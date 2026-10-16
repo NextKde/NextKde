@@ -1316,9 +1316,11 @@ KosApplicationWindow {
                                         if (AppTheme.reduceMotion) {
                                             hourlyCard.opacity = 1
                                             entranceShift.y = 0
+                                            iconBounceShift.y = 0
                                             return
                                         }
                                         entranceAnim.restart()
+                                        iconBounceAnim.restart()
                                     }
 
                                     SequentialAnimation {
@@ -1328,6 +1330,13 @@ KosApplicationWindow {
                                             NumberAnimation { target: hourlyCard; property: "opacity"; to: 1; duration: 260; easing.type: Easing.OutCubic }
                                             NumberAnimation { target: entranceShift; property: "y"; to: 0; duration: 260; easing.type: Easing.OutCubic }
                                         }
+                                    }
+
+                                    SequentialAnimation {
+                                        id: iconBounceAnim
+                                        PauseAnimation { duration: 300 + 40 * hourlyCard.index }
+                                        NumberAnimation { target: iconBounceShift; property: "y"; to: -6; duration: 110; easing.type: Easing.OutCubic }
+                                        NumberAnimation { target: iconBounceShift; property: "y"; to: 0; duration: 160; easing.type: Easing.OutBack }
                                     }
 
                                     background: KosSurface {
@@ -1354,6 +1363,7 @@ KosApplicationWindow {
                                             Layout.preferredHeight: 26
                                             code: root.number(hourlyCard.modelData, "weatherCode", -1)
                                             isDay: Boolean(root.value(hourlyCard.modelData, "isDay", true))
+                                            transform: Translate { id: iconBounceShift; y: 0 }
                                             Accessible.ignored: true
                                         }
 
