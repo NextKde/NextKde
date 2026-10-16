@@ -1715,7 +1715,11 @@ KosApplicationWindow {
                 backgroundColor: root.tahoe.segmentTrack
                 selectionColor: root.tahoe.segmentPill
                 textColor: root.tahoe.labelPrimary
-                mutedTextColor: root.tahoe.labelSecondary
+                // R099/C05: the reference has NO muted label state here — all
+                // four segment labels carry the same pure-black ink (peak 0,
+                // top-5% mean 15–23) and the pill alone marks the selection.
+                // `labelSecondary` (≈147 at 1:1) was 130 levels too light.
+                mutedTextColor: root.tahoe.labelPrimary
                 onSelectionRequested: index => root.viewIndex = index
             }
 
