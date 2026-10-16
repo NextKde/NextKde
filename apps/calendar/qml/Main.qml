@@ -1050,6 +1050,45 @@ KosApplicationWindow {
         }
     }
 
+    // The reference's month arrows are 5x9 px of ink at 1:1 (x22..27 /
+    // y350..358, ~1 px stroke). Its mini month's column pitch is 24.25 where
+    // ours is 28.0 (x1.155), so the scaled target is 5.8x10.4 and the 1:1
+    // target is 5x9; the shape below lands between them by construction, so
+    // the scale choice is not load-bearing at this size. Drawn as a local
+    // vector for the same reason DateNavButton is: the "‹" glyph this
+    // replaced rendered only 4x5 of ink at 13px.
+    component MiniMonthChevron: Item {
+        id: chevron
+
+        // Ink envelope, not a box: two bars at 45 meeting at a point on the
+        // left. The two bars' ink spans x0.18..5.62 / y0.24..10.18 inside
+        // this item, so these two numbers put the item's centre AT the ink's
+        // centre (2.90, 5.21) — that is what makes the 180° rotation below
+        // exactly mirror rather than shift.
+        implicitWidth: 5.8
+        implicitHeight: 10.42
+
+        Rectangle {
+            width: 1.4
+            height: 6.3
+            radius: 0.6
+            color: root.tahoe.labelSecondary
+            rotation: 45
+            x: 2.2
+            y: -0.19
+        }
+
+        Rectangle {
+            width: 1.4
+            height: 6.3
+            radius: 0.6
+            color: root.tahoe.labelSecondary
+            rotation: -45
+            x: 2.2
+            y: 4.31
+        }
+    }
+
     function activationOption(activationArgs, name) {
         const prefix = name + "="
         for (let index = 0; index < activationArgs.length; index++) {
@@ -2157,10 +2196,14 @@ KosApplicationWindow {
                             id: prevMonthButton
                             Layout.preferredWidth: 28
                             Layout.preferredHeight: 28
-                            text: "‹"
+                            text: ""
                             flat: true
                             Accessible.name: qsTr("Previous month")
                             onClicked: root.visibleMonth = root.monthDate(-1)
+
+                            MiniMonthChevron {
+                                anchors.centerIn: parent
+                            }
                         }
 
                         Label {
@@ -2178,10 +2221,15 @@ KosApplicationWindow {
                             id: nextMonthButton
                             Layout.preferredWidth: 28
                             Layout.preferredHeight: 28
-                            text: "›"
+                            text: ""
                             flat: true
                             Accessible.name: qsTr("Next month")
                             onClicked: root.visibleMonth = root.monthDate(1)
+
+                            MiniMonthChevron {
+                                anchors.centerIn: parent
+                                rotation: 180
+                            }
                         }
                     }
 
