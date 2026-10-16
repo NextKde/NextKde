@@ -1341,12 +1341,14 @@ KosApplicationWindow {
                             Layout.alignment: Qt.AlignHCenter
                             text: root.locationName(backend.location)
                             color: root.skyText
-                            font.pixelSize: 34
+                            // ref-main 城市名字高 15px/498 窗高 = 3.0-3.6%，×1.46 折算 ≈22-26px，取 26
+                            font.pixelSize: 26
                             font.weight: Font.DemiBold
                         }
 
                         Row {
                             Layout.alignment: Qt.AlignHCenter
+                            Layout.topMargin: -14 // ref 城市底→数字顶 gap 11px×1.46≈16px；默认行高 padding 多出 ~14px，负 topMargin 收紧（实测偏差下轮微调）
                             // 第 52 轮：按参考图实测缩放。ref-main（814x498 整窗）hero 数字字高 33px = 窗高 6.6%；
                             // tile-hero 切片数字 66px，按其比例折算 iPad 窗高亦 ≈6-6.6%。旧 160px 出自
                             // 80px/498 的单位错配测量，导致实测字高 115px = 窗高 15.8%（超标 2.4 倍）。
@@ -1377,6 +1379,8 @@ KosApplicationWindow {
                             Layout.alignment: Qt.AlignHCenter
                             text: root.conditionText(root.number(backend.current, "weatherCode", -1))
                             color: root.skyText
+                            // ref 数字底→条件顶 gap 9px×1.46≈13px
+                            Layout.topMargin: -14
                             font.pixelSize: 17
                             font.weight: Font.DemiBold
                         }
@@ -1388,6 +1392,8 @@ KosApplicationWindow {
                                   + "L:" + Math.round(root.number(backend.daily[0], "temperatureMinimum", 0)) + "°"
                                 : ""
                             color: root.skyTextMuted
+                            // ref 条件底→H:L 顶 gap 6px×1.46≈9px
+                            Layout.topMargin: -3
                             font.pixelSize: 13
                             font.weight: Font.DemiBold
                         }
