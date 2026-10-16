@@ -19,13 +19,14 @@ KosWorkspaceDialog {
 
     // P02: one consistent field height for every editor control.
     readonly property int fieldHeight: 30
+    readonly property int labelColumnWidth: 56
 
     title: editing ? qsTr("Edit event") : qsTr("New event")
     modal: true
     // P02/P03: compact editor — 380 wide, and never taller than the client
     // viewport minus margins so the footer stays reachable at 760x540.
     width: Math.min(380, parent ? parent.width - 48 : 380)
-    height: Math.min(620, parent ? parent.height - 64 : 620)
+    height: Math.min(620, parent ? parent.height - 32 : 620)
     anchors.centerIn: parent
     standardButtons: Dialog.Save | Dialog.Cancel
     // P02: calendar-local neutral surface — the shared blue-gray windowRaised
@@ -171,6 +172,57 @@ KosWorkspaceDialog {
 
     onAccepted: saveRequested(editingId, eventPayload())
 
+    // P02: the destructive action belongs to the fixed footer, not to the
+    // scrollable form — parked at the bottom of the ColumnLayout it scrolled
+    // out of view and could disappear entirely. macOS Calendar keeps Delete
+    // bottom-left, always visible, on the same row as the standard buttons.
+    // The shared footer's DialogButtonBox is re-declared here so the row can
+    // hold both; a box nested inside a footer Item is not auto-wired to the
+    // dialog (only a DialogButtonBox used *as* the footer is), so the
+    // accept/reject forwarding below is what keeps Save/Cancel working.
+    // No anchors inside the box: as a Container its own layout owns the
+    // child positions. Same 16px inset as the shared footer.
+    footer: Item {
+        implicitHeight: 16 + footerRow.implicitHeight + 16
+
+        RowLayout {
+            id: footerRow
+            anchors.fill: parent
+            anchors.leftMargin: 16
+            anchors.rightMargin: 16
+            spacing: 8
+
+            KosButton {
+                Layout.alignment: Qt.AlignVCenter
+                text: qsTr("Delete event")
+                visible: root.editing
+                destructive: true
+                onClicked: {
+                    root.deleteRequested(root.editingId)
+                    root.close()
+                }
+            }
+
+            // Keeps the standard buttons hard right whether or not the
+            // delete button is present.
+            Item { Layout.fillWidth: true }
+
+            DialogButtonBox {
+                standardButtons: root.standardButtons
+                padding: 0
+                spacing: 8
+                alignment: Qt.AlignRight
+                delegate: KosButton {
+                    highlighted: DialogButtonBox.buttonRole === DialogButtonBox.AcceptRole
+                        || DialogButtonBox.buttonRole === DialogButtonBox.ApplyRole
+                }
+                background: Item {}
+                onAccepted: root.accept()
+                onRejected: root.reject()
+            }
+        }
+    }
+
     contentItem: Flickable {
         id: editorScroll
         clip: true
@@ -183,6 +235,21 @@ KosWorkspaceDialog {
         contentWidth: width
         contentHeight: formLayout.implicitHeight
         boundsBehavior: Flickable.StopAtBounds
+
+        // P03: macOS overlay scrollbar — floats over the form, no track, so a
+        // clipped form reads as scrollable instead of as a rendering fault.
+        ScrollBar.vertical: ScrollBar {
+            id: formScrollBar
+            policy: ScrollBar.AsNeeded
+            width: 6
+            background: Item {}
+            contentItem: Rectangle {
+                implicitWidth: 6
+                radius: 3
+                color: AppTheme.withAlpha(AppTheme.blackSeed,
+                                          AppTheme.dark ? 0.40 : 0.30)
+            }
+        }
 
         MouseArea {
             anchors.fill: parent
@@ -206,18 +273,25 @@ KosWorkspaceDialog {
             width: editorScroll.width
             spacing: 10
 
-            Label {
-                text: qsTr("Title")
-                color: AppTheme.mutedText
-                font.pixelSize: 11
-            }
-
-            KosTextField {
-                id: titleField
+            RowLayout {
                 Layout.fillWidth: true
-                Layout.preferredHeight: fieldHeight
-                placeholderText: qsTr("Event title")
-                Accessible.name: qsTr("Event title")
+                spacing: 8
+
+                Label {
+                    text: qsTr("Title")
+                    Layout.preferredWidth: root.labelColumnWidth
+                    Layout.alignment: Qt.AlignVCenter
+                    color: AppTheme.mutedText
+                    font.pixelSize: 11
+                }
+
+                KosTextField {
+                    id: titleField
+                    Layout.fillWidth: true
+                    Layout.preferredHeight: fieldHeight
+                    placeholderText: qsTr("Event title")
+                    Accessible.name: qsTr("Event title")
+                }
             }
 
             RowLayout {
@@ -239,13 +313,17 @@ KosWorkspaceDialog {
                 Item { Layout.fillWidth: true }
             }
 
-            GridLayout {
+            RowLayout {
                 Layout.fillWidth: true
-                columns: 4
-                columnSpacing: 8
-                rowSpacing: 8
+                spacing: 8
 
-                Label { text: qsTr("Start"); color: AppTheme.mutedText; font.pixelSize: 11 }
+                Label {
+                    text: qsTr("Start")
+                    Layout.preferredWidth: root.labelColumnWidth
+                    Layout.alignment: Qt.AlignVCenter
+                    color: AppTheme.mutedText
+                    font.pixelSize: 11
+                }
                 KosTextField {
                     id: startDateField
                     Layout.fillWidth: true
@@ -253,16 +331,6 @@ KosWorkspaceDialog {
                     placeholderText: "YYYY-MM-DD"
                     Accessible.name: qsTr("Start date")
                 }
-                Label { text: qsTr("End"); color: AppTheme.mutedText; font.pixelSize: 11 }
-                KosTextField {
-                    id: endDateField
-                    Layout.fillWidth: true
-                    Layout.preferredHeight: fieldHeight
-                    placeholderText: "YYYY-MM-DD"
-                    Accessible.name: qsTr("End date")
-                }
-
-                Item { Layout.fillWidth: true }
                 KosTextField {
                     id: startTimeField
                     Layout.preferredWidth: 92
@@ -271,7 +339,26 @@ KosWorkspaceDialog {
                     enabled: !allDayCheck.checked
                     Accessible.name: qsTr("Start time")
                 }
-                Item { Layout.fillWidth: true }
+            }
+
+            RowLayout {
+                Layout.fillWidth: true
+                spacing: 8
+
+                Label {
+                    text: qsTr("End")
+                    Layout.preferredWidth: root.labelColumnWidth
+                    Layout.alignment: Qt.AlignVCenter
+                    color: AppTheme.mutedText
+                    font.pixelSize: 11
+                }
+                KosTextField {
+                    id: endDateField
+                    Layout.fillWidth: true
+                    Layout.preferredHeight: fieldHeight
+                    placeholderText: "YYYY-MM-DD"
+                    Accessible.name: qsTr("End date")
+                }
                 KosTextField {
                     id: endTimeField
                     Layout.preferredWidth: 92
@@ -282,13 +369,24 @@ KosWorkspaceDialog {
                 }
             }
 
-            Label { text: qsTr("Location"); color: AppTheme.mutedText; font.pixelSize: 11 }
-            KosTextField {
-                id: locationField
+            RowLayout {
                 Layout.fillWidth: true
-                Layout.preferredHeight: fieldHeight
-                placeholderText: qsTr("Optional location")
-                Accessible.name: qsTr("Event location")
+                spacing: 8
+
+                Label {
+                    text: qsTr("Location")
+                    Layout.preferredWidth: root.labelColumnWidth
+                    Layout.alignment: Qt.AlignVCenter
+                    color: AppTheme.mutedText
+                    font.pixelSize: 11
+                }
+                KosTextField {
+                    id: locationField
+                    Layout.fillWidth: true
+                    Layout.preferredHeight: fieldHeight
+                    placeholderText: qsTr("Optional location")
+                    Accessible.name: qsTr("Event location")
+                }
             }
 
             // P02: subdued task link — same semantics, quiet neutral chip
@@ -347,7 +445,13 @@ KosWorkspaceDialog {
                 Layout.fillWidth: true
                 spacing: 8
 
-                Label { text: qsTr("Repeat"); color: AppTheme.mutedText; font.pixelSize: 11 }
+                Label {
+                    text: qsTr("Repeat")
+                    Layout.preferredWidth: root.labelColumnWidth
+                    Layout.alignment: Qt.AlignVCenter
+                    color: AppTheme.mutedText
+                    font.pixelSize: 11
+                }
                 KosComboBox {
                     id: recurrenceBox
                     Layout.fillWidth: true
@@ -356,7 +460,19 @@ KosWorkspaceDialog {
                         qsTr("Monthly"), qsTr("Yearly")]
                     Accessible.name: qsTr("Event recurrence")
                 }
-                Label { text: qsTr("Reminder"); color: AppTheme.mutedText; font.pixelSize: 11 }
+            }
+
+            RowLayout {
+                Layout.fillWidth: true
+                spacing: 8
+
+                Label {
+                    text: qsTr("Reminder")
+                    Layout.preferredWidth: root.labelColumnWidth
+                    Layout.alignment: Qt.AlignVCenter
+                    color: AppTheme.mutedText
+                    font.pixelSize: 11
+                }
                 KosComboBox {
                     id: reminderBox
                     Layout.fillWidth: true
@@ -368,76 +484,77 @@ KosWorkspaceDialog {
                 }
             }
 
-            Label { text: qsTr("Notes"); color: AppTheme.mutedText; font.pixelSize: 11 }
-            // Canonical editable-notes scroller, same as the task editor.
-            // P02: fixed neutral frame around the notes viewport — same
-            // treatment as the task editor.
-            Item {
-                id: notesFrame
+            RowLayout {
                 Layout.fillWidth: true
-                Layout.preferredHeight: 96
+                spacing: 8
 
-                KosSurface {
-                    anchors.fill: parent
-                    radius: AppTheme.smallRadius
-                    fillColor: AppTheme.fieldSurface
-                    elevation: 0
-                    focused: descriptionField.activeFocus
+                Label {
+                    text: qsTr("Notes")
+                    Layout.preferredWidth: root.labelColumnWidth
+                    Layout.alignment: Qt.AlignTop
+                    color: AppTheme.mutedText
+                    font.pixelSize: 11
                 }
 
-                Flickable {
-                    id: notesScroll
-                    anchors.fill: parent
-                    clip: true
-                    boundsBehavior: Flickable.StopAtBounds
-                    // Non-interactive (see task editor): wheel + scrollbar
-                    // scrolling, presses always reach the editor.
-                    interactive: false
-                    // Native TextArea.flickable attached integration — the
-                    // attached property is on the Flickable, its value is
-                    // the TextArea; native pointer/cursor/selection ownership.
-                    TextArea.flickable: KosTextArea {
-                        id: descriptionField
-                        width: notesScroll.width
-                        placeholderText: qsTr("Optional notes")
-                        wrapMode: TextEdit.Wrap
-                        Accessible.name: qsTr("Event notes")
-                        background: null
-                        activeFocusOnPress: true
-                        selectByMouse: true
+                // Canonical editable-notes scroller, same as the task editor.
+                // P02: fixed neutral frame around the notes viewport — same
+                // treatment as the task editor.
+                Item {
+                    id: notesFrame
+                    Layout.fillWidth: true
+                    Layout.preferredHeight: 96
+
+                    KosSurface {
+                        anchors.fill: parent
+                        radius: AppTheme.smallRadius
+                        fillColor: AppTheme.fieldSurface
+                        elevation: 0
+                        focused: descriptionField.activeFocus
                     }
 
-                    ScrollBar.vertical: ScrollBar {}
-
-                    // Wheel scrolling for the non-interactive flickable —
-                    // same NoButton MouseArea pattern as the task editor:
-                    // wheel-only, clicks/drag-selection pass through, and
-                    // the outer form does not move.
-                    MouseArea {
+                    Flickable {
+                        id: notesScroll
                         anchors.fill: parent
-                        acceptedButtons: Qt.NoButton
-                        onWheel: function(wheel) {
-                            const max = Math.max(0, notesScroll.contentHeight
-                                                     - notesScroll.height)
-                            const step = wheel.pixelDelta.y !== 0
-                                ? wheel.pixelDelta.y
-                                : wheel.angleDelta.y / 2
-                            notesScroll.contentY = Math.max(0, Math.min(
-                                max, notesScroll.contentY - step))
-                            wheel.accepted = true
+                        clip: true
+                        boundsBehavior: Flickable.StopAtBounds
+                        // Non-interactive (see task editor): wheel + scrollbar
+                        // scrolling, presses always reach the editor.
+                        interactive: false
+                        // Native TextArea.flickable attached integration — the
+                        // attached property is on the Flickable, its value is
+                        // the TextArea; native pointer/cursor/selection ownership.
+                        TextArea.flickable: KosTextArea {
+                            id: descriptionField
+                            width: notesScroll.width
+                            placeholderText: qsTr("Optional notes")
+                            wrapMode: TextEdit.Wrap
+                            Accessible.name: qsTr("Event notes")
+                            background: null
+                            activeFocusOnPress: true
+                            selectByMouse: true
+                        }
+
+                        ScrollBar.vertical: ScrollBar {}
+
+                        // Wheel scrolling for the non-interactive flickable —
+                        // same NoButton MouseArea pattern as the task editor:
+                        // wheel-only, clicks/drag-selection pass through, and
+                        // the outer form does not move.
+                        MouseArea {
+                            anchors.fill: parent
+                            acceptedButtons: Qt.NoButton
+                            onWheel: function(wheel) {
+                                const max = Math.max(0, notesScroll.contentHeight
+                                                         - notesScroll.height)
+                                const step = wheel.pixelDelta.y !== 0
+                                    ? wheel.pixelDelta.y
+                                    : wheel.angleDelta.y / 2
+                                notesScroll.contentY = Math.max(0, Math.min(
+                                    max, notesScroll.contentY - step))
+                                wheel.accepted = true
+                            }
                         }
                     }
-                }
-            }
-
-            KosButton {
-                Layout.alignment: Qt.AlignLeft
-                text: qsTr("Delete event")
-                visible: root.editing
-                destructive: true
-                onClicked: {
-                    root.deleteRequested(root.editingId)
-                    root.close()
                 }
             }
         }
