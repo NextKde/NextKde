@@ -835,7 +835,16 @@ Pane {
                                         // halfway to its own pole. R089 hoisted the expression to
                                         // root.chipInk — see there for the measurement.
                                         readonly property color inkColor: root.chipInk(modelData)
-                                        radius: 5
+                                        // R124: 3, not 5. The chip's corner had been borrowing
+                                        // the all-day pill's row/3 ratio (6 on an 18px row),
+                                        // which is 0.33 x height. Re-measured on the ref's own
+                                        // TIMED chip: the top row y331 never reaches full fill
+                                        // across x489..492 (max coverage 0.76) ⇒ a cut of ~1-2
+                                        // ref px on 26 = 0.08 x height, i.e. a different family
+                                        // entirely. x1.33 ⇒ 2.7, and E01 says "radius about 3".
+                                        // Scoped to the timed chip ONLY - the all-day pill keeps
+                                        // row/3 and A01/A03 stay closed on it.
+                                        radius: 3
                                         color: AppTheme.withAlpha(root.itemColor(modelData),
                                             AppTheme.dark ? 0.36 : 0.19)
                                         // R078: NO border. The ref's chip is fill-only, and its
@@ -857,7 +866,9 @@ Pane {
                                         // alpha — the ref's bars read (59,134,247) and
                                         // (235,76,70). A capsule stripeWidth wide, inset by
                                         // stripeInset, held 2px clear of the chip's top and
-                                        // bottom so it stays inside the 5px corner curve.
+                                        // bottom so it stays inside the chip's corner curve
+                                        // (R124: radius 3; at x=4,y=2 the stripe's top-left is
+                                        // 1.4px from the arc centre (3,3), still inside it).
                                         Rectangle {
                                             x: timedChip.stripeInset
                                             width: timedChip.stripeWidth
