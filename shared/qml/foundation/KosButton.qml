@@ -5,6 +5,8 @@ Button {
     id: root
 
     property bool destructive: false
+    // D06: filled neutral capsule for a non-primary action (opt-in).
+    property bool secondary: false
     readonly property bool emphasized: highlighted || (checkable && checked)
 
     hoverEnabled: true
@@ -46,20 +48,25 @@ Button {
                     : (root.hovered ? AppTheme.accentHover : AppTheme.accent)
             if (root.flat && !root.hovered && !root.down)
                 return "transparent"
+            if (root.secondary)
+                return root.down ? AppTheme.buttonNeutralPressed
+                    : (root.hovered ? AppTheme.buttonNeutralHover
+                                    : AppTheme.buttonNeutral)
             if (root.down)
                 return AppTheme.buttonPressed
             return root.hovered ? AppTheme.buttonHover : AppTheme.button
         }
-        strokeWidth: root.flat && !root.hovered && !root.activeFocus ? 0 : 1
+        strokeWidth: (root.flat || root.secondary) && !root.hovered && !root.activeFocus ? 0 : 1
         strokeColor: root.emphasized
             ? AppTheme.withAlpha(AppTheme.accentText, 0.16)
             : AppTheme.border
-        elevation: root.flat && !root.hovered && !root.activeFocus ? 0
-            : (root.emphasized ? 0.68 : (root.hovered ? 0.62 : 0.42))
+        elevation: root.secondary ? 0
+            : (root.flat && !root.hovered && !root.activeFocus ? 0
+               : (root.emphasized ? 0.68 : (root.hovered ? 0.62 : 0.42)))
         hovered: root.hovered
         pressed: root.down
         focused: root.activeFocus
-        showInnerHighlight: !root.flat || root.hovered
+        showInnerHighlight: root.secondary ? false : (!root.flat || root.hovered)
         opacity: root.enabled ? 1 : 0.68
     }
 }

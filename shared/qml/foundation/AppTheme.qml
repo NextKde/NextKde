@@ -98,6 +98,16 @@ QtObject {
     readonly property color buttonHover: mix(button, accent, dark ? 0.13 : 0.09)
     readonly property color buttonPressed: mix(button, accent, dark ? 0.21 : 0.16)
 
+    // macOS 26 alerts: a non-primary action is a filled capsule one step away
+    // from the surface under it, not the near-invisible outlined `button`.
+    readonly property color buttonNeutral: dark
+        ? mix(card, Qt.rgba(1, 1, 1, 1), 0.13)
+        : mix(card, Qt.rgba(0, 0, 0, 1), 0.095)
+    readonly property color buttonNeutralHover: mix(
+        buttonNeutral, dark ? Qt.rgba(1, 1, 1, 1) : Qt.rgba(0, 0, 0, 1), 0.055)
+    readonly property color buttonNeutralPressed: mix(
+        buttonNeutral, dark ? Qt.rgba(1, 1, 1, 1) : Qt.rgba(0, 0, 0, 1), 0.105)
+
     readonly property bool glassActive: !reduceTransparency
         && (materialMode === "glass"
             || (materialMode === "auto" && nativeBlurAvailable))

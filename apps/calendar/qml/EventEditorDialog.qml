@@ -231,6 +231,7 @@ KosWorkspaceDialog {
             KosButton {
                 Layout.fillWidth: true
                 text: root.cancelLabel
+                secondary: true
                 onClicked: root.reject()
             }
 
