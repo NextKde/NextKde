@@ -1035,14 +1035,15 @@ KosApplicationWindow {
         anchors.left: parent.left
         anchors.margins: 10
         width: root.sidebarExpanded ? sidebar.expandedWidth : AppTheme.controlHeight
-        height: 44
+        height: root.sidebarExpanded ? 46 : 44
         z: 10
         KosSidebarToggle {
             targetWindow: root
             anchors.right: parent.right
-            anchors.rightMargin: root.sidebarExpanded ? 4 : 0
-            anchors.verticalCenter: parent.verticalCenter
-            implicitWidth: root.sidebarExpanded ? 40 : AppTheme.controlHeight
+            anchors.rightMargin: root.sidebarExpanded ? 5 : 0
+            anchors.top: parent.top
+            anchors.topMargin: root.sidebarExpanded ? 10 : (44 - AppTheme.controlHeight) / 2
+            implicitWidth: root.sidebarExpanded ? 26 : AppTheme.controlHeight
             implicitHeight: implicitWidth
             glyphColor: "#ffffff"
             glyphPaneColor: Qt.rgba(1, 1, 1, 0.95)
