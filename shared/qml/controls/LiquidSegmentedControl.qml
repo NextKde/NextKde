@@ -118,7 +118,7 @@ Item {
         y: 2
         width: root.segmentWidth
         height: root.height - 4
-        radius: root.materialForm ? height / 2 : height * 0.42
+        radius: root.materialForm ? height / 2 : height * 0.48
         color: root.selectionColor
         border.width: root.materialForm ? 0 : 1
         border.color: Qt.rgba(1, 1, 1, 0.16)
