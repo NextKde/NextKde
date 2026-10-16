@@ -44,6 +44,9 @@ QtObject {
         : "--"
     readonly property string windDirection: available
         ? Math.round(Number(current.windDirection)) + "°" : "--"
+    readonly property string windGust: available && Number.isFinite(Number(current.windGust))
+        ? Math.round(Number(current.windGust)) + (units === "imperial" ? " mph" : " km/h")
+        : ""
     readonly property string sunriseTime: dailyTime("sunrise")
     readonly property string sunsetTime: dailyTime("sunset")
     readonly property var forecastDays: {

@@ -1384,6 +1384,8 @@ KosApplicationWindow {
                                         property real windDir: root.number(backend.current, "windDirection", 0)
                                         // arrow points where the wind blows TO (Open-Meteo direction is where it comes FROM)
                                         property real flowAngle: (directionTile.windDir + 180) % 360
+                                        property real gustVal: root.number(backend.current, "windGust", Number.NaN)
+                                        property bool hasGust: Number.isFinite(gustVal)
 
                                         onWindDirChanged: compass.requestPaint()
                                         onFlowAngleChanged: compass.requestPaint()
@@ -1393,6 +1395,9 @@ KosApplicationWindow {
                                         ToolTip.text: qsTr("Direction")
                                         Accessible.role: Accessible.StaticText
                                         Accessible.name: qsTr("Direction") + ": " + Math.round(directionTile.windDir) + "° " + directionTile.cardinal
+                                            + (directionTile.hasGust
+                                                ? " " + qsTr("Gusts") + ": " + Math.round(directionTile.gustVal) + " " + root.speedUnit
+                                                : "")
 
                                         property string cardinal: {
                                             var names = ["N", "NE", "E", "SE", "S", "SW", "W", "NW"]
@@ -1473,6 +1478,18 @@ KosApplicationWindow {
                                                     text: Math.round(directionTile.windDir) + "° " + directionTile.cardinal
                                                     color: root.skyText
                                                     font.pixelSize: 15
+                                                    font.weight: Font.DemiBold
+                                                    elide: Text.ElideRight
+                                                    Accessible.ignored: true
+                                                }
+
+                                                Label {
+                                                    Layout.fillWidth: true
+                                                    visible: directionTile.hasGust
+                                                    text: qsTr("Gusts: ") + Math.round(directionTile.gustVal) + " " + root.speedUnit
+                                                          + " " + directionTile.cardinal
+                                                    color: root.skyText
+                                                    font.pixelSize: 10
                                                     font.weight: Font.DemiBold
                                                     elide: Text.ElideRight
                                                     Accessible.ignored: true
