@@ -175,6 +175,10 @@ KosWorkspaceDialog {
 
     contentItem: Flickable {
         id: editorScroll
+        // Harness probe hook: names this Flickable so the review harness can
+        // read its height/contentHeight/contentY (regionPosition). No visual
+        // or behavioural effect.
+        objectName: "editorScroll"
         clip: true
         // Non-interactive form: the outer drag filter is the last press
         // competitor for the notes area; dragging the form is not needed —
@@ -185,6 +189,28 @@ KosWorkspaceDialog {
         contentWidth: width
         contentHeight: formLayout.implicitHeight
         boundsBehavior: Flickable.StopAtBounds
+
+        // P03: macOS overlay scrollbar — floats over the form, no track, so a
+        // clipped form reads as scrollable instead of as a rendering fault
+        // (same treatment as the event editor).
+        // AsNeeded on its own is NOT enough here: measured at 1100x692 the
+        // form already fits (contentHeight 295 <= the flickable's height, the
+        // notes box's bottom border is drawn) yet a bare AsNeeded bar still
+        // painted a full-length thumb — a stray 3px dark line beside the form.
+        // Gate the policy on the real scrollability the wheel handler uses.
+        ScrollBar.vertical: ScrollBar {
+            id: formScrollBar
+            policy: editorScroll.contentHeight > editorScroll.height
+                    ? ScrollBar.AsNeeded : ScrollBar.AlwaysOff
+            width: 6
+            background: Item {}
+            contentItem: Rectangle {
+                implicitWidth: 6
+                radius: 3
+                color: AppTheme.withAlpha(AppTheme.blackSeed,
+                                          AppTheme.dark ? 0.40 : 0.30)
+            }
+        }
 
         // Outer wheel scrolling, same NoButton pattern as the notes area:
         // wheel over the form (outside the notes field, which accepts its
