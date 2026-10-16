@@ -18,6 +18,7 @@ option(KOS_BUILD_TODO "Build the Todo application" OFF)
 option(KOS_BUILD_WEATHER "Build the Weather application" OFF)
 option(KOS_BUILD_MUSIC "Build the legacy Music application" OFF)
 option(KOS_BUILD_LISTENFREE "Build KOS ListenFree (requires its native SDK)" OFF)
+option(KOS_BUILD_CALCULATOR "Build the Calculator application" OFF)
 # The depth engine (kos-ai) needs OpenCV and the ONNX Runtime, and the 3D
 # wallpaper plugin needs Qt Quick 3D. KOS_BUILD_SPATIAL decides whether they are
 # built; the resolution below turns it into KOS_SPATIAL_ENABLED, which both this
@@ -609,7 +610,8 @@ if(KOS_BUILD_PLATFORM)
     add_subdirectory(apps/settings)
 endif()
 
-if(KOS_BUILD_CALENDAR OR KOS_BUILD_TODO OR KOS_BUILD_WEATHER OR KOS_BUILD_MUSIC)
+if(KOS_BUILD_CALENDAR OR KOS_BUILD_TODO OR KOS_BUILD_WEATHER OR KOS_BUILD_MUSIC
+        OR KOS_BUILD_CALCULATOR)
     add_subdirectory(shared/qml)
     add_subdirectory(apps/common)
 endif()
@@ -650,7 +652,7 @@ include(KosApplication)
 # services/pim-service call kos_add_application, which that include defines.
 if(BUILD_TESTING)
     if(NOT (KOS_BUILD_CALENDAR OR KOS_BUILD_TODO OR KOS_BUILD_WEATHER
-            OR KOS_BUILD_MUSIC))
+            OR KOS_BUILD_MUSIC OR KOS_BUILD_CALCULATOR))
         add_subdirectory(apps/common)
     endif()
 
@@ -735,6 +737,9 @@ if(KOS_BUILD_MUSIC)
 endif()
 if(KOS_BUILD_LISTENFREE)
     add_subdirectory(apps/listenfree)
+endif()
+if(KOS_BUILD_CALCULATOR)
+    add_subdirectory(apps/calculator)
 endif()
 
 # The shell imports this QML module even without compositor effects.
