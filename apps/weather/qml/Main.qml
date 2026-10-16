@@ -1224,12 +1224,28 @@ KosApplicationWindow {
                             font.weight: Font.DemiBold
                         }
 
-                        Label {
+                        Row {
                             Layout.alignment: Qt.AlignHCenter
-                            text: Math.round(root.number(backend.current, "temperature", 0)) + "°"
-                            color: root.skyText
-                            font.pixelSize: 160
-                            font.weight: Font.Light
+                            spacing: -25 // 三轮实拍校准：-31 时 ° 与 3 顶曲线相交 ~2px，-25 目标间隙 ~4px（参考 ~3px@0.69x）
+                            Label {
+                                id: heroTempDigits
+                                text: Math.round(root.number(backend.current, "temperature", 0))
+                                Accessible.name: text + "°"
+                                color: root.skyText
+                                font.family: "IBM Plex Sans"
+                                font.pixelSize: 160
+                                font.weight: Font.Thin
+                            }
+                            Label {
+                                text: "°"
+                                color: root.skyText
+                                font.family: "IBM Plex Sans"
+                                font.pixelSize: 100
+                                font.weight: Font.Thin
+                                // 下移 19px 使 ° 顶部与数字顶部对齐（Plex 字形度量）
+                                y: 19
+                                Accessible.ignored: true
+                            }
                         }
 
                         Label {
