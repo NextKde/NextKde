@@ -81,6 +81,11 @@ QtObject {
         return systemAccent
     }
 
+    // M04: the macOS "today" marker red. One literal for the whole app — the
+    // week header disc, the now-line, the now-dot, the time pill and the mini
+    // month's today disc all read this.
+    readonly property color todayRed: "#E5484D"
+
     // Forced Light/Dark modes never inherit the opposite system background.
     readonly property color window: mix(
         paletteWindow, dark ? darkWindowSeed : lightWindowSeed,

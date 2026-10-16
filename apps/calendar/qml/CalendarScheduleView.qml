@@ -107,8 +107,9 @@ Pane {
     }
 
     // W03: local marker tokens (today red like the macOS reference, subdued
-    // grey for the ordinary selection). Neutral, no shared-theme dependency.
-    readonly property color todayRed: "#E5484D"
+    // grey for the ordinary selection). The red is the shared AppTheme token
+    // (M04 hoisted it: the mini month's today disc is its second consumer).
+    readonly property color todayRed: AppTheme.todayRed
     readonly property color selectionGrey: AppTheme.dark
         ? Qt.rgba(1, 1, 1, 0.16) : Qt.rgba(0, 0, 0, 0.10)
     readonly property color normalDateColor: AppTheme.dark

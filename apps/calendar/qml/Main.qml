@@ -2201,7 +2201,7 @@ KosApplicationWindow {
                                     radius: width / 2
                                     anchors.centerIn: parent
                                     color: miniDay.today
-                                        ? root.tahoe.accent
+                                        ? AppTheme.todayRed
                                         : (miniDay.selected
                                             ? root.tahoe.selectionFill
                                             : (miniDay.hovered
