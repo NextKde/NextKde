@@ -100,8 +100,11 @@ QtObject {
 
     // macOS 26 alerts: a non-primary action is a filled capsule one step away
     // from the surface under it, not the near-invisible outlined `button`.
+    // Dark mixes from the *neutral* surface the dialog actually draws
+    // (#262626), not the slate-tinted `card` token, so the capsule stays
+    // hue-neutral; the 0.143 step keeps the old relative luminance (Y 0.0599).
     readonly property color buttonNeutral: dark
-        ? mix(card, Qt.rgba(1, 1, 1, 1), 0.13)
+        ? mix(Qt.rgba(0.149, 0.149, 0.149, 1), Qt.rgba(1, 1, 1, 1), 0.143)
         : mix(card, Qt.rgba(0, 0, 0, 1), 0.095)
     readonly property color buttonNeutralHover: mix(
         buttonNeutral, dark ? Qt.rgba(1, 1, 1, 1) : Qt.rgba(0, 0, 0, 1), 0.055)
