@@ -376,7 +376,7 @@ KosApplicationWindow {
                     Layout.fillWidth: true
                     Layout.fillHeight: true
                     clip: true
-                    spacing: 8
+                    spacing: 6
                     model: backend.locations
 
                     delegate: KosItemDelegate {
@@ -393,9 +393,9 @@ KosApplicationWindow {
                             savedLocation.summary, "tempLow", Number.NaN)
 
                         width: savedLocations.width
-                        implicitHeight: 96
-                        topPadding: 8
-                        bottomPadding: 8
+                        implicitHeight: 74
+                        topPadding: 5
+                        bottomPadding: 5
                         highlighted: String(root.value(modelData, "id", ""))
                             === String(root.value(backend.location, "id", ""))
                         Accessible.name: savedLocation.summary
@@ -405,7 +405,7 @@ KosApplicationWindow {
                         onClicked: backend.selectLocation(modelData)
 
                         background: Rectangle {
-                            radius: 14
+                            radius: 12
                             border.width: 1
                             border.color: savedLocation.highlighted
                                 ? Qt.rgba(1, 1, 1, 0.55) : Qt.rgba(1, 1, 1, 0.18)
@@ -427,6 +427,7 @@ KosApplicationWindow {
 
                             RowLayout {
                                 id: cardTop
+                                height: 30
                                 anchors {
                                     left: parent.left
                                     right: parent.right
@@ -440,6 +441,8 @@ KosApplicationWindow {
                                     color: "#ffffff"
                                     font.pixelSize: 17
                                     font.weight: Font.DemiBold
+                                    lineHeight: 0.85
+                                    lineHeightMode: Text.ProportionalHeight
                                     elide: Text.ElideRight
                                     style: Text.Raised
                                     styleColor: Qt.rgba(0, 0, 0, 0.22)
@@ -451,6 +454,8 @@ KosApplicationWindow {
                                     color: "#ffffff"
                                     font.pixelSize: 30
                                     font.weight: Font.Light
+                                    lineHeight: 0.85
+                                    lineHeightMode: Text.ProportionalHeight
                                     style: Text.Raised
                                     styleColor: Qt.rgba(0, 0, 0, 0.22)
                                 }
@@ -461,7 +466,7 @@ KosApplicationWindow {
                                     left: parent.left
                                     right: parent.right
                                     top: cardTop.bottom
-                                    topMargin: 2
+                                    topMargin: 0
                                 }
                                 text: savedLocation.summary
                                       && String(savedLocation.summary.time ?? "").length > 0
@@ -469,6 +474,8 @@ KosApplicationWindow {
                                     : root.locationDetail(savedLocation.modelData)
                                 color: Qt.rgba(1, 1, 1, 0.72)
                                 font.pixelSize: 12
+                                lineHeight: 0.85
+                                lineHeightMode: Text.ProportionalHeight
                                 elide: Text.ElideRight
                                 visible: text.length > 0 && savedLocation.summary
                                 style: Text.Raised
@@ -490,6 +497,8 @@ KosApplicationWindow {
                                         : root.locationDetail(savedLocation.modelData)
                                     color: "#ffffff"
                                     font.pixelSize: 13
+                                    lineHeight: 0.85
+                                    lineHeightMode: Text.ProportionalHeight
                                     elide: Text.ElideRight
                                     visible: text.length > 0
                                     style: Text.Raised
@@ -501,6 +510,8 @@ KosApplicationWindow {
                                           + Math.round(savedLocation.summaryLow) + "°"
                                     color: Qt.rgba(1, 1, 1, 0.85)
                                     font.pixelSize: 12
+                                    lineHeight: 0.85
+                                    lineHeightMode: Text.ProportionalHeight
                                     visible: Number.isFinite(savedLocation.summaryHigh)
                                         && Number.isFinite(savedLocation.summaryLow)
                                     style: Text.Raised
@@ -514,15 +525,9 @@ KosApplicationWindow {
 
                 RowLayout {
                     Layout.fillWidth: true
+                    Accessible.name: qsTr("Units")
 
                     ButtonGroup { id: unitsGroup }
-
-                    Label {
-                        text: "°"
-                        color: AppTheme.mutedText
-                        font.pixelSize: 17
-                        Accessible.name: qsTr("Units")
-                    }
 
                     Item { Layout.fillWidth: true }
 
@@ -551,6 +556,7 @@ KosApplicationWindow {
 
                 Label {
                     Layout.fillWidth: true
+                    Layout.topMargin: 4
                     text: backend.connected
                         ? "●  Open-Meteo"
                         : "○  " + qsTr("Offline cache")
