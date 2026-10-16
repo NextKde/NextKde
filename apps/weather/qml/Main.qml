@@ -68,6 +68,7 @@ KosApplicationWindow {
         const c = root.currentWeatherCode
         return c === 2 || c === 3 || c === 45 || c === 48
     }
+    readonly property bool thunderSky: root.currentWeatherCode >= 95
     readonly property var dailyRange: {
         let lo = Number.POSITIVE_INFINITY
         let hi = Number.NEGATIVE_INFINITY
@@ -626,6 +627,38 @@ KosApplicationWindow {
                     }
                 }
             }
+        }
+    }
+
+    // Stage 3 motion B.1: thunderstorm lightning flash (weather codes >= 95).
+    // A rare, brief double-strobe white wash over the whole window, in the
+    // spirit of the Apple Weather instantaneous flash. Randomized idle pause
+    // keeps the ambient cadence inside the HIG 2-12s loop range.
+    Rectangle {
+        id: flashLayer
+        anchors.fill: parent
+        visible: root.thunderSky
+        color: "#ffffff"
+        opacity: 0
+        Accessible.ignored: true
+
+        Timer {
+            id: flashTimer
+            interval: 4200
+            repeat: true
+            running: root.thunderSky && !AppTheme.reduceMotion
+            onTriggered: {
+                flashTimer.interval = 3500 + Math.random() * 5000
+                flashSeq.restart()
+            }
+        }
+        SequentialAnimation {
+            id: flashSeq
+            NumberAnimation { target: flashLayer; property: "opacity"; to: 0.32; duration: 70 }
+            NumberAnimation { target: flashLayer; property: "opacity"; to: 0; duration: 90 }
+            PauseAnimation { duration: 110 }
+            NumberAnimation { target: flashLayer; property: "opacity"; to: 0.20; duration: 60 }
+            NumberAnimation { target: flashLayer; property: "opacity"; to: 0; duration: 140 }
         }
     }
 
