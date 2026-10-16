@@ -270,11 +270,23 @@ Pane {
             timelineScroll.contentItem.contentY = usefulStartHour() * root.hourHeight
     }
 
-    onFirstDateChanged: autoScrollTimer.restart()
-    onDayCountChanged: autoScrollTimer.restart()
+    // R091: the 450 ms delay used to be the ONLY path to a correct scroll, so
+    // anything that observed the view inside that window (a capture, the user's
+    // first look after navigating) still saw the PREVIOUS week's offset. That is
+    // the whole R089-vs-R090 "one hour apart" pair: both legs report the same
+    // contentY once settled, and the grid lines never move. Position on the
+    // trigger itself; the timer stays as the settle-net for the one case the
+    // immediate call cannot cover — a content item that is not laid out yet.
+    function repositionTimeline() {
+        root.positionTimeline()
+        autoScrollTimer.restart()
+    }
+
+    onFirstDateChanged: repositionTimeline()
+    onDayCountChanged: repositionTimeline()
     onVisibleChanged: {
         if (visible)
-            autoScrollTimer.restart()
+            repositionTimeline()
     }
 
     Timer {
