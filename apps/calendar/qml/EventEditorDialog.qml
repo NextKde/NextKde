@@ -242,6 +242,7 @@ KosWorkspaceDialog {
                 text: qsTr("Delete event")
                 visible: root.editing
                 destructive: true
+                secondary: true
                 onClicked: {
                     root.deleteRequested(root.editingId)
                     root.close()
