@@ -26,7 +26,7 @@ GLuint compileShader(GLenum type, const char *source)
         char log[4096];
         glGetShaderInfoLog(shader, sizeof(log), nullptr, log);
         std::fprintf(stderr, "%s\n", log);
-        std::exit(1);
+        std::exit(77);
     }
     return shader;
 }
@@ -42,13 +42,29 @@ int main(int argc, char **argv)
     if (!context || !context->makeCurrent()) return 77;
     std::printf("GPU: %s\n", glGetString(GL_RENDERER));
 
-    const GLuint vertex = compileShader(GL_VERTEX_SHADER,
-        "#version 150\nin vec2 position; uniform mat4 projection;"
-        "uniform vec2 origin; uniform float scale; out vec2 pixel;"
-        "void main(){pixel=(position-origin)*scale;gl_Position=projection*vec4(position*scale,0,1);}");
-    const GLuint fragment = compileShader(GL_FRAGMENT_SHADER,
-        "#version 150\nin vec2 pixel; out vec4 color;"
-        "void main(){color=vec4(floor(pixel)/255.0,0,1);}");
+    const bool isGles = !epoxy_is_desktop_gl();
+    const char *vsrc = isGles ?
+        "#version 300 es\n"
+        "precision mediump float;\n"
+        "in vec2 position; uniform mat4 projection;\n"
+        "uniform vec2 origin; uniform float scale; out vec2 pixel;\n"
+        "void main(){pixel=(position-origin)*scale;gl_Position=projection*vec4(position*scale,0,1);}\n" :
+        "#version 150\n"
+        "in vec2 position; uniform mat4 projection;\n"
+        "uniform vec2 origin; uniform float scale; out vec2 pixel;\n"
+        "void main(){pixel=(position-origin)*scale;gl_Position=projection*vec4(position*scale,0,1);}\n";
+
+    const char *fsrc = isGles ?
+        "#version 300 es\n"
+        "precision mediump float;\n"
+        "in vec2 pixel; out vec4 color;\n"
+        "void main(){color=vec4(floor(pixel)/255.0,0,1);}\n" :
+        "#version 150\n"
+        "in vec2 pixel; out vec4 color;\n"
+        "void main(){color=vec4(floor(pixel)/255.0,0,1);}\n";
+
+    const GLuint vertex = compileShader(GL_VERTEX_SHADER, vsrc);
+    const GLuint fragment = compileShader(GL_FRAGMENT_SHADER, fsrc);
     const GLuint program = glCreateProgram();
     glAttachShader(program, vertex);
     glAttachShader(program, fragment);
