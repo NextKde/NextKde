@@ -1649,12 +1649,74 @@ KosApplicationWindow {
                         }
                     }
 
-                    Label {
-                        text: qsTr("Hourly")
-                        color: root.skyTextMuted
-                        font.pixelSize: 18
-                        font.weight: Font.DemiBold
-                        Accessible.name: qsTr("Hourly forecast")
+                    RowLayout {
+                        Layout.fillWidth: true
+
+                        Label {
+                            Layout.fillWidth: true
+                            text: qsTr("Hourly")
+                            color: root.skyTextMuted
+                            font.pixelSize: 18
+                            font.weight: Font.DemiBold
+                            Accessible.name: qsTr("Hourly forecast")
+                        }
+
+                        // 三段胶囊玻璃切换钮，参照 ref-main Conditions 卡右上分段控件（视觉 chrome）。
+                        // 切换功能待后端逐小时降水/风视图另做（本轮仅 chrome）；
+                        // 接功能时应换成带 Accessible.name 的按钮（如 Button/AbstractButton）。
+                        Item {
+                            id: hourlySegmented
+                            implicitWidth: 132
+                            implicitHeight: 36
+                            Layout.alignment: Qt.AlignVCenter
+                            Accessible.ignored: true
+
+                            Rectangle {
+                                anchors.fill: parent
+                                radius: 18
+                                color: Qt.rgba(1, 1, 1, 0.14)
+                                border.width: 1
+                                border.color: Qt.rgba(1, 1, 1, 0.22)
+                            }
+
+                            // 选中圆盘（第 0 段"云"背后）
+                            Rectangle {
+                                x: 3
+                                y: 3
+                                width: 30
+                                height: 30
+                                radius: 15
+                                color: Qt.rgba(1, 1, 1, 0.27)
+                            }
+
+                            Label {
+                                x: 0
+                                width: 44
+                                anchors.verticalCenter: parent.verticalCenter
+                                horizontalAlignment: Text.AlignHCenter
+                                text: "☁"
+                                color: "#ffffff"
+                                font.pixelSize: 16
+                            }
+                            Label {
+                                x: 44
+                                width: 44
+                                anchors.verticalCenter: parent.verticalCenter
+                                horizontalAlignment: Text.AlignHCenter
+                                text: "☂︎"
+                                color: Qt.rgba(1, 1, 1, 0.9)
+                                font.pixelSize: 16
+                            }
+                            Label {
+                                x: 88
+                                width: 44
+                                anchors.verticalCenter: parent.verticalCenter
+                                horizontalAlignment: Text.AlignHCenter
+                                text: "≋"
+                                color: Qt.rgba(1, 1, 1, 0.9)
+                                font.pixelSize: 16
+                            }
+                        }
                     }
 
                     Flickable {
