@@ -137,20 +137,6 @@ KosApplicationWindow {
         return qsTr("Unknown conditions")
     }
 
-    function conditionSymbol(code, isDay) {
-        const weatherCode = Number(code)
-        if (weatherCode === 0) return isDay ? "☀︎" : "☾"
-        if (weatherCode === 1 || weatherCode === 2) return isDay ? "☀︎·☁︎" : "☁︎"
-        if (weatherCode === 3) return "☁︎"
-        if (weatherCode === 45 || weatherCode === 48) return "≋"
-        if ((weatherCode >= 51 && weatherCode <= 67)
-                || (weatherCode >= 80 && weatherCode <= 82)) return "☂︎"
-        if ((weatherCode >= 71 && weatherCode <= 77)
-                || (weatherCode >= 85 && weatherCode <= 86)) return "❄︎"
-        if (weatherCode >= 95) return "ϟ"
-        return "?"
-    }
-
     function localTime(isoTime) {
         const match = String(isoTime ?? "").match(/T(\d{2}:\d{2})/)
         return match ? match[1] : "--:--"
@@ -687,7 +673,7 @@ KosApplicationWindow {
                             Layout.alignment: Qt.AlignHCenter
                             text: Math.round(root.number(backend.current, "temperature", 0)) + "°"
                             color: root.skyText
-                            font.pixelSize: 92
+                            font.pixelSize: 160
                             font.weight: Font.Light
                         }
 
@@ -859,13 +845,12 @@ KosApplicationWindow {
                                             color: root.skyTextMuted
                                         }
 
-                                        Label {
+                                        WeatherIcon {
                                             Layout.alignment: Qt.AlignHCenter
-                                            text: root.conditionSymbol(
-                                                root.number(hourlyCard.modelData, "weatherCode", -1),
-                                                Boolean(root.value(hourlyCard.modelData, "isDay", true)))
-                                            color: root.skyTextMuted
-                                            font.pixelSize: 25
+                                            Layout.preferredWidth: 26
+                                            Layout.preferredHeight: 26
+                                            code: root.number(hourlyCard.modelData, "weatherCode", -1)
+                                            isDay: Boolean(root.value(hourlyCard.modelData, "isDay", true))
                                             Accessible.ignored: true
                                         }
 
@@ -968,11 +953,12 @@ KosApplicationWindow {
                                         Column {
                                             spacing: 1
 
-                                            Label {
-                                                text: root.conditionSymbol(root.number(
-                                                    dailyRow.modelData, "weatherCode", -1), true)
-                                                color: root.skyTextMuted
-                                                font.pixelSize: 22
+                                            WeatherIcon {
+                                                anchors.horizontalCenter: parent.horizontalCenter
+                                                width: 24
+                                                height: 24
+                                                code: root.number(dailyRow.modelData, "weatherCode", -1)
+                                                isDay: true
                                                 Accessible.ignored: true
                                             }
 
