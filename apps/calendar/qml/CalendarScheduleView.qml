@@ -208,6 +208,29 @@ Pane {
         return isoDayPattern(last) && last > today
     }
 
+    // R089: hoisted from the two chip delegates — R079's rule was written out
+    // twice (timedChip R079, allDayChip R080) and the band's `+N` row is the
+    // third consumer of the same ink. One expression, three reads.
+    // The ref's chip ink is the calendar colour moved HALFWAY TO ITS OWN POLE —
+    // hue and saturation untouched. Measured 1:1 on refs/macos-calendar.png as
+    // ink CORES (not AA edges, which land anywhere in between): the red bar
+    // (235,76,70) carries ink (117,37,34), the blue bar (59,134,247) carries
+    // (26,67,123), an olive chip (254,204,0) carries (127,102,0) — 1:2 on all
+    // three channels. Halving RGB is exactly halving the HSV value, because
+    // S = (max-min)/max is invariant under a uniform scale, so the rule needs
+    // no colour-space round trip. No separate "saturation/value mapping" is
+    // needed: the plain scale reproduces both chips with one parameter.
+    // Dark is the theme mirror the ref cannot anchor (it has no dark leg): the
+    // same operation toward the other pole, half to white, which sits on the
+    // 0.36 wash exactly as the light leg's half-to-black sits on the 0.19 wash.
+    function chipInk(item) {
+        const c = itemColor(item)
+        const pole = AppTheme.dark ? 1 : 0
+        return Qt.rgba(c.r + (pole - c.r) * 0.5,
+                       c.g + (pole - c.g) * 0.5,
+                       c.b + (pole - c.b) * 0.5, 1)
+    }
+
     function hourItems(date, hour) {
         const source = itemsForDate(date)
         const result = []
@@ -434,6 +457,19 @@ Pane {
                     }
 
                     ColumnLayout {
+                        id: allDayStack
+                        // R089 (A04 step 2): the band box is allDayBandRows slots tall and
+                        // must never drop an item silently. When a column holds MORE items
+                        // than it has slots, the last slot is spent on a `+N` remainder row
+                        // (the macOS week-view convention) instead of on a chip, so the
+                        // column reports its overflow rather than hiding it.
+                        // This is a spec/HIG-only design call: the ref
+                        // (refs/macos-calendar.png) never exceeds 3 chips in any of its 7
+                        // columns, so there is NO ref anchor for the overflow form.
+                        readonly property int allDayOverflow: Math.max(0,
+                            allDayColumn.columnItems.length - root.allDayBandRows + 1)
+                        readonly property int allDayVisible:
+                            root.allDayBandRows - (allDayOverflow > 0 ? 1 : 0)
                         // R072: hug the rows instead of filling the band. A
                         // ColumnLayout taller than its items does NOT leave the
                         // slack at the bottom — it spreads the surplus into its
@@ -453,7 +489,9 @@ Pane {
                         Repeater {
                             // The band box is allDayBandRows slots tall, so it must render that many:
                             // a cap below the slot count is a pure defect, not a layout choice.
-                            model: allDayColumn.columnItems.slice(0, root.allDayBandRows)
+                            // R089: unless the column overflows, in which case the last slot
+                            // belongs to the `+N` row below.
+                            model: allDayColumn.columnItems.slice(0, allDayStack.allDayVisible)
                             delegate: Rectangle {
                                 id: allDayChip
                                 required property var modelData
@@ -479,19 +517,8 @@ Pane {
                                     AppTheme.dark ? 0.32 : 0.17)
                                 opacity: root.itemCompleted(modelData) ? 0.5 : 1
                                 // R080: the band chip's ink is the same rule as the timed
-                                // chip's (R079) — the calendar colour halfway to its pole.
-                                // Measured on the REF's band chips, 1:1, against their own
-                                // coloured ring icon: purple ring (187,62,217) → ink core
-                                // (93,30,108); blue-grey ring (133,148,173) → (67,74,86).
-                                // Both are 1:2 on every channel (the .5 rounds down where
-                                // the colour is odd), hue and saturation untouched.
-                                readonly property color inkColor: {
-                                    var c = root.itemColor(modelData)
-                                    var pole = AppTheme.dark ? 1 : 0
-                                    return Qt.rgba(c.r + (pole - c.r) * 0.5,
-                                                   c.g + (pole - c.g) * 0.5,
-                                                   c.b + (pole - c.b) * 0.5, 1)
-                                }
+                                // chip's (R079). R089 hoisted it to root.chipInk.
+                                readonly property color inkColor: root.chipInk(modelData)
 
                                 Label {
                                     anchors.fill: parent
@@ -511,6 +538,28 @@ Pane {
                                     onTapped: root.itemActivated(allDayChip.modelData)
                                 }
                             }
+                        }
+
+                        // R089 (A04 step 2): the overflow row. Plain ink text, no fill —
+                        // the `+N` is a count of hidden items, not an item, so it must not
+                        // read as a chip. It occupies the same 24-px slot a chip would and
+                        // takes its ink from the FIRST hidden item, so a column with more
+                        // items than slots stays inside the band's own colour family.
+                        // Height is bound rather than left to the Label so the slot's
+                        // geometry is identical to a chip's (allDayRowHeight, gap above).
+                        Label {
+                            visible: allDayStack.allDayOverflow > 0
+                            Layout.fillWidth: true
+                            Layout.preferredHeight:
+                                allDayStack.allDayOverflow > 0 ? root.allDayRowHeight : 0
+                            text: "+" + allDayStack.allDayOverflow
+                            color: allDayStack.allDayOverflow > 0
+                                ? root.chipInk(allDayColumn.columnItems[allDayStack.allDayVisible])
+                                : "transparent"
+                            font.pixelSize: 9
+                            leftPadding: 5
+                            verticalAlignment: Text.AlignVCenter
+                            elide: Text.ElideRight
                         }
                     }
                 }
@@ -710,28 +759,9 @@ Pane {
                                             Math.round(root.hourHeight * 21 / 54) / 4)
                                         readonly property int stripeInset: stripeWidth
                                         // R079: the ref's chip ink is the calendar colour moved
-                                        // HALFWAY TO ITS OWN POLE — hue and saturation untouched.
-                                        // Measured 1:1 on refs/macos-calendar.png as ink CORES (not
-                                        // AA edges, which land anywhere in between): the red bar
-                                        // (235,76,70) carries ink (117,37,34), the blue bar
-                                        // (59,134,247) carries (26,67,123), an olive chip
-                                        // (254,204,0) carries (127,102,0) — 1:2 on all three
-                                        // channels. Halving RGB is exactly halving the HSV value,
-                                        // because S = (max-min)/max is invariant under a uniform
-                                        // scale, so the rule needs no colour-space round trip.
-                                        // No separate "saturation/value mapping" is needed: the
-                                        // plain scale reproduces both chips with one parameter.
-                                        // Dark is the theme mirror the ref cannot anchor (it has
-                                        // no dark leg): the same operation toward the other pole,
-                                        // half to white, which sits on the 0.36 wash exactly as
-                                        // the light leg's half-to-black sits on the 0.19 wash.
-                                        readonly property color inkColor: {
-                                            var c = root.itemColor(modelData)
-                                            var pole = AppTheme.dark ? 1 : 0
-                                            return Qt.rgba(c.r + (pole - c.r) * 0.5,
-                                                           c.g + (pole - c.g) * 0.5,
-                                                           c.b + (pole - c.b) * 0.5, 1)
-                                        }
+                                        // halfway to its own pole. R089 hoisted the expression to
+                                        // root.chipInk — see there for the measurement.
+                                        readonly property color inkColor: root.chipInk(modelData)
                                         radius: 5
                                         color: AppTheme.withAlpha(root.itemColor(modelData),
                                             AppTheme.dark ? 0.36 : 0.19)
