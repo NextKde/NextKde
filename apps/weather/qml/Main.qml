@@ -1022,6 +1022,38 @@ KosApplicationWindow {
                             }
                         }
                     }
+
+                    // 底边滚动边缘效果：与 scrollEdgeTop 镜像对称（HIG Materials——列表下方还有未滚入内容时模糊并降不透明度）。
+                    Item {
+                        id: scrollEdgeBottom
+                        anchors.bottom: parent.bottom
+                        anchors.left: parent.left
+                        anchors.right: parent.right
+                        height: 26
+                        visible: savedLocations.contentY + savedLocations.height < savedLocations.contentHeight - 0.5
+                        clip: true
+
+                        MultiEffect {
+                            width: savedLocations.width
+                            height: savedLocations.height
+                            source: savedLocations
+                            blurEnabled: true
+                            blurMax: 32
+                            blur: 1.0
+                            saturation: 0.2
+                        }
+
+                        Rectangle {
+                            anchors.fill: parent
+                            gradient: Gradient {
+                                GradientStop { position: 0.0; color: "transparent" }
+                                GradientStop {
+                                    position: 1.0
+                                    color: Qt.rgba(AppTheme.sidebar.r, AppTheme.sidebar.g, AppTheme.sidebar.b, 0.9)
+                                }
+                            }
+                        }
+                    }
                 }
 
                 RowLayout {
