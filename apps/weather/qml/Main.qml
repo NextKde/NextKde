@@ -1289,7 +1289,6 @@ KosApplicationWindow {
                     KosCard {
                         id: airQualityCard
                         Layout.fillWidth: true
-                        visible: !Number.isNaN(root.number(backend.airQuality, "usAqi", Number.NaN))
 
                         background: KosSurface {
                             radius: 14
@@ -2154,6 +2153,12 @@ KosApplicationWindow {
                                     readonly property real uMax: root.clamp(
                                         (dailyRow.dayMaximum - root.dailyRange.minimum)
                                             / dailyRow.rangeSpan, 0, 1)
+                                    readonly property real uCurrent: dailyRow.index === 0
+                                        ? root.clamp(
+                                            (root.number(backend.current, "temperature", Number.NaN)
+                                                - root.dailyRange.minimum) / dailyRow.rangeSpan,
+                                            0, 1)
+                                        : 0
                                     readonly property int precipChance: Math.round(root.number(
                                         dailyRow.modelData, "precipitationProbability", 0))
 
@@ -2229,6 +2234,19 @@ KosApplicationWindow {
                                                         color: root.tempColor(dailyRow.dayMaximum)
                                                     }
                                                 }
+                                            }
+
+                                            // Today 行当前温度标记（ref-main 实测：白点直径 ≈ 条高+1px，仅 Today 行有）
+                                            Rectangle {
+                                                visible: dailyRow.index === 0
+                                                    && Number.isFinite(root.number(
+                                                        backend.current, "temperature", Number.NaN))
+                                                anchors.verticalCenter: parent.verticalCenter
+                                                x: parent.width * dailyRow.uCurrent - width / 2
+                                                width: 8
+                                                height: 8
+                                                radius: 4
+                                                color: "#ffffff"
                                             }
                                         }
 
