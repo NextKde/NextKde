@@ -265,8 +265,14 @@ Pane {
 
         // W02/W03: compact 36px date header. Weekday (11px) and date (12px)
         // sit on one shared row, the pair centred in each day column; the
-        // date mark is a 20px red disc for today (white number), a grey
+        // date mark is a 22px red disc for today (white number), a grey
         // disc for the ordinary selected date, nothing for ordinary days.
+        // R086: 22 is the reference's own physical diameter, NOT a scaled
+        // one. The ref's disc is 22 px around a day-number whose ink is
+        // 9 px tall; our number (12px font) also renders 9 px of ink, so
+        // the two number sizes are already 1:1 and the disc must be too.
+        // (The older "22 ref px x1.33 = 29" note wrongly applied the
+        // window-height ratio to a type element that does not scale.)
         // Weekend columns read one step dimmer. Column boundaries come from
         // the shared gutter/column geometry, so header, all-day and timed
         // sections align exactly.
@@ -309,7 +315,7 @@ Pane {
 
                 Rectangle {
                     anchors.verticalCenter: parent.verticalCenter
-                    width: 20; height: 20; radius: 10
+                    width: 22; height: 22; radius: 11
                     color: headerCell.today ? root.todayRed
                         : (headerCell.selected && !headerCell.today
                            ? root.selectionGrey : "transparent")
