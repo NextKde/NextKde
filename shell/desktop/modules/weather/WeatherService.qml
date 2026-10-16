@@ -47,6 +47,11 @@ QtObject {
     readonly property string windGust: available && Number.isFinite(Number(current.windGust))
         ? Math.round(Number(current.windGust)) + (units === "imperial" ? " mph" : " km/h")
         : ""
+    readonly property string uvIndex: available && Number.isFinite(Number(current.uvIndex))
+        ? String(Math.round(Number(current.uvIndex))) : ""
+    readonly property string visibility: available && Number.isFinite(Number(current.visibility))
+        ? Math.round(Number(current.visibility) / (units === "imperial" ? 1609.344 : 1000))
+          + (units === "imperial" ? " mi" : " km") : ""
     readonly property string sunriseTime: dailyTime("sunrise")
     readonly property string sunsetTime: dailyTime("sunset")
     readonly property var forecastDays: {

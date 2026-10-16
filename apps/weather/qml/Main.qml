@@ -15,6 +15,7 @@ KosApplicationWindow {
 
     readonly property string temperatureUnit: backend.units === "imperial" ? "°F" : "°C"
     readonly property string speedUnit: backend.units === "imperial" ? qsTr("mph") : qsTr("km/h")
+    readonly property string distanceUnit: backend.units === "imperial" ? qsTr("mi") : qsTr("km")
     readonly property var upcomingHours: upcomingForecast()
     property string pendingLocationId: ""
     readonly property int currentWeatherCode: number(backend.current, "weatherCode", -1)
@@ -1504,6 +1505,30 @@ KosApplicationWindow {
                                         labelText: qsTr("Observed")
                                         valueText: root.localTime(root.value(
                                             backend.current, "time", ""))
+                                    }
+
+                                    WeatherMetric {
+                                        Layout.fillWidth: true
+                                        symbol: "☀"
+                                        labelText: qsTr("UV Index")
+                                        valueText: {
+                                            const uv = root.number(backend.current, "uvIndex", NaN)
+                                            return Number.isFinite(uv) ? String(Math.round(uv)) : "—"
+                                        }
+                                    }
+
+                                    WeatherMetric {
+                                        Layout.fillWidth: true
+                                        symbol: "◉"
+                                        labelText: qsTr("Visibility")
+                                        valueText: {
+                                            const meters = root.number(backend.current, "visibility", NaN)
+                                            if (!Number.isFinite(meters))
+                                                return "—"
+                                            return backend.units === "imperial"
+                                                ? Math.round(meters / 1609.344) + " " + root.distanceUnit
+                                                : Math.round(meters / 1000) + " " + root.distanceUnit
+                                        }
                                     }
                                 }
                             }
