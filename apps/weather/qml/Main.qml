@@ -369,9 +369,10 @@ KosApplicationWindow {
 
         implicitHeight: 66
         radius: AppTheme.smallRadius
-        color: Qt.rgba(1, 1, 1, 0.12)
+        // unified with full-width cards (AQ/10-day): fill 0.16 + stroke 0.22; ref-main shows one shared card material
+        color: Qt.rgba(1, 1, 1, 0.16)
         border.width: 1
-        border.color: Qt.rgba(1, 1, 1, 0.20)
+        border.color: Qt.rgba(1, 1, 1, 0.22)
         Accessible.role: Accessible.StaticText
         Accessible.name: metric.labelText + ": " + metric.valueText
 
@@ -388,7 +389,7 @@ KosApplicationWindow {
                 Layout.preferredWidth: 32
                 Layout.preferredHeight: 32
                 radius: 10
-                color: Qt.rgba(1, 1, 1, 0.16)
+                color: Qt.rgba(1, 1, 1, 0.20) // keep +0.04 above tile fill
 
                 Label {
                     anchors.centerIn: parent
@@ -1585,9 +1586,9 @@ KosApplicationWindow {
                                         Layout.fillWidth: true
                                         implicitHeight: 66
                                         radius: AppTheme.smallRadius
-                                        color: Qt.rgba(1, 1, 1, 0.12)
+                                        color: Qt.rgba(1, 1, 1, 0.16)
                                         border.width: 1
-                                        border.color: Qt.rgba(1, 1, 1, 0.20)
+                                        border.color: Qt.rgba(1, 1, 1, 0.22)
 
                                         property real windDir: root.number(backend.current, "windDirection", 0)
                                         // arrow points where the wind blows TO (Open-Meteo direction is where it comes FROM)
@@ -1743,9 +1744,9 @@ KosApplicationWindow {
                                         Layout.fillWidth: true
                                         implicitHeight: 66
                                         radius: AppTheme.smallRadius
-                                        color: Qt.rgba(1, 1, 1, 0.12)
+                                        color: Qt.rgba(1, 1, 1, 0.16)
                                         border.width: 1
-                                        border.color: Qt.rgba(1, 1, 1, 0.20)
+                                        border.color: Qt.rgba(1, 1, 1, 0.22)
 
                                         property real phaseVal: root.number(backend.current, "moonPhase", Number.NaN)
                                         property bool hasPhase: Number.isFinite(phaseVal)
@@ -1859,9 +1860,9 @@ KosApplicationWindow {
                                         Layout.fillWidth: true
                                         implicitHeight: 66
                                         radius: AppTheme.smallRadius
-                                        color: Qt.rgba(1, 1, 1, 0.12)
+                                        color: Qt.rgba(1, 1, 1, 0.16)
                                         border.width: 1
-                                        border.color: Qt.rgba(1, 1, 1, 0.20)
+                                        border.color: Qt.rgba(1, 1, 1, 0.22)
 
                                         // daily[0].sunset 形如 "2026-10-17T17:57"（Open-Meteo 本地 ISO，无时区后缀）
                                         readonly property string sunsetRaw:
