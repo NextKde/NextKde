@@ -612,6 +612,19 @@ Pane {
                                         // the 40px cell minus the 3px margins.
                                         Layout.preferredHeight: Math.round(
                                             root.hourHeight * 21 / 54)
+                                        // R077: the ref marks every calendar-coloured chip with a
+                                        // saturated same-hue bar at its left edge. Measured 1:1 on
+                                        // refs/macos-calendar.png: the blue chip's bar reads x=409-411
+                                        // = (59,134,247) and the red chip's x=328-330 = (235,76,70),
+                                        // i.e. ~2.4 ref px of ink on an ~80 ref px column, its left
+                                        // edge ~2 ref px inside the chip's fill (a sliver of the light
+                                        // wash shows beside it) and capped round. Derived from the chip
+                                        // it sits in — the icon/corner family's row/3 idiom — so a chip
+                                        // height change carries the bar with it, and the inset reuses
+                                        // the measured "sliver ≈ bar width" ratio.
+                                        readonly property int stripeWidth: Math.round(
+                                            Math.round(root.hourHeight * 21 / 54) / 4)
+                                        readonly property int stripeInset: stripeWidth
                                         radius: 5
                                         color: AppTheme.withAlpha(root.itemColor(modelData),
                                             AppTheme.dark ? 0.36 : 0.19)
@@ -620,9 +633,29 @@ Pane {
                                             root.itemColor(modelData), 0.34)
                                         opacity: root.itemCompleted(modelData) ? 0.5 : 1
 
+                                        // R077: the calendar-colour bar. Full saturation, no
+                                        // alpha — the ref's bars read (59,134,247) and
+                                        // (235,76,70). A capsule stripeWidth wide, inset by
+                                        // stripeInset, held 2px clear of the chip's top and
+                                        // bottom so it stays inside the 5px corner curve.
+                                        Rectangle {
+                                            x: timedChip.stripeInset
+                                            width: timedChip.stripeWidth
+                                            anchors.top: parent.top
+                                            anchors.bottom: parent.bottom
+                                            anchors.topMargin: 2
+                                            anchors.bottomMargin: 2
+                                            radius: Math.round(timedChip.stripeWidth / 2)
+                                            color: root.itemColor(timedChip.modelData)
+                                        }
+
                                         Label {
                                             anchors.fill: parent
-                                            anchors.leftMargin: 5
+                                            // R077: clear the bar. The ref's text ink begins 7 ref px
+                                            // from the chip's fill edge (chip x=326, ink x=333) ⇒ ~13
+                                            // at our scale = inset + width + the 5 already here.
+                                            anchors.leftMargin: timedChip.stripeInset
+                                                + timedChip.stripeWidth + 5
                                             anchors.rightMargin: 4
                                             text: root.itemTitle(timedChip.modelData)
                                             color: AppTheme.text
