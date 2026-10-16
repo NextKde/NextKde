@@ -70,6 +70,20 @@ Pane {
     readonly property color sectionRule: AppTheme.dark
         ? Qt.rgba(1, 1, 1, 0.04) : "#F2F2F2"
 
+    // R070: the weekend columns carry a section tint over the whole schedule
+    // field — the all-day band and the hour grid alike, but NOT the day-header
+    // row. Re-measured on the reference (row-mode over empty columns, band
+    // y126-181 and hour grid y500): weekday columns are 255, Sat/Sun are 249
+    // in BOTH regions. There is no band-only tint: the earlier "weekday 249 /
+    // weekend 244" reading was the half-strength row of the 242 boundary.
+    readonly property color weekendField: AppTheme.dark
+        ? Qt.rgba(1, 1, 1, 0.03) : "#F9F9F9"
+    // JS getDay(): 0 = Sunday, 6 = Saturday.
+    function isWeekendColumn(column) {
+        var day = dateForColumn(column).getDay()
+        return day === 0 || day === 6
+    }
+
     // W03: local marker tokens (today red like the macOS reference, subdued
     // grey for the ordinary selection). Neutral, no shared-theme dependency.
     readonly property color todayRed: "#E5484D"
@@ -289,6 +303,16 @@ Pane {
                     Layout.maximumWidth: root.dayColumnWidth
                     Layout.preferredHeight: 48
 
+                    // R070: the weekend section tint, behind the chips.
+                    // Declared first so it stacks below every chip and below
+                    // the column separators. Weekday columns stay transparent
+                    // (the field is white there).
+                    Rectangle {
+                        anchors.fill: parent
+                        color: root.isWeekendColumn(allDayColumn.index)
+                            ? root.weekendField : "transparent"
+                    }
+
                     ColumnLayout {
                         anchors.fill: parent
                         anchors.margins: 3
@@ -377,6 +401,18 @@ Pane {
                             ? root.gutterWidth : root.dayColumnWidth
                         Layout.fillWidth: false
                         Layout.preferredHeight: root.hourHeight
+
+                        // R070: the same weekend section tint covers the hour
+                        // grid, so the band and the grid agree on the column's
+                        // field colour (reference: 249 on both, 255 on
+                        // weekdays). Declared first: it must sit below the four
+                        // edge rules and below the chips.
+                        Rectangle {
+                            anchors.fill: parent
+                            color: hourCell.columnIndex > 0
+                                && root.isWeekendColumn(hourCell.columnIndex - 1)
+                                ? root.weekendField : "transparent"
+                        }
 
                         // T03: hour labels 10-11px, right-aligned 7px from the
                         // grid's left edge (parent.right IS the gutter/day
