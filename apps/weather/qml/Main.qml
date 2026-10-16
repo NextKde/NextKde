@@ -988,12 +988,21 @@ KosApplicationWindow {
                         enabled: backend.connected && !backend.loading
                         background: GlassCircleBg { subtle: true }
                         contentItem: Label {
+                            id: refreshGlyph
                             text: refreshButton.text
                             font: refreshButton.font
                             color: refreshButton.enabled
                                 ? "white" : Qt.rgba(1, 1, 1, 0.38)
                             horizontalAlignment: Text.AlignHCenter
                             verticalAlignment: Text.AlignVCenter
+                            RotationAnimation on rotation {
+                                running: backend.loading && !AppTheme.reduceMotion
+                                loops: Animation.Infinite
+                                duration: 1000
+                                from: 0
+                                to: 360
+                                onRunningChanged: if (!running) refreshGlyph.rotation = 0
+                            }
                         }
                         Accessible.name: qsTr("Refresh weather forecast")
                         ToolTip.visible: hovered
