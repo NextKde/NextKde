@@ -48,6 +48,23 @@ Pane {
     // they can no longer drift apart.
     readonly property int hourHeight: 40
 
+    // A01 step 2 (R072): the all-day band's row geometry, derived from one
+    // anchor and measured off the reference at 1:1. Reference rows sit at
+    // y126-143, y145-162, y164-181 => row 18, gap 1, pitch 19, three rows
+    // spanning a 60px band (top rule y124, bottom separator y183-184).
+    // Our vertical factor against the reference is 1.33 (40px hour pitch vs
+    // 27), so row 18 -> 24, gap 1 -> 1, and the 60px band -> 80px. The band
+    // height is DERIVED from the row height so the two can never drift.
+    readonly property int allDayRowHeight: 24
+    readonly property int allDayRowGap: 1
+    readonly property int allDayBandRows: 3
+    // Step 3 (next round) retunes this to the reference's ~1.35; it stays 3
+    // until then so this round touches row height and gap only.
+    readonly property int allDayBandInset: 3
+    readonly property int allDayBandHeight: allDayBandInset * 2
+        + allDayBandRows * allDayRowHeight
+        + (allDayBandRows - 1) * allDayRowGap
+
     // T02: the two grid-line weights. Neutral (no blue tint), 1px each;
     // the half-hour line is one step lighter than the hour line. The light
     // value is the reference's own measured hour-line colour, (237,237,237).
@@ -301,7 +318,7 @@ Pane {
                     Layout.minimumWidth: root.dayColumnWidth
                     Layout.preferredWidth: root.dayColumnWidth
                     Layout.maximumWidth: root.dayColumnWidth
-                    Layout.preferredHeight: 48
+                    Layout.preferredHeight: root.allDayBandHeight
 
                     // R070: the weekend section tint, behind the chips.
                     // Declared first so it stacks below every chip and below
@@ -314,9 +331,21 @@ Pane {
                     }
 
                     ColumnLayout {
-                        anchors.fill: parent
-                        anchors.margins: 3
-                        spacing: 2
+                        // R072: hug the rows instead of filling the band. A
+                        // ColumnLayout taller than its items does NOT leave the
+                        // slack at the bottom — it spreads the surplus into its
+                        // spacings (a leading half-spacing, the between-spacing,
+                        // and a trailing half-spacing). Measured on the R072
+                        // capture: inset 3 + gap 1 rendered as 7 / 13 / 6, i.e.
+                        // the chips drifted apart. Binding the height to
+                        // implicitHeight removes the surplus entirely, so the
+                        // chips stack from the top on a true allDayRowGap.
+                        anchors.left: parent.left
+                        anchors.right: parent.right
+                        anchors.top: parent.top
+                        anchors.margins: root.allDayBandInset
+                        height: implicitHeight
+                        spacing: root.allDayRowGap
 
                         Repeater {
                             model: allDayColumn.columnItems.slice(0, 2)
@@ -324,7 +353,7 @@ Pane {
                                 id: allDayChip
                                 required property var modelData
                                 Layout.fillWidth: true
-                                Layout.preferredHeight: 18
+                                Layout.preferredHeight: root.allDayRowHeight
                                 radius: 5
                                 color: AppTheme.withAlpha(root.itemColor(modelData),
                                     AppTheme.dark ? 0.32 : 0.17)
