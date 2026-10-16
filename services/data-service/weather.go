@@ -74,6 +74,9 @@ type WeatherCurrent struct {
 	WeatherCode      int     `json:"weatherCode"`
 	WindSpeed        float64 `json:"windSpeed"`
 	WindDirection    float64 `json:"windDirection"`
+	// WindGust is the recent maximum gust in the state's wind unit. It is nil
+	// when the persisted snapshot predates the field or the provider omitted it.
+	WindGust *float64 `json:"windGust,omitempty"`
 }
 
 type WeatherHourlyPoint struct {
@@ -264,14 +267,15 @@ func (provider *OpenMeteoProvider) getJSON(ctx context.Context, endpoint string,
 type openMeteoForecastPayload struct {
 	Timezone string `json:"timezone"`
 	Current  struct {
-		Time             string  `json:"time"`
-		Temperature      float64 `json:"temperature_2m"`
-		RelativeHumidity float64 `json:"relative_humidity_2m"`
-		ApparentTemp     float64 `json:"apparent_temperature"`
-		IsDay            int     `json:"is_day"`
-		WeatherCode      int     `json:"weather_code"`
-		WindSpeed        float64 `json:"wind_speed_10m"`
-		WindDirection    float64 `json:"wind_direction_10m"`
+		Time             string   `json:"time"`
+		Temperature      float64  `json:"temperature_2m"`
+		RelativeHumidity float64  `json:"relative_humidity_2m"`
+		ApparentTemp     float64  `json:"apparent_temperature"`
+		IsDay            int      `json:"is_day"`
+		WeatherCode      int      `json:"weather_code"`
+		WindSpeed        float64  `json:"wind_speed_10m"`
+		WindDirection    float64  `json:"wind_direction_10m"`
+		WindGust         *float64 `json:"wind_gusts_10m"`
 	} `json:"current"`
 	Hourly struct {
 		Time                []string  `json:"time"`
@@ -314,7 +318,7 @@ func (provider *OpenMeteoProvider) Forecast(ctx context.Context, location Weathe
 	values := url.Values{
 		"latitude":      {fmt.Sprintf("%.6f", location.Latitude)},
 		"longitude":     {fmt.Sprintf("%.6f", location.Longitude)},
-		"current":       {"temperature_2m,relative_humidity_2m,apparent_temperature,is_day,weather_code,wind_speed_10m,wind_direction_10m"},
+		"current":       {"temperature_2m,relative_humidity_2m,apparent_temperature,is_day,weather_code,wind_speed_10m,wind_direction_10m,wind_gusts_10m"},
 		"hourly":        {"temperature_2m,apparent_temperature,relative_humidity_2m,precipitation_probability,weather_code,is_day,wind_speed_10m"},
 		"daily":         {"weather_code,temperature_2m_max,temperature_2m_min,precipitation_probability_max,sunrise,sunset"},
 		"timezone":      {"auto"},
@@ -349,6 +353,7 @@ func (provider *OpenMeteoProvider) Forecast(ctx context.Context, location Weathe
 			WeatherCode:      payload.Current.WeatherCode,
 			WindSpeed:        payload.Current.WindSpeed,
 			WindDirection:    payload.Current.WindDirection,
+			WindGust:         payload.Current.WindGust,
 		},
 		Hourly: []WeatherHourlyPoint{},
 		Daily:  []WeatherDay{},

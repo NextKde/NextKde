@@ -91,7 +91,8 @@
         "isDay": { "type": "boolean" },
         "weatherCode": { "type": "integer" },
         "windSpeed": { "type": "number", "minimum": 0 },
-        "windDirection": { "type": "number", "minimum": 0, "maximum": 360 }
+        "windDirection": { "type": "number", "minimum": 0, "maximum": 360 },
+        "windGust": { "type": ["number", "null"], "minimum": 0 }
       },
       "additionalProperties": true
     },
