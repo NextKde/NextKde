@@ -2086,12 +2086,33 @@ KosApplicationWindow {
                                 width: 44
                                 height: 36
                                 background: null
-                                contentItem: Label {
-                                    horizontalAlignment: Text.AlignHCenter
-                                    verticalAlignment: Text.AlignVCenter
-                                    text: "☂︎"
-                                    color: hourlySegmented.segment === 1 ? "#ffffff" : Qt.rgba(1, 1, 1, 0.9)
-                                    font.pixelSize: 16
+                                // ref-main 实测降水段为实心水滴 6×9px@814（胶囊高 25px），我方胶囊 36px 按 1.44 折算 ≈ 9×13
+                                contentItem: Canvas {
+                                    id: dropCanvas
+                                    width: 12
+                                    height: 16
+                                    anchors.centerIn: parent
+                                    antialiasing: true
+                                    onPaint: {
+                                        var ctx = getContext("2d")
+                                        ctx.reset()
+                                        ctx.beginPath()
+                                        ctx.moveTo(6, 1.5)
+                                        ctx.bezierCurveTo(8.2, 5.0, 10, 7.6, 10, 10.5)  // 右侧下行到圆右端
+                                        ctx.arc(6, 10.5, 4, 0, Math.PI, false)          // 经底部从右到左
+                                        ctx.bezierCurveTo(2, 7.6, 3.8, 5.0, 6, 1.5)     // 左侧收回尖点
+                                        ctx.closePath()
+                                        ctx.fillStyle = hourlySegmented.segment === 1 ? "#ffffff" : Qt.rgba(1, 1, 1, 0.9)
+                                        ctx.fill()
+                                    }
+                                    // segment 属于外层 hourlySegmented，Canvas 上无法直接写 onSegmentChanged
+                                    //（qmllint: no matching signal，运行时不触发），改用 Connections 监听后重绘
+                                    Connections {
+                                        target: hourlySegmented
+                                        function onSegmentChanged() { dropCanvas.requestPaint() }
+                                    }
+                                    Component.onCompleted: requestPaint()
+                                    Accessible.ignored: true
                                 }
                                 onClicked: hourlySegmented.segment = 1
                                 Accessible.name: qsTr("Hourly precipitation")
