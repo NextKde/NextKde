@@ -61,7 +61,26 @@ Pane {
     // height is DERIVED from the row height so the two can never drift.
     readonly property int allDayRowHeight: 24
     readonly property int allDayRowGap: 1
-    readonly property int allDayBandRows: 3
+    // A04's cap: the tallest band this view will draw before a column spends its
+    // last slot on a `+N` remainder row.
+    readonly property int allDayMaxRows: 3
+    // A01 clause (a) (R106): the band's MINIMUM height. The reference's band hugs
+    // its content — top rule y=124 with the first chip at y=126, last chip ending
+    // y=181 against the separator at y=183-184, i.e. rows plus a ~1px inset each
+    // side and nothing else. A hard 3-row box cannot do that: in a week whose
+    // tallest column carries one all-day item it still reserved all three rows.
+    // The row count is DERIVED from the content instead, floored at ONE row —
+    // the spec's "min about 28" reads 1 + 24 + 1 = 26 here, against the
+    // reference's own 1-row band (1 + 18 + 1 = 20) x our 1.33 vertical factor
+    // = 26.6 — and capped at allDayMaxRows so A04's overflow row stays reachable.
+    readonly property int allDayContentRows: {
+        let height = 0
+        for (let index = 0; index < dayCount; ++index)
+            height = Math.max(height, allDayItems(dateForColumn(index)).length)
+        return height
+    }
+    readonly property int allDayBandRows: Math.max(1,
+        Math.min(allDayMaxRows, allDayContentRows))
     // Step 3: the reference's band inset, measured 1:1 (top rule y=124, the
     // first chip starting at y=126 => ~1 ref-px), x our 1.33 vertical factor
     // => ~1.3, taken as 1. It feeds allDayBandHeight, so the band follows.
@@ -408,7 +427,7 @@ Pane {
                 Layout.preferredWidth: root.gutterWidth
                 Layout.minimumWidth: root.gutterWidth
                 Layout.maximumWidth: root.gutterWidth
-                Layout.preferredHeight: 48
+                Layout.preferredHeight: root.allDayBandHeight
                 text: qsTr("all-day")
                 color: AppTheme.mutedText
                 font.pixelSize: 9
@@ -480,7 +499,7 @@ Pane {
                         // (refs/macos-calendar.png) never exceeds 3 chips in any of its 7
                         // columns, so there is NO ref anchor for the overflow form.
                         readonly property int allDayOverflow: Math.max(0,
-                            allDayColumn.columnItems.length - root.allDayBandRows + 1)
+                            allDayColumn.columnItems.length - root.allDayMaxRows + 1)
                         readonly property int allDayVisible:
                             root.allDayBandRows - (allDayOverflow > 0 ? 1 : 0)
                         // R072: hug the rows instead of filling the band. A
