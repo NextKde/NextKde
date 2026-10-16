@@ -451,7 +451,9 @@ Pane {
                         spacing: root.allDayRowGap
 
                         Repeater {
-                            model: allDayColumn.columnItems.slice(0, 2)
+                            // The band box is allDayBandRows slots tall, so it must render that many:
+                            // a cap below the slot count is a pure defect, not a layout choice.
+                            model: allDayColumn.columnItems.slice(0, root.allDayBandRows)
                             delegate: Rectangle {
                                 id: allDayChip
                                 required property var modelData
