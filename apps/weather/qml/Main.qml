@@ -177,13 +177,6 @@ KosApplicationWindow {
         return result
     }
 
-    function updatedText() {
-        if (backend.fetchedAt <= 0)
-            return qsTr("Never updated")
-        return qsTr("Updated %1").arg(AppTheme.formatDateTime(
-            new Date(backend.fetchedAt), Locale.ShortFormat))
-    }
-
     component WeatherMetric: Rectangle {
         id: metric
 
@@ -383,6 +376,13 @@ KosApplicationWindow {
                         id: savedLocation
 
                         required property var modelData
+                        Timer { interval: 100; running: true; onTriggered: console.log("CARDGEO",
+                            "delegate.w=" + savedLocation.width, "x=" + savedLocation.x,
+                            "list.w=" + savedLocations.width,
+                            "list.x=" + savedLocations.x,
+                            "col.w=" + savedLocations.parent.width,
+                            "col.x=" + savedLocations.parent.x,
+                            "sidebar.w=" + sidebar.width) }
                         readonly property var summary: root.value(modelData, "summary", null)
                         readonly property var cardStops: root.skyStopsFor(
                             savedLocation.summary ? savedLocation.summary.weatherCode : 2,
@@ -529,6 +529,32 @@ KosApplicationWindow {
 
                     ButtonGroup { id: unitsGroup }
 
+                    KosToolButton {
+                        text: "⚙"
+                        font.pixelSize: 16
+                        Accessible.name: qsTr("Weather settings")
+                        ToolTip.visible: hovered
+                        ToolTip.text: Accessible.name
+                        onClicked: settingsDialog.open()
+                    }
+
+                    KosToolButton {
+                        text: "↻"
+                        font.pixelSize: 18
+                        enabled: backend.connected && !backend.loading
+                        Accessible.name: qsTr("Refresh weather forecast")
+                        ToolTip.visible: hovered
+                        ToolTip.text: qsTr("Refresh weather forecast")
+                        onClicked: backend.refresh()
+                    }
+
+                    BusyIndicator {
+                        Layout.preferredWidth: 24
+                        Layout.preferredHeight: 24
+                        running: backend.loading
+                        visible: running
+                    }
+
                     Item { Layout.fillWidth: true }
 
                     KosButton {
@@ -557,15 +583,20 @@ KosApplicationWindow {
                 Label {
                     Layout.fillWidth: true
                     Layout.topMargin: 4
-                    text: backend.connected
-                        ? "●  Open-Meteo"
-                        : "○  " + qsTr("Offline cache")
-                    color: backend.connected ? AppTheme.positive : AppTheme.warning
+                    text: backend.stale
+                        ? "●  " + qsTr("Cached")
+                        : (backend.connected
+                            ? "●  Open-Meteo"
+                            : "○  " + qsTr("Offline cache"))
+                    color: backend.connected && !backend.stale
+                        ? AppTheme.positive : AppTheme.warning
                     wrapMode: Text.WordWrap
                     font.pixelSize: 11
-                    Accessible.name: backend.connected
-                        ? qsTr("Weather service connected")
-                        : qsTr("Weather service disconnected; showing offline cache")
+                    Accessible.name: backend.stale
+                        ? qsTr("Weather service connected; showing cached data")
+                        : (backend.connected
+                            ? qsTr("Weather service connected")
+                            : qsTr("Weather service disconnected; showing offline cache"))
                 }
             }
         }
@@ -575,48 +606,6 @@ KosApplicationWindow {
             Layout.fillHeight: true
             Layout.margins: 20
             spacing: 16
-
-            RowLayout {
-                Layout.fillWidth: true
-
-                KosSidebarToggle { targetWindow: root }
-
-                Item { Layout.fillWidth: true }
-
-                Label {
-                    Layout.maximumWidth: 180
-                    text: backend.stale ? qsTr("Cached") : root.updatedText()
-                    color: backend.stale ? AppTheme.warning : root.skyTextMuted
-                    elide: Text.ElideRight
-                }
-
-                BusyIndicator {
-                    Layout.preferredWidth: 28
-                    Layout.preferredHeight: 28
-                    running: backend.loading
-                    visible: running
-                }
-
-                KosToolButton {
-                    text: "⚙"
-                    font.pixelSize: 16
-                    Accessible.name: qsTr("Weather settings")
-                    ToolTip.visible: hovered
-                    ToolTip.text: Accessible.name
-                    onClicked: settingsDialog.open()
-                }
-
-                KosToolButton {
-                    text: "↻"
-                    font.pixelSize: 18
-                    enabled: backend.connected && !backend.loading
-                    Accessible.name: qsTr("Refresh weather forecast")
-                    ToolTip.visible: hovered
-                    ToolTip.text: qsTr("Refresh weather forecast")
-                    onClicked: backend.refresh()
-                }
-                KosWindowControls { targetWindow: root }
-            }
 
             Flickable {
                 Layout.fillWidth: true
@@ -1029,6 +1018,28 @@ KosApplicationWindow {
                     }
                 }
             }
+        }
+    }
+
+    KosWindowControls {
+        targetWindow: root
+        anchors.top: parent.top
+        anchors.right: parent.right
+        anchors.margins: 10
+        z: 10
+    }
+
+    Item {
+        anchors.top: parent.top
+        anchors.left: parent.left
+        anchors.margins: 10
+        width: root.sidebarExpanded ? sidebar.expandedWidth : AppTheme.controlHeight
+        height: AppTheme.controlHeight
+        z: 10
+        KosSidebarToggle {
+            targetWindow: root
+            anchors.right: parent.right
+            anchors.verticalCenter: parent.verticalCenter
         }
     }
 }
