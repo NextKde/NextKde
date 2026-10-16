@@ -382,7 +382,9 @@ Pane {
                                 required property var modelData
                                 Layout.fillWidth: true
                                 Layout.preferredHeight: root.allDayRowHeight
-                                radius: 5
+                                // Ref radius ≈ 6 ref-px against an 18 ref-px row ⇒ 1/3 of the row height.
+                                // Derived, not a literal: a row-height change must carry the corner with it.
+                                radius: Math.round(root.allDayRowHeight / 3)
                                 color: AppTheme.withAlpha(root.itemColor(modelData),
                                     AppTheme.dark ? 0.32 : 0.17)
                                 opacity: root.itemCompleted(modelData) ? 0.5 : 1
