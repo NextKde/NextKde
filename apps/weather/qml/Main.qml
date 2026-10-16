@@ -21,6 +21,10 @@ KosApplicationWindow {
         Boolean(value(backend.current, "isDay", true)))
     readonly property color skyText: "#ffffff"
     readonly property color skyTextMuted: Qt.rgba(1, 1, 1, 0.66)
+    readonly property bool nightClearSky:
+        !Boolean(value(backend.current, "isDay", true))
+        && (number(backend.current, "weatherCode", -1) === 0
+            || number(backend.current, "weatherCode", -1) === 1)
     readonly property var dailyRange: {
         let lo = Number.POSITIVE_INFINITY
         let hi = Number.NEGATIVE_INFINITY
@@ -34,6 +38,35 @@ KosApplicationWindow {
 
     function clamp(value, minimum, maximum) {
         return Math.min(Math.max(value, minimum), maximum)
+    }
+
+    function mulberry32(seed) {
+        let state = seed >>> 0
+        return function() {
+            state = (state + 0x6D2B79F5) >>> 0
+            let t = state
+            t = Math.imul(t ^ (t >>> 15), t | 1)
+            t ^= t + Math.imul(t ^ (t >>> 7), t | 61)
+            return ((t ^ (t >>> 14)) >>> 0) / 4294967296
+        }
+    }
+
+    // Star positions come from a fixed-seed PRNG so the layout is identical
+    // on every launch; the twinkle phase (below) intentionally uses
+    // Math.random() so each run animates from a different point.
+    readonly property var starField: {
+        const random = mulberry32(20261016)
+        const stars = []
+        for (let index = 0; index < 48; index++) {
+            stars.push({
+                xRatio: random(),
+                yRatio: Math.pow(random(), 1.3) * 0.75,
+                diameter: 1.2 + random() * 1.6,
+                baseOpacity: 0.35 + random() * 0.6,
+                twinkleMs: 2400 + random() * 4800
+            })
+        }
+        return stars
     }
 
     function skyStopsFor(code, isDay) {
@@ -271,6 +304,51 @@ KosApplicationWindow {
             GradientStop { position: 0.0; color: root.skyStops[0] }
             GradientStop { position: 0.45; color: root.skyStops[1] }
             GradientStop { position: 1.0; color: root.skyStops[2] }
+        }
+    }
+
+    Item {
+        id: starFieldLayer
+        anchors.fill: parent
+        visible: root.nightClearSky
+        clip: true
+
+        Repeater {
+            model: root.starField
+
+            delegate: Rectangle {
+                required property var modelData
+
+                x: (starFieldLayer.width - width) * modelData.xRatio
+                y: (starFieldLayer.height - height) * modelData.yRatio
+                width: modelData.diameter
+                height: width
+                radius: width / 2
+                color: "white"
+                opacity: modelData.baseOpacity
+                Accessible.ignored: true
+
+                SequentialAnimation on opacity {
+                    running: root.nightClearSky && !AppTheme.reduceMotion
+                    loops: Animation.Infinite
+
+                    PauseAnimation {
+                        duration: Math.random() * modelData.twinkleMs
+                    }
+                    NumberAnimation {
+                        from: modelData.baseOpacity
+                        to: modelData.baseOpacity * 0.35
+                        duration: modelData.twinkleMs / 2
+                        easing.type: Easing.InOutSine
+                    }
+                    NumberAnimation {
+                        from: modelData.baseOpacity * 0.35
+                        to: modelData.baseOpacity
+                        duration: modelData.twinkleMs / 2
+                        easing.type: Easing.InOutSine
+                    }
+                }
+            }
         }
     }
 
