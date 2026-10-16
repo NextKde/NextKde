@@ -48,6 +48,14 @@ Pane {
     // they can no longer drift apart.
     readonly property int hourHeight: 40
 
+    // T02: the two grid-line weights. Neutral (no blue tint), 1px each;
+    // the half-hour line is one step lighter than the hour line. The light
+    // value is the reference's own measured hour-line colour, (237,237,237).
+    readonly property color gridLine: AppTheme.dark
+        ? Qt.rgba(1, 1, 1, 0.13) : "#EDEDED"
+    readonly property color gridLineMinor: AppTheme.dark
+        ? Qt.rgba(1, 1, 1, 0.06) : "#F4F4F4"
+
     // W03: local marker tokens (today red like the macOS reference, subdued
     // grey for the ordinary selection). Neutral, no shared-theme dependency.
     readonly property color todayRed: "#E5484D"
@@ -372,8 +380,39 @@ Pane {
                             anchors.fill: parent
                             visible: hourCell.columnIndex > 0
                             color: "transparent"
-                            border.width: 1
-                            border.color: AppTheme.border
+
+                            // T02: exactly one 1px line per boundary. A cell
+                            // draws only its own top and left edge, so two
+                            // neighbours can never stack into a 2px band.
+                            Rectangle {
+                                anchors.left: parent.left
+                                anchors.right: parent.right
+                                anchors.top: parent.top
+                                height: 1
+                                color: root.gridLine
+                            }
+                            Rectangle {
+                                anchors.left: parent.left
+                                anchors.right: parent.right
+                                y: Math.round(parent.height / 2)
+                                height: 1
+                                color: root.gridLineMinor
+                            }
+                            Rectangle {
+                                anchors.left: parent.left
+                                anchors.top: parent.top
+                                anchors.bottom: parent.bottom
+                                width: 1
+                                color: root.gridLine
+                            }
+                            Rectangle {
+                                anchors.right: parent.right
+                                anchors.top: parent.top
+                                anchors.bottom: parent.bottom
+                                width: 1
+                                visible: hourCell.columnIndex === root.dayCount
+                                color: root.gridLine
+                            }
 
                             MouseArea {
                                 anchors.fill: parent
