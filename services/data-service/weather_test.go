@@ -2,9 +2,11 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -75,6 +77,119 @@ func TestOpenMeteoForecastMapsVersionedContract(t *testing.T) {
 	}
 }
 
+func TestOpenMeteoSummariesBatchCoordinates(t *testing.T) {
+	var query url.Values
+	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		query = request.URL.Query()
+		writer.Header().Set("Content-Type", "application/json")
+		_, _ = writer.Write([]byte(`[
+          {"latitude":28.228200,"longitude":112.938800,"timezone":"Asia/Shanghai",
+           "current":{"time":"2026-10-16T11:41","temperature_2m":18.7,
+             "is_day":1,"weather_code":2},
+           "daily":{"temperature_2m_max":[22.4],"temperature_2m_min":[13.1]}},
+          {"latitude":31.222500,"longitude":121.458100,"timezone":"Asia/Shanghai",
+           "current":{"time":"2026-10-16T11:41","temperature_2m":23.2,
+             "is_day":1,"weather_code":61},
+           "daily":{"temperature_2m_max":[26.0],"temperature_2m_min":[19.5]}}
+        ]`))
+	}))
+	defer server.Close()
+
+	provider := newOpenMeteoProvider()
+	provider.client = server.Client()
+	provider.forecastURL = server.URL
+	locations := []WeatherLocation{
+		{ID: "open-meteo:1815577", Name: "长沙", Latitude: 28.2282, Longitude: 112.9388},
+		{ID: "open-meteo:1796236", Name: "上海", Latitude: 31.2225, Longitude: 121.4581},
+	}
+	summaries, err := provider.Summaries(context.Background(), locations, weatherUnitsImperial)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if query.Get("temperature_unit") != "fahrenheit" {
+		t.Errorf("temperature unit = %q", query.Get("temperature_unit"))
+	}
+	if query.Get("latitude") != "28.228200,31.222500" ||
+		query.Get("longitude") != "112.938800,121.458100" {
+		t.Errorf("unexpected coordinates: %q / %q", query.Get("latitude"), query.Get("longitude"))
+	}
+	if query.Get("current") != "temperature_2m,is_day,weather_code" ||
+		query.Get("daily") != "temperature_2m_max,temperature_2m_min" ||
+		query.Get("forecast_days") != "1" {
+		t.Errorf("unexpected summary request: %v", query)
+	}
+	if len(summaries) != 2 {
+		t.Fatalf("summaries = %#v", summaries)
+	}
+	first, ok := summaries["open-meteo:1815577"]
+	if !ok || first.Temperature != 18.7 || first.WeatherCode != 2 || !first.IsDay ||
+		first.TempHigh != 22.4 || first.TempLow != 13.1 {
+		t.Fatalf("unexpected Changsha summary: %#v", first)
+	}
+	if first.Time != "2026-10-16T11:41" {
+		t.Fatalf("summary time = %q", first.Time)
+	}
+	second, ok := summaries["open-meteo:1796236"]
+	if !ok || second.Temperature != 23.2 || second.WeatherCode != 61 ||
+		second.TempHigh != 26.0 || second.TempLow != 19.5 {
+		t.Fatalf("unexpected Shanghai summary: %#v", second)
+	}
+}
+
+func TestOpenMeteoSummariesAcceptsSingleObjectResponse(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		writer.Header().Set("Content-Type", "application/json")
+		_, _ = writer.Write([]byte(`{"latitude":28.228200,"longitude":112.938800,
+          "timezone":"Asia/Shanghai",
+          "current":{"time":"2026-10-16T11:41","temperature_2m":18.7,
+            "is_day":0,"weather_code":2},
+          "daily":{"temperature_2m_max":[22.4],"temperature_2m_min":[13.1]}}`))
+	}))
+	defer server.Close()
+
+	provider := newOpenMeteoProvider()
+	provider.client = server.Client()
+	provider.forecastURL = server.URL
+	locations := []WeatherLocation{
+		{ID: "open-meteo:1815577", Name: "长沙", Latitude: 28.2282, Longitude: 112.9388},
+	}
+	summaries, err := provider.Summaries(context.Background(), locations, weatherUnitsMetric)
+	if err != nil {
+		t.Fatal(err)
+	}
+	summary, ok := summaries["open-meteo:1815577"]
+	if !ok || summary.Temperature != 18.7 || summary.IsDay || summary.TempHigh != 22.4 {
+		t.Fatalf("unexpected summary: %#v", summary)
+	}
+}
+
+func TestWeatherLocationSummaryRoundTripsThroughState(t *testing.T) {
+	state := defaultWeatherState()
+	state.Locations[0].Summary = &WeatherLocationSummary{
+		Time:        "2026-10-16T11:41",
+		Temperature: 18.7,
+		WeatherCode: 2,
+		IsDay:       true,
+		TempHigh:    22.4,
+		TempLow:     13.1,
+	}
+
+	raw, err := json.Marshal(state)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var loaded WeatherState
+	if err := json.Unmarshal(raw, &loaded); err != nil {
+		t.Fatal(err)
+	}
+	summary := loaded.Locations[0].Summary
+	if summary == nil || summary.Time != state.Locations[0].Summary.Time ||
+		summary.Temperature != 18.7 || summary.WeatherCode != 2 || !summary.IsDay ||
+		summary.TempHigh != 22.4 || summary.TempLow != 13.1 {
+		t.Fatalf("summary did not survive persistence: %#v", summary)
+	}
+}
+
 func TestOpenMeteoSearchNormalizesLocations(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
 		if request.URL.Query().Get("name") != "Changsha" {
@@ -124,6 +239,10 @@ func (failingWeatherProvider) Forecast(context.Context, WeatherLocation, string)
 
 func (failingWeatherProvider) Search(context.Context, string, string, int) ([]WeatherLocation, error) {
 	return nil, errors.New("network unavailable")
+}
+
+func (failingWeatherProvider) Summaries(context.Context, []WeatherLocation, string) (map[string]WeatherLocationSummary, error) {
+	return nil, nil
 }
 
 func TestFailedWeatherRefreshPreservesCachedConditions(t *testing.T) {

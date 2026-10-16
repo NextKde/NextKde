@@ -35,14 +35,26 @@ const (
 )
 
 type WeatherLocation struct {
-	ID          string  `json:"id"`
-	Name        string  `json:"name"`
-	Admin1      string  `json:"admin1,omitempty"`
-	Country     string  `json:"country,omitempty"`
-	CountryCode string  `json:"countryCode,omitempty"`
-	Latitude    float64 `json:"latitude"`
-	Longitude   float64 `json:"longitude"`
-	Timezone    string  `json:"timezone,omitempty"`
+	ID          string                  `json:"id"`
+	Name        string                  `json:"name"`
+	Admin1      string                  `json:"admin1,omitempty"`
+	Country     string                  `json:"country,omitempty"`
+	CountryCode string                  `json:"countryCode,omitempty"`
+	Latitude    float64                 `json:"latitude"`
+	Longitude   float64                 `json:"longitude"`
+	Timezone    string                  `json:"timezone,omitempty"`
+	Summary     *WeatherLocationSummary `json:"summary,omitempty"`
+}
+
+// WeatherLocationSummary is the compact per-city snapshot shown by sidebar
+// cards: current conditions plus today's range, in the state's units.
+type WeatherLocationSummary struct {
+	Time        string  `json:"time"`
+	Temperature float64 `json:"temperature"`
+	WeatherCode int     `json:"weatherCode"`
+	IsDay       bool    `json:"isDay"`
+	TempHigh    float64 `json:"tempHigh"`
+	TempLow     float64 `json:"tempLow"`
 }
 
 type WeatherCurrent struct {
@@ -107,6 +119,7 @@ type WeatherForecast struct {
 type WeatherProvider interface {
 	Forecast(context.Context, WeatherLocation, string) (WeatherForecast, error)
 	Search(context.Context, string, string, int) ([]WeatherLocation, error)
+	Summaries(context.Context, []WeatherLocation, string) (map[string]WeatherLocationSummary, error)
 }
 
 type OpenMeteoProvider struct {
@@ -381,6 +394,92 @@ func (provider *OpenMeteoProvider) Forecast(ctx context.Context, location Weathe
 	return forecast, nil
 }
 
+// openMeteoSummaryPayload is one element of a multi-location Open-Meteo
+// response: current conditions plus today's range, nothing else.
+type openMeteoSummaryPayload struct {
+	Latitude  float64 `json:"latitude"`
+	Longitude float64 `json:"longitude"`
+	Timezone  string  `json:"timezone"`
+	Current   struct {
+		Time        string  `json:"time"`
+		Temperature float64 `json:"temperature_2m"`
+		IsDay       int     `json:"is_day"`
+		WeatherCode int     `json:"weather_code"`
+	} `json:"current"`
+	Daily struct {
+		TemperatureMaximum []float64 `json:"temperature_2m_max"`
+		TemperatureMinimum []float64 `json:"temperature_2m_min"`
+	} `json:"daily"`
+}
+
+// Summaries fetches a compact per-city snapshot for the sidebar cards in one
+// batched Open-Meteo request. Results are keyed by location ID; elements are
+// matched by request order, and any element whose echoed coordinates do not
+// line up with the requested location is skipped rather than trusted.
+func (provider *OpenMeteoProvider) Summaries(ctx context.Context, locations []WeatherLocation, units string) (map[string]WeatherLocationSummary, error) {
+	if len(locations) > 20 {
+		locations = locations[:20]
+	}
+	if len(locations) == 0 {
+		return map[string]WeatherLocationSummary{}, nil
+	}
+	latitudes := make([]string, len(locations))
+	longitudes := make([]string, len(locations))
+	for index, location := range locations {
+		latitudes[index] = fmt.Sprintf("%.6f", location.Latitude)
+		longitudes[index] = fmt.Sprintf("%.6f", location.Longitude)
+	}
+	values := url.Values{
+		"latitude":      {strings.Join(latitudes, ",")},
+		"longitude":     {strings.Join(longitudes, ",")},
+		"current":       {"temperature_2m,is_day,weather_code"},
+		"daily":         {"temperature_2m_max,temperature_2m_min"},
+		"forecast_days": {"1"},
+		"timezone":      {"auto"},
+	}
+	if units == weatherUnitsImperial {
+		values.Set("temperature_unit", "fahrenheit")
+	}
+
+	var payload json.RawMessage
+	if err := provider.getJSON(ctx, provider.forecastURL+"?"+values.Encode(), &payload); err != nil {
+		return nil, err
+	}
+	// Open-Meteo returns an array for multiple coordinates and a bare object
+	// for a single one.
+	var payloads []openMeteoSummaryPayload
+	if err := json.Unmarshal(payload, &payloads); err != nil {
+		var single openMeteoSummaryPayload
+		if err := json.Unmarshal(payload, &single); err != nil {
+			return nil, fmt.Errorf("decode weather summary response: %w", err)
+		}
+		payloads = []openMeteoSummaryPayload{single}
+	}
+	summaries := make(map[string]WeatherLocationSummary, len(locations))
+	for index, item := range payloads {
+		if index >= len(locations) {
+			break
+		}
+		location := locations[index]
+		if math.Abs(item.Latitude-location.Latitude) > 0.1 ||
+			math.Abs(item.Longitude-location.Longitude) > 0.1 {
+			continue
+		}
+		summary := WeatherLocationSummary{
+			Time:        item.Current.Time,
+			Temperature: item.Current.Temperature,
+			WeatherCode: item.Current.WeatherCode,
+			IsDay:       item.Current.IsDay == 1,
+		}
+		if shortestLength(len(item.Daily.TemperatureMaximum), len(item.Daily.TemperatureMinimum)) > 0 {
+			summary.TempHigh = item.Daily.TemperatureMaximum[0]
+			summary.TempLow = item.Daily.TemperatureMinimum[0]
+		}
+		summaries[location.ID] = summary
+	}
+	return summaries, nil
+}
+
 type openMeteoSearchPayload struct {
 	Results []struct {
 		ID          int64   `json:"id"`
@@ -565,11 +664,43 @@ func weatherBackoff(streak int) time.Duration {
 	return backoff
 }
 
+// weatherLocationsSnapshot copies the saved location list under the state
+// lock so batched provider requests never read it while it mutates.
+func (s *Service) weatherLocationsSnapshot() []WeatherLocation {
+	s.mu.Lock()
+	locations := make([]WeatherLocation, len(s.state.Weather.Locations))
+	copy(locations, s.state.Weather.Locations)
+	s.mu.Unlock()
+	return locations
+}
+
 func (s *Service) fetchWeather(serial uint64, provider WeatherProvider, location WeatherLocation, units string) {
 	ctx, cancel := context.WithTimeout(context.Background(), weatherRequestTimeout)
 	defer cancel()
 	forecast, err := provider.Forecast(ctx, location, units)
 	now := time.Now()
+
+	summaries := map[string]WeatherLocationSummary{}
+	if err == nil && forecast.Current != nil {
+		// Sidebar summaries are best-effort: a failed batch request leaves the
+		// previous summaries in place instead of failing the refresh.
+		if fetched, summaryErr := provider.Summaries(ctx, s.weatherLocationsSnapshot(), units); summaryErr == nil {
+			summaries = fetched
+		}
+		// The selected location always shows the freshly fetched forecast, so
+		// its summary comes from the same response rather than the batch.
+		selected := WeatherLocationSummary{
+			Time:        forecast.Current.Time,
+			Temperature: forecast.Current.Temperature,
+			WeatherCode: forecast.Current.WeatherCode,
+			IsDay:       forecast.Current.IsDay,
+		}
+		if len(forecast.Daily) > 0 {
+			selected.TempHigh = forecast.Daily[0].TemperatureMaximum
+			selected.TempLow = forecast.Daily[0].TemperatureMinimum
+		}
+		summaries[location.ID] = selected
+	}
 
 	s.mu.Lock()
 	if serial != s.weatherRequestSerial {
@@ -607,6 +738,11 @@ func (s *Service) fetchWeather(serial uint64, provider WeatherProvider, location
 		weather.StaleAt = now.Add(weatherStaleInterval).UnixMilli()
 		if weather.Location.Timezone == "" && forecast.Timezone != "" {
 			weather.Location.Timezone = forecast.Timezone
+		}
+		for index := range weather.Locations {
+			if summary, ok := summaries[weather.Locations[index].ID]; ok {
+				weather.Locations[index].Summary = &summary
+			}
 		}
 	}
 	s.mu.Unlock()

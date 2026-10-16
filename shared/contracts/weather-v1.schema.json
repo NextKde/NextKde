@@ -54,7 +54,19 @@
         "countryCode": { "type": "string" },
         "latitude": { "type": "number", "minimum": -90, "maximum": 90 },
         "longitude": { "type": "number", "minimum": -180, "maximum": 180 },
-        "timezone": { "type": "string" }
+        "timezone": { "type": "string" },
+        "summary": {
+          "type": "object",
+          "properties": {
+            "time": { "type": "string" },
+            "temperature": { "type": "number" },
+            "weatherCode": { "type": "integer" },
+            "isDay": { "type": "boolean" },
+            "tempHigh": { "type": "number" },
+            "tempLow": { "type": "number" }
+          },
+          "additionalProperties": true
+        }
       },
       "additionalProperties": true
     },
