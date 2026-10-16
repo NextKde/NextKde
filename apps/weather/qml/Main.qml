@@ -524,6 +524,7 @@ KosApplicationWindow {
 
                 RowLayout {
                     Layout.fillWidth: true
+                    Layout.minimumWidth: 0
                     Accessible.name: qsTr("Units")
 
                     ButtonGroup { id: unitsGroup }
@@ -531,6 +532,8 @@ KosApplicationWindow {
                     KosToolButton {
                         text: "⚙"
                         font.pixelSize: 16
+                        Layout.preferredWidth: 34
+                        Layout.alignment: Qt.AlignVCenter
                         Accessible.name: qsTr("Weather settings")
                         ToolTip.visible: hovered
                         ToolTip.text: Accessible.name
@@ -540,6 +543,7 @@ KosApplicationWindow {
                     KosToolButton {
                         text: "↻"
                         font.pixelSize: 18
+                        Layout.preferredWidth: 34
                         enabled: backend.connected && !backend.loading
                         Accessible.name: qsTr("Refresh weather forecast")
                         ToolTip.visible: hovered
@@ -559,6 +563,7 @@ KosApplicationWindow {
                     KosButton {
                         text: "°C"
                         checkable: true
+                        Layout.preferredWidth: 46
                         ButtonGroup.group: unitsGroup
                         checked: backend.units === "metric"
                         Accessible.role: Accessible.RadioButton
@@ -570,6 +575,7 @@ KosApplicationWindow {
                     KosButton {
                         text: "°F"
                         checkable: true
+                        Layout.preferredWidth: 46
                         ButtonGroup.group: unitsGroup
                         checked: backend.units === "imperial"
                         Accessible.role: Accessible.RadioButton
@@ -1031,7 +1037,7 @@ KosApplicationWindow {
     Item {
         anchors.top: parent.top
         anchors.left: parent.left
-        anchors.margins: 10
+        anchors.margins: root.sidebarExpanded ? 0 : 10
         width: root.sidebarExpanded ? sidebar.expandedWidth : AppTheme.controlHeight
         height: root.sidebarExpanded ? 46 : 44
         z: 10
