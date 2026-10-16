@@ -112,6 +112,10 @@ Popup {
                 color: root.titleColor
                 font.pixelSize: 15
                 font.weight: Font.DemiBold
+                // 20px = 1.33em. The CJK fallback stack's natural line box is
+                // 1.47em (22px at 15px), which reads looser than macOS body text.
+                lineHeightMode: Text.FixedHeight
+                lineHeight: 20
                 wrapMode: Text.WordWrap
                 maximumLineCount: 3
                 elide: Text.ElideRight
