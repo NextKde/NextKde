@@ -34,10 +34,19 @@ Scope {
     // layer-shell compositors do not reliably grow an already-mapped 1x1
     // surface when its anchors change.
     property bool windowCreated: false
-    readonly property var targetScreen: ScreenLifecycle.activeScreen
+    // The launcher belongs to the Dock the user actually clicked: Dock reports
+    // its own screen through AppLauncherService before toggling, so the app grid
+    // opens next to that Dock instead of jumping to the globally elected active
+    // output. Toggles that did not come from a Dock (IPC, keyboard shortcut)
+    // leave triggerScreen null and keep the active-screen behaviour.
+    readonly property var launcherScreen: AppLauncherService.triggerScreen
+        || ScreenLifecycle.activeScreen
+    readonly property var targetScreen: launcherScreen && !launcherScreen.isPlaceholder
+        ? launcherScreen : ScreenLifecycle.activeScreen
     onOpenChanged: console.log("[AppLauncher] root open=" + open)
     onTargetScreenChanged: {
-        console.log("[AppLauncher] target screen changed=" + !!targetScreen)
+        console.log("[AppLauncher] target screen changed="
+            + (targetScreen ? targetScreen.name : "<null>"))
         // Once constructed, do not tear down the GridView while an output is
         // temporarily unavailable (for example, during suspend/resume).
         if (targetScreen)

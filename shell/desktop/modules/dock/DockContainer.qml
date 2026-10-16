@@ -825,6 +825,9 @@ Item {
                 if (DockModelService.activeDockPopup)
                     DockModelService.setDockPopupVisible(
                         DockModelService.activeDockPopup, false)
+                // Publish this Dock's own output so the launcher opens on the
+                // screen the user clicked, not on the globally elected output.
+                AppLauncherService.setLauncherTriggerScreen(container.targetScreen)
                 AppLauncherService.toggle()
             }
             onContextRequested: DockModelService.openDockPopup(appLauncherContextMenu)
