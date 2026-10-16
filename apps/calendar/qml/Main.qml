@@ -2190,14 +2190,14 @@ KosApplicationWindow {
                             }
 
                             // M03: Control stretches contentItem to the cell,
-                            // which warped a direct 20x20 circle into an
+                            // which warped a direct 15x15 circle into an
                             // ellipse. So the contentItem is a plain filler
-                            // Item and the fixed 20x20 circle sits centred
-                            // inside it.
+                            // Item and the fixed 15x15 circle sits centred
+                            // inside it. (R094: 20 -> 15, the ref's own disc.)
                             contentItem: Item {
                                 Rectangle {
-                                    width: 20
-                                    height: 20
+                                    width: 15
+                                    height: 15
                                     radius: width / 2
                                     anchors.centerIn: parent
                                     color: miniDay.today
