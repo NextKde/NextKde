@@ -85,6 +85,12 @@ Pane {
     // first chip starting at y=126 => ~1 ref-px), x our 1.33 vertical factor
     // => ~1.3, taken as 1. It feeds allDayBandHeight, so the band follows.
     readonly property int allDayBandInset: 1
+    // R109 (A03 clause b): how far a continuing chip reaches back past its own
+    // column edge. The joint is 2px of field plus the neighbour's 1px rule and
+    // the field leftover is known only to ±1 (R108), so the reach is
+    // deliberately one px larger than the measured 3px: the fill is opaque, so
+    // the overlap is invisible and the slack costs nothing.
+    readonly property int allDayJointOverlap: 4
     readonly property int allDayBandHeight: allDayBandInset * 2
         + allDayBandRows * allDayRowHeight
         + (allDayBandRows - 1) * allDayRowGap
@@ -119,6 +125,23 @@ Pane {
     // weekend 244" reading was the half-strength row of the 242 boundary.
     readonly property color weekendField: AppTheme.dark
         ? Qt.rgba(1, 1, 1, 0.03) : "#F9F9F9"
+
+    // R109 (A03 clause b): the field a chip is drawn on, so the chip fill can be
+    // pre-blended to OPAQUE rather than laid down translucent. Must track Root's
+    // `tahoe.contentPlane` (Main.qml:47-48); repeated here because this view is
+    // instantiated two ways and holds no reference to the page root.
+    readonly property color scheduleField: AppTheme.dark
+        ? "#1E1E1E" : "#FFFFFF"
+    // The backdrop is the field, or the field with the weekend tint already
+    // composited into it. `weekendField` cannot be used directly: it is a
+    // translucent white on the dark leg, and its alpha would be dropped.
+    function allDayBackdrop(column) {
+        if (!isWeekendColumn(column))
+            return AppTheme.opaque(scheduleField)
+        return AppTheme.dark
+            ? AppTheme.mix(scheduleField, "#FFFFFF", 0.03)
+            : AppTheme.opaque(weekendField)
+    }
     // JS getDay(): 0 = Sunday, 6 = Saturday.
     function isWeekendColumn(column) {
         var day = dateForColumn(column).getDay()
@@ -545,7 +568,24 @@ Pane {
                                 bottomLeftRadius: continuesLeft ? 0 : endRadius
                                 topRightRadius: continuesRight ? 0 : endRadius
                                 bottomRightRadius: continuesRight ? 0 : endRadius
-                                color: AppTheme.withAlpha(root.itemColor(modelData),
+                                // A03 clause (b): a continuing chip reaches back past its
+                                // own column rule so the run reads as ONE bar. Only the
+                                // LEFT side can do that: this column's separator belongs to
+                                // this column's delegate, which stacks above the previous
+                                // column's chips, so a right-extension could never cover it.
+                                // The continuation is a date fact; there may be no
+                                // column to its left to reach into (column 0 of the
+                                // week), so the reach is gated on one existing.
+                                Layout.leftMargin: continuesLeft && allDayColumn.index > 0
+                                    ? -root.allDayJointOverlap : 0
+                                // R109: the fill is OPAQUE — a pre-blend of itemColor over
+                                // this column's own backdrop, not a translucent overlay.
+                                // Translucent was unfixable at the joint: two overlapping
+                                // chips composite twice and read 11% darker than the bar
+                                // (R108, 191 against a 220 fill). Over white the blended
+                                // value is identical to the old `withAlpha` fill (220).
+                                color: AppTheme.mix(root.allDayBackdrop(allDayColumn.columnDate),
+                                    root.itemColor(modelData),
                                     AppTheme.dark ? 0.32 : 0.17)
                                 opacity: root.itemCompleted(modelData) ? 0.5 : 1
                                 // R080: the band chip's ink is the same rule as the timed
@@ -555,6 +595,7 @@ Pane {
                                 Label {
                                     anchors.fill: parent
                                     anchors.leftMargin: 5
+                                        + (allDayChip.continuesLeft ? root.allDayJointOverlap : 0)
                                     anchors.rightMargin: 4
                                     text: root.itemTitle(allDayChip.modelData)
                                     // R080: was AppTheme.text (grey) — the band chip is the
