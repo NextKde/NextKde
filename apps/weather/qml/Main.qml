@@ -406,9 +406,11 @@ KosApplicationWindow {
 
                 Label {
                     Layout.fillWidth: true
-                    text: metric.labelText
+                    // 参考设计头部为全大写+字距（同 :1458 AQ 卡头）
+                    text: metric.labelText.toLocaleUpperCase(Qt.locale())
                     color: root.skyTextMuted
                     font.pixelSize: 10
+                    font.letterSpacing: 1.4
                     elide: Text.ElideRight
                     Accessible.ignored: true
                 }
@@ -1833,9 +1835,11 @@ KosApplicationWindow {
 
                                                 Label {
                                                     Layout.fillWidth: true
-                                                    text: qsTr("Moon Phase")
+                                                    // 参考设计头部为全大写+字距（同 :1458 AQ 卡头）
+                                                    text: qsTr("Moon Phase").toLocaleUpperCase(Qt.locale())
                                                     color: root.skyTextMuted
                                                     font.pixelSize: 10
+                                                    font.letterSpacing: 1.4
                                                     elide: Text.ElideRight
                                                     Accessible.ignored: true
                                                 }
@@ -1957,9 +1961,11 @@ KosApplicationWindow {
 
                                                 Label {
                                                     Layout.fillWidth: true
-                                                    text: qsTr("Sunset")
+                                                    // 参考设计头部为全大写+字距（同 :1458 AQ 卡头）
+                                                    text: qsTr("Sunset").toLocaleUpperCase(Qt.locale())
                                                     color: root.skyTextMuted
                                                     font.pixelSize: 10
+                                                    font.letterSpacing: 1.4
                                                     elide: Text.ElideRight
                                                     Accessible.ignored: true
                                                 }
