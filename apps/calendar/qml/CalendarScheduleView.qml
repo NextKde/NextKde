@@ -58,9 +58,10 @@ Pane {
     readonly property int allDayRowHeight: 24
     readonly property int allDayRowGap: 1
     readonly property int allDayBandRows: 3
-    // Step 3 (next round) retunes this to the reference's ~1.35; it stays 3
-    // until then so this round touches row height and gap only.
-    readonly property int allDayBandInset: 3
+    // Step 3: the reference's band inset, measured 1:1 (top rule y=124, the
+    // first chip starting at y=126 => ~1 ref-px), x our 1.33 vertical factor
+    // => ~1.3, taken as 1. It feeds allDayBandHeight, so the band follows.
+    readonly property int allDayBandInset: 1
     readonly property int allDayBandHeight: allDayBandInset * 2
         + allDayBandRows * allDayRowHeight
         + (allDayBandRows - 1) * allDayRowGap
