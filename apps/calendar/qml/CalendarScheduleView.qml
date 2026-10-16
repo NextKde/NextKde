@@ -56,6 +56,13 @@ Pane {
     readonly property color gridLineMinor: AppTheme.dark
         ? Qt.rgba(1, 1, 1, 0.06) : "#F4F4F4"
 
+    // T04: the all-day band's bottom separator. Deliberately heavier than the
+    // hour lines — the reference draws it at 2px (217,217,217), one step
+    // stronger than its 1px (237,237,237) hour lines. Local token: do NOT
+    // reuse AppTheme.border (app-wide, blue-tinted) and do NOT reuse gridLine.
+    readonly property color allDaySeparator: AppTheme.dark
+        ? Qt.rgba(1, 1, 1, 0.24) : "#D9D9D9"
+
     // W03: local marker tokens (today red like the macOS reference, subdued
     // grey for the ordinary selection). Neutral, no shared-theme dependency.
     readonly property color todayRed: "#E5484D"
@@ -315,8 +322,8 @@ Pane {
 
         Rectangle {
             Layout.fillWidth: true
-            Layout.preferredHeight: 1
-            color: AppTheme.border
+            Layout.preferredHeight: 2
+            color: root.allDaySeparator
         }
 
         ScrollView {
