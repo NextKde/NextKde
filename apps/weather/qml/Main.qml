@@ -1530,6 +1530,110 @@ KosApplicationWindow {
                                                 : Math.round(meters / 1000) + " " + root.distanceUnit
                                         }
                                     }
+
+                                    Rectangle {
+                                        id: moonPhaseTile
+                                        Layout.fillWidth: true
+                                        implicitHeight: 66
+                                        radius: AppTheme.smallRadius
+                                        color: Qt.rgba(1, 1, 1, 0.12)
+                                        border.width: 1
+                                        border.color: Qt.rgba(1, 1, 1, 0.20)
+
+                                        property real phaseVal: root.number(backend.current, "moonPhase", Number.NaN)
+                                        property bool hasPhase: Number.isFinite(phaseVal)
+                                        readonly property var phaseNames: [
+                                            qsTr("New Moon"), qsTr("Waxing Crescent"), qsTr("First Quarter"),
+                                            qsTr("Waxing Gibbous"), qsTr("Full Moon"), qsTr("Waning Gibbous"),
+                                            qsTr("Last Quarter"), qsTr("Waning Crescent")
+                                        ]
+                                        // 8 等分、以 0/0.25/0.5/0.75 为中心：round(p*8)%8
+                                        readonly property string phaseName: hasPhase
+                                            ? phaseNames[Math.round(((phaseVal % 1) + 1) % 1 * 8) % 8]
+                                            : "—"
+
+                                        onPhaseValChanged: moonCanvas.requestPaint()
+
+                                        HoverHandler { id: moonHover }
+                                        ToolTip.visible: moonHover.hovered
+                                        ToolTip.text: qsTr("Moon Phase")
+                                        Accessible.role: Accessible.StaticText
+                                        Accessible.name: qsTr("Moon Phase") + ": " + moonPhaseTile.phaseName
+
+                                        RowLayout {
+                                            anchors.fill: parent
+                                            anchors.margins: 10
+                                            spacing: 8
+
+                                            Item {
+                                                Layout.preferredWidth: 46
+                                                Layout.preferredHeight: 46
+
+                                                Canvas {
+                                                    id: moonCanvas
+                                                    anchors.fill: parent
+                                                    antialiasing: true
+                                                    contextType: "2d"
+                                                    onPaint: {
+                                                        var ctx = getContext("2d")
+                                                        ctx.reset()
+                                                        var c = 23
+                                                        var r = 17
+                                                        // 暗面：整盘剪影（月亮相位剪影，同族白 0.14）
+                                                        ctx.beginPath()
+                                                        ctx.arc(c, c, r, 0, 2 * Math.PI)
+                                                        ctx.fillStyle = "rgba(255,255,255,0.14)"
+                                                        ctx.fill()
+                                                        if (!moonPhaseTile.hasPhase)
+                                                            return
+                                                        // 亮面：外弧（盈月亮在右，亏月亮在左）+ 终止线半椭圆折线，一次成形
+                                                        var p = ((moonPhaseTile.phaseVal % 1) + 1) % 1
+                                                        var cosT = Math.cos(2 * Math.PI * p)
+                                                        var waxing = p < 0.5
+                                                        ctx.beginPath()
+                                                        if (waxing)
+                                                            ctx.arc(c, c, r, -Math.PI / 2, Math.PI / 2, false)   // 顶极→底极经右侧
+                                                        else
+                                                            ctx.arc(c, c, r, -Math.PI / 2, Math.PI / 2, true)    // 顶极→底极经左侧
+                                                        var steps = 32
+                                                        for (var i = 0; i <= steps; i++) {
+                                                            var a = Math.PI / 2 - (Math.PI * i / steps)          // 底极→顶极
+                                                            // 带符号 cosT：蛾眉凸向亮侧、凸月凸向暗侧（|cosT| 会把凸月画成蛾眉、满月退化成零面积）
+                                                            var ex = waxing ? cosT * r * Math.cos(a) : -cosT * r * Math.cos(a)
+                                                            ctx.lineTo(c + ex, c + r * Math.sin(a))
+                                                        }
+                                                        ctx.closePath()
+                                                        ctx.fillStyle = "#f7f3dc"
+                                                        ctx.fill()
+                                                    }
+                                                }
+                                            }
+
+                                            ColumnLayout {
+                                                Layout.fillWidth: true
+                                                spacing: 1
+
+                                                Label {
+                                                    Layout.fillWidth: true
+                                                    text: qsTr("Moon Phase")
+                                                    color: root.skyTextMuted
+                                                    font.pixelSize: 10
+                                                    elide: Text.ElideRight
+                                                    Accessible.ignored: true
+                                                }
+
+                                                Label {
+                                                    Layout.fillWidth: true
+                                                    text: moonPhaseTile.phaseName
+                                                    color: root.skyText
+                                                    font.pixelSize: 15
+                                                    font.weight: Font.DemiBold
+                                                    elide: Text.ElideRight
+                                                    Accessible.ignored: true
+                                                }
+                                            }
+                                        }
+                                    }
                                 }
                             }
                         }
