@@ -30,6 +30,7 @@
     "lastAttemptAt": { "type": "integer", "minimum": 0 },
     "error": { "type": "string", "maxLength": 240 },
     "current": { "$ref": "#/$defs/current" },
+    "airQuality": { "$ref": "#/$defs/airQuality" },
     "hourly": {
       "type": "array",
       "maxItems": 48,
@@ -91,6 +92,16 @@
         "weatherCode": { "type": "integer" },
         "windSpeed": { "type": "number", "minimum": 0 },
         "windDirection": { "type": "number", "minimum": 0, "maximum": 360 }
+      },
+      "additionalProperties": true
+    },
+    "airQuality": {
+      "type": "object",
+      "required": ["time"],
+      "properties": {
+        "time": { "type": "string" },
+        "usAqi": { "type": ["number", "null"], "minimum": 0 },
+        "category": { "type": "string" }
       },
       "additionalProperties": true
     },

@@ -57,6 +57,14 @@ type WeatherLocationSummary struct {
 	TempLow     float64 `json:"tempLow"`
 }
 
+// WeatherAirQuality carries the current US AQI reading for the selected
+// location. UsAqi is nil when the provider returned no reading.
+type WeatherAirQuality struct {
+	Time     string   `json:"time"`
+	UsAqi    *float64 `json:"usAqi"`
+	Category string   `json:"category,omitempty"`
+}
+
 type WeatherCurrent struct {
 	Time             string  `json:"time"`
 	Temperature      float64 `json:"temperature"`
@@ -105,15 +113,17 @@ type WeatherState struct {
 	LastAttemptAt int64                `json:"lastAttemptAt,omitempty"`
 	Error         string               `json:"error,omitempty"`
 	Current       *WeatherCurrent      `json:"current,omitempty"`
+	AirQuality    *WeatherAirQuality   `json:"airQuality,omitempty"`
 	Hourly        []WeatherHourlyPoint `json:"hourly"`
 	Daily         []WeatherDay         `json:"daily"`
 }
 
 type WeatherForecast struct {
-	Timezone string
-	Current  *WeatherCurrent
-	Hourly   []WeatherHourlyPoint
-	Daily    []WeatherDay
+	Timezone   string
+	Current    *WeatherCurrent
+	AirQuality *WeatherAirQuality
+	Hourly     []WeatherHourlyPoint
+	Daily      []WeatherDay
 }
 
 type WeatherProvider interface {
@@ -123,9 +133,10 @@ type WeatherProvider interface {
 }
 
 type OpenMeteoProvider struct {
-	client       *http.Client
-	forecastURL  string
-	geocodingURL string
+	client        *http.Client
+	forecastURL   string
+	geocodingURL  string
+	airQualityURL string
 }
 
 func defaultWeatherState() WeatherState {
@@ -220,9 +231,10 @@ func normalizeWeatherLocation(location WeatherLocation) (WeatherLocation, error)
 
 func newOpenMeteoProvider() *OpenMeteoProvider {
 	return &OpenMeteoProvider{
-		client:       &http.Client{Timeout: weatherRequestTimeout},
-		forecastURL:  "https://api.open-meteo.com/v1/forecast",
-		geocodingURL: "https://geocoding-api.open-meteo.com/v1/search",
+		client:        &http.Client{Timeout: weatherRequestTimeout},
+		forecastURL:   "https://api.open-meteo.com/v1/forecast",
+		geocodingURL:  "https://geocoding-api.open-meteo.com/v1/search",
+		airQualityURL: "https://air-quality-api.open-meteo.com/v1/air-quality",
 	}
 }
 
@@ -391,6 +403,12 @@ func (provider *OpenMeteoProvider) Forecast(ctx context.Context, location Weathe
 			Sunset:              payload.Daily.Sunset[index],
 		})
 	}
+	// Air quality is best-effort: a failed or missing reading leaves AirQuality
+	// nil instead of failing the refresh, and the previous reading stays in
+	// place until a new one arrives.
+	if airQuality, airQualityErr := provider.AirQuality(ctx, location); airQualityErr == nil {
+		forecast.AirQuality = airQuality
+	}
 	return forecast, nil
 }
 
@@ -478,6 +496,62 @@ func (provider *OpenMeteoProvider) Summaries(ctx context.Context, locations []We
 		summaries[location.ID] = summary
 	}
 	return summaries, nil
+}
+
+type openMeteoAirQualityPayload struct {
+	Current struct {
+		Time  string   `json:"time"`
+		UsAqi *float64 `json:"us_aqi"`
+	} `json:"current"`
+}
+
+// AirQuality fetches the current US AQI reading for one location. A missing
+// reading (us_aqi absent) is not an error: the caller gets (nil, nil) and the
+// UI simply shows no air quality data.
+func (provider *OpenMeteoProvider) AirQuality(ctx context.Context, location WeatherLocation) (*WeatherAirQuality, error) {
+	if !validWeatherLocation(location) {
+		return nil, errors.New("invalid weather location")
+	}
+	values := url.Values{
+		"latitude":  {fmt.Sprintf("%.6f", location.Latitude)},
+		"longitude": {fmt.Sprintf("%.6f", location.Longitude)},
+		"current":   {"us_aqi"},
+	}
+	var payload openMeteoAirQualityPayload
+	if err := provider.getJSON(ctx, provider.airQualityURL+"?"+values.Encode(), &payload); err != nil {
+		return nil, err
+	}
+	if payload.Current.UsAqi == nil {
+		return nil, nil
+	}
+	aqi := *payload.Current.UsAqi
+	return &WeatherAirQuality{
+		Time:     payload.Current.Time,
+		UsAqi:    &aqi,
+		Category: usAqiCategory(aqi),
+	}, nil
+}
+
+// usAqiCategory maps a US EPA AQI reading to its band name. Negative values
+// are clamped to zero so malformed readings still land in "Good".
+func usAqiCategory(aqi float64) string {
+	if aqi < 0 {
+		aqi = 0
+	}
+	switch {
+	case aqi <= 50:
+		return "Good"
+	case aqi <= 100:
+		return "Moderate"
+	case aqi <= 150:
+		return "Unhealthy for Sensitive Groups"
+	case aqi <= 200:
+		return "Unhealthy"
+	case aqi <= 300:
+		return "Very Unhealthy"
+	default:
+		return "Hazardous"
+	}
 }
 
 type openMeteoSearchPayload struct {
@@ -731,6 +805,9 @@ func (s *Service) fetchWeather(serial uint64, provider WeatherProvider, location
 		weather.Status = weatherStatusReady
 		weather.Error = ""
 		weather.Current = forecast.Current
+		if forecast.AirQuality != nil {
+			weather.AirQuality = forecast.AirQuality
+		}
 		weather.Hourly = forecast.Hourly
 		weather.Daily = forecast.Daily
 		weather.FetchedAt = now.UnixMilli()

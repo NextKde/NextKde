@@ -31,6 +31,140 @@ func TestNormalizeWeatherStateMigratesLegacyEmptyState(t *testing.T) {
 	}
 }
 
+func TestOpenMeteoForecastFetchesAirQuality(t *testing.T) {
+	newServer := func(airQualityStatus int) *httptest.Server {
+		return httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+			writer.Header().Set("Content-Type", "application/json")
+			if request.URL.Path == "/air-quality" {
+				if request.URL.Query().Get("current") != "us_aqi" {
+					t.Errorf("air quality current = %q", request.URL.Query().Get("current"))
+				}
+				if request.URL.Query().Get("latitude") != "28.228200" ||
+					request.URL.Query().Get("longitude") != "112.938800" {
+					t.Errorf("unexpected coordinates: %q / %q",
+						request.URL.Query().Get("latitude"), request.URL.Query().Get("longitude"))
+				}
+				if airQualityStatus != http.StatusOK {
+					writer.WriteHeader(airQualityStatus)
+					return
+				}
+				_, _ = writer.Write([]byte(`{"current":{"time":"2026-08-30T12:00","us_aqi":40}}`))
+				return
+			}
+			if request.URL.Path != "/forecast" {
+				http.NotFound(writer, request)
+				return
+			}
+			_, _ = writer.Write([]byte(`{
+	            "timezone":"Asia/Shanghai",
+	            "current":{"time":"2026-08-30T12:00","temperature_2m":31.4,
+	              "relative_humidity_2m":58,"apparent_temperature":34.1,
+	              "is_day":1,"weather_code":2,"wind_speed_10m":12.5,
+	              "wind_direction_10m":175},
+	            "hourly":{"time":["2026-08-30T12:00"],"temperature_2m":[31.4],
+	              "apparent_temperature":[34.1],"relative_humidity_2m":[58],
+	              "precipitation_probability":[10],"weather_code":[2],
+	              "is_day":[1],"wind_speed_10m":[12.5]},
+	            "daily":{"time":["2026-08-30"],"weather_code":[2],
+	              "temperature_2m_max":[34],"temperature_2m_min":[25],
+	              "precipitation_probability_max":[20],
+	              "sunrise":["2026-08-30T06:03"],"sunset":["2026-08-30T18:55"]}
+	          }`))
+		}))
+	}
+
+	server := newServer(http.StatusOK)
+	defer server.Close()
+	provider := newOpenMeteoProvider()
+	provider.client = server.Client()
+	provider.forecastURL = server.URL + "/forecast"
+	provider.airQualityURL = server.URL + "/air-quality"
+	forecast, err := provider.Forecast(context.Background(), defaultWeatherState().Location, weatherUnitsMetric)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if forecast.AirQuality == nil || forecast.AirQuality.UsAqi == nil ||
+		*forecast.AirQuality.UsAqi != 40 || forecast.AirQuality.Category != "Good" ||
+		forecast.AirQuality.Time != "2026-08-30T12:00" {
+		t.Fatalf("unexpected air quality: %#v", forecast.AirQuality)
+	}
+
+	failing := newServer(http.StatusInternalServerError)
+	defer failing.Close()
+	provider = newOpenMeteoProvider()
+	provider.client = failing.Client()
+	provider.forecastURL = failing.URL + "/forecast"
+	provider.airQualityURL = failing.URL + "/air-quality"
+	forecast, err = provider.Forecast(context.Background(), defaultWeatherState().Location, weatherUnitsMetric)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if forecast.AirQuality != nil {
+		t.Fatalf("failed air quality must stay nil, got %#v", forecast.AirQuality)
+	}
+	if forecast.Current == nil || forecast.Current.WeatherCode != 2 {
+		t.Fatalf("forecast did not survive air quality failure: %#v", forecast.Current)
+	}
+}
+
+func TestUSAqiCategoryBands(t *testing.T) {
+	cases := []struct {
+		aqi      float64
+		category string
+	}{
+		{40, "Good"},
+		{60, "Moderate"},
+		{120, "Unhealthy for Sensitive Groups"},
+		{180, "Unhealthy"},
+		{250, "Very Unhealthy"},
+		{350, "Hazardous"},
+		{-5, "Good"},
+	}
+	for _, testCase := range cases {
+		if got := usAqiCategory(testCase.aqi); got != testCase.category {
+			t.Fatalf("usAqiCategory(%v) = %q, want %q", testCase.aqi, got, testCase.category)
+		}
+	}
+}
+
+func TestWeatherAirQualityRoundTripsThroughState(t *testing.T) {
+	aqi := 40.0
+	state := defaultWeatherState()
+	state.AirQuality = &WeatherAirQuality{
+		Time:     "2026-08-30T12:00",
+		UsAqi:    &aqi,
+		Category: "Good",
+	}
+
+	raw, err := json.Marshal(state)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var loaded WeatherState
+	if err := json.Unmarshal(raw, &loaded); err != nil {
+		t.Fatal(err)
+	}
+	airQuality := loaded.AirQuality
+	if airQuality == nil || airQuality.Time != "2026-08-30T12:00" ||
+		airQuality.UsAqi == nil || *airQuality.UsAqi != 40.0 ||
+		airQuality.Category != "Good" {
+		t.Fatalf("air quality did not survive persistence: %#v", airQuality)
+	}
+
+	empty := defaultWeatherState()
+	raw, err = json.Marshal(empty)
+	if err != nil {
+		t.Fatal(err)
+	}
+	loaded = WeatherState{}
+	if err := json.Unmarshal(raw, &loaded); err != nil {
+		t.Fatal(err)
+	}
+	if loaded.AirQuality != nil {
+		t.Fatalf("nil air quality did not stay nil: %#v", loaded.AirQuality)
+	}
+}
+
 func TestOpenMeteoForecastMapsVersionedContract(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
 		if request.URL.Path != "/forecast" {
