@@ -1710,8 +1710,17 @@ KosApplicationWindow {
                 // shows both text areas.
                 opacity: toolbarSearch.active || toolbarSearch.width > 0 ? 0 : 1
                 visible: opacity > 0
-                labels: [qsTr("Month"), qsTr("Week"), qsTr("Day")]
-                currentIndex: root.viewIndex
+                // R100/C05+L03: the reference's segment reads Day · Week ·
+                // Month (· Year) — granularity ascending, left to right — and
+                // L03 words it "Day/week/month segment". Ours was the exact
+                // reverse. `viewIndex` keeps its own published contract
+                // (0=month / 1=week / 2=day: `activeView` :229, Ctrl+1..3
+                // :1544-1546, `--view` :1054, the page cache :2372 and the
+                // review harness), so the segment mirrors it instead of
+                // redefining it. Week still lands on segment 1, so the pill's
+                // measured geometry (R097/R098) is untouched.
+                labels: [qsTr("Day"), qsTr("Week"), qsTr("Month")]
+                currentIndex: 2 - root.viewIndex
                 backgroundColor: root.tahoe.segmentTrack
                 selectionColor: root.tahoe.segmentPill
                 textColor: root.tahoe.labelPrimary
@@ -1720,7 +1729,7 @@ KosApplicationWindow {
                 // top-5% mean 15–23) and the pill alone marks the selection.
                 // `labelSecondary` (≈147 at 1:1) was 130 levels too light.
                 mutedTextColor: root.tahoe.labelPrimary
-                onSelectionRequested: index => root.viewIndex = index
+                onSelectionRequested: index => root.viewIndex = 2 - index
             }
 
             ToolbarButton {
