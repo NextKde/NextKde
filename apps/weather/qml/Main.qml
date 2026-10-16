@@ -26,6 +26,13 @@ KosApplicationWindow {
     readonly property color skyText: "#ffffff"
     readonly property color skyTextMuted: Qt.rgba(1, 1, 1, 0.66)
 
+    // ref-main 白天场景所有内容卡填充暗于周围天空（Pillow 实测：指标卡 (38.5,115.8,196.9)
+    // vs 卡间天空 (54.7,124.3,197.0)；AQ 卡 (9.5,93.7,179.0) vs 缝隙 (38.3,101.7,175.9)），
+    // 可拟合为 α~0.30 的深蓝玻璃 (0,96,210)。夜景无参考：维持白玻璃族不变。
+    readonly property color cardGlassRgb: root.currentIsDay ? Qt.rgba(0, 0.376, 0.824, 1.0) : Qt.rgba(1, 1, 1, 1.0)
+    readonly property real cardGlassAlpha: root.currentIsDay ? 0.30 : 0.16
+    readonly property real cardGlassAlphaHot: root.currentIsDay ? 0.36 : 0.21
+
     // Liquid Glass circular button background (stage 3, style A) for the
     // sky top bar. `selected` shows the tinted glass disc, unselected stays
     // transparent until hover; `subtle` is the always-on action-button glass
@@ -369,14 +376,14 @@ KosApplicationWindow {
 
         implicitHeight: 66
         radius: AppTheme.smallRadius
-        // hover 抬升+高光与 dailyCard B.4 同参数族（ref 静态图无 hover 态，参数沿既有外推）
+        // 昼夜分材质：ref-main 白天所有卡填充暗于周围天空，拟合为 α~0.30 深蓝玻璃 (0,96,210)；夜间维持白玻璃
         property bool hot: metricHover.hovered
         // unified with full-width cards (AQ/10-day): fill 0.16 + stroke 0.22; ref-main shows one shared card material
-        property real hoverFill: hot ? 0.21 : 0.16
+        property real hoverFill: hot ? root.cardGlassAlphaHot : root.cardGlassAlpha
         Behavior on hoverFill { NumberAnimation { duration: AppTheme.motionNormal; easing.type: Easing.OutCubic } }
         property real hoverStroke: hot ? 0.32 : 0.22
         Behavior on hoverStroke { NumberAnimation { duration: AppTheme.motionNormal; easing.type: Easing.OutCubic } }
-        color: Qt.rgba(1, 1, 1, hoverFill)
+        color: Qt.rgba(root.cardGlassRgb.r, root.cardGlassRgb.g, root.cardGlassRgb.b, hoverFill)
         border.width: 1
         border.color: Qt.rgba(1, 1, 1, hoverStroke)
         transform: Translate {
@@ -1437,7 +1444,7 @@ KosApplicationWindow {
 
                         background: KosSurface {
                             radius: 14
-                            fillColor: Qt.rgba(1, 1, 1, 0.16)
+                            fillColor: Qt.rgba(root.cardGlassRgb.r, root.cardGlassRgb.g, root.cardGlassRgb.b, root.cardGlassAlpha)
                             strokeWidth: 1
                             strokeColor: Qt.rgba(1, 1, 1, 0.22)
                             elevation: 0
@@ -1596,13 +1603,13 @@ KosApplicationWindow {
                                         Layout.fillWidth: true
                                         implicitHeight: 66
                                         radius: AppTheme.smallRadius
-                                        // hover 抬升+高光与 dailyCard B.4 同参数族（ref 静态图无 hover 态，参数沿既有外推）
+                                        // 昼夜分材质：ref-main 白天所有卡填充暗于天空（α~0.30 深蓝玻璃）；夜间维持白玻璃
                                         property bool hot: directionHover.hovered
-                                        property real hoverFill: hot ? 0.21 : 0.16
+                                        property real hoverFill: hot ? root.cardGlassAlphaHot : root.cardGlassAlpha
                                         Behavior on hoverFill { NumberAnimation { duration: AppTheme.motionNormal; easing.type: Easing.OutCubic } }
                                         property real hoverStroke: hot ? 0.32 : 0.22
                                         Behavior on hoverStroke { NumberAnimation { duration: AppTheme.motionNormal; easing.type: Easing.OutCubic } }
-                                        color: Qt.rgba(1, 1, 1, hoverFill)
+                                        color: Qt.rgba(root.cardGlassRgb.r, root.cardGlassRgb.g, root.cardGlassRgb.b, hoverFill)
                                         border.width: 1
                                         border.color: Qt.rgba(1, 1, 1, hoverStroke)
                                         transform: Translate {
@@ -1764,13 +1771,13 @@ KosApplicationWindow {
                                         Layout.fillWidth: true
                                         implicitHeight: 66
                                         radius: AppTheme.smallRadius
-                                        // hover 抬升+高光与 dailyCard B.4 同参数族（ref 静态图无 hover 态，参数沿既有外推）
+                                        // 昼夜分材质：ref-main 白天所有卡填充暗于天空（α~0.30 深蓝玻璃）；夜间维持白玻璃
                                         property bool hot: moonHover.hovered
-                                        property real hoverFill: hot ? 0.21 : 0.16
+                                        property real hoverFill: hot ? root.cardGlassAlphaHot : root.cardGlassAlpha
                                         Behavior on hoverFill { NumberAnimation { duration: AppTheme.motionNormal; easing.type: Easing.OutCubic } }
                                         property real hoverStroke: hot ? 0.32 : 0.22
                                         Behavior on hoverStroke { NumberAnimation { duration: AppTheme.motionNormal; easing.type: Easing.OutCubic } }
-                                        color: Qt.rgba(1, 1, 1, hoverFill)
+                                        color: Qt.rgba(root.cardGlassRgb.r, root.cardGlassRgb.g, root.cardGlassRgb.b, hoverFill)
                                         border.width: 1
                                         border.color: Qt.rgba(1, 1, 1, hoverStroke)
                                         transform: Translate {
@@ -1890,13 +1897,13 @@ KosApplicationWindow {
                                         Layout.fillWidth: true
                                         implicitHeight: 66
                                         radius: AppTheme.smallRadius
-                                        // hover 抬升+高光与 dailyCard B.4 同参数族（ref 静态图无 hover 态，参数沿既有外推）
+                                        // 昼夜分材质：ref-main 白天所有卡填充暗于天空（α~0.30 深蓝玻璃）；夜间维持白玻璃
                                         property bool hot: sunsetHover.hovered
-                                        property real hoverFill: hot ? 0.21 : 0.16
+                                        property real hoverFill: hot ? root.cardGlassAlphaHot : root.cardGlassAlpha
                                         Behavior on hoverFill { NumberAnimation { duration: AppTheme.motionNormal; easing.type: Easing.OutCubic } }
                                         property real hoverStroke: hot ? 0.32 : 0.22
                                         Behavior on hoverStroke { NumberAnimation { duration: AppTheme.motionNormal; easing.type: Easing.OutCubic } }
-                                        color: Qt.rgba(1, 1, 1, hoverFill)
+                                        color: Qt.rgba(root.cardGlassRgb.r, root.cardGlassRgb.g, root.cardGlassRgb.b, hoverFill)
                                         border.width: 1
                                         border.color: Qt.rgba(1, 1, 1, hoverStroke)
                                         transform: Translate {
@@ -2193,7 +2200,7 @@ KosApplicationWindow {
 
                                     background: KosSurface {
                                         radius: 14
-                                        fillColor: Qt.rgba(1, 1, 1, 0.20)
+                                        fillColor: Qt.rgba(root.cardGlassRgb.r, root.cardGlassRgb.g, root.cardGlassRgb.b, root.currentIsDay ? root.cardGlassAlpha : 0.20)
                                         strokeWidth: 1
                                         strokeColor: Qt.rgba(1, 1, 1, 0.22)
                                         elevation: 0
@@ -2287,7 +2294,7 @@ KosApplicationWindow {
 
                         HoverHandler { id: dailyHover }
                         property bool cardHot: dailyHover.hovered
-                        property real hoverFill: cardHot ? 0.21 : 0.16
+                        property real hoverFill: cardHot ? root.cardGlassAlphaHot : root.cardGlassAlpha
                         Behavior on hoverFill { NumberAnimation { duration: AppTheme.motionNormal; easing.type: Easing.OutCubic } }
                         property real hoverStroke: cardHot ? 0.32 : 0.22
                         Behavior on hoverStroke { NumberAnimation { duration: AppTheme.motionNormal; easing.type: Easing.OutCubic } }
@@ -2298,7 +2305,7 @@ KosApplicationWindow {
 
                         background: KosSurface {
                             radius: 14
-                            fillColor: Qt.rgba(1, 1, 1, dailyCard.hoverFill)
+                            fillColor: Qt.rgba(root.cardGlassRgb.r, root.cardGlassRgb.g, root.cardGlassRgb.b, dailyCard.hoverFill)
                             strokeWidth: 1
                             strokeColor: Qt.rgba(1, 1, 1, dailyCard.hoverStroke)
                             elevation: 0
