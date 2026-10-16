@@ -11,6 +11,9 @@ Button {
     // the accent whatever the nominal contrast ratio says (opt-in, so the
     // app-wide `accentText` rule is untouched).
     property bool lightLabel: false
+    // D06: macOS alert primaries are a flat fill — no drop shadow and no
+    // 1px rim, unlike a toolbar/default emphasis (opt-in, so nothing else moves).
+    property bool flatPrimary: false
     readonly property bool emphasized: highlighted || (checkable && checked)
 
     hoverEnabled: true
@@ -61,17 +64,20 @@ Button {
                 return AppTheme.buttonPressed
             return root.hovered ? AppTheme.buttonHover : AppTheme.button
         }
-        strokeWidth: (root.flat || root.secondary) && !root.hovered && !root.activeFocus ? 0 : 1
+        strokeWidth: root.flatPrimary && root.emphasized
+            ? 0
+            : ((root.flat || root.secondary) && !root.hovered && !root.activeFocus ? 0 : 1)
         strokeColor: root.emphasized
             ? AppTheme.withAlpha(AppTheme.accentText, 0.16)
             : AppTheme.border
         elevation: root.secondary ? 0
-            : (root.flat && !root.hovered && !root.activeFocus ? 0
-               : (root.emphasized ? 0.68 : (root.hovered ? 0.62 : 0.42)))
+            : (root.flatPrimary && root.emphasized ? 0
+               : (root.flat && !root.hovered && !root.activeFocus ? 0
+                  : (root.emphasized ? 0.68 : (root.hovered ? 0.62 : 0.42))))
         hovered: root.hovered
         pressed: root.down
         focused: root.activeFocus
-        showInnerHighlight: root.secondary ? false : (!root.flat || root.hovered)
+        showInnerHighlight: (root.secondary || (root.flatPrimary && root.emphasized)) ? false : (!root.flat || root.hovered)
         opacity: root.enabled ? 1 : 0.68
     }
 }
