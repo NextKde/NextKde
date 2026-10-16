@@ -38,7 +38,43 @@ Canvas {
     }
     Component.onCompleted: playRayLightup()
 
-    onCodeChanged: requestPaint()
+    // Replace (down-up): old glyph drops out downward while the new one lands
+    // from above. Skipped entirely under reduce motion (instant swap).
+    property real paintAlpha: 1.0
+    property int replaceOldCode: -1
+    property real replaceOut: 0
+    property real replaceIn: 0
+    property bool replacing: false
+    property bool _armed: false
+    property int _lastCode: -1
+    onReplaceOutChanged: requestPaint()
+    onReplaceInChanged: requestPaint()
+    onCodeChanged: {
+        if (!_armed) {
+            _armed = true
+            _lastCode = code
+            requestPaint()
+            return
+        }
+        var oldC = _lastCode
+        if (AppTheme.reduceMotion || oldC < 0 || oldC === code) {
+            _lastCode = code
+            requestPaint()
+            return
+        }
+        replaceOldCode = oldC
+        replacing = true
+        replaceOut = 0
+        replaceIn = 0
+        replaceAnim.restart()
+        _lastCode = code
+    }
+    SequentialAnimation {
+        id: replaceAnim
+        onStopped: root.replacing = false
+        NumberAnimation { target: root; property: "replaceOut"; from: 0; to: 1; duration: 120; easing.type: Easing.InQuad }
+        NumberAnimation { target: root; property: "replaceIn"; from: 0; to: 1; duration: 150; easing.type: Easing.OutCubic }
+    }
     onIsDayChanged: requestPaint()
 
     onPaint: {
@@ -49,7 +85,33 @@ Canvas {
         ctx.save()
         ctx.scale(width / 24, height / 24)
 
-        var weatherCode = Number(code)
+        if (replacing && replaceOldCode >= 0 && replaceOut > 0 && replaceOut < 1) {
+            // Old glyph: falls 7 logical px down while fading out.
+            root.paintAlpha = Math.max(1 - replaceOut, 0)
+            ctx.save()
+            ctx.globalAlpha = Math.max(1 - replaceOut, 0)
+            ctx.translate(0, 7 * replaceOut)
+            drawGlyph(ctx, replaceOldCode)
+            ctx.restore()
+        }
+        if (replaceIn > 0) {
+            // New glyph: lands from 7 logical px above.
+            root.paintAlpha = replaceIn
+            ctx.save()
+            ctx.globalAlpha = replaceIn
+            ctx.translate(0, -7 * (1 - replaceIn))
+            drawGlyph(ctx, Number(code))
+            ctx.restore()
+        } else if (!replacing) {
+            // Steady state (reduce motion, no transition, or transition done).
+            root.paintAlpha = 1.0
+            drawGlyph(ctx, Number(code))
+        }
+
+        ctx.restore()
+    }
+
+    function drawGlyph(ctx, weatherCode) {
         if (weatherCode === 0) {
             if (isDay)
                 drawSun(ctx, 12, 12, 6, true)
@@ -77,8 +139,6 @@ Canvas {
             // Overcast, fog and anything unknown: a plain cloud.
             drawCloud(ctx, 12, 12, 1.0)
         }
-
-        ctx.restore()
     }
 
     function drawSun(ctx, cx, cy, r, withRays) {
@@ -99,7 +159,7 @@ Canvas {
             var angle = i * Math.PI / 4
             var cos = Math.cos(angle)
             var sin = Math.sin(angle)
-            ctx.globalAlpha = alpha
+            ctx.globalAlpha = alpha * root.paintAlpha
             ctx.beginPath()
             ctx.moveTo(cx + cos * 8, cy + sin * 8)
             ctx.lineTo(cx + cos * 10.5, cy + sin * 10.5)
