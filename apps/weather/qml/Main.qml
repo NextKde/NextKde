@@ -1524,28 +1524,15 @@ KosApplicationWindow {
                         }
                     }
 
+                    // 指标瓦片容器：参考图（ref-main）里指标卡（WIND/月相/UV/SUNSET 等）
+                    // 是散在天空上的独立圆角卡，卡与卡之间直接透天空，无外层容器卡——
+                    // 故本 Pane 只做布局，不带任何卡面 chrome（Pillow 实测 ref 指标卡
+                    // 填充 (38.5,115.8,196.9) vs 卡间天空 (54.7,124.3,197.0)，无白玻璃亮层）。
                     KosCard {
                         id: conditionsCard
                         Layout.fillWidth: true
 
-                        HoverHandler { id: conditionsHover }
-                        property bool cardHot: conditionsHover.hovered
-                        property real hoverFill: cardHot ? 0.21 : 0.16
-                        Behavior on hoverFill { NumberAnimation { duration: AppTheme.motionNormal; easing.type: Easing.OutCubic } }
-                        property real hoverStroke: cardHot ? 0.32 : 0.22
-                        Behavior on hoverStroke { NumberAnimation { duration: AppTheme.motionNormal; easing.type: Easing.OutCubic } }
-                        transform: Translate {
-                            y: AppTheme.reduceMotion ? 0 : (conditionsCard.cardHot ? -3 : 0)
-                            Behavior on y { NumberAnimation { duration: AppTheme.motionNormal; easing.type: Easing.OutCubic } }
-                        }
-
-                        background: KosSurface {
-                            radius: 14
-                            fillColor: Qt.rgba(1, 1, 1, conditionsCard.hoverFill)
-                            strokeWidth: 1
-                            strokeColor: Qt.rgba(1, 1, 1, conditionsCard.hoverStroke)
-                            elevation: 0
-                        }
+                        background: Item {}
 
                         contentItem: ColumnLayout {
                             spacing: 12
