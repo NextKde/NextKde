@@ -717,31 +717,66 @@ KosApplicationWindow {
                 anchors.margins: 18
                 spacing: 10
 
-                KosTextField {
-                    id: locationField
+                Item {
                     Layout.topMargin: 36
                     Layout.fillWidth: true
                     Layout.minimumWidth: 0
                     Layout.preferredHeight: 30
-                    cornerRadius: 15
-                    // 阶段三功能层 Liquid Glass：specular 高光与细描边。
-                    // 按参考图量得高光强度温和，用 liquidStrength 0.2 缩放。
-                    materialForm: false
-                    liquidFinish: true
-                    liquidStrength: 0.2
-                    glassColor: Qt.rgba(1, 1, 1, 0.22)
-                    outlineColor: Qt.rgba(1, 1, 1, 0.30)
-                    textColor: "#ffffff"
-                    mutedTextColor: Qt.rgba(1, 1, 1, 0.66)
-                    placeholderText: qsTr("Search")
-                    Accessible.name: qsTr("Location search")
-                    onAccepted: backend.searchLocations(text)
-                    onTextChanged: {
-                        if (text.trim().length >= 2)
-                            searchDebounce.restart()
-                        else {
-                            searchDebounce.stop()
-                            backend.clearSearch()
+
+                    KosTextField {
+                        id: locationField
+                        anchors.fill: parent
+                        leftPadding: 34
+                        cornerRadius: 15
+                        // 阶段三功能层 Liquid Glass：specular 高光与细描边。
+                        // 按参考图量得高光强度温和，用 liquidStrength 0.2 缩放。
+                        materialForm: false
+                        liquidFinish: true
+                        liquidStrength: 0.2
+                        glassColor: Qt.rgba(1, 1, 1, 0.22)
+                        outlineColor: Qt.rgba(1, 1, 1, 0.30)
+                        textColor: "#ffffff"
+                        mutedTextColor: Qt.rgba(1, 1, 1, 0.66)
+                        placeholderText: qsTr("Search")
+                        Accessible.name: qsTr("Location search")
+                        onAccepted: backend.searchLocations(text)
+                        onTextChanged: {
+                            if (text.trim().length >= 2)
+                                searchDebounce.restart()
+                            else {
+                                searchDebounce.stop()
+                                backend.clearSearch()
+                            }
+                        }
+                    }
+
+                    // 搜索放大镜：手绘确定性渲染，替代字体 ⌕ glyph（该字形
+                    // 在当前字体里 bbox 仅 6px 且贴基线，视觉过小）。
+                    // 手绘放大镜（参考图搜索胶囊左侧 magnifier；两笔确定性渲染，无字体依赖）
+                    Item {
+                        anchors.left: parent.left
+                        anchors.leftMargin: 12
+                        anchors.verticalCenter: parent.verticalCenter
+                        width: 13
+                        height: 13
+                        Accessible.ignored: true
+                        Rectangle { // 镜片圆环
+                            width: 10
+                            height: 10
+                            radius: 5
+                            color: "transparent"
+                            border.color: Qt.rgba(1, 1, 1, 0.72)
+                            border.width: 1.4
+                        }
+                        Rectangle { // 手柄，45° 朝右下
+                            x: 8.4
+                            y: 8.4
+                            width: 1.4
+                            height: 5.2
+                            radius: 0.7
+                            color: Qt.rgba(1, 1, 1, 0.72)
+                            rotation: -45
+                            transformOrigin: Item.TopLeft
                         }
                     }
                 }
