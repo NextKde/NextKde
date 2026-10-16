@@ -293,6 +293,120 @@ func TestWeatherCurrentPressureRoundTripsThroughState(t *testing.T) {
 	}
 }
 
+func TestWeatherCurrentMoonPhaseRoundTripsThroughState(t *testing.T) {
+	phase := 0.342
+	illumination := 78.5
+	state := defaultWeatherState()
+	state.Current = &WeatherCurrent{
+		Time:             "2026-10-16T11:41",
+		MoonPhase:        &phase,
+		MoonIllumination: &illumination,
+	}
+
+	raw, err := json.Marshal(state)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var loaded WeatherState
+	if err := json.Unmarshal(raw, &loaded); err != nil {
+		t.Fatal(err)
+	}
+	if loaded.Current == nil || loaded.Current.MoonPhase == nil ||
+		*loaded.Current.MoonPhase != 0.342 || loaded.Current.MoonIllumination == nil ||
+		*loaded.Current.MoonIllumination != 78.5 {
+		t.Fatalf("moon phase did not survive persistence: %#v", loaded.Current)
+	}
+
+	empty := defaultWeatherState()
+	raw, err = json.Marshal(empty)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(raw), "moonPhase") || strings.Contains(string(raw), "moonIllumination") {
+		t.Fatalf("nil moon phase must be omitted, got %s", raw)
+	}
+	loaded = WeatherState{}
+	if err := json.Unmarshal(raw, &loaded); err != nil {
+		t.Fatal(err)
+	}
+	if loaded.Current != nil && (loaded.Current.MoonPhase != nil || loaded.Current.MoonIllumination != nil) {
+		t.Fatalf("nil moon phase did not stay nil: %#v", loaded.Current)
+	}
+}
+
+// TestMoonPhaseAtKnownDates checks the mean-synodic-month approximation
+// against known lunations. The approximation drifts by roughly +/-0.5 day
+// over decades, so assertions on real dates use generous intervals.
+func TestMoonPhaseAtKnownDates(t *testing.T) {
+	cases := []struct {
+		name         string
+		when         time.Time
+		phaseMinimum float64
+		phaseMaximum float64
+		illumMin     float64
+		illumMax     float64
+	}{
+		{
+			// moonEpoch itself is a known new moon: phase must be ~0.
+			name:         "epoch is new moon",
+			when:         moonEpoch,
+			phaseMinimum: 0,
+			phaseMaximum: 0.02,
+			illumMin:     0,
+			illumMax:     0.1,
+		},
+		{
+			// One mean synodic month after the epoch is again a new moon
+			// (within the approximation's tolerance).
+			name:         "one synodic month later is new moon",
+			when:         moonEpoch.Add(time.Duration(29.530588853 * 24 * float64(time.Hour))),
+			phaseMinimum: 0,
+			phaseMaximum: 0.05,
+			illumMin:     0,
+			illumMax:     2.5,
+		},
+		{
+			// 2000-01-21 20:02 UTC is near first quarter (phase ~0.5), so the
+			// illuminated fraction (1-cos(2*pi*phase))/2*100 is near 100:
+			// phase 0.44..0.56 maps to illumination ~92.6..99.7, hence the
+			// 92-100 window below.
+			name:         "first quarter near 2000-01-21",
+			when:         time.Date(2000, time.January, 21, 20, 2, 0, 0, time.UTC),
+			phaseMinimum: 0.44,
+			phaseMaximum: 0.56,
+			illumMin:     92,
+			illumMax:     100,
+		},
+	}
+	for _, testCase := range cases {
+		t.Run(testCase.name, func(t *testing.T) {
+			phase, illumination := moonPhaseAt(testCase.when)
+			if phase < testCase.phaseMinimum || phase >= testCase.phaseMaximum {
+				t.Fatalf("phase = %v, want [%v, %v)", phase, testCase.phaseMinimum, testCase.phaseMaximum)
+			}
+			if illumination < testCase.illumMin || illumination > testCase.illumMax {
+				t.Fatalf("illumination = %v, want [%v, %v]", illumination, testCase.illumMin, testCase.illumMax)
+			}
+		})
+	}
+
+	// Any instant must map into the documented ranges.
+	for _, when := range []time.Time{
+		moonEpoch.Add(-1000 * 24 * time.Hour),
+		time.Date(1900, time.June, 15, 3, 30, 0, 0, time.UTC),
+		time.Date(2100, time.March, 1, 12, 0, 0, 0, time.UTC),
+		time.Now().UTC(),
+	} {
+		phase, illumination := moonPhaseAt(when)
+		if phase < 0 || phase >= 1 {
+			t.Fatalf("phase %v out of [0,1) at %v", phase, when)
+		}
+		if illumination < 0 || illumination > 100 {
+			t.Fatalf("illumination %v out of [0,100] at %v", illumination, when)
+		}
+	}
+}
+
 func TestOpenMeteoForecastMapsVersionedContract(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
 		if request.URL.Path != "/forecast" {
@@ -343,6 +457,13 @@ func TestOpenMeteoForecastMapsVersionedContract(t *testing.T) {
 	}
 	if forecast.Current.Pressure == nil || *forecast.Current.Pressure != 1014.2 {
 		t.Fatalf("pressure = %#v, want 1014.2", forecast.Current.Pressure)
+	}
+	// Moon data is computed locally at mapping time, independent of the fixture.
+	if forecast.Current.MoonPhase == nil || *forecast.Current.MoonPhase < 0 || *forecast.Current.MoonPhase >= 1 {
+		t.Fatalf("moon phase = %#v, want a value in [0,1)", forecast.Current.MoonPhase)
+	}
+	if forecast.Current.MoonIllumination == nil || *forecast.Current.MoonIllumination < 0 || *forecast.Current.MoonIllumination > 100 {
+		t.Fatalf("moon illumination = %#v, want a value in [0,100]", forecast.Current.MoonIllumination)
 	}
 	if len(forecast.Hourly) != 2 || forecast.Hourly[1].PrecipitationChance != 20 {
 		t.Fatalf("unexpected hourly forecast: %#v", forecast.Hourly)

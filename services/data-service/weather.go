@@ -87,6 +87,15 @@ type WeatherCurrent struct {
 	// Pressure is the current sea-level pressure in hPa. It is nil when the
 	// persisted snapshot predates the field or the provider omitted it.
 	Pressure *float64 `json:"pressure,omitempty"`
+	// MoonPhase is the fraction of the synodic cycle at the current time,
+	// in [0,1): 0 = new moon, 0.25 = first quarter, 0.5 = full moon,
+	// 0.75 = last quarter. It is computed locally (Open-Meteo does not
+	// provide it). It is nil when the persisted snapshot predates the field.
+	MoonPhase *float64 `json:"moonPhase,omitempty"`
+	// MoonIllumination is the illuminated fraction of the lunar disk in
+	// percent (0-100), derived from MoonPhase. It is nil when the persisted
+	// snapshot predates the field.
+	MoonIllumination *float64 `json:"moonIllumination,omitempty"`
 }
 
 type WeatherHourlyPoint struct {
@@ -355,6 +364,7 @@ func (provider *OpenMeteoProvider) Forecast(ctx context.Context, location Weathe
 		return WeatherForecast{}, errors.New("weather response has no current conditions")
 	}
 
+	phase, illumination := moonPhaseAt(time.Now().UTC())
 	forecast := WeatherForecast{
 		Timezone: payload.Timezone,
 		Current: &WeatherCurrent{
@@ -370,6 +380,8 @@ func (provider *OpenMeteoProvider) Forecast(ctx context.Context, location Weathe
 			UvIndex:          payload.Current.UvIndex,
 			Visibility:       payload.Current.Visibility,
 			Pressure:         payload.Current.Pressure,
+			MoonPhase:        &phase,
+			MoonIllumination: &illumination,
 		},
 		Hourly: []WeatherHourlyPoint{},
 		Daily:  []WeatherDay{},
@@ -551,6 +563,25 @@ func (provider *OpenMeteoProvider) AirQuality(ctx context.Context, location Weat
 		UsAqi:    &aqi,
 		Category: usAqiCategory(aqi),
 	}, nil
+}
+
+// moonSynodicMonth is the mean synodic month in days.
+const moonSynodicMonth = 29.530588853
+
+// moonEpoch is a known new moon: 2000-01-06 18:14 UTC.
+var moonEpoch = time.Date(2000, 1, 6, 18, 14, 0, 0, time.UTC)
+
+// moonPhaseAt returns the fraction of the synodic cycle in [0,1) and the
+// illuminated disk percentage for the given instant, computed with the
+// mean-synodic-month approximation.
+func moonPhaseAt(when time.Time) (phase float64, illumination float64) {
+	days := when.Sub(moonEpoch).Hours() / 24
+	phase = math.Mod(days/moonSynodicMonth, 1)
+	if phase < 0 {
+		phase += 1
+	}
+	illumination = (1 - math.Cos(2*math.Pi*phase)) / 2 * 100
+	return phase, illumination
 }
 
 // usAqiCategory maps a US EPA AQI reading to its band name. Negative values
