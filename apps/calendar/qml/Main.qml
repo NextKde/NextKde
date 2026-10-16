@@ -2510,6 +2510,7 @@ KosApplicationWindow {
                         itemColor: root.itemColor
                         itemCompleted: root.itemCompleted
                         itemAllDay: root.itemAllDay
+                        itemRecord: root.itemRecord
                         itemHour: root.itemHour
                         onDateSelected: function(date) { root.selectedDate = date }
                         onItemActivated: function(item) { root.openItem(item) }
@@ -2540,6 +2541,7 @@ KosApplicationWindow {
                         itemColor: root.itemColor
                         itemCompleted: root.itemCompleted
                         itemAllDay: root.itemAllDay
+                        itemRecord: root.itemRecord
                         itemHour: root.itemHour
                         onDateSelected: function(date) { root.selectedDate = date }
                         onItemActivated: function(item) { root.openItem(item) }

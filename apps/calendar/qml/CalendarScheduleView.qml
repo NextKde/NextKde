@@ -28,6 +28,10 @@ Pane {
     property var itemColor: function(item) { return AppTheme.accent }
     property var itemCompleted: function(item) { return false }
     property var itemAllDay: function(item) { return false }
+    // A03: the all-day chip needs the item's record to know whether the item
+    // runs on across this column's boundary — a multi-day strip rounds only its
+    // two outer ends.
+    property var itemRecord: function(item) { return ({}) }
     property var itemHour: function(item) { return 0 }
 
     signal dateSelected(date date)
@@ -137,6 +141,46 @@ Pane {
                 result.push(source[index])
         }
         return result
+    }
+
+    // A03: a multi-day all-day item is ONE strip, not one pill per day. Only the
+    // run's two outer ends round; the corners where the item carries on into the
+    // neighbouring column stay square. A chip therefore has to know whether its
+    // item also covers the day before / after this column.
+    //
+    // Compared as ISO day strings. The stored all-day start/end are date-times in
+    // the event's own zone, and `new Date("YYYY-MM-DD")` parses as UTC midnight,
+    // which shifts the day in a negative-offset zone — so the date part is read
+    // as text and only the "end − 1 day" step uses local components.
+    function isoDay(date) {
+        return date.getFullYear() + "-"
+            + String(date.getMonth() + 1).padStart(2, "0") + "-"
+            + String(date.getDate()).padStart(2, "0")
+    }
+    function isoDayPattern(text) {
+        return /^\d{4}-\d{2}-\d{2}$/.test(text)
+    }
+    function allDayRecord(item) {
+        return itemRecord(item) ?? ({})
+    }
+    // The stored all-day end is exclusive, so the last covered day is end − 1.
+    function lastCoveredDay(record) {
+        const end = String(record.end ?? "").slice(0, 10)
+        if (!isoDayPattern(end))
+            return ""
+        const parts = end.split("-")
+        return isoDay(new Date(Number(parts[0]), Number(parts[1]) - 1,
+                               Number(parts[2]) - 1))
+    }
+    function allDayContinues(item, date, direction) {
+        const record = allDayRecord(item)
+        const today = isoDay(date)
+        if (direction < 0) {
+            const start = String(record.start ?? "").slice(0, 10)
+            return isoDayPattern(start) && start < today
+        }
+        const last = lastCoveredDay(record)
+        return isoDayPattern(last) && last > today
     }
 
     function hourItems(date, hour) {
@@ -384,7 +428,20 @@ Pane {
                                 Layout.preferredHeight: root.allDayRowHeight
                                 // Ref radius ≈ 6 ref-px against an 18 ref-px row ⇒ 1/3 of the row height.
                                 // Derived, not a literal: a row-height change must carry the corner with it.
-                                radius: Math.round(root.allDayRowHeight / 3)
+                                readonly property int endRadius: Math.round(root.allDayRowHeight / 3)
+                                // A03: only the strip's outer ends round. Where the item carries on
+                                // into the next/previous column the corner is square, so a multi-day
+                                // item reads as one continuous bar behind the column rules instead of
+                                // as one pill per day. A single-day item continues neither way and so
+                                // gets its radius on all four corners, unchanged.
+                                readonly property bool continuesLeft: root.allDayContinues(modelData,
+                                    allDayColumn.columnDate, -1)
+                                readonly property bool continuesRight: root.allDayContinues(modelData,
+                                    allDayColumn.columnDate, 1)
+                                topLeftRadius: continuesLeft ? 0 : endRadius
+                                bottomLeftRadius: continuesLeft ? 0 : endRadius
+                                topRightRadius: continuesRight ? 0 : endRadius
+                                bottomRightRadius: continuesRight ? 0 : endRadius
                                 color: AppTheme.withAlpha(root.itemColor(modelData),
                                     AppTheme.dark ? 0.32 : 0.17)
                                 opacity: root.itemCompleted(modelData) ? 0.5 : 1
