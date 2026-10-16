@@ -82,6 +82,26 @@ KosApplicationWindow {
             ? Qt.rgba(0x76 / 255, 0x76 / 255, 0x80 / 255, 0.30)
             : Qt.rgba(0x76 / 255, 0x76 / 255, 0x80 / 255, 0.12)
 
+        // Toolbar view segment (R097). The segment sits on the CONTENT plane
+        // (white 255), not on the sidebar plane, so it must not reuse the two
+        // sidebar fills above. Measured 1:1 off the reference's own
+        // Day/Week/Month/Year capsule on that same white plane: track
+        // 249..253 (Δ2..6 below the plane) and the *selected* pill 230..235,
+        // i.e. Δ≈20 BELOW its own track. The pill is the darker of the two —
+        // the older white-on-grey reading here was the wrong polarity.
+        // Dark leg is extrapolation (no dark reference exists): both steps
+        // lift the charcoal plane, the pill the stronger one.
+        // The pill is OPAQUE on purpose: the shared control paints a black@10%
+        // lens shadow under it, so a translucent pill composites down to 210
+        // instead of the measured 231. Dark is extrapolation (no dark reference):
+        // 54 = the same 24 steps, mirrored to the dark side.
+        // (Light: 231 = 24 below the 255 plane, matching the reference's 230..235.)
+        readonly property color segmentTrack: root.tahoeDark
+            ? Qt.rgba(1, 1, 1, 0.06)
+            : Qt.rgba(0x78 / 255, 0x78 / 255, 0x80 / 255, 0.025)
+        readonly property color segmentPill: root.tahoeDark
+            ? "#3C3C3C" : "#E7E7E7"
+
         // Labels/Light 1 Primary, 2 Secondary (#3C3C43 @60% → #8A8A8A).
         readonly property color labelPrimary:
             root.tahoeDark ? "#F2F2F2" : "#000000"
@@ -1692,8 +1712,8 @@ KosApplicationWindow {
                 visible: opacity > 0
                 labels: [qsTr("Month"), qsTr("Week"), qsTr("Day")]
                 currentIndex: root.viewIndex
-                backgroundColor: root.tahoe.controlFill
-                selectionColor: root.tahoe.contentPlane
+                backgroundColor: root.tahoe.segmentTrack
+                selectionColor: root.tahoe.segmentPill
                 textColor: root.tahoe.labelPrimary
                 mutedTextColor: root.tahoe.labelSecondary
                 onSelectionRequested: index => root.viewIndex = index
