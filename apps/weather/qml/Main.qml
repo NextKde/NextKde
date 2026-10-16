@@ -1731,6 +1731,120 @@ KosApplicationWindow {
                                             return Number.isFinite(hpa) ? Math.round(hpa) + " hPa" : "—"
                                         }
                                     }
+
+                                    Rectangle {
+                                        id: sunsetTile
+                                        Layout.fillWidth: true
+                                        implicitHeight: 66
+                                        radius: AppTheme.smallRadius
+                                        color: Qt.rgba(1, 1, 1, 0.12)
+                                        border.width: 1
+                                        border.color: Qt.rgba(1, 1, 1, 0.20)
+
+                                        // daily[0].sunset 形如 "2026-10-17T17:57"（Open-Meteo 本地 ISO，无时区后缀）
+                                        readonly property string sunsetRaw:
+                                            backend.daily.length > 0 ? String(root.value(backend.daily[0], "sunset", "")) : ""
+                                        readonly property bool hasSunset: /T\d{1,2}:\d{2}/.test(sunsetRaw)
+                                        readonly property string sunsetText: {
+                                            if (!hasSunset) return "—"
+                                            const m = /T(\d{1,2}):(\d{2})/.exec(sunsetRaw)
+                                            let h = parseInt(m[1], 10)
+                                            const ap = h >= 12 ? qsTr("PM") : qsTr("AM")
+                                            h = h % 12
+                                            if (h === 0) h = 12
+                                            return h + ":" + m[2] + ap
+                                        }
+
+                                        HoverHandler { id: sunsetHover }
+                                        ToolTip.visible: sunsetHover.hovered
+                                        ToolTip.text: qsTr("Sunset")
+                                        Accessible.role: Accessible.StaticText
+                                        Accessible.name: qsTr("Sunset") + ": " + sunsetTile.sunsetText
+
+                                        RowLayout {
+                                            anchors.fill: parent
+                                            anchors.margins: 10
+                                            spacing: 8
+
+                                            Item {
+                                                Layout.preferredWidth: 46
+                                                Layout.preferredHeight: 46
+
+                                                Canvas {
+                                                    id: sunCanvas
+                                                    anchors.fill: parent
+                                                    antialiasing: true
+                                                    contextType: "2d"
+                                                    onPaint: {
+                                                        var ctx = getContext("2d")
+                                                        ctx.reset()
+                                                        var c = 23
+                                                        // 地平线
+                                                        ctx.beginPath()
+                                                        ctx.strokeStyle = "rgba(255,255,255,0.85)"
+                                                        ctx.lineWidth = 1.4
+                                                        ctx.moveTo(c - 15, 30)
+                                                        ctx.lineTo(c + 15, 30)
+                                                        ctx.stroke()
+                                                        // 半落太阳：地平线上方半圆
+                                                        ctx.beginPath()
+                                                        ctx.arc(c, 30, 9, Math.PI, 2 * Math.PI, false)
+                                                        ctx.closePath()
+                                                        ctx.fillStyle = "#ffd257"
+                                                        ctx.fill()
+                                                        // 太阳 3 根短光线（上半圆方向）
+                                                        ctx.strokeStyle = "#ffd257"
+                                                        ctx.lineWidth = 1.6
+                                                        var rays = [-Math.PI / 2, -Math.PI / 4, -3 * Math.PI / 4]
+                                                        for (var i = 0; i < rays.length; i++) {
+                                                            ctx.beginPath()
+                                                            ctx.moveTo(c + 11.5 * Math.cos(rays[i]), 30 + 11.5 * Math.sin(rays[i]))
+                                                            ctx.lineTo(c + 14.5 * Math.cos(rays[i]), 30 + 14.5 * Math.sin(rays[i]))
+                                                            ctx.stroke()
+                                                        }
+                                                        // 下落箭头（日落中）
+                                                        ctx.strokeStyle = "rgba(255,255,255,0.92)"
+                                                        ctx.fillStyle = "rgba(255,255,255,0.92)"
+                                                        ctx.lineWidth = 1.6
+                                                        ctx.beginPath()
+                                                        ctx.moveTo(c, 6)
+                                                        ctx.lineTo(c, 14)
+                                                        ctx.stroke()
+                                                        ctx.beginPath()
+                                                        ctx.moveTo(c, 17)
+                                                        ctx.lineTo(c - 3, 13)
+                                                        ctx.lineTo(c + 3, 13)
+                                                        ctx.closePath()
+                                                        ctx.fill()
+                                                    }
+                                                }
+                                            }
+
+                                            ColumnLayout {
+                                                Layout.fillWidth: true
+                                                spacing: 1
+
+                                                Label {
+                                                    Layout.fillWidth: true
+                                                    text: qsTr("Sunset")
+                                                    color: root.skyTextMuted
+                                                    font.pixelSize: 10
+                                                    elide: Text.ElideRight
+                                                    Accessible.ignored: true
+                                                }
+
+                                                Label {
+                                                    Layout.fillWidth: true
+                                                    text: sunsetTile.sunsetText
+                                                    color: root.skyText
+                                                    font.pixelSize: 15
+                                                    font.weight: Font.DemiBold
+                                                    elide: Text.ElideRight
+                                                    Accessible.ignored: true
+                                                }
+                                            }
+                                        }
+                                    }
                                 }
                             }
                         }
