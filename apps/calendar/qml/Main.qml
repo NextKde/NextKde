@@ -1161,7 +1161,18 @@ KosApplicationWindow {
                 const rightAllDay = itemAllDay(right)
                 if (leftAllDay !== rightAllDay)
                     return leftAllDay ? -1 : 1
-                return itemDateTime(left).localeCompare(itemDateTime(right))
+                const byDateTime =
+                    itemDateTime(left).localeCompare(itemDateTime(right))
+                if (byDateTime !== 0)
+                    return byDateTime
+                // R083: two items can share an identical start (the fixture's
+                // Thu all-day pair does), and upstream order is then whatever
+                // the model happened to emit. Tiebreak on the UID so the
+                // rendered order is stable run to run.
+                const byId =
+                    itemStableId(left).localeCompare(itemStableId(right))
+                return byId !== 0 ? byId : itemTitle(left).localeCompare(
+                                        itemTitle(right))
             })
         }
         return result
@@ -1198,6 +1209,13 @@ KosApplicationWindow {
     function itemDateTime(item) {
         const record = itemRecord(item)
         return String(value(record, item.kind === "todo" ? "due" : "start", ""))
+    }
+
+    // R083: the record's stable identity — the UID, which the store exposes as
+    // `seriesId`. Only for ORDERING ties; never for display.
+    function itemStableId(item) {
+        const record = itemRecord(item)
+        return String(value(record, "seriesId", value(record, "id", "")))
     }
 
     function itemTime(item) {
