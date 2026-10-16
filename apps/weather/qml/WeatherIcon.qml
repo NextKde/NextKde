@@ -3,6 +3,7 @@
 // All drawing uses a 24x24 logical coordinate space, scaled to the item's
 // actual (square) size, so one implementation serves every use.
 import QtQuick
+import Kos.Ui
 
 Canvas {
     id: root
@@ -21,6 +22,21 @@ Canvas {
         NumberAnimation { to: 0.45; duration: 550; easing.type: Easing.InOutSine }
         NumberAnimation { to: 1.0; duration: 550; easing.type: Easing.InOutSine }
     }
+
+    // Variable color (SF Symbols 词汇): sun rays light up layer by layer.
+    property real rayGlow: 1.0
+    onRayGlowChanged: requestPaint()
+    function playRayLightup() {
+        if (AppTheme.reduceMotion)
+            return
+        rayGlow = 0
+        rayAnim.restart()
+    }
+    SequentialAnimation {
+        id: rayAnim
+        NumberAnimation { target: root; property: "rayGlow"; from: 0; to: 1; duration: 280; easing.type: Easing.OutCubic }
+    }
+    Component.onCompleted: playRayLightup()
 
     onCodeChanged: requestPaint()
     onIsDayChanged: requestPaint()
@@ -77,15 +93,19 @@ Canvas {
 
         if (!withRays)
             return
+        // Variable color: ray i lights up once rayGlow passes i/8, layer by layer.
         for (var i = 0; i < 8; ++i) {
+            var alpha = Math.min(Math.max(rayGlow * 8 - i, 0), 1)
             var angle = i * Math.PI / 4
             var cos = Math.cos(angle)
             var sin = Math.sin(angle)
+            ctx.globalAlpha = alpha
             ctx.beginPath()
             ctx.moveTo(cx + cos * 8, cy + sin * 8)
             ctx.lineTo(cx + cos * 10.5, cy + sin * 10.5)
             ctx.stroke()
         }
+        ctx.globalAlpha = 1
     }
 
     function drawMoon(ctx, cx, cy, r) {
