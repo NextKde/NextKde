@@ -30,8 +30,11 @@ Canvas {
             else
                 drawMoon(ctx)
         } else if (weatherCode === 1 || weatherCode === 2) {
-            // Sun behind, cloud in front hiding its lower-right.
-            drawSun(ctx, 9, 9, 4.5, false)
+            // Sun/moon behind, cloud in front hiding its lower-right.
+            if (isDay)
+                drawSun(ctx, 9, 9, 4.5, false)
+            else
+                drawMoon(ctx, 9, 9, 4.5)
             drawCloud(ctx, 13, 11.5, 0.8)
         } else if ((weatherCode >= 51 && weatherCode <= 67)
                    || (weatherCode >= 80 && weatherCode <= 82)) {
@@ -75,16 +78,19 @@ Canvas {
         }
     }
 
-    function drawMoon(ctx) {
+    function drawMoon(ctx, cx, cy, r) {
+        cx = (cx === undefined) ? 12 : cx
+        cy = (cy === undefined) ? 12 : cy
+        r = (r === undefined) ? 6.5 : r
         ctx.fillStyle = "#f7f3dc"
         ctx.beginPath()
-        ctx.arc(12, 12, 6.5, 0, 2 * Math.PI)
+        ctx.arc(cx, cy, r, 0, 2 * Math.PI)
         ctx.fill()
 
         // Punch a crescent out of the disc.
         ctx.globalCompositeOperation = "destination-out"
         ctx.beginPath()
-        ctx.arc(16, 9, 5.5, 0, 2 * Math.PI)
+        ctx.arc(cx + 4 * r / 6.5, cy - 3 * r / 6.5, r * 5.5 / 6.5, 0, 2 * Math.PI)
         ctx.fill()
         ctx.globalCompositeOperation = "source-over"
     }
