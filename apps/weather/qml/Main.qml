@@ -1701,7 +1701,7 @@ KosApplicationWindow {
                         // 三段胶囊切换钮，参照 ref-main Conditions 卡右上分段控件。
                         // segment 0 = 温度/图标视图（默认，参考图选中态），
                         // segment 1 = 逐小时降水概率视图；
-                        // 风段（≋）需逐小时风速字段（后端未扩）保持惰性不可点。
+                        // segment 2 = 逐小时风速视图（后端 hourlyPoint.windSpeed 已有）。
                         Item {
                             id: hourlySegmented
                             implicitWidth: 132
@@ -1757,15 +1757,20 @@ KosApplicationWindow {
                                 onClicked: hourlySegmented.segment = 1
                                 Accessible.name: qsTr("Hourly precipitation")
                             }
-                            Label {
+                            AbstractButton {
                                 x: 88
                                 width: 44
-                                anchors.verticalCenter: parent.verticalCenter
-                                horizontalAlignment: Text.AlignHCenter
-                                text: "≋"
-                                color: Qt.rgba(1, 1, 1, 0.9)
-                                font.pixelSize: 16
-                                Accessible.ignored: true
+                                height: 36
+                                background: null
+                                contentItem: Label {
+                                    horizontalAlignment: Text.AlignHCenter
+                                    verticalAlignment: Text.AlignVCenter
+                                    text: "≋"
+                                    color: hourlySegmented.segment === 2 ? "#ffffff" : Qt.rgba(1, 1, 1, 0.9)
+                                    font.pixelSize: 16
+                                }
+                                onClicked: hourlySegmented.segment = 2
+                                Accessible.name: qsTr("Hourly wind")
                             }
                         }
                     }
@@ -1875,6 +1880,18 @@ KosApplicationWindow {
                                             Accessible.name: qsTr("%1% chance of precipitation").arg(
                                                 Math.round(root.number(hourlyCard.modelData,
                                                                        "precipitationProbability", 0)))
+                                        }
+
+                                        Label {
+                                            Layout.alignment: Qt.AlignHCenter
+                                            visible: hourlySegmented.segment === 2
+                                            text: Math.round(root.number(
+                                                hourlyCard.modelData, "windSpeed", 0)) + " " + root.speedUnit
+                                            color: root.skyText
+                                            font.weight: Font.DemiBold
+                                            Accessible.name: qsTr("Wind speed %1 %2").arg(
+                                                Math.round(root.number(hourlyCard.modelData, "windSpeed", 0)))
+                                                                .arg(root.speedUnit)
                                         }
 
                                         Label {
