@@ -77,6 +77,13 @@ type WeatherCurrent struct {
 	// WindGust is the recent maximum gust in the state's wind unit. It is nil
 	// when the persisted snapshot predates the field or the provider omitted it.
 	WindGust *float64 `json:"windGust,omitempty"`
+	// UvIndex is the dimensionless current UV index. It is nil when the
+	// persisted snapshot predates the field or the provider omitted it.
+	UvIndex *float64 `json:"uvIndex,omitempty"`
+	// Visibility is the current visibility in meters; consumers convert to
+	// their own display unit. It is nil when the persisted snapshot predates
+	// the field or the provider omitted it.
+	Visibility *float64 `json:"visibility,omitempty"`
 }
 
 type WeatherHourlyPoint struct {
@@ -276,6 +283,8 @@ type openMeteoForecastPayload struct {
 		WindSpeed        float64  `json:"wind_speed_10m"`
 		WindDirection    float64  `json:"wind_direction_10m"`
 		WindGust         *float64 `json:"wind_gusts_10m"`
+		UvIndex          *float64 `json:"uv_index"`
+		Visibility       *float64 `json:"visibility"`
 	} `json:"current"`
 	Hourly struct {
 		Time                []string  `json:"time"`
@@ -318,7 +327,7 @@ func (provider *OpenMeteoProvider) Forecast(ctx context.Context, location Weathe
 	values := url.Values{
 		"latitude":      {fmt.Sprintf("%.6f", location.Latitude)},
 		"longitude":     {fmt.Sprintf("%.6f", location.Longitude)},
-		"current":       {"temperature_2m,relative_humidity_2m,apparent_temperature,is_day,weather_code,wind_speed_10m,wind_direction_10m,wind_gusts_10m"},
+		"current":       {"temperature_2m,relative_humidity_2m,apparent_temperature,is_day,weather_code,wind_speed_10m,wind_direction_10m,wind_gusts_10m,uv_index,visibility"},
 		"hourly":        {"temperature_2m,apparent_temperature,relative_humidity_2m,precipitation_probability,weather_code,is_day,wind_speed_10m"},
 		"daily":         {"weather_code,temperature_2m_max,temperature_2m_min,precipitation_probability_max,sunrise,sunset"},
 		"timezone":      {"auto"},
@@ -354,6 +363,8 @@ func (provider *OpenMeteoProvider) Forecast(ctx context.Context, location Weathe
 			WindSpeed:        payload.Current.WindSpeed,
 			WindDirection:    payload.Current.WindDirection,
 			WindGust:         payload.Current.WindGust,
+			UvIndex:          payload.Current.UvIndex,
+			Visibility:       payload.Current.Visibility,
 		},
 		Hourly: []WeatherHourlyPoint{},
 		Daily:  []WeatherDay{},

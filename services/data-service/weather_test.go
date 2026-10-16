@@ -93,6 +93,12 @@ func TestOpenMeteoForecastFetchesAirQuality(t *testing.T) {
 	if forecast.Current == nil || forecast.Current.WindGust != nil {
 		t.Fatalf("missing gust must map to nil, got %#v", forecast.Current)
 	}
+	// The fixture also omits uv_index and visibility (legacy payload shape):
+	// both optional fields must stay nil for backward compatibility.
+	if forecast.Current == nil || forecast.Current.UvIndex != nil ||
+		forecast.Current.Visibility != nil {
+		t.Fatalf("missing uv/visibility must map to nil, got %#v", forecast.Current)
+	}
 
 	failing := newServer(http.StatusInternalServerError)
 	defer failing.Close()
@@ -208,6 +214,47 @@ func TestWeatherCurrentWindGustRoundTripsThroughState(t *testing.T) {
 	}
 }
 
+func TestWeatherCurrentUvIndexAndVisibilityRoundTripsThroughState(t *testing.T) {
+	uvIndex := 6.4
+	visibility := 24140.0
+	state := defaultWeatherState()
+	state.Current = &WeatherCurrent{
+		Time:       "2026-10-16T11:41",
+		UvIndex:    &uvIndex,
+		Visibility: &visibility,
+	}
+
+	raw, err := json.Marshal(state)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var loaded WeatherState
+	if err := json.Unmarshal(raw, &loaded); err != nil {
+		t.Fatal(err)
+	}
+	if loaded.Current == nil || loaded.Current.UvIndex == nil ||
+		*loaded.Current.UvIndex != 6.4 || loaded.Current.Visibility == nil ||
+		*loaded.Current.Visibility != 24140.0 {
+		t.Fatalf("uv index and visibility did not survive persistence: %#v", loaded.Current)
+	}
+
+	empty := defaultWeatherState()
+	raw, err = json.Marshal(empty)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(raw), "uvIndex") || strings.Contains(string(raw), "visibility") {
+		t.Fatalf("nil uv index and visibility must be omitted, got %s", raw)
+	}
+	loaded = WeatherState{}
+	if err := json.Unmarshal(raw, &loaded); err != nil {
+		t.Fatal(err)
+	}
+	if loaded.Current != nil && (loaded.Current.UvIndex != nil || loaded.Current.Visibility != nil) {
+		t.Fatalf("nil uv index and visibility did not stay nil: %#v", loaded.Current)
+	}
+}
+
 func TestOpenMeteoForecastMapsVersionedContract(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
 		if request.URL.Path != "/forecast" {
@@ -223,7 +270,8 @@ func TestOpenMeteoForecastMapsVersionedContract(t *testing.T) {
             "current":{"time":"2026-08-30T12:00","temperature_2m":31.4,
               "relative_humidity_2m":58,"apparent_temperature":34.1,
               "is_day":1,"weather_code":2,"wind_speed_10m":12.5,
-              "wind_direction_10m":175, "wind_gusts_10m":18.3},
+              "wind_direction_10m":175, "wind_gusts_10m":18.3,
+              "uv_index":6.4, "visibility":24140},
             "hourly":{"time":["2026-08-30T12:00","2026-08-30T13:00"],
               "temperature_2m":[31.4,32.0],"apparent_temperature":[34.1,34.8],
               "relative_humidity_2m":[58,56],"precipitation_probability":[10,20],
@@ -248,6 +296,12 @@ func TestOpenMeteoForecastMapsVersionedContract(t *testing.T) {
 	}
 	if forecast.Current.WindGust == nil || *forecast.Current.WindGust != 18.3 {
 		t.Fatalf("wind gust = %#v, want 18.3", forecast.Current.WindGust)
+	}
+	if forecast.Current.UvIndex == nil || *forecast.Current.UvIndex != 6.4 {
+		t.Fatalf("uv index = %#v, want 6.4", forecast.Current.UvIndex)
+	}
+	if forecast.Current.Visibility == nil || *forecast.Current.Visibility != 24140 {
+		t.Fatalf("visibility = %#v, want 24140", forecast.Current.Visibility)
 	}
 	if len(forecast.Hourly) != 2 || forecast.Hourly[1].PrecipitationChance != 20 {
 		t.Fatalf("unexpected hourly forecast: %#v", forecast.Hourly)
