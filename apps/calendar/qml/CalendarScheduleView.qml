@@ -115,6 +115,31 @@ Pane {
         ? "#F2F2F2" : "#1A1A1A"
     readonly property color weekendText: AppTheme.mutedText
 
+    // N02: the current-time line is ONE object in four parts — a faint rule
+    // across the whole grid, a full-strength rule and its dot on today's
+    // column, and a saturated pill in the gutter at the true now-position.
+    // Every part derives its geometry from this one group, so they cannot
+    // drift apart; only today's column is resolved per hour-cell.
+    readonly property int nowRow: currentTime.getHours()
+    // Offset of the now-position inside its own hour row. Rows are exactly
+    // hourHeight, so this is the line's local y as well as the offset the
+    // gutter pill is centred on.
+    readonly property real nowInHour: currentTime.getMinutes() * hourHeight / 60
+    readonly property real nowLineY: nowRow * hourHeight + nowInHour
+    readonly property string nowLabel: (nowRow < 10 ? "0" + nowRow : nowRow) + ":"
+        + (currentTime.getMinutes() < 10 ? "0" : "")
+        + currentTime.getMinutes()
+    readonly property int todayColumn: {
+        for (let column = 0; column < dayCount; column++)
+            if (sameDay(dateForColumn(column), currentTime))
+                return column
+        return -1
+    }
+    // The pill is 20px tall and an hour label's ink is 9px, both centred on
+    // their own y — closer than half their sum and the reference drops the
+    // label rather than letting the two overlap.
+    readonly property real nowLabelClearance: 14
+
     // The scrolling schedule viewport, exposed read-only for the header's
     // liquid-glass lens: the glass buttons sample a live, blurred strip of
     // this item (G01/G05). Sampling the viewport rather than the contentItem
@@ -563,7 +588,41 @@ Pane {
                                 : hourCell.rowIndex + ":00"
                             color: AppTheme.mutedText
                             font.pixelSize: 11
+                            // N02: the reference drops the hour label the
+                            // now-pill would collide with (its 10 AM label is
+                            // gone under the 9:41 pill while 9 AM survives).
+                            // A week that does not contain today shows the
+                            // line nowhere, so it keeps every label.
                             visible: hourCell.columnIndex === 0
+                                && (root.todayColumn < 0
+                                    || Math.abs(hourCell.rowIndex * root.hourHeight
+                                                - root.nowLineY)
+                                       > root.nowLabelClearance)
+                        }
+
+                        // N02: the now-pill. The reference puts the current
+                        // time in a saturated red capsule in the gutter at the
+                        // TRUE now-position — not snapped to a tick — sharing
+                        // the hour labels' right edge, and in white.
+                        Rectangle {
+                            objectName: "nowPill"
+                            visible: hourCell.columnIndex === 0
+                                && root.todayColumn >= 0
+                                && hourCell.rowIndex === root.nowRow
+                            anchors.right: parent.right
+                            anchors.rightMargin: 6
+                            y: Math.round(root.nowInHour) - height / 2
+                            width: 42
+                            height: 20
+                            radius: height / 2
+                            color: root.todayRed
+
+                            Label {
+                                anchors.centerIn: parent
+                                text: root.nowLabel
+                                color: "#FFFFFF"
+                                font.pixelSize: 11
+                            }
                         }
 
                         Rectangle {
@@ -725,16 +784,40 @@ Pane {
                                 Item { Layout.fillHeight: true }
                             }
 
+                            // N02: the current-time rule — 2px at the true
+                            // now-position, full strength across today's column
+                            // and 10% across the rest of the week. The reference
+                            // starts it at the grid's left edge, so the gutter
+                            // cell deliberately draws none of it.
                             Rectangle {
+                                objectName: "nowLine"
                                 anchors.left: parent.left
                                 anchors.right: parent.right
-                                y: parent.height * root.currentTime.getMinutes() / 60
-                                height: 1
-                                color: AppTheme.destructive
-                                visible: root.sameDay(hourCell.columnDate,
-                                                      root.currentTime)
-                                    && hourCell.rowIndex
-                                        === root.currentTime.getHours()
+                                y: Math.round(root.nowInHour)
+                                height: 2
+                                color: hourCell.columnIndex - 1 === root.todayColumn
+                                    ? root.todayRed
+                                    : Qt.rgba(root.todayRed.r, root.todayRed.g,
+                                              root.todayRed.b, 0.10)
+                                visible: hourCell.columnIndex > 0
+                                    && root.todayColumn >= 0
+                                    && hourCell.rowIndex === root.nowRow
+                            }
+
+                            // N02: the dot sits ON today's left column rule, so
+                            // it hangs half into the previous column — which is
+                            // drawn first, leaving the dot on top.
+                            Rectangle {
+                                objectName: "nowDot"
+                                x: -width / 2
+                                y: Math.round(root.nowInHour) + 1 - height / 2
+                                width: 9
+                                height: 9
+                                radius: width / 2
+                                color: root.todayRed
+                                visible: root.todayColumn >= 0
+                                    && hourCell.columnIndex - 1 === root.todayColumn
+                                    && hourCell.rowIndex === root.nowRow
                             }
                         }
                     }
