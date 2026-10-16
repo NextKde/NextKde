@@ -63,6 +63,13 @@ Pane {
     readonly property color allDaySeparator: AppTheme.dark
         ? Qt.rgba(1, 1, 1, 0.24) : "#D9D9D9"
 
+    // R069: the all-day band's TOP boundary. The reference draws it at 1px
+    // (242,242,242) — its LIGHTEST rule, lighter than the hour lines (237).
+    // Do NOT reuse AppTheme.border (app-wide, blue-tinted, renders 223,225,228
+    // and inverts the weight order) and do NOT reuse gridLine (237).
+    readonly property color sectionRule: AppTheme.dark
+        ? Qt.rgba(1, 1, 1, 0.04) : "#F2F2F2"
+
     // W03: local marker tokens (today red like the macOS reference, subdued
     // grey for the ordinary selection). Neutral, no shared-theme dependency.
     readonly property color todayRed: "#E5484D"
@@ -246,7 +253,7 @@ Pane {
         Rectangle {
             Layout.fillWidth: true
             Layout.preferredHeight: 1
-            color: AppTheme.border
+            color: root.sectionRule
         }
 
         RowLayout {
