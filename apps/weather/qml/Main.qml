@@ -1466,9 +1466,17 @@ KosApplicationWindow {
                                     onPaint: {
                                         const ctx = getContext("2d")
                                         ctx.clearRect(0, 0, width, height)
-                                        ctx.fillStyle = Qt.rgba(1, 1, 1, 0.6)
+                                        // ref-main.png 实测：AQ 卡头部点阵图标最亮点 (284,213)=(52,124,205) vs 卡面 (27,98,175)
+                                        // → 峰值 Δ≈+27；"AIR QUALITY" 文字最亮 (322,218)=(96,162,241) vs 同底 → Δ≈+66；
+                                        // 图标/文字对比度比 ≈ 0.38-0.41。且点阵亮度沿对角渐变：
+                                        // 右上 (row0,col2) 最亮、左下 (row2,col0) 最淡（视觉近消失）。
+                                        // 原统一 alpha 0.6 使 Δ≈+121 vs 文字 Δ≈+119（比 0.92），过亮且无渐隐；
+                                        // 现按对角渐隐：峰值 0.26×(255−背景)≈+47 ≈ 0.4× 文字 Δ。
                                         for (let row = 0; row < 3; ++row) {
                                             for (let col = 0; col < 3; ++col) {
+                                                // 亮度沿 col−row 对角：右上 (row0,col2)=0.26 最亮、左下 (row2,col0)=0.10 最淡
+                                                const alpha = 0.10 + 0.16 * (col - row + 2) / 4
+                                                ctx.fillStyle = Qt.rgba(1, 1, 1, alpha)
                                                 ctx.beginPath()
                                                 ctx.arc(1.5 + col * 4.5, 1.5 + row * 4.5, 1.3, 0, Math.PI * 2)
                                                 ctx.fill()
