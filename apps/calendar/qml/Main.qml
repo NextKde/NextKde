@@ -827,8 +827,16 @@ KosApplicationWindow {
             border.width: 1
             // G07: the specular rim strengthens on hover (moderate boost, no
             // second capsule — same line, brighter).
-            border.color: root.tahoe.glassRim
-            opacity: 1 + (root.tahoe.hoverRimBoost - 1) * glass.hoverAmount
+            // The boost MUST ride on the colour's alpha. `opacity` is a
+            // QQuickItem 0…1 property, so `1 + 0.6 * hoverAmount` used to
+            // compute 1.6 and clamp straight back to 1.0 — the declared 1.6x
+            // never rendered (R131 measured 0.2755 rest / 0.2768 hover).
+            border.color: Qt.rgba(root.tahoe.glassRim.r, root.tahoe.glassRim.g,
+                                  root.tahoe.glassRim.b,
+                                  Math.min(1, root.tahoe.glassRim.a
+                                              * (1 + (root.tahoe.hoverRimBoost - 1)
+                                                   * glass.hoverAmount)))
+            opacity: 1
         }
 
         // G07 press: visual-only sink about the button centre. A QML
