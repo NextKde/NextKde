@@ -24,7 +24,7 @@ QColor dotColor(Type type, bool active)
 }
 
 void drawLight(QPainter &painter, const QRectF &dot, Type type, bool active,
-               bool maximized)
+               bool maximized, bool showGlyph)
 {
     // The dot is square and is the button size, so its width is the one length
     // every proportion below is taken against.
@@ -33,6 +33,10 @@ void drawLight(QPainter &painter, const QRectF &dot, Type type, bool active,
     painter.setPen(QPen(QColor(0, 0, 0, 0x33), 0.75));
     painter.setBrush(dotColor(type, active));
     painter.drawEllipse(dot);
+
+    if (!showGlyph) {
+        return;
+    }
 
     // The two maximize states use different box sizes so their triangular
     // arrows have the same visible leg length, about 5.4 px in a 14 px dot.

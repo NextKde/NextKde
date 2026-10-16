@@ -478,6 +478,9 @@ void ButtonRenderer::paint(const KWin::RenderTarget &renderTarget,
         const bool adjusting = m_adjusting.contains(window);
         const Action hovered =
             (!adjusting && m_hoverWindow == window) ? m_hovered : Action::None;
+        const bool panelHovered =
+            (!adjusting && m_hoverWindow == window && (m_hovered != Action::None || m_insidePanel));
+        const bool showGlyphs = (config.glyphMode == GlyphMode::Always) || panelHovered;
         // What the green dot's glyph is drawn from. `performAction` toggles on
         // exactly this test, so the mark and the click agree by construction
         // rather than by two conditions that happen to match today.
@@ -490,7 +493,7 @@ void ButtonRenderer::paint(const KWin::RenderTarget &renderTarget,
         }
         if (KWin::GLTexture *tex = panelTexture(panelSize, active, dark,
                                                 geometry, hovered, adjusting,
-                                                maximized)) {
+                                                maximized, showGlyphs)) {
             blit(viewport, clip, logicalRect, tex);
         }
     }
@@ -817,6 +820,7 @@ void ButtonRenderer::setAdjusting(KWin::EffectWindow *window, bool adjusting)
         // The hover ring goes away with the adjust ring.
         if (m_hoverWindow == window) {
             m_hovered = Action::None;
+            m_insidePanel = false;
         }
     } else {
         m_adjusting.remove(window);
@@ -856,7 +860,7 @@ KWin::GLTexture *ButtonRenderer::panelTexture(const QSizeF &panelSize, bool acti
                                                bool dark,
                                                const PanelGeometry &geometry,
                                                Action hovered, bool adjusting,
-                                               bool maximized)
+                                               bool maximized, bool showGlyphs)
 {
     // The panel size is part of the key so that a configuration change that
     // alters it yields a new texture rather than a stretched one. The maximized
@@ -864,7 +868,7 @@ KWin::GLTexture *ButtonRenderer::panelTexture(const QSizeF &panelSize, bool acti
     // is the same panel with the other restore glyph on its green dot, and a
     // window that has just been maximized must not be served the one it had
     // before. RGB is deliberately absent: only the background uniform changes.
-    const QString key = QStringLiteral("%1x%2_%3_%4_%5_%6_%7_%8_%9_%10_%11")
+    const QString key = QStringLiteral("%1x%2_%3_%4_%5_%6_%7_%8_%9_%10_%11_%12")
                             .arg(qRound(panelSize.width()))
                             .arg(qRound(panelSize.height()))
                             .arg(active ? 1 : 0)
@@ -878,12 +882,13 @@ KWin::GLTexture *ButtonRenderer::panelTexture(const QSizeF &panelSize, bool acti
                             // value above and still be different widths.
                             .arg(qRound(effectivePanelPaddingX(geometry) * 4))
                             .arg(adjusting ? 1 : 0)
-                            .arg(maximized ? 1 : 0);
+                            .arg(maximized ? 1 : 0)
+                            .arg(showGlyphs ? 1 : 0);
     auto it = m_textures.find(key);
     if (it == m_textures.end()) {
         return cacheTexture(key, buildPanel(panelSize, active, dark,
                                             geometry, hovered, adjusting,
-                                            maximized));
+                                            maximized, showGlyphs));
     }
     return it->second.get();
 }
@@ -906,9 +911,10 @@ KWin::GLTexture *ButtonRenderer::cacheTexture(const QString &key, QImage image)
     return m_textures.emplace(key, std::move(texture)).first->second.get();
 }
 
-void ButtonRenderer::setHovered(KWin::EffectWindow *window, Action action)
+void ButtonRenderer::setHovered(KWin::EffectWindow *window, Action action, bool insidePanel)
 {
-    if (m_hoverWindow == window && m_hovered == action) {
+    const bool panelIn = (window != nullptr && insidePanel);
+    if (m_hoverWindow == window && m_hovered == action && m_insidePanel == panelIn) {
         return;
     }
 
@@ -918,6 +924,7 @@ void ButtonRenderer::setHovered(KWin::EffectWindow *window, Action action)
     repaintRect(currentRect(m_hoverWindow));
     m_hoverWindow = window;
     m_hovered = action;
+    m_insidePanel = panelIn;
     repaintRect(currentRect(window));
 }
 
@@ -1082,7 +1089,7 @@ void ButtonRenderer::setTileMenuHovered(const QPointF &logicalPos)
 
 QImage ButtonRenderer::buildPanel(const QSizeF &panelSize, bool active, bool dark,
                                    const PanelGeometry &geometry, Action hovered,
-                                   bool adjusting, bool maximized) const
+                                   bool adjusting, bool maximized, bool showGlyphs) const
 {
     const qreal w = panelSize.width();
     const qreal h = panelSize.height();
@@ -1142,7 +1149,7 @@ QImage ButtonRenderer::buildPanel(const QSizeF &panelSize, bool active, bool dar
             painter.drawEllipse(disc.adjusted(-2.5, -2.5, 2.5, 2.5));
         }
 
-        drawLight(painter, disc, type, active, maximized);
+        drawLight(painter, disc, type, active, maximized, showGlyphs);
     }
 
     painter.end();
@@ -1356,6 +1363,7 @@ void ButtonRenderer::forget(KWin::EffectWindow *window)
     if (m_hoverWindow == window) {
         m_hoverWindow = nullptr;
         m_hovered = Action::None;
+        m_insidePanel = false;
     }
 }
 
@@ -1366,6 +1374,7 @@ void ButtonRenderer::invalidateAll()
     m_sourceHits.clear();
     m_hoverWindow = nullptr;
     m_hovered = Action::None;
+    m_insidePanel = false;
     // m_pending and m_adjusting are deliberately kept: they belong to a session
     // that is still running, and reloading the configuration is not a reason to
     // throw away the panel the user is in the middle of positioning.

@@ -730,18 +730,19 @@ void testResolution()
             "offset": { "x": 10, "y": 6 },
             "buttonSize": 14,
             "interceptMargin": 7,
-            "background": "auto"
+            "background": "auto",
+            "glyphMode": "always"
         },
         "apps": {
-            "firefox": { "background": "dark" },
-            "code": { "panelPadding": 6 },
+            "firefox": { "background": "dark", "glyphMode": "hover" },
+            "code": { "panelPadding": 6, "glyphMode": "macos" },
             "chrome": { "background": "#202124" }
         },
         "rules": [
             { "match": { "titleRegex": "^Picture-in-Picture" },
               "position": "left", "offset": { "x": 4, "y": 4 } },
             { "match": { "class": "org.kde.dolphin", "type": "dialog" },
-              "showButtons": false }
+              "showButtons": false, "glyphMode": "hover" }
         ]
     })");
 
@@ -754,25 +755,30 @@ void testResolution()
     CHECK(near(plain.interceptMargin, 7));
     CHECK(plain.background == PanelBackground::Auto);
     CHECK(plain.showButtons);
+    CHECK(plain.glyphMode == GlyphMode::Always);
 
     // 2. The app entry, merged key by key over the default. The class arrives
     // as "instance class" and the key may name either of them.
     const AppConfig firefox =
         config.getAppConfig(query(QStringLiteral("Navigator firefox")));
     CHECK(firefox.background == PanelBackground::Dark);
+    CHECK(firefox.glyphMode == GlyphMode::Hover);
     CHECK(near(firefox.geometry.offset.x, 10));
     const AppConfig code = config.getAppConfig(query(QStringLiteral("code code")));
     CHECK(near(code.geometry.panelPadding, 6));
     CHECK(near(code.geometry.buttonSize, 14));
     CHECK(code.background == PanelBackground::Auto);
+    CHECK(code.glyphMode == GlyphMode::Hover);
     const AppConfig chrome = config.getAppConfig(query(QStringLiteral("google-chrome chrome")));
     CHECK(chrome.background == PanelBackground::Custom);
     CHECK(chrome.customBackground == QColor("#202124"));
+    CHECK(chrome.glyphMode == GlyphMode::Always);
 
     // 3. The hand-written rules, by the first that matches.
     const AppConfig dialog =
         config.getAppConfig(query(QStringLiteral("org.kde.dolphin"), {}, 5));
     CHECK(!dialog.showButtons);
+    CHECK(dialog.glyphMode == GlyphMode::Hover);
     const AppConfig normalDolphin =
         config.getAppConfig(query(QStringLiteral("org.kde.dolphin")));
     CHECK(normalDolphin.showButtons);

@@ -107,6 +107,15 @@ AppFieldMask applyFields(AppConfig &config, const QJsonObject &object)
         }
         fields |= AppFieldDecoratedWindows;
     }
+    if (object.contains("glyphMode")) {
+        const QString mode = object["glyphMode"].toString();
+        if (mode == QLatin1String("hover") || mode == QLatin1String("macos")) {
+            config.glyphMode = GlyphMode::Hover;
+        } else {
+            config.glyphMode = GlyphMode::Always;
+        }
+        fields |= AppFieldGlyphMode;
+    }
 
     // Values from a hand-edited text file, through the same clamp the adjust
     // gesture goes through.
@@ -309,6 +318,9 @@ void ButtonConfig::mergeInto(AppConfig &base, const AppConfig &overlay,
     }
     if (fields & AppFieldDecoratedWindows) {
         base.decoratedWindows = overlay.decoratedWindows;
+    }
+    if (fields & AppFieldGlyphMode) {
+        base.glyphMode = overlay.glyphMode;
     }
 }
 

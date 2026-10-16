@@ -167,8 +167,8 @@ bool ButtonInput::pointerMotion(KWin::PointerMotionEvent *event)
             m_renderer->setTileMenuHovered(event->position);
             if (!m_session->active()) {
                 m_renderer->setHovered(
-                    action == ButtonRenderer::Action::None ? nullptr : window,
-                    action);
+                    (action == ButtonRenderer::Action::None && !insidePanel) ? nullptr : window,
+                    action, insidePanel);
             }
             return true;
         }
@@ -180,7 +180,8 @@ bool ButtonInput::pointerMotion(KWin::PointerMotionEvent *event)
     // only repaint it for nothing.
     if (!m_session->active()) {
         m_renderer->setHovered(
-            action == ButtonRenderer::Action::None ? nullptr : window, action);
+            (action == ButtonRenderer::Action::None && !insidePanel) ? nullptr : window,
+            action, insidePanel);
 
         // Alt over the zoom light opens the tiling menu. Alt is already KWin's
         // "this window is about to be moved with the pointer" modifier, so it

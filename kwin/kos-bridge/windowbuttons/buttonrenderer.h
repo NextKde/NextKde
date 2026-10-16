@@ -81,7 +81,7 @@ public:
                    bool *insidePanel = nullptr) const;
 
     // Update which dot is hovered. Repaints the affected window when it changes.
-    void setHovered(KWin::EffectWindow *window, Action action);
+    void setHovered(KWin::EffectWindow *window, Action action, bool insidePanel = false);
 
     // Damage the panels of two windows: the one that just stopped being the
     // active window and the one that just became it (`b` may be `a`). The lights
@@ -230,11 +230,11 @@ private:
     KWin::GLTexture *backgroundTexture(const QSizeF &panelSize);
     KWin::GLTexture *panelTexture(const QSizeF &panelSize, bool active, bool dark,
                                   const PanelGeometry &geometry, Action hovered,
-                                  bool adjusting, bool maximized);
+                                  bool adjusting, bool maximized, bool showGlyphs);
     KWin::GLTexture *cacheTexture(const QString &key, QImage image);
     QImage buildPanel(const QSizeF &panelSize, bool active, bool dark,
                       const PanelGeometry &geometry, Action hovered,
-                      bool adjusting, bool maximized) const;
+                      bool adjusting, bool maximized, bool showGlyphs) const;
 
     KWin::GLTexture *tileMenuTexture(bool dark, std::optional<TilePreset> hovered);
     QImage buildTileMenu(bool dark, std::optional<TilePreset> hovered) const;
@@ -314,6 +314,7 @@ private:
 
     KWin::EffectWindow *m_hoverWindow = nullptr;
     Action m_hovered = Action::None;
+    bool m_insidePanel = false;
 };
 
 } // namespace KOS

@@ -121,6 +121,32 @@ ColumnLayout {
                     }
                 }
             }
+            Rectangle { width: parent.width - 53; x: 53; height: 1; color: colors.separator }
+            Item {
+                width: parent.width; height: 54
+                enabled: windowPage.backend !== null && windowPage.snapshot.enabled !== false
+                opacity: enabled ? 1 : 0.4
+                RowLayout {
+                    anchors.fill: parent; anchors.leftMargin: 16; anchors.rightMargin: 16; spacing: 12
+                    Controls.SettingIcon {
+                        colors: windowPage.colors
+                        materialForm: windowPage.materialForm
+                        symbol: "●"
+                        tint: "#34c759"
+                    }
+                    Text { text: I18n.tr("Window button icons"); color: colors.primaryText; font.pixelSize: 14 }
+                    Item { Layout.fillWidth: true }
+                    Controls.SettingsNavBar {
+                        colors: windowPage.colors
+                        materialForm: windowPage.materialForm
+                        objectName: "windowButtonGlyphMode"
+                        disabled: windowPage.backend === null || windowPage.snapshot.enabled === false
+                        model: [{ id: "always", label: I18n.tr("Always show") }, { id: "hover", label: I18n.tr("macOS (on hover)") }]
+                        currentIndex: ["always", "hover"].indexOf(windowPage.snapshot.buttonGlyphMode ?? "always")
+                        onSelectionChanged: function(index) { windowPage.backend.setButtonGlyphMode(model[index].id) }
+                    }
+                }
+            }
         }
     }
     Text {
