@@ -17,9 +17,11 @@ KosApplicationWindow {
     readonly property string speedUnit: backend.units === "imperial" ? qsTr("mph") : qsTr("km/h")
     readonly property var upcomingHours: upcomingForecast()
     property string pendingLocationId: ""
+    readonly property int currentWeatherCode: number(backend.current, "weatherCode", -1)
+    readonly property bool currentIsDay: Boolean(value(backend.current, "isDay", true))
     readonly property var skyStops: skyStopsFor(
-        number(backend.current, "weatherCode", -1),
-        Boolean(value(backend.current, "isDay", true)))
+        root.currentWeatherCode,
+        root.currentIsDay)
     readonly property color skyText: "#ffffff"
     readonly property color skyTextMuted: Qt.rgba(1, 1, 1, 0.66)
 
@@ -53,8 +55,11 @@ KosApplicationWindow {
     }
     readonly property bool nightClearSky:
         !Boolean(value(backend.current, "isDay", true))
-        && (number(backend.current, "weatherCode", -1) === 0
-            || number(backend.current, "weatherCode", -1) === 1)
+        && (root.currentWeatherCode === 0 || root.currentWeatherCode === 1)
+    readonly property bool rainySky: {
+        const c = root.currentWeatherCode
+        return (c >= 51 && c <= 67) || (c >= 80 && c <= 82) || c >= 95
+    }
     readonly property var dailyRange: {
         let lo = Number.POSITIVE_INFINITY
         let hi = Number.NEGATIVE_INFINITY
@@ -97,6 +102,23 @@ KosApplicationWindow {
             })
         }
         return stars
+    }
+
+    // Rain streaks: fixed-seed PRNG like the stars so the layout is
+    // identical on every launch; phase offsets stagger the fall start.
+    readonly property var rainField: {
+        const random = mulberry32(20261017)
+        const drops = []
+        for (let index = 0; index < 64; index++) {
+            drops.push({
+                xRatio: random(),
+                length: 10 + random() * 10,
+                opacity: 0.20 + random() * 0.28,
+                fallMs: 1500 + random() * 800,
+                phaseMs: random() * 2300
+            })
+        }
+        return drops
     }
 
     function skyStopsFor(code, isDay) {
@@ -376,6 +398,44 @@ KosApplicationWindow {
                         to: modelData.baseOpacity
                         duration: modelData.twinkleMs / 2
                         easing.type: Easing.InOutSine
+                    }
+                }
+            }
+        }
+    }
+
+    Item {
+        id: rainFieldLayer
+        anchors.fill: parent
+        visible: root.rainySky
+        clip: true
+
+        Repeater {
+            model: root.rainField
+
+            delegate: Rectangle {
+                required property var modelData
+
+                x: rainFieldLayer.width * modelData.xRatio
+                y: -modelData.length - 10
+                width: 1.4
+                height: modelData.length
+                color: "#dbe9ff"
+                opacity: modelData.opacity
+                Accessible.ignored: true
+
+                SequentialAnimation on y {
+                    running: root.rainySky && !AppTheme.reduceMotion
+                    loops: Animation.Infinite
+
+                    PauseAnimation {
+                        duration: modelData.phaseMs
+                    }
+                    NumberAnimation {
+                        from: -modelData.length - 10
+                        to: rainFieldLayer.height + 10
+                        duration: modelData.fallMs
+                        easing.type: Easing.Linear
                     }
                 }
             }
