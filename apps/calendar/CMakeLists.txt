@@ -14,6 +14,7 @@ kos_add_application(kos-calendar
         qml/CalendarScheduleView.qml
         qml/CalendarTaskEditorDialog.qml
         qml/EventEditorDialog.qml
+        qml/EventDetailsPopover.qml
     LINK_LIBRARIES
         Kos::PimClient
         Kos::PimClientPlugin

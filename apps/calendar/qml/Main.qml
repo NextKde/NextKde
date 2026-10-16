@@ -4,6 +4,8 @@ import QtQuick
 import QtQuick.Controls
 import QtQuick.Dialogs
 import QtQuick.Layouts
+import QtQuick.Window
+import QtQuick.Effects
 import Kos.Pim
 import Kos.Ui
 
@@ -13,6 +15,8 @@ KosApplicationWindow {
     modernDesign: true
     visible: true
     title: qsTr("Calendar")
+    width: 1100
+    height: 720
     minimumWidth: 760
     minimumHeight: 540
 
@@ -26,16 +30,23 @@ KosApplicationWindow {
     property bool showCompletedTasks: false
     property string statusMessage: ""
 
-    // Apple 26 ("Tahoe") design tokens, verbatim from the shared Sketch
-    // library's document.tokenExport dump — see
+    // Apple 26 ("Tahoe") design tokens. Light values are verbatim from the
+    // shared Sketch library's document.tokenExport dump — see
     // tmp/ui-replication/calendar-v2/LEDGER.md §5. Values are the measured /
     // exported hexes, not theme roles, so the chrome matches the reference
-    // instead of drifting with AppTheme.
+    // instead of drifting with AppTheme. Dark (X03) keeps the same hierarchy
+    // on a neutral charcoal ramp — no blue panel cast: the content plane is
+    // slightly deeper than the sidebar, labels are near-white over neutral
+    // greys, separators faint white, and the glass lifts instead of
+    // whitening.
+    readonly property bool tahoeDark: AppTheme.dark
     readonly property QtObject tahoe: QtObject {
         // Sidebar and content are two flush planes, not floating cards.
-        readonly property color sidebarPlane: "#E4E4E4"
-        readonly property color contentPlane: "#FFFFFF"
-        readonly property int sidebarWidth: 320
+        readonly property color sidebarPlane:
+            root.tahoeDark ? "#282828" : "#E4E4E4"
+        readonly property color contentPlane:
+            root.tahoeDark ? "#1E1E1E" : "#FFFFFF"
+        readonly property int sidebarWidth: 220
 
         // Glass. Two independent frames agree on one law, so this is measured,
         // not eyeballed: the body is 0.44 x backdrop + 129. Materials/Liquid
@@ -46,29 +57,40 @@ KosApplicationWindow {
         // glass *compresses* whatever is behind it instead of just adding
         // white. That is the part a flat opaque gradient cannot do: over the
         // white content plane it stays a light grey (241) rather than blowing
-        // out, and over a dark backdrop it lifts hard.
-        readonly property color glassVeil: Qt.rgba(0xE6 / 255, 0xE6 / 255,
-                                                   0xE6 / 255, 0.56)
+        // out, and over a dark backdrop it lifts hard. Dark: a neutral grey
+        // veil that lifts the charcoal plane without a porcelain read; the
+        // hairline flips to a faint light edge and the specular rim stays
+        // restrained (no glow ring).
+        readonly property color glassVeil: root.tahoeDark
+            ? Qt.rgba(0x8A / 255, 0x8A / 255, 0x8A / 255, 0.22)
+            : Qt.rgba(0xE6 / 255, 0xE6 / 255, 0xE6 / 255, 0.56)
         // Outermost hairline. Measured 200-210 on a 228 plane, 142 on 177.
-        readonly property color glassEdge: Qt.rgba(0, 0, 0, 0.08)
+        readonly property color glassEdge: root.tahoeDark
+            ? Qt.rgba(1, 1, 1, 0.10) : Qt.rgba(0, 0, 0, 0.08)
         // 1px specular line just inside it: 255 against a 229 body at both the
         // top and the bottom rim, so the glass catches light on both edges.
-        readonly property color glassRim: Qt.rgba(1, 1, 1, 0.90)
+        readonly property color glassRim: root.tahoeDark
+            ? Qt.rgba(1, 1, 1, 0.28) : Qt.rgba(1, 1, 1, 0.90)
 
         // Fills/Light 2 Secondary #787880 @16% over the sidebar plane
         // resolves to the #D2D2D2 the reference measures.
-        readonly property color controlFill: Qt.rgba(0x78 / 255, 0x78 / 255,
-                                                     0x80 / 255, 0.16)
+        readonly property color controlFill: root.tahoeDark
+            ? Qt.rgba(0x78 / 255, 0x78 / 255, 0x80 / 255, 0.28)
+            : Qt.rgba(0x78 / 255, 0x78 / 255, 0x80 / 255, 0.16)
         // Fills/Light 3 Tertiary #767680 @12% → the measured #D6D6D8.
-        readonly property color selectionFill: Qt.rgba(0x76 / 255, 0x76 / 255,
-                                                       0x80 / 255, 0.12)
+        readonly property color selectionFill: root.tahoeDark
+            ? Qt.rgba(0x76 / 255, 0x76 / 255, 0x80 / 255, 0.30)
+            : Qt.rgba(0x76 / 255, 0x76 / 255, 0x80 / 255, 0.12)
 
         // Labels/Light 1 Primary, 2 Secondary (#3C3C43 @60% → #8A8A8A).
-        readonly property color labelPrimary: "#000000"
-        readonly property color labelSecondary: Qt.rgba(0x3C / 255, 0x3C / 255,
-                                                        0x43 / 255, 0.6)
+        readonly property color labelPrimary:
+            root.tahoeDark ? "#F2F2F2" : "#000000"
+        readonly property color labelSecondary: root.tahoeDark
+            ? Qt.rgba(0xF2 / 255, 0xF2 / 255, 0xF2 / 255, 0.58)
+            : Qt.rgba(0x3C / 255, 0x3C / 255, 0x43 / 255, 0.6)
         // Separators/Light Non-Opaque (#000000 @12%).
-        readonly property color separator: Qt.rgba(0, 0, 0, 0.12)
+        readonly property color separator: root.tahoeDark
+            ? Qt.rgba(1, 1, 1, 0.10) : Qt.rgba(0, 0, 0, 0.12)
 
         // System Colors/Light 8 Blue, 4 Green, 3 Orange.
         readonly property color accent: "#0088FF"
@@ -77,7 +99,8 @@ KosApplicationWindow {
 
         // Sidebar search field: Sidebar/Light/Search, 300x44 on a 320 plane,
         // fully rounded, filled with Fills/Light 2 over the plane.
-        readonly property color searchFill: "#D2D2D2"
+        readonly property color searchFill:
+            root.tahoeDark ? "#3A3A3A" : "#D2D2D2"
         readonly property int searchHeight: 44
         readonly property int searchInsetLeading: 10
         readonly property int searchInsetTrailing: 11
@@ -93,12 +116,94 @@ KosApplicationWindow {
         readonly property int rowTextGap: 15
         readonly property int rowFontSize: 15
         readonly property int rowDetailInset: 12
-        readonly property color rowHoverFill: Qt.rgba(0x74 / 255, 0x74 / 255,
-                                                      0x80 / 255, 0.08)
+        readonly property color rowHoverFill: root.tahoeDark
+            ? Qt.rgba(1, 1, 1, 0.06)
+            : Qt.rgba(0x74 / 255, 0x74 / 255, 0x80 / 255, 0.08)
+
+        // S02/S03: compact category rows for the 220px sidebar. One 12px
+        // rounded checkbox at inset 12 carries the whole state (filled +
+        // white check when on, hollow colored border when off); the label
+        // sits 8 after the box at 13px; rows are 30 tall. Group headings are
+        // 11px secondary with 6 below and 16 above.
+        readonly property int categoryRowHeight: 30
+        readonly property int categoryInset: 12
+        readonly property int categoryBoxSize: 12
+        readonly property int categoryBoxRadius: 3
+        readonly property int categoryTextGap: 8
+        readonly property int categoryFontSize: 13
+        readonly property int categoryHeadingTop: 16
+        readonly property int categoryHeadingBottom: 6
 
         readonly property int controlHeight: 44
         readonly property int controlRowHeight: 54
         readonly property int pillHeight: 44
+
+        // L06: the date heading band is 48 logical px with 20px side insets
+        // and a 27px single-line localised title. L07: the right navigation
+        // group is 26 high with 13px text, low-contrast neutral chrome.
+        readonly property int dateBandHeight: 48
+        readonly property int dateBandInset: 20
+        readonly property int dateTitleSize: 27
+        readonly property int dateNavHeight: 26
+        readonly property int dateNavTextSize: 13
+
+        // L02: unified toolbar under the 30px dot band. 40 tall; icon buttons
+        // 28x28 with 16px icons and 8px gaps; the segmented control is 196x28.
+        readonly property int toolbarHeight: 40
+        readonly property int toolbarButtonSize: 28
+        readonly property int toolbarIconSize: 16
+        readonly property int toolbarGap: 8
+        readonly property int toolbarInsetLeft: 12
+        readonly property int toolbarInsetRight: 14
+        readonly property int segmentWidth: 196
+        readonly property int segmentHeight: 28
+
+        // G03/G04 玻璃按钮投影(浅色,应用内绘制,G08)。集中命名,只调这里。
+        // 用 QtQuick.Effects 的 RectangularShadow(Qt 6.9+):几何与玻璃本体
+        // 完全一致(anchors.fill),blur 由效果自身向外画,不外扩形状;
+        // z:-1 保证阴影在玻璃后面。
+        // 色相:轻中性灰(#18000000 ≈ 黑 9.4%),无蓝偏,白底与 #E4E4E4 侧栏
+        // 上都干净。单层。
+        readonly property color shadowColor: "#18000000"
+        // G04:blur 是边缘柔化 px,spread 0(不内收不外扩),轻微向下投影。
+        readonly property real shadowBlur: 8
+        readonly property real shadowSpread: 0
+        readonly property real shadowOffsetY: 1.5
+        readonly property real shadowOffsetX: 0
+        // G03 深色分支(本轮接线,X03 验收):纯中性黑,在炭灰面上略重但
+        // 克制,无蓝/棕偏,不用白色光晕充当阴影。
+        readonly property color shadowColorDark: "#40000000"
+        readonly property real shadowBlurDark: 10
+        readonly property real shadowOffsetYDark: 2.5
+
+        // G01/G02/G05 液态镜片(浅色):主区 header 按钮从日程视口顶部采样
+        // 一条内容带,重柔化后透入镜片内部;参数集中,只调这里。
+        // lensSampleBand:采样的视口可见顶部带高度(视口本地 y=0..band,
+        // 即滚动时从按钮下方掠过的那部分内容);x 按钮位取并钳到视口内。
+        readonly property int lensSampleBand: 84
+        // lensBlur 是 MultiEffect 归一化柔化量(blurMax 48);轻微去饱和让
+        // 文字细节不透上来,只留低频色调。
+        readonly property real lensBlur: 0.75
+        readonly property real lensSaturation: -0.25
+        // 镜片内三层透明度:采样内容本身、盖在内容上的 veil、渐变剖面。
+        // fallback(侧栏无背景)完全走 R002 已通过的原样路径,不受影响。
+        readonly property real lensContentOpacity: 0.9
+        readonly property real lensVeilOpacity: 0.55
+        readonly property real lensProfileOpacity: 0.6
+
+        // G07 交互触感(浅色):克制的 macOS 反馈。集中命名,只调这里。
+        // hoverLift:悬停时镜片轻微提亮(白色叠加的峰值 alpha,不是深灰遮罩)。
+        readonly property real hoverLift: 0.10
+        // hoverRimBoost:细白高光边增强倍率(乘在 glassRim 的 alpha 上)。
+        readonly property real hoverRimBoost: 1.6
+        // pressScale:按下视觉压下(只作用于绘制 transform,布局盒不动)。
+        readonly property real pressScale: 0.97
+        // 恢复/进入时长(ms),无弹簧无过冲。
+        readonly property int pressDuration: 150
+        // G03:按下时阴影更淡更贴近(乘在浅色 shadow 参数上),不脏不蓝。
+        readonly property real pressedShadowOpacityFactor: 0.55
+        readonly property real pressedShadowBlurFactor: 0.75
+        readonly property real pressedShadowOffsetFactor: 0.6
     }
 
     readonly property string activeView: ["month", "week", "day"][viewIndex]
@@ -110,6 +215,9 @@ KosApplicationWindow {
     // every day/hour cell then just looks up its key instead of rescanning
     // pim.occurrences + pim.todoOccurrences.
     readonly property var itemsByDate: buildItemsByDate()
+    // G01/G05: the live schedule viewport the header glass samples. Null in
+    // month view (the lens falls back to the static glass there).
+    property Item scheduleViewport: null
 
     Timer {
         interval: 60000
@@ -241,6 +349,111 @@ KosApplicationWindow {
                         }
                     }
                 }
+            }
+        }
+    }
+
+    // S03: compact category row for the 220px sidebar. In checkbox mode the
+    // 12px rounded box is the only state carrier: filled with the category
+    // colour and a white check when checked, a hollow 1px coloured border
+    // when not. Legend mode (checkboxless) draws a plain filled swatch. No
+    // colour dot, no switch. 30 tall, inset 12, label 8 after the box at
+    // 13px, single-line elide with the tail reserved before the label.
+    component CategoryRow: AbstractButton {
+        id: row
+
+        property color boxColor: root.tahoe.accent
+        property string detail: ""
+        property bool nested: false
+        // Pure colour-swatch mode for the task-list legend: solid fill, no
+        // check, no checked/unchecked reading.
+        property bool swatchOnly: false
+
+        implicitHeight: root.tahoe.categoryRowHeight
+        hoverEnabled: true
+        Accessible.role: row.swatchOnly ? Accessible.ListItem
+                                        : Accessible.CheckBox
+        Accessible.name: row.text
+
+        readonly property real boxLeft: root.tahoe.categoryInset
+            + (row.nested ? 24 : 0)
+
+        background: Rectangle {
+            x: 6
+            width: row.width - 12
+            height: row.height
+            radius: 6
+            color: row.hovered ? root.tahoe.rowHoverFill : "transparent"
+        }
+
+        contentItem: Item {
+            Rectangle {
+                id: box
+                x: row.boxLeft
+                anchors.verticalCenter: parent.verticalCenter
+                width: root.tahoe.categoryBoxSize
+                height: root.tahoe.categoryBoxSize
+                radius: root.tahoe.categoryBoxRadius
+                color: row.swatchOnly || row.checked
+                    ? row.boxColor : "transparent"
+                border.width: !row.swatchOnly && !row.checked ? 1 : 0
+                border.color: row.boxColor
+                opacity: row.enabled ? 1 : 0.48
+
+                // White check drawn as two rounded bars in a V: the short
+                // stroke falls from upper-left down to the vertex at the
+                // lower left, the long stroke rises from the vertex to the
+                // upper right. Inside an 8x8 guide in the 12px box.
+                Item {
+                    anchors.centerIn: parent
+                    width: 8; height: 8
+                    visible: row.checked && !row.swatchOnly
+                    opacity: row.enabled ? 1 : 0.9
+
+                    // Short stroke: upper-left (1.5,4.2) falling to the
+                    // shared vertex (2.9,5.6) in the 8x8 guide.
+                    Rectangle {
+                        width: 2; height: 1.98; radius: 1
+                        color: "#FFFFFF"
+                        rotation: -45
+                        x: 1.2; y: 3.91
+                    }
+                    // Long stroke: shared vertex (2.9,5.6) rising to
+                    // upper-right (6.3,2.2).
+                    Rectangle {
+                        width: 2; height: 4.81; radius: 1
+                        color: "#FFFFFF"
+                        rotation: 45
+                        x: 3.6; y: 1.495
+                    }
+                }
+            }
+
+            Label {
+                anchors.verticalCenter: parent.verticalCenter
+                x: row.boxLeft + root.tahoe.categoryBoxSize
+                   + root.tahoe.categoryTextGap
+                width: Math.max(0, parent.width - x
+                                   - (detailLabel.visible
+                                      ? detailLabel.implicitWidth + 8 : 0)
+                                   - root.tahoe.categoryInset)
+                text: row.text
+                color: row.enabled ? root.tahoe.labelPrimary
+                                   : root.tahoe.labelSecondary
+                font.pixelSize: root.tahoe.categoryFontSize
+                elide: Text.ElideRight
+            }
+
+            Label {
+                id: detailLabel
+                anchors.verticalCenter: parent.verticalCenter
+                anchors.right: parent.right
+                anchors.rightMargin: root.tahoe.categoryInset
+                visible: row.detail.length > 0
+                text: row.detail
+                color: root.tahoe.labelSecondary
+                font.pixelSize: root.tahoe.categoryFontSize
+                horizontalAlignment: Text.AlignRight
             }
         }
     }
@@ -379,26 +592,195 @@ KosApplicationWindow {
     // 228 plane, with 255 at both rims — so the glass catches light on its top
     // *and* bottom edge, and the dark end of its gradient never goes below the
     // plane it sits on.
+    //
+    // G01/G02/G05: liquid lens. When `backdrop` (a content Item to sample —
+    // never this button or an ancestor of it) and `backdropWindow` are set,
+    // the lens samples a horizontal band of the *content* under the button
+    // from that item, heavy-blurs it, and shows it inside the glass footprint
+    // under the veil/gradient. The sample is live, so it follows real scroll
+    // continuously; the button itself never moves. Without a backdrop the
+    // component renders exactly as it did in R002 (sidebar fallback).
+    //
+    // Sampling is done from a sibling-level source item, and the sample is
+    // masked to the pill shape, so no rectangular corners or hard edges
+    // appear; the specular rim and R002 shadow are untouched and drawn on top.
     component GlassSurface: Rectangle {
         id: glass
 
+        // Content item to sample (e.g. the schedule viewport) and the window
+        // used for cross-item coordinate mapping. Both read-only inputs.
+        property Item backdrop: null
+        property Item backdropWindow: null
+        // Optional position-based override: true forces the lens on, false
+        // forces the static fallback, regardless of the backdrop presence.
+        // Unset (-1) means "decide from the backdrop".
+        property int activeOverride: -1
+        // G07: interaction state fed by the owning button. Default off.
+        property bool hovered: false
+        property bool pressed: false
+
+        // Smooth 0..1 drivers so enter/leave/press/release all glide over the
+        // same duration — no jumps, no spring overshoot. Writable (not
+        // readonly) because the Behavior interpolates by writing frames.
+        property real hoverAmount: hovered ? 1 : 0
+        property real pressAmount: pressed ? 1 : 0
+        Behavior on hoverAmount { NumberAnimation {
+            duration: root.tahoe.pressDuration; easing.type: Easing.OutCubic } }
+        Behavior on pressAmount { NumberAnimation {
+            duration: root.tahoe.pressDuration; easing.type: Easing.OutCubic } }
+
+        readonly property bool lensActive: backdrop !== null
+            && backdropWindow !== null && activeOverride !== 0
+
+        // Position of this button inside the backdrop's coordinate space.
+        // `geometryProbe` sums ancestor properties so a move/resize of any
+        // ancestor also re-evaluates the mapping (same trick as listenfree's
+        // GlassSurface — mapToItem alone has no geometry notifications).
+        readonly property rect backdropRect: {
+            if (!lensActive)
+                return Qt.rect(0, 0, 0, 0)
+            let probe = glass
+            let geometry = 0
+            while (probe) {
+                geometry += probe.x + probe.y + probe.width + probe.height
+                probe = probe.parent
+            }
+            const position = glass.mapToItem(backdrop, 0, 0)
+            return Qt.rect(position.x, position.y, glass.width, glass.height)
+        }
+
+        // The lens shows what is *visually under the button*, and the button
+        // sits in the header above the viewport, so the sampled area is the
+        // viewport's own visible top band (backdrop-local y=0..band), taken
+        // at the button's x. The button's own y in backdrop space is negative
+        // (it is above the viewport) and must never be used as the sample y —
+        // a negative y samples an empty area outside the source bounds and
+        // the FBO comes back transparent. X is clamped so the rect always
+        // lies inside the viewport; edge buttons (negative x) sample the
+        // leftmost strip of the visible band.
+        readonly property rect lensSampleRect: {
+            if (!lensActive)
+                return Qt.rect(0, 0, 0, 0)
+            const band = root.tahoe.lensSampleBand
+            const x = Math.max(0, Math.min(glass.backdropRect.x,
+                backdrop.width - glass.width))
+            return Qt.rect(x, 0, glass.width, band)
+        }
+
+        RectangularShadow {
+            anchors.fill: parent
+            z: -1
+            offset: Qt.vector2d(root.tahoe.shadowOffsetX,
+                                (root.tahoeDark ? root.tahoe.shadowOffsetYDark
+                                                : root.tahoe.shadowOffsetY)
+                                    * (1 - (1 - root.tahoe.pressedShadowOffsetFactor)
+                                           * glass.pressAmount))
+            blur: (root.tahoeDark ? root.tahoe.shadowBlurDark
+                                  : root.tahoe.shadowBlur)
+                * (1 - (1 - root.tahoe.pressedShadowBlurFactor)
+                       * glass.pressAmount)
+            spread: root.tahoe.shadowSpread
+            radius: glass.radius
+            // Same neutral hue in every state (G03): light grey / dark black,
+            // never blue; press only lightens and tightens the shadow.
+            color: root.tahoeDark ? root.tahoe.shadowColorDark
+                                  : root.tahoe.shadowColor
+            opacity: 1 - (1 - root.tahoe.pressedShadowOpacityFactor)
+                         * glass.pressAmount
+        }
+
+        // Live content sample for the lens: the viewport's visible top band
+        // at the button's x (see lensSampleRect). Independent item as source,
+        // so no recursive self-sampling is possible. textureSize is small —
+        // only low-frequency colour is wanted.
+        ShaderEffectSource {
+            id: lensSample
+            visible: false
+            live: glass.lensActive
+            width: glass.width
+            height: glass.height
+            smooth: true
+            sourceItem: glass.backdrop
+            sourceRect: glass.lensSampleRect
+            textureSize: Qt.size(48, 48)
+            wrapMode: ShaderEffectSource.ClampToEdge
+        }
+
+        // Heavily blurred sample, masked to the pill so only low-frequency
+        // tone inside the lens shows — no rectangular corners, no hard edges.
+        MultiEffect {
+            anchors.fill: parent
+            visible: glass.lensActive
+            source: lensSample
+            blurEnabled: true
+            blurMax: 48
+            blur: root.tahoe.lensBlur
+            saturation: root.tahoe.lensSaturation
+            autoPaddingEnabled: false
+            maskEnabled: true
+            maskSource: lensMask
+            maskThresholdMin: 0.5
+            maskSpreadAtMin: 1.0
+            opacity: root.tahoe.lensContentOpacity
+        }
+        Rectangle {
+            id: lensMask
+            visible: false
+            anchors.fill: parent
+            radius: glass.radius
+            layer.enabled: true
+        }
+
         radius: height / 2
-        color: root.tahoe.glassVeil
+        // Lens mode: the base fill goes translucent so the blurred live
+        // sample behind it shows through; the vertical profile above stays
+        // and keeps its own opacity, so text/icons stay readable and the
+        // specular rim is untouched. Sidebar (no backdrop) keeps the opaque
+        // R002 fill exactly.
+        color: glass.lensActive
+            ? Qt.rgba(root.tahoe.glassVeil.r, root.tahoe.glassVeil.g,
+                      root.tahoe.glassVeil.b, root.tahoe.lensVeilOpacity)
+            : root.tahoe.glassVeil
         border.width: 1
         border.color: root.tahoe.glassEdge
 
+        // G07 hover: a faint white lift so the lens brightens while the real
+        // background tone still shows through — no dark overlay, no expansion.
+        Rectangle {
+            anchors.fill: parent
+            radius: glass.radius
+            color: "#FFFFFF"
+            opacity: root.tahoe.hoverLift * glass.hoverAmount
+            Behavior on opacity { NumberAnimation {
+                duration: root.tahoe.pressDuration; easing.type: Easing.OutCubic } }
+        }
+
         // The vertical profile, drawn inside the rim so the edges stay crisp.
+        // In lens mode the profile fades so the sample tone shows through the
+        // middle while the rims keep their catch-light. Dark keeps the same
+        // shape but far dimmer and neutral — no white porcelain bottom edge.
         Rectangle {
             anchors.fill: parent
             anchors.margins: 1
             radius: Math.max(0, glass.radius - 1)
+            opacity: glass.lensActive ? root.tahoe.lensProfileOpacity : 1
             gradient: Gradient {
-                GradientStop { position: 0.00; color: Qt.rgba(1, 1, 1, 0.410) }
+                GradientStop { position: 0.00; color: root.tahoeDark
+                    ? Qt.rgba(1, 1, 1, 0.10)
+                    : Qt.rgba(1, 1, 1, 0.410) }
                 GradientStop { position: 0.16; color: Qt.rgba(0, 0, 0, 0.008) }
-                GradientStop { position: 0.40; color: Qt.rgba(1, 1, 1, 0.050) }
-                GradientStop { position: 0.70; color: Qt.rgba(1, 1, 1, 0.150) }
-                GradientStop { position: 0.88; color: Qt.rgba(1, 1, 1, 0.550) }
-                GradientStop { position: 1.00; color: Qt.rgba(1, 1, 1, 1.000) }
+                GradientStop { position: 0.40; color: root.tahoeDark
+                    ? Qt.rgba(1, 1, 1, 0.015)
+                    : Qt.rgba(1, 1, 1, 0.050) }
+                GradientStop { position: 0.70; color: root.tahoeDark
+                    ? Qt.rgba(1, 1, 1, 0.045)
+                    : Qt.rgba(1, 1, 1, 0.150) }
+                GradientStop { position: 0.88; color: root.tahoeDark
+                    ? Qt.rgba(1, 1, 1, 0.13)
+                    : Qt.rgba(1, 1, 1, 0.550) }
+                GradientStop { position: 1.00; color: root.tahoeDark
+                    ? Qt.rgba(1, 1, 1, 0.22)
+                    : Qt.rgba(1, 1, 1, 1.000) }
             }
         }
 
@@ -408,7 +790,21 @@ KosApplicationWindow {
             radius: Math.max(0, glass.radius - 1)
             color: "transparent"
             border.width: 1
+            // G07: the specular rim strengthens on hover (moderate boost, no
+            // second capsule — same line, brighter).
             border.color: root.tahoe.glassRim
+            opacity: 1 + (root.tahoe.hoverRimBoost - 1) * glass.hoverAmount
+        }
+
+        // G07 press: visual-only sink about the button centre. A QML
+        // transform never touches the layout box or the neighbours, and the
+        // lens sample mapping stays on the untransformed geometry (the
+        // 3% shift amounts to <1px, below sample resolution).
+        transform: Scale {
+            xScale: 1 - (1 - root.tahoe.pressScale) * glass.pressAmount
+            yScale: 1 - (1 - root.tahoe.pressScale) * glass.pressAmount
+            origin.x: glass.width / 2
+            origin.y: glass.height / 2
         }
     }
 
@@ -419,6 +815,9 @@ KosApplicationWindow {
 
         property string symbol: ""
         property string hint: ""
+        // Liquid-lens inputs, forwarded to the GlassSurface background.
+        property Item lensBackdrop: null
+        property Item lensBackdropWindow: null
 
         implicitWidth: root.tahoe.controlHeight
         implicitHeight: root.tahoe.controlHeight
@@ -437,6 +836,10 @@ KosApplicationWindow {
 
         background: GlassSurface {
             opacity: control.enabled ? 1 : 0.5
+            backdrop: control.lensBackdrop
+            backdropWindow: control.lensBackdropWindow
+            hovered: control.hovered
+            pressed: control.pressed
         }
     }
 
@@ -448,6 +851,9 @@ KosApplicationWindow {
         implicitWidth: Math.max(65, contentItem.implicitWidth + 32)
         implicitHeight: root.tahoe.pillHeight
         hoverEnabled: true
+        // Liquid-lens inputs, forwarded to the GlassSurface background.
+        property Item lensBackdrop: null
+        property Item lensBackdropWindow: null
 
         contentItem: Label {
             text: control.text
@@ -459,6 +865,153 @@ KosApplicationWindow {
 
         background: GlassSurface {
             opacity: control.enabled ? 1 : 0.5
+            backdrop: control.lensBackdrop
+            backdropWindow: control.lensBackdropWindow
+            hovered: control.hovered
+            pressed: control.pressed
+        }
+    }
+
+    // L02: compact glass icon button for the unified toolbar — 28x28 with a
+    // 16px calendar-local vector icon. Same GlassSurface material/lens/
+    // interaction as the big buttons; only the geometry differs.
+    component ToolbarButton: AbstractButton {
+        id: control
+
+        property string iconName: ""
+        property string hint: ""
+        property Item lensBackdrop: null
+        property Item lensBackdropWindow: null
+        // Optional position-based override: -1 lets GlassSurface decide from
+        // the backdrop; 0 forces the static fallback, 1 forces the lens on
+        // (only meaningful together with a bound backdrop).
+        property int lensActiveOverride: -1
+
+        implicitWidth: root.tahoe.toolbarButtonSize
+        implicitHeight: root.tahoe.toolbarButtonSize
+        hoverEnabled: true
+        // Clicks on toolbar buttons must not steal focus from the inline
+        // search input: a press that moved focus would fire the input's blur
+        // handler before onClicked, and toggle() would then reopen what the
+        // blur just closed. Tab keeps keyboard accessibility.
+        focusPolicy: Qt.TabFocus
+        Accessible.name: hint
+        ToolTip.visible: hovered && hint.length > 0
+        ToolTip.text: hint
+
+        // Control stretches contentItem to the button box, so the icon is a
+        // fixed-size child centred inside a plain filler Item.
+        contentItem: Item {
+            CalendarToolbarIcon {
+                anchors.centerIn: parent
+                name: control.iconName
+                size: root.tahoe.toolbarIconSize
+                color: root.tahoe.labelPrimary
+            }
+        }
+
+        background: GlassSurface {
+            opacity: control.enabled ? 1 : 0.5
+            backdrop: control.lensBackdrop
+            backdropWindow: control.lensBackdropWindow
+            activeOverride: control.lensActiveOverride
+            hovered: control.hovered
+            pressed: control.pressed
+        }
+    }
+
+    // Calendar-local copy of the three toolbar glyph paths from the shared
+    // VectorIcon (panel/plus/search). Same data-SVG technique and 2px round
+    // stroke styling; kept inside this file because the shared Kos.Ui module
+    // list does not export VectorIcon to applications.
+    component CalendarToolbarIcon: Item {
+        id: icon
+
+        property string name: "check"
+        property color color: "white"
+        property real size: 16
+        implicitWidth: size
+        implicitHeight: size
+        readonly property var paths: ({
+            panel: "M3 5h18v14H3zM3 9h18M7 9v10",
+            plus: "M12 4v16M4 12h16",
+            search: "M10 3a7 7 0 1 0 0 14 7 7 0 0 0 0-14M15 15l6 6"
+        })
+        Image {
+            anchors.fill: parent
+            sourceSize: Qt.size(icon.size * 2, icon.size * 2)
+            source: "data:image/svg+xml;utf8," + encodeURIComponent(
+                '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path fill="none" stroke="rgb('
+                + Math.round(icon.color.r * 255) + ',' + Math.round(icon.color.g * 255) + ','
+                + Math.round(icon.color.b * 255) + ')" stroke-opacity="' + icon.color.a
+                + '" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="'
+                + (icon.paths[icon.name] || icon.paths.search) + '"/></svg>')
+        }
+    }
+
+    // L07: subdued date-navigation button for the heading band — 26 high,
+    // 13px text, low-contrast neutral edge/fill (macOS light-grey nav look,
+    // dark variant equally quiet). No lens, no thick glass. Arrows are a
+    // local chevron vector, not a glyph font.
+    component DateNavButton: AbstractButton {
+        id: control
+
+        // "" → chevron arrow (rotation from arrowRotation), otherwise text.
+        property string text_: ""
+        property real arrowRotation: 0
+        property string hint: ""
+
+        implicitHeight: root.tahoe.dateNavHeight
+        implicitWidth: text_.length > 0
+            ? textLabel.implicitWidth + 20 : root.tahoe.dateNavHeight
+        hoverEnabled: true
+        Accessible.name: hint
+        ToolTip.visible: hovered && hint.length > 0
+        ToolTip.text: hint
+
+        background: Rectangle {
+            radius: height / 2
+            color: control.pressed
+                ? root.tahoe.selectionFill
+                : (control.hovered ? root.tahoe.rowHoverFill : "transparent")
+            border.width: 1
+            border.color: root.tahoe.separator
+            opacity: control.enabled ? 1 : 0.5
+        }
+
+        contentItem: Item {
+            Label {
+                id: textLabel
+                anchors.centerIn: parent
+                visible: control.text_.length > 0
+                text: control.text_
+                color: root.tahoe.labelPrimary
+                font.pixelSize: root.tahoe.dateNavTextSize
+            }
+            Item {
+                anchors.centerIn: parent
+                width: 14; height: 14
+                visible: control.text_.length === 0
+                // The two bars meet at a bottom point (caret ^); rotating the
+                // holder +90° points it left (‹), -90° points it right (›)
+                // — verified against the actual screenshot evidence.
+                rotation: control.arrowRotation
+
+                // Local chevron: two short bars meeting at a point, same
+                // technique as the checkbox check.
+                Rectangle {
+                    width: 2; height: 5.4; radius: 1
+                    color: root.tahoe.labelSecondary
+                    rotation: -45
+                    x: 3.0; y: 2.4
+                }
+                Rectangle {
+                    width: 2; height: 5.4; radius: 1
+                    color: root.tahoe.labelSecondary
+                    rotation: 45
+                    x: 7.2; y: 2.4
+                }
+            }
         }
     }
 
@@ -654,6 +1207,47 @@ KosApplicationWindow {
         return match ? match[1] : "--:--"
     }
 
+    // P01: full date/time line for the detail popover. Events get a
+    // locale-formatted date plus the start–end range (the stored end is
+    // exclusive, so the displayed end for a same-day timed event is the
+    // literal stored end; multi-day/all-day ranges show a date range).
+    // Tasks show their due date/time. No end is invented when absent.
+    function itemDetailsRange(item) {
+        const record = itemRecord(item)
+        const startText = String(value(record, item.kind === "todo" ? "due" : "start", ""))
+        const start = new Date(startText)
+        if (Number.isNaN(start.getTime()))
+            return itemTime(item)
+        const dateLine = AppTheme.formatDate(start, Locale.LongFormat)
+        if (item.kind === "todo")
+            return dateLine + " · " + itemTime(item)
+        if (itemAllDay(item)) {
+            const endText = String(value(record, "end", ""))
+            const end = new Date(endText)
+            // Stored end is exclusive: the last covered day is end − 1.
+            if (!Number.isNaN(end.getTime()) && endText.length >= 10
+                    && sameDay(start, end)) {
+                return dateLine + " · " + qsTr("All day")
+            }
+            if (!Number.isNaN(end.getTime()) && endText.length >= 10) {
+                const lastDay = new Date(end.getFullYear(), end.getMonth(),
+                                         end.getDate() - 1)
+                return dateLine + " – " + AppTheme.formatDate(lastDay, Locale.LongFormat)
+                    + " · " + qsTr("All day")
+            }
+            return dateLine + " · " + qsTr("All day")
+        }
+        const endText = String(value(record, "end", ""))
+        const end = new Date(endText)
+        if (Number.isNaN(end.getTime()) || endText.length < 16)
+            return dateLine + " · " + itemTime(item)
+        if (sameDay(start, end))
+            return dateLine + " · " + itemTime(item) + " – "
+                + (endText.match(/T(\d{2}:\d{2})/)?.[1] ?? itemTime(item))
+        return dateLine + " – " + AppTheme.formatDate(end, Locale.LongFormat)
+            + " · " + itemTime(item)
+    }
+
     function itemHour(item) {
         const match = itemDateTime(item).match(/T(\d{2}):/)
         return match ? Number(match[1]) : 0
@@ -713,10 +1307,11 @@ KosApplicationWindow {
     }
 
     function openItem(item) {
-        if (item.kind === "todo")
-            taskEditor.openForTodo(itemRecord(item))
-        else
-            eventEditor.openForEvent(itemRecord(item))
+        // P01: single/double click on an existing item first opens the
+        // compact detail popover; the editors are reached through its Edit
+        // action. Double-click on empty grid time still opens the editor
+        // directly (create flow untouched).
+        itemDetails.showItem(item)
     }
 
     function toggleItem(item, completed) {
@@ -783,11 +1378,6 @@ KosApplicationWindow {
     // The reference pairs the header title with a count line ("67 Messages,
     // 12 Unread"); this is the calendar's equivalent. selectedItems is already
     // bound, so reading it here costs nothing.
-    function headerSubtitle() {
-        const count = root.selectedItems.length
-        return count === 1 ? qsTr("1 item") : qsTr("%1 items").arg(count)
-    }
-
     function showStatus(message) {
         statusMessage = message
         statusTimer.restart()
@@ -850,6 +1440,40 @@ KosApplicationWindow {
         onAccepted: pim.exportIcalendar(selectedFile.toString())
     }
 
+    // P01: compact neutral detail popover. Opens on item activation, clamps
+    // into the content viewport, and hands the record to the existing
+    // editors only through its Edit action. One connection, made once; the
+    // pending record is swapped per open.
+    property var pendingDetailsRecord: null
+    property bool pendingDetailsIsTodo: false
+
+    EventDetailsPopover {
+        id: itemDetails
+        parent: root.contentItem
+        z: 50
+        onEditRequested: {
+            if (root.pendingDetailsIsTodo)
+                taskEditor.openForTodo(root.pendingDetailsRecord)
+            else
+                eventEditor.openForEvent(root.pendingDetailsRecord)
+        }
+
+        function showItem(item) {
+            const record = root.itemRecord(item)
+            root.pendingDetailsRecord = record
+            root.pendingDetailsIsTodo = item.kind === "todo"
+            // root-qualified: the popover's own string properties would
+            // otherwise shadow the window helper functions here.
+            itemTitle = root.itemTitle(item)
+            kindColor = root.itemColor(item)
+            kindCompleted = root.itemCompleted(item)
+            itemTime = root.itemDetailsRange(item)
+            itemLocation = String(root.value(record, "location", ""))
+            itemNotes = String(root.value(record, "description", ""))
+            openAt(null)
+        }
+    }
+
     EventEditorDialog {
         id: eventEditor
         parent: root.contentItem
@@ -882,14 +1506,75 @@ KosApplicationWindow {
     Shortcut { sequence: "Ctrl+1"; onActivated: root.viewIndex = 0 }
     Shortcut { sequence: "Ctrl+2"; onActivated: root.viewIndex = 1 }
     Shortcut { sequence: "Ctrl+3"; onActivated: root.viewIndex = 2 }
-    Shortcut { sequences: [StandardKey.Find]; onActivated: searchField.forceActiveFocus() }
+    Shortcut { sequences: [StandardKey.Find]; onActivated: toolbarSearch.toggle() }
 
     // Window framework: two flush planes. The sidebar runs the full height of
     // the window at its left edge — macOS keeps the window controls over it —
     // and everything right of it is plain paper. Backgrounds from the shared
-    // library (LEDGER.md §5).
+    // library (LEDGER.md §5). Both planes reach the very top of the window so
+    // the 30px dot band is the planes' own top strip, not a separate
+    // titlebar; the corner clipping follows the shared windowCornerRadius
+    // rule (square when maximized/fullscreen).
     Item {
+        id: windowChrome
         anchors.fill: parent
+
+        // Clip the planes to the window's rounded corners (top-left/right);
+        // the corner radius itself comes from KosApplicationWindow.
+        Rectangle {
+            id: chromeMask
+            anchors.fill: parent
+            radius: root.windowCornerRadius
+            visible: false
+            layer.enabled: true
+        }
+        layer.enabled: root.windowCornerRadius > 0
+        layer.effect: MultiEffect {
+            maskEnabled: true
+            maskSource: chromeMask
+            maskThresholdMin: 0.5
+            maskSpreadAtMin: 1.0
+        }
+
+        // 窗口顶部 30px 安全区承载窗口圆点,侧栏面与内容面从它下面开始,
+        // 工具栏内容与三圆点完整分开。
+        readonly property int topSafeInset: 30
+
+        // 自绘窗口圆点:几何照抄 apps/settings/main.qml(14px 圆点、间距 14、
+        // 右缘距窗口右 14.5、上缘距窗口顶 10.5),锚定窗口边缘,不嵌在带
+        // margin 的工具栏里。
+        Row {
+            anchors {
+                right: parent.right
+                rightMargin: 14.5
+                top: parent.top
+                topMargin: 10.5
+            }
+            spacing: 14
+            z: 10
+            Repeater {
+                model: [
+                    { color: "#28c840", act: "max" },
+                    { color: "#febc2e", act: "min" },
+                    { color: "#ff5f57", act: "close" }
+                ]
+                delegate: Rectangle {
+                    required property var modelData
+                    width: 14; height: 14; radius: 7
+                    color: modelData.color
+                    opacity: 0.85
+                    MouseArea {
+                        anchors.fill: parent
+                        cursorShape: Qt.PointingHandCursor
+                        onClicked: modelData.act === "min" ? root.showMinimized()
+                            : modelData.act === "max"
+                            ? (root.visibility === Window.Maximized
+                                ? root.showNormal() : root.toggleFullScreen())
+                            : root.close()
+                    }
+                }
+            }
+        }
 
         Rectangle {
             id: sidebarPlane
@@ -906,6 +1591,319 @@ KosApplicationWindow {
             anchors.top: parent.top
             anchors.bottom: parent.bottom
             color: root.tahoe.contentPlane
+
+            // L01: the sidebar and main canvas are one continuous plane pair
+            // joined by a single hairline at their seam.
+            Rectangle {
+                anchors.left: parent.left
+                anchors.top: parent.top
+                anchors.bottom: parent.bottom
+                width: 1
+                color: root.tahoe.separator
+            }
+        }
+
+        // L02: the unified toolbar. One 40px row directly under the 30px dot
+        // band, floating above both planes (the planes still cover the whole
+        // window from y=0). Left: sidebar toggle, add. Right: search toggle,
+        // more. The segmented control is centred over the *current main
+        // region* (L03): sidebar expanded → x sidebarWidth..width, collapsed
+        // → x 0..width, with a binding-animated x so it follows the collapse.
+        Item {
+            id: toolbar
+            objectName: "calendarToolbar"
+            anchors.left: parent.left
+            anchors.right: parent.right
+            anchors.top: parent.top
+            anchors.topMargin: parent.topSafeInset
+            height: root.tahoe.toolbarHeight
+            z: 5
+
+            // Dynamic main-region centre: sidebar width animates, so the
+            // centre binding tracks it continuously.
+            readonly property real mainLeft: sidebar.width
+            readonly property real mainWidth: width - mainLeft
+
+            ToolbarButton {
+                id: sidebarToggleButton
+                objectName: "toolbarSidebarToggle"
+                anchors.left: parent.left
+                anchors.leftMargin: root.tahoe.toolbarInsetLeft
+                anchors.verticalCenter: parent.verticalCenter
+                iconName: "panel"
+                hint: root.sidebarExpanded ? qsTr("Hide sidebar")
+                                           : qsTr("Show sidebar")
+                // Expanded sidebar: the button sits on the static sidebar
+                // plane (fallback). Collapsed: it lands on the main canvas,
+                // so it samples the real viewport like the right-side group.
+                lensBackdrop: root.scheduleViewport
+                lensBackdropWindow: root.contentItem
+                lensActiveOverride: !root.sidebarExpanded
+                onClicked: root.sidebarExpanded = !root.sidebarExpanded
+            }
+
+            ToolbarButton {
+                id: addButton
+                objectName: "toolbarAdd"
+                anchors.left: sidebarToggleButton.right
+                anchors.leftMargin: root.tahoe.toolbarGap
+                anchors.verticalCenter: parent.verticalCenter
+                iconName: "plus"
+                hint: qsTr("Add event")
+                enabled: pim.connected && pim.writable
+                lensBackdrop: root.scheduleViewport
+                lensBackdropWindow: root.contentItem
+                lensActiveOverride: !root.sidebarExpanded
+                onClicked: eventEditor.openForDate(root.selectedDate)
+            }
+
+            LiquidSegmentedControl {
+                id: viewSegment
+                objectName: "toolbarViewSegment"
+                anchors.verticalCenter: parent.verticalCenter
+                x: toolbar.mainLeft
+                   + Math.max(0, (toolbar.mainWidth - width) / 2)
+                width: root.tahoe.segmentWidth
+                height: root.tahoe.segmentHeight
+                // L05: strict mutual exclusion with the search field. The
+                // segment is hidden the moment the search opens and only
+                // reappears once the field has fully collapsed (width == 0) —
+                // sequential transition, no cross-fade, so no frame ever
+                // shows both text areas.
+                opacity: toolbarSearch.active || toolbarSearch.width > 0 ? 0 : 1
+                visible: opacity > 0
+                labels: [qsTr("Month"), qsTr("Week"), qsTr("Day")]
+                currentIndex: root.viewIndex
+                backgroundColor: root.tahoe.controlFill
+                selectionColor: root.tahoe.contentPlane
+                textColor: root.tahoe.labelPrimary
+                mutedTextColor: root.tahoe.labelSecondary
+                onSelectionRequested: index => root.viewIndex = index
+            }
+
+            ToolbarButton {
+                id: searchToggleButton
+                objectName: "toolbarSearchToggle"
+                anchors.right: moreButton.left
+                anchors.rightMargin: root.tahoe.toolbarGap
+                anchors.verticalCenter: parent.verticalCenter
+                iconName: "search"
+                hint: qsTr("Search")
+                lensBackdrop: root.scheduleViewport
+                lensBackdropWindow: root.contentItem
+                onClicked: toolbarSearch.toggle()
+            }
+
+            // L05: inline search, strictly inside the 40px toolbar. Opening
+            // hides the segment (fade above) and grows the field leftward
+            // from the search button; no second row, no overlap with the dots
+            // band or the left button group. Idempotent open/close; Escape
+            // closes and clears from anywhere in the window. z above the
+            // segment so the width transition cross-fades cleanly instead of
+            // compositing into it.
+            Item {
+                id: toolbarSearch
+                objectName: "toolbarSearch"
+                z: 2
+                anchors.verticalCenter: parent.verticalCenter
+                anchors.right: searchToggleButton.left
+                anchors.rightMargin: 6
+                readonly property int maxWidth: Math.min(280, Math.max(0,
+                    toolbar.mainWidth - 2 * root.tahoe.toolbarButtonSize
+                        - 3 * root.tahoe.toolbarGap - 24))
+                width: active ? maxWidth : 0
+                height: root.tahoe.toolbarButtonSize
+                visible: width > 0
+                property bool active: false
+                // Deferred close for clicks elsewhere in the window: the blur
+                // arrives during the press, but the click target may itself
+                // want the field (the search toggle). Waiting one event-loop
+                // turn lets the press target act first, and the deferred close
+                // then no-ops if toggle() already handled it.
+                property bool blurPending: false
+                // True between open() and the field actually being visible
+                // (width animation finished). The delayed focus below is
+                // armed only in this window; a close() cancels it. Any blur
+                // during "opening" is the field's own geometry settling —
+                // the input must not close itself because forceActiveFocus
+                // ran while width was still 0.
+                property bool opening: false
+                function open() {
+                    blurPending = false
+                    if (active) return
+                    active = true
+                    opening = true
+                    // Focus once the field is actually on screen: while the
+                    // width animates from 0 the item is not laid out yet, and
+                    // an immediate forceActiveFocus lands on a zero-size item
+                    // whose subsequent blur re-triggers the close path.
+                    focusTimer.restart()
+                }
+                function close() {
+                    blurPending = false
+                    opening = false
+                    focusTimer.stop()
+                    if (!active) return
+                    active = false
+                    input.text = ""
+                    root.searchQuery = ""
+                    input.focus = false
+                }
+                function toggle() { active ? close() : open() }
+                // Any blur-driven close clears the query: closing the search
+                // must never leave a hidden filter running.
+                function requestBlurClose() {
+                    if (blurPending || opening) return
+                    blurPending = true
+                    Qt.callLater(function() {
+                        if (!blurPending || !toolbarSearch.active) return
+                        close()
+                    })
+                }
+
+                // Focus after the width animation settles (motionFast ~150ms
+                // plus one frame). If the search was closed before this fires
+                // the timer is stopped and nothing happens.
+                Timer {
+                    id: focusTimer
+                    interval: AppTheme.motionFast + 50
+                    onTriggered: {
+                        if (!toolbarSearch.active) return
+                        toolbarSearch.opening = false
+                        input.forceActiveFocus()
+                    }
+                }
+
+                Behavior on width { NumberAnimation {
+                    duration: AppTheme.motionFast; easing.type: Easing.OutCubic } }
+
+                // The field is clipped by its own width, so the text/input
+                // never leaks outside during the width animation.
+                Rectangle {
+                    anchors.fill: parent
+                    radius: height / 2
+                    color: root.tahoe.searchFill
+                    border.width: input.activeFocus ? 1 : 0
+                    border.color: root.tahoe.accent
+                    clip: true
+
+                    TextInput {
+                        id: input
+                        objectName: "toolbarSearchInput"
+                        anchors.fill: parent
+                        anchors.leftMargin: 12
+                        anchors.rightMargin: 12
+                        verticalAlignment: TextInput.AlignVCenter
+                        clip: true
+                        color: root.tahoe.labelPrimary
+                        font.pixelSize: root.tahoe.categoryFontSize
+                        selectionColor: root.tahoe.accent
+                        text: root.searchQuery
+                        onTextEdited: root.searchQuery = text
+                        onActiveFocusChanged: {
+                            // Blur from clicking elsewhere: defer one event-
+                            // loop turn so the click target (e.g. the search
+                            // toggle) acts first and the deferred close
+                            // no-ops. Blurs while the field is still opening
+                            // (geometry settling before the delayed focus)
+                            // are ignored; blur caused by close() itself runs
+                            // after active went false and is also ignored.
+                            if (!activeFocus && toolbarSearch.active
+                                    && !toolbarSearch.opening
+                                    && !toolbarSearch.blurPending)
+                                toolbarSearch.requestBlurClose()
+                        }
+                    }
+
+                    Label {
+                        anchors.verticalCenter: parent.verticalCenter
+                        anchors.left: parent.left
+                        anchors.leftMargin: 12
+                        visible: input.text.length === 0
+                        text: qsTr("Search")
+                        color: root.tahoe.labelSecondary
+                        font.pixelSize: root.tahoe.categoryFontSize
+                    }
+                }
+            }
+
+            // More: three small solid dots, no glyph font involved.
+            AbstractButton {
+                id: moreButton
+                objectName: "toolbarMore"
+                anchors.right: parent.right
+                anchors.rightMargin: root.tahoe.toolbarInsetRight
+                anchors.verticalCenter: parent.verticalCenter
+                width: root.tahoe.toolbarButtonSize
+                height: root.tahoe.toolbarButtonSize
+                hoverEnabled: true
+                Accessible.name: qsTr("Calendar actions")
+                ToolTip.visible: hovered
+                ToolTip.text: Accessible.name
+                onClicked: actionsMenu.popup(this, 0, height + 2)
+
+                contentItem: Item {
+                    // Three small solid dots in a fixed-size centred Row, so
+                    // Control stretching the contentItem cannot shove the
+                    // dots into a corner.
+                    Row {
+                        anchors.centerIn: parent
+                        spacing: 3
+                        Repeater {
+                            model: 3
+                            delegate: Rectangle {
+                                required property int index
+                                width: 3.5; height: 3.5; radius: 1.75
+                                color: root.tahoe.labelPrimary
+                            }
+                        }
+                    }
+                }
+
+                background: GlassSurface {
+                    opacity: moreButton.enabled ? 1 : 0.5
+                    backdrop: root.scheduleViewport
+                    backdropWindow: root.contentItem
+                    hovered: moreButton.hovered
+                    pressed: moreButton.pressed
+                }
+            }
+
+            // L05: Escape always reaches the open search, whichever item in
+            // this window holds focus — the input's own key handler is not
+            // enough once it has lost focus. Scoped to the toolbar, enabled
+            // only while the search is open.
+            Shortcut {
+                sequence: "Escape"
+                enabled: toolbarSearch.active
+                onActivated: toolbarSearch.close()
+            }
+
+            Menu {
+                id: actionsMenu
+                y: moreButton.height
+                MenuItem {
+                    text: qsTr("New task…")
+                    enabled: pim.connected && pim.writable
+                    onTriggered: taskEditor.openForTodo(null)
+                }
+                MenuSeparator {}
+                MenuItem {
+                    text: qsTr("Import iCalendar…")
+                    enabled: pim.connected && pim.writable
+                    onTriggered: importDialog.open()
+                }
+                MenuItem {
+                    text: qsTr("Export iCalendar…")
+                    enabled: pim.connected && pim.ready
+                    onTriggered: exportDialog.open()
+                }
+                MenuSeparator {}
+                MenuItem {
+                    text: qsTr("Calendar settings")
+                    onTriggered: settingsDialog.open()
+                }
+            }
         }
 
         // Same collapse contract KosSidebar uses: the body keeps its expanded
@@ -916,9 +1914,13 @@ KosApplicationWindow {
             objectName: "applicationSidebar"
             anchors.left: parent.left
             anchors.top: parent.top
+            anchors.topMargin: parent.topSafeInset + root.tahoe.toolbarHeight
             anchors.bottom: parent.bottom
             width: root.sidebarExpanded ? root.tahoe.sidebarWidth : 0
-            clip: true
+            // Clip only while collapsing/expanding so the animated width never
+            // spills onto the content plane; fully expanded the clip is off,
+            // so the top glass pill's shadow can reach into the safe area.
+            clip: !root.sidebarExpanded || width < root.tahoe.sidebarWidth
             enabled: root.sidebarExpanded
 
             Behavior on width {
@@ -933,72 +1935,9 @@ KosApplicationWindow {
                 height: sidebar.height
                 spacing: 0
 
-                // Sidebar control row, from Sidebar/Light/Toolbar/Floating
-                // Window: window controls, one labeled glass pill for the
-                // primary action, then circular glass buttons at the right.
-                Item {
-                    Layout.fillWidth: true
-                    Layout.preferredHeight: root.tahoe.controlRowHeight
-
-                    KosWindowControls {
-                        id: windowControls
-                        anchors.left: parent.left
-                        anchors.leftMargin: 12
-                        anchors.verticalCenter: parent.verticalCenter
-                        targetWindow: root
-                    }
-
-                    GlassPill {
-                        id: newEventButton
-                        anchors.left: windowControls.right
-                        anchors.leftMargin: 12
-                        // Both sides anchored: the pill is left-anchored in the
-                        // spec, but "New Event" is longer than the spec's "Edit",
-                        // so pinning the right edge is what keeps it off the
-                        // circular buttons instead of overlapping them.
-                        anchors.right: toolButtons.left
-                        anchors.rightMargin: 10
-                        anchors.verticalCenter: parent.verticalCenter
-                        text: qsTr("New Event")
-                        enabled: pim.connected && pim.writable
-                        Accessible.name: text
-                        onClicked: eventEditor.openForDate(root.selectedDate)
-                    }
-
-                    Row {
-                        id: toolButtons
-                        anchors.right: parent.right
-                        anchors.rightMargin: 10
-                        anchors.verticalCenter: parent.verticalCenter
-                        spacing: 12
-
-                        GlassButton {
-                            symbol: "◇"
-                            hint: qsTr("Go to today")
-                            onClicked: root.showToday()
-                        }
-
-                        GlassButton {
-                            symbol: "▤"
-                            hint: qsTr("Toggle sidebar")
-                            checked: root.sidebarExpanded
-                            onClicked: root.sidebarExpanded = !root.sidebarExpanded
-                        }
-                    }
-                }
-
-                // macOS puts the window's search field in the sidebar, directly
-                // under the control row (Sidebar/Light/Search: 300x44, r22).
-                SidebarSearch {
-                    id: searchField
-                    Layout.fillWidth: true
-                    Layout.preferredHeight: root.tahoe.searchHeight
-                    Layout.topMargin: 7
-                    placeholder: qsTr("Search")
-                    text: root.searchQuery
-                    onEdited: root.searchQuery = value
-                    Accessible.name: qsTr("Search events and tasks")
-                }
+                // L04: the sidebar no longer carries its own toolbar row or a
+                // standing search field — those live in the unified toolbar.
+                // The body starts with the Today row.
 
                 SidebarRow {
                     id: todayNavigation
@@ -1017,61 +1956,179 @@ KosApplicationWindow {
                     Layout.preferredHeight: 1
                     Layout.topMargin: 3
                     Layout.bottomMargin: 3
-                    color: AppTheme.border
+                    color: root.tahoe.separator
                 }
 
-                RowLayout {
+                // S02/S03: categories and task lists directly under the
+                // Today row; the mini calendar anchors the sidebar bottom
+                // (M01). The mid section is one real scrolling viewport
+                // (Flickable over a naturally-sized Column): fillHeight with
+                // minimumHeight 0, so in a short window it is this area that
+                // scrolls — every group heading, category row and task list
+                // stays reachable — while the fixed mini-calendar block
+                // below can never be pushed off-window.
+                Flickable {
+                    id: categoriesViewport
+                    objectName: "calendarCategoriesViewport"
+
                     Layout.fillWidth: true
-                    Layout.preferredHeight: 26
-                    spacing: 2
+                    Layout.fillHeight: true
+                    Layout.minimumHeight: 0
+                    clip: true
+                    contentWidth: width
+                    contentHeight: categoriesColumn.implicitHeight
+                    boundsBehavior: Flickable.StopAtBounds
 
-                    KosToolButton {
-                        Layout.preferredWidth: 28
-                        Layout.preferredHeight: 28
-                        text: "‹"
-                        flat: true
-                        Accessible.name: qsTr("Previous month")
-                        onClicked: root.visibleMonth = root.monthDate(-1)
-                    }
+                    ColumnLayout {
+                        id: categoriesColumn
+                        width: categoriesViewport.width
+                        spacing: 0
 
-                    Label {
-                        Layout.fillWidth: true
-                        text: AppTheme.formatDate(root.visibleMonth, "MMMM yyyy")
-                        color: root.tahoe.labelPrimary
-                        horizontalAlignment: Text.AlignHCenter
-                        font.weight: Font.DemiBold
-                        font.pixelSize: root.tahoe.rowFontSize
-                        elide: Text.ElideRight
-                    }
+                        Label {
+                            Layout.fillWidth: true
+                            Layout.leftMargin: root.tahoe.categoryInset
+                            Layout.topMargin: root.tahoe.categoryHeadingTop
+                            Layout.bottomMargin: root.tahoe.categoryHeadingBottom
+                            Layout.preferredHeight: 16
+                            text: qsTr("Calendars")
+                            color: root.tahoe.labelSecondary
+                            font.pixelSize: 11
+                            verticalAlignment: Text.AlignVCenter
+                        }
 
-                    KosToolButton {
-                        Layout.preferredWidth: 28
-                        Layout.preferredHeight: 28
-                        text: "›"
-                        flat: true
-                        Accessible.name: qsTr("Next month")
-                        onClicked: root.visibleMonth = root.monthDate(1)
+                        CategoryRow {
+                            Layout.fillWidth: true
+                            text: qsTr("Events")
+                            checkable: true
+                            boxColor: root.tahoe.accent
+                            checked: root.showEvents
+                            onToggled: root.showEvents = checked
+                        }
+
+                        CategoryRow {
+                            Layout.fillWidth: true
+                            text: qsTr("Scheduled tasks")
+                            checkable: true
+                            boxColor: root.tahoe.positive
+                            checked: root.showTasks
+                            onToggled: root.showTasks = checked
+                        }
+
+                        CategoryRow {
+                            Layout.fillWidth: true
+                            text: qsTr("Show completed")
+                            checkable: true
+                            nested: true
+                            boxColor: root.tahoe.warning
+                            checked: root.showCompletedTasks
+                            enabled: root.showTasks
+                            Accessible.name: qsTr("Show completed tasks")
+                            onToggled: root.showCompletedTasks = checked
+                        }
+
+                        Label {
+                            Layout.fillWidth: true
+                            Layout.leftMargin: root.tahoe.categoryInset
+                            Layout.topMargin: root.tahoe.categoryHeadingTop
+                            Layout.bottomMargin: root.tahoe.categoryHeadingBottom
+                            Layout.preferredHeight: 16
+                            text: qsTr("Task lists")
+                            color: root.tahoe.labelSecondary
+                            font.pixelSize: 11
+                            verticalAlignment: Text.AlignVCenter
+                        }
+
+                        Repeater {
+                            model: pim.lists
+
+                            delegate: CategoryRow {
+                                id: listLegend
+
+                                required property var modelData
+
+                                Layout.fillWidth: true
+                                swatchOnly: true
+                                text: String(root.value(listLegend.modelData,
+                                                        "name", qsTr("List")))
+                                boxColor: String(root.value(listLegend.modelData,
+                                    "color", root.tahoe.accent))
+                            }
+                        }
                     }
                 }
 
+                // M01: the mini calendar is a fixed, never-compressed block
+                // (26 heading + 18 weekday + 6*21 rows = 170) pinned to the
+                // sidebar bottom with a 12px bottom margin. min/preferred/max
+                // all pin the same height, so no layout state can shrink or
+                // stretch it.
                 Item {
                     id: miniCalendar
 
+                    readonly property real fixedHeight:
+                        headingRow.height + 18 + 6 * cellHeight
+
                     Layout.fillWidth: true
-                    Layout.preferredHeight: 144
+                    Layout.leftMargin: root.tahoe.categoryInset
+                    Layout.rightMargin: root.tahoe.categoryInset
+                    Layout.bottomMargin: 12
+                    Layout.minimumHeight: fixedHeight
+                    Layout.preferredHeight: fixedHeight
+                    Layout.maximumHeight: fixedHeight
                     readonly property real cellWidth: width / 7
-                    readonly property real headingHeight: 18
                     readonly property real cellHeight: 21
 
+                    // M02: month title centred between two equal 28x28
+                    // arrows; title and grid share the same inset area.
+                    RowLayout {
+                        id: headingRow
+                        objectName: "miniCalendarHeading"
+                        width: parent.width
+                        height: 26
+                        spacing: 2
+
+                        KosToolButton {
+                            id: prevMonthButton
+                            Layout.preferredWidth: 28
+                            Layout.preferredHeight: 28
+                            text: "‹"
+                            flat: true
+                            Accessible.name: qsTr("Previous month")
+                            onClicked: root.visibleMonth = root.monthDate(-1)
+                        }
+
+                        Label {
+                            Layout.fillWidth: true
+                            text: AppTheme.formatDate(root.visibleMonth, "MMMM yyyy")
+                            color: root.tahoe.labelPrimary
+                            horizontalAlignment: Text.AlignHCenter
+                            verticalAlignment: Text.AlignVCenter
+                            font.weight: Font.DemiBold
+                            font.pixelSize: 13
+                            elide: Text.ElideRight
+                        }
+
+                        KosToolButton {
+                            id: nextMonthButton
+                            Layout.preferredWidth: 28
+                            Layout.preferredHeight: 28
+                            text: "›"
+                            flat: true
+                            Accessible.name: qsTr("Next month")
+                            onClicked: root.visibleMonth = root.monthDate(1)
+                        }
+                    }
+
+                    // Weekday row: 10px secondary, seven equal columns.
                     Repeater {
                         model: 7
 
                         delegate: Label {
                             required property int index
                             x: index * miniCalendar.cellWidth
-                            y: 0
+                            y: headingRow.height
                             width: miniCalendar.cellWidth
-                            height: miniCalendar.headingHeight
+                            height: 18
                             text: root.weekdayName(index, Locale.NarrowFormat)
                             color: root.tahoe.labelSecondary
                             horizontalAlignment: Text.AlignHCenter
@@ -1097,7 +2154,7 @@ KosApplicationWindow {
                                 root.sameDay(cellDate, root.now)
 
                             x: (index % 7) * miniCalendar.cellWidth
-                            y: miniCalendar.headingHeight
+                            y: headingRow.height + 18
                                 + Math.floor(index / 7) * miniCalendar.cellHeight
                             width: miniCalendar.cellWidth
                             height: miniCalendar.cellHeight
@@ -1114,31 +2171,38 @@ KosApplicationWindow {
                                 }
                             }
 
-                            contentItem: Rectangle {
-                                width: 20
-                                height: 20
-                                anchors.centerIn: parent
-                                radius: width / 2
-                                color: miniDay.today
-                                    ? root.tahoe.accent
-                                    : (miniDay.selected
-                                        ? root.tahoe.selectionFill
-                                        : (miniDay.hovered
-                                            ? root.tahoe.rowHoverFill : "transparent"))
-                                border.width: miniDay.selected && !miniDay.today ? 1 : 0
-                                border.color: root.tahoe.accent
-
-                                Label {
+                            // M03: Control stretches contentItem to the cell,
+                            // which warped a direct 20x20 circle into an
+                            // ellipse. So the contentItem is a plain filler
+                            // Item and the fixed 20x20 circle sits centred
+                            // inside it.
+                            contentItem: Item {
+                                Rectangle {
+                                    width: 20
+                                    height: 20
+                                    radius: width / 2
                                     anchors.centerIn: parent
-                                    text: String(miniDay.cellDate.getDate())
                                     color: miniDay.today
-                                        ? "#FFFFFF"
+                                        ? root.tahoe.accent
                                         : (miniDay.selected
-                                            ? root.tahoe.accent
-                                            : root.tahoe.labelPrimary)
-                                    font.pixelSize: 11
-                                    font.weight: miniDay.today || miniDay.selected
-                                        ? Font.DemiBold : Font.Normal
+                                            ? root.tahoe.selectionFill
+                                            : (miniDay.hovered
+                                                ? root.tahoe.rowHoverFill : "transparent"))
+                                    border.width: miniDay.selected && !miniDay.today ? 1 : 0
+                                    border.color: root.tahoe.accent
+
+                                    Label {
+                                        anchors.centerIn: parent
+                                        text: String(miniDay.cellDate.getDate())
+                                        color: miniDay.today
+                                            ? "#FFFFFF"
+                                            : (miniDay.selected
+                                                ? root.tahoe.accent
+                                                : root.tahoe.labelPrimary)
+                                        font.pixelSize: 11
+                                        font.weight: miniDay.today || miniDay.selected
+                                            ? Font.DemiBold : Font.Normal
+                                    }
                                 }
                             }
 
@@ -1147,265 +2211,91 @@ KosApplicationWindow {
                     }
                 }
 
-                // Section header per Sidebar/Light/Header: sentence case, the
-                // secondary label colour, text 4 clear of the row capsule.
+                // S05: no standing status card. A small, low-key one-liner
+                // only while the PIM service is unreachable — no placeholder
+                // when healthy.
                 Label {
                     Layout.fillWidth: true
-                    Layout.leftMargin: root.tahoe.rowInsetLeading + 4
-                    Layout.topMargin: 18
-                    Layout.bottomMargin: 4
-                    Layout.preferredHeight: 20
-                    text: qsTr("Calendars")
-                    color: root.tahoe.labelSecondary
-                    font.pixelSize: root.tahoe.rowFontSize
-                    verticalAlignment: Text.AlignVCenter
-                }
-
-                SidebarRow {
-                    Layout.fillWidth: true
-                    Layout.preferredHeight: root.tahoe.rowHeight
-                    text: qsTr("Events")
-                    checkable: true
-                    showSwitch: true
-                    markerFilled: true
-                    markerColor: root.tahoe.accent
-                    switchColor: root.tahoe.accent
-                    Accessible.role: Accessible.CheckBox
-                    checked: root.showEvents
-                    onToggled: root.showEvents = checked
-                }
-
-                SidebarRow {
-                    Layout.fillWidth: true
-                    Layout.preferredHeight: root.tahoe.rowHeight
-                    text: qsTr("Scheduled tasks")
-                    checkable: true
-                    showSwitch: true
-                    markerFilled: true
-                    markerColor: root.tahoe.positive
-                    switchColor: root.tahoe.positive
-                    Accessible.role: Accessible.CheckBox
-                    checked: root.showTasks
-                    onToggled: root.showTasks = checked
-                }
-
-                SidebarRow {
-                    Layout.fillWidth: true
-                    Layout.preferredHeight: root.tahoe.rowHeight
-                    text: qsTr("Show completed")
-                    checkable: true
-                    showSwitch: true
-                    nested: true
-                    markerColor: root.tahoe.warning
-                    switchColor: root.tahoe.warning
-                    checked: root.showCompletedTasks
-                    enabled: root.showTasks
-                    opacity: enabled ? 1 : 0.48
-                    Accessible.role: Accessible.CheckBox
-                    onToggled: root.showCompletedTasks = checked
-                }
-
-                Label {
-                    Layout.fillWidth: true
-                    Layout.leftMargin: root.tahoe.rowInsetLeading + 4
-                    Layout.topMargin: 18
-                    Layout.bottomMargin: 4
-                    Layout.preferredHeight: 20
-                    text: qsTr("Task lists")
-                    color: root.tahoe.labelSecondary
-                    font.pixelSize: root.tahoe.rowFontSize
-                    verticalAlignment: Text.AlignVCenter
-                }
-
-                ListView {
-                    Layout.fillWidth: true
-                    Layout.preferredHeight: Math.min(contentHeight,
-                                                     root.tahoe.rowHeight * 2)
-                    Layout.maximumHeight: root.tahoe.rowHeight * 2
-                    clip: true
-                    model: pim.lists
-
-                    delegate: SidebarRow {
-                        id: listLegend
-
-                        required property var modelData
-
-                        width: ListView.view.width
-                        text: String(root.value(listLegend.modelData, "name",
-                                                qsTr("List")))
-                        detail: qsTr("Tasks")
-                        markerFilled: true
-                        markerColor: String(root.value(listLegend.modelData,
-                            "color", root.tahoe.accent))
-                    }
-                }
-
-                Item { Layout.fillHeight: true }
-
-                Rectangle {
-                    id: statusPill
-
-                    readonly property color statusColor: pim.connected
-                        ? root.tahoe.positive : root.tahoe.warning
-
-                    Layout.fillWidth: true
-                    Layout.preferredHeight: 32
-                    Layout.leftMargin: 10
-                    Layout.rightMargin: root.tahoe.rowInsetTrailing
+                    Layout.leftMargin: root.tahoe.categoryInset
+                    Layout.rightMargin: root.tahoe.categoryInset
                     Layout.bottomMargin: 6
-                    radius: height / 2
-                    color: Qt.rgba(statusPill.statusColor.r, statusPill.statusColor.g,
-                                   statusPill.statusColor.b, 0.14)
-
-                    RowLayout {
-                        anchors.fill: parent
-                        anchors.leftMargin: 12
-                        anchors.rightMargin: 12
-                        spacing: 8
-
-                        Rectangle {
-                            Layout.preferredWidth: 8
-                            Layout.preferredHeight: 8
-                            radius: width / 2
-                            color: statusPill.statusColor
-                        }
-
-                        Label {
-                            Layout.fillWidth: true
-                            text: pim.connected
-                                ? qsTr("Calendar and Todo are synchronized")
-                                : qsTr("Waiting for the local PIM service")
-                            color: root.tahoe.labelSecondary
-                            wrapMode: Text.WordWrap
-                            font.pixelSize: 12
-                        }
-                    }
+                    visible: !pim.connected
+                    text: qsTr("Waiting for the local PIM service")
+                    color: root.tahoe.labelSecondary
+                    font.pixelSize: 11
+                    elide: Text.ElideRight
                 }
             }
         }
 
-        // Content plane: a 52-tall header band on paper, then the view. The
-        // reference keeps the title block at the left of that band and its
-        // controls at the right (LEDGER.md §5).
+        // Content plane: the unified toolbar sits above; below it a title row
+        // (date heading + prev/Today/next, L06/L07 review later) and then the
+        // view.
         ColumnLayout {
             anchors.left: sidebarPlane.right
             anchors.right: parent.right
             anchors.top: parent.top
+            anchors.topMargin: parent.topSafeInset + root.tahoe.toolbarHeight
             anchors.bottom: parent.bottom
             spacing: 0
 
+            // L06: 48px date heading band. Single 27px localised title on the
+            // left (20 inset, strictly limited to the space before the
+            // navigation group — long week/day titles elide, never squeeze
+            // the nav); L07 subdued nav group on the right. No subtitle line.
             Item {
                 Layout.fillWidth: true
-                Layout.preferredHeight: root.tahoe.controlRowHeight
+                Layout.preferredHeight: root.tahoe.dateBandHeight
 
-                RowLayout {
-                    id: headerLeading
+                Label {
+                    id: dateTitle
+                    objectName: "dateTitle"
                     anchors.left: parent.left
-                    anchors.leftMargin: 20
+                    anchors.leftMargin: root.tahoe.dateBandInset
                     anchors.verticalCenter: parent.verticalCenter
-                    spacing: 8
+                    width: Math.max(0, dateNavGroup.x
+                                       - root.tahoe.dateBandInset - 16)
+                    text: root.headerTitle()
+                    color: root.tahoe.labelPrimary
+                    font.pixelSize: root.tahoe.dateTitleSize
+                    font.weight: Font.DemiBold
+                    elide: Text.ElideRight
+                }
 
-                    GlassButton {
-                        Layout.alignment: Qt.AlignVCenter
-                        symbol: "‹"
-                        hint: qsTr("Previous period")
-                        onClicked: root.shiftView(-1)
-                    }
-                    GlassButton {
-                        Layout.alignment: Qt.AlignVCenter
-                        symbol: "›"
-                        hint: qsTr("Next period")
-                        onClicked: root.shiftView(1)
-                    }
-                    GlassPill {
-                        Layout.alignment: Qt.AlignVCenter
-                        text: qsTr("Today")
-                        onClicked: root.showToday()
-                    }
-
-                    Column {
-                        Layout.alignment: Qt.AlignVCenter
-                        Layout.leftMargin: 10
-                        Layout.minimumWidth: root.compact ? 100 : 180
-                        spacing: 1
-
-                        Label {
-                            text: root.headerTitle()
-                            color: root.tahoe.labelPrimary
-                            font.pixelSize: 15
-                            font.weight: Font.DemiBold
-                            elide: Text.ElideRight
-                        }
-                        Label {
-                            text: root.headerSubtitle()
-                            color: root.tahoe.labelSecondary
-                            font.pixelSize: 12
-                            elide: Text.ElideRight
-                        }
-                    }
+                BusyIndicator {
+                    anchors.right: dateNavGroup.left
+                    anchors.rightMargin: 8
+                    anchors.verticalCenter: parent.verticalCenter
+                    width: 18; height: 18
+                    running: pim.busy
+                    visible: running
                 }
 
                 RowLayout {
+                    id: dateNavGroup
+                    objectName: "dateNavGroup"
                     anchors.right: parent.right
-                    anchors.rightMargin: 20
+                    anchors.rightMargin: root.tahoe.dateBandInset
                     anchors.verticalCenter: parent.verticalCenter
-                    spacing: 8
+                    spacing: 6
 
-                    BusyIndicator {
-                        Layout.alignment: Qt.AlignVCenter
-                        Layout.preferredWidth: 26
-                        Layout.preferredHeight: 26
-                        running: pim.busy
-                        visible: running
+                    DateNavButton {
+                        objectName: "dateNavPrevious"
+                        hint: qsTr("Previous period")
+                        arrowRotation: 90
+                        onClicked: root.shiftView(-1)
                     }
-
-                    LiquidSegmentedControl {
-                        Layout.alignment: Qt.AlignVCenter
-                        Layout.preferredWidth: 196
-                        Layout.preferredHeight: 32
-                        labels: [qsTr("Month"), qsTr("Week"), qsTr("Day")]
-                        currentIndex: root.viewIndex
-                        backgroundColor: root.tahoe.controlFill
-                        selectionColor: root.tahoe.contentPlane
-                        textColor: root.tahoe.labelPrimary
-                        mutedTextColor: root.tahoe.labelSecondary
-                        onSelectionRequested: index => root.viewIndex = index
+                    DateNavButton {
+                        objectName: "dateNavToday"
+                        hint: qsTr("Show today")
+                        text_: qsTr("Today")
+                        onClicked: root.showToday()
                     }
-
-                    GlassButton {
-                        id: actionsButton
-                        Layout.alignment: Qt.AlignVCenter
-                        symbol: "⋯"
-                        hint: qsTr("Calendar actions")
-                        onClicked: actionsMenu.open()
-
-                        Menu {
-                            id: actionsMenu
-                            y: actionsButton.height
-                            MenuItem {
-                                text: qsTr("Import iCalendar…")
-                                enabled: pim.connected && pim.writable
-                                onTriggered: importDialog.open()
-                            }
-                            MenuItem {
-                                text: qsTr("Export iCalendar…")
-                                enabled: pim.connected && pim.ready
-                                onTriggered: exportDialog.open()
-                            }
-                        }
-                    }
-
-                    GlassButton {
-                        symbol: "⚙"
-                        hint: qsTr("Calendar settings")
-                        onClicked: settingsDialog.open()
-                    }
-
-                    GlassButton {
-                        symbol: "▤"
-                        hint: qsTr("Toggle sidebar")
-                        checked: root.sidebarExpanded
-                        onClicked: root.sidebarExpanded = !root.sidebarExpanded
+                    DateNavButton {
+                        objectName: "dateNavNext"
+                        hint: qsTr("Next period")
+                        arrowRotation: -90
+                        onClicked: root.shiftView(1)
                     }
                 }
             }
@@ -1446,7 +2336,7 @@ KosApplicationWindow {
                 Component {
                     id: monthPage
                     ColumnLayout {
-                        spacing: 10
+                        spacing: 0
 
                         CalendarMonthView {
                             Layout.fillWidth: true
@@ -1466,6 +2356,7 @@ KosApplicationWindow {
 
                         KosCard {
                             Layout.fillWidth: true
+                            Layout.topMargin: 10
                             Layout.preferredHeight: root.height < 680 ? 145 : 170
 
                             contentItem: ColumnLayout {
@@ -1609,9 +2500,11 @@ KosApplicationWindow {
                 Component {
                     id: weekPage
                     CalendarScheduleView {
+                        id: weekSchedule
                         firstDate: root.weekStart
                         currentTime: root.now
                         dayCount: 7
+                        selectedDate: root.selectedDate
                         itemsForDate: root.itemsForDate
                         itemTitle: root.itemTitle
                         itemColor: root.itemColor
@@ -1623,15 +2516,25 @@ KosApplicationWindow {
                         onCreateRequested: function(date, hour) {
                             eventEditor.openForDate(date, hour)
                         }
+                        onVisibleChanged: {
+                            if (visible) root.scheduleViewport = weekSchedule.contentViewport
+                            else if (root.scheduleViewport === weekSchedule.contentViewport)
+                                root.scheduleViewport = null
+                        }
+                        Component.onCompleted: {
+                            if (visible) root.scheduleViewport = weekSchedule.contentViewport
+                        }
                     }
                 }
 
                 Component {
                     id: dayPage
                     CalendarScheduleView {
+                        id: daySchedule
                         firstDate: root.selectedDate
                         currentTime: root.now
                         dayCount: 1
+                        selectedDate: root.selectedDate
                         itemsForDate: root.itemsForDate
                         itemTitle: root.itemTitle
                         itemColor: root.itemColor
@@ -1642,6 +2545,14 @@ KosApplicationWindow {
                         onItemActivated: function(item) { root.openItem(item) }
                         onCreateRequested: function(date, hour) {
                             eventEditor.openForDate(date, hour)
+                        }
+                        onVisibleChanged: {
+                            if (visible) root.scheduleViewport = daySchedule.contentViewport
+                            else if (root.scheduleViewport === daySchedule.contentViewport)
+                                root.scheduleViewport = null
+                        }
+                        Component.onCompleted: {
+                            if (visible) root.scheduleViewport = daySchedule.contentViewport
                         }
                     }
                 }

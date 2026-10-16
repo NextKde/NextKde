@@ -5,8 +5,14 @@ import QtQuick.Controls
 import QtQuick.Layouts
 import Kos.Ui
 
-KosCard {
+// L01: flush root — no KosCard chrome; the month grid fills the canvas.
+// Pane keeps the root-level contentItem contract; padding 0 and a null
+// background remove the card look.
+Pane {
     id: root
+
+    padding: 0
+    background: null
 
     required property date visibleDate
     required property date selectedDate

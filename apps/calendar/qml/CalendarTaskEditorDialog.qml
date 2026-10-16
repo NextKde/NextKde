@@ -17,10 +17,17 @@ KosWorkspaceDialog {
 
     title: qsTr("Edit task")
     modal: true
-    width: Math.min(560, parent ? parent.width - 48 : 560)
-    height: Math.min(610, parent ? parent.height - 48 : 610)
+    // P02/P03: compact neutral editor, matching the event editor treatment.
+    width: Math.min(380, parent ? parent.width - 48 : 380)
+    height: Math.min(560, parent ? parent.height - 64 : 560)
     anchors.centerIn: parent
     standardButtons: Dialog.Save | Dialog.Cancel
+    readonly property int fieldHeight: 30
+    background: KosSurface {
+        radius: AppTheme.smallRadius + 4
+        fillColor: AppTheme.dark ? "#262626" : "#F7F7F7"
+        elevation: 0.5
+    }
 
     function value(record, key, fallback) {
         if (record === null || record === undefined)
@@ -86,96 +93,108 @@ KosWorkspaceDialog {
 
     onAccepted: saveRequested(editingId, payload())
 
-    contentItem: ScrollView {
+    contentItem: Flickable {
         id: editorScroll
-        contentWidth: availableWidth
-        ScrollBar.horizontal.policy: ScrollBar.AlwaysOff
         clip: true
+        // Non-interactive form: the outer drag filter is the last press
+        // competitor for the notes area; dragging the form is not needed —
+        // it scrolls by wheel (NoButton MouseArea below) and the attached
+        // scrollbar. Explicit Flickable (not ScrollView) because
+        // interactive is a real Flickable property; ScrollView has none.
+        interactive: false
+        contentWidth: width
+        contentHeight: formLayout.implicitHeight
+        boundsBehavior: Flickable.StopAtBounds
+
+        // Outer wheel scrolling, same NoButton pattern as the notes area:
+        // wheel over the form (outside the notes field, which accepts its
+        // own wheel first) scrolls the form.
+        MouseArea {
+            anchors.fill: parent
+            acceptedButtons: Qt.NoButton
+            onWheel: function(wheel) {
+                const max = Math.max(0, editorScroll.contentHeight
+                                         - editorScroll.height)
+                const step = wheel.pixelDelta.y !== 0
+                    ? wheel.pixelDelta.y
+                    : wheel.angleDelta.y / 2
+                editorScroll.contentY = Math.max(0, Math.min(
+                    max, editorScroll.contentY - step))
+                wheel.accepted = true
+            }
+        }
 
         ColumnLayout {
-            width: editorScroll.availableWidth
-            spacing: 12
+            id: formLayout
+            width: editorScroll.width
+            spacing: 10
 
-            Rectangle {
+            Label {
                 Layout.fillWidth: true
-                implicitHeight: relationLabel.implicitHeight + 22
-                radius: AppTheme.smallRadius
                 visible: root.linkedEventId.length > 0
-                color: AppTheme.withAlpha(AppTheme.accent, AppTheme.dark ? 0.14 : 0.09)
-                border.width: 1
-                border.color: AppTheme.withAlpha(AppTheme.accent, 0.28)
-
-                Label {
-                    id: relationLabel
-                    anchors.fill: parent
-                    anchors.margins: 11
-                    text: qsTr("Linked to this Calendar event. Editing the title or date updates the matching task in Todo.")
-                    color: AppTheme.text
-                    font.pixelSize: 11
-                    wrapMode: Text.WordWrap
-                }
+                text: qsTr("Linked to this Calendar event. Editing the title or date updates the matching task in Todo.")
+                color: AppTheme.mutedText
+                font.pixelSize: 11
+                wrapMode: Text.WordWrap
             }
 
+            Label { text: qsTr("Title"); color: AppTheme.mutedText; font.pixelSize: 11 }
             RowLayout {
                 Layout.fillWidth: true
+                spacing: 8
 
-                ColumnLayout {
+                KosTextField {
+                    id: titleField
                     Layout.fillWidth: true
-                    Label { text: qsTr("Title"); color: AppTheme.mutedText }
-                    KosTextField {
-                        id: titleField
-                        Layout.fillWidth: true
-                        placeholderText: qsTr("Task title")
-                        Accessible.name: qsTr("Task title")
-                    }
+                    Layout.preferredHeight: root.fieldHeight
+                    placeholderText: qsTr("Task title")
+                    Accessible.name: qsTr("Task title")
                 }
 
                 KosCheckBox {
                     id: completedCheck
                     text: qsTr("Completed")
-                    Layout.alignment: Qt.AlignBottom
                 }
             }
 
             RowLayout {
                 Layout.fillWidth: true
+                spacing: 8
 
-                ColumnLayout {
+                Label { text: qsTr("List"); color: AppTheme.mutedText; font.pixelSize: 11 }
+                KosComboBox {
+                    id: listBox
                     Layout.fillWidth: true
-                    Label { text: qsTr("List"); color: AppTheme.mutedText }
-                    KosComboBox {
-                        id: listBox
-                        Layout.fillWidth: true
-                        model: root.availableLists
-                        textRole: "name"
-                    }
+                    Layout.preferredHeight: root.fieldHeight
+                    model: root.availableLists
+                    textRole: "name"
                 }
-
-                ColumnLayout {
-                    Layout.fillWidth: true
-                    Label { text: qsTr("Priority"); color: AppTheme.mutedText }
-                    KosComboBox {
-                        id: priorityBox
-                        Layout.fillWidth: true
-                        model: [qsTr("None"), qsTr("Low"), qsTr("Medium"), qsTr("High")]
-                    }
+                Label { text: qsTr("Priority"); color: AppTheme.mutedText; font.pixelSize: 11 }
+                KosComboBox {
+                    id: priorityBox
+                    Layout.preferredWidth: 110
+                    Layout.preferredHeight: root.fieldHeight
+                    model: [qsTr("None"), qsTr("Low"), qsTr("Medium"), qsTr("High")]
                 }
             }
 
-            Label { text: qsTr("Due date"); color: AppTheme.mutedText }
             RowLayout {
                 Layout.fillWidth: true
+                spacing: 8
 
+                Label { text: qsTr("Due date"); color: AppTheme.mutedText; font.pixelSize: 11 }
                 KosTextField {
                     id: dueDateField
                     Layout.fillWidth: true
+                    Layout.preferredHeight: root.fieldHeight
                     placeholderText: "YYYY-MM-DD"
                     Accessible.name: qsTr("Task due date")
                 }
 
                 KosTextField {
                     id: dueTimeField
-                    Layout.preferredWidth: 96
+                    Layout.preferredWidth: 92
+                    Layout.preferredHeight: root.fieldHeight
                     placeholderText: "HH:MM"
                     enabled: !allDayCheck.checked
                     Accessible.name: qsTr("Task due time")
@@ -197,15 +216,88 @@ KosWorkspaceDialog {
                 wrapMode: Text.WordWrap
             }
 
-            Label { text: qsTr("Notes"); color: AppTheme.mutedText }
-            ScrollView {
+            Label { text: qsTr("Notes"); color: AppTheme.mutedText; font.pixelSize: 11 }
+            // Canonical editable-notes scroller: an explicit Flickable owns
+            // the TextArea. The editor's height follows its wrapped content,
+            // so the flickable gets real vertical extent and the rendered
+            // glyphs move with contentY (no implicit-ScrollView adoption
+            // ambiguity). Bounded 96 viewport, wrapping, cursor and editing
+            // all preserved; the outer form scroll is unaffected because the
+            // flickable consumes wheel events over the notes area.
+            // P02: the neutral field surface is a FIXED frame around the 96px
+            // viewport (KosTextArea's own scrolling background would travel
+            // with the text), so the outline/corners/focus stay put while
+            // only text and thumb move.
+            Item {
+                id: notesFrame
                 Layout.fillWidth: true
-                Layout.preferredHeight: 130
+                Layout.preferredHeight: 96
 
-                KosTextArea {
-                    id: notesField
-                    placeholderText: qsTr("Optional notes")
-                    wrapMode: TextEdit.Wrap
+                KosSurface {
+                    anchors.fill: parent
+                    radius: AppTheme.smallRadius
+                    fillColor: AppTheme.fieldSurface
+                    elevation: 0
+                    focused: notesField.activeFocus
+                }
+
+                Flickable {
+                    id: notesScroll
+                    anchors.fill: parent
+                    clip: true
+                    boundsBehavior: Flickable.StopAtBounds
+                    // Non-interactive: the notes view scrolls by wheel and
+                    // scrollbar only. A Flickable that can drag would let
+                    // its press filter compete with the TextArea for every
+                    // press once the view is scrolled, which is exactly the
+                    // hit-testing failure seen at lines 17/18 — clicks and
+                    // drags then never reach the native text control. With
+                    // interactive off, presses pass straight through to the
+                    // editor (native cursor placement and drag selection),
+                    // while wheel and the visible scrollbar still scroll.
+                    interactive: false
+                    // Native Qt integration (TextArea.flickable attached
+                    // property, per Qt docs): the attached property lives on
+                    // the Flickable and its value IS the TextArea. The
+                    // native text control then owns pointer handling — every
+                    // click moves the cursor, drag selects, and the view
+                    // keeps the cursor visible — while the Flickable only
+                    // provides scrolling. The attached integration derives
+                    // the content geometry from the TextArea itself, so no
+                    // manual height/content/cursor bindings are needed.
+                    TextArea.flickable: KosTextArea {
+                        id: notesField
+                        width: notesScroll.width
+                        placeholderText: qsTr("Optional notes")
+                        wrapMode: TextEdit.Wrap
+                        background: null
+                        activeFocusOnPress: true
+                        selectByMouse: true
+                    }
+
+                    ScrollBar.vertical: ScrollBar {}
+
+                    // Wheel scrolling for the non-interactive flickable.
+                    // MouseArea.onWheel (not a WheelHandler — measured in
+                    // this repo that an independent WheelHandler at this
+                    // layer never receives the wheel). NoButton means the
+                    // area handles ONLY the wheel: clicks and drag-selection
+                    // pass straight through to the native text control, and
+                    // accepting the wheel keeps the outer form from moving.
+                    MouseArea {
+                        anchors.fill: parent
+                        acceptedButtons: Qt.NoButton
+                        onWheel: function(wheel) {
+                            const max = Math.max(0, notesScroll.contentHeight
+                                                     - notesScroll.height)
+                            const step = wheel.pixelDelta.y !== 0
+                                ? wheel.pixelDelta.y
+                                : wheel.angleDelta.y / 2
+                            notesScroll.contentY = Math.max(0, Math.min(
+                                max, notesScroll.contentY - step))
+                            wheel.accepted = true
+                        }
+                    }
                 }
             }
 

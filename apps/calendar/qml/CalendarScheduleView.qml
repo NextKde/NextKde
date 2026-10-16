@@ -5,11 +5,23 @@ import QtQuick.Controls
 import QtQuick.Layouts
 import Kos.Ui
 
-KosCard {
+// L01: flush root — the schedule fills the main canvas edge to edge with no
+// card chrome (the old KosCard added 18 padding, a rounded surface and an
+// outer shadow). Pane keeps the root-level contentItem contract; padding 0
+// and a null background remove the card look. Content structure and signals
+// are unchanged.
+Pane {
     id: root
+
+    padding: 0
+    background: null
 
     required property date firstDate
     required property date currentTime
+    // W03: the ordinary selected date (distinct from today), bound by the
+    // week/day pages in Main.qml.
+    property date selectedDate: invalidDate
+    readonly property date invalidDate: new Date(NaN)
     property int dayCount: 7
     property var itemsForDate: function(date) { return [] }
     property var itemTitle: function(item) { return "" }
@@ -21,6 +33,32 @@ KosCard {
     signal dateSelected(date date)
     signal itemActivated(var item)
     signal createRequested(date date, int hour)
+
+    // W01: one shared geometry source. The gutter and every day column take
+    // their widths from here, so the header, all-day and timed sections all
+    // have identical column boundaries (including the last column at the
+    // scrollbar edge). Columns are laid out from width, never from content
+    // implicit widths; dayCount 1 gets the same gutter with no empty gap.
+    readonly property real gutterWidth: 52
+    readonly property real dayColumnWidth: dayCount > 0
+        ? (scheduleSpanWidth - gutterWidth) / dayCount : 0
+    readonly property real scheduleSpanWidth: width
+
+    // W03: local marker tokens (today red like the macOS reference, subdued
+    // grey for the ordinary selection). Neutral, no shared-theme dependency.
+    readonly property color todayRed: "#E5484D"
+    readonly property color selectionGrey: AppTheme.dark
+        ? Qt.rgba(1, 1, 1, 0.16) : Qt.rgba(0, 0, 0, 0.10)
+    readonly property color normalDateColor: AppTheme.dark
+        ? "#F2F2F2" : "#1A1A1A"
+    readonly property color weekendText: AppTheme.mutedText
+
+    // The scrolling schedule viewport, exposed read-only for the header's
+    // liquid-glass lens: the glass buttons sample a live, blurred strip of
+    // this item (G01/G05). Sampling the viewport rather than the contentItem
+    // means the strip is always the content currently visible under the
+    // header, and follows real scrolling without any contentY binding.
+    readonly property alias contentViewport: timelineScroll
 
     function dateForColumn(column) {
         return new Date(firstDate.getFullYear(), firstDate.getMonth(),
@@ -98,47 +136,90 @@ KosCard {
     contentItem: ColumnLayout {
         spacing: 0
 
+        // W02/W03: compact 36px date header. Weekday (11px) and date (12px)
+        // sit on one shared row, the pair centred in each day column; the
+        // date mark is a 20px red disc for today (white number), a grey
+        // disc for the ordinary selected date, nothing for ordinary days.
+        // Weekend columns read one step dimmer. Column boundaries come from
+        // the shared gutter/column geometry, so header, all-day and timed
+        // sections align exactly.
+        component DayHeaderCell: Item {
+            id: headerCell
+
+            required property date headerDate
+            readonly property bool today: root.sameDay(headerCell.headerDate,
+                                                       root.currentTime)
+            readonly property bool selected: root.sameDay(
+                headerCell.headerDate, root.selectedDate)
+            readonly property bool weekend: headerCell.headerDate.getDay() === 0
+                || headerCell.headerDate.getDay() === 6
+
+            width: root.dayColumnWidth
+            height: 36
+            // Layout-managed: pin all three attached widths to the shared
+            // column width so the RowLayout can never substitute cached
+            // implicit/preferred sizes (an Item's implicitWidth is 0 — the
+            // earlier resize bug came exactly from that fallback).
+            Layout.minimumWidth: root.dayColumnWidth
+            Layout.preferredWidth: root.dayColumnWidth
+            Layout.maximumWidth: root.dayColumnWidth
+            implicitWidth: root.dayColumnWidth
+            objectName: "dayHeaderCell"
+
+            Row {
+                anchors.centerIn: parent
+                spacing: 4
+
+                Label {
+                    anchors.verticalCenter: parent.verticalCenter
+                    text: Qt.locale().dayName(
+                        (headerCell.headerDate.getDay() + 6) % 7 + 1,
+                        Locale.ShortFormat)
+                    color: headerCell.weekend ? root.weekendText
+                                              : AppTheme.text
+                    font.pixelSize: 11
+                }
+
+                Rectangle {
+                    anchors.verticalCenter: parent.verticalCenter
+                    width: 20; height: 20; radius: 10
+                    color: headerCell.today ? root.todayRed
+                        : (headerCell.selected && !headerCell.today
+                           ? root.selectionGrey : "transparent")
+
+                    Label {
+                        anchors.centerIn: parent
+                        text: String(headerCell.headerDate.getDate())
+                        color: headerCell.today ? "#FFFFFF"
+                            : root.normalDateColor
+                        font.pixelSize: 12
+                        font.weight: headerCell.today
+                            ? Font.DemiBold : Font.Normal
+                    }
+                }
+            }
+
+            TapHandler { onTapped: root.dateSelected(headerCell.headerDate) }
+        }
+
         RowLayout {
             Layout.fillWidth: true
             spacing: 0
 
-            Item { Layout.preferredWidth: 58; Layout.preferredHeight: 48 }
+            Item {
+                objectName: "scheduleGutterHeader"
+                Layout.preferredWidth: root.gutterWidth
+                Layout.minimumWidth: root.gutterWidth
+                Layout.maximumWidth: root.gutterWidth
+                Layout.preferredHeight: 36
+            }
 
             Repeater {
                 model: root.dayCount
 
-                delegate: Rectangle {
-                    id: dayHeader
+                delegate: DayHeaderCell {
                     required property int index
-                    readonly property date headerDate: root.dateForColumn(index)
-                    Layout.fillWidth: true
-                    Layout.preferredHeight: 48
-                    color: root.sameDay(headerDate, root.currentTime)
-                        ? AppTheme.withAlpha(AppTheme.accent, AppTheme.dark ? 0.14 : 0.08)
-                        : "transparent"
-
-                    Column {
-                        anchors.centerIn: parent
-                        spacing: 1
-
-                        Label {
-                            anchors.horizontalCenter: parent.horizontalCenter
-                            text: Qt.locale().dayName((dayHeader.headerDate.getDay() + 6) % 7 + 1,
-                                Locale.ShortFormat)
-                            color: AppTheme.mutedText
-                            font.pixelSize: 10
-                        }
-                        Label {
-                            anchors.horizontalCenter: parent.horizontalCenter
-                            text: String(dayHeader.headerDate.getDate())
-                            color: root.sameDay(dayHeader.headerDate, root.currentTime)
-                                ? AppTheme.accent : AppTheme.text
-                            font.pixelSize: 17
-                            font.weight: Font.DemiBold
-                        }
-                    }
-
-                    TapHandler { onTapped: root.dateSelected(dayHeader.headerDate) }
+                    headerDate: root.dateForColumn(index)
                 }
             }
         }
@@ -154,7 +235,10 @@ KosCard {
             spacing: 0
 
             Label {
-                Layout.preferredWidth: 58
+                objectName: "scheduleGutterAllDay"
+                Layout.preferredWidth: root.gutterWidth
+                Layout.minimumWidth: root.gutterWidth
+                Layout.maximumWidth: root.gutterWidth
                 Layout.preferredHeight: 48
                 text: qsTr("all-day")
                 color: AppTheme.mutedText
@@ -172,7 +256,11 @@ KosCard {
                     required property int index
                     readonly property date columnDate: root.dateForColumn(index)
                     readonly property var columnItems: root.allDayItems(columnDate)
-                    Layout.fillWidth: true
+                    width: root.dayColumnWidth
+                    implicitWidth: root.dayColumnWidth
+                    Layout.minimumWidth: root.dayColumnWidth
+                    Layout.preferredWidth: root.dayColumnWidth
+                    Layout.maximumWidth: root.dayColumnWidth
                     Layout.preferredHeight: 48
 
                     ColumnLayout {
@@ -227,7 +315,13 @@ KosCard {
             ScrollBar.horizontal.policy: ScrollBar.AlwaysOff
 
             GridLayout {
+                objectName: "scheduleTimedGrid"
+                // The grid is exactly the viewport width — never wider. Pin
+                // implicitWidth to the same value so the ScrollView's
+                // Flickable contentWidth cannot adopt a stale implicit sum
+                // (that runaway made the grid outlive the window on resize).
                 width: timelineScroll.availableWidth
+                implicitWidth: width
                 columns: root.dayCount + 1
                 columnSpacing: 0
                 rowSpacing: 0
@@ -244,8 +338,18 @@ KosCard {
                         readonly property var cellItems: columnIndex > 0
                             ? root.hourItems(columnDate, rowIndex) : []
 
-                        Layout.preferredWidth: columnIndex === 0 ? 58 : 0
-                        Layout.fillWidth: columnIndex > 0
+                        // W01: same shared gutter width, same dayColumnWidth
+                        // for every timed column — identical boundaries to
+                        // the header/all-day rows. min/preferred/max pinned
+                        // so the grid distributes exactly; the vertical
+                        // scrollbar overlays and never reshapes the columns.
+                        Layout.minimumWidth: columnIndex === 0
+                            ? root.gutterWidth : root.dayColumnWidth
+                        Layout.preferredWidth: columnIndex === 0
+                            ? root.gutterWidth : root.dayColumnWidth
+                        Layout.maximumWidth: columnIndex === 0
+                            ? root.gutterWidth : root.dayColumnWidth
+                        Layout.fillWidth: false
                         Layout.preferredHeight: 54
 
                         Label {
@@ -263,10 +367,7 @@ KosCard {
                         Rectangle {
                             anchors.fill: parent
                             visible: hourCell.columnIndex > 0
-                            color: root.sameDay(hourCell.columnDate, root.currentTime)
-                                ? AppTheme.withAlpha(AppTheme.accent,
-                                    AppTheme.dark ? 0.035 : 0.022)
-                                : "transparent"
+                            color: "transparent"
                             border.width: 1
                             border.color: AppTheme.border
 

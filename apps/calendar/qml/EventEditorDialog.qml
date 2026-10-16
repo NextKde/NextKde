@@ -17,12 +17,24 @@ KosWorkspaceDialog {
     signal saveRequested(string uid, var event)
     signal deleteRequested(string uid)
 
+    // P02: one consistent field height for every editor control.
+    readonly property int fieldHeight: 30
+
     title: editing ? qsTr("Edit event") : qsTr("New event")
     modal: true
-    width: Math.min(620, parent ? parent.width - 48 : 620)
-    height: Math.min(730, parent ? parent.height - 48 : 730)
+    // P02/P03: compact editor — 380 wide, and never taller than the client
+    // viewport minus margins so the footer stays reachable at 760x540.
+    width: Math.min(380, parent ? parent.width - 48 : 380)
+    height: Math.min(620, parent ? parent.height - 64 : 620)
     anchors.centerIn: parent
     standardButtons: Dialog.Save | Dialog.Cancel
+    // P02: calendar-local neutral surface — the shared blue-gray windowRaised
+    // tint is replaced with a flat neutral panel; same elevation language.
+    background: KosSurface {
+        radius: AppTheme.smallRadius + 4
+        fillColor: AppTheme.dark ? "#262626" : "#F7F7F7"
+        elevation: 0.5
+    }
 
     function twoDigits(value) {
         return value < 10 ? "0" + value : String(value)
@@ -164,25 +176,52 @@ KosWorkspaceDialog {
         contentWidth: availableWidth
         ScrollBar.horizontal.policy: ScrollBar.AlwaysOff
         clip: true
+        // Non-interactive form (see task editor): removes the outer drag
+        // filter that steals presses aimed at the scrolled notes; the form
+        // scrolls by wheel + scrollbar.
+        interactive: false
 
+        MouseArea {
+            anchors.fill: parent
+            acceptedButtons: Qt.NoButton
+            onWheel: function(wheel) {
+                const flickable = editorScroll.contentItem
+                if (!flickable)
+                    return
+                const max = Math.max(0, flickable.contentHeight
+                                         - editorScroll.height)
+                const step = wheel.pixelDelta.y !== 0
+                    ? wheel.pixelDelta.y
+                    : wheel.angleDelta.y / 2
+                flickable.contentY = Math.max(0, Math.min(
+                    max, flickable.contentY - step))
+                wheel.accepted = true
+            }
+        }
+
+        // P02: aligned label-left rows with one field height; compact 380
+        // editor keeps every existing field, just visually tamed.
         ColumnLayout {
             width: editorScroll.availableWidth
-            spacing: 12
+            spacing: 10
 
             Label {
                 text: qsTr("Title")
                 color: AppTheme.mutedText
+                font.pixelSize: 11
             }
 
             KosTextField {
                 id: titleField
                 Layout.fillWidth: true
+                Layout.preferredHeight: fieldHeight
                 placeholderText: qsTr("Event title")
                 Accessible.name: qsTr("Event title")
             }
 
             RowLayout {
                 Layout.fillWidth: true
+                spacing: 10
 
                 KosCheckBox {
                     id: allDayCheck
@@ -197,161 +236,196 @@ KosWorkspaceDialog {
                 }
 
                 Item { Layout.fillWidth: true }
-
-                Label {
-                    text: qsTr("Use YYYY-MM-DD and 24-hour time")
-                    color: AppTheme.mutedText
-                    font.pixelSize: 11
-                }
             }
 
             GridLayout {
                 Layout.fillWidth: true
-                columns: 3
-                columnSpacing: 10
+                columns: 4
+                columnSpacing: 8
                 rowSpacing: 8
 
-                Label { text: qsTr("Start"); color: AppTheme.mutedText }
+                Label { text: qsTr("Start"); color: AppTheme.mutedText; font.pixelSize: 11 }
                 KosTextField {
                     id: startDateField
                     Layout.fillWidth: true
+                    Layout.preferredHeight: fieldHeight
                     placeholderText: "YYYY-MM-DD"
                     Accessible.name: qsTr("Start date")
                 }
+                Label { text: qsTr("End"); color: AppTheme.mutedText; font.pixelSize: 11 }
+                KosTextField {
+                    id: endDateField
+                    Layout.fillWidth: true
+                    Layout.preferredHeight: fieldHeight
+                    placeholderText: "YYYY-MM-DD"
+                    Accessible.name: qsTr("End date")
+                }
+
+                Item { Layout.fillWidth: true }
                 KosTextField {
                     id: startTimeField
-                    Layout.preferredWidth: 96
+                    Layout.preferredWidth: 92
+                    Layout.preferredHeight: fieldHeight
                     placeholderText: "HH:MM"
                     enabled: !allDayCheck.checked
                     Accessible.name: qsTr("Start time")
                 }
-
-                Label { text: qsTr("End"); color: AppTheme.mutedText }
-                KosTextField {
-                    id: endDateField
-                    Layout.fillWidth: true
-                    placeholderText: "YYYY-MM-DD"
-                    Accessible.name: qsTr("End date")
-                }
+                Item { Layout.fillWidth: true }
                 KosTextField {
                     id: endTimeField
-                    Layout.preferredWidth: 96
+                    Layout.preferredWidth: 92
+                    Layout.preferredHeight: fieldHeight
                     placeholderText: "HH:MM"
                     enabled: !allDayCheck.checked
                     Accessible.name: qsTr("End time")
                 }
             }
 
-            Label { text: qsTr("Location"); color: AppTheme.mutedText }
+            Label { text: qsTr("Location"); color: AppTheme.mutedText; font.pixelSize: 11 }
             KosTextField {
                 id: locationField
                 Layout.fillWidth: true
+                Layout.preferredHeight: fieldHeight
                 placeholderText: qsTr("Optional location")
                 Accessible.name: qsTr("Event location")
             }
 
-            Rectangle {
+            // P02: subdued task link — same semantics, quiet neutral chip
+            // instead of the large blue card. List/priority reveal only
+            // while linked.
+            ColumnLayout {
                 Layout.fillWidth: true
-                implicitHeight: todoLinkLayout.implicitHeight + 24
-                radius: AppTheme.smallRadius
-                color: AppTheme.withAlpha(AppTheme.accent, AppTheme.dark ? 0.13 : 0.08)
-                border.width: 1
-                border.color: AppTheme.withAlpha(AppTheme.accent, 0.24)
+                spacing: 8
 
-                ColumnLayout {
-                    id: todoLinkLayout
-                    anchors.fill: parent
-                    anchors.margins: 12
+                KosCheckBox {
+                    id: linkTodoCheck
+                    text: qsTr("Also show this event as a task in Todo")
+                    Accessible.description: qsTr("The title and schedule stay synchronized")
+                }
+
+                Label {
+                    Layout.fillWidth: true
+                    text: root.linkedTodoId.length > 0 && !linkTodoCheck.checked
+                        ? qsTr("Saving will unlink the existing task but keep it in Todo.")
+                        : qsTr("Changes to the title or date will be reflected in both apps.")
+                    visible: linkTodoCheck.checked
+                        || (root.linkedTodoId.length > 0 && !linkTodoCheck.checked)
+                    color: root.linkedTodoId.length > 0 && !linkTodoCheck.checked
+                        ? AppTheme.warning : AppTheme.mutedText
+                    font.pixelSize: 11
+                    wrapMode: Text.WordWrap
+                }
+
+                RowLayout {
+                    Layout.fillWidth: true
+                    visible: linkTodoCheck.checked
                     spacing: 8
 
-                    KosCheckBox {
-                        id: linkTodoCheck
-                        text: qsTr("Also show this event as a task in Todo")
-                        font.weight: Font.DemiBold
-                        Accessible.description: qsTr("The title and schedule stay synchronized")
-                    }
-
-                    Label {
+                    Label { text: qsTr("Todo list"); color: AppTheme.mutedText; font.pixelSize: 11 }
+                    KosComboBox {
+                        id: todoListBox
                         Layout.fillWidth: true
-                        text: root.linkedTodoId.length > 0 && !linkTodoCheck.checked
-                            ? qsTr("Saving will unlink the existing task but keep it in Todo.")
-                            : qsTr("Changes to the title or date will be reflected in both apps.")
-                        color: root.linkedTodoId.length > 0 && !linkTodoCheck.checked
-                            ? AppTheme.warning : AppTheme.mutedText
-                        font.pixelSize: 11
-                        wrapMode: Text.WordWrap
+                        Layout.preferredHeight: fieldHeight
+                        model: root.availableLists
+                        textRole: "name"
+                        Accessible.name: qsTr("Linked todo list")
                     }
-
-                    RowLayout {
-                        Layout.fillWidth: true
-                        visible: linkTodoCheck.checked
-
-                        ColumnLayout {
-                            Layout.fillWidth: true
-                            Label { text: qsTr("Todo list"); color: AppTheme.mutedText }
-                            KosComboBox {
-                                id: todoListBox
-                                Layout.fillWidth: true
-                                model: root.availableLists
-                                textRole: "name"
-                                Accessible.name: qsTr("Linked todo list")
-                            }
-                        }
-
-                        ColumnLayout {
-                            Layout.fillWidth: true
-                            Label { text: qsTr("Priority"); color: AppTheme.mutedText }
-                            KosComboBox {
-                                id: todoPriorityBox
-                                Layout.fillWidth: true
-                                model: [qsTr("None"), qsTr("Low"), qsTr("Medium"),
-                                    qsTr("High")]
-                                Accessible.name: qsTr("Linked todo priority")
-                            }
-                        }
+                    Label { text: qsTr("Priority"); color: AppTheme.mutedText; font.pixelSize: 11 }
+                    KosComboBox {
+                        id: todoPriorityBox
+                        Layout.preferredWidth: 110
+                        Layout.preferredHeight: fieldHeight
+                        model: [qsTr("None"), qsTr("Low"), qsTr("Medium"),
+                            qsTr("High")]
+                        Accessible.name: qsTr("Linked todo priority")
                     }
                 }
             }
 
             RowLayout {
                 Layout.fillWidth: true
+                spacing: 8
 
-                ColumnLayout {
+                Label { text: qsTr("Repeat"); color: AppTheme.mutedText; font.pixelSize: 11 }
+                KosComboBox {
+                    id: recurrenceBox
                     Layout.fillWidth: true
-                    Label { text: qsTr("Repeat"); color: AppTheme.mutedText }
-                    KosComboBox {
-                        id: recurrenceBox
-                        Layout.fillWidth: true
-                        model: [qsTr("Does not repeat"), qsTr("Daily"), qsTr("Weekly"),
-                            qsTr("Monthly"), qsTr("Yearly")]
-                        Accessible.name: qsTr("Event recurrence")
-                    }
+                    Layout.preferredHeight: fieldHeight
+                    model: [qsTr("Does not repeat"), qsTr("Daily"), qsTr("Weekly"),
+                        qsTr("Monthly"), qsTr("Yearly")]
+                    Accessible.name: qsTr("Event recurrence")
                 }
-
-                ColumnLayout {
+                Label { text: qsTr("Reminder"); color: AppTheme.mutedText; font.pixelSize: 11 }
+                KosComboBox {
+                    id: reminderBox
                     Layout.fillWidth: true
-                    Label { text: qsTr("Reminder"); color: AppTheme.mutedText }
-                    KosComboBox {
-                        id: reminderBox
-                        Layout.fillWidth: true
-                        model: [qsTr("None"), qsTr("At start"), qsTr("5 minutes before"),
-                            qsTr("15 minutes before"), qsTr("30 minutes before"),
-                            qsTr("1 hour before"), qsTr("1 day before")]
-                        Accessible.name: qsTr("Event reminder")
-                    }
+                    Layout.preferredHeight: fieldHeight
+                    model: [qsTr("None"), qsTr("At start"), qsTr("5 minutes before"),
+                        qsTr("15 minutes before"), qsTr("30 minutes before"),
+                        qsTr("1 hour before"), qsTr("1 day before")]
+                    Accessible.name: qsTr("Event reminder")
                 }
             }
 
-            Label { text: qsTr("Notes"); color: AppTheme.mutedText }
-            ScrollView {
+            Label { text: qsTr("Notes"); color: AppTheme.mutedText; font.pixelSize: 11 }
+            // Canonical editable-notes scroller, same as the task editor.
+            // P02: fixed neutral frame around the notes viewport — same
+            // treatment as the task editor.
+            Item {
+                id: notesFrame
                 Layout.fillWidth: true
-                Layout.preferredHeight: 130
+                Layout.preferredHeight: 96
 
-                KosTextArea {
-                    id: descriptionField
-                    placeholderText: qsTr("Optional notes")
-                    wrapMode: TextEdit.Wrap
-                    Accessible.name: qsTr("Event notes")
+                KosSurface {
+                    anchors.fill: parent
+                    radius: AppTheme.smallRadius
+                    fillColor: AppTheme.fieldSurface
+                    elevation: 0
+                    focused: descriptionField.activeFocus
+                }
+
+                Flickable {
+                    id: notesScroll
+                    anchors.fill: parent
+                    clip: true
+                    boundsBehavior: Flickable.StopAtBounds
+                    // Non-interactive (see task editor): wheel + scrollbar
+                    // scrolling, presses always reach the editor.
+                    interactive: false
+                    // Native TextArea.flickable attached integration — the
+                    // attached property is on the Flickable, its value is
+                    // the TextArea; native pointer/cursor/selection ownership.
+                    TextArea.flickable: KosTextArea {
+                        id: descriptionField
+                        width: notesScroll.width
+                        placeholderText: qsTr("Optional notes")
+                        wrapMode: TextEdit.Wrap
+                        Accessible.name: qsTr("Event notes")
+                        background: null
+                        activeFocusOnPress: true
+                        selectByMouse: true
+                    }
+
+                    ScrollBar.vertical: ScrollBar {}
+
+                    // Wheel scrolling for the non-interactive flickable —
+                    // same NoButton MouseArea pattern as the task editor:
+                    // wheel-only, clicks/drag-selection pass through, and
+                    // the outer form does not move.
+                    MouseArea {
+                        anchors.fill: parent
+                        acceptedButtons: Qt.NoButton
+                        onWheel: function(wheel) {
+                            const max = Math.max(0, notesScroll.contentHeight
+                                                     - notesScroll.height)
+                            const step = wheel.pixelDelta.y !== 0
+                                ? wheel.pixelDelta.y
+                                : wheel.angleDelta.y / 2
+                            notesScroll.contentY = Math.max(0, Math.min(
+                                max, notesScroll.contentY - step))
+                            wheel.accepted = true
+                        }
+                    }
                 }
             }
 
