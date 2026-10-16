@@ -222,6 +222,9 @@ Item {
     // 的每个输入都必须有发布触发
     onCloseHotChanged: livePoseDirty()
     onMergeGlowChanged: livePoseDirty()
+    // dwellHint 同族补漏（合并驻留的本质是"指针停住"——停住后姿态全
+    // 静止＝零发布触发，特效看不到武装态；驻留到点 layoutCards 才补发）
+    onDwellHintChanged: livePoseDirty()
     // v2：发布**静止姿态** + 卡面元数据。悬停放大/压平动画不再由 QML
     // 驱动（特效 cursorPos 自驱，同管线像素级同步）——这里除放
     // card.scale（TopLeft 变换原点下原点不动，仅 w/h 回到静止尺寸），
@@ -257,6 +260,7 @@ Item {
             // 展开窗口动画的起摆姿态；交棒时卡不压平）
             engagingTilt: (card.rightSide ? -1 : 1) * restTilt,
             hoverMs: StageConfigService.cardEnterDuration + 40,
+            hoverDwellMs: StageConfigService.hoverDwellDelay,
             tiltMs: StageConfigService.tiltAnimDuration,
             enterMs: StageConfigService.cardEnterDuration,
             animMs: StageConfigService.animDuration,
@@ -288,7 +292,7 @@ Item {
         ? (parent ? parent.width - width - StageGeo.CARD_X_INSET : 0)
             - ((shown || enterInstant) ? 0 : 70)
         : StageGeo.CARD_X_INSET + ((shown || enterInstant) ? 0 : 70)
-    opacity: engaging ? 0.0 : (shown ? 1.0 : 0.0)
+    opacity: (engaging ? 0.0 : (shown ? 1.0 : 0.0)) * StageConfigService.cardOpacity
     scale: (shown || enterInstant)
         ? (isHovered ? StageConfigService.hoverScale : 1.0) : 0.86
     // 悬停放大从左上角外扩（与 slot 的 TopLeft 缩放同向）：上边钉死、只向

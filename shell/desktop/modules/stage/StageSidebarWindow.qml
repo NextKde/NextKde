@@ -544,6 +544,9 @@ PanelWindow {
             return
         // 整组同拍收编：退位应用的全部窗口一起飞回组卡
         _cancelPendingDemote()
+        // 被还原组同拍置 engaging（dock 点击路径没有卡片交棒时序）——
+        // 不置位＝组卡随记录翻转移出模型时特效满 alpha 等迟到踢除＝瞬消
+        root._markEngagingByIds([windowId])
         captureAndDemote(_demoteGroupIds(demotedId),
             root._effKey(activeRec), false)
     }
@@ -1146,10 +1149,13 @@ PanelWindow {
                     fade: slot.opacity,            // 压暗 × 边缘渐隐（QML 同源）
                     closeHover: slot.cardItem.closeHot,
                     hoverScale: p.hoverScale, hoverTilt: p.hoverTilt,
-                    hoverMs: p.hoverMs, fanSpacing: p.fanSpacing,
+                    hoverMs: p.hoverMs,
+                    hoverDwellMs: p.hoverDwellMs !== undefined ? p.hoverDwellMs : 0,
+                    fanSpacing: p.fanSpacing,
                     fanHoverSpread: p.fanHoverSpread,
                     cardTint: p.cardTint, cardBorder: p.cardBorder,
-                    cardDepth: p.cardDepth, cardTopLight: p.cardTopLight })
+                    cardDepth: p.cardDepth, cardTopLight: p.cardTopLight,
+                    cardOpacity: p.cardOpacity !== undefined ? p.cardOpacity : 1.0 })
             }
         }
         // ⚠️ 载荷去重：桥事件风暴（缩略图等高频事件驱动 syncCards→
