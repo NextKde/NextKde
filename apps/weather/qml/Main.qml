@@ -283,7 +283,7 @@ KosApplicationWindow {
 
     RowLayout {
         anchors.fill: parent
-        anchors.margins: 12
+        anchors.margins: 0
         spacing: 8
 
         KosSidebar {
@@ -291,25 +291,23 @@ KosApplicationWindow {
             objectName: "applicationSidebar"
             expanded: root.sidebarExpanded
             expandedWidth: root.compact ? AppTheme.compactSidebarWidth : AppTheme.sidebarWidth
-            surfaceColor: Qt.rgba(0.055, 0.137, 0.251, 0.62)
+            floating: false
 
             ColumnLayout {
                 anchors.fill: parent
                 anchors.margins: 18
                 spacing: 10
 
-                Label {
-                    text: qsTr("KOS Weather")
-                    color: AppTheme.text
-                    font.pixelSize: 20
-                    font.weight: Font.DemiBold
-                    Layout.bottomMargin: 8
-                }
-
                 KosTextField {
                     id: locationField
                     Layout.fillWidth: true
-                    placeholderText: qsTr("Search locations…")
+                    Layout.preferredHeight: 30
+                    cornerRadius: 15
+                    glassColor: Qt.rgba(1, 1, 1, 0.22)
+                    outlineColor: Qt.rgba(1, 1, 1, 0.30)
+                    textColor: "#ffffff"
+                    mutedTextColor: Qt.rgba(1, 1, 1, 0.66)
+                    placeholderText: qsTr("Search")
                     Accessible.name: qsTr("Location search")
                     onAccepted: backend.searchLocations(text)
                     onTextChanged: {
@@ -371,25 +369,6 @@ KosApplicationWindow {
                         }
                     }
                     KosKineticScroll { flickable: searchResults }
-                }
-
-                RowLayout {
-                    Layout.topMargin: 8
-                    Accessible.name: qsTr("Saved locations")
-
-                    Label {
-                        text: "●"
-                        color: AppTheme.accent
-                        font.pixelSize: 8
-                        Accessible.ignored: true
-                    }
-                    Label {
-                        text: qsTr("Locations")
-                        color: AppTheme.mutedText
-                        font.pixelSize: 11
-                        font.weight: Font.DemiBold
-                        Accessible.ignored: true
-                    }
                 }
 
                 ListView {
