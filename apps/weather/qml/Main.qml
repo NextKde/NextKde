@@ -1178,13 +1178,25 @@ KosApplicationWindow {
                     }
 
                     KosCard {
+                        id: conditionsCard
                         Layout.fillWidth: true
+
+                        HoverHandler { id: conditionsHover }
+                        property bool cardHot: conditionsHover.hovered
+                        property real hoverFill: cardHot ? 0.21 : 0.16
+                        Behavior on hoverFill { NumberAnimation { duration: AppTheme.motionNormal; easing.type: Easing.OutCubic } }
+                        property real hoverStroke: cardHot ? 0.32 : 0.22
+                        Behavior on hoverStroke { NumberAnimation { duration: AppTheme.motionNormal; easing.type: Easing.OutCubic } }
+                        transform: Translate {
+                            y: AppTheme.reduceMotion ? 0 : (conditionsCard.cardHot ? -3 : 0)
+                            Behavior on y { NumberAnimation { duration: AppTheme.motionNormal; easing.type: Easing.OutCubic } }
+                        }
 
                         background: KosSurface {
                             radius: 14
-                            fillColor: Qt.rgba(1, 1, 1, 0.16)
+                            fillColor: Qt.rgba(1, 1, 1, conditionsCard.hoverFill)
                             strokeWidth: 1
-                            strokeColor: Qt.rgba(1, 1, 1, 0.22)
+                            strokeColor: Qt.rgba(1, 1, 1, conditionsCard.hoverStroke)
                             elevation: 0
                         }
 
@@ -1370,14 +1382,26 @@ KosApplicationWindow {
                     }
 
                     KosCard {
+                        id: dailyCard
                         Layout.fillWidth: true
                         Layout.preferredHeight: dailyColumn.implicitHeight + padding * 2
 
+                        HoverHandler { id: dailyHover }
+                        property bool cardHot: dailyHover.hovered
+                        property real hoverFill: cardHot ? 0.21 : 0.16
+                        Behavior on hoverFill { NumberAnimation { duration: AppTheme.motionNormal; easing.type: Easing.OutCubic } }
+                        property real hoverStroke: cardHot ? 0.32 : 0.22
+                        Behavior on hoverStroke { NumberAnimation { duration: AppTheme.motionNormal; easing.type: Easing.OutCubic } }
+                        transform: Translate {
+                            y: AppTheme.reduceMotion ? 0 : (dailyCard.cardHot ? -3 : 0)
+                            Behavior on y { NumberAnimation { duration: AppTheme.motionNormal; easing.type: Easing.OutCubic } }
+                        }
+
                         background: KosSurface {
                             radius: 14
-                            fillColor: Qt.rgba(1, 1, 1, 0.16)
+                            fillColor: Qt.rgba(1, 1, 1, dailyCard.hoverFill)
                             strokeWidth: 1
-                            strokeColor: Qt.rgba(1, 1, 1, 0.22)
+                            strokeColor: Qt.rgba(1, 1, 1, dailyCard.hoverStroke)
                             elevation: 0
                         }
 
