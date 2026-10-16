@@ -1468,6 +1468,7 @@ KosApplicationWindow {
                                             Layout.preferredHeight: 26
                                             code: root.number(hourlyCard.modelData, "weatherCode", -1)
                                             isDay: Boolean(root.value(hourlyCard.modelData, "isDay", true))
+                                            pulse: backend.loading && !AppTheme.reduceMotion
                                             transform: Translate { id: iconBounceShift; y: 0 }
                                             Accessible.ignored: true
                                         }
@@ -1589,6 +1590,7 @@ KosApplicationWindow {
                                                 height: 24
                                                 code: root.number(dailyRow.modelData, "weatherCode", -1)
                                                 isDay: true
+                                                pulse: backend.loading && !AppTheme.reduceMotion
                                                 Accessible.ignored: true
                                             }
 

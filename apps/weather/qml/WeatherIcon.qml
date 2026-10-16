@@ -11,6 +11,16 @@ Canvas {
 
     property int code: 0
     property bool isDay: true
+    property bool pulse: false
+    property real pulseOpacity: 1.0
+    opacity: root.pulse ? root.pulseOpacity : 1.0
+    onPulseChanged: if (!pulse) pulseOpacity = 1.0
+    SequentialAnimation on pulseOpacity {
+        running: root.pulse
+        loops: Animation.Infinite
+        NumberAnimation { to: 0.45; duration: 550; easing.type: Easing.InOutSine }
+        NumberAnimation { to: 1.0; duration: 550; easing.type: Easing.InOutSine }
+    }
 
     onCodeChanged: requestPaint()
     onIsDayChanged: requestPaint()
