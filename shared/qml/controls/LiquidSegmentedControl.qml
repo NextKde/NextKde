@@ -114,9 +114,9 @@ Item {
 
     Rectangle {
         id: lens
-        x: 2 + root._visualIndex * root.segmentWidth
+        x: 4 + root._visualIndex * root.segmentWidth
         y: 2
-        width: root.segmentWidth
+        width: root.segmentWidth - 4
         height: root.height - 4
         radius: root.materialForm ? height / 2 : height * 0.48
         color: root.selectionColor
