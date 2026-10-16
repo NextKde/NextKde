@@ -2045,254 +2045,277 @@ KosApplicationWindow {
                         }
                     }
 
-                    RowLayout {
+                    // Conditions 单卡：包住 头部行 + 右上分段胶囊 + 逐小时列（对齐 ref-main）
+                    KosCard {
+                        id: hourlyConditionsCard
                         Layout.fillWidth: true
 
-                        Label {
-                            Layout.fillWidth: true
-                            text: qsTr("Hourly")
-                            color: root.skyTextMuted
-                            font.pixelSize: 18
-                            font.weight: Font.DemiBold
-                            Accessible.name: qsTr("Hourly forecast")
+                        background: KosSurface {
+                            radius: 14
+                            fillColor: Qt.rgba(root.cardGlassRgb.r, root.cardGlassRgb.g, root.cardGlassRgb.b, root.currentIsDay ? root.cardGlassAlpha : 0.16)
+                            strokeWidth: 1
+                            strokeColor: Qt.rgba(1, 1, 1, 0.22)
+                            elevation: 0
                         }
 
-                        // 三段胶囊切换钮，参照 ref-main Conditions 卡右上分段控件。
-                        // segment 0 = 温度/图标视图（默认，参考图选中态），
-                        // segment 1 = 逐小时降水概率视图；
-                        // segment 2 = 逐小时风速视图（后端 hourlyPoint.windSpeed 已有）。
-                        Item {
-                            id: hourlySegmented
-                            implicitWidth: 132
-                            implicitHeight: 36
-                            Layout.alignment: Qt.AlignVCenter
-                            property int segment: 0
-
-                            Rectangle {
-                                anchors.fill: parent
-                                radius: 18
-                                color: Qt.rgba(1, 1, 1, 0.14)
-                                border.width: 1
-                                border.color: Qt.rgba(1, 1, 1, 0.22)
-                            }
-
-                            // 选中圆盘（当前段背后）
-                            Rectangle {
-                                x: 3 + 44 * hourlySegmented.segment
-                                y: 3
-                                width: 30
-                                height: 30
-                                radius: 15
-                                color: Qt.rgba(1, 1, 1, 0.27)
-                            }
-
-                            AbstractButton {
-                                x: 0
-                                width: 44
-                                height: 36
-                                background: null
-                                contentItem: Label {
-                                    horizontalAlignment: Text.AlignHCenter
-                                    verticalAlignment: Text.AlignVCenter
-                                    text: "☁"
-                                    color: hourlySegmented.segment === 0 ? "#ffffff" : Qt.rgba(1, 1, 1, 0.9)
-                                    font.pixelSize: 16
-                                }
-                                onClicked: hourlySegmented.segment = 0
-                                Accessible.name: qsTr("Hourly conditions")
-                            }
-                            AbstractButton {
-                                x: 44
-                                width: 44
-                                height: 36
-                                background: null
-                                // ref-main 实测降水段为实心水滴 6×9px@814（胶囊高 25px），我方胶囊 36px 按 1.44 折算 ≈ 9×13
-                                // Control 会覆写 contentItem 几何，Canvas 需包 Item 再居中（ref 胶囊中心 225 vs 水滴中心 225.5 居中）
-                                contentItem: Item {
-                                    anchors.fill: parent
-                                    Canvas {
-                                        id: dropCanvas
-                                        width: 12
-                                        height: 16
-                                        anchors.centerIn: parent
-                                        antialiasing: true
-                                        onPaint: {
-                                            var ctx = getContext("2d")
-                                            ctx.reset()
-                                            ctx.beginPath()
-                                            ctx.moveTo(6, 1.5)
-                                            ctx.bezierCurveTo(8.2, 5.0, 10, 7.6, 10, 10.5)  // 右侧下行到圆右端
-                                            ctx.arc(6, 10.5, 4, 0, Math.PI, false)          // 经底部从右到左
-                                            ctx.bezierCurveTo(2, 7.6, 3.8, 5.0, 6, 1.5)     // 左侧收回尖点
-                                            ctx.closePath()
-                                            ctx.fillStyle = hourlySegmented.segment === 1 ? "#ffffff" : Qt.rgba(1, 1, 1, 0.9)
-                                            ctx.fill()
-                                        }
-                                        // segment 属于外层 hourlySegmented，Canvas 上无法直接写 onSegmentChanged
-                                        //（qmllint: no matching signal，运行时不触发），改用 Connections 监听后重绘
-                                        Connections {
-                                            target: hourlySegmented
-                                            function onSegmentChanged() { dropCanvas.requestPaint() }
-                                        }
-                                        Component.onCompleted: requestPaint()
-                                        Accessible.ignored: true
-                                    }
-                                }
-                                onClicked: hourlySegmented.segment = 1
-                                Accessible.name: qsTr("Hourly precipitation")
-                            }
-                            AbstractButton {
-                                x: 88
-                                width: 44
-                                height: 36
-                                background: null
-                                contentItem: Label {
-                                    horizontalAlignment: Text.AlignHCenter
-                                    verticalAlignment: Text.AlignVCenter
-                                    text: "≋"
-                                    color: hourlySegmented.segment === 2 ? "#ffffff" : Qt.rgba(1, 1, 1, 0.9)
-                                    font.pixelSize: 16
-                                }
-                                onClicked: hourlySegmented.segment = 2
-                                Accessible.name: qsTr("Hourly wind")
-                            }
-                        }
-                    }
-
-                    Flickable {
-                        Layout.fillWidth: true
-                        Layout.preferredHeight: 142
-                        contentWidth: hourlyRow.implicitWidth
-                        contentHeight: height
-                        boundsBehavior: Flickable.StopAtBounds
-                        clip: true
-
-                        ScrollBar.horizontal: ScrollBar {}
-
-                        Row {
-                            id: hourlyRow
-                            height: parent.height - 12
+                        contentItem: ColumnLayout {
                             spacing: 10
 
-                            Repeater {
-                                model: root.upcomingHours
+                            RowLayout {
+                                Layout.fillWidth: true
 
-                                delegate: KosCard {
-                                    id: hourlyCard
+                                ColumnLayout {
+                                    spacing: 1
+                                    Layout.fillWidth: true
 
-                                    required property var modelData
-                                    required property int index
-                                    width: 108
-                                    height: hourlyRow.height
-                                    padding: 12
-                                    opacity: 0
-                                    transform: Translate { id: entranceShift; y: 14 }
-
-                                    Component.onCompleted: {
-                                        if (AppTheme.reduceMotion) {
-                                            hourlyCard.opacity = 1
-                                            entranceShift.y = 0
-                                            iconBounceShift.y = 0
-                                            return
-                                        }
-                                        entranceAnim.restart()
-                                        iconBounceAnim.restart()
+                                    Label {
+                                        Layout.fillWidth: true
+                                        text: qsTr("Conditions")
+                                        color: root.skyText
+                                        font.pixelSize: 14
+                                        font.weight: Font.DemiBold
+                                        Accessible.name: qsTr("Hourly forecast")
                                     }
 
-                                    SequentialAnimation {
-                                        id: entranceAnim
-                                        PauseAnimation { duration: 40 * hourlyCard.index }
-                                        ParallelAnimation {
-                                            NumberAnimation { target: hourlyCard; property: "opacity"; to: 1; duration: 260; easing.type: Easing.OutCubic }
-                                            NumberAnimation { target: entranceShift; property: "y"; to: 0; duration: 260; easing.type: Easing.OutCubic }
-                                        }
+                                    // 副标题为外推：固定展示温度单位，不随 segment 切换
+                                    Label {
+                                        Layout.fillWidth: true
+                                        text: qsTr("Temperature (%1)").arg(root.temperatureUnit)
+                                        color: root.skyTextMuted
+                                        font.pixelSize: 11
+                                    }
+                                }
+
+                                // 三段胶囊切换钮，参照 ref-main Conditions 卡右上分段控件。
+                                // segment 0 = 温度/图标视图（默认，参考图选中态），
+                                // segment 1 = 逐小时降水概率视图；
+                                // segment 2 = 逐小时风速视图（后端 hourlyPoint.windSpeed 已有）。
+                                Item {
+                                    id: hourlySegmented
+                                    implicitWidth: 132
+                                    implicitHeight: 36
+                                    Layout.alignment: Qt.AlignTop | Qt.AlignRight
+                                    property int segment: 0
+
+                                    Rectangle {
+                                        anchors.fill: parent
+                                        radius: 18
+                                        color: Qt.rgba(1, 1, 1, 0.14)
+                                        border.width: 1
+                                        border.color: Qt.rgba(1, 1, 1, 0.22)
                                     }
 
-                                    SequentialAnimation {
-                                        id: iconBounceAnim
-                                        PauseAnimation { duration: 300 + 40 * hourlyCard.index }
-                                        NumberAnimation { target: iconBounceShift; property: "y"; to: -6; duration: 110; easing.type: Easing.OutCubic }
-                                        NumberAnimation { target: iconBounceShift; property: "y"; to: 0; duration: 160; easing.type: Easing.OutBack }
+                                    // 选中圆盘（当前段背后）
+                                    Rectangle {
+                                        x: 3 + 44 * hourlySegmented.segment
+                                        y: 3
+                                        width: 30
+                                        height: 30
+                                        radius: 15
+                                        color: Qt.rgba(1, 1, 1, 0.27)
                                     }
 
-                                    background: KosSurface {
-                                        radius: 14
-                                        fillColor: Qt.rgba(root.cardGlassRgb.r, root.cardGlassRgb.g, root.cardGlassRgb.b, root.currentIsDay ? root.cardGlassAlpha : 0.20)
-                                        strokeWidth: 1
-                                        strokeColor: Qt.rgba(1, 1, 1, 0.22)
-                                        elevation: 0
+                                    AbstractButton {
+                                        x: 0
+                                        width: 44
+                                        height: 36
+                                        background: null
+                                        contentItem: Label {
+                                            horizontalAlignment: Text.AlignHCenter
+                                            verticalAlignment: Text.AlignVCenter
+                                            text: "☁"
+                                            color: hourlySegmented.segment === 0 ? "#ffffff" : Qt.rgba(1, 1, 1, 0.9)
+                                            font.pixelSize: 16
+                                        }
+                                        onClicked: hourlySegmented.segment = 0
+                                        Accessible.name: qsTr("Hourly conditions")
                                     }
-
-                                    contentItem: ColumnLayout {
-                                        spacing: 4
-
-                                        Label {
-                                            Layout.alignment: Qt.AlignHCenter
-                                            text: root.localTime(root.value(
-                                                hourlyCard.modelData, "time", ""))
-                                            color: root.skyTextMuted
+                                    AbstractButton {
+                                        x: 44
+                                        width: 44
+                                        height: 36
+                                        background: null
+                                        // ref-main 实测降水段为实心水滴 6×9px@814（胶囊高 25px），我方胶囊 36px 按 1.44 折算 ≈ 9×13
+                                        // Control 会覆写 contentItem 几何，Canvas 需包 Item 再居中（ref 胶囊中心 225 vs 水滴中心 225.5 居中）
+                                        contentItem: Item {
+                                            anchors.fill: parent
+                                            Canvas {
+                                                id: dropCanvas
+                                                width: 12
+                                                height: 16
+                                                anchors.centerIn: parent
+                                                antialiasing: true
+                                                onPaint: {
+                                                    var ctx = getContext("2d")
+                                                    ctx.reset()
+                                                    ctx.beginPath()
+                                                    ctx.moveTo(6, 1.5)
+                                                    ctx.bezierCurveTo(8.2, 5.0, 10, 7.6, 10, 10.5)  // 右侧下行到圆右端
+                                                    ctx.arc(6, 10.5, 4, 0, Math.PI, false)          // 经底部从右到左
+                                                    ctx.bezierCurveTo(2, 7.6, 3.8, 5.0, 6, 1.5)     // 左侧收回尖点
+                                                    ctx.closePath()
+                                                    ctx.fillStyle = hourlySegmented.segment === 1 ? "#ffffff" : Qt.rgba(1, 1, 1, 0.9)
+                                                    ctx.fill()
+                                                }
+                                                // segment 属于外层 hourlySegmented，Canvas 上无法直接写 onSegmentChanged
+                                                //（qmllint: no matching signal，运行时不触发），改用 Connections 监听后重绘
+                                                Connections {
+                                                    target: hourlySegmented
+                                                    function onSegmentChanged() { dropCanvas.requestPaint() }
+                                                }
+                                                Component.onCompleted: requestPaint()
+                                                Accessible.ignored: true
+                                            }
                                         }
-
-                                        WeatherIcon {
-                                            Layout.alignment: Qt.AlignHCenter
-                                            Layout.preferredWidth: 26
-                                            Layout.preferredHeight: 26
-                                            code: root.number(hourlyCard.modelData, "weatherCode", -1)
-                                            isDay: Boolean(root.value(hourlyCard.modelData, "isDay", true))
-                                            pulse: backend.loading && !AppTheme.reduceMotion
-                                            transform: Translate { id: iconBounceShift; y: 0 }
-                                            Accessible.ignored: true
+                                        onClicked: hourlySegmented.segment = 1
+                                        Accessible.name: qsTr("Hourly precipitation")
+                                    }
+                                    AbstractButton {
+                                        x: 88
+                                        width: 44
+                                        height: 36
+                                        background: null
+                                        contentItem: Label {
+                                            horizontalAlignment: Text.AlignHCenter
+                                            verticalAlignment: Text.AlignVCenter
+                                            text: "≋"
+                                            color: hourlySegmented.segment === 2 ? "#ffffff" : Qt.rgba(1, 1, 1, 0.9)
+                                            font.pixelSize: 16
                                         }
-
-                                        Label {
-                                            Layout.alignment: Qt.AlignHCenter
-                                            visible: hourlySegmented.segment === 0
-                                            text: Math.round(root.number(
-                                                hourlyCard.modelData, "temperature", 0)) + root.temperatureUnit
-                                            color: root.skyText
-                                            font.weight: Font.DemiBold
-                                        }
-
-                                        Label {
-                                            Layout.alignment: Qt.AlignHCenter
-                                            visible: hourlySegmented.segment === 1
-                                            text: Math.round(root.number(
-                                                hourlyCard.modelData,
-                                                "precipitationProbability", 0)) + "%"
-                                            color: root.skyText
-                                            font.weight: Font.DemiBold
-                                            Accessible.name: qsTr("%1% chance of precipitation").arg(
-                                                Math.round(root.number(hourlyCard.modelData,
-                                                                       "precipitationProbability", 0)))
-                                        }
-
-                                        Label {
-                                            Layout.alignment: Qt.AlignHCenter
-                                            visible: hourlySegmented.segment === 2
-                                            text: Math.round(root.number(
-                                                hourlyCard.modelData, "windSpeed", 0)) + " " + root.speedUnit
-                                            color: root.skyText
-                                            font.weight: Font.DemiBold
-                                            Accessible.name: qsTr("Wind speed %1 %2").arg(
-                                                Math.round(root.number(hourlyCard.modelData, "windSpeed", 0)))
-                                                                .arg(root.speedUnit)
-                                        }
-
-                                        Label {
-                                            Layout.alignment: Qt.AlignHCenter
-                                            visible: hourlySegmented.segment === 0
-                                            text: "☂︎  " + Math.round(root.number(
-                                                hourlyCard.modelData,
-                                                "precipitationProbability", 0)) + "%"
-                                            color: root.skyTextMuted
-                                            font.pixelSize: 10
-                                            Accessible.name: qsTr("%1% chance of precipitation").arg(
-                                                Math.round(root.number(hourlyCard.modelData,
-                                                                       "precipitationProbability", 0)))
-                                        }
+                                        onClicked: hourlySegmented.segment = 2
+                                        Accessible.name: qsTr("Hourly wind")
                                     }
                                 }
                             }
+
+                            Flickable {
+                                Layout.fillWidth: true
+                                Layout.preferredHeight: 142
+                                contentWidth: hourlyRow.implicitWidth
+                                contentHeight: height
+                                boundsBehavior: Flickable.StopAtBounds
+                                clip: true
+
+                                ScrollBar.horizontal: ScrollBar {}
+
+                                Row {
+                                    id: hourlyRow
+                                    height: parent.height - 12
+                                    spacing: 10
+
+                                    Repeater {
+                                        model: root.upcomingHours
+
+                                        delegate: Item {
+                                            id: hourlyCard
+
+                                            required property var modelData
+                                            required property int index
+                                            width: 108
+                                            height: hourlyRow.height
+                                            opacity: 0
+                                            transform: Translate { id: entranceShift; y: 14 }
+
+                                            Component.onCompleted: {
+                                                if (AppTheme.reduceMotion) {
+                                                    hourlyCard.opacity = 1
+                                                    entranceShift.y = 0
+                                                    iconBounceShift.y = 0
+                                                    return
+                                                }
+                                                entranceAnim.restart()
+                                                iconBounceAnim.restart()
+                                            }
+
+                                            SequentialAnimation {
+                                                id: entranceAnim
+                                                PauseAnimation { duration: 40 * hourlyCard.index }
+                                                ParallelAnimation {
+                                                    NumberAnimation { target: hourlyCard; property: "opacity"; to: 1; duration: 260; easing.type: Easing.OutCubic }
+                                                    NumberAnimation { target: entranceShift; property: "y"; to: 0; duration: 260; easing.type: Easing.OutCubic }
+                                                }
+                                            }
+
+                                            SequentialAnimation {
+                                                id: iconBounceAnim
+                                                PauseAnimation { duration: 300 + 40 * hourlyCard.index }
+                                                NumberAnimation { target: iconBounceShift; property: "y"; to: -6; duration: 110; easing.type: Easing.OutCubic }
+                                                NumberAnimation { target: iconBounceShift; property: "y"; to: 0; duration: 160; easing.type: Easing.OutBack }
+                                            }
+
+                                            ColumnLayout {
+                                                anchors.fill: parent
+                                                spacing: 4
+
+                                                Label {
+                                                    Layout.alignment: Qt.AlignHCenter
+                                                    text: root.localTime(root.value(
+                                                        hourlyCard.modelData, "time", ""))
+                                                    color: root.skyTextMuted
+                                                }
+
+                                                WeatherIcon {
+                                                    Layout.alignment: Qt.AlignHCenter
+                                                    Layout.preferredWidth: 26
+                                                    Layout.preferredHeight: 26
+                                                    code: root.number(hourlyCard.modelData, "weatherCode", -1)
+                                                    isDay: Boolean(root.value(hourlyCard.modelData, "isDay", true))
+                                                    pulse: backend.loading && !AppTheme.reduceMotion
+                                                    transform: Translate { id: iconBounceShift; y: 0 }
+                                                    Accessible.ignored: true
+                                                }
+
+                                                Label {
+                                                    Layout.alignment: Qt.AlignHCenter
+                                                    visible: hourlySegmented.segment === 0
+                                                    text: Math.round(root.number(
+                                                        hourlyCard.modelData, "temperature", 0)) + root.temperatureUnit
+                                                    color: root.skyText
+                                                    font.weight: Font.DemiBold
+                                                }
+
+                                                Label {
+                                                    Layout.alignment: Qt.AlignHCenter
+                                                    visible: hourlySegmented.segment === 1
+                                                    text: Math.round(root.number(
+                                                        hourlyCard.modelData,
+                                                        "precipitationProbability", 0)) + "%"
+                                                    color: root.skyText
+                                                    font.weight: Font.DemiBold
+                                                    Accessible.name: qsTr("%1% chance of precipitation").arg(
+                                                        Math.round(root.number(hourlyCard.modelData,
+                                                                               "precipitationProbability", 0)))
+                                                }
+
+                                                Label {
+                                                    Layout.alignment: Qt.AlignHCenter
+                                                    visible: hourlySegmented.segment === 2
+                                                    text: Math.round(root.number(
+                                                        hourlyCard.modelData, "windSpeed", 0)) + " " + root.speedUnit
+                                                    color: root.skyText
+                                                    font.weight: Font.DemiBold
+                                                    Accessible.name: qsTr("Wind speed %1 %2").arg(
+                                                        Math.round(root.number(hourlyCard.modelData, "windSpeed", 0)))
+                                                                        .arg(root.speedUnit)
+                                                }
+
+                                                Label {
+                                                    Layout.alignment: Qt.AlignHCenter
+                                                    visible: hourlySegmented.segment === 0
+                                                    text: "☂︎  " + Math.round(root.number(
+                                                        hourlyCard.modelData,
+                                                        "precipitationProbability", 0)) + "%"
+                                                    color: root.skyTextMuted
+                                                    font.pixelSize: 10
+                                                    Accessible.name: qsTr("%1% chance of precipitation").arg(
+                                                        Math.round(root.number(hourlyCard.modelData,
+                                                                               "precipitationProbability", 0)))
+                                                }
+                                            }
+                                        }
+                                    }
+                            }
+                                }
                         }
                     }
 
