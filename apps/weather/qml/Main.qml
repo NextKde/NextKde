@@ -64,6 +64,10 @@ KosApplicationWindow {
         const c = root.currentWeatherCode
         return (c >= 71 && c <= 77) || c === 85 || c === 86
     }
+    readonly property bool cloudySky: {
+        const c = root.currentWeatherCode
+        return c === 2 || c === 3 || c === 45 || c === 48
+    }
     readonly property var dailyRange: {
         let lo = Number.POSITIVE_INFINITY
         let hi = Number.NEGATIVE_INFINITY
@@ -144,6 +148,39 @@ KosApplicationWindow {
             })
         }
         return flakes
+    }
+
+    // Cloud puffs: fixed-seed PRNG so the layout is identical on every
+    // launch; each cloud drifts across the full screen (HIG ambient loop
+    // 2-12s: one crossing takes 8-12s).
+    readonly property var cloudField: {
+        const random = mulberry32(20261019)
+        const clouds = []
+        for (let index = 0; index < 7; index++) {
+            const cloudWidth = 160 + random() * 180
+            const driftMs = 8000 + random() * 4000
+            const puffs = []
+            for (let puff = 0; puff < 4; puff++) {
+                puffs.push({
+                    cxRatio: 0.15 + random() * 0.7,
+                    cyRatio: 0.35 + random() * 0.35,
+                    rRatio: 0.28 + random() * 0.22,
+                    alphaMul: 0.6 + random() * 0.4
+                })
+            }
+            puffs.sort(function(a, b) { return a.cxRatio - b.cxRatio })
+            clouds.push({
+                xRatio: random(),
+                yRatio: random() * 0.55,
+                cloudWidth: cloudWidth,
+                cloudHeight: cloudWidth * 0.38,
+                opacity: 0.10 + random() * 0.14,
+                driftMs: driftMs,
+                phaseMs: random() * driftMs,
+                puffs: puffs
+            })
+        }
+        return clouds
     }
 
     function skyStopsFor(code, isDay) {
@@ -522,6 +559,70 @@ KosApplicationWindow {
                         to: flake.xBase - modelData.swayAmp
                         duration: modelData.swayMs
                         easing.type: Easing.InOutSine
+                    }
+                }
+            }
+        }
+    }
+
+    Item {
+        id: cloudFieldLayer
+        anchors.fill: parent
+        visible: root.cloudySky
+        clip: true
+
+        Repeater {
+            model: root.cloudField
+
+            delegate: Item {
+                id: cloud
+                required property var modelData
+                readonly property real cloudW: Math.min(modelData.cloudWidth, cloudFieldLayer.width * 0.45)
+
+                x: -cloudW - 20
+                y: (cloudFieldLayer.height - height) * modelData.yRatio
+                width: cloudW
+                height: cloudW * 0.38
+                opacity: modelData.opacity
+                Accessible.ignored: true
+
+                Canvas {
+                    anchors.fill: parent
+                    onWidthChanged: requestPaint()
+                    onPaint: {
+                        const ctx = getContext("2d")
+                        ctx.clearRect(0, 0, width, height)
+                        for (let i = 0; i < modelData.puffs.length; i++) {
+                            const p = modelData.puffs[i]
+                            const cx = p.cxRatio * width
+                            const cy = p.cyRatio * height
+                            // Keep the gradient inside the canvas: alpha must
+                            // reach 0 before any clipped edge, otherwise puffs
+                            // show hard rectangular borders.
+                            const r = Math.max(Math.min(p.rRatio * height * 1.2,
+                                                        cy, height - cy,
+                                                        cx, width - cx), 8)
+                            const grad = ctx.createRadialGradient(cx, cy, 0, cx, cy, r)
+                            grad.addColorStop(0, "rgba(255,255,255," + p.alphaMul.toFixed(3) + ")")
+                            grad.addColorStop(1, "rgba(255,255,255,0)")
+                            ctx.fillStyle = grad
+                            ctx.beginPath()
+                            ctx.arc(cx, cy, r, 0, Math.PI * 2)
+                            ctx.fill()
+                        }
+                    }
+                }
+
+                SequentialAnimation on x {
+                    running: root.cloudySky && !AppTheme.reduceMotion
+                    loops: Animation.Infinite
+
+                    PauseAnimation { duration: modelData.phaseMs }
+                    NumberAnimation {
+                        from: -cloud.cloudW - 20
+                        to: cloudFieldLayer.width + 20
+                        duration: modelData.driftMs
+                        easing.type: Easing.Linear
                     }
                 }
             }
