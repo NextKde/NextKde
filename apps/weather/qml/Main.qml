@@ -1510,6 +1510,7 @@ KosApplicationWindow {
                             }
 
                             Item {
+                                Layout.topMargin: 7 // ref-main 实测 rating cap 顶→条顶 22px×1.4598≈32，改前 25px（同口径），+7 补齐；本轮 Pillow 实测 rating 基线→条顶 我方 16.5px vs ref 16px×1.4598≈23.3
                                 Layout.fillWidth: true
                                 height: 9
 
