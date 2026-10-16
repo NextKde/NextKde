@@ -376,6 +376,11 @@ KosApplicationWindow {
                     Layout.minimumWidth: 0
                     Layout.preferredHeight: 30
                     cornerRadius: 15
+                    // 阶段三功能层 Liquid Glass：specular 高光与细描边。
+                    // 按参考图量得高光强度温和，用 liquidStrength 0.2 缩放。
+                    materialForm: false
+                    liquidFinish: true
+                    liquidStrength: 0.2
                     glassColor: Qt.rgba(1, 1, 1, 0.22)
                     outlineColor: Qt.rgba(1, 1, 1, 0.30)
                     textColor: "#ffffff"
