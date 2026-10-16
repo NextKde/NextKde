@@ -1004,9 +1004,30 @@ KosApplicationWindow {
                                     id: hourlyCard
 
                                     required property var modelData
+                                    required property int index
                                     width: 108
                                     height: hourlyRow.height
                                     padding: 12
+                                    opacity: 0
+                                    transform: Translate { id: entranceShift; y: 14 }
+
+                                    Component.onCompleted: {
+                                        if (AppTheme.reduceMotion) {
+                                            hourlyCard.opacity = 1
+                                            entranceShift.y = 0
+                                            return
+                                        }
+                                        entranceAnim.restart()
+                                    }
+
+                                    SequentialAnimation {
+                                        id: entranceAnim
+                                        PauseAnimation { duration: 40 * hourlyCard.index }
+                                        ParallelAnimation {
+                                            NumberAnimation { target: hourlyCard; property: "opacity"; to: 1; duration: 260; easing.type: Easing.OutCubic }
+                                            NumberAnimation { target: entranceShift; property: "y"; to: 0; duration: 260; easing.type: Easing.OutCubic }
+                                        }
+                                    }
 
                                     background: KosSurface {
                                         radius: 14
