@@ -625,6 +625,29 @@ Pane {
                                         readonly property int stripeWidth: Math.round(
                                             Math.round(root.hourHeight * 21 / 54) / 4)
                                         readonly property int stripeInset: stripeWidth
+                                        // R079: the ref's chip ink is the calendar colour moved
+                                        // HALFWAY TO ITS OWN POLE — hue and saturation untouched.
+                                        // Measured 1:1 on refs/macos-calendar.png as ink CORES (not
+                                        // AA edges, which land anywhere in between): the red bar
+                                        // (235,76,70) carries ink (117,37,34), the blue bar
+                                        // (59,134,247) carries (26,67,123), an olive chip
+                                        // (254,204,0) carries (127,102,0) — 1:2 on all three
+                                        // channels. Halving RGB is exactly halving the HSV value,
+                                        // because S = (max-min)/max is invariant under a uniform
+                                        // scale, so the rule needs no colour-space round trip.
+                                        // No separate "saturation/value mapping" is needed: the
+                                        // plain scale reproduces both chips with one parameter.
+                                        // Dark is the theme mirror the ref cannot anchor (it has
+                                        // no dark leg): the same operation toward the other pole,
+                                        // half to white, which sits on the 0.36 wash exactly as
+                                        // the light leg's half-to-black sits on the 0.19 wash.
+                                        readonly property color inkColor: {
+                                            var c = root.itemColor(modelData)
+                                            var pole = AppTheme.dark ? 1 : 0
+                                            return Qt.rgba(c.r + (pole - c.r) * 0.5,
+                                                           c.g + (pole - c.g) * 0.5,
+                                                           c.b + (pole - c.b) * 0.5, 1)
+                                        }
                                         radius: 5
                                         color: AppTheme.withAlpha(root.itemColor(modelData),
                                             AppTheme.dark ? 0.36 : 0.19)
@@ -668,7 +691,9 @@ Pane {
                                                 + timedChip.stripeWidth + 5
                                             anchors.rightMargin: 4
                                             text: root.itemTitle(timedChip.modelData)
-                                            color: AppTheme.text
+                                            // R079: was AppTheme.text (grey). The ref's ink is
+                                            // the chip's own calendar colour at half value.
+                                            color: timedChip.inkColor
                                             font.pixelSize: 9
                                             font.strikeout: root.itemCompleted(timedChip.modelData)
                                             verticalAlignment: Text.AlignVCenter
