@@ -5,6 +5,7 @@ import { matchEntryByHints, parseProbeOutput, probeCommand } from "../../shell/d
 import { indexWindowRecords } from "../../shell/desktop/modules/dock/WindowRecordIndex.mjs";
 import { toArray } from "../../shell/desktop/modules/dock/PayloadArray.mjs";
 import { indexAt, parse } from "../../shell/desktop/modules/dock/TimedLyrics.mjs";
+import { nextWindowToActivate } from "../../shell/desktop/modules/dock/WindowCycle.mjs";
 import { test } from "node:test";
 
 test("process identity", async () => {
@@ -477,3 +478,56 @@ test("timed lyrics", async () => {
     assert.equal(indexAt([],100),-1);
     console.log('Timed lyrics: timestamps, repeats, offsets, interludes and seeks passed');
 });
+
+test("window cycle: multi-window dock activation", async () => {
+    const win1 = { windowId: "win-1", toplevel: { activated: false } };
+    const win2 = { windowId: "win-2", toplevel: { activated: false } };
+    const win3 = { windowId: "win-3", toplevel: { activated: false } };
+    const windows = [win1, win2, win3];
+
+    const timestamps = { "win-1": 1000, "win-2": 2000, "win-3": 500 };
+    const lastActivatedAt = id => timestamps[id] || 0;
+
+    // 1. App not in foreground: activates MRU window (win-2 has highest timestamp)
+    assert.equal(nextWindowToActivate(windows, null, lastActivatedAt), win2);
+
+    // 2. Cycle through all 3 windows in sequence when already active
+    // When win-1 is active -> next is win-2
+    win1.toplevel.activated = true;
+    win2.toplevel.activated = false;
+    win3.toplevel.activated = false;
+    assert.equal(nextWindowToActivate(windows, "win-1", lastActivatedAt), win2);
+
+    // When win-2 is active -> next is win-3 (MUST NOT bounce back to win-1!)
+    win1.toplevel.activated = false;
+    win2.toplevel.activated = true;
+    win3.toplevel.activated = false;
+    assert.equal(nextWindowToActivate(windows, "win-2", lastActivatedAt), win3);
+
+    // When win-3 is active -> wraps around to win-1
+    win1.toplevel.activated = false;
+    win2.toplevel.activated = false;
+    win3.toplevel.activated = true;
+    assert.equal(nextWindowToActivate(windows, "win-3", lastActivatedAt), win1);
+
+    // 3. Rapid click lag guard: pending target advances even before compositor reports focus change
+    // Suppose win-1 is still reported active by compositor, but we just clicked to win-2
+    win1.toplevel.activated = true;
+    win2.toplevel.activated = false;
+    win3.toplevel.activated = false;
+    assert.equal(nextWindowToActivate(windows, "win-1", lastActivatedAt, "win-2", 50), win3);
+
+    // And next rapid click from win-2 to win-3 advances to win-1
+    assert.equal(nextWindowToActivate(windows, "win-1", lastActivatedAt, "win-3", 100), win1);
+
+    // When pending age exceeds TTL (>800ms), it expires and relies on compositor active state
+    assert.equal(nextWindowToActivate(windows, "win-1", lastActivatedAt, "win-2", 900), win2);
+
+    // 4. Single window returns that window
+    assert.equal(nextWindowToActivate([win1], null, lastActivatedAt), win1);
+
+    // 5. Empty window list returns null
+    assert.equal(nextWindowToActivate([], null, lastActivatedAt), null);
+    assert.equal(nextWindowToActivate(null, null, lastActivatedAt), null);
+});
+

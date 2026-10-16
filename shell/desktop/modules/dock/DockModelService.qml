@@ -1,6 +1,7 @@
 pragma Singleton
 import QtQuick
 import qs.desktop.modules.common
+import "WindowCycle.mjs" as WindowCycle
 
 // DockModelService — compatibility facade for the current Dock UI.
 //
@@ -20,6 +21,11 @@ QtObject {
 
     property variant _lastUrgentIds: []
     property bool _urgentInitDone: false
+
+    // Multi-window cycling lag guard across rapid dock clicks
+    property string _pendingCycleAppId: ""
+    property string _pendingCycleWindowId: ""
+    property double _pendingCycleAt: 0
 
     property var pinnedItems: []
     property int pinnedCount: 0
@@ -324,6 +330,8 @@ QtObject {
         const windows = WindowService.windowsForApp(identity.desktopId);
 
         if (windows.length === 0) {
+            svc._pendingCycleAppId = "";
+            svc._pendingCycleWindowId = "";
             if (DockLaunchService.isLaunching(identity.desktopId))
                 return;
             DockLaunchService.begin(identity.desktopId);
@@ -339,6 +347,8 @@ QtObject {
         }
 
         if (windows.length === 1) {
+            svc._pendingCycleAppId = "";
+            svc._pendingCycleWindowId = "";
             const singleWin = windows[0];
             if (singleWin.toplevel.activated && !singleWin.toplevel.minimized) {
                 console.log("[DockModel] minimize single window app=" + identity.desktopId);
@@ -350,35 +360,23 @@ QtObject {
             return;
         }
 
-        // Multiple windows (macOS logic):
-        // Find if any window of this app is currently activated
-        let activeIdx = -1;
-        for (let i = 0; i < windows.length; i++) {
-            if (windows[i].toplevel.activated) {
-                activeIdx = i;
-                break;
-            }
-        }
+        const pendingId = (svc._pendingCycleAppId === identity.desktopId)
+            ? svc._pendingCycleWindowId : "";
+        const pendingAge = Date.now() - svc._pendingCycleAt;
+        const target = WindowCycle.nextWindowToActivate(
+            windows,
+            WindowService.activeWindowId,
+            function(winId) { return WindowService.lastActivatedAtOf(winId); },
+            pendingId,
+            pendingAge);
 
-        if (activeIdx === -1) {
-            // App not currently in foreground: activate MRU window
-            // （v87 审查：windowsForApp 返回 records 序，旧代码取 [0] 实为
-            // "最早创建的窗"，与 MRU 注释语义不符——按最近激活时间戳取真 MRU）
-            const mru = windows.reduce((a, b) =>
-                WindowService.lastActivatedAtOf(a.windowId)
-                    >= WindowService.lastActivatedAtOf(b.windowId) ? a : b);
-            console.log("[DockModel] activate app MRU window=" + mru.windowId);
-            activateWindow(mru.windowId);
-        } else {
-            // App already active: cycle to next window in group (MRU 序)
-            const byMru = windows.slice().sort((a, b) =>
-                WindowService.lastActivatedAtOf(b.windowId)
-                    - WindowService.lastActivatedAtOf(a.windowId));
-            const rank = byMru.indexOf(windows[activeIdx]);
-            const nextIdx = (rank + 1) % byMru.length;
-            console.log("[DockModel] cycle app window from=" + windows[activeIdx].windowId
-                        + " to=" + byMru[nextIdx].windowId);
-            activateWindow(byMru[nextIdx].windowId);
+        if (target) {
+            svc._pendingCycleAppId = identity.desktopId;
+            svc._pendingCycleWindowId = target.windowId;
+            svc._pendingCycleAt = Date.now();
+            console.log("[DockModel] activate app window=" + target.windowId
+                        + " app=" + identity.desktopId);
+            activateWindow(target.windowId);
         }
     }
 
