@@ -23,10 +23,90 @@ KosWorkspaceDialog {
     anchors.centerIn: parent
     standardButtons: Dialog.Save | Dialog.Cancel
     readonly property int fieldHeight: 30
+
+    // D05: the dialog's actions are stacked, not a row — one full-width bar
+    // per action, all the same width and height with a hairline gap, primary
+    // (Save) on top, secondary (Cancel) under it, destructive (Delete) last,
+    // per the macOS 26 alert reference. KosButton supplies the 34px control
+    // height and the pill radius; nothing here restyles surface or shape.
+    // The footer stays fixed (only the form above it scrolls), so Delete can
+    // never scroll out of reach; the 16px insets match the shared footer.
+    //
+    // Labels are not hardcoded: standardButtons is still declared on the
+    // dialog, and the never-rendered DialogButtonBox below instantiates Qt's
+    // platform-localized Save/Cancel buttons, so the bars read exactly as the
+    // standard buttons did. A DialogButtonBox nested inside a footer Item is
+    // not auto-wired to the dialog (only a DialogButtonBox used directly *as*
+    // the footer is), so accept/reject are called explicitly here — and the
+    // button texts, which do not exist until the tree is complete, are copied
+    // in onCompleted rather than bound.
+    property string saveLabel: qsTr("Save")
+    property string cancelLabel: qsTr("Cancel")
+
+    Component.onCompleted: {
+        const save = labelSource.standardButton(Dialog.Save)
+        const cancel = labelSource.standardButton(Dialog.Cancel)
+        if (save)
+            saveLabel = save.text
+        if (cancel)
+            cancelLabel = cancel.text
+    }
+
     background: KosSurface {
         radius: AppTheme.smallRadius + 4
         fillColor: AppTheme.dark ? "#262626" : "#F7F7F7"
         elevation: 0.5
+    }
+
+    footer: Item {
+        implicitHeight: 16 + footerCol.implicitHeight + 16
+
+        // Label source only. Invisible and disabled so it neither paints over
+        // the stack nor joins the focus chain — Esc stays with the dialog.
+        DialogButtonBox {
+            id: labelSource
+            visible: false
+            enabled: false
+            padding: 0
+            standardButtons: root.standardButtons
+        }
+
+        ColumnLayout {
+            id: footerCol
+            anchors.fill: parent
+            anchors.margins: 16
+            spacing: 6
+
+            // Primary: the AcceptRole standard button of the shared footer.
+            KosButton {
+                Layout.fillWidth: true
+                text: root.saveLabel
+                highlighted: true
+                flatPrimary: true
+                lightLabel: true
+                onClicked: root.accept()
+            }
+
+            // Secondary: the RejectRole standard button of the shared footer.
+            KosButton {
+                Layout.fillWidth: true
+                text: root.cancelLabel
+                secondary: true
+                onClicked: root.reject()
+            }
+
+            KosButton {
+                Layout.fillWidth: true
+                text: qsTr("Delete task")
+                visible: root.editingId.length > 0
+                destructive: true
+                secondary: true
+                onClicked: {
+                    root.deleteRequested(root.editingId)
+                    root.close()
+                }
+            }
+        }
     }
 
     function value(record, key, fallback) {
@@ -298,15 +378,6 @@ KosWorkspaceDialog {
                             wheel.accepted = true
                         }
                     }
-                }
-            }
-
-            KosButton {
-                text: qsTr("Delete task")
-                destructive: true
-                onClicked: {
-                    root.deleteRequested(root.editingId)
-                    root.close()
                 }
             }
         }
