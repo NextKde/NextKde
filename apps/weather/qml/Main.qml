@@ -1698,15 +1698,16 @@ KosApplicationWindow {
                             Accessible.name: qsTr("Hourly forecast")
                         }
 
-                        // 三段胶囊玻璃切换钮，参照 ref-main Conditions 卡右上分段控件（视觉 chrome）。
-                        // 切换功能待后端逐小时降水/风视图另做（本轮仅 chrome）；
-                        // 接功能时应换成带 Accessible.name 的按钮（如 Button/AbstractButton）。
+                        // 三段胶囊切换钮，参照 ref-main Conditions 卡右上分段控件。
+                        // segment 0 = 温度/图标视图（默认，参考图选中态），
+                        // segment 1 = 逐小时降水概率视图；
+                        // 风段（≋）需逐小时风速字段（后端未扩）保持惰性不可点。
                         Item {
                             id: hourlySegmented
                             implicitWidth: 132
                             implicitHeight: 36
                             Layout.alignment: Qt.AlignVCenter
-                            Accessible.ignored: true
+                            property int segment: 0
 
                             Rectangle {
                                 anchors.fill: parent
@@ -1716,9 +1717,9 @@ KosApplicationWindow {
                                 border.color: Qt.rgba(1, 1, 1, 0.22)
                             }
 
-                            // 选中圆盘（第 0 段"云"背后）
+                            // 选中圆盘（当前段背后）
                             Rectangle {
-                                x: 3
+                                x: 3 + 44 * hourlySegmented.segment
                                 y: 3
                                 width: 30
                                 height: 30
@@ -1726,23 +1727,35 @@ KosApplicationWindow {
                                 color: Qt.rgba(1, 1, 1, 0.27)
                             }
 
-                            Label {
+                            AbstractButton {
                                 x: 0
                                 width: 44
-                                anchors.verticalCenter: parent.verticalCenter
-                                horizontalAlignment: Text.AlignHCenter
-                                text: "☁"
-                                color: "#ffffff"
-                                font.pixelSize: 16
+                                height: 36
+                                background: null
+                                contentItem: Label {
+                                    horizontalAlignment: Text.AlignHCenter
+                                    verticalAlignment: Text.AlignVCenter
+                                    text: "☁"
+                                    color: hourlySegmented.segment === 0 ? "#ffffff" : Qt.rgba(1, 1, 1, 0.9)
+                                    font.pixelSize: 16
+                                }
+                                onClicked: hourlySegmented.segment = 0
+                                Accessible.name: qsTr("Hourly conditions")
                             }
-                            Label {
+                            AbstractButton {
                                 x: 44
                                 width: 44
-                                anchors.verticalCenter: parent.verticalCenter
-                                horizontalAlignment: Text.AlignHCenter
-                                text: "☂︎"
-                                color: Qt.rgba(1, 1, 1, 0.9)
-                                font.pixelSize: 16
+                                height: 36
+                                background: null
+                                contentItem: Label {
+                                    horizontalAlignment: Text.AlignHCenter
+                                    verticalAlignment: Text.AlignVCenter
+                                    text: "☂︎"
+                                    color: hourlySegmented.segment === 1 ? "#ffffff" : Qt.rgba(1, 1, 1, 0.9)
+                                    font.pixelSize: 16
+                                }
+                                onClicked: hourlySegmented.segment = 1
+                                Accessible.name: qsTr("Hourly precipitation")
                             }
                             Label {
                                 x: 88
@@ -1752,6 +1765,7 @@ KosApplicationWindow {
                                 text: "≋"
                                 color: Qt.rgba(1, 1, 1, 0.9)
                                 font.pixelSize: 16
+                                Accessible.ignored: true
                             }
                         }
                     }
@@ -1843,6 +1857,7 @@ KosApplicationWindow {
 
                                         Label {
                                             Layout.alignment: Qt.AlignHCenter
+                                            visible: hourlySegmented.segment === 0
                                             text: Math.round(root.number(
                                                 hourlyCard.modelData, "temperature", 0)) + root.temperatureUnit
                                             color: root.skyText
@@ -1851,6 +1866,20 @@ KosApplicationWindow {
 
                                         Label {
                                             Layout.alignment: Qt.AlignHCenter
+                                            visible: hourlySegmented.segment === 1
+                                            text: Math.round(root.number(
+                                                hourlyCard.modelData,
+                                                "precipitationProbability", 0)) + "%"
+                                            color: root.skyText
+                                            font.weight: Font.DemiBold
+                                            Accessible.name: qsTr("%1% chance of precipitation").arg(
+                                                Math.round(root.number(hourlyCard.modelData,
+                                                                       "precipitationProbability", 0)))
+                                        }
+
+                                        Label {
+                                            Layout.alignment: Qt.AlignHCenter
+                                            visible: hourlySegmented.segment === 0
                                             text: "☂︎  " + Math.round(root.number(
                                                 hourlyCard.modelData,
                                                 "precipitationProbability", 0)) + "%"
