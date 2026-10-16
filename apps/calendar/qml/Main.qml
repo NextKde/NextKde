@@ -89,6 +89,14 @@ KosApplicationWindow {
         // serves both legs.
         readonly property color selectionDisc: "#8E8E93"
 
+        // M04: the mini month's disc DIAMETER, shared by the today disc and the
+        // "other selection" disc so the clause's "the same shape" is true by
+        // construction rather than by two literals that can drift. M04's
+        // literal is 18-20; the reference's own disc is 15 at 1:1, which is
+        // 17.2-17.3 in this sidebar (220/192 = 1.146 by width, 28.0/24.25 =
+        // 1.155 by column pitch) => 18 is the smallest number satisfying both.
+        readonly property int miniDisc: 18
+
         // Toolbar view segment (R097). The segment sits on the CONTENT plane
         // (white 255), not on the sidebar plane, so it must not reuse the two
         // sidebar fills above. Measured 1:1 off the reference's own
@@ -2230,14 +2238,15 @@ KosApplicationWindow {
                             }
 
                             // M03: Control stretches contentItem to the cell,
-                            // which warped a direct 15x15 circle into an
+                            // which warped a direct circle of this size into an
                             // ellipse. So the contentItem is a plain filler
-                            // Item and the fixed 15x15 circle sits centred
-                            // inside it. (R094: 20 -> 15, the ref's own disc.)
+                            // Item and the fixed circle sits centred inside it.
+                            // (R094: 20 -> 15, the ref's own disc. R117: ->
+                            // tahoe.miniDisc = 18, M04's literal.)
                             contentItem: Item {
                                 Rectangle {
-                                    width: 15
-                                    height: 15
+                                    width: root.tahoe.miniDisc
+                                    height: root.tahoe.miniDisc
                                     radius: width / 2
                                     anchors.centerIn: parent
                                     color: miniDay.today
