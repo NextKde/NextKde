@@ -52,6 +52,8 @@ QtObject {
     readonly property string visibility: available && Number.isFinite(Number(current.visibility))
         ? Math.round(Number(current.visibility) / (units === "imperial" ? 1609.344 : 1000))
           + (units === "imperial" ? " mi" : " km") : ""
+    readonly property string moonPhase: available && Number.isFinite(Number(current.moonPhase))
+        ? moonPhaseName(Number(current.moonPhase)) : ""
     readonly property string sunriseTime: dailyTime("sunrise")
     readonly property string sunsetTime: dailyTime("sunset")
     readonly property var forecastDays: {
@@ -74,6 +76,13 @@ QtObject {
             return "--:--"
         const match = String(daily[0]?.[field] ?? "").match(/T(\d{2}:\d{2})/)
         return match ? match[1] : "--:--"
+    }
+
+    function moonPhaseName(phase) {
+        const names = [I18n.tr("New Moon"), I18n.tr("Waxing Crescent"), I18n.tr("First Quarter"),
+            I18n.tr("Waxing Gibbous"), I18n.tr("Full Moon"), I18n.tr("Waning Gibbous"),
+            I18n.tr("Last Quarter"), I18n.tr("Waning Crescent")]
+        return names[Math.round(((phase % 1) + 1) % 1 * 8) % 8] ?? ""
     }
 
     function conditionText(code) {
