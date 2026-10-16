@@ -3,6 +3,7 @@ pragma ComponentBehavior: Bound
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
+import QtQuick.Effects
 import Kos.Ui
 
 KosApplicationWindow {
@@ -480,158 +481,195 @@ KosApplicationWindow {
                     KosKineticScroll { flickable: searchResults }
                 }
 
-                ListView {
-                    id: savedLocations
+                Item {
+                    id: savedLocationsWrapper
                     Layout.fillWidth: true
                     Layout.minimumWidth: 0
                     implicitWidth: 0
                     Layout.fillHeight: true
-                    clip: true
-                    spacing: 6
-                    model: backend.locations
 
-                    delegate: KosItemDelegate {
-                        id: savedLocation
+                    ListView {
+                        id: savedLocations
+                        anchors.fill: parent
+                        clip: true
+                        spacing: 6
+                        model: backend.locations
 
-                        required property var modelData
-                        readonly property var summary: root.value(modelData, "summary", null)
-                        readonly property var cardStops: root.skyStopsFor(
-                            savedLocation.summary ? savedLocation.summary.weatherCode : 2,
-                            savedLocation.summary ? savedLocation.summary.isDay : true)
-                        readonly property real summaryHigh: root.number(
-                            savedLocation.summary, "tempHigh", Number.NaN)
-                        readonly property real summaryLow: root.number(
-                            savedLocation.summary, "tempLow", Number.NaN)
+                        delegate: KosItemDelegate {
+                            id: savedLocation
 
-                        width: savedLocations.width
-                        implicitHeight: 74
-                        topPadding: 5
-                        bottomPadding: 5
-                        highlighted: String(root.value(modelData, "id", ""))
-                            === String(root.value(backend.location, "id", ""))
-                        Accessible.name: savedLocation.summary
-                            ? root.locationName(modelData) + ", "
-                              + root.conditionText(savedLocation.summary.weatherCode)
-                            : root.locationName(modelData)
-                        onClicked: backend.selectLocation(modelData)
+                            required property var modelData
+                            readonly property var summary: root.value(modelData, "summary", null)
+                            readonly property var cardStops: root.skyStopsFor(
+                                savedLocation.summary ? savedLocation.summary.weatherCode : 2,
+                                savedLocation.summary ? savedLocation.summary.isDay : true)
+                            readonly property real summaryHigh: root.number(
+                                savedLocation.summary, "tempHigh", Number.NaN)
+                            readonly property real summaryLow: root.number(
+                                savedLocation.summary, "tempLow", Number.NaN)
 
-                        background: Rectangle {
-                            radius: 12
-                            border.width: 1
-                            border.color: savedLocation.highlighted
-                                ? Qt.rgba(1, 1, 1, 0.55) : Qt.rgba(1, 1, 1, 0.18)
-                            gradient: Gradient {
-                                GradientStop {
-                                    position: 0.0; color: savedLocation.cardStops[0]
-                                }
-                                GradientStop {
-                                    position: 0.45; color: savedLocation.cardStops[1]
-                                }
-                                GradientStop {
-                                    position: 1.0; color: savedLocation.cardStops[2]
+                            width: savedLocations.width
+                            implicitHeight: 74
+                            topPadding: 5
+                            bottomPadding: 5
+                            highlighted: String(root.value(modelData, "id", ""))
+                                === String(root.value(backend.location, "id", ""))
+                            Accessible.name: savedLocation.summary
+                                ? root.locationName(modelData) + ", "
+                                  + root.conditionText(savedLocation.summary.weatherCode)
+                                : root.locationName(modelData)
+                            onClicked: backend.selectLocation(modelData)
+
+                            background: Rectangle {
+                                radius: 12
+                                border.width: 1
+                                border.color: savedLocation.highlighted
+                                    ? Qt.rgba(1, 1, 1, 0.55) : Qt.rgba(1, 1, 1, 0.18)
+                                gradient: Gradient {
+                                    GradientStop {
+                                        position: 0.0; color: savedLocation.cardStops[0]
+                                    }
+                                    GradientStop {
+                                        position: 0.45; color: savedLocation.cardStops[1]
+                                    }
+                                    GradientStop {
+                                        position: 1.0; color: savedLocation.cardStops[2]
+                                    }
                                 }
                             }
-                        }
 
-                        contentItem: Item {
-                            id: cardContent
+                            contentItem: Item {
+                                id: cardContent
 
-                            RowLayout {
-                                id: cardTop
-                                height: 30
-                                anchors {
-                                    left: parent.left
-                                    right: parent.right
-                                    top: parent.top
+                                RowLayout {
+                                    id: cardTop
+                                    height: 30
+                                    anchors {
+                                        left: parent.left
+                                        right: parent.right
+                                        top: parent.top
+                                    }
+                                    spacing: 8
+
+                                    Label {
+                                        Layout.fillWidth: true
+                                        text: root.locationName(savedLocation.modelData)
+                                        color: "#ffffff"
+                                        font.pixelSize: 17
+                                        font.weight: Font.DemiBold
+                                        lineHeight: 0.85
+                                        lineHeightMode: Text.ProportionalHeight
+                                        elide: Text.ElideRight
+                                        style: Text.Raised
+                                        styleColor: Qt.rgba(0, 0, 0, 0.22)
+                                    }
+
+                                    Label {
+                                        text: savedLocation.summary
+                                            ? Math.round(savedLocation.summary.temperature) + "°" : "—"
+                                        color: "#ffffff"
+                                        font.pixelSize: 30
+                                        font.weight: Font.Light
+                                        lineHeight: 0.85
+                                        lineHeightMode: Text.ProportionalHeight
+                                        style: Text.Raised
+                                        styleColor: Qt.rgba(0, 0, 0, 0.22)
+                                    }
                                 }
-                                spacing: 8
 
                                 Label {
-                                    Layout.fillWidth: true
-                                    text: root.locationName(savedLocation.modelData)
-                                    color: "#ffffff"
-                                    font.pixelSize: 17
-                                    font.weight: Font.DemiBold
-                                    lineHeight: 0.85
-                                    lineHeightMode: Text.ProportionalHeight
-                                    elide: Text.ElideRight
-                                    style: Text.Raised
-                                    styleColor: Qt.rgba(0, 0, 0, 0.22)
-                                }
-
-                                Label {
+                                    anchors {
+                                        left: parent.left
+                                        right: parent.right
+                                        top: cardTop.bottom
+                                        topMargin: 0
+                                    }
                                     text: savedLocation.summary
-                                        ? Math.round(savedLocation.summary.temperature) + "°" : "—"
-                                    color: "#ffffff"
-                                    font.pixelSize: 30
-                                    font.weight: Font.Light
-                                    lineHeight: 0.85
-                                    lineHeightMode: Text.ProportionalHeight
-                                    style: Text.Raised
-                                    styleColor: Qt.rgba(0, 0, 0, 0.22)
-                                }
-                            }
-
-                            Label {
-                                anchors {
-                                    left: parent.left
-                                    right: parent.right
-                                    top: cardTop.bottom
-                                    topMargin: 0
-                                }
-                                text: savedLocation.summary
-                                      && String(savedLocation.summary.time ?? "").length > 0
-                                    ? root.cardTimeText(savedLocation.summary.time)
-                                    : root.locationDetail(savedLocation.modelData)
-                                color: Qt.rgba(1, 1, 1, 0.72)
-                                font.pixelSize: 12
-                                lineHeight: 0.85
-                                lineHeightMode: Text.ProportionalHeight
-                                elide: Text.ElideRight
-                                visible: text.length > 0 && savedLocation.summary
-                                style: Text.Raised
-                                styleColor: Qt.rgba(0, 0, 0, 0.22)
-                            }
-
-                            RowLayout {
-                                anchors {
-                                    left: parent.left
-                                    right: parent.right
-                                    bottom: parent.bottom
-                                }
-                                spacing: 8
-
-                                Label {
-                                    Layout.fillWidth: true
-                                    text: savedLocation.summary
-                                        ? root.conditionText(savedLocation.summary.weatherCode)
+                                          && String(savedLocation.summary.time ?? "").length > 0
+                                        ? root.cardTimeText(savedLocation.summary.time)
                                         : root.locationDetail(savedLocation.modelData)
-                                    color: "#ffffff"
-                                    font.pixelSize: 13
-                                    lineHeight: 0.85
-                                    lineHeightMode: Text.ProportionalHeight
-                                    elide: Text.ElideRight
-                                    visible: text.length > 0
-                                    style: Text.Raised
-                                    styleColor: Qt.rgba(0, 0, 0, 0.22)
-                                }
-
-                                Label {
-                                    text: "H:" + Math.round(savedLocation.summaryHigh) + "° L:"
-                                          + Math.round(savedLocation.summaryLow) + "°"
-                                    color: Qt.rgba(1, 1, 1, 0.85)
+                                    color: Qt.rgba(1, 1, 1, 0.72)
                                     font.pixelSize: 12
                                     lineHeight: 0.85
                                     lineHeightMode: Text.ProportionalHeight
-                                    visible: Number.isFinite(savedLocation.summaryHigh)
-                                        && Number.isFinite(savedLocation.summaryLow)
+                                    elide: Text.ElideRight
+                                    visible: text.length > 0 && savedLocation.summary
                                     style: Text.Raised
                                     styleColor: Qt.rgba(0, 0, 0, 0.22)
                                 }
+
+                                RowLayout {
+                                    anchors {
+                                        left: parent.left
+                                        right: parent.right
+                                        bottom: parent.bottom
+                                    }
+                                    spacing: 8
+
+                                    Label {
+                                        Layout.fillWidth: true
+                                        text: savedLocation.summary
+                                            ? root.conditionText(savedLocation.summary.weatherCode)
+                                            : root.locationDetail(savedLocation.modelData)
+                                        color: "#ffffff"
+                                        font.pixelSize: 13
+                                        lineHeight: 0.85
+                                        lineHeightMode: Text.ProportionalHeight
+                                        elide: Text.ElideRight
+                                        visible: text.length > 0
+                                        style: Text.Raised
+                                        styleColor: Qt.rgba(0, 0, 0, 0.22)
+                                    }
+
+                                    Label {
+                                        text: "H:" + Math.round(savedLocation.summaryHigh) + "° L:"
+                                              + Math.round(savedLocation.summaryLow) + "°"
+                                        color: Qt.rgba(1, 1, 1, 0.85)
+                                        font.pixelSize: 12
+                                        lineHeight: 0.85
+                                        lineHeightMode: Text.ProportionalHeight
+                                        visible: Number.isFinite(savedLocation.summaryHigh)
+                                            && Number.isFinite(savedLocation.summaryLow)
+                                        style: Text.Raised
+                                        styleColor: Qt.rgba(0, 0, 0, 0.22)
+                                    }
+                                }
+                            }
+                        }
+                        KosKineticScroll { flickable: savedLocations }
+                    }
+
+                    // 阶段三功能层 Liquid Glass：滚动边缘效果（HIG Materials——内容滚到侧栏下方时模糊并降不透明度）。
+                    Item {
+                        id: scrollEdgeTop
+                        anchors.top: parent.top
+                        anchors.left: parent.left
+                        anchors.right: parent.right
+                        height: 26
+                        visible: savedLocations.contentY > 0.5
+                        clip: true
+
+                        MultiEffect {
+                            width: savedLocations.width
+                            height: savedLocations.height
+                            source: savedLocations
+                            blurEnabled: true
+                            blurMax: 32
+                            blur: 1.0
+                            saturation: 0.2
+                        }
+
+                        Rectangle {
+                            anchors.fill: parent
+                            gradient: Gradient {
+                                GradientStop {
+                                    position: 0.0
+                                    color: Qt.rgba(AppTheme.sidebar.r, AppTheme.sidebar.g, AppTheme.sidebar.b, 0.9)
+                                }
+                                GradientStop { position: 1.0; color: "transparent" }
                             }
                         }
                     }
-                    KosKineticScroll { flickable: savedLocations }
                 }
 
                 RowLayout {
