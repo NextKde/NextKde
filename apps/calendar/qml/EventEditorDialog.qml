@@ -224,6 +224,7 @@ KosWorkspaceDialog {
                 Layout.fillWidth: true
                 text: root.saveLabel
                 highlighted: true
+                lightLabel: true
                 onClicked: root.accept()
             }
 

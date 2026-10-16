@@ -7,6 +7,10 @@ Button {
     property bool destructive: false
     // D06: filled neutral capsule for a non-primary action (opt-in).
     property bool secondary: false
+    // D06: force a white label on an emphasized button. Apple puts white on
+    // the accent whatever the nominal contrast ratio says (opt-in, so the
+    // app-wide `accentText` rule is untouched).
+    property bool lightLabel: false
     readonly property bool emphasized: highlighted || (checkable && checked)
 
     hoverEnabled: true
@@ -29,7 +33,8 @@ Button {
         font: root.font
         color: !root.enabled
             ? AppTheme.withAlpha(AppTheme.text, 0.42)
-            : (root.emphasized ? AppTheme.accentText
+            : (root.emphasized ? (root.lightLabel ? AppTheme.whiteSeed
+                                                  : AppTheme.accentText)
                                : (root.destructive ? AppTheme.destructive : AppTheme.text))
         horizontalAlignment: Text.AlignHCenter
         verticalAlignment: Text.AlignVCenter
