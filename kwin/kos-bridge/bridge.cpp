@@ -17,6 +17,30 @@ namespace KOS
 namespace
 {
 
+template <typename Ret>
+struct DrawWindowReturn {
+    static constexpr auto success() {
+        if constexpr (std::is_same_v<Ret, bool>) return true;
+    }
+    static constexpr auto failure() {
+        if constexpr (std::is_same_v<Ret, bool>) return false;
+    }
+};
+
+template <typename BaseCall, typename PostPaint>
+auto invokeDrawWindow(BaseCall &&baseCall, PostPaint &&postPaint) {
+    if constexpr (std::is_same_v<decltype(baseCall()), bool>) {
+        if (!baseCall()) {
+            return false;
+        }
+        postPaint();
+        return true;
+    } else {
+        baseCall();
+        postPaint();
+    }
+}
+
 // The window types the unified appearance applies to. The same filter the
 // button panels use -- shell surfaces, docks, popups and notifications are
 // other systems' surfaces and keep their own look.
@@ -232,29 +256,34 @@ void BridgeEffect::prePaintWindow(KWin::RenderView *view,
                            );
 }
 
-void BridgeEffect::drawWindow(const KWin::RenderTarget &renderTarget,
-                               const KWin::RenderViewport &viewport,
-                               KWin::EffectWindow *window, int mask,
-                               const KWin::Region &deviceRegion,
-                               KWin::WindowPaintData &data)
+BridgeEffect::DrawWindowResult BridgeEffect::drawWindow(
+    const KWin::RenderTarget &renderTarget,
+    const KWin::RenderViewport &viewport,
+    KWin::EffectWindow *window, int mask,
+    const KWin::Region &deviceRegion,
+    KWin::WindowPaintData &data)
 {
     if (window->data(WindowSourceCaptureRole).toBool()) {
         // A shared source capture started before us in the effect chain.
         // The provider paints the button panel after this raw scene pass.
-        Effect::drawWindow(renderTarget, viewport, window, mask, deviceRegion, data);
-        return;
+        return Effect::drawWindow(renderTarget, viewport, window, mask, deviceRegion, data);
     }
     if (window->data(LegacyWindowSourceCaptureRole).toBool()) {
-        Effect::drawWindow(renderTarget, viewport, window, mask, deviceRegion, data);
-        paintButtons(renderTarget, viewport, window, deviceRegion, data, true);
-        m_renderer->clearHits(window);
-        return;
+        return invokeDrawWindow(
+            [&] { return Effect::drawWindow(renderTarget, viewport, window, mask, deviceRegion, data); },
+            [&] {
+                paintButtons(renderTarget, viewport, window, deviceRegion, data, true);
+                m_renderer->clearHits(window);
+            });
     }
     if (drawSharedWindow(renderTarget, viewport, window, mask, deviceRegion, data, {})) {
-        return;
+        return DrawWindowReturn<DrawWindowResult>::success();
     }
-    Effect::drawWindow(renderTarget, viewport, window, mask, deviceRegion, data);
-    paintButtons(renderTarget, viewport, window, deviceRegion, data, false);
+    return invokeDrawWindow(
+        [&] { return Effect::drawWindow(renderTarget, viewport, window, mask, deviceRegion, data); },
+        [&] {
+            paintButtons(renderTarget, viewport, window, deviceRegion, data, false);
+        });
 }
 
 bool BridgeEffect::drawSharedWindow(const KWin::RenderTarget &target,
@@ -273,7 +302,7 @@ bool BridgeEffect::drawSharedWindow(const KWin::RenderTarget &target,
             window->setData(WindowSourceCaptureRole, true);
             KWin::WindowPaintData sourceData;
             sourceData.setOpacity(1.0);
-            KWin::effects->drawWindow(sourceTarget, sourceViewport, window,
+            (void)KWin::effects->drawWindow(sourceTarget, sourceViewport, window,
                 PAINT_WINDOW_TRANSFORMED | PAINT_WINDOW_TRANSLUCENT,
                 KWin::Region::infinite(), sourceData);
             paintButtons(sourceTarget, sourceViewport, window, KWin::Region::infinite(), sourceData, true);

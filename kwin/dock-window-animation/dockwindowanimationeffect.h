@@ -4,6 +4,9 @@
 #include <effect/offscreeneffect.h>
 #include <effect/timeline.h>
 
+#include <type_traits>
+#include <utility>
+
 #include <QHash>
 #include <QList>
 #include <QRectF>
@@ -57,10 +60,18 @@ Q_SIGNALS:
                           const QString &transition, int durationMs);
 
 protected:
-    void drawWindow(const RenderTarget &renderTarget,
-                    const RenderViewport &viewport, EffectWindow *window,
-                    int mask, const Region &deviceRegion,
-                    WindowPaintData &data) override;
+    using DrawWindowResult = decltype(std::declval<Effect>().drawWindow(
+        std::declval<const RenderTarget &>(),
+        std::declval<const RenderViewport &>(),
+        std::declval<EffectWindow *>(),
+        0,
+        std::declval<const Region &>(),
+        std::declval<WindowPaintData &>()));
+
+    DrawWindowResult drawWindow(const RenderTarget &renderTarget,
+                                const RenderViewport &viewport, EffectWindow *window,
+                                int mask, const Region &deviceRegion,
+                                WindowPaintData &data) override;
     void apply(EffectWindow *window, int mask, WindowPaintData &data,
                WindowQuadList &quads) override;
 

@@ -58,6 +58,20 @@ static void logTarget(bool trace, const char *source, const QString &id,
                                  << "rect=" << rect << "scale=" << scale;
 }
 
+template <typename BaseCall, typename PostWork>
+static auto invokePaintScreen(BaseCall &&baseCall, PostWork &&postWork) {
+    if constexpr (std::is_same_v<decltype(baseCall()), bool>) {
+        if (!baseCall()) {
+            return false;
+        }
+        postWork();
+        return true;
+    } else {
+        baseCall();
+        postWork();
+    }
+}
+
 // ── 调参常量（与 shell/desktop/modules/stage/stage-geometry.mjs 对应项
 // 保持一致——改一处必须同步另一处）──
 static constexpr qreal kPerspectiveFocal = 900.0;   // 针孔透视焦距
@@ -669,26 +683,32 @@ void StageAnimEffect::prePaintScreen(ScreenPrePaintData &data)
 // 标题/图标排不受影响，仅失去背板色调/深度渐变的叠加（后续可在着色器
 // 里补）。任何窗口动画播放期间整体让位（飞行窗口会横穿卡列，层序
 // 不可与直绘混排）。
-//（paintScreen 签名在 6.6 与 6.7 发行版一致＝void，无需守卫）
-void StageAnimEffect::paintScreen(const RenderTarget &renderTarget, const RenderViewport &viewport,
-                                  int mask, const Region &deviceRegion, LogicalOutput *screen)
+//（paintScreen 签名在 6.6 与 6.7 发行版为 void，在更新的 KWin 版本中返回 bool）
+StageAnimEffect::PaintScreenResult StageAnimEffect::paintScreen(
+    const RenderTarget &renderTarget, const RenderViewport &viewport,
+    int mask, const Region &deviceRegion, LogicalOutput *screen)
 {
     static quint32 s_psCalls = 0;
     if (++s_psCalls % 18000 == 1)
         qCInfo(STAGEANIM_LOG) << "live paintScreen called #" << s_psCalls
                                  << "cards=" << m_liveCards.size()
                                  << "anims=" << m_animations.size();
-    effects->paintScreen(renderTarget, viewport, mask, deviceRegion, screen);
 
-    // ⚠️ 不可再有 m_animations 全局让位闸：卡面视觉整体在特效手里，全局
-    // 一让＝动画期间整列卡消失（旧架构只让内容、QML 卡面还在）。改为
-    // 逐卡让位——飞行中窗口自己的卡跳过（liveCardPaintable 内判定），
-    // 其余卡照画；飞行窗由合成器画在窗层级，交叠瞬间由 engage 淡出遮蔽。
-    if (m_liveCards.isEmpty())
-        return;
-    if (effects->activeFullScreenEffect())
-        return;
-    drawLiveCards(renderTarget, viewport);
+    return invokePaintScreen(
+        [&] {
+            return effects->paintScreen(renderTarget, viewport, mask, deviceRegion, screen);
+        },
+        [&] {
+            // ⚠️ 不可再有 m_animations 全局让位闸：卡面视觉整体在特效手里，全局
+            // 一让＝动画期间整列卡消失（旧架构只让内容、QML 卡面还在）。改为
+            // 逐卡让位——飞行中窗口自己的卡跳过（liveCardPaintable 内判定），
+            // 其余卡照画；飞行窗由合成器画在窗层级，交叠瞬间由 engage 淡出遮蔽。
+            if (m_liveCards.isEmpty())
+                return;
+            if (effects->activeFullScreenEffect())
+                return;
+            drawLiveCards(renderTarget, viewport);
+        });
 }
 
 #ifdef KOS_KWIN_PAINT_TIME_API

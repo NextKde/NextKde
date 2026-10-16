@@ -131,7 +131,15 @@ public:
     void prePaintWindow(RenderView *view, EffectWindow *w, WindowPrePaintData &data, std::chrono::milliseconds presentTime) override;
 #endif
 #endif
-    void drawWindow(const RenderTarget &renderTarget, const RenderViewport &viewport, EffectWindow *w, int mask, const BlurRegion &deviceRegion, WindowPaintData &data) override;
+    using DrawWindowResult = decltype(std::declval<Effect>().drawWindow(
+        std::declval<const RenderTarget &>(),
+        std::declval<const RenderViewport &>(),
+        std::declval<EffectWindow *>(),
+        0,
+        std::declval<const BlurRegion &>(),
+        std::declval<WindowPaintData &>()));
+
+    DrawWindowResult drawWindow(const RenderTarget &renderTarget, const RenderViewport &viewport, EffectWindow *w, int mask, const BlurRegion &deviceRegion, WindowPaintData &data) override;
 
     bool provides(Feature feature) override;
     bool isActive() const override;

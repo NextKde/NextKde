@@ -3,6 +3,8 @@
 #include <effect/effect.h>
 #include "windowappearance/sharedwindowsource.h"
 #include <memory>
+#include <type_traits>
+#include <utility>
 
 namespace KOS
 {
@@ -40,11 +42,19 @@ public:
 #endif
                         ) override;
 
-    void drawWindow(const KWin::RenderTarget &renderTarget,
-                    const KWin::RenderViewport &viewport,
-                    KWin::EffectWindow *window, int mask,
-                    const KWin::Region &deviceRegion,
-                    KWin::WindowPaintData &data) override;
+    using DrawWindowResult = decltype(std::declval<KWin::Effect>().drawWindow(
+        std::declval<const KWin::RenderTarget &>(),
+        std::declval<const KWin::RenderViewport &>(),
+        std::declval<KWin::EffectWindow *>(),
+        0,
+        std::declval<const KWin::Region &>(),
+        std::declval<KWin::WindowPaintData &>()));
+
+    DrawWindowResult drawWindow(const KWin::RenderTarget &renderTarget,
+                                const KWin::RenderViewport &viewport,
+                                KWin::EffectWindow *window, int mask,
+                                const KWin::Region &deviceRegion,
+                                KWin::WindowPaintData &data) override;
 
     bool drawSharedWindow(const KWin::RenderTarget &, const KWin::RenderViewport &,
                           KWin::EffectWindow *, int, const KWin::Region &,

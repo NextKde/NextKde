@@ -76,6 +76,16 @@ static void ensureResources()
 namespace KWin
 {
 
+template <typename Ret>
+struct DrawWindowReturn {
+    static constexpr auto success() {
+        if constexpr (std::is_same_v<Ret, bool>) return true;
+    }
+    static constexpr auto failure() {
+        if constexpr (std::is_same_v<Ret, bool>) return false;
+    }
+};
+
 static const QByteArray s_blurAtomName = QByteArrayLiteral("_KDE_NET_WM_BLUR_BEHIND_REGION");
 
 static bool isQuickshellWindow(const EffectWindow *window)
@@ -1346,7 +1356,7 @@ bool BlurEffect::shouldBlur(const EffectWindow *w, int mask, const WindowPaintDa
     return true;
 }
 
-void BlurEffect::drawWindow(const RenderTarget &renderTarget, const RenderViewport &viewport, EffectWindow *w, int mask, const BlurRegion &deviceRegion, WindowPaintData &data)
+BlurEffect::DrawWindowResult BlurEffect::drawWindow(const RenderTarget &renderTarget, const RenderViewport &viewport, EffectWindow *w, int mask, const BlurRegion &deviceRegion, WindowPaintData &data)
 {
     blur(renderTarget, viewport, w, mask, deviceRegion, data);
 
@@ -1356,7 +1366,7 @@ void BlurEffect::drawWindow(const RenderTarget &renderTarget, const RenderViewpo
     if (m_surfaceShapeManager && w->surface()) {
         if (const auto reveal = m_surfaceShapeManager->revealFor(w->surface())) {
             if (reveal->progress <= 0)
-                return;
+                return DrawWindowReturn<DrawWindowResult>::success();
             WindowPaintData contentData(data);
             const qreal scale = reveal->scale();
             const QPointF anchor = reveal->anchor();
@@ -1365,13 +1375,12 @@ void BlurEffect::drawWindow(const RenderTarget &renderTarget, const RenderViewpo
             contentData.setXScale(data.xScale() * scale);
             contentData.setYScale(data.yScale() * scale);
             contentData.multiplyOpacity(reveal->progress);
-            effects->drawWindow(renderTarget, viewport, w, mask | PAINT_WINDOW_TRANSFORMED,
+            return effects->drawWindow(renderTarget, viewport, w, mask | PAINT_WINDOW_TRANSFORMED,
                                 deviceRegion, contentData);
-            return;
         }
     }
 #endif
-    effects->drawWindow(renderTarget, viewport, w, mask, deviceRegion, data);
+    return effects->drawWindow(renderTarget, viewport, w, mask, deviceRegion, data);
 }
 
 GLTexture *BlurEffect::ensureNoiseTexture(int noiseStrength)

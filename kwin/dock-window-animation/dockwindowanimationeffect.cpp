@@ -15,12 +15,15 @@
 #include <QJsonObject>
 #include <QLoggingCategory>
 #include <QPointer>
+#include <QScopeGuard>
 #include <QTimer>
 
 #include <algorithm>
 #include <chrono>
 #include <cmath>
 #include <numbers>
+#include <type_traits>
+#include <utility>
 
 Q_LOGGING_CATEGORY(KWIN_KOS_DOCK_ANIMATION, "kwin_effect_kos_dock_animation")
 
@@ -29,6 +32,26 @@ namespace KWin
 
 namespace
 {
+template <typename Ret>
+struct DrawWindowReturn {
+    static constexpr auto success() {
+        if constexpr (std::is_same_v<Ret, bool>) return true;
+    }
+    static constexpr auto failure() {
+        if constexpr (std::is_same_v<Ret, bool>) return false;
+    }
+};
+
+template <typename Fn>
+bool checkDrawWindowSuccess(Fn &&fn) {
+    if constexpr (std::is_same_v<decltype(fn()), bool>) {
+        return fn();
+    } else {
+        fn();
+        return true;
+    }
+}
+
 constexpr auto dbusPath = "/KOSDockWindowAnimation";
 
 // Fades the glass material of a window this effect is animating. The vendored
@@ -598,7 +621,7 @@ void DockWindowAnimationEffect::addAnimationRepaint(
                         qCeil(region.width()), qCeil(region.height()));
 }
 
-void DockWindowAnimationEffect::drawWindow(
+DockWindowAnimationEffect::DrawWindowResult DockWindowAnimationEffect::drawWindow(
     const RenderTarget &renderTarget, const RenderViewport &viewport,
     EffectWindow *window, int mask, const Region &deviceRegion,
     WindowPaintData &data)
@@ -614,7 +637,7 @@ void DockWindowAnimationEffect::drawWindow(
                 // A fallback allocation from an earlier frame/configuration
                 // must not remain as a second texture beside the shared one.
                 unredirect(window);
-                return;
+                return DrawWindowReturn<DrawWindowResult>::success();
             }
         }
         redirect(window);
@@ -637,17 +660,23 @@ void DockWindowAnimationEffect::drawWindow(
             const qreal seamSpan = std::clamp(40.0 / duration, 0.0, 1.0);
             if (it->timeLine.value() <= seamSpan) {
                 WindowPaintData backingData = data;
-                effects->drawWindow(renderTarget, viewport, window, mask,
-                                    deviceRegion, backingData);
+                if (!checkDrawWindowSuccess([&] {
+                    return effects->drawWindow(renderTarget, viewport, window, mask,
+                                               deviceRegion, backingData);
+                })) {
+                    return DrawWindowReturn<DrawWindowResult>::failure();
+                }
             }
         }
     }
 
     const QVariant previousCapture = window->data(KOS::LegacyWindowSourceCaptureRole);
     if (it != m_animations.end()) window->setData(KOS::LegacyWindowSourceCaptureRole, true);
-    OffscreenEffect::drawWindow(renderTarget, viewport, window, mask,
-                                deviceRegion, data);
-    window->setData(KOS::LegacyWindowSourceCaptureRole, previousCapture);
+    const auto cleanup = qScopeGuard([window, &previousCapture] {
+        window->setData(KOS::LegacyWindowSourceCaptureRole, previousCapture);
+    });
+    return OffscreenEffect::drawWindow(renderTarget, viewport, window, mask,
+                                       deviceRegion, data);
 }
 
 void DockWindowAnimationEffect::applyDockMorph(

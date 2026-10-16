@@ -31,6 +31,8 @@
 #include <QSet>
 #include <QTimer>
 #include <QVector>
+#include <type_traits>
+#include <utility>
 
 namespace KWin
 {
@@ -196,8 +198,15 @@ public:
     void prePaintScreen(ScreenPrePaintData &data) override;
     void prePaintWindow(RenderView *view, EffectWindow *w, WindowPrePaintData &data) override;
 #endif
-    void paintScreen(const RenderTarget &renderTarget, const RenderViewport &viewport,
-                     int mask, const Region &deviceRegion, LogicalOutput *screen) override;
+    using PaintScreenResult = decltype(std::declval<Effect>().paintScreen(
+        std::declval<const RenderTarget &>(),
+        std::declval<const RenderViewport &>(),
+        0,
+        std::declval<const Region &>(),
+        std::declval<LogicalOutput *>()));
+
+    PaintScreenResult paintScreen(const RenderTarget &renderTarget, const RenderViewport &viewport,
+                                  int mask, const Region &deviceRegion, LogicalOutput *screen) override;
     void postPaintScreen() override;
     bool isActive() const override;
 
