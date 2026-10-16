@@ -188,6 +188,37 @@ KosApplicationWindow {
         return clouds
     }
 
+    // Static high cloud band for the clear day sky: a fixed-seed PRNG lays
+    // out 5 soft white cloud banks hugging the top of the window (the Apple
+    // Weather clear-day reference keeps clouds in the upper ~40% and fades
+    // them out toward the horizon). Purely decorative, never animated.
+    readonly property var clearSkyClouds: {
+        const random = mulberry32(20261020)
+        const clouds = []
+        for (let index = 0; index < 5; index++) {
+            const cloudWidth = 300 + random() * 160
+            const puffs = []
+            for (let puff = 0; puff < 4; puff++) {
+                puffs.push({
+                    cxRatio: 0.1 + random() * 0.8,
+                    cyRatio: 0.3 + random() * 0.4,
+                    rRatio: 0.28 + random() * 0.22,
+                    alphaMul: 0.6 + random() * 0.4
+                })
+            }
+            puffs.sort(function(a, b) { return a.cxRatio - b.cxRatio })
+            clouds.push({
+                xRatio: random(),
+                yRatio: index * 0.085 + random() * 0.04,
+                cloudWidth: cloudWidth,
+                cloudHeight: cloudWidth * 0.3,
+                opacity: 0.40 - index * 0.075 + random() * 0.05,
+                puffs: puffs
+            })
+        }
+        return clouds
+    }
+
     function skyStopsFor(code, isDay) {
         const c = Number(code)
         if (!isDay) {
@@ -423,6 +454,65 @@ KosApplicationWindow {
             GradientStop { position: 0.0; color: root.skyStops[0] }
             GradientStop { position: 0.45; color: root.skyStops[1] }
             GradientStop { position: 1.0; color: root.skyStops[2] }
+        }
+    }
+
+    // Static procedural cirrus band for the clear day sky (see
+    // clearSkyClouds). Painted once per canvas resize, never animated.
+    // Clouds are kept to the right of the (opaque) sidebar so none of the
+    // band is wasted behind it.
+    Item {
+        id: clearSkyCloudLayer
+        anchors.fill: parent
+        visible: root.dayClearSky
+        clip: true
+        readonly property real cloudLeft:
+            root.compact ? AppTheme.compactSidebarWidth : AppTheme.sidebarWidth
+
+        Repeater {
+            model: root.clearSkyClouds
+
+            delegate: Item {
+                id: clearSkyCloud
+                required property var modelData
+
+                x: clearSkyCloudLayer.cloudLeft
+                   + (clearSkyCloudLayer.width - clearSkyCloudLayer.cloudLeft - width)
+                     * modelData.xRatio
+                y: (clearSkyCloudLayer.height - height) * modelData.yRatio
+                width: modelData.cloudWidth
+                height: modelData.cloudHeight
+                opacity: modelData.opacity
+                Accessible.ignored: true
+
+                Canvas {
+                    anchors.fill: parent
+                    onWidthChanged: requestPaint()
+                    onHeightChanged: requestPaint()
+                    onPaint: {
+                        const ctx = getContext("2d")
+                        ctx.clearRect(0, 0, width, height)
+                        for (let i = 0; i < modelData.puffs.length; i++) {
+                            const p = modelData.puffs[i]
+                            const cx = p.cxRatio * width
+                            const cy = p.cyRatio * height
+                            // Keep the gradient inside the canvas: alpha must
+                            // reach 0 before any clipped edge, otherwise puffs
+                            // show hard rectangular borders.
+                            const r = Math.max(Math.min(p.rRatio * height * 1.2,
+                                                        cy, height - cy,
+                                                        cx, width - cx), 8)
+                            const grad = ctx.createRadialGradient(cx, cy, 0, cx, cy, r)
+                            grad.addColorStop(0, "rgba(255,255,255," + p.alphaMul.toFixed(3) + ")")
+                            grad.addColorStop(1, "rgba(255,255,255,0)")
+                            ctx.fillStyle = grad
+                            ctx.beginPath()
+                            ctx.arc(cx, cy, r, 0, Math.PI * 2)
+                            ctx.fill()
+                        }
+                    }
+                }
+            }
         }
     }
 
