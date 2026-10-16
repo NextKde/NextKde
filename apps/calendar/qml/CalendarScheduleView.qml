@@ -445,13 +445,30 @@ Pane {
                                 color: AppTheme.withAlpha(root.itemColor(modelData),
                                     AppTheme.dark ? 0.32 : 0.17)
                                 opacity: root.itemCompleted(modelData) ? 0.5 : 1
+                                // R080: the band chip's ink is the same rule as the timed
+                                // chip's (R079) — the calendar colour halfway to its pole.
+                                // Measured on the REF's band chips, 1:1, against their own
+                                // coloured ring icon: purple ring (187,62,217) → ink core
+                                // (93,30,108); blue-grey ring (133,148,173) → (67,74,86).
+                                // Both are 1:2 on every channel (the .5 rounds down where
+                                // the colour is odd), hue and saturation untouched.
+                                readonly property color inkColor: {
+                                    var c = root.itemColor(modelData)
+                                    var pole = AppTheme.dark ? 1 : 0
+                                    return Qt.rgba(c.r + (pole - c.r) * 0.5,
+                                                   c.g + (pole - c.g) * 0.5,
+                                                   c.b + (pole - c.b) * 0.5, 1)
+                                }
 
                                 Label {
                                     anchors.fill: parent
                                     anchors.leftMargin: 5
                                     anchors.rightMargin: 4
                                     text: root.itemTitle(allDayChip.modelData)
-                                    color: AppTheme.text
+                                    // R080: was AppTheme.text (grey) — the band chip is the
+                                    // same chip family as the timed chip and the ref inks
+                                    // both the same way.
+                                    color: allDayChip.inkColor
                                     font.pixelSize: 9
                                     font.strikeout: root.itemCompleted(allDayChip.modelData)
                                     verticalAlignment: Text.AlignVCenter
