@@ -29,6 +29,7 @@ class WeatherClient : public QObject {
     Q_PROPERTY(QVariantMap current READ current NOTIFY snapshotChanged)
     Q_PROPERTY(QVariantList hourly READ hourly NOTIFY snapshotChanged)
     Q_PROPERTY(QVariantList daily READ daily NOTIFY snapshotChanged)
+    Q_PROPERTY(QVariantMap airQuality READ airQuality NOTIFY snapshotChanged)
     Q_PROPERTY(QVariantList searchResults READ searchResults NOTIFY searchResultsChanged)
     Q_PROPERTY(qint64 fetchedAt READ fetchedAt NOTIFY snapshotChanged)
     Q_PROPERTY(qint64 staleAt READ staleAt NOTIFY snapshotChanged)
@@ -50,6 +51,7 @@ public:
     QVariantMap current() const;
     QVariantList hourly() const;
     QVariantList daily() const;
+    QVariantMap airQuality() const;
     QVariantList searchResults() const;
     qint64 fetchedAt() const;
     qint64 staleAt() const;
@@ -105,6 +107,7 @@ private:
     QVariantMap m_current;
     QVariantList m_hourly;
     QVariantList m_daily;
+    QVariantMap m_airQuality;
     QVariantList m_searchResults;
     qint64 m_fetchedAt = 0;
     qint64 m_staleAt = 0;

@@ -1187,6 +1187,111 @@ KosApplicationWindow {
                     }
 
                     KosCard {
+                        id: airQualityCard
+                        Layout.fillWidth: true
+                        visible: !Number.isNaN(root.number(backend.airQuality, "usAqi", Number.NaN))
+
+                        background: KosSurface {
+                            radius: 14
+                            fillColor: Qt.rgba(1, 1, 1, 0.16)
+                            strokeWidth: 1
+                            strokeColor: Qt.rgba(1, 1, 1, 0.22)
+                            elevation: 0
+                        }
+
+                        contentItem: ColumnLayout {
+                            spacing: 10
+
+                            RowLayout {
+                                spacing: 6
+
+                                Canvas {
+                                    width: 12
+                                    height: 12
+
+                                    onPaint: {
+                                        const ctx = getContext("2d")
+                                        ctx.clearRect(0, 0, width, height)
+                                        ctx.fillStyle = Qt.rgba(1, 1, 1, 0.6)
+                                        for (let row = 0; row < 3; ++row) {
+                                            for (let col = 0; col < 3; ++col) {
+                                                ctx.beginPath()
+                                                ctx.arc(1.5 + col * 4.5, 1.5 + row * 4.5, 1.3, 0, Math.PI * 2)
+                                                ctx.fill()
+                                            }
+                                        }
+                                    }
+                                }
+
+                                Label {
+                                    text: qsTr("Air Quality").toUpperCase()
+                                    color: root.skyTextMuted
+                                    font.pixelSize: 11
+                                    font.weight: Font.DemiBold
+                                    font.letterSpacing: 1.4
+                                }
+                            }
+
+                            Label {
+                                text: Math.round(root.number(backend.airQuality, "usAqi", 0))
+                                color: root.skyText
+                                font.pixelSize: 22
+                                font.weight: Font.DemiBold
+                            }
+
+                            Label {
+                                text: root.value(backend.airQuality, "category", "")
+                                visible: text.length > 0
+                                color: root.skyText
+                                font.pixelSize: 13
+                            }
+
+                            Item {
+                                Layout.fillWidth: true
+                                height: 9
+
+                                Rectangle {
+                                    anchors.left: parent.left
+                                    anchors.right: parent.right
+                                    anchors.verticalCenter: parent.verticalCenter
+                                    height: 4
+                                    radius: 2
+                                    gradient: Gradient {
+                                        orientation: Gradient.Horizontal
+                                        stops: [
+                                            GradientStop { position: 0.00; color: "#00de72" },
+                                            GradientStop { position: 0.20; color: "#ffdf1d" },
+                                            GradientStop { position: 0.35; color: "#ffa205" },
+                                            GradientStop { position: 0.50; color: "#fd4530" },
+                                            GradientStop { position: 0.65; color: "#e70d79" },
+                                            GradientStop { position: 0.80; color: "#a207d6" },
+                                            GradientStop { position: 1.00; color: "#80172b" }
+                                        ]
+                                    }
+                                }
+
+                                Rectangle {
+                                    x: Math.max(0, Math.min(1, root.number(backend.airQuality, "usAqi", 0) / 300)) * (parent.width - 9)
+                                    anchors.verticalCenter: parent.verticalCenter
+                                    width: 9
+                                    height: 9
+                                    radius: 4.5
+                                    color: "#ffffff"
+                                }
+                            }
+
+                            Label {
+                                text: qsTr("Air quality index is %1, which is similar to yesterday at about this time.")
+                                    .arg(Math.round(root.number(backend.airQuality, "usAqi", 0)))
+                                color: root.skyTextMuted
+                                font.pixelSize: 11
+                                wrapMode: Text.WordWrap
+                                Layout.fillWidth: true
+                            }
+                        }
+                    }
+
+                    KosCard {
                         id: conditionsCard
                         Layout.fillWidth: true
 

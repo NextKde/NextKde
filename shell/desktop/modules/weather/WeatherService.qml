@@ -15,6 +15,7 @@ QtObject {
     property var current: null
     property var hourly: []
     property var daily: []
+    property var airQuality: null
     property string units: "metric"
     property string status: "idle"
     property string errorMessage: ""
@@ -124,6 +125,7 @@ QtObject {
         current = weather.current ?? null
         hourly = Array.isArray(weather.hourly) ? weather.hourly : []
         daily = Array.isArray(weather.daily) ? weather.daily : []
+        airQuality = weather.airQuality ?? null
         units = weather.units === "imperial" ? "imperial" : "metric"
         status = String(weather.status ?? "idle")
         errorMessage = String(weather.error ?? "")
