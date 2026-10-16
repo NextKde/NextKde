@@ -23,6 +23,10 @@ Popup {
     readonly property color titleColor: AppTheme.dark ? "#F2F2F2" : "#1A1A1A"
     readonly property color secondaryColor: AppTheme.dark
         ? Qt.rgba(1, 1, 1, 0.58) : Qt.rgba(0, 0, 0, 0.55)
+    // Interior margin reserved for the app-painted shadow: the visible
+    // surface is inset by this much on every side while the popup itself
+    // grows by 2 * shadowInset, so the surface box keeps its size/position.
+    readonly property real shadowInset: 14
 
     property string itemTitle: ""
     property string itemTime: ""
@@ -48,29 +52,37 @@ Popup {
     }
     onItemNotesChanged: resetNotesScroll()
 
-    width: 340
-    padding: 14
+    // The popup grows by 2 * shadowInset; contentItem is inset by
+    // padding, so the content width stays 340 - 2 * 14 = 312.
+    width: 340 + 2 * shadowInset
+    padding: 14 + shadowInset
     modal: false
     closePolicy: Popup.CloseOnPressOutside | Popup.CloseOnEscape
     onClosed: root.dismissed()
 
     background: Item {
-        // Soft app-painted shadow behind a neutral surface.
+        // Soft app-painted shadow behind a neutral surface. It is painted
+        // INSIDE the popup's own bounds (into the shadowInset margin) so
+        // the Popup cannot clip it; autoPaddingEnabled lets the blur bleed
+        // ~2px past the surface on the top/left/right and ~4px below.
         Rectangle {
-            x: 2; y: 5
-            width: parent.width - 4; height: parent.height - 4
+            x: root.shadowInset - 2
+            y: root.shadowInset - 2
+            width: parent.width - 2 * root.shadowInset + 4
+            height: parent.height - 2 * root.shadowInset + 6
             radius: 14
-            color: AppTheme.dark ? "#B3000000" : "#59000000"
+            color: AppTheme.dark ? "#99000000" : "#40000000"
             layer.enabled: true
             layer.effect: MultiEffect {
                 blurEnabled: true
                 blurMax: 24
-                blur: 0.6
-                autoPaddingEnabled: false
+                blur: 0.4
+                autoPaddingEnabled: true
             }
         }
         Rectangle {
             anchors.fill: parent
+            anchors.margins: root.shadowInset
             radius: 12
             color: root.surfaceColor
             border.width: 1
@@ -167,7 +179,10 @@ Popup {
 
             Label {
                 objectName: "detailsNotes"
-                width: root.availableWidth - root.padding * 2
+                // 14 is the content inset, independent of shadowInset; the
+                // wrap must not depend on the shadow margin. Using
+                // root.padding here made the label 28px narrower.
+                width: root.availableWidth - 2 * 14
                 text: root.itemNotes
                 color: root.secondaryColor
                 font.pixelSize: 12
