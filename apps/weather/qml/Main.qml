@@ -57,6 +57,9 @@ KosApplicationWindow {
     readonly property bool nightClearSky:
         !Boolean(value(backend.current, "isDay", true))
         && (root.currentWeatherCode === 0 || root.currentWeatherCode === 1)
+    readonly property bool dayClearSky:
+        root.currentIsDay
+        && (root.currentWeatherCode === 0 || root.currentWeatherCode === 1)
     readonly property bool rainySky: {
         const c = root.currentWeatherCode
         return (c >= 51 && c <= 67) || (c >= 80 && c <= 82) || c >= 95
@@ -420,6 +423,40 @@ KosApplicationWindow {
             GradientStop { position: 0.0; color: root.skyStops[0] }
             GradientStop { position: 0.45; color: root.skyStops[1] }
             GradientStop { position: 1.0; color: root.skyStops[2] }
+        }
+    }
+
+    Item {
+        id: sunGlowLayer
+        anchors.fill: parent
+        visible: root.dayClearSky
+        clip: true
+        opacity: 0.17
+
+        Canvas {
+            anchors.fill: parent
+            onWidthChanged: requestPaint()
+            onHeightChanged: requestPaint()
+            onPaint: {
+                const ctx = getContext("2d")
+                ctx.reset()
+                const cx = width * 0.65
+                const cy = height * 0.14
+                const r = Math.max(width * 0.55, height * 0.8)
+                const g = ctx.createRadialGradient(cx, cy, 0, cx, cy, r)
+                g.addColorStop(0, "rgba(255, 240, 200, 0.85)")
+                g.addColorStop(0.4, "rgba(255, 240, 200, 0.35)")
+                g.addColorStop(1, "rgba(255, 240, 200, 0)")
+                ctx.fillStyle = g
+                ctx.fillRect(0, 0, width, height)
+            }
+        }
+
+        SequentialAnimation on opacity {
+            running: root.dayClearSky && !AppTheme.reduceMotion
+            loops: Animation.Infinite
+            NumberAnimation { from: 0.10; to: 0.24; duration: 3500; easing.type: Easing.InOutSine }
+            NumberAnimation { from: 0.24; to: 0.10; duration: 3500; easing.type: Easing.InOutSine }
         }
     }
 
