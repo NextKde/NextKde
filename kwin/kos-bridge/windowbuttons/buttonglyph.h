@@ -36,4 +36,10 @@ QColor dotColor(Type type, bool active);
 void drawLight(QPainter &painter, const QRectF &dot, Type type, bool active,
                bool maximized, bool showGlyph = true);
 
+// Tone-matched or luminous hover halo color for the selected button.
+QColor dotHoverRingColor(Type type, bool dark);
+
+// Draw the smooth hover halo/ring around the hovered button.
+void drawHoverRing(QPainter &painter, const QRectF &dot, Type type, bool dark);
+
 } // namespace KOS

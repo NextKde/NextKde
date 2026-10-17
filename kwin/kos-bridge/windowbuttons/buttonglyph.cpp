@@ -151,4 +151,39 @@ void drawLight(QPainter &painter, const QRectF &dot, Type type, bool active,
     }
 }
 
+QColor dotHoverRingColor(Type type, bool dark)
+{
+    if (dark) {
+        return QColor(255, 255, 255, 0x70);
+    }
+    switch (type) {
+    case Close: return QColor(0xe0, 0x44, 0x3e, 0x90);
+    case Minimize: return QColor(0xde, 0xa1, 0x23, 0xa0);
+    case Maximize: return QColor(0x1a, 0xab, 0x29, 0x90);
+    case TypeCount: break;
+    }
+    return QColor(0, 0, 0, 0x44);
+}
+
+void drawHoverRing(QPainter &painter, const QRectF &dot, Type type, bool dark)
+{
+    // A delicate, smooth focus halo hugging the light (gap 1.5px, width 1.2px)
+    // with subpixel anti-aliasing feathering.
+    constexpr qreal gap = 1.5;
+    const QRectF ringRect = dot.adjusted(-gap, -gap, gap, gap);
+
+    const QColor base = dotHoverRingColor(type, dark);
+
+    // Core ring (1.2px)
+    painter.setBrush(Qt::NoBrush);
+    painter.setPen(QPen(base, 1.2));
+    painter.drawEllipse(ringRect);
+
+    // Soft outer feathering pass for silky subpixel transition
+    const QColor feather(base.red(), base.green(), base.blue(), base.alpha() / 3);
+    painter.setPen(QPen(feather, 0.6));
+    painter.drawEllipse(ringRect.adjusted(-0.35, -0.35, 0.35, 0.35));
+    painter.drawEllipse(ringRect.adjusted(0.35, 0.35, -0.35, -0.35));
+}
+
 } // namespace KOS
