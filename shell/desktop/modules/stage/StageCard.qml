@@ -489,6 +489,24 @@ Item {
             Behavior on color { ColorAnimation { duration: 130 } }
         }
 
+        // ── 常驻投影(iPadOS 还原,2026-10-17):参考缩略图卡下方有柔和短
+        // 投影(实测壁纸压暗 ~25%、衰减 ~21pt)。4 层步进黑矩形,声明在
+        // 背板之后/内容之前 = 随 plane 纹理一起被透视斜切(投影随卡姿态,
+        // 与参考一致)。只在卡底部可见(向下偏移,上/侧层被卡面盖住)──
+        Repeater {
+            model: 4
+            Rectangle {
+                required property int index
+                anchors.centerIn: plate
+                width: plate.width + 4 + index * 4
+                height: plate.height + 4 + index * 4
+                y: plate.y + 3 + index * 2   // 向下偏移:底缘露出,顶缘藏卡后
+                radius: plate.radius + 2 + index * 2
+                color: Qt.rgba(0, 0, 0, 1)
+                opacity: 0.25 / (index + 1)
+            }
+        }
+
         // ── 聚焦辉光：多层薄步进衰减模拟柔和光晕。⚠️ 平色矩形层叠会出硬边
         //（在深色壁纸上呈"黑条"，实测踩过）——每层透明度减半、外扩小步长，
         // 层间差异小到不可辨。声明在内容之前 = 画在卡背之上、内容之下；
