@@ -414,7 +414,7 @@ void ButtonRenderer::paint(const KWin::RenderTarget &renderTarget,
         hit.dots[i] = dotRect(panelSize, geometry, i).translated(panelOrigin);
         cluster = cluster.isEmpty() ? hit.dots[i] : cluster.united(hit.dots[i]);
     }
-    hit.clusterRect = cluster.adjusted(-4.0, -4.0, 4.0, 4.0);
+    hit.clusterRect = cluster.adjusted(-1.0, -1.0, 1.0, 1.0);
 
     // The tiling menu, if one is open on this window. It hangs from the panel
     // being drawn now -- the draft, while the panel is being positioned -- and
@@ -1325,6 +1325,7 @@ void ButtonRenderer::syncHits(KWin::EffectWindow *window)
     it->windowOrigin = origin;
     it->panelRect.translate(delta);
     it->interceptRect.translate(delta);
+    it->clusterRect.translate(delta);
     for (auto &dot : it->dots) dot.translate(delta);
     if (m_menu.window == window) {
         m_menu.rect = tileMenuRect(it->panelRect, window->frameGeometry(),
