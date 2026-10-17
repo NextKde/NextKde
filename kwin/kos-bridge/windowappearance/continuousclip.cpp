@@ -4,6 +4,9 @@
  * SPDX-License-Identifier: GPL-2.0-or-later
  */
 #include "continuousclip.h"
+#ifdef KOS_KWIN_PAINT_RESULT_API
+#include <opengl/eglcontext.h>
+#endif
 
 #include <core/output.h>
 #include <core/pixelgrid.h>
@@ -390,11 +393,24 @@ bool ContinuousClip::paint(const KWin::RenderTarget &target,
         cache.dirty = false;
         KWin::RenderTarget sourceTarget(cache.fbo.get());
         KWin::RenderViewport sourceViewport(sourceGeometry, sourceScale, sourceTarget, QPoint());
+#ifdef KOS_KWIN_PAINT_RESULT_API
+        auto *sourceContext = KWin::EglContext::currentContext();
+#endif
         KWin::GLFramebuffer::pushFramebuffer(cache.fbo.get());
         glClearColor(0, 0, 0, 0);
         glClear(GL_COLOR_BUFFER_BIT);
-        sourcePainter(sourceTarget, sourceViewport);
+        const bool painted = sourcePainter(sourceTarget, sourceViewport);
+#ifdef KOS_KWIN_PAINT_RESULT_API
+        if (KWin::EglContext::currentContext() != sourceContext) {
+            cache.dirty = true;
+            return false;
+        }
+#endif
         KWin::GLFramebuffer::popFramebuffer();
+        if (!painted) {
+            cache.dirty = true;
+            return false;
+        }
     }
 
     const qreal scale = viewport.scale();

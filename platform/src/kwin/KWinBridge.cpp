@@ -8,6 +8,7 @@
 #include <QDBusPendingCallWatcher>
 #include <QDBusPendingReply>
 #include <QDBusReply>
+#include <QDBusServiceWatcher>
 #include <QDBusUnixFileDescriptor>
 #include <QDateTime>
 #include <QDirIterator>
@@ -781,10 +782,33 @@ bool startKWinBridge(const KWinEventHandler &handler)
                             << bus.lastError().message() << Qt::endl;
     }
 
-    // KWin's script is deliberately loaded by the same resident process. The
-    // D-Bus bridge is usable even when KWin is unavailable; the call simply
-    // fails and the rest of the platform adapters keep serving clients.
-    QTimer::singleShot(0, [] {
+    // KWin may register after the platform daemon, or acquire a new bus owner
+    // after a compositor restart. A one-shot load leaves Dock permanently
+    // without windows in either case. Retry startup briefly, and reload when
+    // a new KWin owner appears. This only loads our JS script, not effect .so's.
+    auto *scriptLoader = new QTimer(g_bridge);
+    scriptLoader->setInterval(2000);
+    auto attempts = std::make_shared<int>(0);
+    auto *kwinWatcher = new QDBusServiceWatcher(
+        QStringLiteral("org.kde.KWin"), bus,
+        QDBusServiceWatcher::WatchForOwnerChange, g_bridge);
+    QObject::connect(kwinWatcher, &QDBusServiceWatcher::serviceOwnerChanged,
+                     scriptLoader, [scriptLoader, attempts](const QString &,
+                                     const QString &, const QString &newOwner) {
+        scriptLoader->stop();
+        if (!newOwner.isEmpty()) {
+            *attempts = 0;
+            scriptLoader->start(0);
+        }
+    });
+    QObject::connect(scriptLoader, &QTimer::timeout, g_bridge, [scriptLoader, attempts] {
+        scriptLoader->setInterval(2000);
+        if (++*attempts >= 5)
+            scriptLoader->stop();
+        const auto reportFailure = [](const QString &reason) {
+            QTextStream(stderr) << "KWin window bridge not started: " << reason
+                                << Qt::endl;
+        };
         QDBusInterface effects(QStringLiteral("org.kde.KWin"),
                               QStringLiteral("/Effects"),
                               QStringLiteral("org.kde.kwin.Effects"),
@@ -799,20 +823,37 @@ bool startKWinBridge(const KWinEventHandler &handler)
         QDBusInterface scripting(QStringLiteral("org.kde.KWin"),
                                  QStringLiteral("/Scripting"),
                                  QStringLiteral("org.kde.kwin.Scripting"));
-        if (!scripting.isValid())
+        if (!scripting.isValid()) {
+            reportFailure(scripting.lastError().message());
             return;
+        }
         const QString script = qEnvironmentVariable("KOS_PLATFORM_KWIN_SCRIPT");
-        if (script.isEmpty())
+        if (script.isEmpty() || !QFileInfo(script).isReadable()) {
+            reportFailure(QStringLiteral("KOS_PLATFORM_KWIN_SCRIPT is missing or unreadable: ") + script);
+            scriptLoader->stop();
             return;
+        }
         scripting.call(QStringLiteral("unloadScript"),
                        QStringLiteral("kos-window-bridge"));
-        const QDBusMessage loaded = scripting.call(QStringLiteral("loadScript"),
+        const QDBusReply<int> loaded = scripting.call(QStringLiteral("loadScript"),
                                                     script,
                                                     QStringLiteral("kos-window-bridge"));
-        if (loaded.type() == QDBusMessage::ErrorMessage)
+        if (!loaded.isValid() || loaded.value() < 0) {
+            reportFailure(loaded.isValid() ? QStringLiteral("loadScript returned a negative script id")
+                                           : loaded.error().message());
             return;
-        scripting.call(QStringLiteral("start"));
+        }
+        const QDBusMessage started = scripting.call(QStringLiteral("start"));
+        if (started.type() == QDBusMessage::ErrorMessage) {
+            reportFailure(started.errorMessage());
+            return;
+        }
+        scriptLoader->stop();
+        // start() dispatches evaluation asynchronously; runtime JS errors are
+        // reported by KWin's scripting log, not by this D-Bus reply.
+        QTextStream(stderr) << "KWin window bridge start requested: " << script << Qt::endl;
     });
+    scriptLoader->start(0);
     return true;
 }
 
