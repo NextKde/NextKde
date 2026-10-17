@@ -418,9 +418,14 @@ Item {
     // ⚠️ 着色器以 plane 中心对称采样：扩容必须对称（plate 保持居中）。
     // 层纹理外扩余量：2 张 × 最大扩散系数 × 间距（默认 2×1.4=2.8 同旧值；
     // fanHoverSpread 调大时余量同步长——不够＝扇叠被层边界裁成直角）
-    readonly property real fanPad: 2
-        * Math.max(1.4, StageConfigService.fanHoverSpread)
-        * StageConfigService.fanSpacing
+    // 单窗卡没有扇叠背板，余量归零：plane 只剩 16/22 的辉光/投影余量
+    //（辉光实测外扩 13×18、投影 8×17，均 < 16/22），层纹理与着色器项
+    // 面积各减 ~30%，悬停动画期的离屏重渲随之变小。count 变化（合并/
+    // 拆散）时 plane 尺寸跟着变，层保持启用、只做常规重烘焙。
+    readonly property real fanPad: card.count > 1
+        ? 2 * Math.max(1.4, StageConfigService.fanHoverSpread)
+            * StageConfigService.fanSpacing
+        : 0
     Item {
         id: plane
         visible: false
