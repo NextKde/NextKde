@@ -44,6 +44,8 @@ Item {
     // 每窗图标（与 idsJson 平行；自由合并组内各应用图标不同）
     required property string iconsJson
     required property string iconIdsJson
+    // 逐窗行（合并卡左下窗口列：图标+标题竖排，参考 ref/c2.png）
+    required property string rowsJson
     required property bool merged // 自由合并卡（右键拆分）
     // 拖拽合并手势的落点高亮（窗口侧按 _dropMergeKey 绑定）
     property bool dropHovered: false
@@ -125,6 +127,17 @@ Item {
             out.push({ icon: icons[i], id: ids[i] })
         return out
     }
+    // 逐窗行（合并卡左下窗口列）：[{icon, title, id}]，代表窗在首位。
+    // 与 iconPairs 的区别——这里**不按应用去重**：同应用两扇窗是两行
+    //（各带自己的标题），点击直达对应窗口。
+    readonly property var windowRows: {
+        try {
+            const arr = JSON.parse(rowsJson || "[]")
+            return Array.isArray(arr) ? arr : []
+        } catch (e) {
+            return []
+        }
+    }
     // 图标排并列上限（stage-config maxIconSlots，设置页可调）；实际
     // 可见数还按卡宽动态封顶（见 iconRow.visibleCount），超出进 "+N"
     readonly property int maxIconSlots: StageConfigService.maxIconSlots
@@ -185,7 +198,10 @@ Item {
     property bool faceExposed: false
     property bool _faceEmptyExposed: false
     function _noteFaceExposure() {
-        if (faceExposed && thumbCard.thumbUrl === "")
+        // 判据："曝光时图还没就绪"（不是"URL 为空"）。壳重启时 URL 已在
+        // 表里但 PNG 还没写好，层纹理同样会烘死在空态（2026-10-18 实测：
+        // 6 张里 4 张空白，最终 thumbStatus=Ready 却永不刷新）。
+        if (faceExposed && preview.status !== Image.Ready)
             _faceEmptyExposed = true
     }
     onFaceExposedChanged: _noteFaceExposure()
@@ -197,8 +213,14 @@ Item {
         ? -1 : preview.status
     // 排障补全(2026-10-17):Image 实际 source 与可见性 — thumbStatus=0
     // 而 thumbUrl 非空的矛盾靠这两个分量分辨"source 空"vs"加载未启动"
+    // ⚠️ thumbPreviewVisible 读的是**有效可见性**（Qt 语义 = 自身 && 祖先），
+    // thumbCard 是 visible:false 的离屏烘焙层，故这里恒为 false——它不是
+    // "图没画"的判据（2026-10-18 曾据此误判一整轮）
     readonly property string thumbPreviewSource: preview.source.toString()
     readonly property bool thumbPreviewVisible: preview.visible
+    // 排障补全(2026-10-18):空脸自愈的两个状态位（曝光时是否已记"空脸"）
+    readonly property bool dbgFaceExposed: faceExposed
+    readonly property bool dbgEmptyExposed: _faceEmptyExposed
     // 活体卡发布参数（StageSidebarWindow.publishLiveCards 消费）：
     // 卡面矩形 + 透视参数。**发布动画中的实时值**（card.scale / tiltCur
     // 都带 Behavior，悬停/入场期间逐帧变化）——旧版发终态值，特效按自己的
@@ -286,6 +308,7 @@ Item {
             selfMergeHint: card.selfMergeHint,
             chipHot: card.isHovered || card.mergeGlow,
             iconsJson: card.iconsJson,
+            rowsJson: card.rowsJson,
             // 图标排消费参数（v88：特效侧原本硬编码 24px+仅宽度封顶＝
             // stripIconSize/maxIconSlots 两个旋钮在实时模式失灵，且与
             // 静态模式 40px 视觉不一致）
@@ -1072,53 +1095,64 @@ Item {
         }
     }
 
-    // ── 左下角窗口图标排（macOS Stage Manager 同款）：一窗一图标并列。
-    // ⚠️ 正视、独立图层：声明在 ShaderEffect 之后（画在其上）、不进 plane
-    // 的透视纹理——图标永远不随卡片倾斜（用户定稿："正视，和卡片不应是
-    // 一个图层，像小图标盖住卡片左下角"）。点击直达那扇窗。条在右时整
-    // 排镜像到右下角。悬停合入 isHovered（指针移到图标上卡片姿态不塌）。
+    // ── 左下角窗口标识（iPadOS 还原，参考 ref/c1·c2·c3）──
+    // 单窗：一枚大图标半悬卡角外（ref/c3 实测：水平探出 27%、垂直 60%）。
+    // 多窗合并卡：白色圆角胶囊，内为**逐窗**「图标 + 标题」竖排（ref/c2
+    // 实测：胶囊 ≈ 卡宽 33%，底/左各探出卡外约 8-10px）。两种形态都正视、
+    // 独立图层（不进 plane 透视纹理，不随卡倾斜——用户定稿"像小图标盖住
+    // 卡片左下角"）；点击直达对应窗口；条在右时整体镜像到右下角。
     Item {
         id: iconRow
         z: 2
         // chrome 让位：图标排已迁特效正视覆盖层（用户定稿"正视盖住左下
         // 角"），QML 侧隐藏防双绘
         visible: card.previewActive && !card.effectOwnedChrome
+        // 多窗形态：逐窗行 >1（同应用两扇窗也是两行——参考列的是窗口，
+        // 不是应用）。rowsJson 缺失（旧载荷/热重载）时退回单图标 + "+N"
+        readonly property bool listForm: card.windowRows.length > 1
         readonly property int iconSize: StageConfigService.stripIconSize
         readonly property int iconGap: Math.max(3, Math.round(iconSize * 0.2))
-        // 2026-10-17 iPadOS 还原:参考卡左下角是**单枚**大图标(~48pt、
-        // 半枚探出卡外);排形态(多窗并列)是参考没有的。visibleCount 钳到
-        // 1(旋钮 maxIconSlots 语义保留,预设/手动调大可恢复排)
+        // 胶囊度量：ref/c2 像素反推（卡宽 204 → 本卡 216，×1.06）
+        readonly property int pillW: 72
+        readonly property int pillIcon: 16
+        readonly property int pillRowH: 19
+        readonly property int pillPadX: 8
+        readonly property int pillPadY: 5
+        readonly property int pillRadius: 12
+        readonly property int pillMaxRows: 4
+        readonly property int displayRows:
+            Math.min(card.windowRows.length, pillMaxRows)
+        readonly property bool overflow: card.windowRows.length > displayRows
+        readonly property int pillH: displayRows * pillRowH + pillPadY * 2
+        // 单窗形态的并列上限（maxIconSlots 旋钮保留；预设钳 1）
         readonly property int visibleCount: Math.min(card.iconPairs.length,
             card.maxIconSlots,
             Math.floor((card.width + iconGap) / (iconSize + iconGap)),
             1)
         readonly property real rowWidth:
             visibleCount * iconSize + Math.max(0, visibleCount - 1) * iconGap
-        height: iconSize
+        // 单窗：图标中心略低于卡底；合并卡：胶囊底探出约 10px
+        readonly property real outX: listForm ? 8 : iconSize * 0.27
+        width: listForm ? pillW : rowWidth
+        height: listForm ? pillH : iconSize
         // ⚠️ 水平定位用 x 而非 left/right 锚点切换（同 cards 列的坑）：
         // 锚点对在 side 翻转瞬间同时定义会拆掉 width 绑定
         anchors.bottom: parent.bottom
-        // 参考实测(2026-10-18 iPadOS 还原,card3-zoom 像素扫描):图标挂
-        // 在卡角外——水平约 27% 探出卡左缘、垂直约 60% 探出卡底(图标
-        // 中心略低于卡底)。旧值 -5 / -iconSize/3 是"大半坐在卡上"。
-        anchors.bottomMargin: -iconSize * 0.6
-        // 条在右时镜像向外探出（旧值 parent.width - width - 5 是内缩，
-        // 与左侧不对称）
-        x: card.rightSide ? parent.width - width + iconSize * 0.27
-                          : -iconSize * 0.27
-        width: rowWidth
+        anchors.bottomMargin: listForm ? -10 : -iconSize * 0.6
+        x: card.rightSide ? parent.width - width + outX : -outX
 
-        // 悬停垫片（不截点击）：指针在排内任意位置 = 卡片保持悬停姿态
+        // ── 单窗形态：一枚大图标（图标资源自带 squircle 底）──
         MouseArea {
             id: iconRowHover
             anchors.fill: parent
             anchors.margins: -3
+            visible: !iconRow.listForm
             hoverEnabled: true
             acceptedButtons: Qt.NoButton
         }
 
         Repeater {
-            model: iconRow.visibleCount
+            model: iconRow.listForm ? 0 : iconRow.visibleCount
             MouseArea {
                 id: iconSlot
                 required property int index
@@ -1150,14 +1184,83 @@ Item {
             }
         }
 
-        // 更多窗口收进 "+N"（x 定位同上——不碰水平锚点）
+        // 单窗形态的 "+N"（iconPairs 超过可见上限时）
         Text {
-            visible: card.iconPairs.length > iconRow.visibleCount
+            visible: !iconRow.listForm && card.iconPairs.length > iconRow.visibleCount
             anchors.verticalCenter: parent.verticalCenter
             x: card.rightSide ? -width - 5 : parent.width + 5
             text: "+" + (card.iconPairs.length - iconRow.visibleCount)
             color: Qt.rgba(1, 1, 1, 0.65)
             font { pixelSize: 10; weight: Font.DemiBold }
+        }
+
+        // ── 合并卡形态：白色圆角胶囊 + 逐窗行 ──
+        // 投影（参考有一层很浅的落影；两层叠出柔和边）
+        Rectangle {
+            visible: iconRow.listForm
+            x: -1; y: 2
+            width: parent.width + 2; height: parent.height + 2
+            radius: iconRow.pillRadius + 1
+            color: Qt.rgba(0, 0, 0, 0.10)
+        }
+        Rectangle {
+            id: pillBg
+            visible: iconRow.listForm
+            anchors.fill: parent
+            radius: iconRow.pillRadius
+            // ref/c2 实测底色 (251,252,251)
+            color: "#fbfcfb"
+        }
+
+        Repeater {
+            model: iconRow.listForm ? iconRow.displayRows : 0
+            MouseArea {
+                id: pillRow
+                required property int index
+                readonly property bool more:
+                    iconRow.overflow && index === iconRow.displayRows - 1
+                readonly property var row:
+                    (!more && index < card.windowRows.length)
+                        ? card.windowRows[index] : null
+                x: 0
+                y: iconRow.pillPadY + index * iconRow.pillRowH
+                width: iconRow.pillW
+                height: iconRow.pillRowH
+                hoverEnabled: true
+                cursorShape: Qt.PointingHandCursor
+                onClicked: if (row && row.id) card.iconActivated(row.id)
+                Rectangle {
+                    anchors.fill: parent
+                    anchors.margins: 2
+                    radius: 6
+                    color: pillRow.containsMouse
+                        ? Qt.rgba(0, 0, 0, 0.06) : "transparent"
+                    Behavior on color { ColorAnimation { duration: 120 } }
+                }
+                IconImage {
+                    visible: !pillRow.more
+                    x: iconRow.pillPadX
+                    anchors.verticalCenter: parent.verticalCenter
+                    width: iconRow.pillIcon
+                    height: iconRow.pillIcon
+                    source: pillRow.row ? (pillRow.row.icon || "") : ""
+                    asynchronous: false
+                }
+                Text {
+                    x: iconRow.pillPadX + iconRow.pillIcon + 6
+                    anchors.verticalCenter: parent.verticalCenter
+                    width: iconRow.pillW - x - iconRow.pillPadX
+                    text: pillRow.more
+                        ? "+" + (card.windowRows.length
+                                 - (iconRow.displayRows - 1))
+                        : (pillRow.row ? pillRow.row.title : "")
+                    // iOS 次要文字灰；参考标签很小、被模糊糊住
+                    color: "#8e8e93"
+                    font.pixelSize: 10
+                    elide: Text.ElideRight
+                    maximumLineCount: 1
+                }
+            }
         }
     }
 }

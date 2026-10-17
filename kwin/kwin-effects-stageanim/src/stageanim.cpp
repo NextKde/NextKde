@@ -1167,6 +1167,7 @@ struct CardMeta
     bool enterInstant = false;  // 收编落卡（淡入=飞行时长 420ms）
     bool chipHot = false;       // 拆分芯片点亮（isHovered||mergeGlow）
     QString iconsJson;          // 组内窗口图标排（file:/icon: URL 数组）
+    QString rowsJson;           // 逐窗行（合并卡左下窗口列：{icon,title,id}）
     qreal iconSize = 48;   // 图标排图标边长（缺省对齐 schema def；shell 恒发布）
     int iconSlots = 1;     // 图标排并列上限（缺省对齐 schema def）
     qreal engagingTilt = 0;     // 交棒保持倾角（adaptive=tiltAngle 非 0）
@@ -1212,6 +1213,7 @@ static void applyCardMeta(LiveCard &card, const CardMeta &m)
     card.showCardTitle = m.showCardTitle;
     card.chipHot = m.chipHot;
     card.iconsJson = m.iconsJson;
+    card.rowsJson = m.rowsJson;
     card.iconSize = m.iconSize;
     card.iconSlots = m.iconSlots;
     card.engagingTilt = m.engagingTilt;
@@ -1239,6 +1241,7 @@ void StageAnimEffect::rasterChrome(LiveCard &card)
         + QLatin1Char(card.merged ? 'M' : 'm')
         + QLatin1Char(card.showCardTitle ? 'T' : 't');
     const QString ovKey = card.iconsJson + QLatin1Char('|')
+        + card.rowsJson + QLatin1Char('|')
         + QString::number(card.count) + QLatin1Char('|')
         + QString::number(w) + QLatin1Char('x') + QString::number(h)
         + QLatin1Char(card.merged ? (card.chipHot ? 'C' : 'N') : 'c')
@@ -1342,6 +1345,18 @@ void StageAnimEffect::rasterChrome(LiveCard &card)
     of.setPixelSize(22); // QML pixelSize 11 ×2
     of.setWeight(QFont::Bold);
     op.setFont(of);
+    // 逐窗行（合并卡左下窗口列）：[{icon,title,id}]，代表窗在首位。
+    // 与图标排的区别——**不按应用去重**：同应用两扇窗是两行（各带标题）
+    QVector<QPair<QString, QString>> rows;
+    {
+        const auto doc = QJsonDocument::fromJson(card.rowsJson.toUtf8());
+        if (doc.isArray())
+            for (const auto &v : doc.array()) {
+                const auto o = v.toObject();
+                rows.append({o.value(QStringLiteral("icon")).toString(),
+                             o.value(QStringLiteral("title")).toString()});
+            }
+    }
     QStringList icons;
     {
         const auto doc = QJsonDocument::fromJson(card.iconsJson.toUtf8());
@@ -1349,6 +1364,63 @@ void StageAnimEffect::rasterChrome(LiveCard &card)
             for (const auto &v : doc.array())
                 icons.append(v.toString());
     }
+    // 图标加载（file:// 路径优先，其次 icon theme 名；与 QML IconImage 同源）
+    auto loadIcon = [](const QString &src, int px) {
+        QPixmap pm;
+        if (src.startsWith(QLatin1String("file://")))
+            pm.load(src.mid(7));
+        if (pm.isNull()) {
+            QString name = src;
+            name.remove(QRegularExpression(QStringLiteral("^image://[^/]+/")));
+            pm = QIcon::fromTheme(name).pixmap(px, px);
+        }
+        return pm;
+    };
+    if (rows.size() > 1) {
+        // ── 合并卡：白色圆角胶囊 + 逐窗「图标 + 标题」竖排（ref/c2）──
+        // 参考实测（卡宽 204 → 本卡 216，×1.06）：胶囊宽 72、行高 19、
+        // 图标 16、圆角 12、左/底各探出卡外 8/10；行数 >4 时末行折 "+N"
+        const int pillW = 144, pillIcon = 32, pillRowH = 38,
+                  padX = 16, padY = 10, pillR = 24, maxRows = 4;
+        const int shown = std::min<int>(rows.size(), maxRows);
+        const bool more = int(rows.size()) > shown;
+        const int pillH = shown * pillRowH + padY * 2;
+        const int px = card.rightSide ? w * 2 - pillW + 16 : -16;
+        const int py = h * 2 - pillH + 20;
+        // 落影（参考有一层很浅的落影）
+        op.setPen(Qt::NoPen);
+        op.setBrush(QColor(0, 0, 0, 26));
+        op.drawRoundedRect(QRectF(px - 2, py + 4, pillW + 4, pillH + 4),
+                           pillR + 2, pillR + 2);
+        // ref/c2 实测底色 (251,252,251)
+        op.setBrush(QColor(251, 252, 251, 252));
+        op.drawRoundedRect(QRectF(px, py, pillW, pillH), pillR, pillR);
+        QFont lf = op.font();
+        lf.setPixelSize(20); // 10pt ×2
+        lf.setWeight(QFont::Normal);
+        op.setFont(lf);
+        const QFontMetrics fm(lf);
+        for (int i = 0; i < shown; i++) {
+            const bool plus = more && i == shown - 1;
+            const int ry = py + padY + i * pillRowH;
+            if (!plus) {
+                const QPixmap pm = loadIcon(rows.at(i).first, pillIcon);
+                if (!pm.isNull())
+                    op.drawPixmap(px + padX, ry + (pillRowH - pillIcon) / 2,
+                                  pillIcon, pillIcon, pm);
+            }
+            const QString label = plus
+                ? QStringLiteral("+%1").arg(rows.size() - (shown - 1))
+                : rows.at(i).second;
+            const int tx = px + padX + pillIcon + 12;
+            const int tw = pillW - (tx - px) - padX;
+            op.setPen(QColor(142, 142, 147, 255));
+            op.drawText(QRect(tx, ry, tw, pillRowH),
+                        Qt::AlignLeft | Qt::AlignVCenter,
+                        fm.elidedText(label, Qt::ElideRight, tw));
+        }
+    } else {
+    // ── 单窗：一枚大图标挂卡角外（27%/60%，ref/c3）──
     // 去重兜底：QML 侧 decorateGroups 已按图标源去重（同应用多窗一枚），
     // 这里再滤一次防御异常数据（重复图标是用户实测困惑点）
     {
@@ -1374,15 +1446,7 @@ void StageAnimEffect::rasterChrome(LiveCard &card)
     int ix0 = card.rightSide ? w * 2 - iconOutX - rowW : iconOutX;
     const int iy0 = h * 2 - isz * 2 / 5;
     for (int i = 0; i < visible; i++) {
-        const QString &src = icons.at(i);
-        QPixmap pm;
-        if (src.startsWith(QLatin1String("file://")))
-            pm.load(src.mid(7));
-        if (pm.isNull()) {
-            QString name = src;
-            name.remove(QRegularExpression(QStringLiteral("^image://[^/]+/")));
-            pm = QIcon::fromTheme(name).pixmap(isz, isz);
-        }
+        const QPixmap pm = loadIcon(icons.at(i), isz);
         if (!pm.isNull()) {
             op.drawPixmap(ix0 + i * (isz + igap), iy0, isz, isz, pm);
         } else {
@@ -1397,6 +1461,7 @@ void StageAnimEffect::rasterChrome(LiveCard &card)
                     Qt::AlignLeft | Qt::AlignVCenter,
                     QStringLiteral("+%1").arg(icons.size() - visible));
     }
+    } // rows>1 ? pill : single icon
     if (card.merged) {
         // 拆分芯片：**右上**，关闭钮左侧（与 QML splitHit 同位 rightMargin
         // 31/顶 7；铭牌 titleMargin=50 一直为它预留着）。合并卡**常显**暗态
@@ -1508,6 +1573,7 @@ void StageAnimEffect::reloadLiveCards()
                 meta.enterInstant = o.value(QStringLiteral("enterInstant")).toBool();
                 meta.chipHot = o.value(QStringLiteral("chipHot")).toBool();
                 meta.iconsJson = o.value(QStringLiteral("iconsJson")).toString();
+                meta.rowsJson = o.value(QStringLiteral("rowsJson")).toString();
                 meta.iconSize = qBound(12.0,
                     o.value(QStringLiteral("iconSize")).toDouble(48.0), 96.0);
                 meta.iconSlots = std::max(1,

@@ -128,6 +128,7 @@ struct LiveCard
     bool enterInstant = false;
     bool chipHot = false;
     QString iconsJson;
+    QString rowsJson;      // 逐窗行（合并卡左下窗口列：{icon,title,id} 数组）
     qreal iconSize = 40;   // 图标排图标边长（payload，v88：原硬编码 24）
     int iconSlots = 4;     // 图标排并列上限（payload，v88：原仅按宽度封顶）
     qreal engagingTilt = 0;

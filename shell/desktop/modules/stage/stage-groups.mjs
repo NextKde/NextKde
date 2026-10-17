@@ -7,7 +7,8 @@
 // ListModel 角色 / delegate required property 的唯一出处（appKey 是主键，
 // 不进差异比较）。新增卡片字段：加这里 + buildModelRows + 两处 required。
 export const CARD_FIELDS = ["targetId", "pid", "appName", "title",
-    "iconSource", "count", "idsJson", "iconsJson", "iconIdsJson", "merged"]
+    "iconSource", "count", "idsJson", "iconsJson", "iconIdsJson",
+    "rowsJson", "merged"]
 
 // ── 分组 ──
 
@@ -161,6 +162,18 @@ export function decorateGroups(groups, thumbnailUrlOf) {
             grp.icons.unshift(ic)
             grp.iconIds.unshift(id)
         }
+        // 逐窗行（合并卡左下"窗口列"）：参考 ref/c2.png 的合并卡左下一枚
+        // 白色圆角胶囊，内为逐窗图标+标题竖排（不是并列图标排）。代表窗
+        // 排首位＝与卡面缩略图同源，其余按组内原序；id 供点击直达。
+        const ordered = [rep]
+        for (const w of grp.wins)
+            if (w !== rep)
+                ordered.push(w)
+        grp.rows = ordered.map(w => ({
+            icon: w.iconSource || "",
+            title: w.title || "",
+            id: w.windowId,
+        }))
     }
     return groups
 }
@@ -293,6 +306,7 @@ export function buildModelRows(groups) {
             idsJson: JSON.stringify(g.ids || []),
             iconsJson: JSON.stringify(g.icons || []),
             iconIdsJson: JSON.stringify(g.iconIds || []),
+            rowsJson: JSON.stringify(g.rows || []),
             merged: !!g.merged,
         })
     }

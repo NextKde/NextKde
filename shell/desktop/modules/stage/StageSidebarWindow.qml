@@ -1140,6 +1140,7 @@ PanelWindow {
                     merged: p.merged, showCardTitle: p.showCardTitle,
                     enterInstant: p.enterInstant, dragScale: p.dragScale,
                     chipHot: p.chipHot, iconsJson: p.iconsJson,
+                    rowsJson: p.rowsJson,
                     iconSize: p.iconSize, iconSlots: p.iconSlots,
                     engagingTilt: p.engagingTilt, tiltMs: p.tiltMs,
                     enterMs: p.enterMs, animMs: p.animMs,
@@ -2318,6 +2319,7 @@ PanelWindow {
                 required property string idsJson
                 required property string iconsJson
                 required property string iconIdsJson
+                required property string rowsJson
                 required property bool merged
                 required property bool enterInstant
 
@@ -2407,6 +2409,7 @@ PanelWindow {
                     idsJson: slot.idsJson
                     iconsJson: slot.iconsJson
                     iconIdsJson: slot.iconIdsJson
+                    rowsJson: slot.rowsJson
                     merged: slot.merged
                     enterInstant: slot.enterInstant
                     dropHovered: root._dropMergeKey === slot.appKey
@@ -2431,7 +2434,7 @@ PanelWindow {
                             root._cardHover(slot.appKey, true)
                     }
                     onEngageClicked: root.engageCard(slot)
-                    onFaceRecreateRequested: root.resetCardFace(slot.appKey)
+                    onFaceRecreateRequested: root.requestCardFaceHeal(slot.appKey)
                     onDragStarted: function(sceneX, sceneY) {
                         root._beginCardDrag(slot, slot.index, sceneX, sceneY)
                     }
@@ -2807,6 +2810,13 @@ PanelWindow {
             slots.push({ app: s.appKey, y: Math.round(s.y),
                 scale: Math.round(s.slotScale * 100) / 100, z: s.z,
                 x: Math.round(s.x),
+                // 排障（2026-10-18）：整卡不可见的三个分量——槽位不透明度/
+                // 边缘渐隐/卡自身 shown 与 opacity
+                slotOpacity: Math.round(s.opacity * 100) / 100,
+                edgeFade: Math.round(s.edgeFade * 100) / 100,
+                shown: s.cardItem ? s.cardItem.shown : null,
+                cardOpacity: s.cardItem
+                    ? Math.round(s.cardItem.opacity * 100) / 100 : -1,
                 hot: s.cardItem ? s.cardItem.isHovered : false,
                 cardScale: s.cardItem
                     ? Math.round(s.cardItem.scale * 100) / 100 : -1,
@@ -2820,7 +2830,9 @@ PanelWindow {
                 previewActive: s.cardItem ? s.cardItem.previewActive : null,
                 layerEnabled: s.cardItem ? s.cardItem.faceLayerActive : null,
                 src: s.cardItem ? s.cardItem.thumbPreviewSource : "",
-                pvis: s.cardItem ? s.cardItem.thumbPreviewVisible : null })
+                pvis: s.cardItem ? s.cardItem.thumbPreviewVisible : null,
+                fexp: s.cardItem ? s.cardItem.dbgFaceExposed : null,
+                eexp: s.cardItem ? s.cardItem.dbgEmptyExposed : null })
         }
         // 可见窗记录探针：让位检测吃的正是这份数据，卡住时先看
         // 目标窗到底进没进 records（bridge includeWindow 过滤与否）
@@ -2852,8 +2864,30 @@ PanelWindow {
             scroll: Math.round(root.scrollOffset),
             maxScroll: Math.round(root._maxScroll),
             totalWin: root.totalWindows, order: root._groupOrder,
+            modelKeys: (() => {
+                const a = []
+                for (let i = 0; i < cardModel.count; i++) {
+                    const r = cardModel.get(i)
+                    a.push(r.appKey + "|" + r.targetId + "|" + r.count)
+                }
+                return a
+            })(),
+            resetKeys: Object.keys(root._faceResetKeys),
             hitRegion: [stripHitRegion.y, stripHitRegion.height],
             wins: wins, slots: slots })
+    }
+    // 排障：对全部在册卡走一次宿主侧重置（空脸自愈的现有机制），
+    // 用于验证"层纹理烘早"根因——修好即说明缺的只是触发条件
+    function debugResetFaces(): string {
+        const keys = []
+        for (let i = 0; i < cardRepeater.count; i++) {
+            const s = cardRepeater.itemAt(i)
+            if (s)
+                keys.push(s.appKey)
+        }
+        for (const k of keys)
+            root.resetCardFace(k)
+        return JSON.stringify(keys)
     }
 
     // 显示桌面开关状态机快照（抗打断排障）：集合/在途批次/定时器/焦点
@@ -3070,6 +3104,26 @@ PanelWindow {
     // 不会刷新）。防重入：同键在途忽略；重建后卡创建时 URL 已在表里 → 不再触发。
     property var _faceResetKeys: ({})
     property var _faceResetDeferred: ({})   // 拖拽/交棒中被推迟的重置
+    property bool _syncingCards: false      // syncCards 重入门（见函数头注释）
+    property bool _syncCardsAgain: false
+    // 重建限流（2026-10-18）：重建必须晚于缩略图落盘才有效；启动期第一轮
+    // 重建常赶在 PNG 写完之前，之后图 Ready 也补不回来。故 Ready 时会再请
+    // 一次重建——用滑动窗口上限防"重建→图未就绪→再重建"活锁（实测 Edge
+    // 合并卡曾一分钟触发 400 次）。5s 内同键最多 3 次。
+    property var _faceHealLog: ({})
+    function requestCardFaceHeal(appKey) {
+        if (appKey === "")
+            return
+        const now = Date.now()
+        const prev = root._faceHealLog[appKey]
+        const n = (prev && now - prev.at < 5000) ? prev.n : 0
+        if (n >= 3)
+            return
+        const log = Object.assign({}, root._faceHealLog)
+        log[appKey] = { n: n + 1, at: now }
+        root._faceHealLog = log
+        root.resetCardFace(appKey)
+    }
     property Timer _faceResetTimer: Timer {
         interval: 120
         onTriggered: {
@@ -3336,6 +3390,17 @@ PanelWindow {
     property int totalWindows: 0
 
     function syncCards() {
+        // 防重入（2026-10-18）：cardModel.append 会同步创建 delegate，新卡
+        // 的缩略图同步解码 Ready 后会发 faceRecreateRequested → 重置 →
+        // 再进 syncCards。内层对账在**外层 append 循环中途**跑，外层接着
+        // 把同一批行再 append 一遍＝模型出现重复卡（实测 6 行变 11 行，
+        // removes 只删 desired 里没有的键，重复行会永久留存）。重入改为
+        // 记一笔、本轮结束后再跑一次。
+        if (root._syncingCards) {
+            root._syncCardsAgain = true
+            return
+        }
+        root._syncingCards = true
         // 悬停键自愈（scroll 分支原有、adaptive 分支缺）：键不在模型里 =
         // 该组已离开侧栏但指针没动；组键日后复用时 focusKey 立即为真＝
         // 幽灵悬停（无悬停却放大/发布 hovered 姿态）
@@ -3442,6 +3507,11 @@ PanelWindow {
         }
         layoutCards()
         publishSimulatedLayout("")
+        root._syncingCards = false
+        if (root._syncCardsAgain) {
+            root._syncCardsAgain = false
+            root.syncCards()
+        }
     }
 
     // 拖拽中断的统一出口（被拖卡消失 / 窗口隐藏后 release 不再送达）

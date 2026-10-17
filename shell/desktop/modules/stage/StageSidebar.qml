@@ -85,6 +85,10 @@ Scope {
         function debugStreamProbe(index: int): string {
             return stageWindow.debugStreamProbe(index)
         }
+        // 排障：全卡走一遍宿主侧空脸重置（验证自愈机制本身有效）
+        function debugResetFaces(): string {
+            return stageWindow.debugResetFaces()
+        }
     }
 
     // 台前调度可调参数（设置应用 → 台前调度页走这里实时改）
