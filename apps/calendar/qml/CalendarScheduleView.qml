@@ -709,16 +709,15 @@ Pane {
                         // derived from implicitHeight because this font's line
                         // box is ~1.47em — a hardcoded -7 only centres font 9.
                         // Stays anchored, so it cannot inflate the 40px row.
-                        Label {
+                        // R-GUTTER: 12-hour two-tone — digits labelPrimary, smaller AM/PM, same baseline.
+                        Item {
+                            id: hourLabel
                             anchors.top: parent.top
-                            anchors.topMargin: -Math.round(implicitHeight / 2)
+                            anchors.topMargin: -Math.round(digitText.implicitHeight / 2)
                             anchors.right: parent.right
                             anchors.rightMargin: 7
-                            text: hourCell.rowIndex < 10
-                                ? "0" + hourCell.rowIndex + ":00"
-                                : hourCell.rowIndex + ":00"
-                            color: AppTheme.mutedText
-                            font.pixelSize: 11
+                            width: meridiemText.width + 3 + digitText.width
+                            height: digitText.implicitHeight
                             // R158: when the timeline is hour-aligned
                             // (positionTimeline always is), the topmost
                             // visible hour line sits ON the grid's top rule
@@ -734,6 +733,27 @@ Pane {
                                     || Math.abs(hourCell.rowIndex * root.hourHeight
                                                 - root.nowLineY)
                                        > root.nowLabelClearance)
+
+                            Label {
+                                id: meridiemText
+                                anchors.right: parent.right
+                                anchors.top: parent.top
+                                text: hourCell.rowIndex < 12 ? "AM" : "PM"
+                                color: AppTheme.mutedText
+                                font.pixelSize: 8
+                            }
+                            Label {
+                                id: digitText
+                                anchors.right: meridiemText.left
+                                anchors.rightMargin: 3
+                                anchors.baseline: meridiemText.baseline
+                                text: {
+                                    var h = hourCell.rowIndex % 12
+                                    return (h === 0 ? 12 : h) + ""
+                                }
+                                color: AppTheme.text
+                                font.pixelSize: 11
+                            }
                         }
 
                         // N02: the now-pill. The reference puts the current
