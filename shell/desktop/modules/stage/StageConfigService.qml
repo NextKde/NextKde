@@ -46,8 +46,8 @@ QtObject {
         // 侧栏距屏幕边缘（px）：卡片列左/右缘到屏缘的净距（默认 32 =
         // 全屏浮层化前的定值 CARD_OVERFLOW_MARGIN 20 + CARD_X_INSET 12；
         // 设置页「距离屏幕边缘」，位置在「侧栏位置」之下）
-        "stripMargin":  { type: "int", min: 0, max: 120, def: 32 },
-        "cardSpacing":  { type: "int", min: 4, max: 48, def: 16 },
+        "stripMargin":  { type: "int", min: 0, max: 120, def: 12 },
+        "cardSpacing":  { type: "int", min: 4, max: 48, def: 24 },
         "centerCards":  { type: "bool", def: true },
         "deckSidePeek": { type: "int", min: 4, max: 60, def: 20 },
         "focusDim":     { type: "bool", def: false },
@@ -127,8 +127,10 @@ QtObject {
     property int cardWidth: 216
     // 侧栏距屏幕边缘：卡片列贴常驻侧屏缘的净距（列原点偏移 =
     // stripMargin − CARD_X_INSET，见 StageSidebarWindow._stripInset）
-    property int stripMargin: 32
-    property int cardSpacing: 16
+    // 2026-10-17 iPadOS 还原:参考卡距屏缘 ~11pt(原 32)
+    property int stripMargin: 12
+    // 2026-10-17 iPadOS 还原:参考卡距 23-37pt(透视伸缩,取中偏保守 24)
+    property int cardSpacing: 24
     // adaptive 模式：放得下时整列垂直居中；贴满时顶部锚定
     property bool centerCards: true
     // 聚焦退避距离：悬停聚焦时其余卡片从原位向两侧平移的像素
