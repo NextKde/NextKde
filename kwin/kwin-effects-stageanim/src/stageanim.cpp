@@ -1136,7 +1136,7 @@ struct CardMeta
     bool selfMergeHint = false; // 中心合并武装：被拖卡自身亮蓝边框
     bool rightSide = false;     // 右条镜像（扇叠/深度/图标方向）
     bool merged = false;        // 合并卡（拆分芯片；标题让位 50）
-    bool showCardTitle = true;
+    bool showCardTitle = false; // 默认同 StageConfigService(iPadOS 还原:无卡顶标题)
     bool enterInstant = false;  // 收编落卡（淡入=飞行时长 420ms）
     bool chipHot = false;       // 拆分芯片点亮（isHovered||mergeGlow）
     QString iconsJson;          // 组内窗口图标排（file:/icon: URL 数组）
@@ -1458,7 +1458,7 @@ void StageAnimEffect::reloadLiveCards()
                 meta.selfMergeHint = o.value(QStringLiteral("selfMergeHint")).toBool();
                 meta.rightSide = o.value(QStringLiteral("rightSide")).toBool();
                 meta.merged = o.value(QStringLiteral("merged")).toBool();
-                meta.showCardTitle = o.value(QStringLiteral("showCardTitle")).toBool(true);
+                meta.showCardTitle = o.value(QStringLiteral("showCardTitle")).toBool(false);
                 meta.enterInstant = o.value(QStringLiteral("enterInstant")).toBool();
                 meta.chipHot = o.value(QStringLiteral("chipHot")).toBool();
                 meta.iconsJson = o.value(QStringLiteral("iconsJson")).toString();

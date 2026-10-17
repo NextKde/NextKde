@@ -39,7 +39,7 @@ QtObject {
         //（用户实测调过 320→550→450，入 schema 供设置页可调）
         "mergeDwellMs": { type: "int", min: 200, max: 1200, def: 450 },
         // 卡片顶部名称：可关（沉浸缩略图——整卡就是窗口内容）
-        "showCardTitle": { type: "bool", def: true },
+        "showCardTitle": { type: "bool", def: false },
         "cardHeight":   { type: "int", min: 100, max: 220, def: 148 },
         // 卡宽（卡高之外的独立自由度；默认 216 = 原 PANEL_WIDTH−24 定宽）
         "cardWidth":    { type: "int", min: 120, max: 320, def: 216 },
@@ -119,7 +119,10 @@ QtObject {
     // 两处默认必须同步改——2026-09-30 审计抓过 550/450 漂移）
     property int mergeDwellMs: 450
     property bool debugTrace: false   // 诊断遥测（[DragTrace]），见 schema 注释
-    property bool showCardTitle: true
+    // 2026-10-17 iPadOS 还原:参考缩略图无卡顶标题(app 名靠左下图标),
+    // 默认改 false。已有 config.json 里的旧值 true 会覆盖此默认 —— 用户
+    // 手动关一次或删键后生效
+    property bool showCardTitle: false
     property int cardHeight: 148
     property int cardWidth: 216
     // 侧栏距屏幕边缘：卡片列贴常驻侧屏缘的净距（列原点偏移 =
