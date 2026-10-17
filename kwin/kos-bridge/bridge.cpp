@@ -1,4 +1,7 @@
 #include "bridge.h"
+#ifdef KOS_KWIN_PAINT_RESULT_API
+#include <opengl/eglcontext.h>
+#endif
 #include "windowbuttons/buttonrenderer.h"
 #include "windowbuttons/buttonconfig.h"
 #include "windowbuttons/buttoninput.h"
@@ -255,7 +258,11 @@ BridgeEffect::drawWindow(const KWin::RenderTarget &renderTarget,
 #endif
     }
 #ifdef KOS_KWIN_PAINT_RESULT_API
+    if (KWin::EglContext::currentContext() != KWin::effects->openglContext())
+        return false;
     const bool painted = Effect::drawWindow(renderTarget, viewport, window, mask, deviceRegion, data);
+    if (!painted)
+        return false;
 #else
     Effect::drawWindow(renderTarget, viewport, window, mask, deviceRegion, data);
 #endif
@@ -289,7 +296,10 @@ bool BridgeEffect::drawSharedWindow(const KWin::RenderTarget &target,
             KWin::effects->drawWindow(sourceTarget, sourceViewport, window,
                 PAINT_WINDOW_TRANSFORMED | PAINT_WINDOW_TRANSLUCENT,
                 KWin::Region::infinite(), sourceData);
-            paintButtons(sourceTarget, sourceViewport, window, KWin::Region::infinite(), sourceData, true);
+#ifdef KOS_KWIN_PAINT_RESULT_API
+            if (painted)
+#endif
+                paintButtons(sourceTarget, sourceViewport, window, KWin::Region::infinite(), sourceData, true);
             window->setData(WindowSourceCaptureRole, previous);
 #ifdef KOS_KWIN_PAINT_RESULT_API
             return painted;

@@ -1,4 +1,7 @@
 #include "dockwindowanimationeffect.h"
+#ifdef KOS_KWIN_PAINT_RESULT_API
+#include <opengl/eglcontext.h>
+#endif
 #include "../kos-bridge/windowappearance/sharedwindowsource.h"
 
 #include <effect/effecthandler.h>
@@ -629,6 +632,10 @@ DockWindowAnimationEffect::drawWindow(
 #endif
             }
         }
+#ifdef KOS_KWIN_PAINT_RESULT_API
+        if (EglContext::currentContext() != effects->openglContext())
+            return false;
+#endif
         redirect(window);
     }
 
@@ -658,6 +665,10 @@ DockWindowAnimationEffect::drawWindow(
         }
     }
 
+#ifdef KOS_KWIN_PAINT_RESULT_API
+    if (!backingPainted)
+        return false;
+#endif
     const QVariant previousCapture = window->data(KOS::LegacyWindowSourceCaptureRole);
     if (it != m_animations.end()) window->setData(KOS::LegacyWindowSourceCaptureRole, true);
 #ifdef KOS_KWIN_PAINT_RESULT_API

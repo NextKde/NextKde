@@ -687,6 +687,10 @@ StageAnimEffect::paintScreen(const RenderTarget &renderTarget, const RenderViewp
     const bool painted =
 #endif
     effects->paintScreen(renderTarget, viewport, mask, deviceRegion, screen);
+#ifdef KOS_KWIN_PAINT_RESULT_API
+    if (!painted)
+        return false;
+#endif
 
     // ⚠️ 不可再有 m_animations 全局让位闸：卡面视觉整体在特效手里，全局
     // 一让＝动画期间整列卡消失（旧架构只让内容、QML 卡面还在）。改为
