@@ -194,14 +194,14 @@ KosApplicationWindow {
         readonly property int dateNavTextSize: 13
 
         // L02: unified toolbar under the 30px dot band. 40 tall; icon buttons
-        // 28x28 with 16px icons and 8px gaps; the segmented control is 196x28.
+        // 28x28 with 16px icons and 8px gaps; the segmented control is 228x28.
         readonly property int toolbarHeight: 40
         readonly property int toolbarButtonSize: 28
         readonly property int toolbarIconSize: 16
         readonly property int toolbarGap: 8
         readonly property int toolbarInsetLeft: 12
         readonly property int toolbarInsetRight: 14
-        readonly property int segmentWidth: 196
+        readonly property int segmentWidth: 228
         readonly property int segmentHeight: 28
 
         // G03/G04 玻璃按钮投影(浅色,应用内绘制,G08)。集中命名,只调这里。
@@ -252,7 +252,8 @@ KosApplicationWindow {
         readonly property real pressedShadowOffsetFactor: 0.6
     }
 
-    readonly property string activeView: ["month", "week", "day"][viewIndex]
+    readonly property string activeView:
+        ["month", "week", "day", "year"][viewIndex]
     readonly property int localeFirstDayOfWeek:
         Number(Qt.locale().firstDayOfWeek) % 7
     readonly property date weekStart: startOfWeek(selectedDate)
@@ -1494,6 +1495,13 @@ KosApplicationWindow {
     }
 
     function shiftView(offset) {
+        if (activeView === "year") {
+            selectedDate = new Date(selectedDate.getFullYear() + offset,
+                                    selectedDate.getMonth(), selectedDate.getDate())
+            visibleMonth = new Date(selectedDate.getFullYear(), 0, 1)
+            Qt.callLater(updateEventRange)
+            return
+        }
         if (activeView === "month") {
             const currentDay = selectedDate.getDate()
             const target = monthDate(offset)
@@ -1511,6 +1519,8 @@ KosApplicationWindow {
     }
 
     function headerTitle() {
+        if (activeView === "year")
+            return String(visibleMonth.getFullYear())
         if (activeView === "month")
             return AppTheme.formatDate(visibleMonth, "MMMM yyyy")
         if (activeView === "day")
@@ -1822,16 +1832,18 @@ KosApplicationWindow {
                 opacity: toolbarSearch.active || toolbarSearch.width > 0 ? 0 : 1
                 visible: opacity > 0
                 // R100/C05+L03: the reference's segment reads Day · Week ·
-                // Month (· Year) — granularity ascending, left to right — and
+                // Month · Year — granularity ascending, left to right — and
                 // L03 words it "Day/week/month segment". Ours was the exact
                 // reverse. `viewIndex` keeps its own published contract
-                // (0=month / 1=week / 2=day: `activeView` :229, Ctrl+1..3
-                // :1544-1546, `--view` :1054, the page cache :2372 and the
-                // review harness), so the segment mirrors it instead of
-                // redefining it. Week still lands on segment 1, so the pill's
-                // measured geometry (R097/R098) is untouched.
-                labels: [qsTr("Day"), qsTr("Week"), qsTr("Month")]
-                currentIndex: 2 - root.viewIndex
+                // (0=month / 1=week / 2=day / 3=year: `activeView` :255,
+                // Ctrl+1..3 :1544-1546, `--view` :1054, the page cache :2495
+                // and the review harness), so the segment mirrors it instead
+                // of redefining it: segment i = viewIndex (2 - i) for i <= 2,
+                // and the 4th segment (i == 3) maps to the year view. Weeks
+                // still land on segment 1, so the pill's measured geometry
+                // (R097/R098) is untouched.
+                labels: [qsTr("Day"), qsTr("Week"), qsTr("Month"), qsTr("Year")]
+                currentIndex: root.viewIndex <= 2 ? 2 - root.viewIndex : 3
                 backgroundColor: root.tahoe.segmentTrack
                 selectionColor: root.tahoe.segmentPill
                 textColor: root.tahoe.labelPrimary
@@ -1840,7 +1852,8 @@ KosApplicationWindow {
                 // top-5% mean 15–23) and the pill alone marks the selection.
                 // `labelSecondary` (≈147 at 1:1) was 130 levels too light.
                 mutedTextColor: root.tahoe.labelPrimary
-                onSelectionRequested: index => root.viewIndex = 2 - index
+                onSelectionRequested: index =>
+                    root.viewIndex = index <= 2 ? 2 - index : 3
             }
 
             ToolbarButton {
@@ -2499,7 +2512,7 @@ KosApplicationWindow {
                 // Keep the active view and one recent view warm. Retaining all
                 // three would only defer StackLayout's original memory cost.
                 cacheLimit: 2
-                pages: [monthPage, weekPage, dayPage]
+                pages: [monthPage, weekPage, dayPage, yearPage]
 
                 Component {
                     id: monthPage
@@ -2725,6 +2738,111 @@ KosApplicationWindow {
                         }
                         Component.onCompleted: {
                             if (visible) root.scheduleViewport = daySchedule.contentViewport
+                        }
+                    }
+                }
+
+                Component {
+                    id: yearPage
+
+                    // R-YEAR step 1: 12-month skeleton from the mini-month
+                    // idiom. Day-cell selection and event dots land in step
+                    // 2; clicking a month already routes to the month view so
+                    // no part of the new segment is dead.
+                    Item {
+                        GridLayout {
+                            anchors.fill: parent
+                            anchors.margins: 16
+                            columns: 3
+                            columnSpacing: 16
+                            rowSpacing: 12
+
+                            Repeater {
+                                model: 12
+
+                                ItemDelegate {
+                                    id: yearMonthCell
+                                    required property int index
+                                    readonly property date monthStart:
+                                        new Date(root.visibleMonth.getFullYear(), index, 1)
+                                    readonly property int firstOffset:
+                                        (monthStart.getDay() - root.localeFirstDayOfWeek + 7) % 7
+                                    Layout.fillWidth: true
+                                    Layout.fillHeight: true
+
+                                    onClicked: {
+                                        root.selectedDate = monthStart
+                                        root.visibleMonth = monthStart
+                                        root.viewIndex = 0
+                                    }
+
+                                    contentItem: ColumnLayout {
+                                        spacing: 4
+
+                                        Label {
+                                            Layout.alignment: Qt.AlignHCenter
+                                            text: AppTheme.formatDate(
+                                                yearMonthCell.monthStart, "MMMM")
+                                            color: root.tahoe.labelPrimary
+                                            font.pixelSize: 12
+                                            font.weight: Font.DemiBold
+                                        }
+
+                                        GridLayout {
+                                            Layout.fillWidth: true
+                                            columns: 7
+                                            columnSpacing: 0
+                                            rowSpacing: 0
+
+                                            Repeater {
+                                                model: 42
+
+                                                Item {
+                                                    id: yearDayCell
+                                                    required property int index
+                                                    readonly property date cellDate:
+                                                        new Date(
+                                                            yearMonthCell.monthStart.getFullYear(),
+                                                            yearMonthCell.monthStart.getMonth(),
+                                                            index - yearMonthCell.firstOffset + 1)
+                                                    readonly property bool inMonth:
+                                                        cellDate.getMonth()
+                                                            === yearMonthCell.monthStart.getMonth()
+                                                    readonly property bool isToday:
+                                                        cellDate.getFullYear() === root.now.getFullYear()
+                                                            && cellDate.getMonth() === root.now.getMonth()
+                                                            && cellDate.getDate() === root.now.getDate()
+                                                    Layout.fillWidth: true
+                                                    Layout.preferredHeight: 18
+
+                                                    Rectangle {
+                                                        anchors.centerIn: parent
+                                                        width: 14
+                                                        height: 14
+                                                        radius: 7
+                                                        color: yearDayCell.isToday
+                                                            ? root.tahoe.selectionDisc
+                                                            : "transparent"
+                                                    }
+
+                                                    Label {
+                                                        anchors.centerIn: parent
+                                                        text: yearDayCell.inMonth
+                                                            ? String(yearDayCell.cellDate.getDate())
+                                                            : ""
+                                                        color: yearDayCell.isToday
+                                                            ? "#FFFFFF"
+                                                            : root.tahoe.labelPrimary
+                                                        font.pixelSize: 9
+                                                        font.weight: yearDayCell.isToday
+                                                            ? Font.DemiBold : Font.Normal
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
                         }
                     }
                 }
