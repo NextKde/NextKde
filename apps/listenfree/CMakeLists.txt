@@ -326,6 +326,8 @@ if(LISTENFREE_BUILD_QMMP_BACKEND)
         if(Python3_Interpreter_FOUND AND LISTENFREE_QMLTESTRUNNER)
             add_test(NAME listenfree_track_management_qml_tests COMMAND ${Python3_EXECUTABLE}
                 "${CMAKE_CURRENT_SOURCE_DIR}/tools/run_track_management_qml_tests.py" --runner "${LISTENFREE_QMLTESTRUNNER}")
+            add_test(NAME listenfree_navigation_qml_tests COMMAND ${Python3_EXECUTABLE}
+                "${CMAKE_CURRENT_SOURCE_DIR}/tools/run_navigation_qml_tests.py" --runner "${LISTENFREE_QMLTESTRUNNER}")
         endif()
         add_executable(listenfree_track_management_tests tests/track_management_tests.cpp)
         target_link_libraries(listenfree_track_management_tests PRIVATE listenfree_portable Qt6::Test)

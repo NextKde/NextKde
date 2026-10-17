@@ -6,6 +6,7 @@ TestCase {
     id: test
     name: "NavigationBudget"
     when: windowShown
+    visible: true
     width: 500; height: 400
     Component {
         id: fakePage
@@ -64,9 +65,21 @@ TestCase {
         verify(cache.retainedArtworkCount<=1)
         cache.route="a"
         wait(40);compare(cache.displayedRoute,"d")
+        verify(cache.loading)
+        verify(!pageFor(cache,"d").visible, "The old route must disappear while restored artwork loads")
         tryCompare(cache,"displayedRoute","a")
         compare(pageFor(cache,"a").selection,37);compare(loaded(cache),2)
         cache.artworkBudgetBytes=0;compare(cache.retainedArtworkCount,0)
+    }
+    function test_slowArtworkDoesNotBlockPageForever() {
+        const cache=createTemporaryObject(cacheComponent,test,{artworkWaitTimeout:40})
+        tryCompare(cache,"displayedRoute","a")
+        cache.route="b";tryCompare(cache,"displayedRoute","b")
+        cache.route="c";tryCompare(cache,"displayedRoute","c")
+        cache.route="a"
+        tryCompare(cache,"displayedRoute","a",130)
+        verify(!cache.loading)
+        verify(pageFor(cache,"a").visible)
     }
     function test_uniqueBytesAndNewestFirst() {
         const cache=createTemporaryObject(cacheComponent,test,{artworkBudgetBytes:300})

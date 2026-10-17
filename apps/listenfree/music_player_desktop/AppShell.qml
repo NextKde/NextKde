@@ -196,6 +196,17 @@ Item {
         }
     }
     property string baseRoute: "library/songs"
+    function routeDataBusy(route) {
+        if (route === "discover") return !!(playlistController && playlistController.homeBusy)
+        if (route === "playlists") return !!(playlistController && playlistController.busy)
+        if (route === "radio") return !!(radioController && radioController.busy)
+        if (route === "library/songs" || route === "library/albums")
+            return !!(libraryController && libraryController.scanning)
+        return false
+    }
+    readonly property bool navigationLoading: !settingsOpen && currentRoute === baseRoute
+        && (mosaicCanvasActive ? (routeDataBusy(currentRoute) || mosaicCanvasLoader.status === Loader.Loading
+                                  || mosaicCanvasLoader.status === Loader.Null) : navigationCache.loading)
     property string lastNavigationRoute: "library/songs"
     property var navigationFilters: ({})
     function filterForRoute(route) { return currentRoute===route?pageSearchQuery:navigationFilters[route] || "" }
@@ -787,6 +798,13 @@ Item {
             settingsStore: shell.settingsController
             playing: false
         }
+        Rectangle {
+            id: mosaicLoadingBackground
+            objectName: "mosaicLoadingBackground"
+            anchors.fill: parent
+            visible: shell.mosaicCanvasActive && shell.navigationLoading
+            color: "#20232b"
+        }
         Loader {
             id: artistCanvasLoader
             anchors.fill: parent
@@ -807,6 +825,8 @@ Item {
             id: mosaicCanvasLoader
             anchors.fill: parent
             active: shell.mosaicCanvasActive
+            asynchronous: true
+            visible: !shell.navigationLoading
             sourceComponent: AlbumMosaicPage {
                 catalog: shell.libraryCatalog
                 sidebarWidth: shell.sidebarWidth
@@ -827,7 +847,8 @@ Item {
             objectName: "sidebarFrost"
             anchors.fill: sidebarSurface
             visible: !shell.nowPlayingOpen
-            backdrop: shell.mosaicCanvasActive ? mosaicCanvasLoader.item : shell.artistCanvasActive ? artistCanvasLoader.item : globalBackground
+            backdrop: shell.mosaicCanvasActive ? (shell.navigationLoading ? mosaicLoadingBackground : mosaicCanvasLoader.item)
+                                               : shell.artistCanvasActive ? artistCanvasLoader.item : globalBackground
             backdropBlur: 12
             cornerRadius: 0; opaqueBackdropBase: false
             tint: "transparent"; edgeColor: "transparent"; shadowOpacity: 0
@@ -1165,7 +1186,7 @@ Item {
                         sourceComponent: GlassSurface {
                             // Sample only the artist canvas, excluding this field
                             // and the toolbar to avoid recursive self-sampling.
-                            backdrop: shell.mosaicCanvasActive ? mosaicCanvasLoader.item : artistCanvasLoader.item
+                            backdrop: shell.mosaicCanvasActive ? (shell.navigationLoading ? mosaicLoadingBackground : mosaicCanvasLoader.item) : artistCanvasLoader.item
                             opaqueBackdropBase: false
                             frosted: true
                             cornerRadius: searchCapsule.radius
@@ -1238,6 +1259,7 @@ Item {
                 objectName: "navigationStateCache"
                 anchors.fill: parent
                 route: shell.baseRoute
+                contentBusy: shell.routeDataBusy(route)
                 transitionSourceItem: shell.collectionMorphActive ? shell.collectionMorphSourceItem : null
                 enabled: !shell.settingsOpen && !shell.mosaicCanvasActive && shell.currentRoute.indexOf("detail/")!==0
                 visible: !shell.settingsOpen && !shell.mosaicCanvasActive
@@ -1661,6 +1683,7 @@ Item {
         property string label: ""
         property string iconKind: "music"
         property string route: ""
+        readonly property bool loading: shell.currentRoute === route && shell.navigationLoading
         property bool selected: shell.currentRoute === route
                                 || (shell.currentRoute === "detail/album" && route === "library/albums")
                                 || (shell.currentRoute === "detail/playlist" && route === (shell.previousRoute === "my-lists" ? "my-lists" : "playlists"))
@@ -1686,7 +1709,7 @@ Item {
             }
         }
         IconGlyph {
-            x: shell.sidebarCollapsed ? 11 : 14 + shell.sidebarContentOffset
+            x: shell.sidebarCollapsed ? (sidebarButton.loading ? 9 : 11) : 14 + shell.sidebarContentOffset
             anchors.verticalCenter: parent.verticalCenter
             width: 20
             height: 20
@@ -1697,7 +1720,7 @@ Item {
         Text {
             x: 47 + shell.sidebarContentOffset
             anchors.verticalCenter: parent.verticalCenter
-            width: parent.width - x - 8
+            width: parent.width - x - (sidebarButton.loading ? 32 : 8)
             text: label
             color: AppTheme.sidebarText
             opacity: shell.sidebarCollapsed ? 0 : 1
@@ -1706,6 +1729,16 @@ Item {
             font.pixelSize: 14
             font.weight: selected ? Font.DemiBold : Font.Normal
             Behavior on opacity { NumberAnimation { duration: AppTheme.duration(140); easing.type: Easing.OutCubic } }
+        }
+        LoadingIndicator {
+            objectName: "sidebarLoading_" + sidebarButton.route.replace("/", "_")
+            anchors.right: parent.right
+            anchors.rightMargin: shell.sidebarCollapsed ? 1 : 10
+            anchors.verticalCenter: parent.verticalCenter
+            width: shell.sidebarCollapsed ? 14 : 18
+            height: width
+            color: AppTheme.sidebarText
+            visible: sidebarButton.loading
         }
     }
 
