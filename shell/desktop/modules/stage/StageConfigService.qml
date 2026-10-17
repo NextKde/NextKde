@@ -64,7 +64,7 @@ QtObject {
         "deckRestTilt": { type: "real", min: 0, max: 40, def: 0 },
         "tiltAngle":    { type: "real", min: 0, max: 40, def: 0 },
         // 玻璃质感（StageCard 卡面：背板/受光/描边/辉光/纵深）
-        "cardRadius":   { type: "int", min: 0, max: 24, def: 6 },
+        "cardRadius":   { type: "int", min: 0, max: 24, def: 15 },
         "cardTint":     { type: "real", min: 0.2, max: 0.95, def: 0.55 },
         "cardOpacity":  { type: "real", min: 0.2, max: 1.0, def: 1.0 },
         "cardTopLight": { type: "real", min: 0, max: 0.3, def: 0.07 },
@@ -153,8 +153,10 @@ QtObject {
     property real tiltAngle: 0
     // 卡面玻璃质感：背板浓度（悬停自动 ×1.3 提亮）/ 顶部受光 / 静置描边
     // 亮度 / 聚焦辉光强度 / 纵深压暗
-    // 2026-10-17 iPadOS 还原:参考卡圆角实测 6-7pt(原 14 偏大 2 倍)
-    property int cardRadius: 6
+    // 2026-10-18 重测：第 9 轮"6-7pt"只数了边缘最后 2px 内收，低估一半。
+    // 按 c1(弧跨 12/160)与 card3-zoom(20-23/283)两处独立测量，圆角 ≈
+    // 7~8% 卡宽 → 216 宽取 15（约 7%）。
+    property int cardRadius: 15
     property real cardTint: 0.55
     property real cardOpacity: 1.0
     property real cardTopLight: 0.07

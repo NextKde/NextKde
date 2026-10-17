@@ -1118,7 +1118,8 @@ Item {
         readonly property int pillRowH: 19
         readonly property int pillPadX: 8
         readonly property int pillPadY: 5
-        readonly property int pillRadius: 12
+        // 胶囊圆角：ref/c2-icon 实测约 24% 胶囊宽（60/230）→ 72 取 17
+        readonly property int pillRadius: 17
         readonly property int pillMaxRows: 4
         readonly property int displayRows:
             Math.min(card.windowRows.length, pillMaxRows)

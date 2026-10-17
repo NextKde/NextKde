@@ -1379,9 +1379,9 @@ void StageAnimEffect::rasterChrome(LiveCard &card)
     if (rows.size() > 1) {
         // ── 合并卡：白色圆角胶囊 + 逐窗「图标 + 标题」竖排（ref/c2）──
         // 参考实测（卡宽 204 → 本卡 216，×1.06）：胶囊宽 72、行高 19、
-        // 图标 16、圆角 12、左/底各探出卡外 8/10；行数 >4 时末行折 "+N"
+        // 图标 16、圆角 17、左/底各探出卡外 8/10；行数 >4 时末行折 "+N"
         const int pillW = 144, pillIcon = 32, pillRowH = 38,
-                  padX = 16, padY = 10, pillR = 24, maxRows = 4;
+                  padX = 16, padY = 10, pillR = 34, maxRows = 4;
         const int shown = std::min<int>(rows.size(), maxRows);
         const bool more = int(rows.size()) > shown;
         const int pillH = shown * pillRowH + padY * 2;
