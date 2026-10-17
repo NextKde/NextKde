@@ -61,7 +61,7 @@ QtObject {
         "deckRestTilt": { type: "real", min: 0, max: 40, def: 10 },
         "tiltAngle":    { type: "real", min: 0, max: 40, def: 22 },
         // 玻璃质感（StageCard 卡面：背板/受光/描边/辉光/纵深）
-        "cardRadius":   { type: "int", min: 0, max: 24, def: 14 },
+        "cardRadius":   { type: "int", min: 0, max: 24, def: 6 },
         "cardTint":     { type: "real", min: 0.2, max: 0.95, def: 0.55 },
         "cardOpacity":  { type: "real", min: 0.2, max: 1.0, def: 1.0 },
         "cardTopLight": { type: "real", min: 0, max: 0.3, def: 0.07 },
@@ -145,7 +145,8 @@ QtObject {
     property real tiltAngle: 22
     // 卡面玻璃质感：背板浓度（悬停自动 ×1.3 提亮）/ 顶部受光 / 静置描边
     // 亮度 / 聚焦辉光强度 / 纵深压暗
-    property int cardRadius: 14
+    // 2026-10-17 iPadOS 还原:参考卡圆角实测 6-7pt(原 14 偏大 2 倍)
+    property int cardRadius: 6
     property real cardTint: 0.55
     property real cardOpacity: 1.0
     property real cardTopLight: 0.07
