@@ -947,14 +947,55 @@ Pane {
                                                 font.strikeout: root.itemCompleted(timedChip.modelData)
                                                 elide: Text.ElideRight
                                             }
-                                            Label {
+                                            // R246: the ref's 2-hour chips open their
+                                            // secondary line with a small outlined clock
+                                            // glyph (ring 8 ref px ⇒ 11 at our scale,
+                                            // stroke 1.5, hands 12+3, same ink as the
+                                            // text, ~5px gap, bottom aligned with the
+                                            // digits' baseline).
+                                            Row {
                                                 width: parent.width
-                                                text: root.itemSecondary(timedChip.modelData)
-                                                visible: text !== ""
+                                                visible: secondaryLabel.text !== ""
                                                     && timedChip.height >= 34
-                                                font.pixelSize: 10
-                                                color: timedChip.inkColor
-                                                elide: Text.ElideRight
+                                                spacing: 5
+
+                                                Item {
+                                                    width: 11
+                                                    height: 11
+                                                    anchors.verticalCenter: secondaryLabel.verticalCenter
+
+                                                    Rectangle {
+                                                        anchors.fill: parent
+                                                        radius: 5.5
+                                                        color: "transparent"
+                                                        border.color: timedChip.inkColor
+                                                        border.width: 1.5
+                                                    }
+                                                    // hand to 12
+                                                    Rectangle {
+                                                        x: (parent.width - 1.5) / 2
+                                                        y: 2.5
+                                                        width: 1.5
+                                                        height: 4
+                                                        color: timedChip.inkColor
+                                                    }
+                                                    // hand to 3
+                                                    Rectangle {
+                                                        x: parent.width / 2 - 0.75
+                                                        y: parent.height / 2 - 0.75
+                                                        width: 3.5
+                                                        height: 1.5
+                                                        color: timedChip.inkColor
+                                                    }
+                                                }
+                                                Label {
+                                                    id: secondaryLabel
+                                                    width: parent.width - 16
+                                                    text: root.itemSecondary(timedChip.modelData)
+                                                    font.pixelSize: 10
+                                                    color: timedChip.inkColor
+                                                    elide: Text.ElideRight
+                                                }
                                             }
                                         }
                                         TapHandler {
