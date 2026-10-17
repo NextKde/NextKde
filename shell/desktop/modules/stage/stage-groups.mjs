@@ -151,6 +151,16 @@ export function decorateGroups(groups, thumbnailUrlOf) {
             grp.icons.push(src)
             grp.iconIds.push(w.windowId)
         }
+        // 单图标形态（maxIconSlots=1）只显示首枚：它必须与卡面内容同源
+        // ——代表窗的图标排首位，否则合并卡会出现"Edge 画面配 Alacritty
+        // 图标"的错位（2026-10-17 实测）。排只影响显示，激活语义不变
+        const repIcon = grp.icons.indexOf(rep.iconSource || "")
+        if (repIcon > 0) {
+            const [ic] = grp.icons.splice(repIcon, 1)
+            const [id] = grp.iconIds.splice(repIcon, 1)
+            grp.icons.unshift(ic)
+            grp.iconIds.unshift(id)
+        }
     }
     return groups
 }
