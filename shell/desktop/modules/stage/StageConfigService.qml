@@ -68,7 +68,7 @@ QtObject {
         "cardTint":     { type: "real", min: 0.2, max: 0.95, def: 0.55 },
         "cardOpacity":  { type: "real", min: 0.2, max: 1.0, def: 1.0 },
         "cardTopLight": { type: "real", min: 0, max: 0.3, def: 0.07 },
-        "cardBorder":   { type: "real", min: 0, max: 0.4, def: 0.13 },
+        "cardBorder":   { type: "real", min: 0, max: 0.4, def: 0.05 },
         "cardGlow":     { type: "real", min: 0, max: 0.4, def: 0.13 },
         "cardDepth":    { type: "real", min: 0, max: 0.6, def: 0.38 },
         "thumbSize":    { type: "int", min: 160, max: 640, def: 320 },
@@ -158,7 +158,7 @@ QtObject {
     property real cardTint: 0.55
     property real cardOpacity: 1.0
     property real cardTopLight: 0.07
-    property real cardBorder: 0.13
+    property real cardBorder: 0.05
     property real cardGlow: 0.13
     property real cardDepth: 0.38
     // 缩略图解码尺寸（宽，高等比 0.7）：越大越清晰、内存与重拍开销越大

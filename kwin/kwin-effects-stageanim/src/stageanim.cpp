@@ -1152,7 +1152,7 @@ struct CardMeta
     qreal hoverScale = 1.05, hoverTiltDeg = 0;
     std::chrono::milliseconds hoverMs{280};
     std::chrono::milliseconds hoverDwellMs{0}; // QML 驻留（hoverDwellDelay）同拍
-    qreal fanSpacing = 8, tintAlpha = 0.55, borderAlpha = 0.13;
+    qreal fanSpacing = 8, tintAlpha = 0.55, borderAlpha = 0.05;
     qreal fanHoverSpread = 1.4;
     qreal depthStrength = 0.38, topLight = 0.07;
     qreal fade = 1.0;   // QML slot.opacity（压暗 × 视口边缘渐隐）
@@ -1484,7 +1484,7 @@ void StageAnimEffect::reloadLiveCards()
                     o.value(QStringLiteral("fanHoverSpread")).toDouble(1.4), 2.0);
                 meta.winId = o.value(QStringLiteral("winId")).toString();
                 meta.tintAlpha = o.value(QStringLiteral("cardTint")).toDouble(0.55);
-                meta.borderAlpha = o.value(QStringLiteral("cardBorder")).toDouble(0.13);
+                meta.borderAlpha = o.value(QStringLiteral("cardBorder")).toDouble(0.05);
                 meta.depthStrength = o.value(QStringLiteral("cardDepth")).toDouble(0.38);
                 meta.topLight = o.value(QStringLiteral("cardTopLight")).toDouble(0.07);
                 meta.fade = qBound(0.0, o.value(QStringLiteral("fade")).toDouble(1.0), 1.0);
