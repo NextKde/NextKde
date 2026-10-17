@@ -204,7 +204,7 @@ Item {
     readonly property int vPadding: _layout.vPadding
     readonly property int dividerMargin: _layout.dividerMargin
     readonly property int pillRadius: Math.round(computedDockHeight
-        * AppearanceTokens.dock.radiusRatio)
+        * ConfigService.cornerRadiusRatio)
     // DockIcon reserves this invisible outer slot even when inactive. This
     // keeps the Row width stable while the active background appears/disappears.
     readonly property real activeBackgroundGap: _layout.activeBackgroundGap

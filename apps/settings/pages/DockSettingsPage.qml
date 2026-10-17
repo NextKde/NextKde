@@ -40,6 +40,10 @@ ColumnLayout {
     property string errorText: ""
     property bool layoutDirty: false
     property bool hoverScaleDirty: false
+    property real dockCornerRadiusPct: 100
+    readonly property real minCornerRadiusPct: 0
+    readonly property real maxCornerRadiusPct: 100
+    property bool cornerRadiusDirty: false
 
     function positionIndexFromString(position) {
         const idx = dockPositions.indexOf(position)
@@ -83,6 +87,13 @@ ColumnLayout {
                 ? Math.max(minHoverScalePct, Math.min(maxHoverScalePct,
                     Math.round(hoverScale * 100)))
                 : 119
+        }
+        const cornerRatio = Number(state.cornerRadiusRatio)
+        if (!cornerRadiusDirty && !cornerRadiusSlider._pressed) {
+            dockCornerRadiusPct = Number.isFinite(cornerRatio)
+                ? Math.max(minCornerRadiusPct, Math.min(maxCornerRadiusPct,
+                    Math.round(cornerRatio * 200)))
+                : 100
         }
         visibilityModeIndex = visibilityModeIndexFromString(state.visibilityMode)
         windowGroupingIndex = windowGroupingIndexFromString(state.windowGrouping)
@@ -130,6 +141,23 @@ ColumnLayout {
         hoverScaleDirty = false
         if (bridge)
             bridge.updateDockHoverScale(dockHoverScalePct / 100)
+    }
+
+    function previewCornerRadius(position) {
+        const next = Math.round(minCornerRadiusPct
+            + position * (maxCornerRadiusPct - minCornerRadiusPct))
+        if (next === dockCornerRadiusPct)
+            return
+        dockCornerRadiusPct = next
+        cornerRadiusDirty = true
+    }
+
+    function commitCornerRadius() {
+        if (!cornerRadiusDirty)
+            return
+        cornerRadiusDirty = false
+        if (bridge)
+            bridge.updateDockCornerRadius(dockCornerRadiusPct / 200)
     }
 
     function saveVisibilityMode(index) {
@@ -269,6 +297,76 @@ ColumnLayout {
                         }
                         onCanceled: { dockPage.layoutDirty = false; dockPage.refresh() }
                         onCommitRequested: dockPage.commitLayout()
+                    }
+                }
+            }
+        }
+    }
+
+    Text {
+        text: I18n.tr("Corner radius").toUpperCase()
+        color: colors.secondaryText
+        font.pixelSize: 12
+        font.weight: Font.DemiBold
+        Layout.leftMargin: 13
+        Layout.topMargin: 14
+    }
+
+    Rectangle {
+        Layout.fillWidth: true
+        color: colors.card
+        radius: 18
+        implicitHeight: cornerRadiusColumn.implicitHeight
+
+        Column {
+            id: cornerRadiusColumn
+            anchors.fill: parent
+
+            Item {
+                width: parent.width
+                height: 62
+                RowLayout {
+                    anchors.fill: parent
+                    anchors.leftMargin: 16
+                    anchors.rightMargin: 16
+                    spacing: 12
+                    Controls.SettingIcon {
+                        colors: dockPage.colors
+                        materialForm: dockPage.materialForm
+                        symbol: "◖"
+                        tint: "#0a84ff"
+                    }
+                    ColumnLayout {
+                        spacing: 1
+                        Text { text: I18n.tr("Dock corner radius"); color: colors.primaryText; font.pixelSize: 14 }
+                        Text {
+                            text: I18n.tr("0% square, 100% half-circle cap")
+                            color: colors.secondaryText
+                            font.pixelSize: 11
+                        }
+                    }
+                    Item { Layout.fillWidth: true }
+                    Text {
+                        text: Math.round(dockPage.dockCornerRadiusPct) + "%"
+                        color: colors.secondaryText
+                        font.pixelSize: 12
+                    }
+                    LiquidControls.LiquidSlider {
+                        id: cornerRadiusSlider
+                        accentColor: colors.accent
+                        Layout.preferredWidth: 156
+                        trackColor: colors.divider
+                        wheelStep: 1 / (dockPage.maxCornerRadiusPct
+                                        - dockPage.minCornerRadiusPct)
+                        value: (dockPage.dockCornerRadiusPct
+                            - dockPage.minCornerRadiusPct)
+                            / (dockPage.maxCornerRadiusPct
+                                - dockPage.minCornerRadiusPct)
+                        onPreviewChanged: function(position) {
+                            dockPage.previewCornerRadius(position)
+                        }
+                        onCanceled: { dockPage.cornerRadiusDirty = false; dockPage.refresh() }
+                        onCommitRequested: dockPage.commitCornerRadius()
                     }
                 }
             }

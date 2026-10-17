@@ -80,6 +80,7 @@ public:
     Q_INVOKABLE void updateDockContentStyle(const QString& style);
     Q_INVOKABLE void updateDockStyle(const QString& style);
     Q_INVOKABLE void updateDockHoverScale(double scale);
+    Q_INVOKABLE void updateDockCornerRadius(double ratio);
     Q_INVOKABLE void updateDockIconMode(const QString& mode);
     Q_INVOKABLE void updateDockIconOpacity(double opacity);
     Q_INVOKABLE void updateDockIconTintColor(const QString& color);

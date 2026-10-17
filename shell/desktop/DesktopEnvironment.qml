@@ -307,6 +307,7 @@ Item {
                 showTrash: ConfigService.showTrash,
                 showNotificationBadges: ConfigService.showNotificationBadges,
                 showRevealIndicator: ConfigService.showRevealIndicator,
+                cornerRadiusRatio: ConfigService.cornerRadiusRatio,
             })
         }
 
@@ -396,6 +397,11 @@ Item {
 
         function updateWindowGrouping(mode: string): string {
             ConfigService.updateWindowGrouping(mode)
+            return snapshot()
+        }
+
+        function updateCornerRadiusRatio(ratio: real): string {
+            ConfigService.updateCornerRadiusRatio(ratio)
             return snapshot()
         }
 

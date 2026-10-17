@@ -62,6 +62,12 @@ QtObject {
     // this value too, keeping one source of truth; a future bar-visibility
     // setting will decide whether it is applied at all.
     property real   barHeight:    35
+    // Dock corner rounding as a fraction of dock height. Replaces the
+    // previously hard-coded AppearanceTokens.dock.radiusRatio with a
+    // user-facing setting. 0.5 keeps the current cap-a-half-circle look.
+    property real cornerRadiusRatio: AppearanceTokens.dock.radiusRatio
+    readonly property real minCornerRadiusRatio: 0.0
+    readonly property real maxCornerRadiusRatio: 0.5
     // Icon appearance source of truth. Shader inputs are derived from iconMode
     // instead of persisted separately, preventing impossible mixed states.
     property string iconMode:        "color"       // "color" | "grayscale" | "tint"
@@ -418,6 +424,24 @@ QtObject {
         return true
     }
 
+    function isValidCornerRadiusRatio(value) {
+        return Number.isFinite(value) && value >= svc.minCornerRadiusRatio
+            && value <= svc.maxCornerRadiusRatio
+    }
+
+    function updateCornerRadiusRatio(rawRatio) {
+        const next = Number(rawRatio)
+        if (!Number.isFinite(next))
+            return false
+        const clamped = Math.max(svc.minCornerRadiusRatio,
+            Math.min(svc.maxCornerRadiusRatio, next))
+        if (Math.abs(svc.cornerRadiusRatio - clamped) <= 0.0001)
+            return false
+        svc.cornerRadiusRatio = clamped
+        scheduleSave()
+        return true
+    }
+
     function isValidVisibilityMode(value) {
         return value === "always" || value === "smart" || value === "persistent"
     }
@@ -573,6 +597,8 @@ QtObject {
             iconMode:        svc.iconMode,
             iconOpacity:     svc.iconOpacity,
             iconTintColor:    svc.iconTintColor,
+            // Dock corner rounding (user-facing setting)
+            cornerRadiusRatio: svc.cornerRadiusRatio,
             // Show mode (v3)
             visibilityMode: svc.visibilityMode,
             // Grouping mode (macOS style vs separate)
@@ -771,6 +797,12 @@ QtObject {
 
         if (obj.iconMode === undefined || obj.iconDuotoneShadowColor !== undefined)
             scheduleSave()
+        if (obj.cornerRadiusRatio !== undefined) {
+            const ratio = Number(obj.cornerRadiusRatio)
+            if (Number.isFinite(ratio))
+                svc.cornerRadiusRatio = Math.max(svc.minCornerRadiusRatio,
+                    Math.min(svc.maxCornerRadiusRatio, ratio))
+        }
         if (obj.windowGrouping !== undefined) {
             if (isValidWindowGrouping(obj.windowGrouping)) {
                 svc.windowGrouping = obj.windowGrouping

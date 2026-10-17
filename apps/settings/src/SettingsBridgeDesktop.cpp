@@ -98,6 +98,11 @@ void SettingsBridge::updateDockHoverScale(double scale)
     callDock({ QStringLiteral("updateHoverScale"), QString::number(scale, 'f', 4) });
 }
 
+void SettingsBridge::updateDockCornerRadius(double ratio)
+{
+    callDock({ QStringLiteral("updateCornerRadiusRatio"), QString::number(ratio, 'f', 4) });
+}
+
 void SettingsBridge::updateDockIconMode(const QString& mode)
 {
     callDock({ QStringLiteral("updateIconMode"), mode });
@@ -228,6 +233,9 @@ QVariantMap SettingsBridge::snapshotFromReply(const QString& payload)
         // untouched profile opens on exactly what the Dock is drawing; the
         // fallbacks match the macOS defaults the page starts with.
         { QStringLiteral("hoverScale"), object.value(QStringLiteral("hoverScale")).toDouble(1.19) },
+        // Dock corner rounding as a fraction of dock height. Defaults to 0.5
+        // (half-circle cap), the pre-setting behaviour when no value is stored.
+        { QStringLiteral("cornerRadiusRatio"), object.value(QStringLiteral("cornerRadiusRatio")).toDouble(0.5) },
         { QStringLiteral("iconMode"), object.value(QStringLiteral("iconMode")).toString() },
         { QStringLiteral("iconOpacity"), object.value(QStringLiteral("iconOpacity")).toDouble() },
         { QStringLiteral("iconTintColor"),
