@@ -2746,9 +2746,10 @@ KosApplicationWindow {
                     id: yearPage
 
                     // R-YEAR step 1: 12-month skeleton from the mini-month
-                    // idiom. Day-cell selection and event dots land in step
-                    // 2; clicking a month already routes to the month view so
-                    // no part of the new segment is dead.
+                    // idiom. Step 2: day-cell click selects (stays in year
+                    // view; today red disc / selected gray disc, mini-month
+                    // idiom), event dots per day, month-label click still
+                    // routes to month view.
                     Item {
                         GridLayout {
                             anchors.fill: parent
@@ -2812,6 +2813,12 @@ KosApplicationWindow {
                                                         cellDate.getFullYear() === root.now.getFullYear()
                                                             && cellDate.getMonth() === root.now.getMonth()
                                                             && cellDate.getDate() === root.now.getDate()
+                                                    readonly property bool isSelected:
+                                                        root.sameDay(cellDate, root.selectedDate)
+                                                    readonly property int eventCount:
+                                                        yearDayCell.inMonth
+                                                            ? root.itemsForDate(yearDayCell.cellDate).length
+                                                            : 0
                                                     Layout.fillWidth: true
                                                     Layout.preferredHeight: 18
 
@@ -2821,8 +2828,21 @@ KosApplicationWindow {
                                                         height: 14
                                                         radius: 7
                                                         color: yearDayCell.isToday
-                                                            ? root.tahoe.selectionDisc
-                                                            : "transparent"
+                                                            ? AppTheme.todayRed
+                                                            : (yearDayCell.isSelected
+                                                                ? root.tahoe.selectionDisc
+                                                                : "transparent")
+                                                    }
+
+                                                    Rectangle {
+                                                        // Extrapolated (no year-view reference): mini-month idiom dot.
+                                                        visible: yearDayCell.eventCount > 0
+                                                        width: 3
+                                                        height: 3
+                                                        radius: 1.5
+                                                        anchors.horizontalCenter: parent.horizontalCenter
+                                                        anchors.bottom: parent.bottom
+                                                        color: root.tahoe.accent
                                                     }
 
                                                     Label {
@@ -2830,12 +2850,19 @@ KosApplicationWindow {
                                                         text: yearDayCell.inMonth
                                                             ? String(yearDayCell.cellDate.getDate())
                                                             : ""
-                                                        color: yearDayCell.isToday
+                                                        color: yearDayCell.isToday || yearDayCell.isSelected
                                                             ? "#FFFFFF"
                                                             : root.tahoe.labelPrimary
                                                         font.pixelSize: 9
-                                                        font.weight: yearDayCell.isToday
+                                                        font.weight: yearDayCell.isToday || yearDayCell.isSelected
                                                             ? Font.DemiBold : Font.Normal
+                                                    }
+
+                                                    MouseArea {
+                                                        anchors.fill: parent
+                                                        enabled: yearDayCell.inMonth
+                                                        cursorShape: Qt.PointingHandCursor
+                                                        onClicked: root.selectedDate = yearDayCell.cellDate
                                                     }
                                                 }
                                             }
