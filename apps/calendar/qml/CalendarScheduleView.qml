@@ -847,11 +847,19 @@ Pane {
                             // T01: same-hour chips sit side-by-side in
                             // half-width lanes, never stacked
                             // (user ruling 2026-10-17).
+                            // R-OVERFLOW (user ruling 2026-10-18): max 3
+                            // lanes, then a plain +N count for the remainder —
+                            // same overflow rules as R-MONTH / the all-day
+                            // band's R089 row.
                             Item {
                                 id: chipHost
                                 anchors.fill: parent
                                 anchors.margins: 3
-                                readonly property var visibleItems: hourCell.cellItems.slice(0, 2)
+                                readonly property var visibleItems: hourCell.cellItems.slice(0, 3)
+                                readonly property bool hasOverflow: hourCell.cellItems.length > 3
+                                readonly property int overflowCount: hourCell.cellItems.length - visibleItems.length
+                                // 20 logical px reserved at the right edge for the +N label
+                                readonly property int overflowReserve: chipHost.hasOverflow ? 20 : 0
 
                                 Repeater {
                                     model: chipHost.visibleItems
@@ -861,7 +869,8 @@ Pane {
                                         required property int index
                                         required property var modelData
                                         width: (chipHost.width
-                                            - (chipHost.visibleItems.length - 1) * 2)
+                                            - (chipHost.visibleItems.length - 1) * 2
+                                            - chipHost.overflowReserve)
                                             / chipHost.visibleItems.length
                                         x: index * (width + 2)
                                         // R-CHIP (user ruling 2026-10-17): the
@@ -1016,6 +1025,22 @@ Pane {
                                             onTapped: root.itemActivated(timedChip.modelData)
                                         }
                                     }
+                                }
+
+                                Label {
+                                    visible: chipHost.hasOverflow
+                                    anchors.right: parent.right
+                                    anchors.verticalCenter: parent.verticalCenter
+                                    width: chipHost.overflowReserve - 2
+                                    text: "+" + chipHost.overflowCount
+                                    // R-OVERFLOW: same overflow form as the all-day
+                                    // band's R089 row — plain ink text, no fill, ink
+                                    // taken from the FIRST hidden item.
+                                    color: chipHost.hasOverflow
+                                        ? root.chipInk(hourCell.cellItems[3])
+                                        : "transparent"
+                                    font.pixelSize: 9
+                                    elide: Text.ElideRight
                                 }
                             }
 
