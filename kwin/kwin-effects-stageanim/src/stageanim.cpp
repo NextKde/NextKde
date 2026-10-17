@@ -325,7 +325,7 @@ void StageAnimEffect::reconfigure(ReconfigureFlags)
     // ·sinR 随角变大，k = focal / (focal − depth)——大屏宽 × 45° 时 depth
     // ≈900 恰好触焦，>45° 远缘 focal−depth 变负、k 翻负号，顶点镜像翻转
     // 窗口绘制炸裂。40° 封顶时 1272px 半宽 depth≈818 < focal(900) 恒安全。
-    m_tiltAngle = std::clamp(grp.readEntry<double>("TiltAngle", 22.0),
+    m_tiltAngle = std::clamp(grp.readEntry<double>("TiltAngle", 0.0),
                              0.0, 40.0);
 
     // 飞行玻璃透明度：1.0 = 关闭（全程不透明），越低越"玻璃"
@@ -1235,6 +1235,7 @@ void StageAnimEffect::rasterChrome(LiveCard &card)
         + QString::number(card.count) + QLatin1Char('|')
         + QString::number(w) + QLatin1Char('x') + QString::number(h)
         + QLatin1Char(card.closeHot ? '!' : '.')
+        + QLatin1Char((card.hovered || card.hoverPending) ? 'H' : 'h')
         + QLatin1Char(card.merged ? 'M' : 'm')
         + QLatin1Char(card.showCardTitle ? 'T' : 't');
     const QString ovKey = card.iconsJson + QLatin1Char('|')
@@ -1283,28 +1284,34 @@ void StageAnimEffect::rasterChrome(LiveCard &card)
         p.setPen(QColor(255, 255, 255, 235));
         p.drawText(tr, Qt::AlignLeft | Qt::AlignVCenter, card.title);
     }
-    // 关闭钮：右上 20×20 热区。静置=柔和暗底圆 + 白 ×（无圈线——
-    // "圆圈带叉"样式用户否决；暗底保证亮内容上也不隐身），悬停=
-    // 红圆底 + 白 ×。与 QML cardClose 同款（两模式视觉统一）
+    // 关闭钮：右上 20×20 热区。iPadOS 还原(2026-10-17)：参考卡没有常驻
+    // 关闭钮——仅卡片悬停时出现（与 QML cardClose 的 opacity 门控一致）。
+    // 悬停按钮本体=红圆底 + 白 ×；悬停卡面=柔和暗底圆 + 白 ×
     const int csize = 40; // 20 ×2
     const int cx = w * 2 - 16 - csize;
     const int cy = 8 * 2 + (48 - csize) / 2;
     const qreal cmx = cx + csize / 2.0, cmy = cy + csize / 2.0;
-    if (card.closeHot) {
-        p.setPen(Qt::NoPen);
-        p.setBrush(QColor(239, 68, 68, 225));
-        p.drawEllipse(QPointF(cmx, cmy), 15.0, 15.0);
-        p.setPen(QPen(QColor(255, 255, 255, 245), 3.2,
-                      Qt::SolidLine, Qt::RoundCap));
-    } else {
-        p.setPen(Qt::NoPen);
-        p.setBrush(QColor(10, 14, 20, 115));
-        p.drawEllipse(QPointF(cmx, cmy), 14.0, 14.0);
-        p.setPen(QPen(QColor(255, 255, 255, 210), 2.8,
-                      Qt::SolidLine, Qt::RoundCap));
+    // hoverPending = 驻留计时中（指针已在卡上，hovered 尚未置位）——
+    // 与 QML isHovered 的即时显隐对齐
+    const bool closeVisible = card.closeHot || card.hovered
+        || card.hoverPending;
+    if (closeVisible) {
+        if (card.closeHot) {
+            p.setPen(Qt::NoPen);
+            p.setBrush(QColor(239, 68, 68, 225));
+            p.drawEllipse(QPointF(cmx, cmy), 15.0, 15.0);
+            p.setPen(QPen(QColor(255, 255, 255, 245), 3.2,
+                          Qt::SolidLine, Qt::RoundCap));
+        } else {
+            p.setPen(Qt::NoPen);
+            p.setBrush(QColor(10, 14, 20, 115));
+            p.drawEllipse(QPointF(cmx, cmy), 14.0, 14.0);
+            p.setPen(QPen(QColor(255, 255, 255, 210), 2.8,
+                          Qt::SolidLine, Qt::RoundCap));
+        }
+        p.drawLine(QPointF(cmx - 5.5, cmy - 5.5), QPointF(cmx + 5.5, cmy + 5.5));
+        p.drawLine(QPointF(cmx + 5.5, cmy - 5.5), QPointF(cmx - 5.5, cmy + 5.5));
     }
-    p.drawLine(QPointF(cmx - 5.5, cmy - 5.5), QPointF(cmx + 5.5, cmy + 5.5));
-    p.drawLine(QPointF(cmx + 5.5, cmy - 5.5), QPointF(cmx - 5.5, cmy + 5.5));
     p.end();
     card.chromeTex = upload(img.mirrored(false, true));
     } // chromeDirty

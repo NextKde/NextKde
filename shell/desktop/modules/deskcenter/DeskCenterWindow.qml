@@ -357,7 +357,7 @@ PanelWindow {
     // joined it would come back as glass. Material cards paint themselves and
     // stay out of it.
     BackgroundEffect.blurRegion: (AppearanceTokens.surface.usesKwinBlur
-        && root.visible) ? widgetBlurHolder : null
+        && root.visible && !StageModeService.enabled) ? widgetBlurHolder : null
 
     Region {
         id: widgetBlurHolder
@@ -557,7 +557,9 @@ PanelWindow {
             property real dragOffsetX: 0
             property real dragOffsetY: 0
             readonly property var placement: root.placementFor(modelData.id)
-            visible: placement !== null
+            // 台前调度常驻时隐藏组件板：参考图卡列背景是纯壁纸，组件板
+            // 会从卡缝里透出来把侧栏读成一堆碎片（2026-10-17 用户定案）
+            visible: placement !== null && !StageModeService.enabled
             z: widgetDrag.active ? 120 : (root.editMode ? 20 : 1)
             transform: Translate { x: card.dragOffsetX; y: card.dragOffsetY }
             scale: widgetDrag.active ? 1.035 : 1

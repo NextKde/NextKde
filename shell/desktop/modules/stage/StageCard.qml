@@ -510,7 +510,10 @@ Item {
                 y: plate.y + 3 + index * 2   // 向下偏移:底缘露出,顶缘藏卡后
                 radius: plate.radius + 2 + index * 2
                 color: Qt.rgba(0, 0, 0, 1)
-                opacity: 0.25 / (index + 1)
+                // 0.25 → 0.15(2026-10-17 并排实测):四层叠加后重叠区
+                // 合成 ≈28%,对齐参考的壁纸压暗量级(≈25%);原 0.25 合成
+                // ≈43%,并排图上明显比参考重
+                opacity: 0.15 / (index + 1)
             }
         }
 
@@ -609,9 +612,10 @@ Item {
                 width: 20
                 height: 20
                 radius: 10
-                // 与特效铭牌同款（v79）：静置=柔和暗底圆 + 白 ×（无圈线，
-                // "圆圈带叉"已否决；暗底保证亮内容上不隐身）、悬停红圆底
-                // + 白 ×；两模式视觉统一
+                // iPadOS 还原(2026-10-17):参考缩略图无常驻关闭钮——只在
+                // 卡片悬停时出现。静置=暗底圆 + 白 ×；悬停按钮本体=红圆底
+                opacity: (card.isHovered || closeHit.containsMouse) ? 1.0 : 0.0
+                Behavior on opacity { NumberAnimation { duration: 120 } }
                 color: closeHit.containsMouse
                     ? "#ef4444" : Qt.rgba(0.04, 0.055, 0.08, 0.45)
 

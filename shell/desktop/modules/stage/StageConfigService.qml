@@ -58,8 +58,11 @@ QtObject {
         // **静置倾斜角**——静止/交棒时的卡片倾角，adaptive 完整显示也有
         // 静置姿态；tiltAngle = **悬停倾斜角**——鼠标悬停时的倾角
         //（0 = 悬停放平阅读）
-        "deckRestTilt": { type: "real", min: 0, max: 40, def: 10 },
-        "tiltAngle":    { type: "real", min: 0, max: 40, def: 22 },
+        // TiltAngle kwinrc 投影取 deckRestTilt（与卡片交棒姿态同源，见
+        // _pushEffectConfig）。2026-10-17 iPadOS 还原：参考卡近平贴（仅
+        // 整列 ~1.4° 旋转），双旋钮默认归零；需要牌堆姿态的用户可自行调大
+        "deckRestTilt": { type: "real", min: 0, max: 40, def: 0 },
+        "tiltAngle":    { type: "real", min: 0, max: 40, def: 0 },
         // 玻璃质感（StageCard 卡面：背板/受光/描边/辉光/纵深）
         "cardRadius":   { type: "int", min: 0, max: 24, def: 6 },
         "cardTint":     { type: "real", min: 0.2, max: 0.95, def: 0.55 },
@@ -145,8 +148,9 @@ QtObject {
     // deckRestTilt（与卡片交棒姿态同源，见 _pushEffectConfig）。
     //（悬停放大只有一个旋钮 hoverScale——原 deckFocusScale 与其相乘控
     // 同一效果，冲突已删）
-    property real deckRestTilt: 10
-    property real tiltAngle: 22
+    // 2026-10-17 iPadOS 还原:双旋钮默认归零(参考卡近平贴)
+    property real deckRestTilt: 0
+    property real tiltAngle: 0
     // 卡面玻璃质感：背板浓度（悬停自动 ×1.3 提亮）/ 顶部受光 / 静置描边
     // 亮度 / 聚焦辉光强度 / 纵深压暗
     // 2026-10-17 iPadOS 还原:参考卡圆角实测 6-7pt(原 14 偏大 2 倍)

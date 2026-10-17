@@ -244,7 +244,8 @@ private:
     QSet<EffectWindow *> m_connected; // 已挂 minimizedChanged 的窗口
     QRect m_target; // 全局配置目标（Stage 侧栏区域）；无效 = 回落行为
     QEasingCurve m_easing{QEasingCurve::InOutCubic};
-    qreal m_tiltAngle = 22.0; // kwinrc TiltAngle：卡片倾斜角，动画起止姿态
+    qreal m_tiltAngle = 0.0;   // kwinrc TiltAngle：卡片倾斜角，动画起止姿态
+                               //（默认 0 = iPadOS 还原的近平贴卡）
     qreal m_glassOpacity = 0.65; // kwinrc GlassOpacity：飞行途中透明度（1=关）
     bool m_trace = false; // kwinrc TraceTargets：正常路径也打目标解析日志
     bool m_mirrorTargets = false; // kwinrc TargetMirror：右侧常驻——装卡姿态镜像

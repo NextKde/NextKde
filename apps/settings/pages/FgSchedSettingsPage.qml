@@ -35,12 +35,12 @@ ColumnLayout {
     // 风格**，不进预设、也不在 UI 暴露：值仍存于 config.json 与
     // StageConfigService，需要时用 `stage-config set <key> <value>` 调。
     readonly property var stagePresets: [
-        { id: "lite", name: I18n.tr("Lithe"), detail: I18n.tr("Compact cards · slight tilt · crisp motion"),
+        { id: "lite", name: I18n.tr("Lithe"), detail: I18n.tr("Compact cards · crisp motion"),
           values: { cardHeight: 145, cardWidth: 216, cardSpacing: 14,
                     stripMargin: 12, deckSidePeek: 16, focusDim: false,
                     fanSpacing: 6, fanHoverSpread: 1.4, stripIconSize: 48,
                     maxIconSlots: 1,
-                    deckRestTilt: 16, tiltAngle: 16, hoverScale: 1.0,
+                    deckRestTilt: 0, tiltAngle: 0, hoverScale: 1.0,
                     hoverDwellDelay: 200, engageDelay: 170,
                     cardEnterDuration: 190, tiltAnimDuration: 220,
                     cardRadius: 6, cardTint: 0.55, cardOpacity: 1.0,
@@ -48,12 +48,12 @@ ColumnLayout {
                     cardGlow: 0.08, cardDepth: 0.28, thumbSize: 320,
                     animDuration: 340, glassOpacity: 0.65,
                     animEasing: "OutCubic" } },
-        { id: "standard", name: I18n.tr("Standard"), detail: I18n.tr("Medium cards · moderate tilt · balanced motion"),
+        { id: "standard", name: I18n.tr("Standard"), detail: I18n.tr("Medium cards · balanced motion"),
           values: { cardHeight: 170, cardWidth: 216, cardSpacing: 20,
                     stripMargin: 12, deckSidePeek: 20, focusDim: false,
                     fanSpacing: 8, fanHoverSpread: 1.4, stripIconSize: 48,
                     maxIconSlots: 1,
-                    deckRestTilt: 28, tiltAngle: 28, hoverScale: 1.0,
+                    deckRestTilt: 0, tiltAngle: 0, hoverScale: 1.0,
                     hoverDwellDelay: 200, engageDelay: 170,
                     cardEnterDuration: 240, tiltAnimDuration: 280,
                     cardRadius: 6, cardTint: 0.55, cardOpacity: 1.0,
@@ -61,13 +61,14 @@ ColumnLayout {
                     cardGlow: 0.14, cardDepth: 0.40, thumbSize: 320,
                     animDuration: 400, glassOpacity: 0.65,
                     animEasing: "OutCubic" } },
-        // 「立体」= 用户 2026-09-30 定稿手感（204/28/40×2，悬停放大关）
-        { id: "vivid", name: I18n.tr("Dimensional"), detail: I18n.tr("Large cards · strong tilt · relaxed motion"),
+        // 「立体」= 用户 2026-09-30 定稿手感（204/28，悬停放大关）；
+        // 2026-10-17 iPadOS 还原：倾角归零（参考卡近平贴）
+        { id: "vivid", name: I18n.tr("Dimensional"), detail: I18n.tr("Large cards · relaxed motion"),
           values: { cardHeight: 204, cardWidth: 216, cardSpacing: 28,
                     stripMargin: 12, deckSidePeek: 24, focusDim: false,
                     fanSpacing: 10, fanHoverSpread: 1.4, stripIconSize: 48,
                     maxIconSlots: 1,
-                    deckRestTilt: 40, tiltAngle: 40, hoverScale: 1.0,
+                    deckRestTilt: 0, tiltAngle: 0, hoverScale: 1.0,
                     hoverDwellDelay: 200, engageDelay: 170,
                     cardEnterDuration: 280, tiltAnimDuration: 340,
                     cardRadius: 6, cardTint: 0.55, cardOpacity: 1.0,
