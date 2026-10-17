@@ -1299,6 +1299,20 @@ KosApplicationWindow {
         return String(value(itemRecord(item), "title", qsTr("Untitled")))
     }
 
+    // E02 (R-CHIP user ruling 2026-10-17): the timed chip's second line is
+    // the time range ("11AM – 1PM" on the ref). Todos render their due time
+    // only; no end is invented when the record lacks one.
+    function itemSecondary(item) {
+        if (itemAllDay(item))
+            return ""
+        const startMatch = itemDateTime(item).match(/T(\d{2}:\d{2})/)
+        if (!startMatch)
+            return ""
+        const endText = String(value(itemRecord(item), "end", ""))
+        const endMatch = endText.match(/T(\d{2}:\d{2})/)
+        return endMatch ? startMatch[1] + " – " + endMatch[1] : startMatch[1]
+    }
+
     function itemDateTime(item) {
         const record = itemRecord(item)
         return String(value(record, item.kind === "todo" ? "due" : "start", ""))
@@ -2637,6 +2651,7 @@ KosApplicationWindow {
                         selectedDate: root.selectedDate
                         itemsForDate: root.itemsForDate
                         itemTitle: root.itemTitle
+                        itemSecondary: root.itemSecondary
                         itemColor: root.itemColor
                         itemCompleted: root.itemCompleted
                         itemAllDay: root.itemAllDay
@@ -2668,6 +2683,7 @@ KosApplicationWindow {
                         selectedDate: root.selectedDate
                         itemsForDate: root.itemsForDate
                         itemTitle: root.itemTitle
+                        itemSecondary: root.itemSecondary
                         itemColor: root.itemColor
                         itemCompleted: root.itemCompleted
                         itemAllDay: root.itemAllDay

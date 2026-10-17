@@ -25,6 +25,7 @@ Pane {
     property int dayCount: 7
     property var itemsForDate: function(date) { return [] }
     property var itemTitle: function(item) { return "" }
+    property var itemSecondary: function(item) { return "" }
     property var itemColor: function(item) { return AppTheme.accent }
     property var itemCompleted: function(item) { return false }
     property var itemAllDay: function(item) { return false }
@@ -887,7 +888,12 @@ Pane {
                                             color: root.itemColor(timedChip.modelData)
                                         }
 
-                                        Label {
+                                        // E02 (R-CHIP user ruling 2026-10-17):
+                                        // title near the TOP (ref: ink begins right
+                                        // under the chip's top edge, never centred)
+                                        // with a smaller secondary line under it —
+                                        // the time range, same chip ink.
+                                        Column {
                                             anchors.fill: parent
                                             // R077: clear the bar. The ref's text ink begins 7 ref px
                                             // from the chip's fill edge (chip x=326, ink x=333) ⇒ ~13
@@ -895,16 +901,31 @@ Pane {
                                             anchors.leftMargin: timedChip.stripeInset
                                                 + timedChip.stripeWidth + 5
                                             anchors.rightMargin: 4
-                                            text: root.itemTitle(timedChip.modelData)
-                                            // R-CHIP: E02 title 11–12 medium.
-                                            font.pixelSize: 11
-                                            font.weight: Font.Medium
-                                            // R079: was AppTheme.text (grey). The ref's ink is
-                                            // the chip's own calendar colour at half value.
-                                            color: timedChip.inkColor
-                                            font.strikeout: root.itemCompleted(timedChip.modelData)
-                                            verticalAlignment: Text.AlignVCenter
-                                            elide: Text.ElideRight
+                                            anchors.topMargin: 2
+                                            anchors.bottomMargin: 2
+                                            spacing: 1
+
+                                            Label {
+                                                width: parent.width
+                                                text: root.itemTitle(timedChip.modelData)
+                                                // R-CHIP: E02 title 11–12 medium.
+                                                font.pixelSize: 11
+                                                font.weight: Font.Medium
+                                                // R079: was AppTheme.text (grey). The ref's ink is
+                                                // the chip's own calendar colour at half value.
+                                                color: timedChip.inkColor
+                                                font.strikeout: root.itemCompleted(timedChip.modelData)
+                                                elide: Text.ElideRight
+                                            }
+                                            Label {
+                                                width: parent.width
+                                                text: root.itemSecondary(timedChip.modelData)
+                                                visible: text !== ""
+                                                    && timedChip.height >= 34
+                                                font.pixelSize: 10
+                                                color: timedChip.inkColor
+                                                elide: Text.ElideRight
+                                            }
                                         }
                                         TapHandler {
                                             onTapped: root.itemActivated(timedChip.modelData)
