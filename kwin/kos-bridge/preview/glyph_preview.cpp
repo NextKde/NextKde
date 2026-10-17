@@ -48,7 +48,8 @@ constexpr int Supersample = 4;
 // lights on it. The hover ring and the adjust ring are deliberately absent --
 // they are affordances of a panel that has a pointer on it, and this one does
 // not.
-QImage buildPanel(const PanelGeometry &geometry, bool maximized, bool dark)
+QImage buildPanel(const PanelGeometry &geometry, bool maximized, bool dark,
+                   int hoveredIndex = -1)
 {
     const QSizeF panel =
         panelRectUnclipped(geometry, QSizeF(100000, 100000)).size();
@@ -68,12 +69,12 @@ QImage buildPanel(const PanelGeometry &geometry, bool maximized, bool dark)
 
     for (int i = 0; i < TypeCount; ++i) {
         // The order the panel is laid out in, which ButtonRenderer::typeAt owns.
-        // Repeated here rather than shared because the preview must be able to
-        // show a panel whose order is being reconsidered, and a preview that
-        // reads the order out of the thing it is previewing cannot do that.
         constexpr Type Order[TypeCount] = {Maximize, Minimize, Close};
-        drawLight(painter, dotRect(panel, geometry, i), Order[i], true,
-                  maximized);
+        const QRectF disc = dotRect(panel, geometry, i);
+        if (i == hoveredIndex) {
+            drawHoverRing(painter, disc, Order[i], dark);
+        }
+        drawLight(painter, disc, Order[i], true, maximized);
     }
 
     painter.end();
@@ -121,7 +122,7 @@ int main(int argc, char **argv)
     qreal y = 34.0;
     for (bool dark : {false, true}) {
         const QImage left = buildPanel(geometry, false, dark);
-        const QImage right = buildPanel(geometry, true, dark);
+        const QImage right = buildPanel(geometry, true, dark, 1);
         p.drawImage(QRectF(20, y, defaultPanel.width(), defaultPanel.height()),
                     left);
         p.drawImage(QRectF(20 + defaultPanel.width() + 16, y,
