@@ -40,7 +40,8 @@ AnimatedPopupWindow {
         return arranged
     }
 
-    implicitWidth: 424
+    readonly property int contentRequiredWidth: ids.length * 90 + Math.max(0, ids.length - 1) * 8 + 28
+    implicitWidth: Math.max(516, contentRequiredWidth)
     implicitHeight: 146
     color: "transparent"
     grabFocus: interactive
@@ -49,12 +50,65 @@ AnimatedPopupWindow {
     anchor {
         edges: Edges.Bottom
         gravity: Edges.Bottom
+        adjustment: PopupAdjustment.Slide
         margins.bottom: 10
     }
 
     function openFor(item) {
         anchorItem = item
         show()
+    }
+
+    function toggleFor(item) {
+        if (requestedOpen)
+            hide()
+        else
+            openFor(item)
+    }
+
+    Shortcut {
+        sequence: "Escape"
+        enabled: editor.requestedOpen
+        onActivated: editor.hide()
+    }
+
+    PanelWindow {
+        id: dismissalCatcher
+        screen: ScreenLifecycle.activeScreen
+        visible: ScreenLifecycle.outputAvailable && ScreenLifecycle.activeScreen !== null
+            && editor.requestedOpen
+        color: "transparent"
+        exclusionMode: ExclusionMode.Ignore
+        WlrLayershell.layer: WlrLayer.Top
+        WlrLayershell.namespace: "quickshell-statusarea-backdrop"
+        WlrLayershell.keyboardFocus: WlrKeyboardFocus.None
+        anchors {
+            top: true
+            bottom: true
+            left: true
+            right: true
+        }
+        MouseArea {
+            anchors.fill: parent
+            cursorShape: Qt.ArrowCursor
+            onPressed: editor.hide()
+        }
+    }
+
+    Connections {
+        target: WindowService
+        function onActiveWindowIdChanged() {
+            if (editor.requestedOpen)
+                editor.hide()
+        }
+    }
+
+    Connections {
+        target: ContextMenuCoordinator
+        function onActiveMenuChanged() {
+            if (ContextMenuCoordinator.activeMenu && editor.requestedOpen)
+                editor.hide()
+        }
     }
 
     Item {
@@ -87,12 +141,15 @@ AnimatedPopupWindow {
                 }
                 Item { Layout.fillWidth: true; height: 1 }
                 Rectangle {
+                    id: doneButton
+                    Layout.preferredWidth: 48
+                    Layout.preferredHeight: 26
                     width: 48; height: 26; radius: AppearanceTokens.isMaterial ? 13 : 9
                     color: AppearanceTokens.surface.pick(
                         AppearanceTokens.colors.primaryContainer,
                         Qt.rgba(editor.foregroundColor.r,
                             editor.foregroundColor.g,
-                            editor.foregroundColor.b, 0.10))
+                            editor.foregroundColor.b, doneHover.hovered ? 0.20 : 0.10))
                     Text {
                         anchors.centerIn: parent
                         text: I18n.tr("Done")
@@ -101,6 +158,7 @@ AnimatedPopupWindow {
                             editor.foregroundColor)
                         font { pixelSize: 11; weight: Font.DemiBold }
                     }
+                    HoverHandler { id: doneHover; cursorShape: Qt.PointingHandCursor }
                     TapHandler { onTapped: editor.hide() }
                 }
             }

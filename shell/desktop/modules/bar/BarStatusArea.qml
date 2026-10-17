@@ -275,7 +275,7 @@ Item {
         acceptedButtons: Qt.RightButton
         gesturePolicy: TapHandler.ReleaseWithinBounds
         enabled: root.contextualEditingAvailable
-        onTapped: statusAreaEditor.openFor(root)
+        onTapped: statusAreaEditor.toggleFor(root)
     }
 
     StatusAreaEditor {
