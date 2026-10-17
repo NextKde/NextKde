@@ -667,7 +667,12 @@ Item {
                 thumbCard.liveWanted && StageConfigService.thumbLiveStream
             property bool streamOn: false     // 占空比相位：true=连接消费
             property var liveGrabResult: null // Hold only the current frozen frame.
-            readonly property url liveGrabUrl: liveGrabResult ? liveGrabResult.url : ""
+            // 2026-10-17 根修:url 类型声明会把 result.url 的 undefined 转成
+            // "非空 url"(!== "" 为真),下游三元误走活体支拿 undefined →
+            // source 恒空。改 string + 真值判(根因:grabToImage 结果对象的
+            // url 在本机栈上返回 undefined,见 ledger 第 18 轮)
+            readonly property string liveGrabUrl: liveGrabResult
+                ? String(liveGrabResult.url || "") : ""
             property int streamGeneration: 0
 
             function _syncStream() {
@@ -782,8 +787,8 @@ Item {
                 // thumbUrl/liveGrabUrl 变化与让位开关翻转时显式重算 source
                 function _syncPreviewSource() {
                     const want = (card.previewActive && !card.effectOwnedChrome)
-                        ? (thumbCard.liveGrabUrl !== ""
-                            ? thumbCard.liveGrabUrl : thumbCard.thumbUrl)
+                        ? (thumbCard.liveGrabUrl
+                            ? String(thumbCard.liveGrabUrl) : thumbCard.thumbUrl)
                         : ""
                     preview.source = want
                     preview.visible = preview.source !== ""
@@ -800,6 +805,16 @@ Item {
                     target: card
                     function onPreviewActiveChanged() { preview._syncPreviewSource() }
                     function onEffectOwnedChromeChanged() { preview._syncPreviewSource() }
+                }
+                // 2026-10-17 轮询兜底:实测本机 thumbCard 子树(visible:false
+                // +layer 烘焙)信号链不可靠——onThumbUrlChanged 在值变化时
+                // 不发(ledger 第 17 轮)。轮询直调 sync,与 WindowService
+                // 的 1.5s retry 同拍;信号恢复时双路径幂等无副作用
+                Timer {
+                    interval: 500
+                    running: card.faceExposed
+                    repeat: true
+                    onTriggered: preview._syncPreviewSource()
                 }
                 onStatusChanged: {
                     if (status === Image.Error) {
