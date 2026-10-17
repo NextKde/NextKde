@@ -2817,7 +2817,7 @@ KosApplicationWindow {
                                                             && cellDate.getMonth() === root.now.getMonth()
                                                             && cellDate.getDate() === root.now.getDate()
                                                     readonly property bool isSelected:
-                                                        root.sameDay(cellDate, root.selectedDate)
+                                                        yearDayCell.inMonth && root.sameDay(cellDate, root.selectedDate)
                                                     readonly property int eventCount:
                                                         yearDayCell.inMonth
                                                             ? root.itemsForDate(yearDayCell.cellDate).length
