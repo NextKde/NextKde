@@ -819,22 +819,24 @@ Pane {
                                         id: timedChip
                                         required property var modelData
                                         Layout.fillWidth: true
-                                        // T01: two chips plus spacing must fit
-                                        // the 40px cell minus the 3px margins.
+                                        // R-CHIP (user ruling 2026-10-17): the
+                                        // ref's timed chip fills 0.96 of its
+                                        // hour (26 on 27). 38 at hourHeight 40.
+                                        // T01 side-by-side rework follows.
                                         Layout.preferredHeight: Math.round(
-                                            root.hourHeight * 21 / 54)
+                                            root.hourHeight * 0.96)
                                         // R077: the ref marks every calendar-coloured chip with a
                                         // saturated same-hue bar at its left edge. Measured 1:1 on
                                         // refs/macos-calendar.png: the blue chip's bar reads x=409-411
                                         // = (59,134,247) and the red chip's x=328-330 = (235,76,70),
                                         // i.e. ~2.4 ref px of ink on an ~80 ref px column, its left
                                         // edge ~2 ref px inside the chip's fill (a sliver of the light
-                                        // wash shows beside it) and capped round. Derived from the chip
-                                        // it sits in — the icon/corner family's row/3 idiom — so a chip
-                                        // height change carries the bar with it, and the inset reuses
-                                        // the measured "sliver ≈ bar width" ratio.
-                                        readonly property int stripeWidth: Math.round(
-                                            Math.round(root.hourHeight * 21 / 54) / 4)
+                                        // wash shows beside it) and capped round. R-SCALE (user
+                                        // ruling 2026-10-17): the ref measures the bar at ~2.4
+                                        // px and its inset sliver at ~2 px; x1.35 ⇒ 3 and 3.
+                                        // Literal, no longer derived from chip height.
+                                        // The inset reuses the measured "sliver ≈ bar width" ratio.
+                                        readonly property int stripeWidth: 3
                                         readonly property int stripeInset: stripeWidth
                                         // R079: the ref's chip ink is the calendar colour moved
                                         // halfway to its own pole. R089 hoisted the expression to
@@ -894,10 +896,12 @@ Pane {
                                                 + timedChip.stripeWidth + 5
                                             anchors.rightMargin: 4
                                             text: root.itemTitle(timedChip.modelData)
+                                            // R-CHIP: E02 title 11–12 medium.
+                                            font.pixelSize: 11
+                                            font.weight: Font.Medium
                                             // R079: was AppTheme.text (grey). The ref's ink is
                                             // the chip's own calendar colour at half value.
                                             color: timedChip.inkColor
-                                            font.pixelSize: 9
                                             font.strikeout: root.itemCompleted(timedChip.modelData)
                                             verticalAlignment: Text.AlignVCenter
                                             elide: Text.ElideRight
