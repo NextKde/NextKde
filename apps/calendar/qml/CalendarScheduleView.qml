@@ -718,12 +718,17 @@ Pane {
                                 : hourCell.rowIndex + ":00"
                             color: AppTheme.mutedText
                             font.pixelSize: 11
-                            // N02: the reference drops the hour label the
-                            // now-pill would collide with (its 10 AM label is
-                            // gone under the 9:41 pill while 9 AM survives).
-                            // A week that does not contain today shows the
-                            // line nowhere, so it keeps every label.
+                            // R158: when the timeline is hour-aligned
+                            // (positionTimeline always is), the topmost
+                            // visible hour line sits ON the grid's top rule
+                            // under the all-day band separator, and the clip
+                            // slices its label in half — a glyph fragment
+                            // floating under the band. Drop that label (the
+                            // reference's topmost label sits fully below the
+                            // band). 0.5 absorbs contentY rounding.
                             visible: hourCell.columnIndex === 0
+                                && hourCell.rowIndex * root.hourHeight
+                                   > timelineScroll.contentItem.contentY + 0.5
                                 && (root.todayColumn < 0
                                     || Math.abs(hourCell.rowIndex * root.hourHeight
                                                 - root.nowLineY)
