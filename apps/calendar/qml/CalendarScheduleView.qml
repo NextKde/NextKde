@@ -808,23 +808,31 @@ Pane {
                                 }
                             }
 
-                            ColumnLayout {
+                            // T01: same-hour chips sit side-by-side in
+                            // half-width lanes, never stacked
+                            // (user ruling 2026-10-17).
+                            Item {
+                                id: chipHost
                                 anchors.fill: parent
                                 anchors.margins: 3
-                                spacing: 2
+                                readonly property var visibleItems: hourCell.cellItems.slice(0, 2)
 
                                 Repeater {
-                                    model: hourCell.cellItems.slice(0, 2)
+                                    model: chipHost.visibleItems
 
                                     delegate: Rectangle {
                                         id: timedChip
+                                        required property int index
                                         required property var modelData
-                                        Layout.fillWidth: true
+                                        width: (chipHost.width
+                                            - (chipHost.visibleItems.length - 1) * 2)
+                                            / chipHost.visibleItems.length
+                                        x: index * (width + 2)
                                         // R-CHIP (user ruling 2026-10-17): the
                                         // ref's timed chip fills 0.96 of its
                                         // hour (26 on 27). 38 at hourHeight 40.
                                         // T01 side-by-side rework follows.
-                                        Layout.preferredHeight: Math.round(
+                                        height: Math.round(
                                             root.hourHeight * 0.96)
                                         // R077: the ref marks every calendar-coloured chip with a
                                         // saturated same-hue bar at its left edge. Measured 1:1 on
@@ -932,8 +940,6 @@ Pane {
                                         }
                                     }
                                 }
-
-                                Item { Layout.fillHeight: true }
                             }
 
                             // N02: the current-time rule — 2px at the true
