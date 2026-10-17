@@ -33,8 +33,8 @@ QtObject {
         "fanSpacing":   { type: "int", min: 2, max: 24, def: 8 },
         // 扇叠悬停扩散系数（悬停/武装时间距 × 此值；1.0 = 不扩散）
         "fanHoverSpread": { type: "real", min: 1.0, max: 2.0, def: 1.4 },
-        "stripIconSize": { type: "int", min: 16, max: 40, def: 24 },
-        "maxIconSlots": { type: "int", min: 3, max: 8, def: 5 },
+        "stripIconSize": { type: "int", min: 16, max: 64, def: 48 },
+        "maxIconSlots": { type: "int", min: 1, max: 8, def: 1 },
         // 合并手势驻留：被拖卡压在目标卡上停此时长才"武装"并组意图
         //（用户实测调过 320→550→450，入 schema 供设置页可调）
         "mergeDwellMs": { type: "int", min: 200, max: 1200, def: 450 },
@@ -113,8 +113,10 @@ QtObject {
     property string side: "left"
     property int fanSpacing: 8
     property real fanHoverSpread: 1.4
-    property int stripIconSize: 24
-    property int maxIconSlots: 5
+    // 2026-10-17 iPadOS 还原:单枚大图标 ~48pt(参考实测)
+    property int stripIconSize: 48
+    // 1 = 单枚(参考形态);调大恢复排(2026-10-17)
+    property int maxIconSlots: 1
     // ⚠️ 属性默认值 = 无 config.json 时的真实默认（_load 不回填 schema def，
     // 两处默认必须同步改——2026-09-30 审计抓过 550/450 漂移）
     property int mergeDwellMs: 450

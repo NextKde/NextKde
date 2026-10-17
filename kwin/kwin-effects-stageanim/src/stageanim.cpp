@@ -1343,17 +1343,20 @@ void StageAnimEffect::rasterChrome(LiveCard &card)
     }
     // 图标排参数经载荷（v88）：尺寸＝stripIconSize 旋钮（原硬编码 24，
     // 与静态模式 40px 不一致），并列上限＝maxIconSlots 旋钮与卡宽取小
+    // 2026-10-17 iPadOS 还原:单枚大图标(与 QML 侧 visibleCount 钳 1 同步;
+    // maxIconSlots 语义保留,调大恢复排)。参考尺寸 ~48pt
     const int isz = std::max(12, qRound(card.iconSize)) * 2,
               igap = std::max(6, isz / 5);
-    const int maxFit = std::max(1, std::min(card.iconSlots,
-        (w * 2 + igap) / (isz + igap)));
+    const int maxFit = std::max(1, std::min(1, std::min(card.iconSlots,
+        (w * 2 + igap) / (isz + igap))));
     const int visible = int(std::min<qsizetype>(icons.size(), maxFit));
     int rowW = visible > 0 ? visible * isz + (visible - 1) * igap : 0;
     const bool overflow = icons.size() > visible;
     if (overflow)
         rowW += igap + 56;
     int ix0 = card.rightSide ? w * 2 - 10 - rowW : 10;
-    const int iy0 = h * 2 - isz - 8; // 完整收进卡内（用户定稿"直接上移"）
+    // 参考实测:图标半枚探出卡外(与 QML bottomMargin -iconSize/3 同步)
+    const int iy0 = h * 2 - isz * 2 / 3;
     for (int i = 0; i < visible; i++) {
         const QString &src = icons.at(i);
         QPixmap pm;

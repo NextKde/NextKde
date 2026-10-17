@@ -1076,19 +1076,21 @@ Item {
         visible: card.previewActive && !card.effectOwnedChrome
         readonly property int iconSize: StageConfigService.stripIconSize
         readonly property int iconGap: Math.max(3, Math.round(iconSize * 0.2))
-        // 卡宽钳制：图标排不裁切（Item 默认不 clip），maxIconSlots×最大
-        // 图标 40px 时 rowWidth 232 > 卡宽 216 会画出卡缘——按"排满卡宽
-        // 能塞几枚"动态封顶（40px 图标 × 卡宽 216 → 4 枚），多的进 "+N"
+        // 2026-10-17 iPadOS 还原:参考卡左下角是**单枚**大图标(~48pt、
+        // 半枚探出卡外);排形态(多窗并列)是参考没有的。visibleCount 钳到
+        // 1(旋钮 maxIconSlots 语义保留,预设/手动调大可恢复排)
         readonly property int visibleCount: Math.min(card.iconPairs.length,
             card.maxIconSlots,
-            Math.floor((card.width + iconGap) / (iconSize + iconGap)))
+            Math.floor((card.width + iconGap) / (iconSize + iconGap)),
+            1)
         readonly property real rowWidth:
             visibleCount * iconSize + Math.max(0, visibleCount - 1) * iconGap
         height: iconSize
         // ⚠️ 水平定位用 x 而非 left/right 锚点切换（同 cards 列的坑）：
         // 锚点对在 side 翻转瞬间同时定义会拆掉 width 绑定
         anchors.bottom: parent.bottom
-        anchors.bottomMargin: -5
+        // 参考实测:图标约半枚探出卡外(2026-10-17 iPadOS 还原)
+        anchors.bottomMargin: -iconSize / 3
         x: card.rightSide ? parent.width - width - 5 : -5
         width: rowWidth
 
@@ -1116,19 +1118,17 @@ Item {
                 onClicked: card.iconActivated(card.iconPairs[index].id)
                 Rectangle {
                     anchors.fill: parent
-                    radius: width / 3
+                    radius: width * 0.24   // iPadOS app 图标 squircle 比例
+                    // 参考无底板:图标本体直接压卡。悬停显底板做点击反馈
                     color: iconSlot.containsMouse
                         ? Qt.rgba(0.16, 0.20, 0.30, 0.98)
-                        : Qt.rgba(0.07, 0.09, 0.14, 0.92)
-                    border.width: 1
-                    border.color: iconSlot.containsMouse
-                        ? Qt.rgba(0.62, 0.80, 1.0, 0.85)
-                        : Qt.rgba(1, 1, 1, 0.22)
+                        : "transparent"
+                    border.width: iconSlot.containsMouse ? 1 : 0
+                    border.color: Qt.rgba(0.62, 0.80, 1.0, 0.85)
                     Behavior on color { ColorAnimation { duration: 120 } }
                     IconImage {
-                        anchors.centerIn: parent
-                        width: parent.width * 0.7
-                        height: parent.width * 0.7
+                        anchors.fill: parent
+                        anchors.margins: parent.width * 0.08
                         source: card.iconPairs[index]?.icon || card.iconSource || ""
                         asynchronous: false
                     }
