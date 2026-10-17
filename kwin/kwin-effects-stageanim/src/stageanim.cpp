@@ -1167,8 +1167,8 @@ struct CardMeta
     bool enterInstant = false;  // 收编落卡（淡入=飞行时长 420ms）
     bool chipHot = false;       // 拆分芯片点亮（isHovered||mergeGlow）
     QString iconsJson;          // 组内窗口图标排（file:/icon: URL 数组）
-    qreal iconSize = 24;   // 图标排图标边长（缺省对齐 schema def；shell 恒发布）
-    int iconSlots = 5;     // 图标排并列上限（缺省对齐 schema def）
+    qreal iconSize = 48;   // 图标排图标边长（缺省对齐 schema def；shell 恒发布）
+    int iconSlots = 1;     // 图标排并列上限（缺省对齐 schema def）
     qreal engagingTilt = 0;     // 交棒保持倾角（adaptive=tiltAngle 非 0）
     std::chrono::milliseconds tiltMs{250};
     std::chrono::milliseconds enterMs{240};
@@ -1500,9 +1500,9 @@ void StageAnimEffect::reloadLiveCards()
                 meta.chipHot = o.value(QStringLiteral("chipHot")).toBool();
                 meta.iconsJson = o.value(QStringLiteral("iconsJson")).toString();
                 meta.iconSize = qBound(12.0,
-                    o.value(QStringLiteral("iconSize")).toDouble(40.0), 96.0);
+                    o.value(QStringLiteral("iconSize")).toDouble(48.0), 96.0);
                 meta.iconSlots = std::max(1,
-                    o.value(QStringLiteral("iconSlots")).toInt(4));
+                    o.value(QStringLiteral("iconSlots")).toInt(1));
                 meta.engagingTilt = o.value(QStringLiteral("engagingTilt")).toDouble();
                 meta.tiltMs = std::chrono::milliseconds(
                     std::max(80, o.value(QStringLiteral("tiltMs")).toInt(250)));
