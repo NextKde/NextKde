@@ -14,6 +14,17 @@ KosApplicationWindow {
 
     modernDesign: true
     visible: true
+    // The bare attached ToolTip renders the installed Basic style verbatim,
+    // whose panel is `palette.toolTipBase` + `palette.toolTipText` (R134). The
+    // app sets no palette, so on the dark leg that leaks a pure-white panel
+    // with near-black ink onto a (30,30,30) window. Theme the two tooltip
+    // slots per leg on the window palette: dark panel #3C3C3C (the tahoe
+    // elevated lift over #1E1E1E) with #F2F2F2 ink; light panel #F2F2F2 (one
+    // step below the white plane) with black ink. Radius stays Basic's 0
+    // (square) — the reference has no tooltip at all (R063), so the choice is
+    // ours and is recorded here for both legs.
+    palette.toolTipBase: root.tahoeDark ? "#3C3C3C" : "#F2F2F2"
+    palette.toolTipText: root.tahoe.labelPrimary
     title: qsTr("Calendar")
     width: 1100
     height: 720
