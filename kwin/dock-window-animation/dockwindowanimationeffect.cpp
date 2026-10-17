@@ -598,11 +598,19 @@ void DockWindowAnimationEffect::addAnimationRepaint(
                         qCeil(region.width()), qCeil(region.height()));
 }
 
-void DockWindowAnimationEffect::drawWindow(
+#ifdef KOS_KWIN_PAINT_RESULT_API
+bool
+#else
+void
+#endif
+DockWindowAnimationEffect::drawWindow(
     const RenderTarget &renderTarget, const RenderViewport &viewport,
     EffectWindow *window, int mask, const Region &deviceRegion,
     WindowPaintData &data)
 {
+#ifdef KOS_KWIN_PAINT_RESULT_API
+    bool backingPainted = true;
+#endif
     auto it = m_animations.find(window);
     if (it != m_animations.end()) {
         auto *providerObject = effects->property(KOS::SharedWindowSourceProperty).value<QObject *>();
@@ -614,7 +622,11 @@ void DockWindowAnimationEffect::drawWindow(
                 // A fallback allocation from an earlier frame/configuration
                 // must not remain as a second texture beside the shared one.
                 unredirect(window);
+#ifdef KOS_KWIN_PAINT_RESULT_API
+                return true;
+#else
                 return;
+#endif
             }
         }
         redirect(window);
@@ -637,6 +649,9 @@ void DockWindowAnimationEffect::drawWindow(
             const qreal seamSpan = std::clamp(40.0 / duration, 0.0, 1.0);
             if (it->timeLine.value() <= seamSpan) {
                 WindowPaintData backingData = data;
+#ifdef KOS_KWIN_PAINT_RESULT_API
+                backingPainted =
+#endif
                 effects->drawWindow(renderTarget, viewport, window, mask,
                                     deviceRegion, backingData);
             }
@@ -645,9 +660,15 @@ void DockWindowAnimationEffect::drawWindow(
 
     const QVariant previousCapture = window->data(KOS::LegacyWindowSourceCaptureRole);
     if (it != m_animations.end()) window->setData(KOS::LegacyWindowSourceCaptureRole, true);
+#ifdef KOS_KWIN_PAINT_RESULT_API
+    const bool painted =
+#endif
     OffscreenEffect::drawWindow(renderTarget, viewport, window, mask,
                                 deviceRegion, data);
     window->setData(KOS::LegacyWindowSourceCaptureRole, previousCapture);
+#ifdef KOS_KWIN_PAINT_RESULT_API
+    return painted && backingPainted;
+#endif
 }
 
 void DockWindowAnimationEffect::applyDockMorph(

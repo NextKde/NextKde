@@ -925,26 +925,35 @@ function handleCommand(serialized) {
     publishSnapshotNow();
 }
 
+// Missing signals must not abort evaluation before the first snapshot. Keep
+// property reads authoritative; signals only request a fresh snapshot.
+function connectBridgeSignal(object, name, callback) {
+    try {
+        if (object[name] && object[name].connect) {
+            object[name].connect(callback);
+            return true;
+        }
+    } catch (error) {
+        print("[QuickshellWindowBridge] signal connect failed: " + name + " error=" + error);
+    }
+    return false;
+}
+
 function watchWindow(window) {
     if (!window)
         return;
     const watchedId = windowId(window);
-    window.captionChanged.connect(scheduleSnapshot);
-    window.desktopFileNameChanged.connect(scheduleSnapshot);
-    window.activeChanged.connect(scheduleSnapshot);
-    window.minimizedChanged.connect(scheduleSnapshot);
-    window.fullScreenChanged.connect(scheduleSnapshot);
-    // Kept defensive for an older KWin scripting API that lacks this signal.
-    try { window.demandsAttentionChanged.connect(scheduleSnapshot); } catch (error) {}
-    window.skipTaskbarChanged.connect(scheduleSnapshot);
-    // Geometry/placement changes drive the Dock auto-hide collision judgement.
-    // Each connect is defensive: one missing signal must not kill the bridge.
-    try { window.frameGeometryChanged.connect(scheduleGeometrySnapshot); } catch (error) {}
-    try { window.outputChanged.connect(scheduleGeometrySnapshot); } catch (error) {}
-    try { window.maximizedChanged.connect(scheduleSnapshot); } catch (error) {}
-    try { window.maximizeModeChanged.connect(scheduleSnapshot); } catch (error) {}
-    try { window.desktopsChanged.connect(scheduleSnapshot); } catch (error) {}
-    window.closed.connect(function() {
+    const metadataSignals = [
+        "captionChanged", "desktopFileNameChanged", "activeChanged",
+        "minimizedChanged", "fullScreenChanged", "demandsAttentionChanged",
+        "skipTaskbarChanged", "skipSwitcherChanged", "hiddenChanged",
+        "maximizedChanged", "maximizeModeChanged", "desktopsChanged"
+    ];
+    for (let i = 0; i < metadataSignals.length; i++)
+        connectBridgeSignal(window, metadataSignals[i], scheduleSnapshot);
+    connectBridgeSignal(window, "frameGeometryChanged", scheduleGeometrySnapshot);
+    connectBridgeSignal(window, "outputChanged", scheduleGeometrySnapshot);
+    connectBridgeSignal(window, "closed", function() {
         if (watchedId) {
             delete initialPlacementState[watchedId];
             delete parkedGeometry[watchedId];
@@ -964,7 +973,7 @@ for (let i = 0; i < initial.length; i++)
 // happens to fire.
 scheduleSnapshot();
 
-workspace.windowAdded.connect(function(window) {
+connectBridgeSignal(workspace, "windowAdded", function(window) {
     watchWindow(window);
     scheduleInitialPlacement(window);
     scheduleSnapshot();
@@ -972,11 +981,13 @@ workspace.windowAdded.connect(function(window) {
 // 停泊档案随窗销毁清理（原写在纯函数区——测试用 "Runtime-dependent
 // bridge helpers" 标记切走 workspace 依赖段，顶层 connect 在标记前会让
 // window-placement 测试 ReferenceError，自停泊落地起一直红着）
-workspace.windowRemoved.connect(function(window) {
-    delete parkedGeometry[windowId(window)];
+connectBridgeSignal(workspace, "windowRemoved", function(window) {
+    const id = windowId(window);
+    delete parkedGeometry[id];
+    delete initialPlacementState[id];
+    scheduleSnapshot();
 });
-workspace.windowRemoved.connect(scheduleSnapshot);
-workspace.windowActivated.connect(scheduleSnapshot);
+connectBridgeSignal(workspace, "windowActivated", scheduleSnapshot);
 
 // Virtual-desktop lifecycle signals. KWin's QtScript API does not expose every
 // signal name in every version, and one missing connect aborts the whole
@@ -985,6 +996,7 @@ workspace.windowActivated.connect(scheduleSnapshot);
 // available when a lifecycle signal is missing.
 function connectDesktopSignals() {
     const hooks = {
+        desktopsChanged: publishDesktops,
         desktopAdded: publishDesktops,
         desktopRemoved: publishDesktops,
         desktopNameChanged: publishDesktops,

@@ -669,8 +669,13 @@ void StageAnimEffect::prePaintScreen(ScreenPrePaintData &data)
 // 标题/图标排不受影响，仅失去背板色调/深度渐变的叠加（后续可在着色器
 // 里补）。任何窗口动画播放期间整体让位（飞行窗口会横穿卡列，层序
 // 不可与直绘混排）。
-//（paintScreen 签名在 6.6 与 6.7 发行版一致＝void，无需守卫）
-void StageAnimEffect::paintScreen(const RenderTarget &renderTarget, const RenderViewport &viewport,
+// KWin 6.8 returns paint success; older versions use void.
+#ifdef KOS_KWIN_PAINT_RESULT_API
+bool
+#else
+void
+#endif
+StageAnimEffect::paintScreen(const RenderTarget &renderTarget, const RenderViewport &viewport,
                                   int mask, const Region &deviceRegion, LogicalOutput *screen)
 {
     static quint32 s_psCalls = 0;
@@ -678,6 +683,9 @@ void StageAnimEffect::paintScreen(const RenderTarget &renderTarget, const Render
         qCInfo(STAGEANIM_LOG) << "live paintScreen called #" << s_psCalls
                                  << "cards=" << m_liveCards.size()
                                  << "anims=" << m_animations.size();
+#ifdef KOS_KWIN_PAINT_RESULT_API
+    const bool painted =
+#endif
     effects->paintScreen(renderTarget, viewport, mask, deviceRegion, screen);
 
     // ⚠️ 不可再有 m_animations 全局让位闸：卡面视觉整体在特效手里，全局
@@ -685,10 +693,21 @@ void StageAnimEffect::paintScreen(const RenderTarget &renderTarget, const Render
     // 逐卡让位——飞行中窗口自己的卡跳过（liveCardPaintable 内判定），
     // 其余卡照画；飞行窗由合成器画在窗层级，交叠瞬间由 engage 淡出遮蔽。
     if (m_liveCards.isEmpty())
+#ifdef KOS_KWIN_PAINT_RESULT_API
+        return painted;
+#else
         return;
+#endif
     if (effects->activeFullScreenEffect())
+#ifdef KOS_KWIN_PAINT_RESULT_API
+        return painted;
+#else
         return;
+#endif
     drawLiveCards(renderTarget, viewport);
+#ifdef KOS_KWIN_PAINT_RESULT_API
+    return painted;
+#endif
 }
 
 #ifdef KOS_KWIN_PAINT_TIME_API

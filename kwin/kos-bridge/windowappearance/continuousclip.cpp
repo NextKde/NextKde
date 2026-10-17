@@ -393,8 +393,12 @@ bool ContinuousClip::paint(const KWin::RenderTarget &target,
         KWin::GLFramebuffer::pushFramebuffer(cache.fbo.get());
         glClearColor(0, 0, 0, 0);
         glClear(GL_COLOR_BUFFER_BIT);
-        sourcePainter(sourceTarget, sourceViewport);
+        const bool painted = sourcePainter(sourceTarget, sourceViewport);
         KWin::GLFramebuffer::popFramebuffer();
+        if (!painted) {
+            cache.dirty = true;
+            return false;
+        }
     }
 
     const qreal scale = viewport.scale();
