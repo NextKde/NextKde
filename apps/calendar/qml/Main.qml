@@ -1479,6 +1479,9 @@ KosApplicationWindow {
         } else if (activeView === "week") {
             first = weekStart
             last = new Date(first.getFullYear(), first.getMonth(), first.getDate() + 6)
+        } else if (activeView === "year") {
+            first = new Date(selectedDate.getFullYear(), 0, 1)
+            last = new Date(selectedDate.getFullYear(), 11, 31)
         } else {
             first = selectedDate
             last = selectedDate
