@@ -1321,9 +1321,21 @@ void StageAnimEffect::rasterChrome(LiveCard &card)
     // ——全套特效直绘后，压平层在悬停缩放/压平动画里表现为钉死原地
     // 不跟卡动）
     if (overlayDirty) {
-    QImage ov(w * 2, h * 2, QImage::Format_ARGB32_Premultiplied);
+    // 图标排参数经载荷（v88）：尺寸＝stripIconSize 旋钮（原硬编码 24，
+    // 与静态模式 40px 不一致），并列上限＝maxIconSlots 旋钮与卡宽取小
+    // 2026-10-17 iPadOS 还原:单枚大图标(与 QML 侧 visibleCount 钳 1 同步;
+    // maxIconSlots 语义保留,调大恢复排)。参考尺寸 ~48pt
+    const int isz = std::max(12, qRound(card.iconSize)) * 2,
+              igap = std::max(6, isz / 5);
+    // 覆盖层画布外扩：图标探出卡外（左下），不扩会被卡矩形裁平
+    // （live 模式只剩坐在卡上的上半截）。外扩量与 drawLiveCardBody 的
+    // 覆盖层 pass 必须一致——对称外扩，矩形中心仍是卡中心。
+    const int ovPad = int(std::ceil(0.6 * isz));
+    QImage ov(w * 2 + ovPad * 2, h * 2 + ovPad * 2,
+              QImage::Format_ARGB32_Premultiplied);
     ov.fill(Qt::transparent);
     QPainter op(&ov);
+    op.translate(ovPad, ovPad); // 以下全部按卡局部坐标绘制
     op.setRenderHint(QPainter::Antialiasing, true);
     op.setRenderHint(QPainter::TextAntialiasing, true);
     QFont of = op.font();
@@ -1348,12 +1360,7 @@ void StageAnimEffect::rasterChrome(LiveCard &card)
                 seenIcons.insert(icons.at(i));
         }
     }
-    // 图标排参数经载荷（v88）：尺寸＝stripIconSize 旋钮（原硬编码 24，
-    // 与静态模式 40px 不一致），并列上限＝maxIconSlots 旋钮与卡宽取小
-    // 2026-10-17 iPadOS 还原:单枚大图标(与 QML 侧 visibleCount 钳 1 同步;
-    // maxIconSlots 语义保留,调大恢复排)。参考尺寸 ~48pt
-    const int isz = std::max(12, qRound(card.iconSize)) * 2,
-              igap = std::max(6, isz / 5);
+    // 图标排参数（isz/igap）已在上方画布外扩处算好
     const int maxFit = std::max(1, std::min(1, std::min(card.iconSlots,
         (w * 2 + igap) / (isz + igap))));
     const int visible = int(std::min<qsizetype>(icons.size(), maxFit));
@@ -1361,9 +1368,11 @@ void StageAnimEffect::rasterChrome(LiveCard &card)
     const bool overflow = icons.size() > visible;
     if (overflow)
         rowW += igap + 56;
-    int ix0 = card.rightSide ? w * 2 - 10 - rowW : 10;
-    // 参考实测:图标半枚探出卡外(与 QML bottomMargin -iconSize/3 同步)
-    const int iy0 = h * 2 - isz * 2 / 3;
+    // 参考实测(2026-10-18):图标挂卡角外——水平 27% 探出、垂直 60%
+    // 探出（与 QML iconRow 的 x / bottomMargin 同步；画布已外扩 ovPad）
+    const int iconOutX = qRound(0.27 * isz);
+    int ix0 = card.rightSide ? w * 2 - iconOutX - rowW : iconOutX;
+    const int iy0 = h * 2 - isz * 2 / 5;
     for (int i = 0; i < visible; i++) {
         const QString &src = icons.at(i);
         QPixmap pm;
@@ -2203,7 +2212,8 @@ void StageAnimEffect::liveCardPass(const RenderViewport &viewport, qreal dpr,
                                    const QColor &tint, const QColor &border,
                                    qreal borderWidth, qreal depthG,
                                    qreal topLight, GLTexture *tex, qreal alpha,
-                                   qreal hoverBlend, float sideRight)
+                                   qreal hoverBlend, float sideRight,
+                                   qreal cardSizePad)
 {
     ShaderBinder binder(&sh);
     sh.setUniform("modelViewProjectionMatrix", viewport.projectionMatrix());
@@ -2213,8 +2223,12 @@ void StageAnimEffect::liveCardPass(const RenderViewport &viewport, qreal dpr,
     sh.setUniform("yOff", float(pose.yOff * dpr));
     sh.setUniform("camRel", QVector2D(float(iw / 2), float(ih / 2 - pose.yOff * dpr)));
     sh.setUniform("itemSize", QVector2D(float(iw), float(ih)));
-    sh.setUniform("cardSize", QVector2D(float(pose.rect.width() * dpr),
-                                        float(pose.rect.height() * dpr)));
+    // cardSizePad：采样平面比卡矩形每侧外扩的量（设备像素）。仅覆盖层
+    // （图标探出卡外）非零——quad 与纹理必须对应同一外扩矩形，否则纹理
+    // 被拉伸、探出部分仍会被 SDF 卡矩形裁掉
+    sh.setUniform("cardSize", QVector2D(
+        float(pose.rect.width() * dpr + cardSizePad * 2),
+        float(pose.rect.height() * dpr + cardSizePad * 2)));
     GLVertexBuffer *vbo = GLVertexBuffer::streamingBuffer();
     const QList<GLVertex2D> verts = {
         GLVertex2D{QVector2D(float(ix), float(iy)), QVector2D(0, 0)},
@@ -2428,9 +2442,21 @@ void StageAnimEffect::drawLiveCardBody(const RenderViewport &viewport,
     // 动画里表现为钉死原地不跟卡动＝"固定位置不随卡片运动"，用户定稿
     // 改为跟卡：倾斜/keystone/缩放全程同步）
     if (card.overlayTex && fadeMul > 0.01) {
-        liveCardPass(viewport, dpr, *m_liveShader, pose, ix, iy, iw, ih,
+        // 覆盖层画布比卡矩形每侧外扩 ovPad（图标探出卡外，见 rasterChrome）
+        // ——quad 与 cardSize 必须用同一外扩矩形，否则纹理被拉伸、探出
+        // 部分仍会被 SDF 卡矩形裁平
+        const qreal ovPad = std::ceil(
+            0.6 * std::max(12, qRound(card.iconSize)) * 2);
+        const QRectF ovQuad = cardBodyQuad(pose, ovPad, dpr);
+        addRepaintRectF(effects, QRectF(ovQuad.left() / dpr,
+                                   ovQuad.top() / dpr,
+                                   ovQuad.width() / dpr,
+                                   ovQuad.height() / dpr));
+        liveCardPass(viewport, dpr, *m_liveShader, pose,
+                     ovQuad.left(), ovQuad.top(),
+                     ovQuad.width(), ovQuad.height(),
                      QVector2D(0, 0), false, QColor(), QColor(), 0, 0, 0,
-                     card.overlayTex.get(), fadeMul);
+                     card.overlayTex.get(), fadeMul, 0.0, 0.0f, ovPad);
     }
 
 }

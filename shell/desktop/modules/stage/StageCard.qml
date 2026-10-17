@@ -1098,9 +1098,14 @@ Item {
         // ⚠️ 水平定位用 x 而非 left/right 锚点切换（同 cards 列的坑）：
         // 锚点对在 side 翻转瞬间同时定义会拆掉 width 绑定
         anchors.bottom: parent.bottom
-        // 参考实测:图标约半枚探出卡外(2026-10-17 iPadOS 还原)
-        anchors.bottomMargin: -iconSize / 3
-        x: card.rightSide ? parent.width - width - 5 : -5
+        // 参考实测(2026-10-18 iPadOS 还原,card3-zoom 像素扫描):图标挂
+        // 在卡角外——水平约 27% 探出卡左缘、垂直约 60% 探出卡底(图标
+        // 中心略低于卡底)。旧值 -5 / -iconSize/3 是"大半坐在卡上"。
+        anchors.bottomMargin: -iconSize * 0.6
+        // 条在右时镜像向外探出（旧值 parent.width - width - 5 是内缩，
+        // 与左侧不对称）
+        x: card.rightSide ? parent.width - width + iconSize * 0.27
+                          : -iconSize * 0.27
         width: rowWidth
 
         // 悬停垫片（不截点击）：指针在排内任意位置 = 卡片保持悬停姿态

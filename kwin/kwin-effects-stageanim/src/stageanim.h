@@ -269,7 +269,7 @@ private:
                       const QColor &tint, const QColor &border,
                       qreal borderWidth, qreal depthG, qreal topLight,
                       GLTexture *tex, qreal alpha, qreal hoverBlend = 0.0,
-                      float sideRight = 0.0f);
+                      float sideRight = 0.0f, qreal cardSizePad = 0.0);
     QRectF cardBodyQuad(const LiveCardPose &pose, qreal fanMax, qreal dpr) const;
     void drawLiveCardBody(const RenderViewport &viewport, qreal dpr,
                           LiveCard &card, quint32 &paintable);
