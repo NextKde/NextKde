@@ -2815,7 +2815,12 @@ PanelWindow {
                 // 预览图读数：URL 尾段（含平台 serial）+ Image 状态
                 // （-1 无 URL / 0 Null / 1 Ready / 2 Loading / 3 Error）
                 thumb: s.cardItem ? s.cardItem.thumbPreviewUrl : "",
-                thumbStatus: s.cardItem ? s.cardItem.thumbPreviewStatus : -2 })
+                thumbStatus: s.cardItem ? s.cardItem.thumbPreviewStatus : -2,
+                // previewActive 让位开关读数（source 绑定的第一分量）
+                previewActive: s.cardItem ? s.cardItem.previewActive : null,
+                layerEnabled: s.cardItem ? s.cardItem.faceLayerActive : null,
+                src: s.cardItem ? s.cardItem.thumbPreviewSource : "",
+                pvis: s.cardItem ? s.cardItem.thumbPreviewVisible : null })
         }
         // 可见窗记录探针：让位检测吃的正是这份数据，卡住时先看
         // 目标窗到底进没进 records（bridge includeWindow 过滤与否）

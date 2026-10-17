@@ -165,6 +165,9 @@ Item {
     property bool effectOwnedChrome: false
     // The owner disables preview resources for hidden or offscreen cards.
     property bool previewActive: true
+    // 无头排障读数:卡面 layer 是否有效(=previewActive 且未被特效接管)。
+    // "缩略图空白"悬案的 C 假设(layer 未生效)经 debugGeom 直读判别
+    readonly property bool faceLayerActive: previewActive && !effectOwnedChrome
     // 关闭钮悬停态（根层热区 containsMouse；铭牌在特效侧据此画红钮）
     readonly property bool closeHot: closeHit.containsMouse
 
@@ -192,6 +195,10 @@ Item {
     readonly property string thumbPreviewUrl: thumbCard.thumbUrl
     readonly property int thumbPreviewStatus: thumbCard.thumbUrl === ""
         ? -1 : preview.status
+    // 排障补全(2026-10-17):Image 实际 source 与可见性 — thumbStatus=0
+    // 而 thumbUrl 非空的矛盾靠这两个分量分辨"source 空"vs"加载未启动"
+    readonly property string thumbPreviewSource: preview.source.toString()
+    readonly property bool thumbPreviewVisible: preview.visible
     // 活体卡发布参数（StageSidebarWindow.publishLiveCards 消费）：
     // 卡面矩形 + 透视参数。**发布动画中的实时值**（card.scale / tiltCur
     // 都带 Behavior，悬停/入场期间逐帧变化）——旧版发终态值，特效按自己的
@@ -744,14 +751,19 @@ Item {
                 // `!liveStream.visible && !!url` 一旦在这一拍短路，URL 依赖
                 // 就永远不会建立（绑定冻结在 false）；先判 URL 则 URL 变化
                 // 必然触发重算，liveStream.visible 在其后才被读取。
-                readonly property string displayUrl: thumbCard.liveGrabUrl !== ""
-                    ? thumbCard.liveGrabUrl : parent.thumbUrl
-                visible: displayUrl !== "" && !liveStream.visible
+                // 2026-10-17:displayUrl 链(parent.thumbUrl 经中间容器)在
+                // 本机实测恒得空 source(status 卡 Null、文件有效、pA/layer
+                // 全真)——旁路中间层,直接绑 thumbCard.thumbUrl;liveGrabUrl
+                // 的优先级保持(活体定格帧仍优先)
+                // displayUrl/visible 声明式绑定已废弃(见 _syncPreviewSource
+                // 注释)——visible 也走命令式,读数属性保留供 debugGeom
+                readonly property string displayUrl: source.toString()
                 // 合成器活体卡直绘时让出卡面（opacity：plane 内 visible
                 // 改动被吞，opacity 链有效——快照退路在任何让位失败时
                 // 自动恢复，特效不在=livePainted=false=快照照常画）
                 opacity: card.livePainted ? 0.0 : 1.0
-                source: card.previewActive && !card.effectOwnedChrome ? displayUrl : ""
+                source: card.previewActive && !card.effectOwnedChrome
+                    ? displayUrl : ""
                 // 同步解码 + 禁缓存：实时换帧时不留异步空白间隙（闪烁根源）
                 asynchronous: false
                 cache: false
@@ -763,6 +775,32 @@ Item {
                 // 会停在 Error 且同一 source 不会重读盘（可见性变化、同串
                 // 重赋值都无效）——上报给 WindowService 清账并补拍，见
                 // thumbnailLoadFailed 注释
+                // 2026-10-17 根修:声明式 source 绑定在本机实测**从未求值**
+                //(onSourceChanged 一次不触发、src 恒空,而 pA/layer/thumbUrl
+                // 全真)——thumbCard 是 visible:false+layer 烘焙子树,深层
+                // 声明式绑定的依赖注册疑似被层烘焙路径丢弃。改为命令式:
+                // thumbUrl/liveGrabUrl 变化与让位开关翻转时显式重算 source
+                function _syncPreviewSource() {
+                    const want = (card.previewActive && !card.effectOwnedChrome)
+                        ? (thumbCard.liveGrabUrl !== ""
+                            ? thumbCard.liveGrabUrl : thumbCard.thumbUrl)
+                        : ""
+                    preview.source = want
+                    preview.visible = preview.source !== ""
+                        && !liveStream.visible
+                }
+                Component.onCompleted: _syncPreviewSource()
+                Connections {
+                    target: thumbCard
+                    function onThumbUrlChanged() { preview._syncPreviewSource() }
+                    function onLiveGrabUrlChanged() { preview._syncPreviewSource() }
+                }
+                // 让位开关翻转也得同步(卡所属特效接管状态变化时)
+                Connections {
+                    target: card
+                    function onPreviewActiveChanged() { preview._syncPreviewSource() }
+                    function onEffectOwnedChromeChanged() { preview._syncPreviewSource() }
+                }
                 onStatusChanged: {
                     if (status === Image.Error) {
                         card._faceEmptyExposed = true   // 图被删等于回到"无图"态
