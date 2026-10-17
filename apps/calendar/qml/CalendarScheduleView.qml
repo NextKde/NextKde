@@ -593,9 +593,23 @@ Pane {
                                 // chip's (R079). R089 hoisted it to root.chipInk.
                                 readonly property color inkColor: root.chipInk(modelData)
 
+                                // R-H: hand-drawn ring icon — 12×12 outer, border 3 ⇒ 6 hole, 3 px in from the
+                                // left, inked like the text. On a left-continuing chip the icon tracks the
+                                // column rule (the chip itself reaches back past it by allDayJointOverlap).
+                                Rectangle {
+                                    x: 3 + (allDayChip.continuesLeft ? root.allDayJointOverlap : 0)
+                                    anchors.verticalCenter: parent.verticalCenter
+                                    width: 12
+                                    height: 12
+                                    radius: 6
+                                    color: "transparent"
+                                    border.width: 3
+                                    border.color: allDayChip.inkColor
+                                }
+
                                 Label {
                                     anchors.fill: parent
-                                    anchors.leftMargin: 5
+                                    anchors.leftMargin: 19
                                         + (allDayChip.continuesLeft ? root.allDayJointOverlap : 0)
                                     anchors.rightMargin: 4
                                     text: root.itemTitle(allDayChip.modelData)
