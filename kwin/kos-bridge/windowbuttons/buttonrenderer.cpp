@@ -1150,17 +1150,9 @@ QImage ButtonRenderer::buildPanel(const QSizeF &panelSize, qreal scale, bool act
         const Type type = typeAt(i);
         const QRectF disc = dotRect(panelSize, geometry, i);
 
-        // Hover: a contrasting ring around the dot. Drawn here rather than in
-        // drawLight(), which knows nothing about the pointer: the ring is an
-        // affordance of this panel and takes its colour from the panel's own
-        // tint, while the light under it is the same light in every panel.
+        // Hover: a delicate, smooth focus halo around the hovered dot.
         if (actionFor(type) == hovered) {
-            const QColor ring = dark ? QColor(255, 255, 255, 0xE0)
-                                     : QColor(30, 30, 30, 0xB0);
-            painter.setPen(QPen(ring,
-                                std::max(1.0, geometry.buttonSize * 0.11)));
-            painter.setBrush(Qt::NoBrush);
-            painter.drawEllipse(disc.adjusted(-2.5, -2.5, 2.5, 2.5));
+            drawHoverRing(painter, disc, type, dark);
         }
 
         drawLight(painter, disc, type, active, maximized);
