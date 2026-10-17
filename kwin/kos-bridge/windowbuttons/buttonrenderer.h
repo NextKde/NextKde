@@ -227,17 +227,17 @@ private:
     // handler has been crashing KWin, and a panel is a small fixed rectangle.
     static void repaintRect(const QRectF &globalRect);
 
-    KWin::GLTexture *backgroundTexture(const QSizeF &panelSize);
-    KWin::GLTexture *panelTexture(const QSizeF &panelSize, bool active, bool dark,
-                                  const PanelGeometry &geometry, Action hovered,
-                                  bool adjusting, bool maximized);
+    KWin::GLTexture *backgroundTexture(const QSizeF &panelSize, qreal scale);
+    KWin::GLTexture *panelTexture(const QSizeF &panelSize, qreal scale, bool active,
+                                  bool dark, const PanelGeometry &geometry,
+                                  Action hovered, bool adjusting, bool maximized);
     KWin::GLTexture *cacheTexture(const QString &key, QImage image);
-    QImage buildPanel(const QSizeF &panelSize, bool active, bool dark,
+    QImage buildPanel(const QSizeF &panelSize, qreal scale, bool active, bool dark,
                       const PanelGeometry &geometry, Action hovered,
                       bool adjusting, bool maximized) const;
 
-    KWin::GLTexture *tileMenuTexture(bool dark, std::optional<TilePreset> hovered);
-    QImage buildTileMenu(bool dark, std::optional<TilePreset> hovered) const;
+    KWin::GLTexture *tileMenuTexture(qreal scale, bool dark, std::optional<TilePreset> hovered);
+    QImage buildTileMenu(qreal scale, bool dark, std::optional<TilePreset> hovered) const;
 
     // Blit one of this effect's textures over a rectangle of the frame, clipped
     // to the part of the window that is actually being painted. The panel and

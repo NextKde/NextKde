@@ -19,6 +19,10 @@ enum Type { Close = 0, Minimize = 1, Maximize = 2, TypeCount = 3 };
 // has to be read from its position rather than from its colour.
 QColor dotColor(Type type, bool active);
 
+// The dot's border outline. Uses tone-on-tone colors matching macOS traffic light
+// styling rather than translucent black, preventing muddy edge halos.
+QColor dotBorderColor(Type type, bool active);
+
 // Draw one light -- the dot and the mark inside it -- filling `dot`.
 //
 // `maximized` selects the green light's mark and is ignored by the other two: a
