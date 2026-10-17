@@ -456,7 +456,13 @@ Item {
         y: -(22 + card.fanPad)
         width: parent.width + 32 + card.fanPad * 2
         height: parent.height + 44 + card.fanPad * 2
-        layer.enabled: card.previewActive && !card.effectOwnedChrome
+        // ⚠️ 层启用**不跟 previewActive**（2026-10-18 合并/拆分拖回排障）：
+        // 卡在屏幕外创建（拆组后追加到列尾）时 layer 为 false，之后拖回
+        // 屏幕内再启用，烘焙出的层纹理整块空白且此后不再刷新——卡面
+        // 全丢、只剩根层图标排（悬停/再出屏再入屏都不愈，只有 delegate
+        // 重建能愈）。层只有在被 stage_tilt 采样时才真正渲染，离屏卡
+        // 的 ShaderEffect 不可见＝不采样＝不产生逐帧开销，故可常开。
+        layer.enabled: !card.effectOwnedChrome
         layer.smooth: true
 
         // ── 扇叠背板（macOS Stage Manager 同语义）：同应用多窗 = 一前
@@ -671,7 +677,9 @@ Item {
             id: thumbCard
             anchors.fill: plate
             visible: false
-            layer.enabled: card.previewActive && !card.effectOwnedChrome
+            // 同上（plane 层注释）：不跟 previewActive，避免"离屏创建 →
+            // 回屏启用"的空白层纹理；本层只在 plane 烘焙时被采样。
+            layer.enabled: !card.effectOwnedChrome
             layer.smooth: true
 
             readonly property string thumbUrl: WindowService.thumbnailUrl(card.targetId)

@@ -2817,6 +2817,22 @@ PanelWindow {
                 shown: s.cardItem ? s.cardItem.shown : null,
                 cardOpacity: s.cardItem
                     ? Math.round(s.cardItem.opacity * 100) / 100 : -1,
+                // 排障：delegate 实际几何（与布局 y 对照——"模型里在、屏幕
+                // 上没有"时分清是布局没落位还是卡自身没画）
+                itemX: s.cardItem ? Math.round(s.cardItem.x) : null,
+                itemY: s.cardItem ? Math.round(s.cardItem.y) : null,
+                itemW: s.cardItem ? Math.round(s.cardItem.width) : null,
+                itemH: s.cardItem ? Math.round(s.cardItem.height) : null,
+                // 排障：整条可见性链（own/父链/场景坐标/卡自身）
+                svis: s.visible,
+                pvis2: s.parent ? s.parent.visible : null,
+                pop: s.parent ? Math.round(s.parent.opacity * 100) / 100 : null,
+                scene: (() => {
+                    const p = s.mapToItem(null, 0, 0)
+                    return [Math.round(p.x), Math.round(p.y)]
+                })(),
+                cvis: s.cardItem ? s.cardItem.visible : null,
+                cop: s.cardItem ? Math.round(s.cardItem.opacity * 100) / 100 : -1,
                 hot: s.cardItem ? s.cardItem.isHovered : false,
                 cardScale: s.cardItem
                     ? Math.round(s.cardItem.scale * 100) / 100 : -1,
