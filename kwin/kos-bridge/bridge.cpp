@@ -232,29 +232,39 @@ void BridgeEffect::prePaintWindow(KWin::RenderView *view,
                            );
 }
 
-void BridgeEffect::drawWindow(const KWin::RenderTarget &renderTarget,
-                               const KWin::RenderViewport &viewport,
-                               KWin::EffectWindow *window, int mask,
-                               const KWin::Region &deviceRegion,
-                               KWin::WindowPaintData &data)
+#ifdef KOS_KWIN_PAINT_RESULT_API
+bool
+#else
+void
+#endif
+BridgeEffect::drawWindow(const KWin::RenderTarget &renderTarget,
+                        const KWin::RenderViewport &viewport,
+                        KWin::EffectWindow *window, int mask,
+                        const KWin::Region &deviceRegion,
+                        KWin::WindowPaintData &data)
 {
     if (window->data(WindowSourceCaptureRole).toBool()) {
-        // A shared source capture started before us in the effect chain.
-        // The provider paints the button panel after this raw scene pass.
-        Effect::drawWindow(renderTarget, viewport, window, mask, deviceRegion, data);
-        return;
+        return Effect::drawWindow(renderTarget, viewport, window, mask, deviceRegion, data);
     }
-    if (window->data(LegacyWindowSourceCaptureRole).toBool()) {
-        Effect::drawWindow(renderTarget, viewport, window, mask, deviceRegion, data);
-        paintButtons(renderTarget, viewport, window, deviceRegion, data, true);
-        m_renderer->clearHits(window);
+    const bool capture = window->data(LegacyWindowSourceCaptureRole).toBool();
+    if (!capture && drawSharedWindow(renderTarget, viewport, window, mask, deviceRegion, data, {})) {
+#ifdef KOS_KWIN_PAINT_RESULT_API
+        return true;
+#else
         return;
+#endif
     }
-    if (drawSharedWindow(renderTarget, viewport, window, mask, deviceRegion, data, {})) {
-        return;
-    }
+#ifdef KOS_KWIN_PAINT_RESULT_API
+    const bool painted = Effect::drawWindow(renderTarget, viewport, window, mask, deviceRegion, data);
+#else
     Effect::drawWindow(renderTarget, viewport, window, mask, deviceRegion, data);
-    paintButtons(renderTarget, viewport, window, deviceRegion, data, false);
+#endif
+    paintButtons(renderTarget, viewport, window, deviceRegion, data, capture);
+    if (capture)
+        m_renderer->clearHits(window);
+#ifdef KOS_KWIN_PAINT_RESULT_API
+    return painted;
+#endif
 }
 
 bool BridgeEffect::drawSharedWindow(const KWin::RenderTarget &target,
@@ -273,11 +283,19 @@ bool BridgeEffect::drawSharedWindow(const KWin::RenderTarget &target,
             window->setData(WindowSourceCaptureRole, true);
             KWin::WindowPaintData sourceData;
             sourceData.setOpacity(1.0);
+#ifdef KOS_KWIN_PAINT_RESULT_API
+            const bool painted =
+#endif
             KWin::effects->drawWindow(sourceTarget, sourceViewport, window,
                 PAINT_WINDOW_TRANSFORMED | PAINT_WINDOW_TRANSLUCENT,
                 KWin::Region::infinite(), sourceData);
             paintButtons(sourceTarget, sourceViewport, window, KWin::Region::infinite(), sourceData, true);
             window->setData(WindowSourceCaptureRole, previous);
+#ifdef KOS_KWIN_PAINT_RESULT_API
+            return painted;
+#else
+            return true;
+#endif
         }, morph);
     if (!result) {
         // The source could not be allocated/uploaded. Restore native rounding

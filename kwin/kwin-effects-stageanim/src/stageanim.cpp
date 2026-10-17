@@ -711,8 +711,13 @@ void StageAnimEffect::prePaintScreen(ScreenPrePaintData &data)
 // 标题/图标排不受影响，仅失去背板色调/深度渐变的叠加（后续可在着色器
 // 里补）。任何窗口动画播放期间整体让位（飞行窗口会横穿卡列，层序
 // 不可与直绘混排）。
-//（paintScreen 签名在 6.6 与 6.7 发行版一致＝void，无需守卫）
-void StageAnimEffect::paintScreen(const RenderTarget &renderTarget, const RenderViewport &viewport,
+// KWin 6.8 returns paint success; older versions use void.
+#ifdef KOS_KWIN_PAINT_RESULT_API
+bool
+#else
+void
+#endif
+StageAnimEffect::paintScreen(const RenderTarget &renderTarget, const RenderViewport &viewport,
                                   int mask, const Region &deviceRegion, LogicalOutput *screen)
 {
     static quint32 s_psCalls = 0;
@@ -720,6 +725,9 @@ void StageAnimEffect::paintScreen(const RenderTarget &renderTarget, const Render
         qCInfo(STAGEANIM_LOG) << "live paintScreen called #" << s_psCalls
                                  << "cards=" << m_liveCards.size()
                                  << "anims=" << m_animations.size();
+#ifdef KOS_KWIN_PAINT_RESULT_API
+    const bool painted =
+#endif
     effects->paintScreen(renderTarget, viewport, mask, deviceRegion, screen);
 
     // ⚠️ 不可再有 m_animations 全局让位闸：卡面视觉整体在特效手里，全局
@@ -727,15 +735,30 @@ void StageAnimEffect::paintScreen(const RenderTarget &renderTarget, const Render
     // 逐卡让位——飞行中窗口自己的卡跳过（liveCardPaintable 内判定），
     // 其余卡照画；飞行窗由合成器画在窗层级，交叠瞬间由 engage 淡出遮蔽。
     if (m_liveCards.isEmpty())
+#ifdef KOS_KWIN_PAINT_RESULT_API
+        return painted;
+#else
         return;
+#endif
     if (effects->activeFullScreenEffect())
+#ifdef KOS_KWIN_PAINT_RESULT_API
+        return painted;
+#else
         return;
+#endif
     // 锁屏守卫：后置通道画在场景（含锁屏窗口）之上，无此判断＝锁屏时
     // 卡列仍悬浮在锁屏画面上（2026-10-09 用户实报"锁屏时卡还在"）。
     // 软件光标补绘在 drawLiveCards 尾部，同被此闸挡住
     if (effects->isScreenLocked())
+#ifdef KOS_KWIN_PAINT_RESULT_API
+        return painted;
+#else
         return;
+#endif
     drawLiveCards(renderTarget, viewport);
+#ifdef KOS_KWIN_PAINT_RESULT_API
+    return painted;
+#endif
 }
 
 #ifdef KOS_KWIN_PAINT_TIME_API
@@ -1963,6 +1986,12 @@ void StageAnimEffect::renderLiveTexture(LiveCard &card)
     RenderViewport viewport(src, scale, renderTarget, QPoint());
 #if STAGE_LIVE_CONTENT_RENDER_67
     if (!m_itemRenderer67) {
+#ifdef KOS_KWIN_PAINT_RESULT_API
+        auto *device = Compositor::self()->primaryDevice();
+        if (!device)
+            return;
+        m_itemRenderer67 = new ItemRendererOpenGL(device);
+#else
         ::EGLDisplay ed = eglGetCurrentDisplay();
         if (!ed)
             ed = eglGetDisplay(EGL_DEFAULT_DISPLAY);
@@ -1971,15 +2000,25 @@ void StageAnimEffect::renderLiveTexture(LiveCard &card)
             exts = QByteArray(e).split(' ');
         m_eglDisplay67 = new EglDisplay(ed, exts, nullptr);
         m_itemRenderer67 = new ItemRendererOpenGL(m_eglDisplay67);
+#endif
         qCDebug(STAGEANIM_LOG) << "6.7 itemrenderer created";
     }
     m_itemRenderer67->beginFrame(renderTarget, viewport);
     glClearColor(0.0f, 0.0f, 0.0f, 0.0f);
     glClear(GL_COLOR_BUFFER_BIT);
+#ifdef KOS_KWIN_PAINT_RESULT_API
+    const bool rendered =
+#endif
     m_itemRenderer67->renderItem(renderTarget, viewport, w->windowItem(),
                                  Scene::PAINT_WINDOW_TRANSFORMED,
                                  Region::infinite(), WindowPaintData{}, {}, {});
     m_itemRenderer67->endFrame();
+#ifdef KOS_KWIN_PAINT_RESULT_API
+    if (!rendered) {
+        card.dirty = true;
+        return;
+    }
+#endif
     card.renderCount++;
     card.dirty = false;
     return;
