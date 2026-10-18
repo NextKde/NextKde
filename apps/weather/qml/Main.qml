@@ -32,6 +32,7 @@ KosApplicationWindow {
     readonly property color cardGlassRgb: root.currentIsDay ? Qt.rgba(0, 0.376, 0.824, 1.0) : Qt.rgba(1, 1, 1, 1.0)
     readonly property real cardGlassAlpha: root.currentIsDay ? 0.30 : 0.16
     readonly property real cardGlassAlphaHot: root.currentIsDay ? 0.36 : 0.21
+    readonly property int tileRadius: 16 // ref-main UV 瓦角部拟合 r≈10.5@814 × 1.46 窗比 ≈ 15.3，LEDGER WIND 瓦 r≈11±1 同证；AppTheme.smallRadius(12) 是 shared 基础件不动，weather 内显式覆盖
 
     // Liquid Glass circular button background (stage 3, style A) for the
     // sky top bar. `selected` shows the tinted glass disc, unselected stays
@@ -409,7 +410,7 @@ KosApplicationWindow {
         required property string valueText
 
         implicitHeight: 66
-        radius: AppTheme.smallRadius
+        radius: root.tileRadius
         // 昼夜分材质：ref-main 白天所有卡填充暗于周围天空，拟合为 α~0.30 深蓝玻璃 (0,96,210)；夜间维持白玻璃
         property bool hot: metricHover.hovered
         // unified with full-width cards (AQ/10-day): fill 0.16 + stroke 0.22; ref-main shows one shared card material
@@ -1724,7 +1725,7 @@ KosApplicationWindow {
                                         id: directionTile
                                         Layout.fillWidth: true
                                         implicitHeight: 66
-                                        radius: AppTheme.smallRadius
+                                        radius: root.tileRadius
                                         // 昼夜分材质：ref-main 白天所有卡填充暗于天空（α~0.30 深蓝玻璃）；夜间维持白玻璃
                                         property bool hot: directionHover.hovered
                                         property real hoverFill: hot ? root.cardGlassAlphaHot : root.cardGlassAlpha
@@ -1892,7 +1893,7 @@ KosApplicationWindow {
                                         id: moonPhaseTile
                                         Layout.fillWidth: true
                                         implicitHeight: 66
-                                        radius: AppTheme.smallRadius
+                                        radius: root.tileRadius
                                         // 昼夜分材质：ref-main 白天所有卡填充暗于天空（α~0.30 深蓝玻璃）；夜间维持白玻璃
                                         property bool hot: moonHover.hovered
                                         property real hoverFill: hot ? root.cardGlassAlphaHot : root.cardGlassAlpha
@@ -2018,7 +2019,7 @@ KosApplicationWindow {
                                         id: sunsetTile
                                         Layout.fillWidth: true
                                         implicitHeight: 66
-                                        radius: AppTheme.smallRadius
+                                        radius: root.tileRadius
                                         // 昼夜分材质：ref-main 白天所有卡填充暗于天空（α~0.30 深蓝玻璃）；夜间维持白玻璃
                                         property bool hot: sunsetHover.hovered
                                         property real hoverFill: hot ? root.cardGlassAlphaHot : root.cardGlassAlpha
