@@ -803,11 +803,17 @@ Pane {
                                 && root.todayColumn >= 0
                                 && hourCell.rowIndex === root.nowRow
                             anchors.right: parent.right
-                            anchors.rightMargin: 6
+                            anchors.rightMargin: 2
                             y: Math.round(root.nowInHour) - height / 2
                             // P1-2: 12h compact labels ("11:30AM") run wider
                             // than the 24h "HH:MM" the 42px pill was sized for.
-                            width: Math.max(42, nowPillLabel.implicitWidth + 12)
+                            // The gutter is only 52px, so clamp the pill inside
+                            // it instead of clipping at the window edge; the
+                            // label stays centred and still fits ("11:06AM"
+                            // ≈45px < 48px).
+                            width: Math.min(
+                                Math.max(42, nowPillLabel.implicitWidth + 12),
+                                root.gutterWidth - 4)
                             height: 20
                             radius: height / 2
                             color: root.todayRed
