@@ -24,7 +24,7 @@ Item {
                                                             : (rows ? rows.length : 0)
 
     signal playRequested(int index, var track)
-    signal removeRequested(int index)
+    signal removeRequested(int index, var track)
     signal moveRequested(int from, int to)
     signal trackCommandRequested(string command, var track, int rowIndex)
     signal clearRequested
@@ -188,7 +188,7 @@ Item {
         onSelectedRequested: panel.playRequested(rowIndex,track)
         onActivated: panel.playRequested(rowIndex,track)
         onCommandRequested: command => {
-            if (command === "remove_queue") panel.removeRequested(rowIndex)
+            if (command === "remove_queue") panel.removeRequested(rowIndex, track)
             else panel.trackCommandRequested(command,track,rowIndex)
         }
         onContextRequested: (mx,my) => panel.openRowMenu(queueRow,mx,my,rowIndex,track)
@@ -281,7 +281,7 @@ Item {
         ]
         onCommandTriggered: function(command, contextData) {
             if (command === "remove" && contextData)
-                panel.removeRequested(contextData.rowIndex)
+                panel.removeRequested(contextData.rowIndex, contextData.track)
         }
     }
 }

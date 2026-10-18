@@ -23,6 +23,20 @@ QColor dotColor(Type type, bool active)
     return QColor(0x9a, 0x9a, 0x9e);
 }
 
+QColor dotBorderColor(Type type, bool active)
+{
+    if (!active) {
+        return QColor(0x82, 0x82, 0x86);
+    }
+    switch (type) {
+    case Close: return QColor(0xe0, 0x44, 0x3e);
+    case Minimize: return QColor(0xde, 0xa1, 0x23);
+    case Maximize: return QColor(0x1a, 0xab, 0x29);
+    case TypeCount: break;
+    }
+    return QColor(0x82, 0x82, 0x86);
+}
+
 void drawLight(QPainter &painter, const QRectF &dot, Type type, bool active,
                bool maximized, bool showGlyph)
 {
@@ -30,7 +44,7 @@ void drawLight(QPainter &painter, const QRectF &dot, Type type, bool active,
     // every proportion below is taken against.
     const qreal size = dot.width();
 
-    painter.setPen(QPen(QColor(0, 0, 0, 0x33), 0.75));
+    painter.setPen(QPen(dotBorderColor(type, active), 0.75));
     painter.setBrush(dotColor(type, active));
     painter.drawEllipse(dot);
 

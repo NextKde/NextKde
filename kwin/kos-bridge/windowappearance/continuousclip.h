@@ -45,7 +45,7 @@ public:
     void invalidate(KWin::EffectWindow *window);
     void invalidateAll();
     void invalidateRegion(const QRectF &region);
-    using SourcePainter = std::function<void(const KWin::RenderTarget &, const KWin::RenderViewport &)>;
+    using SourcePainter = std::function<bool(const KWin::RenderTarget &, const KWin::RenderViewport &)>;
     bool paint(const KWin::RenderTarget &target,
                const KWin::RenderViewport &viewport,
                KWin::EffectWindow *window, int mask,

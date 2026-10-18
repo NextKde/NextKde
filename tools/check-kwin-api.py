@@ -22,6 +22,7 @@ def main():
     build = args.build_dir.resolve()
     headers = args.kwin_headers.resolve()
     effect = (headers / "effect/effect.h").read_text()
+    paint_result = bool(re.search(r"bool drawWindow\(", effect))
     timed = bool(re.search(r"prePaintWindow\([^;]*std::chrono::milliseconds", effect))
     commands = subprocess.check_output(
         ["ninja", "-C", str(build), "-t", "commands",
@@ -41,10 +42,13 @@ def main():
             if token in ("-o", "-MF", "-MT"):
                 index += 2
                 continue
-            if token not in ("-c", "-MD", "-DKOS_KWIN_PAINT_TIME_API"):
+            if token not in ("-c", "-MD", "-DKOS_KWIN_PAINT_TIME_API",
+                             "-DKOS_KWIN_PAINT_RESULT_API"):
                 options.append(token)
             index += 1
         extra = ["-I" + str(headers), "-fsyntax-only"]
+        if paint_result:
+            extra.append("-DKOS_KWIN_PAINT_RESULT_API")
         if timed:
             extra.append("-DKOS_KWIN_PAINT_TIME_API")
         options[1:1] = extra

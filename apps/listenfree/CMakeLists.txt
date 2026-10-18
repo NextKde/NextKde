@@ -321,6 +321,19 @@ if(LISTENFREE_BUILD_QMMP_BACKEND)
         add_executable(listenfree_radio_tests tests/radio_tests.cpp)
         target_link_libraries(listenfree_radio_tests PRIVATE listenfree_portable Qt6::Test)
         add_executable(listenfree_portable_tests tests/portable_session_tests.cpp)
+        find_package(Python3 COMPONENTS Interpreter QUIET)
+        find_program(LISTENFREE_QMLTESTRUNNER NAMES qmltestrunner6 qmltestrunner HINTS /usr/lib/qt6/bin)
+        if(Python3_Interpreter_FOUND AND LISTENFREE_QMLTESTRUNNER)
+            add_test(NAME listenfree_track_management_qml_tests COMMAND ${Python3_EXECUTABLE}
+                "${CMAKE_CURRENT_SOURCE_DIR}/tools/run_track_management_qml_tests.py" --runner "${LISTENFREE_QMLTESTRUNNER}")
+            add_test(NAME listenfree_navigation_qml_tests COMMAND ${Python3_EXECUTABLE}
+                "${CMAKE_CURRENT_SOURCE_DIR}/tools/run_navigation_qml_tests.py" --runner "${LISTENFREE_QMLTESTRUNNER}")
+        endif()
+        add_executable(listenfree_track_management_tests tests/track_management_tests.cpp)
+        target_link_libraries(listenfree_track_management_tests PRIVATE listenfree_portable Qt6::Test)
+        add_dependencies(listenfree_track_management_tests listenfree-sourcehost)
+        add_test(NAME listenfree_track_management_tests COMMAND listenfree_track_management_tests)
+        set_tests_properties(listenfree_track_management_tests PROPERTIES ENVIRONMENT "QMMP_PLUGINS=${LISTENFREE_QMMP_PLUGIN_ROOT};QT_QPA_PLATFORM=offscreen")
         add_executable(listenfree_collection_tests tests/collection_tests.cpp)
         target_link_libraries(listenfree_collection_tests PRIVATE listenfree_portable Qt6::Test)
         if(WIN32)
@@ -430,6 +443,8 @@ qt_add_qml_module(listenfree
         music_player_desktop/components/SegmentedTabBar.qml
         music_player_desktop/components/ArtworkTile.qml
         music_player_desktop/components/SongTable.qml
+        music_player_desktop/components/LoadingIndicator.qml
+        music_player_desktop/components/TrackTitle.qml
         music_player_desktop/components/SongRow.qml
         music_player_desktop/components/ContextMenu.qml
         music_player_desktop/components/SongContextMenu.qml
