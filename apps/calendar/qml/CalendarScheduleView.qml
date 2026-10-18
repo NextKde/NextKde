@@ -170,9 +170,12 @@ Pane {
     // gutter pill is centred on.
     readonly property real nowInHour: currentTime.getMinutes() * hourHeight / 60
     readonly property real nowLineY: nowRow * hourHeight + nowInHour
-    readonly property string nowLabel: (nowRow < 10 ? "0" + nowRow : nowRow) + ":"
+    // P1-2: locale-aware — 24h locales keep zero-padded "HH:MM", 12h locales
+    // get the compact form ("1:30PM"), same as the gutter and the agenda.
+    readonly property string nowLabel: AppTheme.formatClock(
+        (nowRow < 10 ? "0" + nowRow : nowRow) + ":"
         + (currentTime.getMinutes() < 10 ? "0" : "")
-        + currentTime.getMinutes()
+        + currentTime.getMinutes())
     readonly property int todayColumn: {
         for (let column = 0; column < dayCount; column++)
             if (sameDay(dateForColumn(column), currentTime))
@@ -802,12 +805,15 @@ Pane {
                             anchors.right: parent.right
                             anchors.rightMargin: 6
                             y: Math.round(root.nowInHour) - height / 2
-                            width: 42
+                            // P1-2: 12h compact labels ("11:30AM") run wider
+                            // than the 24h "HH:MM" the 42px pill was sized for.
+                            width: Math.max(42, nowPillLabel.implicitWidth + 12)
                             height: 20
                             radius: height / 2
                             color: root.todayRed
 
                             Label {
+                                id: nowPillLabel
                                 anchors.centerIn: parent
                                 text: root.nowLabel
                                 color: "#FFFFFF"

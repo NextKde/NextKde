@@ -1340,11 +1340,13 @@ KosApplicationWindow {
         return String(value(record, "seriesId", value(record, "id", "")))
     }
 
+    // P1-2: locale-aware via AppTheme.formatClock — 24h locales keep "HH:MM",
+    // 12h locales get the compact form ("11AM" / "1:30PM").
     function itemTime(item) {
         if (itemAllDay(item))
             return qsTr("All day")
         const match = itemDateTime(item).match(/T(\d{2}:\d{2})/)
-        return match ? match[1] : "--:--"
+        return match ? AppTheme.formatClock(match[1]) : "--:--"
     }
 
     // P01: full date/time line for the detail popover. Events get a
@@ -1381,9 +1383,13 @@ KosApplicationWindow {
         const end = new Date(endText)
         if (Number.isNaN(end.getTime()) || endText.length < 16)
             return dateLine + " · " + itemTime(item)
-        if (sameDay(start, end))
-            return dateLine + " · " + itemTime(item) + " – "
-                + (endText.match(/T(\d{2}:\d{2})/)?.[1] ?? itemTime(item))
+        if (sameDay(start, end)) {
+            // P1-2: same locale-aware clock formatting as itemTime.
+            const endMatch = endText.match(/T(\d{2}:\d{2})/)
+            const endClock = endMatch ? AppTheme.formatClock(endMatch[1])
+                                      : itemTime(item)
+            return dateLine + " · " + itemTime(item) + " – " + endClock
+        }
         return dateLine + " – " + AppTheme.formatDate(end, Locale.LongFormat)
             + " · " + itemTime(item)
     }
@@ -2632,7 +2638,12 @@ KosApplicationWindow {
                                             color: root.itemColor(agendaItem.modelData)
                                         }
                                         Label {
-                                            Layout.preferredWidth: 58
+                                            id: agendaTimeLabel
+                                            // P1-2: locale 12h forms ("1:30PM")
+                                            // run wider than the old 24h "HH:MM"
+                                            // — grow past the 58px floor instead
+                                            // of clipping.
+                                            Layout.preferredWidth: Math.max(58, agendaTimeLabel.implicitWidth)
                                             text: root.itemTime(agendaItem.modelData)
                                             color: AppTheme.mutedText
                                             font.pixelSize: 11
