@@ -16,13 +16,13 @@ Popup {
     id: root
 
     // Local neutral tokens (dark branches off AppTheme.dark only for the
-    // light/dark choice; the greys themselves stay neutral).
-    readonly property color surfaceColor: AppTheme.dark ? "#262626" : "#F5F5F5"
-    readonly property color borderColor: AppTheme.dark
-        ? Qt.rgba(1, 1, 1, 0.12) : Qt.rgba(0, 0, 0, 0.12)
-    readonly property color titleColor: AppTheme.dark ? "#F2F2F2" : "#1A1A1A"
-    readonly property color secondaryColor: AppTheme.dark
-        ? Qt.rgba(1, 1, 1, 0.58) : Qt.rgba(0, 0, 0, 0.55)
+    // light/dark choice; the greys themselves stay neutral). The values now
+    // live in AppTheme (M05) so the popover and the Tahoe content plane are
+    // themed from one place.
+    readonly property color surfaceColor: AppTheme.popoverSurface
+    readonly property color borderColor: AppTheme.popoverBorder
+    readonly property color titleColor: AppTheme.popoverInk
+    readonly property color secondaryColor: AppTheme.popoverInkSecondary
     // Interior margin reserved for the app-painted shadow: the visible
     // surface is inset by this much on every side while the popup itself
     // grows by 2 * shadowInset, so the surface box keeps its size/position.

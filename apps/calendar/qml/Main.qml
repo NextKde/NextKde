@@ -56,7 +56,7 @@ KosApplicationWindow {
         readonly property color sidebarPlane:
             root.tahoeDark ? "#282828" : "#E4E4E4"
         readonly property color contentPlane:
-            root.tahoeDark ? "#1E1E1E" : "#FFFFFF"
+            AppTheme.neutralPlane
         readonly property int sidebarWidth: 220
 
         // Glass. Two independent frames agree on one law, so this is measured,

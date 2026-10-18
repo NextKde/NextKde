@@ -110,6 +110,20 @@ QtObject {
     // month's today disc all read this.
     readonly property color todayRed: "#E5484D"
 
+    // M05: hue-neutral light/dark legs that must NOT ride the slate-tinted
+    // window ramp (same rationale as buttonNeutral below). One definition for
+    // the Tahoe content plane and the app-owned detail popover, replacing the
+    // literals that used to be scattered across Main.qml (tahoe.contentPlane),
+    // CalendarScheduleView.qml (scheduleField) and EventDetailsPopover.qml —
+    // separate copies of the same pair could drift silently when re-themed.
+    readonly property color neutralPlane: dark ? "#1E1E1E" : "#FFFFFF"
+    readonly property color popoverSurface: dark ? "#262626" : "#F5F5F5"
+    readonly property color popoverBorder: dark
+        ? Qt.rgba(1, 1, 1, 0.12) : Qt.rgba(0, 0, 0, 0.12)
+    readonly property color popoverInk: dark ? "#F2F2F2" : "#1A1A1A"
+    readonly property color popoverInkSecondary: dark
+        ? Qt.rgba(1, 1, 1, 0.58) : Qt.rgba(0, 0, 0, 0.55)
+
     // Forced Light/Dark modes never inherit the opposite system background.
     readonly property color window: mix(
         paletteWindow, dark ? darkWindowSeed : lightWindowSeed,

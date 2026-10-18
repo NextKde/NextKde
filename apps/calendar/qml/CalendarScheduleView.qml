@@ -128,11 +128,10 @@ Pane {
         ? Qt.rgba(1, 1, 1, 0.03) : "#F9F9F9"
 
     // R109 (A03 clause b): the field a chip is drawn on, so the chip fill can be
-    // pre-blended to OPAQUE rather than laid down translucent. Must track Root's
-    // `tahoe.contentPlane` (Main.qml:47-48); repeated here because this view is
-    // instantiated two ways and holds no reference to the page root.
-    readonly property color scheduleField: AppTheme.dark
-        ? "#1E1E1E" : "#FFFFFF"
+    // pre-blended to OPAQUE rather than laid down translucent. Must stay equal
+    // to Root's `tahoe.contentPlane` (Main.qml:59) — both now read the same
+    // AppTheme.neutralPlane token (M05), so they cannot drift.
+    readonly property color scheduleField: AppTheme.neutralPlane
     // The backdrop is the field, or the field with the weekend tint already
     // composited into it. `weekendField` cannot be used directly: it is a
     // translucent white on the dark leg, and its alpha would be dropped.
@@ -140,7 +139,7 @@ Pane {
         if (!isWeekendColumn(column))
             return AppTheme.opaque(scheduleField)
         return AppTheme.dark
-            ? AppTheme.mix(scheduleField, "#FFFFFF", 0.03)
+            ? AppTheme.mix(scheduleField, AppTheme.whiteSeed, 0.03)
             : AppTheme.opaque(weekendField)
     }
     // JS getDay(): 0 = Sunday, 6 = Saturday.
