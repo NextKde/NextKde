@@ -574,10 +574,12 @@ Item {
             // 光源在左上：右下重、左上轻
             offsetX: 1
             offsetY: 4
-            // 模糊半径 ≈ 卡宽 35%：着色器对衰减再平方（alpha²），视觉
-            // 半程 ≈ softness/2，44 对应实测参考的 ~17-19px 有效衰减
-            softness: 44
-            shadowColor: Qt.rgba(0, 0, 0, 0.20)
+            // 2026-10-18 二测参考：卡右缘外 1~2px 处压暗 ~14%、12 参考 px
+            //（≈21 逻辑 px）内回到壁纸本色。旧的 44/0.20 在实测里边缘
+            // 20%、衰减 ~28 逻辑 px——偏重偏散，两张相邻卡的尾巴在 24px
+            // 间隙里连成一条暗带。收到 36/0.15。
+            softness: 36
+            shadowColor: Qt.rgba(0, 0, 0, 0.15)
             x: plate.x - margin + (opaqueFace ? 1 : 0)
             y: plate.y - margin + (opaqueFace ? 1 : 0)
         }
