@@ -2551,8 +2551,8 @@ KosApplicationWindow {
                                             Label {
                                                 Layout.fillWidth: true
                                                 text: qsTr("Temperature (%1)").arg(root.temperatureUnit)
-                                                // ref-main 实测副标题淡天蓝（均值 (114,188,238) / 峰值 (167,236,255)=#a7ecff，降采样稀释取峰值）；非 muted 灰白
-                                                color: "#a7ecff"
+                                                // tile-conditions 原生分辨率实测副标题淡天蓝峰值 #b3f4ff (179,244,255)；文字亮于卡面，AA 只往暗混，真值≥峰值（旧 ref-main 814 降采样值 #a7ecff 系稀释低估）；非 muted 灰白
+                                                color: "#b3f4ff"
                                                 font.pixelSize: 11
                                             }
                                         }
