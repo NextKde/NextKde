@@ -67,10 +67,10 @@ QtObject {
         // 横边斜率随卡位线性变化（顶卡 ~10°、中卡 0°、底卡 ~9° 反向），
         // 竖边严格垂直。反推静置偏航 ≈30°、焦距 ≈1100（TILT_FOCAL）。
         // 旧的 2° 是"微倾"的误读：在 2200 焦距下视觉斜率 <0.2°，等于没歪
-        "deckRestTilt": { type: "real", min: 0, max: 40, def: 30 },
+        "deckRestTilt": { type: "real", min: 0, max: 40, def: 35 },
         "tiltAngle":    { type: "real", min: 0, max: 40, def: 0 },
         // 玻璃质感（StageCard 卡面：背板/受光/描边/辉光/纵深）
-        "cardRadius":   { type: "int", min: 0, max: 24, def: 7 },
+        "cardRadius":   { type: "int", min: 0, max: 24, def: 6 },
         "cardTint":     { type: "real", min: 0.2, max: 0.95, def: 0.35 },
         "cardOpacity":  { type: "real", min: 0.2, max: 1.0, def: 1.0 },
         "cardTopLight": { type: "real", min: 0, max: 0.3, def: 0.07 },
@@ -159,12 +159,15 @@ QtObject {
     // 同一效果，冲突已删）
     // 2026-10-18 参考实测改判：静置偏航 30°（共享相机广角透视，竖边垂直、
     // 横边随卡位倾斜），悬停放平。焦距同源改到 TILT_FOCAL=1100
-    property real deckRestTilt: 30
+    // 2026-10-18 用户要求"倾斜角再大一点"：30 → 35（人工偏好覆盖参考值，
+    // 上限仍受 40° 钳位）
+    property real deckRestTilt: 35
     property real tiltAngle: 0
     // 卡面玻璃质感：背板浓度（悬停自动 ×1.3 提亮）/ 顶部受光 / 静置描边
     // 亮度 / 聚焦辉光强度
     // 2026-10-18 结构轮：圆角按参考 7% 卡宽，128 宽取 9
-    property int cardRadius: 9
+    // 2026-10-18 用户反馈"圆角小一点"：9 → 6（≈5% 卡宽）
+    property int cardRadius: 6
     // 参考卡面是缩略图本体，背板只在无图/留边处露出；0.35 让留边接近
     // 参考的浅色卡面，不再是一块深色玻璃
     property real cardTint: 0.35

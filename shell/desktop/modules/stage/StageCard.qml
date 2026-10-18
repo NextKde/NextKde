@@ -470,6 +470,9 @@ Item {
         // 的 ShaderEffect 不可见＝不采样＝不产生逐帧开销，故可常开。
         layer.enabled: !card.effectOwnedChrome
         layer.smooth: true
+        // 透视缩小采样要 mipmap：stage_tilt 按偏航把层纹理水平压到
+        // cos(yaw)≈0.82，细文字/窗口边框无 mipmap 时混叠成锯齿
+        layer.mipmap: true
 
         // ── 扇叠背板（macOS Stage Manager 同语义）：同应用多窗 = 一前
         // 一后的卡片簇。声明在 plate 之前 = 画在卡背之下；随卡面一起被
@@ -856,6 +859,11 @@ Item {
                 horizontalAlignment: Image.AlignHCenter
                 verticalAlignment: Image.AlignVCenter
                 smooth: true
+                // 缩略图源 640 宽，卡面在 2x 屏上只有 ~256 设备像素：无
+                // mipmap 时 GPU 只做双线性缩小，细文字/窗口边框会出现
+                // 摩尔纹与锯齿（2026-10-18 用户反馈"缩略图锯齿严重"）。
+                // mipmap 让缩小时退到低层级采样，观感明显干净
+                mipmap: true
                 // 失效自愈：URL 指向的 PNG 被新一轮拍摄替换/删除后，Image
                 // 会停在 Error 且同一 source 不会重读盘（可见性变化、同串
                 // 重赋值都无效）——上报给 WindowService 清账并补拍，见
