@@ -2937,16 +2937,31 @@ KosApplicationWindow {
                                                                                        "precipitationProbability", 0)))
                                                         }
 
-                                                        Label {
+                                                        // 实测风段 "12 千米/时" ~70px 超出 50px 列宽（tmp/shots/windseg-probe-1792318936.png），
+                                                        // 数字/单位分两行，单位行占用 segment 2 下 ☂ 占位行空出的位置、净行高不变；
+                                                        // ref 无风段形态，两行结构系外推（Apple hourly wind 视图惯例数字大/单位小）
+                                                        ColumnLayout {
                                                             Layout.alignment: Qt.AlignHCenter
                                                             visible: hourlySegmented.segment === 2
-                                                            text: Math.round(root.number(
-                                                                hourlyCard.modelData, "windSpeed", 0)) + " " + root.speedUnit
-                                                            color: root.skyText
-                                                            font.weight: Font.DemiBold
+                                                            spacing: 1
                                                             Accessible.name: qsTr("Wind speed %1 %2").arg(
                                                                 Math.round(root.number(hourlyCard.modelData, "windSpeed", 0)))
                                                                                 .arg(root.speedUnit)
+
+                                                            Label {
+                                                                Layout.alignment: Qt.AlignHCenter
+                                                                text: Math.round(root.number(
+                                                                    hourlyCard.modelData, "windSpeed", 0))
+                                                                color: root.skyText
+                                                                font.weight: Font.DemiBold
+                                                            }
+
+                                                            Label {
+                                                                Layout.alignment: Qt.AlignHCenter
+                                                                text: root.speedUnit
+                                                                color: root.skyTextMuted
+                                                                font.pixelSize: 10
+                                                            }
                                                         }
 
                                                         Label {
