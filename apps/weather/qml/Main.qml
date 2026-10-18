@@ -1147,6 +1147,7 @@ KosApplicationWindow {
                             onClicked: backend.selectLocation(modelData)
 
                             background: Rectangle {
+                                // ref-main 卡 3 角剖面实测 r≈7-8@814 ×1.4503 ≈ 10-12@1180，12 在误差带内；勿改为 16（旧 tile 换算链已勘误，见 LEDGER 0f）
                                 radius: 12
                                 // ref-main sidebar cards have no stroke (selected or not) — sampled Mumbai/Chicago/Cupertino edges
                                 border.width: 0
