@@ -19,6 +19,10 @@ enum Type { Close = 0, Minimize = 1, Maximize = 2, TypeCount = 3 };
 // has to be read from its position rather than from its colour.
 QColor dotColor(Type type, bool active);
 
+// The dot's border outline. Uses tone-on-tone colors matching macOS traffic light
+// styling rather than translucent black, preventing muddy edge halos.
+QColor dotBorderColor(Type type, bool active);
+
 // Draw one light -- the dot and the mark inside it -- filling `dot`.
 //
 // `maximized` selects the green light's mark and is ignored by the other two: a
@@ -35,5 +39,11 @@ QColor dotColor(Type type, bool active);
 // gets tuned blind.
 void drawLight(QPainter &painter, const QRectF &dot, Type type, bool active,
                bool maximized);
+
+// Tone-matched or luminous hover halo color for the selected button.
+QColor dotHoverRingColor(Type type, bool dark);
+
+// Draw the smooth hover halo/ring around the hovered button.
+void drawHoverRing(QPainter &painter, const QRectF &dot, Type type, bool dark);
 
 } // namespace KOS
