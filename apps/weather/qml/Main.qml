@@ -2490,7 +2490,8 @@ KosApplicationWindow {
                                             Label {
                                                 Layout.fillWidth: true
                                                 text: qsTr("Temperature (%1)").arg(root.temperatureUnit)
-                                                color: root.skyTextMuted
+                                                // ref-main 实测副标题淡天蓝（均值 (114,188,238) / 峰值 (167,236,255)=#a7ecff，降采样稀释取峰值）；非 muted 灰白
+                                                color: "#a7ecff"
                                                 font.pixelSize: 11
                                             }
                                         }
@@ -2918,7 +2919,8 @@ KosApplicationWindow {
                                                             verticalAlignment: Text.AlignVCenter
                                                             text: hourlyCard.isCurrentHour ? qsTr("Now")
                                                                 : root.localTime(root.value(hourlyCard.modelData, "time", ""))
-                                                            color: root.skyTextMuted
+                                                            // ref-main 实测小时标签峰值 (255,255,255)（Now/12PM/2PM 三点采样一致），非 muted；同 hero H·L 轮判据
+                                                            color: root.skyText
                                                         }
 
                                                         WeatherIcon {
