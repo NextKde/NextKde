@@ -72,8 +72,8 @@ AnimatedPopupWindow {
         applicationsGeneration++
         applicationsPending = false
         previousSockets = ({})
-        detailsExpanded = false
         if (requestedOpen) {
+            detailsExpanded = false
             applicationRows = []
             applicationsError = ""
             refreshApplications()

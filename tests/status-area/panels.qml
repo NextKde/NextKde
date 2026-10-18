@@ -62,7 +62,9 @@ ShellRoot {
                 traffic.detailsExpanded = false
                 traffic.refreshApplications()
                 fixture.check(PlatformClient.applicationRequests === 1, "collapsed details stop process requests")
+                traffic.detailsExpanded = true
                 traffic.close()
+                fixture.check(traffic.detailsExpanded, "closing preserves expanded layout for exit animation")
                 battery.toggle(entry)
             } else if (fixture.stage === 4) {
                 fixture.check(battery.targetScreen === host.screen, "battery screen follows secondary-screen anchor")
@@ -75,7 +77,7 @@ ShellRoot {
                 traffic.toggle(entry)
             } else if (fixture.stage === 6) {
                 fixture.check(!traffic.detailsExpanded, "reopening starts with summary")
-                fixture.check(PlatformClient.applicationRequests === 1, "reopening summary does not sample processes")
+                fixture.check(PlatformClient.applicationRequests === 2, "reopening summary does not sample processes")
                 traffic.close()
                 console.log("STATUS_PANELS_PASS " + fixture.checks + " checks")
                 Qt.quit()
