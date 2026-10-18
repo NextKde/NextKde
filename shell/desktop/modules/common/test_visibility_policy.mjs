@@ -6,6 +6,7 @@ import {
     isKnownDeskCenterWidget,
     isKnownStatusCell,
     normalizeHiddenIds,
+    shouldShowBatteryCell,
     statusCellIds,
     withVisibility,
 } from "./VisibilityPolicy.mjs";
@@ -17,6 +18,20 @@ assert.equal(isKnownDeskCenterWidget("music"), true, "music is a known widget");
 assert.equal(isKnownDeskCenterWidget("nope"), false, "unknown widget rejected");
 assert.equal(isKnownStatusCell("battery"), true, "battery is a known cell");
 assert.equal(isKnownStatusCell("clock"), false, "a widget id is not a cell id");
+
+// ── battery presence ────────────────────────────────────────────────────────
+
+// A desktop reports a DisplayDevice with ready=true and present=false.
+assert.equal(shouldShowBatteryCell(true, false), false,
+    "a ready device with no battery hides the cell");
+// A laptop must keep the cell.
+assert.equal(shouldShowBatteryCell(true, true), true,
+    "a ready device with a battery shows the cell");
+// Before UPower enumerates, `present` is not meaningful: do not hide.
+assert.equal(shouldShowBatteryCell(false, false), true,
+    "an unready UPower keeps the cell");
+assert.equal(shouldShowBatteryCell(false, true), true,
+    "an unready UPower with a battery keeps the cell");
 
 // ── normalisation ───────────────────────────────────────────────────────────
 

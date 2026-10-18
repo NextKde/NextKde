@@ -1,5 +1,7 @@
 import QtQuick
+import Quickshell.Services.UPower
 import qs.desktop.modules.common
+import "../common/VisibilityPolicy.mjs" as VisibilityPolicy
 
 // Reusable system-status cluster. Popup panels stay anchored to the same
 // visual items whether this component lives in BarWindow or inside Dock.
@@ -37,8 +39,16 @@ Item {
         { key: "notifications", component: notificationQuickControl },
         { key: "controlcenter", component: controlCenterQuickControl }
     ]
+    // A desktop exposes a UPower DisplayDevice that is `ready` but has no
+    // battery, so readiness alone cannot decide this — the tray used to draw a
+    // 0% battery on battery-less machines. VisibilityPolicy owns the three-way
+    // decision (unready = keep, ready without battery = hide) and is unit
+    // tested, so an unready or unavailable UPower cannot hide a laptop's cell.
+    readonly property bool showBatteryCell: VisibilityPolicy.shouldShowBatteryCell(
+        UPower.displayDevice.ready, UPower.displayDevice.isPresent)
     readonly property var visibleTrailingCells: trailingCells.filter(
-        entry => !AppearanceConfigService.isStatusCellHidden(entry.key))
+        entry => !AppearanceConfigService.isStatusCellHidden(entry.key)
+            && (entry.key !== "battery" || root.showBatteryCell))
 
     property Item pendingControlCenterAnchor: null
     readonly property var controlCenter: controlCenterLoader.item
