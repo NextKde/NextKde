@@ -2311,8 +2311,8 @@ KosApplicationWindow {
                                                             onPaint: {
                                                                 var ctx = getContext("2d")
                                                                 ctx.reset()
-                                                                // mini 日落 glyph（ref ~8px@814 → 12px）：地平线 + 上半圆太阳 + 下落箭头，同旧 46px sunCanvas 家族缩比
-                                                                ctx.strokeStyle = "rgba(255,255,255,0.85)"
+                                                                // mini 日落 glyph（ref ~8px@814 → 12px）：地平线 + 上半圆太阳 + 下落箭头，同旧 46px sunCanvas 家族缩比（墨色 #90cbff，见下实测依据）
+                                                                ctx.strokeStyle = "#90cbff"
                                                                 ctx.lineWidth = 1.2
                                                                 ctx.beginPath()
                                                                 ctx.moveTo(0.5, 9)
@@ -2321,11 +2321,15 @@ KosApplicationWindow {
                                                                 ctx.beginPath()
                                                                 ctx.arc(6, 9, 3.5, Math.PI, 2 * Math.PI, false)
                                                                 ctx.closePath()
-                                                                // ref-main SUNSET 卡头 glyph 实测浅蓝白（峰值 (224,240,255)/(239,251,255)、暖色像素 0），非黄色
-                                                                ctx.fillStyle = "#e7f5ff"
+                                                                // ref-main.png (814×498) SUNSET glyph 区 (277,457,291,471) 峰值 (144,203,255)=#90cbff、
+                                                                // UV glyph 区 (400,457,414,471) 峰值 (142,202,255)；tile-cards.png 原生切片佐证
+                                                                // SUNSET (154,214,255) / UV (151,210,255)、头部文字峰值 (146,205,255) 与 glyph 同族 ——
+                                                                // 参考里 glyph 与头部文字同墨色（浅蓝 #90cbff 族），不是白。
+                                                                // 旧记载峰值 (224,240,255)/(239,251,255) 系误采样（混入邻近白色大数字墨），作废。
+                                                                ctx.fillStyle = "#90cbff"
                                                                 ctx.fill()
-                                                                ctx.strokeStyle = "rgba(255,255,255,0.92)"
-                                                                ctx.fillStyle = "rgba(255,255,255,0.92)"
+                                                                ctx.strokeStyle = "#90cbff"
+                                                                ctx.fillStyle = "#90cbff"
                                                                 ctx.lineWidth = 1.2
                                                                 ctx.beginPath()
                                                                 ctx.moveTo(6, 2)
@@ -2411,7 +2415,7 @@ KosApplicationWindow {
                                                                 var ctx = getContext("2d")
                                                                 ctx.reset()
                                                                 // mini UV glyph（ref tile-cards ~14px@tile → 12px）：中心日盘 + 8 根射线
-                                                                ctx.strokeStyle = "rgba(255,255,255,0.85)"
+                                                                ctx.strokeStyle = "#90cbff"
                                                                 ctx.lineWidth = 1.2
                                                                 for (var i = 0; i < 8; i++) {
                                                                     var a = i * Math.PI / 4
@@ -2423,8 +2427,8 @@ KosApplicationWindow {
                                                                 ctx.beginPath()
                                                                 ctx.arc(6, 6, 2, 0, 2 * Math.PI, false)
                                                                 ctx.closePath()
-                                                                // ref-main UV INDEX 卡头 glyph 实测浅蓝白（同 SUNSET 依据）
-                                                                ctx.fillStyle = "#e7f5ff"
+                                                                // ref-main.png UV glyph 区 (400,457,414,471) 峰值 (142,202,255)，与 SUNSET 同浅蓝 #90cbff 单色墨（同族实测），非白
+                                                                ctx.fillStyle = "#90cbff"
                                                                 ctx.fill()
                                                             }
                                                         }
