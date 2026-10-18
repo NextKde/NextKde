@@ -727,7 +727,11 @@ KosApplicationWindow {
                 required property var modelData
                 readonly property real cloudW: Math.min(modelData.cloudWidth, cloudFieldLayer.width * 0.45)
 
-                x: -cloudW - 20
+                // Clouds start spread across the window per the seeded xRatio so the
+                // sky is populated on the very first frame; reduce-motion leaves them
+                // parked there as static content instead of an empty sky.
+                property real entryX: modelData.xRatio * Math.max(cloudFieldLayer.width - cloudW, 0)
+                x: cloud.entryX
                 y: (cloudFieldLayer.height - height) * modelData.yRatio
                 width: cloudW
                 height: cloudW * 0.38
@@ -765,13 +769,16 @@ KosApplicationWindow {
                     running: root.cloudySky && !AppTheme.reduceMotion
                     loops: Animation.Infinite
 
-                    PauseAnimation { duration: modelData.phaseMs }
+                    // First pass runs from the seeded on-screen position; every later
+                    // pass re-enters from the left edge after the staggered pause.
                     NumberAnimation {
-                        from: -cloud.cloudW - 20
+                        from: cloud.entryX
                         to: cloudFieldLayer.width + 20
                         duration: modelData.driftMs
                         easing.type: Easing.Linear
                     }
+                    ScriptAction { script: cloud.entryX = -cloud.cloudW - 20 }
+                    PauseAnimation { duration: modelData.phaseMs }
                 }
             }
         }
