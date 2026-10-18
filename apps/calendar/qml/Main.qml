@@ -2514,12 +2514,27 @@ KosApplicationWindow {
                 Layout.fillWidth: true
                 visible: root.statusMessage.length > 0 || (pim.errorMessage.length > 0 && pim.ready)
 
+                // A5: the row clears itself after 3.5s, which a screen reader
+                // can neither announce on appearance nor re-read afterwards.
+                // The Alert role asks the platform to speak it, and hovering
+                // the row pauses the timer so the text stays put while read.
+                HoverHandler {
+                    onHoveredChanged: {
+                        if (hovered)
+                            statusTimer.stop()
+                        else
+                            statusTimer.restart()
+                    }
+                }
+
                 Label {
                     Layout.fillWidth: true
                     text: pim.errorMessage.length > 0 ? pim.errorMessage : root.statusMessage
                     color: pim.errorMessage.length > 0
                         ? root.tahoe.statusWarning : root.tahoe.statusPositive
                     wrapMode: Text.WordWrap
+                    Accessible.role: Accessible.Alert
+                    Accessible.name: text
                 }
             }
 
