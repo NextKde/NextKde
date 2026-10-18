@@ -89,7 +89,6 @@
     "kos-settings.window-install",
     "kos-settings.wallpaper-colors",
     "kos-settings.dev-session-entry",
-    "kos-settings.power-interactions",
-    "kos-ui.status-panels"
+    "kos-settings.power-interactions"
   ]
 }

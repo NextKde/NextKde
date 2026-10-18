@@ -482,7 +482,7 @@ if(BUILD_TESTING)
             COMMAND ${KOS_PYTHON_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/status-area/run-panels.py)
         set_tests_properties(kos-ui.status-panels PROPERTIES
             ENVIRONMENT "QML_IMPORT_PATH=${CMAKE_BINARY_DIR}/qml;QML2_IMPORT_PATH=${CMAKE_BINARY_DIR}/qml"
-            LABELS "ui;headless" TIMEOUT 45 RUN_SERIAL TRUE)
+            LABELS "ui;compositor" TIMEOUT 45 RUN_SERIAL TRUE)
         add_test(NAME kos-ui.control-center-modules
             COMMAND ${KOS_PYTHON_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/control-center/run.py)
         set_tests_properties(kos-ui.control-center-modules PROPERTIES
