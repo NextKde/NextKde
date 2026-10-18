@@ -119,7 +119,7 @@ Pane {
                             Label {
                                 anchors.centerIn: parent
                                 text: String(dayButton.cellDate.getDate())
-                                color: dayButton.today ? "white" : AppTheme.text
+                                color: dayButton.today ? AppTheme.accentText : AppTheme.text
                                 font.pixelSize: 11
                                 font.weight: dayButton.today || dayButton.selected
                                     ? Font.DemiBold : Font.Normal
