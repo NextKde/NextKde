@@ -38,6 +38,28 @@ QtObject {
         return (m[2] === "00" ? String(h) : h + ":" + m[2]) + meridiemText(h24)
     }
 
+    // Date formatted with a catalog-translated pattern (I5, REVIEW R3): the
+    // pattern string goes through I18n.trPattern first, so zh-CN renders
+    // "MMM d, yyyy" as "yyyy年M月d日" instead of hardcoding English word order.
+    function formatDatePattern(date, pattern) {
+        return date.toLocaleDateString(uiLocale, I18n.trPattern(pattern))
+    }
+
+    // Week-range header title following locale word order. The range
+    // skeleton itself is a translated template, so zh-CN can move the year
+    // to the front: "2026年10月11日 – 17日" for the same-month leg and
+    // "3月29日 – 2026年4月4日" across months. English output is unchanged.
+    function formatWeekRange(start, end) {
+        if (start.getMonth() === end.getMonth())
+            return I18n.tr("%1 – %2, %3")
+                .arg(formatDatePattern(start, "MMM d"))
+                .arg(String(end.getDate()))
+                .arg(String(end.getFullYear()))
+        return I18n.tr("%1 – %2")
+            .arg(formatDatePattern(start, "MMM d"))
+            .arg(formatDatePattern(end, "MMM d, yyyy"))
+    }
+
 
     // KosApplicationWindow binds these values to the shared C++ preferences
     // object. Controls can stay application-agnostic and still update live.

@@ -1543,11 +1543,8 @@ KosApplicationWindow {
             return AppTheme.formatDate(selectedDate, Locale.LongFormat)
         const end = new Date(weekStart.getFullYear(), weekStart.getMonth(),
                              weekStart.getDate() + 6)
-        if (weekStart.getMonth() === end.getMonth())
-            return AppTheme.formatDate(weekStart, "MMM d") + " – "
-                + AppTheme.formatDate(end, "d, yyyy")
-        return AppTheme.formatDate(weekStart, "MMM d") + " – "
-            + AppTheme.formatDate(end, "MMM d, yyyy")
+        // Week range follows locale word order via I18n templates (P2-5/I5).
+        return AppTheme.formatWeekRange(weekStart, end)
     }
 
     // The reference pairs the header title with a count line ("67 Messages,
