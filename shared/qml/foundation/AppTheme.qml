@@ -14,6 +14,30 @@ QtObject {
     function formatTime(date, format) { return date.toLocaleTimeString(uiLocale, format) }
     function formatDateTime(date, format) { return date.toLocaleString(uiLocale, format) }
 
+    // Locale-aware clock formatting for stored "HH:MM" strings (P1-1, REVIEW
+    // R3 F1). 12/24 follows the locale's own short time format (no lowercase
+    // 'h' ⇒ 24-hour locale); the meridiem text always comes from the locale,
+    // never hardcoded English.
+    function localeUses24hClock() {
+        return uiLocale.timeFormat(Locale.ShortFormat).indexOf("h") < 0
+    }
+    function meridiemText(hour) {
+        const t = hour >= 12 ? uiLocale.pmText : uiLocale.amText
+        return t !== "" ? t : (hour >= 12 ? "PM" : "AM")
+    }
+    function formatClock(hhmm) {
+        const m = String(hhmm).match(/^(\d{2}):(\d{2})$/)
+        if (!m)
+            return String(hhmm)
+        if (localeUses24hClock())
+            return String(hhmm)
+        const h24 = parseInt(m[1], 10)
+        var h = h24 % 12
+        if (h === 0)
+            h = 12
+        return (m[2] === "00" ? String(h) : h + ":" + m[2]) + meridiemText(h24)
+    }
+
 
     // KosApplicationWindow binds these values to the shared C++ preferences
     // object. Controls can stay application-agnostic and still update live.

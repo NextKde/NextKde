@@ -1302,23 +1302,11 @@ KosApplicationWindow {
 
     // E02 (R-CHIP user ruling 2026-10-17): the timed chip's second line is
     // the time range ("11AM – 1PM" on the ref). Todos render their due time
-    // only; no end is invented when the record lacks one. R246: 12-hour with
-    // AM/PM to match the ref's secondary line and the R243 12-hour gutter;
-    // minutes only when nonzero; the start meridiem is dropped when both
-    // ends share the same period ("12 – 2PM").
-    function formatClock12(hhmm) {
-        const m = String(hhmm).match(/^(\d{2}):(\d{2})$/)
-        if (!m)
-            return String(hhmm)
-        var h = parseInt(m[1], 10)
-        const mins = m[2]
-        const suffix = h >= 12 ? "PM" : "AM"
-        h = h % 12
-        if (h === 0)
-            h = 12
-        return (mins === "00" ? String(h) : h + ":" + mins) + suffix
-    }
-
+    // only; no end is invented when the record lacks one. R246/P1-1: the
+    // format follows the locale — 12-hour locales keep the compact style
+    // (minutes only when nonzero; the start meridiem dropped when both ends
+    // share the same period, "12 – 2PM") with meridiem text from the locale;
+    // 24-hour locales render plain "HH:MM – HH:MM" with no meridiem.
     function itemSecondary(item) {
         if (itemAllDay(item))
             return ""
@@ -1327,15 +1315,17 @@ KosApplicationWindow {
             return ""
         const endText = String(value(itemRecord(item), "end", ""))
         const endMatch = endText.match(/T(\d{2}:\d{2})/)
+        const startClock = AppTheme.formatClock(startMatch[1])
         if (!endMatch)
-            return formatClock12(startMatch[1])
-        const startText = formatClock12(startMatch[1])
-        const end12 = formatClock12(endMatch[1])
-        const startSuffix = startText.slice(-2)
-        const endSuffix = end12.slice(-2)
-        if (startSuffix === endSuffix && (startSuffix === "AM" || startSuffix === "PM"))
-            return startText.slice(0, -2) + " – " + end12
-        return startText + " – " + end12
+            return startClock
+        const endClock = AppTheme.formatClock(endMatch[1])
+        if (AppTheme.localeUses24hClock())
+            return startClock + " – " + endClock
+        const startSuffix = AppTheme.meridiemText(parseInt(startMatch[1], 10))
+        const endSuffix = AppTheme.meridiemText(parseInt(endMatch[1], 10))
+        if (startSuffix === endSuffix)
+            return startClock.slice(0, startClock.length - startSuffix.length) + " – " + endClock
+        return startClock + " – " + endClock
     }
 
     function itemDateTime(item) {

@@ -763,16 +763,25 @@ Pane {
                                 id: meridiemText
                                 anchors.right: parent.right
                                 anchors.top: parent.top
-                                text: hourCell.rowIndex < 12 ? "AM" : "PM"
+                                // P1-1: 24-hour locales have no meridiem — the
+                                // digit takes the full gutter edge instead.
+                                visible: !AppTheme.localeUses24hClock()
+                                text: hourCell.rowIndex < 12 ? AppTheme.meridiemText(0)
+                                                             : AppTheme.meridiemText(12)
                                 color: AppTheme.mutedText
                                 font.pixelSize: 8
                             }
                             Label {
                                 id: digitText
-                                anchors.right: meridiemText.left
+                                anchors.right: AppTheme.localeUses24hClock()
+                                               ? parent.right : meridiemText.left
                                 anchors.rightMargin: 3
                                 anchors.baseline: meridiemText.baseline
                                 text: {
+                                    // P1-1: locale decides 12/24h (no 'h' in
+                                    // the locale's short time format ⇒ 24h).
+                                    if (AppTheme.localeUses24hClock())
+                                        return hourCell.rowIndex + ""
                                     var h = hourCell.rowIndex % 12
                                     return (h === 0 ? 12 : h) + ""
                                 }
