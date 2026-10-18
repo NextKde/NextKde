@@ -368,6 +368,14 @@ Pane {
                 headerCell.headerDate, root.selectedDate)
             readonly property bool weekend: headerCell.headerDate.getDay() === 0
                 || headerCell.headerDate.getDay() === 6
+            // P1-7 (A1): the header cell is itself the selectable day target,
+            // so the VoiceOver name (weekday + date) lives on the cell, not
+            // the labels inside it.
+            readonly property string accessibleText:
+                Qt.locale().dayName((headerCell.headerDate.getDay() + 6) % 7 + 1,
+                                    Locale.ShortFormat)
+                + " " + headerCell.headerDate.toLocaleDateString(Qt.locale(),
+                                                                 Locale.ShortFormat)
 
             width: root.dayColumnWidth
             height: 36
@@ -380,6 +388,18 @@ Pane {
             Layout.maximumWidth: root.dayColumnWidth
             implicitWidth: root.dayColumnWidth
             objectName: "dayHeaderCell"
+
+            // P1-7 (A1): keyboard focus ring — the cell is focusable (below),
+            // and a bare focus without any visible state would be invisible.
+            Rectangle {
+                anchors.fill: parent
+                anchors.margins: -2
+                radius: 6
+                color: "transparent"
+                visible: headerCell.activeFocus
+                border.color: AppTheme.accent
+                border.width: 1
+            }
 
             Row {
                 anchors.centerIn: parent
@@ -413,6 +433,15 @@ Pane {
                     }
                 }
             }
+
+            // P1-7 (A1): keep the pointer path, add the keyboard one (Return /
+            // Space select the day) and the accessibility surface.
+            activeFocusOnTab: true
+            Keys.onReturnPressed: root.dateSelected(headerCell.headerDate)
+            Keys.onSpacePressed: root.dateSelected(headerCell.headerDate)
+            Accessible.role: Accessible.ColumnHeader
+            Accessible.name: headerCell.accessibleText
+            Accessible.onPressAction: root.dateSelected(headerCell.headerDate)
 
             TapHandler { onTapped: root.dateSelected(headerCell.headerDate) }
         }
@@ -634,6 +663,22 @@ Pane {
                                     verticalAlignment: Text.AlignVCenter
                                     elide: Text.ElideRight
                                 }
+                                // P1-7 (A1): the chip was pointer-only; add focus,
+                                // keyboard activation and a VoiceOver identity.
+                                // All-day items have no time of their own — the
+                                // name carries an explicit "All-day" marker.
+                                activeFocusOnTab: true
+                                Keys.onReturnPressed: root.itemActivated(allDayChip.modelData)
+                                Keys.onSpacePressed: root.itemActivated(allDayChip.modelData)
+                                Accessible.role: Accessible.ListItem
+                                Accessible.name: root.itemTitle(allDayChip.modelData)
+                                    + " — " + qsTr("All-day")
+                                Accessible.onPressAction: root.itemActivated(allDayChip.modelData)
+                                // Focus ring only: R078/R109 keep the resting chip
+                                // fill-only, so the border appears on focus alone.
+                                border.color: allDayChip.inkColor
+                                border.width: allDayChip.activeFocus ? 1 : 0
+
                                 TapHandler {
                                     onTapped: root.itemActivated(allDayChip.modelData)
                                 }
@@ -702,6 +747,51 @@ Pane {
                         readonly property date columnDate: root.dateForColumn(columnIndex - 1)
                         readonly property var cellItems: columnIndex > 0
                             ? root.hourItems(columnDate, rowIndex) : []
+
+                        // P1-7 (A1): the day columns were pointer-only. Column 0 is
+                        // the shared gutter (no date), so it stays out of the focus
+                        // chain; the dated cells take Tab focus, arrows move between
+                        // them, Space selects the day, Return starts a new event —
+                        // the keyboard mirror of the MouseArea's click/double-click.
+                        readonly property bool interactive: columnIndex > 0
+                        activeFocusOnTab: interactive
+
+                        function moveFocus(delta) {
+                            const step = root.dayCount + 1
+                            const t = index + delta
+                            if (t < 0)
+                                return
+                            if (t % step === 0)  // column 0 is the gutter — not a target
+                                return
+                            const siblings = hourCell.parent ? hourCell.parent.children : []
+                            if (t >= siblings.length)
+                                return
+                            const target = siblings[t]
+                            if (target && target.rowIndex !== undefined)
+                                target.forceActiveFocus()
+                        }
+                        Keys.onUpPressed: hourCell.moveFocus(-(root.dayCount + 1))
+                        Keys.onDownPressed: hourCell.moveFocus(root.dayCount + 1)
+                        Keys.onLeftPressed: hourCell.moveFocus(-1)
+                        Keys.onRightPressed: hourCell.moveFocus(1)
+                        Keys.onReturnPressed: {
+                            if (hourCell.interactive)
+                                root.createRequested(hourCell.columnDate, hourCell.rowIndex)
+                        }
+                        Keys.onSpacePressed: {
+                            if (hourCell.interactive)
+                                root.dateSelected(hourCell.columnDate)
+                        }
+                        Accessible.role: hourCell.interactive
+                            ? Accessible.Cell : Accessible.NoRole
+                        Accessible.name: hourCell.interactive
+                            ? hourCell.columnDate.toLocaleDateString(Qt.locale(), Locale.ShortFormat)
+                              + ", " + hourCell.rowIndex + ":00"
+                            : ""
+                        Accessible.onPressAction: {
+                            if (hourCell.interactive)
+                                root.createRequested(hourCell.columnDate, hourCell.rowIndex)
+                        }
 
                         // W01: same shared gutter width, same dayColumnWidth
                         // for every timed column — identical boundaries to
@@ -831,6 +921,9 @@ Pane {
                             anchors.fill: parent
                             visible: hourCell.columnIndex > 0
                             color: "transparent"
+                            // P1-7 (A1): keyboard focus ring for the focused hour cell.
+                            border.color: AppTheme.accent
+                            border.width: hourCell.activeFocus ? 1 : 0
 
                             // T02: exactly one 1px line per boundary. A cell
                             // draws only its own top and left edge, so two
@@ -1051,6 +1144,21 @@ Pane {
                                                 }
                                             }
                                         }
+                                        // P1-7 (A1): same keyboard/accessibility surface
+                                        // as the all-day chip; the name is title + time
+                                        // (itemSecondary carries the formatted time).
+                                        activeFocusOnTab: true
+                                        Keys.onReturnPressed: root.itemActivated(timedChip.modelData)
+                                        Keys.onSpacePressed: root.itemActivated(timedChip.modelData)
+                                        Accessible.role: Accessible.ListItem
+                                        Accessible.name: root.itemTitle(timedChip.modelData)
+                                            + (root.itemSecondary(timedChip.modelData) !== ""
+                                               ? ", " + root.itemSecondary(timedChip.modelData) : "")
+                                        Accessible.onPressAction: root.itemActivated(timedChip.modelData)
+                                        // Focus ring only (R078: resting chip is fill-only).
+                                        border.color: timedChip.inkColor
+                                        border.width: timedChip.activeFocus ? 1 : 0
+
                                         TapHandler {
                                             onTapped: root.itemActivated(timedChip.modelData)
                                         }
