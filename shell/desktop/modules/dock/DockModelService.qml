@@ -25,6 +25,7 @@ QtObject {
     // Multi-window cycling lag guard across rapid dock clicks
     property string _pendingCycleAppId: ""
     property string _pendingCycleWindowId: ""
+    property string _pendingCycleSourceWindowId: ""
     property double _pendingCycleAt: 0
 
     property var pinnedItems: []
@@ -286,12 +287,37 @@ QtObject {
         _refreshWindowItems();
     }
 
+    function _clearPendingCycle() {
+        svc._pendingCycleAppId = "";
+        svc._pendingCycleWindowId = "";
+        svc._pendingCycleSourceWindowId = "";
+        svc._pendingCycleAt = 0;
+    }
+
+    function _syncPendingCycle() {
+        if (!svc._pendingCycleWindowId)
+            return;
+        if (!WindowCycle.pendingWindowIdFor(svc._pendingCycleWindowId,
+                svc._pendingCycleSourceWindowId, WindowService.activeWindowId,
+                Date.now() - svc._pendingCycleAt)
+                || !WindowService.windowById(svc._pendingCycleWindowId))
+            svc._clearPendingCycle();
+    }
+
     property Connections _windowConnections: Connections {
         target: WindowService
         function onRevisionChanged() {
+            svc._syncPendingCycle();
             svc._refreshPresentation();
         }
+        // A preview or another shell surface can request
+        // focus before the compositor publishes it. That request takes priority.
+        function onActivationRequested(windowId) {
+            if (windowId !== svc._pendingCycleWindowId)
+                svc._clearPendingCycle();
+        }
         function onActiveWindowIdChanged() {
+            svc._syncPendingCycle();
             const record = WindowService.windowById(WindowService.activeWindowId)
             if (record)
                 AppNotificationService.clearForApp(record.identity.desktopId,
@@ -325,13 +351,15 @@ QtObject {
     }
 
     function activateApp(appId) {
+        svc._syncPendingCycle();
         const identity = AppIdentityService.resolve(appId);
+        if (svc._pendingCycleAppId !== identity.desktopId)
+            svc._clearPendingCycle();
         AppNotificationService.clearForApp(identity.desktopId, identity.name);
         const windows = WindowService.windowsForApp(identity.desktopId);
 
         if (windows.length === 0) {
-            svc._pendingCycleAppId = "";
-            svc._pendingCycleWindowId = "";
+            svc._clearPendingCycle();
             if (DockLaunchService.isLaunching(identity.desktopId))
                 return;
             DockLaunchService.begin(identity.desktopId);
@@ -347,8 +375,7 @@ QtObject {
         }
 
         if (windows.length === 1) {
-            svc._pendingCycleAppId = "";
-            svc._pendingCycleWindowId = "";
+            svc._clearPendingCycle();
             const singleWin = windows[0];
             if (singleWin.toplevel.activated && !singleWin.toplevel.minimized) {
                 console.log("[DockModel] minimize single window app=" + identity.desktopId);
@@ -368,11 +395,13 @@ QtObject {
             WindowService.activeWindowId,
             function(winId) { return WindowService.lastActivatedAtOf(winId); },
             pendingId,
-            pendingAge);
+            pendingAge,
+            svc._pendingCycleSourceWindowId);
 
         if (target) {
             svc._pendingCycleAppId = identity.desktopId;
             svc._pendingCycleWindowId = target.windowId;
+            svc._pendingCycleSourceWindowId = WindowService.activeWindowId;
             svc._pendingCycleAt = Date.now();
             console.log("[DockModel] activate app window=" + target.windowId
                         + " app=" + identity.desktopId);

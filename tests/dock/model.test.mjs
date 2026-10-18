@@ -5,7 +5,7 @@ import { matchEntryByHints, parseProbeOutput, probeCommand } from "../../shell/d
 import { indexWindowRecords } from "../../shell/desktop/modules/dock/WindowRecordIndex.mjs";
 import { toArray } from "../../shell/desktop/modules/dock/PayloadArray.mjs";
 import { indexAt, parse } from "../../shell/desktop/modules/dock/TimedLyrics.mjs";
-import { nextWindowToActivate } from "../../shell/desktop/modules/dock/WindowCycle.mjs";
+import { nextWindowToActivate, pendingWindowIdFor } from "../../shell/desktop/modules/dock/WindowCycle.mjs";
 import { test } from "node:test";
 
 test("process identity", async () => {
@@ -515,13 +515,13 @@ test("window cycle: multi-window dock activation", async () => {
     win1.toplevel.activated = true;
     win2.toplevel.activated = false;
     win3.toplevel.activated = false;
-    assert.equal(nextWindowToActivate(windows, "win-1", lastActivatedAt, "win-2", 50), win3);
+    assert.equal(nextWindowToActivate(windows, "win-1", lastActivatedAt, "win-2", 50, "win-1"), win3);
 
     // And next rapid click from win-2 to win-3 advances to win-1
-    assert.equal(nextWindowToActivate(windows, "win-1", lastActivatedAt, "win-3", 100), win1);
+    assert.equal(nextWindowToActivate(windows, "win-1", lastActivatedAt, "win-3", 100, "win-1"), win1);
 
     // When pending age exceeds TTL (>800ms), it expires and relies on compositor active state
-    assert.equal(nextWindowToActivate(windows, "win-1", lastActivatedAt, "win-2", 900), win2);
+    assert.equal(nextWindowToActivate(windows, "win-1", lastActivatedAt, "win-2", 900, "win-1"), win2);
 
     // 4. Single window returns that window
     assert.equal(nextWindowToActivate([win1], null, lastActivatedAt), win1);
@@ -531,3 +531,55 @@ test("window cycle: multi-window dock activation", async () => {
     assert.equal(nextWindowToActivate(null, null, lastActivatedAt), null);
 });
 
+
+test("window cycle: pending requests stop at focus acknowledgements or user changes", () => {
+    const wins = ["A1", "A2", "A3"].map(windowId => ({ windowId, toplevel: { activated: false } }));
+    const last = id => ({ A1: 100, A2: 300, A3: 50 }[id]);
+
+    // Request A2 from A1; another click before acknowledgement advances to A3.
+    assert.equal(pendingWindowIdFor("A2", "A1", "A1", 50), "A2");
+    assert.equal(nextWindowToActivate(wins, "A1", last, "A2", 50, "A1"), wins[2]);
+    // Focus acknowledged A2: no speculative state should remain.
+    assert.equal(pendingWindowIdFor("A2", "A1", "A2", 100), "");
+    // Leaving the app, then returning, must restore MRU A2 rather than cycle A3.
+    assert.equal(pendingWindowIdFor("A2", "A1", "B1", 200), "");
+    assert.equal(nextWindowToActivate(wins, "B1", last, "A2", 200, "A1"), wins[1]);
+    // A manual switch within the same app must also replace the old request.
+    assert.equal(nextWindowToActivate(wins, "A1", last, "A3", 300, "A2"), wins[1]);
+    // Background-to-foreground rapid clicks still advance until focus changes.
+    assert.equal(nextWindowToActivate(wins, "B1", last, "A2", 50, "B1"), wins[2]);
+    assert.equal(nextWindowToActivate(wins, "B2", last, "A2", 50, "B1"), wins[1]);
+    assert.equal(pendingWindowIdFor("A2", "A1", "A1", 800), "");
+    assert.equal(pendingWindowIdFor("A2", "A1", "A1", -1), "");
+    // Closing the requested window falls back to the real active window.
+    assert.equal(nextWindowToActivate([wins[0], wins[2]], "A1", last, "A2", 50, "A1"), wins[2]);
+});
+
+test("window cycle: facade clears acknowledged requests before focus returns", () => {
+    const source = readFileSync(new URL("../../shell/desktop/modules/dock/DockModelService.qml", import.meta.url), "utf8");
+    const functions = source.slice(source.indexOf("    function _clearPendingCycle()"),
+        source.indexOf("    property Connections _windowConnections"));
+    assert.ok(functions.includes("function _syncPendingCycle()"));
+    const svc = {
+        _pendingCycleAppId: "app-a", _pendingCycleWindowId: "A2",
+        _pendingCycleSourceWindowId: "A1", _pendingCycleAt: 1000
+    };
+    const service = { activeWindowId: "A1", windowById: id => ({ windowId: id }) };
+    const context = vm.createContext({ svc, WindowService: service,
+        WindowCycle: { pendingWindowIdFor }, Date: { now: () => 1100 } });
+    vm.runInContext(functions, context);
+    svc._clearPendingCycle = context._clearPendingCycle;
+    context._syncPendingCycle();
+    assert.equal(svc._pendingCycleWindowId, "A2", "keep request until focus changes");
+    service.activeWindowId = "A2";
+    context._syncPendingCycle();
+    assert.equal(svc._pendingCycleWindowId, "", "acknowledgement clears speculative state");
+    service.activeWindowId = "A1";
+    context._syncPendingCycle();
+    assert.equal(svc._pendingCycleWindowId, "", "returning to original focus must not revive request");
+    Object.assign(svc, { _pendingCycleAppId: "app-a", _pendingCycleWindowId: "A2",
+        _pendingCycleSourceWindowId: "A1", _pendingCycleAt: 1000 });
+    service.windowById = () => null;
+    context._syncPendingCycle();
+    assert.equal(svc._pendingCycleWindowId, "", "closing the target clears pending state");
+});

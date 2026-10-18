@@ -1,5 +1,13 @@
 // WindowCycle.mjs — pure calculation for cycling application windows on Dock click.
 
+// A request is speculative only while focus still matches the snapshot from
+// which it was made. An acknowledgement or a separate focus change ends it.
+export function pendingWindowIdFor(pendingWindowId, sourceWindowId, activeWindowId, ageMs) {
+    return pendingWindowId && pendingWindowId !== activeWindowId
+        && sourceWindowId === activeWindowId && ageMs >= 0 && ageMs < 800
+        ? pendingWindowId : "";
+}
+
 /**
  * Determine which window of an application should be activated next.
  *
@@ -8,9 +16,10 @@
  * @param {Function} [lastActivatedAtOf] - Function returning last activation timestamp for a windowId.
  * @param {string} [pendingWindowId] - ID of recently requested window for rapid-click lag guard.
  * @param {number} [pendingAgeMs] - Age in milliseconds since pendingWindowId was requested.
+ * @param {string} [pendingSourceWindowId] - Active window when the request was made.
  * @returns {object|null} The window record to activate, or null if no windows exist.
  */
-export function nextWindowToActivate(windows, activeWindowId, lastActivatedAtOf, pendingWindowId = "", pendingAgeMs = Infinity) {
+export function nextWindowToActivate(windows, activeWindowId, lastActivatedAtOf, pendingWindowId = "", pendingAgeMs = Infinity, pendingSourceWindowId = "") {
     if (!windows || windows.length === 0)
         return null;
     if (windows.length === 1)
@@ -30,7 +39,7 @@ export function nextWindowToActivate(windows, activeWindowId, lastActivatedAtOf,
     // Lag guard for rapid clicks: if we recently requested activation of a
     // window in this group and KWin's snapshot hasn't reflected it yet,
     // advance from that requested window instead of repeating the step.
-    if (pendingWindowId && pendingAgeMs < 800) {
+    if (pendingWindowIdFor(pendingWindowId, pendingSourceWindowId, activeWindowId, pendingAgeMs)) {
         for (let i = 0; i < windows.length; i++) {
             if (windows[i].windowId === pendingWindowId) {
                 activeIdx = i;
