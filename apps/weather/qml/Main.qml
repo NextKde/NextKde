@@ -321,9 +321,9 @@ KosApplicationWindow {
     function tempColor(temperature) {
         const u = clamp((temperature - dailyRange.minimum)
                         / (dailyRange.maximum - dailyRange.minimum), 0, 1)
-        const cold = Qt.rgba(0.353, 0.784, 0.980, 1)   // #5ac8fa
-        const mid  = Qt.rgba(1, 0.839, 0.039, 1)       // #ffd60a
-        const hot  = Qt.rgba(1, 0.624, 0.039, 1)       // #ff9f0a
+        const cold = Qt.rgba(0.671, 0.827, 0.627, 1)   // #abd3a0 — tile-10day 原生条带实测低端绿（ref-main Thu 行 u=0 起点 #a8d4a4 同族）
+        const mid  = Qt.rgba(0.812, 0.820, 0.482, 1)   // #cfd17b — tile-10day 原生条带实测中段黄绿
+        const hot  = Qt.rgba(1, 0.839, 0.039, 1)       // #ffd60a — 原生条带实测高端金 #ffd603/#ffd000 家族（原值在族内，保留）
         const first = u < 0.5
         const amount = first ? u * 2 : (u - 0.5) * 2
         const a = first ? cold : mid
