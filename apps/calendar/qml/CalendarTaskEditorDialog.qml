@@ -137,6 +137,76 @@ KosWorkspaceDialog {
         return 1
     }
 
+    // P1-5 (REVIEW): save-time validation, mirroring the event editor. The
+    // due date/time fields are free text, so parse strictly before they are
+    // concatenated into the ISO due string — an unparsable field must block
+    // accept instead of storing a broken todo.
+    function parseDateText(value) {
+        const match = String(value ?? "").trim().match(/^(\d{4})-(\d{2})-(\d{2})$/)
+        if (!match)
+            return null
+        const date = new Date(Number(match[1]), Number(match[2]) - 1,
+            Number(match[3]))
+        // Reject calendar rollovers (2026-02-30 → Mar 2) via round-trip.
+        return date.getFullYear() === Number(match[1])
+            && date.getMonth() === Number(match[2]) - 1
+            && date.getDate() === Number(match[3]) ? date : null
+    }
+
+    function parseTimeText(value) {
+        const match = String(value ?? "").trim().match(/^(\d{2}):(\d{2})$/)
+        if (!match)
+            return null
+        const hours = Number(match[1])
+        const minutes = Number(match[2])
+        return hours <= 23 && minutes <= 59 ? hours * 60 + minutes : null
+    }
+
+    // P1-5: last validation problem, kept until the offending field is edited
+    // or the dialog reopens. null = clean.
+    property string errorText: ""
+    property var errorFields: []
+
+    // Inline error copy sits at 11px non-bold → needs 4.5:1. AppTheme
+    // .destructive is 4.25:1 on the light panel (#F7F7F7); #d23636 is the
+    // minimal darkening that passes (4.54:1, measured per WCAG formula).
+    // Dark #ff6961 on #262626 = 5.37:1, so dark keeps the token.
+    readonly property color errorColor: AppTheme.dark
+        ? AppTheme.destructive : "#d23636"
+
+    function hasError(name) {
+        return errorFields.includes(name)
+    }
+
+    function clearError(name) {
+        if (!errorFields.includes(name))
+            return
+        const rest = errorFields.filter(function(field) { return field !== name })
+        errorFields = rest
+        if (rest.length === 0)
+            errorText = ""
+    }
+
+    function validationProblem() {
+        if (titleField.text.trim().length === 0)
+            return { message: qsTr("Title is required."), fields: ["title"] }
+        // An empty due date is allowed (the task simply stays off Calendar),
+        // but a linked task must keep one — it defines the event time.
+        const dueDate = dueDateField.text.trim()
+        if (dueDate.length === 0) {
+            if (linkedEventId.length > 0)
+                return { message: qsTr("A linked task needs a due date."),
+                    fields: ["dueDate"] }
+        } else if (parseDateText(dueDate) === null) {
+            return { message: qsTr("Due date must be YYYY-MM-DD."),
+                fields: ["dueDate"] }
+        }
+        if (!allDayCheck.checked && parseTimeText(dueTimeField.text) === null)
+            return { message: qsTr("Due time must be HH:MM (00-23:00-59)."),
+                fields: ["dueTime"] }
+        return null
+    }
+
     function openForTodo(todo) {
         editingId = String(value(todo, "seriesId", value(todo, "id", "")))
         linkedEventId = String(value(todo, "linkedEventId", ""))
@@ -150,6 +220,8 @@ KosWorkspaceDialog {
         dueTimeField.text = timeMatch ? timeMatch[1] : "18:00"
         allDayCheck.checked = Boolean(value(todo, "allDay", false))
         priorityBox.currentIndex = priorityIndex(value(todo, "priority", 0))
+        errorText = ""
+        errorFields = []
         open()
         titleField.forceActiveFocus()
     }
@@ -169,6 +241,21 @@ KosWorkspaceDialog {
             priority: priorityValues[priorityBox.currentIndex],
             completed: completedCheck.checked
         }
+    }
+
+    // P1-5: every accept path runs validation first — invalid input keeps
+    // the dialog open and reports inline instead of storing a broken todo.
+    function accept() {
+        const problem = validationProblem()
+        if (problem !== null) {
+            errorText = problem.message
+            errorFields = problem.fields
+            return
+        }
+        errorText = ""
+        errorFields = []
+        close()
+        accepted()
     }
 
     onAccepted: saveRequested(editingId, payload())
@@ -235,6 +322,18 @@ KosWorkspaceDialog {
             width: editorScroll.width
             spacing: 10
 
+            // P1-5: inline validation error — pinned to the top of the form so
+            // it is visible without scrolling; offending fields also get a
+            // destructive outline until they are edited.
+            Label {
+                Layout.fillWidth: true
+                visible: root.errorText.length > 0
+                text: root.errorText
+                color: root.errorColor
+                font.pixelSize: 11
+                wrapMode: Text.WordWrap
+            }
+
             Label {
                 Layout.fillWidth: true
                 visible: root.linkedEventId.length > 0
@@ -255,6 +354,9 @@ KosWorkspaceDialog {
                     Layout.preferredHeight: root.fieldHeight
                     placeholderText: qsTr("Task title")
                     Accessible.name: qsTr("Task title")
+                    outlineColor: root.hasError("title")
+                        ? AppTheme.destructive : AppTheme.border
+                    onTextChanged: root.clearError("title")
                 }
 
                 KosCheckBox {
@@ -295,6 +397,9 @@ KosWorkspaceDialog {
                     Layout.preferredHeight: root.fieldHeight
                     placeholderText: "YYYY-MM-DD"
                     Accessible.name: qsTr("Task due date")
+                    outlineColor: root.hasError("dueDate")
+                        ? AppTheme.destructive : AppTheme.border
+                    onTextChanged: root.clearError("dueDate")
                 }
 
                 KosTextField {
@@ -304,6 +409,9 @@ KosWorkspaceDialog {
                     placeholderText: "HH:MM"
                     enabled: !allDayCheck.checked
                     Accessible.name: qsTr("Task due time")
+                    outlineColor: root.hasError("dueTime")
+                        ? AppTheme.destructive : AppTheme.border
+                    onTextChanged: root.clearError("dueTime")
                 }
 
                 KosCheckBox {
