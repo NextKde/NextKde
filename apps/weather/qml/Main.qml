@@ -1963,16 +1963,16 @@ KosApplicationWindow {
                                                                     ctx.lineTo(c + Math.sin(a) * 46, c - Math.cos(a) * 46)
                                                                     ctx.stroke()
                                                                 }
-                                                                // N/E/S/W 字母 r≈50；N 用实测亮蓝，W/E/S 白 0.65
+                                                                // N/E/S/W 字母带内嵌 r35（tile-cards 实测参考字母嵌在刻度带内侧；r50 时 S 落 y144 被 Gusts 行墨区完全覆盖不可见）；N 用实测亮蓝，W/E/S 白 0.65
                                                                 ctx.font = "600 10px sans-serif"
                                                                 ctx.textAlign = "center"
                                                                 ctx.textBaseline = "middle"
                                                                 ctx.fillStyle = "#6CB1E0"
-                                                                ctx.fillText("N", c, c - 50)
+                                                                ctx.fillText("N", c, c - 35)
                                                                 ctx.fillStyle = "rgba(255,255,255,0.65)"
-                                                                ctx.fillText("E", c + 50, c)
-                                                                ctx.fillText("S", c, c + 50)
-                                                                ctx.fillText("W", c - 50, c)
+                                                                ctx.fillText("E", c + 35, c)
+                                                                ctx.fillText("S", c, c + 35)
+                                                                ctx.fillText("W", c - 35, c)
                                                                 // 两段式留空指针（ref-main WIND 卡实测：指针不穿
                                                                 // 中心文字——箭头段在流向侧近外圈 + 来向侧短尾针，
                                                                 // r<30 让位环心数字/单位）
