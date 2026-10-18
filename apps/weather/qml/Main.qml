@@ -1605,10 +1605,11 @@ KosApplicationWindow {
                                 ? "H:" + Math.round(root.number(backend.daily[0], "temperatureMaximum", 0)) + "°  "
                                   + "L:" + Math.round(root.number(backend.daily[0], "temperatureMinimum", 0)) + "°"
                                 : ""
-                            color: root.skyTextMuted
+                            color: root.skyText
                             // ref 条件底→H:L 顶 gap 6px×1.46≈9px
                             Layout.topMargin: -3
-                            font.pixelSize: 13
+                            // ref H·L ink 8px×1.46≈11.7 → 字号 16；ref 墨均值 (224,230,239) 与条件行同白系，hero 仅小标签 muted
+                            font.pixelSize: 16
                             font.weight: Font.DemiBold
                         }
                     }
