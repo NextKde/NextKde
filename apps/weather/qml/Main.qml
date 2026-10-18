@@ -1924,7 +1924,7 @@ KosApplicationWindow {
 
                                                         Label {
                                                             text: "≋"
-                                                            color: root.skyTextMuted
+                                                            color: root.cardHeaderText
                                                             font.pixelSize: 11
                                                             font.weight: Font.DemiBold
                                                             Accessible.ignored: true
@@ -2146,8 +2146,8 @@ KosApplicationWindow {
                                                                     ctx.lineTo(c + ex, c + r * Math.sin(a))
                                                                 }
                                                                 ctx.closePath()
-                                                                // 同色族冷蓝白，与 moonCanvas 大盘亮面一致
-                                                                ctx.fillStyle = "#a1c0e4"
+                                                                // ref tile-cards 月相卡头 glyph 峰值 (108,179,255)、同排头部文字 (113,183,255) 同浅蓝墨族 → 统一 #90cbff（与卡头标签/glyph 家族同墨，见 LEDGER 2026-10-18 hdrcol 轮）
+                                                                ctx.fillStyle = "#90cbff"
                                                                 ctx.fill()
                                                             }
                                                         }
