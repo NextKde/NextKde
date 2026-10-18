@@ -257,8 +257,9 @@ KosApplicationWindow {
         readonly property real hoverRimBoost: 1.6
         // pressScale:按下视觉压下(只作用于绘制 transform,布局盒不动)。
         readonly property real pressScale: 0.97
-        // 恢复/进入时长(ms),无弹簧无过冲。
-        readonly property int pressDuration: 150
+        // 恢复/进入时长(ms),无弹簧无过冲。M1:与 AppTheme motion token 同规,
+        // reduceMotion 时归零,按下/悬停不做插值动画。
+        readonly property int pressDuration: AppTheme.reduceMotion ? 0 : 150
         // G03:按下时阴影更淡更贴近(乘在浅色 shadow 参数上),不脏不蓝。
         readonly property real pressedShadowOpacityFactor: 0.55
         readonly property real pressedShadowBlurFactor: 0.75
