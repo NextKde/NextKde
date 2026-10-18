@@ -1674,6 +1674,7 @@ KosApplicationWindow {
 
     CalendarTaskEditorDialog {
         id: taskEditor
+        objectName: "taskEditorDialog"
         parent: root.contentItem
         availableLists: pim.lists
         onSaveRequested: function(uid, todo) { pim.updateTodo(uid, todo) }
