@@ -312,7 +312,12 @@ int run(int argc, char *argv[], const Metadata &metadata)
             qCritical() << "A valid application window and screenshot path are required";
             return EXIT_FAILURE;
         }
-        QTimer::singleShot(650, window, [window, screenshotPath] {
+        // Snapshot-driven layouts fill in asynchronously over the data socket;
+        // the fixed 650ms default can race them. KOS_SCREENSHOT_DELAY_MS lets
+        // tooling wait for data before grabbing.
+        bool delayOk = false;
+        const int delayMs = qEnvironmentVariableIntValue("KOS_SCREENSHOT_DELAY_MS", &delayOk);
+        QTimer::singleShot(delayOk && delayMs > 0 ? delayMs : 650, window, [window, screenshotPath] {
             const QImage image = window->grabWindow();
             if (image.isNull() || !image.save(screenshotPath)) {
                 qCritical() << "Unable to save application screenshot to"
