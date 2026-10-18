@@ -2726,8 +2726,10 @@ KosApplicationWindow {
                                                         Label {
                                                             Layout.alignment: Qt.AlignHCenter
                                                             visible: hourlySegmented.segment === 0
+                                                            // Ref hourly temps are unitless degrees ("68°"); the unit lives in the
+                                                            // card subtitle "Temperature (°C)" only (see :2369).
                                                             text: Math.round(root.number(
-                                                                hourlyCard.modelData, "temperature", 0)) + root.temperatureUnit
+                                                                hourlyCard.modelData, "temperature", 0)) + "°"
                                                             color: root.skyText
                                                             font.weight: Font.DemiBold
                                                         }
