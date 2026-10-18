@@ -1855,7 +1855,9 @@ KosApplicationWindow {
                                                                 ctx.fillText("E", c + 50, c)
                                                                 ctx.fillText("S", c, c + 50)
                                                                 ctx.fillText("W", c - 50, c)
-                                                                // 风向箭头：flowAngle = windDir+180，指向风吹去
+                                                                // 两段式留空指针（ref-main WIND 卡实测：指针不穿
+                                                                // 中心文字——箭头段在流向侧近外圈 + 来向侧短尾针，
+                                                                // r<30 让位环心数字/单位）
                                                                 ctx.save()
                                                                 ctx.translate(c, c)
                                                                 ctx.rotate(windCard.flowAngle * Math.PI / 180)
@@ -1863,8 +1865,13 @@ KosApplicationWindow {
                                                                 ctx.fillStyle = "#ffffff"
                                                                 ctx.lineWidth = 1.6
                                                                 ctx.beginPath()
-                                                                ctx.moveTo(0, -12)
+                                                                ctx.moveTo(0, -30)
                                                                 ctx.lineTo(0, -40)
+                                                                ctx.stroke()
+                                                                // 来向侧短尾针：r30→r38，止于刻度环内缘，平头无箭头
+                                                                ctx.beginPath()
+                                                                ctx.moveTo(0, 30)
+                                                                ctx.lineTo(0, 38)
                                                                 ctx.stroke()
                                                                 ctx.beginPath()
                                                                 ctx.moveTo(0, -46)      // tip
