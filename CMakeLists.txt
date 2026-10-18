@@ -78,6 +78,12 @@ if(BUILD_TESTING)
             COMMAND ${KOS_NODE_EXECUTABLE}
                 --test ${CMAKE_CURRENT_SOURCE_DIR}/tests/applauncher/screen-routing.test.mjs)
         set_tests_properties(kos-applauncher.screen-routing PROPERTIES LABELS logic TIMEOUT 10)
+        add_test(NAME kos-shell.traffic-history
+            COMMAND ${KOS_NODE_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/status-area/test_traffic_history.mjs)
+        set_tests_properties(kos-shell.traffic-history PROPERTIES LABELS logic TIMEOUT 10)
+        add_test(NAME kos-shell.application-traffic
+            COMMAND ${KOS_NODE_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/status-area/test_application_traffic.mjs)
+        set_tests_properties(kos-shell.application-traffic PROPERTIES LABELS logic TIMEOUT 10)
         add_test(NAME kos-shell.language
             COMMAND ${KOS_NODE_EXECUTABLE}
                 ${CMAKE_CURRENT_SOURCE_DIR}/tests/localization/widget-language.mjs)
@@ -472,6 +478,13 @@ if(BUILD_TESTING)
     find_program(KOS_TEST_KWIN NAMES kwin_wayland)
     find_program(KOS_TEST_DBUS_RUN NAMES dbus-run-session)
     if(KOS_PYTHON_EXECUTABLE AND KOS_INTERACTION_QUICKSHELL AND KOS_TEST_KWIN AND KOS_TEST_DBUS_RUN)
+        add_test(NAME kos-ui.status-panels
+            COMMAND ${KOS_PYTHON_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/status-area/run-panels.py)
+        add_test(NAME kos-ui.status-panels-opengl
+            COMMAND ${KOS_PYTHON_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/status-area/run-panels.py --opengl)
+        set_tests_properties(kos-ui.status-panels kos-ui.status-panels-opengl PROPERTIES
+            ENVIRONMENT "QML_IMPORT_PATH=${CMAKE_BINARY_DIR}/qml;QML2_IMPORT_PATH=${CMAKE_BINARY_DIR}/qml"
+            LABELS "ui;compositor" TIMEOUT 45 RUN_SERIAL TRUE)
         add_test(NAME kos-ui.control-center-modules
             COMMAND ${KOS_PYTHON_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/control-center/run.py)
         set_tests_properties(kos-ui.control-center-modules PROPERTIES

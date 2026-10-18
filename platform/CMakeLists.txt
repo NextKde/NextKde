@@ -40,6 +40,7 @@ set(kos_platform_sources
     src/daemon/PlatformServerDesktop.cpp
     src/daemon/PlatformServerDisplay.cpp
     src/daemon/PlatformServerFiles.cpp
+    src/daemon/PlatformServerPower.cpp
     src/daemon/PlatformServerNetwork.cpp
     src/daemon/PlatformServerState.cpp
     src/daemon/PlatformServerTheme.cpp
@@ -66,6 +67,13 @@ if(KOS_SPATIAL_ENABLED)
     list(APPEND kos_platform_sources
         src/ai/AiWorkerClient.cpp
         src/ai/AiWorkerClient.h)
+endif()
+
+if(BUILD_TESTING)
+    qt_add_executable(kos-status-panel-data-test tests/test_status_panel_data.cpp)
+    target_link_libraries(kos-status-panel-data-test PRIVATE Qt6::Core)
+    add_test(NAME kos-platform.status-panel-data COMMAND kos-status-panel-data-test)
+    set_tests_properties(kos-platform.status-panel-data PROPERTIES LABELS "platform;data")
 endif()
 
 qt_add_executable(kos-platform ${kos_platform_sources})
@@ -173,6 +181,9 @@ if(BUILD_TESTING)
             TIMEOUT 30)
     endif()
     if(KOS_PYTHON_EXECUTABLE AND DBUS_RUN_SESSION_EXECUTABLE)
+        add_test(NAME kos-platform.status-panel-operations
+            COMMAND ${KOS_PYTHON_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/test_status_panel_operations.py $<TARGET_FILE:kos-platform>)
+        set_tests_properties(kos-platform.status-panel-operations PROPERTIES LABELS platform TIMEOUT 30)
         add_test(NAME kos-platform.startup
             COMMAND ${KOS_PYTHON_EXECUTABLE}
                 ${CMAKE_CURRENT_SOURCE_DIR}/tests/test_platform_startup.py

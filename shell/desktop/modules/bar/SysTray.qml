@@ -1,4 +1,5 @@
 import Quickshell
+import Quickshell.Wayland
 import Quickshell.Services.SystemTray
 import QtQuick
 import QtQuick.Effects
@@ -649,17 +650,20 @@ Item {
                             && root.dockEdge === "left" ? -6 : 0
                     }
 
-                    Rectangle {
+                    BackgroundEffect.blurRegion: trayTooltip.visible && AppearanceTokens.surface.usesBackdrop
+                        ? trayTooltipSurface.blurRegion : null
+
+                    ControlCenterGlass {
+                        id: trayTooltipSurface
                         anchors.fill: parent
                         radius: 6
-                        color: Qt.rgba(0.18, 0.18, 0.20, 0.95)
 
                         Text {
                             id: tooltipText
                             anchors.centerIn: parent
                             text: trayItem.tooltip + (SysTrayOrderService.isCollected(trayItem.trayKey)
                                 ? " · " + I18n.tr("Alt-drag to the bar to keep visible") : "")
-                            color: "white"
+                            color: trayTooltipSurface.foregroundColor
                             font.pixelSize: 12
                         }
                     }
@@ -953,6 +957,7 @@ Item {
 
     ContextMenu {
         id: trayMenu
+        scrimLevel: AppearanceTokens.bar.popupScrimLevel
         customAnchorEdges: root.popupEdge
         customGravity: root.popupEdge
         customMargins: ({

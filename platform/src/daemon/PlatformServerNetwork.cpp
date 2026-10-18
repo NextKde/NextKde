@@ -1,4 +1,5 @@
 #include "PlatformServer.h"
+#include "StatusPanelData.h"
 #include "PlatformNetworkBackend.h"
 #include "PlatformProcess.h"
 
@@ -393,6 +394,12 @@ bool PlatformServer::handleNetworkOperation(QLocalSocket *socket, const QJsonObj
             return true;
         }
         runCommand(socket, request, QStringLiteral("nmcli"), {QStringLiteral("device"), QStringLiteral("disconnect"), device}, {}, 15000);
+        return true;
+    }
+    if (op == QStringLiteral("network.applications")) {
+        runCommand(socket, request, QStringLiteral("ss"), {QStringLiteral("-tinpeOH")},
+            [](const QByteArray &output, int) { return parseApplicationTraffic(output); },
+            3000, QStringLiteral("network.applications"), 500);
         return true;
     }
     if (op == QStringLiteral("network.traffic")) {

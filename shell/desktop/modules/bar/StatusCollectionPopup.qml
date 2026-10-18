@@ -55,7 +55,7 @@ AnimatedPopupWindow {
         baseColor: ThemeService.backgroundColor
         surfaceOpacity: 0.98
         scrimEnabled: AppearanceTokens.surface.usesBackdrop
-        scrimLevel: "balanced"
+        scrimLevel: AppearanceTokens.bar.popupScrimLevel
     }
     Flickable {
         id: viewport

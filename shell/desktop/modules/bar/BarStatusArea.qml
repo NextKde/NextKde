@@ -56,7 +56,7 @@ Item {
         || (controlCenter?.isOpen ?? false)
     readonly property bool anyPanelOpen: (networkPanel?.requestedOpen ?? false)
         || (bluetoothPanel?.requestedOpen ?? false) || root.controlCenterOpen
-        || notificationPanel.requestedOpen
+        || notificationPanel.requestedOpen || trafficPanel.requestedOpen || batteryPanel.requestedOpen
 
     readonly property bool keepBarOpen: anyPanelOpen || collectionExpanded || statusDragActive
 
@@ -76,7 +76,13 @@ Item {
             ControlCenterService.notePanelOpen(false)
     }
 
+    function closeDetailPanels() {
+        trafficPanel.close()
+        batteryPanel.close()
+    }
+
     function toggleControlCenter(anchorItem) {
+        closeDetailPanels()
         if (controlCenterOpen) {
             closeControlCenter()
             return
@@ -99,6 +105,7 @@ Item {
     // confirmation dialog, exactly like choosing the entry in the panel.
     property string pendingSessionAction: ""
     function presentSessionConfirmation(action) {
+        closeDetailPanels()
         notificationPanel.close()
         if (controlCenter) {
             if (!controlCenter.isOpen)
@@ -159,6 +166,7 @@ Item {
                         || bluetoothPanel.requestedOpen || root.controlCenterOpen
                         || notificationPanel.requestedOpen
                     onPanelToggleRequested: {
+                        root.closeDetailPanels()
                         notificationPanel.close()
                         bluetoothPanel.close()
                         if (!networkPanel.requestedOpen)
@@ -172,7 +180,14 @@ Item {
                     visible: !root.dockHosted && !SysTrayOrderService.isCollected("cell:network")
                         && NetworkService.available
                         && NetworkService.deviceState === "connected"
-                    onPanelToggleRequested: networkStatus.panelToggleRequested()
+                    onPanelToggleRequested: {
+                        batteryPanel.close()
+                        notificationPanel.close()
+                        bluetoothPanel.close()
+                        networkPanel.close()
+                        root.closeControlCenter()
+                        trafficPanel.toggle(networkTraffic)
+                    }
                 }
             }
         }
@@ -182,6 +197,16 @@ Item {
         id: batteryQuickControl
         Item {
             Battery {
+                id: battery
+                panelOpen: batteryPanel.requestedOpen
+                onPanelToggleRequested: {
+                    trafficPanel.close()
+                    notificationPanel.close()
+                    bluetoothPanel.close()
+                    networkPanel.close()
+                    root.closeControlCenter()
+                    batteryPanel.toggle(battery)
+                }
                 anchors.centerIn: parent
                 iconSize: systemTray.iconSize + 3
                 dockHosted: root.dockHosted
@@ -216,6 +241,7 @@ Item {
                 dockEdge: root.dockEdge
                 verticalDock: root.verticalDock && !SysTrayOrderService.isCollected("cell:notifications")
                 onPanelToggleRequested: {
+                    root.closeDetailPanels()
                     if (!notificationPanel.requestedOpen) {
                         networkPanel.close()
                         bluetoothPanel.close()
@@ -289,6 +315,7 @@ Item {
                 availableHeight: root.height
                 collectionKeepOpen: root.anyPanelOpen
                 onCollectionCollapseRequested: {
+                    root.closeDetailPanels()
                     networkPanel.close()
                     bluetoothPanel.close()
                     notificationPanel.close()
@@ -305,6 +332,12 @@ Item {
         dockHosted: root.dockHosted
         dockEdge: root.dockEdge
     }
+    BatteryPanel {
+        id: batteryPanel
+        dockHosted: root.dockHosted
+        dockEdge: root.dockEdge
+    }
+    NetworkTrafficPanel { id: trafficPanel }
     NetworkPanel {
         id: networkPanel
         dockHosted: root.dockHosted
