@@ -3006,10 +3006,11 @@ KosApplicationWindow {
                                     // calendar glyph + caps 字距 muted 文本（文本带 y321-329、glyph x276-284、与文字同色）；
                                     // ref-main 该卡被窗底裁切无头部可见，以 ipad 参考为准。
                                     // 文案照参考 "10-Day Forecast"（数据上限 7 天，差异记 LEDGER）。
+                                    // 头部→首行 ink gap：ipad 参考实测 29px（头部墨底 y328 → Today 墨顶 y357），我方实测 33px（patrol-1792318394：头部墨底 y471 → 今天墨顶 y504），bottomMargin 8→4 收敛 +4px。
                                     RowLayout {
                                         spacing: 6
                                         Layout.fillWidth: true
-                                        Layout.bottomMargin: 8
+                                        Layout.bottomMargin: 4
                                         visible: backend.daily.length > 0
 
                                         Canvas {
