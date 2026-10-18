@@ -3028,10 +3028,11 @@ KosApplicationWindow {
                                                         Accessible.ignored: true
                                                     }
 
+                                                    // ref-main Fri 行 50% 峰值 (61,202,248)@814 降采样、纯百分数无伞 glyph
                                                     Label {
                                                         visible: dailyRow.precipChance > 0
-                                                        text: "☂︎ " + dailyRow.precipChance + "%"
-                                                        color: root.skyTextMuted
+                                                        text: dailyRow.precipChance + "%"
+                                                        color: "#3dcaf8"
                                                         font.pixelSize: 10
                                                         Accessible.name: qsTr("%1% chance of precipitation").arg(
                                                             dailyRow.precipChance)
