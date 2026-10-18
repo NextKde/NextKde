@@ -411,6 +411,25 @@ KosWorkspaceDialog {
     contentItem: Flickable {
         id: editorScroll
         clip: true
+        // P1-18/A7: the custom footer hides the standard DialogButtonBox
+        // that would normally wire a default button, so Return used to do
+        // nothing in the form. Return bubbles up here from every field, so
+        // submit the form from the dialog's own content item. The multiline
+        // notes TextArea consumes Return for newlines and never reaches
+        // this; while the delete confirmation is up, Save must not fire
+        // (Cancel is the focused default there).
+        Keys.onReturnPressed: function(event) {
+            if (root.confirmingDelete)
+                return
+            root.accept()
+            event.accepted = true
+        }
+        Keys.onEnterPressed: function(event) {
+            if (root.confirmingDelete)
+                return
+            root.accept()
+            event.accepted = true
+        }
         // Non-interactive form (see task editor): the outer drag filter is
         // the last press competitor for the notes area; dragging the form is
         // not needed — it scrolls by wheel only. Explicit Flickable (not
