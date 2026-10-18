@@ -58,12 +58,16 @@ QVariantMap WindowSettings::state() const {
     const KConfigGroup decoration(config, QStringLiteral("org.kde.kdecoration2"));
     const QString hide = animation.readEntry("HideAnimation",
         animation.readEntry("AnimationStyle", QStringLiteral("scale")));
+    const auto buttonsDoc = read(path(QStringLiteral("window-buttons.json")));
+    const auto buttonsDefault = buttonsDoc.value(QStringLiteral("default")).toObject();
+    const QString buttonGlyphMode = buttonsDefault.value(QStringLiteral("glyphMode")).toString(QStringLiteral("always"));
     return {{"enabled", doc.value("enabled").toBool(true)},
             {"radius", defaults.value("corners").toObject().value("radius").toInt(20)},
             {"shadow", defaults.value("shadow").toObject().value("enabled").toBool(true)},
             {"hideAnimation", hide},
             {"closeAnimation", animation.readEntry("CloseAnimation", QStringLiteral("scale"))},
-            {"decoration", decoration.readEntry("library", QStringLiteral("org.kde.breeze"))}};
+            {"decoration", decoration.readEntry("library", QStringLiteral("org.kde.breeze"))},
+            {"buttonGlyphMode", buttonGlyphMode}};
 }
 
 bool WindowSettings::patchAppearance(const QString &section, const QString &key,
@@ -149,6 +153,27 @@ bool WindowSettings::setAnimation(const QString &kind, const QString &style) {
     const bool saved = config->sync();
     if (!saved) m_error = QStringLiteral("Could not save the animation configuration");
     else reconfigure(QStringLiteral("kos_dock_window_animation"));
+    emit changed();
+    return saved;
+}
+bool WindowSettings::setButtonGlyphMode(const QString &mode) {
+    if (mode != QLatin1String("always") && mode != QLatin1String("hover")) return false;
+    m_error.clear();
+    const QString filename = path(QStringLiteral("window-buttons.json"));
+    QDir().mkpath(QFileInfo(filename).absolutePath());
+    QLockFile lock(filename + QStringLiteral(".lock"));
+    if (!lock.tryLock(0)) {
+        m_error = QStringLiteral("The configuration is being updated; please retry");
+        emit changed();
+        return false;
+    }
+    auto doc = read(filename, &m_error);
+    if (!m_error.isEmpty()) { emit changed(); return false; }
+    auto defaultObj = doc.value(QStringLiteral("default")).toObject();
+    defaultObj.insert(QStringLiteral("glyphMode"), mode);
+    doc.insert(QStringLiteral("default"), defaultObj);
+    const bool saved = write(filename, doc, m_error);
+    if (saved) reconfigure(QStringLiteral("kos_bridge"));
     emit changed();
     return saved;
 }

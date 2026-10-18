@@ -4,7 +4,7 @@ Item {
     property var windowSettings: backend
     QtObject {
         id: backend
-        property var state: ({enabled:true, radius:20, shadow:true, hideAnimation:"scale", closeAnimation:"scale"})
+        property var state: ({enabled:true, radius:20, shadow:true, hideAnimation:"scale", closeAnimation:"scale", buttonGlyphMode:"always"})
         property string error: ""
         property var calls: []
         function refresh() {}
@@ -16,6 +16,7 @@ Item {
         function setShadow(value) { change("shadow", value); return true }
         function setTakeover(value) { change("enabled", value); return true }
         function setAnimation(kind, value) { change(kind + "Animation", value); return true }
+        function setButtonGlyphMode(value) { change("buttonGlyphMode", value); return true }
     }
     TestCase {
         name: "WindowSettingsInteractions"
@@ -23,7 +24,7 @@ Item {
         property var app: null
         function init() {
             backend.calls = []
-            backend.state = {enabled:true, radius:20, shadow:true, hideAnimation:"scale", closeAnimation:"scale"}
+            backend.state = {enabled:true, radius:20, shadow:true, hideAnimation:"scale", closeAnimation:"scale", buttonGlyphMode:"always"}
             const component = Qt.createComponent("../../main.qml")
             compare(component.status, Component.Ready, component.errorString())
             app = component.createObject(null, {currentPage:11})
@@ -68,6 +69,14 @@ Item {
                     mouseClick(picker, picker.width * (i+0.5)/3, picker.height/2)
                     compare(backend.state[kind+"Animation"], styles[i])
                 }
+            }
+        }
+        function test_button_glyph_mode() {
+            const picker = control("windowButtonGlyphMode")
+            const modes = ["always", "hover"]
+            for (let i = 0; i < 2; ++i) {
+                mouseClick(picker, picker.width * (i + 0.5) / 2, picker.height / 2)
+                compare(backend.state.buttonGlyphMode, modes[i])
             }
         }
     }

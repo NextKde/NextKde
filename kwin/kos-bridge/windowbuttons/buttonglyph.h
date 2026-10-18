@@ -38,7 +38,7 @@ QColor dotBorderColor(Type type, bool active);
 // a mark that can only be looked at by installing the effect is a mark that
 // gets tuned blind.
 void drawLight(QPainter &painter, const QRectF &dot, Type type, bool active,
-               bool maximized);
+               bool maximized, bool showGlyph = true);
 
 // Tone-matched or luminous hover halo color for the selected button.
 QColor dotHoverRingColor(Type type, bool dark);

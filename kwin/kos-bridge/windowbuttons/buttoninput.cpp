@@ -152,8 +152,9 @@ bool ButtonInput::pointerMotion(KWin::PointerMotionEvent *event)
 
     KWin::EffectWindow *window = nullptr;
     bool insidePanel = false;
+    bool nearLights = false;
     const ButtonRenderer::Action action =
-        m_renderer->hitTest(event->position, &window, &insidePanel);
+        m_renderer->hitTest(event->position, &window, &insidePanel, &nearLights);
 
     // An open menu takes the pointer before the panel does. It hangs from the
     // panel's bottom edge, and the first few rows of it are inside the panel's
@@ -167,8 +168,8 @@ bool ButtonInput::pointerMotion(KWin::PointerMotionEvent *event)
             m_renderer->setTileMenuHovered(event->position);
             if (!m_session->active()) {
                 m_renderer->setHovered(
-                    action == ButtonRenderer::Action::None ? nullptr : window,
-                    action);
+                    (action == ButtonRenderer::Action::None && !insidePanel) ? nullptr : window,
+                    action, insidePanel, nearLights);
             }
             return true;
         }
@@ -180,7 +181,8 @@ bool ButtonInput::pointerMotion(KWin::PointerMotionEvent *event)
     // only repaint it for nothing.
     if (!m_session->active()) {
         m_renderer->setHovered(
-            action == ButtonRenderer::Action::None ? nullptr : window, action);
+            (action == ButtonRenderer::Action::None && !insidePanel) ? nullptr : window,
+            action, insidePanel, nearLights);
 
         // Alt over the zoom light opens the tiling menu. Alt is already KWin's
         // "this window is about to be moved with the pointer" modifier, so it

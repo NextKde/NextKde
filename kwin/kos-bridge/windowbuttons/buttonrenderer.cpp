@@ -409,9 +409,12 @@ void ButtonRenderer::paint(const KWin::RenderTarget &renderTarget,
     hit.interceptRect =
         hit.panelRect.adjusted(-margin, -margin, margin, margin)
             .intersected(QRectF(windowTopLeft, window->frameGeometry().size()));
+    QRectF cluster;
     for (int i = 0; i < TypeCount; ++i) {
         hit.dots[i] = dotRect(panelSize, geometry, i).translated(panelOrigin);
+        cluster = cluster.isEmpty() ? hit.dots[i] : cluster.united(hit.dots[i]);
     }
+    hit.clusterRect = cluster.adjusted(-1.0, -1.0, 1.0, 1.0);
 
     // The tiling menu, if one is open on this window. It hangs from the panel
     // being drawn now -- the draft, while the panel is being positioned -- and
@@ -478,6 +481,9 @@ void ButtonRenderer::paint(const KWin::RenderTarget &renderTarget,
         const bool adjusting = m_adjusting.contains(window);
         const Action hovered =
             (!adjusting && m_hoverWindow == window) ? m_hovered : Action::None;
+        const bool lightsHovered =
+            (!adjusting && m_hoverWindow == window && (m_hovered != Action::None || m_nearLights));
+        const bool showGlyphs = (config.glyphMode == GlyphMode::Always) || lightsHovered;
         // What the green dot's glyph is drawn from. `performAction` toggles on
         // exactly this test, so the mark and the click agree by construction
         // rather than by two conditions that happen to match today.
@@ -491,7 +497,7 @@ void ButtonRenderer::paint(const KWin::RenderTarget &renderTarget,
         }
         if (KWin::GLTexture *tex = panelTexture(panelSize, scale, active, dark,
                                                 geometry, hovered, adjusting,
-                                                maximized)) {
+                                                maximized, showGlyphs)) {
             blit(viewport, clip, logicalRect, tex);
         }
     }
@@ -819,6 +825,8 @@ void ButtonRenderer::setAdjusting(KWin::EffectWindow *window, bool adjusting)
         // The hover ring goes away with the adjust ring.
         if (m_hoverWindow == window) {
             m_hovered = Action::None;
+            m_insidePanel = false;
+            m_nearLights = false;
         }
     } else {
         m_adjusting.remove(window);
@@ -869,14 +877,14 @@ KWin::GLTexture *ButtonRenderer::panelTexture(const QSizeF &panelSize, qreal sca
                                                bool active, bool dark,
                                                const PanelGeometry &geometry,
                                                Action hovered, bool adjusting,
-                                               bool maximized)
+                                               bool maximized, bool showGlyphs)
 {
     // The device size and scale are part of the key so each output scale gets
     // pixel-perfect rasterisation. The maximized flag is part of it for the same
     // reason: it is the same panel with the restore glyph on its green dot.
     const QSize deviceSize(std::max(1, qRound(panelSize.width() * scale)),
                            std::max(1, qRound(panelSize.height() * scale)));
-    const QString key = QStringLiteral("%1x%2@%3_%4_%5_%6_%7_%8_%9_%10_%11_%12")
+    const QString key = QStringLiteral("%1x%2@%3_%4_%5_%6_%7_%8_%9_%10_%11_%12_%13")
                             .arg(deviceSize.width())
                             .arg(deviceSize.height())
                             .arg(qRound(scale * 100))
@@ -891,12 +899,13 @@ KWin::GLTexture *ButtonRenderer::panelTexture(const QSizeF &panelSize, qreal sca
                             // value above and still be different widths.
                             .arg(qRound(effectivePanelPaddingX(geometry) * 4))
                             .arg(adjusting ? 1 : 0)
-                            .arg(maximized ? 1 : 0);
+                            .arg(maximized ? 1 : 0)
+                            .arg(showGlyphs ? 1 : 0);
     auto it = m_textures.find(key);
     if (it == m_textures.end()) {
         return cacheTexture(key, buildPanel(panelSize, scale, active, dark,
                                             geometry, hovered, adjusting,
-                                            maximized));
+                                            maximized, showGlyphs));
     }
     return it->second.get();
 }
@@ -920,9 +929,11 @@ KWin::GLTexture *ButtonRenderer::cacheTexture(const QString &key, QImage image)
     return m_textures.emplace(key, std::move(texture)).first->second.get();
 }
 
-void ButtonRenderer::setHovered(KWin::EffectWindow *window, Action action)
+void ButtonRenderer::setHovered(KWin::EffectWindow *window, Action action, bool insidePanel, bool nearLights)
 {
-    if (m_hoverWindow == window && m_hovered == action) {
+    const bool panelIn = (window != nullptr && insidePanel);
+    const bool lightsIn = (window != nullptr && (action != Action::None || nearLights));
+    if (m_hoverWindow == window && m_hovered == action && m_insidePanel == panelIn && m_nearLights == lightsIn) {
         return;
     }
 
@@ -932,6 +943,8 @@ void ButtonRenderer::setHovered(KWin::EffectWindow *window, Action action)
     repaintRect(currentRect(m_hoverWindow));
     m_hoverWindow = window;
     m_hovered = action;
+    m_insidePanel = panelIn;
+    m_nearLights = lightsIn;
     repaintRect(currentRect(window));
 }
 
@@ -1097,7 +1110,7 @@ void ButtonRenderer::setTileMenuHovered(const QPointF &logicalPos)
 QImage ButtonRenderer::buildPanel(const QSizeF &panelSize, qreal scale, bool active,
                                    bool dark, const PanelGeometry &geometry,
                                    Action hovered, bool adjusting,
-                                   bool maximized) const
+                                   bool maximized, bool showGlyphs) const
 {
     const QSize deviceSize(std::max(1, qRound(panelSize.width() * scale)),
                            std::max(1, qRound(panelSize.height() * scale)));
@@ -1155,7 +1168,7 @@ QImage ButtonRenderer::buildPanel(const QSizeF &panelSize, qreal scale, bool act
             drawHoverRing(painter, disc, type, dark);
         }
 
-        drawLight(painter, disc, type, active, maximized);
+        drawLight(painter, disc, type, active, maximized, showGlyphs);
     }
 
     painter.end();
@@ -1254,13 +1267,17 @@ ButtonRenderer::Action ButtonRenderer::actionFor(Type type)
 
 ButtonRenderer::Action ButtonRenderer::hitTest(const QPointF &logicalPos,
                                                KWin::EffectWindow **window,
-                                               bool *insidePanel) const
+                                               bool *insidePanel,
+                                               bool *nearLights) const
 {
     if (window) {
         *window = nullptr;
     }
     if (insidePanel) {
         *insidePanel = false;
+    }
+    if (nearLights) {
+        *nearLights = false;
     }
 
     // Most motion events land nowhere near a panel, and the stacking order is
@@ -1304,6 +1321,9 @@ ButtonRenderer::Action ButtonRenderer::hitTest(const QPointF &logicalPos,
         if (insidePanel) {
             *insidePanel = true;
         }
+        if (nearLights) {
+            *nearLights = hit.clusterRect.contains(logicalPos);
+        }
 
         for (int i = 0; i < TypeCount; ++i) {
             if (hit.dots[i].contains(logicalPos)) {
@@ -1331,6 +1351,7 @@ void ButtonRenderer::syncHits(KWin::EffectWindow *window)
     it->windowOrigin = origin;
     it->panelRect.translate(delta);
     it->interceptRect.translate(delta);
+    it->clusterRect.translate(delta);
     for (auto &dot : it->dots) dot.translate(delta);
     if (m_menu.window == window) {
         m_menu.rect = tileMenuRect(it->panelRect, window->frameGeometry(),
@@ -1374,6 +1395,8 @@ void ButtonRenderer::forget(KWin::EffectWindow *window)
     if (m_hoverWindow == window) {
         m_hoverWindow = nullptr;
         m_hovered = Action::None;
+        m_insidePanel = false;
+        m_nearLights = false;
     }
 }
 
@@ -1384,6 +1407,8 @@ void ButtonRenderer::invalidateAll()
     m_sourceHits.clear();
     m_hoverWindow = nullptr;
     m_hovered = Action::None;
+    m_insidePanel = false;
+    m_nearLights = false;
     // m_pending and m_adjusting are deliberately kept: they belong to a session
     // that is still running, and reloading the configuration is not a reason to
     // throw away the panel the user is in the middle of positioning.
