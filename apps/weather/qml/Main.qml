@@ -2386,7 +2386,9 @@ KosApplicationWindow {
                                             Rectangle {
                                                 anchors.fill: parent
                                                 radius: 18
-                                                color: Qt.rgba(1, 1, 1, 0.14)
+                                                // 参考实测（ref-main 814×498 Pillow 采样）：胶囊内 (28,90,168) vs 卡面 (0,83,180)
+                                                // ——相对卡面 R+28/G+7/B−12，解出脱饱和中性灰 ≈#767676 @ α0.22-0.26（压暗蓝通道）；白@0.14 方向相反（整体提亮），故按参考改灰。
+                                                color: Qt.rgba(0.46, 0.46, 0.46, 0.24)
                                                 border.width: 1
                                                 border.color: Qt.rgba(1, 1, 1, 0.22)
                                             }
