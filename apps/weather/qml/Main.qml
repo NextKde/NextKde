@@ -2667,16 +2667,21 @@ KosApplicationWindow {
 
                                         // ref-main（参考图）Conditions 卡本无温度曲线；本条系 TASK.md
                                         // 用户裁定（2026-10-18）按 Apple Weather 惯例外推。
-                                        // 布局适配：委托列实际占 content y 84..122（温度文字 84..93、
-                                        // ☂行 115..122，Pillow 实测），真实空档为 94..114，曲线带据此落位。
+                                        // 布局适配：温度墨底 content 96（real 362）、☂ 行墨顶
+                                        // content 114-115（real 380-381，Pillow 实测
+                                        // tmp/shots/patrol-1792320265.png），真实空档为 96..115。
+                                        // 曲线带 100..110 渲染于 real 365..377（content→real
+                                        // 偏移实测 +266），与温度墨/☂ 墨各留 2-3px。旧值 97..113
+                                        // 系行高钉死/列密度改动前的旧测量、带值未随动，导致曲线
+                                        // 左端压到温度墨上（同一截图实证）。曲线带据此落位。
                                         // 层位：Canvas 位于 Flickable 内容区内部、Row 之前声明（先声明者
                                         // 先画、z 序在下），随 contentX 一起横滚覆盖逐小时列。
                                         Canvas {
                                             id: hourlyCurve
 
-                                            readonly property int bandTop: 97
-                                            readonly property int bandInner: 15
-                                            readonly property int bandBottom: 113
+                                            readonly property int bandTop: 100
+                                            readonly property int bandInner: 10
+                                            readonly property int bandBottom: 110
 
                                             // draw-on 揭示动画：0..1，1 = 完整曲线。1000ms 系外推：
                                             // 内容揭示类动效，HIG 环境量级（阶段三 B.6，用户裁定 1）。
