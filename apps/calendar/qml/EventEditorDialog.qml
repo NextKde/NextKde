@@ -66,6 +66,89 @@ KosWorkspaceDialog {
         return match ? match[1] : fallback
     }
 
+    // I4 (REVIEW): save-time validation. Date/time fields are free text, so
+    // parse strictly before they are concatenated into ISO strings — an
+    // unparsable field must block accept instead of storing a broken record.
+    function parseDateText(value) {
+        const match = String(value ?? "").trim().match(/^(\d{4})-(\d{2})-(\d{2})$/)
+        if (!match)
+            return null
+        const date = new Date(Number(match[1]), Number(match[2]) - 1,
+            Number(match[3]))
+        // Reject calendar rollovers (2026-02-30 → Mar 2) via round-trip.
+        return date.getFullYear() === Number(match[1])
+            && date.getMonth() === Number(match[2]) - 1
+            && date.getDate() === Number(match[3]) ? date : null
+    }
+
+    function parseTimeText(value) {
+        const match = String(value ?? "").trim().match(/^(\d{2}):(\d{2})$/)
+        if (!match)
+            return null
+        const hours = Number(match[1])
+        const minutes = Number(match[2])
+        return hours <= 23 && minutes <= 59 ? hours * 60 + minutes : null
+    }
+
+    // I4: last validation problem, kept until the offending field is edited
+    // or the dialog reopens. null = clean.
+    property string errorText: ""
+    property var errorFields: []
+
+    // Inline error copy sits at 11px non-bold → needs 4.5:1. AppTheme
+    // .destructive is 4.25:1 on the light panel (#F7F7F7); #d23636 is the
+    // minimal darkening that passes (4.54:1, measured per WCAG formula).
+    // Dark #ff6961 on #262626 = 5.37:1, so dark keeps the token.
+    readonly property color errorColor: AppTheme.dark
+        ? AppTheme.destructive : "#d23636"
+
+    function hasError(name) {
+        return errorFields.includes(name)
+    }
+
+    function clearError(name) {
+        if (!errorFields.includes(name))
+            return
+        const rest = errorFields.filter(function(field) { return field !== name })
+        errorFields = rest
+        if (rest.length === 0)
+            errorText = ""
+    }
+
+    function validationProblem() {
+        if (titleField.text.trim().length === 0)
+            return { message: qsTr("Title is required."), fields: ["title"] }
+        const startDate = parseDateText(startDateField.text)
+        if (startDate === null)
+            return { message: qsTr("Start date must be YYYY-MM-DD."),
+                fields: ["startDate"] }
+        const endDate = parseDateText(endDateField.text)
+        if (endDate === null)
+            return { message: qsTr("End date must be YYYY-MM-DD."),
+                fields: ["endDate"] }
+        let startMinutes = 0
+        let endMinutes = 0
+        if (!allDayCheck.checked) {
+            startMinutes = parseTimeText(startTimeField.text)
+            if (startMinutes === null)
+                return { message: qsTr("Start time must be HH:MM (00-23:00-59)."),
+                    fields: ["startTime"] }
+            endMinutes = parseTimeText(endTimeField.text)
+            if (endMinutes === null)
+                return { message: qsTr("End time must be HH:MM (00-23:00-59)."),
+                    fields: ["endTime"] }
+        }
+        if (endDate < startDate)
+            return { message: qsTr("End must not be before start."),
+                fields: ["endDate"] }
+        if (!allDayCheck.checked
+                && endDate.getTime() === startDate.getTime()
+                && endMinutes <= startMinutes)
+            return { message: qsTr("End time must be after start time."),
+                fields: ["endTime"] }
+        return null
+    }
+
     function recurrenceIndex(preset) {
         const values = ["none", "daily", "weekly", "monthly", "yearly"]
         const index = values.indexOf(String(preset ?? "none"))
@@ -106,6 +189,8 @@ KosWorkspaceDialog {
         editingId = ""
         calendarId = "personal"
         linkedTodoId = ""
+        errorText = ""
+        errorFields = []
         titleField.text = ""
         descriptionField.text = ""
         locationField.text = ""
@@ -129,6 +214,8 @@ KosWorkspaceDialog {
         editingId = String(event?.seriesId ?? event?.id ?? "")
         calendarId = String(event?.calendarId ?? "personal")
         linkedTodoId = String(event?.linkedTodoId ?? "")
+        errorText = ""
+        errorFields = []
         titleField.text = String(event?.title ?? "")
         descriptionField.text = String(event?.description ?? "")
         locationField.text = String(event?.location ?? "")
@@ -168,6 +255,21 @@ KosWorkspaceDialog {
             todoListId: String(value(list, "id", "inbox")),
             todoPriority: priorityValues[todoPriorityBox.currentIndex]
         }
+    }
+
+    // I4: every accept path runs validation first — invalid input keeps the
+    // dialog open and reports inline instead of storing a broken record.
+    function accept() {
+        const problem = validationProblem()
+        if (problem !== null) {
+            errorText = problem.message
+            errorFields = problem.fields
+            return
+        }
+        errorText = ""
+        errorFields = []
+        close()
+        accepted()
     }
 
     onAccepted: saveRequested(editingId, eventPayload())
@@ -301,6 +403,18 @@ KosWorkspaceDialog {
             width: editorScroll.width
             spacing: 10
 
+            // I4: inline validation error — pinned to the top of the form so
+            // it is visible without scrolling; offending fields also get a
+            // destructive outline until they are edited.
+            Label {
+                Layout.fillWidth: true
+                visible: root.errorText.length > 0
+                text: root.errorText
+                color: root.errorColor
+                font.pixelSize: 11
+                wrapMode: Text.WordWrap
+            }
+
             RowLayout {
                 Layout.fillWidth: true
                 spacing: 8
@@ -319,6 +433,9 @@ KosWorkspaceDialog {
                     Layout.preferredHeight: fieldHeight
                     placeholderText: qsTr("Event title")
                     Accessible.name: qsTr("Event title")
+                    outlineColor: root.hasError("title")
+                        ? AppTheme.destructive : AppTheme.border
+                    onTextChanged: root.clearError("title")
                 }
             }
 
@@ -358,6 +475,9 @@ KosWorkspaceDialog {
                     Layout.preferredHeight: fieldHeight
                     placeholderText: "YYYY-MM-DD"
                     Accessible.name: qsTr("Start date")
+                    outlineColor: root.hasError("startDate")
+                        ? AppTheme.destructive : AppTheme.border
+                    onTextChanged: root.clearError("startDate")
                 }
                 KosTextField {
                     id: startTimeField
@@ -366,6 +486,9 @@ KosWorkspaceDialog {
                     placeholderText: "HH:MM"
                     enabled: !allDayCheck.checked
                     Accessible.name: qsTr("Start time")
+                    outlineColor: root.hasError("startTime")
+                        ? AppTheme.destructive : AppTheme.border
+                    onTextChanged: root.clearError("startTime")
                 }
             }
 
@@ -386,6 +509,9 @@ KosWorkspaceDialog {
                     Layout.preferredHeight: fieldHeight
                     placeholderText: "YYYY-MM-DD"
                     Accessible.name: qsTr("End date")
+                    outlineColor: root.hasError("endDate")
+                        ? AppTheme.destructive : AppTheme.border
+                    onTextChanged: root.clearError("endDate")
                 }
                 KosTextField {
                     id: endTimeField
@@ -394,6 +520,9 @@ KosWorkspaceDialog {
                     placeholderText: "HH:MM"
                     enabled: !allDayCheck.checked
                     Accessible.name: qsTr("End time")
+                    outlineColor: root.hasError("endTime")
+                        ? AppTheme.destructive : AppTheme.border
+                    onTextChanged: root.clearError("endTime")
                 }
             }
 
