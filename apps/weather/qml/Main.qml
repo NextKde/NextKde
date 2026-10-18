@@ -261,6 +261,41 @@ KosApplicationWindow {
         return clouds
     }
 
+    // Static per-card cloud texture for sidebar city cards: the reference
+    // sidebar (tile-sidebar) shows every city card carrying weather-
+    // appropriate sky texture (white puffs on day cards, faint wisps on the
+    // night card). Fixed-seed PRNG per card index so each card differs but
+    // stays identical across launches. Purely decorative, never animated.
+    // Shown on every card: the reference shows sky texture on all five
+    // visible cards (day and night alike); the clear-day card form is an
+    // extrapolation from the main-window clear-day band precedent.
+    function sidebarCardClouds(cardIndex, isDay) {
+        const random = mulberry32(20261022 + cardIndex * 97)
+        const clouds = []
+        for (let i = 0; i < 3; i++) {
+            const cloudWidth = 70 + random() * 60
+            const puffs = []
+            for (let puff = 0; puff < 4; puff++) {
+                puffs.push({
+                    cxRatio: 0.1 + random() * 0.8,
+                    cyRatio: 0.3 + random() * 0.4,
+                    rRatio: 0.28 + random() * 0.22,
+                    alphaMul: 0.6 + random() * 0.4
+                })
+            }
+            puffs.sort(function(a, b) { return a.cxRatio - b.cxRatio })
+            clouds.push({
+                xRatio: random(),
+                yRatio: i * 0.28 + random() * 0.18,
+                cloudWidth: cloudWidth,
+                cloudHeight: cloudWidth * 0.3,
+                opacity: (isDay ? 0.32 : 0.13) - i * 0.07 + random() * 0.03,
+                puffs: puffs
+            })
+        }
+        return clouds
+    }
+
     function skyStopsFor(code, isDay) {
         const c = Number(code)
         if (!isDay) {
@@ -1068,9 +1103,13 @@ KosApplicationWindow {
                             id: savedLocation
 
                             required property var modelData
+                            required property int index
                             readonly property var summary: root.value(modelData, "summary", null)
                             readonly property var cardStops: root.skyStopsFor(
                                 savedLocation.summary ? savedLocation.summary.weatherCode : 2,
+                                savedLocation.summary ? savedLocation.summary.isDay : true)
+                            readonly property var cardClouds: root.sidebarCardClouds(
+                                index,
                                 savedLocation.summary ? savedLocation.summary.isDay : true)
                             readonly property real summaryHigh: root.number(
                                 savedLocation.summary, "tempHigh", Number.NaN)
@@ -1102,6 +1141,53 @@ KosApplicationWindow {
                                     }
                                     GradientStop {
                                         position: 1.0; color: savedLocation.cardStops[2]
+                                    }
+                                }
+                                Item {
+                                    id: cardSkyTexture
+                                    anchors.fill: parent
+                                    clip: true
+                                    Accessible.ignored: true
+
+                                    Repeater {
+                                        model: savedLocation.cardClouds
+
+                                        delegate: Item {
+                                            required property var modelData
+
+                                            x: (cardSkyTexture.width - width)
+                                               * modelData.xRatio
+                                            y: (cardSkyTexture.height - height)
+                                               * modelData.yRatio
+                                            width: modelData.cloudWidth
+                                            height: modelData.cloudHeight
+                                            opacity: modelData.opacity
+
+                                            Canvas {
+                                                anchors.fill: parent
+                                                onWidthChanged: requestPaint()
+                                                onHeightChanged: requestPaint()
+                                                onPaint: {
+                                                    const ctx = getContext("2d")
+                                                    ctx.clearRect(0, 0, width, height)
+                                                    for (let i = 0; i < modelData.puffs.length; i++) {
+                                                        const p = modelData.puffs[i]
+                                                        const cx = p.cxRatio * width
+                                                        const cy = p.cyRatio * height
+                                                        const r = Math.max(Math.min(
+                                                            p.rRatio * height * 1.2,
+                                                            cy, height - cy, cx, width - cx), 4)
+                                                        const grad = ctx.createRadialGradient(cx, cy, 0, cx, cy, r)
+                                                        grad.addColorStop(0, "rgba(255,255,255," + p.alphaMul.toFixed(3) + ")")
+                                                        grad.addColorStop(1, "rgba(255,255,255,0)")
+                                                        ctx.fillStyle = grad
+                                                        ctx.beginPath()
+                                                        ctx.arc(cx, cy, r, 0, Math.PI * 2)
+                                                        ctx.fill()
+                                                    }
+                                                }
+                                            }
+                                        }
                                     }
                                 }
                             }
