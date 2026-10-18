@@ -40,7 +40,12 @@ public:
 #endif
                         ) override;
 
-    void drawWindow(const KWin::RenderTarget &renderTarget,
+#ifdef KOS_KWIN_PAINT_RESULT_API
+    bool
+#else
+    void
+#endif
+    drawWindow(const KWin::RenderTarget &renderTarget,
                     const KWin::RenderViewport &viewport,
                     KWin::EffectWindow *window, int mask,
                     const KWin::Region &deviceRegion,

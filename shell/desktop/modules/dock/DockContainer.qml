@@ -34,6 +34,14 @@ Item {
     property Component trailingAccessory: null
     property bool clockInInfoCarousel: false
 
+    readonly property bool statusCollectionExpanded: trailingAccessoryLoader.item?.collectionExpanded ?? false
+    readonly property bool statusDragActive: trailingAccessoryLoader.item?.statusDragActive ?? false
+    readonly property bool accessoryInteractionActive: trailingAccessoryLoader.item?.keepBarOpen ?? false
+
+    function closeStatusCollectionOutside(x, y) {
+        trailingAccessoryLoader.item?.closeCollectionOutside(x, y)
+    }
+
     // ═══════════════════════════════════════════════════════════
     // Inputs (from services / parent)
     // ═══════════════════════════════════════════════════════════
@@ -205,6 +213,8 @@ Item {
     readonly property int dividerMargin: _layout.dividerMargin
     readonly property int pillRadius: Math.round(computedDockHeight
         * AppearanceTokens.dock.radiusRatio)
+    // One effective radius for the outer Dock and all Stack card backgrounds.
+    readonly property int surfaceRadius: stretched ? 0 : pillRadius
     // DockIcon reserves this invisible outer slot even when inactive. This
     // keeps the Row width stable while the active background appears/disappears.
     readonly property real activeBackgroundGap: _layout.activeBackgroundGap
@@ -1189,6 +1199,7 @@ Item {
         // ── Shared music / weather / clock / temperature information slot ──
         DockInfoCarousel {
             id: horizontalInfoCarousel
+            cornerRadius: container.surfaceRadius
             iconSize: container.iconSize
             dockHeight: container.computedDockHeight
             widthUnits: container.infoUnits
@@ -1206,6 +1217,7 @@ Item {
         // reserving only two icon lengths along the edge.
         DockSideInfoCarousel {
             id: verticalInfoCarousel
+            cornerRadius: container.surfaceRadius
             iconSize: container.iconSize
             dockHeight: container.computedDockHeight
             widthUnits: container.infoUnits

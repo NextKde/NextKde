@@ -5,6 +5,17 @@ import QtQuick
 QtObject {
     id: theme
 
+    function musicLocation(track) {
+        if (!track || Object.keys(track).length === 0) return ""
+        const source = String(track.source || "").toLowerCase()
+        if (track.localPath || source === "local") return qsTr("本地音乐")
+        const platform = ({kw: qsTr("酷我"), kg: qsTr("酷狗"), tx: qsTr("QQ 音乐"),
+            wy: qsTr("网易云"), mg: qsTr("咪咕"), bili: qsTr("哔哩哔哩")})[source]
+        if (track.originKind === "lx") return (platform || source || qsTr("在线音乐"))
+            + " · " + (track.originSourceName || qsTr("已移除音源"))
+        if (track.radioId) return qsTr("电台")
+        return platform || (track.remoteUrl ? qsTr("网络音频") : qsTr("未知来源"))
+    }
     function artworkUrl(source, pixels) {
         let url = String(source || "")
         if (url.indexOf("image://artwork/") === 0) url = decodeURIComponent(url.substring(16))

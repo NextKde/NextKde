@@ -78,10 +78,12 @@ public:
     // The point has to be over a part of the window that is not covered by
     // anything above it, and the topmost window wins where two panels overlap.
     Action hitTest(const QPointF &logicalPos, KWin::EffectWindow **window,
-                   bool *insidePanel = nullptr) const;
+                   bool *insidePanel = nullptr,
+                   bool *nearLights = nullptr) const;
 
     // Update which dot is hovered. Repaints the affected window when it changes.
-    void setHovered(KWin::EffectWindow *window, Action action);
+    void setHovered(KWin::EffectWindow *window, Action action,
+                    bool insidePanel = false, bool nearLights = false);
 
     // Damage the panels of two windows: the one that just stopped being the
     // active window and the one that just became it (`b` may be `a`). The lights
@@ -227,17 +229,17 @@ private:
     // handler has been crashing KWin, and a panel is a small fixed rectangle.
     static void repaintRect(const QRectF &globalRect);
 
-    KWin::GLTexture *backgroundTexture(const QSizeF &panelSize);
-    KWin::GLTexture *panelTexture(const QSizeF &panelSize, bool active, bool dark,
-                                  const PanelGeometry &geometry, Action hovered,
-                                  bool adjusting, bool maximized);
+    KWin::GLTexture *backgroundTexture(const QSizeF &panelSize, qreal scale);
+    KWin::GLTexture *panelTexture(const QSizeF &panelSize, qreal scale, bool active,
+                                  bool dark, const PanelGeometry &geometry,
+                                  Action hovered, bool adjusting, bool maximized, bool showGlyphs);
     KWin::GLTexture *cacheTexture(const QString &key, QImage image);
-    QImage buildPanel(const QSizeF &panelSize, bool active, bool dark,
+    QImage buildPanel(const QSizeF &panelSize, qreal scale, bool active, bool dark,
                       const PanelGeometry &geometry, Action hovered,
-                      bool adjusting, bool maximized) const;
+                      bool adjusting, bool maximized, bool showGlyphs) const;
 
-    KWin::GLTexture *tileMenuTexture(bool dark, std::optional<TilePreset> hovered);
-    QImage buildTileMenu(bool dark, std::optional<TilePreset> hovered) const;
+    KWin::GLTexture *tileMenuTexture(qreal scale, bool dark, std::optional<TilePreset> hovered);
+    QImage buildTileMenu(qreal scale, bool dark, std::optional<TilePreset> hovered) const;
 
     // Blit one of this effect's textures over a rectangle of the frame, clipped
     // to the part of the window that is actually being painted. The panel and
@@ -279,6 +281,8 @@ private:
         // by the intercept margin, never beyond the window's own edge.
         QRectF panelRect;
         QRectF interceptRect;
+        // Bounding rectangle of the traffic light buttons cluster for hover feedback.
+        QRectF clusterRect;
         // The three lights, by position rather than by action: which action a
         // position means is typeAt()'s business, and asking it here is what
         // keeps a reordered panel clickable at the position it is drawn in.
@@ -314,6 +318,8 @@ private:
 
     KWin::EffectWindow *m_hoverWindow = nullptr;
     Action m_hovered = Action::None;
+    bool m_insidePanel = false;
+    bool m_nearLights = false;
 };
 
 } // namespace KOS

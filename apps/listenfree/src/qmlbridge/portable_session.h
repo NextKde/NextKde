@@ -1,4 +1,5 @@
 #pragma once
+#include "qmlbridge/playback_resolution.h"
 #include "infrastructure/database/database.h"
 #include "qmlbridge/list_models.h"
 #include "qmlbridge/source_controller.h"
@@ -233,6 +234,8 @@ public:
     Q_INVOKABLE bool enqueueTrack(const QVariantMap& track, bool next = false);
     Q_INVOKABLE void openLocal(const QString& path);
     Q_INVOKABLE void openUrl(const QUrl& url);
+    Q_INVOKABLE QString trackUid(const QVariantMap& track) const;
+    Q_INVOKABLE int queueIndexFor(const QVariantMap& track) const;
     Q_INVOKABLE bool selectQueue(int index, bool playImmediately = true);
     Q_INVOKABLE bool removeFromQueue(int index);
     Q_INVOKABLE bool moveQueue(int from, int to);
@@ -386,7 +389,6 @@ private:
     bool commentsBusy_{false};
     QHash<QString,QString> commentMatches_;
     void fetchNeteaseComments(const QString& rid, const QString& entry, const QString& sort, bool more);
-    int queueIndexFor(const QVariantMap& track) const;
     void fetchLyrics(const QString& rid);
     QSet<QString> artworkRequests_;
     QCache<QString, QString> artworkUrls_{128};
@@ -399,9 +401,13 @@ private:
     bool resumePaused_{false}, pauseIntent_{false};
     QString duplicateResumeEntry_,duplicateResumeState_;
     qint64 duplicateResumePosition_{0};
+    PlaybackAttempts resolutionAttempts_;
+    int resolutionAttempt_{0};
+    QElapsedTimer resolutionClock_;
+    bool resolutionRetryScheduled_{false};
     int consecutiveErrors_{0};
     int prematureNetworkRetries_{0};
-    bool batching_{false};
+    bool batching_{false}, restoringQueue_{false};
     QSet<QString> batchSongKeys_;
     bool loading_{false}, mediaReady_{false}, ready_{false}, searchBusy_{false}, stopped_{false}, reloadAgain_{false};
     bool reloadAgainForceFull_{false};
@@ -428,6 +434,8 @@ private:
     void commitSmartMix();
     int mixTargetIndex() const;
     void beginCurrent();
+    void resolveNextAttempt();
+    bool retryResolution(const QString& error);
     void fetchOnlineArtwork(const QVariantMap& track);
     void invalidate();
     void syncQueue();

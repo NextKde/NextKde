@@ -215,6 +215,12 @@ Item {
             onContextRequested: (mx,my) => table.openContext(mockRow,mx,my,index,track)
         }
     }
+    property int backendRevision: 0
+    Connections {
+        target: table.sourceModel
+        ignoreUnknownSignals: true
+        function onDataChanged() { table.backendRevision++ }
+    }
     ListView {
         id: backendList
         objectName: "songTableBackendList"
@@ -243,7 +249,7 @@ Item {
             width: backendList.width; compact: table.tight
             rowIndex: index
             fallbackArtwork: table.fallbackArtwork
-            track: ({ trackId: trackId, title: title, artist: artist, album: album, duration: duration, localPath: localPath, artwork: artwork, source: "Local" })
+            track: { const revision = table.backendRevision; return table.sourceModel.get(index) }
             onActivated: table.trackActivated(track, table)
             onCommandRequested: command => table.commandRequested(command,track,index,table)
             onContextRequested: (mx,my) => table.openContext(backendRow,mx,my,index,track)

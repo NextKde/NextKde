@@ -1,4 +1,5 @@
 #include "qmlbridge/list_models.h"
+#include "online/track_identity.h"
 
 #include <QString>
 #include <QLocale>
@@ -81,10 +82,11 @@ bool TrackListModel::moveRow(int from, int to) {
 
 QVariantMap TrackListModel::get(int row) const {
     if (row < 0 || row >= rowCount()) return {};
+    if (rowStorage_) return online::identifiedTrack(rows_.at(row).toMap());
     QVariantMap result;
     const auto roles=roleNames();
     for(auto it=roles.cbegin();it!=roles.cend();++it)result.insert(QString::fromUtf8(it.value()),data(index(row,0),it.key()));
-    return result;
+    return online::identifiedTrack(result);
 }
 
 QVariantMap TrackListModel::rowMap(int row) const {

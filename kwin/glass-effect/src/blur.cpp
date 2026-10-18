@@ -1346,7 +1346,12 @@ bool BlurEffect::shouldBlur(const EffectWindow *w, int mask, const WindowPaintDa
     return true;
 }
 
-void BlurEffect::drawWindow(const RenderTarget &renderTarget, const RenderViewport &viewport, EffectWindow *w, int mask, const BlurRegion &deviceRegion, WindowPaintData &data)
+#ifdef KOS_KWIN_PAINT_RESULT_API
+bool
+#else
+void
+#endif
+BlurEffect::drawWindow(const RenderTarget &renderTarget, const RenderViewport &viewport, EffectWindow *w, int mask, const BlurRegion &deviceRegion, WindowPaintData &data)
 {
     blur(renderTarget, viewport, w, mask, deviceRegion, data);
 
@@ -1355,8 +1360,14 @@ void BlurEffect::drawWindow(const RenderTarget &renderTarget, const RenderViewpo
 #ifndef GLASS_X11
     if (m_surfaceShapeManager && w->surface()) {
         if (const auto reveal = m_surfaceShapeManager->revealFor(w->surface())) {
-            if (reveal->progress <= 0)
+            if (reveal->progress <= 0) {
+#ifdef KOS_KWIN_PAINT_RESULT_API
+                // Intentionally hidden content is a successful empty pass.
+                return true;
+#else
                 return;
+#endif
+            }
             WindowPaintData contentData(data);
             const qreal scale = reveal->scale();
             const QPointF anchor = reveal->anchor();
@@ -1365,13 +1376,12 @@ void BlurEffect::drawWindow(const RenderTarget &renderTarget, const RenderViewpo
             contentData.setXScale(data.xScale() * scale);
             contentData.setYScale(data.yScale() * scale);
             contentData.multiplyOpacity(reveal->progress);
-            effects->drawWindow(renderTarget, viewport, w, mask | PAINT_WINDOW_TRANSFORMED,
+            return effects->drawWindow(renderTarget, viewport, w, mask | PAINT_WINDOW_TRANSFORMED,
                                 deviceRegion, contentData);
-            return;
         }
     }
 #endif
-    effects->drawWindow(renderTarget, viewport, w, mask, deviceRegion, data);
+    return effects->drawWindow(renderTarget, viewport, w, mask, deviceRegion, data);
 }
 
 GLTexture *BlurEffect::ensureNoiseTexture(int noiseStrength)
@@ -1514,7 +1524,11 @@ void BlurEffect::blur(const RenderTarget &renderTarget, const RenderViewport &vi
                                              backgroundRect.y() * viewport.scale(),
                                              backgroundRect.width() * viewport.scale(),
                                              backgroundRect.height() * viewport.scale());
+#ifdef KOS_KWIN_PAINT_RESULT_API
+    const QRect scaledBackgroundRect = RectF(scaledLogicalBackgroundRect).rounded();
+#else
     const QRect scaledBackgroundRect = snapToPixelGrid(scaledLogicalBackgroundRect);
+#endif
     const QRect deviceBackgroundRect = viewport.mapToDeviceCoordinates(Rect(backgroundRect)).rounded();
 #endif
     const auto opacity = data.opacity();
@@ -2138,8 +2152,13 @@ void BlurEffect::blur(const RenderTarget &renderTarget, const RenderViewport &vi
                                        transformedRect.y() * viewport.scale(),
                                        transformedRect.width() * viewport.scale(),
                                        transformedRect.height() * viewport.scale());
+#ifdef KOS_KWIN_PAINT_RESULT_API
+    const QRectF nativeBox = QRectF(snapToPixels(RectF(scaledTransformedRect), 1))
+                                 .translated(-scaledBackgroundRect.topLeft());
+#else
     const QRectF nativeBox = snapToPixelGridF(scaledTransformedRect)
                                  .translated(-scaledBackgroundRect.topLeft());
+#endif
 #endif
     const QVariant visualRadii = w->window()->property("_kos_window_appearance_visual_radii");
     const bool appearanceMask = visualRadii.canConvert<QVector4D>();

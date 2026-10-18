@@ -843,7 +843,7 @@ Item {
                 secondaryText: page.secondaryText
                 rows: [
                     { title: qsTr("智能过渡"), detail: qsTr("分析近静音尾部并平滑衔接；连续专辑、直播及不兼容格式保留普通播放。"), key: "playback.transition.smart", type: "toggle", checked: false },
-                    { title: qsTr("在线播放音质"), detail: qsTr("优先请求所选音质；当前音源不支持时使用可用音质。"), key: "playback.quality", type: "select", options: [{label:qsTr("无损 FLAC"),value:"flac"},{label:qsTr("高品质 320k"),value:"320k"},{label:qsTr("标准 128k"),value:"128k"}], currentIndex: 0 },
+                    { title: qsTr("在线播放音质"), detail: qsTr("优先请求所选音质；当前音源不支持时使用可用音质。"), key: "playback.quality", type: "select", options: [{label:qsTr("无损 FLAC"),value:"flac"},{label:qsTr("高品质 320k"),value:"320k"},{label:qsTr("标准 128k"),value:"128k"}], currentIndex: 2 },
                     { title: qsTr("播放错误时自动跳过"), detail: qsTr("连续五首失败后停止并汇总错误。"), key: page.settingKeys.skipOnError, type: "toggle", checked: true }
                 ]
                 onSettingChanged: (key, value) => page.handleSettingChanged(key, value)

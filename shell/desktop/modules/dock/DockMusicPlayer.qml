@@ -21,6 +21,7 @@ Item {
     // ── Inputs ──
     property int iconSize: 44
     property int dockHeight: 60
+    required property real cornerRadius
     property int widthUnits: 4
     // Set by DockInfoCarousel: true only while this page is the visible one.
     // Inactive pages keep their transitions but stop self-driven animation.
@@ -136,7 +137,7 @@ Item {
         y: -widget.backgroundGap
         width: widget.width
         height: widget.iconSize + widget.backgroundGap * 2
-        radius: widget.iconSize * 0.35
+        radius: widget.cornerRadius
         color: "transparent"
         gradient: Gradient {
             orientation: Gradient.Horizontal

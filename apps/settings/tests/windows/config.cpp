@@ -57,11 +57,17 @@ int main(int argc, char **argv) {
     CHECK(settings.setAnimation("hide", "none"));
     CHECK(settings.state()["closeAnimation"]=="fade");
     CHECK(settings.state()["hideAnimation"]=="none");
+    CHECK(settings.state()["buttonGlyphMode"]=="always");
+    CHECK(settings.setButtonGlyphMode("hover"));
+    CHECK(settings.state()["buttonGlyphMode"]=="hover");
+    CHECK(!settings.setButtonGlyphMode("invalid"));
+    CHECK(settings.state()["buttonGlyphMode"]=="hover");
     QProcess reopened;
     reopened.start(QCoreApplication::applicationFilePath(), {"--install-defaults"});
     CHECK(reopened.waitForFinished(5000)); CHECK(reopened.exitCode()==0);
     const auto persisted=QJsonDocument::fromJson(reopened.readAllStandardOutput()).object();
     CHECK(persisted["hideAnimation"]=="none"); CHECK(persisted["closeAnimation"]=="fade");
+    CHECK(persisted["buttonGlyphMode"]=="hover");
     CHECK(persisted["radius"].toInt()==28); CHECK(!persisted["shadow"].toBool());
     CHECK(!persisted["enabled"].toBool()); CHECK(persisted["decoration"]=="changed_externally");
     const auto saved=get();

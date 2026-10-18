@@ -57,7 +57,12 @@ Q_SIGNALS:
                           const QString &transition, int durationMs);
 
 protected:
-    void drawWindow(const RenderTarget &renderTarget,
+#ifdef KOS_KWIN_PAINT_RESULT_API
+    bool
+#else
+    void
+#endif
+    drawWindow(const RenderTarget &renderTarget,
                     const RenderViewport &viewport, EffectWindow *window,
                     int mask, const Region &deviceRegion,
                     WindowPaintData &data) override;

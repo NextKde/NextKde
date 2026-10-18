@@ -51,6 +51,10 @@ QtObject {
         "window": '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><g fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4.5" width="18" height="15" rx="2.5"/><path d="M3 9.2h18"/></g></svg>',
 
         // ── 动作 ──
+        // macOS 27 menu-bar overflow double chevrons, redrawn from the native screenshot:
+        // https://talk.tidbits.com/t/menu-bar-icons-can-finally-cross-the-notch-in-macos-27/34217/2
+        "status-collection-expand": '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 18 18"><g fill="none" stroke="#fff" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="m8 3-5.5 6L8 15m7-12-5.5 6 5.5 6"/></g></svg>',
+        "status-collection-collapse": '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 18 18"><g fill="none" stroke="#fff" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="m3 3 5.5 6L3 15m7-12 5.5 6-5.5 6"/></g></svg>',
         "back": '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="24" height="24"><g fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19.6 12H4.4"/><path d="M11.2 5.2 4.4 12l6.8 6.8"/></g></svg>',
         "select-all": '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><g fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="3"/><path d="m7 12 3 3 7-7"/></g></svg>',
         "help": '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><g fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round"><path d="M8.5 8a3.5 3.5 0 0 1 7 0c0 2.5-3.5 2.5-3.5 5"/><path d="M12 17v.1"/></g></svg>',
