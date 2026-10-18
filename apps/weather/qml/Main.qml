@@ -2558,7 +2558,8 @@ KosApplicationWindow {
                                                 for (var i = 0; i < root.upcomingHours.length; ++i) {
                                                     var t = root.number(root.upcomingHours[i], "temperature", NaN)
                                                     if (isFinite(t))
-                                                        pts.push({ x: 54 + i * 118, t: t })
+                                                        // 与委托 width 50 / Row spacing 10 联动：中心 x = 25，列距 60
+                                                        pts.push({ x: 25 + i * 60, t: t })
                                                 }
                                                 if (pts.length < 2)
                                                     return
@@ -2665,7 +2666,8 @@ KosApplicationWindow {
 
                                                     required property var modelData
                                                     required property int index
-                                                    width: 108
+                                                    // ref-main 实测小时列中心距 41px@814 × 1.4598 ≈ 60px（含 Row spacing 10）
+                                                    width: 50
                                                     height: hourlyRow.height
                                                     opacity: 0
                                                     transform: Translate { id: entranceShift; y: 14 }
