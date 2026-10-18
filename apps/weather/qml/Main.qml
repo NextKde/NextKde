@@ -2464,22 +2464,23 @@ KosApplicationWindow {
                                                 background: null
                                                 // ref-main 实测降水段为实心水滴 6×9px@814（胶囊高 25px），我方胶囊 36px 按 1.44 折算 ≈ 9×13
                                                 // Control 会覆写 contentItem 几何，Canvas 需包 Item 再居中（ref 胶囊中心 225 vs 水滴中心 225.5 居中）
+                                                // LEDGER 仍差 15：ref 水滴墨/胶囊高比 0.386，canvas 12×16→15×20（×1.25），墨迹 8×11→~10×14
                                                 contentItem: Item {
                                                     anchors.fill: parent
                                                     Canvas {
                                                         id: dropCanvas
-                                                        width: 12
-                                                        height: 16
+                                                        width: 15
+                                                        height: 20
                                                         anchors.centerIn: parent
                                                         antialiasing: true
                                                         onPaint: {
                                                             var ctx = getContext("2d")
                                                             ctx.reset()
                                                             ctx.beginPath()
-                                                            ctx.moveTo(6, 1.5)
-                                                            ctx.bezierCurveTo(8.2, 5.0, 10, 7.6, 10, 10.5)  // 右侧下行到圆右端
-                                                            ctx.arc(6, 10.5, 4, 0, Math.PI, false)          // 经底部从右到左
-                                                            ctx.bezierCurveTo(2, 7.6, 3.8, 5.0, 6, 1.5)     // 左侧收回尖点
+                                                            ctx.moveTo(7.5, 1.9)
+                                                            ctx.bezierCurveTo(10.25, 6.25, 12.5, 9.5, 12.5, 13.1)  // 右侧下行到圆右端
+                                                            ctx.arc(7.5, 13.1, 5, 0, Math.PI, false)              // 经底部从右到左
+                                                            ctx.bezierCurveTo(2.5, 9.5, 4.75, 6.25, 7.5, 1.9)     // 左侧收回尖点
                                                             ctx.closePath()
                                                             ctx.fillStyle = hourlySegmented.segment === 1 ? "#ffffff" : Qt.rgba(1, 1, 1, 0.9)
                                                             ctx.fill()
