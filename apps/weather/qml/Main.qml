@@ -26,6 +26,9 @@ KosApplicationWindow {
         root.currentIsDay)
     readonly property color skyText: "#ffffff"
     readonly property color skyTextMuted: Qt.rgba(1, 1, 1, 0.66)
+    // tile-cards 原生分辨率实测：卡头小 caps 与卡头 glyph 同浅蓝墨（SUNSET/UV 峰值 (146,205,255)/(147,206,255)；
+    // 白@α 反解三通道矛盾 R 0.33/B 0.91，证独立蓝墨非白@α），与 glyph 色 #90cbff 同源
+    readonly property color cardHeaderText: "#90cbff"
 
     // ref-main 白天场景所有内容卡填充暗于周围天空（Pillow 实测：指标卡 (38.5,115.8,196.9)
     // vs 卡间天空 (54.7,124.3,197.0)；AQ 卡 (9.5,93.7,179.0) vs 缝隙 (38.3,101.7,175.9)），
@@ -1729,7 +1732,7 @@ KosApplicationWindow {
 
                                         Label {
                                             text: qsTr("Air Quality").toUpperCase()
-                                            color: root.skyTextMuted
+                                            color: root.cardHeaderText
                                             font.pixelSize: 11
                                             font.weight: Font.DemiBold
                                             font.letterSpacing: 1.4
@@ -1929,7 +1932,7 @@ KosApplicationWindow {
 
                                                         Label {
                                                             text: qsTr("Wind").toLocaleUpperCase(Qt.locale())
-                                                            color: root.skyTextMuted
+                                                            color: root.cardHeaderText
                                                             font.pixelSize: 11
                                                             font.letterSpacing: 1.4
                                                             Accessible.ignored: true
@@ -2151,7 +2154,7 @@ KosApplicationWindow {
 
                                                         Label {
                                                             text: moonCard.phaseName.toLocaleUpperCase(Qt.locale())
-                                                            color: root.skyTextMuted
+                                                            color: root.cardHeaderText
                                                             font.pixelSize: 11
                                                             font.letterSpacing: 1.4
                                                             elide: Text.ElideRight
@@ -2346,7 +2349,7 @@ KosApplicationWindow {
 
                                                         Label {
                                                             text: qsTr("Sunset").toLocaleUpperCase(Qt.locale())
-                                                            color: root.skyTextMuted
+                                                            color: root.cardHeaderText
                                                             font.pixelSize: 11
                                                             font.letterSpacing: 1.4
                                                             Accessible.ignored: true
@@ -2435,7 +2438,7 @@ KosApplicationWindow {
 
                                                         Label {
                                                             text: qsTr("UV Index").toLocaleUpperCase(Qt.locale())
-                                                            color: root.skyTextMuted
+                                                            color: root.cardHeaderText
                                                             font.pixelSize: 11
                                                             font.letterSpacing: 1.4
                                                             Accessible.ignored: true
@@ -3162,7 +3165,7 @@ KosApplicationWindow {
 
                                         Label {
                                             text: qsTr("10-Day Forecast").toLocaleUpperCase(Qt.locale())
-                                            color: root.skyTextMuted
+                                            color: root.cardHeaderText
                                             font.pixelSize: 11
                                             font.weight: Font.DemiBold
                                             font.letterSpacing: 1.4
