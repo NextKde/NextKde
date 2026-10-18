@@ -2360,7 +2360,7 @@ KosApplicationWindow {
                             width: miniCalendar.cellWidth
                             height: miniCalendar.cellHeight
                             hoverEnabled: true
-                            opacity: inVisibleMonth ? 1 : 0.42
+                            opacity: inVisibleMonth ? 1 : 0.5
                             Accessible.name: AppTheme.formatDate(cellDate, Locale.LongFormat)
                             onClicked: {
                                 root.selectedDate = cellDate

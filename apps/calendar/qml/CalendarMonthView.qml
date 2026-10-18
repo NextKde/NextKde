@@ -99,7 +99,7 @@ Pane {
                 rightPadding: 6
                 topPadding: 5
                 bottomPadding: 5
-                opacity: inVisibleMonth ? 1 : 0.42
+                opacity: inVisibleMonth ? 1 : 0.5
                 Accessible.name: AppTheme.formatDate(cellDate, Locale.LongFormat)
                 onClicked: root.dateSelected(cellDate)
 
