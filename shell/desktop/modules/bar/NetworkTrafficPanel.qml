@@ -195,7 +195,7 @@ AnimatedPopupWindow {
         baseColor: AppearanceTokens.colors.surfaceContainer
         surfaceOpacity: 1
         scrimEnabled: AppearanceTokens.surface.usesBackdrop
-        scrimLevel: "subtle"
+        scrimLevel: AppearanceTokens.bar.popupScrimLevel
     }
     Flickable {
         objectName: "traffic-panel-body"

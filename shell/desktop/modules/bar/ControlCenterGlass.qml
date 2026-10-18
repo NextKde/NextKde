@@ -14,7 +14,7 @@ LiquidGlassPanel {
     // The normalized minimum maps to KWin blur level 1.
     blurStrength: 0
     scrimEnabled: AppearanceTokens.surface.usesBackdrop
-    scrimLevel: "transparent"
+    scrimLevel: AppearanceTokens.bar.popupScrimLevel
     ambientPrimary: WallpaperColorSource.primary
     ambientSecondary: WallpaperColorSource.secondary
     ambientStrength: 0.35 * AppearanceTokens.glass.ambientMultiplier

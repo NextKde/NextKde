@@ -276,7 +276,7 @@ AnimatedPopupWindow {
             // sat on raw glass while every neighbouring panel was scrimmed --
             // the two tones were visibly different side by side.
             scrimEnabled: AppearanceTokens.surface.usesBackdrop
-            scrimLevel: "transparent"
+            scrimLevel: AppearanceTokens.bar.popupScrimLevel
     }
 
     Rectangle {

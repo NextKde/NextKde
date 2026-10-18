@@ -1,5 +1,6 @@
 import QtQuick
 import Quickshell
+import Quickshell.Wayland
 import qs.desktop.modules.common
 
 // Edge-aware tooltip shared by built-in status items. A PopupWindow is used
@@ -42,10 +43,13 @@ AnimatedPopupWindow {
         margins.right: root.dockHosted && root.dockEdge === "left" ? -6 : 0
     }
 
-    Rectangle {
+    BackgroundEffect.blurRegion: root.visible && AppearanceTokens.surface.usesBackdrop
+        ? tooltipSurface.blurRegion : null
+
+    ControlCenterGlass {
+        id: tooltipSurface
         anchors.fill: parent
         radius: 7
-        color: "#000000"
 
         Column {
             id: tooltipColumn
@@ -55,14 +59,14 @@ AnimatedPopupWindow {
             Text {
                 anchors.horizontalCenter: parent.horizontalCenter
                 text: root.primaryText
-                color: "#ffffff"
+                color: tooltipSurface.foregroundColor
                 font { family: "Noto Sans CJK SC"; pixelSize: 12; weight: Font.DemiBold }
             }
             Text {
                 anchors.horizontalCenter: parent.horizontalCenter
                 visible: root.secondaryText.length > 0
                 text: root.secondaryText
-                color: "#ffffff"
+                color: tooltipSurface.secondaryForegroundColor
                 font { family: "Noto Sans CJK SC"; pixelSize: 10; weight: Font.Medium }
             }
         }

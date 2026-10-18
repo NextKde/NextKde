@@ -105,7 +105,7 @@ AnimatedPopupWindow {
         // glass never darkened over a bright backdrop, so its white labels sat
         // on raw glass while every neighbouring panel was scrimmed.
         scrimEnabled: AppearanceTokens.surface.usesBackdrop
-        scrimLevel: "transparent"
+        scrimLevel: AppearanceTokens.bar.popupScrimLevel
         adaptiveDarkScrim: true
 
         ListView {

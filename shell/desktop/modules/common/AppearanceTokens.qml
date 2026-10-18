@@ -449,6 +449,8 @@ QtObject {
     }
 
     readonly property QtObject bar: QtObject {
+        // Bar popups and Control Center share one compositor tint strength.
+        readonly property string popupScrimLevel: "transparent"
         // Bar keeps one visual language across shell styles. Integration is a
         // user choice, not an implicit Windows-theme side effect.
         readonly property string placement: "top"
