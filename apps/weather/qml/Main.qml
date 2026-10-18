@@ -3151,23 +3151,31 @@ KosApplicationWindow {
                                                         pulse: backend.loading && !AppTheme.reduceMotion
                                                         Accessible.ignored: true
                                                     }
+                                                }
 
-                                                    // ref-main Fri 行 50% 峰值 (61,202,248)@814 降采样、纯百分数无伞 glyph
+                                                Column {
+                                                    Layout.preferredWidth: 44
+                                                    spacing: 2
+
                                                     Label {
+                                                        width: 44
+                                                        text: Math.round(dailyRow.dayMinimum) + "°"
+                                                        color: root.skyTextMuted
+                                                        horizontalAlignment: Text.AlignRight
+                                                    }
+
+                                                    // ref tile-10day Fri 行实测：低温 "54°" 墨 x155-177、其下 "50%" 墨 x150-181（同列近居中），
+                                                    // ref-main 同构——% 落低温列下方，不放图标列下
+                                                    Label {
+                                                        width: 44
                                                         visible: dailyRow.precipChance > 0
                                                         text: dailyRow.precipChance + "%"
                                                         color: "#3dcaf8"
                                                         font.pixelSize: 10
+                                                        horizontalAlignment: Text.AlignRight
                                                         Accessible.name: qsTr("%1% chance of precipitation").arg(
                                                             dailyRow.precipChance)
                                                     }
-                                                }
-
-                                                Label {
-                                                    Layout.preferredWidth: 44
-                                                    text: Math.round(dailyRow.dayMinimum) + "°"
-                                                    color: root.skyTextMuted
-                                                    horizontalAlignment: Text.AlignRight
                                                 }
 
                                                 Item {
