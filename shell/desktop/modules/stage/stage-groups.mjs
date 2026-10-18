@@ -45,6 +45,15 @@ export function isSameApp(a, b, appIdA, appIdB) {
     return !!(appIdA && appIdA === appIdB)
 }
 
+// 卡片宽高比：优先窗口内容几何（无装饰，与缩略图同口径），退 frame。
+// 两个矩形的选择在别处无关——只有 aspect 消费它。
+function aspectOf(r) {
+    const g = r.toplevel?.contentGeometry || r.geometry
+    if (!g || !(g.width > 0) || !(g.height > 0))
+        return 0
+    return g.width / g.height
+}
+
 // 把 records 分组（保持首次出现顺序），返回 [{ key, pid, wins }]。
 //   opts.skipWindowId — 排除的窗口（当前活动窗：它就是"主窗"，不出卡）
 //   opts.desktopId    — 只留该桌面上的窗口（缺省不筛；矩形发布跨桌面）
@@ -89,13 +98,14 @@ export function groupRecords(records, opts = {}) {
             byKey[key] = wins
             groups.push({ key: key, pid: r.pid || 0, wins: wins,
                 merged: false,
-                // 窗口宽高比（含装饰，来自 KWin 几何）：卡片形状跟窗口走
-                // （macOS Stage Manager 语义：横窗=横卡、竖窗=竖卡，整窗
-                // 缩进卡里）。取组首窗、与代表窗选择无关——视图布局与
-                // 矩形发布两条路径必须得到同一个值（发布路径不 decorate）
-                aspect: (r.geometry && r.geometry.width > 0
-                    && r.geometry.height > 0)
-                    ? r.geometry.width / r.geometry.height : 0 })
+                // 窗口内容宽高比：卡片形状跟窗口走（macOS Stage Manager
+                // 语义：横窗=横卡、竖窗=竖卡，整窗缩进卡里）。取**内容**
+                // 几何（frame 去掉装饰）而不是 frame——缩略图抓的正是无
+                // 装饰内容，两边口径必须一致，否则 PreserveAspectFit 在卡
+                // 内上下留黑边（kate: frame 1.61 vs 内容 1.69）。
+                // 取组首窗、与代表窗选择无关——视图布局与矩形发布两条
+                // 路径必须得到同一个值（发布路径不 decorate）。
+                aspect: aspectOf(r) })
         }
         wins.push(r)
     }

@@ -1163,7 +1163,7 @@ PanelWindow {
                     fanSpacing: p.fanSpacing,
                     fanHoverSpread: p.fanHoverSpread,
                     cardTint: p.cardTint, cardBorder: p.cardBorder,
-                    cardDepth: p.cardDepth, cardTopLight: p.cardTopLight,
+                    cardTopLight: p.cardTopLight,
                     cardOpacity: p.cardOpacity !== undefined ? p.cardOpacity : 1.0 })
             }
         }
@@ -2579,15 +2579,17 @@ PanelWindow {
     }
 
     // ── 逐卡高度（2026-10-18 macOS 语义轮）──
-    // 卡形跟窗口宽高比走：横窗＝矮卡、竖窗＝高卡，整窗等比缩进卡里
+    // 卡形跟窗口内容宽高比走：横窗＝矮卡、竖窗＝高卡，整窗等比缩进卡里
     // （不再统一 128×170 裁切）。宽度恒为列宽−inset，只有高度变；
-    // 卡高夹在 [0.70w, 1.5w]——极端窗形（超宽/超高）不把列撑炸。
-    // aspect 未知（0/NaN）回落配置 cardHeight（无记录的空脸、旧数据）。
+    // 只夹上限 1.5w——偏高卡不把列撑炸。⚠️ 不要加最小高度下限：卡高一旦
+    // 大于 w/aspect，PreserveAspectFit 就在卡内上下留黑边，白窗上读作
+    // "缩略图是直角、卡是圆角"（2026-10-18 实测 kate 被 0.70w 下限撑出
+    // 7px 黑边）。aspect 未知（0/NaN）回落配置 cardHeight。
     function _cardHeightFor(aspect) {
         const w = StageConfigService.cardWidth
         if (!(aspect > 0) || !isFinite(aspect))
             return StageConfigService.cardHeight
-        return Math.round(Math.max(w * 0.70, Math.min(w * 1.5, w / aspect)))
+        return Math.round(Math.min(w * 1.5, w / aspect))
     }
     // 模型行高度（视图布局口径）
     function _modelHeights(n) {

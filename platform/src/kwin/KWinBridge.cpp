@@ -458,6 +458,13 @@ private:
         // 标题栏+应用图标（台前卡片"最上面覆盖着图标"的根源），实时模式
         // 下内容持续刷新、那条静止的图标条格外显眼
         options.insert(QStringLiteral("include-decoration"), false);
+        // 不含窗口投影：CaptureWindow 默认把窗口的合成器投影一起拍进
+        // alpha 通道（实测 614×440 的暗窗，左右各有 ~12px 的 alpha 渐变
+        // 带，内容只从 x=12 开始）。缩略图是"窗口内容"，带投影会同时造成
+        // 三个可见缺陷：①内容被投影边距缩进、实际比卡面小一圈；②透明
+        // 边距让卡背板的白描边透出来，暗窗上读作"一圈莫名其妙的亮边"；
+        // ③卡面内部自带一层投影，与卡外的 KosCardShadow 叠成双影。
+        options.insert(QStringLiteral("include-shadow"), false);
         // ScreenShot2 writes raw pixels to this descriptor after its D-Bus
         // reply describes the image dimensions and QImage format.
         QDBusUnixFileDescriptor writePipe(dbusWriteFd);

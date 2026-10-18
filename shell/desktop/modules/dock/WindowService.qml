@@ -276,6 +276,7 @@ QtObject {
         // provider-owned QObjects and must never be written here.
         if (record.provider === "kwin") {
             record.toplevel.geometry = next.toplevel.geometry;
+            record.toplevel.contentGeometry = next.toplevel.contentGeometry;
             record.toplevel.outputName = next.toplevel.outputName;
             record.toplevel.maximized = next.toplevel.maximized;
             record.toplevel.visible = next.toplevel.visible;
@@ -318,6 +319,12 @@ QtObject {
                 // Full-reveal geometry & placement for Dock collision.
                 geometry: source.geometry && source.geometry.width > 0
                     ? source.geometry : null,
+                // Content rect (frame minus decoration). Stage cards use this
+                // for their aspect: thumbnails are captured without decoration,
+                // so sizing from the frame letterboxes wide windows.
+                contentGeometry: source.contentGeometry
+                    && source.contentGeometry.width > 0
+                    ? source.contentGeometry : null,
                 outputName: source.outputName || "",
                 maximized: !!source.maximized,
                 visible: source.visible === undefined ? true : !!source.visible

@@ -517,12 +517,26 @@ Item {
             // 内容盖在其上，视觉与快照时代同层。旧的 livePainted 开洞是
             // 给"内容画在条带之下"的已废弃架构留的，留着会把玻璃底板抠空
             // = 卡片分裂成"透明框＋悬浮内容"）
+            // 有缩略图时背板必须不透明：投影是 outer-only（卡内被
+            // SDF 抠掉），半透明背板的抗锯齿边缘会把**没被投影压暗**的
+            // 壁纸透出来，比卡外投影区更亮 = 一圈 1~2px 亮边（2026-10-18
+            // 实测：卡外 39,61,88 → 边缘 67,91,121）。不透明后边缘只混
+            // 背板色，亮边消失。空卡/占位仍走半透明玻璃。
             color: (card.isHovered || card.dropHovered || card.dwellHint)
                 ? Qt.rgba(0.10, 0.13, 0.20,
                     Math.min(0.95, StageConfigService.cardTint * 1.3))
-                : Qt.rgba(0.05, 0.07, 0.12, StageConfigService.cardTint)
+                : card.thumbPreviewSource !== ""
+                    ? Qt.rgba(0.05, 0.07, 0.12, 1.0)
+                    : Qt.rgba(0.05, 0.07, 0.12, StageConfigService.cardTint)
+            // 静置描边只给"空卡/占位"用：缩略图铺满卡面时它是唯一露在
+            // 圆角边上的东西，实测在白窗旁读作一圈亮边（阴影被卡内裁掉，
+            // 卡外壁纸是压暗的，1px 白描边反而更亮）。参考卡没有这圈边
+            // ——有内容就 0，武装/驻留高亮照旧 2。
+            // ⚠️ 判据用 source 而非 thumbPreviewVisible：后者是有效可见性，
+            // 受 thumbCard.visible=false 牵连恒假（见该属性注释）。
             border.width: (card.dropHovered || card.selfMergeHint
-                || card.dwellHint) ? 2 : 1
+                || card.dwellHint) ? 2
+                : (card.thumbPreviewSource !== "" ? 0 : 1)
             // dropHovered/selfMergeHint = 武装级高亮（亮蓝）；
             // dwellHint = 驻留预示（强蓝，"停住别动"的即时反馈——首版
             // 1px@45% 实测几乎不可见 = "反馈太差"，加粗提亮）
@@ -548,8 +562,14 @@ Item {
         // ⚠️ 不要改回 anchors.centerIn：锚点会覆盖 x/y 绑定，投影变成
         // 上下对称的光晕（2026-10-18 卡顶黑边事故）。显式 x/y 定位。
         KosCardShadow {
-            cardWidth: plate.width
-            cardHeight: plate.height
+            // KosCardShadow 的洞比卡面外扩 1px（保护半透明玻璃不被自己的
+            // 投影染灰）。卡面一旦不透明，这 1px 外扩就只剩副作用：卡外
+            // 1~2px 的**未压暗**壁纸露出来，比周围投影区更亮 = 一圈亮边
+            // （2026-10-18 实测 70,145,173 vs 卡外 56,117,139）。按 2px
+            // 缩卡 + 1px 回正抵消内建生长，洞与外轮廓重新重合。
+            readonly property bool opaqueFace: card.thumbPreviewSource !== ""
+            cardWidth: plate.width - (opaqueFace ? 2 : 0)
+            cardHeight: plate.height - (opaqueFace ? 2 : 0)
             cornerRadius: plate.radius
             // 光源在左上：右下重、左上轻
             offsetX: 1
@@ -558,8 +578,8 @@ Item {
             // 半程 ≈ softness/2，44 对应实测参考的 ~17-19px 有效衰减
             softness: 44
             shadowColor: Qt.rgba(0, 0, 0, 0.20)
-            x: plate.x - margin
-            y: plate.y - margin
+            x: plate.x - margin + (opaqueFace ? 1 : 0)
+            y: plate.y - margin + (opaqueFace ? 1 : 0)
         }
 
         // ── 聚焦辉光：多层薄步进衰减模拟柔和光晕。⚠️ 平色矩形层叠会出硬边
@@ -913,28 +933,10 @@ Item {
             fragmentShader: Qt.resolvedUrl("../../shaders/stage_round.frag.qsb")
         }
 
-        // 深度渐变：远侧压暗盖在内容之上，增强"退到侧边"的纵深（悬停/点击时淡出）。
-        // 压暗侧 = 屏缘侧（左条压左、右条压右），条在右时整个翻转
-        Rectangle {
-            anchors.fill: plate
-            radius: plate.radius
-            gradient: Gradient {
-                orientation: Gradient.Horizontal
-                GradientStop {
-                    position: 0.0
-                    color: card.rightSide ? Qt.rgba(0, 0, 0, 0.0)
-                        : Qt.rgba(0, 0, 0, StageConfigService.cardDepth)
-                }
-                GradientStop { position: 0.75; color: Qt.rgba(0, 0, 0, 0.0) }
-                GradientStop {
-                    position: 1.0
-                    color: card.rightSide ? Qt.rgba(0, 0, 0, StageConfigService.cardDepth)
-                        : Qt.rgba(0, 0, 0, 0.0)
-                }
-            }
-            opacity: (card.isHovered || card.engaging) ? 0.0 : 1.0
-            Behavior on opacity { NumberAnimation { duration: 250 } }
-        }
+        // 深度渐变已删除（2026-10-18）：卡片就是窗口内容本身，参考里
+        // 没有任何"远侧压暗"——它只是盖在缩略图上的一层横向黑渐变，
+        // 白窗实测左 144 → 右 239，读作"卡面一半发灰"。卡不再是玻璃，
+        // 而是内容；纵深由透视 + 投影表达。
     }
 
     // ── 真透视倾斜：把 plane 纹理按共享相机针孔模型重投影（逆映射逐像素

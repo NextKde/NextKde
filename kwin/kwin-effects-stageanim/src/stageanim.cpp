@@ -1154,7 +1154,7 @@ struct CardMeta
     std::chrono::milliseconds hoverDwellMs{0}; // QML 驻留（hoverDwellDelay）同拍
     qreal fanSpacing = 8, tintAlpha = 0.55, borderAlpha = 0.05;
     qreal fanHoverSpread = 1.4;
-    qreal depthStrength = 0.38, topLight = 0.07;
+    qreal depthStrength = 0.0, topLight = 0.07;
     qreal fade = 1.0;   // QML slot.opacity（压暗 × 视口边缘渐隐）
     qreal cardOpacity = 1.0; // 整卡透明度旋钮（面板 cardOpacity，1=不透明）
     bool closeHot = false;
@@ -1578,7 +1578,8 @@ void StageAnimEffect::reloadLiveCards()
                 meta.winId = o.value(QStringLiteral("winId")).toString();
                 meta.tintAlpha = o.value(QStringLiteral("cardTint")).toDouble(0.55);
                 meta.borderAlpha = o.value(QStringLiteral("cardBorder")).toDouble(0.05);
-                meta.depthStrength = o.value(QStringLiteral("cardDepth")).toDouble(0.38);
+                // 0 = 关闭：参考卡面没有"远侧压暗"，QML 侧已删除该层
+                meta.depthStrength = o.value(QStringLiteral("cardDepth")).toDouble(0.0);
                 meta.topLight = o.value(QStringLiteral("cardTopLight")).toDouble(0.07);
                 meta.fade = qBound(0.0, o.value(QStringLiteral("fade")).toDouble(1.0), 1.0);
                 meta.cardOpacity = o.value(QStringLiteral("cardOpacity")).toDouble(1.0);

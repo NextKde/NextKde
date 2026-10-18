@@ -76,7 +76,6 @@ QtObject {
         "cardTopLight": { type: "real", min: 0, max: 0.3, def: 0.07 },
         "cardBorder":   { type: "real", min: 0, max: 0.4, def: 0.05 },
         "cardGlow":     { type: "real", min: 0, max: 0.4, def: 0.13 },
-        "cardDepth":    { type: "real", min: 0, max: 0.6, def: 0.38 },
         "thumbSize":    { type: "int", min: 160, max: 640, def: 640 },
         // 动效与节拍
         "hoverScale":   { type: "real", min: 1.0, max: 1.20, def: 1.05 },
@@ -162,7 +161,7 @@ QtObject {
     property real deckRestTilt: 30
     property real tiltAngle: 0
     // 卡面玻璃质感：背板浓度（悬停自动 ×1.3 提亮）/ 顶部受光 / 静置描边
-    // 亮度 / 聚焦辉光强度 / 纵深压暗
+    // 亮度 / 聚焦辉光强度
     // 2026-10-18 结构轮：圆角按参考 7% 卡宽，128 宽取 9
     property int cardRadius: 9
     // 参考卡面是缩略图本体，背板只在无图/留边处露出；0.35 让留边接近
@@ -172,7 +171,6 @@ QtObject {
     property real cardTopLight: 0.07
     property real cardBorder: 0.05
     property real cardGlow: 0.13
-    property real cardDepth: 0.38
     // 缩略图解码尺寸（宽，高等比 0.7）：裁切铺满卡面后按卡高放大显示，
     // 需要比卡宽更大的纹理才不糊（128 卡 @2x 显示宽 ≈486 设备像素；
     // 2026-10-18 实测 480 仍糊，640 才清晰——源图本身 720 级）

@@ -156,6 +156,27 @@ function frameGeometry(window) {
     }
 }
 
+// Window content geometry (frame minus decoration). Stage cards size themselves
+// from the *content* aspect because the thumbnail is captured without
+// decoration — sizing from frameGeometry letterboxes wide windows (2026-10-18
+// kate: frame 1206x747 = 1.61, client 1206x713 = 1.69, thumbnail 720x425).
+// Older scripting APIs without clientGeometry fall back to the frame rect.
+function contentGeometry(window) {
+    try {
+        const g = window.clientGeometry;
+        if (!g || !(Number(propertyValue(g, "width", 0)) > 0))
+            return frameGeometry(window);
+        return {
+            x: Number(propertyValue(g, "x", 0)),
+            y: Number(propertyValue(g, "y", 0)),
+            width: Number(propertyValue(g, "width", 0)),
+            height: Number(propertyValue(g, "height", 0))
+        };
+    } catch (error) {
+        return frameGeometry(window);
+    }
+}
+
 // KWin 6 exposes maximizeMode as a flag set: vertical=1, horizontal=2. Read it
 // first; the older `maximized` shapes remain only as a compatibility fallback.
 function isMaximized(window) {
@@ -565,6 +586,8 @@ function snapshot() {
             // placement, so the user's actual drawn window is what occludes
             // the dock, not an app's requested size.
             geometry: frameGeometry(window),
+            // Content rect (no decoration) — Stage card aspect source.
+            contentGeometry: contentGeometry(window),
             outputName: outputName(window),
             maximized: isMaximized(window),
             visible: !!propertyValue(window, "visible", true)
