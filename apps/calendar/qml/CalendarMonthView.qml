@@ -138,7 +138,8 @@ Pane {
                         KosToolButton {
                             text: "+"
                             flat: true
-                            visible: dayButton.hovered && dayButton.inVisibleMonth
+                            visible: (dayButton.hovered || dayButton.activeFocus)
+                                && dayButton.inVisibleMonth
                             implicitWidth: 24
                             implicitHeight: 24
                             Accessible.name: qsTr("Add event on %1").arg(
@@ -184,6 +185,29 @@ Pane {
                                 verticalAlignment: Text.AlignVCenter
                                 elide: Text.ElideRight
                             }
+
+                            // P1-8 (A1): the chip was pointer-only; add focus,
+                            // keyboard activation and a VoiceOver identity —
+                            // same surface as the P1-7 schedule-view chips.
+                            activeFocusOnTab: true
+                            Keys.onReturnPressed: {
+                                root.dateSelected(dayButton.cellDate)
+                                root.itemActivated(itemChip.modelData)
+                            }
+                            Keys.onSpacePressed: {
+                                root.dateSelected(dayButton.cellDate)
+                                root.itemActivated(itemChip.modelData)
+                            }
+                            Accessible.role: Accessible.ListItem
+                            Accessible.name: root.itemTitle(itemChip.modelData)
+                            Accessible.onPressAction: {
+                                root.dateSelected(dayButton.cellDate)
+                                root.itemActivated(itemChip.modelData)
+                            }
+                            // Focus ring only: the resting chip is fill-only,
+                            // so the border appears on focus alone.
+                            border.color: root.itemColor(itemChip.modelData)
+                            border.width: itemChip.activeFocus ? 1 : 0
 
                             TapHandler {
                                 onTapped: {
