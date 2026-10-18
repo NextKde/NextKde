@@ -1521,13 +1521,18 @@ KosApplicationWindow {
                                     radius: 2
                                     gradient: Gradient {
                                         orientation: Gradient.Horizontal
+                                        // ref-main 实测：EPA 0-500 线性映射，0.72 起平直 #80172b（Pillow 逐点采样）
                                         stops: [
                                             GradientStop { position: 0.00; color: "#00de72" },
-                                            GradientStop { position: 0.20; color: "#ffdf1d" },
-                                            GradientStop { position: 0.35; color: "#ffa205" },
-                                            GradientStop { position: 0.50; color: "#fd4530" },
-                                            GradientStop { position: 0.65; color: "#e70d79" },
-                                            GradientStop { position: 0.80; color: "#a207d6" },
+                                            GradientStop { position: 0.15; color: "#fde620" },
+                                            GradientStop { position: 0.22; color: "#ffac0b" },
+                                            GradientStop { position: 0.29; color: "#fd5e21" },
+                                            GradientStop { position: 0.36; color: "#f30f5e" },
+                                            GradientStop { position: 0.43; color: "#cd08b2" },
+                                            GradientStop { position: 0.50; color: "#a805fa" },
+                                            GradientStop { position: 0.58; color: "#9a0aae" },
+                                            GradientStop { position: 0.65; color: "#8b1062" },
+                                            GradientStop { position: 0.72; color: "#80172b" },
                                             GradientStop { position: 1.00; color: "#80172b" }
                                         ]
                                     }
