@@ -34,10 +34,16 @@ Scope {
     // layer-shell compositors do not reliably grow an already-mapped 1x1
     // surface when its anchors change.
     property bool windowCreated: false
-    readonly property var targetScreen: ScreenLifecycle.activeScreen
+    // A Dock click supplies its output for this opening. Keyboard and IPC
+    // callers omit it and use the shared active output.
+    readonly property var launcherScreen: AppLauncherService.triggerScreen
+        || ScreenLifecycle.activeScreen
+    readonly property var targetScreen: launcherScreen && !launcherScreen.isPlaceholder
+        ? launcherScreen : ScreenLifecycle.activeScreen
     onOpenChanged: console.log("[AppLauncher] root open=" + open)
     onTargetScreenChanged: {
-        console.log("[AppLauncher] target screen changed=" + !!targetScreen)
+        console.log("[AppLauncher] target screen changed="
+            + (targetScreen ? targetScreen.name : "<null>"))
         // Once constructed, do not tear down the GridView while an output is
         // temporarily unavailable (for example, during suspend/resume).
         if (targetScreen)

@@ -835,7 +835,7 @@ Item {
                 if (DockModelService.activeDockPopup)
                     DockModelService.setDockPopupVisible(
                         DockModelService.activeDockPopup, false)
-                AppLauncherService.toggle()
+                AppLauncherService.toggle(container.targetScreen)
             }
             onContextRequested: DockModelService.openDockPopup(appLauncherContextMenu)
         }

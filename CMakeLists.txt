@@ -74,6 +74,10 @@ if(BUILD_TESTING)
                     ${CMAKE_CURRENT_SOURCE_DIR}/tests/dock/${suite}.test.mjs)
             set_tests_properties(kos-dock.${suite} PROPERTIES LABELS logic TIMEOUT 30)
         endforeach()
+        add_test(NAME kos-applauncher.screen-routing
+            COMMAND ${KOS_NODE_EXECUTABLE}
+                --test ${CMAKE_CURRENT_SOURCE_DIR}/tests/applauncher/screen-routing.test.mjs)
+        set_tests_properties(kos-applauncher.screen-routing PROPERTIES LABELS logic TIMEOUT 10)
         add_test(NAME kos-shell.language
             COMMAND ${KOS_NODE_EXECUTABLE}
                 ${CMAKE_CURRENT_SOURCE_DIR}/tests/localization/widget-language.mjs)
