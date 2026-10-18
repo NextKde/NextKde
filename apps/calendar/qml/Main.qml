@@ -529,6 +529,7 @@ KosApplicationWindow {
 
             TextInput {
                 id: input
+                Accessible.name: field.placeholder
                 anchors.verticalCenter: parent.verticalCenter
                 anchors.left: parent.left
                 anchors.leftMargin: 47
@@ -1967,6 +1968,7 @@ KosApplicationWindow {
                     TextInput {
                         id: input
                         objectName: "toolbarSearchInput"
+                        Accessible.name: qsTr("Search")
                         anchors.fill: parent
                         anchors.leftMargin: 12
                         anchors.rightMargin: 12

@@ -427,6 +427,7 @@ KosWorkspaceDialog {
                 Label { text: qsTr("List"); color: AppTheme.mutedText; font.pixelSize: 11 }
                 KosComboBox {
                     id: listBox
+                    Accessible.name: qsTr("Task list")
                     Layout.fillWidth: true
                     Layout.preferredHeight: root.fieldHeight
                     model: root.availableLists
@@ -435,6 +436,7 @@ KosWorkspaceDialog {
                 Label { text: qsTr("Priority"); color: AppTheme.mutedText; font.pixelSize: 11 }
                 KosComboBox {
                     id: priorityBox
+                    Accessible.name: qsTr("Task priority")
                     Layout.preferredWidth: 110
                     Layout.preferredHeight: root.fieldHeight
                     model: [qsTr("None"), qsTr("Low"), qsTr("Medium"), qsTr("High")]
@@ -536,6 +538,7 @@ KosWorkspaceDialog {
                     // manual height/content/cursor bindings are needed.
                     TextArea.flickable: KosTextArea {
                         id: notesField
+                        Accessible.name: qsTr("Task notes")
                         width: notesScroll.width
                         placeholderText: qsTr("Optional notes")
                         wrapMode: TextEdit.Wrap
