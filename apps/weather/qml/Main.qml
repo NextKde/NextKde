@@ -1734,29 +1734,14 @@ KosApplicationWindow {
                                             columnSpacing: 8
                                             rowSpacing: 8
 
-                                            WeatherMetric {
-                                                Layout.fillWidth: true
-                                                symbol: "%"
-                                                labelText: qsTr("Humidity")
-                                                valueText: Math.round(root.number(
-                                                    backend.current, "relativeHumidity", 0)) + "%"
-                                            }
-
-                                            WeatherMetric {
-                                                Layout.fillWidth: true
-                                                symbol: "≋"
-                                                labelText: qsTr("Wind")
-                                                valueText: Math.round(root.number(
-                                                    backend.current, "windSpeed", 0)) + " " + root.speedUnit
-                                            }
-
                                             Rectangle {
-                                                id: directionTile
+                                                id: windCard
+                                                Layout.columnSpan: 2
                                                 Layout.fillWidth: true
-                                                implicitHeight: 66
+                                                implicitHeight: 162
                                                 radius: root.tileRadius
                                                 // 昼夜分材质：ref-main 白天所有卡填充暗于天空（α~0.30 深蓝玻璃）；夜间维持白玻璃
-                                                property bool hot: directionHover.hovered
+                                                property bool hot: windHover.hovered
                                                 property real hoverFill: hot ? root.cardGlassAlphaHot : root.cardGlassAlpha
                                                 Behavior on hoverFill { NumberAnimation { duration: AppTheme.motionNormal; easing.type: Easing.OutCubic } }
                                                 property real hoverStroke: hot ? 0.32 : 0.22
@@ -1765,125 +1750,170 @@ KosApplicationWindow {
                                                 border.width: 1
                                                 border.color: Qt.rgba(1, 1, 1, hoverStroke)
                                                 transform: Translate {
-                                                    y: AppTheme.reduceMotion ? 0 : (directionTile.hot ? -3 : 0)
+                                                    y: AppTheme.reduceMotion ? 0 : (windCard.hot ? -3 : 0)
                                                     Behavior on y { NumberAnimation { duration: AppTheme.motionNormal; easing.type: Easing.OutCubic } }
                                                 }
 
                                                 property real windDir: root.number(backend.current, "windDirection", 0)
                                                 // arrow points where the wind blows TO (Open-Meteo direction is where it comes FROM)
-                                                property real flowAngle: (directionTile.windDir + 180) % 360
+                                                property real flowAngle: (windCard.windDir + 180) % 360
                                                 property real gustVal: root.number(backend.current, "windGust", Number.NaN)
                                                 property bool hasGust: Number.isFinite(gustVal)
 
-                                                onWindDirChanged: compass.requestPaint()
-                                                onFlowAngleChanged: compass.requestPaint()
+                                                onWindDirChanged: windCompass.requestPaint()
+                                                onFlowAngleChanged: windCompass.requestPaint()
 
-                                                HoverHandler { id: directionHover }
-                                                ToolTip.visible: directionHover.hovered
+                                                HoverHandler { id: windHover }
+                                                ToolTip.visible: windHover.hovered
                                                 ToolTip.text: qsTr("Direction")
                                                 Accessible.role: Accessible.StaticText
-                                                Accessible.name: qsTr("Direction") + ": " + Math.round(directionTile.windDir) + "° " + directionTile.cardinal
-                                                    + (directionTile.hasGust
-                                                        ? " " + qsTr("Gusts") + ": " + Math.round(directionTile.gustVal) + " " + root.speedUnit
+                                                Accessible.name: qsTr("Wind") + ": " + Math.round(root.number(
+                                                    backend.current, "windSpeed", 0)) + " " + root.speedUnit
+                                                    + ", " + qsTr("Direction") + " " + Math.round(windCard.windDir) + "° " + windCard.cardinal
+                                                    + (windCard.hasGust
+                                                        ? " " + qsTr("Gusts") + ": " + Math.round(windCard.gustVal) + " " + root.speedUnit
                                                         : "")
 
                                                 property string cardinal: {
                                                     var names = ["N", "NE", "E", "SE", "S", "SW", "W", "NW"]
-                                                    return names[Math.round(directionTile.windDir / 45) % 8]
+                                                    return names[Math.round(windCard.windDir / 45) % 8]
                                                 }
 
+                                                // ref-main WIND 头部：左/上 inset 14/12px，11px DemiBold + 字距全大写（同瓦片头家族）
                                                 RowLayout {
-                                                    anchors.fill: parent
-                                                    anchors.margins: 10
+                                                    anchors.left: parent.left
+                                                    anchors.leftMargin: 14
+                                                    anchors.top: parent.top
+                                                    anchors.topMargin: 12
                                                     spacing: 8
 
-                                                    Item {
-                                                        Layout.preferredWidth: 46
-                                                        Layout.preferredHeight: 46
+                                                    Label {
+                                                        text: "≋"
+                                                        color: root.skyTextMuted
+                                                        font.pixelSize: 11
+                                                        font.weight: Font.DemiBold
+                                                        Accessible.ignored: true
+                                                    }
 
-                                                        Canvas {
-                                                            id: compass
-                                                            anchors.fill: parent
-                                                            antialiasing: true
-                                                            contextType: "2d"
-                                                            onPaint: {
-                                                                var ctx = getContext("2d")
-                                                                ctx.reset()
-                                                                var c = 23
-                                                                ctx.strokeStyle = "rgba(255,255,255,0.30)"
-                                                                ctx.lineWidth = 1
-                                                                for (var i = 0; i < 36; i++) {
-                                                                    var a = i * Math.PI / 18
-                                                                    ctx.beginPath()
-                                                                    ctx.moveTo(c + Math.sin(a) * 15, c - Math.cos(a) * 15)
-                                                                    ctx.lineTo(c + Math.sin(a) * 19.5, c - Math.cos(a) * 19.5)
-                                                                    ctx.stroke()
-                                                                }
-                                                                ctx.fillStyle = "rgba(255,255,255,0.92)"
-                                                                ctx.font = "600 7px sans-serif"
-                                                                ctx.textAlign = "center"
-                                                                ctx.textBaseline = "middle"
-                                                                ctx.fillText("N", c, c - 21.5)
-                                                                ctx.fillText("E", c + 21.5, c)
-                                                                ctx.fillText("S", c, c + 21.5)
-                                                                ctx.fillText("W", c - 21.5, c)
-                                                                ctx.save()
-                                                                ctx.translate(c, c)
-                                                                ctx.rotate(directionTile.flowAngle * Math.PI / 180)
-                                                                ctx.strokeStyle = "#ffffff"
-                                                                ctx.fillStyle = "#ffffff"
-                                                                ctx.lineWidth = 1.6
+                                                    Label {
+                                                        text: qsTr("Wind").toLocaleUpperCase(Qt.locale())
+                                                        color: root.skyTextMuted
+                                                        font.pixelSize: 11
+                                                        font.letterSpacing: 1.4
+                                                        Accessible.ignored: true
+                                                    }
+                                                }
+
+                                                // ref-main 罗盘外径 72px@814 → 116×116，水平居中 y36
+                                                Item {
+                                                    anchors.horizontalCenter: parent.horizontalCenter
+                                                    y: 36
+                                                    width: 116
+                                                    height: 116
+
+                                                    Canvas {
+                                                        id: windCompass
+                                                        anchors.fill: parent
+                                                        antialiasing: true
+                                                        contextType: "2d"
+                                                        onPaint: {
+                                                            var ctx = getContext("2d")
+                                                            ctx.reset()
+                                                            var c = 58
+                                                            // 内盘 r29 白 0.06（ref 内盘 (52,122,196) vs 卡面 (35,112,193) ≈ 白@0.06）
+                                                            ctx.fillStyle = "rgba(255,255,255,0.06)"
+                                                            ctx.beginPath()
+                                                            ctx.arc(c, c, 29, 0, 2 * Math.PI)
+                                                            ctx.fill()
+                                                            // 36 根刻度 r38→r44
+                                                            ctx.strokeStyle = "rgba(255,255,255,0.30)"
+                                                            ctx.lineWidth = 1
+                                                            for (var i = 0; i < 36; i++) {
+                                                                var a = i * Math.PI / 18
                                                                 ctx.beginPath()
-                                                                ctx.moveTo(0, -11)
-                                                                ctx.lineTo(0, -19)
+                                                                ctx.moveTo(c + Math.sin(a) * 38, c - Math.cos(a) * 38)
+                                                                ctx.lineTo(c + Math.sin(a) * 44, c - Math.cos(a) * 44)
                                                                 ctx.stroke()
-                                                                ctx.beginPath()
-                                                                ctx.moveTo(0, -23)      // tip
-                                                                ctx.lineTo(-2.6, -18.4)
-                                                                ctx.lineTo(2.6, -18.4)
-                                                                ctx.closePath()
-                                                                ctx.fill()
-                                                                ctx.restore()
                                                             }
+                                                            // N/E/S/W 字母 r≈50；N 用实测亮蓝，W/E/S 白 0.65
+                                                            ctx.font = "600 10px sans-serif"
+                                                            ctx.textAlign = "center"
+                                                            ctx.textBaseline = "middle"
+                                                            ctx.fillStyle = "#6CB1E0"
+                                                            ctx.fillText("N", c, c - 50)
+                                                            ctx.fillStyle = "rgba(255,255,255,0.65)"
+                                                            ctx.fillText("E", c + 50, c)
+                                                            ctx.fillText("S", c, c + 50)
+                                                            ctx.fillText("W", c - 50, c)
+                                                            // 风向箭头：flowAngle = windDir+180，指向风吹去
+                                                            ctx.save()
+                                                            ctx.translate(c, c)
+                                                            ctx.rotate(windCard.flowAngle * Math.PI / 180)
+                                                            ctx.strokeStyle = "#ffffff"
+                                                            ctx.fillStyle = "#ffffff"
+                                                            ctx.lineWidth = 1.6
+                                                            ctx.beginPath()
+                                                            ctx.moveTo(0, -12)
+                                                            ctx.lineTo(0, -40)
+                                                            ctx.stroke()
+                                                            ctx.beginPath()
+                                                            ctx.moveTo(0, -46)      // tip
+                                                            ctx.lineTo(-3, -41)
+                                                            ctx.lineTo(3, -41)
+                                                            ctx.closePath()
+                                                            ctx.fill()
+                                                            ctx.restore()
                                                         }
                                                     }
 
+                                                    // 环心速度：数字+单位整体居中于罗盘中心
                                                     ColumnLayout {
-                                                        Layout.fillWidth: true
+                                                        anchors.centerIn: parent
                                                         spacing: 1
 
                                                         Label {
-                                                            Layout.fillWidth: true
-                                                            text: qsTr("Direction")
+                                                            Layout.alignment: Qt.AlignHCenter
+                                                            text: Math.round(root.number(
+                                                                backend.current, "windSpeed", 0))
+                                                            color: root.skyText
+                                                            font.pixelSize: 30
+                                                            font.weight: Font.DemiBold
+                                                            Accessible.ignored: true
+                                                        }
+
+                                                        Label {
+                                                            Layout.alignment: Qt.AlignHCenter
+                                                            text: root.speedUnit
                                                             color: root.skyTextMuted
-                                                            font.pixelSize: 10
-                                                            elide: Text.ElideRight
-                                                            Accessible.ignored: true
-                                                        }
-
-                                                        Label {
-                                                            Layout.fillWidth: true
-                                                            text: Math.round(directionTile.windDir) + "° " + directionTile.cardinal
-                                                            color: root.skyText
-                                                            font.pixelSize: 15
-                                                            font.weight: Font.DemiBold
-                                                            elide: Text.ElideRight
-                                                            Accessible.ignored: true
-                                                        }
-
-                                                        Label {
-                                                            Layout.fillWidth: true
-                                                            visible: directionTile.hasGust
-                                                            text: qsTr("Gusts: ") + Math.round(directionTile.gustVal) + " " + root.speedUnit
-                                                                  + " " + directionTile.cardinal
-                                                            color: root.skyText
-                                                            font.pixelSize: 10
-                                                            font.weight: Font.DemiBold
-                                                            elide: Text.ElideRight
+                                                            font.pixelSize: 13
                                                             Accessible.ignored: true
                                                         }
                                                     }
                                                 }
+
+                                                // ref-main Gusts 行：距卡底 9px@814、左 inset 12px@814
+                                                Label {
+                                                    anchors.left: parent.left
+                                                    anchors.leftMargin: 17
+                                                    anchors.bottom: parent.bottom
+                                                    anchors.bottomMargin: 12
+                                                    visible: windCard.hasGust
+                                                    text: qsTr("Gusts: ") + Math.round(windCard.gustVal) + " " + root.speedUnit
+                                                          + " " + windCard.cardinal
+                                                    color: root.skyText
+                                                    font.pixelSize: 13
+                                                    font.weight: Font.DemiBold
+                                                    elide: Text.ElideRight
+                                                    Accessible.ignored: true
+                                                }
+                                            }
+
+                                            WeatherMetric {
+                                                Layout.fillWidth: true
+                                                symbol: "%"
+                                                labelText: qsTr("Humidity")
+                                                valueText: Math.round(root.number(
+                                                    backend.current, "relativeHumidity", 0)) + "%"
                                             }
 
                                             WeatherMetric {
