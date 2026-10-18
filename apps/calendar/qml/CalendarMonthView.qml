@@ -130,7 +130,7 @@ Pane {
                         Label {
                             text: "+" + (dayButton.dayItems.length - dayButton.visibleItemCount)
                             visible: dayButton.dayItems.length > dayButton.visibleItemCount
-                            color: AppTheme.mutedText; font.pixelSize: 9
+                            color: AppTheme.mutedText; font.pixelSize: 10
                             Accessible.name: qsTr("%1 items; select this date to view all").arg(dayButton.dayItems.length)
                         }
 
@@ -180,7 +180,7 @@ Pane {
                                 anchors.rightMargin: 4
                                 text: root.itemTitle(itemChip.modelData)
                                 color: AppTheme.text
-                                font.pixelSize: 9
+                                font.pixelSize: 10
                                 font.strikeout: root.itemCompleted(itemChip.modelData)
                                 verticalAlignment: Text.AlignVCenter
                                 elide: Text.ElideRight

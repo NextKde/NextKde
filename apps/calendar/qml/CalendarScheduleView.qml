@@ -486,7 +486,7 @@ Pane {
                 Layout.preferredHeight: root.allDayBandHeight
                 text: qsTr("all-day")
                 color: AppTheme.mutedText
-                font.pixelSize: 9
+                font.pixelSize: 10
                 horizontalAlignment: Text.AlignHCenter
                 verticalAlignment: Text.AlignTop
                 topPadding: 8
@@ -658,7 +658,7 @@ Pane {
                                     // same chip family as the timed chip and the ref inks
                                     // both the same way.
                                     color: allDayChip.inkColor
-                                    font.pixelSize: 9
+                                    font.pixelSize: 10
                                     font.strikeout: root.itemCompleted(allDayChip.modelData)
                                     verticalAlignment: Text.AlignVCenter
                                     elide: Text.ElideRight
@@ -701,7 +701,7 @@ Pane {
                             color: allDayStack.allDayOverflow > 0
                                 ? root.chipInk(allDayColumn.columnItems[allDayStack.allDayVisible])
                                 : "transparent"
-                            font.pixelSize: 9
+                            font.pixelSize: 10
                             leftPadding: 5
                             verticalAlignment: Text.AlignVCenter
                             elide: Text.ElideRight
@@ -862,7 +862,7 @@ Pane {
                                 text: hourCell.rowIndex < 12 ? AppTheme.meridiemText(0)
                                                              : AppTheme.meridiemText(12)
                                 color: AppTheme.mutedText
-                                font.pixelSize: 8
+                                font.pixelSize: 10
                             }
                             Label {
                                 id: digitText
@@ -1182,7 +1182,7 @@ Pane {
                                     color: chipHost.hasOverflow
                                         ? root.chipInk(hourCell.cellItems[3])
                                         : "transparent"
-                                    font.pixelSize: 9
+                                    font.pixelSize: 10
                                     elide: Text.ElideRight
                                 }
                             }

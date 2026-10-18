@@ -2705,7 +2705,7 @@ KosApplicationWindow {
                                                 : (root.itemTodoId(agendaItem.modelData).length > 0
                                                     ? qsTr("EVENT + TASK") : qsTr("EVENT"))
                                             color: root.itemColor(agendaItem.modelData)
-                                            font.pixelSize: 9
+                                            font.pixelSize: 10
                                             font.weight: Font.DemiBold
                                         }
                                     }
