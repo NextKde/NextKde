@@ -1746,18 +1746,37 @@ KosApplicationWindow {
                     { color: "#ff5f57", act: "close" }
                 ]
                 delegate: Rectangle {
+                    id: windowDot
                     required property var modelData
                     width: 14; height: 14; radius: 7
                     color: modelData.color
-                    opacity: 0.85
+                    // P1-A6b: 键盘聚焦时给最小可见反馈（常态外观 0.85 不变）。
+                    opacity: activeFocus ? 1.0 : 0.85
+                    border.width: activeFocus ? 1 : 0
+                    border.color: AppTheme.text
+                    activeFocusOnTab: true
+                    function activate() {
+                        if (modelData.act === "min")
+                            root.showMinimized()
+                        else if (modelData.act === "max")
+                            root.visibility === Window.Maximized
+                                ? root.showNormal() : root.toggleFullScreen()
+                        else
+                            root.close()
+                    }
+                    Keys.onReturnPressed: windowDot.activate()
+                    Keys.onEnterPressed: windowDot.activate()
+                    Keys.onSpacePressed: windowDot.activate()
+                    Accessible.role: Accessible.Button
+                    Accessible.name: modelData.act === "min" ? qsTr("Minimize")
+                        : modelData.act === "max" ? qsTr("Zoom") : qsTr("Close")
                     MouseArea {
-                        anchors.fill: parent
+                        // P1-A6b: 命中区放大到 22×22 居中（中心距 28 不重叠），
+                        // 视觉圆点仍是 14×14。
+                        anchors.centerIn: parent
+                        width: 22; height: 22
                         cursorShape: Qt.PointingHandCursor
-                        onClicked: modelData.act === "min" ? root.showMinimized()
-                            : modelData.act === "max"
-                            ? (root.visibility === Window.Maximized
-                                ? root.showNormal() : root.toggleFullScreen())
-                            : root.close()
+                        onClicked: windowDot.activate()
                     }
                 }
             }
