@@ -11,6 +11,7 @@ ShellRoot {
     property int ticks: 0
     property int checks: 0
     property real summaryHeight: 0
+    property real openingHeight: 0
     function check(ok, message) {
         if (!ok) throw new Error("STATUS_PANELS_FAIL: " + message)
         checks++
@@ -45,8 +46,15 @@ ShellRoot {
                 NetworkService.deviceState = "connected"
                 NetworkService.deviceName = "test0"
                 traffic.toggle(entry)
+                fixture.openingHeight = traffic.implicitHeight
+                fixture.check(traffic.interactive && traffic.revealProgress === 1,
+                    "traffic maps with enabled input and no intermediate scaled frame")
+                fixture.check(fixture.openingHeight > 200,
+                    "traffic layout has its full summary height before mapping")
             } else if (fixture.stage === 2) {
                 fixture.check(traffic.requestedOpen && !traffic.detailsExpanded, "summary opens without process details")
+                fixture.check(traffic.implicitHeight === fixture.openingHeight,
+                    "traffic summary does not resize after its first layout")
                 fixture.check(PlatformClient.applicationRequests === 0, "summary must not sample process traffic")
                 fixture.check(traffic.targetScreen === host.screen, "traffic screen follows its secondary-screen anchor")
                 fixture.check(battery.targetScreen === ScreenLifecycle.activeScreen, "unanchored battery has fallback")
@@ -75,6 +83,8 @@ ShellRoot {
                 fixture.check(PowerProfileService.activeProfile === "power-saver", "readback confirms power profile")
                 battery.close()
                 traffic.toggle(entry)
+                fixture.check(traffic.implicitHeight === fixture.openingHeight,
+                    "reopening settles summary geometry before mapping")
             } else if (fixture.stage === 6) {
                 fixture.check(!traffic.detailsExpanded, "reopening starts with summary")
                 fixture.check(PlatformClient.applicationRequests === 2, "reopening summary does not sample processes")

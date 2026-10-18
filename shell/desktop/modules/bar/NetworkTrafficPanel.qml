@@ -12,6 +12,9 @@ import qs.desktop.modules.dock
 // A read-only dashboard for the active interface, independent of Wi-Fi setup.
 AnimatedPopupWindow {
     id: panel
+    // This popup sizes itself from a layout. Map its settled geometry directly;
+    // scaling a newly resized Wayland popup can leave a stretched first frame.
+    animationEnabled: false
     property Item anchorItem: null
     readonly property bool connected: NetworkService.available
         && NetworkService.deviceState === "connected"
@@ -111,6 +114,8 @@ AnimatedPopupWindow {
         }
         anchorItem = item
         history = TrafficHistory.empty(NetworkService.deviceName)
+        detailsExpanded = false
+        content.ensurePolished()
         show()
     }
     function close() { hide() }
