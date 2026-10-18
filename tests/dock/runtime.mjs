@@ -614,6 +614,7 @@ const cases = {
             property Component leadingAccessory; property Component trailingAccessory
             property bool clockInInfoCarousel; property bool pointerInside: false; property bool editMode: false
             property var draggedPinnedLoader: null; property real pillRadius: 28
+            readonly property real surfaceRadius: ConfigService.dockStyle === "taskbar" ? 0 : pillRadius
             width: 56; height: 900
         }`,
                 DockAutoHideController: `import QtQuick

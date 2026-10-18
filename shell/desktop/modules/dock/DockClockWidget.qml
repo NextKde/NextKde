@@ -14,6 +14,7 @@ Item {
 
     property int iconSize: 44
     property int dockHeight: 60
+    required property real cornerRadius
     property int widthUnits: 4
     // DockInfoCarousel sets this false while another page is shown so the
     // glyph-mask ShaderEffectSource stops re-sampling every frame.
@@ -94,14 +95,14 @@ Item {
     }
 
     // Match the music/weather card contract exactly: the visible background
-    // extends by backgroundGap on every side and shares their 0.35 radius.
+    // extends by backgroundGap on every side and shares the outer Dock radius.
     Rectangle {
         id: clockBackground
         anchors.horizontalCenter: parent.horizontalCenter
         y: -widget.backgroundGap
         width: widget.width
         height: widget.iconSize + widget.backgroundGap * 2
-        radius: widget.iconSize * 0.35
+        radius: widget.cornerRadius
         gradient: Gradient {
             orientation: Gradient.Horizontal
             GradientStop {
