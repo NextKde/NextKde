@@ -42,6 +42,7 @@ Item {
 
     property int iconSize: 44
     property int dockHeight: 60
+    required property real cornerRadius
     property int widthUnits: 4
     property bool showClock: false
     property bool showTemperature: true
@@ -370,6 +371,7 @@ Item {
         anchors.verticalCenter: parent.verticalCenter
         iconSize: carousel.iconSize
         dockHeight: carousel.dockHeight
+        cornerRadius: carousel.cornerRadius
         widthUnits: carousel.expanded
             ? carousel.unitsFor(carousel.musicPage) : carousel.widthUnits
         visible: carousel.cardVisible(carousel.musicPage)
@@ -385,6 +387,7 @@ Item {
         anchors.verticalCenter: parent.verticalCenter
         iconSize: carousel.iconSize
         dockHeight: carousel.dockHeight
+        cornerRadius: carousel.cornerRadius
         widthUnits: carousel.expanded
             ? carousel.unitsFor(carousel.weatherPage) : carousel.widthUnits
         visible: carousel.cardVisible(carousel.weatherPage)
@@ -400,6 +403,7 @@ Item {
         anchors.verticalCenter: parent.verticalCenter
         iconSize: carousel.iconSize
         dockHeight: carousel.dockHeight
+        cornerRadius: carousel.cornerRadius
         widthUnits: carousel.expanded
             ? carousel.unitsFor(carousel.clockPage) : carousel.widthUnits
         visible: carousel.cardVisible(carousel.clockPage)
@@ -415,6 +419,7 @@ Item {
         anchors.verticalCenter: parent.verticalCenter
         iconSize: carousel.iconSize
         dockHeight: carousel.dockHeight
+        cornerRadius: carousel.cornerRadius
         widthUnits: carousel.expanded
             ? carousel.unitsFor(carousel.temperaturePage) : carousel.widthUnits
         visible: carousel.cardVisible(carousel.temperaturePage)

@@ -12,6 +12,7 @@ Item {
 
     property int iconSize: 44
     property int dockHeight: 60
+    required property real cornerRadius
     property int widthUnits: 4
     // Set by DockInfoCarousel; the activity Canvas only repaints while shown.
     property bool pageActive: true
@@ -51,7 +52,7 @@ Item {
         y: -widget.backgroundGap
         width: widget.width
         height: widget.iconSize + widget.backgroundGap * 2
-        radius: widget.iconSize * 0.35
+        radius: widget.cornerRadius
         gradient: Gradient {
             orientation: Gradient.Horizontal
             GradientStop {

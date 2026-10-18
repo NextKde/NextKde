@@ -17,6 +17,11 @@ Item {
     readonly property int retainedArtworkCount: retainedArtwork.count
     property int retainedBytes: 0
     property string displayedRoute: ""
+    property bool contentBusy: false
+    readonly property bool loading: pages.some(page => page.route === route)
+                                    && (contentBusy || displayedRoute !== route)
+    // A slow cover must not keep an otherwise usable page blank indefinitely.
+    property int artworkWaitTimeout: 3000
     property Item transitionSourceItem: null
     property var settingsStore: typeof backendSettingsController !== "undefined" ? backendSettingsController : null
     readonly property bool remember: {
@@ -84,7 +89,7 @@ Item {
         }
         const next = ({}), states = Object.assign({}, pageStates), artwork = Object.assign({}, artworkStates)
         for (const key of recent) next[key] = true
-        // The current visual remains until restored covers have finished loading.
+        // Retain the previous tree for restoration, but hide it while loading.
         if (displayedRoute) next[displayedRoute] = true
         for (let i = 0; i < pageLoaders.count; ++i) {
             const loader = pageLoaders.itemAt(i)
@@ -115,17 +120,23 @@ Item {
         return false
     }
     function displayWhenReady() {
+        if (contentBusy) { displayTimer.stop(); return }
         for (let i = 0; i < pageLoaders.count; ++i) {
             const loader = pageLoaders.itemAt(i)
-            if (!loader || loader.routeKey !== route || loader.status !== Loader.Ready) continue
-            if (remember && pageStates[route] !== undefined && coversLoading(loader.item)) return
+            if (!loader || loader.routeKey !== route) continue
+            if (loader.status !== Loader.Ready && loader.status !== Loader.Error) return
+            if (loader.status === Loader.Ready && remember && pageStates[route] !== undefined
+                    && Date.now() - loader.readyAt < artworkWaitTimeout && coversLoading(loader.item)) return
             displayedRoute = route
             displayTimer.stop()
             retain()
             return
         }
+        displayTimer.stop()
     }
     onRouteChanged: { retain(); displayTimer.restart() }
+    onContentBusyChanged: if (!contentBusy) displayTimer.restart()
+    onPagesChanged: { retain(); displayTimer.restart() }
     onArtworkBudgetBytesChanged: retain()
     Component.onCompleted: { retain(); displayTimer.restart() }
     Timer { id: displayTimer; interval: 16; repeat: true; onTriggered: cache.displayWhenReady() }
@@ -154,10 +165,12 @@ Item {
             required property var modelData
             readonly property string routeKey: modelData.route
             property bool readyForDisplay: false
+            property double readyAt: 0
             anchors.fill: parent
             active: routeKey===cache.route || routeKey===cache.displayedRoute || !!cache.visited[routeKey]
+            asynchronous: true
             sourceComponent: modelData.component
-            visible: routeKey===cache.displayedRoute
+            visible: !cache.loading && routeKey===cache.route && routeKey===cache.displayedRoute
             opacity: readyForDisplay || cache.pageStates[routeKey] === undefined ? 1 : 0
             enabled: visible && routeKey===cache.route && opacity > 0
             onStatusChanged: if (status !== Loader.Ready) readyForDisplay = false
@@ -166,6 +179,7 @@ Item {
                 if (cache.remember && state !== undefined && typeof item.restoreNavigationState === "function")
                     item.restoreNavigationState(state)
                 readyForDisplay = true
+                readyAt = Date.now()
                 displayTimer.restart()
             }
         }

@@ -34,6 +34,12 @@ enum class DecoratedWindows {
     Never,
 };
 
+// Controls whether traffic light glyphs (x, -, +) are always visible or only on hover.
+enum class GlyphMode {
+    Always, // always visible (default)
+    Hover,  // macOS style: hide glyphs unless hovering over button cluster
+};
+
 // Which of AppConfig's keys a JSON object named. A config is built by merging
 // one JSON object at a time over a base, so the keys an object set have to be
 // recorded next to the values; a key that was not named must leave the base's
@@ -53,10 +59,12 @@ enum AppField : AppFieldMask {
     AppFieldInterceptMargin = 1u << 8,
     AppFieldBackground = 1u << 9,
     AppFieldDecoratedWindows = 1u << 10,
+    AppFieldGlyphMode = 1u << 11,
 };
 
 struct AppConfig {
     bool showButtons = true;
+    GlyphMode glyphMode = GlyphMode::Always;
     // Where the panel is and how big it is: the part of this struct an adjust
     // session changes and a machine-written rule stores (WindowRuleStore).
     PanelGeometry geometry;

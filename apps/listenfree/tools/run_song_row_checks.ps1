@@ -7,11 +7,11 @@ $components=Join-Path $fixture 'Components'
 New-Item -ItemType Directory -Force $components | Out-Null
 New-Item -ItemType Directory -Force (Join-Path $fixture 'assets') | Out-Null
 Copy-Item -LiteralPath (Join-Path $repo 'music_player_desktop/assets/icons') -Destination (Join-Path $fixture 'assets') -Recurse -Force
-foreach ($name in @('AppTheme','SongRow','CoverArt','IconGlyph')) {
+foreach ($name in @('AppTheme','LoadingIndicator','TrackTitle','SongRow','CoverArt','IconGlyph')) {
     $source=if ($name -eq 'SongRow' -and $SongRowSource) { $SongRowSource } else { Join-Path $repo "music_player_desktop/components/$name.qml" }
     Copy-Item -LiteralPath $source -Destination $components -Force
 }
-[IO.File]::WriteAllText((Join-Path $components 'qmldir'), "singleton AppTheme 1.0 AppTheme.qml`nSongRow 1.0 SongRow.qml`nCoverArt 1.0 CoverArt.qml`nIconGlyph 1.0 IconGlyph.qml`n")
+[IO.File]::WriteAllText((Join-Path $components 'qmldir'), "singleton AppTheme 1.0 AppTheme.qml`nLoadingIndicator 1.0 LoadingIndicator.qml`nTrackTitle 1.0 TrackTitle.qml`nSongRow 1.0 SongRow.qml`nCoverArt 1.0 CoverArt.qml`nIconGlyph 1.0 IconGlyph.qml`n")
 Copy-Item -LiteralPath (Join-Path $repo 'tests/qml/tst_song_row_favorites.qml') -Destination $fixture -Force
 $env:Path='F:/QT/6.11.2/mingw_64/bin;F:/QT/Tools/mingw1310_64/bin;'+$env:Path
 $env:QT_PLUGIN_PATH='F:/QT/6.11.2/mingw_64/plugins'

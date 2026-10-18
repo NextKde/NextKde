@@ -1,3 +1,4 @@
+#include "online/track_identity.h"
 #include "platform_catalog.h"
 #include <QCryptographicHash>
 #include <QDateTime>
@@ -163,7 +164,7 @@ QVariantMap song(const QString &platform, QJsonObject o) {
                QString("%1:%2")
                    .arg(duration / 60000, 2, 10, QLatin1Char('0'))
                    .arg(duration / 1000 % 60, 2, 10, QLatin1Char('0')));
-  return extra;
+  return identifiedTrack(extra);
 }
 } // namespace
 QJsonObject platformJson(QByteArray bytes) {
@@ -457,7 +458,7 @@ QVariantList platformSearchRows(const QString &p, const QString &category, const
         {"artist", clean(r.value("ARTIST"))}, {"album", clean(r.value("ALBUM"))}, {"albumId", r.value("ALBUMID").toVariant()},
         {"durationMs", ms}, {"duration", QString("%1:%2").arg(ms/60000,2,10,QChar('0')).arg(ms/1000%60,2,10,QChar('0'))}});
     }
-    return rows;
+    return identifiedTracks(rows);
   }
   const bool album = category == "albums";
   QJsonArray items;
@@ -516,7 +517,7 @@ QVariantList platformAlbumSongs(const QString &p, const QJsonObject &o) {
       auto row=song(p,r);if(!row.isEmpty()) rows.append(row);
     }
   }
-  return rows;
+  return identifiedTracks(rows);
 }
 
 QStringList platformSuggestions(const QString &p, const QJsonObject &o) {

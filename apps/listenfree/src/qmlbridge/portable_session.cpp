@@ -8,6 +8,7 @@
 #include "online/lyric_matching.h"
 #include "online/platform_catalog.h"
 #include "online/track_origin.h"
+#include "online/track_identity.h"
 #include "online/radio_catalog.h"
 #include <taglib/fileref.h>
 #include <taglib/tpropertymap.h>
@@ -135,14 +136,7 @@ struct CatalogAggregates {
     }
 };
 QString songKey(const QVariantMap& track) {
-    if (online::isScriptTrack(track)) return online::scriptTrackKey(track);
-    if(!track.value("radioId").toString().isEmpty())return "radio:"+track.value("radioProvider").toString()+":"+track.value("radioId").toString();
-    const auto path=track.value("localPath").toString();
-    if(!path.isEmpty()) return "file:"+platform::filePathKey(QDir::cleanPath(QFileInfo(path).absoluteFilePath()));
-    const auto rid=track.value("rid").toString();
-    if(!rid.isEmpty()) return track.value("source").toString().toLower()+":"+rid;
-    const auto url=track.value("remoteUrl").toString();
-    return url.isEmpty()?QString{}:"url:"+QUrl(url).toString(QUrl::NormalizePathSegments);
+    return online::trackUid(track);
 }
 QString timeLabel(qint64 ms) { return QStringLiteral("%1:%2").arg(ms / 60000, 2, 10, QLatin1Char('0')).arg(ms / 1000 % 60, 2, 10, QLatin1Char('0')); }
 QJsonObject kuwoJson(QByteArray bytes) {
@@ -170,18 +164,18 @@ QVariantMap PortableSession::toMap(const domain::Track& track) {
     const auto duration = static_cast<qint64>(track.duration.count());
     // Catalog rows retain these keys for the session; share their static data
     // instead of allocating identical field names for every track.
-    return {{QStringLiteral("trackId"), s(track.id.value())}, {QStringLiteral("title"), s(track.title)},
+    return online::identifiedTrack({{QStringLiteral("trackId"), s(track.id.value())}, {QStringLiteral("title"), s(track.title)},
             {QStringLiteral("artist"), track.artists.empty() ? QString{} : s(track.artists.front().name)},
             {QStringLiteral("album"), track.album ? s(track.album->title) : QString{}},
             {QStringLiteral("durationMs"), duration}, {QStringLiteral("duration"), timeLabel(duration)},
             {QStringLiteral("localPath"), track.localPath ? s(*track.localPath) : QString{}},
             {QStringLiteral("remoteUrl"), track.remoteUrl ? s(*track.remoteUrl) : QString{}},
             {QStringLiteral("artwork"), track.localPath ? localArtworkUrl(s(*track.localPath)) : (track.album && track.album->artworkUrl ? s(*track.album->artworkUrl) : QString{})},
-            {QStringLiteral("source"), track.localPath ? QStringLiteral("Local") : QStringLiteral("Online")}};
+            {QStringLiteral("source"), track.localPath ? QStringLiteral("Local") : QStringLiteral("Online")}});
 }
 domain::Track PortableSession::toTrack(const QVariantMap& map) {
     domain::Track track;
-    track.id = domain::TrackId(map.value("trackId").toString().toStdString());
+    track.id = domain::TrackId(online::trackUid(map).toStdString());
     track.title = map.value("title").toString().toStdString();
     // Use the same name identities as TagLibMetadataReader. Database upserts
     // replace relations and intentionally reject artists/albums with empty IDs.
@@ -250,7 +244,7 @@ PortableSession::PortableSession(infrastructure::database::Database& database, c
                 if(paused)player_.pause();
             });
         }
-        if(position.count()>5000)consecutiveErrors_=0;
+        if(position.count()>5000){consecutiveErrors_=0;resolutionAttempts_.clear();resolutionClock_.invalidate();}
         if(position.count()>30000)radioRetries_=0;
         emit progressChanged();
     };
@@ -316,7 +310,7 @@ PortableSession::PortableSession(infrastructure::database::Database& database, c
             [this](const QString& id, const QString&, const QString&, const QVariantMap& data, const QString& error) {
         if (id == scriptSearchId_ && !id.isEmpty()) {
             scriptSearchId_.clear(); searchBusy_ = false;
-            searchResults_ = data.value("rows").toList(); searchError_ = error.isEmpty() ? data.value("warning").toString() : error;
+            searchResults_ = online::identifiedTracks(data.value("rows").toList()); searchError_ = error.isEmpty() ? data.value("warning").toString() : error;
             searchTotal_ = data.value("total", 0).toInt(); scriptSearchPages_ = qMax(1, data.value("pages", 1).toInt());
             emit searchResultsChanged(); return;
         }
@@ -349,8 +343,14 @@ PortableSession::PortableSession(infrastructure::database::Database& database, c
         if (id != pending_ || currentTrack().value("entryId").toString() != pendingEntry_) return;
         pending_.clear();
         if (!error.isEmpty()) {
-            fail(error, currentTrack().value("source") == "bili" || sources_.hostReady());
+            fail(error);
             return;
+        }
+        if (resolutionAttempt_ > 0 && resolutionAttempt_ <= resolutionAttempts_.size()) {
+            auto& row = entries_[navigation_.currentTrack()];
+            row["playbackSourceId"] = resolutionAttempts_.at(resolutionAttempt_ - 1).first;
+            row["playbackQuality"] = data.value("quality", resolutionAttempts_.at(resolutionAttempt_ - 1).second);
+            syncQueue(); emit currentTrackChanged();
         }
         startResolved(data.value("url").toString(), data.value("headers").toMap());
     });
@@ -647,6 +647,7 @@ void PortableSession::invalidate() {
     cancelSmartMix();
     mixAttempted_=false; mixCooldown_=0;
     radioRetryScheduled_=false;
+    resolutionRetryScheduled_=false; resolutionAttempts_.clear(); resolutionClock_.invalidate();
     pauseIntent_=false;
     ++generation_;
     const auto pending = std::exchange(pending_, {});
@@ -661,6 +662,8 @@ void PortableSession::invalidate() {
 }
 void PortableSession::fail(const QString& message, bool skipEligible) {
     if(live() && radioRetryScheduled_)return;
+    if (skipEligible && retryResolution(message)) return;
+    resolutionAttempts_.clear(); resolutionClock_.invalidate(); resolutionRetryScheduled_ = false;
     loading_ = false; error_ = message; emit changed();
     if(live()) {
         if(skipEligible && radioRetries_<3) {
@@ -696,12 +699,21 @@ void PortableSession::beginCurrent() {
     if (track.isEmpty()) { emit changed(); return; }
     if (track.value("radioProvider").toString().startsWith("netease")) {
         resolveRadio();
-    } else if (!track.value("rid").toString().isEmpty()) {
+    } else if (track.value("localPath").toString().isEmpty() && !track.value("rid").toString().isEmpty()) {
         fetchLyrics(track.value("rid").toString());
-        pendingEntry_ = track.value("entryId").toString();
-        pending_ = sources_.resolveMusicUrl(sources_.activeId(), QString::fromStdString(database_.getSetting("playback.quality").value_or("flac")), online::sourceMusicInfo(track));
-        if (pending_.isEmpty())
-            fail(sources_.lastError(), track.value("source") == "bili" || sources_.hostReady());
+        resolutionAttempts_ = playbackAttempts(track, sources_.sources(), sources_.activeId(),
+            QString::fromStdString(database_.getSetting("playback.quality").value_or("128k")));
+        resolutionAttempt_ = 0;
+        resolutionClock_.start();
+        const auto gen = generation_;
+        QTimer::singleShot(PlaybackResolutionBudgetMs, this, [this, gen] {
+            if (gen != generation_ || !resolutionClock_.isValid() || mediaReady_) return;
+            resolutionAttempts_.clear(); resolutionRetryScheduled_ = false;
+            const auto pending = std::exchange(pending_, {});
+            sources_.cancelResolution(pending);
+            fail(QCoreApplication::translate("ListenFree", "寻找可用音源超时，可点击播放重试"));
+        });
+        resolveNextAttempt();
     } else {
         const auto local = track.value("localPath").toString();
         if (!local.isEmpty()) {
@@ -714,6 +726,32 @@ void PortableSession::beginCurrent() {
         } else startResolved(track.value("remoteUrl").toString());
     }
     emit changed();
+}
+void PortableSession::resolveNextAttempt() {
+    if (resolutionAttempt_ >= resolutionAttempts_.size()) {
+        fail(QCoreApplication::translate("ListenFree", "没有找到可用音源")); return;
+    }
+    const auto attempt = resolutionAttempts_.at(resolutionAttempt_++);
+    pendingEntry_ = currentTrack().value("entryId").toString();
+    pending_ = sources_.resolveMusicUrl(attempt.first, attempt.second, online::sourceMusicInfo(currentTrack()));
+    if (pending_.isEmpty()) fail(sources_.lastError());
+}
+bool PortableSession::retryResolution(const QString& message) {
+    if (resolutionRetryScheduled_) return true;
+    if (!resolutionClock_.isValid() || resolutionClock_.elapsed() >= PlaybackResolutionBudgetMs ||
+        resolutionAttempt_ >= resolutionAttempts_.size()) return false;
+    resolutionRetryScheduled_ = true;
+    loading_ = true; mediaReady_ = false; error_.clear(); emit changed();
+    const auto gen = generation_;
+    // Defer decoder teardown until its error callback has unwound.
+    QTimer::singleShot(1000, this, [this, gen, message] {
+        if (gen != generation_ || !resolutionRetryScheduled_) return;
+        resolutionRetryScheduled_ = false;
+        if (resolutionClock_.elapsed() >= PlaybackResolutionBudgetMs) { fail(message); return; }
+        player_.stop(); proxy_->cancel();
+        resolveNextAttempt();
+    });
+    return true;
 }
 void PortableSession::startResolved(const QString& url, const QVariantMap& headers) {
     const QUrl upstream(url);
@@ -828,20 +866,26 @@ bool PortableSession::enqueueTrack(const QVariantMap& value, bool next) {
 }
 bool PortableSession::enqueueTrackInternal(const QVariantMap& value, bool next, bool allowDuplicate) {
     cancelSmartMix(); mixAttempted_=false;
-    auto map = value;
+    auto map = online::identifiedTrack(value);
     if (map.value("localPath").toString().isEmpty() && map.value("rid").toString().isEmpty() && map.value("remoteUrl").toString().isEmpty() && map.value("radioId").toString().isEmpty()) return false;
     const auto key = songKey(map);
     // The three bulk paths start from an empty queue. Keep their duplicate
     // check linear while preserving the existing lookup for ordinary actions.
     if (batching_ && !next && batchSongKeys_.contains(key)) return true;
-    const int existing = allowDuplicate || (batching_ && !next) ? -1 : queueIndexFor(map);
+    auto identity = map; identity.remove("entryId");
+    const int existing = allowDuplicate || (batching_ && !next) ? -1 : queueIndexFor(identity);
     if(existing>=0) {
         const int current=navigation_.currentIndex();
         if(next && existing!=current) moveQueue(existing,existing<current?current:current+1);
         return true;
     }
     if (!map.value("localPath").toString().isEmpty()) map["artwork"] = localArtworkUrl(map.value("localPath").toString());
-    map["entryId"] = QUuid::createUuid().toString(QUuid::WithoutBraces);
+    // Preserve valid entry IDs across restarts; repair collisions from old snapshots.
+    auto entryId = restoringQueue_ ? map.value("entryId").toString() : QString{};
+    if (entryId.isEmpty() || std::any_of(entries_.cbegin(), entries_.cend(), [&](const auto& row) {
+            return row.value("entryId").toString() == entryId;
+        })) entryId = QUuid::createUuid().toString(QUuid::WithoutBraces);
+    map["entryId"] = entryId;
     map.remove("resolvedUrl");
     TrackInfo info(map.value("localPath").toString().isEmpty() ? "listenfree:" + map.value("entryId").toString() : map.value("localPath").toString());
     info.setValue(Qmmp::TITLE, map.value("title"));
@@ -892,7 +936,8 @@ bool PortableSession::appendEndlessTrack() {
 bool PortableSession::openTrack(const QVariantMap& value) {
     radioRetries_=0;
     if (!enqueueTrack(value)) { fail(QCoreApplication::translate("ListenFree", "曲目没有可播放来源")); return false; }
-    const int index=queueIndexFor(value);
+    auto identity = value; identity.remove("entryId");
+    const int index=queueIndexFor(identity);
     if(index==navigation_.currentIndex()) { play(); return true; }
     return selectQueue(index, true);
 }
@@ -916,10 +961,18 @@ bool PortableSession::replaceQueueWithList(const QVariantList& values, const QVa
     batching_ = false;
     batchSongKeys_.clear();
     syncQueue();
-    const int selectedIndex = queueIndexFor(selectedTrack);
+    auto selectedIdentity = selectedTrack; selectedIdentity.remove("entryId");
+    const int selectedIndex = queueIndexFor(selectedIdentity);
     return selectedIndex >= 0 && selectQueue(selectedIndex, true);
 }
+QString PortableSession::trackUid(const QVariantMap& track) const { return online::trackUid(track); }
 int PortableSession::queueIndexFor(const QVariantMap& track) const {
+    const auto entry = track.value("entryId").toString();
+    if (!entry.isEmpty()) {
+        for (int i=0; i<navigation_.trackCount(); ++i)
+            if (entries_.value(navigation_.track(i)).value("entryId").toString() == entry) return i;
+        return -1; // A stale queue command must not target a replacement entry.
+    }
     const auto key=songKey(track);
     if(key.isEmpty())return -1;
     for(int i=0;i<navigation_.trackCount();++i) if(songKey(entries_.value(navigation_.track(i)))==key)return i;
@@ -928,6 +981,8 @@ int PortableSession::queueIndexFor(const QVariantMap& track) const {
 bool PortableSession::isCurrentTrack(const QVariantMap& track) const {
     const auto current = currentTrack();
     if (current.isEmpty() || track.isEmpty()) return false;
+    const auto entry = track.value("entryId").toString();
+    if (!entry.isEmpty()) return entry == current.value("entryId").toString();
     // Share the queue's file / platform identity; titles and row positions are
     // not identities, and resolving an online URL must not change the marker.
     const auto key = songKey(track), currentKey = songKey(current);
@@ -1029,6 +1084,7 @@ void PortableSession::redirectDuplicates(const QVariantList& redirects) {
         for(auto it=entries_.begin();it!=entries_.end();++it) {
             if(QDir::fromNativeSeparators(it.value().value("localPath").toString()).compare(from.value("path").toString(),platform::filePathSensitivity)!=0)continue;
             it.value()["localPath"]=to.value("path");it.value()["trackId"]=to.value("id");
+            it.value() = online::identifiedTrack(it.value());
             it.value()["artwork"]=localArtworkUrl(to.value("path").toString());
             it.key()->setPath(to.value("path").toString());
             currentChanged|=currentPath.compare(from.value("path").toString(),platform::filePathSensitivity)==0;
@@ -1061,8 +1117,11 @@ void PortableSession::restoreQueue() {
     batchSongKeys_.clear();
     batching_ = true;
     const auto items=state.value("items").toArray();
-    const auto selected=items.isEmpty()?QVariantMap{}:items[std::clamp(state.value("index").toInt(),0,int(items.size()-1))].toObject().toVariantMap();
+    auto selected=items.isEmpty()?QVariantMap{}:items[std::clamp(state.value("index").toInt(),0,int(items.size()-1))].toObject().toVariantMap();
+    selected.remove("entryId");
+    restoringQueue_ = true;
     for (const auto& value : items) enqueueTrack(value.toObject().toVariantMap());
+    restoringQueue_ = false;
     batching_ = false;
     batchSongKeys_.clear();
     if (!navigation_.isEmpty()) navigation_.setCurrent(std::max(0,queueIndexFor(selected)));

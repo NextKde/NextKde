@@ -96,6 +96,8 @@ Item {
     property real volumeValue: 0.68
     property real positionMs: 51000
     property real durationMs: 236000
+    property bool waiting: false
+    property string trackLocation: ""
     property string trackTitle: "world étude"
     property string trackArtist: qsTr("豊崎愛生")
     property string trackAlbum: "world Étude / アルタイル"
@@ -283,18 +285,18 @@ Item {
                 anchors.right: page.radioContent ? mediaAction.left : favoriteAction.left
                 anchors.rightMargin: 12
                 spacing: 2 * page.controlScale
-                Text {
-                    width: parent.width
+                TrackTitle {
+                    width: parent.width; height: implicitHeight
+                    waiting: page.waiting
                     text: page.trackTitle
                     color: "#fffdfd"
                     font.family: AppTheme.fontFamily
                     font.pixelSize: 22 * page.controlScale
                     font.weight: Font.Bold
-                    elide: Text.ElideRight
                 }
                 Text {
                     width: parent.width
-                    text: page.trackArtist + (page.trackAlbum.length ? " / " + page.trackAlbum : "")
+                    text: (page.trackLocation.length ? page.trackLocation + " · " : "") + page.trackArtist + (page.trackAlbum.length ? " / " + page.trackAlbum : "")
                     color: "#e0dcdd"
                     opacity: .9
                     font.family: AppTheme.fontFamily
@@ -527,16 +529,15 @@ Item {
     }
 
     }
-    Text {
+    TrackTitle {
         objectName: "overflowTrackHeading"
         z: 4
         visible: page.overflowStyle
         anchors.horizontalCenter: parent.horizontalCenter
         y: 8; width: Math.max(0, parent.width - 400); height: 22
-        text: page.trackTitle + "  ·  " + page.trackArtist
+        text: page.trackTitle + "  ·  " + page.trackArtist + " · " + page.trackLocation
+        waiting: page.waiting
         color: "#e8e6e3"; font.family: AppTheme.fontFamily; font.pixelSize: 12
-        horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter
-        elide: Text.ElideRight
     }
     Item {
         id: bottomHotzone

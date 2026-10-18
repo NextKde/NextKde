@@ -6,6 +6,7 @@ TestCase {
     id: test
     name: "NavigationCacheLifecycle"
     when: windowShown
+    visible: true
     width: 400; height: 300
 
     Component {
@@ -38,7 +39,11 @@ TestCase {
             ]
         }
     }
-    function makeCache() { return createTemporaryObject(cacheComponent, test) }
+    function makeCache() {
+        const cache = createTemporaryObject(cacheComponent, test)
+        tryCompare(cache, "displayedRoute", "a")
+        return cache
+    }
     function page(cache, route) { return findChild(cache, "page:" + route) }
     function go(cache, route) { cache.route = route; tryVerify(function() { return page(cache, route) !== null }) }
 
@@ -81,6 +86,7 @@ TestCase {
     function test_disablingMemoryDropsStateAndOldPages() {
         const settings = createTemporaryObject(settingsComponent, test)
         const cache = createTemporaryObject(cacheComponent, test, { settingsStore: settings })
+        tryCompare(cache, "displayedRoute", "a")
         page(cache, "a").selectedIndex = 22
         go(cache, "b"); go(cache, "c")
         settings.remember = false; ++settings.revision
@@ -92,6 +98,7 @@ TestCase {
     function test_artworkReferenceSurvivesFurtherNavigationAndIsReleased() {
         const settings = createTemporaryObject(settingsComponent, test)
         const cache = createTemporaryObject(cacheComponent, test, { settingsStore: settings })
+        tryCompare(cache, "displayedRoute", "a")
         page(cache, "a").artwork = Qt.resolvedUrl("../../music_player_desktop/assets/album_Cover_2.png")
         tryCompare(findChild(page(cache, "a"), "coverSourceImage"), "status", Image.Ready)
         go(cache, "b"); go(cache, "c")

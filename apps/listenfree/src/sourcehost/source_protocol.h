@@ -7,9 +7,9 @@
 
 namespace listenfree::sourcehost {
 
-// LX permits one HTTP request to wait for 60 seconds. Both ends must use the
+// Allow slower sources up to 90 seconds per operation. Both ends use the
 // same operation budget; the client includes a small IPC scheduling allowance.
-inline constexpr int PluginOperationTimeoutMs = 60000;
+inline constexpr int PluginOperationTimeoutMs = 90000;
 inline constexpr int PluginClientTimeoutMs = PluginOperationTimeoutMs + 5000;
 
 enum class MessageType {

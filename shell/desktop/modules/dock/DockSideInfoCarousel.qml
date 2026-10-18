@@ -40,6 +40,7 @@ Item {
 
     property int iconSize: 44
     property int dockHeight: 60
+    required property real cornerRadius
     property real widthUnits: 2
     property bool showClock: false
     property bool showTemperature: true
@@ -307,7 +308,7 @@ Item {
 
                     Rectangle {
                         anchors.fill: parent
-                        radius: Math.max(4, carousel.iconSize * 0.30)
+                        radius: carousel.cornerRadius
                         gradient: Gradient {
                             orientation: Gradient.Horizontal
                             GradientStop { position: 0.0; color: carousel.backgroundStart(sideSlot.modelData) }

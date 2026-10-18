@@ -1,5 +1,7 @@
 #include "qmlbridge/collection_service.h"
 #include "qmlbridge/library_catalog.h"
+#include "online/track_identity.h"
+#include "qmlbridge/playback_resolution.h"
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QTemporaryDir>
@@ -133,7 +135,7 @@ bool storeCollections(infrastructure::database::Database& db, const QVariantList
 class CollectionTests final : public QObject {
     Q_OBJECT
 private slots:
-    void libraryIncludesPersistedFavoritesAndKeepsSourceIdentity() {
+    void libraryContainsOnlyLocalMusicAndKeepsSavedAlbums() {
         QTemporaryDir dir; infrastructure::database::Database db;
         QVERIFY(db.open(dir.filePath("library.sqlite"))); QVERIFY(db.migrate());
         Network network; qmlbridge::CollectionService service(db,nullptr,&network);
@@ -149,9 +151,8 @@ private slots:
         auto script=platform; script["originKind"]="lx"; script["originSourceId"]="fixture-a";
         auto otherScript=script; otherScript["originSourceId"]="fixture-b";
         for (const auto& row : {local,platform,other,script,otherScript}) service.toggleTrackLiked(row);
-        QCOMPARE(catalog.songs().size(),5); QCOMPARE(catalog.tracksModel()->rowCount(),5);
-        QVERIFY(catalog.tracksModel()->snapshotRows().contains(script));
-        QVERIFY(catalog.tracksModel()->snapshotRows().contains(otherScript));
+        QCOMPARE(catalog.songs().size(),1); QCOMPARE(catalog.tracksModel(),&localModel);
+        for (const auto& row : {local,platform,other,script,otherScript}) QVERIFY(service.isTrackLiked(row));
         QVariantMap album{{"id","42"},{"source","tx"},{"kind","album"},{"title","Same album"}};
         service.toggleSaved(album); album["source"]="wy"; service.toggleSaved(album);
         QCOMPARE(catalog.albums().size(),2);
@@ -160,17 +161,74 @@ private slots:
             QVERIFY(row.value("savedOnlineAlbum").toBool()); QCOMPARE(row.value("playlistId").toString(),QString("42"));
         }
         qmlbridge::CollectionService reopened(db,nullptr,&network);
-        catalog.setCollections(reopened.playlists()); QCOMPARE(catalog.songs().size(),5); QCOMPARE(catalog.albums().size(),2);
-        service.toggleTrackLiked(platform); QCOMPARE(catalog.songs().size(),4);
+        catalog.setCollections(reopened.playlists()); QCOMPARE(catalog.songs().size(),1); QCOMPARE(catalog.albums().size(),2);
+        service.toggleTrackLiked(platform); QCOMPARE(catalog.songs().size(),1);
         service.toggleSaved(album); QCOMPARE(catalog.albums().size(),1);
         service.clear(); QCOMPARE(catalog.songs().size(),1); QCOMPARE(catalog.albums().size(),0);
         QCOMPARE(catalog.tracksModel(),&localModel);
+    }
+    void identitiesAreScopedStableAndMigrateCollections() {
+        QTemporaryDir dir; infrastructure::database::Database db;
+        QVERIFY(db.open(dir.filePath("identity.sqlite"))); QVERIFY(db.migrate());
+        QVariantList rows;
+        QSet<QString> uids;
+        for (const auto& source : {"kw", "kg", "tx", "wy", "mg", "bili"}) {
+            QVariantMap row{{"source",source},{"rid","42"},{"trackId","legacy-collision"},{"title","Same song"}};
+            rows.append(row); uids.insert(online::trackUid(row));
+            auto renamed = row; renamed["title"]="Renamed"; renamed["resolvedUrl"]="https://example.test/temporary";
+            QCOMPARE(online::trackUid(row),online::trackUid(renamed));
+        }
+        QCOMPARE(uids.size(),6);
+        auto local = rows.first().toMap(); local["localPath"]=dir.filePath("song.mp3");
+        auto equivalent = local; equivalent["localPath"]=dir.path()+"/./song.mp3";
+        QCOMPARE(online::trackUid(local),online::trackUid(equivalent));
+        QVERIFY(!uids.contains(online::trackUid(local)));
+        rows.append(local); rows.append(equivalent);
+        auto script = rows.first().toMap(); script["originKind"]="lx"; script["originSourceId"]="one";
+        auto otherScript=script; otherScript["originSourceId"]="two";
+        QVERIFY(online::trackUid(script)!=online::trackUid(otherScript));
+        QVERIFY(online::trackUid(script)!=online::trackUid(rows.first().toMap()));
+        auto upperProvider=script; upperProvider["source"]="TX";
+        QVERIFY(online::trackUid(script)!=online::trackUid(upperProvider));
+        QCOMPARE(online::identifiedTrack(upperProvider).value("source").toString(),QString("TX"));
+        QVERIFY(storeCollections(db, favoriteSnapshot(rows)));
+        Network network; qmlbridge::CollectionService service(db,nullptr,&network);
+        const auto saved=service.playlists().first().toMap().value("tracks").toList();
+        QCOMPARE(saved.size(),7);
+        for(const auto& row:saved) QVERIFY(!row.toMap().value("trackUid").toString().isEmpty());
+        for(const auto& row:rows) QVERIFY(service.isTrackLiked(row.toMap()));
+        const auto list=service.create("Mixed", {rows.first()});
+        service.addTracks(list,rows);
+        for(const auto& value:service.playlists()) if(value.toMap().value("id")==list)
+            QCOMPARE(value.toMap().value("tracks").toList().size(),7);
+        qmlbridge::CollectionService restored(db,nullptr,&network);
+        QCOMPARE(restored.playlists(),service.playlists());
+        qmlbridge::TrackListModel model; model.setRows(saved);
+        QCOMPARE(model.get(0).value("rid").toString(),QString("42"));
+        QCOMPARE(model.get(0).value("source").toString(),QString("kw"));
+        QCOMPARE(model.get(0).value("trackUid"),saved.first().toMap().value("trackUid"));
+    }
+    void retryPlanKeepsOwnershipAndTriesLowerQuality() {
+        QVariantMap song{{"source","tx"},{"rid","42"}};
+        const QVariantList sources{
+            QVariantMap{{"id","a"},{"enabled",true},{"removable",true}},
+            QVariantMap{{"id","b"},{"enabled",true},{"removable",true}},
+            QVariantMap{{"id","off"},{"enabled",false},{"removable",true}}};
+        auto plan=qmlbridge::playbackAttempts(song,sources,"a","flac");
+        QCOMPARE(plan.size(),12);
+        QCOMPARE(plan[0],qMakePair(QString("a"),QString("flac")));
+        QCOMPARE(plan[2],qMakePair(QString("a"),QString("128k")));
+        QCOMPARE(plan[3].first,QString("b"));
+        song["originKind"]="lx"; song["originSourceId"]="pinned";
+        plan=qmlbridge::playbackAttempts(song,sources,"a","128k");
+        QCOMPARE(plan.size(),2);
+        for(const auto& attempt:plan) QCOMPARE(attempt.first,QString("pinned"));
     }
     void releaseDetailKeepsSavedSongsAndPlaybackSnapshot() {
         QTemporaryDir dir; infrastructure::database::Database db;
         QVERIFY(db.open(dir.filePath("detail.sqlite"))); QVERIFY(db.migrate());
         Network network; qmlbridge::CollectionService service(db, nullptr, &network);
-        const QVariantList rows{favoriteTrack(1),favoriteTrack(2)};
+        const QVariantList rows=online::identifiedTracks({favoriteTrack(1),favoriteTrack(2)});
         const auto id=service.create("Saved list",rows); QVERIFY(!id.isEmpty());
         const auto saved=service.playlists(); service.open(saved.first().toMap());
         const auto playbackSnapshot=service.detail().value("tracks").toList();
@@ -223,7 +281,8 @@ private slots:
         QVERIFY(!service.isTrackLiked({{"source", "wy"}, {"rid", "abc"}}));
         QVERIFY(service.isTrackLiked({{"trackId", "legacy-id"}}));
         QVERIFY(!service.isTrackLiked({}));
-        QCOMPARE(service.playlists().first().toMap().value("tracks").toList(), rows);
+        auto migrated = online::identifiedTracks(rows); migrated.removeAt(1);
+        QCOMPARE(service.playlists().first().toMap().value("tracks").toList(), migrated);
         service.toggleTrackLiked(local); // All duplicate identities must be removed.
         QVERIFY(!service.isTrackLiked(local));
         QVERIFY(service.isTrackLiked(remote));

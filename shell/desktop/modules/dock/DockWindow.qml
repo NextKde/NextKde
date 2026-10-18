@@ -34,6 +34,9 @@ PanelWindow {
         && AppLauncherConfigService.displayMode === "fullscreen")
         ? WlrLayer.Overlay : WlrLayer.Top
 
+    WlrLayershell.keyboardFocus: dockContainer.statusCollectionExpanded || dockContainer.statusDragActive
+        ? WlrKeyboardFocus.OnDemand : WlrKeyboardFocus.None
+
     // ── Position-aware anchoring ──
     // The surface clings directly to the configured screen edge (margins = 0);
     // the 5px float moves inside as an inset on dockWrapper, and the reveal
@@ -132,8 +135,8 @@ PanelWindow {
         edgeMargin: root.edgeMargin
         pointerInsideDock: dockContainer.pointerInside
         editing: dockContainer.editMode
-        dragging: dockContainer.draggedPinnedLoader !== null
-        popupOpen: DockModelService.activeDockPopup !== null
+        dragging: dockContainer.draggedPinnedLoader !== null || dockContainer.statusDragActive
+        popupOpen: DockModelService.activeDockPopup !== null || dockContainer.accessoryInteractionActive
         launcherOpen: AppLauncherService.open
     }
 
@@ -274,6 +277,13 @@ PanelWindow {
         // The panel owns both its rounded blur mask and its exact SurfaceShape.
         // DockWindow only aggregates that declaration with the reveal handle
         // above, then passes the result across the window/compositor boundary.
+        TapHandler {
+            acceptedButtons: Qt.LeftButton | Qt.RightButton
+            enabled: dockContainer.statusCollectionExpanded
+            onTapped: point => dockContainer.closeStatusCollectionOutside(
+                point.scenePosition.x, point.scenePosition.y)
+        }
+
         LiquidGlassPanel {
             id: pill
             anchors.fill: parent
@@ -282,7 +292,7 @@ PanelWindow {
             // Combining that off-screen capsule with the on-screen handle lets
             // the compositor realign the capsule back into the clipped region.
             visible: ConfigService.dockStyle !== "transparent" && hide.revealProgress > 0
-            radius: root.stretched ? 0 : dockContainer.pillRadius
+            radius: dockContainer.surfaceRadius
             // Soften the shell-wide squircle for this low-height capsule while
             // retaining a little continuous-corner character.
             cornerExponent: 2.35
