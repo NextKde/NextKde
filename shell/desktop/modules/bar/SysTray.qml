@@ -2,9 +2,11 @@ import Quickshell
 import Quickshell.Services.SystemTray
 import QtQuick
 import QtQuick.Effects
+import "../../../shared/qml/i18n"
 import qs.desktop.modules.common
 import qs.desktop.modules.dock
 import "../../../Kos/Ui"
+import "StatusCollection.mjs" as StatusCollection
 
 // StatusNotifierItem host. Referencing SystemTray claims and tracks tray items.
 Item {
@@ -69,9 +71,20 @@ Item {
     }
     readonly property var trailingCellKeys: (root.trailingKeys || []).map(key => "cell:" + key)
     readonly property var allKeys: root.nativeKeys.concat(root.trailingCellKeys)
-    readonly property var arrangedKeys: SysTrayOrderService.arrange(root.allKeys)
+    readonly property var orderedKeys: SysTrayOrderService.arrange(root.allKeys)
+    readonly property string collectionKey: StatusCollection.toggleKey
+    property bool collectionExpanded: false
+    property bool collectionKeepOpen: false
+    signal collectionCollapseRequested()
+    readonly property var collectedKeys: root.orderedKeys.filter(key => SysTrayOrderService.isCollected(key))
+    readonly property var pinnedKeys: root.orderedKeys.filter(key => !SysTrayOrderService.isCollected(key))
+    // Keep every delegate alive; folding changes positions and visibility only.
+    readonly property var arrangedKeys: StatusCollection.visibleKeys(root.orderedKeys,
+        SysTrayOrderService.collectedKeys, root.collectionExpanded)
+    readonly property var previewKeys: StatusCollection.previewOrder(root.arrangedKeys,
+        root.draggedKey, root.dragInsertIndex)
 
-    readonly property int itemCount: root.allKeys.length
+    readonly property int itemCount: root.arrangedKeys.length
     readonly property int twoRowThreshold: itemSize * 2
     readonly property bool twoRows: dockHosted && itemCount > 1
         && availableHeight >= twoRowThreshold
@@ -80,8 +93,8 @@ Item {
         if (root.itemCount <= 0)
             return 0
         let width = 0
-        for (let i = 0; i < root.allKeys.length; i++)
-            width += root.slotWidth(root.allKeys[i])
+        for (let i = 0; i < root.arrangedKeys.length; i++)
+            width += root.slotWidth(root.arrangedKeys[i])
         return width + (root.itemCount - 1) * root.iconSpacing
     }
 
@@ -100,7 +113,7 @@ Item {
         const arranged = root.arrangedKeys.indexOf(key)
         if (arranged >= 0)
             return arranged
-        return root.allKeys.indexOf(key)
+        return -1
     }
 
     // Alt is the drag modifier (mirroring the desktop convention this shell
@@ -114,8 +127,126 @@ Item {
         (modifierTracker.point.modifiers & Qt.AltModifier) !== 0
 
     property string draggedKey: ""
-    property real dragTranslationX: 0
-    property real dragTranslationY: 0
+    property point dragPointerScene: Qt.point(0, 0)
+    property point dragGrabOffset: Qt.point(0, 0)
+    property bool dragCancelled: false
+    readonly property point dragCenter: {
+        // Expanding changes the right-anchored strip's width and scene origin.
+        const geometry = root.width + root.x
+        return root.mapFromItem(null, root.dragPointerScene.x, root.dragPointerScene.y)
+    }
+
+    function beginDrag(key, item, pointer) {
+        root.dragCancelled = false
+        const center = item.mapToItem(null, item.width / 2, item.height / 2)
+        root.dragPointerScene = center
+        root.dragGrabOffset = Qt.point(center.x - pointer.x, center.y - pointer.y)
+        root.draggedKey = key
+        root.forceActiveFocus()
+    }
+
+    function updateDrag(pointer) {
+        if (root.draggedKey === "") return
+        // Scene coordinates survive the 90-degree side-Dock transform and
+        // the Dock's recentering when the collection expands.
+        root.dragPointerScene = Qt.point(pointer.x + root.dragGrabOffset.x,
+            pointer.y + root.dragGrabOffset.y)
+    }
+
+    property string pendingDropKey: ""
+    Timer {
+        id: finishDragTimer
+        interval: 0
+        onTriggered: {
+            const key = root.pendingDropKey
+            root.pendingDropKey = ""
+            root.finishDrag(key)
+        }
+    }
+    function scheduleDrop(key) {
+        root.pendingDropKey = key
+        finishDragTimer.restart()
+    }
+    function cancelDrag() {
+        finishDragTimer.stop()
+        root.pendingDropKey = ""
+        root.dragCancelled = true
+        root.draggedKey = ""
+    }
+
+    function finishDrag(key) {
+        if (root.draggedKey !== key) return
+        const destination = root.dragInsertIndex
+        const preview = root.previewKeys.slice()
+        const target = StatusCollection.destinationSection(preview, key)
+        if (!root.dragCancelled && destination >= 0) {
+            SysTrayOrderService.setCollected(key, target.collected)
+            SysTrayOrderService.moveKey(key, target.keys.indexOf(key), target.keys)
+        }
+        root.draggedKey = ""
+        if (root.dragCancelled) root.collectionExpanded = false
+    }
+
+    function toggleCollection() {
+        if (root.collectionExpanded) {
+            root.collectionCollapseRequested()
+            trayMenu.hide()
+            root.collectionExpanded = false
+        } else {
+            root.collectionExpanded = true
+            root.forceActiveFocus()
+        }
+    }
+
+    function closeCollectionOutside(x, y) {
+        const point = root.mapFromItem(null, x, y)
+        if (!root.contains(point)) root.closeCollection()
+    }
+
+    function closeCollection() {
+        if (root.draggedKey !== "" || root.collectionKeepOpen || trayMenu.visible)
+            return
+        root.collectionExpanded = false
+    }
+
+    Shortcut {
+        sequence: "Escape"
+        enabled: (root.collectionExpanded || root.draggedKey !== "")
+            && !root.collectionKeepOpen && !trayMenu.visible
+        onActivated: {
+            root.cancelDrag()
+            root.collectionExpanded = false
+        }
+    }
+    HoverHandler { id: collectionHover }
+    // No fullscreen input catcher: leaving the strip folds it after a short
+    // grace period. Native menus and shell panels retain their live anchors.
+    Timer {
+        interval: 650
+        running: root.collectionExpanded && !collectionHover.hovered
+            && root.draggedKey === "" && !root.collectionKeepOpen && !trayMenu.visible
+        onTriggered: root.closeCollection()
+    }
+    Timer {
+        interval: 220
+        running: !root.collectionExpanded && root.draggedKey !== ""
+            && root.dragInsertIndex === root.arrangedKeys.indexOf(root.collectionKey)
+        onTriggered: root.collectionExpanded = true
+    }
+
+    Connections {
+        target: WindowService
+        function onActiveWindowIdChanged() {
+            if (WindowService.activeWindowId) root.closeCollection()
+        }
+    }
+    Connections {
+        target: ContextMenuCoordinator
+        function onActiveMenuChanged() {
+            if (ContextMenuCoordinator.activeMenu && !trayMenu.visible)
+                root.closeCollection()
+        }
+    }
 
     function slotOriginIn(keys, flowIndex) {
         if (flowIndex < 0)
@@ -147,35 +278,36 @@ Item {
     }
     // The visual (Translate) delta from a delegate's fixed declaration slot
     // to wherever it should currently appear.
-    function reorderOffsetFor(naturalIndex, displayIndex) {
+    function reorderOffsetFor(naturalIndex, key) {
         const from = root.slotOriginIn(root.allKeys, naturalIndex)
-        const to = root.slotOrigin(displayIndex)
+        if (key === root.draggedKey) {
+            const center = root.dragCenter
+            return Qt.point(center.x - root.slotWidth(key) / 2 - from.x,
+                center.y - root.itemSize / 2 - from.y)
+        }
+        const to = root.slotOriginIn(root.previewKeys, root.previewKeys.indexOf(key))
         return Qt.point(to.x - from.x, to.y - from.y)
     }
 
-    // Nearest slot to the dragged item's current pointer-followed centre.
-    // Purely arithmetic (no querying of other delegates' actual geometry),
-    // since every slot's centre is already a deterministic function of its
-    // arranged index.
     readonly property int dragInsertIndex: {
-        if (root.draggedKey === "")
+        if (root.draggedKey === "" || root.dragCancelled) return -1
+        const center = root.dragCenter
+        if (center.x < -root.itemSize / 2 || center.x > root.implicitWidth + root.itemSize / 2
+            || center.y < -root.itemSize / 2 || center.y > root.implicitHeight + root.itemSize / 2)
             return -1
-        const sourceIndex = root.targetIndexFor(root.draggedKey)
-        const sourceCenter = root.slotCenter(sourceIndex)
-        const pointerCenter = Qt.point(sourceCenter.x + root.dragTranslationX,
-                                       sourceCenter.y + root.dragTranslationY)
-        let nearest = sourceIndex
-        let nearestDistance = Number.POSITIVE_INFINITY
-        const count = root.allKeys.length
-        for (let i = 0; i < count; i++) {
-            const center = root.slotCenter(i)
-            const dx = pointerCenter.x - center.x
-            const dy = pointerCenter.y - center.y
-            const distance = dx * dx + dy * dy
-            if (distance < nearestDistance) {
-                nearestDistance = distance
-                nearest = i
-            }
+        const source = root.arrangedKeys.indexOf(root.draggedKey)
+        const boundary = root.arrangedKeys.indexOf(root.collectionKey)
+        // Hovering the disclosure is itself a collection target, even if the
+        // nearest midpoint belongs to the adjacent icon.
+        const origin = root.slotOrigin(boundary)
+        if (StatusCollection.pointInSlot(center, origin, root.itemSize))
+            return source > boundary ? boundary : Math.max(0, boundary - 1)
+        let nearest = source
+        let distance = Number.POSITIVE_INFINITY
+        for (let i = 0; i < root.arrangedKeys.length; i++) {
+            const point = root.slotCenter(i)
+            const d = (point.x - center.x) ** 2 + (point.y - center.y) ** 2
+            if (d < distance) { nearest = i; distance = d }
         }
         return nearest
     }
@@ -196,6 +328,57 @@ Item {
         anchors.centerIn: parent
         width: root.implicitWidth
         height: root.implicitHeight
+
+        Rectangle {
+            id: collectionToggle
+            objectName: "status-collection-toggle"
+            enabled: SysTrayOrderService.ready
+            activeFocusOnTab: true
+            Accessible.role: Accessible.Button
+            Accessible.name: root.collectionExpanded ? I18n.tr("Collapse collected icons") : I18n.tr("Show collected icons")
+            Accessible.onPressAction: root.toggleCollection()
+            Keys.onSpacePressed: root.toggleCollection()
+            Keys.onReturnPressed: root.toggleCollection()
+            readonly property point origin: root.slotOriginIn(root.previewKeys,
+                root.previewKeys.indexOf(root.collectionKey))
+            x: origin.x; y: origin.y
+            width: root.itemSize; height: root.itemSize
+            radius: 6
+            readonly property bool dropTarget: root.draggedKey !== "" && root.dragInsertIndex >= 0
+                && root.previewKeys.indexOf(root.draggedKey) < root.previewKeys.indexOf(root.collectionKey)
+            color: dropTarget ? Qt.rgba(0.1, 0.5, 1, 0.22)
+                : toggleMouse.containsMouse ? Qt.rgba(ThemeService.barInk.r, ThemeService.barInk.g, ThemeService.barInk.b, 0.10)
+                : "transparent"
+            border.width: dropTarget ? 1 : 0
+            border.color: AppearanceTokens.colors.primary
+            Behavior on x { NumberAnimation { duration: 180; easing.type: Easing.OutCubic } }
+            BundledIcon {
+                anchors.centerIn: parent
+                name: root.collectionExpanded ? "status-collection-collapse" : "status-collection-expand"
+                size: 18
+                color: ThemeService.barInk
+                opacity: root.collectedKeys.length > 0 || toggleMouse.containsMouse || root.draggedKey !== "" ? 0.9 : 0.5
+            }
+            MouseArea {
+                id: toggleMouse
+                anchors.fill: parent
+                hoverEnabled: true
+                cursorShape: Qt.PointingHandCursor
+                onClicked: {
+                    root.toggleCollection()
+                }
+            }
+            StatusTooltip {
+                anchorItem: collectionToggle
+                dockHosted: root.dockHosted
+                dockEdge: root.dockEdge
+                shown: toggleMouse.containsMouse && root.draggedKey === ""
+                primaryText: root.collectionExpanded ? I18n.tr("Collapse collected icons") : I18n.tr("Show collected icons")
+                secondaryText: root.collectedKeys.length === 0
+                    ? I18n.tr("Alt-drag icons here to collect; drag to reorder")
+                    : I18n.tr("Click to expand · Alt-drag icons to reorder or collect")
+            }
+        }
 
         Repeater {
             id: trayRepeater
@@ -261,6 +444,7 @@ Item {
                 Component.onCompleted: root.notifyTrayChanged()
                 Component.onDestruction: {
                     root.notifyTrayChanged()
+                    if (root.draggedKey === trayItem.trayKey) root.cancelDrag()
                     if (trayMenu.anchorItem === trayItem) {
                         // hide() alone is a no-op while a show is still
                         // pending (visible is already false), so release
@@ -270,31 +454,10 @@ Item {
                     }
                 }
 
-                // Shift by exactly one slot when another item's live drag
-                // insertion point is passing over this item's resting slot.
-                readonly property int reorderSlots: {
-                    if (!isValid || isDraggedItem || root.draggedKey === "" || root.dragInsertIndex < 0)
-                        return 0
-                    const source = root.targetIndexFor(root.draggedKey)
-                    const destination = root.dragInsertIndex
-                    if (destination < source && targetIndex >= destination && targetIndex < source)
-                        return 1
-                    if (destination > source && targetIndex <= destination && targetIndex > source)
-                        return -1
-                    return 0
-                }
-                // The drag translation is relative to where the item was
-                // actually sitting when it was grabbed — its arranged slot,
-                // not its declaration slot — so the resting offset stays
-                // applied while dragging (reorderSlots is already 0 here).
-                // Dropping it would teleport any item whose arranged slot
-                // differs from its natural one, leaving the icon trailing
-                // the cursor by exactly that gap.
                 readonly property point reorderOffset: isValid
-                    ? root.reorderOffsetFor(naturalIndex, targetIndex + reorderSlots)
-                    : Qt.point(0, 0)
-                property real offsetX: reorderOffset.x + (isDraggedItem ? root.dragTranslationX : 0)
-                property real offsetY: reorderOffset.y + (isDraggedItem ? root.dragTranslationY : 0)
+                    ? root.reorderOffsetFor(naturalIndex, trayKey) : Qt.point(0, 0)
+                property real offsetX: reorderOffset.x
+                property real offsetY: reorderOffset.y
                 Behavior on offsetX {
                     enabled: !trayItem.isDraggedItem
                     NumberAnimation { duration: 180; easing.type: Easing.OutCubic }
@@ -308,7 +471,7 @@ Item {
                 scale: isDraggedItem ? 1.08 : 1.0
                 Behavior on scale { NumberAnimation { duration: 120; easing.type: Easing.OutCubic } }
 
-                visible: isValid
+                visible: isValid && targetIndex >= 0
                 x: root.slotOriginIn(root.allKeys, naturalIndex).x
                 y: root.slotOriginIn(root.allKeys, naturalIndex).y
                 width: isValid ? root.itemSize : 0
@@ -397,28 +560,18 @@ Item {
                     id: trayReorderDrag
                     target: null
                     acceptedButtons: Qt.LeftButton
-                    enabled: root.altModifierHeld
+                    enabled: SysTrayOrderService.ready && (root.altModifierHeld || active)
                     xAxis.enabled: true
-                    yAxis.enabled: root.rowCount > 1
+                    yAxis.enabled: true
+                    onCanceled: root.cancelDrag()
                     onActiveChanged: {
-                        if (active) {
-                            root.draggedKey = trayItem.trayKey
-                            root.dragTranslationX = 0
-                            root.dragTranslationY = 0
-                            return
-                        }
-                        if (root.draggedKey !== trayItem.trayKey)
-                            return
-                        const destination = root.dragInsertIndex
-                        root.draggedKey = ""
-                        if (destination >= 0 && destination !== trayItem.targetIndex)
-                            SysTrayOrderService.moveKey(trayItem.trayKey, destination, root.allKeys)
+                        if (active) root.beginDrag(trayItem.trayKey, trayItem, trayReorderDrag.centroid.scenePosition)
+                        else root.scheduleDrop(trayItem.trayKey)
                     }
                     onTranslationChanged: {
-                        if (!active)
+                        if (!active || root.draggedKey === "")
                             return
-                        root.dragTranslationX = translation.x
-                        root.dragTranslationY = translation.y
+                        root.updateDrag(centroid.scenePosition)
                     }
                 }
 
@@ -431,7 +584,7 @@ Item {
                     motionOrigin: !root.dockHosted ? Item.Top
                         : root.dockEdge === "left" ? Item.Left
                         : root.dockEdge === "right" ? Item.Right : Item.Bottom
-                    requestedOpen: trayMouse.containsMouse && !trayMenu.visible
+                    requestedOpen: trayMouse.containsMouse && !trayMenu.visible && root.draggedKey === ""
                         && trayItem.tooltip.length > 0
                     implicitWidth: tooltipText.implicitWidth + 16
                     implicitHeight: tooltipText.implicitHeight + 10
@@ -458,7 +611,8 @@ Item {
                         Text {
                             id: tooltipText
                             anchors.centerIn: parent
-                            text: trayItem.tooltip
+                            text: trayItem.tooltip + (SysTrayOrderService.isCollected(trayItem.trayKey)
+                                ? " · " + I18n.tr("Alt-drag past the arrow to keep visible") : "")
                             color: "white"
                             font.pixelSize: 12
                         }
@@ -482,28 +636,9 @@ Item {
                 readonly property int targetIndex: root.targetIndexFor(trayKey)
                 readonly property bool isDraggedItem: root.draggedKey !== ""
                     && root.draggedKey === trayKey
-                readonly property int reorderSlots: {
-                    if (isDraggedItem || root.draggedKey === "" || root.dragInsertIndex < 0)
-                        return 0
-                    const source = root.targetIndexFor(root.draggedKey)
-                    const destination = root.dragInsertIndex
-                    if (destination < source && targetIndex >= destination && targetIndex < source)
-                        return 1
-                    if (destination > source && targetIndex <= destination && targetIndex > source)
-                        return -1
-                    return 0
-                }
-                // The drag translation is relative to where the item was
-                // actually sitting when it was grabbed — its arranged slot,
-                // not its declaration slot — so the resting offset stays
-                // applied while dragging (reorderSlots is already 0 here).
-                // Dropping it would teleport any item whose arranged slot
-                // differs from its natural one, leaving the icon trailing
-                // the cursor by exactly that gap.
-                readonly property point reorderOffset:
-                    root.reorderOffsetFor(naturalIndex, targetIndex + reorderSlots)
-                property real offsetX: reorderOffset.x + (isDraggedItem ? root.dragTranslationX : 0)
-                property real offsetY: reorderOffset.y + (isDraggedItem ? root.dragTranslationY : 0)
+                readonly property point reorderOffset: root.reorderOffsetFor(naturalIndex, trayKey)
+                property real offsetX: reorderOffset.x
+                property real offsetY: reorderOffset.y
                 Behavior on offsetX {
                     enabled: !trailingItem.isDraggedItem
                     NumberAnimation { duration: 180; easing.type: Easing.OutCubic }
@@ -517,6 +652,7 @@ Item {
                 scale: isDraggedItem ? 1.08 : 1.0
                 Behavior on scale { NumberAnimation { duration: 120; easing.type: Easing.OutCubic } }
 
+                visible: targetIndex >= 0
                 x: root.slotOriginIn(root.allKeys, naturalIndex).x
                 y: root.slotOriginIn(root.allKeys, naturalIndex).y
                 width: root.slotWidth(trayKey)
@@ -528,12 +664,25 @@ Item {
                     sourceComponent: trailingItem.modelData
                 }
 
+                HoverHandler { id: collectedCellHover }
+                StatusTooltip {
+                    anchorItem: trailingItem
+                    dockHosted: root.dockHosted
+                    dockEdge: root.dockEdge
+                    shown: root.altModifierHeld && SysTrayOrderService.isCollected(trailingItem.trayKey)
+                        && collectedCellHover.hovered && !root.collectionKeepOpen && root.draggedKey === ""
+                    primaryText: I18n.tr("Alt-drag past the arrow to keep visible")
+                }
+                Component.onDestruction: {
+                    if (root.draggedKey === trayKey) root.cancelDrag()
+                }
+
                 // Swallows input while a reorder is possible so the loaded
                 // control's own click (opening its panel, toggling Wi-Fi...)
                 // cannot also fire from the same press that starts a drag.
                 MouseArea {
                     anchors.fill: parent
-                    visible: root.altModifierHeld
+                    visible: root.altModifierHeld && trailingItem.trayKey !== "cell:controlcenter"
                     cursorShape: Qt.SizeAllCursor
                 }
 
@@ -541,28 +690,18 @@ Item {
                     id: trailingReorderDrag
                     target: null
                     acceptedButtons: Qt.LeftButton
-                    enabled: root.altModifierHeld
+                    enabled: SysTrayOrderService.ready && trailingItem.trayKey !== "cell:controlcenter" && (root.altModifierHeld || active)
                     xAxis.enabled: true
-                    yAxis.enabled: root.rowCount > 1
+                    yAxis.enabled: true
+                    onCanceled: root.cancelDrag()
                     onActiveChanged: {
-                        if (active) {
-                            root.draggedKey = trailingItem.trayKey
-                            root.dragTranslationX = 0
-                            root.dragTranslationY = 0
-                            return
-                        }
-                        if (root.draggedKey !== trailingItem.trayKey)
-                            return
-                        const destination = root.dragInsertIndex
-                        root.draggedKey = ""
-                        if (destination >= 0 && destination !== trailingItem.targetIndex)
-                            SysTrayOrderService.moveKey(trailingItem.trayKey, destination, root.allKeys)
+                        if (active) root.beginDrag(trailingItem.trayKey, trailingItem, trailingReorderDrag.centroid.scenePosition)
+                        else root.scheduleDrop(trailingItem.trayKey)
                     }
                     onTranslationChanged: {
-                        if (!active)
+                        if (!active || root.draggedKey === "")
                             return
-                        root.dragTranslationX = translation.x
-                        root.dragTranslationY = translation.y
+                        root.updateDrag(centroid.scenePosition)
                     }
                 }
             }

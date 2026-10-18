@@ -3,6 +3,7 @@ import QtQuick
 import Quickshell
 import Quickshell.Io
 import qs.desktop.modules.platform
+import "StatusCollection.mjs" as StatusCollection
 
 // Persists the user's Alt+drag reordering of the tray row — native
 // StatusNotifierItem icons and the shell's own network/battery/settings/
@@ -17,6 +18,7 @@ QtObject {
     readonly property string configPath: configDir + "/tray-order.json"
 
     property var order: []
+    property var collectedKeys: []
     property bool ready: false
 
     // A native StatusNotifierItem slot, as opposed to one of the shell's own
@@ -128,7 +130,7 @@ QtObject {
         } else {
             // Shell cells can only be reordered within the cells section
             minDest = trayCount
-            maxDest = Math.max(minDest, arranged.length - 2)
+            maxDest = Math.max(minDest, arranged.length - (arranged.indexOf("cell:controlcenter") >= 0 ? 2 : 1))
         }
 
         const destination = Math.max(minDest, Math.min(maxDest, Math.round(targetIndex)))
@@ -136,7 +138,22 @@ QtObject {
             return
         const moved = arranged.splice(sourceIndex, 1)[0]
         arranged.splice(destination, 0, moved)
-        svc.order = arranged
+        // Retain preferences for absent apps and the other side of the collection.
+        svc.order = StatusCollection.mergeOrder(svc.order, arranged)
+        scheduleSave()
+    }
+
+    function isCollected(key) {
+        return key !== "cell:controlcenter" && svc.collectedKeys.indexOf(key) >= 0
+    }
+
+    function setCollected(key, collected) {
+        if (!key || key === "cell:controlcenter" || svc.isPlaceholderKey(key))
+            return
+        if (svc.isCollected(key) === collected)
+            return
+        svc.collectedKeys = collected ? svc.collectedKeys.concat([key])
+            : svc.collectedKeys.filter(k => k !== key)
         scheduleSave()
     }
 
@@ -148,7 +165,7 @@ QtObject {
     function scheduleSave() { _saveTimer.restart() }
 
     function _doSave() {
-        const json = JSON.stringify({ version: 1, order: svc.order }, null, 2)
+        const json = JSON.stringify({ version: 2, order: svc.order, collectedKeys: svc.collectedKeys }, null, 2)
         JsonConfigStore.writePath(svc.configPath, json)
     }
 
@@ -157,6 +174,10 @@ QtObject {
             if (exists && data) {
                 try {
                     const obj = JSON.parse(data)
+                    if (Array.isArray(obj.collectedKeys))
+                        svc.collectedKeys = [...new Set(obj.collectedKeys.filter(key =>
+                            typeof key === "string" && !svc.isPlaceholderKey(key)
+                            && key !== "cell:controlcenter"))]
                     if (Array.isArray(obj.order)) {
                         const raw = obj.order.filter(key => typeof key === "string")
                         const trayPart = raw.filter(k => svc.isTrayKey(k))
