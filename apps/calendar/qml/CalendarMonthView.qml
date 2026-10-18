@@ -114,7 +114,9 @@ Pane {
                             Layout.preferredWidth: 24
                             Layout.preferredHeight: 24
                             radius: 12
-                            color: dayButton.today ? AppTheme.accent : "transparent"
+                            // C8: unified with the week header, now-pill and
+                            // mini month's today disc — one M04 literal.
+                            color: dayButton.today ? AppTheme.todayRed : "transparent"
 
                             Label {
                                 anchors.centerIn: parent
