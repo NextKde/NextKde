@@ -2761,15 +2761,16 @@ KosApplicationWindow {
 
                                                         Label {
                                                             Layout.alignment: Qt.AlignHCenter
+                                                            // ref-main Conditions 卡无 ☂ 行（可见小时全 0%）：0% 隐文字但保留占位，防 ColumnLayout 重排使温度行下坠（最小 repro 实证）
                                                             visible: hourlySegmented.segment === 0
-                                                            text: "☂︎  " + Math.round(root.number(
-                                                                hourlyCard.modelData,
-                                                                "precipitationProbability", 0)) + "%"
+                                                            text: Math.round(root.number(hourlyCard.modelData, "precipitationProbability", 0)) > 0
+                                                                ? "☂︎  " + Math.round(root.number(hourlyCard.modelData, "precipitationProbability", 0)) + "%"
+                                                                : ""
                                                             color: root.skyTextMuted
                                                             font.pixelSize: 10
-                                                            Accessible.name: qsTr("%1% chance of precipitation").arg(
-                                                                Math.round(root.number(hourlyCard.modelData,
-                                                                                       "precipitationProbability", 0)))
+                                                            Accessible.name: Math.round(root.number(hourlyCard.modelData, "precipitationProbability", 0)) > 0
+                                                                ? qsTr("%1% chance of precipitation").arg(Math.round(root.number(hourlyCard.modelData, "precipitationProbability", 0)))
+                                                                : ""
                                                         }
                                                     }
                                                 }
