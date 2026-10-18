@@ -1238,7 +1238,9 @@ KosApplicationWindow {
                                         top: cardTop.bottom
                                         topMargin: 0
                                     }
-                                    text: savedLocation.summary
+                                    text: savedLocation.highlighted
+                                        ? qsTr("My Location")
+                                        : savedLocation.summary
                                           && String(savedLocation.summary.time ?? "").length > 0
                                         ? root.cardTimeText(savedLocation.summary.time)
                                         : root.locationDetail(savedLocation.modelData)

@@ -621,6 +621,11 @@
       <translation>任务已在日历与待办中更新</translation>
     </message>
     <message>
+      <location filename="../../weather/qml/Main.qml" line="+0" />
+      <source>My Location</source>
+      <translation>我的位置</translation>
+    </message>
+    <message>
       <location line="+2" />
       <source>Event removed</source>
       <translation>日程已删除</translation>
