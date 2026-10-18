@@ -1113,7 +1113,7 @@ KosApplicationWindow {
                         id: savedLocations
                         anchors.fill: parent
                         clip: true
-                        spacing: 6
+                        spacing: 9 // ref-main 卡缝 ~6@814 × 1.4503 ≈ 9
                         model: backend.locations
 
                         delegate: KosItemDelegate {
@@ -1134,7 +1134,8 @@ KosApplicationWindow {
                                 savedLocation.summary, "tempLow", Number.NaN)
 
                             width: savedLocations.width
-                            implicitHeight: 74
+                            // ref-main 直测卡高 ~75@814 × 1.4503 ≈ 109；取 106 与卡缝 9 保持 pitch ~115（旧 74 系 tile-sidebar ÷2.1 旧口径，侧栏校准 297 后未跟改）
+                            implicitHeight: 106
                             topPadding: 5
                             bottomPadding: 5
                             highlighted: String(root.value(modelData, "id", ""))
