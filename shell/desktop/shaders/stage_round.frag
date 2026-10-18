@@ -22,16 +22,26 @@ layout(binding = 1) uniform sampler2D source;
 layout(std140, binding = 0) uniform buf {
     mat4 qt_Matrix;
     float qt_Opacity;
-    float crad;   // 圆角半径（px，逻辑坐标）
-    vec2 isz;     // 本项像素尺寸（逻辑坐标）
+    float crad;      // 远缘圆角半径（px，逻辑坐标）
+    float cradNear;  // 近缘圆角半径（贴屏缘一侧的两角更大）
+    float nearLeft;  // 1 = 近缘在左，0 = 近缘在右（右条镜像）
+    vec2 isz;        // 本项像素尺寸（逻辑坐标）
 } ubuf;
 
 void main() {
     vec4 c = texture(source, qt_TexCoord0);
     vec2 h = ubuf.isz * 0.5;
     vec2 p = qt_TexCoord0 * ubuf.isz;
-    vec2 q = abs(p - h) - (h - vec2(ubuf.crad));
-    float d = length(max(q, vec2(0.0))) + min(max(q.x, q.y), 0.0) - ubuf.crad;
-    float a = 1.0 - smoothstep(-1.0, 1.0, d);
+    // 近/远缘两侧各自一组半径：左两角同半径、右两角同半径，故按
+    // p.x 的侧别取即可；同一侧上下两角一致，纵向跨中线无 SDF 断裂。
+    float r = ((p.x < h.x) == (ubuf.nearLeft > 0.5)) ? ubuf.cradNear : ubuf.crad;
+    vec2 q = abs(p - h) - (h - vec2(r));
+    float d = length(max(q, vec2(0.0))) + min(max(q.x, q.y), 0.0) - r;
+    // 抗锯齿带宽取屏幕空间导数（每设备像素的 d 变化量），而不是固定
+    // ±2 逻辑 px：本机 dpr=2，±2 逻辑 = 8 个片元宽的灰度过渡，白窗卡
+    // 四周直接读成一圈灰色边框（2026-10-18 用户"灰色边框/锯齿"反馈）。
+    // 导数带宽在近缘约 1 设备 px，远缘被透视缩小后也仍是 1 设备 px。
+    float aa = max(fwidth(d), 0.25);
+    float a = 1.0 - smoothstep(-aa, aa, d);
     fragColor = c * a * ubuf.qt_Opacity;
 }

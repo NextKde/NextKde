@@ -51,6 +51,10 @@ QtObject {
     // on command success (stage engage) reset on this instead of staying
     // stuck when the command was lost.
     signal commandFinished(string action, string ticket, bool found)
+    // 缩略图回执（stage 侧重试策略的输入）：failed 带平台侧原因（授权失效/
+    // 队列满/无效帧……）——消费方据此做重试封顶；ready 用于清零计数。
+    signal thumbnailFailed(string handleId, string message)
+    signal thumbnailReady(string handleId)
 
     property int _nextWindowNumber: 1
     property var _recordsById: ({})
@@ -272,6 +276,7 @@ QtObject {
         // provider-owned QObjects and must never be written here.
         if (record.provider === "kwin") {
             record.toplevel.geometry = next.toplevel.geometry;
+            record.toplevel.contentGeometry = next.toplevel.contentGeometry;
             record.toplevel.outputName = next.toplevel.outputName;
             record.toplevel.maximized = next.toplevel.maximized;
             record.toplevel.visible = next.toplevel.visible;
@@ -314,6 +319,12 @@ QtObject {
                 // Full-reveal geometry & placement for Dock collision.
                 geometry: source.geometry && source.geometry.width > 0
                     ? source.geometry : null,
+                // Content rect (frame minus decoration). Stage cards use this
+                // for their aspect: thumbnails are captured without decoration,
+                // so sizing from the frame letterboxes wide windows.
+                contentGeometry: source.contentGeometry
+                    && source.contentGeometry.width > 0
+                    ? source.contentGeometry : null,
                 outputName: source.outputName || "",
                 maximized: !!source.maximized,
                 visible: source.visible === undefined ? true : !!source.visible
@@ -473,9 +484,9 @@ QtObject {
     }
 
     // Thumbnail state is keyed by KWin's window handle, which dies with the
-    // window. Without this sweep a closed window would leave its PNG URL and
-    // any pending mark behind forever; a late thumbnail event for a dead
-    // handle is dropped again on the next rebuild.
+    // window. Without this sweep a closed window would leave its PNG URL,
+    // pending mark and load-failure counter behind forever; a late thumbnail
+    // event for a dead handle is dropped again on the next rebuild.
     function _pruneThumbnails(nextRecords) {
         const live = {};
         for (let i = 0; i < nextRecords.length; i++) {
@@ -504,6 +515,26 @@ QtObject {
         }
         if (pendingChanged)
             svc._thumbnailPendingByHandle = pending;
+        let loadFailuresChanged = false;
+        const loadFailures = {};
+        for (const handle in svc._thumbnailLoadFailures) {
+            if (live[handle])
+                loadFailures[handle] = svc._thumbnailLoadFailures[handle];
+            else
+                loadFailuresChanged = true;
+        }
+        if (loadFailuresChanged)
+            svc._thumbnailLoadFailures = loadFailures;
+        let refusedChanged = false;
+        const refused = {};
+        for (const handle in svc._thumbnailRefusedByHandle) {
+            if (live[handle])
+                refused[handle] = svc._thumbnailRefusedByHandle[handle];
+            else
+                refusedChanged = true;
+        }
+        if (refusedChanged)
+            svc._thumbnailRefusedByHandle = refused;
     }
 
     // ── Process identity fallback ──
@@ -665,6 +696,70 @@ QtObject {
         return true;
     }
 
+    // ── 缩略图「读盘失败」自愈通道 ──
+    // Qt Quick 的 Image 对同一 source 不会重读盘：URL 指向的 PNG 被新一轮
+    // 拍摄替换/删除后（平台每次拍摄写新文件并删上一张），加载失败的 Image
+    // 会永远停在 Error——可见性变化、同串重赋值都不会让它重读，只有
+    // source 变化才会重读。而卡片侧的补拍循环是「有图即停」（URL 非空就
+    // 跳过），于是该卡永久停在无图态，直到用户手动点卡（engage 走的路径
+    // 会重新触发一次拍摄）才恢复。
+    //
+    // 这里接住消费端的 Image 错误回执：给该窗当前 URL 盖「已判死」章并
+    // 立刻补拍；补拍回来的新 URL 顶掉旧 URL（source 变化）→ Image 重读。
+    //
+    // ⚠️ 不要改成「把 URL 从表里清掉再补拍」（曾这么写过，实机 A/B 否掉）：
+    // 清空会让 source 走 "" → url 的过渡，而 Qt 的 QQuickItemLayer 在
+    // 「先清空 source、再赋新值」这条路上**不会重绘层纹理**——数据链全绿
+    // （新文件在、status=Ready）但卡面永远空白，用户看到的还是"没预览"。
+    // 直换 URL（无 "" 过渡）才会重绘（隔离会话 A/B：毒化前 sd=0.33206 →
+    // 直换后 sd=0.33208＝内容回来了；清空版恒 0.27773＝空白）。
+    //
+    // 安全网沿用补拍的「失败封顶 + 30s 时间窗衰减」：同一窗口连续 4 次
+    // 读盘失败（文件在却不可解码等永远修不好的情形）暂停自愈，窗口期
+    // 过期后自动恢复；迟到的错误回执（旧 URL 的失败在新 URL 就位后才到）
+    // 由「表里仍是失败的那个 URL」判定拦下，不会给新图盖章。
+    property var _thumbnailLoadFailures: ({})     // handleId -> { count, at }
+    property var _thumbnailRefusedByHandle: ({})  // handleId -> 已判死的 URL
+    readonly property int thumbnailLoadFailureCap: 4
+    readonly property int _thumbnailLoadFailureWindowMs: 30000
+    function thumbnailLoadFailureCount(handleId) {
+        const e = _thumbnailLoadFailures[handleId]
+        if (!e)
+            return 0
+        return (Date.now() - e.at < _thumbnailLoadFailureWindowMs) ? e.count : 0
+    }
+    // 消费端/补拍侧的单一判定：该窗的 URL 缺失、或已就位但被 Image 判死
+    // （需要一次补拍）。「有图即停」的正确含义由此得出。
+    function thumbnailNeedsRefresh(windowId) {
+        const record = windowById(windowId)
+        if (!record?.handleId)
+            return false
+        const url = _thumbnailUrlsByHandle[record.handleId] ?? ""
+        return url === "" || _thumbnailRefusedByHandle[record.handleId] === url
+    }
+    function thumbnailLoadFailed(windowId, url) {
+        const record = windowById(windowId)
+        if (!record?.handleId || !url)
+            return
+        const handleId = record.handleId
+        if (_thumbnailUrlsByHandle[handleId] !== url)
+            return
+        if (_thumbnailRefusedByHandle[handleId] === url)
+            return    // 同一 URL 已判死过：计一次就够，防同帧重复计数
+        const refused = Object.assign({}, _thumbnailRefusedByHandle)
+        refused[handleId] = url
+        _thumbnailRefusedByHandle = refused
+        const alive = thumbnailLoadFailureCount(handleId)
+        const f = Object.assign({}, _thumbnailLoadFailures)
+        f[handleId] = { count: alive + 1, at: Date.now() }
+        _thumbnailLoadFailures = f
+        console.info("[WindowService] thumbnail load failed id=" + handleId
+            + " attempt=" + (alive + 1) + " " + url)
+        if (alive >= thumbnailLoadFailureCap)
+            return;   // 封顶：不补拍（时间窗衰减后自动恢复）
+        requestThumbnail(windowId)   // 立刻补拍，不等侧栏 1.5s 重试拍
+    }
+
     function activateWindow(windowId) {
         const record = windowById(windowId);
         if (!record) {
@@ -683,7 +778,11 @@ QtObject {
     // 拿焦点。必须走单个 activate-group 原子命令——连续的 activate 会被
     // _kwinActivationTimer 的单槽合并吞掉兄弟窗的还原（dock/侧栏两条入口
     // 都踩过）。activationRequested 只对 focus 窗发一次（stage 退位交换）。
-    function activateGroup(windowIds, focusId) {
+    // forceAnim：卡侧调用（显示桌面放出/撤销看门狗/拖拽中心）传 true——
+    // 目标窗"应该"在卡里，快照滞后导致它其实已在桌面时，桥注入一次真翻转
+    // 播完整的"从卡片展开"动画（同值写入会被 KWin 静默短路、无动画）；
+    // dock 点击不传——对已在桌面的窗它是抬前语义，注入反而制造伪影。
+    function activateGroup(windowIds, focusId, forceAnim) {
         const ids = [];
         for (let i = 0; i < windowIds.length; i++) {
             const record = windowById(windowIds[i]);
@@ -702,7 +801,7 @@ QtObject {
             ? focusRecord.handleId : ids[ids.length - 1];
         activationRequested(focusId);
         _sendKwinCommand({ action: "activate-group", ids: ids,
-            focusId: focusHandle });
+            focusId: focusHandle, forceAnim: forceAnim === true });
     }
 
     // 同拍交换（点击卡片）：激活目标组 + 收编退位组走**一条原子命令**——
@@ -735,7 +834,11 @@ QtObject {
         activationRequested(focusId);
         _sendKwinCommand({ action: "engage-swap", ids: actHandles,
             focusId: focusHandle, minimizeIds: minHandles,
-            ticket: ticket || undefined });
+            ticket: ticket || undefined,
+            // 点卡 = 从卡位展开语义：目标窗若已不在最小化态（快照滞后/
+            // 上一手还原提前落地），桥注入真翻转补出展开动画（见桥内
+            // restoreWithAnimation 注释）
+            forceAnim: true });
     }
 
 
@@ -911,12 +1014,21 @@ QtObject {
                             const urls = Object.assign({}, svc._thumbnailUrlsByHandle);
                             urls[event.id] = "file://" + event.path;
                             svc._thumbnailUrlsByHandle = urls;
+                            // 新 URL 落地即撤旧 URL 的「已判死」章——否则
+                            // 补拍循环会一直认为这张卡需要刷新（补拍风暴）
+                            if (svc._thumbnailRefusedByHandle[event.id] !== undefined) {
+                                const refused = Object.assign({}, svc._thumbnailRefusedByHandle);
+                                delete refused[event.id];
+                                svc._thumbnailRefusedByHandle = refused;
+                            }
                             svc.thumbnailRevision++;
                             console.log("[WindowService] thumbnail ready id="
                                 + event.id + " " + event.width + "x" + event.height);
+                            svc.thumbnailReady(event.id);
                         } else if (event.error) {
                             console.warn("[WindowService] thumbnail failed id="
                                 + event.id + " error=" + event.error);
+                            svc.thumbnailFailed(event.id, String(event.error));
                         }
                 } else if (event.type === "desktops") {
                         svc.desktops = PayloadArray.toArray(event.desktops) || [];

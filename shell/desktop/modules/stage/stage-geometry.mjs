@@ -6,15 +6,20 @@
 // 面板窗宽 = 常驻左侧条宽（窗口 implicitWidth / exclusiveZone /
 // StageModeService 的 TargetWidth 三处同源）
 export const PANEL_WIDTH = 240
-// 悬停放大 + 辉光 + 倾斜的横向溢出余量：面板窗比常驻条两侧各宽这么多
-//（内容列仍居中 PANEL_WIDTH），避免放大后的卡/辉光被窗缘硬切（输入用
-// mask 限制回内容列，余量区点击穿透到桌面）。取值按"辉光外扩 13px ×
-// 悬停放大 1.05 + 倾斜投影 ~6px"（≈19）再留 1px——exclusiveZone 会把它
-// 一并保留（窗口不被辉光盖到），改辉光层数/悬停放大时同步核此值。
+// （历史遗值）全屏浮层化前的横向溢出余量：面板窗曾比常驻条两侧各宽
+// 这么多（悬停放大 + 辉光 + 倾斜投影的溢出，见旧注释）。全屏浮层化后
+// 窗口恒全屏、该职责消失——卡片列贴缘偏移改由 stripMargin（配置项，
+// 设置页「距离屏幕边缘」可调）承担，默认 32 = 本值 + CARD_X_INSET。
+// 全代码不再消费本常量，仅为旧引用可读保留。
 export const CARD_OVERFLOW_MARGIN = 20
 // 卡宽 = 列宽 − 24（左右各 12 内边距）
 export const CARD_WIDTH_INSET = 24
 export const CARD_HEIGHT = 148
+// 卡形竖高上限（高/宽）。卡宽恒定，卡高跟窗口宽高比走；窗口越窄越高时
+// 按此封顶——否则竖窗被拉成细长条（列观感割裂）。3/4 即基准卡形
+// 128×171，宽高比更小的窗口封顶后按 PreserveAspectFit 在卡内左右留边，
+// 整窗内容仍完整可见（2026-10-18 用户定案"细长要有约束"）
+export const CARD_MAX_TALL_RATIO = 4 / 3
 export const CARD_X_INSET = 12          // 卡片 x（列左内边距）
 export const PANEL_ORIGIN_Y = 35        // 仅剩 StageModeService 的 kwinrc 三级
 // 回退矩形在用（"顶栏之下的条"粗略语义）。⚠️ 全屏浮层化（d5d8630）后
@@ -23,10 +28,9 @@ export const PANEL_ORIGIN_Y = 35        // 仅剩 StageModeService 的 kwinrc �
 export const PERSPECTIVE_FOCAL = 900    // 文档锚：本导出无代码消费，值须与
                                         // 特效 stageanim.cpp kPerspectiveFocal 同步
 
-export const SCROLL_RETREAT = 20        // 聚焦退避：其余卡从原位向两侧平移的像素
 // ── 拖拽排序（StageCard 与 StageSidebarWindow 共用；阈值/视觉同源）──
 export const DRAG_PICK_THRESHOLD = 12   // 按下位移超过此值才算拖拽（否则是点击）
-export const DRAG_SCALE = 1.06          // 被拖卡微放大（悬停放大走 config.hoverScale）
+export const DRAG_SCALE = 1.06          // 被拖卡微放大
 export const DRAG_Z = 999               // 被拖卡置顶 z（盖过全部槽位 z = n-i）
 export const DRAG_EDGE_RATIO = 0.5      // 拖拽 y 的上下钳位（半个卡高出界余量）
 export const DRAG_SCREEN_MARGIN = 8     // 拖拽 x 的左右屏缘余量（_dragClampX）
@@ -37,13 +41,16 @@ export const ENGAGE_FADE_MS = 180       // 点卡交棒/被吞卡淡出（_merge
 // StageSidebarWindow 的 _mergeExitRatio（手势时序类参数，不进几何库）
 // 辉光裁剪放宽：滚动视口只裁上下（滚动方向），左右各放宽这么多——
 // 悬停辉光外扩 13px×放大 1.05 + 倾斜投影后 ≈19px 超出卡面 inset，
-// 整条 clip 会把辉光侧边切掉（要与 CARD_OVERFLOW_MARGIN 同步核算）
+// 整条 clip 会把辉光侧边切掉（取值口径与列内 inset 的余量核算同源）
 export const GLOW_PAD = 22
 
 // ── 卡面真透视（与 shaders/stage_tilt.frag 互为孪生，改一处同步另一处）──
-// 卡片倾斜的针孔焦距：比特效（PERSPECTIVE_FOCAL=900）温和——整列卡片共享
-// 透视时大焦距避免远离地平线的卡被广角式放大（45° 倾角下 k 偏差仍 <4%）
-export const TILT_FOCAL = 2200
+// 卡片倾斜的针孔焦距（逻辑像素）。2026-10-18 按参考实测反推：参考列是
+// 共享相机的广角透视——横边斜率随卡位线性变化、上下卡反向倾斜、竖边
+// 严格垂直。实测每像素斜率 tanθ/f ≈ 5.2e-4（1560 逻辑宽空间），配合
+// 静置偏航 30° 取 f≈1100；旧的 2200 是为"几乎不可见"的 2° 配的，在
+// 30° 下会把透视压成一条直线（上下卡斜率差 <1°，列失去整体纵深）。
+export const TILT_FOCAL = 1100
 
 // 前向投影：卡面 (u,v)（相对卡中心/相机竖轴）→ **相机系**屏幕偏移。
 // depth = −u·sinR（正角 = 左缘近大，与 stageanim 特效约定一致）；
@@ -74,19 +81,42 @@ function _finiteAvailH(availH, count, cardHeight, spacing) {
     return Number.isFinite(availH)
         ? availH : Math.max(count, 1) * (cardHeight + spacing)
 }
+// 逐卡高度（2026-10-18：卡形跟窗口宽高比走）。heights 缺省/坏值回落
+// 统一 cardHeight——旧调用（无 heights）行为完全不变。
+function _heightsOf(count, heights, fallback) {
+    const out = []
+    for (let i = 0; i < count; i++) {
+        const v = Array.isArray(heights) ? heights[i] : undefined
+        out.push(Number.isFinite(v) && v > 0 ? v : fallback)
+    }
+    return out
+}
+function _sum(a) {
+    let s = 0
+    for (let i = 0; i < a.length; i++)
+        s += a[i]
+    return s
+}
+
 export function adaptiveLayout(availH, count, cardHeight = CARD_HEIGHT,
-                                spacing = 12, center = false) {
+                                spacing = 12, center = false, heights = null) {
     const positions = []
     if (!(count > 0))
         return { positions, scale: 1 }
-    availH = _finiteAvailH(availH, count, cardHeight, spacing)
+    const hs = _heightsOf(count, heights, cardHeight)
+    const total = _sum(hs)
+    availH = Number.isFinite(availH)
+        ? availH : total + Math.max(count - 1, 0) * spacing
     const scale = Math.max(0.3, Math.min(1,
-        (availH - (count - 1) * spacing) / (count * cardHeight)))
-    for (let i = 0; i < count; i++)
-        positions.push(i * (cardHeight * scale + spacing))
+        (availH - (count - 1) * spacing) / total))
+    let y = 0
+    for (let i = 0; i < count; i++) {
+        positions.push(y)
+        y += hs[i] * scale + spacing
+    }
     if (center)
         _centerPositions(positions, availH,
-            positions[positions.length - 1] + cardHeight * scale)
+            positions[positions.length - 1] + hs[count - 1] * scale)
     return { positions, scale }
 }
 
@@ -106,11 +136,10 @@ function _centerPositions(positions, availH, contentBottom) {
 //   ② 放得下：整块垂直居中；放不下：顶锚 + 滚动（scroll 偏移，
 //      clamp 到 scrollMax，滚到底末卡完整露出 + 辉光余量）；
 //   ③ 卡面永不缩小、无隐藏卡。
-// 聚焦态（hoveredIndex 命中且 count>1，"原位退避"）：悬停卡**原位微放大
-// + 置顶**（TopLeft 外扩只向右下长，卡内指针不可能被挤出）；其余卡
-// **保持基础槽位与原尺寸**，只从悬停卡向两侧平移 retreat px 并压暗
-//（focusDim 可关）。
-// 返回 { positions[], scales[], zs[], dims[], scale, pitch, scrollMax }——
+// 悬停态（2026-10-18 用户定案"只放平"）：悬停只改倾角（放平由卡片
+// 特效/QML 的 tilt 完成），**不重排、不缩放、不压暗**——其余卡留在
+// 基础槽位，悬停卡 y 锚定当前视觉位置（hoverY），只有 z 抬到最上。
+// 返回 { positions[], scales[], zs[], scale, pitch, scrollMax }——
 // positions 已含 scroll 偏移；pitch 供滚轮步进、scrollMax 供滚动上限；
 // scale 为基础缩放兜底值。
 // 溢出居中块的两侧最小对称净空：低于此值少显示一张卡——居中必须
@@ -129,9 +158,8 @@ export function scrollLayout(availH, count, opts = {}) {
     const positions = []
     const scales = []
     const zs = []
-    const dims = []
     if (!(count > 0))
-        return { positions, scales, zs, dims, scale: 1,
+        return { positions, scales, zs, scale: 1,
             pitch: ch + spacing, scrollMax: 0 }
     availH = _finiteAvailH(availH, count, ch, spacing)
     // 基础槽位（未滚动）：固定间距。**时刻居中**（用户定稿）：
@@ -142,8 +170,11 @@ export function scrollLayout(availH, count, opts = {}) {
     //   ⚠️ 不做缩放全显（用户实测否决）：整列等比缩小会让尺寸旋钮
     //   失灵（视觉被 scale 饱和）；"全部完整显示、随数量等比缩小"是
     //   adaptive 模式的专属语义（设置页"自适应缩小"）
+    const hs = _heightsOf(count, opts.heights, ch)
+    // 滚轮步进用统一卡高（逐卡高度时取默认档）——步进是手感参数，
+    // 不该随每张卡的高度抖动
     const pitch = ch + spacing
-    const contentH = (count - 1) * pitch + ch
+    const contentH = _sum(hs) + (count - 1) * spacing
     const fits = contentH <= availH
     // centerCards（v88 审计）：False＝退顶锚（两分支都尊重）
     const center = opts.centerCards !== false
@@ -155,15 +186,20 @@ export function scrollLayout(availH, count, opts = {}) {
         // **可感知居中**（用户复诉"还是顶着上面"）：34px 级净空与顶锚
         // 视觉无法区分——块两侧至少留 MIN_CENTER_PAD 对称净空，不够就
         // 少显示一张卡（多出的卡本就藏折叠线下滚动翻看）
-        let k = Math.max(1, Math.floor((availH + spacing) / pitch))
+        let k = count
         while (k > 1
-                && (availH - (k * ch + (k - 1) * spacing)) / 2
+                && (availH - (_sum(hs.slice(0, k)) + (k - 1) * spacing)) / 2
                     < MIN_CENTER_PAD)
             k--
-        const block = k * ch + (k - 1) * spacing
+        const block = _sum(hs.slice(0, k)) + (k - 1) * spacing
         top0 = center ? Math.max(0, (availH - block) / 2) : 0
     }
-    const baseY = i => top0 + i * pitch
+    const baseY = i => {
+        let y = top0
+        for (let j = 0; j < i; j++)
+            y += hs[j] + spacing
+        return y
+    }
     // 滚动上限：滚到底末卡完整露出（+GLOW_PAD 辉光余量）
     const scrollMax = fits ? 0
         : Math.max(0, top0 + contentH - availH + GLOW_PAD)
@@ -172,39 +208,18 @@ export function scrollLayout(availH, count, opts = {}) {
             positions.push(baseY(i) - scroll)
             scales.push(1)
             zs.push(count - i)
-            dims.push(false)
         }
-        return { positions, scales, zs, dims, scale: 1, pitch, scrollMax }
+        return { positions, scales, zs, scale: 1, pitch, scrollMax }
     }
-    // 聚焦缩放 ≥ 基础缩放（TopLeft 外扩不变量）：聚焦比基础小会让悬停
-    // 卡向内收缩、把指针从卡缘挤出（悬停丢失→回弹→驻留→再聚焦的慢振
-    // 荡）。**相对基础缩放**（用户实测否决"弹回全尺寸"版：hoverScale
-    // 本就关闭悬停放大的配置下，0.76→1.0 的强弹＝"反转后突然放大"的
-    // 突兀感来源）——默认 1.0×base＝悬停不改尺寸，配置放大也按比例
-    const focusScale = Math.max(
-        (Number.isFinite(opts.focusScale) ? opts.focusScale : 1.0), 1)
-    const retreat = Number.isFinite(opts.retreat)
-        ? opts.retreat : SCROLL_RETREAT
     // 悬停卡锚定当前视觉位置（hoverY）；缺省回退滚动后的基础槽位
     const hy = Number.isFinite(opts.hoverY)
         ? opts.hoverY : baseY(h) - scroll
     for (let i = 0; i < count; i++) {
-        if (i === h) {
-            positions.push(hy)
-            scales.push(focusScale)
-            zs.push(count + 2)
-            dims.push(false)
-            continue
-        }
-        // 上组退避不设下限：滚动布局里卡在视口上方属正常（clip 裁掉）
-        positions.push(i < h
-            ? baseY(i) - scroll - retreat
-            : baseY(i) - scroll + retreat)
+        positions.push(i === h ? hy : baseY(i) - scroll)
         scales.push(1)
-        zs.push(count - i)
-        dims.push(true)
+        zs.push(i === h ? count + 2 : count - i)
     }
-    return { positions, scales, zs, dims, scale: 1, pitch, scrollMax }
+    return { positions, scales, zs, scale: 1, pitch, scrollMax }
 }
 
 // ── 特效目标矩形（stage-targets.json 的内容）──
@@ -221,6 +236,7 @@ export function scrollLayout(availH, count, opts = {}) {
 // 坐标必须在最小化派发前进文件，否则特效查不到就回落全局矩形。
 export function computeTargetRects(groups, lay, dims, records, prevRects) {
     const cardHeight = dims.cardHeight ?? CARD_HEIGHT
+    const heights = Array.isArray(dims.heights) ? dims.heights : null
     const merged = ({})
     for (const k in prevRects)
         merged[k] = prevRects[k]
@@ -236,7 +252,9 @@ export function computeTargetRects(groups, lay, dims, records, prevRects) {
         // 屏幕坐标 = 全屏浮层原点(0,0) + 列内 y——不加 PANEL_ORIGIN_Y
         //（全屏化前的旧窗原点常量，见其声明处注释）
         const y = Math.round(dims.columnY + (lay.positions[g] ?? 0))
-        const h = Math.round(cardHeight * s)
+        const gh = (heights && Number.isFinite(heights[g]) && heights[g] > 0)
+            ? heights[g] : cardHeight
+        const h = Math.round(gh * s)
         const w = Math.round((dims.columnWidth - CARD_WIDTH_INSET) * s)
         // originX = 面板窗在屏幕上的原点 x：左侧常驻=0；右侧常驻时窗口
         // 锚在屏幕右缘，矩形必须加窗口原点才是特效要的屏幕坐标（缺省 0
@@ -272,4 +290,4 @@ export function computeTargetRects(groups, lay, dims, records, prevRects) {
 }
 
 // （tiltHeadroom 已删——2026-09-30 审计：stack 模式删除后无生产调用方，
-// 且公式用 PERSPECTIVE_FOCAL=900 与现役卡片倾斜 TILT_FOCAL=2200 已不符）
+// 且公式写死了与 TILT_FOCAL 无关的旧焦距口径）

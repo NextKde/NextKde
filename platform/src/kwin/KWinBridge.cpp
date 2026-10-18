@@ -458,6 +458,13 @@ private:
         // 标题栏+应用图标（台前卡片"最上面覆盖着图标"的根源），实时模式
         // 下内容持续刷新、那条静止的图标条格外显眼
         options.insert(QStringLiteral("include-decoration"), false);
+        // 不含窗口投影：CaptureWindow 默认把窗口的合成器投影一起拍进
+        // alpha 通道（实测 614×440 的暗窗，左右各有 ~12px 的 alpha 渐变
+        // 带，内容只从 x=12 开始）。缩略图是"窗口内容"，带投影会同时造成
+        // 三个可见缺陷：①内容被投影边距缩进、实际比卡面小一圈；②透明
+        // 边距让卡背板的白描边透出来，暗窗上读作"一圈莫名其妙的亮边"；
+        // ③卡面内部自带一层投影，与卡外的 KosCardShadow 叠成双影。
+        options.insert(QStringLiteral("include-shadow"), false);
         // ScreenShot2 writes raw pixels to this descriptor after its D-Bus
         // reply describes the image dimensions and QImage format.
         QDBusUnixFileDescriptor writePipe(dbusWriteFd);
@@ -569,6 +576,41 @@ private:
                 if (image.isNull()) {
                     fail(QStringLiteral("Cannot decode KWin screenshot"));
                     return;
+                }
+
+                // KWin's frame carries a fully transparent rim along the window
+                // shape's outer edge (2px on every side even with decorations
+                // and shadows excluded). Scaled onto the card face that rim is
+                // a translucent hairline around the thumbnail: the card's
+                // rounded clip trims the *rim* instead of the window content,
+                // which reads as "rounded frame around a square screenshot".
+                // Trim the frame to the rows/columns that actually carry
+                // pixels so the card edge meets the content edge.
+                if (image.hasAlphaChannel()) {
+                    constexpr int kAlphaFloor = 8;
+                    int left = image.width();
+                    int top = image.height();
+                    int right = -1;
+                    int bottom = -1;
+                    for (int y = 0; y < image.height(); ++y) {
+                        const auto *line = reinterpret_cast<const QRgb *>(
+                            image.constScanLine(y));
+                        for (int x = 0; x < image.width(); ++x) {
+                            if (qAlpha(line[x]) < kAlphaFloor)
+                                continue;
+                            left = std::min(left, x);
+                            top = std::min(top, y);
+                            right = std::max(right, x);
+                            bottom = std::max(bottom, y);
+                        }
+                    }
+                    if (right >= left && bottom >= top
+                            && (left > 0 || top > 0
+                                || right < image.width() - 1
+                                || bottom < image.height() - 1)) {
+                        image = image.copy(left, top, right - left + 1,
+                                           bottom - top + 1);
+                    }
                 }
 
                 const QString runtimeDir = QStandardPaths::writableLocation(

@@ -7,7 +7,8 @@
 // ListModel 角色 / delegate required property 的唯一出处（appKey 是主键，
 // 不进差异比较）。新增卡片字段：加这里 + buildModelRows + 两处 required。
 export const CARD_FIELDS = ["targetId", "pid", "appName", "title",
-    "iconSource", "count", "idsJson", "iconsJson", "iconIdsJson", "merged"]
+    "iconSource", "count", "idsJson", "iconsJson", "iconIdsJson",
+    "rowsJson", "merged", "aspect"]
 
 // ── 分组 ──
 
@@ -42,6 +43,15 @@ export function isSameApp(a, b, appIdA, appIdB) {
     if (isSameProcess(a, b))
         return true
     return !!(appIdA && appIdA === appIdB)
+}
+
+// 卡片宽高比：优先窗口内容几何（无装饰，与缩略图同口径），退 frame。
+// 两个矩形的选择在别处无关——只有 aspect 消费它。
+function aspectOf(r) {
+    const g = r.toplevel?.contentGeometry || r.geometry
+    if (!g || !(g.width > 0) || !(g.height > 0))
+        return 0
+    return g.width / g.height
 }
 
 // 把 records 分组（保持首次出现顺序），返回 [{ key, pid, wins }]。
@@ -87,7 +97,15 @@ export function groupRecords(records, opts = {}) {
             wins = []
             byKey[key] = wins
             groups.push({ key: key, pid: r.pid || 0, wins: wins,
-                merged: false })
+                merged: false,
+                // 窗口内容宽高比：卡片形状跟窗口走（macOS Stage Manager
+                // 语义：横窗=横卡、竖窗=竖卡，整窗缩进卡里）。取**内容**
+                // 几何（frame 去掉装饰）而不是 frame——缩略图抓的正是无
+                // 装饰内容，两边口径必须一致，否则 PreserveAspectFit 在卡
+                // 内上下留黑边（kate: frame 1.61 vs 内容 1.69）。
+                // 取组首窗、与代表窗选择无关——视图布局与矩形发布两条
+                // 路径必须得到同一个值（发布路径不 decorate）。
+                aspect: aspectOf(r) })
         }
         wins.push(r)
     }
@@ -151,6 +169,28 @@ export function decorateGroups(groups, thumbnailUrlOf) {
             grp.icons.push(src)
             grp.iconIds.push(w.windowId)
         }
+        // 单图标形态（maxIconSlots=1）只显示首枚：它必须与卡面内容同源
+        // ——代表窗的图标排首位，否则合并卡会出现"Edge 画面配 Alacritty
+        // 图标"的错位（2026-10-17 实测）。排只影响显示，激活语义不变
+        const repIcon = grp.icons.indexOf(rep.iconSource || "")
+        if (repIcon > 0) {
+            const [ic] = grp.icons.splice(repIcon, 1)
+            const [id] = grp.iconIds.splice(repIcon, 1)
+            grp.icons.unshift(ic)
+            grp.iconIds.unshift(id)
+        }
+        // 逐窗行（合并卡左下"窗口列"）：参考 ref/c2.png 的合并卡左下一枚
+        // 白色圆角胶囊，内为逐窗图标+标题竖排（不是并列图标排）。代表窗
+        // 排首位＝与卡面缩略图同源，其余按组内原序；id 供点击直达。
+        const ordered = [rep]
+        for (const w of grp.wins)
+            if (w !== rep)
+                ordered.push(w)
+        grp.rows = ordered.map(w => ({
+            icon: w.iconSource || "",
+            title: w.title || "",
+            id: w.windowId,
+        }))
     }
     return groups
 }
@@ -283,7 +323,9 @@ export function buildModelRows(groups) {
             idsJson: JSON.stringify(g.ids || []),
             iconsJson: JSON.stringify(g.icons || []),
             iconIdsJson: JSON.stringify(g.iconIds || []),
+            rowsJson: JSON.stringify(g.rows || []),
             merged: !!g.merged,
+            aspect: g.aspect || 0,
         })
     }
     return rows

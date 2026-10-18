@@ -258,7 +258,7 @@ check("commit: rapid alternation — both due, sequential commits",
 // ── 模型对账 ──
 check("CARD_FIELDS shape", CARD_FIELDS,
     ["targetId", "pid", "appName", "title", "iconSource", "count",
-     "idsJson", "iconsJson", "iconIdsJson", "merged"]);
+     "idsJson", "iconsJson", "iconIdsJson", "rowsJson", "merged"]);
 
 function row(appKey, over = {}) {
     return Object.assign({ appKey, targetId: "t-" + appKey, pid: 1,

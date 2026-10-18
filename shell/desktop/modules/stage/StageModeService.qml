@@ -44,11 +44,15 @@ QtObject {
     // 会让右条回退带错位 ~100px；与侧栏 panelW 同一公式）
     readonly property int _panelW:
         StageConfigService.cardWidth + StageGeo.CARD_WIDTH_INSET
+    // 列原点偏移 = 侧栏 stripMargin − 列内缩进（与 StageSidebarWindow
+    // 的 _stripInset 同公式）：kwinrc 回退矩形的 x 与卡片列同源
+    readonly property int _stripInset:
+        StageConfigService.stripMargin - StageGeo.CARD_X_INSET
     readonly property string targetRectCmd: ""
         + "kwriteconfig6 --file kwinrc --group Effect-stageanim --key TargetX "
         + (StageConfigService.side === "right"
-            ? String(_screenW - _panelW - StageGeo.CARD_OVERFLOW_MARGIN)
-            : String(StageGeo.CARD_OVERFLOW_MARGIN))
+            ? String(_screenW - _panelW - _stripInset)
+            : String(_stripInset))
         + " && kwriteconfig6 --file kwinrc --group Effect-stageanim --key TargetY " + StageGeo.PANEL_ORIGIN_Y
         + " && kwriteconfig6 --file kwinrc --group Effect-stageanim --key TargetWidth " + _panelW
         + " && kwriteconfig6 --file kwinrc --group Effect-stageanim --key TargetHeight " + (_screenH - StageGeo.PANEL_ORIGIN_Y)
@@ -94,8 +98,8 @@ QtObject {
 
     function toggle() { setEnabled(!_requestedEnabled) }
 
-    // 侧栏位置切换：只重投影全局回退矩形（每窗矩形由 shell 窗口侧的
-    // originX 现算，不落 kwinrc），reconfigure 让特效重读。
+    // 侧栏位置/边距切换：只重投影全局回退矩形（每窗矩形由 shell 窗口侧
+    // 现算，不落 kwinrc），reconfigure 让特效重读。
     // ⚠️ 不能写 Connections 子对象——QtObject 没有默认属性容纳子项
     //（同 Process 直挂的坑，crash-loop 实测），Component.onCompleted
     // 里手动 connect
@@ -115,8 +119,28 @@ QtObject {
         }
     }
 
+    // 层内重排交给 KWin：同层没有固定层级，激活或新映射都会把桌面组件窗
+    // 抬到条带之上，而 Wayland 客户端无法重排自己。KWin 脚本监听层序并
+    // 把条带抬回，见 kwin-stage-stack.js。脚本随 shell 配置分发，这里只
+    // 负责加载（KWin 重启后需重新加载；isScriptLoaded 防止热重载重复注册）。
+    function _ensureStageStackScript() {
+        const script = StageEffects.shellQuote(Quickshell.shellDir
+            + "/desktop/modules/stage/kwin-stage-stack.js")
+        const dbus = "qdbus6 org.kde.KWin /Scripting org.kde.kwin.Scripting"
+        const cmd = "if [ \"$(" + dbus + ".isScriptLoaded kos-stage-stack)\" != \"true\" ];"
+            + " then " + dbus + ".loadScript " + script + " kos-stage-stack"
+            + " && " + dbus + ".start; fi"
+        const loader = _procFactory.createObject(svc, { command: ["bash", "-c", cmd] })
+        loader.exited.connect(function() { loader.destroy() })
+        loader.running = true
+    }
+
     Component.onCompleted: {
+        _ensureStageStackScript()
         StageConfigService.sideChanged.connect(svc._onSideChanged)
+        // 边距改动（设置页「距离屏幕边缘」）同样重投影回退矩形：TargetX
+        // 停在旧值会让 targets 未命中时的回落动画横向飞错位
+        StageConfigService.stripMarginChanged.connect(svc._onSideChanged)
         const reader = _procFactory.createObject(svc,
             { command: ["cat", svc.flagPath] })
         reader.exited.connect(function() {

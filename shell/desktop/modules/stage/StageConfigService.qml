@@ -33,38 +33,62 @@ QtObject {
         "fanSpacing":   { type: "int", min: 2, max: 24, def: 8 },
         // 扇叠悬停扩散系数（悬停/武装时间距 × 此值；1.0 = 不扩散）
         "fanHoverSpread": { type: "real", min: 1.0, max: 2.0, def: 1.4 },
-        "stripIconSize": { type: "int", min: 16, max: 40, def: 24 },
-        "maxIconSlots": { type: "int", min: 3, max: 8, def: 5 },
+        "stripIconSize": { type: "int", min: 16, max: 80, def: 46 },
+        "maxIconSlots": { type: "int", min: 1, max: 8, def: 4 },
         // 合并手势驻留：被拖卡压在目标卡上停此时长才"武装"并组意图
         //（用户实测调过 320→550→450，入 schema 供设置页可调）
         "mergeDwellMs": { type: "int", min: 200, max: 1200, def: 450 },
         // 卡片顶部名称：可关（沉浸缩略图——整卡就是窗口内容）
-        "showCardTitle": { type: "bool", def: true },
-        "cardHeight":   { type: "int", min: 100, max: 220, def: 148 },
-        // 卡宽（卡高之外的独立自由度；默认 216 = 原 PANEL_WIDTH−24 定宽）
-        "cardWidth":    { type: "int", min: 120, max: 320, def: 216 },
-        "cardSpacing":  { type: "int", min: 4, max: 48, def: 16 },
+        "showCardTitle": { type: "bool", def: false },
+        // 卡宽是主尺寸；卡高按窗口宽高比逐卡算（StageSidebarWindow.
+        // _cardHeightFor，上限 4/3w＝基准卡形，竖窄窗不再拉成细长条）。
+        // cardHeight 只在宽高比未知（无记录空脸/旧数据）时作回落——
+        // 128×170 是人工定案的基准卡形。
+        "cardHeight":   { type: "int", min: 80, max: 220, def: 170 },
+        // 卡宽（卡高之外的独立自由度；与 cardHeight 同按 0.75 宽高比）
+        "cardWidth":    { type: "int", min: 60, max: 320, def: 128 },
+        // 侧栏距屏幕边缘（px）：卡片列左/右缘到屏缘的净距（默认 32 =
+        // 全屏浮层化前的定值 CARD_OVERFLOW_MARGIN 20 + CARD_X_INSET 12；
+        // 设置页「距离屏幕边缘」，位置在「侧栏位置」之下）
+        "stripMargin":  { type: "int", min: 0, max: 120, def: 12 },
+        // 卡间距按**屏幕高度百分比**（用户定案：不写死像素）。面板窗恒
+        // 全屏，占比换算在 StageSidebarWindow.cardGap（4.5% × 1040 ≈ 47）
+        "cardGapPercent": { type: "real", min: 1, max: 10, def: 4.5 },
         "centerCards":  { type: "bool", def: true },
         "deckSidePeek": { type: "int", min: 4, max: 60, def: 20 },
         "focusDim":     { type: "bool", def: false },
         // ⚠️ 倾角上限 40 = 特效 stageanim 的 std::clamp 钳位（>40° 时
         // depth>focal 顶点镜像炸裂）——schema 越过它就是"设置页可选但
         // 静默被砍"，两处必须同步
-        "deckRestTilt": { type: "real", min: 0, max: 40, def: 10 },
-        "tiltAngle":    { type: "real", min: 0, max: 40, def: 22 },
+        // 倾角双旋钮（解耦，两模式统一）：deckRestTilt（牌堆遗名）=
+        // **静置倾斜角**——静止/交棒时的卡片倾角，adaptive 完整显示也有
+        // 静置姿态；tiltAngle = **悬停倾斜角**——鼠标悬停时的倾角
+        //（0 = 悬停放平阅读）
+        // TiltAngle kwinrc 投影取 deckRestTilt（与卡片交棒姿态同源，见
+        // _pushEffectConfig）。2026-10-18 按参考实测改判：参考列不是 2°
+        // 微倾，而是共享相机的广角偏航——屏幕上半卡右低、下半卡右高，
+        // 横边斜率随卡位线性变化（顶卡 ~10°、中卡 0°、底卡 ~9° 反向），
+        // 竖边严格垂直。反推静置偏航 ≈30°、焦距 ≈1100（TILT_FOCAL）。
+        // 旧的 2° 是"微倾"的误读：在 2200 焦距下视觉斜率 <0.2°，等于没歪
+        "deckRestTilt": { type: "real", min: 0, max: 40, def: 40 },
+        "tiltAngle":    { type: "real", min: 0, max: 40, def: 0 },
         // 玻璃质感（StageCard 卡面：背板/受光/描边/辉光/纵深）
-        "cardRadius":   { type: "int", min: 0, max: 24, def: 14 },
-        "cardTint":     { type: "real", min: 0.2, max: 0.95, def: 0.55 },
+        "cardRadius":   { type: "int", min: 0, max: 24, def: 6 },
+        "cardTint":     { type: "real", min: 0.2, max: 0.95, def: 0.35 },
+        "cardOpacity":  { type: "real", min: 0.2, max: 1.0, def: 1.0 },
         "cardTopLight": { type: "real", min: 0, max: 0.3, def: 0.07 },
-        "cardBorder":   { type: "real", min: 0, max: 0.4, def: 0.13 },
+        "cardBorder":   { type: "real", min: 0, max: 0.4, def: 0.05 },
         "cardGlow":     { type: "real", min: 0, max: 0.4, def: 0.13 },
-        "cardDepth":    { type: "real", min: 0, max: 0.6, def: 0.38 },
-        "thumbSize":    { type: "int", min: 160, max: 640, def: 320 },
+        "thumbSize":    { type: "int", min: 160, max: 640, def: 640 },
         // 动效与节拍
         "hoverScale":   { type: "real", min: 1.0, max: 1.20, def: 1.05 },
         "hoverDwellDelay": { type: "int", min: 0, max: 800, def: 200 },
-        "cardEnterDuration": { type: "int", min: 100, max: 800, def: 240 },
-        "tiltAnimDuration": { type: "int", min: 100, max: 800, def: 250 },
+        "cardEnterDuration": { type: "int", min: 100, max: 800, def: 200 },
+        // 列位让位/回弹（一张卡离开或插入后，其余卡"往上挤"的位移）：
+        // 与卡片入场解耦——2026-10-18 用户实测让位比入场更需要跟手，
+        // 共用 200ms 时点开首卡后整列上移显得拖沓
+        "reflowDuration": { type: "int", min: 60, max: 500, def: 140 },
+        "tiltAnimDuration": { type: "int", min: 100, max: 800, def: 200 },
         "engageDelay":  { type: "int", min: 60, max: 500, def: 170 },
         "autoMinimize": { type: "bool", def: true },
         // 保留整条侧栏条（exclusiveZone）：关=卡片纯悬浮，最大化/普通窗
@@ -85,7 +109,7 @@ QtObject {
         // 纹理按卡面透视画进卡里——无 screencast 管线，本机预算内。
         "thumbLiveEffect": { type: "bool", def: false },
         // 窗口动画特效（stageanim）的 kwinrc 投影
-        "animDuration": { type: "int", min: 120, max: 2000, def: 420 },
+        "animDuration": { type: "int", min: 120, max: 2000, def: 320 },
         "glassOpacity": { type: "real", min: 0.3, max: 1.0, def: 0.65 },
         "animEasing":   { type: "enum",
             values: ["OutCubic", "InOutCubic", "OutBack", "OutQuad",
@@ -104,44 +128,70 @@ QtObject {
     property string side: "left"
     property int fanSpacing: 8
     property real fanHoverSpread: 1.4
-    property int stripIconSize: 24
-    property int maxIconSlots: 5
+    // 2026-10-18 用户反馈"图标一样大了但太大"：60 → 46（≈36% 卡宽）
+    property int stripIconSize: 46
+    // 4 = 多应用合并卡并排显示各应用图标（参考 ref-orange）；1 会只剩首枚
+    property int maxIconSlots: 4
     // ⚠️ 属性默认值 = 无 config.json 时的真实默认（_load 不回填 schema def，
     // 两处默认必须同步改——2026-09-30 审计抓过 550/450 漂移）
     property int mergeDwellMs: 450
     property bool debugTrace: false   // 诊断遥测（[DragTrace]），见 schema 注释
-    property bool showCardTitle: true
-    property int cardHeight: 148
-    property int cardWidth: 216
-    property int cardSpacing: 16
+    // 2026-10-17 iPadOS 还原:参考缩略图无卡顶标题(app 名靠左下图标),
+    // 默认改 false。已有 config.json 里的旧值 true 会覆盖此默认 —— 用户
+    // 手动关一次或删键后生效
+    property bool showCardTitle: false
+    // 2026-10-18 结构轮：基准卡形 128×170（参考 0.753 竖版、放大一档）；
+    // 实际卡高逐卡按窗口宽高比算，本值只作未知宽高比的回落
+    property int cardHeight: 170
+    property int cardWidth: 128
+    // 侧栏距屏幕边缘：卡片列贴常驻侧屏缘的净距（列原点偏移 =
+    // stripMargin − CARD_X_INSET，见 StageSidebarWindow._stripInset）
+    // 2026-10-17 iPadOS 还原:参考卡距屏缘 ~11pt(原 32)
+    property int stripMargin: 12
+    // 卡间距占屏幕高度的百分比（用户定案：不写死像素）。4.5% 在 1040
+    // 高的屏上 ≈ 47px；屏越小间距等比收，不再出现"换分辨率就过密/过疏"
+    property real cardGapPercent: 4.5
     // adaptive 模式：放得下时整列垂直居中；贴满时顶部锚定
     property bool centerCards: true
     // 聚焦退避距离：悬停聚焦时其余卡片从原位向两侧平移的像素
     property int deckSidePeek: 20
     // 聚焦时压暗退避卡片（用户觉得不必要，默认关）
     property bool focusDim: false
-    // 静置倾斜：scroll 模式静止时卡片带统一倾角，悬停聚焦放平，交棒保持
-    //（kwinrc TiltAngle 同源投影）；tiltAngle = adaptive 模式的悬停倾角。
+    // 倾角双旋钮（解耦，两模式统一）：deckRestTilt = 静置倾斜角（静止/
+    // 交棒姿态，adaptive 完整显示也有静置倾角）；tiltAngle = 悬停倾斜角
+    //（鼠标悬停时的倾角，0 = 悬停放平）。kwinrc TiltAngle 投影取
+    // deckRestTilt（与卡片交棒姿态同源，见 _pushEffectConfig）。
     //（悬停放大只有一个旋钮 hoverScale——原 deckFocusScale 与其相乘控
     // 同一效果，冲突已删）
-    property real deckRestTilt: 10
-    property real tiltAngle: 22
+    // 2026-10-18 参考实测改判：静置偏航 30°（共享相机广角透视，竖边垂直、
+    // 横边随卡位倾斜），悬停放平。焦距同源改到 TILT_FOCAL=1100
+    // 2026-10-18 用户要求"倾斜角再大一点"：30 → 35 → 40（人工偏好覆盖参考值，
+    // 40 = 特效侧 std::clamp 上限，超过会让 depth>focal 顶点镜像炸裂）
+    property real deckRestTilt: 40
+    property real tiltAngle: 0
     // 卡面玻璃质感：背板浓度（悬停自动 ×1.3 提亮）/ 顶部受光 / 静置描边
-    // 亮度 / 聚焦辉光强度 / 纵深压暗
-    property int cardRadius: 14
-    property real cardTint: 0.55
+    // 亮度 / 聚焦辉光强度
+    // 2026-10-18 结构轮：圆角按参考 7% 卡宽，128 宽取 9
+    // 2026-10-18 用户反馈"圆角小一点"：9 → 6（≈5% 卡宽）
+    property int cardRadius: 6
+    // 参考卡面是缩略图本体，背板只在无图/留边处露出；0.35 让留边接近
+    // 参考的浅色卡面，不再是一块深色玻璃
+    property real cardTint: 0.35
+    property real cardOpacity: 1.0
     property real cardTopLight: 0.07
-    property real cardBorder: 0.13
+    property real cardBorder: 0.05
     property real cardGlow: 0.13
-    property real cardDepth: 0.38
-    // 缩略图解码尺寸（宽，高等比 0.7）：越大越清晰、内存与重拍开销越大
-    property int thumbSize: 320
+    // 缩略图解码尺寸（宽，高等比 0.7）：裁切铺满卡面后按卡高放大显示，
+    // 需要比卡宽更大的纹理才不糊（128 卡 @2x 显示宽 ≈486 设备像素；
+    // 2026-10-18 实测 480 仍糊，640 才清晰——源图本身 720 级）
+    property int thumbSize: 640
     property real hoverScale: 1.05
     // 悬停驻留：指针停稳多久才应用聚焦排布（滑动途中只亮卡不重排 =
     // 不跳卡）。0 = 立即聚焦（旧手感）
     property int hoverDwellDelay: 200
-    property int cardEnterDuration: 240
-    property int tiltAnimDuration: 250
+    property int cardEnterDuration: 200
+    property int reflowDuration: 140
+    property int tiltAnimDuration: 200
     property int engageDelay: 170
     property bool autoMinimize: true
     property bool reserveStrip: true
@@ -161,7 +211,7 @@ QtObject {
     property int streamCycleOffMs: 750
     // 合成器活体卡（stage-live.json → stageanim 直绘），见 schema 注释
     property bool thumbLiveEffect: false
-    property int animDuration: 420
+    property int animDuration: 320
     // 飞行玻璃透明度：窗口在卡片↔桌面途中半透明透见桌面，落地凝实；
     // 1.0 = 关闭玻璃感（全程不透明，纯淡出）
     property real glassOpacity: 0.65
@@ -300,7 +350,10 @@ QtObject {
     function _pushEffectConfig() {
         if (!_writer)
             return
-        const tilt = layoutMode === "scroll" ? deckRestTilt : tiltAngle
+        // 窗口展开动画的装卡姿态 = 卡片交棒姿态：tiltCur 的 engaging 分支
+        // 两模式统一保持静置角（deckRestTilt），特效 TiltAngle 与之同源，
+        // 卡片淡出与窗口起摆零跳变
+        const tilt = deckRestTilt
         _enqueueWriter(["bash", "-c",
             "kwriteconfig6 --file kwinrc --group Effect-stageanim"
             + " --key AnimationDuration " + animDuration
