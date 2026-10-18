@@ -80,7 +80,7 @@ Item {
     readonly property var pinnedKeys: root.orderedKeys.filter(key => !SysTrayOrderService.isCollected(key))
     // Keep every delegate alive; folding changes positions and visibility only.
     readonly property var arrangedKeys: StatusCollection.visibleKeys(root.orderedKeys,
-        SysTrayOrderService.collectedKeys, root.collectionExpanded, !root.dockHosted)
+        SysTrayOrderService.collectedKeys, root.collectionExpanded)
     readonly property var previewKeys: StatusCollection.previewOrder(root.arrangedKeys,
         root.draggedKey, root.dragInsertIndex)
 
@@ -127,24 +127,30 @@ Item {
         (modifierTracker.point.modifiers & Qt.AltModifier) !== 0
 
     property string draggedKey: ""
-    property real dragTranslationX: 0
-    property real dragTranslationY: 0
-    property point dragStartScene: Qt.point(0, 0)
+    property point dragPointerScene: Qt.point(0, 0)
+    property point dragGrabOffset: Qt.point(0, 0)
     property bool dragCancelled: false
     readonly property point dragCenter: {
         // Expanding changes the right-anchored strip's width and scene origin.
         const geometry = root.width + root.x
-        return root.mapFromItem(null, root.dragStartScene.x + root.dragTranslationX,
-            root.dragStartScene.y + root.dragTranslationY)
+        return root.mapFromItem(null, root.dragPointerScene.x, root.dragPointerScene.y)
     }
 
-    function beginDrag(key, item) {
+    function beginDrag(key, item, pointer) {
         root.dragCancelled = false
-        root.dragStartScene = item.mapToItem(null, item.width / 2, item.height / 2)
-        root.dragTranslationX = 0
-        root.dragTranslationY = 0
+        const center = item.mapToItem(null, item.width / 2, item.height / 2)
+        root.dragPointerScene = center
+        root.dragGrabOffset = Qt.point(center.x - pointer.x, center.y - pointer.y)
         root.draggedKey = key
-        if (!root.dockHosted) root.forceActiveFocus()
+        root.forceActiveFocus()
+    }
+
+    function updateDrag(pointer) {
+        if (root.draggedKey === "") return
+        // Scene coordinates survive the 90-degree side-Dock transform and
+        // the Dock's recentering when the collection expands.
+        root.dragPointerScene = Qt.point(pointer.x + root.dragGrabOffset.x,
+            pointer.y + root.dragGrabOffset.y)
     }
 
     property string pendingDropKey: ""
@@ -174,12 +180,10 @@ Item {
         const preview = root.previewKeys.slice()
         const target = StatusCollection.destinationSection(preview, key)
         if (!root.dragCancelled && destination >= 0) {
-            if (!root.dockHosted) SysTrayOrderService.setCollected(key, target.collected)
+            SysTrayOrderService.setCollected(key, target.collected)
             SysTrayOrderService.moveKey(key, target.keys.indexOf(key), target.keys)
         }
         root.draggedKey = ""
-        root.dragTranslationX = 0
-        root.dragTranslationY = 0
         if (root.dragCancelled) root.collectionExpanded = false
     }
 
@@ -225,7 +229,7 @@ Item {
     }
     Timer {
         interval: 220
-        running: !root.dockHosted && !root.collectionExpanded && root.draggedKey !== ""
+        running: !root.collectionExpanded && root.draggedKey !== ""
             && root.dragInsertIndex === root.arrangedKeys.indexOf(root.collectionKey)
         onTriggered: root.collectionExpanded = true
     }
@@ -295,11 +299,9 @@ Item {
         const boundary = root.arrangedKeys.indexOf(root.collectionKey)
         // Hovering the disclosure is itself a collection target, even if the
         // nearest midpoint belongs to the adjacent icon.
-        if (!root.dockHosted) {
-            const origin = root.slotOrigin(boundary)
-            if (center.x >= origin.x && center.x <= origin.x + root.itemSize)
-                return source > boundary ? boundary : Math.max(0, boundary - 1)
-        }
+        const origin = root.slotOrigin(boundary)
+        if (StatusCollection.pointInSlot(center, origin, root.itemSize))
+            return source > boundary ? boundary : Math.max(0, boundary - 1)
         let nearest = source
         let distance = Number.POSITIVE_INFINITY
         for (let i = 0; i < root.arrangedKeys.length; i++) {
@@ -330,7 +332,6 @@ Item {
         Rectangle {
             id: collectionToggle
             objectName: "status-collection-toggle"
-            visible: !root.dockHosted
             enabled: SysTrayOrderService.ready
             activeFocusOnTab: true
             Accessible.role: Accessible.Button
@@ -369,10 +370,12 @@ Item {
             }
             StatusTooltip {
                 anchorItem: collectionToggle
+                dockHosted: root.dockHosted
+                dockEdge: root.dockEdge
                 shown: toggleMouse.containsMouse && root.draggedKey === ""
                 primaryText: root.collectionExpanded ? I18n.tr("Collapse collected icons") : I18n.tr("Show collected icons")
                 secondaryText: root.collectedKeys.length === 0
-                    ? I18n.tr("Alt-drag icons here to collect; drag along the bar to reorder")
+                    ? I18n.tr("Alt-drag icons here to collect; drag to reorder")
                     : I18n.tr("Click to expand · Alt-drag icons to reorder or collect")
             }
         }
@@ -559,17 +562,16 @@ Item {
                     acceptedButtons: Qt.LeftButton
                     enabled: SysTrayOrderService.ready && (root.altModifierHeld || active)
                     xAxis.enabled: true
-                    yAxis.enabled: !root.dockHosted || root.rowCount > 1
+                    yAxis.enabled: true
                     onCanceled: root.cancelDrag()
                     onActiveChanged: {
-                        if (active) root.beginDrag(trayItem.trayKey, trayItem)
+                        if (active) root.beginDrag(trayItem.trayKey, trayItem, trayReorderDrag.centroid.scenePosition)
                         else root.scheduleDrop(trayItem.trayKey)
                     }
                     onTranslationChanged: {
                         if (!active || root.draggedKey === "")
                             return
-                        root.dragTranslationX = translation.x
-                        root.dragTranslationY = translation.y
+                        root.updateDrag(centroid.scenePosition)
                     }
                 }
 
@@ -609,8 +611,8 @@ Item {
                         Text {
                             id: tooltipText
                             anchors.centerIn: parent
-                            text: trayItem.tooltip + (!root.dockHosted && SysTrayOrderService.isCollected(trayItem.trayKey)
-                                ? " · " + I18n.tr("Alt-drag to the bar to keep visible") : "")
+                            text: trayItem.tooltip + (SysTrayOrderService.isCollected(trayItem.trayKey)
+                                ? " · " + I18n.tr("Alt-drag past the arrow to keep visible") : "")
                             color: "white"
                             font.pixelSize: 12
                         }
@@ -665,9 +667,11 @@ Item {
                 HoverHandler { id: collectedCellHover }
                 StatusTooltip {
                     anchorItem: trailingItem
-                    shown: root.altModifierHeld && !root.dockHosted && SysTrayOrderService.isCollected(trailingItem.trayKey)
+                    dockHosted: root.dockHosted
+                    dockEdge: root.dockEdge
+                    shown: root.altModifierHeld && SysTrayOrderService.isCollected(trailingItem.trayKey)
                         && collectedCellHover.hovered && !root.collectionKeepOpen && root.draggedKey === ""
-                    primaryText: I18n.tr("Alt-drag to the bar to keep visible")
+                    primaryText: I18n.tr("Alt-drag past the arrow to keep visible")
                 }
                 Component.onDestruction: {
                     if (root.draggedKey === trayKey) root.cancelDrag()
@@ -688,17 +692,16 @@ Item {
                     acceptedButtons: Qt.LeftButton
                     enabled: SysTrayOrderService.ready && trailingItem.trayKey !== "cell:controlcenter" && (root.altModifierHeld || active)
                     xAxis.enabled: true
-                    yAxis.enabled: !root.dockHosted || root.rowCount > 1
+                    yAxis.enabled: true
                     onCanceled: root.cancelDrag()
                     onActiveChanged: {
-                        if (active) root.beginDrag(trailingItem.trayKey, trailingItem)
+                        if (active) root.beginDrag(trailingItem.trayKey, trailingItem, trailingReorderDrag.centroid.scenePosition)
                         else root.scheduleDrop(trailingItem.trayKey)
                     }
                     onTranslationChanged: {
                         if (!active || root.draggedKey === "")
                             return
-                        root.dragTranslationX = translation.x
-                        root.dragTranslationY = translation.y
+                        root.updateDrag(centroid.scenePosition)
                     }
                 }
             }

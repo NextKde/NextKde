@@ -34,6 +34,14 @@ Item {
     property Component trailingAccessory: null
     property bool clockInInfoCarousel: false
 
+    readonly property bool statusCollectionExpanded: trailingAccessoryLoader.item?.collectionExpanded ?? false
+    readonly property bool statusDragActive: trailingAccessoryLoader.item?.statusDragActive ?? false
+    readonly property bool accessoryInteractionActive: trailingAccessoryLoader.item?.keepBarOpen ?? false
+
+    function closeStatusCollectionOutside(x, y) {
+        trailingAccessoryLoader.item?.closeCollectionOutside(x, y)
+    }
+
     // ═══════════════════════════════════════════════════════════
     // Inputs (from services / parent)
     // ═══════════════════════════════════════════════════════════

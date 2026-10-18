@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { visibleKeys, previewOrder, destinationSection, mergeOrder, toggleKey } from "./StatusCollection.mjs";
+import { visibleKeys, previewOrder, destinationSection, mergeOrder, toggleKey, pointInSlot } from "./StatusCollection.mjs";
 
 const app = "tray:music", other = "tray:chat", network = "cell:network", cc = "cell:controlcenter";
 
@@ -8,7 +8,7 @@ test("existing configurations start unfolded and the required control remains vi
     assert.deepEqual(visibleKeys([app, network, cc], [], false), [toggleKey, app, network, cc]);
     assert.deepEqual(visibleKeys([app, network, cc], [app, cc], false), [toggleKey, network, cc]);
     assert.deepEqual(visibleKeys([app, network, cc], [app], true), [app, toggleKey, network, cc]);
-    assert.deepEqual(visibleKeys([app, network, cc], [app], false, false), [app, network, cc]);
+
 });
 
 test("dragging into a closed collection previews the drop without modifying configuration", () => {
@@ -40,4 +40,11 @@ test("reordering one section retains absent applications and the other section",
     const reloaded = JSON.parse(JSON.stringify({version: 2, order: saved, collectedKeys: [app]}));
     assert.deepEqual(visibleKeys(reloaded.order, reloaded.collectedKeys, false),
         [toggleKey, "tray:offline", other, network, cc]);
+});
+
+test("collection target only covers its own cell in a two-row Dock", () => {
+    assert.equal(pointInSlot({x: 10, y: 10}, {x: 0, y: 0}, 26), true);
+    assert.equal(pointInSlot({x: 10, y: 39}, {x: 0, y: 0}, 26), false);
+    assert.equal(pointInSlot({x: 10, y: 39}, {x: 0, y: 26}, 26), true);
+    assert.equal(pointInSlot({x: 40, y: 10}, {x: 0, y: 0}, 26), false);
 });
