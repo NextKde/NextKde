@@ -2319,14 +2319,6 @@ KosApplicationWindow {
                         }
                     }
 
-                    Label {
-                        text: qsTr("7 days")
-                        color: root.skyTextMuted
-                        font.pixelSize: 18
-                        font.weight: Font.DemiBold
-                        Accessible.name: qsTr("Seven-day forecast")
-                    }
-
                     KosCard {
                         id: dailyCard
                         Layout.fillWidth: true
@@ -2354,6 +2346,59 @@ KosApplicationWindow {
                         contentItem: ColumnLayout {
                             id: dailyColumn
                             spacing: 0
+
+                            // ref-ipad-small.png 实测：10 天卡头部 "10-DAY FORECAST" 在卡内顶部——
+                            // calendar glyph + caps 字距 muted 文本（文本带 y321-329、glyph x276-284、与文字同色）；
+                            // ref-main 该卡被窗底裁切无头部可见，以 ipad 参考为准。
+                            // 文案照参考 "10-Day Forecast"（数据上限 7 天，差异记 LEDGER）。
+                            RowLayout {
+                                spacing: 6
+                                Layout.fillWidth: true
+                                Layout.bottomMargin: 8
+                                visible: backend.daily.length > 0
+
+                                Canvas {
+                                    width: 12
+                                    height: 12
+                                    Accessible.ignored: true
+
+                                    onPaint: {
+                                        const ctx = getContext("2d")
+                                        ctx.clearRect(0, 0, width, height)
+                                        ctx.strokeStyle = root.skyTextMuted
+                                        ctx.lineWidth = 1.2
+                                        // 圆角方框（calendar 外形）：x1.5..10.5、y1.5..10.5，radius 3
+                                        ctx.beginPath()
+                                        ctx.moveTo(4.5, 1.5)
+                                        ctx.lineTo(7.5, 1.5)
+                                        ctx.arcTo(10.5, 1.5, 10.5, 4.5, 3)
+                                        ctx.lineTo(10.5, 7.5)
+                                        ctx.arcTo(10.5, 10.5, 7.5, 10.5, 3)
+                                        ctx.lineTo(4.5, 10.5)
+                                        ctx.arcTo(1.5, 10.5, 1.5, 7.5, 3)
+                                        ctx.lineTo(1.5, 4.5)
+                                        ctx.arcTo(1.5, 1.5, 4.5, 1.5, 3)
+                                        ctx.closePath()
+                                        ctx.stroke()
+                                        // 框内两条横线（calendar 行）：y=4.8 与 y=7.6，x 3.6..8.4
+                                        ctx.beginPath()
+                                        ctx.moveTo(3.6, 4.8)
+                                        ctx.lineTo(8.4, 4.8)
+                                        ctx.moveTo(3.6, 7.6)
+                                        ctx.lineTo(8.4, 7.6)
+                                        ctx.stroke()
+                                    }
+                                }
+
+                                Label {
+                                    text: qsTr("10-Day Forecast").toLocaleUpperCase(Qt.locale())
+                                    color: root.skyTextMuted
+                                    font.pixelSize: 11
+                                    font.weight: Font.DemiBold
+                                    font.letterSpacing: 1.4
+                                    Accessible.name: qsTr("10-day forecast")
+                                }
+                            }
 
                             KosEmptyState {
                                 Layout.fillWidth: true
