@@ -683,6 +683,10 @@
       <translation>今天</translation>
     </message>
     <message>
+      <source>Now</source>
+      <translation>现在</translation>
+    </message>
+    <message>
       <location line="-300" />
       <source>Previous month</source>
       <translation>上个月</translation>

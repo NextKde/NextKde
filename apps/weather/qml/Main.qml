@@ -2763,6 +2763,12 @@ KosApplicationWindow {
 
                                                     required property var modelData
                                                     required property int index
+                                                    // ref-main Conditions 卡首列标签实测为 "Now"（当前小时），其余列为 localTime
+                                                    readonly property bool isCurrentHour: {
+                                                        const current = String(root.value(backend.current, "time", "")).substring(0, 13)
+                                                        return current.length > 0
+                                                            && String(root.value(hourlyCard.modelData, "time", "")).substring(0, 13) === current
+                                                    }
                                                     // ref-main 实测小时列中心距 41px@814 × 1.4598 ≈ 60px（含 Row spacing 10）
                                                     width: 50
                                                     height: hourlyRow.height
@@ -2802,8 +2808,11 @@ KosApplicationWindow {
 
                                                         Label {
                                                             Layout.alignment: Qt.AlignHCenter
-                                                            text: root.localTime(root.value(
-                                                                hourlyCard.modelData, "time", ""))
+                                                            // CJK 回退字形行盒高于数字（"现在"墨高 274-285 vs "17:00" 274-283），钉死行高防列内重排
+                                                            Layout.preferredHeight: Math.ceil(font.pixelSize * 1.5)
+                                                            verticalAlignment: Text.AlignVCenter
+                                                            text: hourlyCard.isCurrentHour ? qsTr("Now")
+                                                                : root.localTime(root.value(hourlyCard.modelData, "time", ""))
                                                             color: root.skyTextMuted
                                                         }
 
