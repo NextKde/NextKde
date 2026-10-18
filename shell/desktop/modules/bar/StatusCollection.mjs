@@ -2,8 +2,7 @@
 // the saved order: temporarily folding an icon is not deleting its preference.
 export const toggleKey = "collection:toggle";
 
-export function visibleKeys(ordered, collected, expanded, enabled = true) {
-    if (!enabled) return ordered.slice();
+export function visibleKeys(ordered, collected, expanded) {
     const hidden = new Set(collected.filter(key => key !== "cell:controlcenter"));
     return (expanded ? ordered.filter(key => hidden.has(key)) : [])
         .concat([toggleKey], ordered.filter(key => !hidden.has(key)));
@@ -38,4 +37,11 @@ export function mergeOrder(saved, arranged) {
     let next = 0;
     const merged = saved.map(key => live.has(key) ? arranged[next++] : key);
     return merged.concat(arranged.slice(next));
+}
+
+// A folded Dock has two rows in each column. The other half of a column
+// must remain an ordinary reorder target, not become the collection target.
+export function pointInSlot(point, origin, size) {
+    return point.x >= origin.x && point.x <= origin.x + size
+        && point.y >= origin.y && point.y <= origin.y + size;
 }

@@ -1180,6 +1180,6 @@ export const catalog = {
     "Show collected icons": "展开收纳图标",
     "Collapse collected icons": "收起收纳图标",
     "Click to expand · Alt-drag icons to reorder or collect": "点击展开 · Alt＋拖动图标可排序或收纳",
-    "Alt-drag icons here to collect; drag along the bar to reorder": "Alt＋拖到这里收纳，沿顶栏拖动排序",
-    "Alt-drag to the bar to keep visible": "Alt＋拖回顶栏以常驻",
+    "Alt-drag icons here to collect; drag to reorder": "Alt＋拖到这里收纳，拖动图标排序",
+    "Alt-drag past the arrow to keep visible": "Alt＋拖到箭头外侧以常驻",
 }
