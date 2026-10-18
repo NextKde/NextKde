@@ -1701,6 +1701,7 @@ KosApplicationWindow {
 
                                 GridLayout {
                                     Layout.fillWidth: true
+                                    Layout.topMargin: -16 // ref-main AQ 底→WIND 顶 14px@814 × 1.4598 ≈ 20px;改前 36px = content spacing 16 + 本卡 padding ~20,-16 抵消 padding 多余部分(描边-描边 20px)
                                     columns: root.compact ? 2 : 4
                                     columnSpacing: 8
                                     rowSpacing: 8
