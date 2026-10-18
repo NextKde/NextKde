@@ -1548,7 +1548,8 @@ KosApplicationWindow {
                         Layout.fillWidth: true
 
                         background: KosSurface {
-                            radius: 14
+                            // ref-main Pillow 实测 Conditions 卡圆角 r≈14px@814 × 1.4598 窗高比 ≈ 20.4 → 20（同心圆角锚点，阶段三 A）
+                            radius: 20
                             fillColor: Qt.rgba(root.cardGlassRgb.r, root.cardGlassRgb.g, root.cardGlassRgb.b, root.cardGlassAlpha)
                             strokeWidth: 1
                             strokeColor: Qt.rgba(1, 1, 1, 0.22)
@@ -2159,7 +2160,7 @@ KosApplicationWindow {
                         Layout.fillWidth: true
 
                         background: KosSurface {
-                            radius: 14
+                            radius: 20
                             fillColor: Qt.rgba(root.cardGlassRgb.r, root.cardGlassRgb.g, root.cardGlassRgb.b, root.currentIsDay ? root.cardGlassAlpha : 0.16)
                             strokeWidth: 1
                             strokeColor: Qt.rgba(1, 1, 1, 0.22)
@@ -2614,7 +2615,7 @@ KosApplicationWindow {
                         }
 
                         background: KosSurface {
-                            radius: 14
+                            radius: 20
                             fillColor: Qt.rgba(root.cardGlassRgb.r, root.cardGlassRgb.g, root.cardGlassRgb.b, dailyCard.hoverFill)
                             strokeWidth: 1
                             strokeColor: Qt.rgba(1, 1, 1, dailyCard.hoverStroke)
