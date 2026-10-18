@@ -1673,11 +1673,13 @@ KosApplicationWindow {
                                         }
                                     }
 
+                                    // ref-main 实测：说明文字峰值纯白 (255,255,255) 且重于 rating，Demibold 白字
                                     Label {
                                         text: qsTr("Air quality index is %1, which is similar to yesterday at about this time.")
                                             .arg(Math.round(root.number(backend.airQuality, "usAqi", 0)))
-                                        color: root.skyTextMuted
+                                        color: root.skyText
                                         font.pixelSize: 11
+                                        font.weight: Font.DemiBold
                                         wrapMode: Text.WordWrap
                                         Layout.fillWidth: true
                                     }
