@@ -2406,12 +2406,49 @@ KosApplicationWindow {
                                                 width: 44
                                                 height: 36
                                                 background: null
-                                                contentItem: Label {
-                                                    horizontalAlignment: Text.AlignHCenter
-                                                    verticalAlignment: Text.AlignVCenter
-                                                    text: "☁"
-                                                    color: hourlySegmented.segment === 0 ? "#ffffff" : Qt.rgba(1, 1, 1, 0.9)
-                                                    font.pixelSize: 16
+                                                // ref tile-conditions：实心云体 + 右上探出小日盘，云与日之间有缺口（SF cloud.sun.fill 构图）
+                                                // Control 会覆写 contentItem 几何，Canvas 需包 Item 再居中；segment 属于外层 hourlySegmented
+                                                contentItem: Item {
+                                                    anchors.fill: parent
+                                                    Canvas {
+                                                        id: cloudSunCanvas
+                                                        width: 20
+                                                        height: 15
+                                                        anchors.centerIn: parent
+                                                        antialiasing: true
+                                                        onPaint: {
+                                                            var ctx = getContext("2d")
+                                                            ctx.reset()
+                                                            // 日盘（右上探出）
+                                                            ctx.beginPath()
+                                                            ctx.arc(13.5, 4.5, 3.2, 0, 2 * Math.PI)
+                                                            ctx.fillStyle = hourlySegmented.segment === 0 ? "#ffffff" : Qt.rgba(1, 1, 1, 0.9)
+                                                            ctx.fill()
+                                                            // 云体：底边 y=14 平直，大鼓包 (6,10) r4.5、小鼓包 (11,10.5) r3.8，弧线顺滑闭合
+                                                            ctx.beginPath()
+                                                            ctx.moveTo(2.0, 14)
+                                                            ctx.lineTo(12.49, 14)
+                                                            ctx.arc(11, 10.5, 3.8, 1.168, -2.006, true)   // 右侧上行翻过小包顶
+                                                            ctx.arc(6, 10, 4.5, -0.716, 2.15, true)       // 越谷扫过大包顶到左侧
+                                                            ctx.quadraticCurveTo(2.0, 13.9, 2.0, 14)      // 左下角微圆收口
+                                                            ctx.closePath()
+                                                            // 缺口：沿云体路径 stroke 打孔（先于云体 fill，fill 会盖回内侧一半）
+                                                            ctx.globalCompositeOperation = "destination-out"
+                                                            ctx.strokeStyle = "#000000"
+                                                            ctx.lineWidth = 2.4
+                                                            ctx.lineCap = "round"
+                                                            ctx.lineJoin = "round"
+                                                            ctx.stroke()
+                                                            ctx.globalCompositeOperation = "source-over"
+                                                            ctx.fill()
+                                                        }
+                                                        Connections {
+                                                            target: hourlySegmented
+                                                            function onSegmentChanged() { cloudSunCanvas.requestPaint() }
+                                                        }
+                                                        Component.onCompleted: requestPaint()
+                                                        Accessible.ignored: true
+                                                    }
                                                 }
                                                 onClicked: hourlySegmented.segment = 0
                                                 Accessible.name: qsTr("Hourly conditions")
@@ -2461,12 +2498,44 @@ KosApplicationWindow {
                                                 width: 44
                                                 height: 36
                                                 background: null
-                                                contentItem: Label {
-                                                    horizontalAlignment: Text.AlignHCenter
-                                                    verticalAlignment: Text.AlignVCenter
-                                                    text: "≋"
-                                                    color: hourlySegmented.segment === 2 ? "#ffffff" : Qt.rgba(1, 1, 1, 0.9)
-                                                    font.pixelSize: 16
+                                                // ref SF wind：三道横向流线，右端卷成小螺旋，整体重心居中
+                                                contentItem: Item {
+                                                    anchors.fill: parent
+                                                    Canvas {
+                                                        id: windCanvas
+                                                        width: 16
+                                                        height: 13
+                                                        anchors.centerIn: parent
+                                                        antialiasing: true
+                                                        onPaint: {
+                                                            var ctx = getContext("2d")
+                                                            ctx.reset()
+                                                            ctx.strokeStyle = hourlySegmented.segment === 2 ? "#ffffff" : Qt.rgba(1, 1, 1, 0.9)
+                                                            ctx.lineWidth = 1.8
+                                                            ctx.lineCap = "round"
+                                                            ctx.lineJoin = "round"
+                                                            ctx.beginPath()
+                                                            // 上线：右端 r2 向上卷
+                                                            ctx.moveTo(2.0, 3.4)
+                                                            ctx.quadraticCurveTo(6.0, 3.65, 10.0, 3.4)
+                                                            ctx.arc(10.0, 1.4, 2.0, Math.PI / 2, 0, true)
+                                                            // 中线：最长，右端 r2.4 卷
+                                                            ctx.moveTo(1.5, 7.2)
+                                                            ctx.quadraticCurveTo(6.5, 6.95, 12.3, 7.2)
+                                                            ctx.arc(12.3, 4.8, 2.4, Math.PI / 2, -0.4, true)
+                                                            // 下线：短，右端小卷
+                                                            ctx.moveTo(3.0, 11.2)
+                                                            ctx.quadraticCurveTo(5.5, 11.4, 8.0, 11.2)
+                                                            ctx.arc(8.0, 9.6, 1.6, Math.PI / 2, 0.3, true)
+                                                            ctx.stroke()
+                                                        }
+                                                        Connections {
+                                                            target: hourlySegmented
+                                                            function onSegmentChanged() { windCanvas.requestPaint() }
+                                                        }
+                                                        Component.onCompleted: requestPaint()
+                                                        Accessible.ignored: true
+                                                    }
                                                 }
                                                 onClicked: hourlySegmented.segment = 2
                                                 Accessible.name: qsTr("Hourly wind")
