@@ -293,7 +293,9 @@ KosApplicationWindow {
 
         implicitHeight: root.tahoe.rowHeight
         hoverEnabled: true
+        Accessible.role: row.showSwitch ? Accessible.Switch : Accessible.ListItem
         Accessible.name: row.text
+        Accessible.checked: row.checked
 
         readonly property real nestInset: row.nested ? 24 : 0
         readonly property real markerLeft: root.tahoe.rowInsetLeading
@@ -421,6 +423,7 @@ KosApplicationWindow {
         Accessible.role: row.swatchOnly ? Accessible.ListItem
                                         : Accessible.CheckBox
         Accessible.name: row.text
+        Accessible.checked: row.checked
 
         readonly property real boxLeft: root.tahoe.categoryInset
             + (row.nested ? 24 : 0)
