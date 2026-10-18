@@ -3174,7 +3174,18 @@ KosApplicationWindow {
                                                     Layout.fillWidth: true
                                                     Layout.preferredHeight: 20
 
-                                                    // ref-main 实测：10 天行无灰色轨道——渐变段单独落在 [uMin,uMax]，轨道位置为纯卡面色（Thu 行 x702-714 = (42,109,179)）
+                                                    // ref-main 复测（2026-10-18 巡检轮，推翻旧"无轨道"记载——旧轮把轨道色 (42,109,179) 误当卡面色，
+                                                    // 真实卡面 Thu 行 (49,120,196)）：五条行（Today/Thu/Fri/Sat/Sun）低/高温标签间整列均有固定全宽暗轨道，
+                                                    // 高 ~5px（y382-386）、比卡面暗 Δ≈(-7,-12,-16) ≈ 黑@0.08-0.10；tile-10day（iPad 原生切片）同证。
+                                                    Rectangle {
+                                                        anchors.verticalCenter: parent.verticalCenter
+                                                        x: 0
+                                                        width: parent.width
+                                                        height: 5
+                                                        radius: 2.5
+                                                        color: "#000000"
+                                                        opacity: 0.09
+                                                    }
                                                     Rectangle {
                                                         anchors.verticalCenter: parent.verticalCenter
                                                         x: parent.width * dailyRow.uMin
