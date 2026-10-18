@@ -2115,7 +2115,8 @@ KosApplicationWindow {
                                                                     ctx.lineTo(c + ex, c + r * Math.sin(a))
                                                                 }
                                                                 ctx.closePath()
-                                                                ctx.fillStyle = "#f7f3dc"
+                                                                // 同色族冷蓝白，与 moonCanvas 大盘亮面一致
+                                                                ctx.fillStyle = "#a1c0e4"
                                                                 ctx.fill()
                                                             }
                                                         }
@@ -2168,7 +2169,8 @@ KosApplicationWindow {
                                                                 ctx.lineTo(c + ex, c + r * Math.sin(a))
                                                             }
                                                             ctx.closePath()
-                                                            ctx.fillStyle = "#f7f3dc"
+                                                            // 亮面冷蓝白：ref tile-cards 月亮相照片亮面实测均值 (161,192,228)；峰值 (228,236,247) 系纹理不可平面复刻
+                                                            ctx.fillStyle = "#a1c0e4"
                                                             ctx.fill()
                                                         }
                                                     }
