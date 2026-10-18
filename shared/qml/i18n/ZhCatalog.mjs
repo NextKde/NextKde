@@ -558,6 +558,13 @@ export const catalog = {
     // stage · 台前调度
     "No other windows\nCards appear here after switching windows": "没有其他窗口\n切换窗口后这里显示卡片",
     "%1 windows": "%1 窗",
+    "+%1 windows": "+%1 窗",
+    "Compact cards · crisp motion": "紧凑卡片 · 利落动效",
+    "Medium cards · balanced motion": "中等卡片 · 均衡动效",
+    "Large cards · relaxed motion": "大卡片 · 舒缓动效",
+    "A window-card rail docked to the screen edge: tap a card to promote it, collected apps shrink into glass cards": "停靠在屏幕边缘的窗口卡片栏：点击卡片即可将其前置，收纳的应用会收进玻璃卡片",
+    "A preset sets the whole look — card size and spacing, tilt, glass, fan and icon row, motion tempo — in one click. ": "预设一键设定整体外观——卡片尺寸与间距、倾斜、玻璃、扇形与图标排、动效节奏。 ",
+    "Nothing highlights while the live values match no preset. Fine-tuning is not exposed on purpose; the remaining behavior switches keep their stored values.": "当实时数值不匹配任何预设时不会高亮。微调有意不公开；其余行为开关保留各自存储的值。",
 
     // platform · 深度图
     "Image path cannot be empty": "图片路径不能为空",

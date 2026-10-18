@@ -579,10 +579,10 @@ assert.doesNotMatch(controlCenterPanel,
 const controlCenterCard = read("../../shell/desktop/modules/bar/ControlCenterCard.qml");
 const controlCenterSlider = read("../../shell/desktop/modules/bar/ControlCenterSlider.qml");
 const statusTooltip = read("../../shell/desktop/modules/bar/StatusTooltip.qml");
-assert.match(statusTooltip, /color:\s*"#000000"/,
-    "built-in status tooltips use a black background");
-assert.ok((statusTooltip.match(/color:\s*"#ffffff"/g) || []).length >= 2,
-    "built-in status tooltip text is always white");
+assert.match(statusTooltip, /ControlCenterGlass\s*\{/,
+    "built-in status tooltips use the shared glass surface");
+assert.ok((statusTooltip.match(/color:\s*tooltipSurface\.(?:foregroundColor|secondaryForegroundColor)/g) || []).length >= 2,
+    "built-in status tooltip text follows the surface colors");
 for (const statusSource of [networkStatus, read("../../shell/desktop/modules/bar/Battery.qml"),
                             read("../../shell/desktop/modules/bar/ControlCenterToggle.qml")]) {
     assert.match(statusSource, /StatusTooltip\s*\{/,

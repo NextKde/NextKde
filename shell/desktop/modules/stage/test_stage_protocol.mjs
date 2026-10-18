@@ -42,9 +42,14 @@ const parsed = [...reloadBlock.matchAll(
     .map(m => m[1]);
 const parsedCard = parsed.filter(k => k !== "id" && k !== "winId");
 
+// 特效解析但发布端有意不发送的键：QML 已删纵深渐变层，特效保留解析
+// 并以 0 关闭（stageanim.cpp 该行注释同义）。
+const parsedWhitelist = new Set(["cardDepth"]);
 let cases = 0;
 for (const k of parsedCard) {
     cases++;
+    if (parsedWhitelist.has(k))
+        continue;
     assert(published.has(k),
         `effect parses "${k}" but publishLiveCards does not send it`);
 }
