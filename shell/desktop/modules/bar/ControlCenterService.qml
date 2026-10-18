@@ -2,7 +2,9 @@ pragma Singleton
 
 import QtQuick
 import Quickshell
+import Quickshell.Services.Pipewire
 import "../../../shared/qml/i18n"
+import "../common/AudioOutputNames.mjs" as AudioOutputNames
 import qs.desktop.modules.platform
 import qs.desktop.modules.notifications
 
@@ -18,6 +20,10 @@ QtObject {
     property bool audioApplicationsAvailable: false
     property bool audioApplicationsRefreshInProgress: false
     property var audioOutputs: []
+    // PipeWire's node properties preserve the original UTF-8 description while
+    // the platform's audio.outputs snapshot can carry the literal "(null)" for
+    // a non-ASCII name. Keep the live node list for name resolution.
+    readonly property var _audioOutputNodes: Pipewire.nodes.values
     property bool audioOutputsRefreshInProgress: false
     property bool audioOutputChangeInProgress: false
     property string _audioOutputReadError: ""
@@ -184,13 +190,23 @@ QtObject {
         })
     }
 
+    function audioOutputWithName(output) {
+        // pactl JSON can turn a non-ASCII description into the literal
+        // "(null)". PipeWire's node properties preserve the original UTF-8;
+        // AudioOutputNames owns the fallback order and is unit tested.
+        return Object.assign({}, output, {
+            description: AudioOutputNames.resolveAudioOutputName(
+                _audioOutputNodes, output, I18n.tr("Output devices"))
+        })
+    }
+
     function refreshAudioOutputs() {
         if (audioOutputsRefreshInProgress || audioOutputChangeInProgress) return
         audioOutputsRefreshInProgress = true
         PlatformClient.request("audio.outputs", {}, function(response) {
             audioOutputsRefreshInProgress = false
             if (response?.ok) {
-                audioOutputs = response.result?.outputs || []
+                audioOutputs = (response.result?.outputs || []).map(audioOutputWithName)
                 _audioOutputReadError = ""
             } else {
                 audioOutputs = []
