@@ -16,7 +16,7 @@ KosApplicationWindow {
     readonly property string temperatureUnit: backend.units === "imperial" ? "°F" : "°C"
     readonly property string speedUnit: backend.units === "imperial" ? qsTr("mph") : qsTr("km/h")
     readonly property string distanceUnit: backend.units === "imperial" ? qsTr("mi") : qsTr("km")
-    readonly property int weatherSidebarWidth: Math.round(297 * AppTheme.densityScale) // ref-main 侧栏右缘 x205@814 × 窗比 1180/814 ≈ 297（LEDGER 首次侧栏宽度校准）；AppTheme.sidebarWidth(224) 系 shared 值（music 引用）不动
+    readonly property int weatherSidebarWidth: Math.round(307 * AppTheme.densityScale) // ref-main 干净行（y=47 无卡无胶囊）Pillow 实测侧栏→主区过渡 x≈211.5@814 ×1.4501≈307；旧 x205 实为卡片右缘（卡右缘与侧栏缘间有 ~6px 侧栏底色带，y=440 带色 (60,91,128) ≈ 侧栏底），2026-10-18 勘误；AppTheme.sidebarWidth(224) 系 shared 值（music 引用）不动
     readonly property var upcomingHours: upcomingForecast()
     property string pendingLocationId: ""
     readonly property int currentWeatherCode: number(backend.current, "weatherCode", -1)
@@ -980,7 +980,9 @@ KosApplicationWindow {
 
             ColumnLayout {
                 anchors.fill: parent
-                anchors.margins: 18
+                // ref-main Pillow 实测：卡左缘 x10、卡右缘 x205.5、侧栏右缘 x211.5@814 → 内缩左 14.5 / 右 9.4@1180（×1.4501），胶囊右缘与卡右缘同线（同用右内缩）；旧对称 18 系未校准值
+                anchors.leftMargin: 15
+                anchors.rightMargin: 9
                 spacing: 10
 
                 Item {
