@@ -1530,6 +1530,11 @@ KosApplicationWindow {
                         id: heroColumn
                         Layout.alignment: Qt.AlignHCenter
                         spacing: 2
+                        // 0e：ref-main hero 小标签 ink 顶 74/498=14.9% 窗高；我方 ink 顶=margin20+ink4=24 起步。
+                        // topMargin = 14.9% × flick 高 − 24，默认窗高(mainFlick 高≈687)时 ≈ 84px，ink 顶落位 ≈108px
+                        Layout.topMargin: Math.max(0, mainFlick.height * 0.149 - 24)
+                        // 0e：ref H·L ink 底→AQ 卡顶 30px@814 ×1.46 ≈ 44px；现 ink gap 22px（content spacing 16 + ink 余 ~6）
+                        Layout.bottomMargin: 22
                         // Stage 3 motion B.3: hero parallax + slight shrink while the main area
                         // scrolls. Scroll-linked mapping (no timed animation): the hero tracks
                         // contentY at half speed and scales down gently; reduce-motion pins both.
