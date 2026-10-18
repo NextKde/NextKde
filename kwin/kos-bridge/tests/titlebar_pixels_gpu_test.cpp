@@ -41,14 +41,23 @@ int main(int argc, char **argv)
     auto context = KWin::EglContext::create(display.get(), EGL_NO_CONFIG_KHR, nullptr);
     if (!context || !context->makeCurrent()) return 77;
     std::printf("GPU: %s\n", glGetString(GL_RENDERER));
+    std::printf("OpenGL: %s\n", glGetString(GL_VERSION));
 
-    const GLuint vertex = compileShader(GL_VERTEX_SHADER,
-        "#version 150\nin vec2 position; uniform mat4 projection;"
-        "uniform vec2 origin; uniform float scale; out vec2 pixel;"
-        "void main(){pixel=(position-origin)*scale;gl_Position=projection*vec4(position*scale,0,1);}");
-    const GLuint fragment = compileShader(GL_FRAGMENT_SHADER,
-        "#version 150\nin vec2 pixel; out vec4 color;"
-        "void main(){color=vec4(floor(pixel)/255.0,0,1);}");
+    // KWin can create either a desktop GL or GLES context. Use the matching
+    // shader language so the same readback cases run on both backends.
+    const QByteArray shaderHeader = epoxy_is_desktop_gl()
+        ? QByteArrayLiteral("#version 150\n")
+        : QByteArrayLiteral("#version 300 es\nprecision highp float;\n");
+    const QByteArray vertexSource = shaderHeader
+        + "in vec2 position; uniform mat4 projection;"
+          "uniform vec2 origin; uniform float scale; out vec2 pixel;"
+          "void main(){pixel=(position-origin)*scale;gl_Position=projection*vec4(position*scale,0,1);}";
+    const QByteArray fragmentSource = shaderHeader
+        + "in vec2 pixel; out vec4 color;"
+          "void main(){color=vec4(floor(pixel)/255.0,0,1);}";
+
+    const GLuint vertex = compileShader(GL_VERTEX_SHADER, vertexSource.constData());
+    const GLuint fragment = compileShader(GL_FRAGMENT_SHADER, fragmentSource.constData());
     const GLuint program = glCreateProgram();
     glAttachShader(program, vertex);
     glAttachShader(program, fragment);
