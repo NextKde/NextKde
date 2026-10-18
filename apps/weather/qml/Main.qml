@@ -968,7 +968,8 @@ KosApplicationWindow {
     RowLayout {
         anchors.fill: parent
         anchors.margins: 0
-        spacing: 8
+        // 侧栏与内容列之间不加缝，内容左缝由内容列 Layout.margins: 20 统一提供（否则左缝 8+20=28 违反四周 20px 硬约定；参考 LEDGER 0g）。
+        spacing: 0
 
         KosSidebar {
             id: sidebar
