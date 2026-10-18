@@ -1561,6 +1561,9 @@ KosApplicationWindow {
                             spacing: 16
                             KosCard {
                                 id: airQualityCard
+                                // 空态（快照无 airQuality 字段）下旧代码显示假 "0"、全宽渐变条与模板文案，属仍差 14a 收口；
+                                // usAqi=0 是合法值（非负），故用 null 比较而非真值判断
+                                readonly property bool hasAqi: root.value(backend.airQuality, "usAqi", null) !== null
                                 Layout.fillWidth: true
                                 // ref-main 两列等宽(239/241@814)：preferred 拉平让 GridLayout 等分剩余宽度
                                 Layout.minimumWidth: 0
@@ -1618,6 +1621,7 @@ KosApplicationWindow {
                                     }
 
                                     Label {
+                                        visible: airQualityCard.hasAqi
                                         text: Math.round(root.number(backend.airQuality, "usAqi", 0))
                                         color: root.skyText
                                         font.pixelSize: 22
@@ -1633,6 +1637,7 @@ KosApplicationWindow {
                                     }
 
                                     Item {
+                                        visible: airQualityCard.hasAqi
                                         Layout.topMargin: 7 // ref-main 实测 rating cap 顶→条顶 22px×1.4598≈32，改前 25px（同口径），+7 补齐；本轮 Pillow 实测 rating 基线→条顶 我方 16.5px vs ref 16px×1.4598≈23.3
                                         Layout.fillWidth: true
                                         height: 9
@@ -1675,6 +1680,7 @@ KosApplicationWindow {
 
                                     // ref-main 实测：说明文字峰值纯白 (255,255,255) 且重于 rating，Demibold 白字
                                     Label {
+                                        visible: airQualityCard.hasAqi
                                         text: qsTr("Air quality index is %1, which is similar to yesterday at about this time.")
                                             .arg(Math.round(root.number(backend.airQuality, "usAqi", 0)))
                                         color: root.skyText
