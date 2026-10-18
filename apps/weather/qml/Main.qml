@@ -1734,177 +1734,329 @@ KosApplicationWindow {
                                             columnSpacing: 8
                                             rowSpacing: 8
 
-                                            Rectangle {
-                                                id: windCard
+                                            // ref-main WIND 124 / gap 8 / MOON 102 → 半宽并排（235/15/193）
+                                            RowLayout {
                                                 Layout.columnSpan: 2
                                                 Layout.fillWidth: true
-                                                implicitHeight: 162
-                                                radius: root.tileRadius
-                                                // 昼夜分材质：ref-main 白天所有卡填充暗于天空（α~0.30 深蓝玻璃）；夜间维持白玻璃
-                                                property bool hot: windHover.hovered
-                                                property real hoverFill: hot ? root.cardGlassAlphaHot : root.cardGlassAlpha
-                                                Behavior on hoverFill { NumberAnimation { duration: AppTheme.motionNormal; easing.type: Easing.OutCubic } }
-                                                property real hoverStroke: hot ? 0.32 : 0.22
-                                                Behavior on hoverStroke { NumberAnimation { duration: AppTheme.motionNormal; easing.type: Easing.OutCubic } }
-                                                color: Qt.rgba(root.cardGlassRgb.r, root.cardGlassRgb.g, root.cardGlassRgb.b, hoverFill)
-                                                border.width: 1
-                                                border.color: Qt.rgba(1, 1, 1, hoverStroke)
-                                                transform: Translate {
-                                                    y: AppTheme.reduceMotion ? 0 : (windCard.hot ? -3 : 0)
-                                                    Behavior on y { NumberAnimation { duration: AppTheme.motionNormal; easing.type: Easing.OutCubic } }
-                                                }
+                                                spacing: 15
 
-                                                property real windDir: root.number(backend.current, "windDirection", 0)
-                                                // arrow points where the wind blows TO (Open-Meteo direction is where it comes FROM)
-                                                property real flowAngle: (windCard.windDir + 180) % 360
-                                                property real gustVal: root.number(backend.current, "windGust", Number.NaN)
-                                                property bool hasGust: Number.isFinite(gustVal)
-
-                                                onWindDirChanged: windCompass.requestPaint()
-                                                onFlowAngleChanged: windCompass.requestPaint()
-
-                                                HoverHandler { id: windHover }
-                                                ToolTip.visible: windHover.hovered
-                                                ToolTip.text: qsTr("Direction")
-                                                Accessible.role: Accessible.StaticText
-                                                Accessible.name: qsTr("Wind") + ": " + Math.round(root.number(
-                                                    backend.current, "windSpeed", 0)) + " " + root.speedUnit
-                                                    + ", " + qsTr("Direction") + " " + Math.round(windCard.windDir) + "° " + windCard.cardinal
-                                                    + (windCard.hasGust
-                                                        ? " " + qsTr("Gusts") + ": " + Math.round(windCard.gustVal) + " " + root.speedUnit
-                                                        : "")
-
-                                                property string cardinal: {
-                                                    var names = ["N", "NE", "E", "SE", "S", "SW", "W", "NW"]
-                                                    return names[Math.round(windCard.windDir / 45) % 8]
-                                                }
-
-                                                // ref-main WIND 头部：左/上 inset 14/12px，11px DemiBold + 字距全大写（同瓦片头家族）
-                                                RowLayout {
-                                                    anchors.left: parent.left
-                                                    anchors.leftMargin: 14
-                                                    anchors.top: parent.top
-                                                    anchors.topMargin: 12
-                                                    spacing: 8
-
-                                                    Label {
-                                                        text: "≋"
-                                                        color: root.skyTextMuted
-                                                        font.pixelSize: 11
-                                                        font.weight: Font.DemiBold
-                                                        Accessible.ignored: true
+                                                Rectangle {
+                                                    id: windCard
+                                                    Layout.fillWidth: true
+                                                    Layout.preferredWidth: 235
+                                                    implicitHeight: 162
+                                                    radius: root.tileRadius
+                                                    // 昼夜分材质：ref-main 白天所有卡填充暗于天空（α~0.30 深蓝玻璃）；夜间维持白玻璃
+                                                    property bool hot: windHover.hovered
+                                                    property real hoverFill: hot ? root.cardGlassAlphaHot : root.cardGlassAlpha
+                                                    Behavior on hoverFill { NumberAnimation { duration: AppTheme.motionNormal; easing.type: Easing.OutCubic } }
+                                                    property real hoverStroke: hot ? 0.32 : 0.22
+                                                    Behavior on hoverStroke { NumberAnimation { duration: AppTheme.motionNormal; easing.type: Easing.OutCubic } }
+                                                    color: Qt.rgba(root.cardGlassRgb.r, root.cardGlassRgb.g, root.cardGlassRgb.b, hoverFill)
+                                                    border.width: 1
+                                                    border.color: Qt.rgba(1, 1, 1, hoverStroke)
+                                                    transform: Translate {
+                                                        y: AppTheme.reduceMotion ? 0 : (windCard.hot ? -3 : 0)
+                                                        Behavior on y { NumberAnimation { duration: AppTheme.motionNormal; easing.type: Easing.OutCubic } }
                                                     }
 
-                                                    Label {
-                                                        text: qsTr("Wind").toLocaleUpperCase(Qt.locale())
-                                                        color: root.skyTextMuted
-                                                        font.pixelSize: 11
-                                                        font.letterSpacing: 1.4
-                                                        Accessible.ignored: true
-                                                    }
-                                                }
+                                                    property real windDir: root.number(backend.current, "windDirection", 0)
+                                                    // arrow points where the wind blows TO (Open-Meteo direction is where it comes FROM)
+                                                    property real flowAngle: (windCard.windDir + 180) % 360
+                                                    property real gustVal: root.number(backend.current, "windGust", Number.NaN)
+                                                    property bool hasGust: Number.isFinite(gustVal)
 
-                                                // ref-main 罗盘外径 72px@814 → 116×116，水平居中 y36
-                                                Item {
-                                                    anchors.horizontalCenter: parent.horizontalCenter
-                                                    y: 36
-                                                    width: 116
-                                                    height: 116
+                                                    onWindDirChanged: windCompass.requestPaint()
+                                                    onFlowAngleChanged: windCompass.requestPaint()
 
-                                                    Canvas {
-                                                        id: windCompass
-                                                        anchors.fill: parent
-                                                        antialiasing: true
-                                                        contextType: "2d"
-                                                        onPaint: {
-                                                            var ctx = getContext("2d")
-                                                            ctx.reset()
-                                                            var c = 58
-                                                            // 内盘 r29 白 0.06（ref 内盘 (52,122,196) vs 卡面 (35,112,193) ≈ 白@0.06）
-                                                            ctx.fillStyle = "rgba(255,255,255,0.06)"
-                                                            ctx.beginPath()
-                                                            ctx.arc(c, c, 29, 0, 2 * Math.PI)
-                                                            ctx.fill()
-                                                            // 36 根刻度 r38→r44
-                                                            ctx.strokeStyle = "rgba(255,255,255,0.30)"
-                                                            ctx.lineWidth = 1
-                                                            for (var i = 0; i < 36; i++) {
-                                                                var a = i * Math.PI / 18
-                                                                ctx.beginPath()
-                                                                ctx.moveTo(c + Math.sin(a) * 38, c - Math.cos(a) * 38)
-                                                                ctx.lineTo(c + Math.sin(a) * 44, c - Math.cos(a) * 44)
-                                                                ctx.stroke()
-                                                            }
-                                                            // N/E/S/W 字母 r≈50；N 用实测亮蓝，W/E/S 白 0.65
-                                                            ctx.font = "600 10px sans-serif"
-                                                            ctx.textAlign = "center"
-                                                            ctx.textBaseline = "middle"
-                                                            ctx.fillStyle = "#6CB1E0"
-                                                            ctx.fillText("N", c, c - 50)
-                                                            ctx.fillStyle = "rgba(255,255,255,0.65)"
-                                                            ctx.fillText("E", c + 50, c)
-                                                            ctx.fillText("S", c, c + 50)
-                                                            ctx.fillText("W", c - 50, c)
-                                                            // 风向箭头：flowAngle = windDir+180，指向风吹去
-                                                            ctx.save()
-                                                            ctx.translate(c, c)
-                                                            ctx.rotate(windCard.flowAngle * Math.PI / 180)
-                                                            ctx.strokeStyle = "#ffffff"
-                                                            ctx.fillStyle = "#ffffff"
-                                                            ctx.lineWidth = 1.6
-                                                            ctx.beginPath()
-                                                            ctx.moveTo(0, -12)
-                                                            ctx.lineTo(0, -40)
-                                                            ctx.stroke()
-                                                            ctx.beginPath()
-                                                            ctx.moveTo(0, -46)      // tip
-                                                            ctx.lineTo(-3, -41)
-                                                            ctx.lineTo(3, -41)
-                                                            ctx.closePath()
-                                                            ctx.fill()
-                                                            ctx.restore()
-                                                        }
+                                                    HoverHandler { id: windHover }
+                                                    ToolTip.visible: windHover.hovered
+                                                    ToolTip.text: qsTr("Direction")
+                                                    Accessible.role: Accessible.StaticText
+                                                    Accessible.name: qsTr("Wind") + ": " + Math.round(root.number(
+                                                        backend.current, "windSpeed", 0)) + " " + root.speedUnit
+                                                        + ", " + qsTr("Direction") + " " + Math.round(windCard.windDir) + "° " + windCard.cardinal
+                                                        + (windCard.hasGust
+                                                            ? " " + qsTr("Gusts") + ": " + Math.round(windCard.gustVal) + " " + root.speedUnit
+                                                            : "")
+
+                                                    property string cardinal: {
+                                                        var names = ["N", "NE", "E", "SE", "S", "SW", "W", "NW"]
+                                                        return names[Math.round(windCard.windDir / 45) % 8]
                                                     }
 
-                                                    // 环心速度：数字+单位整体居中于罗盘中心
-                                                    ColumnLayout {
-                                                        anchors.centerIn: parent
-                                                        spacing: 1
+                                                    // ref-main WIND 头部：左/上 inset 14/12px，11px DemiBold + 字距全大写（同瓦片头家族）
+                                                    RowLayout {
+                                                        anchors.left: parent.left
+                                                        anchors.leftMargin: 14
+                                                        anchors.top: parent.top
+                                                        anchors.topMargin: 12
+                                                        spacing: 8
 
                                                         Label {
-                                                            Layout.alignment: Qt.AlignHCenter
-                                                            text: Math.round(root.number(
-                                                                backend.current, "windSpeed", 0))
-                                                            color: root.skyText
-                                                            font.pixelSize: 30
+                                                            text: "≋"
+                                                            color: root.skyTextMuted
+                                                            font.pixelSize: 11
                                                             font.weight: Font.DemiBold
                                                             Accessible.ignored: true
                                                         }
 
                                                         Label {
-                                                            Layout.alignment: Qt.AlignHCenter
-                                                            text: root.speedUnit
+                                                            text: qsTr("Wind").toLocaleUpperCase(Qt.locale())
                                                             color: root.skyTextMuted
-                                                            font.pixelSize: 13
+                                                            font.pixelSize: 11
+                                                            font.letterSpacing: 1.4
                                                             Accessible.ignored: true
                                                         }
                                                     }
+
+                                                    // ref-main 罗盘外径 72px@814 → 116×116，水平居中 y36
+                                                    Item {
+                                                        anchors.horizontalCenter: parent.horizontalCenter
+                                                        y: 36
+                                                        width: 116
+                                                        height: 116
+
+                                                        Canvas {
+                                                            id: windCompass
+                                                            anchors.fill: parent
+                                                            antialiasing: true
+                                                            contextType: "2d"
+                                                            onPaint: {
+                                                                var ctx = getContext("2d")
+                                                                ctx.reset()
+                                                                var c = 58
+                                                                // 内盘 r29 白 0.06（ref 内盘 (52,122,196) vs 卡面 (35,112,193) ≈ 白@0.06）
+                                                                ctx.fillStyle = "rgba(255,255,255,0.06)"
+                                                                ctx.beginPath()
+                                                                ctx.arc(c, c, 29, 0, 2 * Math.PI)
+                                                                ctx.fill()
+                                                                // 36 根刻度 r38→r44
+                                                                ctx.strokeStyle = "rgba(255,255,255,0.30)"
+                                                                ctx.lineWidth = 1
+                                                                for (var i = 0; i < 36; i++) {
+                                                                    var a = i * Math.PI / 18
+                                                                    ctx.beginPath()
+                                                                    ctx.moveTo(c + Math.sin(a) * 38, c - Math.cos(a) * 38)
+                                                                    ctx.lineTo(c + Math.sin(a) * 44, c - Math.cos(a) * 44)
+                                                                    ctx.stroke()
+                                                                }
+                                                                // N/E/S/W 字母 r≈50；N 用实测亮蓝，W/E/S 白 0.65
+                                                                ctx.font = "600 10px sans-serif"
+                                                                ctx.textAlign = "center"
+                                                                ctx.textBaseline = "middle"
+                                                                ctx.fillStyle = "#6CB1E0"
+                                                                ctx.fillText("N", c, c - 50)
+                                                                ctx.fillStyle = "rgba(255,255,255,0.65)"
+                                                                ctx.fillText("E", c + 50, c)
+                                                                ctx.fillText("S", c, c + 50)
+                                                                ctx.fillText("W", c - 50, c)
+                                                                // 风向箭头：flowAngle = windDir+180，指向风吹去
+                                                                ctx.save()
+                                                                ctx.translate(c, c)
+                                                                ctx.rotate(windCard.flowAngle * Math.PI / 180)
+                                                                ctx.strokeStyle = "#ffffff"
+                                                                ctx.fillStyle = "#ffffff"
+                                                                ctx.lineWidth = 1.6
+                                                                ctx.beginPath()
+                                                                ctx.moveTo(0, -12)
+                                                                ctx.lineTo(0, -40)
+                                                                ctx.stroke()
+                                                                ctx.beginPath()
+                                                                ctx.moveTo(0, -46)      // tip
+                                                                ctx.lineTo(-3, -41)
+                                                                ctx.lineTo(3, -41)
+                                                                ctx.closePath()
+                                                                ctx.fill()
+                                                                ctx.restore()
+                                                            }
+                                                        }
+
+                                                        // 环心速度：数字+单位整体居中于罗盘中心
+                                                        ColumnLayout {
+                                                            anchors.centerIn: parent
+                                                            spacing: 1
+
+                                                            Label {
+                                                                Layout.alignment: Qt.AlignHCenter
+                                                                text: Math.round(root.number(
+                                                                    backend.current, "windSpeed", 0))
+                                                                color: root.skyText
+                                                                font.pixelSize: 30
+                                                                font.weight: Font.DemiBold
+                                                                Accessible.ignored: true
+                                                            }
+
+                                                            Label {
+                                                                Layout.alignment: Qt.AlignHCenter
+                                                                text: root.speedUnit
+                                                                color: root.skyTextMuted
+                                                                font.pixelSize: 13
+                                                                Accessible.ignored: true
+                                                            }
+                                                        }
+                                                    }
+
+                                                    // ref-main Gusts 行：距卡底 9px@814、左 inset 12px@814
+                                                    Label {
+                                                        anchors.left: parent.left
+                                                        anchors.leftMargin: 17
+                                                        anchors.bottom: parent.bottom
+                                                        anchors.bottomMargin: 12
+                                                        visible: windCard.hasGust
+                                                        text: qsTr("Gusts: ") + Math.round(windCard.gustVal) + " " + root.speedUnit
+                                                              + " " + windCard.cardinal
+                                                        color: root.skyText
+                                                        font.pixelSize: 13
+                                                        font.weight: Font.DemiBold
+                                                        elide: Text.ElideRight
+                                                        Accessible.ignored: true
+                                                    }
                                                 }
 
-                                                // ref-main Gusts 行：距卡底 9px@814、左 inset 12px@814
-                                                Label {
-                                                    anchors.left: parent.left
-                                                    anchors.leftMargin: 17
-                                                    anchors.bottom: parent.bottom
-                                                    anchors.bottomMargin: 12
-                                                    visible: windCard.hasGust
-                                                    text: qsTr("Gusts: ") + Math.round(windCard.gustVal) + " " + root.speedUnit
-                                                          + " " + windCard.cardinal
-                                                    color: root.skyText
-                                                    font.pixelSize: 13
-                                                    font.weight: Font.DemiBold
-                                                    elide: Text.ElideRight
-                                                    Accessible.ignored: true
+                                                Rectangle {
+                                                    id: moonCard
+                                                    Layout.fillWidth: true
+                                                    Layout.preferredWidth: 193
+                                                    implicitHeight: 162
+                                                    radius: root.tileRadius
+                                                    // 昼夜分材质：ref-main 白天所有卡填充暗于天空（α~0.30 深蓝玻璃）；夜间维持白玻璃
+                                                    property bool hot: moonHover.hovered
+                                                    property real hoverFill: hot ? root.cardGlassAlphaHot : root.cardGlassAlpha
+                                                    Behavior on hoverFill { NumberAnimation { duration: AppTheme.motionNormal; easing.type: Easing.OutCubic } }
+                                                    property real hoverStroke: hot ? 0.32 : 0.22
+                                                    Behavior on hoverStroke { NumberAnimation { duration: AppTheme.motionNormal; easing.type: Easing.OutCubic } }
+                                                    color: Qt.rgba(root.cardGlassRgb.r, root.cardGlassRgb.g, root.cardGlassRgb.b, hoverFill)
+                                                    border.width: 1
+                                                    border.color: Qt.rgba(1, 1, 1, hoverStroke)
+                                                    transform: Translate {
+                                                        y: AppTheme.reduceMotion ? 0 : (moonCard.hot ? -3 : 0)
+                                                        Behavior on y { NumberAnimation { duration: AppTheme.motionNormal; easing.type: Easing.OutCubic } }
+                                                    }
+
+                                                    property real phaseVal: root.number(backend.current, "moonPhase", Number.NaN)
+                                                    property bool hasPhase: Number.isFinite(phaseVal)
+                                                    readonly property var phaseNames: [
+                                                        qsTr("New Moon"), qsTr("Waxing Crescent"), qsTr("First Quarter"),
+                                                        qsTr("Waxing Gibbous"), qsTr("Full Moon"), qsTr("Waning Gibbous"),
+                                                        qsTr("Last Quarter"), qsTr("Waning Crescent")
+                                                    ]
+                                                    // 8 等分、以 0/0.25/0.5/0.75 为中心：round(p*8)%8
+                                                    readonly property string phaseName: hasPhase
+                                                        ? phaseNames[Math.round(((phaseVal % 1) + 1) % 1 * 8) % 8]
+                                                        : "—"
+
+                                                    onPhaseValChanged: {
+                                                        moonCanvas.requestPaint()
+                                                        moonGlyphCanvas.requestPaint()
+                                                    }
+
+                                                    HoverHandler { id: moonHover }
+                                                    ToolTip.visible: moonHover.hovered
+                                                    ToolTip.text: qsTr("Moon Phase")
+                                                    Accessible.role: Accessible.StaticText
+                                                    Accessible.name: qsTr("Moon Phase") + ": " + moonCard.phaseName
+
+                                                    // ref-main 头部=相位名 caps + 小月相 glyph（y338-344 实测）
+                                                    RowLayout {
+                                                        anchors.left: parent.left
+                                                        anchors.leftMargin: 14
+                                                        anchors.top: parent.top
+                                                        anchors.topMargin: 12
+                                                        spacing: 8
+
+                                                        Canvas {
+                                                            id: moonGlyphCanvas
+                                                            implicitWidth: 12
+                                                            implicitHeight: 12
+                                                            antialiasing: true
+                                                            contextType: "2d"
+                                                            onPaint: {
+                                                                var ctx = getContext("2d")
+                                                                ctx.reset()
+                                                                var c = 6
+                                                                var r = 5
+                                                                // 暗面：整盘剪影（月亮相位剪影，同族白 0.14）
+                                                                ctx.beginPath()
+                                                                ctx.arc(c, c, r, 0, 2 * Math.PI)
+                                                                ctx.fillStyle = "rgba(255,255,255,0.14)"
+                                                                ctx.fill()
+                                                                if (!moonCard.hasPhase)
+                                                                    return
+                                                                // 亮面：外弧（盈月亮在右，亏月亮在左）+ 终止线半椭圆折线，一次成形
+                                                                var p = ((moonCard.phaseVal % 1) + 1) % 1
+                                                                var cosT = Math.cos(2 * Math.PI * p)
+                                                                var waxing = p < 0.5
+                                                                ctx.beginPath()
+                                                                if (waxing)
+                                                                    ctx.arc(c, c, r, -Math.PI / 2, Math.PI / 2, false)   // 顶极→底极经右侧
+                                                                else
+                                                                    ctx.arc(c, c, r, -Math.PI / 2, Math.PI / 2, true)    // 顶极→底极经左侧
+                                                                var steps = 32
+                                                                for (var i = 0; i <= steps; i++) {
+                                                                    var a = Math.PI / 2 - (Math.PI * i / steps)          // 底极→顶极
+                                                                    // 带符号 cosT：蛾眉凸向亮侧、凸月凸向暗侧（|cosT| 会把凸月画成蛾眉、满月退化成零面积）
+                                                                    var ex = waxing ? cosT * r * Math.cos(a) : -cosT * r * Math.cos(a)
+                                                                    ctx.lineTo(c + ex, c + r * Math.sin(a))
+                                                                }
+                                                                ctx.closePath()
+                                                                ctx.fillStyle = "#f7f3dc"
+                                                                ctx.fill()
+                                                            }
+                                                        }
+
+                                                        Label {
+                                                            text: moonCard.phaseName.toLocaleUpperCase(Qt.locale())
+                                                            color: root.skyTextMuted
+                                                            font.pixelSize: 11
+                                                            font.letterSpacing: 1.4
+                                                            elide: Text.ElideRight
+                                                            Accessible.ignored: true
+                                                        }
+                                                    }
+
+                                                    // ref-main 月亮盘 d≈71@814 ×1.46 ≈ 104，盘顶距卡顶 28×1.46 ≈ 41，水平居中
+                                                    Canvas {
+                                                        id: moonCanvas
+                                                        anchors.horizontalCenter: parent.horizontalCenter
+                                                        y: 41
+                                                        width: 104
+                                                        height: 104
+                                                        antialiasing: true
+                                                        contextType: "2d"
+                                                        onPaint: {
+                                                            var ctx = getContext("2d")
+                                                            ctx.reset()
+                                                            var c = 52
+                                                            var r = 52
+                                                            // 暗面：整盘剪影（月亮相位剪影，同族白 0.14）
+                                                            ctx.beginPath()
+                                                            ctx.arc(c, c, r, 0, 2 * Math.PI)
+                                                            ctx.fillStyle = "rgba(255,255,255,0.14)"
+                                                            ctx.fill()
+                                                            if (!moonCard.hasPhase)
+                                                                return
+                                                            // 亮面：外弧（盈月亮在右，亏月亮在左）+ 终止线半椭圆折线，一次成形
+                                                            var p = ((moonCard.phaseVal % 1) + 1) % 1
+                                                            var cosT = Math.cos(2 * Math.PI * p)
+                                                            var waxing = p < 0.5
+                                                            ctx.beginPath()
+                                                            if (waxing)
+                                                                ctx.arc(c, c, r, -Math.PI / 2, Math.PI / 2, false)   // 顶极→底极经右侧
+                                                            else
+                                                                ctx.arc(c, c, r, -Math.PI / 2, Math.PI / 2, true)    // 顶极→底极经左侧
+                                                            var steps = 32
+                                                            for (var i = 0; i <= steps; i++) {
+                                                                var a = Math.PI / 2 - (Math.PI * i / steps)          // 底极→顶极
+                                                                // 带符号 cosT：蛾眉凸向亮侧、凸月凸向暗侧（|cosT| 会把凸月画成蛾眉、满月退化成零面积）
+                                                                var ex = waxing ? cosT * r * Math.cos(a) : -cosT * r * Math.cos(a)
+                                                                ctx.lineTo(c + ex, c + r * Math.sin(a))
+                                                            }
+                                                            ctx.closePath()
+                                                            ctx.fillStyle = "#f7f3dc"
+                                                            ctx.fill()
+                                                        }
+                                                    }
                                                 }
                                             }
 
@@ -1945,122 +2097,6 @@ KosApplicationWindow {
                                                     return backend.units === "imperial"
                                                         ? Math.round(meters / 1609.344) + " " + root.distanceUnit
                                                         : Math.round(meters / 1000) + " " + root.distanceUnit
-                                                }
-                                            }
-
-                                            Rectangle {
-                                                id: moonPhaseTile
-                                                Layout.fillWidth: true
-                                                implicitHeight: 66
-                                                radius: root.tileRadius
-                                                // 昼夜分材质：ref-main 白天所有卡填充暗于天空（α~0.30 深蓝玻璃）；夜间维持白玻璃
-                                                property bool hot: moonHover.hovered
-                                                property real hoverFill: hot ? root.cardGlassAlphaHot : root.cardGlassAlpha
-                                                Behavior on hoverFill { NumberAnimation { duration: AppTheme.motionNormal; easing.type: Easing.OutCubic } }
-                                                property real hoverStroke: hot ? 0.32 : 0.22
-                                                Behavior on hoverStroke { NumberAnimation { duration: AppTheme.motionNormal; easing.type: Easing.OutCubic } }
-                                                color: Qt.rgba(root.cardGlassRgb.r, root.cardGlassRgb.g, root.cardGlassRgb.b, hoverFill)
-                                                border.width: 1
-                                                border.color: Qt.rgba(1, 1, 1, hoverStroke)
-                                                transform: Translate {
-                                                    y: AppTheme.reduceMotion ? 0 : (moonPhaseTile.hot ? -3 : 0)
-                                                    Behavior on y { NumberAnimation { duration: AppTheme.motionNormal; easing.type: Easing.OutCubic } }
-                                                }
-
-                                                property real phaseVal: root.number(backend.current, "moonPhase", Number.NaN)
-                                                property bool hasPhase: Number.isFinite(phaseVal)
-                                                readonly property var phaseNames: [
-                                                    qsTr("New Moon"), qsTr("Waxing Crescent"), qsTr("First Quarter"),
-                                                    qsTr("Waxing Gibbous"), qsTr("Full Moon"), qsTr("Waning Gibbous"),
-                                                    qsTr("Last Quarter"), qsTr("Waning Crescent")
-                                                ]
-                                                // 8 等分、以 0/0.25/0.5/0.75 为中心：round(p*8)%8
-                                                readonly property string phaseName: hasPhase
-                                                    ? phaseNames[Math.round(((phaseVal % 1) + 1) % 1 * 8) % 8]
-                                                    : "—"
-
-                                                onPhaseValChanged: moonCanvas.requestPaint()
-
-                                                HoverHandler { id: moonHover }
-                                                ToolTip.visible: moonHover.hovered
-                                                ToolTip.text: qsTr("Moon Phase")
-                                                Accessible.role: Accessible.StaticText
-                                                Accessible.name: qsTr("Moon Phase") + ": " + moonPhaseTile.phaseName
-
-                                                RowLayout {
-                                                    anchors.fill: parent
-                                                    anchors.margins: 10
-                                                    spacing: 8
-
-                                                    Item {
-                                                        Layout.preferredWidth: 46
-                                                        Layout.preferredHeight: 46
-
-                                                        Canvas {
-                                                            id: moonCanvas
-                                                            anchors.fill: parent
-                                                            antialiasing: true
-                                                            contextType: "2d"
-                                                            onPaint: {
-                                                                var ctx = getContext("2d")
-                                                                ctx.reset()
-                                                                var c = 23
-                                                                var r = 17
-                                                                // 暗面：整盘剪影（月亮相位剪影，同族白 0.14）
-                                                                ctx.beginPath()
-                                                                ctx.arc(c, c, r, 0, 2 * Math.PI)
-                                                                ctx.fillStyle = "rgba(255,255,255,0.14)"
-                                                                ctx.fill()
-                                                                if (!moonPhaseTile.hasPhase)
-                                                                    return
-                                                                // 亮面：外弧（盈月亮在右，亏月亮在左）+ 终止线半椭圆折线，一次成形
-                                                                var p = ((moonPhaseTile.phaseVal % 1) + 1) % 1
-                                                                var cosT = Math.cos(2 * Math.PI * p)
-                                                                var waxing = p < 0.5
-                                                                ctx.beginPath()
-                                                                if (waxing)
-                                                                    ctx.arc(c, c, r, -Math.PI / 2, Math.PI / 2, false)   // 顶极→底极经右侧
-                                                                else
-                                                                    ctx.arc(c, c, r, -Math.PI / 2, Math.PI / 2, true)    // 顶极→底极经左侧
-                                                                var steps = 32
-                                                                for (var i = 0; i <= steps; i++) {
-                                                                    var a = Math.PI / 2 - (Math.PI * i / steps)          // 底极→顶极
-                                                                    // 带符号 cosT：蛾眉凸向亮侧、凸月凸向暗侧（|cosT| 会把凸月画成蛾眉、满月退化成零面积）
-                                                                    var ex = waxing ? cosT * r * Math.cos(a) : -cosT * r * Math.cos(a)
-                                                                    ctx.lineTo(c + ex, c + r * Math.sin(a))
-                                                                }
-                                                                ctx.closePath()
-                                                                ctx.fillStyle = "#f7f3dc"
-                                                                ctx.fill()
-                                                            }
-                                                        }
-                                                    }
-
-                                                    ColumnLayout {
-                                                        Layout.fillWidth: true
-                                                        spacing: 1
-
-                                                        Label {
-                                                            Layout.fillWidth: true
-                                                            // 参考设计头部为全大写+字距（同 :1458 AQ 卡头）
-                                                            text: qsTr("Moon Phase").toLocaleUpperCase(Qt.locale())
-                                                            color: root.skyTextMuted
-                                                            font.pixelSize: 10
-                                                            font.letterSpacing: 1.4
-                                                            elide: Text.ElideRight
-                                                            Accessible.ignored: true
-                                                        }
-
-                                                        Label {
-                                                            Layout.fillWidth: true
-                                                            text: moonPhaseTile.phaseName
-                                                            color: root.skyText
-                                                            font.pixelSize: 15
-                                                            font.weight: Font.DemiBold
-                                                            elide: Text.ElideRight
-                                                            Accessible.ignored: true
-                                                        }
-                                                    }
                                                 }
                                             }
 
