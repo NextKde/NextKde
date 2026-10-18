@@ -31,3 +31,13 @@ assert.match(service, /airQuality = weather\.airQuality \?\? null/,
     "applyWeather keeps wiring the airQuality object")
 assert.match(service, /current = weather\.current \?\? null/,
     "applyWeather keeps wiring the current object")
+
+// Popup bottom row reuses the existing columns and appends a Gusts sub-line
+// under the Wind speed column (user ruling 3: no new columns in the 336px
+// popup; Apple weather card "Gusts" sub-line convention). The sub Text is
+// gated so it stays hidden when the service degrades windGust to "".
+const popup = readFileSync(join(here, "WeatherPopup.qml"), "utf8")
+assert.ok(popup.includes("sub: WeatherService.windGust"),
+    "popup bottom row wires Wind speed sub to WeatherService.windGust")
+assert.ok(popup.includes("visible: modelData.sub !== \"\""),
+    "popup gusts sub-line is gated on non-empty sub (hidden for old snapshots)")

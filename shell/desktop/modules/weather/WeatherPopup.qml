@@ -73,17 +73,19 @@ AnimatedPopupWindow {
         Row {
             anchors { left: parent.left; right: parent.right; bottom: parent.bottom; margins: 16 }
             spacing: 20
+            // 底行复用既有列补 Gusts（用户裁定 3：不新增列；Apple Wind 卡 "Gusts" 副行惯例；popup 336px 加列会溢出）
             Repeater {
                 model: [
-                    { label: I18n.tr("Humidity"), value: WeatherService.humidity },
-                    { label: I18n.tr("Wind speed"), value: WeatherService.windSpeed },
-                    { label: I18n.tr("Wind direction"), value: WeatherService.windDirection }
+                    { label: I18n.tr("Humidity"), value: WeatherService.humidity, sub: "" },
+                    { label: I18n.tr("Wind speed"), value: WeatherService.windSpeed, sub: WeatherService.windGust },
+                    { label: I18n.tr("Wind direction"), value: WeatherService.windDirection, sub: "" }
                 ]
                 delegate: Column {
                     required property var modelData
                     spacing: 3
                     Text { text: modelData.label; color: ThemeService.foregroundColor; opacity: 0.55; font.pixelSize: 11 }
                     Text { text: modelData.value; color: ThemeService.foregroundColor; font.pixelSize: 13 }
+                    Text { visible: modelData.sub !== ""; text: modelData.sub; color: ThemeService.foregroundColor; opacity: 0.5; font.pixelSize: 10 }
                 }
             }
             Item { width: 1; height: 1 }
