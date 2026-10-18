@@ -1224,6 +1224,16 @@ static void applyCardMeta(LiveCard &card, const CardMeta &m)
     card.enterInstant = m.enterInstant;
 }
 
+// 图标边长（设备 px，含 ×2 超采样）：stripIconSize 旋钮随卡高封顶——
+// 卡形跟窗口宽高比后（横窗矮卡），60px 图标会盖掉半张卡。覆盖层 quad
+// 的外扩 ovPad 由本值推出，rasterChrome 与绘制侧必须共用本函数。
+static int liveIconPx(const LiveCard &card)
+{
+    const qreal hLog = card.target.rect.height();
+    return std::min(std::max(12, qRound(card.iconSize)) * 2,
+        std::max(24, qRound(0.42 * hLog * 2)));
+}
+
 // 铭牌（标题 + 关闭钮，QML cardHeader 同版式 ×2 超采样）光栅进纹理。
 // QImage 行 0 = 顶部，stage-live 着色器按 FBO 朝向（行 0 = 底）采样——
 // 上传前 Y 镜像即可复用同一着色器。键变才重绘（标题/计数/卡宽）。
@@ -1328,7 +1338,7 @@ void StageAnimEffect::rasterChrome(LiveCard &card)
     // 与静态模式 40px 不一致），并列上限＝maxIconSlots 旋钮与卡宽取小
     // 2026-10-17 iPadOS 还原:单枚大图标(与 QML 侧 visibleCount 钳 1 同步;
     // maxIconSlots 语义保留,调大恢复排)。参考尺寸 ~48pt
-    const int isz = std::max(12, qRound(card.iconSize)) * 2,
+    const int isz = liveIconPx(card),
               igap = std::max(6, isz / 5);
     // 覆盖层画布外扩：图标探出卡外（左下），不扩会被卡矩形裁平
     // （live 模式只剩坐在卡上的上半截）。外扩量与 drawLiveCardBody 的
@@ -1378,15 +1388,22 @@ void StageAnimEffect::rasterChrome(LiveCard &card)
     };
     if (rows.size() > 1) {
         // ── 合并卡：白色圆角胶囊 + 逐窗「图标 + 标题」竖排（ref/c2）──
-        // 参考实测（卡宽 204 → 本卡 216，×1.06）：胶囊宽 72、行高 19、
-        // 图标 16、圆角 17、左/底各探出卡外 8/10；行数 >4 时末行折 "+N"
-        const int pillW = 144, pillIcon = 32, pillRowH = 38,
-                  padX = 16, padY = 10, pillR = 34, maxRows = 4;
+        // 度量随卡宽缩放（与 QML iconRow 的 pill* 比例同源）：胶囊 33%
+        // 卡宽、图标 22% 胶囊宽、行高 26%、圆角 24%；左/底探出卡外
+        // 12% 胶囊宽 / 15% 胶囊高（以下全部是设备像素，w 为逻辑卡宽）
+        const int pillW = qRound(w * 2 * 0.33),
+                  pillIcon = std::max(12, qRound(pillW * 0.22)),
+                  pillRowH = std::max(16, qRound(pillW * 0.26)),
+                  padX = std::max(4, qRound(pillW * 0.11)),
+                  padY = std::max(4, qRound(pillW * 0.07)),
+                  pillR = std::max(8, qRound(pillW * 0.24)), maxRows = 4;
         const int shown = std::min<int>(rows.size(), maxRows);
         const bool more = int(rows.size()) > shown;
         const int pillH = shown * pillRowH + padY * 2;
-        const int px = card.rightSide ? w * 2 - pillW + 16 : -16;
-        const int py = h * 2 - pillH + 20;
+        const int pillOutX = std::max(6, qRound(pillW * 0.12));
+        const int pillOutY = std::max(6, qRound(pillH * 0.15));
+        const int px = card.rightSide ? w * 2 - pillW + pillOutX : -pillOutX;
+        const int py = h * 2 - pillH + pillOutY;
         // 落影（参考有一层很浅的落影）
         op.setPen(Qt::NoPen);
         op.setBrush(QColor(0, 0, 0, 26));
@@ -1396,7 +1413,7 @@ void StageAnimEffect::rasterChrome(LiveCard &card)
         op.setBrush(QColor(251, 252, 251, 252));
         op.drawRoundedRect(QRectF(px, py, pillW, pillH), pillR, pillR);
         QFont lf = op.font();
-        lf.setPixelSize(20); // 10pt ×2
+        lf.setPixelSize(std::max(12, qRound(pillW * 0.14))); // 14% 胶囊宽
         lf.setWeight(QFont::Normal);
         op.setFont(lf);
         const QFontMetrics fm(lf);
@@ -1412,7 +1429,8 @@ void StageAnimEffect::rasterChrome(LiveCard &card)
             const QString label = plus
                 ? QStringLiteral("+%1").arg(rows.size() - (shown - 1))
                 : rows.at(i).second;
-            const int tx = px + padX + pillIcon + 12;
+            const int tx = px + padX + pillIcon
+                + std::max(4, qRound(pillW * 0.08));
             const int tw = pillW - (tx - px) - padX;
             op.setPen(QColor(142, 142, 147, 255));
             op.drawText(QRect(tx, ry, tw, pillRowH),
@@ -1439,12 +1457,13 @@ void StageAnimEffect::rasterChrome(LiveCard &card)
     int rowW = visible > 0 ? visible * isz + (visible - 1) * igap : 0;
     const bool overflow = icons.size() > visible;
     if (overflow)
-        rowW += igap + 56;
-    // 参考实测(2026-10-18):图标挂卡角外——水平 27% 探出、垂直 60%
-    // 探出（与 QML iconRow 的 x / bottomMargin 同步；画布已外扩 ovPad）
-    const int iconOutX = qRound(0.27 * isz);
+        rowW += igap + qRound(0.6 * isz);
+    // 参考实测（2026-10-18 重测）：图标挂卡角外——水平 30% 探出、垂直
+    // 26% 探出（与 QML iconRow 的 outX / bottomMargin 同步；画布已外扩
+    // ovPad）。第 29 轮的 60% 把卡底量错了。
+    const int iconOutX = qRound(0.30 * isz);
     int ix0 = card.rightSide ? w * 2 - iconOutX - rowW : iconOutX;
-    const int iy0 = h * 2 - isz * 2 / 5;
+    const int iy0 = h * 2 - qRound(0.74 * isz);
     for (int i = 0; i < visible; i++) {
         const QPixmap pm = loadIcon(icons.at(i), isz);
         if (!pm.isNull()) {
@@ -1457,7 +1476,7 @@ void StageAnimEffect::rasterChrome(LiveCard &card)
     }
     if (overflow) {
         op.setPen(QColor(255, 255, 255, 200));
-        op.drawText(QRect(ix0 + visible * (isz + igap), iy0, 56, isz),
+        op.drawText(QRect(ix0 + visible * (isz + igap), iy0, qRound(0.6 * isz), isz),
                     Qt::AlignLeft | Qt::AlignVCenter,
                     QStringLiteral("+%1").arg(icons.size() - visible));
     }
@@ -2511,8 +2530,7 @@ void StageAnimEffect::drawLiveCardBody(const RenderViewport &viewport,
         // 覆盖层画布比卡矩形每侧外扩 ovPad（图标探出卡外，见 rasterChrome）
         // ——quad 与 cardSize 必须用同一外扩矩形，否则纹理被拉伸、探出
         // 部分仍会被 SDF 卡矩形裁平
-        const qreal ovPad = std::ceil(
-            0.6 * std::max(12, qRound(card.iconSize)) * 2);
+        const qreal ovPad = std::ceil(0.6 * liveIconPx(card));
         const QRectF ovQuad = cardBodyQuad(pose, ovPad, dpr);
         addRepaintRectF(effects, QRectF(ovQuad.left() / dpr,
                                    ovQuad.top() / dpr,

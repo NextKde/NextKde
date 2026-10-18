@@ -33,21 +33,24 @@ QtObject {
         "fanSpacing":   { type: "int", min: 2, max: 24, def: 8 },
         // 扇叠悬停扩散系数（悬停/武装时间距 × 此值；1.0 = 不扩散）
         "fanHoverSpread": { type: "real", min: 1.0, max: 2.0, def: 1.4 },
-        "stripIconSize": { type: "int", min: 16, max: 64, def: 48 },
+        "stripIconSize": { type: "int", min: 16, max: 80, def: 60 },
         "maxIconSlots": { type: "int", min: 1, max: 8, def: 1 },
         // 合并手势驻留：被拖卡压在目标卡上停此时长才"武装"并组意图
         //（用户实测调过 320→550→450，入 schema 供设置页可调）
         "mergeDwellMs": { type: "int", min: 200, max: 1200, def: 450 },
         // 卡片顶部名称：可关（沉浸缩略图——整卡就是窗口内容）
         "showCardTitle": { type: "bool", def: false },
-        "cardHeight":   { type: "int", min: 100, max: 220, def: 148 },
-        // 卡宽（卡高之外的独立自由度；默认 216 = 原 PANEL_WIDTH−24 定宽）
-        "cardWidth":    { type: "int", min: 120, max: 320, def: 216 },
+        // 卡宽是主尺寸；卡高按窗口宽高比逐卡算（StageSidebarWindow.
+        // _cardHeightFor，夹 [0.70w, 1.5w]）。cardHeight 只在宽高比未知
+        //（无记录空脸/旧数据）时作回落——128×170 是人工定案的基准卡形。
+        "cardHeight":   { type: "int", min: 80, max: 220, def: 170 },
+        // 卡宽（卡高之外的独立自由度；与 cardHeight 同按 0.75 宽高比）
+        "cardWidth":    { type: "int", min: 60, max: 320, def: 128 },
         // 侧栏距屏幕边缘（px）：卡片列左/右缘到屏缘的净距（默认 32 =
         // 全屏浮层化前的定值 CARD_OVERFLOW_MARGIN 20 + CARD_X_INSET 12；
         // 设置页「距离屏幕边缘」，位置在「侧栏位置」之下）
         "stripMargin":  { type: "int", min: 0, max: 120, def: 12 },
-        "cardSpacing":  { type: "int", min: 4, max: 48, def: 24 },
+        "cardSpacing":  { type: "int", min: 4, max: 72, def: 24 },
         "centerCards":  { type: "bool", def: true },
         "deckSidePeek": { type: "int", min: 4, max: 60, def: 20 },
         "focusDim":     { type: "bool", def: false },
@@ -59,19 +62,19 @@ QtObject {
         // 静置姿态；tiltAngle = **悬停倾斜角**——鼠标悬停时的倾角
         //（0 = 悬停放平阅读）
         // TiltAngle kwinrc 投影取 deckRestTilt（与卡片交棒姿态同源，见
-        // _pushEffectConfig）。2026-10-17 iPadOS 还原：参考卡近平贴（仅
-        // 整列 ~1.4° 旋转），双旋钮默认归零；需要牌堆姿态的用户可自行调大
-        "deckRestTilt": { type: "real", min: 0, max: 40, def: 0 },
+        // _pushEffectConfig）。2026-10-18 用户定案：参考卡列是微倾的
+        //（~2° 透视，左缘近、顶边收），静置倾斜恢复 2°，悬停仍放平
+        "deckRestTilt": { type: "real", min: 0, max: 40, def: 2 },
         "tiltAngle":    { type: "real", min: 0, max: 40, def: 0 },
         // 玻璃质感（StageCard 卡面：背板/受光/描边/辉光/纵深）
-        "cardRadius":   { type: "int", min: 0, max: 24, def: 15 },
-        "cardTint":     { type: "real", min: 0.2, max: 0.95, def: 0.55 },
+        "cardRadius":   { type: "int", min: 0, max: 24, def: 7 },
+        "cardTint":     { type: "real", min: 0.2, max: 0.95, def: 0.35 },
         "cardOpacity":  { type: "real", min: 0.2, max: 1.0, def: 1.0 },
         "cardTopLight": { type: "real", min: 0, max: 0.3, def: 0.07 },
         "cardBorder":   { type: "real", min: 0, max: 0.4, def: 0.05 },
         "cardGlow":     { type: "real", min: 0, max: 0.4, def: 0.13 },
         "cardDepth":    { type: "real", min: 0, max: 0.6, def: 0.38 },
-        "thumbSize":    { type: "int", min: 160, max: 640, def: 320 },
+        "thumbSize":    { type: "int", min: 160, max: 640, def: 640 },
         // 动效与节拍
         "hoverScale":   { type: "real", min: 1.0, max: 1.20, def: 1.05 },
         "hoverDwellDelay": { type: "int", min: 0, max: 800, def: 200 },
@@ -116,8 +119,8 @@ QtObject {
     property string side: "left"
     property int fanSpacing: 8
     property real fanHoverSpread: 1.4
-    // 2026-10-17 iPadOS 还原:单枚大图标 ~48pt(参考实测)
-    property int stripIconSize: 48
+    // 2026-10-17 iPadOS 还原:单枚大图标 ~47% 卡宽(参考实测);128 卡取 60
+    property int stripIconSize: 60
     // 1 = 单枚(参考形态);调大恢复排(2026-10-17)
     property int maxIconSlots: 1
     // ⚠️ 属性默认值 = 无 config.json 时的真实默认（_load 不回填 schema def，
@@ -128,13 +131,16 @@ QtObject {
     // 默认改 false。已有 config.json 里的旧值 true 会覆盖此默认 —— 用户
     // 手动关一次或删键后生效
     property bool showCardTitle: false
-    property int cardHeight: 148
-    property int cardWidth: 216
+    // 2026-10-18 结构轮：基准卡形 128×170（参考 0.753 竖版、放大一档）；
+    // 实际卡高逐卡按窗口宽高比算，本值只作未知宽高比的回落
+    property int cardHeight: 170
+    property int cardWidth: 128
     // 侧栏距屏幕边缘：卡片列贴常驻侧屏缘的净距（列原点偏移 =
     // stripMargin − CARD_X_INSET，见 StageSidebarWindow._stripInset）
     // 2026-10-17 iPadOS 还原:参考卡距屏缘 ~11pt(原 32)
     property int stripMargin: 12
-    // 2026-10-17 iPadOS 还原:参考卡距 23-37pt(透视伸缩,取中偏保守 24)
+    // 2026-10-18 卡形跟窗口宽高比后，参考 gap/卡高 ≈ 0.30 按实际卡高
+    //（横窗矮卡 ~80）折算 ≈ 24——48 是为竖卡 170 定的，横卡上会松一倍
     property int cardSpacing: 24
     // adaptive 模式：放得下时整列垂直居中；贴满时顶部锚定
     property bool centerCards: true
@@ -148,23 +154,25 @@ QtObject {
     // deckRestTilt（与卡片交棒姿态同源，见 _pushEffectConfig）。
     //（悬停放大只有一个旋钮 hoverScale——原 deckFocusScale 与其相乘控
     // 同一效果，冲突已删）
-    // 2026-10-17 iPadOS 还原:双旋钮默认归零(参考卡近平贴)
-    property real deckRestTilt: 0
+    // 2026-10-18 用户定案:静置微倾 2°（参考卡列透视倾斜），悬停放平
+    property real deckRestTilt: 2
     property real tiltAngle: 0
     // 卡面玻璃质感：背板浓度（悬停自动 ×1.3 提亮）/ 顶部受光 / 静置描边
     // 亮度 / 聚焦辉光强度 / 纵深压暗
-    // 2026-10-18 重测：第 9 轮"6-7pt"只数了边缘最后 2px 内收，低估一半。
-    // 按 c1(弧跨 12/160)与 card3-zoom(20-23/283)两处独立测量，圆角 ≈
-    // 7~8% 卡宽 → 216 宽取 15（约 7%）。
-    property int cardRadius: 15
-    property real cardTint: 0.55
+    // 2026-10-18 结构轮：圆角按参考 7% 卡宽，128 宽取 9
+    property int cardRadius: 9
+    // 参考卡面是缩略图本体，背板只在无图/留边处露出；0.35 让留边接近
+    // 参考的浅色卡面，不再是一块深色玻璃
+    property real cardTint: 0.35
     property real cardOpacity: 1.0
     property real cardTopLight: 0.07
     property real cardBorder: 0.05
     property real cardGlow: 0.13
     property real cardDepth: 0.38
-    // 缩略图解码尺寸（宽，高等比 0.7）：越大越清晰、内存与重拍开销越大
-    property int thumbSize: 320
+    // 缩略图解码尺寸（宽，高等比 0.7）：裁切铺满卡面后按卡高放大显示，
+    // 需要比卡宽更大的纹理才不糊（128 卡 @2x 显示宽 ≈486 设备像素；
+    // 2026-10-18 实测 480 仍糊，640 才清晰——源图本身 720 级）
+    property int thumbSize: 640
     property real hoverScale: 1.05
     // 悬停驻留：指针停稳多久才应用聚焦排布（滑动途中只亮卡不重排 =
     // 不跳卡）。0 = 立即聚焦（旧手感）

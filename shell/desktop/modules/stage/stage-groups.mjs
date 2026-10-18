@@ -8,7 +8,7 @@
 // 不进差异比较）。新增卡片字段：加这里 + buildModelRows + 两处 required。
 export const CARD_FIELDS = ["targetId", "pid", "appName", "title",
     "iconSource", "count", "idsJson", "iconsJson", "iconIdsJson",
-    "rowsJson", "merged"]
+    "rowsJson", "merged", "aspect"]
 
 // ── 分组 ──
 
@@ -88,7 +88,14 @@ export function groupRecords(records, opts = {}) {
             wins = []
             byKey[key] = wins
             groups.push({ key: key, pid: r.pid || 0, wins: wins,
-                merged: false })
+                merged: false,
+                // 窗口宽高比（含装饰，来自 KWin 几何）：卡片形状跟窗口走
+                // （macOS Stage Manager 语义：横窗=横卡、竖窗=竖卡，整窗
+                // 缩进卡里）。取组首窗、与代表窗选择无关——视图布局与
+                // 矩形发布两条路径必须得到同一个值（发布路径不 decorate）
+                aspect: (r.geometry && r.geometry.width > 0
+                    && r.geometry.height > 0)
+                    ? r.geometry.width / r.geometry.height : 0 })
         }
         wins.push(r)
     }
@@ -308,6 +315,7 @@ export function buildModelRows(groups) {
             iconIdsJson: JSON.stringify(g.iconIds || []),
             rowsJson: JSON.stringify(g.rows || []),
             merged: !!g.merged,
+            aspect: g.aspect || 0,
         })
     }
     return rows

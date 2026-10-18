@@ -148,7 +148,9 @@ Item {
 
     width: parent ? parent.width
                   : StageGeo.PANEL_WIDTH - StageGeo.CARD_WIDTH_INSET
-    height: StageConfigService.cardHeight
+    // 卡高由槽位按窗口宽高比决定（StageSidebarWindow._cardHeightFor）；
+    // 无槽位父项（独立预览/调试）时回落配置卡高
+    height: parent ? parent.height : StageConfigService.cardHeight
 
     // ── 动效状态机：点击=原地淡出并保持倾斜（窗口从倾斜姿态旋转展开接管）──
     // enterInstant = 行以"收集落卡"追加（窗口正飞进该卡位）：几何出生即
@@ -782,6 +784,8 @@ Item {
                 allowDmaBuf: false
             }
 
+            // 卡面 = 整窗缩略图（卡形跟窗口宽高比走，见 StageSidebarWindow.
+            // _cardHeightFor）：完整显示窗口内容，不裁切、不留大边。
             Image {
                 id: preview
                 anchors.fill: parent
@@ -814,7 +818,12 @@ Item {
                 cache: false
                 sourceSize: Qt.size(StageConfigService.thumbSize,
                     Math.round(StageConfigService.thumbSize * 0.7))
-                fillMode: Image.PreserveAspectCrop
+                // 卡形已跟窗口宽高比走（横窗横卡），整窗等比缩进卡面：
+                // 完整显示、不裁切（macOS 台前语义）。缩略图是窗口内容，
+                // 与含装饰的 KWin 几何有细微比例差——居中留边即可
+                fillMode: Image.PreserveAspectFit
+                horizontalAlignment: Image.AlignHCenter
+                verticalAlignment: Image.AlignVCenter
                 smooth: true
                 // 失效自愈：URL 指向的 PNG 被新一轮拍摄替换/删除后，Image
                 // 会停在 Error 且同一 source 不会重读盘（可见性变化、同串
@@ -1118,16 +1127,20 @@ Item {
         // 多窗形态：逐窗行 >1（同应用两扇窗也是两行——参考列的是窗口，
         // 不是应用）。rowsJson 缺失（旧载荷/热重载）时退回单图标 + "+N"
         readonly property bool listForm: card.windowRows.length > 1
-        readonly property int iconSize: StageConfigService.stripIconSize
+        // 单窗图标随卡高封顶（横窗矮卡时 60px 图标会盖掉半张卡）
+        readonly property int iconSize: Math.min(
+            StageConfigService.stripIconSize,
+            Math.round(card.height * 0.42))
         readonly property int iconGap: Math.max(3, Math.round(iconSize * 0.2))
-        // 胶囊度量：ref/c2 像素反推（卡宽 204 → 本卡 216，×1.06）
-        readonly property int pillW: 72
-        readonly property int pillIcon: 16
-        readonly property int pillRowH: 19
-        readonly property int pillPadX: 8
-        readonly property int pillPadY: 5
-        // 胶囊圆角：ref/c2-icon 实测约 24% 胶囊宽（60/230）→ 72 取 17
-        readonly property int pillRadius: 17
+        // 胶囊度量：按参考比例随卡宽缩放（ref/c2：胶囊≈33% 卡宽、图标
+        // 22% 胶囊宽、行高 26%、圆角 24%；旧值是按 216 宽卡定死的绝对值，
+        // 卡缩小到 96 后必须同比缩，否则胶囊会比卡还宽）
+        readonly property int pillW: Math.round(card.width * 0.33)
+        readonly property int pillIcon: Math.max(6, Math.round(pillW * 0.22))
+        readonly property int pillRowH: Math.max(8, Math.round(pillW * 0.26))
+        readonly property int pillPadX: Math.max(2, Math.round(pillW * 0.11))
+        readonly property int pillPadY: Math.max(2, Math.round(pillW * 0.07))
+        readonly property int pillRadius: Math.max(4, Math.round(pillW * 0.24))
         readonly property int pillMaxRows: 4
         readonly property int displayRows:
             Math.min(card.windowRows.length, pillMaxRows)
@@ -1140,14 +1153,18 @@ Item {
             1)
         readonly property real rowWidth:
             visibleCount * iconSize + Math.max(0, visibleCount - 1) * iconGap
-        // 单窗：图标中心略低于卡底；合并卡：胶囊底探出约 10px
-        readonly property real outX: listForm ? 8 : iconSize * 0.27
+        // 单窗：图标中心坐在卡左下角内（ref/card1-zoom 实测：水平探出
+        // 30% 图标宽、垂直仅 26%——第 29 轮的 60% 把卡底量错了）；合并卡：
+        // 胶囊底探出约 15% 胶囊高
+        readonly property real outX: listForm
+            ? Math.max(3, Math.round(pillW * 0.12)) : iconSize * 0.30
         width: listForm ? pillW : rowWidth
         height: listForm ? pillH : iconSize
         // ⚠️ 水平定位用 x 而非 left/right 锚点切换（同 cards 列的坑）：
         // 锚点对在 side 翻转瞬间同时定义会拆掉 width 绑定
         anchors.bottom: parent.bottom
-        anchors.bottomMargin: listForm ? -10 : -iconSize * 0.6
+        anchors.bottomMargin: listForm
+            ? -Math.max(3, Math.round(pillH * 0.15)) : -iconSize * 0.26
         x: card.rightSide ? parent.width - width + outX : -outX
 
         // ── 单窗形态：一枚大图标（图标资源自带 squircle 底）──
@@ -1240,8 +1257,8 @@ Item {
                 onClicked: if (row && row.id) card.iconActivated(row.id)
                 Rectangle {
                     anchors.fill: parent
-                    anchors.margins: 2
-                    radius: 6
+                    anchors.margins: 1
+                    radius: Math.max(2, Math.round(iconRow.pillRadius * 0.35))
                     color: pillRow.containsMouse
                         ? Qt.rgba(0, 0, 0, 0.06) : "transparent"
                     Behavior on color { ColorAnimation { duration: 120 } }
@@ -1256,7 +1273,8 @@ Item {
                     asynchronous: false
                 }
                 Text {
-                    x: iconRow.pillPadX + iconRow.pillIcon + 6
+                    x: iconRow.pillPadX + iconRow.pillIcon
+                        + Math.max(2, Math.round(iconRow.pillW * 0.08))
                     anchors.verticalCenter: parent.verticalCenter
                     width: iconRow.pillW - x - iconRow.pillPadX
                     text: pillRow.more
@@ -1265,7 +1283,8 @@ Item {
                         : (pillRow.row ? pillRow.row.title : "")
                     // iOS 次要文字灰；参考标签很小、被模糊糊住
                     color: "#8e8e93"
-                    font.pixelSize: 10
+                    font.pixelSize: Math.max(6,
+                        Math.round(iconRow.pillW * 0.14))
                     elide: Text.ElideRight
                     maximumLineCount: 1
                 }

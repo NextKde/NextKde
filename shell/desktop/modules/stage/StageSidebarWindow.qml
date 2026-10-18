@@ -934,15 +934,18 @@ PanelWindow {
         //（实测：悬停另一张卡时点卡，收编矩形 base−28）。卡片落点以
         // 无指针时的基础槽位为准。
         let lay
+        // 逐组卡高（窗口宽高比）：发布路径的 groups 未 decorate，但 aspect
+        // 在 groupRecords 里就写好——与视图同一取值口径
+        const pubHeights = _groupHeights(groups)
         if (StageConfigService.layoutMode === "scroll") {
             lay = StageGeo.scrollLayout(cards.height, groups.length,
-                _scrollOpts(null))
+                _scrollOpts(null, pubHeights))
         } else {
-            lay = _layout(groups.length)
+            lay = _layout(groups.length, pubHeights)
         }
         root._lastCardRects = StageGeo.computeTargetRects(groups, lay,
             { columnY: cards.y, columnWidth: cards.width,
-                columnX: cards.x,
+                columnX: cards.x, heights: pubHeights,
                 cardHeight: StageConfigService.cardHeight },
             records, root._lastCardRects)
         // round35 NEW-4：活动组"ghost 槽位"。活动组被排除在视图布局外
@@ -974,10 +977,14 @@ PanelWindow {
                 for (let g = 0; g < groups.length; g++)
                     if (StageGroups.orderIndex(order, groups[g].key) < gIdx)
                         pos++
+                // ghost 的逐卡高度：按视图顺序插回 pos（与 positions[pos] 同源）
+                const ghostHeights = pubHeights.slice()
+                ghostHeights.splice(pos, 0,
+                    _cardHeightFor(ghostEntry.aspect))
                 const ghostLay = StageConfigService.layoutMode === "scroll"
                     ? StageGeo.scrollLayout(cards.height, groups.length + 1,
-                        _scrollOpts(null))
-                    : _layout(groups.length + 1)
+                        _scrollOpts(null, ghostHeights))
+                    : _layout(groups.length + 1, ghostHeights)
                 // computeTargetRects 按数组下标取 lay.positions[g]——直接
                 // 传 [ghostEntry] 下标恒 0，pos 算完即丢，ghost 矩形永远
                 // 落最顶槽（审计 P0）。单槽位布局对象让下标 0 = ghost 槽位；
@@ -1001,6 +1008,7 @@ PanelWindow {
                     [ghostEntry], ghostAt,
                     { columnY: cards.y, columnWidth: cards.width,
                         columnX: cards.x,
+                        heights: [ghostHeights[pos]],
                         cardHeight: StageConfigService.cardHeight },
                     records, root._lastCardRects)
                 for (const k in savedFlat)
@@ -1573,7 +1581,6 @@ PanelWindow {
                 + root.dragKey + " cand=" + root._mergeCandidate)
             return
         }
-        const ch = StageConfigService.cardHeight
         // 复核跟指针（与候选检测同源）+ 基础槽位（恒定坐标系）
         const py = root.dragPointerY
         const lay = root._dragBaseLayout(cardRepeater.count)
@@ -1581,7 +1588,8 @@ PanelWindow {
             const s = cardRepeater.itemAt(i)
             if (s && s.appKey === root._mergeCandidate) {
                 const top = lay.positions[i] ?? 0
-                if (py >= top && py <= top + ch) {
+                const sh = s.height
+                if (py >= top && py <= top + sh) {
                     root._dropMergeKey = root._mergeCandidate
                     root._mergeCandidate = ""
                     console.info("[StageSidebar] merge armed on "
@@ -1594,7 +1602,7 @@ PanelWindow {
                     root._mergeCandidate = ""
                     console.info("[StageSidebar] dwell fired-offcard pY="
                         + Math.round(py) + " rect=" + Math.round(top)
-                        + ".." + Math.round(top + ch))
+                        + ".." + Math.round(top + sh))
                 }
                 return
             }
@@ -1631,10 +1639,11 @@ PanelWindow {
     // 让位而动，拿它做检测会构成反馈回路（中心进卡→预览把卡挤走→检测
     // 翻空→预览又回来 = 抽搐循环的根源）。基础槽位恒定，检测确定性。
     function _dragBaseLayout(n) {
+        const hs = _modelHeights(n)
         return StageConfigService.layoutMode === "scroll"
             ? StageGeo.scrollLayout(cards.height, n,
-                _scrollOpts({ hoveredIndex: -1 }))
-            : _layout(n)
+                _scrollOpts({ hoveredIndex: -1 }, hs))
+            : _layout(n, hs)
     }
 
     // ── 共享小工具（审计抽取：此前以同构样板散落多处）──
@@ -1667,10 +1676,12 @@ PanelWindow {
                 root.dragPointerX - root.dragGrabOffsetX))
     }
 
-    // scrollLayout 参数包（三处同构）：extra 追加/覆盖键（hoveredIndex 等）
-    function _scrollOpts(extra) {
+    // scrollLayout 参数包（三处同构）：extra 追加/覆盖键（hoveredIndex 等）；
+    // heights 缺省 = 模型行高度（发布路径传 _groupHeights，count 口径不同）
+    function _scrollOpts(extra, heights) {
         const o = {
             cardHeight: StageConfigService.cardHeight,
+            heights: heights || _modelHeights(cardModel.count),
             spacing: StageConfigService.cardSpacing,
             scroll: root.scrollOffset,
             centerCards: StageConfigService.centerCards,
@@ -1753,7 +1764,7 @@ PanelWindow {
         const lay = _dragBaseLayout(cardModel.count)
         if (_dragUpdateCenterZone(p))
             return          // 区内不更新插入目标（松手=并入前台/纯展开）
-        if (_dragUpdateMergeTarget(StageConfigService.cardHeight, lay))
+        if (_dragUpdateMergeTarget(lay))
             return          // 武装中：不更新插入目标（松手即合并）
         _dragUpdateInsertTarget(index, cardModel.count, lay)
     }
@@ -1763,7 +1774,7 @@ PanelWindow {
         root.dragPointerX = p.x
         root.dragPointerY = p.y
         const want = p.y - root.dragGrabOffset
-        const edge = StageConfigService.cardHeight * StageGeo.DRAG_EDGE_RATIO
+        const edge = slot.height * StageGeo.DRAG_EDGE_RATIO
         root.dragY = Math.max(-edge,
             Math.min(cards.height - edge, want))
         // 逐帧跟手：被拖卡的 y/x 直接赋值（其 Behavior 已在拖拽中禁用；
@@ -1829,7 +1840,7 @@ PanelWindow {
     // 用户瞄的是指针——用被拖卡中心会"抓卡偏一点就等错目标"
     //（"合并十分困难"的根源之一）；用实时 y 则构成检测-布局反馈回路。
     // 返回 true = 武装中（松手即合并，调用方跳过插入目标更新）
-    function _dragUpdateMergeTarget(ch, lay) {
+    function _dragUpdateMergeTarget(lay) {
         const n = cardModel.count
         if (root._dropMergeKey !== "") {
             // 武装态滞回：指针离开目标基础槽位 ± DRAG_MERGE_EXIT_RATIO×
@@ -1839,9 +1850,9 @@ PanelWindow {
                 const s = cardRepeater.itemAt(i)
                 if (s && s.appKey === root._dropMergeKey) {
                     const top = lay.positions[i] ?? 0
-                    const m = ch * root._mergeExitRatio
+                    const m = s.height * root._mergeExitRatio
                     armed = root.dragPointerY >= top - m
-                        && root.dragPointerY <= top + ch + m
+                        && root.dragPointerY <= top + s.height + m
                     break
                 }
             }
@@ -1859,7 +1870,6 @@ PanelWindow {
         // 清候选，否则计时不断归零 = "停了也不亮"）
         let mergeKey = ""
         const enter = 6
-        const stay = ch * 0.15
         for (let i = 0; i < n; i++) {
             if (i === root.dragFromIndex)
                 continue
@@ -1867,14 +1877,15 @@ PanelWindow {
             if (!s)
                 continue
             const top = lay.positions[i] ?? 0
+            const stay = s.height * 0.15
             if (s.appKey === root._mergeCandidate) {
                 if (root.dragPointerY >= top - stay
-                        && root.dragPointerY <= top + ch + stay) {
+                        && root.dragPointerY <= top + s.height + stay) {
                     mergeKey = s.appKey
                     break
                 }
             } else if (root.dragPointerY >= top + enter
-                        && root.dragPointerY <= top + ch - enter) {
+                        && root.dragPointerY <= top + s.height - enter) {
                 mergeKey = s.appKey
                 break
             }
@@ -1959,17 +1970,16 @@ PanelWindow {
             return JSON.stringify({ error: "no slot" })
         const log = []
         const o = cards.mapToItem(null, 0, 0)
-        const ch = StageConfigService.cardHeight
         // 列内指针 x（列中线上）与中心区指针 x（越过卡列 + 300）
         const colX = o.x + cards.width / 2
         const centerX = o.x + (StageConfigService.side === "right"
             ? -300 : cards.width + 300)
         _beginCardDrag(slot, fromIndex, colX,
-            o.y + slot.y + ch / 2)
+            o.y + slot.y + slot.height / 2)
         if (mode === "center") {
             // 拖向屏幕中心松手：应与前台程序（活动组）并组
             _updateCardDrag(slot, fromIndex, centerX,
-                o.y + slot.y + ch / 2)
+                o.y + slot.y + slot.height / 2)
             log.push({ step: "center", armed: root._centerMergeArmed,
                 target: root._centerMergeTarget,
                 slotX: Math.round(slot.x), slotY: Math.round(slot.y) })
@@ -1979,7 +1989,7 @@ PanelWindow {
         }
         // 指针压到目标卡基础槽位中心（检测跟指针）
         _updateCardDrag(slot, fromIndex, colX,
-            o.y + (target.y + ch / 2))
+            o.y + (target.y + target.height / 2))
         log.push({ step: "over", cand: root._mergeCandidate,
             armed: root._dropMergeKey })
         if (mode === "pass") {
@@ -2321,6 +2331,8 @@ PanelWindow {
                 required property string iconIdsJson
                 required property string rowsJson
                 required property bool merged
+                // 窗口宽高比（宽/高，组首窗；0 = 未知）：卡高跟它走
+                required property real aspect
                 required property bool enterInstant
 
                 // 统一等比缩放：设计宽 = 列宽 − inset，slotX 按缩放居中
@@ -2342,7 +2354,7 @@ PanelWindow {
                 //（侧栏透明背景下硬切边特别刺眼，实测）。绑定 slot.y =
                 // 随滚动/布局动画逐帧跟随，无需手动刷新。
                 readonly property real edgeFade: {
-                    const h = StageConfigService.cardHeight
+                    const h = slot.height
                     const fade = h * 0.45
                     // 上缘按**卡顶**越界深度计（顶栏让位修复，与底缘对称）：
                     // 滚动越顶的卡按隐藏比例淡出——特效直绘不受 QML 视口
@@ -2365,7 +2377,9 @@ PanelWindow {
                 opacity: (1 - dimBlend * (StageConfigService.focusDim ? 0.28 : 0))
                     * edgeFade
                 width: cards.width - StageGeo.CARD_WIDTH_INSET
-                height: StageConfigService.cardHeight
+                // 卡高跟窗口宽高比走（见 root._cardHeightFor）；卡面
+                // StageCard 填满本槽位
+                height: root._cardHeightFor(aspect)
                 x: slotX
                 scale: slotScale
                 transformOrigin: Item.TopLeft
@@ -2558,10 +2572,38 @@ PanelWindow {
     // publishSimulatedLayout 里直接调 StageGeo.scrollLayout）。⚠️ 两处 count
     // 语义不同：视图用模型行数（含前台最小化保卡的组），发布用
     // groups.length（整组排除），不能混。
-    function _layout(count) {
+    function _layout(count, heights) {
         return StageGeo.adaptiveLayout(cards.height, count,
             StageConfigService.cardHeight, StageConfigService.cardSpacing,
-            StageConfigService.centerCards)
+            StageConfigService.centerCards, heights)
+    }
+
+    // ── 逐卡高度（2026-10-18 macOS 语义轮）──
+    // 卡形跟窗口宽高比走：横窗＝矮卡、竖窗＝高卡，整窗等比缩进卡里
+    // （不再统一 128×170 裁切）。宽度恒为列宽−inset，只有高度变；
+    // 卡高夹在 [0.70w, 1.5w]——极端窗形（超宽/超高）不把列撑炸。
+    // aspect 未知（0/NaN）回落配置 cardHeight（无记录的空脸、旧数据）。
+    function _cardHeightFor(aspect) {
+        const w = StageConfigService.cardWidth
+        if (!(aspect > 0) || !isFinite(aspect))
+            return StageConfigService.cardHeight
+        return Math.round(Math.max(w * 0.70, Math.min(w * 1.5, w / aspect)))
+    }
+    // 模型行高度（视图布局口径）
+    function _modelHeights(n) {
+        const out = []
+        for (let i = 0; i < n; i++) {
+            const row = cardModel.get(i)
+            out.push(_cardHeightFor(row ? row.aspect : 0))
+        }
+        return out
+    }
+    // 组数组高度（矩形发布口径；groups 已按顺序表排序）
+    function _groupHeights(groups) {
+        const out = []
+        for (let i = 0; i < groups.length; i++)
+            out.push(_cardHeightFor(groups[i].aspect))
+        return out
     }
 
     // 悬停聚焦键（组 key）：悬停卡原位放大置顶，其余卡从原位向两侧退避
@@ -2975,6 +3017,7 @@ PanelWindow {
             root._layoutHeight = cards.height
             const lay = StageGeo.scrollLayout(cards.height, n, {
                 cardHeight: StageConfigService.cardHeight,
+                heights: _modelHeights(n),
                 spacing: StageConfigService.cardSpacing,
                 scroll: root.scrollOffset,
                 centerCards: StageConfigService.centerCards,
@@ -3007,7 +3050,7 @@ PanelWindow {
             return
         }
         // adaptive：等比缩小全显（无悬停冻结/无逐卡 dims，z 按 n−i）
-        const lay = _layout(n)
+        const lay = _layout(n, _modelHeights(n))
         const opts = {
             scaleAt: function() { return lay.scale },
             armedScale: function() { return lay.scale },
