@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Exercise real status-panels components on a private virtual KWin session."""
+"""Exercise real status panels, including rendered frames; --opengl tests GPU resize regressions."""
 import os
 from pathlib import Path
 import re
@@ -13,6 +13,7 @@ REPO = Path(__file__).resolve().parents[2]
 
 
 def main():
+    opengl = '--opengl' in sys.argv
     if '--private-bus' not in sys.argv:
         with tempfile.TemporaryDirectory(prefix='kos-status-panels-bus-') as directory:
             config = Path(directory) / 'bus.conf'
@@ -20,7 +21,7 @@ def main():
                 '<policy context="default"><allow send_destination="*"/>'
                 '<allow receive_sender="*"/><allow own="*"/></policy></busconfig>')
             subprocess.run(['dbus-run-session', '--config-file=' + str(config), '--',
-                            sys.executable, __file__, '--private-bus'], check=True)
+                            sys.executable, __file__, *sys.argv[1:], '--private-bus'], check=True)
         return
 
     with tempfile.TemporaryDirectory(prefix='kos-status-panels-') as directory:
@@ -41,11 +42,16 @@ def main():
             KOS_DATA_SOCKET=str(root / 'no-data.sock'), WAYLAND_DISPLAY='status-panels-test',
             DISPLAY='', QT_QPA_PLATFORM='wayland', QT_QUICK_BACKEND='software',
             QML_IMPORT_PATH=qml_path, QML2_IMPORT_PATH=qml_path)
+        if opengl:
+            env.pop('QT_QUICK_BACKEND', None)
+            env['QSG_RHI_BACKEND'] = 'opengl'
+        if '--scale-2' in sys.argv:
+            env['QT_SCALE_FACTOR'] = '2'
         with (root / 'kwin.log').open('w+') as log:
             compositor = subprocess.Popen(['kwin_wayland', '--virtual', '--width', '1280',
                 '--height', '900', '--output-count', '2', '--no-lockscreen', '--no-global-shortcuts', '--no-kactivities',
                 '--socket', 'status-panels-test'],
-                env=dict(env, QT_QPA_PLATFORM='offscreen', KWIN_COMPOSE='Q'), stdout=log, stderr=log)
+                env=dict(env, QT_QPA_PLATFORM='offscreen', KWIN_COMPOSE='O2' if opengl else 'Q'), stdout=log, stderr=log)
             try:
                 for _ in range(100):
                     if (root / 'runtime/status-panels-test').exists():
@@ -73,7 +79,8 @@ def main():
         assert not re.search(r'STATUS_PANELS_FAIL|ReferenceError|TypeError|'
             r'Cannot assign|Unable to assign|Binding loop|is not a type|is not a function', output), output
         count = re.search(r'STATUS_PANELS_PASS (\d+) checks', output).group(1)
-        print(f'PASS: {count} checks: secondary-screen panel placement, collapsed process sampling, details/reopen and confirmed power changes')
+        backend = 'OpenGL' if opengl else 'software'
+        print(f'PASS ({backend}): {count} checks: rendered summary/details/collapse, stable surface size, secondary-screen placement and confirmed power changes')
 
 
 if __name__ == '__main__':

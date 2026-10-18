@@ -12,8 +12,6 @@ import qs.desktop.modules.dock
 // A read-only dashboard for the active interface, independent of Wi-Fi setup.
 AnimatedPopupWindow {
     id: panel
-    // This popup sizes itself from a layout. Map its settled geometry directly;
-    // scaling a newly resized Wayland popup can leave a stretched first frame.
     animationEnabled: false
     property Item anchorItem: null
     readonly property bool connected: NetworkService.available
@@ -94,7 +92,14 @@ AnimatedPopupWindow {
         ? (anchorItem.QsWindow.window?.screen ?? ScreenLifecycle.activeScreen)
         : ScreenLifecycle.activeScreen
     implicitWidth: 348
-    implicitHeight: Math.min(content.implicitHeight + 40, Math.max(160, (targetScreen?.height ?? 900) - 80))
+    // Like ControlCenterPanel, keep the Wayland surface allocation stable while
+    // content unfolds. Resizing a mapped OpenGL popup can stop frame delivery.
+    // Only the visible card receives input; the unused envelope is click-through.
+    implicitHeight: Math.min(620, Math.max(160, (targetScreen?.height ?? 900) - 80))
+    readonly property real surfaceHeight: Math.min(content.implicitHeight + 40, height)
+    mask: interactive ? panelInputRegion : panelEmptyRegion
+    Region { id: panelInputRegion; item: panelSurface }
+    Region { id: panelEmptyRegion }
     color: "transparent"
     grabFocus: interactive
     PopupAnchorBinding { popupAnchor: panel.anchor; sourceItem: panel.anchorItem }
@@ -178,8 +183,10 @@ AnimatedPopupWindow {
         MouseArea { objectName: "traffic-outside-press"; anchors.fill: parent; onPressed: panel.close() }
     }
     Item {
+        id: panelSurface
         objectName: "traffic-panel-surface"
-        anchors.fill: parent
+        anchors { top: parent.top; left: parent.left; right: parent.right }
+        height: panel.surfaceHeight
     LiquidGlassPanel {
         id: surface
         anchors.fill: parent
