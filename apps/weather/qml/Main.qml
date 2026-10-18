@@ -1841,14 +1841,16 @@ KosApplicationWindow {
                                                                 ctx.beginPath()
                                                                 ctx.arc(c, c, 29, 0, 2 * Math.PI)
                                                                 ctx.fill()
-                                                                // 36 根刻度 r38→r44
+                                                                // 刻度环带：tile-cards WIND 卡（538 宽切片，卡宽 ~223）实测参考为密集细刻度带
+                                                                // r46→r57（0.206-0.256 卡宽比）；我方卡高 162 受 Gusts 行约束按高度缩放，
+                                                                // 带取 r38→r46，密度取每 3°（120 根，ref 糊化不可数，密度系外推）
                                                                 ctx.strokeStyle = "rgba(255,255,255,0.30)"
                                                                 ctx.lineWidth = 1
-                                                                for (var i = 0; i < 36; i++) {
-                                                                    var a = i * Math.PI / 18
+                                                                for (var i = 0; i < 120; i++) {
+                                                                    var a = i * Math.PI / 60
                                                                     ctx.beginPath()
                                                                     ctx.moveTo(c + Math.sin(a) * 38, c - Math.cos(a) * 38)
-                                                                    ctx.lineTo(c + Math.sin(a) * 44, c - Math.cos(a) * 44)
+                                                                    ctx.lineTo(c + Math.sin(a) * 46, c - Math.cos(a) * 46)
                                                                     ctx.stroke()
                                                                 }
                                                                 // N/E/S/W 字母 r≈50；N 用实测亮蓝，W/E/S 白 0.65
