@@ -1164,3 +1164,10 @@ VLC ISO 十段曲线 · 幅度减半|VLC ISO 10-band curve · Half strength
 验证失败|Verification failed
 （连续失败，已停止）| (stopped after repeated failures)
 ，可点击播放重试|; click Play to retry
+本地音乐|Local Music
+正在寻找或加载音源|Finding or loading an audio source
+网络音频|Network Audio
+未知来源|Unknown Source
+在线音乐|Online Music
+寻找可用音源超时，可点击播放重试|Source lookup timed out. Press play to retry.
+没有找到可用音源|No playable source found

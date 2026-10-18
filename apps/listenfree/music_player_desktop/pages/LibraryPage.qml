@@ -12,7 +12,7 @@ Item {
     property string filterText: ""
     property var catalog
     property bool albumGridLayout: false
-    readonly property bool gridLayout: section === "artists" || (section === "albums" && albumGridLayout)
+    readonly property bool gridLayout: section === "albums" && albumGridLayout
     property var tracksModel
     property string section: "albums"
     // The proxy owns only source row indexes. Keep it detached when this
@@ -63,7 +63,7 @@ Item {
         target: typeof backendSettingsController!=="undefined" ? backendSettingsController : null
         function onValueChanged(key,value){if(key==="list.rememberScrollPosition" && !value)page.selectedAlbumIndex=0}
     }
-    ScrollPosition { id: gridPosition; view: artistGrid; key: "library.grid."+page.section }
+    ScrollPosition { id: gridPosition; view: albumGrid; key: "library.grid."+page.section }
     function saveNavigationState() {
         return { albumIndex: selectedAlbumIndex, gridY: gridPosition.saveNavigationState(),
             songs: songLoader.item ? songLoader.item.saveNavigationState() : null }
@@ -100,8 +100,6 @@ Item {
     }
     readonly property var albums: page.visible && section === "albums"
                                   ? matching(catalog && catalog.albums ? catalog.albums : [], ["title"]) : []
-    readonly property var artists: page.visible && section === "artists"
-                                   ? matching(catalog && catalog.artists ? catalog.artists : [], ["name"]) : []
     readonly property bool usingTracksModel: section === "songs"
                                              && tracksModel !== null && tracksModel !== undefined
     readonly property var displayTracksModel: !usingTracksModel ? null
@@ -109,10 +107,8 @@ Item {
     readonly property var songs: section !== "songs" || usingTracksModel ? []
                                                                        : matching(catalog && catalog.songs ? catalog.songs : [], ["title", "artist", "album"])
     onAlbumsChanged: { restoreAlbumPosition(); Qt.callLater(syncAlbumWindow) }
-    readonly property string sectionTitle: section === "songs" ? qsTr("歌曲")
-                                                   : section === "artists" ? qsTr("艺术家") : qsTr("专辑")
+    readonly property string sectionTitle: section === "songs" ? qsTr("本地音乐") : qsTr("专辑")
     readonly property string sectionCount: section === "songs" ? (usingTracksModel ? displayTracksModel.count : songs.length) + qsTr(" 首歌曲")
-                                                   : section === "artists" ? artists.length + qsTr(" 位艺术家")
                                                    : albums.length + qsTr(" 张专辑")
 
     function albumOffset(relativeIndex) {
@@ -454,8 +450,8 @@ Item {
     }
 
     GridView {
-        id: artistGrid
-        objectName: page.section === "albums" ? "libraryAlbumGrid" : "libraryArtistGrid"
+        id: albumGrid
+        objectName: "libraryAlbumGrid"
         visible: page.gridLayout
         x: 24; y: 100; width: parent.width-48; height: parent.height-y
         bottomMargin: 96
@@ -471,30 +467,30 @@ Item {
         displayMarginBeginning: cellHeight
         displayMarginEnd: cellHeight
         clip: true; boundsBehavior: Flickable.StopAtBounds
-        model: page.gridLayout ? (page.section === "artists" ? page.artists : page.albums) : []
+        model: page.gridLayout ? page.albums : []
         delegate: Item {
-            id: artistCard
+            id: albumCard
             required property int index
             required property var modelData
-            width: artistGrid.cellWidth; height: artistGrid.cellHeight
+            width: albumGrid.cellWidth; height: albumGrid.cellHeight
             ArtworkTile {
-                id: artistPortrait
-                objectName: (page.section === "artists" ? "libraryArtistCard" : "libraryAlbumCard") + artistCard.index
+                id: albumArtwork
+                objectName: "libraryAlbumCard" + albumCard.index
                 anchors.horizontalCenter: parent.horizontalCenter
-                size: artistGrid.tileSize
+                size: albumGrid.tileSize
                 portrait: false
-                title: (page.section === "artists" ? artistCard.modelData.name : artistCard.modelData.title) || ""
-                subtitle: artistCard.modelData.subtitle || ""
-                artworkSource: artistCard.modelData.artwork || ""
-                onActivated: page.prepareCollectionTransition(page.section === "artists" ? "Artist" : "Album",title,
-                    AppTheme.accent,artistPortrait,artistPortrait.artworkItem,artistPortrait.artworkSource,artistCard.modelData)
+                title: albumCard.modelData.title || ""
+                subtitle: albumCard.modelData.subtitle || ""
+                artworkSource: albumCard.modelData.artwork || ""
+                onActivated: page.prepareCollectionTransition("Album",title,
+                    AppTheme.accent,albumArtwork,albumArtwork.artworkItem,albumArtwork.artworkSource,albumCard.modelData)
             }
         }
     }
     Text {
         objectName: "localSearchEmpty"
         anchors.centerIn: parent
-        visible: page.filterText.trim().length > 0 && (page.section === "songs" ? (page.usingTracksModel ? page.displayTracksModel.count === 0 : !page.songs.length) : page.section === "artists" ? !page.artists.length : !page.albums.length)
+        visible: page.filterText.trim().length > 0 && (page.section === "songs" ? (page.usingTracksModel ? page.displayTracksModel.count === 0 : !page.songs.length) : !page.albums.length)
         text: qsTr("没有找到“") + page.filterText + "”"
         color: AppTheme.textSecondary; font.family: AppTheme.fontFamily; font.pixelSize: 16
     }

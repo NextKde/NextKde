@@ -370,7 +370,7 @@ inline constexpr char settingsSchema[] = R"json({
   },
   "playback.quality": {
     "category": "playback",
-    "default": "flac",
+    "default": "128k",
     "values": [
       "flac",
       "320k",

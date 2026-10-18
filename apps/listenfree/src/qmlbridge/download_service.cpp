@@ -2,6 +2,7 @@
 #include <cstdio>
 #include "online/platform_catalog.h"
 #include "download_service.h"
+#include "online/track_identity.h"
 #include "online/kuwo_lyrics.h"
 #include <QDateTime>
 #include <QCoreApplication>
@@ -223,12 +224,12 @@ void DownloadService::add(const QVariantList &tracks, const QString &quality) {
     return;
   }
   for (const auto &value : tracks) {
-    auto track = value.toMap();
+    auto track = online::identifiedTrack(value.toMap());
     if (track.value("rid").toString().isEmpty())
       continue;
     bool duplicate = false;
     for (const auto &t : jobs_)
-      if (t->data.value("track").toMap().value("trackId") == track.value("trackId") &&
+      if (online::trackUid(t->data.value("track").toMap()) == online::trackUid(track) &&
           t->data.value("state") != "completed" &&
           t->data.value("state") != "cancelled")
         duplicate = true;

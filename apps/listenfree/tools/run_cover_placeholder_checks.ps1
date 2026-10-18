@@ -4,7 +4,7 @@ $fixture = Join-Path $repo 'build/cover-placeholder-check'
 $components = Join-Path $fixture 'Components'
 New-Item -ItemType Directory -Force $components | Out-Null
 New-Item -ItemType Directory -Force (Join-Path $fixture 'assets/icons') | Out-Null
-foreach ($name in @('CoverArt', 'AppTheme', 'IconGlyph', 'SongRow')) {
+foreach ($name in @('CoverArt', 'AppTheme', 'IconGlyph', 'LoadingIndicator','TrackTitle','SongRow')) {
     Copy-Item -LiteralPath (Join-Path $repo "music_player_desktop/components/$name.qml") -Destination $components -Force
 }
 $shaderDirectory=Join-Path $fixture 'shaders'
@@ -16,7 +16,7 @@ $fixtureCover=Join-Path $components 'CoverArt.qml'
 $coverText=[IO.File]::ReadAllText($fixtureCover).Replace('qrc:/shaders/cover-rounded.frag.qsb','../shaders/cover-rounded.frag.qsb')
 [IO.File]::WriteAllText($fixtureCover,$coverText,[Text.UTF8Encoding]::new($false))
 Copy-Item -Path (Join-Path $repo 'music_player_desktop/assets/icons/*.svg') -Destination (Join-Path $fixture 'assets/icons') -Force
-Set-Content -LiteralPath (Join-Path $components 'qmldir') -Value "singleton AppTheme 1.0 AppTheme.qml`nCoverArt 1.0 CoverArt.qml`nIconGlyph 1.0 IconGlyph.qml`nSongRow 1.0 SongRow.qml"
+Set-Content -LiteralPath (Join-Path $components 'qmldir') -Value "singleton AppTheme 1.0 AppTheme.qml`nCoverArt 1.0 CoverArt.qml`nIconGlyph 1.0 IconGlyph.qml`nLoadingIndicator 1.0 LoadingIndicator.qml`nTrackTitle 1.0 TrackTitle.qml`nSongRow 1.0 SongRow.qml"
 Copy-Item -LiteralPath (Join-Path $repo 'tests/qml/tst_cover_placeholder.qml') -Destination $fixture -Force
 Add-Type -AssemblyName System.Drawing
 foreach ($entry in @(@('transparent', 1, [Drawing.Color]::Transparent), @('opaque', 16, [Drawing.Color]::FromArgb(186,64,80)))) {

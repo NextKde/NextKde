@@ -1,3 +1,4 @@
+#include "online/track_identity.h"
 #include <QCoreApplication>
 #include "bilibili_client.h"
 #include <QCryptographicHash>
@@ -155,13 +156,13 @@ QVariantMap BilibiliClient::trackFromPage(const QJsonObject& view,const QJsonObj
     const QString title=plain((count>1?page.value("part"):view.value("title")).toString());
     const auto ms=page.value("duration").toVariant().toLongLong()*1000;
     const QString rid=bvid+"_"+cid;
-    return {{"source","bili"},{"trackId","bili:"+rid},{"rid",rid},{"bvid",bvid},{"cid",cid},
+    return identifiedTrack({{"source","bili"},{"trackId","bili:"+rid},{"rid",rid},{"bvid",bvid},{"cid",cid},
         {"aid",view.value("aid").toVariant()},{"page",page.value("page").toInt(1)},{"pageCount",qMax(1,count)},
         {"videoTitle",plain(view.value("title").toString())},{"title",title},{"album",""},
         {"artist",plain(view.value("owner").toObject().value("name").toString())},
         {"artwork",cover(view.value("pic").toString())},{"durationMs",ms},
         {"duration",QString("%1:%2").arg(ms/60000).arg(ms/1000%60,2,10,QChar('0'))},
-        {"webUrl","https://www.bilibili.com/video/"+bvid+"?p="+QString::number(page.value("page").toInt(1))}};
+        {"webUrl","https://www.bilibili.com/video/"+bvid+"?p="+QString::number(page.value("page").toInt(1))}});
 }
 QVariantMap BilibiliClient::collectionFromView(const QJsonObject& view) {
     const QString bvid=view.value("bvid").toString(); if(!validId(bvid))return {};

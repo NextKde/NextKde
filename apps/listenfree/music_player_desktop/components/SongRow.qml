@@ -48,9 +48,9 @@ Rectangle {
         return favorites.isTrackLiked(track)
     }
     readonly property bool local: String(track.localPath || "").length > 0 || String(track.source || "").toLowerCase() === "local"
-    readonly property string originLabel: track.originKind === "lx"
-        ? qsTr("洛雪 · ") + (track.originSourceName || qsTr("已移除音源"))
-        : ({kw: qsTr("酷我"), kg: qsTr("酷狗"), tx: qsTr("QQ 音乐"), wy: qsTr("网易云"), mg: qsTr("咪咕"), bili: qsTr("哔哩哔哩")})[track.source] || ""
+    readonly property string originLabel: AppTheme.musicLocation(track)
+    readonly property bool waiting: current && playerController
+        && (playerController.state === "Loading" || playerController.state === "Buffering")
     readonly property bool hovered: hover.hovered
     readonly property real numberWidth: compact ? 28 : 38
     readonly property real coverSize: compact ? 34 : 40
@@ -107,8 +107,8 @@ Rectangle {
     Column {
         objectName: "songRowTitle"
         x: row.titleX; width: row.titleWidth; anchors.verticalCenter: parent.verticalCenter; spacing: 4
-        Text { width: parent.width; text: row.track.title || qsTr("未知歌曲"); color: row.primaryText; font.family: AppTheme.fontFamily; font.pixelSize: row.compact ? 12 : 14; font.weight: Font.Medium; elide: Text.ElideRight }
-        Text { width: parent.width; text: (row.track.artist || qsTr("未知艺术家")) + (row.originLabel ? " · " + row.originLabel : "") + (row.compact && row.track.album ? " · " + row.track.album : ""); color: row.secondaryText; font.family: AppTheme.fontFamily; font.pixelSize: 11; elide: Text.ElideRight }
+        TrackTitle { width: parent.width; height: implicitHeight; waiting: row.waiting; text: row.track.title || qsTr("未知歌曲"); color: row.primaryText; font.family: AppTheme.fontFamily; font.pixelSize: row.compact ? 12 : 14; font.weight: Font.Medium }
+        Text { width: parent.width; text: (row.originLabel ? row.originLabel + " · " : "") + (row.track.artist || qsTr("未知艺术家")) + (row.compact && row.track.album ? " · " + row.track.album : ""); color: row.secondaryText; font.family: AppTheme.fontFamily; font.pixelSize: 11; elide: Text.ElideRight }
     }
     Row {
         id: actions
