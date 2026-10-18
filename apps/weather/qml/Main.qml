@@ -2735,8 +2735,18 @@ KosApplicationWindow {
                                     }
 
                                     Flickable {
+                                        id: hourlyFlick
                                         Layout.fillWidth: true
                                         Layout.preferredHeight: 142
+                                        // ref-main 逐小时行为整列满卡（列距 40.4@814，末列墨右缘距卡缘 ~8px，无半列字形）。
+                                        // 旧固定 pitch 60（delegate 50 + spacing 10）在现视口宽下呈 6.45 列，第 7 列被
+                                        // 卡缘截断出半列 "0" 残影。改为按视口整除自适应：列数 = floor((宽+10)/60)
+                                        // （10 = 最小间距，向下列数取整），pitch = 宽/列数，delegate 保持 ref 的
+                                        // delegate/pitch ≈ 5/6 比例，间距 = 余量均摊 → 行恰好满宽，静止时右缘恒为整列。
+                                        readonly property int hourlyColumnCount: Math.max(3, Math.floor((width + 10) / 60))
+                                        readonly property real hourlyPitch: width / hourlyColumnCount
+                                        readonly property real hourlyDelegateWidth: hourlyPitch * 5 / 6
+                                        readonly property real hourlySpacing: (width - hourlyColumnCount * hourlyDelegateWidth) / Math.max(1, hourlyColumnCount - 1)
                                         contentWidth: hourlyRow.implicitWidth
                                         contentHeight: height
                                         boundsBehavior: Flickable.StopAtBounds
@@ -2825,8 +2835,8 @@ KosApplicationWindow {
                                                 for (var i = 0; i < root.upcomingHours.length; ++i) {
                                                     var t = root.number(root.upcomingHours[i], "temperature", NaN)
                                                     if (isFinite(t))
-                                                        // 与委托 width 50 / Row spacing 10 联动：中心 x = 25，列距 60
-                                                        pts.push({ x: 25 + i * 60, t: t })
+                                                        // 与 delegate width / Row spacing 联动（hourlyPitch 自适应）：中心 x = delegateWidth/2，列距 hourlyPitch
+                                                        pts.push({ x: hourlyFlick.hourlyDelegateWidth / 2 + i * hourlyFlick.hourlyPitch, t: t })
                                                 }
                                                 if (pts.length < 2)
                                                     return
@@ -2923,7 +2933,7 @@ KosApplicationWindow {
                                         Row {
                                             id: hourlyRow
                                             height: parent.height - 12
-                                            spacing: 10
+                                            spacing: hourlyFlick.hourlySpacing
 
                                             Repeater {
                                                 model: root.upcomingHours
@@ -2939,8 +2949,8 @@ KosApplicationWindow {
                                                         return current.length > 0
                                                             && String(root.value(hourlyCard.modelData, "time", "")).substring(0, 13) === current
                                                     }
-                                                    // ref-main 实测小时列中心距 41px@814 × 1.4598 ≈ 60px（含 Row spacing 10）
-                                                    width: 50
+                                                    // ref-main 逐小时 6 列满卡（列距 40.4@814）；列距随视口自适应（hourlyPitch），整列满宽杜绝半列残影
+                                                    width: hourlyFlick.hourlyDelegateWidth
                                                     height: hourlyRow.height
                                                     opacity: 0
                                                     transform: Translate { id: entranceShift; y: 14 }
