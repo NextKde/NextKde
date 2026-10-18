@@ -1711,6 +1711,8 @@ KosApplicationWindow {
                                         Layout.fillHeight: true
                                         visible: !backend.ready
                                         symbol: backend.loading ? "↻" : "☁"
+                                        titleColor: root.skyText
+                                        descriptionColor: root.skyTextMuted
                                         title: backend.loading
                                             ? qsTr("Loading the forecast") : qsTr("No forecast available")
                                         description: backend.connected
@@ -2865,6 +2867,8 @@ KosApplicationWindow {
                                         Layout.preferredHeight: 130
                                         visible: backend.daily.length === 0
                                         symbol: "☂"
+                                        titleColor: root.skyText
+                                        descriptionColor: root.skyTextMuted
                                         title: qsTr("Daily forecast unavailable")
                                         description: qsTr("Cached current conditions can still be used.")
                                     }

@@ -11,6 +11,14 @@ Item {
     property string actionText: ""
     property bool actionEnabled: true
 
+    // Optional palette overrides; defaults keep the original light-panel
+    // look (music/todo). Weather passes sky-text colors for legibility on
+    // the full-window sky background (empty-state title measured near-black
+    // (35,38,41) on sky (57,126,195) — unreadable).
+    property color symbolColor: AppTheme.withAlpha(AppTheme.accent, 0.86)
+    property color titleColor: AppTheme.text
+    property color descriptionColor: AppTheme.mutedText
+
     signal actionTriggered()
 
     implicitWidth: 420
@@ -25,7 +33,7 @@ Item {
         Label {
             Layout.alignment: Qt.AlignHCenter
             text: root.symbol
-            color: AppTheme.withAlpha(AppTheme.accent, 0.86)
+            color: root.symbolColor
             font.pixelSize: 48
             Accessible.name: root.title
         }
@@ -33,7 +41,7 @@ Item {
         Label {
             Layout.fillWidth: true
             text: root.title
-            color: AppTheme.text
+            color: root.titleColor
             horizontalAlignment: Text.AlignHCenter
             wrapMode: Text.WordWrap
             font.pixelSize: 21
@@ -43,7 +51,7 @@ Item {
         Label {
             Layout.fillWidth: true
             text: root.description
-            color: AppTheme.mutedText
+            color: root.descriptionColor
             horizontalAlignment: Text.AlignHCenter
             wrapMode: Text.WordWrap
             lineHeight: 1.22
