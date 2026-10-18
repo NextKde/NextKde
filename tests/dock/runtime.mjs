@@ -588,6 +588,7 @@ const cases = {
                 .replace(/^    WlrLayershell\.namespace:.*\n/m, "")
                 .replace(/^    exclusionMode:.*\n/m, "")
                 .replace(/^    WlrLayershell\.layer:[\s\S]*?WlrLayer\.Top\n/m, "")
+                .replace(/^    WlrLayershell\.keyboardFocus:[\s\S]*?: WlrKeyboardFocus\.None\n/m, "")
                 .replace("    anchors: ({", "    property var testAnchors: ({")
                 .replace(/^    margins \{.*\}\n/m, "")
                 .replace("    exclusiveZone:", "    property real exclusiveZone:")
@@ -606,13 +607,23 @@ const cases = {
             module("dock", {
                 DockWindow: window,
                 ConfigService: object(`property string dockStyle: "floating"; property string visibilityMode: "always"
-                    property bool showRevealIndicator: true
+                    property bool showRevealIndicator: true; property real effectiveHoverScale: 1
+                    property real effectiveHoverLift: 0
                     property bool ready: true; property int barHeight: 35`),
                 DockContainer: `import QtQuick
         Item {
             property var targetScreen; property real surfaceOriginX; property real surfaceOriginY
             property Component leadingAccessory; property Component trailingAccessory
             property bool clockInInfoCarousel; property bool pointerInside: false; property bool editMode: false
+            property bool launchAnimationVisible; property Item nameLabelHost; property bool nameLabelsEnabled
+            property Item pointerInputItem; property Item pointerEventRoot
+            property bool statusCollectionExpanded: false; property bool statusDragActive: false
+            property bool accessoryInteractionActive: false
+            property real iconSize: 44; property real activeBackgroundGap: 4
+            property real magnificationRadius: 60; property real hoverGlassShift: 0
+            readonly property real computedDockHeight: Math.min(width, height)
+            readonly property real restingComputedWidth: width
+            function closeStatusCollectionOutside(x, y) {}
             property var draggedPinnedLoader: null; property real pillRadius: 28
             readonly property real surfaceRadius: ConfigService.dockStyle === "taskbar" ? 0 : pillRadius
             width: 56; height: 900
@@ -632,12 +643,16 @@ const cases = {
         }`,
                 DockModelService: object("property var activeDockPopup: null; signal urgentWindowAppeared()"),
                 WindowService: object("property bool providerReady: true"),
-                DockAnimation: object("property int smartHideUrgentRevealMs: 2200"),
+                DockAnimation: object(`property int smartHideUrgentRevealMs: 2200
+                    property real launchBounceHeightRatio: 0.5; property real nameLabelGap: 8
+                    property real nameLabelMaximumWidth: 160; property real nameLabelMaximumHeight: 24`),
                 ThemeService: object('property color backgroundColor: "black"'),
                 DockRevealHandle: readFileSync(join(repository, "shell/desktop/modules/dock/DockRevealHandle.qml"), "utf8"),
             });
             copyFileSync(join(repository, "shell/desktop/modules/dock/DockRevealGeometry.mjs"),
                 join(directory, "desktop/modules/dock/DockRevealGeometry.mjs"));
+            copyFileSync(join(repository, "shell/desktop/modules/dock/DockMagnification.mjs"),
+                join(directory, "desktop/modules/dock/DockMagnification.mjs"));
             const glass = readFileSync(join(repository, "tests/dock/fixtures/LiquidGlassPanel.qml"), "utf8")
                 .replace("import QtQuick", "import QtQuick\nimport Quickshell")
                 .replace("property var blurRegion: null", "property Region blurRegion: Region {}");
