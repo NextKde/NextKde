@@ -237,7 +237,8 @@ ApplicationWindow {
             subtitle: I18n.tr("Stage scheduling")
         },
         { subtitle: I18n.tr("Windows and animations") },
-        { subtitle: I18n.tr("Notifications") }
+        { subtitle: I18n.tr("Notifications") },
+        { subtitle: I18n.tr("Power") }
     ]
 
     // Shown only while a development session drives this window. Every value on
@@ -535,6 +536,14 @@ ApplicationWindow {
 
                         SidebarEntry {
                             Layout.fillWidth: true
+                            pageIndex: 13
+                            label: I18n.tr("Power")
+                            navSymbol: "ϟ"
+                            navTint: "#34c759"
+                        }
+
+                        SidebarEntry {
+                            Layout.fillWidth: true
                             pageIndex: 12
                             label: I18n.tr("Notifications")
                             navSymbol: "●"
@@ -709,6 +718,17 @@ ApplicationWindow {
                     // items -- so without it a page the user has left keeps its
                     // whole height as a blank slab between the title and the
                     // page actually being shown.
+                    Loader {
+                        Layout.fillWidth: true
+                        active: window.displayedPage === 13
+                        visible: active
+                        sourceComponent: Pages.PowerSettingsPage {
+                            colors: window.notificationTheme
+                            materialForm: window.materialForm
+                            backend: typeof powerSettings !== "undefined" ? powerSettings : null
+                        }
+                    }
+
                     Loader {
                         Layout.fillWidth: true
                         active: window.displayedPage === 12

@@ -643,6 +643,7 @@ void PlatformServer::handleRequest(QLocalSocket *socket, const QJsonObject &requ
         || handleKWin(socket, request) || handleAppMenu(socket, request)
         || handleInput(socket, request)
         || handleAudioOperation(socket, request)
+        || handlePowerOperation(socket, request)
         || handleNetworkOperation(socket, request)
         || handleBluetoothOperation(socket, request)
         || handleDisplayOperation(socket, request)

@@ -152,6 +152,7 @@ private:
     bool handleAppMenu(QLocalSocket *socket, const QJsonObject &request);
     bool handleInput(QLocalSocket *socket, const QJsonObject &request);
     bool handleAudioOperation(QLocalSocket *socket, const QJsonObject &request);
+    bool handlePowerOperation(QLocalSocket *socket, const QJsonObject &request);
     bool handleNetworkOperation(QLocalSocket *socket, const QJsonObject &request);
     bool handleBluetoothOperation(QLocalSocket *socket, const QJsonObject &request);
     bool handleDisplayOperation(QLocalSocket *socket, const QJsonObject &request);

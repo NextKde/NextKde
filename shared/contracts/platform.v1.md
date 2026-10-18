@@ -196,3 +196,11 @@ defaults is outside the light/dark toggle contract.
 launcher as `application.launch`. A desktop-file path is resolved and parsed by
 `KService`; optional file arguments are passed as URLs. Launch failure is
 reported through the common response envelope.
+
+### Status panel operations
+
+- `network.applications` (read): returns `{scope: "user-tcp", sockets: [{id, name, pid, rxBytes, txBytes}]}` from `ss -tinpeOH`. Visible-owner TCP counters are sampled per socket before grouping by process name. Local proxy connections may count the same traffic twice. UDP/QUIC, inaccessible owners, and connections closed between samples are excluded. These totals are independent of interface totals.
+- `power.profiles` (read): returns `{profiles, activeProfile, degraded}` from `powerprofilesctl list`.
+- `power.profile.set` (write): accepts `{profile: "power-saver" | "balanced" | "performance"}`. System authorization is retained; success is followed by a readback before confirming the selected profile.
+
+The optional `ss` and `powerprofilesctl` helpers must be installed for these operations. Missing helpers report unavailable states. The independent Power settings page also uses `powerprofilesctl` and observes system D-Bus profile changes; it is available without a battery or running shell.

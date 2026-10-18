@@ -1,3 +1,4 @@
+#include "PowerSettings.h"
 #include "CacheMaintenance.h"
 #include "SettingsBridge.h"
 #include "SettingsRuntime.h"
@@ -34,9 +35,11 @@ int main(int argc, char* argv[])
 
     SettingsBridge bridge;
     WindowSettings windowSettings;
+    PowerSettings powerSettings;
     QQmlApplicationEngine engine;
     engine.rootContext()->setContextProperty(QStringLiteral("settingsBridge"), &bridge);
     engine.rootContext()->setContextProperty(QStringLiteral("windowSettings"), &windowSettings);
+    engine.rootContext()->setContextProperty(QStringLiteral("powerSettings"), &powerSettings);
 
     const SettingsEntry entry
         = chooseSettingsEntry(bridge.isDevelopmentSession(), bridge.sessionShellDir());

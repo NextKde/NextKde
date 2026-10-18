@@ -10,6 +10,8 @@ import qs.desktop.modules.common
 Item {
     id: root
 
+    signal panelToggleRequested()
+    property bool panelOpen: false
     property bool dockHosted: false
     property string dockEdge: "bottom"
     property bool verticalDock: false
@@ -97,11 +99,13 @@ Item {
         id: hoverArea
         anchors.fill: parent
         hoverEnabled: true
+        cursorShape: Qt.PointingHandCursor
+        onClicked: root.panelToggleRequested()
     }
 
     StatusTooltip {
         anchorItem: root
-        shown: hoverArea.containsMouse && batteryDevice.ready
+        shown: hoverArea.containsMouse && batteryDevice.ready && !root.panelOpen
         dockHosted: root.dockHosted
         dockEdge: root.dockEdge
         primaryText: root.isCharging

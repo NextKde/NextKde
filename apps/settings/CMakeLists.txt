@@ -22,6 +22,8 @@ qt_add_executable(kos-settings
     src/WallpaperLibrary.cpp
     src/SettingsRuntime.cpp
     src/CacheMaintenance.cpp
+    src/PowerSettings.cpp
+    src/PowerSettings.h
     src/WindowSettings.cpp
 )
 target_include_directories(kos-settings PRIVATE
@@ -70,6 +72,12 @@ if(BUILD_TESTING)
     add_test(NAME kos-settings.backend-modules COMMAND kos-settings-backend-test)
     set_tests_properties(kos-settings.backend-modules PROPERTIES LABELS logic TIMEOUT 20)
 
+    add_executable(kos-power-settings-test tests/power/backend.cpp src/PowerSettings.cpp src/PowerSettings.h)
+    target_include_directories(kos-power-settings-test PRIVATE src)
+    target_link_libraries(kos-power-settings-test PRIVATE Qt6::Core Qt6::DBus)
+    add_test(NAME kos-settings.power-config COMMAND kos-power-settings-test)
+    set_tests_properties(kos-settings.power-config PROPERTIES LABELS logic TIMEOUT 20)
+
     add_executable(kos-window-settings-test tests/windows/config.cpp src/WindowSettings.cpp)
     target_include_directories(kos-window-settings-test PRIVATE src)
     target_link_libraries(kos-window-settings-test PRIVATE Qt6::Core Qt6::DBus KF6::ConfigCore)
@@ -101,6 +109,10 @@ if(BUILD_TESTING)
         set_tests_properties(kos-settings.page-contracts PROPERTIES
             ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_QUICK_BACKEND=software"
             LABELS ui TIMEOUT 30)
+        add_test(NAME kos-settings.power-interactions
+            COMMAND ${KOS_QMLTESTRUNNER_EXECUTABLE} -input ${CMAKE_CURRENT_SOURCE_DIR}/tests/power/tst_power.qml)
+        set_tests_properties(kos-settings.power-interactions PROPERTIES
+            ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_QUICK_BACKEND=software" LABELS ui TIMEOUT 20)
         add_test(NAME kos-settings.window-interactions
             COMMAND ${KOS_QMLTESTRUNNER_EXECUTABLE}
                 -input ${CMAKE_CURRENT_SOURCE_DIR}/tests/windows/tst_windows.qml)
