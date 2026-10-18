@@ -35,21 +35,19 @@ KosWorkspaceDialog {
     // Labels are not hardcoded: standardButtons is still declared on the
     // dialog, and the never-rendered DialogButtonBox below instantiates Qt's
     // platform-localized Save/Cancel buttons, so the bars read exactly as the
-    // standard buttons did. A DialogButtonBox nested inside a footer Item is
-    // not auto-wired to the dialog (only a DialogButtonBox used directly *as*
-    // the footer is), so accept/reject are called explicitly here — and the
-    // button texts, which do not exist until the tree is complete, are copied
-    // in onCompleted rather than bound.
-    property string saveLabel: qsTr("Save")
-    property string cancelLabel: qsTr("Cancel")
-
-    Component.onCompleted: {
-        const save = labelSource.standardButton(Dialog.Save)
-        const cancel = labelSource.standardButton(Dialog.Cancel)
-        if (save)
-            saveLabel = save.text
-        if (cancel)
-            cancelLabel = cancel.text
+    // standard buttons did. The labels are bound, not copied once: reading
+    // `count` re-evaluates the binding as soon as the box finishes creating
+    // its standard buttons (no onCompleted creation-order fragility), and the
+    // button `text` dependency keeps the labels live if the platform strings
+    // change (locale hot-switch). The qsTr strings are only the
+    // pre-instantiation fallback.
+    readonly property string saveLabel: {
+        const b = labelSource.count > 0 ? labelSource.standardButton(Dialog.Save) : null
+        return b ? b.text : qsTr("Save")
+    }
+    readonly property string cancelLabel: {
+        const b = labelSource.count > 0 ? labelSource.standardButton(Dialog.Cancel) : null
+        return b ? b.text : qsTr("Cancel")
     }
 
     background: KosSurface {
