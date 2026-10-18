@@ -1548,7 +1548,7 @@ KosApplicationWindow {
 
                         Label {
                             Layout.alignment: Qt.AlignHCenter
-                            text: root.locationDetail(backend.location).toUpperCase()
+                            text: qsTr("My Location")
                             visible: text.length > 0
                             color: root.skyTextMuted
                             font.pixelSize: 11
