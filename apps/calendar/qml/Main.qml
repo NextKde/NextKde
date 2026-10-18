@@ -2824,7 +2824,37 @@ KosApplicationWindow {
                                                             ? root.itemsForDate(yearDayCell.cellDate).length
                                                             : 0
                                                     Layout.fillWidth: true
-                                                    Layout.preferredHeight: 18
+                                                    Layout.preferredHeight: 20
+
+                                                    // P1-9 (A9): the year cell was
+                                                    // pointer-only; add keyboard
+                                                    // focus plus an accessible
+                                                    // identity (date + item count).
+                                                    activeFocusOnTab: yearDayCell.inMonth
+                                                    Keys.onReturnPressed: yearDayCell.activate()
+                                                    Keys.onSpacePressed: yearDayCell.activate()
+                                                    function activate() {
+                                                        if (yearDayCell.inMonth)
+                                                            root.selectedDate = yearDayCell.cellDate
+                                                    }
+                                                    Accessible.role: yearDayCell.inMonth
+                                                        ? Accessible.ListItem : Accessible.NoRole
+                                                    Accessible.name: yearDayCell.inMonth
+                                                        ? qsTr("%1; %2 items").arg(
+                                                              AppTheme.formatDate(cellDate, Locale.LongFormat)).arg(eventCount)
+                                                        : ""
+                                                    Accessible.focusable: true
+                                                    Accessible.onPressAction: yearDayCell.activate()
+
+                                                    // Focus ring only: resting
+                                                    // cell keeps its plain look.
+                                                    Rectangle {
+                                                        anchors.fill: parent
+                                                        color: "transparent"
+                                                        border.color: root.tahoe.accent
+                                                        border.width: 1
+                                                        visible: yearDayCell.activeFocus
+                                                    }
 
                                                     Rectangle {
                                                         anchors.centerIn: parent
@@ -2857,7 +2887,7 @@ KosApplicationWindow {
                                                         color: yearDayCell.isToday || yearDayCell.isSelected
                                                             ? "#FFFFFF"
                                                             : root.tahoe.labelPrimary
-                                                        font.pixelSize: 9
+                                                        font.pixelSize: 10
                                                         font.weight: yearDayCell.isToday || yearDayCell.isSelected
                                                             ? Font.DemiBold : Font.Normal
                                                     }
