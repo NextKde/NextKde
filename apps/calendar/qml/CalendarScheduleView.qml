@@ -914,6 +914,11 @@ Pane {
                                 text: root.nowLabel
                                 color: "#FFFFFF"
                                 font.pixelSize: 11
+                                // C3: DemiBold matches the ref's bold capsule
+                                // and moves white-on-todayRed onto the 3:1
+                                // large-text threshold (same as the 12px
+                                // DemiBold day numbers).
+                                font.weight: Font.DemiBold
                             }
                         }
 
