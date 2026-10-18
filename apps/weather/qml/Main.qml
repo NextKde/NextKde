@@ -1992,16 +1992,16 @@ KosApplicationWindow {
                                                                 ctx.moveTo(0, -30)
                                                                 ctx.lineTo(0, -40)
                                                                 ctx.stroke()
-                                                                // 来向侧圆头短针（tile-cards WIND 卡 538 切片实测：气球形
-                                                                // 圆头 ⌀~14@卡宽223 位于刻度带外缘 r~58 + 细杆向心 r51→36
-                                                                // 宽 2-3px；我方卡高 162 竖向受限，与刻度带 r38-46 同族缩放
-                                                                // ——圆头 r5 中心 r46=带外缘，杆 r30→41，内端 r30 让位环心单位文字）
+                                                                // 来向侧圆头短针（tile-cards WIND 卡 538 切片原生分辨率实测：头部圆
+                                                                // ⌀~10@卡宽223 圆心在刻度带中线 r50.5（带 46-57），不出带外缘；细杆
+                                                                // r27.5→45.5 宽 2-3px。按带我 38-46 同族映射（×0.727）→ 圆头 r4.3
+                                                                // 圆心 r42=带中线、不出带外缘；杆 r24.5→38，内端让位环心单位文字）
                                                                 ctx.beginPath()
-                                                                ctx.moveTo(0, 30)
-                                                                ctx.lineTo(0, 41)
+                                                                ctx.moveTo(0, 24.5)
+                                                                ctx.lineTo(0, 38)
                                                                 ctx.stroke()
                                                                 ctx.beginPath()
-                                                                ctx.arc(0, 46, 5, 0, 2 * Math.PI)
+                                                                ctx.arc(0, 42, 4.3, 0, 2 * Math.PI)
                                                                 ctx.fill()
                                                                 ctx.beginPath()
                                                                 ctx.moveTo(0, -46)      // tip
