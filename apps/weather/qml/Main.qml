@@ -1876,11 +1876,17 @@ KosApplicationWindow {
                                                                 ctx.moveTo(0, -30)
                                                                 ctx.lineTo(0, -40)
                                                                 ctx.stroke()
-                                                                // 来向侧短尾针：r30→r38，止于刻度环内缘，平头无箭头
+                                                                // 来向侧圆头短针（tile-cards WIND 卡 538 切片实测：气球形
+                                                                // 圆头 ⌀~14@卡宽223 位于刻度带外缘 r~58 + 细杆向心 r51→36
+                                                                // 宽 2-3px；我方卡高 162 竖向受限，与刻度带 r38-46 同族缩放
+                                                                // ——圆头 r5 中心 r46=带外缘，杆 r30→41，内端 r30 让位环心单位文字）
                                                                 ctx.beginPath()
                                                                 ctx.moveTo(0, 30)
-                                                                ctx.lineTo(0, 38)
+                                                                ctx.lineTo(0, 41)
                                                                 ctx.stroke()
+                                                                ctx.beginPath()
+                                                                ctx.arc(0, 46, 5, 0, 2 * Math.PI)
+                                                                ctx.fill()
                                                                 ctx.beginPath()
                                                                 ctx.moveTo(0, -46)      // tip
                                                                 ctx.lineTo(-3, -41)
