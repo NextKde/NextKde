@@ -522,8 +522,17 @@ Pane {
                         // This is a spec/HIG-only design call: the ref
                         // (refs/macos-calendar.png) never exceeds 3 chips in any of its 7
                         // columns, so there is NO ref anchor for the overflow form.
-                        readonly property int allDayOverflow: Math.max(0,
-                            allDayColumn.columnItems.length - root.allDayMaxRows + 1)
+                        // P0-1: overflow only when the items truly do not fit the
+                        // band's slots. length == allDayBandRows must render every
+                        // chip — the old `length - maxRows + 1` burned a slot on a
+                        // "+1" that counted nothing. When it genuinely overflows,
+                        // the "+N" row takes the last slot, so N (the hidden count
+                        // per the +N row's own contract) is length - visible chips
+                        // = length - (bandRows - 1).
+                        readonly property int allDayOverflow:
+                            allDayColumn.columnItems.length > root.allDayBandRows
+                                ? allDayColumn.columnItems.length - root.allDayBandRows + 1
+                                : 0
                         readonly property int allDayVisible:
                             root.allDayBandRows - (allDayOverflow > 0 ? 1 : 0)
                         // R072: hug the rows instead of filling the band. A
