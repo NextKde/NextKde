@@ -621,8 +621,13 @@ KosWorkspaceDialog {
                         : qsTr("Changes to the title or date will be reflected in both apps.")
                     visible: linkTodoCheck.checked
                         || (root.linkedTodoId.length > 0 && !linkTodoCheck.checked)
+                    // C5: shared AppTheme.warning is 3.89:1 on the light
+                    // #F7F7F7 surface; darken only the light leg to #a85c00
+                    // (4.67:1). Shared token untouched — weather/todo/music
+                    // also read it.
                     color: root.linkedTodoId.length > 0 && !linkTodoCheck.checked
-                        ? AppTheme.warning : AppTheme.mutedText
+                        ? (AppTheme.dark ? AppTheme.warning : "#a85c00")
+                        : AppTheme.mutedText
                     font.pixelSize: 11
                     wrapMode: Text.WordWrap
                 }
