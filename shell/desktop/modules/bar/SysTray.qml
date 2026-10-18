@@ -354,8 +354,8 @@ Item {
             Behavior on x { NumberAnimation { duration: 180; easing.type: Easing.OutCubic } }
             BundledIcon {
                 anchors.centerIn: parent
-                name: root.collectionExpanded ? "submenu" : "back"
-                size: 12
+                name: root.collectionExpanded ? "status-collection-collapse" : "status-collection-expand"
+                size: 18
                 color: ThemeService.barInk
                 opacity: root.collectedKeys.length > 0 || toggleMouse.containsMouse || root.draggedKey !== "" ? 0.9 : 0.5
             }
