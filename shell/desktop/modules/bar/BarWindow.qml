@@ -24,6 +24,9 @@ PanelWindow {
     WlrLayershell.layer: (AppLauncherService.open
         && AppLauncherConfigService.displayMode === "fullscreen")
         ? WlrLayer.Overlay : WlrLayer.Top
+    WlrLayershell.keyboardFocus: ((barContentLoader.item?.statusArea?.collectionExpanded ?? false)
+        || (barContentLoader.item?.statusArea?.statusDragActive ?? false))
+        ? WlrKeyboardFocus.OnDemand : WlrKeyboardFocus.None
     implicitHeight: ConfigService.barHeight
     readonly property bool transparentMode:
         AppearanceConfigService.barLayoutMode === "transparent"
@@ -37,7 +40,7 @@ PanelWindow {
         barHeight: root.implicitHeight
         edgeMargin: 15
         pointerInsideBar: contentHoverHandler.hovered
-        popupOpen: (barContentLoader.item?.statusArea?.anyPanelOpen ?? false)
+        popupOpen: (barContentLoader.item?.statusArea?.keepBarOpen ?? false)
             || (barContentLoader.item?.globalMenu?.menuOpen ?? false)
             || (barContentLoader.item?.systemMenu?.menuOpen ?? false)
         launcherOpen: AppLauncherService.open
@@ -97,6 +100,14 @@ PanelWindow {
         opacity: hide.barOpacity
         visible: root.barEnabled && hide.revealProgress > 0.001
 
+        // Passive observation of clicks elsewhere on this bar, without a backdrop
+        // covering application windows or consuming their first click.
+        TapHandler {
+            acceptedButtons: Qt.LeftButton | Qt.RightButton
+            enabled: barContentLoader.item?.statusArea?.collectionExpanded ?? false
+            onTapped: point => barContentLoader.item?.statusArea?.closeCollectionOutside(
+                point.scenePosition.x, point.scenePosition.y)
+        }
         // The Bar is a glass surface too. Its QML Rectangle below remains the
         // tonal-theme paint, while this panel owns the rounded compositor mask
         // and exact corner declaration in backdrop themes.
