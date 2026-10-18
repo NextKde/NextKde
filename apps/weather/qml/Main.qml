@@ -1544,8 +1544,8 @@ KosApplicationWindow {
                         }
                     }
 
-                    // 双列行（ref-main masonry 步骤 a）：左 AQ 半宽卡 + 右 Conditions 卡并排，
-                    // 瓦片区/10 天卡后续轮再入列；compact 窄窗回落单列
+                    // 双列行（ref-main masonry 步骤 a+c）：左 AQ 半宽卡 + 右 Conditions 卡并排，
+                    // 10 天卡入右列 Conditions 下方；瓦片区仍全宽，步 b（瓦片改大方卡入左列）后续轮做；compact 窄窗回落单列
                     GridLayout {
                         Layout.fillWidth: true
                         columns: root.compact ? 1 : 2
@@ -2123,8 +2123,245 @@ KosApplicationWindow {
                                     }
                             }
                         }
-                    }
 
+                        KosCard {
+                            id: dailyCard
+                            // ref-main 实测：10 天卡与 Conditions 同右列（x519-760），Conditions 底 y≈317 → 10 天卡顶 y≈329，gap ~12px@814 × 1.4598 ≈ 17.5 → rowSpacing 16 吻合（masonry 步骤 c）
+                            Layout.row: root.compact ? 2 : 1
+                            Layout.column: root.compact ? 0 : 1
+                            Layout.fillWidth: true
+                            Layout.minimumWidth: 0
+                            Layout.preferredWidth: 0
+                            Layout.alignment: Qt.AlignTop
+                            Layout.preferredHeight: dailyColumn.implicitHeight + padding * 2
+
+                            HoverHandler { id: dailyHover }
+                            property bool cardHot: dailyHover.hovered
+                            property real hoverFill: cardHot ? root.cardGlassAlphaHot : root.cardGlassAlpha
+                            Behavior on hoverFill { NumberAnimation { duration: AppTheme.motionNormal; easing.type: Easing.OutCubic } }
+                            property real hoverStroke: cardHot ? 0.32 : 0.22
+                            Behavior on hoverStroke { NumberAnimation { duration: AppTheme.motionNormal; easing.type: Easing.OutCubic } }
+                            transform: Translate {
+                                y: AppTheme.reduceMotion ? 0 : (dailyCard.cardHot ? -3 : 0)
+                                Behavior on y { NumberAnimation { duration: AppTheme.motionNormal; easing.type: Easing.OutCubic } }
+                            }
+
+                            background: KosSurface {
+                                radius: 20
+                                fillColor: Qt.rgba(root.cardGlassRgb.r, root.cardGlassRgb.g, root.cardGlassRgb.b, dailyCard.hoverFill)
+                                strokeWidth: 1
+                                strokeColor: Qt.rgba(1, 1, 1, dailyCard.hoverStroke)
+                                elevation: 0
+                            }
+
+                            contentItem: ColumnLayout {
+                                id: dailyColumn
+                                spacing: 0
+
+                                // ref-ipad-small.png 实测：10 天卡头部 "10-DAY FORECAST" 在卡内顶部——
+                                // calendar glyph + caps 字距 muted 文本（文本带 y321-329、glyph x276-284、与文字同色）；
+                                // ref-main 该卡被窗底裁切无头部可见，以 ipad 参考为准。
+                                // 文案照参考 "10-Day Forecast"（数据上限 7 天，差异记 LEDGER）。
+                                RowLayout {
+                                    spacing: 6
+                                    Layout.fillWidth: true
+                                    Layout.bottomMargin: 8
+                                    visible: backend.daily.length > 0
+
+                                    Canvas {
+                                        width: 12
+                                        height: 12
+                                        Accessible.ignored: true
+
+                                        onPaint: {
+                                            const ctx = getContext("2d")
+                                            ctx.clearRect(0, 0, width, height)
+                                            ctx.strokeStyle = root.skyTextMuted
+                                            ctx.lineWidth = 1.2
+                                            // 圆角方框（calendar 外形）：x1.5..10.5、y1.5..10.5，radius 3
+                                            ctx.beginPath()
+                                            ctx.moveTo(4.5, 1.5)
+                                            ctx.lineTo(7.5, 1.5)
+                                            ctx.arcTo(10.5, 1.5, 10.5, 4.5, 3)
+                                            ctx.lineTo(10.5, 7.5)
+                                            ctx.arcTo(10.5, 10.5, 7.5, 10.5, 3)
+                                            ctx.lineTo(4.5, 10.5)
+                                            ctx.arcTo(1.5, 10.5, 1.5, 7.5, 3)
+                                            ctx.lineTo(1.5, 4.5)
+                                            ctx.arcTo(1.5, 1.5, 4.5, 1.5, 3)
+                                            ctx.closePath()
+                                            ctx.stroke()
+                                            // 框内两条横线（calendar 行）：y=4.8 与 y=7.6，x 3.6..8.4
+                                            ctx.beginPath()
+                                            ctx.moveTo(3.6, 4.8)
+                                            ctx.lineTo(8.4, 4.8)
+                                            ctx.moveTo(3.6, 7.6)
+                                            ctx.lineTo(8.4, 7.6)
+                                            ctx.stroke()
+                                        }
+                                    }
+
+                                    Label {
+                                        text: qsTr("10-Day Forecast").toLocaleUpperCase(Qt.locale())
+                                        color: root.skyTextMuted
+                                        font.pixelSize: 11
+                                        font.weight: Font.DemiBold
+                                        font.letterSpacing: 1.4
+                                        Accessible.name: qsTr("10-day forecast")
+                                    }
+                                }
+
+                                KosEmptyState {
+                                    Layout.fillWidth: true
+                                    Layout.preferredHeight: 130
+                                    visible: backend.daily.length === 0
+                                    symbol: "☂"
+                                    title: qsTr("Daily forecast unavailable")
+                                    description: qsTr("Cached current conditions can still be used.")
+                                }
+
+                                Repeater {
+                                    model: backend.daily
+
+                                    delegate: Item {
+                                        id: dailyRow
+
+                                        required property int index
+                                        required property var modelData
+                                        Layout.fillWidth: true
+                                        Layout.preferredHeight: 54
+
+                                        readonly property real dayMinimum: root.number(
+                                            dailyRow.modelData, "temperatureMinimum", 0)
+                                        readonly property real dayMaximum: root.number(
+                                            dailyRow.modelData, "temperatureMaximum", 0)
+                                        readonly property real rangeSpan: root.dailyRange.maximum
+                                            - root.dailyRange.minimum
+                                        readonly property real uMin: root.clamp(
+                                            (dailyRow.dayMinimum - root.dailyRange.minimum)
+                                                / dailyRow.rangeSpan, 0, 1)
+                                        readonly property real uMax: root.clamp(
+                                            (dailyRow.dayMaximum - root.dailyRange.minimum)
+                                                / dailyRow.rangeSpan, 0, 1)
+                                        readonly property real uCurrent: dailyRow.index === 0
+                                            ? root.clamp(
+                                                (root.number(backend.current, "temperature", Number.NaN)
+                                                    - root.dailyRange.minimum) / dailyRow.rangeSpan,
+                                                0, 1)
+                                            : 0
+                                        readonly property int precipChance: Math.round(root.number(
+                                            dailyRow.modelData, "precipitationProbability", 0))
+
+                                        RowLayout {
+                                            anchors.fill: parent
+                                            spacing: 12
+
+                                            Label {
+                                                Layout.preferredWidth: 88
+                                                text: root.dayLabel(root.value(
+                                                    dailyRow.modelData, "date", ""), dailyRow.index)
+                                                color: root.skyText
+                                                font.weight: Font.DemiBold
+                                            }
+
+                                            Column {
+                                                spacing: 1
+
+                                                WeatherIcon {
+                                                    anchors.horizontalCenter: parent.horizontalCenter
+                                                    width: 24
+                                                    height: 24
+                                                    code: root.number(dailyRow.modelData, "weatherCode", -1)
+                                                    isDay: true
+                                                    pulse: backend.loading && !AppTheme.reduceMotion
+                                                    Accessible.ignored: true
+                                                }
+
+                                                Label {
+                                                    visible: dailyRow.precipChance > 0
+                                                    text: "☂︎ " + dailyRow.precipChance + "%"
+                                                    color: root.skyTextMuted
+                                                    font.pixelSize: 10
+                                                    Accessible.name: qsTr("%1% chance of precipitation").arg(
+                                                        dailyRow.precipChance)
+                                                }
+                                            }
+
+                                            Label {
+                                                Layout.preferredWidth: 44
+                                                text: Math.round(dailyRow.dayMinimum) + "°"
+                                                color: root.skyTextMuted
+                                                horizontalAlignment: Text.AlignRight
+                                            }
+
+                                            Item {
+                                                Layout.fillWidth: true
+                                                Layout.preferredHeight: 20
+
+                                                Rectangle {
+                                                    anchors.verticalCenter: parent.verticalCenter
+                                                    width: parent.width
+                                                    height: 5
+                                                    radius: 2.5
+                                                    color: Qt.rgba(1, 1, 1, 0.28)
+                                                }
+
+                                                Rectangle {
+                                                    anchors.verticalCenter: parent.verticalCenter
+                                                    x: parent.width * dailyRow.uMin
+                                                    width: Math.max(parent.width
+                                                                    * (dailyRow.uMax - dailyRow.uMin), 14)
+                                                    height: 5
+                                                    radius: 2.5
+                                                    gradient: Gradient {
+                                                        orientation: Gradient.Horizontal
+                                                        GradientStop {
+                                                            position: 0
+                                                            color: root.tempColor(dailyRow.dayMinimum)
+                                                        }
+                                                        GradientStop {
+                                                            position: 1
+                                                            color: root.tempColor(dailyRow.dayMaximum)
+                                                        }
+                                                    }
+                                                }
+
+                                                // Today 行当前温度标记（ref-main 实测：白点直径 ≈ 条高+1px，仅 Today 行有）
+                                                Rectangle {
+                                                    visible: dailyRow.index === 0
+                                                        && Number.isFinite(root.number(
+                                                            backend.current, "temperature", Number.NaN))
+                                                    anchors.verticalCenter: parent.verticalCenter
+                                                    x: parent.width * dailyRow.uCurrent - width / 2
+                                                    width: 8
+                                                    height: 8
+                                                    radius: 4
+                                                    color: "#ffffff"
+                                                }
+                                            }
+
+                                            Label {
+                                                Layout.preferredWidth: 44
+                                                text: Math.round(dailyRow.dayMaximum) + "°"
+                                                color: root.skyText
+                                                horizontalAlignment: Text.AlignLeft
+                                                font.weight: Font.DemiBold
+                                            }
+                                        }
+
+                                        Rectangle {
+                                            anchors.left: parent.left
+                                            anchors.right: parent.right
+                                            anchors.bottom: parent.bottom
+                                            height: 1
+                                            color: AppTheme.border
+                                            visible: dailyRow.index < backend.daily.length - 1
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
                     // 指标瓦片容器：参考图（ref-main）里指标卡（WIND/月相/UV/SUNSET 等）
                     // 是散在天空上的独立圆角卡，卡与卡之间直接透天空，无外层容器卡——
                     // 故本 Pane 只做布局，不带任何卡面 chrome（Pillow 实测 ref 指标卡
@@ -2610,238 +2847,6 @@ KosApplicationWindow {
                                             const feels = root.number(backend.current, "apparentTemperature", NaN)
                                             return Number.isFinite(feels) ? Math.round(feels) + "°" : "—"
                                         }
-                                    }
-                                }
-                            }
-                        }
-                    }
-
-                    KosCard {
-                        id: dailyCard
-                        Layout.fillWidth: true
-                        Layout.preferredHeight: dailyColumn.implicitHeight + padding * 2
-
-                        HoverHandler { id: dailyHover }
-                        property bool cardHot: dailyHover.hovered
-                        property real hoverFill: cardHot ? root.cardGlassAlphaHot : root.cardGlassAlpha
-                        Behavior on hoverFill { NumberAnimation { duration: AppTheme.motionNormal; easing.type: Easing.OutCubic } }
-                        property real hoverStroke: cardHot ? 0.32 : 0.22
-                        Behavior on hoverStroke { NumberAnimation { duration: AppTheme.motionNormal; easing.type: Easing.OutCubic } }
-                        transform: Translate {
-                            y: AppTheme.reduceMotion ? 0 : (dailyCard.cardHot ? -3 : 0)
-                            Behavior on y { NumberAnimation { duration: AppTheme.motionNormal; easing.type: Easing.OutCubic } }
-                        }
-
-                        background: KosSurface {
-                            radius: 20
-                            fillColor: Qt.rgba(root.cardGlassRgb.r, root.cardGlassRgb.g, root.cardGlassRgb.b, dailyCard.hoverFill)
-                            strokeWidth: 1
-                            strokeColor: Qt.rgba(1, 1, 1, dailyCard.hoverStroke)
-                            elevation: 0
-                        }
-
-                        contentItem: ColumnLayout {
-                            id: dailyColumn
-                            spacing: 0
-
-                            // ref-ipad-small.png 实测：10 天卡头部 "10-DAY FORECAST" 在卡内顶部——
-                            // calendar glyph + caps 字距 muted 文本（文本带 y321-329、glyph x276-284、与文字同色）；
-                            // ref-main 该卡被窗底裁切无头部可见，以 ipad 参考为准。
-                            // 文案照参考 "10-Day Forecast"（数据上限 7 天，差异记 LEDGER）。
-                            RowLayout {
-                                spacing: 6
-                                Layout.fillWidth: true
-                                Layout.bottomMargin: 8
-                                visible: backend.daily.length > 0
-
-                                Canvas {
-                                    width: 12
-                                    height: 12
-                                    Accessible.ignored: true
-
-                                    onPaint: {
-                                        const ctx = getContext("2d")
-                                        ctx.clearRect(0, 0, width, height)
-                                        ctx.strokeStyle = root.skyTextMuted
-                                        ctx.lineWidth = 1.2
-                                        // 圆角方框（calendar 外形）：x1.5..10.5、y1.5..10.5，radius 3
-                                        ctx.beginPath()
-                                        ctx.moveTo(4.5, 1.5)
-                                        ctx.lineTo(7.5, 1.5)
-                                        ctx.arcTo(10.5, 1.5, 10.5, 4.5, 3)
-                                        ctx.lineTo(10.5, 7.5)
-                                        ctx.arcTo(10.5, 10.5, 7.5, 10.5, 3)
-                                        ctx.lineTo(4.5, 10.5)
-                                        ctx.arcTo(1.5, 10.5, 1.5, 7.5, 3)
-                                        ctx.lineTo(1.5, 4.5)
-                                        ctx.arcTo(1.5, 1.5, 4.5, 1.5, 3)
-                                        ctx.closePath()
-                                        ctx.stroke()
-                                        // 框内两条横线（calendar 行）：y=4.8 与 y=7.6，x 3.6..8.4
-                                        ctx.beginPath()
-                                        ctx.moveTo(3.6, 4.8)
-                                        ctx.lineTo(8.4, 4.8)
-                                        ctx.moveTo(3.6, 7.6)
-                                        ctx.lineTo(8.4, 7.6)
-                                        ctx.stroke()
-                                    }
-                                }
-
-                                Label {
-                                    text: qsTr("10-Day Forecast").toLocaleUpperCase(Qt.locale())
-                                    color: root.skyTextMuted
-                                    font.pixelSize: 11
-                                    font.weight: Font.DemiBold
-                                    font.letterSpacing: 1.4
-                                    Accessible.name: qsTr("10-day forecast")
-                                }
-                            }
-
-                            KosEmptyState {
-                                Layout.fillWidth: true
-                                Layout.preferredHeight: 130
-                                visible: backend.daily.length === 0
-                                symbol: "☂"
-                                title: qsTr("Daily forecast unavailable")
-                                description: qsTr("Cached current conditions can still be used.")
-                            }
-
-                            Repeater {
-                                model: backend.daily
-
-                                delegate: Item {
-                                    id: dailyRow
-
-                                    required property int index
-                                    required property var modelData
-                                    Layout.fillWidth: true
-                                    Layout.preferredHeight: 54
-
-                                    readonly property real dayMinimum: root.number(
-                                        dailyRow.modelData, "temperatureMinimum", 0)
-                                    readonly property real dayMaximum: root.number(
-                                        dailyRow.modelData, "temperatureMaximum", 0)
-                                    readonly property real rangeSpan: root.dailyRange.maximum
-                                        - root.dailyRange.minimum
-                                    readonly property real uMin: root.clamp(
-                                        (dailyRow.dayMinimum - root.dailyRange.minimum)
-                                            / dailyRow.rangeSpan, 0, 1)
-                                    readonly property real uMax: root.clamp(
-                                        (dailyRow.dayMaximum - root.dailyRange.minimum)
-                                            / dailyRow.rangeSpan, 0, 1)
-                                    readonly property real uCurrent: dailyRow.index === 0
-                                        ? root.clamp(
-                                            (root.number(backend.current, "temperature", Number.NaN)
-                                                - root.dailyRange.minimum) / dailyRow.rangeSpan,
-                                            0, 1)
-                                        : 0
-                                    readonly property int precipChance: Math.round(root.number(
-                                        dailyRow.modelData, "precipitationProbability", 0))
-
-                                    RowLayout {
-                                        anchors.fill: parent
-                                        spacing: 12
-
-                                        Label {
-                                            Layout.preferredWidth: 88
-                                            text: root.dayLabel(root.value(
-                                                dailyRow.modelData, "date", ""), dailyRow.index)
-                                            color: root.skyText
-                                            font.weight: Font.DemiBold
-                                        }
-
-                                        Column {
-                                            spacing: 1
-
-                                            WeatherIcon {
-                                                anchors.horizontalCenter: parent.horizontalCenter
-                                                width: 24
-                                                height: 24
-                                                code: root.number(dailyRow.modelData, "weatherCode", -1)
-                                                isDay: true
-                                                pulse: backend.loading && !AppTheme.reduceMotion
-                                                Accessible.ignored: true
-                                            }
-
-                                            Label {
-                                                visible: dailyRow.precipChance > 0
-                                                text: "☂︎ " + dailyRow.precipChance + "%"
-                                                color: root.skyTextMuted
-                                                font.pixelSize: 10
-                                                Accessible.name: qsTr("%1% chance of precipitation").arg(
-                                                    dailyRow.precipChance)
-                                            }
-                                        }
-
-                                        Label {
-                                            Layout.preferredWidth: 44
-                                            text: Math.round(dailyRow.dayMinimum) + "°"
-                                            color: root.skyTextMuted
-                                            horizontalAlignment: Text.AlignRight
-                                        }
-
-                                        Item {
-                                            Layout.fillWidth: true
-                                            Layout.preferredHeight: 20
-
-                                            Rectangle {
-                                                anchors.verticalCenter: parent.verticalCenter
-                                                width: parent.width
-                                                height: 5
-                                                radius: 2.5
-                                                color: Qt.rgba(1, 1, 1, 0.28)
-                                            }
-
-                                            Rectangle {
-                                                anchors.verticalCenter: parent.verticalCenter
-                                                x: parent.width * dailyRow.uMin
-                                                width: Math.max(parent.width
-                                                                * (dailyRow.uMax - dailyRow.uMin), 14)
-                                                height: 5
-                                                radius: 2.5
-                                                gradient: Gradient {
-                                                    orientation: Gradient.Horizontal
-                                                    GradientStop {
-                                                        position: 0
-                                                        color: root.tempColor(dailyRow.dayMinimum)
-                                                    }
-                                                    GradientStop {
-                                                        position: 1
-                                                        color: root.tempColor(dailyRow.dayMaximum)
-                                                    }
-                                                }
-                                            }
-
-                                            // Today 行当前温度标记（ref-main 实测：白点直径 ≈ 条高+1px，仅 Today 行有）
-                                            Rectangle {
-                                                visible: dailyRow.index === 0
-                                                    && Number.isFinite(root.number(
-                                                        backend.current, "temperature", Number.NaN))
-                                                anchors.verticalCenter: parent.verticalCenter
-                                                x: parent.width * dailyRow.uCurrent - width / 2
-                                                width: 8
-                                                height: 8
-                                                radius: 4
-                                                color: "#ffffff"
-                                            }
-                                        }
-
-                                        Label {
-                                            Layout.preferredWidth: 44
-                                            text: Math.round(dailyRow.dayMaximum) + "°"
-                                            color: root.skyText
-                                            horizontalAlignment: Text.AlignLeft
-                                            font.weight: Font.DemiBold
-                                        }
-                                    }
-
-                                    Rectangle {
-                                        anchors.left: parent.left
-                                        anchors.right: parent.right
-                                        anchors.bottom: parent.bottom
-                                        height: 1
-                                        color: AppTheme.border
-                                        visible: dailyRow.index < backend.daily.length - 1
                                     }
                                 }
                             }
