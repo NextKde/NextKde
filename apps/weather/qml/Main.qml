@@ -197,29 +197,34 @@ KosApplicationWindow {
     }
 
     // Static high cloud band for the clear day sky: a fixed-seed PRNG lays
-    // out 5 soft white cloud banks hugging the top of the window (the Apple
-    // Weather clear-day reference keeps clouds in the upper ~40% and fades
-    // them out toward the horizon). Purely decorative, never animated.
+    // out 5 soft white streaks hugging the top of the window. Streak form
+    // per ref-main measurement: clouds are concentrated in the top 8-15% of
+    // the window height and rendered as long, horizontally feathered bands
+    // (aspect ratio ~7:1) rather than discrete round puffs. Purely
+    // decorative, never animated.
     readonly property var clearSkyClouds: {
         const random = mulberry32(20261020)
         const clouds = []
         for (let index = 0; index < 5; index++) {
             const cloudWidth = 300 + random() * 160
             const puffs = []
-            for (let puff = 0; puff < 4; puff++) {
+            for (let puff = 0; puff < 8; puff++) {
                 puffs.push({
-                    cxRatio: 0.1 + random() * 0.8,
-                    cyRatio: 0.3 + random() * 0.4,
-                    rRatio: 0.28 + random() * 0.22,
+                    // Streak form per ref-main measurement: puffs are laid out
+                    // at even horizontal spacing so neighbours overlap into a
+                    // single feathered horizontal band (top 8-15% of window).
+                    cxRatio: 0.12 + puff * 0.105 + (random() - 0.5) * 0.05,
+                    cyRatio: 0.5 + (random() - 0.5) * 0.3,
+                    rRatio: 0.55 + random() * 0.25,
                     alphaMul: 0.6 + random() * 0.4
                 })
             }
             puffs.sort(function(a, b) { return a.cxRatio - b.cxRatio })
             clouds.push({
                 xRatio: random(),
-                yRatio: index * 0.085 + random() * 0.04,
+                yRatio: index * 0.035 + random() * 0.025,
                 cloudWidth: cloudWidth,
-                cloudHeight: cloudWidth * 0.3,
+                cloudHeight: cloudWidth * 0.14,
                 opacity: 0.40 - index * 0.075 + random() * 0.05,
                 puffs: puffs
             })
@@ -591,13 +596,24 @@ KosApplicationWindow {
                             const r = Math.max(Math.min(p.rRatio * height * 1.2,
                                                         cy, height - cy,
                                                         cx, width - cx), 8)
-                            const grad = ctx.createRadialGradient(cx, cy, 0, cx, cy, r)
+                            // Horizontal-ellipse gradient (streak form, per
+                            // ref-main top 8-15% height feathered band
+                            // measurement): scale the circular gradient wider
+                            // than tall; radii stay clamped to the canvas so
+                            // alpha still reaches 0 before any clip.
+                            const rx = Math.min(r * 2.6, cx, width - cx)
+                            const ry = Math.min(r, cy, height - cy)
+                            ctx.save()
+                            ctx.translate(cx, cy)
+                            ctx.scale(rx / r, ry / r)
+                            const grad = ctx.createRadialGradient(0, 0, 0, 0, 0, r)
                             grad.addColorStop(0, "rgba(255,255,255," + p.alphaMul.toFixed(3) + ")")
                             grad.addColorStop(1, "rgba(255,255,255,0)")
                             ctx.fillStyle = grad
                             ctx.beginPath()
-                            ctx.arc(cx, cy, r, 0, Math.PI * 2)
+                            ctx.arc(0, 0, r, 0, Math.PI * 2)
                             ctx.fill()
+                            ctx.restore()
                         }
                     }
                 }
