@@ -2574,13 +2574,14 @@ KosApplicationWindow {
                                                 border.color: Qt.rgba(1, 1, 1, 0.22)
                                             }
 
-                                            // 选中圆盘（当前段背后）
+                                            // 选中段胶囊（当前段背后）——ref-main 814×498 Pillow 实测：选中胶囊 26×22@814（段宽 28、胶囊高 24，
+                                            // 四周内缩 ~1px，宽>高的 stadium 近乎填满段），×1.45 → 38×32；取 40×32、内缩 2px 同族。
                                             Rectangle {
-                                                x: 3 + 44 * hourlySegmented.segment
-                                                y: 3
-                                                width: 30
-                                                height: 30
-                                                radius: 15
+                                                x: 2 + 44 * hourlySegmented.segment
+                                                y: 2
+                                                width: 40
+                                                height: 32
+                                                radius: 16
                                                 color: Qt.rgba(1, 1, 1, 0.27)
                                             }
 
