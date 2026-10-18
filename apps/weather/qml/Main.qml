@@ -2194,6 +2194,47 @@ KosApplicationWindow {
                                                             // 亮面冷蓝白：ref tile-cards 月亮相照片亮面实测均值 (161,192,228)；峰值 (228,236,247) 系纹理不可平面复刻
                                                             ctx.fillStyle = "#a1c0e4"
                                                             ctx.fill()
+                                                            // 亮面程序化斑驳纹理：ref tile-cards 月亮相照片分布校准（中位 159,189,228 / p90 184,208,234 / 峰值 228,236,247）；
+                                                            // 全部确定性坐标（无随机），保证逐帧稳定可做帧差回归
+                                                            ctx.save()
+                                                            ctx.clip()   // 裁到亮面路径内
+                                                            // 月海暗斑（低覆盖低透明度，只把分布下沿拉低，不拉中位数；径向渐变柔边，避免硬圆 rim）
+                                                            var mare = [[0.30, 0.38, 0.26], [0.66, 0.28, 0.20], [0.48, 0.66, 0.22], [0.78, 0.60, 0.15]]
+                                                            for (var m = 0; m < mare.length; m++) {
+                                                                var mx = c + mare[m][0] * r
+                                                                var my = c + mare[m][1] * r
+                                                                var mr = mare[m][2] * r
+                                                                ctx.beginPath()
+                                                                ctx.arc(mx, my, mr, 0, 2 * Math.PI)
+                                                                var mg = ctx.createRadialGradient(mx, my, 0, mx, my, mr)
+                                                                mg.addColorStop(0, "rgba(126,155,201,0.28)")
+                                                                mg.addColorStop(0.7, "rgba(126,155,201,0.18)")
+                                                                mg.addColorStop(1, "rgba(126,155,201,0)")
+                                                                ctx.fillStyle = mg
+                                                                ctx.fill()
+                                                            }
+                                                            // 高地亮斑（抬 p90 到 ~(184,208,234)；径向渐变柔边）
+                                                            var high = [[0.55, 0.15, 0.17], [0.14, 0.45, 0.15], [0.70, 0.36, 0.14], [0.40, 0.30, 0.12], [0.60, 0.78, 0.16], [0.20, 0.20, 0.11], [0.80, 0.74, 0.11]]
+                                                            for (var h = 0; h < high.length; h++) {
+                                                                var hx = c + high[h][0] * r
+                                                                var hy = c + high[h][1] * r
+                                                                var hr = high[h][2] * r
+                                                                ctx.beginPath()
+                                                                ctx.arc(hx, hy, hr, 0, 2 * Math.PI)
+                                                                var hg = ctx.createRadialGradient(hx, hy, 0, hx, hy, hr)
+                                                                hg.addColorStop(0, "rgba(196,214,240,0.62)")
+                                                                hg.addColorStop(0.7, "rgba(196,214,240,0.35)")
+                                                                hg.addColorStop(1, "rgba(196,214,240,0)")
+                                                                ctx.fillStyle = hg
+                                                                ctx.fill()
+                                                            }
+                                                            // 左上软高光（拉出峰值 ~228,236,247；alpha 0.42 压峰值防纯白打满）
+                                                            var glow = ctx.createRadialGradient(c - 0.30 * r, c - 0.35 * r, 0, c - 0.30 * r, c - 0.35 * r, 0.85 * r)
+                                                            glow.addColorStop(0, "rgba(228,236,247,0.42)")
+                                                            glow.addColorStop(1, "rgba(228,236,247,0)")
+                                                            ctx.fillStyle = glow
+                                                            ctx.fillRect(0, 0, 2 * r, 2 * r)
+                                                            ctx.restore()
                                                         }
                                                     }
                                                 }
