@@ -22,9 +22,9 @@ Item {
     // DockContainer uses this stable, single-row maximum for its width solver.
     // The visible tray may then fold to two rows without feeding a discrete
     // row-count change back into the Dock height calculation.
-    readonly property real layoutMaximumWidth: cpuSlot.width
+    readonly property real layoutMaximumWidth: collectionSlot.width + cpuSlot.width
         + systemTray.singleRowImplicitWidth
-        + (cpuSlot.visible ? statusArea.spacing : 0)
+        + statusArea.spacing * (cpuSlot.width > 0 ? 2 : 1)
 
     // The shell-owned cells, paired with the component that renders each one.
     // One table feeds both the rendered components and their reorder keys, so a
@@ -144,7 +144,7 @@ Item {
                     iconSize: systemTray.iconSize + 3
                     dockHosted: root.dockHosted
                     dockEdge: root.dockEdge
-                    verticalDock: root.verticalDock
+                    verticalDock: root.verticalDock && !SysTrayOrderService.isCollected("cell:network")
                     sharedPanelOpen: networkPanel.requestedOpen
                         || bluetoothPanel.requestedOpen || root.controlCenterOpen
                         || notificationPanel.requestedOpen
@@ -159,7 +159,8 @@ Item {
                 NetworkTraffic {
                     id: networkTraffic
                     anchors.verticalCenter: parent.verticalCenter
-                    visible: !root.dockHosted && NetworkService.available
+                    visible: !root.dockHosted && !SysTrayOrderService.isCollected("cell:network")
+                        && NetworkService.available
                         && NetworkService.deviceState === "connected"
                     onPanelToggleRequested: networkStatus.panelToggleRequested()
                 }
@@ -175,7 +176,7 @@ Item {
                 iconSize: systemTray.iconSize + 3
                 dockHosted: root.dockHosted
                 dockEdge: root.dockEdge
-                verticalDock: root.verticalDock
+                verticalDock: root.verticalDock && !SysTrayOrderService.isCollected("cell:battery")
             }
         }
     }
@@ -187,7 +188,7 @@ Item {
                 anchors.centerIn: parent
                 iconSize: systemTray.iconSize
                 dockHosted: root.dockHosted
-                verticalDock: root.verticalDock
+                verticalDock: root.verticalDock && !SysTrayOrderService.isCollected("cell:settings")
             }
         }
     }
@@ -203,7 +204,7 @@ Item {
                 panelOpen: notificationPanel.requestedOpen
                 dockHosted: root.dockHosted
                 dockEdge: root.dockEdge
-                verticalDock: root.verticalDock
+                verticalDock: root.verticalDock && !SysTrayOrderService.isCollected("cell:notifications")
                 onPanelToggleRequested: {
                     if (!notificationPanel.requestedOpen) {
                         networkPanel.close()
@@ -227,7 +228,7 @@ Item {
                 panelOpen: root.controlCenterOpen
                 dockHosted: root.dockHosted
                 dockEdge: root.dockEdge
-                verticalDock: root.verticalDock
+                verticalDock: root.verticalDock && !SysTrayOrderService.isCollected("cell:controlcenter")
                 onPanelToggleRequested: {
                     bluetoothPanel.close()
                     if (!root.controlCenterOpen)
@@ -243,6 +244,11 @@ Item {
         anchors.centerIn: parent
         spacing: 10
 
+        Item {
+            id: collectionSlot
+            width: systemTray.itemSize
+            height: root.height
+        }
         Item {
             id: cpuSlot
             // In integrated mode the permanent Dock carousel temperature page
@@ -263,6 +269,7 @@ Item {
             height: root.height
             SysTray {
                 id: systemTray
+                collectionToggleHost: collectionSlot
                 anchors.centerIn: parent
                 iconSize: 18
                 visualYOffset: 0
