@@ -16,7 +16,8 @@ Item {
     // cluster that is not inside a sliding Bar (the Dock host) and for a Bar
     // that is permanently visible.
     property real barRevealProgress: 1
-    readonly property bool contextualEditingAvailable: !dockHosted
+    readonly property bool collectionExpanded: systemTray.collectionExpanded
+    readonly property bool statusDragActive: systemTray.draggedKey !== ""
     readonly property bool verticalDock: dockHosted && dockEdge !== "bottom"
     // DockContainer uses this stable, single-row maximum for its width solver.
     // The visible tray may then fold to two rows without feeding a discrete
@@ -46,6 +47,8 @@ Item {
     readonly property bool anyPanelOpen: (networkPanel?.requestedOpen ?? false)
         || (bluetoothPanel?.requestedOpen ?? false) || root.controlCenterOpen
         || notificationPanel.requestedOpen
+
+    readonly property bool keepBarOpen: anyPanelOpen || collectionExpanded || statusDragActive
 
     // Report panel visibility into the service singleton so its fast refresh
     // only runs while a panel is actually showing the data. A count (not a
@@ -106,6 +109,8 @@ Item {
     // anchor the WiFi popup to the battery glyph once network was hidden.
     // A hidden cell yields null, and every caller already handles an absent
     // anchor by falling back to a fixed position.
+    function closeCollectionOutside(x, y) { systemTray.closeCollectionOutside(x, y) }
+
     function networkStatusAnchor() {
         return systemTray.trailingItemForKey("network")?.control ?? null
     }
@@ -265,21 +270,17 @@ Item {
                 dockEdge: root.dockEdge
                 verticalDock: root.verticalDock
                 availableHeight: root.height
+                collectionKeepOpen: root.anyPanelOpen
+                onCollectionCollapseRequested: {
+                    networkPanel.close()
+                    bluetoothPanel.close()
+                    notificationPanel.close()
+                    root.closeControlCenter()
+                }
                 trailingComponents: root.visibleTrailingCells.map(entry => entry.component)
                 trailingKeys: root.visibleTrailingCells.map(entry => entry.key)
             }
         }
-    }
-
-    TapHandler {
-        acceptedButtons: Qt.RightButton
-        gesturePolicy: TapHandler.ReleaseWithinBounds
-        enabled: root.contextualEditingAvailable
-        onTapped: statusAreaEditor.openFor(root)
-    }
-
-    StatusAreaEditor {
-        id: statusAreaEditor
     }
 
     NotificationHistoryPanel {

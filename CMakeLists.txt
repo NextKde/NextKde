@@ -134,6 +134,11 @@ if(BUILD_TESTING)
                 ${CMAKE_CURRENT_SOURCE_DIR}/shell/desktop/modules/bar/test_control_center_submenu_state.mjs
         )
         set_tests_properties(kos-shell.control-center-submenu-state PROPERTIES TIMEOUT 10)
+        add_test(NAME kos-shell.status-collection
+            COMMAND ${KOS_NODE_EXECUTABLE}
+                ${CMAKE_CURRENT_SOURCE_DIR}/shell/desktop/modules/bar/test_status_collection.mjs
+        )
+        set_tests_properties(kos-shell.status-collection PROPERTIES TIMEOUT 10 LABELS logic)
         add_test(NAME kos-shell.visibility-policy
             COMMAND ${KOS_NODE_EXECUTABLE}
                 ${CMAKE_CURRENT_SOURCE_DIR}/shell/desktop/modules/common/test_visibility_policy.mjs
