@@ -85,7 +85,7 @@ struct LiveCard
     QPointer<EffectWindow> window;
     LiveCardPose target;  // 最新发布的终态
     LiveCardPose from;    // 缓动起点
-    TimeLine ease{std::chrono::milliseconds(220)};
+    TimeLine ease{std::chrono::milliseconds(180)};
     bool easing = false;
     bool offscreenRef = false;
     QMetaObject::Connection damageConnection;
@@ -179,10 +179,9 @@ struct LiveCard
     bool enterHold = false;
     qreal fade = 1.0;
     qreal cardOpacity = 1.0; // 整卡透明度旋钮（面板 cardOpacity；缺省=不透明）
-    bool closeHot = false;
     TimeLine fadeTl{std::chrono::milliseconds(180)};
     bool fadeAnimating = false;
-    // 铭牌（标题/关闭钮，QPainter 光栅 → 纹理；键变才重绘，Y 镜像匹配
+    // 铭牌（标题，QPainter 光栅 → 纹理；键变才重绘，Y 镜像匹配
     // stage-live 的 FBO 朝向采样）
     std::unique_ptr<GLTexture> chromeTex;
     std::unique_ptr<GLTexture> overlayTex; // 随卡投影覆盖层（图标排/拆分芯片）

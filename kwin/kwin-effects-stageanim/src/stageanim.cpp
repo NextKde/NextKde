@@ -550,10 +550,8 @@ void StageAnimEffect::prePaintScreen(ScreenPrePaintData &data)
                         || (card.hovered && grown.contains(cur)));
                 if (hit)
                     hoverTaken = true;
-                // 驻留协同：放大补间与 QML 聚焦布局（退避）同拍起跑——
-                // 旧实现特效命中即放大，QML 驻留 hoverDwellDelay 后才退避
-                // ＝"放大先动、退避半拍后才动"两段式（用户实测延迟感）。
-                // hoverDwellMs=0（驻留关）保持原即时行为。
+                // 悬停只放平：倾角补间到 hoverTilt，不放大、不叠 hoverBlend
+                //（提亮/深度淡出/扇叠扩散都不参与，2026-10-18 用户定案）
                 auto applyHover = [&](bool on) {
                     qCInfo(STAGEANIM_LOG) << "live hover"
                         << (on ? "IN " : "OUT") << card.id.left(10)
@@ -562,12 +560,11 @@ void StageAnimEffect::prePaintScreen(ScreenPrePaintData &data)
                     card.hovered = on;
                     card.scaleFrom = card.curScale;
                     card.tiltFrom = card.curTiltDeg;
-                    card.scaleTo = on ? card.hoverScale : 1.0;
+                    card.scaleTo = 1.0;
                     card.tiltTo = on ? card.hoverTiltDeg : card.target.angleDeg;
-                    // hoverBlend 也从当前值起摆（v87 审查）：旧实现
-                    // (hovered?1:0)*cubic 在翻转/打断瞬间单帧硬跳
+                    // hoverBlend 保留动画通道（打断时不硬跳），但目标恒 0
                     card.hoverBlendFrom = card.hoverBlend;
-                    card.hoverBlendTo = on ? 1.0 : 0.0;
+                    card.hoverBlendTo = 0.0;
                     card.hoverTl = TimeLine(card.hoverMs);
                     card.hoverAnimating = true;
                 };
@@ -633,11 +630,10 @@ void StageAnimEffect::prePaintScreen(ScreenPrePaintData &data)
                 }
                 anyAnim = true;
             }
-            // 扇叠扩散补间：hover/武装(dropHover)/驻留(dwellHint)任一即扩，
-            // 目标翻转从当前值起摆（150ms OutCubic）——武装/驻留瞬时满扩
-            // ＝跳变"生硬"的根因；旧实现挂 hoverBlend 也与放大曲线耦合
+            // 扇叠扩散补间：武装(dropHover)/驻留(dwellHint)任一即扩，
+            // 悬停不扩散（只放平）。目标翻转从当前值起摆（150ms OutCubic）
             {
-                const qreal fanTarget = (card.hovered || card.dropHover
+                const qreal fanTarget = (card.dropHover
                     || card.dwellHint) ? 1.0 : 0.0;
                 if (fanTarget != card.fanTo) {
                     card.fanFrom = card.fanBlend;
@@ -1157,7 +1153,6 @@ struct CardMeta
     qreal depthStrength = 0.0, topLight = 0.07;
     qreal fade = 1.0;   // QML slot.opacity（压暗 × 视口边缘渐隐）
     qreal cardOpacity = 1.0; // 整卡透明度旋钮（面板 cardOpacity，1=不透明）
-    bool closeHot = false;
     QString winId;      // 渲染窗口（rep 窗口 id；id 本体=组键，rep 翻转
                         // 只换此字段 → 特效原地换窗重接，不销毁重注册）
     bool selfMergeHint = false; // 中心合并武装：被拖卡自身亮蓝边框
@@ -1206,7 +1201,6 @@ static void applyCardMeta(LiveCard &card, const CardMeta &m)
     card.border = QColor(255, 255, 255, int(qBound(0.0, m.borderAlpha, 1.0) * 255));
     card.fade = m.fade;
     card.cardOpacity = qBound(0.2, m.cardOpacity, 1.0);
-    card.closeHot = m.closeHot;
     card.selfMergeHint = m.selfMergeHint;
     card.rightSide = m.rightSide;
     card.merged = m.merged;
@@ -1234,11 +1228,10 @@ static int liveIconPx(const LiveCard &card)
         std::max(24, qRound(0.42 * hLog * 2)));
 }
 
-// 铭牌（标题 + 关闭钮，QML cardHeader 同版式 ×2 超采样）光栅进纹理。
+// 铭牌（标题，QML cardHeader 同版式 ×2 超采样）光栅进纹理。
 // QImage 行 0 = 顶部，stage-live 着色器按 FBO 朝向（行 0 = 底）采样——
 // 上传前 Y 镜像即可复用同一着色器。键变才重绘（标题/计数/卡宽）。
-// 分脏分张（v87 审查）：铭牌与覆盖层各按各的键独立重光栅——旧版任一
-// 键变就两层全重画（关闭钮悬停高频翻转会把整个图标排也重传一遍）。
+// 分脏分张（v87 审查）：铭牌与覆盖层各按各的键独立重光栅。
 void StageAnimEffect::rasterChrome(LiveCard &card)
 {
     const int w = std::max(2, qRound(card.target.rect.width()));
@@ -1246,8 +1239,6 @@ void StageAnimEffect::rasterChrome(LiveCard &card)
     const QString key = card.title + QLatin1Char('|')
         + QString::number(card.count) + QLatin1Char('|')
         + QString::number(w) + QLatin1Char('x') + QString::number(h)
-        + QLatin1Char(card.closeHot ? '!' : '.')
-        + QLatin1Char((card.hovered || card.hoverPending) ? 'H' : 'h')
         + QLatin1Char(card.merged ? 'M' : 'm')
         + QLatin1Char(card.showCardTitle ? 'T' : 't');
     const QString ovKey = card.iconsJson + QLatin1Char('|')
@@ -1289,41 +1280,13 @@ void StageAnimEffect::rasterChrome(LiveCard &card)
     f.setPixelSize(22); // QML pixelSize 11 ×2
     f.setWeight(QFont::Bold);
     p.setFont(f);
-    const int titleMargin = card.merged ? 50 * 2 : 26 * 2; // merged 让位芯片
+    const int titleMargin = card.merged ? 50 * 2 : 16; // merged 让位芯片
     if (card.showCardTitle) {
         const QRect tr(16, 16, w * 2 - 16 - titleMargin - 8, 48);
         p.setPen(QColor(0, 0, 0, 150));
         p.drawText(tr.translated(0, 2), Qt::AlignLeft | Qt::AlignVCenter, card.title);
         p.setPen(QColor(255, 255, 255, 235));
         p.drawText(tr, Qt::AlignLeft | Qt::AlignVCenter, card.title);
-    }
-    // 关闭钮：右上 20×20 热区。iPadOS 还原(2026-10-17)：参考卡没有常驻
-    // 关闭钮——仅卡片悬停时出现（与 QML cardClose 的 opacity 门控一致）。
-    // 悬停按钮本体=红圆底 + 白 ×；悬停卡面=柔和暗底圆 + 白 ×
-    const int csize = 40; // 20 ×2
-    const int cx = w * 2 - 16 - csize;
-    const int cy = 8 * 2 + (48 - csize) / 2;
-    const qreal cmx = cx + csize / 2.0, cmy = cy + csize / 2.0;
-    // hoverPending = 驻留计时中（指针已在卡上，hovered 尚未置位）——
-    // 与 QML isHovered 的即时显隐对齐
-    const bool closeVisible = card.closeHot || card.hovered
-        || card.hoverPending;
-    if (closeVisible) {
-        if (card.closeHot) {
-            p.setPen(Qt::NoPen);
-            p.setBrush(QColor(239, 68, 68, 225));
-            p.drawEllipse(QPointF(cmx, cmy), 15.0, 15.0);
-            p.setPen(QPen(QColor(255, 255, 255, 245), 3.2,
-                          Qt::SolidLine, Qt::RoundCap));
-        } else {
-            p.setPen(Qt::NoPen);
-            p.setBrush(QColor(10, 14, 20, 115));
-            p.drawEllipse(QPointF(cmx, cmy), 14.0, 14.0);
-            p.setPen(QPen(QColor(255, 255, 255, 210), 2.8,
-                          Qt::SolidLine, Qt::RoundCap));
-        }
-        p.drawLine(QPointF(cmx - 5.5, cmy - 5.5), QPointF(cmx + 5.5, cmy + 5.5));
-        p.drawLine(QPointF(cmx + 5.5, cmy - 5.5), QPointF(cmx - 5.5, cmy + 5.5));
     }
     p.end();
     card.chromeTex = upload(img.mirrored(false, true));
@@ -1458,12 +1421,12 @@ void StageAnimEffect::rasterChrome(LiveCard &card)
     const bool overflow = icons.size() > visible;
     if (overflow)
         rowW += igap + qRound(0.6 * isz);
-    // 参考实测（2026-10-18 重测）：图标挂卡角外——水平 30% 探出、垂直
-    // 26% 探出（与 QML iconRow 的 outX / bottomMargin 同步；画布已外扩
-    // ovPad）。第 29 轮的 60% 把卡底量错了。
-    const int iconOutX = qRound(0.30 * isz);
-    int ix0 = card.rightSide ? w * 2 - iconOutX - rowW : iconOutX;
-    const int iy0 = h * 2 - qRound(0.74 * isz);
+    // 参考实测（2026-10-18）：图标挂卡角外——水平探出 26% 图标宽、
+    // 垂直中线压在卡底边（50% 在内 / 50% 在外；与 QML iconRow 的
+    // outX / overhangY 同源；画布已外扩 ovPad）。
+    const int iconOutX = qRound(0.26 * isz);
+    int ix0 = card.rightSide ? w * 2 + iconOutX - rowW : -iconOutX;
+    const int iy0 = h * 2 - qRound(0.50 * isz);
     for (int i = 0; i < visible; i++) {
         const QPixmap pm = loadIcon(icons.at(i), isz);
         if (!pm.isNull()) {
@@ -1585,7 +1548,6 @@ void StageAnimEffect::reloadLiveCards()
                 meta.cardOpacity = o.value(QStringLiteral("cardOpacity")).toDouble(1.0);
                 meta.hoverDwellMs = std::chrono::milliseconds(
                     qMax(0, o.value(QStringLiteral("hoverDwellMs")).toInt(0)));
-                meta.closeHot = o.value(QStringLiteral("closeHover")).toBool();
                 meta.selfMergeHint = o.value(QStringLiteral("selfMergeHint")).toBool();
                 meta.rightSide = o.value(QStringLiteral("rightSide")).toBool();
                 meta.merged = o.value(QStringLiteral("merged")).toBool();
@@ -2457,11 +2419,10 @@ void StageAnimEffect::drawLiveCardBody(const RenderViewport &viewport,
     // 武装态视觉（老 QML 两档完整迁移）：
     //   armed（dropHover/selfMerge）= 亮蓝 rgba(0.45,0.85,1.0,0.95) + 2px + 提亮
     //   dwell（驻留中）= rgba(0.45,0.85,1.0,0.78) + 2px + 提亮
-    //   hover 边框蓝 = rgba(0.62,0.80,1.0,0.85)（随 hoverBlend 渐变）
+    // hover 只放平：不提亮、不混蓝边框（2026-10-18 用户定案）。
     const bool armed = card.dropHover || card.selfMergeHint;
     const bool hinted = card.dwellHint;
-    const QColor mainTint = (card.hovered || armed || hinted)
-        ? card.tintHover : card.tint;
+    const QColor mainTint = (armed || hinted) ? card.tintHover : card.tint;
     QColor mainBorder = card.border;
     qreal borderWidth = 1.0;
     if (armed) {
@@ -2470,13 +2431,6 @@ void StageAnimEffect::drawLiveCardBody(const RenderViewport &viewport,
     } else if (hinted) {
         mainBorder = QColor(115, 217, 255, 199);
         borderWidth = 2.0;
-    } else if (card.hoverBlend > 0.01) {
-        const QColor blue(158, 204, 255, 217);
-        mainBorder = QColor(
-            int(mainBorder.red() + (blue.red() - mainBorder.red()) * card.hoverBlend),
-            int(mainBorder.green() + (blue.green() - mainBorder.green()) * card.hoverBlend),
-            int(mainBorder.blue() + (blue.blue() - mainBorder.blue()) * card.hoverBlend),
-            int(mainBorder.alpha() + (blue.alpha() - mainBorder.alpha()) * card.hoverBlend));
     }
     // 深度渐变悬停淡出（老 250ms Behavior → hoverBlend 渐变）；
     // 顶光悬停 ×2（上限 0.4）；右条镜像深度侧

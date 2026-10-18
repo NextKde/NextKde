@@ -578,6 +578,41 @@ private:
                     return;
                 }
 
+                // KWin's frame carries a fully transparent rim along the window
+                // shape's outer edge (2px on every side even with decorations
+                // and shadows excluded). Scaled onto the card face that rim is
+                // a translucent hairline around the thumbnail: the card's
+                // rounded clip trims the *rim* instead of the window content,
+                // which reads as "rounded frame around a square screenshot".
+                // Trim the frame to the rows/columns that actually carry
+                // pixels so the card edge meets the content edge.
+                if (image.hasAlphaChannel()) {
+                    constexpr int kAlphaFloor = 8;
+                    int left = image.width();
+                    int top = image.height();
+                    int right = -1;
+                    int bottom = -1;
+                    for (int y = 0; y < image.height(); ++y) {
+                        const auto *line = reinterpret_cast<const QRgb *>(
+                            image.constScanLine(y));
+                        for (int x = 0; x < image.width(); ++x) {
+                            if (qAlpha(line[x]) < kAlphaFloor)
+                                continue;
+                            left = std::min(left, x);
+                            top = std::min(top, y);
+                            right = std::max(right, x);
+                            bottom = std::max(bottom, y);
+                        }
+                    }
+                    if (right >= left && bottom >= top
+                            && (left > 0 || top > 0
+                                || right < image.width() - 1
+                                || bottom < image.height() - 1)) {
+                        image = image.copy(left, top, right - left + 1,
+                                           bottom - top + 1);
+                    }
+                }
+
                 const QString runtimeDir = QStandardPaths::writableLocation(
                         QStandardPaths::RuntimeLocation)
                     + QStringLiteral("/quickshell/window-thumbnails");

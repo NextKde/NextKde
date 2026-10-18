@@ -36,9 +36,9 @@ ColumnLayout {
     // StageConfigService，需要时用 `stage-config set <key> <value>` 调。
     readonly property var stagePresets: [
         { id: "lite", name: I18n.tr("Lithe"), detail: I18n.tr("Compact cards · crisp motion"),
-          values: { cardHeight: 149, cardWidth: 112, cardSpacing: 21,
+          values: { cardHeight: 149, cardWidth: 112, cardGapPercent: 3.5,
                     stripMargin: 12, deckSidePeek: 16, focusDim: false,
-                    fanSpacing: 6, fanHoverSpread: 1.4, stripIconSize: 52,
+                    fanSpacing: 6, fanHoverSpread: 1.4, stripIconSize: 40,
                     maxIconSlots: 1,
                     deckRestTilt: 2, tiltAngle: 0, hoverScale: 1.0,
                     hoverDwellDelay: 200, engageDelay: 170,
@@ -49,9 +49,9 @@ ColumnLayout {
                     animDuration: 340, glassOpacity: 0.65,
                     animEasing: "OutCubic" } },
         { id: "standard", name: I18n.tr("Standard"), detail: I18n.tr("Medium cards · balanced motion"),
-          values: { cardHeight: 170, cardWidth: 128, cardSpacing: 24,
+          values: { cardHeight: 170, cardWidth: 128, cardGapPercent: 4.5,
                     stripMargin: 12, deckSidePeek: 20, focusDim: false,
-                    fanSpacing: 8, fanHoverSpread: 1.4, stripIconSize: 60,
+                    fanSpacing: 8, fanHoverSpread: 1.4, stripIconSize: 46,
                     maxIconSlots: 1,
                     deckRestTilt: 2, tiltAngle: 0, hoverScale: 1.0,
                     hoverDwellDelay: 200, engageDelay: 170,
@@ -64,9 +64,9 @@ ColumnLayout {
         // 「立体」= 用户 2026-09-30 定稿手感（204/28，悬停放大关）；
         // 2026-10-17 iPadOS 还原：倾角归零（参考卡近平贴）
         { id: "vivid", name: I18n.tr("Dimensional"), detail: I18n.tr("Large cards · relaxed motion"),
-          values: { cardHeight: 191, cardWidth: 144, cardSpacing: 27,
+          values: { cardHeight: 191, cardWidth: 144, cardGapPercent: 5.5,
                     stripMargin: 12, deckSidePeek: 24, focusDim: false,
-                    fanSpacing: 10, fanHoverSpread: 1.4, stripIconSize: 64,
+                    fanSpacing: 10, fanHoverSpread: 1.4, stripIconSize: 52,
                     maxIconSlots: 1,
                     deckRestTilt: 2, tiltAngle: 0, hoverScale: 1.0,
                     hoverDwellDelay: 200, engageDelay: 170,

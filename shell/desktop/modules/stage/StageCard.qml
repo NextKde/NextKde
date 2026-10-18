@@ -1,4 +1,5 @@
 import QtQuick
+import QtQuick.Shapes
 import Quickshell.Widgets
 import org.kde.pipewire
 // ⚠️ ScreencastingRequest 在本模块（勿按直觉挪去 pipewire——删过一次
@@ -45,7 +46,7 @@ Item {
     // 每窗图标（与 idsJson 平行；自由合并组内各应用图标不同）
     required property string iconsJson
     required property string iconIdsJson
-    // 逐窗行（合并卡左下窗口列：图标+标题竖排，参考 ref/c2.png）
+    // 逐窗行（特效侧合并卡窗口列；QML 路径已改为应用图标排）
     required property string rowsJson
     required property bool merged // 自由合并卡（右键拆分）
     // 拖拽合并手势的落点高亮（窗口侧按 _dropMergeKey 绑定）
@@ -80,10 +81,8 @@ Item {
     signal dragStarted(real sceneX, real sceneY)
     signal dragMoved(real sceneX, real sceneY)
     signal dragReleased()
-    // 悬停进出（窗口侧据此聚焦布局：悬停卡原位放大置顶、其余原位退避）
+    // 悬停进出（窗口侧据此把悬停卡置顶；悬停只放平，不重排）
     signal hovered(bool over)
-    // 关闭按钮：关闭组内全部窗口
-    signal closeAllRequested()
     // 点击左下角的窗口小图标：直达该扇窗（macOS Stage Manager 同语义，
     // 走 engage 管线但焦点钉在被点窗口）
     signal iconActivated(string windowId)
@@ -128,17 +127,6 @@ Item {
             out.push({ icon: icons[i], id: ids[i] })
         return out
     }
-    // 逐窗行（合并卡左下窗口列）：[{icon, title, id}]，代表窗在首位。
-    // 与 iconPairs 的区别——这里**不按应用去重**：同应用两扇窗是两行
-    //（各带自己的标题），点击直达对应窗口。
-    readonly property var windowRows: {
-        try {
-            const arr = JSON.parse(rowsJson || "[]")
-            return Array.isArray(arr) ? arr : []
-        } catch (e) {
-            return []
-        }
-    }
     // 图标排并列上限（stage-config maxIconSlots，设置页可调）；实际
     // 可见数还按卡宽动态封顶（见 iconRow.visibleCount），超出进 "+N"
     readonly property int maxIconSlots: StageConfigService.maxIconSlots
@@ -146,6 +134,10 @@ Item {
     // 右侧常驻（stage-config side）：内容整体镜像——入场方向/扇叠方向/
     // 图标排/深度渐变都翻到对侧
     readonly property bool rightSide: StageConfigService.side === "right"
+    // 四角同半径（参考卡是均匀圆角）。真正的轮廓裁切在可见树的透视层
+    // （stage_tilt.frag 的卡面 SDF）——plane 隐藏子树里绑定的半径不会
+    // 重求值，那里只保留同值的静态壳。
+    readonly property real nearCornerRadius: StageConfigService.cardRadius
 
     width: parent ? parent.width
                   : StageGeo.PANEL_WIDTH - StageGeo.CARD_WIDTH_INSET
@@ -184,8 +176,6 @@ Item {
     // 无头排障读数:卡面 layer 是否有效(=previewActive 且未被特效接管)。
     // "缩略图空白"悬案的 C 假设(layer 未生效)经 debugGeom 直读判别
     readonly property bool faceLayerActive: previewActive && !effectOwnedChrome
-    // 关闭钮悬停态（根层热区 containsMouse；铭牌在特效侧据此画红钮）
-    readonly property bool closeHot: closeHit.containsMouse
 
     // ── 卡面"空脸先渲"自愈（2026-10-11 实测）──
     // Qt 的 QQuickItemLayer 在这条路径上会把卡面纹理做死在"空"的状态：卡面
@@ -248,11 +238,8 @@ Item {
     //再 150ms 淡出＝放大后旧卡位残影一闪（v80 交棒淡出在这些路径从未
     // 生效的真因；窗口还原销毁委托比下一次发布更快，标记必须同拍出帧）
     onEngagingChanged: livePoseDirty()
-    // closeHover/mergeGlow 同族（v87 审查）：scroll 模式下指针从卡面移到
-    // 关闭钮，isHovered 合成值不变、姿态全不动＝零触发，特效红钮要等
-    // 15s 心跳；mergeGlow 1.8s 到期翻转时指针早已离开同理。载荷字段
-    // 的每个输入都必须有发布触发
-    onCloseHotChanged: livePoseDirty()
+    // mergeGlow 同族（v87 审查）：1.8s 到期翻转时指针早已离开＝零触发，
+    // 载荷字段的每个输入都必须有发布触发
     onMergeGlowChanged: livePoseDirty()
     // dwellHint 同族补漏（合并驻留的本质是"指针停住"——停住后姿态全
     // 静止＝零发布触发，特效看不到武装态；驻留到点 layoutCards 才补发）
@@ -313,9 +300,9 @@ Item {
             iconsJson: card.iconsJson,
             rowsJson: card.rowsJson,
             // 图标排消费参数（v88：特效侧原本硬编码 24px+仅宽度封顶＝
-            // stripIconSize/maxIconSlots 两个旋钮在实时模式失灵，且与
-            // 静态模式 40px 视觉不一致）
-            iconSize: StageConfigService.stripIconSize,
+            // stripIconSize/maxIconSlots 两个旋钮在实时模式失灵）。取
+            // iconRow 的实际值而非原始旋钮：与 QML 同源，含卡宽封顶
+            iconSize: iconRow.iconSize,
             iconSlots: card.maxIconSlots,
         }
     }
@@ -326,8 +313,8 @@ Item {
             - ((shown || enterInstant) ? 0 : 70)
         : StageGeo.CARD_X_INSET + ((shown || enterInstant) ? 0 : 70)
     opacity: (engaging ? 0.0 : (shown ? 1.0 : 0.0)) * StageConfigService.cardOpacity
-    scale: (shown || enterInstant)
-        ? (isHovered ? StageConfigService.hoverScale : 1.0) : 0.86
+    // 悬停只放平（tilt → 0），不放大、不重排
+    scale: (shown || enterInstant) ? 1.0 : 0.86
     // 悬停放大从左上角外扩（与 slot 的 TopLeft 缩放同向）：上边钉死、只向
     // 右/下生长——绕中心缩放会让四边同缩，压在边条上的指针被"缩出去"→
     // 悬停丢失（kill 循环的一环）。外扩区域内的指针不可能被挤出。
@@ -360,13 +347,9 @@ Item {
     // 也有静置姿态）；悬停 = 悬停倾斜角（tiltAngle，0 = 悬停放平阅读）；
     // 交棒（engaging）保持静置角——kwinrc TiltAngle 同源投影给展开窗口
     // 动画，卡片淡出姿态与窗口起摆姿态零跳变。
-    // ⚠️ 悬停倾斜下 plane 内的关闭钮被透视投影挪位，热区对齐改走
-    // _closeProj（见 closeHit）；"按钮角区瞄准摆平"已废除——活体模式下
-    // 卡面由特效直绘，QML 的摆平从没生效过（两侧不一致的既存缺陷），
-    // 统一由热区跟随解决。
     // ⚠️ schema 键 deckRestTilt/deckSidePeek 是牌堆时代遗名（持久化配置
     // 不能改名）：deckRestTilt 现役语义 = 双模式的静置倾角；
-    // deckSidePeek 仍属 scroll 模式。
+    // deckSidePeek 已无布局消费方（悬停不再退避）。
     property real tiltCur: dragging ? 0
         : (engaging
             ? StageConfigService.deckRestTilt
@@ -381,42 +364,14 @@ Item {
     }
 
     // 悬停 = 整卡或任一按钮热区命中（合成）：按钮类 MouseArea 在最上层，
-    // 指针移上去会让整卡 MouseArea 失去悬停——若只看后者，卡片会缩回
-    // 1.0 → 按钮随 5% 缩放位移 → 指针脱出 → 再放大 = 抽搐循环（实测），
-    // 且点击永远落空。⚠️ splitHit 必须在列（2026-09-30 抽搐定案）：漏列
-    // 时指针移上拆分钮 = isHovered 翻 false → hovered(false) → 窗口侧
-    // 清 hoveredKey 整列回基础槽位 = 卡在静止指针底下移位 → 悬停失而
-    // 复得 → 布局弹回 = 抖动 + tilt/scale 来回翻转（"拆分钮点不到"）。
-    // 按钮角区合成进 isHovered：指针在角区（按钮间的空隙）时卡不缩回。
+    // 指针移上去会让整卡 MouseArea 失去悬停——只认后者的话 hovered(false)
+    // 会让倾角在指针下翻回去，进出按钮时反复抖动。按钮角区同样合成，
+    // 指针在按钮间的空隙时卡不 tilt 回弹。
     readonly property bool isHovered: cardMouse.containsMouse
-        || closeHit.containsMouse
         || splitHit.containsMouse
         || iconRowHover.containsMouse
         || buttonAimHover.containsMouse
     onIsHoveredChanged: card.hovered(card.isHovered)
-
-    // ── 关闭钮热区的透视跟随（悬停倾斜的点击对齐）──
-    // 关闭钮视觉在 plane 内、随真透视投影（倾斜卡面上的钮被挪位），而
-    // 热区是轴对齐固定矩形——不跟随的话悬停倾斜（tiltAngle>0）下指针点
-    // "看到的钮"会落在热区外、被整卡 MouseArea 接走（点关闭反被展开）。
-    // 按与 stage_tilt.frag 同源的针孔公式把热区中心从平面位投到视觉位
-    //（tiltProject 孪生；Δ = 投影后 − 平面位）。角用 tiltCur 绑定：
-    // 拖拽摆平/悬停补间都自动连续跟随（含 Behavior），两模式一致。
-    // 拆分芯片/图标排是"正视覆盖层"（用户定稿不随倾斜）——热区与芯片
-    // 都在固定位，天然对齐，不动。
-    readonly property var _closeProj: {
-        // 热区中心平面位（相对卡中心）：宽 24 锚右上 6/6 + 卡头 18 中心
-        const hu = card.width / 2 - 18
-        const hv = 18 - card.height / 2
-        const rad = (card.rightSide ? -1 : 1) * card.tiltCur * Math.PI / 180
-        const s = Math.sin(rad), c = Math.cos(rad)
-        const k = StageGeo.TILT_FOCAL / (StageGeo.TILT_FOCAL + hu * s)
-        return {
-            dx: hu * c * k - hu,
-            dy: (hv + card.perspectiveYOff) * k
-                - card.perspectiveYOff - hv,
-        }
-    }
 
     // 合并完成的可拆分提示：merged 原地翻真（首次拖卡合并就是这条路径）
     // 时拆分钮自动亮一小会儿——拆分钮平时只在悬停时显现，合并完指针不在
@@ -433,8 +388,8 @@ Item {
             _mergeGlowTimer.restart()
         }
     }
-    // 聚焦辉光：悬停/交棒时点亮（与聚焦放大同步）
-    readonly property bool glowOn: card.isHovered || card.engaging
+    // 辉光只在交棒时点亮（悬停只放平）
+    readonly property bool glowOn: card.engaging
 
     // ── 卡面内容层（离屏）：背板/辉光/头部/缩略图全部渲染进 plane 的层
     // 纹理，再由 stage_tilt 着色器按共享透视重投影。plane 比卡面大一圈：
@@ -452,6 +407,7 @@ Item {
         ? 2 * Math.max(1.4, StageConfigService.fanHoverSpread)
             * StageConfigService.fanSpacing
         : 0
+
     Item {
         id: plane
         visible: false
@@ -481,7 +437,8 @@ Item {
         // 更多的用左下角图标排表达 ──
         Repeater {
             model: Math.min(card.count - 1, 4)
-            Rectangle {
+            Item {
+                id: fanCard
                 required property int index
                 readonly property real off: (index + 1)
                     * StageConfigService.fanSpacing
@@ -494,63 +451,107 @@ Item {
                 y: plate.y - off
                 width: plate.width
                 height: plate.height
-                radius: plate.radius
-                color: Qt.rgba(0.03, 0.05, 0.09,
-                    StageConfigService.cardTint * (0.88 - index * 0.18))
-                border.width: 1
-                border.color: Qt.rgba(255, 255, 255,
-                    StageConfigService.cardBorder * (0.8 - index * 0.18))
                 opacity: card.engaging ? 0.0 : 1.0
                 Behavior on opacity { NumberAnimation { duration: 160 } }
                 Behavior on x { NumberAnimation { duration: 150; easing.type: Easing.OutCubic } }
                 Behavior on y { NumberAnimation { duration: 150; easing.type: Easing.OutCubic } }
+
+                // ⚠️ 不能用 Rectangle：它的圆角抗锯齿同样依赖多重采样目标，
+                // 而本项所在的 plane 是无 MSAA 的离屏层。扇叠背板向前上探出
+                // 卡面（左侧条向左上），探出部分的硬边就是多窗卡的真实轮廓
+                // ——暗色缩略图与背板同色时，前卡的软遮罩完全被吃掉
+                //（2026-10-18 实测：扇叠卡左缘 97→43→26 仅 1 个过渡像素）。
+                // 用与背板/遮罩同一条 SDF 着色器，轮廓一律软边。
+                ShaderEffect {
+                    anchors.fill: parent
+                    property size isz: Qt.size(width, height)
+                    // 扇叠背板四角同半径（旧 Rectangle 的 radius）
+                    property real rNear: plate.radius
+                    property real rFar: plate.radius
+                    property real nearLeft: 1.0
+                    // 扇叠背板不描边：白描边在卡缘外叠成一道可见的灰色轮廓
+                    //（参考图的多窗卡只有层叠色差，没有轮廓线）。填充色差
+                    // 已经足以表达"下面还有一张"。
+                    property real borderWidth: 0
+                    property color fillColor: Qt.rgba(0.03, 0.05, 0.09,
+                        StageConfigService.cardTint
+                            * (0.88 - fanCard.index * 0.18))
+                    fragmentShader: Qt.resolvedUrl(
+                        "../../shaders/stage_plate.frag.qsb")
+                }
             }
         }
 
-        // 背板（原根 Rectangle 的颜色/描边/圆角，随卡面一起被透视投影）
-        Rectangle {
+        // 背板（原根 Rectangle 的颜色/描边/圆角，随卡面一起被透视投影）。
+        // 2026-10-18 非对称圆角：近缘两角 nearCornerRadius、远缘两角
+        // cardRadius——缩略图遮罩（stage_round.frag）与受光层必须同源，
+        // 否则近角会露出一块背板小圆角的楔形。
+        Item {
             id: plate
             x: 50 + card.fanPad
             y: 50 + card.fanPad
             width: parent.width - 100 - card.fanPad * 2
             height: parent.height - 100 - card.fanPad * 2
-            radius: StageConfigService.cardRadius
-            // 背板浓度：静置 cardTint，悬停/驻留预示自动 ×1.3 提亮（上限 0.95）
-            //（活体内容走 paintScreen 后置通道画在一切之上——背板正常渲染，
-            // 内容盖在其上，视觉与快照时代同层。旧的 livePainted 开洞是
-            // 给"内容画在条带之下"的已废弃架构留的，留着会把玻璃底板抠空
-            // = 卡片分裂成"透明框＋悬浮内容"）
-            // 有缩略图时背板必须不透明：投影是 outer-only（卡内被
-            // SDF 抠掉），半透明背板的抗锯齿边缘会把**没被投影压暗**的
-            // 壁纸透出来，比卡外投影区更亮 = 一圈 1~2px 亮边（2026-10-18
-            // 实测：卡外 39,61,88 → 边缘 67,91,121）。不透明后边缘只混
-            // 背板色，亮边消失。空卡/占位仍走半透明玻璃。
-            color: (card.isHovered || card.dropHovered || card.dwellHint)
-                ? Qt.rgba(0.10, 0.13, 0.20,
-                    Math.min(0.95, StageConfigService.cardTint * 1.3))
-                : card.thumbPreviewSource !== ""
-                    ? Qt.rgba(0.05, 0.07, 0.12, 1.0)
-                    : Qt.rgba(0.05, 0.07, 0.12, StageConfigService.cardTint)
-            // 静置描边只给"空卡/占位"用：缩略图铺满卡面时它是唯一露在
-            // 圆角边上的东西，实测在白窗旁读作一圈亮边（阴影被卡内裁掉，
-            // 卡外壁纸是压暗的，1px 白描边反而更亮）。参考卡没有这圈边
-            // ——有内容就 0，武装/驻留高亮照旧 2。
-            // ⚠️ 判据用 source 而非 thumbPreviewVisible：后者是有效可见性，
-            // 受 thumbCard.visible=false 牵连恒假（见该属性注释）。
-            border.width: (card.dropHovered || card.selfMergeHint
-                || card.dwellHint) ? 2
-                : (card.thumbPreviewSource !== "" ? 0 : 1)
-            // dropHovered/selfMergeHint = 武装级高亮（亮蓝）；
-            // dwellHint = 驻留预示（强蓝，"停住别动"的即时反馈——首版
-            // 1px@45% 实测几乎不可见 = "反馈太差"，加粗提亮）
-            border.color: (card.dropHovered || card.selfMergeHint)
-                ? Qt.rgba(0.45, 0.85, 1.0, 0.95)
-                : card.dwellHint
-                    ? Qt.rgba(0.45, 0.85, 1.0, 0.78)
-                    : card.glowOn
-                        ? Qt.rgba(0.62, 0.80, 1.0, 0.85)
-                        : Qt.rgba(255, 255, 255, StageConfigService.cardBorder)
-            Behavior on color { ColorAnimation { duration: 130 } }
+            // 旧消费方（扇叠/辉光/投影）读的基准半径 = 远缘半径
+            readonly property real radius: StageConfigService.cardRadius
+
+            // 背板改用 SDF 着色器：Shape 的曲线抗锯齿要多重采样目标，而这个
+            // plane 是离屏 layer（samples 默认 0）——硬边直接成为暗色缩略图
+            // 卡的可见轮廓（2026-10-18 圆角锯齿事故）。与缩略图遮罩同一条
+            // SDF、同一覆盖带，轮廓在哪张卡上都由软边定义。
+            ShaderEffect {
+                id: plateMask
+                anchors.fill: parent
+                property size isz: Qt.size(width, height)
+                property real rNear: card.nearCornerRadius
+                property real rFar: StageConfigService.cardRadius
+                property real nearLeft: card.rightSide ? 0.0 : 1.0
+                fragmentShader: Qt.resolvedUrl("../../shaders/stage_plate.frag.qsb")
+                // 背板浓度：静置 cardTint，悬停/驻留预示自动 ×1.3 提亮（上限 0.95）
+                //（活体内容走 paintScreen 后置通道画在一切之上——背板正常渲染，
+                // 内容盖在其上，视觉与快照时代同层。旧的 livePainted 开洞是
+                // 给"内容画在条带之下"的已废弃架构留的，留着会把玻璃底板抠空
+                // = 卡片分裂成"透明框＋悬浮内容"）
+                // 有缩略图时背板必须不透明：投影是 outer-only（卡内被
+                // SDF 抠掉），半透明背板的抗锯齿边缘会把**没被投影压暗**的
+                // 壁纸透出来，比卡外投影区更亮 = 一圈 1~2px 亮边（2026-10-18
+                // 实测：卡外 39,61,88 → 边缘 67,91,121）。不透明后边缘只混
+                // 背板色，亮边消失。空卡/占位仍走半透明玻璃。
+                // 有缩略图时背板不填色：缩略图自己铺满卡面，背板唯一可见的
+                // 位置是遮罩 ±2 抗锯齿带——不透明背板会把这条带染暗，白窗
+                // 卡四周读作一圈灰边（2026-10-18 用户"灰色边框"反馈）。
+                // 取消填色后边缘直接由缩略图 alpha 过渡到壁纸；武装/驻留
+                // 描边（borderWidth）仍照常由本项绘制。
+                property color fillColor: card.thumbPreviewSource !== ""
+                    ? Qt.rgba(0, 0, 0, 0)
+                    : (card.isHovered || card.dropHovered || card.dwellHint)
+                        ? Qt.rgba(0.10, 0.13, 0.20,
+                            Math.min(0.95, StageConfigService.cardTint * 1.3))
+                        : Qt.rgba(0.05, 0.07, 0.12, StageConfigService.cardTint)
+                // 静置描边只给"空卡/占位"用：缩略图铺满卡面时它是唯一露在
+                // 圆角边上的东西，实测在白窗旁读作一圈亮边（阴影被卡内裁掉，
+                // 卡外壁纸是压暗的，1px 白描边反而更亮）。参考卡没有这圈边
+                // ——有内容就 0，武装/驻留高亮照旧 2。
+                // ⚠️ 判据用 source 而非 thumbPreviewVisible：后者是有效可见性，
+                // 受 thumbCard.visible=false 牵连恒假（见该属性注释）。
+                // 静置不描边：1px 白描边沿 SDF 圆弧逐像素排布，在曲率大的
+                // 近缘直接读成一圈锯齿状的灰色轮廓（2026-10-18 用户"灰色
+                // 边框 / 锯齿"反馈）。参考卡没有任何轮廓线，卡形由填充色差
+                // 与柔边定义。只有武装/驻留的交互高亮才画描边。
+                property real borderWidth: (card.dropHovered || card.selfMergeHint
+                    || card.dwellHint) ? 2 : 0
+                // dropHovered/selfMergeHint = 武装级高亮（亮蓝）；
+                // dwellHint = 驻留预示（强蓝，"停住别动"的即时反馈——首版
+                // 1px@45% 实测几乎不可见 = "反馈太差"，加粗提亮）
+                property color borderColor: (card.dropHovered || card.selfMergeHint)
+                    ? Qt.rgba(0.45, 0.85, 1.0, 0.95)
+                    : card.dwellHint
+                        ? Qt.rgba(0.45, 0.85, 1.0, 0.78)
+                        : card.glowOn
+                            ? Qt.rgba(0.62, 0.80, 1.0, 0.85)
+                            : Qt.rgba(255, 255, 255, StageConfigService.cardBorder)
+                Behavior on fillColor { ColorAnimation { duration: 130 } }
+            }
         }
 
         // ── 常驻投影(iPadOS 还原,2026-10-17):参考缩略图卡四周有柔和短
@@ -558,10 +559,9 @@ Item {
         // 20%，上/左也有一圈淡影 = 光源略偏左上而非纯底投影）。声明在
         // 背板之后/内容之前 = 随 plane 纹理一起被透视斜切（投影随卡
         // 姿态，与参考一致）。
-        // 2026-10-18：改用与浮层同源的 SDF 投影着色器（KosCardShadow）。
-        // 旧的 4 层步进黑矩形在 30° 透视角下卡底能看出阶梯边（每级
-        // 6/8px 的外扩在斜切后被放大），而 SDF 的 smoothstep 是连续
-        // 衰减；峰值也压回参考的 ~20%（旧叠加 ≈26% 偏重）。
+        // 2026-10-18 用户回退定案：回到最初这张随卡面透视的投影（屏幕
+        // 空间版作废），但颜色更淡、扩散更短——原先 0.15/36 在深色壁纸
+        // 上仍显重，收到 0.10/22。
         // ⚠️ 不要改回 anchors.centerIn：锚点会覆盖 x/y 绑定，投影变成
         // 上下对称的光晕（2026-10-18 卡顶黑边事故）。显式 x/y 定位。
         KosCardShadow {
@@ -577,12 +577,8 @@ Item {
             // 光源在左上：右下重、左上轻
             offsetX: 1
             offsetY: 4
-            // 2026-10-18 二测参考：卡右缘外 1~2px 处压暗 ~14%、12 参考 px
-            //（≈21 逻辑 px）内回到壁纸本色。旧的 44/0.20 在实测里边缘
-            // 20%、衰减 ~28 逻辑 px——偏重偏散，两张相邻卡的尾巴在 24px
-            // 间隙里连成一条暗带。收到 36/0.15。
-            softness: 36
-            shadowColor: Qt.rgba(0, 0, 0, 0.15)
+            softness: 22
+            shadowColor: Qt.rgba(0, 0, 0, 0.10)
             x: plate.x - margin + (opaqueFace ? 1 : 0)
             y: plate.y - margin + (opaqueFace ? 1 : 0)
         }
@@ -611,22 +607,11 @@ Item {
             }
         }
 
-        // ── 玻璃质感：顶部受光渐变（悬停 ×2 提亮） ──
-        Rectangle {
-            anchors.fill: plate
-            radius: plate.radius
-            gradient: Gradient {
-                orientation: Gradient.Vertical
-                GradientStop {
-                    position: 0.0
-                    color: Qt.rgba(1, 1, 1, card.isHovered
-                        ? Math.min(0.4, StageConfigService.cardTopLight * 2)
-                        : StageConfigService.cardTopLight)
-                }
-                GradientStop { position: 0.35; color: Qt.rgba(1, 1, 1, 0.02) }
-                GradientStop { position: 1.0; color: Qt.rgba(0, 0, 0, 0.10) }
-            }
-        }
+        // ── 玻璃质感：顶部受光渐变已删除（2026-10-18）──
+        // 它是 QQuickShape，在无 MSAA 的 plane 离屏层里硬边不抗锯齿；填充
+        // 渐变顶端的 7% 白正是沿卡缘那一圈 1px 亮线的来源——把描边全关掉
+        // 之后线仍在（r87 实测）。参考卡没有任何顶部受光线，卡形由背板
+        // 填充与柔边定义，故整层移除。
 
         // 头部：名称（多窗带数量）+ 关闭。不放应用图标——卡面保持纯缩略图
         //（图标只在缩略图未就绪的占位里出现）
@@ -648,10 +633,10 @@ Item {
                     left: parent.left
                     // 合并卡让位给拆分芯片（芯片亮起盖住标题尾部 ~18px，
                     // elide 又按全宽算——读作"标题被啃"）。芯片已搬根层，
-                    // 锚点坐标不再同系，改固定让位量：merged 时让出 ✕(20)
-                    // + 间隙(4) + 芯片(20) + 余量(6)
+                    // 锚点坐标不再同系，改固定让位量：merged 时让出
+                    // 芯片(20) + 间隙(4) + 余量(6)；无芯片时贴头部右缘
                     right: parent.right
-                    rightMargin: card.merged ? 50 : 26
+                    rightMargin: card.merged ? 50 : 0
                     verticalCenter: parent.verticalCenter
                 }
                 // 名称可关（stage-config showCardTitle）：关=纯窗口内容。
@@ -672,33 +657,6 @@ Item {
             //（绑定不重求值 + 命令式写也不重渲染，2026-10-03 原地合并
             // 三轮实测），原地合并后芯片永远隐身。根层直渲染 + opacity
             // 门控彻底绕开；悬停时卡片压平，直渲染芯片与卡面对齐
-
-            Rectangle {
-                id: cardClose
-                anchors {
-                    right: parent.right
-                    verticalCenter: parent.verticalCenter
-                }
-                width: 20
-                height: 20
-                radius: 10
-                // iPadOS 还原(2026-10-17):参考缩略图无常驻关闭钮——只在
-                // 卡片悬停时出现。静置=暗底圆 + 白 ×；悬停按钮本体=红圆底
-                opacity: (card.isHovered || closeHit.containsMouse) ? 1.0 : 0.0
-                Behavior on opacity { NumberAnimation { duration: 120 } }
-                color: closeHit.containsMouse
-                    ? "#ef4444" : Qt.rgba(0.04, 0.055, 0.08, 0.45)
-
-                Text {
-                    anchors.centerIn: parent
-                    text: "✕"
-                    font.pixelSize: 11
-                    font.bold: true
-                    color: closeHit.containsMouse
-                        ? "white" : Qt.rgba(1, 1, 1, 0.82)
-                    Behavior on color { ColorAnimation { duration: 120 } }
-                }
-            }
         }
 
         // 缩略图视口：填满整卡（沉浸式——整卡就是窗口内容，无内框）。
@@ -852,10 +810,12 @@ Item {
                 cache: false
                 sourceSize: Qt.size(StageConfigService.thumbSize,
                     Math.round(StageConfigService.thumbSize * 0.7))
-                // 卡形已跟窗口宽高比走（横窗横卡），整窗等比缩进卡面：
-                // 完整显示、不裁切（macOS 台前语义）。缩略图是窗口内容，
-                // 与含装饰的 KWin 几何有细微比例差——居中留边即可
-                fillMode: Image.PreserveAspectFit
+                // 卡形已跟窗口宽高比走（横窗横卡），缩略图**铺满卡面**：
+                // 2026-10-18 用户反馈"有些面板没有圆角（如 Edge）"——Fit
+                // 会在卡角留透明边，露出的方形窗口截图就是肉眼看到的卡
+                // 角，圆角遮罩/裁切全落在透明留边上，等于没有圆角。Crop
+                // 只裁掉装饰几何与内容几何之间那几像素的比例差
+                fillMode: Image.PreserveAspectCrop
                 horizontalAlignment: Image.AlignHCenter
                 verticalAlignment: Image.AlignVCenter
                 smooth: true
@@ -933,12 +893,16 @@ Item {
         }
 
         // 圆角化的缩略图本体：采样 thumbCard 层纹理，圆角矩形 SDF 抠
-        // alpha——圆角外透出下方背板（背板自带 radius，视觉浑然一体）。
-        // 半径/尺寸绑定 plate，与背板圆角严格同源（含设置页实时调整）。
+        // alpha——圆角外透出下方背板（背板自带同源非对称圆角，视觉浑
+        // 然一体）。半径/尺寸绑定 plate，与背板圆角严格同源（含设置页
+        // 实时调整）。
         ShaderEffect {
+            id: thumbMask
             anchors.fill: plate
             property variant source: thumbCard
-            property real crad: plate.radius
+            property real crad: 0
+            property real cradNear: 0
+            property real nearLeft: card.rightSide ? 0.0 : 1.0
             property size isz: Qt.size(width, height)
             fragmentShader: Qt.resolvedUrl("../../shaders/stage_round.frag.qsb")
         }
@@ -977,6 +941,19 @@ Item {
             height / 2 - card.perspectiveYOff)
         property real yOff: card.perspectiveYOff
         property size itemSize: Qt.size(width, height)
+        // 卡面圆角裁切（见 stage_tilt.frag 里的 SDF）：卡面（plate）在
+        // 卡坐标系里的半尺寸 + 四角同半径。必须在这里绑定——plane 是
+        // visible:false 的 layer 子树，树内 ShaderEffect 的自定义属性
+        // 绑定在本机栈上不重求值（半径恒读默认 0 = 直角，2026-10-18 实测）
+        //
+        // ⚠️ cornerRadius 必须经卡片根属性中转（2026-10-18 实测）：
+        // ShaderEffect 自定义属性直接绑单例（StageConfigService.cardRadius）
+        // 在本机栈上**不求值**，uniform 恒为 0，全卡直角，且 stage-config
+        // 改值也不响应；绑到普通 Item 属性（card.nearCornerRadius）即正常。
+        property size cardHalf: Qt.size(
+            (plane.width - 100 - card.fanPad * 2) / 2,
+            (plane.height - 100 - card.fanPad * 2) / 2)
+        property real cornerRadius: card.nearCornerRadius
         fragmentShader: Qt.resolvedUrl("../../shaders/stage_tilt.frag.qsb")
     }
 
@@ -1037,31 +1014,11 @@ Item {
         }
     }
 
-    // 关闭钮热区必须在卡根层级：视觉树渲染进 visible:false 的透视层
-    //（plane，着色器源），层内 MouseArea 不收输入——整卡 cardMouse 把
-    // 点击全接走（"关闭按钮点不动"的根因）。plane/plate 与根坐标 1:1
-    // 对齐（plane.x=-50/plate.x=50 抵消）。
-    // x/y 显式定位 = 基准位（右上 6/6）+ _closeProj 透视位移：视觉钮在
-    // 投影位、热区跟到同位（悬停倾斜下不跟随会"点关闭变展开"，见
-    // _closeProj 注释）。
-    MouseArea {
-        id: closeHit
-        z: 1
-        width: 24
-        height: 24
-        x: parent.width - width - 6 + card._closeProj.dx
-        y: 6 + card._closeProj.dy
-        hoverEnabled: true
-        cursorShape: Qt.PointingHandCursor
-        onClicked: card.closeAllRequested()
-    }
-
-    // 按钮角区热区：覆盖两个按钮的更大区域（NoButton 不截点击；声明在
-    // cardMouse 之后=角区内它是 hover 顶层，压住 cardMouse；closeHit/
-    // splitHit z:1 在按钮上仍是最顶层——isHovered 合成见上）。
-    // ⚠️ 固定锚右上：视觉钮（cardClose/cardSplit）在头部永远位于卡面
-    // 右上（头部横贯 plate、关闭钮锚右），不随 side 镜像——镜像到左上
-    // 会瞄准错侧（2026-09-30 修正）。
+    // 按钮角区热区：覆盖拆分钮周围的更大区域（NoButton 不截点击；声明在
+    // cardMouse 之后=角区内它是 hover 顶层，压住 cardMouse；splitHit z:1
+    // 在按钮上仍是最顶层——isHovered 合成见上）。
+    // ⚠️ 固定锚右上：拆分芯片在头部永远位于卡面右上，不随 side 镜像
+    // ——镜像到左上会瞄准错侧（2026-09-30 修正）。
     MouseArea {
         id: buttonAimHover
         width: 104
@@ -1076,9 +1033,8 @@ Item {
         cursorShape: Qt.PointingHandCursor
     }
 
-    // 拆分热区：与 closeHit 同款根层原理（plane 层内不收输入）。位置与
-    // 头部拆分钮对齐：closeHit 右缘 6 + 钮 20 + 间隙 4 = 30，热区 22px
-    // 居中于 20px 视觉钮再 +1 → rightMargin 31
+    // 拆分热区：根层原理（plane 层内不收输入）。位置与头部拆分芯片对齐：
+    // 热区 22px 居中于 20px 视觉钮，rightMargin 31
     MouseArea {
         id: splitHit
         z: 1
@@ -1134,72 +1090,57 @@ Item {
     }
 
     // ── 左下角窗口标识（iPadOS 还原，参考 ref/c1·c2·c3）──
-    // 单窗：一枚大图标半悬卡角外（ref/c3 实测：水平探出 27%、垂直 60%）。
-    // 多窗合并卡：白色圆角胶囊，内为**逐窗**「图标 + 标题」竖排（ref/c2
-    // 实测：胶囊 ≈ 卡宽 33%，底/左各探出卡外约 8-10px）。两种形态都正视、
-    // 独立图层（不进 plane 透视纹理，不随卡倾斜——用户定稿"像小图标盖住
-    // 卡片左下角"）；点击直达对应窗口；条在右时整体镜像到右下角。
+    // 左下角应用图标（每个应用一枚，合并卡并排；超出进 "+N"）。正视、
+    // 独立图层（不进 plane 透视纹理，不随卡倾斜——用户定稿"像小图标
+    // 盖住卡片左下角"）；垂直中线与卡底边重合；点击直达对应窗口；
+    // 条在右时整体镜像到右下角。
     Item {
         id: iconRow
         z: 2
         // chrome 让位：图标排已迁特效正视覆盖层（用户定稿"正视盖住左下
         // 角"），QML 侧隐藏防双绘
         visible: card.previewActive && !card.effectOwnedChrome
-        // 多窗形态：逐窗行 >1（同应用两扇窗也是两行——参考列的是窗口，
-        // 不是应用）。rowsJson 缺失（旧载荷/热重载）时退回单图标 + "+N"
-        readonly property bool listForm: card.windowRows.length > 1
-        // 单窗图标随卡高封顶（横窗矮卡时 60px 图标会盖掉半张卡）
+        // 图标尺寸只看卡宽、与卡高完全解耦（用户定案：所有卡图标一样大，
+        // 卡高跟窗口宽高比变时图标不得跟着缩/拉）。0.47×卡宽 = 参考的
+        // ~47% 卡宽（128 卡 → 60）；卡宽调小时按比例封顶防溢出
         readonly property int iconSize: Math.min(
             StageConfigService.stripIconSize,
-            Math.round(card.height * 0.42))
+            Math.round(card.width * 0.47))
         readonly property int iconGap: Math.max(3, Math.round(iconSize * 0.2))
-        // 胶囊度量：按参考比例随卡宽缩放（ref/c2：胶囊≈33% 卡宽、图标
-        // 22% 胶囊宽、行高 26%、圆角 24%；旧值是按 216 宽卡定死的绝对值，
-        // 卡缩小到 96 后必须同比缩，否则胶囊会比卡还宽）
-        readonly property int pillW: Math.round(card.width * 0.33)
-        readonly property int pillIcon: Math.max(6, Math.round(pillW * 0.22))
-        readonly property int pillRowH: Math.max(8, Math.round(pillW * 0.26))
-        readonly property int pillPadX: Math.max(2, Math.round(pillW * 0.11))
-        readonly property int pillPadY: Math.max(2, Math.round(pillW * 0.07))
-        readonly property int pillRadius: Math.max(4, Math.round(pillW * 0.24))
-        readonly property int pillMaxRows: 4
-        readonly property int displayRows:
-            Math.min(card.windowRows.length, pillMaxRows)
-        readonly property bool overflow: card.windowRows.length > displayRows
-        readonly property int pillH: displayRows * pillRowH + pillPadY * 2
-        // 单窗形态的并列上限（maxIconSlots 旋钮保留；预设钳 1）
+        // 水平按参考实测：图标左缘探出卡缘 ~26% 图标宽（Mail 卡实测
+        // 24/92）；垂直按用户定案——图标垂直中线与卡底边线重合（一半
+        // 在卡内、一半在卡外）
+        readonly property real outX: Math.round(iconSize * 0.26)
+        readonly property real overhangY: iconSize / 2
+        // 并列上限：应用数、maxIconSlots 旋钮、卡宽装得下的枚数，三者取小。
+        // 多应用合并卡并排显示各应用图标（参考 ref-orange 多窗卡左下角
+        // 是 Finder + Edge 两枚图标，不是文字列表）
         readonly property int visibleCount: Math.min(card.iconPairs.length,
             card.maxIconSlots,
-            Math.floor((card.width + iconGap) / (iconSize + iconGap)),
-            1)
+            Math.max(1, Math.floor((card.width + outX + iconGap)
+                / (iconSize + iconGap))))
         readonly property real rowWidth:
             visibleCount * iconSize + Math.max(0, visibleCount - 1) * iconGap
-        // 单窗：图标中心坐在卡左下角内（ref/card1-zoom 实测：水平探出
-        // 30% 图标宽、垂直仅 26%——第 29 轮的 60% 把卡底量错了）；合并卡：
-        // 胶囊底探出约 15% 胶囊高
-        readonly property real outX: listForm
-            ? Math.max(3, Math.round(pillW * 0.12)) : iconSize * 0.30
-        width: listForm ? pillW : rowWidth
-        height: listForm ? pillH : iconSize
+        width: rowWidth
+        height: iconSize
         // ⚠️ 水平定位用 x 而非 left/right 锚点切换（同 cards 列的坑）：
         // 锚点对在 side 翻转瞬间同时定义会拆掉 width 绑定
         anchors.bottom: parent.bottom
-        anchors.bottomMargin: listForm
-            ? -Math.max(3, Math.round(pillH * 0.15)) : -iconSize * 0.26
-        x: card.rightSide ? parent.width - width + outX : -outX
+        anchors.bottomMargin: -iconRow.overhangY
+        x: card.rightSide
+            ? parent.width - width + iconRow.outX : -iconRow.outX
 
-        // ── 单窗形态：一枚大图标（图标资源自带 squircle 底）──
+        // ── 图标（图标资源自带 squircle 底）──
         MouseArea {
             id: iconRowHover
             anchors.fill: parent
             anchors.margins: -3
-            visible: !iconRow.listForm
             hoverEnabled: true
             acceptedButtons: Qt.NoButton
         }
 
         Repeater {
-            model: iconRow.listForm ? 0 : iconRow.visibleCount
+            model: iconRow.visibleCount
             MouseArea {
                 id: iconSlot
                 required property int index
@@ -1231,85 +1172,14 @@ Item {
             }
         }
 
-        // 单窗形态的 "+N"（iconPairs 超过可见上限时）
+        // "+N"（iconPairs 超过可见上限时）
         Text {
-            visible: !iconRow.listForm && card.iconPairs.length > iconRow.visibleCount
+            visible: card.iconPairs.length > iconRow.visibleCount
             anchors.verticalCenter: parent.verticalCenter
             x: card.rightSide ? -width - 5 : parent.width + 5
             text: "+" + (card.iconPairs.length - iconRow.visibleCount)
             color: Qt.rgba(1, 1, 1, 0.65)
             font { pixelSize: 10; weight: Font.DemiBold }
-        }
-
-        // ── 合并卡形态：白色圆角胶囊 + 逐窗行 ──
-        // 投影（参考有一层很浅的落影；两层叠出柔和边）
-        Rectangle {
-            visible: iconRow.listForm
-            x: -1; y: 2
-            width: parent.width + 2; height: parent.height + 2
-            radius: iconRow.pillRadius + 1
-            color: Qt.rgba(0, 0, 0, 0.10)
-        }
-        Rectangle {
-            id: pillBg
-            visible: iconRow.listForm
-            anchors.fill: parent
-            radius: iconRow.pillRadius
-            // ref/c2 实测底色 (251,252,251)
-            color: "#fbfcfb"
-        }
-
-        Repeater {
-            model: iconRow.listForm ? iconRow.displayRows : 0
-            MouseArea {
-                id: pillRow
-                required property int index
-                readonly property bool more:
-                    iconRow.overflow && index === iconRow.displayRows - 1
-                readonly property var row:
-                    (!more && index < card.windowRows.length)
-                        ? card.windowRows[index] : null
-                x: 0
-                y: iconRow.pillPadY + index * iconRow.pillRowH
-                width: iconRow.pillW
-                height: iconRow.pillRowH
-                hoverEnabled: true
-                cursorShape: Qt.PointingHandCursor
-                onClicked: if (row && row.id) card.iconActivated(row.id)
-                Rectangle {
-                    anchors.fill: parent
-                    anchors.margins: 1
-                    radius: Math.max(2, Math.round(iconRow.pillRadius * 0.35))
-                    color: pillRow.containsMouse
-                        ? Qt.rgba(0, 0, 0, 0.06) : "transparent"
-                    Behavior on color { ColorAnimation { duration: 120 } }
-                }
-                IconImage {
-                    visible: !pillRow.more
-                    x: iconRow.pillPadX
-                    anchors.verticalCenter: parent.verticalCenter
-                    width: iconRow.pillIcon
-                    height: iconRow.pillIcon
-                    source: pillRow.row ? (pillRow.row.icon || "") : ""
-                    asynchronous: false
-                }
-                Text {
-                    x: iconRow.pillPadX + iconRow.pillIcon
-                        + Math.max(2, Math.round(iconRow.pillW * 0.08))
-                    anchors.verticalCenter: parent.verticalCenter
-                    width: iconRow.pillW - x - iconRow.pillPadX
-                    text: pillRow.more
-                        ? "+" + (card.windowRows.length
-                                 - (iconRow.displayRows - 1))
-                        : (pillRow.row ? pillRow.row.title : "")
-                    // iOS 次要文字灰；参考标签很小、被模糊糊住
-                    color: "#8e8e93"
-                    font.pixelSize: Math.max(6,
-                        Math.round(iconRow.pillW * 0.14))
-                    elide: Text.ElideRight
-                    maximumLineCount: 1
-                }
-            }
         }
     }
 }

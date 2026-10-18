@@ -15,6 +15,11 @@ export const CARD_OVERFLOW_MARGIN = 20
 // 卡宽 = 列宽 − 24（左右各 12 内边距）
 export const CARD_WIDTH_INSET = 24
 export const CARD_HEIGHT = 148
+// 卡形竖高上限（高/宽）。卡宽恒定，卡高跟窗口宽高比走；窗口越窄越高时
+// 按此封顶——否则竖窗被拉成细长条（列观感割裂）。3/4 即基准卡形
+// 128×171，宽高比更小的窗口封顶后按 PreserveAspectFit 在卡内左右留边，
+// 整窗内容仍完整可见（2026-10-18 用户定案"细长要有约束"）
+export const CARD_MAX_TALL_RATIO = 4 / 3
 export const CARD_X_INSET = 12          // 卡片 x（列左内边距）
 export const PANEL_ORIGIN_Y = 35        // 仅剩 StageModeService 的 kwinrc 三级
 // 回退矩形在用（"顶栏之下的条"粗略语义）。⚠️ 全屏浮层化（d5d8630）后
@@ -23,10 +28,9 @@ export const PANEL_ORIGIN_Y = 35        // 仅剩 StageModeService 的 kwinrc �
 export const PERSPECTIVE_FOCAL = 900    // 文档锚：本导出无代码消费，值须与
                                         // 特效 stageanim.cpp kPerspectiveFocal 同步
 
-export const SCROLL_RETREAT = 20        // 聚焦退避：其余卡从原位向两侧平移的像素
 // ── 拖拽排序（StageCard 与 StageSidebarWindow 共用；阈值/视觉同源）──
 export const DRAG_PICK_THRESHOLD = 12   // 按下位移超过此值才算拖拽（否则是点击）
-export const DRAG_SCALE = 1.06          // 被拖卡微放大（悬停放大走 config.hoverScale）
+export const DRAG_SCALE = 1.06          // 被拖卡微放大
 export const DRAG_Z = 999               // 被拖卡置顶 z（盖过全部槽位 z = n-i）
 export const DRAG_EDGE_RATIO = 0.5      // 拖拽 y 的上下钳位（半个卡高出界余量）
 export const DRAG_SCREEN_MARGIN = 8     // 拖拽 x 的左右屏缘余量（_dragClampX）
@@ -132,11 +136,10 @@ function _centerPositions(positions, availH, contentBottom) {
 //   ② 放得下：整块垂直居中；放不下：顶锚 + 滚动（scroll 偏移，
 //      clamp 到 scrollMax，滚到底末卡完整露出 + 辉光余量）；
 //   ③ 卡面永不缩小、无隐藏卡。
-// 聚焦态（hoveredIndex 命中且 count>1，"原位退避"）：悬停卡**原位微放大
-// + 置顶**（TopLeft 外扩只向右下长，卡内指针不可能被挤出）；其余卡
-// **保持基础槽位与原尺寸**，只从悬停卡向两侧平移 retreat px 并压暗
-//（focusDim 可关）。
-// 返回 { positions[], scales[], zs[], dims[], scale, pitch, scrollMax }——
+// 悬停态（2026-10-18 用户定案"只放平"）：悬停只改倾角（放平由卡片
+// 特效/QML 的 tilt 完成），**不重排、不缩放、不压暗**——其余卡留在
+// 基础槽位，悬停卡 y 锚定当前视觉位置（hoverY），只有 z 抬到最上。
+// 返回 { positions[], scales[], zs[], scale, pitch, scrollMax }——
 // positions 已含 scroll 偏移；pitch 供滚轮步进、scrollMax 供滚动上限；
 // scale 为基础缩放兜底值。
 // 溢出居中块的两侧最小对称净空：低于此值少显示一张卡——居中必须
@@ -155,9 +158,8 @@ export function scrollLayout(availH, count, opts = {}) {
     const positions = []
     const scales = []
     const zs = []
-    const dims = []
     if (!(count > 0))
-        return { positions, scales, zs, dims, scale: 1,
+        return { positions, scales, zs, scale: 1,
             pitch: ch + spacing, scrollMax: 0 }
     availH = _finiteAvailH(availH, count, ch, spacing)
     // 基础槽位（未滚动）：固定间距。**时刻居中**（用户定稿）：
@@ -206,39 +208,18 @@ export function scrollLayout(availH, count, opts = {}) {
             positions.push(baseY(i) - scroll)
             scales.push(1)
             zs.push(count - i)
-            dims.push(false)
         }
-        return { positions, scales, zs, dims, scale: 1, pitch, scrollMax }
+        return { positions, scales, zs, scale: 1, pitch, scrollMax }
     }
-    // 聚焦缩放 ≥ 基础缩放（TopLeft 外扩不变量）：聚焦比基础小会让悬停
-    // 卡向内收缩、把指针从卡缘挤出（悬停丢失→回弹→驻留→再聚焦的慢振
-    // 荡）。**相对基础缩放**（用户实测否决"弹回全尺寸"版：hoverScale
-    // 本就关闭悬停放大的配置下，0.76→1.0 的强弹＝"反转后突然放大"的
-    // 突兀感来源）——默认 1.0×base＝悬停不改尺寸，配置放大也按比例
-    const focusScale = Math.max(
-        (Number.isFinite(opts.focusScale) ? opts.focusScale : 1.0), 1)
-    const retreat = Number.isFinite(opts.retreat)
-        ? opts.retreat : SCROLL_RETREAT
     // 悬停卡锚定当前视觉位置（hoverY）；缺省回退滚动后的基础槽位
     const hy = Number.isFinite(opts.hoverY)
         ? opts.hoverY : baseY(h) - scroll
     for (let i = 0; i < count; i++) {
-        if (i === h) {
-            positions.push(hy)
-            scales.push(focusScale)
-            zs.push(count + 2)
-            dims.push(false)
-            continue
-        }
-        // 上组退避不设下限：滚动布局里卡在视口上方属正常（clip 裁掉）
-        positions.push(i < h
-            ? baseY(i) - scroll - retreat
-            : baseY(i) - scroll + retreat)
+        positions.push(i === h ? hy : baseY(i) - scroll)
         scales.push(1)
-        zs.push(count - i)
-        dims.push(true)
+        zs.push(i === h ? count + 2 : count - i)
     }
-    return { positions, scales, zs, dims, scale: 1, pitch, scrollMax }
+    return { positions, scales, zs, scale: 1, pitch, scrollMax }
 }
 
 // ── 特效目标矩形（stage-targets.json 的内容）──

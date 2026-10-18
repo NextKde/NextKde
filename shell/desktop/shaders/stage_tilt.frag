@@ -35,6 +35,8 @@ layout(std140, binding = 0) uniform buf {
     vec2 camRel;      // 共享相机在本项坐标系：x = 项中心（竖轴），y = 地平线
     float yOff;       // 卡中心 y − 地平线 y（px，正 = 卡在地平线下方）
     vec2 itemSize;    // 本 ShaderEffect 的像素尺寸
+    vec2 cardHalf;    // 卡面（plate）在卡坐标系里的半尺寸（不含 shadows 余量）
+    float cornerRadius; // 卡面四角圆角半径（px，卡坐标系）
 };
 
 void main() {
@@ -53,5 +55,19 @@ void main() {
     if (tuv.x < 0.0 || tuv.x > 1.0 || tuv.y < 0.0 || tuv.y > 1.0)
         discard;
     vec4 col = texture(source, tuv);
+    // ── 卡面圆角裁切（2026-10-18）──
+    // plane 是 visible:false 的 layer 子树，其内部 ShaderEffect 的自定义
+    // 属性绑定在本机栈上不生效（thumbRound 的半径恒为 0 = 卡片直角；
+    // 实测改成字面量立刻出圆角、绑配置值永不更新）。透视层在可见树里、
+    // 绑定可靠，故圆角在这里做：用逆映射已算出的卡面坐标 (u,v) 取
+    // 圆角矩形 SDF。**只在卡面包围盒内抠角**——投影/辉光/扇叠背板都画在
+    // 卡面之外，不能一起被裁。
+    float r = min(cornerRadius, min(cardHalf.x, cardHalf.y));
+    vec2 ah = abs(vec2(u, v)) - (cardHalf - vec2(r));
+    float dist = length(max(ah, vec2(0.0))) + min(max(ah.x, ah.y), 0.0) - r;
+    float aa = max(fwidth(dist), 0.25);
+    float a = 1.0 - smoothstep(-aa, aa, dist);
+    if (abs(u) <= cardHalf.x && abs(v) <= cardHalf.y)
+        col *= a;
     fragColor = col * qt_Opacity;
 }

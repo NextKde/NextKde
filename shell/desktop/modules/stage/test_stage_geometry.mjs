@@ -4,7 +4,7 @@
 import assert from "node:assert/strict";
 import {
     PANEL_WIDTH, CARD_WIDTH_INSET, CARD_HEIGHT, CARD_X_INSET, PANEL_ORIGIN_Y,
-    SCROLL_RETREAT as RETREAT_DEFAULT, TILT_FOCAL,
+    TILT_FOCAL,
     tiltProject, tiltUnproject,
     adaptiveLayout, scrollLayout, computeTargetRects,
 } from "./stage-geometry.mjs";
@@ -21,7 +21,6 @@ check("CARD_WIDTH_INSET", CARD_WIDTH_INSET, 24);
 check("CARD_HEIGHT", CARD_HEIGHT, 148);
 check("CARD_X_INSET", CARD_X_INSET, 12);
 check("PANEL_ORIGIN_Y", PANEL_ORIGIN_Y, 35);
-check("SCROLL_RETREAT default", RETREAT_DEFAULT, 20);
 
 check("computeTargetRects: dims.cardHeight scales rect height",
     computeTargetRects(
@@ -100,38 +99,34 @@ lay = scrollLayout(1000, 8, { spacing: 16, scroll: 300 });
 check("scroll: offset applied", lay.positions[0], 98 - 300);
 check("scroll: offset uniform", Math.round(lay.positions[7]),
     98 + 7 * 164 - 300);
-// ③ 聚焦原位退避（avail 1000, n=5, sp 16 → pitch 164，content 804，
-// top0=98，基础 [98,262,426,590,754]，retreat 默认 20）
+// ③ 悬停只放平（avail 1000, n=5, sp 16 → pitch 164，content 804，
+// top0=98，基础 [98,262,426,590,754]）：不重排、不缩放、不压暗
 lay = scrollLayout(1000, 5, { spacing: 16, hoveredIndex: 2 });
 const baseScroll = scrollLayout(1000, 5, { spacing: 16 });
 check("scroll focus: hovered stays in place",
     Math.round(lay.positions[2] - baseScroll.positions[2]), 0);
-check("scroll focus: focused scale", lay.scales[2], 1.0);
+check("scroll focus: no scale change", lay.scales[2], 1.0);
 check("scroll focus: focused top z", lay.zs[2], 7);
 check("scroll focus: others keep full size",
     lay.scales.filter((s, i) => i !== 2), [1, 1, 1, 1]);
-check("scroll focus: others dimmed", lay.dims.filter(d => d).length, 4);
-check("scroll focus: retreat from slots",
-    lay.positions.map(p => Math.round(p)), [78, 242, 426, 610, 774]);
-// 滚动态聚焦：retreat 基于滚动后的槽位（scroll 200 → 基础
-// [−102,62,226,390,554]，悬停 i=3：上组再 −20、下组 +20，无下限）
+check("scroll focus: others stay in slots",
+    lay.positions.map(p => Math.round(p)), [98, 262, 426, 590, 754]);
+// 滚动态悬停：其余卡仍停在滚动后的基础槽位
 lay = scrollLayout(1000, 5,
-    { spacing: 16, scroll: 200, hoveredIndex: 3, retreat: 20 });
-check("scroll focus: scrolled slots retreat, no floor",
-    lay.positions.map(p => Math.round(p)), [-122, 42, 206, 390, 574]);
+    { spacing: 16, scroll: 200, hoveredIndex: 3 });
+check("scroll focus: scrolled slots unchanged",
+    lay.positions.map(p => Math.round(p)), [-102, 62, 226, 390, 554]);
 // 聚焦锚定当前视觉位置（hoverY）：原样采用（卡不动 = 指针安全）
 lay = scrollLayout(1000, 5, { spacing: 16, hoveredIndex: 4, hoverY: 700 });
 check("scroll focus: anchored at hoverY verbatim",
     Math.round(lay.positions[4]), 700);
-// 聚焦缩放 ≥ 基础缩放（外扩不变量）：基础恒 1.0，低于 1.0 的聚焦值被
-// 抬到 1.0（内缩会把指针从卡缘挤出 → 悬停丢失慢振荡）
-check("scroll focus: focus clamped up to base scale",
-    scrollLayout(1000, 5, { spacing: 16, hoveredIndex: 2,
-        focusScale: 0.95 }).scales[2], 1.0);
+// 悬停不改缩放（focusScale 已无消费方）
+check("scroll focus: no focus scaling",
+    scrollLayout(1000, 5, { spacing: 16, hoveredIndex: 2 }).scales[2], 1.0);
 // 越界悬停索引 = 基础态
 check("scroll focus: invalid index falls back to base",
-    scrollLayout(1000, 3, { hoveredIndex: 9 }).dims,
-    [false, false, false]);
+    scrollLayout(1000, 3, { hoveredIndex: 9 }).zs,
+    [3, 2, 1]);
 // NaN 全防线：Number.isFinite 挡住 NaN/undefined（?? 挡不住 NaN，会让
 // 整列布局毒成 NaN——2026-09-30 审计补齐后锁住）
 check("scroll: NaN opts fall back to defaults",

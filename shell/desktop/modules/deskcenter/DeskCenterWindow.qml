@@ -20,16 +20,19 @@ import qs.desktop.modules.weather
 import "../../../Kos/Ui"
 import "WidgetLayout.mjs" as WidgetLayout
 
-// iPadOS-inspired desktop widgets. Keep this in the Bottom layer so Plasma's
-// desktop surface cannot cover it when plasmashell starts after KOS. Normal and
-// maximised application windows remain above it, and it reserves no usable
-// desktop area.
+// iPadOS-inspired desktop widgets. Stays on the Bottom layer: Plasma's desktop
+// surface shares the Desktop/Background layer and would cover it if moved down.
+// Application windows remain above it; it reserves no usable desktop area.
 PanelWindow {
     id: root
 
     color: "transparent"
     exclusionMode: ExclusionMode.Ignore
     exclusiveZone: 0
+    // 2026-10-18 层序：留在 Bottom。降到 Background（KWin DesktopLayer）
+    // 会被同在 DesktopLayer 的 Plasma 桌面表面盖住——实测重登后组件全部
+    // 消失。与台前调度条带的层内先后由 KWin 脚本重排，见
+    // kwin-stage-stack.js。
     WlrLayershell.layer: WlrLayer.Bottom
     // A desktop needs shortcuts only after the user explicitly clicks it.
     // OnDemand keeps active applications' Ctrl+C/V untouched otherwise.
@@ -356,8 +359,10 @@ PanelWindow {
     // declaration has its *material* drawn from this union, so any card that
     // joined it would come back as glass. Material cards paint themselves and
     // stay out of it.
+    // 2026-10-18 用户改判：台前调度开启时桌面组件照常显示（两者共存，
+    // 台前调度在组件之上）；不再随 StageModeService.enabled 隐藏。
     BackgroundEffect.blurRegion: (AppearanceTokens.surface.usesKwinBlur
-        && root.visible && !StageModeService.enabled) ? widgetBlurHolder : null
+        && root.visible) ? widgetBlurHolder : null
 
     Region {
         id: widgetBlurHolder
@@ -557,9 +562,9 @@ PanelWindow {
             property real dragOffsetX: 0
             property real dragOffsetY: 0
             readonly property var placement: root.placementFor(modelData.id)
-            // 台前调度常驻时隐藏组件板：参考图卡列背景是纯壁纸，组件板
-            // 会从卡缝里透出来把侧栏读成一堆碎片（2026-10-17 用户定案）
-            visible: placement !== null && !StageModeService.enabled
+            // 2026-10-18 用户改判：台前调度与桌面组件共存（台前调度在
+            // 组件之上），组件不再随台前调度开启而隐藏
+            visible: placement !== null
             z: widgetDrag.active ? 120 : (root.editMode ? 20 : 1)
             transform: Translate { x: card.dragOffsetX; y: card.dragOffsetY }
             scale: widgetDrag.active ? 1.035 : 1
