@@ -1105,8 +1105,17 @@ Pane {
                                             // digits' baseline).
                                             Row {
                                                 width: parent.width
+                                                // P2-9: the old `>= 34` was a
+                                                // dead guard — timedChip.height
+                                                // is Math.round(hourHeight*0.96)
+                                                // = 38, so it was always true.
+                                                // The intent (hide the secondary
+                                                // line when a chip runs too short
+                                                // to carry it) is now expressed
+                                                // against hourHeight so it tracks
+                                                // a future height change.
                                                 visible: secondaryLabel.text !== ""
-                                                    && timedChip.height >= 34
+                                                    && timedChip.height >= root.hourHeight - 8
                                                 spacing: 5
 
                                                 Item {

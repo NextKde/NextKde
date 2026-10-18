@@ -48,7 +48,15 @@ Pane {
 
     contentItem: GridLayout {
         id: monthGrid
-        readonly property real dayHeight: Math.max(0, (height - 30 - 6 * rowSpacing) / 6)
+        // P2-9 (REVIEW clue 20 + :51): the day delegate's chip budget is
+        // silently coupled to these literals — the weekday header's fixed
+        // height, the 24px date disc and the 18px chip (each +2 spacing).
+        // Naming them keeps a change in one place from silently misaligning
+        // the other two.
+        readonly property int headerHeight: 30
+        readonly property int dayDiscSize: 24
+        readonly property int chipHeight: 18
+        readonly property real dayHeight: Math.max(0, (height - headerHeight - 6 * rowSpacing) / 6)
         columns: 7
         uniformCellWidths: true
         uniformCellHeights: false
@@ -61,9 +69,9 @@ Pane {
             delegate: Label {
                 required property int index
                 Layout.fillWidth: true
-                Layout.preferredHeight: 30
-                Layout.minimumHeight: 30
-                Layout.maximumHeight: 30
+                Layout.preferredHeight: monthGrid.headerHeight
+                Layout.minimumHeight: monthGrid.headerHeight
+                Layout.maximumHeight: monthGrid.headerHeight
                 text: root.weekdayName(index)
                 color: AppTheme.mutedText
                 horizontalAlignment: Text.AlignHCenter
@@ -94,7 +102,9 @@ Pane {
                 Layout.maximumHeight: monthGrid.dayHeight
                 Layout.minimumWidth: 0
                 clip: true
-                readonly property int visibleItemCount: Math.max(0, Math.min(3, Math.floor((height - topPadding - bottomPadding - 26) / 20)))
+                readonly property int visibleItemCount: Math.max(0, Math.min(3,
+                    Math.floor((height - topPadding - bottomPadding
+                        - (monthGrid.dayDiscSize + 2)) / (monthGrid.chipHeight + 2))))
                 leftPadding: 6
                 rightPadding: 6
                 topPadding: 5
@@ -111,8 +121,8 @@ Pane {
                         spacing: 2
 
                         Rectangle {
-                            Layout.preferredWidth: 24
-                            Layout.preferredHeight: 24
+                            Layout.preferredWidth: monthGrid.dayDiscSize
+                            Layout.preferredHeight: monthGrid.dayDiscSize
                             radius: 12
                             // C8: unified with the week header, now-pill and
                             // mini month's today disc — one M04 literal.
@@ -161,7 +171,7 @@ Pane {
 
                             required property var modelData
                             Layout.fillWidth: true
-                            Layout.preferredHeight: 18
+                            Layout.preferredHeight: monthGrid.chipHeight
                             radius: 5
                             color: AppTheme.withAlpha(root.itemColor(modelData),
                                 AppTheme.dark ? 0.30 : 0.16)

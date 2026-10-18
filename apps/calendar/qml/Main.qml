@@ -1141,7 +1141,9 @@ KosApplicationWindow {
 
     function handleActivation(activationArgs, workingDirectory) {
         const requestedView = activationOption(activationArgs, "--view")
-        const requestedViewIndex = ["month", "week", "day"].indexOf(requestedView)
+        // P2-9: "year" was silently dropped even though viewIndex 3 exists;
+        // the fourth view now has a CLI activation path to match Ctrl+4.
+        const requestedViewIndex = ["month", "week", "day", "year"].indexOf(requestedView)
         if (requestedViewIndex >= 0)
             viewIndex = requestedViewIndex
 
@@ -1435,13 +1437,23 @@ KosApplicationWindow {
         return String(value(record, "linkedTodoId", ""))
     }
 
+    // P2-9: Qt.darker(color, 1.0) is an identity transform — dropped. The
+    // accent fallback also gave every unknown list the accent color, so
+    // unknown ids now land in a small stable palette, hashed from the id.
+    readonly property var listPalette: ["#0A84FF", "#34C759", "#FF9F0A",
+        "#BF5AF2", "#FF375F", "#64D2FF"]
+
     function listColor(id) {
         for (let index = 0; index < pim.lists.length; index++) {
             const list = pim.lists[index]
             if (String(value(list, "id", "")) === String(id))
-                return Qt.darker(String(value(list, "color", AppTheme.accent)), 1.0)
+                return String(value(list, "color", AppTheme.accent))
         }
-        return AppTheme.accent
+        let hash = 0
+        const key = String(id)
+        for (let index = 0; index < key.length; index++)
+            hash = (hash * 31 + key.charCodeAt(index)) & 0x7fffffff
+        return root.listPalette[hash % root.listPalette.length]
     }
 
     function listName(id) {
@@ -1679,6 +1691,8 @@ KosApplicationWindow {
     Shortcut { sequence: "Ctrl+1"; onActivated: root.viewIndex = 0 }
     Shortcut { sequence: "Ctrl+2"; onActivated: root.viewIndex = 1 }
     Shortcut { sequence: "Ctrl+3"; onActivated: root.viewIndex = 2 }
+    // P2-9: the Year segment had no keyboard path (REVIEW P2, clue 8).
+    Shortcut { sequence: "Ctrl+4"; onActivated: root.viewIndex = 3 }
     Shortcut { sequences: [StandardKey.Find]; onActivated: toolbarSearch.toggle() }
 
     // Window framework: two flush planes. The sidebar runs the full height of
@@ -1850,7 +1864,7 @@ KosApplicationWindow {
                 // L03 words it "Day/week/month segment". Ours was the exact
                 // reverse. `viewIndex` keeps its own published contract
                 // (0=month / 1=week / 2=day / 3=year: `activeView` :255,
-                // Ctrl+1..3 :1544-1546, `--view` :1054, the page cache :2495
+                // Ctrl+1..4, `--view` :1054, the page cache :2495
                 // and the review harness), so the segment mirrors it instead
                 // of redefining it: segment i = viewIndex (2 - i) for i <= 2,
                 // and the 4th segment (i == 3) maps to the year view. Weeks
@@ -2382,10 +2396,22 @@ KosApplicationWindow {
                                     height: root.tahoe.miniDisc
                                     radius: width / 2
                                     anchors.centerIn: parent
+                                    // P2-9: white 11px DemiBold on todayRed
+                                    // #E5484D measured 3.91:1 and on
+                                    // selectionDisc #8E8E93 3.26:1 (WCAG,
+                                    // python3; small text needs 4.5). The
+                                    // shared tokens stay untouched — today
+                                    // markers and the year view depend on
+                                    // them — so the mini month applies the
+                                    // minimal Qt.darker factor that clears
+                                    // 4.5: white-on-#D24247 = 4.56, white-
+                                    // on-#76767A = 4.52. Slightly deeper
+                                    // discs than the ref; deviation noted
+                                    // in state.md.
                                     color: miniDay.today
-                                        ? AppTheme.todayRed
+                                        ? Qt.darker(AppTheme.todayRed, 1.09)
                                         : (miniDay.selected
-                                            ? root.tahoe.selectionDisc
+                                            ? Qt.darker(root.tahoe.selectionDisc, 1.20)
                                             : (miniDay.hovered
                                                 ? root.tahoe.rowHoverFill : "transparent"))
 
@@ -2541,7 +2567,7 @@ KosApplicationWindow {
                 Layout.fillHeight: true
                 currentIndex: root.viewIndex
                 // Keep the active view and one recent view warm. Retaining all
-                // three would only defer StackLayout's original memory cost.
+                // four would only defer StackLayout's original memory cost.
                 cacheLimit: 2
                 pages: [monthPage, weekPage, dayPage, yearPage]
 
@@ -2628,8 +2654,10 @@ KosApplicationWindow {
                                             id: completionButton
 
                                             visible: root.itemTodoId(agendaItem.modelData).length > 0
-                                            implicitWidth: 24
-                                            implicitHeight: 24
+                                            // P2-9: 24 was below the macOS
+                                            // 28x28 default hit target.
+                                            implicitWidth: 28
+                                            implicitHeight: 28
                                             checkable: true
                                             checked: root.itemCompleted(agendaItem.modelData)
                                             Accessible.name: checked
