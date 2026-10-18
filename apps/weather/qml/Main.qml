@@ -2369,6 +2369,11 @@ KosApplicationWindow {
                     KosCard {
                         id: conditionsCard
                         Layout.fillWidth: true
+                        // ref-main Pillow 实测：WIND 卡左缘 x271 与 AQ 卡左缘 x271 同列对齐；
+                        // 本卡 padding≈20 导致瓦片 x272 vs AQ 卡 x252，置零水平 padding 对齐；
+                        // topPadding/bottomPadding 保持不动——:2401 的 topMargin:-16 抵消方案按 padding 20 校准，勿动
+                        leftPadding: 0
+                        rightPadding: 0
 
                         background: Item {}
 
