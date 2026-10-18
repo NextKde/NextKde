@@ -2005,6 +2005,8 @@ KosApplicationWindow {
                                                                 text: root.speedUnit
                                                                 color: root.skyTextMuted
                                                                 font.pixelSize: 13
+                                                                // 单位墨底实测距刻度内缘仅 10px（patrol-1792322227：墨底 y500 vs 内缘 y510），上移 10px 贴 ref（tile-cards 数字→单位墨距 ~5px、单位全在环内）
+                                                                transform: Translate { y: -10 }
                                                                 Accessible.ignored: true
                                                             }
                                                         }
