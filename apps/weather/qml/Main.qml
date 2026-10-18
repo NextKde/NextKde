@@ -16,6 +16,7 @@ KosApplicationWindow {
     readonly property string temperatureUnit: backend.units === "imperial" ? "°F" : "°C"
     readonly property string speedUnit: backend.units === "imperial" ? qsTr("mph") : qsTr("km/h")
     readonly property string distanceUnit: backend.units === "imperial" ? qsTr("mi") : qsTr("km")
+    readonly property int weatherSidebarWidth: Math.round(297 * AppTheme.densityScale) // ref-main 侧栏右缘 x205@814 × 窗比 1180/814 ≈ 297（LEDGER 首次侧栏宽度校准）；AppTheme.sidebarWidth(224) 系 shared 值（music 引用）不动
     readonly property var upcomingHours: upcomingForecast()
     property string pendingLocationId: ""
     readonly property int currentWeatherCode: number(backend.current, "weatherCode", -1)
@@ -561,7 +562,7 @@ KosApplicationWindow {
         visible: root.dayClearSky
         clip: true
         readonly property real cloudLeft:
-            root.compact ? AppTheme.compactSidebarWidth : AppTheme.sidebarWidth
+            root.compact ? AppTheme.compactSidebarWidth : root.weatherSidebarWidth
 
         Repeater {
             model: root.clearSkyClouds
@@ -713,7 +714,7 @@ KosApplicationWindow {
         visible: root.nightClearSky
         clip: true
         readonly property real cloudLeft:
-            root.compact ? AppTheme.compactSidebarWidth : AppTheme.sidebarWidth
+            root.compact ? AppTheme.compactSidebarWidth : root.weatherSidebarWidth
 
         Repeater {
             model: root.nightClearClouds
@@ -973,7 +974,7 @@ KosApplicationWindow {
             id: sidebar
             objectName: "applicationSidebar"
             expanded: root.sidebarExpanded
-            expandedWidth: root.compact ? AppTheme.compactSidebarWidth : AppTheme.sidebarWidth
+            expandedWidth: root.compact ? AppTheme.compactSidebarWidth : root.weatherSidebarWidth
             floating: false
 
             ColumnLayout {
