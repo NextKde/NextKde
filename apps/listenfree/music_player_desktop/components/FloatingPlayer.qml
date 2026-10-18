@@ -35,6 +35,8 @@ Item {
     property bool live: false
     property real volumeValue: 0.68
     property color accentColor: AppTheme.accent
+    property bool waiting: false
+    property string trackLocation: ""
     property string trackTitle: "world étude"
     property string trackArtist: qsTr("豊崎愛生")
     property string trackAlbum: "world Étude"
@@ -169,18 +171,18 @@ Item {
 
         Behavior on opacity { NumberAnimation { duration: root.reducedMotion ? 0 : AppTheme.duration(150) } }
 
-        Text {
-            width: parent.width
+        TrackTitle {
+            width: parent.width; height: implicitHeight
+            waiting: root.waiting
             text: root.trackTitle
             color: root.primaryText
             font.family: AppTheme.fontFamily
             font.pixelSize: 14
             font.weight: Font.DemiBold
-            elide: Text.ElideRight
         }
         Text {
             width: parent.width
-            text: root.trackArtist + (root.trackAlbum.length ? " / " + root.trackAlbum : "")
+            text: (root.trackLocation.length ? root.trackLocation + " · " : "") + root.trackArtist + (root.trackAlbum.length ? " / " + root.trackAlbum : "")
             color: root.secondaryText
             font.family: AppTheme.fontFamily
             font.pixelSize: 11

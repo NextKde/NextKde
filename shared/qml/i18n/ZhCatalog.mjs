@@ -1177,4 +1177,13 @@ export const catalog = {
     "Flowing caustics, underwater rays and rising bubbles": "流动焦散、穿透水光与上浮气泡",
     "Firefly Forest": "萤火森林",
     "Moonlit mist, layered trees and foreground fireflies": "月光薄雾、层叠树影与近景萤火",
+    "Drag icons here to collect": "将图标拖到这里收纳",
+    "Alt-drag to reorder, collect or keep visible": "Alt＋拖动可排序、收纳或设为常驻",
+    "Click to open collection · Alt-drag to reorder": "点击打开收纳 · Alt＋拖动可排序",
+    "Alt-drag to the bar to keep visible": "Alt＋拖回状态栏以常驻",
+    "Show collected icons": "展开收纳图标",
+    "Collapse collected icons": "收起收纳图标",
+    "Click to expand · Alt-drag icons to reorder or collect": "点击展开 · Alt＋拖动图标可排序或收纳",
+    "Alt-drag icons here to collect; drag to reorder": "Alt＋拖到这里收纳，拖动图标排序",
+    "Alt-drag past the arrow to keep visible": "Alt＋拖到箭头外侧以常驻",
 }

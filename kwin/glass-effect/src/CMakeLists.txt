@@ -100,3 +100,21 @@ if(GLASS_X11)
     target_compile_definitions(glass_x11 PRIVATE GLASS_X11)
     install(TARGETS glass_x11 DESTINATION ${KDE_INSTALL_PLUGINDIR}/kwin-x11/effects/plugins)
 endif()
+
+# KWin 6.8 propagates paint success through the effect chain. Detect the
+# installed signature so older releases and distribution backports still work.
+if(TARGET glass)
+    get_target_property(_kos_paint_includes KWin::kwin INTERFACE_INCLUDE_DIRECTORIES)
+    foreach(_dir IN LISTS _kos_paint_includes)
+        if(EXISTS "${_dir}/effect/effect.h")
+            set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS "${_dir}/effect/effect.h")
+            file(READ "${_dir}/effect/effect.h" _kos_paint_header)
+            if(_kos_paint_header MATCHES "bool drawWindow\\(")
+                target_compile_definitions(glass PRIVATE KOS_KWIN_PAINT_RESULT_API)
+            endif()
+            break()
+        endif()
+    endforeach()
+    set_property(TARGET glass APPEND PROPERTY AUTOMOC_MACRO_NAMES
+        KWIN_EFFECT_FACTORY_SUPPORTED_ENABLED)
+endif()

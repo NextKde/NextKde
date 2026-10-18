@@ -192,11 +192,16 @@ public:
     void prePaintScreen(ScreenPrePaintData &data, std::chrono::milliseconds presentTime) override;
     void prePaintWindow(RenderView *view, EffectWindow *w, WindowPrePaintData &data, std::chrono::milliseconds presentTime) override;
 #else
-    // 6.7+：prePaint 钩子移除 presentTime；paintScreen 签名两代一致（void）
+    // 6.7+：prePaint 钩子移除 presentTime；paintScreen 从 6.8 起返回 bool
     void prePaintScreen(ScreenPrePaintData &data) override;
     void prePaintWindow(RenderView *view, EffectWindow *w, WindowPrePaintData &data) override;
 #endif
-    void paintScreen(const RenderTarget &renderTarget, const RenderViewport &viewport,
+#ifdef KOS_KWIN_PAINT_RESULT_API
+    bool
+#else
+    void
+#endif
+    paintScreen(const RenderTarget &renderTarget, const RenderViewport &viewport,
                      int mask, const Region &deviceRegion, LogicalOutput *screen) override;
     void postPaintScreen() override;
     bool isActive() const override;

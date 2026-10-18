@@ -196,6 +196,17 @@ Item {
         }
     }
     property string baseRoute: "library/songs"
+    function routeDataBusy(route) {
+        if (route === "discover") return !!(playlistController && playlistController.homeBusy)
+        if (route === "playlists") return !!(playlistController && playlistController.busy)
+        if (route === "radio") return !!(radioController && radioController.busy)
+        if (route === "library/songs" || route === "library/albums")
+            return !!(libraryController && libraryController.scanning)
+        return false
+    }
+    readonly property bool navigationLoading: !settingsOpen && currentRoute === baseRoute
+        && (mosaicCanvasActive ? (routeDataBusy(currentRoute) || mosaicCanvasLoader.status === Loader.Loading
+                                  || mosaicCanvasLoader.status === Loader.Null) : navigationCache.loading)
     property string lastNavigationRoute: "library/songs"
     property var navigationFilters: ({})
     function filterForRoute(route) { return currentRoute===route?pageSearchQuery:navigationFilters[route] || "" }
@@ -353,9 +364,8 @@ Item {
         if (currentRoute === "discover") return chinese ? qsTr("发现") : "Discover"
         if (currentRoute === "playlists") return chinese ? qsTr("歌单") : "Playlists"
         if (currentRoute === "radio") return chinese ? qsTr("电台") : "Radio"
-        if (currentRoute === "library/songs") return chinese ? qsTr("歌曲") : "Songs"
+        if (currentRoute === "library/songs") return chinese ? qsTr("本地音乐") : "Local Music"
         if (currentRoute === "library/albums") return chinese ? qsTr("专辑") : "Albums"
-        if (currentRoute === "library/artists") return chinese ? qsTr("艺术家") : "Artists"
         if (currentRoute === "my-lists") return chinese ? qsTr("我的收藏") : "My Favorites"
         if (currentRoute.indexOf("detail/") === 0) return selectedCollectionTitle
         if (currentRoute === "search") return chinese ? qsTr("在线歌曲") : "Online Songs"
@@ -393,7 +403,6 @@ Item {
 
     function localSearchRows() {
         if (currentRoute === "library/albums") return libraryCatalog ? libraryCatalog.albums : []
-        if (currentRoute === "library/artists") return libraryCatalog ? libraryCatalog.artists : []
         if (currentRoute === "library/songs") return libraryCatalog ? libraryCatalog.songs : []
         if (currentRoute === "my-lists") return (playlistController ? playlistController.playlists : []).concat(radioController ? radioController.favorites : [])
         if (currentRoute === "playlists") return playlistController ? playlistController.onlinePlaylists : []
@@ -460,11 +469,11 @@ Item {
         requestPlayback("playSong")
     }
 
-    function removeQueue(index) {
+    function removeQueue(index, track) {
         const queueView = useBackendModels && playerController ? sidebarBackendQueue : sidebarQueue
         const sidebarPosition = queueView ? queueView.contentY : 0
         if (useBackendModels && playerController) {
-            playerController.removeFromQueue(index)
+            playerController.removeFromQueue(track ? playerController.queueIndexFor(track) : index)
             Qt.callLater(function() {
                 if (!queueView) return
                 queueView.forceLayout()
@@ -519,7 +528,7 @@ Item {
 
     function activateQueue(index, track) {
         if (useBackendModels && playerController) {
-            playerController.selectQueue(index, true)
+            playerController.selectQueue(track ? playerController.queueIndexFor(track) : index, true)
             return
         }
         playTrack(track)
@@ -635,12 +644,12 @@ Item {
         ignoreUnknownSignals: true
         function onTrackMetadataChanged(track) {
             if (shell.currentRoute.indexOf("detail/") !== 0 || !shell.selectedCollectionRows.length) return
-            const previous = shell.selectedCollectionRows.find(row => row.localPath && row.localPath.toLowerCase() === String(track.localPath).toLowerCase())
+            const previous = shell.selectedCollectionRows.find(row => shell.playerController.trackUid(row) === shell.playerController.trackUid(track))
             if (previous && String(shell.selectedCollectionArtwork) === String(previous.artwork)) {
                 shell.selectedCollectionArtwork = track.artwork || ""
                 shell.collectionMorphArtworkSource = track.artwork || ""
             }
-            shell.selectedCollectionRows=shell.selectedCollectionRows.map(row => row.localPath && row.localPath.toLowerCase()===String(track.localPath).toLowerCase()?Object.assign({},row,track):row)
+            shell.selectedCollectionRows=shell.selectedCollectionRows.map(row => shell.playerController.trackUid(row)===shell.playerController.trackUid(track)?Object.assign({},row,track):row)
         }
         function onCatalogChanged() {
             if(shell.currentRoute!=="detail/album" && shell.currentRoute!=="detail/artist")return
@@ -789,6 +798,13 @@ Item {
             settingsStore: shell.settingsController
             playing: false
         }
+        Rectangle {
+            id: mosaicLoadingBackground
+            objectName: "mosaicLoadingBackground"
+            anchors.fill: parent
+            visible: shell.mosaicCanvasActive && shell.navigationLoading
+            color: "#20232b"
+        }
         Loader {
             id: artistCanvasLoader
             anchors.fill: parent
@@ -809,6 +825,8 @@ Item {
             id: mosaicCanvasLoader
             anchors.fill: parent
             active: shell.mosaicCanvasActive
+            asynchronous: true
+            visible: !shell.navigationLoading
             sourceComponent: AlbumMosaicPage {
                 catalog: shell.libraryCatalog
                 sidebarWidth: shell.sidebarWidth
@@ -829,7 +847,8 @@ Item {
             objectName: "sidebarFrost"
             anchors.fill: sidebarSurface
             visible: !shell.nowPlayingOpen
-            backdrop: shell.mosaicCanvasActive ? mosaicCanvasLoader.item : shell.artistCanvasActive ? artistCanvasLoader.item : globalBackground
+            backdrop: shell.mosaicCanvasActive ? (shell.navigationLoading ? mosaicLoadingBackground : mosaicCanvasLoader.item)
+                                               : shell.artistCanvasActive ? artistCanvasLoader.item : globalBackground
             backdropBlur: 12
             cornerRadius: 0; opaqueBackdropBase: false
             tint: "transparent"; edgeColor: "transparent"; shadowOpacity: 0
@@ -897,9 +916,8 @@ Item {
             SidebarButton { label: qsTr("发现"); iconKind: "navDiscover"; route: "discover" }
             SidebarButton { label: qsTr("歌单"); iconKind: "navPlaylists"; route: "playlists" }
             SidebarButton { label: qsTr("电台"); iconKind: "radio"; route: "radio" }
-            SidebarButton { label: qsTr("歌曲"); iconKind: "navSongs"; route: "library/songs" }
+            SidebarButton { label: qsTr("本地音乐"); iconKind: "navSongs"; route: "library/songs" }
             SidebarButton { label: qsTr("专辑"); iconKind: "navAlbums"; route: "library/albums" }
-            SidebarButton { label: qsTr("艺术家"); iconKind: "navArtists"; route: "library/artists" }
             SidebarButton { label: qsTr("我的收藏"); iconKind: "heart"; route: "my-lists" }
             Item { width: 1; height: 8 }
             SectionLabel { text: "List" }
@@ -940,8 +958,8 @@ Item {
                     opacity: shell.sidebarCollapsed ? 0 : 1
                     visible: opacity > 0.001
                     Behavior on opacity { NumberAnimation { duration: AppTheme.duration(140) } }
-                    Text { width: parent.width; text: queueDelegate.trackData.title; elide: Text.ElideRight; color: AppTheme.sidebarText; font.pixelSize: 12; font.weight: Font.DemiBold }
-                    Text { width: parent.width; text: queueDelegate.trackData.artist; elide: Text.ElideRight; color: AppTheme.sidebarSecondary; font.pixelSize: 10 }
+                    TrackTitle { width: parent.width; height: implicitHeight; waiting: queueDelegate.rowIndex === shell.currentQueueIndex && shell.playerController && (shell.playerController.state === "Loading" || shell.playerController.state === "Buffering"); text: queueDelegate.trackData.title; color: AppTheme.sidebarText; font.pixelSize: 12; font.weight: Font.DemiBold }
+                    Text { width: parent.width; text: AppTheme.musicLocation(queueDelegate.trackData) + " · " + (queueDelegate.trackData.artist || ""); elide: Text.ElideRight; color: AppTheme.sidebarSecondary; font.pixelSize: 10 }
                 }
                 HoverHandler { id: queueRowHover }
                 MouseArea {
@@ -1022,7 +1040,7 @@ Item {
                     required property string artist
                     required property string artwork
                     rowIndex: index
-                    trackData: ({ title: title, artist: artist, artwork: artwork })
+                    trackData: { const rows = shell.playerController.queueSongs; return shell.playerController.queueModel.rowMap(index) }
                     ownerList: sidebarBackendQueue
                 }
             }
@@ -1168,7 +1186,7 @@ Item {
                         sourceComponent: GlassSurface {
                             // Sample only the artist canvas, excluding this field
                             // and the toolbar to avoid recursive self-sampling.
-                            backdrop: shell.mosaicCanvasActive ? mosaicCanvasLoader.item : artistCanvasLoader.item
+                            backdrop: shell.mosaicCanvasActive ? (shell.navigationLoading ? mosaicLoadingBackground : mosaicCanvasLoader.item) : artistCanvasLoader.item
                             opaqueBackdropBase: false
                             frosted: true
                             cornerRadius: searchCapsule.radius
@@ -1241,6 +1259,7 @@ Item {
                 objectName: "navigationStateCache"
                 anchors.fill: parent
                 route: shell.baseRoute
+                contentBusy: shell.routeDataBusy(route)
                 transitionSourceItem: shell.collectionMorphActive ? shell.collectionMorphSourceItem : null
                 enabled: !shell.settingsOpen && !shell.mosaicCanvasActive && shell.currentRoute.indexOf("detail/")!==0
                 visible: !shell.settingsOpen && !shell.mosaicCanvasActive
@@ -1251,7 +1270,6 @@ Item {
                 pages: [
                     {route:"library/songs",component:libraryComponent},
                     {route:"library/albums",component:libraryComponent},
-                    {route:"library/artists",component:libraryComponent},
                     {route:"my-lists",component:myListsComponent},
                     {route:"discover",component:discoverComponent},
                     {route:"playlists",component:playlistComponent},
@@ -1346,6 +1364,8 @@ Item {
             durationMs: shell.playerController && shell.playerController.duration > 0
                         ? shell.playerController.duration : 0
             volumeValue: shell.playerController ? shell.playerController.volume : 0.68
+            waiting: shell.playerController && (shell.playerController.state === "Loading" || shell.playerController.state === "Buffering")
+            trackLocation: AppTheme.musicLocation(shell.displayedTrack)
             trackTitle: shell.displayedTrack.title || qsTr("未知歌曲")
             trackArtist: shell.playerController && shell.playerController.live ? (shell.playerController.radioProgram || shell.displayedTrack.artist || qsTr("直播广播")) : shell.displayedTrack.artist || qsTr("未知艺术家")
             trackAlbum: shell.displayedTrack.album || ""
@@ -1555,7 +1575,7 @@ Item {
                 onCloseRequested: shell.closeQueue()
                 onClearRequested: shell.clearQueue()
                 onPlayRequested: function(index, track) { shell.activateQueue(index, track) }
-                onRemoveRequested: function(index) { shell.removeQueue(index) }
+                onRemoveRequested: function(index, track) { shell.removeQueue(index, track) }
                 onTrackCommandRequested: (command,track,index) => shell.handleTrackCommand(command,track,index)
                 onMoveRequested: function(from, to) { shell.moveQueue(from, to) }
                 TapHandler { onTapped: {} }
@@ -1663,8 +1683,8 @@ Item {
         property string label: ""
         property string iconKind: "music"
         property string route: ""
+        readonly property bool loading: shell.currentRoute === route && shell.navigationLoading
         property bool selected: shell.currentRoute === route
-                                || (shell.currentRoute === "detail/artist" && route === "library/artists")
                                 || (shell.currentRoute === "detail/album" && route === "library/albums")
                                 || (shell.currentRoute === "detail/playlist" && route === (shell.previousRoute === "my-lists" ? "my-lists" : "playlists"))
         signal pressed
@@ -1689,7 +1709,7 @@ Item {
             }
         }
         IconGlyph {
-            x: shell.sidebarCollapsed ? 11 : 14 + shell.sidebarContentOffset
+            x: shell.sidebarCollapsed ? (sidebarButton.loading ? 9 : 11) : 14 + shell.sidebarContentOffset
             anchors.verticalCenter: parent.verticalCenter
             width: 20
             height: 20
@@ -1700,7 +1720,7 @@ Item {
         Text {
             x: 47 + shell.sidebarContentOffset
             anchors.verticalCenter: parent.verticalCenter
-            width: parent.width - x - 8
+            width: parent.width - x - (sidebarButton.loading ? 32 : 8)
             text: label
             color: AppTheme.sidebarText
             opacity: shell.sidebarCollapsed ? 0 : 1
@@ -1709,6 +1729,16 @@ Item {
             font.pixelSize: 14
             font.weight: selected ? Font.DemiBold : Font.Normal
             Behavior on opacity { NumberAnimation { duration: AppTheme.duration(140); easing.type: Easing.OutCubic } }
+        }
+        LoadingIndicator {
+            objectName: "sidebarLoading_" + sidebarButton.route.replace("/", "_")
+            anchors.right: parent.right
+            anchors.rightMargin: shell.sidebarCollapsed ? 1 : 10
+            anchors.verticalCenter: parent.verticalCenter
+            width: shell.sidebarCollapsed ? 14 : 18
+            height: width
+            color: AppTheme.sidebarText
+            visible: sidebarButton.loading
         }
     }
 
@@ -1736,7 +1766,7 @@ Item {
             catalog: routeKey === "library/albums" && shell.albumMosaicLayout ? null : shell.libraryCatalog
             albumGridLayout: shell.albumGridLayout
             tracksModel: shell.useBackendModels && shell.libraryCatalog ? shell.libraryCatalog.tracksModel : null
-            section: routeKey === "library/songs" ? "songs" : routeKey === "library/artists" ? "artists" : "albums"
+            section: routeKey === "library/songs" ? "songs" : "albums"
             darkMode: shell.darkMode
             deferCollectionOpen: true
             onCollectionTransitionRequested: function(kind, title, tint, frameRect, artworkRect, artworkSource, artworkItem) {
@@ -1995,7 +2025,7 @@ Item {
             onTrackCommandRequested: function(command, track, rowIndex, playbackContext) {
                 if (command === "remove_from_playlist" && editablePlaylist) {
                     const detail=shell.playlistController.detail
-                    const key=t => t.localPath ? t.localPath.replace(/\\/g,"/").toLowerCase() : t.source+":"+t.rid
+                    const key=t => shell.playerController.trackUid(t)
                     const index=(detail.tracks || []).findIndex(t => key(t)===key(track))
                     if(index>=0) { shell.playlistController.removeTrack(detail.id,index); shell.playlistController.openTitle(shell.selectedCollectionTitle) }
                 } else shell.handleTrackCommand(command, track, rowIndex, playbackContext)
@@ -2120,6 +2150,8 @@ Item {
             durationMs: shell.playerController && shell.playerController.duration > 0
                         ? shell.playerController.duration : 0
             volumeValue: shell.playerController ? shell.playerController.volume : 0.68
+            waiting: shell.playerController && (shell.playerController.state === "Loading" || shell.playerController.state === "Buffering")
+            trackLocation: AppTheme.musicLocation(shell.displayedTrack)
             trackTitle: shell.displayedTrack.title || qsTr("未知歌曲")
             trackArtist: shell.displayedTrack.artist || qsTr("未知艺术家")
             trackAlbum: shell.displayedTrack.album || ""

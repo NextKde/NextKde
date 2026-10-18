@@ -72,7 +72,7 @@ bool PortableSession::prepareSmartMix(int index, bool manual, bool advanceNaviga
         queueSmartMix();
     } else if (!target.value("rid").toString().isEmpty()) {
         mixResolution_=sources_.resolveMusicUrl(sources_.activeId(),
-            QString::fromStdString(database_.getSetting("playback.quality").value_or("flac")),
+            QString::fromStdString(database_.getSetting("playback.quality").value_or("128k")),
             online::sourceMusicInfo(target));
         if (mixResolution_.isEmpty()) { cancelSmartMix(); return false; }
     } else queueSmartMix(target.value("remoteUrl").toString());

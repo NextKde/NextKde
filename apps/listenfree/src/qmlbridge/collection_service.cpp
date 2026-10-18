@@ -3,6 +3,7 @@
 #include "collection_service.h"
 #include "online/platform_catalog.h"
 #include "online/track_origin.h"
+#include "online/track_identity.h"
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
@@ -21,12 +22,7 @@ QString referenceKey(const QVariantMap& row) {
   return row.value("source","kw").toString()+":"+(row.value("kind")=="album" ? "album:" : "")+row.value("playlistId",row.value("id")).toString();
 }
 QString likedTrackKey(const QVariantMap& row) {
-  if (online::isScriptTrack(row)) return online::scriptTrackKey(row);
-  const auto path = row.value("localPath").toString();
-  if (!path.isEmpty()) return "local:" + platform::filePathKey(path);
-  const auto source = row.value("source").toString().toLower();
-  const auto rid = row.value("rid").toString();
-  return !source.isEmpty() && !rid.isEmpty() ? source + ":" + rid : row.value("trackId").toString();
+  return online::trackUid(row);
 }
 QString clean(const QJsonValue &v) {
   return QTextDocumentFragment::fromHtml(v.toVariant().toString())
@@ -49,6 +45,7 @@ QVariantMap song(const QJsonObject &o) {
 }
 QVariantList safeTracks(const QVariantList &rows) {
   QVariantList result;
+  QSet<QString> seen;
   for (const auto &value : rows) {
     auto row = value.toMap();
     if (row.value("localPath").toString().isEmpty() &&
@@ -57,6 +54,10 @@ QVariantList safeTracks(const QVariantList &rows) {
     row.remove("resolvedUrl");
     row.remove("remoteUrl");
     row.remove("entryId");
+    row = online::identifiedTrack(row);
+    const auto uid = row.value("trackUid").toString();
+    if (seen.contains(uid)) continue;
+    seen.insert(uid);
     result.append(row);
   }
   return result;
@@ -74,6 +75,23 @@ CollectionService::CollectionService(infrastructure::database::Database &db,
                    db_.getSetting("collections.v1").value_or("[]")))
                .array()
                .toVariantList();
+  // Upgrade existing collection snapshots without changing their ownership.
+  auto migrated = lists_;
+  for (auto& value : migrated) {
+    auto row = value.toMap();
+    if (row.contains("tracks")) {
+      QVariantList tracks; QSet<QString> seen;
+      for (const auto& value : row.value("tracks").toList()) {
+        auto track = online::identifiedTrack(value.toMap());
+        const auto uid = track.value("trackUid").toString();
+        if (!uid.isEmpty() && seen.contains(uid)) continue;
+        seen.insert(uid); tracks.append(track);
+      }
+      row["tracks"] = tracks;
+    }
+    value = row;
+  }
+  if (migrated != lists_) save(migrated);
   refreshLikedTrackIndex();
   const auto home = QJsonDocument::fromJson(QByteArray::fromStdString(db_.getSetting("discovery.home.v1").value_or("{}"))).object();
   homeRecommendations_=home.value("recommendations").toArray().toVariantList().mid(0,12);
@@ -298,7 +316,7 @@ void CollectionService::addTracks(const QString &id,
   for (const auto &v : safeTracks(tracks)) {
     bool found = false;
     for (const auto &r : rows)
-      if (r.toMap().value("trackId") == v.toMap().value("trackId")) {
+      if (online::trackUid(r.toMap()) == online::trackUid(v.toMap())) {
         found = true;
         break;
       }

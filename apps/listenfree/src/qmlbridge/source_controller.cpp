@@ -1,3 +1,4 @@
+#include "online/track_identity.h"
 #include <QCoreApplication>
 #include "qmlbridge/source_controller.h"
 #include "sourcehost/script_metadata.h"
@@ -895,7 +896,7 @@ QString SourceController::resolve(const QString &sourceId,
   if (action == "musicUrl" && !hasString(info.value("qualitys"), selectedQuality)) {
     const auto choices=info.value("qualitys").toList();
     if(choices.isEmpty()){setError(QCoreApplication::translate("ListenFree", "当前音源未声明可用音质"));return {};}
-    selectedQuality=hasString(info.value("qualitys"),"320k")?QString("320k"):choices.first().toString();
+    selectedQuality=hasString(info.value("qualitys"),"128k")?QString("128k"):choices.first().toString();
   }
   sourcehost::SourceMessage request;
   request.type = action == QStringLiteral("musicUrl")
@@ -964,6 +965,7 @@ QString SourceController::requestScript(const QString &id, const QString &action
   // different source never unloads the source serving the current player.
   struct State {
     QHash<QString, QString> providers;
+    QString quality;
     QVariantList rows;
     QStringList errors;
     int total = 0;
@@ -1035,8 +1037,9 @@ QString SourceController::requestScript(const QString &id, const QString &action
         const auto qualities = providers.value(provider).toObject().value("qualitys").toArray();
         if (action == "musicUrl" && !hasString(qualities.toVariantList(), requestedQuality)) {
           if (qualities.isEmpty()) { finish({}, QCoreApplication::translate("ListenFree", "音源未声明可用音质")); return; }
-          requestedQuality = hasString(qualities.toVariantList(), "320k") ? QStringLiteral("320k") : qualities.first().toString();
+          requestedQuality = hasString(qualities.toVariantList(), "128k") ? QStringLiteral("128k") : qualities.first().toString();
         }
+        state->quality = requestedQuality;
         sourcehost::SourceMessage request;
         request.requestId = operationId + "." + provider;
         request.type = action == "search" ? Type::Search : action == "lyric" ? Type::ResolveLyric
@@ -1054,6 +1057,7 @@ QString SourceController::requestScript(const QString &id, const QString &action
     if (action != "search") {
       if (message.payload.value("data").isString()) data["url"] = message.payload.value("data").toString();
       data["source"] = provider;
+      if (action == "musicUrl") data["quality"] = state->quality;
       finish(data, error); return;
     }
     if (!error.isEmpty()) state->errors.append(error);
@@ -1092,7 +1096,7 @@ QString SourceController::requestScript(const QString &id, const QString &action
         row["trackId"] = online::scriptTrackKey(row);
         // A result cannot inject a local file or bypass its script resolver.
         row.remove("localPath"); row.remove("remoteUrl"); row.remove("radioId"); row.remove("radioProvider");
-        state->rows.append(row);
+        state->rows.append(online::identifiedTrack(row));
       }
       const int total = data.value("total", rows.size()).toInt();
       state->total += qMax(0, total);
@@ -1124,7 +1128,9 @@ QString SourceController::resolveMusicUrl(const QString &sourceId,
         });
     return *requestId;
   }
-  return resolve(sourceId, QStringLiteral("musicUrl"), quality, musicInfo);
+  const auto id = sourceId.isEmpty() ? activeId_ : sourceId;
+  if (id != activeId_ || !hostReady()) return requestScript(id, "musicUrl", musicInfo, quality);
+  return resolve(id, QStringLiteral("musicUrl"), quality, musicInfo);
 }
 
 QString SourceController::resolveLyric(const QString &sourceId,
