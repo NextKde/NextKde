@@ -2252,7 +2252,8 @@ KosApplicationWindow {
                                                                 ctx.beginPath()
                                                                 ctx.arc(6, 9, 3.5, Math.PI, 2 * Math.PI, false)
                                                                 ctx.closePath()
-                                                                ctx.fillStyle = "#ffd257"
+                                                                // ref-main SUNSET 卡头 glyph 实测浅蓝白（峰值 (224,240,255)/(239,251,255)、暖色像素 0），非黄色
+                                                                ctx.fillStyle = "#e7f5ff"
                                                                 ctx.fill()
                                                                 ctx.strokeStyle = "rgba(255,255,255,0.92)"
                                                                 ctx.fillStyle = "rgba(255,255,255,0.92)"
@@ -2353,7 +2354,8 @@ KosApplicationWindow {
                                                                 ctx.beginPath()
                                                                 ctx.arc(6, 6, 2, 0, 2 * Math.PI, false)
                                                                 ctx.closePath()
-                                                                ctx.fillStyle = "#ffd257"
+                                                                // ref-main UV INDEX 卡头 glyph 实测浅蓝白（同 SUNSET 依据）
+                                                                ctx.fillStyle = "#e7f5ff"
                                                                 ctx.fill()
                                                             }
                                                         }
