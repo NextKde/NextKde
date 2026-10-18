@@ -95,6 +95,11 @@ KosWorkspaceDialog {
     property string errorText: ""
     property var errorFields: []
 
+    // P1-6: delete is a two-step destructive action — the Delete bar only
+    // arms the inline confirmation (below); the actual deleteRequested fires
+    // from the confirmation step. Reset on every open.
+    property bool confirmingDelete: false
+
     // Inline error copy sits at 11px non-bold → needs 4.5:1. AppTheme
     // .destructive is 4.25:1 on the light panel (#F7F7F7); #d23636 is the
     // minimal darkening that passes (4.54:1, measured per WCAG formula).
@@ -191,6 +196,7 @@ KosWorkspaceDialog {
         linkedTodoId = ""
         errorText = ""
         errorFields = []
+        confirmingDelete = false
         titleField.text = ""
         descriptionField.text = ""
         locationField.text = ""
@@ -303,7 +309,8 @@ KosWorkspaceDialog {
     }
 
     footer: Item {
-        implicitHeight: 16 + footerCol.implicitHeight + 16
+        implicitHeight: 16
+            + (root.confirmingDelete ? confirmCol.implicitHeight : footerCol.implicitHeight) + 16
 
         // Label source only. Invisible and disabled so it neither paints over
         // the stack nor joins the focus chain — Esc stays with the dialog.
@@ -320,6 +327,7 @@ KosWorkspaceDialog {
             anchors.fill: parent
             anchors.margins: 16
             spacing: 6
+            visible: !root.confirmingDelete
 
             // Primary: the AcceptRole standard button of the shared footer.
             KosButton {
@@ -343,6 +351,53 @@ KosWorkspaceDialog {
                 Layout.fillWidth: true
                 text: qsTr("Delete event")
                 visible: root.editing
+                destructive: true
+                secondary: true
+                onClicked: {
+                    root.confirmingDelete = true
+                    confirmCancelButton.forceActiveFocus()
+                }
+            }
+        }
+
+        // P1-6: delete confirmation, macOS alert form (bold title, one-line
+        // description, stacked buttons) per the alert-macos reference. Cancel
+        // is the default (highlighted, focused); Delete fires only from here.
+        ColumnLayout {
+            id: confirmCol
+            anchors.fill: parent
+            anchors.margins: 16
+            spacing: 6
+            visible: root.confirmingDelete
+
+            Label {
+                Layout.fillWidth: true
+                text: qsTr("Delete this event?")
+                font.bold: true
+                wrapMode: Text.WordWrap
+            }
+
+            Label {
+                Layout.fillWidth: true
+                text: qsTr("The event is removed from every view. This cannot be undone.")
+                color: AppTheme.mutedText
+                font.pixelSize: 11
+                wrapMode: Text.WordWrap
+            }
+
+            KosButton {
+                id: confirmCancelButton
+                Layout.fillWidth: true
+                text: root.cancelLabel
+                highlighted: true
+                flatPrimary: true
+                lightLabel: true
+                onClicked: root.confirmingDelete = false
+            }
+
+            KosButton {
+                Layout.fillWidth: true
+                text: qsTr("Delete event")
                 destructive: true
                 secondary: true
                 onClicked: {
