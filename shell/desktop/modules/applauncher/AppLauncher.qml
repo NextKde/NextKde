@@ -34,11 +34,8 @@ Scope {
     // layer-shell compositors do not reliably grow an already-mapped 1x1
     // surface when its anchors change.
     property bool windowCreated: false
-    // The launcher belongs to the Dock the user actually clicked: Dock reports
-    // its own screen through AppLauncherService before toggling, so the app grid
-    // opens next to that Dock instead of jumping to the globally elected active
-    // output. Toggles that did not come from a Dock (IPC, keyboard shortcut)
-    // leave triggerScreen null and keep the active-screen behaviour.
+    // A Dock click supplies its output for this opening. Keyboard and IPC
+    // callers omit it and use the shared active output.
     readonly property var launcherScreen: AppLauncherService.triggerScreen
         || ScreenLifecycle.activeScreen
     readonly property var targetScreen: launcherScreen && !launcherScreen.isPlaceholder

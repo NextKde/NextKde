@@ -29,20 +29,9 @@ QtObject {
     property color dockAmbientPrimary: "transparent"
     property color dockAmbientSecondary: "transparent"
     property color dockForegroundColor: "white"
-    // Screen of the Dock that most recently asked for the launcher. The Dock
-    // owns one real output, while AppLauncher follows the globally elected
-    // active screen; publishing the Dock's own screen here lets the launcher
-    // open next to the Dock the user clicked. Stays null for callers that have
-    // no Dock to point at (IPC, keyboard shortcut, DeskCenter), which keeps the
-    // previous active-screen behaviour.
+    // The screen belongs to this opening only. Unspecified callers use the
+    // shared active output. Keep it during hide so exit animations do not jump.
     property var triggerScreen: null
-
-    function setLauncherTriggerScreen(screen) {
-        if (screen && screen !== service.triggerScreen) {
-            service.triggerScreen = screen
-            console.log("[AppLauncherService] trigger screen=" + screen.name)
-        }
-    }
 
     function setDockPresentation(width, height, position, background, primary, secondary, foreground, barHeight) {
         service.dockWidth = width
@@ -57,14 +46,18 @@ QtObject {
 
     onOpenChanged: console.log("[AppLauncherService] open=" + open)
 
-    function show() {
+    function show(screen = null) {
+        service.triggerScreen = screen && !screen.isPlaceholder ? screen : null
         service.open = true
         console.log("[AppLauncher] show width=" + dockWidth
             + " height=" + dockHeight)
     }
     function hide() { service.open = false }
-    function toggle() {
-        service.open = !service.open
+    function toggle(screen = null) {
+        if (service.open)
+            service.hide()
+        else
+            service.show(screen)
         console.log("[AppLauncher] toggle open=" + service.open
             + " width=" + dockWidth + " height=" + dockHeight)
     }
