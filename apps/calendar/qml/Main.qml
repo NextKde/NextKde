@@ -146,6 +146,15 @@ KosApplicationWindow {
         readonly property color accent: "#0088FF"
         readonly property color positive: "#34C759"
         readonly property color warning: "#FF8D28"
+        // C2: status-bar text sits on the white content plane, where the
+        // reference green/orange read 2.22/2.31:1. The light leg darkens to
+        // the smallest same-hue values clearing 4.5:1 (#24883D 4.50,
+        // #B2621C 4.51); dark keeps the reference colors (7.51/7.22 on
+        // #1E1E1E).
+        readonly property color statusPositive:
+            root.tahoeDark ? "#34C759" : "#24883D"
+        readonly property color statusWarning:
+            root.tahoeDark ? "#FF8D28" : "#B2621C"
 
         // Sidebar search field: Sidebar/Light/Search, 300x44 on a 320 plane,
         // fully rounded, filled with Fills/Light 2 over the plane.
@@ -2508,7 +2517,8 @@ KosApplicationWindow {
                 Label {
                     Layout.fillWidth: true
                     text: pim.errorMessage.length > 0 ? pim.errorMessage : root.statusMessage
-                    color: pim.errorMessage.length > 0 ? AppTheme.warning : AppTheme.positive
+                    color: pim.errorMessage.length > 0
+                        ? root.tahoe.statusWarning : root.tahoe.statusPositive
                     wrapMode: Text.WordWrap
                 }
             }
