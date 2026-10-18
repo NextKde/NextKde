@@ -48,12 +48,12 @@ KosWorkspaceDialog {
 
     function nextDateText(date) {
         const next = new Date(date.getFullYear(), date.getMonth(), date.getDate() + 1)
-        return dateText(next)
+        return Qt.formatDate(next, inputDateFormat)
     }
 
     function nextDateFromText(value) {
-        const parsed = new Date(String(value) + "T12:00:00")
-        return Number.isNaN(parsed.getTime()) ? String(value) : nextDateText(parsed)
+        const parsed = parseDateText(value)
+        return parsed === null ? String(value) : nextDateText(parsed)
     }
 
     function isoDatePart(value, fallback) {
@@ -66,28 +66,93 @@ KosWorkspaceDialog {
         return match ? match[1] : fallback
     }
 
-    // I4 (REVIEW): save-time validation. Date/time fields are free text, so
-    // parse strictly before they are concatenated into ISO strings — an
-    // unparsable field must block accept instead of storing a broken record.
+    // I7 (REVIEW): date/time fields speak the locale's short format — the
+    // placeholder shows the locale's field order, seeds and parsing use it,
+    // and plain ISO stays accepted (copy/paste). Records are still assembled
+    // as ISO at payload time; unparsable input must block accept (I4)
+    // instead of storing a broken record.
+    readonly property var inputLocale: Qt.locale()
+    readonly property string inputDateFormat: {
+        const fmt = String(inputLocale.dateFormat(Locale.ShortFormat))
+        // Upgrade a 2-digit short-format year so the year stays unambiguous.
+        return /yyyy/.test(fmt) ? fmt : fmt.replace(/yy/, "yyyy")
+    }
+    readonly property string inputTimeFormat: inputLocale.timeFormat(Locale.ShortFormat)
+    readonly property string datePattern: inputPattern(inputDateFormat)
+    readonly property string timePattern: inputPattern(inputTimeFormat)
+
+    function inputPattern(format) {
+        return String(format).replace(
+            /yyyy|yy|MM|M|dd|d|mm|m|HH|H|h|AP|ap/g,
+            function (token) {
+                if (token === "yyyy" || token === "yy") return "YYYY"
+                if (token === "MM" || token === "M"
+                        || token === "mm" || token === "m") return "MM"
+                if (token === "dd" || token === "d") return "DD"
+                if (token === "HH") return "HH"
+                if (token === "H" || token === "h") return "H"
+                if (token === "AP") return "AM/PM"
+                if (token === "ap") return "am/pm"
+                return token
+            })
+    }
+
     function parseDateText(value) {
-        const match = String(value ?? "").trim().match(/^(\d{4})-(\d{2})-(\d{2})$/)
-        if (!match)
+        const text = String(value ?? "").trim()
+        if (text.length === 0)
             return null
-        const date = new Date(Number(match[1]), Number(match[2]) - 1,
-            Number(match[3]))
-        // Reject calendar rollovers (2026-02-30 → Mar 2) via round-trip.
-        return date.getFullYear() === Number(match[1])
-            && date.getMonth() === Number(match[2]) - 1
-            && date.getDate() === Number(match[3]) ? date : null
+        const match = text.match(/^(\d{4})-(\d{2})-(\d{2})$/)
+        if (match) {
+            const date = new Date(Number(match[1]), Number(match[2]) - 1,
+                Number(match[3]))
+            // Reject calendar rollovers (2026-02-30 → Mar 2) via round-trip.
+            return date.getFullYear() === Number(match[1])
+                && date.getMonth() === Number(match[2]) - 1
+                && date.getDate() === Number(match[3]) ? date : null
+        }
+        const parsed = Date.fromLocaleDateString(inputLocale, text, inputDateFormat)
+        return Number.isNaN(parsed.getTime()) ? null : parsed
     }
 
     function parseTimeText(value) {
-        const match = String(value ?? "").trim().match(/^(\d{2}):(\d{2})$/)
-        if (!match)
+        const text = String(value ?? "").trim()
+        if (text.length === 0)
             return null
-        const hours = Number(match[1])
-        const minutes = Number(match[2])
-        return hours <= 23 && minutes <= 59 ? hours * 60 + minutes : null
+        const match = text.match(/^(\d{2}):(\d{2})$/)
+        if (match) {
+            const hours = Number(match[1])
+            const minutes = Number(match[2])
+            return hours <= 23 && minutes <= 59 ? hours * 60 + minutes : null
+        }
+        const parsed = Date.fromLocaleTimeString(inputLocale, text, inputTimeFormat)
+        return Number.isNaN(parsed.getTime())
+            ? null : parsed.getHours() * 60 + parsed.getMinutes()
+    }
+
+    // I7: seeds are shown in the locale format, payloads store ISO.
+    function formatDateInput(value) {
+        const parsed = parseDateText(value)
+        return parsed === null ? String(value ?? "").trim()
+            : Qt.formatDate(parsed, inputDateFormat)
+    }
+
+    function formatTimeInput(value) {
+        const minutes = parseTimeText(value)
+        return minutes === null ? String(value ?? "").trim()
+            : Qt.formatTime(new Date(2000, 0, 1, Math.floor(minutes / 60),
+                minutes % 60), inputTimeFormat)
+    }
+
+    function isoFromDateText(value) {
+        const parsed = parseDateText(value)
+        return parsed === null ? String(value ?? "").trim()
+            : Qt.formatDate(parsed, "yyyy-MM-dd")
+    }
+
+    function isoFromTimeText(value) {
+        const minutes = parseTimeText(value)
+        return minutes === null ? String(value ?? "").trim()
+            : twoDigits(Math.floor(minutes / 60)) + ":" + twoDigits(minutes % 60)
     }
 
     // I4: last validation problem, kept until the offending field is edited
@@ -125,22 +190,22 @@ KosWorkspaceDialog {
             return { message: qsTr("Title is required."), fields: ["title"] }
         const startDate = parseDateText(startDateField.text)
         if (startDate === null)
-            return { message: qsTr("Start date must be YYYY-MM-DD."),
+            return { message: qsTr("Start date must be %1.").arg(datePattern),
                 fields: ["startDate"] }
         const endDate = parseDateText(endDateField.text)
         if (endDate === null)
-            return { message: qsTr("End date must be YYYY-MM-DD."),
+            return { message: qsTr("End date must be %1.").arg(datePattern),
                 fields: ["endDate"] }
         let startMinutes = 0
         let endMinutes = 0
         if (!allDayCheck.checked) {
             startMinutes = parseTimeText(startTimeField.text)
             if (startMinutes === null)
-                return { message: qsTr("Start time must be HH:MM (00-23:00-59)."),
+                return { message: qsTr("Start time must be %1.").arg(timePattern),
                     fields: ["startTime"] }
             endMinutes = parseTimeText(endTimeField.text)
             if (endMinutes === null)
-                return { message: qsTr("End time must be HH:MM (00-23:00-59)."),
+                return { message: qsTr("End time must be %1.").arg(timePattern),
                     fields: ["endTime"] }
         }
         if (endDate < startDate)
@@ -200,10 +265,10 @@ KosWorkspaceDialog {
         titleField.text = ""
         descriptionField.text = ""
         locationField.text = ""
-        startDateField.text = dateText(date)
-        endDateField.text = dateText(date)
-        startTimeField.text = twoDigits(startHour) + ":00"
-        endTimeField.text = twoDigits(startHour + 1) + ":00"
+        startDateField.text = formatDateInput(dateText(date))
+        endDateField.text = formatDateInput(dateText(date))
+        startTimeField.text = formatTimeInput(twoDigits(startHour) + ":00")
+        endTimeField.text = formatTimeInput(twoDigits(startHour + 1) + ":00")
         allDayCheck.checked = false
         recurrenceBox.currentIndex = 0
         reminderBox.currentIndex = 0
@@ -225,10 +290,10 @@ KosWorkspaceDialog {
         titleField.text = String(event?.title ?? "")
         descriptionField.text = String(event?.description ?? "")
         locationField.text = String(event?.location ?? "")
-        startDateField.text = isoDatePart(event?.start, fallbackDate)
-        endDateField.text = isoDatePart(event?.end, startDateField.text)
-        startTimeField.text = isoTimePart(event?.start, "09:00")
-        endTimeField.text = isoTimePart(event?.end, "10:00")
+        startDateField.text = formatDateInput(isoDatePart(event?.start, fallbackDate))
+        endDateField.text = formatDateInput(isoDatePart(event?.end, startDateField.text))
+        startTimeField.text = formatTimeInput(isoTimePart(event?.start, "09:00"))
+        endTimeField.text = formatTimeInput(isoTimePart(event?.end, "10:00"))
         allDayCheck.checked = Boolean(event?.allDay)
         recurrenceBox.currentIndex = recurrenceIndex(event?.recurrence)
         reminderBox.currentIndex = reminderIndex(event?.reminderMinutes)
@@ -249,10 +314,10 @@ KosWorkspaceDialog {
             title: titleField.text.trim(),
             description: descriptionField.text.trim(),
             location: locationField.text.trim(),
-            start: startDateField.text.trim() + "T"
-                + (allDayCheck.checked ? "00:00" : startTimeField.text.trim()) + ":00",
-            end: endDateField.text.trim() + "T"
-                + (allDayCheck.checked ? "00:00" : endTimeField.text.trim()) + ":00",
+            start: isoFromDateText(startDateField.text) + "T"
+                + (allDayCheck.checked ? "00:00" : isoFromTimeText(startTimeField.text)) + ":00",
+            end: isoFromDateText(endDateField.text) + "T"
+                + (allDayCheck.checked ? "00:00" : isoFromTimeText(endTimeField.text)) + ":00",
             allDay: allDayCheck.checked,
             calendarId: calendarId,
             recurrence: recurrenceValues[recurrenceBox.currentIndex],
@@ -545,7 +610,7 @@ KosWorkspaceDialog {
                     id: startDateField
                     Layout.fillWidth: true
                     Layout.preferredHeight: fieldHeight
-                    placeholderText: "YYYY-MM-DD"
+                    placeholderText: root.datePattern
                     Accessible.name: qsTr("Start date")
                     outlineColor: root.hasError("startDate")
                         ? AppTheme.destructive : AppTheme.border
@@ -555,7 +620,7 @@ KosWorkspaceDialog {
                     id: startTimeField
                     Layout.preferredWidth: 92
                     Layout.preferredHeight: fieldHeight
-                    placeholderText: "HH:MM"
+                    placeholderText: root.timePattern
                     enabled: !allDayCheck.checked
                     Accessible.name: qsTr("Start time")
                     outlineColor: root.hasError("startTime")
@@ -579,7 +644,7 @@ KosWorkspaceDialog {
                     id: endDateField
                     Layout.fillWidth: true
                     Layout.preferredHeight: fieldHeight
-                    placeholderText: "YYYY-MM-DD"
+                    placeholderText: root.datePattern
                     Accessible.name: qsTr("End date")
                     outlineColor: root.hasError("endDate")
                         ? AppTheme.destructive : AppTheme.border
@@ -589,7 +654,7 @@ KosWorkspaceDialog {
                     id: endTimeField
                     Layout.preferredWidth: 92
                     Layout.preferredHeight: fieldHeight
-                    placeholderText: "HH:MM"
+                    placeholderText: root.timePattern
                     enabled: !allDayCheck.checked
                     Accessible.name: qsTr("End time")
                     outlineColor: root.hasError("endTime")

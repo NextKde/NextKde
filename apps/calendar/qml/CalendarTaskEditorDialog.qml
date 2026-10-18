@@ -188,25 +188,97 @@ KosWorkspaceDialog {
     // due date/time fields are free text, so parse strictly before they are
     // concatenated into the ISO due string — an unparsable field must block
     // accept instead of storing a broken todo.
+    //
+    // I7 (REVIEW): the fields speak the locale's short format — the
+    // placeholder shows the locale's field order, seeds and parsing use it,
+    // and plain ISO stays accepted (copy/paste). The due string is still
+    // assembled as ISO at payload time.
+    function twoDigits(value) {
+        return value < 10 ? "0" + value : String(value)
+    }
+
+    readonly property var inputLocale: Qt.locale()
+    readonly property string inputDateFormat: {
+        const fmt = String(inputLocale.dateFormat(Locale.ShortFormat))
+        // Upgrade a 2-digit short-format year so the year stays unambiguous.
+        return /yyyy/.test(fmt) ? fmt : fmt.replace(/yy/, "yyyy")
+    }
+    readonly property string inputTimeFormat: inputLocale.timeFormat(Locale.ShortFormat)
+    readonly property string datePattern: inputPattern(inputDateFormat)
+    readonly property string timePattern: inputPattern(inputTimeFormat)
+
+    function inputPattern(format) {
+        return String(format).replace(
+            /yyyy|yy|MM|M|dd|d|mm|m|HH|H|h|AP|ap/g,
+            function (token) {
+                if (token === "yyyy" || token === "yy") return "YYYY"
+                if (token === "MM" || token === "M"
+                        || token === "mm" || token === "m") return "MM"
+                if (token === "dd" || token === "d") return "DD"
+                if (token === "HH") return "HH"
+                if (token === "H" || token === "h") return "H"
+                if (token === "AP") return "AM/PM"
+                if (token === "ap") return "am/pm"
+                return token
+            })
+    }
+
     function parseDateText(value) {
-        const match = String(value ?? "").trim().match(/^(\d{4})-(\d{2})-(\d{2})$/)
-        if (!match)
+        const text = String(value ?? "").trim()
+        if (text.length === 0)
             return null
-        const date = new Date(Number(match[1]), Number(match[2]) - 1,
-            Number(match[3]))
-        // Reject calendar rollovers (2026-02-30 → Mar 2) via round-trip.
-        return date.getFullYear() === Number(match[1])
-            && date.getMonth() === Number(match[2]) - 1
-            && date.getDate() === Number(match[3]) ? date : null
+        const match = text.match(/^(\d{4})-(\d{2})-(\d{2})$/)
+        if (match) {
+            const date = new Date(Number(match[1]), Number(match[2]) - 1,
+                Number(match[3]))
+            // Reject calendar rollovers (2026-02-30 → Mar 2) via round-trip.
+            return date.getFullYear() === Number(match[1])
+                && date.getMonth() === Number(match[2]) - 1
+                && date.getDate() === Number(match[3]) ? date : null
+        }
+        const parsed = Date.fromLocaleDateString(inputLocale, text, inputDateFormat)
+        return Number.isNaN(parsed.getTime()) ? null : parsed
     }
 
     function parseTimeText(value) {
-        const match = String(value ?? "").trim().match(/^(\d{2}):(\d{2})$/)
-        if (!match)
+        const text = String(value ?? "").trim()
+        if (text.length === 0)
             return null
-        const hours = Number(match[1])
-        const minutes = Number(match[2])
-        return hours <= 23 && minutes <= 59 ? hours * 60 + minutes : null
+        const match = text.match(/^(\d{2}):(\d{2})$/)
+        if (match) {
+            const hours = Number(match[1])
+            const minutes = Number(match[2])
+            return hours <= 23 && minutes <= 59 ? hours * 60 + minutes : null
+        }
+        const parsed = Date.fromLocaleTimeString(inputLocale, text, inputTimeFormat)
+        return Number.isNaN(parsed.getTime())
+            ? null : parsed.getHours() * 60 + parsed.getMinutes()
+    }
+
+    // I7: seeds are shown in the locale format, payloads store ISO.
+    function formatDateInput(value) {
+        const parsed = parseDateText(value)
+        return parsed === null ? String(value ?? "").trim()
+            : Qt.formatDate(parsed, inputDateFormat)
+    }
+
+    function formatTimeInput(value) {
+        const minutes = parseTimeText(value)
+        return minutes === null ? String(value ?? "").trim()
+            : Qt.formatTime(new Date(2000, 0, 1, Math.floor(minutes / 60),
+                minutes % 60), inputTimeFormat)
+    }
+
+    function isoFromDateText(value) {
+        const parsed = parseDateText(value)
+        return parsed === null ? String(value ?? "").trim()
+            : Qt.formatDate(parsed, "yyyy-MM-dd")
+    }
+
+    function isoFromTimeText(value) {
+        const minutes = parseTimeText(value)
+        return minutes === null ? String(value ?? "").trim()
+            : twoDigits(Math.floor(minutes / 60)) + ":" + twoDigits(minutes % 60)
     }
 
     // P1-5: last validation problem, kept until the offending field is edited
@@ -250,11 +322,11 @@ KosWorkspaceDialog {
                 return { message: qsTr("A linked task needs a due date."),
                     fields: ["dueDate"] }
         } else if (parseDateText(dueDate) === null) {
-            return { message: qsTr("Due date must be YYYY-MM-DD."),
+            return { message: qsTr("Due date must be %1.").arg(datePattern),
                 fields: ["dueDate"] }
         }
         if (!allDayCheck.checked && parseTimeText(dueTimeField.text) === null)
-            return { message: qsTr("Due time must be HH:MM (00-23:00-59)."),
+            return { message: qsTr("Due time must be %1.").arg(timePattern),
                 fields: ["dueTime"] }
         return null
     }
@@ -267,9 +339,9 @@ KosWorkspaceDialog {
         completedCheck.checked = Boolean(value(todo, "completed", false))
         listBox.currentIndex = listIndex(value(todo, "listId", "inbox"))
         const due = String(value(todo, "due", ""))
-        dueDateField.text = datePart(due)
+        dueDateField.text = formatDateInput(datePart(due))
         const timeMatch = due.match(/T(\d{2}:\d{2})/)
-        dueTimeField.text = timeMatch ? timeMatch[1] : "18:00"
+        dueTimeField.text = formatTimeInput(timeMatch ? timeMatch[1] : "18:00")
         allDayCheck.checked = Boolean(value(todo, "allDay", false))
         priorityBox.currentIndex = priorityIndex(value(todo, "priority", 0))
         errorText = ""
@@ -288,8 +360,8 @@ KosWorkspaceDialog {
             title: titleField.text.trim(),
             description: notesField.text.trim(),
             listId: String(value(list, "id", "inbox")),
-            due: dueDate.length > 0 ? dueDate + "T"
-                + (allDayCheck.checked ? "00:00" : dueTimeField.text.trim()) + ":00" : "",
+            due: dueDate.length > 0 ? isoFromDateText(dueDate) + "T"
+                + (allDayCheck.checked ? "00:00" : isoFromTimeText(dueTimeField.text)) + ":00" : "",
             allDay: allDayCheck.checked,
             priority: priorityValues[priorityBox.currentIndex],
             completed: completedCheck.checked
@@ -469,7 +541,7 @@ KosWorkspaceDialog {
                     id: dueDateField
                     Layout.fillWidth: true
                     Layout.preferredHeight: root.fieldHeight
-                    placeholderText: "YYYY-MM-DD"
+                    placeholderText: root.datePattern
                     Accessible.name: qsTr("Task due date")
                     outlineColor: root.hasError("dueDate")
                         ? AppTheme.destructive : AppTheme.border
@@ -480,7 +552,7 @@ KosWorkspaceDialog {
                     id: dueTimeField
                     Layout.preferredWidth: 92
                     Layout.preferredHeight: root.fieldHeight
-                    placeholderText: "HH:MM"
+                    placeholderText: root.timePattern
                     enabled: !allDayCheck.checked
                     Accessible.name: qsTr("Task due time")
                     outlineColor: root.hasError("dueTime")
