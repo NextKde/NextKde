@@ -15,7 +15,7 @@ KosWorkspaceDialog {
     signal saveRequested(string uid, var todo)
     signal deleteRequested(string uid)
 
-    title: qsTr("Edit task")
+    title: editingId.length > 0 ? qsTr("Edit task") : qsTr("New task")
     modal: true
     // P02/P03: compact neutral editor, matching the event editor treatment.
     width: Math.min(380, parent ? parent.width - 48 : 380)
