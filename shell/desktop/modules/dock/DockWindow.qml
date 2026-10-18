@@ -292,7 +292,7 @@ PanelWindow {
             // Combining that off-screen capsule with the on-screen handle lets
             // the compositor realign the capsule back into the clipped region.
             visible: ConfigService.dockStyle !== "transparent" && hide.revealProgress > 0
-            radius: root.stretched ? 0 : dockContainer.pillRadius
+            radius: dockContainer.surfaceRadius
             // Soften the shell-wide squircle for this low-height capsule while
             // retaining a little continuous-corner character.
             cornerExponent: 2.35
