@@ -2060,6 +2060,116 @@ KosApplicationWindow {
                                                 }
                                             }
 
+                                            // ref-main SUNSET 卡 x272-380 顶 y453：头部 glyph+SUNSET caps、大号时间左对齐（字形顶=卡顶+30、字高 ~14.4px@814 → 30px）；底缘被参考窗裁切，底部内容外推待确认
+                                            Rectangle {
+                                                id: sunsetCard
+                                                Layout.columnSpan: 2
+                                                Layout.topMargin: 8
+                                                Layout.fillWidth: true
+                                                implicitHeight: 162
+                                                radius: root.tileRadius
+                                                // 昼夜分材质：ref-main 白天所有卡填充暗于天空（α~0.30 深蓝玻璃）；夜间维持白玻璃
+                                                property bool hot: sunsetHover.hovered
+                                                property real hoverFill: hot ? root.cardGlassAlphaHot : root.cardGlassAlpha
+                                                Behavior on hoverFill { NumberAnimation { duration: AppTheme.motionNormal; easing.type: Easing.OutCubic } }
+                                                property real hoverStroke: hot ? 0.32 : 0.22
+                                                Behavior on hoverStroke { NumberAnimation { duration: AppTheme.motionNormal; easing.type: Easing.OutCubic } }
+                                                color: Qt.rgba(root.cardGlassRgb.r, root.cardGlassRgb.g, root.cardGlassRgb.b, hoverFill)
+                                                border.width: 1
+                                                border.color: Qt.rgba(1, 1, 1, hoverStroke)
+                                                transform: Translate {
+                                                    y: AppTheme.reduceMotion ? 0 : (sunsetCard.hot ? -3 : 0)
+                                                    Behavior on y { NumberAnimation { duration: AppTheme.motionNormal; easing.type: Easing.OutCubic } }
+                                                }
+
+                                                // daily[0].sunset 形如 "2026-10-17T17:57"（Open-Meteo 本地 ISO，无时区后缀）——自旧 66px 日落瓦片原样迁入
+                                                readonly property string sunsetRaw:
+                                                    backend.daily.length > 0 ? String(root.value(backend.daily[0], "sunset", "")) : ""
+                                                readonly property bool hasSunset: /T\d{1,2}:\d{2}/.test(sunsetRaw)
+                                                readonly property string sunsetText: {
+                                                    if (!hasSunset) return "—"
+                                                    const m = /T(\d{1,2}):(\d{2})/.exec(sunsetRaw)
+                                                    let h = parseInt(m[1], 10)
+                                                    const ap = h >= 12 ? qsTr("PM") : qsTr("AM")
+                                                    h = h % 12
+                                                    if (h === 0) h = 12
+                                                    return h + ":" + m[2] + ap
+                                                }
+
+                                                HoverHandler { id: sunsetHover }
+                                                ToolTip.visible: sunsetHover.hovered
+                                                ToolTip.text: qsTr("Sunset")
+                                                Accessible.role: Accessible.StaticText
+                                                Accessible.name: qsTr("Sunset") + ": " + sunsetCard.sunsetText
+
+                                                RowLayout {
+                                                    anchors.left: parent.left
+                                                    anchors.leftMargin: 14
+                                                    anchors.top: parent.top
+                                                    anchors.topMargin: 12
+                                                    spacing: 8
+
+                                                    Canvas {
+                                                        id: sunsetGlyphCanvas
+                                                        implicitWidth: 12
+                                                        implicitHeight: 12
+                                                        antialiasing: true
+                                                        contextType: "2d"
+                                                        Accessible.ignored: true
+                                                        onPaint: {
+                                                            var ctx = getContext("2d")
+                                                            ctx.reset()
+                                                            // mini 日落 glyph（ref ~8px@814 → 12px）：地平线 + 上半圆太阳 + 下落箭头，同旧 46px sunCanvas 家族缩比
+                                                            ctx.strokeStyle = "rgba(255,255,255,0.85)"
+                                                            ctx.lineWidth = 1.2
+                                                            ctx.beginPath()
+                                                            ctx.moveTo(0.5, 9)
+                                                            ctx.lineTo(11.5, 9)
+                                                            ctx.stroke()
+                                                            ctx.beginPath()
+                                                            ctx.arc(6, 9, 3.5, Math.PI, 2 * Math.PI, false)
+                                                            ctx.closePath()
+                                                            ctx.fillStyle = "#ffd257"
+                                                            ctx.fill()
+                                                            ctx.strokeStyle = "rgba(255,255,255,0.92)"
+                                                            ctx.fillStyle = "rgba(255,255,255,0.92)"
+                                                            ctx.lineWidth = 1.2
+                                                            ctx.beginPath()
+                                                            ctx.moveTo(6, 2)
+                                                            ctx.lineTo(6, 4.5)
+                                                            ctx.stroke()
+                                                            ctx.beginPath()
+                                                            ctx.moveTo(6, 6)
+                                                            ctx.lineTo(4.4, 4.2)
+                                                            ctx.lineTo(7.6, 4.2)
+                                                            ctx.closePath()
+                                                            ctx.fill()
+                                                        }
+                                                    }
+
+                                                    Label {
+                                                        text: qsTr("Sunset").toLocaleUpperCase(Qt.locale())
+                                                        color: root.skyTextMuted
+                                                        font.pixelSize: 11
+                                                        font.letterSpacing: 1.4
+                                                        Accessible.ignored: true
+                                                    }
+                                                }
+
+                                                // ref-main 大号时间墨顶=卡顶+30×1.4598≈44、左 inset ~7-9@814 → 与头部 glyph 同列 14（30px 字体行高空隙 ~9，盒顶取 35）
+                                                Label {
+                                                    anchors.left: parent.left
+                                                    anchors.leftMargin: 14
+                                                    anchors.top: parent.top
+                                                    anchors.topMargin: 35
+                                                    text: sunsetCard.sunsetText
+                                                    color: root.skyText
+                                                    font.pixelSize: 30
+                                                    font.weight: Font.DemiBold
+                                                    Accessible.ignored: true
+                                                }
+                                            }
+
                                             WeatherMetric {
                                                 Layout.fillWidth: true
                                                 symbol: "%"
@@ -2107,132 +2217,6 @@ KosApplicationWindow {
                                                 valueText: {
                                                     const hpa = root.number(backend.current, "pressure", NaN)
                                                     return Number.isFinite(hpa) ? Math.round(hpa) + " hPa" : "—"
-                                                }
-                                            }
-
-                                            Rectangle {
-                                                id: sunsetTile
-                                                Layout.fillWidth: true
-                                                implicitHeight: 66
-                                                radius: root.tileRadius
-                                                // 昼夜分材质：ref-main 白天所有卡填充暗于天空（α~0.30 深蓝玻璃）；夜间维持白玻璃
-                                                property bool hot: sunsetHover.hovered
-                                                property real hoverFill: hot ? root.cardGlassAlphaHot : root.cardGlassAlpha
-                                                Behavior on hoverFill { NumberAnimation { duration: AppTheme.motionNormal; easing.type: Easing.OutCubic } }
-                                                property real hoverStroke: hot ? 0.32 : 0.22
-                                                Behavior on hoverStroke { NumberAnimation { duration: AppTheme.motionNormal; easing.type: Easing.OutCubic } }
-                                                color: Qt.rgba(root.cardGlassRgb.r, root.cardGlassRgb.g, root.cardGlassRgb.b, hoverFill)
-                                                border.width: 1
-                                                border.color: Qt.rgba(1, 1, 1, hoverStroke)
-                                                transform: Translate {
-                                                    y: AppTheme.reduceMotion ? 0 : (sunsetTile.hot ? -3 : 0)
-                                                    Behavior on y { NumberAnimation { duration: AppTheme.motionNormal; easing.type: Easing.OutCubic } }
-                                                }
-
-                                                // daily[0].sunset 形如 "2026-10-17T17:57"（Open-Meteo 本地 ISO，无时区后缀）
-                                                readonly property string sunsetRaw:
-                                                    backend.daily.length > 0 ? String(root.value(backend.daily[0], "sunset", "")) : ""
-                                                readonly property bool hasSunset: /T\d{1,2}:\d{2}/.test(sunsetRaw)
-                                                readonly property string sunsetText: {
-                                                    if (!hasSunset) return "—"
-                                                    const m = /T(\d{1,2}):(\d{2})/.exec(sunsetRaw)
-                                                    let h = parseInt(m[1], 10)
-                                                    const ap = h >= 12 ? qsTr("PM") : qsTr("AM")
-                                                    h = h % 12
-                                                    if (h === 0) h = 12
-                                                    return h + ":" + m[2] + ap
-                                                }
-
-                                                HoverHandler { id: sunsetHover }
-                                                ToolTip.visible: sunsetHover.hovered
-                                                ToolTip.text: qsTr("Sunset")
-                                                Accessible.role: Accessible.StaticText
-                                                Accessible.name: qsTr("Sunset") + ": " + sunsetTile.sunsetText
-
-                                                RowLayout {
-                                                    anchors.fill: parent
-                                                    anchors.margins: 10
-                                                    spacing: 8
-
-                                                    Item {
-                                                        Layout.preferredWidth: 46
-                                                        Layout.preferredHeight: 46
-
-                                                        Canvas {
-                                                            id: sunCanvas
-                                                            anchors.fill: parent
-                                                            antialiasing: true
-                                                            contextType: "2d"
-                                                            onPaint: {
-                                                                var ctx = getContext("2d")
-                                                                ctx.reset()
-                                                                var c = 23
-                                                                // 地平线
-                                                                ctx.beginPath()
-                                                                ctx.strokeStyle = "rgba(255,255,255,0.85)"
-                                                                ctx.lineWidth = 1.4
-                                                                ctx.moveTo(c - 15, 30)
-                                                                ctx.lineTo(c + 15, 30)
-                                                                ctx.stroke()
-                                                                // 半落太阳：地平线上方半圆
-                                                                ctx.beginPath()
-                                                                ctx.arc(c, 30, 9, Math.PI, 2 * Math.PI, false)
-                                                                ctx.closePath()
-                                                                ctx.fillStyle = "#ffd257"
-                                                                ctx.fill()
-                                                                // 太阳 3 根短光线（上半圆方向）
-                                                                ctx.strokeStyle = "#ffd257"
-                                                                ctx.lineWidth = 1.6
-                                                                var rays = [-Math.PI / 2, -Math.PI / 4, -3 * Math.PI / 4]
-                                                                for (var i = 0; i < rays.length; i++) {
-                                                                    ctx.beginPath()
-                                                                    ctx.moveTo(c + 11.5 * Math.cos(rays[i]), 30 + 11.5 * Math.sin(rays[i]))
-                                                                    ctx.lineTo(c + 14.5 * Math.cos(rays[i]), 30 + 14.5 * Math.sin(rays[i]))
-                                                                    ctx.stroke()
-                                                                }
-                                                                // 下落箭头（日落中）
-                                                                ctx.strokeStyle = "rgba(255,255,255,0.92)"
-                                                                ctx.fillStyle = "rgba(255,255,255,0.92)"
-                                                                ctx.lineWidth = 1.6
-                                                                ctx.beginPath()
-                                                                ctx.moveTo(c, 6)
-                                                                ctx.lineTo(c, 14)
-                                                                ctx.stroke()
-                                                                ctx.beginPath()
-                                                                ctx.moveTo(c, 17)
-                                                                ctx.lineTo(c - 3, 13)
-                                                                ctx.lineTo(c + 3, 13)
-                                                                ctx.closePath()
-                                                                ctx.fill()
-                                                            }
-                                                        }
-                                                    }
-
-                                                    ColumnLayout {
-                                                        Layout.fillWidth: true
-                                                        spacing: 1
-
-                                                        Label {
-                                                            Layout.fillWidth: true
-                                                            // 参考设计头部为全大写+字距（同 :1458 AQ 卡头）
-                                                            text: qsTr("Sunset").toLocaleUpperCase(Qt.locale())
-                                                            color: root.skyTextMuted
-                                                            font.pixelSize: 10
-                                                            font.letterSpacing: 1.4
-                                                            elide: Text.ElideRight
-                                                            Accessible.ignored: true
-                                                        }
-
-                                                        Label {
-                                                            Layout.fillWidth: true
-                                                            text: sunsetTile.sunsetText
-                                                            color: root.skyText
-                                                            font.pixelSize: 15
-                                                            font.weight: Font.DemiBold
-                                                            elide: Text.ElideRight
-                                                            Accessible.ignored: true
-                                                        }
-                                                    }
                                                 }
                                             }
 
