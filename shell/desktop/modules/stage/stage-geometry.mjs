@@ -41,9 +41,12 @@ export const ENGAGE_FADE_MS = 180       // 点卡交棒/被吞卡淡出（_merge
 export const GLOW_PAD = 22
 
 // ── 卡面真透视（与 shaders/stage_tilt.frag 互为孪生，改一处同步另一处）──
-// 卡片倾斜的针孔焦距：比特效（PERSPECTIVE_FOCAL=900）温和——整列卡片共享
-// 透视时大焦距避免远离地平线的卡被广角式放大（45° 倾角下 k 偏差仍 <4%）
-export const TILT_FOCAL = 2200
+// 卡片倾斜的针孔焦距（逻辑像素）。2026-10-18 按参考实测反推：参考列是
+// 共享相机的广角透视——横边斜率随卡位线性变化、上下卡反向倾斜、竖边
+// 严格垂直。实测每像素斜率 tanθ/f ≈ 5.2e-4（1560 逻辑宽空间），配合
+// 静置偏航 30° 取 f≈1100；旧的 2200 是为"几乎不可见"的 2° 配的，在
+// 30° 下会把透视压成一条直线（上下卡斜率差 <1°，列失去整体纵深）。
+export const TILT_FOCAL = 1100
 
 // 前向投影：卡面 (u,v)（相对卡中心/相机竖轴）→ **相机系**屏幕偏移。
 // depth = −u·sinR（正角 = 左缘近大，与 stageanim 特效约定一致）；
@@ -306,4 +309,4 @@ export function computeTargetRects(groups, lay, dims, records, prevRects) {
 }
 
 // （tiltHeadroom 已删——2026-09-30 审计：stack 模式删除后无生产调用方，
-// 且公式用 PERSPECTIVE_FOCAL=900 与现役卡片倾斜 TILT_FOCAL=2200 已不符）
+// 且公式写死了与 TILT_FOCAL 无关的旧焦距口径）

@@ -1553,7 +1553,7 @@ void StageAnimEffect::reloadLiveCards()
                         || pose.rect.width() * pose.rect.height() > kMaxArea)
                     continue;
                 if (pose.focal < 100.0)
-                    pose.focal = 2200.0;
+                    pose.focal = 1100.0;
                 // v2 卡面元数据（chrome 由特效同管线绘制）
                 CardMeta meta;
                 meta.title = o.value(QStringLiteral("title")).toString();

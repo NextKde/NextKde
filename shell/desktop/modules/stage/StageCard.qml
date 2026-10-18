@@ -6,6 +6,7 @@ import org.kde.pipewire
 import org.kde.taskmanager
 import "../../../shared/qml/i18n"
 import qs.desktop.modules.dock
+import qs.desktop.modules.common
 import "stage-geometry.mjs" as StageGeo
 
 // StageCard — 台前侧栏的单张应用卡片（同应用窗口堆叠在同一张卡上）。
@@ -454,10 +455,13 @@ Item {
     Item {
         id: plane
         visible: false
-        x: -(16 + card.fanPad)
-        y: -(22 + card.fanPad)
-        width: parent.width + 32 + card.fanPad * 2
-        height: parent.height + 44 + card.fanPad * 2
+        // 余量 50（原 16/22）：投影改 SDF 后外扩 = offsetY + softness + 1
+        // ≈ 49px，旧的 22 会把它裁成直边。余量对称 = 卡面仍居中，透视
+        // 采样（stage_tilt 以项中心为相机竖轴）不受影响。
+        x: -(50 + card.fanPad)
+        y: -(50 + card.fanPad)
+        width: parent.width + 100 + card.fanPad * 2
+        height: parent.height + 100 + card.fanPad * 2
         // ⚠️ 层启用**不跟 previewActive**（2026-10-18 合并/拆分拖回排障）：
         // 卡在屏幕外创建（拆组后追加到列尾）时 layer 为 false，之后拖回
         // 屏幕内再启用，烘焙出的层纹理整块空白且此后不再刷新——卡面
@@ -503,10 +507,10 @@ Item {
         // 背板（原根 Rectangle 的颜色/描边/圆角，随卡面一起被透视投影）
         Rectangle {
             id: plate
-            x: 16 + card.fanPad
-            y: 22 + card.fanPad
-            width: parent.width - 32 - card.fanPad * 2
-            height: parent.height - 44 - card.fanPad * 2
+            x: 50 + card.fanPad
+            y: 50 + card.fanPad
+            width: parent.width - 100 - card.fanPad * 2
+            height: parent.height - 100 - card.fanPad * 2
             radius: StageConfigService.cardRadius
             // 背板浓度：静置 cardTint，悬停/驻留预示自动 ×1.3 提亮（上限 0.95）
             //（活体内容走 paintScreen 后置通道画在一切之上——背板正常渲染，
@@ -532,25 +536,30 @@ Item {
             Behavior on color { ColorAnimation { duration: 130 } }
         }
 
-        // ── 常驻投影(iPadOS 还原,2026-10-17):参考缩略图卡下方有柔和短
-        // 投影(实测壁纸压暗 ~25%、衰减 ~21pt)。4 层步进黑矩形,声明在
-        // 背板之后/内容之前 = 随 plane 纹理一起被透视斜切(投影随卡姿态,
-        // 与参考一致)。只在卡底部可见(向下偏移,上/侧层被卡面盖住)──
-        Repeater {
-            model: 4
-            Rectangle {
-                required property int index
-                anchors.centerIn: plate
-                width: plate.width + 4 + index * 4
-                height: plate.height + 4 + index * 4
-                y: plate.y + 3 + index * 2   // 向下偏移:底缘露出,顶缘藏卡后
-                radius: plate.radius + 2 + index * 2
-                color: Qt.rgba(0, 0, 0, 1)
-                // 0.25 → 0.15(2026-10-17 并排实测):四层叠加后重叠区
-                // 合成 ≈28%,对齐参考的壁纸压暗量级(≈25%);原 0.25 合成
-                // ≈43%,并排图上明显比参考重
-                opacity: 0.15 / (index + 1)
-            }
+        // ── 常驻投影(iPadOS 还原,2026-10-17):参考缩略图卡四周有柔和短
+        // 投影（sm4 原生尺度实测：贴边压暗 ~15-20%，衰减半径 ≈ 卡宽
+        // 20%，上/左也有一圈淡影 = 光源略偏左上而非纯底投影）。声明在
+        // 背板之后/内容之前 = 随 plane 纹理一起被透视斜切（投影随卡
+        // 姿态，与参考一致）。
+        // 2026-10-18：改用与浮层同源的 SDF 投影着色器（KosCardShadow）。
+        // 旧的 4 层步进黑矩形在 30° 透视角下卡底能看出阶梯边（每级
+        // 6/8px 的外扩在斜切后被放大），而 SDF 的 smoothstep 是连续
+        // 衰减；峰值也压回参考的 ~20%（旧叠加 ≈26% 偏重）。
+        // ⚠️ 不要改回 anchors.centerIn：锚点会覆盖 x/y 绑定，投影变成
+        // 上下对称的光晕（2026-10-18 卡顶黑边事故）。显式 x/y 定位。
+        KosCardShadow {
+            cardWidth: plate.width
+            cardHeight: plate.height
+            cornerRadius: plate.radius
+            // 光源在左上：右下重、左上轻
+            offsetX: 1
+            offsetY: 4
+            // 模糊半径 ≈ 卡宽 35%：着色器对衰减再平方（alpha²），视觉
+            // 半程 ≈ softness/2，44 对应实测参考的 ~17-19px 有效衰减
+            softness: 44
+            shadowColor: Qt.rgba(0, 0, 0, 0.20)
+            x: plate.x - margin
+            y: plate.y - margin
         }
 
         // ── 聚焦辉光：多层薄步进衰减模拟柔和光晕。⚠️ 平色矩形层叠会出硬边
@@ -1019,7 +1028,7 @@ Item {
     // 关闭钮热区必须在卡根层级：视觉树渲染进 visible:false 的透视层
     //（plane，着色器源），层内 MouseArea 不收输入——整卡 cardMouse 把
     // 点击全接走（"关闭按钮点不动"的根因）。plane/plate 与根坐标 1:1
-    // 对齐（plane.x=-16/plate.x=16 抵消）。
+    // 对齐（plane.x=-50/plate.x=50 抵消）。
     // x/y 显式定位 = 基准位（右上 6/6）+ _closeProj 透视位移：视觉钮在
     // 投影位、热区跟到同位（悬停倾斜下不跟随会"点关闭变展开"，见
     // _closeProj 注释）。

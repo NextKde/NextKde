@@ -68,7 +68,7 @@ struct LiveCardPose
     QRectF rect;      // 屏幕逻辑坐标的卡面矩形（= 快照所在 plate）
     qreal angleDeg = 0; // 已含右侧镜像符号的终态倾角
     qreal yOff = 0;   // 卡中心相对共享地平线的 y 偏移（正 = 地平线下方）
-    qreal focal = 2200;
+    qreal focal = 1100; // 与 stage-geometry.mjs TILT_FOCAL 同源（发布端覆盖）
     qreal radius = 10; // 圆角半径（与 plate.radius 同源）
 };
 

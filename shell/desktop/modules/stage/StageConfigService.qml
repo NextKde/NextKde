@@ -62,9 +62,12 @@ QtObject {
         // 静置姿态；tiltAngle = **悬停倾斜角**——鼠标悬停时的倾角
         //（0 = 悬停放平阅读）
         // TiltAngle kwinrc 投影取 deckRestTilt（与卡片交棒姿态同源，见
-        // _pushEffectConfig）。2026-10-18 用户定案：参考卡列是微倾的
-        //（~2° 透视，左缘近、顶边收），静置倾斜恢复 2°，悬停仍放平
-        "deckRestTilt": { type: "real", min: 0, max: 40, def: 2 },
+        // _pushEffectConfig）。2026-10-18 按参考实测改判：参考列不是 2°
+        // 微倾，而是共享相机的广角偏航——屏幕上半卡右低、下半卡右高，
+        // 横边斜率随卡位线性变化（顶卡 ~10°、中卡 0°、底卡 ~9° 反向），
+        // 竖边严格垂直。反推静置偏航 ≈30°、焦距 ≈1100（TILT_FOCAL）。
+        // 旧的 2° 是"微倾"的误读：在 2200 焦距下视觉斜率 <0.2°，等于没歪
+        "deckRestTilt": { type: "real", min: 0, max: 40, def: 30 },
         "tiltAngle":    { type: "real", min: 0, max: 40, def: 0 },
         // 玻璃质感（StageCard 卡面：背板/受光/描边/辉光/纵深）
         "cardRadius":   { type: "int", min: 0, max: 24, def: 7 },
@@ -154,8 +157,9 @@ QtObject {
     // deckRestTilt（与卡片交棒姿态同源，见 _pushEffectConfig）。
     //（悬停放大只有一个旋钮 hoverScale——原 deckFocusScale 与其相乘控
     // 同一效果，冲突已删）
-    // 2026-10-18 用户定案:静置微倾 2°（参考卡列透视倾斜），悬停放平
-    property real deckRestTilt: 2
+    // 2026-10-18 参考实测改判：静置偏航 30°（共享相机广角透视，竖边垂直、
+    // 横边随卡位倾斜），悬停放平。焦距同源改到 TILT_FOCAL=1100
+    property real deckRestTilt: 30
     property real tiltAngle: 0
     // 卡面玻璃质感：背板浓度（悬停自动 ×1.3 提亮）/ 顶部受光 / 静置描边
     // 亮度 / 聚焦辉光强度 / 纵深压暗
