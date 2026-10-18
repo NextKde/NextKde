@@ -131,9 +131,13 @@ KosApplicationWindow {
         // Labels/Light 1 Primary, 2 Secondary (#3C3C43 @60% → #8A8A8A).
         readonly property color labelPrimary:
             root.tahoeDark ? "#F2F2F2" : "#000000"
+        // C1: reference alpha is 60%, but that reads 3.44:1 on white and
+        // 2.70:1 on the #E4E4E4 sidebar plane. 0.79 is the smallest alpha
+        // that clears 4.5:1 on BOTH planes (4.56 / 5.80), the minimal
+        // deviation from the reference that satisfies WCAG.
         readonly property color labelSecondary: root.tahoeDark
             ? Qt.rgba(0xF2 / 255, 0xF2 / 255, 0xF2 / 255, 0.58)
-            : Qt.rgba(0x3C / 255, 0x3C / 255, 0x43 / 255, 0.6)
+            : Qt.rgba(0x3C / 255, 0x3C / 255, 0x43 / 255, 0.79)
         // Separators/Light Non-Opaque (#000000 @12%).
         readonly property color separator: root.tahoeDark
             ? Qt.rgba(1, 1, 1, 0.10) : Qt.rgba(0, 0, 0, 0.12)
