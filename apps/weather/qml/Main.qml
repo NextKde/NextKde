@@ -1544,1313 +1544,1332 @@ KosApplicationWindow {
                         }
                     }
 
-                    // 双列行（ref-main masonry 步骤 a+c）：左 AQ 半宽卡 + 右 Conditions 卡并排，
-                    // 10 天卡入右列 Conditions 下方；瓦片区仍全宽，步 b（瓦片改大方卡入左列）后续轮做；compact 窄窗回落单列
+                    // 双列 masonry（ref-main 步骤 a+b+c）：GridLayout 内两个独立列容器 = 真 masonry——
+                    // 行式布局曾把左列瓦片压到右列 Conditions 底下产生 86px 天窗；左列 AQ→指标瓦片、右列 Conditions→10 天卡各自独立堆叠；compact 窄窗回落单列
                     GridLayout {
                         Layout.fillWidth: true
                         columns: root.compact ? 1 : 2
                         // ref-main(814x498) y260 行实测 AQ 卡右缘 x505 → Conditions 卡左缘 x519 ≈13px 间隙 × 1.4598 窗高比 ≈ 19px
                         columnSpacing: 19
                         rowSpacing: 16
-                        KosCard {
-                            id: airQualityCard
+                        // ref-main 左列：AQ 卡 → 指标瓦片（独立堆叠，不随右列高度走；列缝 19 见 GridLayout）
+                        ColumnLayout {
                             Layout.fillWidth: true
-                            // ref-main 两列等宽(239/241@814)：preferred 拉平让 GridLayout 等分剩余宽度
                             Layout.minimumWidth: 0
                             Layout.preferredWidth: 0
                             Layout.alignment: Qt.AlignTop
+                            spacing: 16
+                            KosCard {
+                                id: airQualityCard
+                                Layout.fillWidth: true
+                                // ref-main 两列等宽(239/241@814)：preferred 拉平让 GridLayout 等分剩余宽度
+                                Layout.minimumWidth: 0
+                                Layout.preferredWidth: 0
+                                Layout.alignment: Qt.AlignTop
 
-                            background: KosSurface {
-                                // ref-main Pillow 实测 Conditions 卡圆角 r≈14px@814 × 1.4598 窗高比 ≈ 20.4 → 20（同心圆角锚点，阶段三 A）
-                                radius: 20
-                                fillColor: Qt.rgba(root.cardGlassRgb.r, root.cardGlassRgb.g, root.cardGlassRgb.b, root.cardGlassAlpha)
-                                strokeWidth: 1
-                                strokeColor: Qt.rgba(1, 1, 1, 0.22)
-                                elevation: 0
-                            }
-
-                            contentItem: ColumnLayout {
-                                spacing: 10
-
-                                RowLayout {
-                                    spacing: 6
-
-                                    Canvas {
-                                        width: 12
-                                        height: 12
-
-                                        onPaint: {
-                                            const ctx = getContext("2d")
-                                            ctx.clearRect(0, 0, width, height)
-                                            // ref-main.png 实测：AQ 卡头部点阵图标最亮点 (284,213)=(52,124,205) vs 卡面 (27,98,175)
-                                            // → 峰值 Δ≈+27；"AIR QUALITY" 文字最亮 (322,218)=(96,162,241) vs 同底 → Δ≈+66；
-                                            // 图标/文字对比度比 ≈ 0.38-0.41。且点阵亮度沿对角渐变：
-                                            // 右上 (row0,col2) 最亮、左下 (row2,col0) 最淡（视觉近消失）。
-                                            // 原统一 alpha 0.6 使 Δ≈+121 vs 文字 Δ≈+119（比 0.92），过亮且无渐隐；
-                                            // 现按对角渐隐：峰值 0.26×(255−背景)≈+47 ≈ 0.4× 文字 Δ。
-                                            for (let row = 0; row < 3; ++row) {
-                                                for (let col = 0; col < 3; ++col) {
-                                                    // 亮度沿 col−row 对角：右上 (row0,col2)=0.26 最亮、左下 (row2,col0)=0.10 最淡
-                                                    const alpha = 0.10 + 0.16 * (col - row + 2) / 4
-                                                    ctx.fillStyle = Qt.rgba(1, 1, 1, alpha)
-                                                    ctx.beginPath()
-                                                    ctx.arc(1.5 + col * 4.5, 1.5 + row * 4.5, 1.3, 0, Math.PI * 2)
-                                                    ctx.fill()
-                                                }
-                                            }
-                                        }
-                                    }
-
-                                    Label {
-                                        text: qsTr("Air Quality").toUpperCase()
-                                        color: root.skyTextMuted
-                                        font.pixelSize: 11
-                                        font.weight: Font.DemiBold
-                                        font.letterSpacing: 1.4
-                                    }
+                                background: KosSurface {
+                                    // ref-main Pillow 实测 Conditions 卡圆角 r≈14px@814 × 1.4598 窗高比 ≈ 20.4 → 20（同心圆角锚点，阶段三 A）
+                                    radius: 20
+                                    fillColor: Qt.rgba(root.cardGlassRgb.r, root.cardGlassRgb.g, root.cardGlassRgb.b, root.cardGlassAlpha)
+                                    strokeWidth: 1
+                                    strokeColor: Qt.rgba(1, 1, 1, 0.22)
+                                    elevation: 0
                                 }
 
-                                Label {
-                                    text: Math.round(root.number(backend.airQuality, "usAqi", 0))
-                                    color: root.skyText
-                                    font.pixelSize: 22
-                                    font.weight: Font.DemiBold
-                                }
+                                contentItem: ColumnLayout {
+                                    spacing: 10
 
-                                Label {
-                                    text: root.value(backend.airQuality, "category", "")
-                                    visible: text.length > 0
-                                    color: root.skyText
-                                    Layout.topMargin: -12 // ref-main 实测数字底→rating cap 顶 ink gap 7px×1.46≈10，改前 22px（spacing 10 + 两行字体行高 padding），-12 只抵消行高 padding
-                                    font.pixelSize: 13
-                                }
+                                    RowLayout {
+                                        spacing: 6
 
-                                Item {
-                                    Layout.topMargin: 7 // ref-main 实测 rating cap 顶→条顶 22px×1.4598≈32，改前 25px（同口径），+7 补齐；本轮 Pillow 实测 rating 基线→条顶 我方 16.5px vs ref 16px×1.4598≈23.3
-                                    Layout.fillWidth: true
-                                    height: 9
+                                        Canvas {
+                                            width: 12
+                                            height: 12
 
-                                    Rectangle {
-                                        anchors.left: parent.left
-                                        anchors.right: parent.right
-                                        anchors.verticalCenter: parent.verticalCenter
-                                        height: 4
-                                        radius: 2
-                                        gradient: Gradient {
-                                            orientation: Gradient.Horizontal
-                                            // ref-main 实测：EPA 0-500 线性映射，0.72 起平直 #80172b（Pillow 逐点采样）
-                                            stops: [
-                                                GradientStop { position: 0.00; color: "#00de72" },
-                                                GradientStop { position: 0.15; color: "#fde620" },
-                                                GradientStop { position: 0.22; color: "#ffac0b" },
-                                                GradientStop { position: 0.29; color: "#fd5e21" },
-                                                GradientStop { position: 0.36; color: "#f30f5e" },
-                                                GradientStop { position: 0.43; color: "#cd08b2" },
-                                                GradientStop { position: 0.50; color: "#a805fa" },
-                                                GradientStop { position: 0.58; color: "#9a0aae" },
-                                                GradientStop { position: 0.65; color: "#8b1062" },
-                                                GradientStop { position: 0.72; color: "#80172b" },
-                                                GradientStop { position: 1.00; color: "#80172b" }
-                                            ]
-                                        }
-                                    }
-
-                                    Rectangle {
-                                        // ref-main Pillow 实测 AQI 40 白点在条 8.33% 处，0–500（EPA AQI 满量程）预测 8.0% 吻合，0–300 预测 13.3% 偏差 10.5px
-                                        x: Math.max(0, Math.min(1, root.number(backend.airQuality, "usAqi", 0) / 500)) * (parent.width - 9)
-                                        anchors.verticalCenter: parent.verticalCenter
-                                        width: 9
-                                        height: 9
-                                        radius: 4.5
-                                        color: "#ffffff"
-                                    }
-                                }
-
-                                Label {
-                                    text: qsTr("Air quality index is %1, which is similar to yesterday at about this time.")
-                                        .arg(Math.round(root.number(backend.airQuality, "usAqi", 0)))
-                                    color: root.skyTextMuted
-                                    font.pixelSize: 11
-                                    wrapMode: Text.WordWrap
-                                    Layout.fillWidth: true
-                                }
-                            }
-                        }
-                        // Conditions 单卡：包住 头部行 + 右上分段胶囊 + 逐小时列（对齐 ref-main）
-                        KosCard {
-                            id: hourlyConditionsCard
-                            Layout.fillWidth: true
-                            // ref-main 两列等宽(239/241@814)：preferred 拉平让 GridLayout 等分剩余宽度
-                            Layout.minimumWidth: 0
-                            Layout.preferredWidth: 0
-                            Layout.alignment: Qt.AlignTop
-
-                            background: KosSurface {
-                                radius: 20
-                                fillColor: Qt.rgba(root.cardGlassRgb.r, root.cardGlassRgb.g, root.cardGlassRgb.b, root.currentIsDay ? root.cardGlassAlpha : 0.16)
-                                strokeWidth: 1
-                                strokeColor: Qt.rgba(1, 1, 1, 0.22)
-                                elevation: 0
-                            }
-
-                            contentItem: ColumnLayout {
-                                spacing: 10
-
-                                RowLayout {
-                                    Layout.fillWidth: true
-
-                                    ColumnLayout {
-                                        spacing: 1
-                                        Layout.fillWidth: true
-
-                                        Label {
-                                            Layout.fillWidth: true
-                                            text: qsTr("Conditions")
-                                            color: root.skyText
-                                            font.pixelSize: 14
-                                            font.weight: Font.DemiBold
-                                            Accessible.name: qsTr("Hourly forecast")
-                                        }
-
-                                        // 副标题为外推：固定展示温度单位，不随 segment 切换
-                                        Label {
-                                            Layout.fillWidth: true
-                                            text: qsTr("Temperature (%1)").arg(root.temperatureUnit)
-                                            color: root.skyTextMuted
-                                            font.pixelSize: 11
-                                        }
-                                    }
-
-                                    // 三段胶囊切换钮，参照 ref-main Conditions 卡右上分段控件。
-                                    // segment 0 = 温度/图标视图（默认，参考图选中态），
-                                    // segment 1 = 逐小时降水概率视图；
-                                    // segment 2 = 逐小时风速视图（后端 hourlyPoint.windSpeed 已有）。
-                                    Item {
-                                        id: hourlySegmented
-                                        implicitWidth: 132
-                                        implicitHeight: 36
-                                        Layout.alignment: Qt.AlignTop | Qt.AlignRight
-                                        property int segment: 0
-
-                                        Rectangle {
-                                            anchors.fill: parent
-                                            radius: 18
-                                            color: Qt.rgba(1, 1, 1, 0.14)
-                                            border.width: 1
-                                            border.color: Qt.rgba(1, 1, 1, 0.22)
-                                        }
-
-                                        // 选中圆盘（当前段背后）
-                                        Rectangle {
-                                            x: 3 + 44 * hourlySegmented.segment
-                                            y: 3
-                                            width: 30
-                                            height: 30
-                                            radius: 15
-                                            color: Qt.rgba(1, 1, 1, 0.27)
-                                        }
-
-                                        AbstractButton {
-                                            x: 0
-                                            width: 44
-                                            height: 36
-                                            background: null
-                                            contentItem: Label {
-                                                horizontalAlignment: Text.AlignHCenter
-                                                verticalAlignment: Text.AlignVCenter
-                                                text: "☁"
-                                                color: hourlySegmented.segment === 0 ? "#ffffff" : Qt.rgba(1, 1, 1, 0.9)
-                                                font.pixelSize: 16
-                                            }
-                                            onClicked: hourlySegmented.segment = 0
-                                            Accessible.name: qsTr("Hourly conditions")
-                                        }
-                                        AbstractButton {
-                                            x: 44
-                                            width: 44
-                                            height: 36
-                                            background: null
-                                            // ref-main 实测降水段为实心水滴 6×9px@814（胶囊高 25px），我方胶囊 36px 按 1.44 折算 ≈ 9×13
-                                            // Control 会覆写 contentItem 几何，Canvas 需包 Item 再居中（ref 胶囊中心 225 vs 水滴中心 225.5 居中）
-                                            contentItem: Item {
-                                                anchors.fill: parent
-                                                Canvas {
-                                                    id: dropCanvas
-                                                    width: 12
-                                                    height: 16
-                                                    anchors.centerIn: parent
-                                                    antialiasing: true
-                                                    onPaint: {
-                                                        var ctx = getContext("2d")
-                                                        ctx.reset()
+                                            onPaint: {
+                                                const ctx = getContext("2d")
+                                                ctx.clearRect(0, 0, width, height)
+                                                // ref-main.png 实测：AQ 卡头部点阵图标最亮点 (284,213)=(52,124,205) vs 卡面 (27,98,175)
+                                                // → 峰值 Δ≈+27；"AIR QUALITY" 文字最亮 (322,218)=(96,162,241) vs 同底 → Δ≈+66；
+                                                // 图标/文字对比度比 ≈ 0.38-0.41。且点阵亮度沿对角渐变：
+                                                // 右上 (row0,col2) 最亮、左下 (row2,col0) 最淡（视觉近消失）。
+                                                // 原统一 alpha 0.6 使 Δ≈+121 vs 文字 Δ≈+119（比 0.92），过亮且无渐隐；
+                                                // 现按对角渐隐：峰值 0.26×(255−背景)≈+47 ≈ 0.4× 文字 Δ。
+                                                for (let row = 0; row < 3; ++row) {
+                                                    for (let col = 0; col < 3; ++col) {
+                                                        // 亮度沿 col−row 对角：右上 (row0,col2)=0.26 最亮、左下 (row2,col0)=0.10 最淡
+                                                        const alpha = 0.10 + 0.16 * (col - row + 2) / 4
+                                                        ctx.fillStyle = Qt.rgba(1, 1, 1, alpha)
                                                         ctx.beginPath()
-                                                        ctx.moveTo(6, 1.5)
-                                                        ctx.bezierCurveTo(8.2, 5.0, 10, 7.6, 10, 10.5)  // 右侧下行到圆右端
-                                                        ctx.arc(6, 10.5, 4, 0, Math.PI, false)          // 经底部从右到左
-                                                        ctx.bezierCurveTo(2, 7.6, 3.8, 5.0, 6, 1.5)     // 左侧收回尖点
-                                                        ctx.closePath()
-                                                        ctx.fillStyle = hourlySegmented.segment === 1 ? "#ffffff" : Qt.rgba(1, 1, 1, 0.9)
+                                                        ctx.arc(1.5 + col * 4.5, 1.5 + row * 4.5, 1.3, 0, Math.PI * 2)
                                                         ctx.fill()
                                                     }
-                                                    // segment 属于外层 hourlySegmented，Canvas 上无法直接写 onSegmentChanged
-                                                    //（qmllint: no matching signal，运行时不触发），改用 Connections 监听后重绘
-                                                    Connections {
-                                                        target: hourlySegmented
-                                                        function onSegmentChanged() { dropCanvas.requestPaint() }
-                                                    }
-                                                    Component.onCompleted: requestPaint()
-                                                    Accessible.ignored: true
-                                                }
-                                            }
-                                            onClicked: hourlySegmented.segment = 1
-                                            Accessible.name: qsTr("Hourly precipitation")
-                                        }
-                                        AbstractButton {
-                                            x: 88
-                                            width: 44
-                                            height: 36
-                                            background: null
-                                            contentItem: Label {
-                                                horizontalAlignment: Text.AlignHCenter
-                                                verticalAlignment: Text.AlignVCenter
-                                                text: "≋"
-                                                color: hourlySegmented.segment === 2 ? "#ffffff" : Qt.rgba(1, 1, 1, 0.9)
-                                                font.pixelSize: 16
-                                            }
-                                            onClicked: hourlySegmented.segment = 2
-                                            Accessible.name: qsTr("Hourly wind")
-                                        }
-                                    }
-                                }
-
-                                Flickable {
-                                    Layout.fillWidth: true
-                                    Layout.preferredHeight: 142
-                                    contentWidth: hourlyRow.implicitWidth
-                                    contentHeight: height
-                                    boundsBehavior: Flickable.StopAtBounds
-                                    clip: true
-
-                                    ScrollBar.horizontal: ScrollBar {}
-
-                                    // ref-main（参考图）Conditions 卡本无温度曲线；本条系 TASK.md
-                                    // 用户裁定（2026-10-18）按 Apple Weather 惯例外推。
-                                    // 布局适配：委托列实际占 content y 84..122（温度文字 84..93、
-                                    // ☂行 115..122，Pillow 实测），真实空档为 94..114，曲线带据此落位。
-                                    // 层位：Canvas 位于 Flickable 内容区内部、Row 之前声明（先声明者
-                                    // 先画、z 序在下），随 contentX 一起横滚覆盖逐小时列。
-                                    Canvas {
-                                        id: hourlyCurve
-
-                                        readonly property int bandTop: 97
-                                        readonly property int bandInner: 15
-                                        readonly property int bandBottom: 113
-
-                                        // draw-on 揭示动画：0..1，1 = 完整曲线。1000ms 系外推：
-                                        // 内容揭示类动效，HIG 环境量级（阶段三 B.6，用户裁定 1）。
-                                        property real drawProgress: 1.0
-                                        Behavior on drawProgress {
-                                            id: drawProgressBehavior
-                                            NumberAnimation { duration: 1000; easing.type: Easing.OutCubic }
-                                        }
-
-                                        function replayDraw() {
-                                            if (AppTheme.reduceMotion) {
-                                                // reduce-motion：永远完整曲线，动画不跑
-                                                drawProgressBehavior.enabled = false
-                                                drawProgress = 1
-                                                drawProgressBehavior.enabled = true
-                                                requestPaint()
-                                                return
-                                            }
-                                            // 先在 Behavior 关闭时归零（保证落 0），再开启 Behavior
-                                            // 写 1 触发 0→1 动画；同块直写 0 再写 1 会被 Behavior
-                                            // 重定向为 1→1 而吞掉动画。
-                                            drawProgressBehavior.enabled = false
-                                            drawProgress = 0
-                                            requestPaint()
-                                            drawProgressBehavior.enabled = true
-                                            drawProgress = 1
-                                        }
-
-                                        x: 0
-                                        y: 0
-                                        width: hourlyRow.implicitWidth
-                                        height: 142
-                                        antialiasing: true
-                                        visible: hourlySegmented.segment === 0
-                                        Accessible.ignored: true
-
-                                        onWidthChanged: requestPaint()
-                                        onDrawProgressChanged: requestPaint()
-                                        Component.onCompleted: replayDraw()
-
-                                        Connections {
-                                            target: root
-                                            function onUpcomingHoursChanged() {
-                                                hourlyCurve.replayDraw()
-                                            }
-                                        }
-
-                                        Connections {
-                                            target: hourlySegmented
-                                            function onSegmentChanged() {
-                                                if (hourlySegmented.segment === 0)
-                                                    hourlyCurve.replayDraw()
-                                            }
-                                        }
-
-                                        onPaint: {
-                                            var ctx = hourlyCurve.getContext("2d")
-                                            ctx.clearRect(0, 0, hourlyCurve.width, hourlyCurve.height)
-                                            if (hourlyCurve.drawProgress <= 0)
-                                                return
-                                            var pts = []
-                                            for (var i = 0; i < root.upcomingHours.length; ++i) {
-                                                var t = root.number(root.upcomingHours[i], "temperature", NaN)
-                                                if (isFinite(t))
-                                                    pts.push({ x: 54 + i * 118, t: t })
-                                            }
-                                            if (pts.length < 2)
-                                                return
-                                            var minT = pts[0].t
-                                            var maxT = pts[0].t
-                                            for (var j = 1; j < pts.length; ++j) {
-                                                minT = Math.min(minT, pts[j].t)
-                                                maxT = Math.max(maxT, pts[j].t)
-                                            }
-                                            function yFor(t) {
-                                                if (maxT === minT)
-                                                    return hourlyCurve.bandTop + hourlyCurve.bandInner / 2
-                                                return hourlyCurve.bandTop
-                                                    + (1 - (t - minT) / (maxT - minT)) * hourlyCurve.bandInner
-                                            }
-                                            var ys = []
-                                            for (var k = 0; k < pts.length; ++k)
-                                                ys.push(yFor(pts[k].t))
-
-                                            // 把二次贝塞尔路径展平为稠密折线，便于按累计弧长截断
-                                            var samples = [{ x: pts[0].x, y: ys[0] }]
-                                            for (var m = 1; m < pts.length - 1; ++m) {
-                                                var p0x = samples[samples.length - 1].x
-                                                var p0y = samples[samples.length - 1].y
-                                                var cx = pts[m].x
-                                                var cy = ys[m]
-                                                var p1x = (pts[m].x + pts[m + 1].x) / 2
-                                                var p1y = (ys[m] + ys[m + 1]) / 2
-                                                for (var s = 1; s <= 16; ++s) {
-                                                    var u = s / 16
-                                                    var a = (1 - u) * (1 - u)
-                                                    var b = 2 * (1 - u) * u
-                                                    var c = u * u
-                                                    samples.push({
-                                                        x: a * p0x + b * cx + c * p1x,
-                                                        y: a * p0y + b * cy + c * p1y
-                                                    })
-                                                }
-                                            }
-                                            samples.push({
-                                                x: pts[pts.length - 1].x,
-                                                y: ys[ys.length - 1]
-                                            })
-
-                                            var total = 0
-                                            var segLen = []
-                                            for (var d = 1; d < samples.length; ++d) {
-                                                var len = Math.hypot(samples[d].x - samples[d - 1].x,
-                                                                     samples[d].y - samples[d - 1].y)
-                                                segLen.push(len)
-                                                total += len
-                                            }
-                                            var budget = total * Math.min(1, Math.max(0, hourlyCurve.drawProgress))
-                                            var cutX = samples[samples.length - 1].x
-                                            var cutY = samples[samples.length - 1].y
-                                            var cutIdx = samples.length - 1
-                                            if (budget < total) {
-                                                var acc = 0
-                                                for (var e = 0; e < segLen.length; ++e) {
-                                                    if (acc + segLen[e] >= budget) {
-                                                        var f = segLen[e] > 0 ? (budget - acc) / segLen[e] : 0
-                                                        cutX = samples[e].x + (samples[e + 1].x - samples[e].x) * f
-                                                        cutY = samples[e].y + (samples[e + 1].y - samples[e].y) * f
-                                                        cutIdx = e
-                                                        break
-                                                    }
-                                                    acc += segLen[e]
-                                                }
-                                            }
-
-                                            ctx.beginPath()
-                                            ctx.moveTo(samples[0].x, samples[0].y)
-                                            for (var g = 1; g <= cutIdx; ++g)
-                                                ctx.lineTo(samples[g].x, samples[g].y)
-                                            ctx.lineTo(cutX, cutY)
-
-                                            ctx.strokeStyle = "rgba(255,255,255,0.85)"
-                                            ctx.lineWidth = 2
-                                            ctx.lineJoin = "round"
-                                            ctx.lineCap = "round"
-                                            ctx.stroke()
-
-                                            var grad = ctx.createLinearGradient(0, hourlyCurve.bandTop, 0, hourlyCurve.bandBottom)
-                                            grad.addColorStop(0, "rgba(255,255,255,0.20)")
-                                            grad.addColorStop(1, "rgba(255,255,255,0)")
-                                            ctx.lineTo(cutX, hourlyCurve.bandBottom)
-                                            ctx.lineTo(samples[0].x, hourlyCurve.bandBottom)
-                                            ctx.closePath()
-                                            ctx.fillStyle = grad
-                                            ctx.fill()
-                                        }
-                                    }
-
-                                    Row {
-                                        id: hourlyRow
-                                        height: parent.height - 12
-                                        spacing: 10
-
-                                        Repeater {
-                                            model: root.upcomingHours
-
-                                            delegate: Item {
-                                                id: hourlyCard
-
-                                                required property var modelData
-                                                required property int index
-                                                width: 108
-                                                height: hourlyRow.height
-                                                opacity: 0
-                                                transform: Translate { id: entranceShift; y: 14 }
-
-                                                Component.onCompleted: {
-                                                    if (AppTheme.reduceMotion) {
-                                                        hourlyCard.opacity = 1
-                                                        entranceShift.y = 0
-                                                        iconBounceShift.y = 0
-                                                        return
-                                                    }
-                                                    entranceAnim.restart()
-                                                    iconBounceAnim.restart()
-                                                }
-
-                                                SequentialAnimation {
-                                                    id: entranceAnim
-                                                    PauseAnimation { duration: 40 * hourlyCard.index }
-                                                    ParallelAnimation {
-                                                        NumberAnimation { target: hourlyCard; property: "opacity"; to: 1; duration: 260; easing.type: Easing.OutCubic }
-                                                        NumberAnimation { target: entranceShift; property: "y"; to: 0; duration: 260; easing.type: Easing.OutCubic }
-                                                    }
-                                                }
-
-                                                SequentialAnimation {
-                                                    id: iconBounceAnim
-                                                    PauseAnimation { duration: 300 + 40 * hourlyCard.index }
-                                                    NumberAnimation { target: iconBounceShift; property: "y"; to: -6; duration: 110; easing.type: Easing.OutCubic }
-                                                    NumberAnimation { target: iconBounceShift; property: "y"; to: 0; duration: 160; easing.type: Easing.OutBack }
-                                                }
-
-                                                ColumnLayout {
-                                                    anchors.fill: parent
-                                                    spacing: 4
-
-                                                    Label {
-                                                        Layout.alignment: Qt.AlignHCenter
-                                                        text: root.localTime(root.value(
-                                                            hourlyCard.modelData, "time", ""))
-                                                        color: root.skyTextMuted
-                                                    }
-
-                                                    WeatherIcon {
-                                                        Layout.alignment: Qt.AlignHCenter
-                                                        Layout.preferredWidth: 26
-                                                        Layout.preferredHeight: 26
-                                                        code: root.number(hourlyCard.modelData, "weatherCode", -1)
-                                                        isDay: Boolean(root.value(hourlyCard.modelData, "isDay", true))
-                                                        pulse: backend.loading && !AppTheme.reduceMotion
-                                                        transform: Translate { id: iconBounceShift; y: 0 }
-                                                        Accessible.ignored: true
-                                                    }
-
-                                                    Label {
-                                                        Layout.alignment: Qt.AlignHCenter
-                                                        visible: hourlySegmented.segment === 0
-                                                        text: Math.round(root.number(
-                                                            hourlyCard.modelData, "temperature", 0)) + root.temperatureUnit
-                                                        color: root.skyText
-                                                        font.weight: Font.DemiBold
-                                                    }
-
-                                                    Label {
-                                                        Layout.alignment: Qt.AlignHCenter
-                                                        visible: hourlySegmented.segment === 1
-                                                        text: Math.round(root.number(
-                                                            hourlyCard.modelData,
-                                                            "precipitationProbability", 0)) + "%"
-                                                        color: root.skyText
-                                                        font.weight: Font.DemiBold
-                                                        Accessible.name: qsTr("%1% chance of precipitation").arg(
-                                                            Math.round(root.number(hourlyCard.modelData,
-                                                                                   "precipitationProbability", 0)))
-                                                    }
-
-                                                    Label {
-                                                        Layout.alignment: Qt.AlignHCenter
-                                                        visible: hourlySegmented.segment === 2
-                                                        text: Math.round(root.number(
-                                                            hourlyCard.modelData, "windSpeed", 0)) + " " + root.speedUnit
-                                                        color: root.skyText
-                                                        font.weight: Font.DemiBold
-                                                        Accessible.name: qsTr("Wind speed %1 %2").arg(
-                                                            Math.round(root.number(hourlyCard.modelData, "windSpeed", 0)))
-                                                                            .arg(root.speedUnit)
-                                                    }
-
-                                                    Label {
-                                                        Layout.alignment: Qt.AlignHCenter
-                                                        visible: hourlySegmented.segment === 0
-                                                        text: "☂︎  " + Math.round(root.number(
-                                                            hourlyCard.modelData,
-                                                            "precipitationProbability", 0)) + "%"
-                                                        color: root.skyTextMuted
-                                                        font.pixelSize: 10
-                                                        Accessible.name: qsTr("%1% chance of precipitation").arg(
-                                                            Math.round(root.number(hourlyCard.modelData,
-                                                                                   "precipitationProbability", 0)))
-                                                    }
                                                 }
                                             }
                                         }
-                                }
-                                    }
-                            }
-                        }
 
-                        KosCard {
-                            id: dailyCard
-                            // ref-main 实测：10 天卡与 Conditions 同右列（x519-760），Conditions 底 y≈317 → 10 天卡顶 y≈329，gap ~12px@814 × 1.4598 ≈ 17.5 → rowSpacing 16 吻合（masonry 步骤 c）
-                            Layout.row: root.compact ? 2 : 1
-                            Layout.column: root.compact ? 0 : 1
-                            Layout.fillWidth: true
-                            Layout.minimumWidth: 0
-                            Layout.preferredWidth: 0
-                            Layout.alignment: Qt.AlignTop
-                            Layout.preferredHeight: dailyColumn.implicitHeight + padding * 2
-
-                            HoverHandler { id: dailyHover }
-                            property bool cardHot: dailyHover.hovered
-                            property real hoverFill: cardHot ? root.cardGlassAlphaHot : root.cardGlassAlpha
-                            Behavior on hoverFill { NumberAnimation { duration: AppTheme.motionNormal; easing.type: Easing.OutCubic } }
-                            property real hoverStroke: cardHot ? 0.32 : 0.22
-                            Behavior on hoverStroke { NumberAnimation { duration: AppTheme.motionNormal; easing.type: Easing.OutCubic } }
-                            transform: Translate {
-                                y: AppTheme.reduceMotion ? 0 : (dailyCard.cardHot ? -3 : 0)
-                                Behavior on y { NumberAnimation { duration: AppTheme.motionNormal; easing.type: Easing.OutCubic } }
-                            }
-
-                            background: KosSurface {
-                                radius: 20
-                                fillColor: Qt.rgba(root.cardGlassRgb.r, root.cardGlassRgb.g, root.cardGlassRgb.b, dailyCard.hoverFill)
-                                strokeWidth: 1
-                                strokeColor: Qt.rgba(1, 1, 1, dailyCard.hoverStroke)
-                                elevation: 0
-                            }
-
-                            contentItem: ColumnLayout {
-                                id: dailyColumn
-                                spacing: 0
-
-                                // ref-ipad-small.png 实测：10 天卡头部 "10-DAY FORECAST" 在卡内顶部——
-                                // calendar glyph + caps 字距 muted 文本（文本带 y321-329、glyph x276-284、与文字同色）；
-                                // ref-main 该卡被窗底裁切无头部可见，以 ipad 参考为准。
-                                // 文案照参考 "10-Day Forecast"（数据上限 7 天，差异记 LEDGER）。
-                                RowLayout {
-                                    spacing: 6
-                                    Layout.fillWidth: true
-                                    Layout.bottomMargin: 8
-                                    visible: backend.daily.length > 0
-
-                                    Canvas {
-                                        width: 12
-                                        height: 12
-                                        Accessible.ignored: true
-
-                                        onPaint: {
-                                            const ctx = getContext("2d")
-                                            ctx.clearRect(0, 0, width, height)
-                                            ctx.strokeStyle = root.skyTextMuted
-                                            ctx.lineWidth = 1.2
-                                            // 圆角方框（calendar 外形）：x1.5..10.5、y1.5..10.5，radius 3
-                                            ctx.beginPath()
-                                            ctx.moveTo(4.5, 1.5)
-                                            ctx.lineTo(7.5, 1.5)
-                                            ctx.arcTo(10.5, 1.5, 10.5, 4.5, 3)
-                                            ctx.lineTo(10.5, 7.5)
-                                            ctx.arcTo(10.5, 10.5, 7.5, 10.5, 3)
-                                            ctx.lineTo(4.5, 10.5)
-                                            ctx.arcTo(1.5, 10.5, 1.5, 7.5, 3)
-                                            ctx.lineTo(1.5, 4.5)
-                                            ctx.arcTo(1.5, 1.5, 4.5, 1.5, 3)
-                                            ctx.closePath()
-                                            ctx.stroke()
-                                            // 框内两条横线（calendar 行）：y=4.8 与 y=7.6，x 3.6..8.4
-                                            ctx.beginPath()
-                                            ctx.moveTo(3.6, 4.8)
-                                            ctx.lineTo(8.4, 4.8)
-                                            ctx.moveTo(3.6, 7.6)
-                                            ctx.lineTo(8.4, 7.6)
-                                            ctx.stroke()
+                                        Label {
+                                            text: qsTr("Air Quality").toUpperCase()
+                                            color: root.skyTextMuted
+                                            font.pixelSize: 11
+                                            font.weight: Font.DemiBold
+                                            font.letterSpacing: 1.4
                                         }
                                     }
 
                                     Label {
-                                        text: qsTr("10-Day Forecast").toLocaleUpperCase(Qt.locale())
-                                        color: root.skyTextMuted
-                                        font.pixelSize: 11
+                                        text: Math.round(root.number(backend.airQuality, "usAqi", 0))
+                                        color: root.skyText
+                                        font.pixelSize: 22
                                         font.weight: Font.DemiBold
-                                        font.letterSpacing: 1.4
-                                        Accessible.name: qsTr("10-day forecast")
                                     }
-                                }
 
-                                KosEmptyState {
-                                    Layout.fillWidth: true
-                                    Layout.preferredHeight: 130
-                                    visible: backend.daily.length === 0
-                                    symbol: "☂"
-                                    title: qsTr("Daily forecast unavailable")
-                                    description: qsTr("Cached current conditions can still be used.")
-                                }
+                                    Label {
+                                        text: root.value(backend.airQuality, "category", "")
+                                        visible: text.length > 0
+                                        color: root.skyText
+                                        Layout.topMargin: -12 // ref-main 实测数字底→rating cap 顶 ink gap 7px×1.46≈10，改前 22px（spacing 10 + 两行字体行高 padding），-12 只抵消行高 padding
+                                        font.pixelSize: 13
+                                    }
 
-                                Repeater {
-                                    model: backend.daily
-
-                                    delegate: Item {
-                                        id: dailyRow
-
-                                        required property int index
-                                        required property var modelData
+                                    Item {
+                                        Layout.topMargin: 7 // ref-main 实测 rating cap 顶→条顶 22px×1.4598≈32，改前 25px（同口径），+7 补齐；本轮 Pillow 实测 rating 基线→条顶 我方 16.5px vs ref 16px×1.4598≈23.3
                                         Layout.fillWidth: true
-                                        Layout.preferredHeight: 54
-
-                                        readonly property real dayMinimum: root.number(
-                                            dailyRow.modelData, "temperatureMinimum", 0)
-                                        readonly property real dayMaximum: root.number(
-                                            dailyRow.modelData, "temperatureMaximum", 0)
-                                        readonly property real rangeSpan: root.dailyRange.maximum
-                                            - root.dailyRange.minimum
-                                        readonly property real uMin: root.clamp(
-                                            (dailyRow.dayMinimum - root.dailyRange.minimum)
-                                                / dailyRow.rangeSpan, 0, 1)
-                                        readonly property real uMax: root.clamp(
-                                            (dailyRow.dayMaximum - root.dailyRange.minimum)
-                                                / dailyRow.rangeSpan, 0, 1)
-                                        readonly property real uCurrent: dailyRow.index === 0
-                                            ? root.clamp(
-                                                (root.number(backend.current, "temperature", Number.NaN)
-                                                    - root.dailyRange.minimum) / dailyRow.rangeSpan,
-                                                0, 1)
-                                            : 0
-                                        readonly property int precipChance: Math.round(root.number(
-                                            dailyRow.modelData, "precipitationProbability", 0))
-
-                                        RowLayout {
-                                            anchors.fill: parent
-                                            spacing: 12
-
-                                            Label {
-                                                Layout.preferredWidth: 88
-                                                text: root.dayLabel(root.value(
-                                                    dailyRow.modelData, "date", ""), dailyRow.index)
-                                                color: root.skyText
-                                                font.weight: Font.DemiBold
-                                            }
-
-                                            Column {
-                                                spacing: 1
-
-                                                WeatherIcon {
-                                                    anchors.horizontalCenter: parent.horizontalCenter
-                                                    width: 24
-                                                    height: 24
-                                                    code: root.number(dailyRow.modelData, "weatherCode", -1)
-                                                    isDay: true
-                                                    pulse: backend.loading && !AppTheme.reduceMotion
-                                                    Accessible.ignored: true
-                                                }
-
-                                                Label {
-                                                    visible: dailyRow.precipChance > 0
-                                                    text: "☂︎ " + dailyRow.precipChance + "%"
-                                                    color: root.skyTextMuted
-                                                    font.pixelSize: 10
-                                                    Accessible.name: qsTr("%1% chance of precipitation").arg(
-                                                        dailyRow.precipChance)
-                                                }
-                                            }
-
-                                            Label {
-                                                Layout.preferredWidth: 44
-                                                text: Math.round(dailyRow.dayMinimum) + "°"
-                                                color: root.skyTextMuted
-                                                horizontalAlignment: Text.AlignRight
-                                            }
-
-                                            Item {
-                                                Layout.fillWidth: true
-                                                Layout.preferredHeight: 20
-
-                                                Rectangle {
-                                                    anchors.verticalCenter: parent.verticalCenter
-                                                    width: parent.width
-                                                    height: 5
-                                                    radius: 2.5
-                                                    color: Qt.rgba(1, 1, 1, 0.28)
-                                                }
-
-                                                Rectangle {
-                                                    anchors.verticalCenter: parent.verticalCenter
-                                                    x: parent.width * dailyRow.uMin
-                                                    width: Math.max(parent.width
-                                                                    * (dailyRow.uMax - dailyRow.uMin), 14)
-                                                    height: 5
-                                                    radius: 2.5
-                                                    gradient: Gradient {
-                                                        orientation: Gradient.Horizontal
-                                                        GradientStop {
-                                                            position: 0
-                                                            color: root.tempColor(dailyRow.dayMinimum)
-                                                        }
-                                                        GradientStop {
-                                                            position: 1
-                                                            color: root.tempColor(dailyRow.dayMaximum)
-                                                        }
-                                                    }
-                                                }
-
-                                                // Today 行当前温度标记（ref-main 实测：白点直径 ≈ 条高+1px，仅 Today 行有）
-                                                Rectangle {
-                                                    visible: dailyRow.index === 0
-                                                        && Number.isFinite(root.number(
-                                                            backend.current, "temperature", Number.NaN))
-                                                    anchors.verticalCenter: parent.verticalCenter
-                                                    x: parent.width * dailyRow.uCurrent - width / 2
-                                                    width: 8
-                                                    height: 8
-                                                    radius: 4
-                                                    color: "#ffffff"
-                                                }
-                                            }
-
-                                            Label {
-                                                Layout.preferredWidth: 44
-                                                text: Math.round(dailyRow.dayMaximum) + "°"
-                                                color: root.skyText
-                                                horizontalAlignment: Text.AlignLeft
-                                                font.weight: Font.DemiBold
-                                            }
-                                        }
+                                        height: 9
 
                                         Rectangle {
                                             anchors.left: parent.left
                                             anchors.right: parent.right
-                                            anchors.bottom: parent.bottom
-                                            height: 1
-                                            color: AppTheme.border
-                                            visible: dailyRow.index < backend.daily.length - 1
+                                            anchors.verticalCenter: parent.verticalCenter
+                                            height: 4
+                                            radius: 2
+                                            gradient: Gradient {
+                                                orientation: Gradient.Horizontal
+                                                // ref-main 实测：EPA 0-500 线性映射，0.72 起平直 #80172b（Pillow 逐点采样）
+                                                stops: [
+                                                    GradientStop { position: 0.00; color: "#00de72" },
+                                                    GradientStop { position: 0.15; color: "#fde620" },
+                                                    GradientStop { position: 0.22; color: "#ffac0b" },
+                                                    GradientStop { position: 0.29; color: "#fd5e21" },
+                                                    GradientStop { position: 0.36; color: "#f30f5e" },
+                                                    GradientStop { position: 0.43; color: "#cd08b2" },
+                                                    GradientStop { position: 0.50; color: "#a805fa" },
+                                                    GradientStop { position: 0.58; color: "#9a0aae" },
+                                                    GradientStop { position: 0.65; color: "#8b1062" },
+                                                    GradientStop { position: 0.72; color: "#80172b" },
+                                                    GradientStop { position: 1.00; color: "#80172b" }
+                                                ]
+                                            }
+                                        }
+
+                                        Rectangle {
+                                            // ref-main Pillow 实测 AQI 40 白点在条 8.33% 处，0–500（EPA AQI 满量程）预测 8.0% 吻合，0–300 预测 13.3% 偏差 10.5px
+                                            x: Math.max(0, Math.min(1, root.number(backend.airQuality, "usAqi", 0) / 500)) * (parent.width - 9)
+                                            anchors.verticalCenter: parent.verticalCenter
+                                            width: 9
+                                            height: 9
+                                            radius: 4.5
+                                            color: "#ffffff"
+                                        }
+                                    }
+
+                                    Label {
+                                        text: qsTr("Air quality index is %1, which is similar to yesterday at about this time.")
+                                            .arg(Math.round(root.number(backend.airQuality, "usAqi", 0)))
+                                        color: root.skyTextMuted
+                                        font.pixelSize: 11
+                                        wrapMode: Text.WordWrap
+                                        Layout.fillWidth: true
+                                    }
+                                }
+                            }
+
+                            // 指标瓦片容器：参考图（ref-main）里指标卡（WIND/月相/UV/SUNSET 等）
+                            // 是散在天空上的独立圆角卡，卡与卡之间直接透天空，无外层容器卡——
+                            // 故本 Pane 只做布局，不带任何卡面 chrome（Pillow 实测 ref 指标卡
+                            // 填充 (38.5,115.8,196.9) vs 卡间天空 (54.7,124.3,197.0)，无白玻璃亮层）。
+                            KosCard {
+                                id: conditionsCard
+                                // ref-main：瓦片区入左列 AQ 卡下方（左列 x271-505，与 AQ 同列对齐）；右列 dailyCard 不动（masonry 步骤 b 第一半）
+                                Layout.fillWidth: true
+                                // 镜像 airQualityCard/dailyCard 同族等宽修正（步 a 先例）：preferred 拉平让 GridLayout 等分列宽
+                                Layout.minimumWidth: 0
+                                Layout.preferredWidth: 0
+                                // ref-main Pillow 实测：WIND 卡左缘 x271 与 AQ 卡左缘 x271 同列对齐；
+                                // 本卡 padding≈20 导致瓦片 x272 vs AQ 卡 x252，置零水平 padding 对齐；
+                                // topPadding/bottomPadding 保持不动——:2401 的 topMargin:-16 抵消方案按 padding 20 校准，勿动
+                                leftPadding: 0
+                                rightPadding: 0
+
+                                background: Item {}
+
+                                contentItem: ColumnLayout {
+                                    spacing: 12
+
+                                    KosEmptyState {
+                                        Layout.fillWidth: true
+                                        Layout.fillHeight: true
+                                        visible: !backend.ready
+                                        symbol: backend.loading ? "↻" : "☁"
+                                        title: backend.loading
+                                            ? qsTr("Loading the forecast") : qsTr("No forecast available")
+                                        description: backend.connected
+                                            ? qsTr("Refresh or choose another saved location.")
+                                            : qsTr("Start kos-data-service to fetch weather data.")
+                                        actionText: backend.connected ? qsTr("Refresh") : ""
+                                        actionEnabled: !backend.loading
+                                        onActionTriggered: backend.refresh()
+                                    }
+
+                                    ColumnLayout {
+                                        Layout.fillWidth: true
+                                        Layout.fillHeight: true
+                                        visible: backend.ready
+                                        spacing: 12
+
+                                        GridLayout {
+                                            Layout.fillWidth: true
+                                            Layout.topMargin: -16 // ref-main AQ 底→WIND 顶 14px@814 × 1.4598 ≈ 20px;改前 36px = content spacing 16 + 本卡 padding ~20,-16 抵消 padding 多余部分(描边-描边 20px)
+                                            columns: 2 // ref-main 左列瓦片区两列排布，compact 原本就是 2 列故统一
+                                            columnSpacing: 8
+                                            rowSpacing: 8
+
+                                            WeatherMetric {
+                                                Layout.fillWidth: true
+                                                symbol: "%"
+                                                labelText: qsTr("Humidity")
+                                                valueText: Math.round(root.number(
+                                                    backend.current, "relativeHumidity", 0)) + "%"
+                                            }
+
+                                            WeatherMetric {
+                                                Layout.fillWidth: true
+                                                symbol: "≋"
+                                                labelText: qsTr("Wind")
+                                                valueText: Math.round(root.number(
+                                                    backend.current, "windSpeed", 0)) + " " + root.speedUnit
+                                            }
+
+                                            Rectangle {
+                                                id: directionTile
+                                                Layout.fillWidth: true
+                                                implicitHeight: 66
+                                                radius: root.tileRadius
+                                                // 昼夜分材质：ref-main 白天所有卡填充暗于天空（α~0.30 深蓝玻璃）；夜间维持白玻璃
+                                                property bool hot: directionHover.hovered
+                                                property real hoverFill: hot ? root.cardGlassAlphaHot : root.cardGlassAlpha
+                                                Behavior on hoverFill { NumberAnimation { duration: AppTheme.motionNormal; easing.type: Easing.OutCubic } }
+                                                property real hoverStroke: hot ? 0.32 : 0.22
+                                                Behavior on hoverStroke { NumberAnimation { duration: AppTheme.motionNormal; easing.type: Easing.OutCubic } }
+                                                color: Qt.rgba(root.cardGlassRgb.r, root.cardGlassRgb.g, root.cardGlassRgb.b, hoverFill)
+                                                border.width: 1
+                                                border.color: Qt.rgba(1, 1, 1, hoverStroke)
+                                                transform: Translate {
+                                                    y: AppTheme.reduceMotion ? 0 : (directionTile.hot ? -3 : 0)
+                                                    Behavior on y { NumberAnimation { duration: AppTheme.motionNormal; easing.type: Easing.OutCubic } }
+                                                }
+
+                                                property real windDir: root.number(backend.current, "windDirection", 0)
+                                                // arrow points where the wind blows TO (Open-Meteo direction is where it comes FROM)
+                                                property real flowAngle: (directionTile.windDir + 180) % 360
+                                                property real gustVal: root.number(backend.current, "windGust", Number.NaN)
+                                                property bool hasGust: Number.isFinite(gustVal)
+
+                                                onWindDirChanged: compass.requestPaint()
+                                                onFlowAngleChanged: compass.requestPaint()
+
+                                                HoverHandler { id: directionHover }
+                                                ToolTip.visible: directionHover.hovered
+                                                ToolTip.text: qsTr("Direction")
+                                                Accessible.role: Accessible.StaticText
+                                                Accessible.name: qsTr("Direction") + ": " + Math.round(directionTile.windDir) + "° " + directionTile.cardinal
+                                                    + (directionTile.hasGust
+                                                        ? " " + qsTr("Gusts") + ": " + Math.round(directionTile.gustVal) + " " + root.speedUnit
+                                                        : "")
+
+                                                property string cardinal: {
+                                                    var names = ["N", "NE", "E", "SE", "S", "SW", "W", "NW"]
+                                                    return names[Math.round(directionTile.windDir / 45) % 8]
+                                                }
+
+                                                RowLayout {
+                                                    anchors.fill: parent
+                                                    anchors.margins: 10
+                                                    spacing: 8
+
+                                                    Item {
+                                                        Layout.preferredWidth: 46
+                                                        Layout.preferredHeight: 46
+
+                                                        Canvas {
+                                                            id: compass
+                                                            anchors.fill: parent
+                                                            antialiasing: true
+                                                            contextType: "2d"
+                                                            onPaint: {
+                                                                var ctx = getContext("2d")
+                                                                ctx.reset()
+                                                                var c = 23
+                                                                ctx.strokeStyle = "rgba(255,255,255,0.30)"
+                                                                ctx.lineWidth = 1
+                                                                for (var i = 0; i < 36; i++) {
+                                                                    var a = i * Math.PI / 18
+                                                                    ctx.beginPath()
+                                                                    ctx.moveTo(c + Math.sin(a) * 15, c - Math.cos(a) * 15)
+                                                                    ctx.lineTo(c + Math.sin(a) * 19.5, c - Math.cos(a) * 19.5)
+                                                                    ctx.stroke()
+                                                                }
+                                                                ctx.fillStyle = "rgba(255,255,255,0.92)"
+                                                                ctx.font = "600 7px sans-serif"
+                                                                ctx.textAlign = "center"
+                                                                ctx.textBaseline = "middle"
+                                                                ctx.fillText("N", c, c - 21.5)
+                                                                ctx.fillText("E", c + 21.5, c)
+                                                                ctx.fillText("S", c, c + 21.5)
+                                                                ctx.fillText("W", c - 21.5, c)
+                                                                ctx.save()
+                                                                ctx.translate(c, c)
+                                                                ctx.rotate(directionTile.flowAngle * Math.PI / 180)
+                                                                ctx.strokeStyle = "#ffffff"
+                                                                ctx.fillStyle = "#ffffff"
+                                                                ctx.lineWidth = 1.6
+                                                                ctx.beginPath()
+                                                                ctx.moveTo(0, -11)
+                                                                ctx.lineTo(0, -19)
+                                                                ctx.stroke()
+                                                                ctx.beginPath()
+                                                                ctx.moveTo(0, -23)      // tip
+                                                                ctx.lineTo(-2.6, -18.4)
+                                                                ctx.lineTo(2.6, -18.4)
+                                                                ctx.closePath()
+                                                                ctx.fill()
+                                                                ctx.restore()
+                                                            }
+                                                        }
+                                                    }
+
+                                                    ColumnLayout {
+                                                        Layout.fillWidth: true
+                                                        spacing: 1
+
+                                                        Label {
+                                                            Layout.fillWidth: true
+                                                            text: qsTr("Direction")
+                                                            color: root.skyTextMuted
+                                                            font.pixelSize: 10
+                                                            elide: Text.ElideRight
+                                                            Accessible.ignored: true
+                                                        }
+
+                                                        Label {
+                                                            Layout.fillWidth: true
+                                                            text: Math.round(directionTile.windDir) + "° " + directionTile.cardinal
+                                                            color: root.skyText
+                                                            font.pixelSize: 15
+                                                            font.weight: Font.DemiBold
+                                                            elide: Text.ElideRight
+                                                            Accessible.ignored: true
+                                                        }
+
+                                                        Label {
+                                                            Layout.fillWidth: true
+                                                            visible: directionTile.hasGust
+                                                            text: qsTr("Gusts: ") + Math.round(directionTile.gustVal) + " " + root.speedUnit
+                                                                  + " " + directionTile.cardinal
+                                                            color: root.skyText
+                                                            font.pixelSize: 10
+                                                            font.weight: Font.DemiBold
+                                                            elide: Text.ElideRight
+                                                            Accessible.ignored: true
+                                                        }
+                                                    }
+                                                }
+                                            }
+
+                                            WeatherMetric {
+                                                Layout.fillWidth: true
+                                                symbol: "◷"
+                                                labelText: qsTr("Observed")
+                                                valueText: root.localTime(root.value(
+                                                    backend.current, "time", ""))
+                                            }
+
+                                            WeatherMetric {
+                                                Layout.fillWidth: true
+                                                symbol: "☀"
+                                                labelText: qsTr("UV Index")
+                                                valueText: {
+                                                    const uv = root.number(backend.current, "uvIndex", NaN)
+                                                    return Number.isFinite(uv) ? String(Math.round(uv)) : "—"
+                                                }
+                                            }
+
+                                            WeatherMetric {
+                                                Layout.fillWidth: true
+                                                symbol: "◉"
+                                                labelText: qsTr("Visibility")
+                                                valueText: {
+                                                    const meters = root.number(backend.current, "visibility", NaN)
+                                                    if (!Number.isFinite(meters))
+                                                        return "—"
+                                                    return backend.units === "imperial"
+                                                        ? Math.round(meters / 1609.344) + " " + root.distanceUnit
+                                                        : Math.round(meters / 1000) + " " + root.distanceUnit
+                                                }
+                                            }
+
+                                            Rectangle {
+                                                id: moonPhaseTile
+                                                Layout.fillWidth: true
+                                                implicitHeight: 66
+                                                radius: root.tileRadius
+                                                // 昼夜分材质：ref-main 白天所有卡填充暗于天空（α~0.30 深蓝玻璃）；夜间维持白玻璃
+                                                property bool hot: moonHover.hovered
+                                                property real hoverFill: hot ? root.cardGlassAlphaHot : root.cardGlassAlpha
+                                                Behavior on hoverFill { NumberAnimation { duration: AppTheme.motionNormal; easing.type: Easing.OutCubic } }
+                                                property real hoverStroke: hot ? 0.32 : 0.22
+                                                Behavior on hoverStroke { NumberAnimation { duration: AppTheme.motionNormal; easing.type: Easing.OutCubic } }
+                                                color: Qt.rgba(root.cardGlassRgb.r, root.cardGlassRgb.g, root.cardGlassRgb.b, hoverFill)
+                                                border.width: 1
+                                                border.color: Qt.rgba(1, 1, 1, hoverStroke)
+                                                transform: Translate {
+                                                    y: AppTheme.reduceMotion ? 0 : (moonPhaseTile.hot ? -3 : 0)
+                                                    Behavior on y { NumberAnimation { duration: AppTheme.motionNormal; easing.type: Easing.OutCubic } }
+                                                }
+
+                                                property real phaseVal: root.number(backend.current, "moonPhase", Number.NaN)
+                                                property bool hasPhase: Number.isFinite(phaseVal)
+                                                readonly property var phaseNames: [
+                                                    qsTr("New Moon"), qsTr("Waxing Crescent"), qsTr("First Quarter"),
+                                                    qsTr("Waxing Gibbous"), qsTr("Full Moon"), qsTr("Waning Gibbous"),
+                                                    qsTr("Last Quarter"), qsTr("Waning Crescent")
+                                                ]
+                                                // 8 等分、以 0/0.25/0.5/0.75 为中心：round(p*8)%8
+                                                readonly property string phaseName: hasPhase
+                                                    ? phaseNames[Math.round(((phaseVal % 1) + 1) % 1 * 8) % 8]
+                                                    : "—"
+
+                                                onPhaseValChanged: moonCanvas.requestPaint()
+
+                                                HoverHandler { id: moonHover }
+                                                ToolTip.visible: moonHover.hovered
+                                                ToolTip.text: qsTr("Moon Phase")
+                                                Accessible.role: Accessible.StaticText
+                                                Accessible.name: qsTr("Moon Phase") + ": " + moonPhaseTile.phaseName
+
+                                                RowLayout {
+                                                    anchors.fill: parent
+                                                    anchors.margins: 10
+                                                    spacing: 8
+
+                                                    Item {
+                                                        Layout.preferredWidth: 46
+                                                        Layout.preferredHeight: 46
+
+                                                        Canvas {
+                                                            id: moonCanvas
+                                                            anchors.fill: parent
+                                                            antialiasing: true
+                                                            contextType: "2d"
+                                                            onPaint: {
+                                                                var ctx = getContext("2d")
+                                                                ctx.reset()
+                                                                var c = 23
+                                                                var r = 17
+                                                                // 暗面：整盘剪影（月亮相位剪影，同族白 0.14）
+                                                                ctx.beginPath()
+                                                                ctx.arc(c, c, r, 0, 2 * Math.PI)
+                                                                ctx.fillStyle = "rgba(255,255,255,0.14)"
+                                                                ctx.fill()
+                                                                if (!moonPhaseTile.hasPhase)
+                                                                    return
+                                                                // 亮面：外弧（盈月亮在右，亏月亮在左）+ 终止线半椭圆折线，一次成形
+                                                                var p = ((moonPhaseTile.phaseVal % 1) + 1) % 1
+                                                                var cosT = Math.cos(2 * Math.PI * p)
+                                                                var waxing = p < 0.5
+                                                                ctx.beginPath()
+                                                                if (waxing)
+                                                                    ctx.arc(c, c, r, -Math.PI / 2, Math.PI / 2, false)   // 顶极→底极经右侧
+                                                                else
+                                                                    ctx.arc(c, c, r, -Math.PI / 2, Math.PI / 2, true)    // 顶极→底极经左侧
+                                                                var steps = 32
+                                                                for (var i = 0; i <= steps; i++) {
+                                                                    var a = Math.PI / 2 - (Math.PI * i / steps)          // 底极→顶极
+                                                                    // 带符号 cosT：蛾眉凸向亮侧、凸月凸向暗侧（|cosT| 会把凸月画成蛾眉、满月退化成零面积）
+                                                                    var ex = waxing ? cosT * r * Math.cos(a) : -cosT * r * Math.cos(a)
+                                                                    ctx.lineTo(c + ex, c + r * Math.sin(a))
+                                                                }
+                                                                ctx.closePath()
+                                                                ctx.fillStyle = "#f7f3dc"
+                                                                ctx.fill()
+                                                            }
+                                                        }
+                                                    }
+
+                                                    ColumnLayout {
+                                                        Layout.fillWidth: true
+                                                        spacing: 1
+
+                                                        Label {
+                                                            Layout.fillWidth: true
+                                                            // 参考设计头部为全大写+字距（同 :1458 AQ 卡头）
+                                                            text: qsTr("Moon Phase").toLocaleUpperCase(Qt.locale())
+                                                            color: root.skyTextMuted
+                                                            font.pixelSize: 10
+                                                            font.letterSpacing: 1.4
+                                                            elide: Text.ElideRight
+                                                            Accessible.ignored: true
+                                                        }
+
+                                                        Label {
+                                                            Layout.fillWidth: true
+                                                            text: moonPhaseTile.phaseName
+                                                            color: root.skyText
+                                                            font.pixelSize: 15
+                                                            font.weight: Font.DemiBold
+                                                            elide: Text.ElideRight
+                                                            Accessible.ignored: true
+                                                        }
+                                                    }
+                                                }
+                                            }
+
+                                            WeatherMetric {
+                                                Layout.fillWidth: true
+                                                symbol: "◐"
+                                                labelText: qsTr("Pressure")
+                                                valueText: {
+                                                    const hpa = root.number(backend.current, "pressure", NaN)
+                                                    return Number.isFinite(hpa) ? Math.round(hpa) + " hPa" : "—"
+                                                }
+                                            }
+
+                                            Rectangle {
+                                                id: sunsetTile
+                                                Layout.fillWidth: true
+                                                implicitHeight: 66
+                                                radius: root.tileRadius
+                                                // 昼夜分材质：ref-main 白天所有卡填充暗于天空（α~0.30 深蓝玻璃）；夜间维持白玻璃
+                                                property bool hot: sunsetHover.hovered
+                                                property real hoverFill: hot ? root.cardGlassAlphaHot : root.cardGlassAlpha
+                                                Behavior on hoverFill { NumberAnimation { duration: AppTheme.motionNormal; easing.type: Easing.OutCubic } }
+                                                property real hoverStroke: hot ? 0.32 : 0.22
+                                                Behavior on hoverStroke { NumberAnimation { duration: AppTheme.motionNormal; easing.type: Easing.OutCubic } }
+                                                color: Qt.rgba(root.cardGlassRgb.r, root.cardGlassRgb.g, root.cardGlassRgb.b, hoverFill)
+                                                border.width: 1
+                                                border.color: Qt.rgba(1, 1, 1, hoverStroke)
+                                                transform: Translate {
+                                                    y: AppTheme.reduceMotion ? 0 : (sunsetTile.hot ? -3 : 0)
+                                                    Behavior on y { NumberAnimation { duration: AppTheme.motionNormal; easing.type: Easing.OutCubic } }
+                                                }
+
+                                                // daily[0].sunset 形如 "2026-10-17T17:57"（Open-Meteo 本地 ISO，无时区后缀）
+                                                readonly property string sunsetRaw:
+                                                    backend.daily.length > 0 ? String(root.value(backend.daily[0], "sunset", "")) : ""
+                                                readonly property bool hasSunset: /T\d{1,2}:\d{2}/.test(sunsetRaw)
+                                                readonly property string sunsetText: {
+                                                    if (!hasSunset) return "—"
+                                                    const m = /T(\d{1,2}):(\d{2})/.exec(sunsetRaw)
+                                                    let h = parseInt(m[1], 10)
+                                                    const ap = h >= 12 ? qsTr("PM") : qsTr("AM")
+                                                    h = h % 12
+                                                    if (h === 0) h = 12
+                                                    return h + ":" + m[2] + ap
+                                                }
+
+                                                HoverHandler { id: sunsetHover }
+                                                ToolTip.visible: sunsetHover.hovered
+                                                ToolTip.text: qsTr("Sunset")
+                                                Accessible.role: Accessible.StaticText
+                                                Accessible.name: qsTr("Sunset") + ": " + sunsetTile.sunsetText
+
+                                                RowLayout {
+                                                    anchors.fill: parent
+                                                    anchors.margins: 10
+                                                    spacing: 8
+
+                                                    Item {
+                                                        Layout.preferredWidth: 46
+                                                        Layout.preferredHeight: 46
+
+                                                        Canvas {
+                                                            id: sunCanvas
+                                                            anchors.fill: parent
+                                                            antialiasing: true
+                                                            contextType: "2d"
+                                                            onPaint: {
+                                                                var ctx = getContext("2d")
+                                                                ctx.reset()
+                                                                var c = 23
+                                                                // 地平线
+                                                                ctx.beginPath()
+                                                                ctx.strokeStyle = "rgba(255,255,255,0.85)"
+                                                                ctx.lineWidth = 1.4
+                                                                ctx.moveTo(c - 15, 30)
+                                                                ctx.lineTo(c + 15, 30)
+                                                                ctx.stroke()
+                                                                // 半落太阳：地平线上方半圆
+                                                                ctx.beginPath()
+                                                                ctx.arc(c, 30, 9, Math.PI, 2 * Math.PI, false)
+                                                                ctx.closePath()
+                                                                ctx.fillStyle = "#ffd257"
+                                                                ctx.fill()
+                                                                // 太阳 3 根短光线（上半圆方向）
+                                                                ctx.strokeStyle = "#ffd257"
+                                                                ctx.lineWidth = 1.6
+                                                                var rays = [-Math.PI / 2, -Math.PI / 4, -3 * Math.PI / 4]
+                                                                for (var i = 0; i < rays.length; i++) {
+                                                                    ctx.beginPath()
+                                                                    ctx.moveTo(c + 11.5 * Math.cos(rays[i]), 30 + 11.5 * Math.sin(rays[i]))
+                                                                    ctx.lineTo(c + 14.5 * Math.cos(rays[i]), 30 + 14.5 * Math.sin(rays[i]))
+                                                                    ctx.stroke()
+                                                                }
+                                                                // 下落箭头（日落中）
+                                                                ctx.strokeStyle = "rgba(255,255,255,0.92)"
+                                                                ctx.fillStyle = "rgba(255,255,255,0.92)"
+                                                                ctx.lineWidth = 1.6
+                                                                ctx.beginPath()
+                                                                ctx.moveTo(c, 6)
+                                                                ctx.lineTo(c, 14)
+                                                                ctx.stroke()
+                                                                ctx.beginPath()
+                                                                ctx.moveTo(c, 17)
+                                                                ctx.lineTo(c - 3, 13)
+                                                                ctx.lineTo(c + 3, 13)
+                                                                ctx.closePath()
+                                                                ctx.fill()
+                                                            }
+                                                        }
+                                                    }
+
+                                                    ColumnLayout {
+                                                        Layout.fillWidth: true
+                                                        spacing: 1
+
+                                                        Label {
+                                                            Layout.fillWidth: true
+                                                            // 参考设计头部为全大写+字距（同 :1458 AQ 卡头）
+                                                            text: qsTr("Sunset").toLocaleUpperCase(Qt.locale())
+                                                            color: root.skyTextMuted
+                                                            font.pixelSize: 10
+                                                            font.letterSpacing: 1.4
+                                                            elide: Text.ElideRight
+                                                            Accessible.ignored: true
+                                                        }
+
+                                                        Label {
+                                                            Layout.fillWidth: true
+                                                            text: sunsetTile.sunsetText
+                                                            color: root.skyText
+                                                            font.pixelSize: 15
+                                                            font.weight: Font.DemiBold
+                                                            elide: Text.ElideRight
+                                                            Accessible.ignored: true
+                                                        }
+                                                    }
+                                                }
+                                            }
+
+                                            WeatherMetric {
+                                                Layout.fillWidth: true
+                                                symbol: "≈"
+                                                labelText: qsTr("Feels Like")
+                                                valueText: {
+                                                    const feels = root.number(backend.current, "apparentTemperature", NaN)
+                                                    return Number.isFinite(feels) ? Math.round(feels) + "°" : "—"
+                                                }
+                                            }
                                         }
                                     }
                                 }
                             }
                         }
-                    }
-                    // 指标瓦片容器：参考图（ref-main）里指标卡（WIND/月相/UV/SUNSET 等）
-                    // 是散在天空上的独立圆角卡，卡与卡之间直接透天空，无外层容器卡——
-                    // 故本 Pane 只做布局，不带任何卡面 chrome（Pillow 实测 ref 指标卡
-                    // 填充 (38.5,115.8,196.9) vs 卡间天空 (54.7,124.3,197.0)，无白玻璃亮层）。
-                    KosCard {
-                        id: conditionsCard
-                        Layout.fillWidth: true
-                        // ref-main Pillow 实测：WIND 卡左缘 x271 与 AQ 卡左缘 x271 同列对齐；
-                        // 本卡 padding≈20 导致瓦片 x272 vs AQ 卡 x252，置零水平 padding 对齐；
-                        // topPadding/bottomPadding 保持不动——:2401 的 topMargin:-16 抵消方案按 padding 20 校准，勿动
-                        leftPadding: 0
-                        rightPadding: 0
-
-                        background: Item {}
-
-                        contentItem: ColumnLayout {
-                            spacing: 12
-
-                            KosEmptyState {
+                        // ref-main 右列：Conditions 卡 → 10 天卡（独立堆叠，不随左列高度走；列缝 19 见 GridLayout）
+                        ColumnLayout {
+                            Layout.fillWidth: true
+                            Layout.minimumWidth: 0
+                            Layout.preferredWidth: 0
+                            Layout.alignment: Qt.AlignTop
+                            spacing: 16
+                            // Conditions 单卡：包住 头部行 + 右上分段胶囊 + 逐小时列（对齐 ref-main）
+                            KosCard {
+                                id: hourlyConditionsCard
                                 Layout.fillWidth: true
-                                Layout.fillHeight: true
-                                visible: !backend.ready
-                                symbol: backend.loading ? "↻" : "☁"
-                                title: backend.loading
-                                    ? qsTr("Loading the forecast") : qsTr("No forecast available")
-                                description: backend.connected
-                                    ? qsTr("Refresh or choose another saved location.")
-                                    : qsTr("Start kos-data-service to fetch weather data.")
-                                actionText: backend.connected ? qsTr("Refresh") : ""
-                                actionEnabled: !backend.loading
-                                onActionTriggered: backend.refresh()
+                                // ref-main 两列等宽(239/241@814)：preferred 拉平让 GridLayout 等分剩余宽度
+                                Layout.minimumWidth: 0
+                                Layout.preferredWidth: 0
+                                Layout.alignment: Qt.AlignTop
+
+                                background: KosSurface {
+                                    radius: 20
+                                    fillColor: Qt.rgba(root.cardGlassRgb.r, root.cardGlassRgb.g, root.cardGlassRgb.b, root.currentIsDay ? root.cardGlassAlpha : 0.16)
+                                    strokeWidth: 1
+                                    strokeColor: Qt.rgba(1, 1, 1, 0.22)
+                                    elevation: 0
+                                }
+
+                                contentItem: ColumnLayout {
+                                    spacing: 10
+
+                                    RowLayout {
+                                        Layout.fillWidth: true
+
+                                        ColumnLayout {
+                                            spacing: 1
+                                            Layout.fillWidth: true
+
+                                            Label {
+                                                Layout.fillWidth: true
+                                                text: qsTr("Conditions")
+                                                color: root.skyText
+                                                font.pixelSize: 14
+                                                font.weight: Font.DemiBold
+                                                Accessible.name: qsTr("Hourly forecast")
+                                            }
+
+                                            // 副标题为外推：固定展示温度单位，不随 segment 切换
+                                            Label {
+                                                Layout.fillWidth: true
+                                                text: qsTr("Temperature (%1)").arg(root.temperatureUnit)
+                                                color: root.skyTextMuted
+                                                font.pixelSize: 11
+                                            }
+                                        }
+
+                                        // 三段胶囊切换钮，参照 ref-main Conditions 卡右上分段控件。
+                                        // segment 0 = 温度/图标视图（默认，参考图选中态），
+                                        // segment 1 = 逐小时降水概率视图；
+                                        // segment 2 = 逐小时风速视图（后端 hourlyPoint.windSpeed 已有）。
+                                        Item {
+                                            id: hourlySegmented
+                                            implicitWidth: 132
+                                            implicitHeight: 36
+                                            Layout.alignment: Qt.AlignTop | Qt.AlignRight
+                                            property int segment: 0
+
+                                            Rectangle {
+                                                anchors.fill: parent
+                                                radius: 18
+                                                color: Qt.rgba(1, 1, 1, 0.14)
+                                                border.width: 1
+                                                border.color: Qt.rgba(1, 1, 1, 0.22)
+                                            }
+
+                                            // 选中圆盘（当前段背后）
+                                            Rectangle {
+                                                x: 3 + 44 * hourlySegmented.segment
+                                                y: 3
+                                                width: 30
+                                                height: 30
+                                                radius: 15
+                                                color: Qt.rgba(1, 1, 1, 0.27)
+                                            }
+
+                                            AbstractButton {
+                                                x: 0
+                                                width: 44
+                                                height: 36
+                                                background: null
+                                                contentItem: Label {
+                                                    horizontalAlignment: Text.AlignHCenter
+                                                    verticalAlignment: Text.AlignVCenter
+                                                    text: "☁"
+                                                    color: hourlySegmented.segment === 0 ? "#ffffff" : Qt.rgba(1, 1, 1, 0.9)
+                                                    font.pixelSize: 16
+                                                }
+                                                onClicked: hourlySegmented.segment = 0
+                                                Accessible.name: qsTr("Hourly conditions")
+                                            }
+                                            AbstractButton {
+                                                x: 44
+                                                width: 44
+                                                height: 36
+                                                background: null
+                                                // ref-main 实测降水段为实心水滴 6×9px@814（胶囊高 25px），我方胶囊 36px 按 1.44 折算 ≈ 9×13
+                                                // Control 会覆写 contentItem 几何，Canvas 需包 Item 再居中（ref 胶囊中心 225 vs 水滴中心 225.5 居中）
+                                                contentItem: Item {
+                                                    anchors.fill: parent
+                                                    Canvas {
+                                                        id: dropCanvas
+                                                        width: 12
+                                                        height: 16
+                                                        anchors.centerIn: parent
+                                                        antialiasing: true
+                                                        onPaint: {
+                                                            var ctx = getContext("2d")
+                                                            ctx.reset()
+                                                            ctx.beginPath()
+                                                            ctx.moveTo(6, 1.5)
+                                                            ctx.bezierCurveTo(8.2, 5.0, 10, 7.6, 10, 10.5)  // 右侧下行到圆右端
+                                                            ctx.arc(6, 10.5, 4, 0, Math.PI, false)          // 经底部从右到左
+                                                            ctx.bezierCurveTo(2, 7.6, 3.8, 5.0, 6, 1.5)     // 左侧收回尖点
+                                                            ctx.closePath()
+                                                            ctx.fillStyle = hourlySegmented.segment === 1 ? "#ffffff" : Qt.rgba(1, 1, 1, 0.9)
+                                                            ctx.fill()
+                                                        }
+                                                        // segment 属于外层 hourlySegmented，Canvas 上无法直接写 onSegmentChanged
+                                                        //（qmllint: no matching signal，运行时不触发），改用 Connections 监听后重绘
+                                                        Connections {
+                                                            target: hourlySegmented
+                                                            function onSegmentChanged() { dropCanvas.requestPaint() }
+                                                        }
+                                                        Component.onCompleted: requestPaint()
+                                                        Accessible.ignored: true
+                                                    }
+                                                }
+                                                onClicked: hourlySegmented.segment = 1
+                                                Accessible.name: qsTr("Hourly precipitation")
+                                            }
+                                            AbstractButton {
+                                                x: 88
+                                                width: 44
+                                                height: 36
+                                                background: null
+                                                contentItem: Label {
+                                                    horizontalAlignment: Text.AlignHCenter
+                                                    verticalAlignment: Text.AlignVCenter
+                                                    text: "≋"
+                                                    color: hourlySegmented.segment === 2 ? "#ffffff" : Qt.rgba(1, 1, 1, 0.9)
+                                                    font.pixelSize: 16
+                                                }
+                                                onClicked: hourlySegmented.segment = 2
+                                                Accessible.name: qsTr("Hourly wind")
+                                            }
+                                        }
+                                    }
+
+                                    Flickable {
+                                        Layout.fillWidth: true
+                                        Layout.preferredHeight: 142
+                                        contentWidth: hourlyRow.implicitWidth
+                                        contentHeight: height
+                                        boundsBehavior: Flickable.StopAtBounds
+                                        clip: true
+
+                                        ScrollBar.horizontal: ScrollBar {}
+
+                                        // ref-main（参考图）Conditions 卡本无温度曲线；本条系 TASK.md
+                                        // 用户裁定（2026-10-18）按 Apple Weather 惯例外推。
+                                        // 布局适配：委托列实际占 content y 84..122（温度文字 84..93、
+                                        // ☂行 115..122，Pillow 实测），真实空档为 94..114，曲线带据此落位。
+                                        // 层位：Canvas 位于 Flickable 内容区内部、Row 之前声明（先声明者
+                                        // 先画、z 序在下），随 contentX 一起横滚覆盖逐小时列。
+                                        Canvas {
+                                            id: hourlyCurve
+
+                                            readonly property int bandTop: 97
+                                            readonly property int bandInner: 15
+                                            readonly property int bandBottom: 113
+
+                                            // draw-on 揭示动画：0..1，1 = 完整曲线。1000ms 系外推：
+                                            // 内容揭示类动效，HIG 环境量级（阶段三 B.6，用户裁定 1）。
+                                            property real drawProgress: 1.0
+                                            Behavior on drawProgress {
+                                                id: drawProgressBehavior
+                                                NumberAnimation { duration: 1000; easing.type: Easing.OutCubic }
+                                            }
+
+                                            function replayDraw() {
+                                                if (AppTheme.reduceMotion) {
+                                                    // reduce-motion：永远完整曲线，动画不跑
+                                                    drawProgressBehavior.enabled = false
+                                                    drawProgress = 1
+                                                    drawProgressBehavior.enabled = true
+                                                    requestPaint()
+                                                    return
+                                                }
+                                                // 先在 Behavior 关闭时归零（保证落 0），再开启 Behavior
+                                                // 写 1 触发 0→1 动画；同块直写 0 再写 1 会被 Behavior
+                                                // 重定向为 1→1 而吞掉动画。
+                                                drawProgressBehavior.enabled = false
+                                                drawProgress = 0
+                                                requestPaint()
+                                                drawProgressBehavior.enabled = true
+                                                drawProgress = 1
+                                            }
+
+                                            x: 0
+                                            y: 0
+                                            width: hourlyRow.implicitWidth
+                                            height: 142
+                                            antialiasing: true
+                                            visible: hourlySegmented.segment === 0
+                                            Accessible.ignored: true
+
+                                            onWidthChanged: requestPaint()
+                                            onDrawProgressChanged: requestPaint()
+                                            Component.onCompleted: replayDraw()
+
+                                            Connections {
+                                                target: root
+                                                function onUpcomingHoursChanged() {
+                                                    hourlyCurve.replayDraw()
+                                                }
+                                            }
+
+                                            Connections {
+                                                target: hourlySegmented
+                                                function onSegmentChanged() {
+                                                    if (hourlySegmented.segment === 0)
+                                                        hourlyCurve.replayDraw()
+                                                }
+                                            }
+
+                                            onPaint: {
+                                                var ctx = hourlyCurve.getContext("2d")
+                                                ctx.clearRect(0, 0, hourlyCurve.width, hourlyCurve.height)
+                                                if (hourlyCurve.drawProgress <= 0)
+                                                    return
+                                                var pts = []
+                                                for (var i = 0; i < root.upcomingHours.length; ++i) {
+                                                    var t = root.number(root.upcomingHours[i], "temperature", NaN)
+                                                    if (isFinite(t))
+                                                        pts.push({ x: 54 + i * 118, t: t })
+                                                }
+                                                if (pts.length < 2)
+                                                    return
+                                                var minT = pts[0].t
+                                                var maxT = pts[0].t
+                                                for (var j = 1; j < pts.length; ++j) {
+                                                    minT = Math.min(minT, pts[j].t)
+                                                    maxT = Math.max(maxT, pts[j].t)
+                                                }
+                                                function yFor(t) {
+                                                    if (maxT === minT)
+                                                        return hourlyCurve.bandTop + hourlyCurve.bandInner / 2
+                                                    return hourlyCurve.bandTop
+                                                        + (1 - (t - minT) / (maxT - minT)) * hourlyCurve.bandInner
+                                                }
+                                                var ys = []
+                                                for (var k = 0; k < pts.length; ++k)
+                                                    ys.push(yFor(pts[k].t))
+
+                                                // 把二次贝塞尔路径展平为稠密折线，便于按累计弧长截断
+                                                var samples = [{ x: pts[0].x, y: ys[0] }]
+                                                for (var m = 1; m < pts.length - 1; ++m) {
+                                                    var p0x = samples[samples.length - 1].x
+                                                    var p0y = samples[samples.length - 1].y
+                                                    var cx = pts[m].x
+                                                    var cy = ys[m]
+                                                    var p1x = (pts[m].x + pts[m + 1].x) / 2
+                                                    var p1y = (ys[m] + ys[m + 1]) / 2
+                                                    for (var s = 1; s <= 16; ++s) {
+                                                        var u = s / 16
+                                                        var a = (1 - u) * (1 - u)
+                                                        var b = 2 * (1 - u) * u
+                                                        var c = u * u
+                                                        samples.push({
+                                                            x: a * p0x + b * cx + c * p1x,
+                                                            y: a * p0y + b * cy + c * p1y
+                                                        })
+                                                    }
+                                                }
+                                                samples.push({
+                                                    x: pts[pts.length - 1].x,
+                                                    y: ys[ys.length - 1]
+                                                })
+
+                                                var total = 0
+                                                var segLen = []
+                                                for (var d = 1; d < samples.length; ++d) {
+                                                    var len = Math.hypot(samples[d].x - samples[d - 1].x,
+                                                                         samples[d].y - samples[d - 1].y)
+                                                    segLen.push(len)
+                                                    total += len
+                                                }
+                                                var budget = total * Math.min(1, Math.max(0, hourlyCurve.drawProgress))
+                                                var cutX = samples[samples.length - 1].x
+                                                var cutY = samples[samples.length - 1].y
+                                                var cutIdx = samples.length - 1
+                                                if (budget < total) {
+                                                    var acc = 0
+                                                    for (var e = 0; e < segLen.length; ++e) {
+                                                        if (acc + segLen[e] >= budget) {
+                                                            var f = segLen[e] > 0 ? (budget - acc) / segLen[e] : 0
+                                                            cutX = samples[e].x + (samples[e + 1].x - samples[e].x) * f
+                                                            cutY = samples[e].y + (samples[e + 1].y - samples[e].y) * f
+                                                            cutIdx = e
+                                                            break
+                                                        }
+                                                        acc += segLen[e]
+                                                    }
+                                                }
+
+                                                ctx.beginPath()
+                                                ctx.moveTo(samples[0].x, samples[0].y)
+                                                for (var g = 1; g <= cutIdx; ++g)
+                                                    ctx.lineTo(samples[g].x, samples[g].y)
+                                                ctx.lineTo(cutX, cutY)
+
+                                                ctx.strokeStyle = "rgba(255,255,255,0.85)"
+                                                ctx.lineWidth = 2
+                                                ctx.lineJoin = "round"
+                                                ctx.lineCap = "round"
+                                                ctx.stroke()
+
+                                                var grad = ctx.createLinearGradient(0, hourlyCurve.bandTop, 0, hourlyCurve.bandBottom)
+                                                grad.addColorStop(0, "rgba(255,255,255,0.20)")
+                                                grad.addColorStop(1, "rgba(255,255,255,0)")
+                                                ctx.lineTo(cutX, hourlyCurve.bandBottom)
+                                                ctx.lineTo(samples[0].x, hourlyCurve.bandBottom)
+                                                ctx.closePath()
+                                                ctx.fillStyle = grad
+                                                ctx.fill()
+                                            }
+                                        }
+
+                                        Row {
+                                            id: hourlyRow
+                                            height: parent.height - 12
+                                            spacing: 10
+
+                                            Repeater {
+                                                model: root.upcomingHours
+
+                                                delegate: Item {
+                                                    id: hourlyCard
+
+                                                    required property var modelData
+                                                    required property int index
+                                                    width: 108
+                                                    height: hourlyRow.height
+                                                    opacity: 0
+                                                    transform: Translate { id: entranceShift; y: 14 }
+
+                                                    Component.onCompleted: {
+                                                        if (AppTheme.reduceMotion) {
+                                                            hourlyCard.opacity = 1
+                                                            entranceShift.y = 0
+                                                            iconBounceShift.y = 0
+                                                            return
+                                                        }
+                                                        entranceAnim.restart()
+                                                        iconBounceAnim.restart()
+                                                    }
+
+                                                    SequentialAnimation {
+                                                        id: entranceAnim
+                                                        PauseAnimation { duration: 40 * hourlyCard.index }
+                                                        ParallelAnimation {
+                                                            NumberAnimation { target: hourlyCard; property: "opacity"; to: 1; duration: 260; easing.type: Easing.OutCubic }
+                                                            NumberAnimation { target: entranceShift; property: "y"; to: 0; duration: 260; easing.type: Easing.OutCubic }
+                                                        }
+                                                    }
+
+                                                    SequentialAnimation {
+                                                        id: iconBounceAnim
+                                                        PauseAnimation { duration: 300 + 40 * hourlyCard.index }
+                                                        NumberAnimation { target: iconBounceShift; property: "y"; to: -6; duration: 110; easing.type: Easing.OutCubic }
+                                                        NumberAnimation { target: iconBounceShift; property: "y"; to: 0; duration: 160; easing.type: Easing.OutBack }
+                                                    }
+
+                                                    ColumnLayout {
+                                                        anchors.fill: parent
+                                                        spacing: 4
+
+                                                        Label {
+                                                            Layout.alignment: Qt.AlignHCenter
+                                                            text: root.localTime(root.value(
+                                                                hourlyCard.modelData, "time", ""))
+                                                            color: root.skyTextMuted
+                                                        }
+
+                                                        WeatherIcon {
+                                                            Layout.alignment: Qt.AlignHCenter
+                                                            Layout.preferredWidth: 26
+                                                            Layout.preferredHeight: 26
+                                                            code: root.number(hourlyCard.modelData, "weatherCode", -1)
+                                                            isDay: Boolean(root.value(hourlyCard.modelData, "isDay", true))
+                                                            pulse: backend.loading && !AppTheme.reduceMotion
+                                                            transform: Translate { id: iconBounceShift; y: 0 }
+                                                            Accessible.ignored: true
+                                                        }
+
+                                                        Label {
+                                                            Layout.alignment: Qt.AlignHCenter
+                                                            visible: hourlySegmented.segment === 0
+                                                            text: Math.round(root.number(
+                                                                hourlyCard.modelData, "temperature", 0)) + root.temperatureUnit
+                                                            color: root.skyText
+                                                            font.weight: Font.DemiBold
+                                                        }
+
+                                                        Label {
+                                                            Layout.alignment: Qt.AlignHCenter
+                                                            visible: hourlySegmented.segment === 1
+                                                            text: Math.round(root.number(
+                                                                hourlyCard.modelData,
+                                                                "precipitationProbability", 0)) + "%"
+                                                            color: root.skyText
+                                                            font.weight: Font.DemiBold
+                                                            Accessible.name: qsTr("%1% chance of precipitation").arg(
+                                                                Math.round(root.number(hourlyCard.modelData,
+                                                                                       "precipitationProbability", 0)))
+                                                        }
+
+                                                        Label {
+                                                            Layout.alignment: Qt.AlignHCenter
+                                                            visible: hourlySegmented.segment === 2
+                                                            text: Math.round(root.number(
+                                                                hourlyCard.modelData, "windSpeed", 0)) + " " + root.speedUnit
+                                                            color: root.skyText
+                                                            font.weight: Font.DemiBold
+                                                            Accessible.name: qsTr("Wind speed %1 %2").arg(
+                                                                Math.round(root.number(hourlyCard.modelData, "windSpeed", 0)))
+                                                                                .arg(root.speedUnit)
+                                                        }
+
+                                                        Label {
+                                                            Layout.alignment: Qt.AlignHCenter
+                                                            visible: hourlySegmented.segment === 0
+                                                            text: "☂︎  " + Math.round(root.number(
+                                                                hourlyCard.modelData,
+                                                                "precipitationProbability", 0)) + "%"
+                                                            color: root.skyTextMuted
+                                                            font.pixelSize: 10
+                                                            Accessible.name: qsTr("%1% chance of precipitation").arg(
+                                                                Math.round(root.number(hourlyCard.modelData,
+                                                                                       "precipitationProbability", 0)))
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                    }
+                                        }
+                                }
                             }
 
-                            ColumnLayout {
+                            KosCard {
+                                id: dailyCard
+                                // ref-main 实测：10 天卡与 Conditions 同右列（x519-760），Conditions 底 y≈317 → 10 天卡顶 y≈329，gap ~12px@814 × 1.4598 ≈ 17.5 → rowSpacing 16 吻合（masonry 步骤 c）
                                 Layout.fillWidth: true
-                                Layout.fillHeight: true
-                                visible: backend.ready
-                                spacing: 12
+                                Layout.minimumWidth: 0
+                                Layout.preferredWidth: 0
+                                Layout.alignment: Qt.AlignTop
+                                Layout.preferredHeight: dailyColumn.implicitHeight + padding * 2
 
-                                GridLayout {
-                                    Layout.fillWidth: true
-                                    Layout.topMargin: -16 // ref-main AQ 底→WIND 顶 14px@814 × 1.4598 ≈ 20px;改前 36px = content spacing 16 + 本卡 padding ~20,-16 抵消 padding 多余部分(描边-描边 20px)
-                                    columns: root.compact ? 2 : 4
-                                    columnSpacing: 8
-                                    rowSpacing: 8
+                                HoverHandler { id: dailyHover }
+                                property bool cardHot: dailyHover.hovered
+                                property real hoverFill: cardHot ? root.cardGlassAlphaHot : root.cardGlassAlpha
+                                Behavior on hoverFill { NumberAnimation { duration: AppTheme.motionNormal; easing.type: Easing.OutCubic } }
+                                property real hoverStroke: cardHot ? 0.32 : 0.22
+                                Behavior on hoverStroke { NumberAnimation { duration: AppTheme.motionNormal; easing.type: Easing.OutCubic } }
+                                transform: Translate {
+                                    y: AppTheme.reduceMotion ? 0 : (dailyCard.cardHot ? -3 : 0)
+                                    Behavior on y { NumberAnimation { duration: AppTheme.motionNormal; easing.type: Easing.OutCubic } }
+                                }
 
-                                    WeatherMetric {
+                                background: KosSurface {
+                                    radius: 20
+                                    fillColor: Qt.rgba(root.cardGlassRgb.r, root.cardGlassRgb.g, root.cardGlassRgb.b, dailyCard.hoverFill)
+                                    strokeWidth: 1
+                                    strokeColor: Qt.rgba(1, 1, 1, dailyCard.hoverStroke)
+                                    elevation: 0
+                                }
+
+                                contentItem: ColumnLayout {
+                                    id: dailyColumn
+                                    spacing: 0
+
+                                    // ref-ipad-small.png 实测：10 天卡头部 "10-DAY FORECAST" 在卡内顶部——
+                                    // calendar glyph + caps 字距 muted 文本（文本带 y321-329、glyph x276-284、与文字同色）；
+                                    // ref-main 该卡被窗底裁切无头部可见，以 ipad 参考为准。
+                                    // 文案照参考 "10-Day Forecast"（数据上限 7 天，差异记 LEDGER）。
+                                    RowLayout {
+                                        spacing: 6
                                         Layout.fillWidth: true
-                                        symbol: "%"
-                                        labelText: qsTr("Humidity")
-                                        valueText: Math.round(root.number(
-                                            backend.current, "relativeHumidity", 0)) + "%"
-                                    }
+                                        Layout.bottomMargin: 8
+                                        visible: backend.daily.length > 0
 
-                                    WeatherMetric {
-                                        Layout.fillWidth: true
-                                        symbol: "≋"
-                                        labelText: qsTr("Wind")
-                                        valueText: Math.round(root.number(
-                                            backend.current, "windSpeed", 0)) + " " + root.speedUnit
-                                    }
+                                        Canvas {
+                                            width: 12
+                                            height: 12
+                                            Accessible.ignored: true
 
-                                    Rectangle {
-                                        id: directionTile
-                                        Layout.fillWidth: true
-                                        implicitHeight: 66
-                                        radius: root.tileRadius
-                                        // 昼夜分材质：ref-main 白天所有卡填充暗于天空（α~0.30 深蓝玻璃）；夜间维持白玻璃
-                                        property bool hot: directionHover.hovered
-                                        property real hoverFill: hot ? root.cardGlassAlphaHot : root.cardGlassAlpha
-                                        Behavior on hoverFill { NumberAnimation { duration: AppTheme.motionNormal; easing.type: Easing.OutCubic } }
-                                        property real hoverStroke: hot ? 0.32 : 0.22
-                                        Behavior on hoverStroke { NumberAnimation { duration: AppTheme.motionNormal; easing.type: Easing.OutCubic } }
-                                        color: Qt.rgba(root.cardGlassRgb.r, root.cardGlassRgb.g, root.cardGlassRgb.b, hoverFill)
-                                        border.width: 1
-                                        border.color: Qt.rgba(1, 1, 1, hoverStroke)
-                                        transform: Translate {
-                                            y: AppTheme.reduceMotion ? 0 : (directionTile.hot ? -3 : 0)
-                                            Behavior on y { NumberAnimation { duration: AppTheme.motionNormal; easing.type: Easing.OutCubic } }
+                                            onPaint: {
+                                                const ctx = getContext("2d")
+                                                ctx.clearRect(0, 0, width, height)
+                                                ctx.strokeStyle = root.skyTextMuted
+                                                ctx.lineWidth = 1.2
+                                                // 圆角方框（calendar 外形）：x1.5..10.5、y1.5..10.5，radius 3
+                                                ctx.beginPath()
+                                                ctx.moveTo(4.5, 1.5)
+                                                ctx.lineTo(7.5, 1.5)
+                                                ctx.arcTo(10.5, 1.5, 10.5, 4.5, 3)
+                                                ctx.lineTo(10.5, 7.5)
+                                                ctx.arcTo(10.5, 10.5, 7.5, 10.5, 3)
+                                                ctx.lineTo(4.5, 10.5)
+                                                ctx.arcTo(1.5, 10.5, 1.5, 7.5, 3)
+                                                ctx.lineTo(1.5, 4.5)
+                                                ctx.arcTo(1.5, 1.5, 4.5, 1.5, 3)
+                                                ctx.closePath()
+                                                ctx.stroke()
+                                                // 框内两条横线（calendar 行）：y=4.8 与 y=7.6，x 3.6..8.4
+                                                ctx.beginPath()
+                                                ctx.moveTo(3.6, 4.8)
+                                                ctx.lineTo(8.4, 4.8)
+                                                ctx.moveTo(3.6, 7.6)
+                                                ctx.lineTo(8.4, 7.6)
+                                                ctx.stroke()
+                                            }
                                         }
 
-                                        property real windDir: root.number(backend.current, "windDirection", 0)
-                                        // arrow points where the wind blows TO (Open-Meteo direction is where it comes FROM)
-                                        property real flowAngle: (directionTile.windDir + 180) % 360
-                                        property real gustVal: root.number(backend.current, "windGust", Number.NaN)
-                                        property bool hasGust: Number.isFinite(gustVal)
-
-                                        onWindDirChanged: compass.requestPaint()
-                                        onFlowAngleChanged: compass.requestPaint()
-
-                                        HoverHandler { id: directionHover }
-                                        ToolTip.visible: directionHover.hovered
-                                        ToolTip.text: qsTr("Direction")
-                                        Accessible.role: Accessible.StaticText
-                                        Accessible.name: qsTr("Direction") + ": " + Math.round(directionTile.windDir) + "° " + directionTile.cardinal
-                                            + (directionTile.hasGust
-                                                ? " " + qsTr("Gusts") + ": " + Math.round(directionTile.gustVal) + " " + root.speedUnit
-                                                : "")
-
-                                        property string cardinal: {
-                                            var names = ["N", "NE", "E", "SE", "S", "SW", "W", "NW"]
-                                            return names[Math.round(directionTile.windDir / 45) % 8]
+                                        Label {
+                                            text: qsTr("10-Day Forecast").toLocaleUpperCase(Qt.locale())
+                                            color: root.skyTextMuted
+                                            font.pixelSize: 11
+                                            font.weight: Font.DemiBold
+                                            font.letterSpacing: 1.4
+                                            Accessible.name: qsTr("10-day forecast")
                                         }
+                                    }
 
-                                        RowLayout {
-                                            anchors.fill: parent
-                                            anchors.margins: 10
-                                            spacing: 8
+                                    KosEmptyState {
+                                        Layout.fillWidth: true
+                                        Layout.preferredHeight: 130
+                                        visible: backend.daily.length === 0
+                                        symbol: "☂"
+                                        title: qsTr("Daily forecast unavailable")
+                                        description: qsTr("Cached current conditions can still be used.")
+                                    }
 
-                                            Item {
-                                                Layout.preferredWidth: 46
-                                                Layout.preferredHeight: 46
+                                    Repeater {
+                                        model: backend.daily
 
-                                                Canvas {
-                                                    id: compass
-                                                    anchors.fill: parent
-                                                    antialiasing: true
-                                                    contextType: "2d"
-                                                    onPaint: {
-                                                        var ctx = getContext("2d")
-                                                        ctx.reset()
-                                                        var c = 23
-                                                        ctx.strokeStyle = "rgba(255,255,255,0.30)"
-                                                        ctx.lineWidth = 1
-                                                        for (var i = 0; i < 36; i++) {
-                                                            var a = i * Math.PI / 18
-                                                            ctx.beginPath()
-                                                            ctx.moveTo(c + Math.sin(a) * 15, c - Math.cos(a) * 15)
-                                                            ctx.lineTo(c + Math.sin(a) * 19.5, c - Math.cos(a) * 19.5)
-                                                            ctx.stroke()
-                                                        }
-                                                        ctx.fillStyle = "rgba(255,255,255,0.92)"
-                                                        ctx.font = "600 7px sans-serif"
-                                                        ctx.textAlign = "center"
-                                                        ctx.textBaseline = "middle"
-                                                        ctx.fillText("N", c, c - 21.5)
-                                                        ctx.fillText("E", c + 21.5, c)
-                                                        ctx.fillText("S", c, c + 21.5)
-                                                        ctx.fillText("W", c - 21.5, c)
-                                                        ctx.save()
-                                                        ctx.translate(c, c)
-                                                        ctx.rotate(directionTile.flowAngle * Math.PI / 180)
-                                                        ctx.strokeStyle = "#ffffff"
-                                                        ctx.fillStyle = "#ffffff"
-                                                        ctx.lineWidth = 1.6
-                                                        ctx.beginPath()
-                                                        ctx.moveTo(0, -11)
-                                                        ctx.lineTo(0, -19)
-                                                        ctx.stroke()
-                                                        ctx.beginPath()
-                                                        ctx.moveTo(0, -23)      // tip
-                                                        ctx.lineTo(-2.6, -18.4)
-                                                        ctx.lineTo(2.6, -18.4)
-                                                        ctx.closePath()
-                                                        ctx.fill()
-                                                        ctx.restore()
+                                        delegate: Item {
+                                            id: dailyRow
+
+                                            required property int index
+                                            required property var modelData
+                                            Layout.fillWidth: true
+                                            Layout.preferredHeight: 54
+
+                                            readonly property real dayMinimum: root.number(
+                                                dailyRow.modelData, "temperatureMinimum", 0)
+                                            readonly property real dayMaximum: root.number(
+                                                dailyRow.modelData, "temperatureMaximum", 0)
+                                            readonly property real rangeSpan: root.dailyRange.maximum
+                                                - root.dailyRange.minimum
+                                            readonly property real uMin: root.clamp(
+                                                (dailyRow.dayMinimum - root.dailyRange.minimum)
+                                                    / dailyRow.rangeSpan, 0, 1)
+                                            readonly property real uMax: root.clamp(
+                                                (dailyRow.dayMaximum - root.dailyRange.minimum)
+                                                    / dailyRow.rangeSpan, 0, 1)
+                                            readonly property real uCurrent: dailyRow.index === 0
+                                                ? root.clamp(
+                                                    (root.number(backend.current, "temperature", Number.NaN)
+                                                        - root.dailyRange.minimum) / dailyRow.rangeSpan,
+                                                    0, 1)
+                                                : 0
+                                            readonly property int precipChance: Math.round(root.number(
+                                                dailyRow.modelData, "precipitationProbability", 0))
+
+                                            RowLayout {
+                                                anchors.fill: parent
+                                                spacing: 12
+
+                                                Label {
+                                                    Layout.preferredWidth: 88
+                                                    text: root.dayLabel(root.value(
+                                                        dailyRow.modelData, "date", ""), dailyRow.index)
+                                                    color: root.skyText
+                                                    font.weight: Font.DemiBold
+                                                }
+
+                                                Column {
+                                                    spacing: 1
+
+                                                    WeatherIcon {
+                                                        anchors.horizontalCenter: parent.horizontalCenter
+                                                        width: 24
+                                                        height: 24
+                                                        code: root.number(dailyRow.modelData, "weatherCode", -1)
+                                                        isDay: true
+                                                        pulse: backend.loading && !AppTheme.reduceMotion
+                                                        Accessible.ignored: true
+                                                    }
+
+                                                    Label {
+                                                        visible: dailyRow.precipChance > 0
+                                                        text: "☂︎ " + dailyRow.precipChance + "%"
+                                                        color: root.skyTextMuted
+                                                        font.pixelSize: 10
+                                                        Accessible.name: qsTr("%1% chance of precipitation").arg(
+                                                            dailyRow.precipChance)
                                                     }
                                                 }
-                                            }
-
-                                            ColumnLayout {
-                                                Layout.fillWidth: true
-                                                spacing: 1
 
                                                 Label {
-                                                    Layout.fillWidth: true
-                                                    text: qsTr("Direction")
+                                                    Layout.preferredWidth: 44
+                                                    text: Math.round(dailyRow.dayMinimum) + "°"
                                                     color: root.skyTextMuted
-                                                    font.pixelSize: 10
-                                                    elide: Text.ElideRight
-                                                    Accessible.ignored: true
+                                                    horizontalAlignment: Text.AlignRight
                                                 }
 
-                                                Label {
+                                                Item {
                                                     Layout.fillWidth: true
-                                                    text: Math.round(directionTile.windDir) + "° " + directionTile.cardinal
-                                                    color: root.skyText
-                                                    font.pixelSize: 15
-                                                    font.weight: Font.DemiBold
-                                                    elide: Text.ElideRight
-                                                    Accessible.ignored: true
-                                                }
+                                                    Layout.preferredHeight: 20
 
-                                                Label {
-                                                    Layout.fillWidth: true
-                                                    visible: directionTile.hasGust
-                                                    text: qsTr("Gusts: ") + Math.round(directionTile.gustVal) + " " + root.speedUnit
-                                                          + " " + directionTile.cardinal
-                                                    color: root.skyText
-                                                    font.pixelSize: 10
-                                                    font.weight: Font.DemiBold
-                                                    elide: Text.ElideRight
-                                                    Accessible.ignored: true
-                                                }
-                                            }
-                                        }
-                                    }
+                                                    Rectangle {
+                                                        anchors.verticalCenter: parent.verticalCenter
+                                                        width: parent.width
+                                                        height: 5
+                                                        radius: 2.5
+                                                        color: Qt.rgba(1, 1, 1, 0.28)
+                                                    }
 
-                                    WeatherMetric {
-                                        Layout.fillWidth: true
-                                        symbol: "◷"
-                                        labelText: qsTr("Observed")
-                                        valueText: root.localTime(root.value(
-                                            backend.current, "time", ""))
-                                    }
-
-                                    WeatherMetric {
-                                        Layout.fillWidth: true
-                                        symbol: "☀"
-                                        labelText: qsTr("UV Index")
-                                        valueText: {
-                                            const uv = root.number(backend.current, "uvIndex", NaN)
-                                            return Number.isFinite(uv) ? String(Math.round(uv)) : "—"
-                                        }
-                                    }
-
-                                    WeatherMetric {
-                                        Layout.fillWidth: true
-                                        symbol: "◉"
-                                        labelText: qsTr("Visibility")
-                                        valueText: {
-                                            const meters = root.number(backend.current, "visibility", NaN)
-                                            if (!Number.isFinite(meters))
-                                                return "—"
-                                            return backend.units === "imperial"
-                                                ? Math.round(meters / 1609.344) + " " + root.distanceUnit
-                                                : Math.round(meters / 1000) + " " + root.distanceUnit
-                                        }
-                                    }
-
-                                    Rectangle {
-                                        id: moonPhaseTile
-                                        Layout.fillWidth: true
-                                        implicitHeight: 66
-                                        radius: root.tileRadius
-                                        // 昼夜分材质：ref-main 白天所有卡填充暗于天空（α~0.30 深蓝玻璃）；夜间维持白玻璃
-                                        property bool hot: moonHover.hovered
-                                        property real hoverFill: hot ? root.cardGlassAlphaHot : root.cardGlassAlpha
-                                        Behavior on hoverFill { NumberAnimation { duration: AppTheme.motionNormal; easing.type: Easing.OutCubic } }
-                                        property real hoverStroke: hot ? 0.32 : 0.22
-                                        Behavior on hoverStroke { NumberAnimation { duration: AppTheme.motionNormal; easing.type: Easing.OutCubic } }
-                                        color: Qt.rgba(root.cardGlassRgb.r, root.cardGlassRgb.g, root.cardGlassRgb.b, hoverFill)
-                                        border.width: 1
-                                        border.color: Qt.rgba(1, 1, 1, hoverStroke)
-                                        transform: Translate {
-                                            y: AppTheme.reduceMotion ? 0 : (moonPhaseTile.hot ? -3 : 0)
-                                            Behavior on y { NumberAnimation { duration: AppTheme.motionNormal; easing.type: Easing.OutCubic } }
-                                        }
-
-                                        property real phaseVal: root.number(backend.current, "moonPhase", Number.NaN)
-                                        property bool hasPhase: Number.isFinite(phaseVal)
-                                        readonly property var phaseNames: [
-                                            qsTr("New Moon"), qsTr("Waxing Crescent"), qsTr("First Quarter"),
-                                            qsTr("Waxing Gibbous"), qsTr("Full Moon"), qsTr("Waning Gibbous"),
-                                            qsTr("Last Quarter"), qsTr("Waning Crescent")
-                                        ]
-                                        // 8 等分、以 0/0.25/0.5/0.75 为中心：round(p*8)%8
-                                        readonly property string phaseName: hasPhase
-                                            ? phaseNames[Math.round(((phaseVal % 1) + 1) % 1 * 8) % 8]
-                                            : "—"
-
-                                        onPhaseValChanged: moonCanvas.requestPaint()
-
-                                        HoverHandler { id: moonHover }
-                                        ToolTip.visible: moonHover.hovered
-                                        ToolTip.text: qsTr("Moon Phase")
-                                        Accessible.role: Accessible.StaticText
-                                        Accessible.name: qsTr("Moon Phase") + ": " + moonPhaseTile.phaseName
-
-                                        RowLayout {
-                                            anchors.fill: parent
-                                            anchors.margins: 10
-                                            spacing: 8
-
-                                            Item {
-                                                Layout.preferredWidth: 46
-                                                Layout.preferredHeight: 46
-
-                                                Canvas {
-                                                    id: moonCanvas
-                                                    anchors.fill: parent
-                                                    antialiasing: true
-                                                    contextType: "2d"
-                                                    onPaint: {
-                                                        var ctx = getContext("2d")
-                                                        ctx.reset()
-                                                        var c = 23
-                                                        var r = 17
-                                                        // 暗面：整盘剪影（月亮相位剪影，同族白 0.14）
-                                                        ctx.beginPath()
-                                                        ctx.arc(c, c, r, 0, 2 * Math.PI)
-                                                        ctx.fillStyle = "rgba(255,255,255,0.14)"
-                                                        ctx.fill()
-                                                        if (!moonPhaseTile.hasPhase)
-                                                            return
-                                                        // 亮面：外弧（盈月亮在右，亏月亮在左）+ 终止线半椭圆折线，一次成形
-                                                        var p = ((moonPhaseTile.phaseVal % 1) + 1) % 1
-                                                        var cosT = Math.cos(2 * Math.PI * p)
-                                                        var waxing = p < 0.5
-                                                        ctx.beginPath()
-                                                        if (waxing)
-                                                            ctx.arc(c, c, r, -Math.PI / 2, Math.PI / 2, false)   // 顶极→底极经右侧
-                                                        else
-                                                            ctx.arc(c, c, r, -Math.PI / 2, Math.PI / 2, true)    // 顶极→底极经左侧
-                                                        var steps = 32
-                                                        for (var i = 0; i <= steps; i++) {
-                                                            var a = Math.PI / 2 - (Math.PI * i / steps)          // 底极→顶极
-                                                            // 带符号 cosT：蛾眉凸向亮侧、凸月凸向暗侧（|cosT| 会把凸月画成蛾眉、满月退化成零面积）
-                                                            var ex = waxing ? cosT * r * Math.cos(a) : -cosT * r * Math.cos(a)
-                                                            ctx.lineTo(c + ex, c + r * Math.sin(a))
+                                                    Rectangle {
+                                                        anchors.verticalCenter: parent.verticalCenter
+                                                        x: parent.width * dailyRow.uMin
+                                                        width: Math.max(parent.width
+                                                                        * (dailyRow.uMax - dailyRow.uMin), 14)
+                                                        height: 5
+                                                        radius: 2.5
+                                                        gradient: Gradient {
+                                                            orientation: Gradient.Horizontal
+                                                            GradientStop {
+                                                                position: 0
+                                                                color: root.tempColor(dailyRow.dayMinimum)
+                                                            }
+                                                            GradientStop {
+                                                                position: 1
+                                                                color: root.tempColor(dailyRow.dayMaximum)
+                                                            }
                                                         }
-                                                        ctx.closePath()
-                                                        ctx.fillStyle = "#f7f3dc"
-                                                        ctx.fill()
+                                                    }
+
+                                                    // Today 行当前温度标记（ref-main 实测：白点直径 ≈ 条高+1px，仅 Today 行有）
+                                                    Rectangle {
+                                                        visible: dailyRow.index === 0
+                                                            && Number.isFinite(root.number(
+                                                                backend.current, "temperature", Number.NaN))
+                                                        anchors.verticalCenter: parent.verticalCenter
+                                                        x: parent.width * dailyRow.uCurrent - width / 2
+                                                        width: 8
+                                                        height: 8
+                                                        radius: 4
+                                                        color: "#ffffff"
                                                     }
                                                 }
-                                            }
-
-                                            ColumnLayout {
-                                                Layout.fillWidth: true
-                                                spacing: 1
 
                                                 Label {
-                                                    Layout.fillWidth: true
-                                                    // 参考设计头部为全大写+字距（同 :1458 AQ 卡头）
-                                                    text: qsTr("Moon Phase").toLocaleUpperCase(Qt.locale())
-                                                    color: root.skyTextMuted
-                                                    font.pixelSize: 10
-                                                    font.letterSpacing: 1.4
-                                                    elide: Text.ElideRight
-                                                    Accessible.ignored: true
-                                                }
-
-                                                Label {
-                                                    Layout.fillWidth: true
-                                                    text: moonPhaseTile.phaseName
+                                                    Layout.preferredWidth: 44
+                                                    text: Math.round(dailyRow.dayMaximum) + "°"
                                                     color: root.skyText
-                                                    font.pixelSize: 15
+                                                    horizontalAlignment: Text.AlignLeft
                                                     font.weight: Font.DemiBold
-                                                    elide: Text.ElideRight
-                                                    Accessible.ignored: true
-                                                }
-                                            }
-                                        }
-                                    }
-
-                                    WeatherMetric {
-                                        Layout.fillWidth: true
-                                        symbol: "◐"
-                                        labelText: qsTr("Pressure")
-                                        valueText: {
-                                            const hpa = root.number(backend.current, "pressure", NaN)
-                                            return Number.isFinite(hpa) ? Math.round(hpa) + " hPa" : "—"
-                                        }
-                                    }
-
-                                    Rectangle {
-                                        id: sunsetTile
-                                        Layout.fillWidth: true
-                                        implicitHeight: 66
-                                        radius: root.tileRadius
-                                        // 昼夜分材质：ref-main 白天所有卡填充暗于天空（α~0.30 深蓝玻璃）；夜间维持白玻璃
-                                        property bool hot: sunsetHover.hovered
-                                        property real hoverFill: hot ? root.cardGlassAlphaHot : root.cardGlassAlpha
-                                        Behavior on hoverFill { NumberAnimation { duration: AppTheme.motionNormal; easing.type: Easing.OutCubic } }
-                                        property real hoverStroke: hot ? 0.32 : 0.22
-                                        Behavior on hoverStroke { NumberAnimation { duration: AppTheme.motionNormal; easing.type: Easing.OutCubic } }
-                                        color: Qt.rgba(root.cardGlassRgb.r, root.cardGlassRgb.g, root.cardGlassRgb.b, hoverFill)
-                                        border.width: 1
-                                        border.color: Qt.rgba(1, 1, 1, hoverStroke)
-                                        transform: Translate {
-                                            y: AppTheme.reduceMotion ? 0 : (sunsetTile.hot ? -3 : 0)
-                                            Behavior on y { NumberAnimation { duration: AppTheme.motionNormal; easing.type: Easing.OutCubic } }
-                                        }
-
-                                        // daily[0].sunset 形如 "2026-10-17T17:57"（Open-Meteo 本地 ISO，无时区后缀）
-                                        readonly property string sunsetRaw:
-                                            backend.daily.length > 0 ? String(root.value(backend.daily[0], "sunset", "")) : ""
-                                        readonly property bool hasSunset: /T\d{1,2}:\d{2}/.test(sunsetRaw)
-                                        readonly property string sunsetText: {
-                                            if (!hasSunset) return "—"
-                                            const m = /T(\d{1,2}):(\d{2})/.exec(sunsetRaw)
-                                            let h = parseInt(m[1], 10)
-                                            const ap = h >= 12 ? qsTr("PM") : qsTr("AM")
-                                            h = h % 12
-                                            if (h === 0) h = 12
-                                            return h + ":" + m[2] + ap
-                                        }
-
-                                        HoverHandler { id: sunsetHover }
-                                        ToolTip.visible: sunsetHover.hovered
-                                        ToolTip.text: qsTr("Sunset")
-                                        Accessible.role: Accessible.StaticText
-                                        Accessible.name: qsTr("Sunset") + ": " + sunsetTile.sunsetText
-
-                                        RowLayout {
-                                            anchors.fill: parent
-                                            anchors.margins: 10
-                                            spacing: 8
-
-                                            Item {
-                                                Layout.preferredWidth: 46
-                                                Layout.preferredHeight: 46
-
-                                                Canvas {
-                                                    id: sunCanvas
-                                                    anchors.fill: parent
-                                                    antialiasing: true
-                                                    contextType: "2d"
-                                                    onPaint: {
-                                                        var ctx = getContext("2d")
-                                                        ctx.reset()
-                                                        var c = 23
-                                                        // 地平线
-                                                        ctx.beginPath()
-                                                        ctx.strokeStyle = "rgba(255,255,255,0.85)"
-                                                        ctx.lineWidth = 1.4
-                                                        ctx.moveTo(c - 15, 30)
-                                                        ctx.lineTo(c + 15, 30)
-                                                        ctx.stroke()
-                                                        // 半落太阳：地平线上方半圆
-                                                        ctx.beginPath()
-                                                        ctx.arc(c, 30, 9, Math.PI, 2 * Math.PI, false)
-                                                        ctx.closePath()
-                                                        ctx.fillStyle = "#ffd257"
-                                                        ctx.fill()
-                                                        // 太阳 3 根短光线（上半圆方向）
-                                                        ctx.strokeStyle = "#ffd257"
-                                                        ctx.lineWidth = 1.6
-                                                        var rays = [-Math.PI / 2, -Math.PI / 4, -3 * Math.PI / 4]
-                                                        for (var i = 0; i < rays.length; i++) {
-                                                            ctx.beginPath()
-                                                            ctx.moveTo(c + 11.5 * Math.cos(rays[i]), 30 + 11.5 * Math.sin(rays[i]))
-                                                            ctx.lineTo(c + 14.5 * Math.cos(rays[i]), 30 + 14.5 * Math.sin(rays[i]))
-                                                            ctx.stroke()
-                                                        }
-                                                        // 下落箭头（日落中）
-                                                        ctx.strokeStyle = "rgba(255,255,255,0.92)"
-                                                        ctx.fillStyle = "rgba(255,255,255,0.92)"
-                                                        ctx.lineWidth = 1.6
-                                                        ctx.beginPath()
-                                                        ctx.moveTo(c, 6)
-                                                        ctx.lineTo(c, 14)
-                                                        ctx.stroke()
-                                                        ctx.beginPath()
-                                                        ctx.moveTo(c, 17)
-                                                        ctx.lineTo(c - 3, 13)
-                                                        ctx.lineTo(c + 3, 13)
-                                                        ctx.closePath()
-                                                        ctx.fill()
-                                                    }
                                                 }
                                             }
 
-                                            ColumnLayout {
-                                                Layout.fillWidth: true
-                                                spacing: 1
-
-                                                Label {
-                                                    Layout.fillWidth: true
-                                                    // 参考设计头部为全大写+字距（同 :1458 AQ 卡头）
-                                                    text: qsTr("Sunset").toLocaleUpperCase(Qt.locale())
-                                                    color: root.skyTextMuted
-                                                    font.pixelSize: 10
-                                                    font.letterSpacing: 1.4
-                                                    elide: Text.ElideRight
-                                                    Accessible.ignored: true
-                                                }
-
-                                                Label {
-                                                    Layout.fillWidth: true
-                                                    text: sunsetTile.sunsetText
-                                                    color: root.skyText
-                                                    font.pixelSize: 15
-                                                    font.weight: Font.DemiBold
-                                                    elide: Text.ElideRight
-                                                    Accessible.ignored: true
-                                                }
+                                            Rectangle {
+                                                anchors.left: parent.left
+                                                anchors.right: parent.right
+                                                anchors.bottom: parent.bottom
+                                                height: 1
+                                                color: AppTheme.border
+                                                visible: dailyRow.index < backend.daily.length - 1
                                             }
-                                        }
-                                    }
-
-                                    WeatherMetric {
-                                        Layout.fillWidth: true
-                                        symbol: "≈"
-                                        labelText: qsTr("Feels Like")
-                                        valueText: {
-                                            const feels = root.number(backend.current, "apparentTemperature", NaN)
-                                            return Number.isFinite(feels) ? Math.round(feels) + "°" : "—"
                                         }
                                     }
                                 }
