@@ -3166,14 +3166,7 @@ KosApplicationWindow {
                                                     Layout.fillWidth: true
                                                     Layout.preferredHeight: 20
 
-                                                    Rectangle {
-                                                        anchors.verticalCenter: parent.verticalCenter
-                                                        width: parent.width
-                                                        height: 5
-                                                        radius: 2.5
-                                                        color: Qt.rgba(1, 1, 1, 0.28)
-                                                    }
-
+                                                    // ref-main 实测：10 天行无灰色轨道——渐变段单独落在 [uMin,uMax]，轨道位置为纯卡面色（Thu 行 x702-714 = (42,109,179)）
                                                     Rectangle {
                                                         anchors.verticalCenter: parent.verticalCenter
                                                         x: parent.width * dailyRow.uMin
