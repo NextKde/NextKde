@@ -39,6 +39,24 @@ if(_kwin_effecthandler)
         # ⚠️ 不能依赖构建缓存：干净配置丢这个定义 = STAGE_LIVE_CONTENT_RENDER=0
         # 静默编译成静态玻璃卡（2026-10-09 实锤本机缓存路径）
         target_compile_definitions(stageanim13 PRIVATE ANLAND_KWIN_67)
+        # 6.8 把 ItemRendererOpenGL 构造从 EglDisplay* 改成 RenderDevice*
+        #（RenderBackend::renderDevice() 公开访问器）。探测头文件选路径
+        set(_iro_header "")
+        foreach(_dir IN LISTS _kwin_include_dirs)
+            if(EXISTS "${_dir}/scene/itemrenderer_opengl.h")
+                set(_iro_header "${_dir}/scene/itemrenderer_opengl.h")
+                break()
+            endif()
+        endforeach()
+        if(_iro_header)
+            file(READ "${_iro_header}" _iro_src)
+            if(_iro_src MATCHES "ItemRendererOpenGL\\(RenderDevice")
+                message(STATUS "KWin API: ItemRendererOpenGL takes RenderDevice (6.8)")
+                target_compile_definitions(stageanim13 PRIVATE STAGE_RENDERER_RENDERDEVICE_API)
+            else()
+                message(STATUS "KWin API: ItemRendererOpenGL takes EglDisplay (6.7)")
+            endif()
+        endif()
     endif()
 endif()
 

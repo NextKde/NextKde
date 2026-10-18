@@ -2057,11 +2057,12 @@ void StageAnimEffect::renderLiveTexture(LiveCard &card)
     RenderViewport viewport(src, scale, renderTarget, QPoint());
 #if STAGE_LIVE_CONTENT_RENDER_67
     if (!m_itemRenderer67) {
-#ifdef KOS_KWIN_PAINT_RESULT_API
-        auto *device = Compositor::self()->primaryDevice();
-        if (!device)
-            return;
-        m_itemRenderer67 = new ItemRendererOpenGL(device);
+#if defined(STAGE_RENDERER_RENDERDEVICE_API)
+        // KWin 6.8：构造收 RenderDevice（EglDisplay 由其持有），
+        // 经公开的 RenderBackend::renderDevice() 取当前后端设备
+        m_itemRenderer67 = new ItemRendererOpenGL(
+            Compositor::self()->backend()->renderDevice());
+        qCDebug(STAGEANIM_LOG) << "6.8 itemrenderer created";
 #else
         ::EGLDisplay ed = eglGetCurrentDisplay();
         if (!ed)
@@ -2071,8 +2072,8 @@ void StageAnimEffect::renderLiveTexture(LiveCard &card)
             exts = QByteArray(e).split(' ');
         m_eglDisplay67 = new EglDisplay(ed, exts, nullptr);
         m_itemRenderer67 = new ItemRendererOpenGL(m_eglDisplay67);
-#endif
         qCDebug(STAGEANIM_LOG) << "6.7 itemrenderer created";
+#endif
     }
     m_itemRenderer67->beginFrame(renderTarget, viewport);
     glClearColor(0.0f, 0.0f, 0.0f, 0.0f);

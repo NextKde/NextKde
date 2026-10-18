@@ -17,7 +17,11 @@
 #include "opengl/gltexture.h"
 #if defined(ANLAND_KWIN_67) && !defined(KOS_KWIN_PAINT_TIME_API)
 #include "scene/itemrenderer.h"
+#if defined(STAGE_RENDERER_RENDERDEVICE_API)
+#include "core/renderbackend.h"
+#else
 #include "opengl/egldisplay.h"
+#endif
 #endif
 
 // 6.6 公开的离屏渲染入口（Compositor::scene()->renderer()）在 6.7+ 被收进
@@ -307,7 +311,10 @@ private:
     QPointF m_cursorHotspot;
 #if STAGE_LIVE_CONTENT_RENDER_67
     ItemRenderer *m_itemRenderer67 = nullptr;
-    EglDisplay *m_eglDisplay67 = nullptr;
+#if defined(ANLAND_KWIN_67) && !defined(KOS_KWIN_PAINT_TIME_API) \
+    && !defined(STAGE_RENDERER_RENDERDEVICE_API)
+    EglDisplay *m_eglDisplay67 = nullptr; // 6.8 走 RenderDevice 路径不需要
+#endif
 #endif
     bool m_liveEnabled = true; // kwinrc LiveCards 总闸（默认开，排障用）
 };
