@@ -2306,6 +2306,176 @@ KosApplicationWindow {
 
                                 ScrollBar.horizontal: ScrollBar {}
 
+                                // ref-main（参考图）Conditions 卡本无温度曲线；本条系 TASK.md
+                                // 用户裁定（2026-10-18）按 Apple Weather 惯例外推。
+                                // 布局适配：委托列实际占 content y 84..122（温度文字 84..93、
+                                // ☂行 115..122，Pillow 实测），真实空档为 94..114，曲线带据此落位。
+                                // 层位：Canvas 位于 Flickable 内容区内部、Row 之前声明（先声明者
+                                // 先画、z 序在下），随 contentX 一起横滚覆盖逐小时列。
+                                Canvas {
+                                    id: hourlyCurve
+
+                                    readonly property int bandTop: 97
+                                    readonly property int bandInner: 15
+                                    readonly property int bandBottom: 113
+
+                                    // draw-on 揭示动画：0..1，1 = 完整曲线。1000ms 系外推：
+                                    // 内容揭示类动效，HIG 环境量级（阶段三 B.6，用户裁定 1）。
+                                    property real drawProgress: 1.0
+                                    Behavior on drawProgress {
+                                        id: drawProgressBehavior
+                                        NumberAnimation { duration: 1000; easing.type: Easing.OutCubic }
+                                    }
+
+                                    function replayDraw() {
+                                        if (AppTheme.reduceMotion) {
+                                            // reduce-motion：永远完整曲线，动画不跑
+                                            drawProgressBehavior.enabled = false
+                                            drawProgress = 1
+                                            drawProgressBehavior.enabled = true
+                                            requestPaint()
+                                            return
+                                        }
+                                        // 先在 Behavior 关闭时归零（保证落 0），再开启 Behavior
+                                        // 写 1 触发 0→1 动画；同块直写 0 再写 1 会被 Behavior
+                                        // 重定向为 1→1 而吞掉动画。
+                                        drawProgressBehavior.enabled = false
+                                        drawProgress = 0
+                                        requestPaint()
+                                        drawProgressBehavior.enabled = true
+                                        drawProgress = 1
+                                    }
+
+                                    x: 0
+                                    y: 0
+                                    width: hourlyRow.implicitWidth
+                                    height: 142
+                                    antialiasing: true
+                                    visible: hourlySegmented.segment === 0
+                                    Accessible.ignored: true
+
+                                    onWidthChanged: requestPaint()
+                                    onDrawProgressChanged: requestPaint()
+                                    Component.onCompleted: replayDraw()
+
+                                    Connections {
+                                        target: root
+                                        function onUpcomingHoursChanged() {
+                                            hourlyCurve.replayDraw()
+                                        }
+                                    }
+
+                                    Connections {
+                                        target: hourlySegmented
+                                        function onSegmentChanged() {
+                                            if (hourlySegmented.segment === 0)
+                                                hourlyCurve.replayDraw()
+                                        }
+                                    }
+
+                                    onPaint: {
+                                        var ctx = hourlyCurve.getContext("2d")
+                                        ctx.clearRect(0, 0, hourlyCurve.width, hourlyCurve.height)
+                                        if (hourlyCurve.drawProgress <= 0)
+                                            return
+                                        var pts = []
+                                        for (var i = 0; i < root.upcomingHours.length; ++i) {
+                                            var t = root.number(root.upcomingHours[i], "temperature", NaN)
+                                            if (isFinite(t))
+                                                pts.push({ x: 54 + i * 118, t: t })
+                                        }
+                                        if (pts.length < 2)
+                                            return
+                                        var minT = pts[0].t
+                                        var maxT = pts[0].t
+                                        for (var j = 1; j < pts.length; ++j) {
+                                            minT = Math.min(minT, pts[j].t)
+                                            maxT = Math.max(maxT, pts[j].t)
+                                        }
+                                        function yFor(t) {
+                                            if (maxT === minT)
+                                                return hourlyCurve.bandTop + hourlyCurve.bandInner / 2
+                                            return hourlyCurve.bandTop
+                                                + (1 - (t - minT) / (maxT - minT)) * hourlyCurve.bandInner
+                                        }
+                                        var ys = []
+                                        for (var k = 0; k < pts.length; ++k)
+                                            ys.push(yFor(pts[k].t))
+
+                                        // 把二次贝塞尔路径展平为稠密折线，便于按累计弧长截断
+                                        var samples = [{ x: pts[0].x, y: ys[0] }]
+                                        for (var m = 1; m < pts.length - 1; ++m) {
+                                            var p0x = samples[samples.length - 1].x
+                                            var p0y = samples[samples.length - 1].y
+                                            var cx = pts[m].x
+                                            var cy = ys[m]
+                                            var p1x = (pts[m].x + pts[m + 1].x) / 2
+                                            var p1y = (ys[m] + ys[m + 1]) / 2
+                                            for (var s = 1; s <= 16; ++s) {
+                                                var u = s / 16
+                                                var a = (1 - u) * (1 - u)
+                                                var b = 2 * (1 - u) * u
+                                                var c = u * u
+                                                samples.push({
+                                                    x: a * p0x + b * cx + c * p1x,
+                                                    y: a * p0y + b * cy + c * p1y
+                                                })
+                                            }
+                                        }
+                                        samples.push({
+                                            x: pts[pts.length - 1].x,
+                                            y: ys[ys.length - 1]
+                                        })
+
+                                        var total = 0
+                                        var segLen = []
+                                        for (var d = 1; d < samples.length; ++d) {
+                                            var len = Math.hypot(samples[d].x - samples[d - 1].x,
+                                                                 samples[d].y - samples[d - 1].y)
+                                            segLen.push(len)
+                                            total += len
+                                        }
+                                        var budget = total * Math.min(1, Math.max(0, hourlyCurve.drawProgress))
+                                        var cutX = samples[samples.length - 1].x
+                                        var cutY = samples[samples.length - 1].y
+                                        var cutIdx = samples.length - 1
+                                        if (budget < total) {
+                                            var acc = 0
+                                            for (var e = 0; e < segLen.length; ++e) {
+                                                if (acc + segLen[e] >= budget) {
+                                                    var f = segLen[e] > 0 ? (budget - acc) / segLen[e] : 0
+                                                    cutX = samples[e].x + (samples[e + 1].x - samples[e].x) * f
+                                                    cutY = samples[e].y + (samples[e + 1].y - samples[e].y) * f
+                                                    cutIdx = e
+                                                    break
+                                                }
+                                                acc += segLen[e]
+                                            }
+                                        }
+
+                                        ctx.beginPath()
+                                        ctx.moveTo(samples[0].x, samples[0].y)
+                                        for (var g = 1; g <= cutIdx; ++g)
+                                            ctx.lineTo(samples[g].x, samples[g].y)
+                                        ctx.lineTo(cutX, cutY)
+
+                                        ctx.strokeStyle = "rgba(255,255,255,0.85)"
+                                        ctx.lineWidth = 2
+                                        ctx.lineJoin = "round"
+                                        ctx.lineCap = "round"
+                                        ctx.stroke()
+
+                                        var grad = ctx.createLinearGradient(0, hourlyCurve.bandTop, 0, hourlyCurve.bandBottom)
+                                        grad.addColorStop(0, "rgba(255,255,255,0.20)")
+                                        grad.addColorStop(1, "rgba(255,255,255,0)")
+                                        ctx.lineTo(cutX, hourlyCurve.bandBottom)
+                                        ctx.lineTo(samples[0].x, hourlyCurve.bandBottom)
+                                        ctx.closePath()
+                                        ctx.fillStyle = grad
+                                        ctx.fill()
+                                    }
+                                }
+
                                 Row {
                                     id: hourlyRow
                                     height: parent.height - 12
@@ -2422,88 +2592,6 @@ KosApplicationWindow {
                                             }
                                         }
                                     }
-                            }
-
-                            // ref-main（参考图）Conditions 卡本无温度曲线；本条系 TASK.md
-                            // 用户裁定（2026-10-18）按 Apple Weather 惯例外推。
-                            // 布局适配：委托列实际占 content y 84..122（温度文字 84..93、
-                            // ☂行 115..122，Pillow 实测），真实空档为 94..114，曲线带据此落位。
-                            Canvas {
-                                id: hourlyCurve
-
-                                readonly property int bandTop: 97
-                                readonly property int bandInner: 15
-                                readonly property int bandBottom: 113
-
-                                x: 0
-                                y: 0
-                                width: hourlyRow.implicitWidth
-                                height: 142
-                                antialiasing: true
-                                visible: hourlySegmented.segment === 0
-                                Accessible.ignored: true
-
-                                onWidthChanged: requestPaint()
-                                Component.onCompleted: requestPaint()
-
-                                Connections {
-                                    target: root
-                                    function onUpcomingHoursChanged() {
-                                        hourlyCurve.requestPaint()
-                                    }
-                                }
-
-                                onPaint: {
-                                    var ctx = hourlyCurve.getContext("2d")
-                                    ctx.clearRect(0, 0, hourlyCurve.width, hourlyCurve.height)
-                                    var pts = []
-                                    for (var i = 0; i < root.upcomingHours.length; ++i) {
-                                        var t = root.number(root.upcomingHours[i], "temperature", NaN)
-                                        if (isFinite(t))
-                                            pts.push({ x: 54 + i * 118, t: t })
-                                    }
-                                    if (pts.length < 2)
-                                        return
-                                    var minT = pts[0].t
-                                    var maxT = pts[0].t
-                                    for (var j = 1; j < pts.length; ++j) {
-                                        minT = Math.min(minT, pts[j].t)
-                                        maxT = Math.max(maxT, pts[j].t)
-                                    }
-                                    function yFor(t) {
-                                        if (maxT === minT)
-                                            return hourlyCurve.bandTop + hourlyCurve.bandInner / 2
-                                        return hourlyCurve.bandTop
-                                            + (1 - (t - minT) / (maxT - minT)) * hourlyCurve.bandInner
-                                    }
-                                    var ys = []
-                                    for (var k = 0; k < pts.length; ++k)
-                                        ys.push(yFor(pts[k].t))
-
-                                    ctx.beginPath()
-                                    ctx.moveTo(pts[0].x, ys[0])
-                                    for (var m = 1; m < pts.length - 1; ++m) {
-                                        var midX = (pts[m].x + pts[m + 1].x) / 2
-                                        var midY = (ys[m] + ys[m + 1]) / 2
-                                        ctx.quadraticCurveTo(pts[m].x, ys[m], midX, midY)
-                                    }
-                                    ctx.lineTo(pts[pts.length - 1].x, ys[ys.length - 1])
-
-                                    ctx.strokeStyle = "rgba(255,255,255,0.85)"
-                                    ctx.lineWidth = 2
-                                    ctx.lineJoin = "round"
-                                    ctx.lineCap = "round"
-                                    ctx.stroke()
-
-                                    var grad = ctx.createLinearGradient(0, hourlyCurve.bandTop, 0, hourlyCurve.bandBottom)
-                                    grad.addColorStop(0, "rgba(255,255,255,0.20)")
-                                    grad.addColorStop(1, "rgba(255,255,255,0)")
-                                    ctx.lineTo(pts[pts.length - 1].x, hourlyCurve.bandBottom)
-                                    ctx.lineTo(pts[0].x, hourlyCurve.bandBottom)
-                                    ctx.closePath()
-                                    ctx.fillStyle = grad
-                                    ctx.fill()
-                                }
                             }
                                 }
                         }
