@@ -226,6 +226,40 @@ KosApplicationWindow {
         return clouds
     }
 
+    // Static faint cloud band for the clear night sky, added per user ruling
+    // 2026-10-18. No night reference image exists (refs are day-only), so
+    // geometry/opacity is a programmatic approximation: 4 flatter wisps
+    // (height = width * 0.24) at much lower opacity than the day band, since
+    // the night sky is dark and the clouds must stay subtle. Purely
+    // decorative, static texture, never animated (reduce-motion safe by
+    // construction, no frame-diff obligation).
+    readonly property var nightClearClouds: {
+        const random = mulberry32(20261021)
+        const clouds = []
+        for (let index = 0; index < 4; index++) {
+            const cloudWidth = 340 + random() * 180
+            const puffs = []
+            for (let puff = 0; puff < 5; puff++) {
+                puffs.push({
+                    cxRatio: 0.1 + random() * 0.8,
+                    cyRatio: 0.3 + random() * 0.4,
+                    rRatio: 0.28 + random() * 0.22,
+                    alphaMul: 0.6 + random() * 0.4
+                })
+            }
+            puffs.sort(function(a, b) { return a.cxRatio - b.cxRatio })
+            clouds.push({
+                xRatio: random(),
+                yRatio: index * 0.085 + random() * 0.04,
+                cloudWidth: cloudWidth,
+                cloudHeight: cloudWidth * 0.24,
+                opacity: 0.16 - index * 0.035 + random() * 0.02,
+                puffs: puffs
+            })
+        }
+        return clouds
+    }
+
     function skyStopsFor(code, isDay) {
         const c = Number(code)
         if (!isDay) {
@@ -608,6 +642,68 @@ KosApplicationWindow {
                         to: modelData.baseOpacity
                         duration: modelData.twinkleMs / 2
                         easing.type: Easing.InOutSine
+                    }
+                }
+            }
+        }
+    }
+
+    // Static procedural faint cloud band for the clear night sky (see
+    // nightClearClouds), added per user ruling 2026-10-18. No night reference
+    // image exists (refs are day-only), so geometry/opacity is a programmatic
+    // approximation. Deliberately placed after starFieldLayer so the clouds
+    // occlude the twinkling stars (real-world ordering). Static texture,
+    // never animated (reduce-motion safe by construction, no frame-diff
+    // obligation).
+    Item {
+        id: nightClearCloudLayer
+        anchors.fill: parent
+        visible: root.nightClearSky
+        clip: true
+        readonly property real cloudLeft:
+            root.compact ? AppTheme.compactSidebarWidth : AppTheme.sidebarWidth
+
+        Repeater {
+            model: root.nightClearClouds
+
+            delegate: Item {
+                id: nightClearCloud
+                required property var modelData
+
+                x: nightClearCloudLayer.cloudLeft
+                   + (nightClearCloudLayer.width - nightClearCloudLayer.cloudLeft - width)
+                     * modelData.xRatio
+                y: (nightClearCloudLayer.height - height) * modelData.yRatio
+                width: modelData.cloudWidth
+                height: modelData.cloudHeight
+                opacity: modelData.opacity
+                Accessible.ignored: true
+
+                Canvas {
+                    anchors.fill: parent
+                    onWidthChanged: requestPaint()
+                    onHeightChanged: requestPaint()
+                    onPaint: {
+                        const ctx = getContext("2d")
+                        ctx.clearRect(0, 0, width, height)
+                        for (let i = 0; i < modelData.puffs.length; i++) {
+                            const p = modelData.puffs[i]
+                            const cx = p.cxRatio * width
+                            const cy = p.cyRatio * height
+                            // Keep the gradient inside the canvas: alpha must
+                            // reach 0 before any clipped edge, otherwise puffs
+                            // show hard rectangular borders.
+                            const r = Math.max(Math.min(p.rRatio * height * 1.2,
+                                                        cy, height - cy,
+                                                        cx, width - cx), 8)
+                            const grad = ctx.createRadialGradient(cx, cy, 0, cx, cy, r)
+                            grad.addColorStop(0, "rgba(255,255,255," + p.alphaMul.toFixed(3) + ")")
+                            grad.addColorStop(1, "rgba(255,255,255,0)")
+                            ctx.fillStyle = grad
+                            ctx.beginPath()
+                            ctx.arc(cx, cy, r, 0, Math.PI * 2)
+                            ctx.fill()
+                        }
                     }
                 }
             }
