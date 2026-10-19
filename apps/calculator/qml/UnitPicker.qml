@@ -429,7 +429,7 @@ Item {
             x: root.footerLeft
             y: root.footerTop + root.footerInkDrop
                - (baselineOffset + footerMetrics.tightBoundingRect.y)
-            text: root.source
+            text: root.source.length > 0 ? qsTr("离线参考汇率") : ""
             color: root.colors.pickerCode
             font.pixelSize: root.footerFont
         }
@@ -438,7 +438,7 @@ Item {
             id: footerUpdated
             y: footerSource.y
             width: parent.width - root.footerRightInset
-            text: root.updated.length > 0 ? qsTr("%1 更新").arg(root.updated) : ""
+            text: root.updated.length > 0 ? qsTr("快照：%1").arg(root.updated) : ""
             color: root.colors.pickerCode
             font.pixelSize: root.footerFont
             horizontalAlignment: Text.AlignRight
