@@ -38,19 +38,20 @@ git diff --cached --stat        # confirm what is actually staged
 
 ---
 
-## 2. 提交前本地测试必须全部通过
+## 2. 合并与发布前必须通过验证
 
 **中文**
 
-提交前必须在本地把测试跑一遍，**全部通过才能提交**。跑不过就修到过为止；确实修不了的，
-不要提交，并把失败输出留在 `tmp/`。
+验证在专用虚拟机或托管 CI 中执行，**全部通过才能合并或发布**。候选提交可以推送以运行
+CI；出现失败时继续修复，并把失败输出留在 `tmp/`。
 
 ```bash
-./tools/run-tests.sh            # 数据/服务层测试（提交前必须过）
+./tools/run-tests.sh            # 数据/服务层测试（合并与发布前必须过）
 ```
 
-`./tools/run-tests.sh` 是测试的唯一入口，本地与 CI 跑的是同一条命令
-（CI 见 `.github/workflows/tests.yml`，跑 `data` + `platform` 两层）。默认只跑**数据/服务层** ——
+验证只在专用虚拟机或托管 CI 执行。候选提交可以推送以触发 CI，合并和发布前必须通过检查。
+`./tools/run-tests.sh` 是核心测试入口，CI 使用同一份 CTest 注册
+（见 `.github/workflows/tests.yml`，覆盖 `data`、`platform`、`logic` 和 `headless`）。默认只跑**数据/服务层** ——
 这层不需要显示环境，是"不能崩"的部分，也是 CI 会验的部分：
 
 ```bash
@@ -61,8 +62,9 @@ git diff --cached --stat        # confirm what is actually staged
 ```
 
 - 改了 `platform/`、C++ 或 Go：加 `--layer platform`。
-- 改了 QML / 界面：加 `--all`。界面层需要 QML 引擎，面板测试还需要合成器 —— **CI 容器里跑不了**，
-  所以它们只在本地生效。
+- 改了 QML / 界面：在虚拟机加 `--all`。无界面 UI 子集在 CI 执行，需要真实合成器的用例在 VM 图形会话执行。
+- CI 另有日历、计算器、天气和待办的应用构建/测试，以及 KWin 6.6、6.7、6.8 的完整 SDK 矩阵。
+  每个 SDK 构建全部插件和 Glass 特效、执行离线测试并检查官方头文件；这些不能替代真实桌面加载验收。
 - 另有三条轻量检查，同样必须过：
 
 ```bash
@@ -73,15 +75,15 @@ python3 tools/check-docs.py
 
 **English**
 
-Run the tests locally before committing, and **commit only once they all pass**. If a test fails,
-fix it; if you genuinely cannot, do not commit — keep the failing output in `tmp/` instead.
+Run verification only in a dedicated VM or hosted CI. Candidate commits may be pushed to trigger
+CI; merge and release only after the required checks pass. Preserve failing output in `tmp/`.
 
 ```bash
-./tools/run-tests.sh            # data/service layer tests (must pass before committing)
+./tools/run-tests.sh            # data/service layer tests (must pass before merging/releasing)
 ```
 
-`./tools/run-tests.sh` is the single entry point for tests: local development and CI run the exact
-same command (CI is `.github/workflows/tests.yml`, running the `data` and `platform` layers). By
+`./tools/run-tests.sh` is the core test entry point. CI uses the same CTest registrations
+(`.github/workflows/tests.yml`, covering `data`, `platform`, `logic`, and `headless`). By
 default it runs only the **data/service layer** — that layer needs no display, it is the "must not
 crash" part, and it is what CI verifies:
 
@@ -93,8 +95,11 @@ crash" part, and it is what CI verifies:
 ```
 
 - Platform, C++ or Go changes: add `--layer platform`.
-- QML / UI changes: add `--all`. The UI layer needs a QML engine and the panel tests need a
-  compositor — **CI containers cannot run them**, so they only take effect locally.
+- QML / UI changes: run `--all` in the VM. CI runs the offscreen subset; compositor-dependent
+  tests require a real VM graphical session.
+- CI also builds/tests Calendar, Calculator, Weather and Todo. Full KWin 6.6, 6.7 and 6.8 SDK jobs
+  build every plugin and Glass, run offline regressions and check official headers. Real desktop
+  plugin loading still requires separate VM acceptance.
 - Three lightweight checks must also pass:
 
 ```bash
