@@ -165,21 +165,14 @@ Item {
     property bool scrimPearl: false
     readonly property int scrimTint: scrimTintOverride >= 0
         ? scrimTintOverride
-        : (AppearanceConfigService.glassFollowsAppearanceMode
-            ? (AppearanceTokens.isDarkTheme ? 0 : 1)
-            : 0) // 0 = black, 1 = white
+        : GlassBackdrop.defaultScrimTint // 0 = black, 1 = white
 
     // Named presets concretize the readability/transparency tradeoff as one
     // ceiling (cap) plus a per-surface calm factor (decay). "custom" ignores
-    // these and takes the explicit scrimCap/scrimDecay verbatim.
-    readonly property real _presetCap: scrimLevel === "readable" ? 0.72
-        : scrimLevel === "balanced" ? 0.47
-        : scrimLevel === "transparent" ? 0.22
-        : scrimLevel === "subtle" ? 0.15 : 0.5
-    readonly property real _presetDecay: scrimLevel === "readable" ? 1.0
-        : scrimLevel === "balanced" ? 0.75
-        : scrimLevel === "transparent" ? 0.5
-        : scrimLevel === "subtle" ? 0.45 : 1.0
+    // these and takes the explicit scrimCap/scrimDecay verbatim. The table
+    // lives on GlassBackdrop so the QML fallback resolves the same numbers.
+    readonly property real _presetCap: GlassBackdrop.scrimCap(scrimLevel)
+    readonly property real _presetDecay: GlassBackdrop.scrimDecay(scrimLevel)
     readonly property real _effectiveScrimCap:
         scrimLevel === "custom" ? scrimCap : _presetCap
     readonly property real _effectiveScrimDecay:

@@ -43,10 +43,18 @@ Rectangle {
     // Null keeps the previous behaviour exactly.
     property Item backdropItem: GlassBackdrop.sourceItem
     property bool scrimEnabled: false
+    // Named readability/transparency tradeoff. "custom" (the default) takes
+    // scrimCap/scrimDecay verbatim and keeps every older caller unchanged;
+    // any preset name resolves through the shared KWin table on GlassBackdrop.
+    property string scrimLevel: "custom"
     property real scrimCap: 0.5
     property real scrimDecay: 1.0
-    property int scrimTint: 0
+    property int scrimTint: GlassBackdrop.defaultScrimTint
     property real scrimOpacity: 1.0
+    readonly property real _effectiveScrimCap:
+        scrimLevel === "custom" ? scrimCap : GlassBackdrop.scrimCap(scrimLevel)
+    readonly property real _effectiveScrimDecay:
+        scrimLevel === "custom" ? scrimDecay : GlassBackdrop.scrimDecay(scrimLevel)
     property int _sceneRevision: 0
     readonly property bool sceneSampling: backdropItem !== null
         && !usesMaterialSurface && visible && width > 0 && height > 0
@@ -264,8 +272,8 @@ Rectangle {
         property color tintColor: root.sceneTintColor
         property real tintStrength: root.sceneTintStrength
         property real scrimEnabled: root.scrimEnabled ? 1.0 : 0.0
-        property real scrimCap: root.scrimCap
-        property real scrimDecay: root.scrimDecay
+        property real scrimCap: root._effectiveScrimCap
+        property real scrimDecay: root._effectiveScrimDecay
         property real scrimTint: root.scrimTint
         property real surfaceOpacity: root.surfaceOpacity
         property real blurScale: root.normalizedBlurStrength
