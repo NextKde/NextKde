@@ -131,6 +131,12 @@ Current operation groups are:
   per-application PipeWire/PulseAudio sink-input control), `bluetooth.*`, `display.*`, `session.*`,
   `theme.*`, and `screenshot.*`
 
+`network.details {device}` includes `macAddress` from NetworkManager's device
+properties alongside `ipv4`, `ssid`, `connectionName` and `signalStrength`.
+An unavailable hardware address is an empty string. `network.traffic` counters
+are interface lifetime bytes, not per-process totals; a UI may subtract a local
+reset baseline without changing the counters or network configuration.
+
 KWin events are sent to subscribers as `window.snapshot`, `desktops`,
 `thumbnail`, `animation.started`, and related event names. KWin's internal script-to-daemon channel
 continues to use the session D-Bus service `org.kos.Platform` at `/Platform`;
