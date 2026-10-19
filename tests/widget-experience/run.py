@@ -62,7 +62,10 @@ def run():
                        XDG_STATE_HOME=str(root / "state"), XDG_RUNTIME_DIR=str(root / "runtime"),
                        KOS_PLATFORM_SOCKET=str(root / "platform.sock"),
                        KOS_DATA_SOCKET=str(root / "absent-data.sock"),
-                       QT_QPA_PLATFORM="wayland")
+                       QT_QPA_PLATFORM="wayland",
+                       # These assertions inspect the legacy blur-region transport.
+                       # Keep them stable when the compositor also advertises v8.
+                       KOS_SURFACE_SHAPE_MAX_VERSION="7")
             # First load migrates grayscale -> glass. The second must respect
             # an explicit colour widget style despite those same legacy icons.
             for expected in ["glass", "color"]:

@@ -26,7 +26,10 @@ def run(verify_wayland=False):
         env = dict(os.environ, XDG_CONFIG_HOME=str(root / "config"),
                    XDG_STATE_HOME=str(root / "state"), XDG_RUNTIME_DIR=str(root / "runtime"),
                    KOS_PLATFORM_SOCKET=str(root / "no-platform.sock"),
-                   KOS_DATA_SOCKET=str(root / "no-data.sock"), QT_QPA_PLATFORM="wayland")
+                   KOS_DATA_SOCKET=str(root / "no-data.sock"), QT_QPA_PLATFORM="wayland",
+                   # This fixture checks explicit legacy blur-region lifetime.
+                   # v8 uses independent SurfaceShape declarations instead.
+                   KOS_SURFACE_SHAPE_MAX_VERSION="7")
         if verify_wayland:
             env["WAYLAND_DEBUG"] = "client"
         try:
