@@ -37,21 +37,21 @@ Item {
                     text: modelData.label || modelData.id || I18n.tr("Display")
                     elide: Text.ElideRight
                     color: AppearanceTokens.content.glassInk()
-                    font { pixelSize: 11; weight: Font.DemiBold; family: "Noto Sans CJK SC" }
+                    font { pixelSize: 11; weight: Font.DemiBold; family: AppearanceTokens.typography.textFamily }
                 }
                 GlassText {
                     id: displayBrightnessPercent
                     anchors { right: parent.right; top: parent.top }
                     text: Math.round(displayBrightnessRow.preview) + "%"
                     color: AppearanceTokens.content.glassInk()
-                    font { pixelSize: 10; family: "Noto Sans CJK SC" }
+                    font { pixelSize: 10; family: AppearanceTokens.typography.textFamily }
                 }
                 GlassText {
                     anchors { left: parent.left; top: parent.top; topMargin: 20 }
                     text: modelData.isInternal
                         ? I18n.tr("Built-in display") : I18n.tr("External display")
                     color: AppearanceTokens.content.glassInk()
-                    font { pixelSize: 9; family: "Noto Sans CJK SC" }
+                    font { pixelSize: 9; family: AppearanceTokens.typography.textFamily }
                 }
                 ControlCenterSlider {
                     anchors { left: parent.left; right: parent.right; bottom: parent.bottom; bottomMargin: 3 }
@@ -76,7 +76,7 @@ Item {
         visible: brightnessSubmenuView.service.brightnessDisplays.length === 0
         text: I18n.tr("No brightness-adjustable displays found")
         color: AppearanceTokens.content.glassInk()
-        font { pixelSize: 11; family: "Noto Sans CJK SC" }
+        font { pixelSize: 11; family: AppearanceTokens.typography.textFamily }
     }
 
     Item {
@@ -91,7 +91,7 @@ Item {
             anchors { left: parent.left; leftMargin: 16; verticalCenter: parent.verticalCenter }
             text: I18n.tr("Display settings…")
             color: AppearanceTokens.content.glassInk()
-            font { pixelSize: 11; weight: Font.DemiBold; family: "Noto Sans CJK SC" }
+            font { pixelSize: 11; weight: Font.DemiBold; family: AppearanceTokens.typography.textFamily }
         }
         GlassText {
             anchors { right: parent.right; rightMargin: 16; verticalCenter: parent.verticalCenter }

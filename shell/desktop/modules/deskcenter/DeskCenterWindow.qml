@@ -889,7 +889,7 @@ PanelWindow {
                             anchors.centerIn: parent
                             text: root.formattedTimer()
                             color: "white"
-                            font { family: "SF Pro Display"; pixelSize: Math.min(16, timerDial.width * 0.15); weight: Font.Medium }
+                            font { family: AppearanceTokens.typography.displayFamily; pixelSize: Math.min(16, timerDial.width * 0.15); weight: Font.Medium }
                         }
                     }
                     Row {
@@ -1189,7 +1189,7 @@ PanelWindow {
                         text: "ϟ"
 	                        color: AppearanceTokens.content.ink("#e0ccff", 0.68)
                         opacity: 0.68
-                        font { family: "SF Pro Display"; pixelSize: 42; weight: Font.DemiBold }
+                        font { family: AppearanceTokens.typography.displayFamily; pixelSize: 42; weight: Font.DemiBold }
                     }
                 }
                 Text {
@@ -1206,7 +1206,7 @@ PanelWindow {
                     // short cards never push the glyph box into the forecast row
                     // (issue #205). Tall cards keep the authored 42 px.
                     font {
-                        family: "SF Pro Display"
+                        family: AppearanceTokens.typography.displayFamily
                         pixelSize: Math.min(42, parent.height * 0.32,
                             Math.max(16, (parent.height - weeklyForecast.height - 38) / 1.5))
                         weight: Font.Normal
@@ -1481,7 +1481,7 @@ PanelWindow {
                             text: activityRings.labels[activityRings.hoveredMetric] + " "
                                 + Math.round(activityRings.values[activityRings.hoveredMetric] * 100) + "%"
 	                            color: AppearanceTokens.content.ink("#7d7782")
-                            font { family: "SF Pro Display"; pixelSize: Math.max(8, activityRings.width * 0.075); weight: Font.DemiBold }
+                            font { family: AppearanceTokens.typography.displayFamily; pixelSize: Math.max(8, activityRings.width * 0.075); weight: Font.DemiBold }
                         }
                     }
 
@@ -1533,7 +1533,7 @@ PanelWindow {
                                 text: temperatureSummary.available
                                     ? Math.round(temperatureSummary.currentC) + "°" : "--"
 	                                color: AppearanceTokens.content.ink("#7d7782")
-                                font { family: "SF Pro Display"; pixelSize: Math.max(10, temperatureSummary.height * 0.42); weight: Font.DemiBold }
+                                font { family: AppearanceTokens.typography.displayFamily; pixelSize: Math.max(10, temperatureSummary.height * 0.42); weight: Font.DemiBold }
                             }
                             Text {
                                 text: I18n.tr("Now")
@@ -1553,7 +1553,7 @@ PanelWindow {
                                 text: temperatureSummary.available
                                     ? Math.round(temperatureSummary.maximum5MinuteC) + "°" : "--"
 	                                color: AppearanceTokens.content.ink("#7d7782")
-                                font { family: "SF Pro Display"; pixelSize: Math.max(10, temperatureSummary.height * 0.42); weight: Font.DemiBold }
+                                font { family: AppearanceTokens.typography.displayFamily; pixelSize: Math.max(10, temperatureSummary.height * 0.42); weight: Font.DemiBold }
                             }
                             Text {
                                 text: I18n.tr("High")
@@ -1671,7 +1671,7 @@ PanelWindow {
                                     : I18n.tr("Uptime: %1").arg(root.formatDuration(
                                         root.activityUsage.uptimeByDay[root.activityUsage.dayKey(Date.now())] ?? 0))
 	                                        color: AppearanceTokens.content.ink(Qt.rgba(1, 1, 1, 0.86), 0.86)
-                                font { family: "SF Pro Display"; pixelSize: 14; weight: Font.DemiBold }
+                                font { family: AppearanceTokens.typography.displayFamily; pixelSize: 14; weight: Font.DemiBold }
                             }
                         }
                         Item {
@@ -1753,7 +1753,7 @@ PanelWindow {
                                         anchors { right: appUsageRow.right; verticalCenter: appUsageRow.verticalCenter }
                                         text: root.formatDuration(modelData.seconds)
 	                                        color: AppearanceTokens.content.ink(Qt.rgba(1, 1, 1, 0.46), 0.46)
-                                        font { family: "SF Pro Display"; pixelSize: 9 }
+                                        font { family: AppearanceTokens.typography.displayFamily; pixelSize: 9 }
                                     }
                                     Text {
                                         anchors { left: appUsageIcon.right; right: appDurationText.left; verticalCenter: appUsageRow.verticalCenter; leftMargin: 6; rightMargin: 6 }
@@ -1916,7 +1916,7 @@ PanelWindow {
                             x: offsets[index]
                             text: modelData
                             color: AppearanceTokens.surface.pick(AppearanceTokens.colors.tertiary, Qt.rgba(1, 1, 1, 0.60))
-                            font { family: "SF Pro Display"; pixelSize: index === 1 ? 18 : 14; weight: Font.DemiBold }
+                            font { family: AppearanceTokens.typography.displayFamily; pixelSize: index === 1 ? 18 : 14; weight: Font.DemiBold }
                             SequentialAnimation on y {
                                 running: musicNotes.running
                                 loops: Animation.Infinite
@@ -1988,7 +1988,7 @@ PanelWindow {
 	                                visible: !musicContent.hasPlayer
                                 text: "♫"
                                 color: Qt.rgba(1, 1, 1, 0.46)
-                                font { family: "SF Pro Display"; pixelSize: musicArtwork.width * 0.42 }
+                                font { family: AppearanceTokens.typography.displayFamily; pixelSize: musicArtwork.width * 0.42 }
                             }
                         }
                     }
@@ -2406,7 +2406,7 @@ PanelWindow {
                     anchors { left: parent.left; top: parent.top; leftMargin: 15; topMargin: calendarContent.headerHeight + 7 }
                     text: I18n.fmt(calendarClock.dayDate, I18n.tr("d"))
 	                    color: AppearanceTokens.content.ink("#15151a")
-                    font { family: "SF Pro Display"; pixelSize: 32; weight: Font.DemiBold }
+                    font { family: AppearanceTokens.typography.displayFamily; pixelSize: 32; weight: Font.DemiBold }
                 }
                 Text {
                     anchors { left: parent.left; top: parent.top; leftMargin: 16; topMargin: calendarContent.headerHeight + 46 }
@@ -3863,7 +3863,7 @@ PanelWindow {
                             }
                             visible: parent.folderCustom && parent.folderCustom.emoji
                             text: parent.folderCustom ? parent.folderCustom.emoji : ""
-                            font { family: "Noto Color Emoji"; pixelSize: desktopFileGrid.iconSize * 0.36 }
+                            font { family: AppearanceTokens.typography.emojiFamily; pixelSize: desktopFileGrid.iconSize * 0.36 }
                         }
                     }
                     IconImage {

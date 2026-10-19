@@ -124,7 +124,7 @@ Item {
                     .arg(root.currentC).arg(root.maximum5MinuteC)
                 color: ThemeService.foregroundColor
                 font {
-                    family: "Noto Sans CJK SC"
+                    family: AppearanceTokens.typography.textFamily
                     pixelSize: 12
                     weight: Font.DemiBold
                 }
@@ -195,14 +195,14 @@ Item {
                         GlassText {
                             text: I18n.tr("Temperature Sensors")
                             color: ThemeService.foregroundColor
-                            font { family: "Noto Sans CJK SC"; pixelSize: 16; weight: Font.DemiBold }
+                            font { family: AppearanceTokens.typography.textFamily; pixelSize: 16; weight: Font.DemiBold }
                         }
 
                         GlassText {
                             text: I18n.tr("Updates every 10 s · %1 readings")
                                 .arg(MetricsService.sensors.length)
                             color: Qt.rgba(ThemeService.foregroundColor.r, ThemeService.foregroundColor.g, ThemeService.foregroundColor.b, 0.62)
-                            font { family: "Noto Sans CJK SC"; pixelSize: 11 }
+                            font { family: AppearanceTokens.typography.textFamily; pixelSize: 11 }
                         }
                     }
 
@@ -307,7 +307,7 @@ Item {
                             text: I18n.tr("Memory trend · last %1 s")
                                 .arg(MetricsService.memoryHistory.length * 10)
                             color: Qt.rgba(ThemeService.foregroundColor.r, ThemeService.foregroundColor.g, ThemeService.foregroundColor.b, 0.62)
-                            font { family: "Noto Sans CJK SC"; pixelSize: 10 }
+                            font { family: AppearanceTokens.typography.textFamily; pixelSize: 10 }
                         }
                         UsageSparkline { width: parent.width; values: MetricsService.memoryHistoryValues; lineColor: "#5e5ce6"; adaptiveRange: true }
                     }
@@ -319,7 +319,7 @@ Item {
                                 .arg(Math.round(MetricsService.cpuUsage * 100))
                                 .arg(MetricsService.cpuHistory.length * 10)
                             color: Qt.rgba(ThemeService.foregroundColor.r, ThemeService.foregroundColor.g, ThemeService.foregroundColor.b, 0.62)
-                            font { family: "Noto Sans CJK SC"; pixelSize: 10 }
+                            font { family: AppearanceTokens.typography.textFamily; pixelSize: 10 }
                         }
                         UsageSparkline { width: parent.width; values: MetricsService.cpuHistoryValues; lineColor: "#ff9f0a" }
                     }
@@ -333,7 +333,7 @@ Item {
                             .arg(Math.round(MetricsService.cpuFrequencyMhz))
                             .arg(MetricsService.frequencyHistory.length * 10)
                         color: Qt.rgba(ThemeService.foregroundColor.r, ThemeService.foregroundColor.g, ThemeService.foregroundColor.b, 0.62)
-                        font { family: "Noto Sans CJK SC"; pixelSize: 10 }
+                        font { family: AppearanceTokens.typography.textFamily; pixelSize: 10 }
                     }
                     UsageSparkline {
                         width: parent.width
@@ -346,7 +346,7 @@ Item {
                 GlassText {
                     text: I18n.tr("Live readings")
                     color: ThemeService.foregroundColor
-                    font { family: "Noto Sans CJK SC"; pixelSize: 12; weight: Font.DemiBold }
+                    font { family: AppearanceTokens.typography.textFamily; pixelSize: 12; weight: Font.DemiBold }
                 }
 
                 ListView {
@@ -368,14 +368,14 @@ Item {
                             elide: Text.ElideRight
                             text: modelData.device + " · " + modelData.label
                             color: ThemeService.foregroundColor
-                            font { family: "Noto Sans CJK SC"; pixelSize: 12 }
+                            font { family: AppearanceTokens.typography.textFamily; pixelSize: 12 }
                         }
                         GlassText {
                             id: valueText
                             anchors { right: parent.right; rightMargin: 10; verticalCenter: parent.verticalCenter }
                             text: (modelData.milliC / 1000).toFixed(1) + "°C"
                             color: modelData.milliC >= 85000 ? "#ff453a" : modelData.milliC >= 70000 ? "#ff9f0a" : ThemeService.foregroundColor
-                            font { family: "SF Pro Display"; pixelSize: 13; weight: Font.DemiBold }
+                            font { family: AppearanceTokens.typography.displayFamily; pixelSize: 13; weight: Font.DemiBold }
                         }
                     }
                 }

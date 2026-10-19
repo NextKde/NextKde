@@ -80,7 +80,7 @@ PopupWindow {
             text: tooltip.targetIcon ? tooltip.targetIcon.displayName : ""
             color: ThemeService.foregroundColor
             font {
-                family: "Noto Sans CJK SC, sans-serif"
+                family: AppearanceTokens.typography.textChain
                 pixelSize: 11
                 weight: Font.DemiBold
             }

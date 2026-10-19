@@ -25,6 +25,7 @@ singleton AppPresentationService 1.0 AppPresentationService.qml
 singleton AppActionService 1.0 AppActionService.qml
 singleton MetricsService 1.0 MetricsService.qml
 singleton IconThemeReloadService 1.0 IconThemeReloadService.qml
+singleton SystemFontService 1.0 SystemFontService.qml
 singleton BundledIcons 1.0 BundledIcons.qml
 singleton SystemIconResolver 1.0 SystemIconResolver.qml
 singleton TrayAttentionService 1.0 TrayAttentionService.qml

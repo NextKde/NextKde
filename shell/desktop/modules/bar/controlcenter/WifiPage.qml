@@ -23,13 +23,13 @@ Item {
                 anchors.horizontalCenter: parent.horizontalCenter
                 text: I18n.tr("Wi‑Fi is off")
                 color: AppearanceTokens.content.glassInk()
-                font { pixelSize: 14; weight: Font.Bold; family: "Noto Sans CJK SC" }
+                font { pixelSize: 14; weight: Font.Bold; family: AppearanceTokens.typography.textFamily }
             }
             GlassText {
                 anchors.horizontalCenter: parent.horizontalCenter
                 text: I18n.tr("Turn on the switch above to see nearby networks")
                 color: AppearanceTokens.content.glassInk()
-                font { pixelSize: 12; weight: Font.DemiBold; family: "Noto Sans CJK SC" }
+                font { pixelSize: 12; weight: Font.DemiBold; family: AppearanceTokens.typography.textFamily }
             }
         }
     }
@@ -54,7 +54,7 @@ Item {
                 anchors { left: parent.left; verticalCenter: parent.verticalCenter }
                 text: I18n.tr("Nearby Networks")
                 color: AppearanceTokens.content.glassInk()
-                font { pixelSize: 11; weight: Font.Bold; family: "Noto Sans CJK SC" }
+                font { pixelSize: 11; weight: Font.Bold; family: AppearanceTokens.typography.textFamily }
             }
 
             GlassText {
@@ -62,7 +62,7 @@ Item {
                 visible: wifiSubmenuView.network.wifiScanInProgress
                 text: I18n.tr("Scanning…")
                 color: AppearanceTokens.content.glassInk()
-                font { pixelSize: 10; weight: Font.DemiBold; family: "Noto Sans CJK SC" }
+                font { pixelSize: 10; weight: Font.DemiBold; family: AppearanceTokens.typography.textFamily }
             }
         }
 
@@ -140,7 +140,7 @@ Item {
                     font {
                         pixelSize: 12
                         weight: modelData.active ? Font.Bold : Font.DemiBold
-                        family: "Noto Sans CJK SC"
+                        family: AppearanceTokens.typography.textFamily
                     }
                 }
 
@@ -194,7 +194,7 @@ Item {
                             anchors.centerIn: parent
                             text: I18n.tr("Disconnect")
                             color: AppearanceTokens.content.glassInk()
-                            font { pixelSize: 10; weight: Font.DemiBold; family: "Noto Sans CJK SC" }
+                            font { pixelSize: 10; weight: Font.DemiBold; family: AppearanceTokens.typography.textFamily }
                         }
                         MouseArea {
                             anchors.fill: parent
@@ -241,7 +241,7 @@ Item {
                 visible: submenuWifiList.count === 0 && !wifiSubmenuView.network.wifiScanInProgress
                 text: I18n.tr("No Wi‑Fi networks detected")
                 color: AppearanceTokens.content.glassInk()
-                font { pixelSize: 12; weight: Font.DemiBold; family: "Noto Sans CJK SC" }
+                font { pixelSize: 12; weight: Font.DemiBold; family: AppearanceTokens.typography.textFamily }
             }
 
             KosKineticScroll { flickable: submenuWifiList }
@@ -263,7 +263,7 @@ Item {
             anchors { left: parent.left; leftMargin: 16; verticalCenter: parent.verticalCenter }
             text: I18n.tr("Network settings…")
             color: AppearanceTokens.content.glassInk()
-            font { pixelSize: 12; weight: Font.Bold; family: "Noto Sans CJK SC" }
+            font { pixelSize: 12; weight: Font.Bold; family: AppearanceTokens.typography.textFamily }
         }
 
         GlassText {

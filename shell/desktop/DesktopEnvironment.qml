@@ -247,6 +247,10 @@ Item {
     // publishes again once its config is ready and the transport reconnects.
     Component.onCompleted: {
         IconThemeReloadService.initialize()
+        // Watch kdeglobals so 使用系统字体 follows a font changed in System
+        // Settings without restarting the shell, and so the first value is
+        // available before any surface binds its family.
+        SystemFontService.initialize()
         ShortcutsService.applyToPlatform()
         // Warm the theme pack scan at startup: a persisted pack themeId is
         // validated against installed packs on every shell start, and the
@@ -486,6 +490,11 @@ Item {
                 barMacTint: AppearanceConfigService.barMacTint,
                 dockWindowAnimationStyle:
                     AppearanceConfigService.dockWindowAnimationStyle,
+                useSystemFont: AppearanceConfigService.useSystemFont,
+                // The family the desktop would draw with, so the Settings page
+                // can name it instead of describing the option in the abstract.
+                // This is kdeglobals' [General] font= family, resolved.
+                systemFontFamily: SystemFontService.family,
                 // Same reason as materialColorSwatches above: these are arrays,
                 // and a plain JSON string crosses the hand-written C++ whitelist
                 // with no conversion left to get wrong. They carry the *hidden*
@@ -607,6 +616,14 @@ Item {
 
         function updateDockWindowAnimationStyle(style: string): string {
             AppearanceConfigService.updateDockWindowAnimationStyle(style)
+            return snapshot()
+        }
+
+        // 使用系统字体. The family itself is not written here: it is KDE's, read
+        // live from kdeglobals by SystemFontService, so the page only toggles
+        // which of the two families the desktop draws with.
+        function updateUseSystemFont(enabled: bool): string {
+            AppearanceConfigService.updateUseSystemFont(enabled)
             return snapshot()
         }
 
