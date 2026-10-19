@@ -74,6 +74,12 @@ if(BUILD_TESTING)
                     ${CMAKE_CURRENT_SOURCE_DIR}/tests/dock/${suite}.test.mjs)
             set_tests_properties(kos-dock.${suite} PROPERTIES LABELS logic TIMEOUT 30)
         endforeach()
+        # Regression: material-style Dock showed two overlapping tooltips. The
+        # popup's active condition must stay decoupled from magnification.
+        add_test(NAME kos-dock.tooltip-mutex
+            COMMAND ${KOS_NODE_EXECUTABLE}
+                ${CMAKE_CURRENT_SOURCE_DIR}/tests/dock/tooltip-mutex.test.mjs)
+        set_tests_properties(kos-dock.tooltip-mutex PROPERTIES LABELS logic TIMEOUT 10)
         add_test(NAME kos-applauncher.screen-routing
             COMMAND ${KOS_NODE_EXECUTABLE}
                 --test ${CMAKE_CURRENT_SOURCE_DIR}/tests/applauncher/screen-routing.test.mjs)
