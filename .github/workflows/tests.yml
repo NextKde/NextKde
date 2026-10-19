@@ -24,6 +24,10 @@ jobs:
       - uses: actions/checkout@v7
       - name: Test release selection without installing the desktop
         run: python3 -m unittest discover -s tools/tests -p 'test_*release*.py'
+      - name: Check project contracts and documentation
+        run: |
+          python3 platform/tests/test_contract.py
+          python3 tools/check-docs.py
 
   tests:
     name: data + platform + logic + headless
