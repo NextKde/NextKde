@@ -15,6 +15,7 @@ let
   };
   kos-platform = pkgs.callPackage ./kos-platform.nix { inherit src; };
   kos-surface-shape = pkgs.callPackage ./kos-surface-shape.nix { inherit src; };
+  kos-forma-network = pkgs.callPackage ./kos-forma-network.nix { inherit src; };
   kos-spatial3d = pkgs.callPackage ./kos-spatial3d.nix { inherit src; };
   kwin-dock-window-animation = pkgs.callPackage ./kwin-dock-window-animation.nix { inherit src; };
   kwin-stage-animation = pkgs.callPackage ./kwin-stage-animation.nix { inherit src; };
@@ -96,6 +97,7 @@ stdenv.mkDerivation {
     mkdir -p $out/qml/Kos
     ln -s ${kos-spatial3d}/lib/qt6/qml/Kos/Spatial3D $out/qml/Kos/Spatial3D
     ln -s ${kos-surface-shape}/lib/qt6/qml/Kos/SurfaceShape $out/qml/Kos/SurfaceShape
+    ln -s ${kos-forma-network}/lib/qt6/qml/Kos/FormaNetwork $out/qml/Kos/FormaNetwork
 
     # --- KWin bridge script ---
     mkdir -p $out/share/kos/platform/kwin
@@ -135,7 +137,7 @@ stdenv.mkDerivation {
   '';
 
   passthru = {
-    inherit shell-data-service kos-settings kos-platform kos-spatial3d kos-surface-shape kosctl
+    inherit shell-data-service kos-settings kos-platform kos-spatial3d kos-surface-shape kos-forma-network kosctl
             kwin-dock-window-animation kwin-stage-animation kwin-context-menu-input kwin-effects-glass
             kwin-kos-bridge kwin-kos-decoration;
     inherit patched-platform-service patched-shell-service;

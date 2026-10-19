@@ -314,6 +314,7 @@ NetworkWorkerResult networkDetailsWorker(const QString &device)
                              {QStringLiteral("connectionName"), connectionName},
                              {QStringLiteral("ssid"), ssid},
                              {QStringLiteral("ipv4"), ipv4},
+                             {QStringLiteral("macAddress"), found.value(QStringLiteral("HwAddress")).toString()},
                              {QStringLiteral("signalStrength"), signalStrength}};
     out.ok = true;
     out.watchPaths = watched.values();

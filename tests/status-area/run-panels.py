@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Exercise real status panels, including rendered frames; --opengl tests GPU resize regressions."""
+"""Exercise real status panels with GPU-backed original Forma components."""
 import os
 from pathlib import Path
 import re
@@ -14,6 +14,7 @@ REPO = Path(__file__).resolve().parents[2]
 
 def main():
     opengl = '--opengl' in sys.argv
+    vulkan = '--vulkan' in sys.argv
     if '--private-bus' not in sys.argv:
         with tempfile.TemporaryDirectory(prefix='kos-status-panels-bus-') as directory:
             config = Path(directory) / 'bus.conf'
@@ -34,24 +35,24 @@ def main():
         shutil.copy(Path(__file__).with_name('panels.qml'), root / 'shell.qml')
         shutil.copy(Path(__file__).with_name('PlatformFixture.qml'),
             root / 'desktop/modules/platform/PlatformClient.qml')
-        qml_path = os.environ.get('QML_IMPORT_PATH', str(REPO / 'build/qml'))
+        qml_path = os.environ.get('QML_IMPORT_PATH', str(REPO / '.build/kosctl/qml'))
         env = dict(os.environ, XDG_RUNTIME_DIR=str(root / 'runtime'),
             XDG_CONFIG_HOME=str(root / 'config'), XDG_STATE_HOME=str(root / 'state'),
             XDG_CACHE_HOME=str(root / 'cache'), XDG_DATA_HOME=str(root / 'data'),
             KOS_PLATFORM_SOCKET=str(root / 'no-platform.sock'),
             KOS_DATA_SOCKET=str(root / 'no-data.sock'), WAYLAND_DISPLAY='status-panels-test',
-            DISPLAY='', QT_QPA_PLATFORM='wayland', QT_QUICK_BACKEND='software',
+            DISPLAY='', QT_QPA_PLATFORM='wayland', QT_FORCE_STDERR_LOGGING='1',
             QML_IMPORT_PATH=qml_path, QML2_IMPORT_PATH=qml_path)
-        if opengl:
-            env.pop('QT_QUICK_BACKEND', None)
-            env['QSG_RHI_BACKEND'] = 'opengl'
+        env.pop('QT_QUICK_BACKEND', None)
+        env['QSG_RHI_BACKEND'] = 'vulkan' if vulkan else 'opengl'
+        env['QSG_RENDER_LOOP'] = 'threaded'
         if '--scale-2' in sys.argv:
             env['QT_SCALE_FACTOR'] = '2'
         with (root / 'kwin.log').open('w+') as log:
             compositor = subprocess.Popen(['kwin_wayland', '--virtual', '--width', '1280',
                 '--height', '900', '--output-count', '2', '--no-lockscreen', '--no-global-shortcuts', '--no-kactivities',
                 '--socket', 'status-panels-test'],
-                env=dict(env, QT_QPA_PLATFORM='offscreen', KWIN_COMPOSE='O2' if opengl else 'Q'), stdout=log, stderr=log)
+                env=dict(env, QT_QPA_PLATFORM='offscreen', KWIN_COMPOSE='O2'), stdout=log, stderr=log)
             try:
                 for _ in range(100):
                     if (root / 'runtime/status-panels-test').exists():
@@ -79,7 +80,7 @@ def main():
         assert not re.search(r'STATUS_PANELS_FAIL|ReferenceError|TypeError|'
             r'Cannot assign|Unable to assign|Binding loop|is not a type|is not a function', output), output
         count = re.search(r'STATUS_PANELS_PASS (\d+) checks', output).group(1)
-        backend = 'OpenGL' if opengl else 'software'
+        backend = 'Vulkan' if vulkan else 'OpenGL'
         print(f'PASS ({backend}): {count} checks: rendered summary/details/collapse, stable surface size, secondary-screen placement and confirmed power changes')
 
 

@@ -58,7 +58,7 @@ is_nixos() {
 # is needed only while compositor plugins are enabled.
 arch_core_build_packages=(
     quickshell cmake ninja gcc qt6-base qt6-declarative qt6-tools qt6-translations qt6-quick3d qt6-svg qt6-imageformats qt6-5compat qt6-wayland go curl
-    extra-cmake-modules wayland
+    extra-cmake-modules wayland qt6-shadertools sdl3 freetype2 pkgconf
     kwindowsystem kiconthemes kglobalaccel kio patchelf
 )
 # The depth engine and 3D wallpaper plugin follow KOS_BUILD_SPATIAL.
@@ -86,6 +86,7 @@ debian_core_build_packages=(
     extra-cmake-modules libwayland-dev wayland-protocols libxkbcommon-dev
     qt6-base-dev qt6-declarative-dev qt6-tools-dev qt6-l10n-tools qt6-translations-l10n qt6-quick3d-dev qt6-svg-dev qt6-wayland-dev
     qt6-image-formats-plugins qt6-5compat-dev libqt6svg6
+    qt6-base-private-dev libqt6shadertools6-dev qt6-shader-baker libsdl3-dev libfreetype-dev libgl-dev
     qml6-module-qtquick qml6-module-qtquick-controls qml6-module-qtquick-layouts
     qml6-module-qtquick-dialogs qml6-module-qtquick-window qml6-module-qtquick-effects
     qml6-module-qtqml-models qml6-module-qtqml-workerscript
@@ -964,6 +965,10 @@ deploy_artifacts() {
     if [[ -d "$artifact_root/qml/Kos/SurfaceShape" ]]; then
         rm -rf "$shell_config/Kos/SurfaceShape"
         cp -rL --no-preserve=mode "$artifact_root/qml/Kos/SurfaceShape" "$shell_config/Kos/"
+    fi
+    if [[ -d "$artifact_root/qml/Kos/FormaNetwork" ]]; then
+        rm -rf "$shell_config/Kos/FormaNetwork"
+        cp -rL --no-preserve=mode "$artifact_root/qml/Kos/FormaNetwork" "$shell_config/Kos/"
     fi
     # Optional Qt Quick 3D mesh geometry used by the spatial wallpaper layer.
     if [[ -d "$artifact_root/qml/Kos/Spatial3D" ]]; then

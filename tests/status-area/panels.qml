@@ -1,6 +1,7 @@
 import QtQuick
 import Quickshell
 import Quickshell.Services.UPower
+import qs.shared.qml.i18n
 import qs.desktop.modules.bar
 import qs.desktop.modules.common
 import qs.desktop.modules.platform
@@ -19,6 +20,9 @@ ShellRoot {
         const surface = find(traffic.contentItem, "traffic-panel-surface")
         check(surface.grabToImage(function(result) {
             check(String(result.url).length > 0, "traffic frame has image data")
+            const captureDir = Quickshell.env("KOS_STATUS_CAPTURE_DIR")
+            if (captureDir) check(result.saveToFile(captureDir + "/traffic-" + fixture.stage + ".png"),
+                "production native traffic panel capture is saved")
             done()
         }), "traffic frame capture can be scheduled")
     }
@@ -58,6 +62,7 @@ ShellRoot {
                 || (fixture.stage === 5 && !fixture.collapsedRendered)) return
             fixture.stage++
             if (fixture.stage === 1) {
+                I18n.language = "zh-CN"
                 PowerProfileService.platform = PlatformClient
                 NetworkService.available = true
                 NetworkService.deviceState = "connected"
@@ -77,6 +82,9 @@ ShellRoot {
                 fixture.check(battery.targetScreen === ScreenLifecycle.activeScreen, "unanchored battery has fallback")
                 NetworkService.trafficSampled("test0",1024,256)
                 fixture.check(traffic.downloadHistory[traffic.downloadHistory.length - 1] === 1024, "completed sample updates graph")
+                fixture.check(traffic.nativeView.snapshot.translations.Network === "网络"
+                    && traffic.nativeView.snapshot.translations.UP === "已连接",
+                    "Chinese catalog reaches native headings and status badges")
                 fixture.summaryHeight = traffic.surfaceHeight
                 fixture.captureFrame(function() { fixture.summaryRendered = true })
             } else if (fixture.stage === 3) {
@@ -88,16 +96,24 @@ ShellRoot {
                 const surface = find(traffic.contentItem, "traffic-panel-surface")
                 fixture.check(traffic.mask.item === surface && surface.height <= traffic.height,
                     "unused window space is outside the input region")
-                const rows = find(traffic.contentItem, "traffic-application-list")
-                fixture.check(rows !== null && rows.visible, "process rows become visible")
+                fixture.check(traffic.nativeView.detailsExpanded
+                    && traffic.nativeView.snapshot.applications.length > 0,
+                    "process samples reach the native Forma component tree")
+                fixture.check(traffic.nativeView.nativeComponentCount > 100,
+                    "the production panel uses original Forma layout and controls")
+                fixture.check(traffic.nativeView.renderedPixelSize.width >= traffic.width,
+                    "the native target is not a smaller bitmap scaled up")
                 fixture.captureFrame(function() { fixture.detailsRendered = true })
             } else if (fixture.stage === 5) {
+                I18n.language = "en"
                 traffic.detailsExpanded = false
                 traffic.refreshApplications()
                 fixture.check(PlatformClient.applicationRequests === 1, "collapsed details stop process requests")
                 NetworkService.trafficSampled("test0",2048,512)
                 fixture.captureFrame(function() { fixture.collapsedRendered = true })
             } else if (fixture.stage === 6) {
+                fixture.check(traffic.nativeView.snapshot.translations.Network === "Network",
+                    "open native panel follows runtime language changes")
                 fixture.check(traffic.surfaceHeight === fixture.summaryHeight, "collapse restores compact card height")
                 fixture.check(traffic.implicitHeight === fixture.openingHeight, "collapse preserves Wayland surface size")
                 traffic.detailsExpanded = true
