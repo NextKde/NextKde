@@ -281,6 +281,13 @@ Item {
         surfaceOpacity: root.surfaceOpacity
         tonalOpacity: root.tonalOpacity
         adaptiveDarkScrim: root.adaptiveDarkScrim
+        // The QML fallback's in-scene scrim uses the same preset values the
+        // compositor path publishes above, so the two finishes agree on how
+        // strongly a backdrop is compressed.
+        scrimEnabled: root.scrimEnabled && !root.useKwinEffect
+        scrimCap: root._effectiveScrimCap * Math.max(0, Math.min(1, root.scrimOpacity))
+        scrimDecay: root._effectiveScrimDecay * Math.max(0, Math.min(1, root.scrimOpacity))
+        scrimTint: root.scrimTint
         bottomEdgeVisible: root.bottomEdgeVisible
         bottomShadeVisible: root.bottomShadeVisible
 

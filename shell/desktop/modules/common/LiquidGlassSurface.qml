@@ -36,6 +36,38 @@ Rectangle {
     // continuous dark scrim that becomes stronger only near white/black
     // wallpaper, keeping ordinary imagery visibly behind the glass.
     property bool adaptiveDarkScrim: false
+    // ---- in-scene backdrop sampling (QML fallback only) ------------------
+    // A host can point this at a sibling item -- usually a hidden copy of the
+    // scene backdrop. When set and KWin is not owning the finish, the body is
+    // sampled from that item and compressed with KWin's adaptiveScrim curve.
+    // Null keeps the previous behaviour exactly.
+    property Item backdropItem: GlassBackdrop.sourceItem
+    property bool scrimEnabled: false
+    property real scrimCap: 0.5
+    property real scrimDecay: 1.0
+    property int scrimTint: 0
+    property real scrimOpacity: 1.0
+    property int _sceneRevision: 0
+    readonly property bool sceneSampling: backdropItem !== null
+        && !usesMaterialSurface && visible && width > 0 && height > 0
+    readonly property rect sceneSourceRect: {
+        const revision = _sceneRevision
+        if (!backdropItem)
+            return Qt.rect(0, 0, 0, 0)
+        const p = mapToItem(backdropItem, 0, 0)
+        return Qt.rect(p.x, p.y, width, height)
+    }
+    readonly property color sceneTintColor: Qt.rgba(
+        baseColor.r * (1.0 - ambientBaseMix) + _displayAmbientPrimary.r * ambientBaseMix,
+        baseColor.g * (1.0 - ambientBaseMix) + _displayAmbientPrimary.g * ambientBaseMix,
+        baseColor.b * (1.0 - ambientBaseMix) + _displayAmbientPrimary.b * ambientBaseMix,
+        1.0)
+    readonly property real sceneTintStrength:
+        Math.min(1.0, baseColor.a * materialOpacityScale) * normalizedBlurStrength
+    onXChanged: _sceneRevision++
+    onYChanged: _sceneRevision++
+    onWidthChanged: _sceneRevision++
+    onHeightChanged: _sceneRevision++
     // Some lightweight surfaces (for example notification cards) should keep
     // the upper reflection without the heavier bottom inset edge.
     property bool bottomEdgeVisible: true
@@ -185,7 +217,7 @@ Rectangle {
     // it. Kept as one expression so the fill and its alpha cannot drift apart.
     readonly property real tonalPlateOpacity: tonalOpacity >= 0
         ? Math.min(1.0, tonalOpacity) : AppearanceTokens.surface.panelOpacity
-    color: usesMaterialSurface
+    color: sceneSampling ? "transparent" : usesMaterialSurface
         ? Qt.rgba(materialSurfaceColor.r, materialSurfaceColor.g,
             materialSurfaceColor.b, tonalPlateOpacity)
         : Qt.rgba(
@@ -196,13 +228,47 @@ Rectangle {
                 * surfaceOpacity * root.normalizedBlurStrength
         )
 
+    // In-scene capture. hideSource keeps the host's sample copy out of the
+    // normal scene; the texture is still rendered for every glass surface.
+    ShaderEffectSource {
+        id: sceneCapture
+        sourceItem: root.backdropItem
+        sourceRect: root.sceneSourceRect
+        textureSize: Qt.size(
+            Math.max(1, Math.round(root.width / 6)),
+            Math.max(1, Math.round(root.height / 6)))
+        wrapMode: ShaderEffectSource.ClampToEdge
+        live: true
+        hideSource: root.backdropItem !== null
+        visible: false
+    }
+
+    ShaderEffect {
+        anchors.fill: parent
+        visible: root.sceneSampling
+        fragmentShader: Qt.resolvedUrl("../../shaders/scene_liquid.frag.qsb")
+
+        property variant source: sceneCapture
+        property vector2d surfaceSize: Qt.vector2d(root.width, root.height)
+        property real radius: root.radius
+        property color tintColor: root.sceneTintColor
+        property real tintStrength: root.sceneTintStrength
+        property real scrimEnabled: root.scrimEnabled ? 1.0 : 0.0
+        property real scrimCap: root.scrimCap
+        property real scrimDecay: root.scrimDecay
+        property real scrimTint: root.scrimTint
+        property real surfaceOpacity: root.surfaceOpacity
+        property real blurScale: root.normalizedBlurStrength
+    }
+
     // Reinforce the side of the material opposite its foreground ink. A light
     // lift supports dark labels; a dark scrim supports white labels. This is
     // the static QML counterpart of Liquid Glass's dynamic-range adaptation.
     Rectangle {
         anchors.fill: parent
         radius: root.radius
-        visible: !root.usesMaterialSurface && root.adaptiveScrimOpacity > 0.001
+        visible: !root.sceneSampling && !root.usesMaterialSurface
+            && root.adaptiveScrimOpacity > 0.001
         color: root.estimatedMaterialLuminance >= 0.58
             ? Qt.rgba(1, 1, 1, root.adaptiveScrimOpacity * 0.72)
             : Qt.rgba(0.018, 0.028, 0.052, root.adaptiveScrimOpacity)
