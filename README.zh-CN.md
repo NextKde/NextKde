@@ -28,6 +28,11 @@
 KOS 是 KDE Plasma 6 Wayland 上的 Quickshell 桌面 Shell。它提供顶部栏、Dock、
 启动器、搜索、通知和设置界面；KDE、KWin、NetworkManager 等系统组件仍然保留。
 
+源码版本选择需要 Git 和 Python 3.9+。发布与维护规则见 [发布流程](docs/Releasing.md)。只维护最新正式版。
+目前尚未建立正式版基线；默认 `update` 会明确停止。愿意使用开发版时，
+将其改为 `./tools/kosctl update main`；Debian 安装器使用 `--version main`。
+切换源码后还需要执行安装；`./tools/kosctl version` 分别显示部署与源码版本。
+
 ## 从零开始
 
 ### 1. 准备环境
@@ -295,13 +300,14 @@ Calendar、Todo、Weather 和 ListenFree 是独立的可选应用，不由默认
 ```sh
 git clone https://github.com/SuceV587/NextKde.git
 cd NextKde
+./tools/kosctl update  # 最新正式版；失败后不要继续执行安装步骤
 ```
 
 ### 3. 检查并安装
 
 ```sh
 ./tools/kosctl doctor
-./tools/kosctl install
+./tools/kosctl install &&
 ./tools/kosctl start
 ```
 
@@ -397,7 +403,7 @@ NixOS 声明式服务需先在配置中关闭 `services.kos.enable` 并重新构
 清理完成后重新登录或重启，再执行：
 
 ```sh
-./tools/kosctl install
+./tools/kosctl install &&
 ./tools/kosctl start
 ```
 
@@ -418,8 +424,8 @@ NixOS 声明式服务需先在配置中关闭 `services.kos.enable` 并重新构
 ### 更新到新版本
 
 ```sh
-git pull
-./tools/kosctl install
+./tools/kosctl update &&
+./tools/kosctl install &&
 ./tools/kosctl start
 ```
 
@@ -458,7 +464,7 @@ KOS 前的值（plasmashell 在下次登录时重新加载原来的 shell）；�
 
 ```nix
 nextkde = {
-  url = "git+https://github.com/SuceV587/NextKde.git";
+  url = "git+https://github.com/SuceV587/NextKde.git?ref=main"; # development; pin a published tag for releases
   inputs.nixpkgs.follows = "nixpkgs";
 };
 ```
@@ -581,7 +587,7 @@ QML 改动在 `kosctl dev` 下即时生效（见上文）。要发布到已安�
 修改 C++、Go 或 KWin 插件后：
 
 ```sh
-./tools/kosctl install
+./tools/kosctl install &&
 ./tools/kosctl start
 ```
 

@@ -235,3 +235,13 @@ git diff origin/main HEAD --stat     # empty output = equivalent tree ⇒ stale 
 **English**
 
 `-a` sweeps every tracked change into the commit and bypasses the check in section 1.
+
+## 8. 发布与版本维护 / Releases
+
+只维护最新正式版；发布分支仅收修复，main 继续开发。流程、版本说明模板及虚拟机验收见
+[docs/Releasing.md](docs/Releasing.md)。发布验证及本指南中的测试/检查只在专用虚拟机
+或托管 CI 执行，不在维护者本机执行；这条环境约定优先于前文“本地测试”的措辞。
+
+Only the latest official release is maintained. See [Releasing](docs/Releasing.md).
+Run verification and the checks above in a dedicated VM or hosted CI, never on the
+maintainer's workstation; this overrides the earlier wording about local tests.

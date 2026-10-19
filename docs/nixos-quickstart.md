@@ -6,6 +6,14 @@ KOS 提供了专门针对 NixOS 的控制接口，简化了在 NixOS 上的安�
 
 ## 安装
 
+只维护最新正式版，见 [发布流程](Releasing.md)。目前尚未建立正式版基线，
+下面明确使用 main 开发版。正式版发布后，将输入 URL 的 `ref=main` 改为真实的
+`ref=vX.Y.Z`（占位符不可直接使用），执行 `nix flake update nextkde` 并按下文重建。
+保留 flake.lock 固定提交；新正式版发布后需要主动修改 Tag 并更新 lock 文件。
+Nix 包读取根目录 VERSION，`kosctl version` 显示包版本与可获得的构建提交号。
+Nix store 中的 kosctl 不用于切换源码；通过 flake 输入升级。
+
+
 ### 方法 1: 使用 NixOS 模块 (推荐)
 
 1. 在你的 `flake.nix` 中添加 KOS 作为输入:
@@ -15,7 +23,7 @@ KOS 提供了专门针对 NixOS 的控制接口，简化了在 NixOS 上的安�
   inputs = {
     # ... 其他输入
     nextkde = {
-      url = "git+https://github.com/SuceV587/NextKde.git";
+      url = "git+https://github.com/SuceV587/NextKde.git?ref=main"; # 当前显式选择开发版
       inputs.nixpkgs.follows = "nixpkgs";
     };
   };
@@ -46,6 +54,7 @@ sudo nixos-rebuild switch
 ```bash
 git clone https://github.com/SuceV587/NextKde.git
 cd NextKde
+./tools/kosctl update main # 显式选择开发版；有正式版后用 update
 ./tools/nix-start.sh start
 ```
 
