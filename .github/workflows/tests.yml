@@ -19,7 +19,7 @@ permissions:
 jobs:
   tests:
     name: data + platform + logic + headless
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
 
     # Arch, not Ubuntu: `tools/kosctl` provisions `arch_core_build_packages`
     # from `pacman`, and this image gives those packages the same names and the
@@ -32,7 +32,7 @@ jobs:
       - name: Install git
         run: pacman -Sy --noconfirm --needed git
 
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       # node and python drive the platform layer without a display. Building
       # the platform also builds its AI worker, which requires OpenCV and the
@@ -57,7 +57,7 @@ jobs:
       # build root, but the ctest entry point overrides it with an absolute
       # path, so the script's directory and every sibling of it stay empty.
       - name: Mount Go test cache
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: .build/tests/services/data-service/go-test-cache
           key: gocache-${{ runner.os }}-${{ hashFiles('services/data-service/go.sum') }}
@@ -109,7 +109,7 @@ jobs:
 
       - name: Upload test reports and diagnostics
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: test-results
           include-hidden-files: true
@@ -121,7 +121,7 @@ jobs:
 
   kwin-plugins:
     name: KWin plugins compile and offline checks
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
 
     container: archlinux:base-devel
 
@@ -129,7 +129,7 @@ jobs:
       - name: Install git
         run: pacman -Sy --noconfirm --needed git
 
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       # The four plugins under kwin/ and shell/native
       # pull their own dependencies on top of the core set: `KWin` and
