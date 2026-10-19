@@ -160,8 +160,14 @@ jobs:
         run: |
           printf 'Server = https://archive.archlinux.org/repos/%s/$repo/os/$arch\n' \
             "$ARCH_SNAPSHOT" > /etc/pacman.d/mirrorlist
-          pacman -Syyuu --noconfirm --ignore archlinux-keyring
-          pacman -S --noconfirm --needed git
+          for attempt in 1 2 3; do
+            if pacman -Syyuu --noconfirm --disable-download-timeout \
+                --ignore archlinux-keyring git; then
+              break
+            fi
+            test "$attempt" -lt 3 || exit 1
+            sleep 5
+          done
 
       - uses: actions/checkout@v7
 
@@ -173,7 +179,7 @@ jobs:
       # protocol-generation dependencies from tools/kosctl as well.
       - name: Install plugin build dependencies
         run: |
-          pacman -S --noconfirm --needed \
+          pacman -S --noconfirm --needed --disable-download-timeout \
             cmake ninja gcc \
             qt6-base qt6-declarative qt6-wayland qt6-tools qt6-translations \
             extra-cmake-modules kwin kconfig ki18n kguiaddons kcmutils \

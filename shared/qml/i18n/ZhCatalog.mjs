@@ -3,6 +3,14 @@
 // 规则：值必须与改造前界面上的中文逐字一致（含空格、间隔符与省略号），
 // 改动文案时同步更新对应键，不要只改一边。
 export const catalog = {
+    "New Moon": "新月",
+    "Waxing Crescent": "蛾眉月",
+    "First Quarter": "上弦月",
+    "Waxing Gibbous": "盈凸月",
+    "Full Moon": "满月",
+    "Waning Gibbous": "亏凸月",
+    "Last Quarter": "下弦月",
+    "Waning Crescent": "残月",
     "Process traffic": "进程流量",
     "Visible TCP connections only. Proxy traffic may be counted twice; UDP/QUIC is excluded.": "仅统计可见 TCP 连接。代理流量可能重复计入，不含 UDP/QUIC。",
     "Only power modes supported by this computer can be selected.": "只能选择此电脑支持的电源模式。",
