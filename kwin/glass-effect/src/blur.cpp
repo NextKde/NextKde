@@ -246,13 +246,18 @@ BlurEffect::BlurEffect()
     m_gaussianPass.shader = ShaderManager::instance()->generateShaderFromFile(ShaderTrait::MapTexture,
         QStringLiteral(":/effects/glass/generated/vertex.vert"),
         QStringLiteral(":/effects/glass/generated/gaussian.frag"));
-    // Since KWin 6.8 shader creation reports failure through a null pointer;
-    // older GLShader APIs expose the compile/link result through isValid().
-    if (m_gaussianPass.shader
-#if PLASMA_VERSION < 0x060800
-        && m_gaussianPass.shader->isValid()
-#endif
-    ) {
+    // Some KWin 6.7 packages already removed isValid(). Detect the API rather
+    // than assuming its availability from the Plasma version number.
+    const auto shaderReady = []<typename Shader>(const Shader *shader) {
+        if (!shader) {
+            return false;
+        }
+        if constexpr (requires { shader->isValid(); }) {
+            return shader->isValid();
+        }
+        return true; // Newer ShaderManager APIs return null on failure.
+    };
+    if (shaderReady(m_gaussianPass.shader.get())) {
         m_gaussianPass.mvp = m_gaussianPass.shader->uniformLocation("modelViewProjectionMatrix");
         m_gaussianPass.direction = m_gaussianPass.shader->uniformLocation("direction");
         m_gaussianPass.kernel = m_gaussianPass.shader->uniformLocation("kernel[0]");
