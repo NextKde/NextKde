@@ -23,6 +23,17 @@
     </message>
   </context>
   <context>
+    <name>EventDetailsPopover</name>
+    <message>
+      <source>Edit</source>
+      <translation>编辑</translation>
+    </message>
+    <message>
+      <source>Close</source>
+      <translation>关闭</translation>
+    </message>
+  </context>
+  <context>
     <name>CalendarTaskEditorDialog</name>
     <message>
       <location filename="../../calendar/qml/CalendarTaskEditorDialog.qml" line="+18" />

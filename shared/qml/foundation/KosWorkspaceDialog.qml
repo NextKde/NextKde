@@ -23,6 +23,6 @@ KosDialog {
     }
     Overlay.modal: Rectangle {
         radius: root.ApplicationWindow.window ? root.ApplicationWindow.window.windowCornerRadius || 0 : 0
-        color: AppTheme.withAlpha(AppTheme.blackSeed, AppTheme.dark ? 0.42 : 0.2)
+        color: AppTheme.withAlpha(AppTheme.blackSeed, (AppTheme.dark ? 0.42 : 0.2) * root.revealProgress)
     }
 }

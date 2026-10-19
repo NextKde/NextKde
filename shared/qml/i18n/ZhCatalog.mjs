@@ -298,6 +298,9 @@ export const catalog = {
     "When off, hover and scroll wheel still switch pages": "关闭后仍可悬停并使用滚轮切换",
     "· Peak %1": "· 峰值 %1",
     "MMMM d, yyyy": "yyyy年M月d日",
+    "MMM d": "M月d日",
+    "MMM d, yyyy": "yyyy年M月d日",
+    "%1 – %2, %3": "%3年%1 – %2日",
     "· Sunset %1": "· 日落 %1",
 
     // dock · 容器与模式菜单
