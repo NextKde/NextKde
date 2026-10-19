@@ -8,6 +8,8 @@ Item {
     default property alias contents: body.data
     property bool expanded: true
     property real expandedWidth: AppTheme.sidebarWidth
+    property color surfaceColor: AppTheme.sidebarSurface
+    property bool floating: true
     Layout.fillHeight: true
     Layout.preferredWidth: expanded ? expandedWidth : 0
     Layout.minimumWidth: 0
@@ -22,8 +24,8 @@ Item {
         id: body
         width: root.expandedWidth
         height: root.height
-        radius: AppTheme.largeRadius
-        color: AppTheme.sidebarSurface
+        radius: root.floating ? AppTheme.largeRadius : 0
+        color: root.surfaceColor
         opacity: root.expanded ? 1 : 0
         Behavior on opacity { NumberAnimation { duration: AppTheme.motionFast } }
     }

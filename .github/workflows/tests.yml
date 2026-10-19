@@ -24,6 +24,10 @@ jobs:
       - uses: actions/checkout@v7
       - name: Test release selection without installing the desktop
         run: python3 -m unittest discover -s tools/tests -p 'test_*release*.py'
+      - name: Check project contracts and documentation
+        run: |
+          python3 platform/tests/test_contract.py
+          python3 tools/check-docs.py
 
   tests:
     name: data + platform + logic + headless
@@ -128,14 +132,42 @@ jobs:
             .build/tests/CMakeFiles/CMakeConfigureLog.yaml
 
   kwin-plugins:
-    name: KWin plugins compile and offline checks
+    name: KWin ${{ matrix.series }} SDK build and offline checks
     runs-on: ubuntu-24.04
-
+    timeout-minutes: 40
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - series: '6.6'
+            snapshot: '2026/05/15'
+            api_versions: '6.6.0 6.6.6'
+          - series: '6.7'
+            snapshot: '2026/10/01'
+            api_versions: '6.7.0 6.7.5'
+          - series: '6.8'
+            snapshot: '2026/10/18'
+            api_versions: '6.8.0'
     container: archlinux:base-devel
 
     steps:
-      - name: Install git
-        run: pacman -Sy --noconfirm --needed git
+      # A complete repository snapshot keeps Qt/KF/KDecoration and KWin in
+      # agreement. Alternate headers on a rolling SDK alone do not prove a
+      # plugin can compile and link on each supported series.
+      - name: Select the KWin ${{ matrix.series }} SDK snapshot
+        env:
+          ARCH_SNAPSHOT: ${{ matrix.snapshot }}
+        run: |
+          printf 'Server = https://archive.archlinux.org/repos/%s/$repo/os/$arch\n' \
+            "$ARCH_SNAPSHOT" > /etc/pacman.d/mirrorlist
+          for attempt in 1 2 3; do
+            if pacman -Syyuu --noconfirm --disable-download-timeout \
+                --ignore archlinux-keyring git; then
+              break
+            fi
+            test "$attempt" -lt 3 || exit 1
+            sleep 5
+          done
 
       - uses: actions/checkout@v7
 
@@ -147,11 +179,24 @@ jobs:
       # protocol-generation dependencies from tools/kosctl as well.
       - name: Install plugin build dependencies
         run: |
-          pacman -S --noconfirm --needed \
+          pacman -S --noconfirm --needed --disable-download-timeout \
             cmake ninja gcc \
             qt6-base qt6-declarative qt6-wayland qt6-tools qt6-translations \
             extra-cmake-modules kwin kconfig ki18n kguiaddons kcmutils \
             kcoreaddons kdecoration gettext libxcb vulkan-headers wayland python
+
+      - name: Assert SDK series and record package versions
+        env:
+          KWIN_SERIES: ${{ matrix.series }}
+        run: |
+          mkdir -p .build/kwin
+          pacman -Q kwin kdecoration qt6-base > .build/kwin/sdk-packages.txt
+          cat .build/kwin/sdk-packages.txt
+          version=$(pacman -Q kwin | cut -d ' ' -f2)
+          case "$version" in
+            "$KWIN_SERIES".*) ;;
+            *) echo "Expected KWin $KWIN_SERIES SDK, got $version" >&2; exit 1 ;;
+          esac
 
       # Compilation and offline bridge regressions do not prove whether the
       # plugin loads, or whether the install path relabels correctly. That is
@@ -174,16 +219,76 @@ jobs:
       - name: Build the KWin plugins
         run: cmake --build .build/kwin --parallel "$(nproc)"
 
+      - name: Build the Glass effect against the same SDK
+        run: |
+          cmake -S kwin/glass-effect -B .build/glass -G Ninja \
+            -DCMAKE_BUILD_TYPE=Release -DGLASS_WAYLAND=ON -DGLASS_X11=OFF
+          cmake --build .build/glass --parallel "$(nproc)"
+
       - name: Run offline bridge regressions
         # The PBO test reports SKIP when the container has no OpenGL context.
         run: ctest --test-dir .build/kwin/kwin/kos-bridge --output-on-failure
 
-      - name: Check KWin 6.6 API compatibility
+      - name: Check official KWin API headers
+        env:
+          API_VERSIONS: ${{ matrix.api_versions }}
         run: |
-          for version in 6.6.0 6.6.5; do
+          for version in $API_VERSIONS; do
             # KDE's official mirror avoids Invent's HTTP 403 on hosted runners.
             git clone --quiet --depth 1 --branch "v${version}" \
               https://github.com/KDE/kwin.git ".build/kwin-${version}"
             python tools/check-kwin-api.py --build-dir .build/kwin \
               --kwin-headers ".build/kwin-${version}/src"
           done
+
+      - name: Upload SDK and test diagnostics
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: kwin-${{ matrix.series }}-results
+          include-hidden-files: true
+          path: |
+            .build/kwin/sdk-packages.txt
+            .build/kwin/Testing/Temporary/
+            .build/kwin/kwin/kos-bridge/Testing/Temporary/
+            .build/kwin/CMakeFiles/CMakeConfigureLog.yaml
+            .build/glass/CMakeFiles/CMakeConfigureLog.yaml
+
+  applications:
+    name: Calendar Calculator Weather build and tests
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    container: archlinux:base-devel
+    steps:
+      - name: Install git
+        run: pacman -Sy --noconfirm --needed git
+      - uses: actions/checkout@v7
+      - name: Install application SDK
+        run: |
+          pacman -S --noconfirm --needed cmake ninja gcc python nodejs go dbus \
+            qt6-base qt6-declarative qt6-tools qt6-translations qt6-wayland \
+            extra-cmake-modules kcalendarcore kwindowsystem kconfig
+      - name: Configure applications and tests
+        run: |
+          cmake -S . -B .build/applications -G Ninja \
+            -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTING=ON \
+            -DKOS_BUILD_PLATFORM=OFF -DKOS_BUILD_KWIN_PLUGINS=OFF \
+            -DKOS_BUILD_SPATIAL=OFF -DKOS_BUILD_CALENDAR=ON \
+            -DKOS_BUILD_TODO=ON -DKOS_BUILD_WEATHER=ON -DKOS_BUILD_CALCULATOR=ON
+      - name: Build applications
+        run: cmake --build .build/applications --parallel "$(nproc)"
+      - name: Run application and data regressions
+        run: |
+          ctest --test-dir .build/applications --output-on-failure --no-tests=error \
+            -R '^(kos-(calendar|calculator|weather|todo)\.|kos-pim\.|kos-application\.|kos-language\.)' \
+            --output-junit "$GITHUB_WORKSPACE/.build/applications/results.xml"
+      - name: Upload application diagnostics
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: application-results
+          include-hidden-files: true
+          path: |
+            .build/applications/results.xml
+            .build/applications/Testing/Temporary/
+            .build/applications/CMakeFiles/CMakeConfigureLog.yaml

@@ -21,7 +21,7 @@ find_package(Qt6 REQUIRED COMPONENTS LinguistTools)
 qt_add_translations(kos_app_core
     SOURCE_TARGETS kos_app_core
     SOURCES
-        ../calendar/qml ../todo/qml ../weather/qml
+        ../calendar/qml ../calculator/qml ../todo/qml ../weather/qml
         ../../shared/qml/foundation ../../shared/pim
     TS_FILES translations/kos_apps_zh_CN.ts translations/kos_apps_en_US.ts
     RESOURCE_PREFIX /kos/i18n

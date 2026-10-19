@@ -242,8 +242,10 @@ void PimStoreTest::linkedEventAndTodoStayInSync()
                                .first().toObject();
         QCOMPARE(todo.value(QStringLiteral("id")).toString(), todoId);
         QCOMPARE(todo.value(QStringLiteral("linkedEventId")).toString(), eventId);
-        QCOMPARE(todo.value(QStringLiteral("due")).toString().left(16),
-                 QStringLiteral("2026-09-10T09:00"));
+        // Preserve the original minute precision while comparing absolute
+        // time: calendar SDKs may normalize sub-minute fields differently.
+        QCOMPARE(QDateTime::fromString(todo.value(QStringLiteral("due")).toString(), Qt::ISODate).toSecsSinceEpoch() / 60,
+                 QDateTime::fromString(QStringLiteral("2026-09-10T09:00:00+08:00"), Qt::ISODate).toSecsSinceEpoch() / 60);
         QCOMPARE(todo.value(QStringLiteral("priority")).toInt(), 2);
 
         QVERIFY(parseObject(store.updateEvent(eventId, encode({
@@ -255,8 +257,8 @@ void PimStoreTest::linkedEventAndTodoStayInSync()
                    .toArray().first().toObject();
         QCOMPARE(todo.value(QStringLiteral("title")).toString(),
                  QStringLiteral("Release readiness"));
-        QCOMPARE(todo.value(QStringLiteral("due")).toString().left(16),
-                 QStringLiteral("2026-09-10T11:00"));
+        QCOMPARE(QDateTime::fromString(todo.value(QStringLiteral("due")).toString(), Qt::ISODate).toSecsSinceEpoch() / 60,
+                 QDateTime::fromString(QStringLiteral("2026-09-10T11:00:00+08:00"), Qt::ISODate).toSecsSinceEpoch() / 60);
 
         QVERIFY(parseObject(store.updateTodo(todoId, encode({
             {QStringLiteral("title"), QStringLiteral("Ship release")},
@@ -268,10 +270,10 @@ void PimStoreTest::linkedEventAndTodoStayInSync()
                                       .toArray().first().toObject();
         QCOMPARE(event.value(QStringLiteral("title")).toString(),
                  QStringLiteral("Ship release"));
-        QCOMPARE(event.value(QStringLiteral("start")).toString().left(16),
-                 QStringLiteral("2026-09-11T14:00"));
-        QCOMPARE(event.value(QStringLiteral("end")).toString().left(16),
-                 QStringLiteral("2026-09-11T15:30"));
+        QCOMPARE(QDateTime::fromString(event.value(QStringLiteral("start")).toString(), Qt::ISODate).toSecsSinceEpoch() / 60,
+                 QDateTime::fromString(QStringLiteral("2026-09-11T14:00:00+08:00"), Qt::ISODate).toSecsSinceEpoch() / 60);
+        QCOMPARE(QDateTime::fromString(event.value(QStringLiteral("end")).toString(), Qt::ISODate).toSecsSinceEpoch() / 60,
+                 QDateTime::fromString(QStringLiteral("2026-09-11T15:30:00+08:00"), Qt::ISODate).toSecsSinceEpoch() / 60);
         QVERIFY(event.value(QStringLiteral("linkedTodoCompleted")).toBool());
     }
 

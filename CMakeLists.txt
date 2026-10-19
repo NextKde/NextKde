@@ -25,6 +25,7 @@ option(KOS_BUILD_TODO "Build the Todo application" OFF)
 option(KOS_BUILD_WEATHER "Build the Weather application" OFF)
 option(KOS_BUILD_MUSIC "Build the legacy Music application" OFF)
 option(KOS_BUILD_LISTENFREE "Build KOS ListenFree (requires its native SDK)" OFF)
+option(KOS_BUILD_CALCULATOR "Build the Calculator application" OFF)
 # The depth engine (kos-ai) needs OpenCV and the ONNX Runtime, and the 3D
 # wallpaper plugin needs Qt Quick 3D. KOS_BUILD_SPATIAL decides whether they are
 # built; the resolution below turns it into KOS_SPATIAL_ENABLED, which both this
@@ -190,6 +191,11 @@ if(BUILD_TESTING)
                 ${CMAKE_CURRENT_SOURCE_DIR}/shell/desktop/modules/common/test_audio_output_names.mjs
         )
         set_tests_properties(kos-shell.audio-output-names PROPERTIES TIMEOUT 10)
+        add_test(NAME kos-shell.weather-fields
+            COMMAND ${KOS_NODE_EXECUTABLE}
+                ${CMAKE_CURRENT_SOURCE_DIR}/shell/desktop/modules/weather/test_weather_service_fields.mjs
+        )
+        set_tests_properties(kos-shell.weather-fields PROPERTIES TIMEOUT 10 LABELS logic)
         find_program(KOS_QMLTESTRUNNER_EXECUTABLE NAMES qmltestrunner
             HINTS /usr/lib/qt6/bin /usr/lib64/qt6/bin)
         if(KOS_QMLTESTRUNNER_EXECUTABLE)
@@ -526,6 +532,12 @@ if(BUILD_TESTING)
         set_tests_properties(kos-ui.clipboard-placement PROPERTIES LABELS ui TIMEOUT 40)
     endif()
     if(KOS_INTERACTION_QMLTEST)
+        add_test(NAME kos-calculator.engine
+            COMMAND ${KOS_INTERACTION_QMLTEST}
+                -input ${CMAKE_CURRENT_SOURCE_DIR}/tests/calculator/tst_engine.qml)
+        set_tests_properties(kos-calculator.engine PROPERTIES
+            ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_QUICK_BACKEND=software"
+            LABELS "ui;headless" TIMEOUT 20)
         add_test(NAME kos-ui.interaction-controls
             COMMAND ${KOS_INTERACTION_QMLTEST}
                 -input ${CMAKE_CURRENT_SOURCE_DIR}/tests/interaction-controls/tst_controls.qml)
@@ -667,7 +679,8 @@ if(KOS_BUILD_PLATFORM)
     add_subdirectory(apps/settings)
 endif()
 
-if(KOS_BUILD_CALENDAR OR KOS_BUILD_TODO OR KOS_BUILD_WEATHER OR KOS_BUILD_MUSIC)
+if(KOS_BUILD_CALENDAR OR KOS_BUILD_TODO OR KOS_BUILD_WEATHER OR KOS_BUILD_MUSIC
+        OR KOS_BUILD_CALCULATOR)
     add_subdirectory(shared/qml)
     add_subdirectory(apps/common)
 endif()
@@ -708,7 +721,7 @@ include(KosApplication)
 # services/pim-service call kos_add_application, which that include defines.
 if(BUILD_TESTING)
     if(NOT (KOS_BUILD_CALENDAR OR KOS_BUILD_TODO OR KOS_BUILD_WEATHER
-            OR KOS_BUILD_MUSIC))
+            OR KOS_BUILD_MUSIC OR KOS_BUILD_CALCULATOR))
         add_subdirectory(apps/common)
     endif()
 
@@ -793,6 +806,9 @@ if(KOS_BUILD_MUSIC)
 endif()
 if(KOS_BUILD_LISTENFREE)
     add_subdirectory(apps/listenfree)
+endif()
+if(KOS_BUILD_CALCULATOR)
+    add_subdirectory(apps/calculator)
 endif()
 
 # The shell imports this QML module even without compositor effects.

@@ -15,6 +15,7 @@ QtObject {
     property var current: null
     property var hourly: []
     property var daily: []
+    property var airQuality: null
     property string units: "metric"
     property string status: "idle"
     property string errorMessage: ""
@@ -43,6 +44,16 @@ QtObject {
         : "--"
     readonly property string windDirection: available
         ? Math.round(Number(current.windDirection)) + "°" : "--"
+    readonly property string windGust: available && Number.isFinite(Number(current.windGust))
+        ? Math.round(Number(current.windGust)) + (units === "imperial" ? " mph" : " km/h")
+        : ""
+    readonly property string uvIndex: available && Number.isFinite(Number(current.uvIndex))
+        ? String(Math.round(Number(current.uvIndex))) : ""
+    readonly property string visibility: available && Number.isFinite(Number(current.visibility))
+        ? Math.round(Number(current.visibility) / (units === "imperial" ? 1609.344 : 1000))
+          + (units === "imperial" ? " mi" : " km") : ""
+    readonly property string moonPhase: available && Number.isFinite(Number(current.moonPhase))
+        ? moonPhaseName(Number(current.moonPhase)) : ""
     readonly property string sunriseTime: dailyTime("sunrise")
     readonly property string sunsetTime: dailyTime("sunset")
     readonly property var forecastDays: {
@@ -65,6 +76,13 @@ QtObject {
             return "--:--"
         const match = String(daily[0]?.[field] ?? "").match(/T(\d{2}:\d{2})/)
         return match ? match[1] : "--:--"
+    }
+
+    function moonPhaseName(phase) {
+        const names = [I18n.tr("New Moon"), I18n.tr("Waxing Crescent"), I18n.tr("First Quarter"),
+            I18n.tr("Waxing Gibbous"), I18n.tr("Full Moon"), I18n.tr("Waning Gibbous"),
+            I18n.tr("Last Quarter"), I18n.tr("Waning Crescent")]
+        return names[Math.round(((phase % 1) + 1) % 1 * 8) % 8] ?? ""
     }
 
     function conditionText(code) {
@@ -124,6 +142,7 @@ QtObject {
         current = weather.current ?? null
         hourly = Array.isArray(weather.hourly) ? weather.hourly : []
         daily = Array.isArray(weather.daily) ? weather.daily : []
+        airQuality = weather.airQuality ?? null
         units = weather.units === "imperial" ? "imperial" : "metric"
         status = String(weather.status ?? "idle")
         errorMessage = String(weather.error ?? "")

@@ -36,6 +36,7 @@
         "KOS_BUILD_PLATFORM": "OFF",
         "KOS_BUILD_KWIN_PLUGINS": "OFF",
         "KOS_BUILD_CALENDAR": "ON",
+        "KOS_BUILD_CALCULATOR": "ON",
         "KOS_BUILD_TODO": "ON",
         "KOS_BUILD_WEATHER": "ON",
         "KOS_BUILD_MUSIC": "OFF",
@@ -65,6 +66,7 @@
       "binaryDir": "${sourceDir}/.build/calendar-dev",
       "cacheVariables": {
         "KOS_BUILD_CALENDAR": "ON",
+        "KOS_BUILD_CALCULATOR": "OFF",
         "KOS_BUILD_TODO": "OFF",
         "KOS_BUILD_WEATHER": "OFF",
         "KOS_BUILD_MUSIC": "OFF",
@@ -78,6 +80,7 @@
       "binaryDir": "${sourceDir}/.build/todo-dev",
       "cacheVariables": {
         "KOS_BUILD_CALENDAR": "OFF",
+        "KOS_BUILD_CALCULATOR": "OFF",
         "KOS_BUILD_TODO": "ON",
         "KOS_BUILD_WEATHER": "OFF",
         "KOS_BUILD_MUSIC": "OFF",
@@ -91,6 +94,7 @@
       "binaryDir": "${sourceDir}/.build/weather-dev",
       "cacheVariables": {
         "KOS_BUILD_CALENDAR": "OFF",
+        "KOS_BUILD_CALCULATOR": "OFF",
         "KOS_BUILD_TODO": "OFF",
         "KOS_BUILD_WEATHER": "ON",
         "KOS_BUILD_MUSIC": "OFF",
@@ -104,6 +108,7 @@
       "binaryDir": "${sourceDir}/.build/music-dev",
       "cacheVariables": {
         "KOS_BUILD_CALENDAR": "OFF",
+        "KOS_BUILD_CALCULATOR": "OFF",
         "KOS_BUILD_TODO": "OFF",
         "KOS_BUILD_WEATHER": "OFF",
         "KOS_BUILD_MUSIC": "ON",
@@ -117,6 +122,7 @@
       "binaryDir": "${sourceDir}/.build/listenfree-dev",
       "cacheVariables": {
         "KOS_BUILD_CALENDAR": "OFF",
+        "KOS_BUILD_CALCULATOR": "OFF",
         "KOS_BUILD_TODO": "OFF",
         "KOS_BUILD_WEATHER": "OFF",
         "KOS_BUILD_MUSIC": "OFF",

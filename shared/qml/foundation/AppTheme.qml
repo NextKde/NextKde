@@ -14,6 +14,52 @@ QtObject {
     function formatTime(date, format) { return date.toLocaleTimeString(uiLocale, format) }
     function formatDateTime(date, format) { return date.toLocaleString(uiLocale, format) }
 
+    // Locale-aware clock formatting for stored "HH:MM" strings (P1-1, REVIEW
+    // R3 F1). 12/24 follows the locale's own short time format (no lowercase
+    // 'h' ⇒ 24-hour locale); the meridiem text always comes from the locale,
+    // never hardcoded English.
+    function localeUses24hClock() {
+        return uiLocale.timeFormat(Locale.ShortFormat).indexOf("h") < 0
+    }
+    function meridiemText(hour) {
+        const t = hour >= 12 ? uiLocale.pmText : uiLocale.amText
+        return t !== "" ? t : (hour >= 12 ? "PM" : "AM")
+    }
+    function formatClock(hhmm) {
+        const m = String(hhmm).match(/^(\d{2}):(\d{2})$/)
+        if (!m)
+            return String(hhmm)
+        if (localeUses24hClock())
+            return String(hhmm)
+        const h24 = parseInt(m[1], 10)
+        var h = h24 % 12
+        if (h === 0)
+            h = 12
+        return (m[2] === "00" ? String(h) : h + ":" + m[2]) + meridiemText(h24)
+    }
+
+    // Date formatted with a catalog-translated pattern (I5, REVIEW R3): the
+    // pattern string goes through I18n.trPattern first, so zh-CN renders
+    // "MMM d, yyyy" as "yyyy年M月d日" instead of hardcoding English word order.
+    function formatDatePattern(date, pattern) {
+        return date.toLocaleDateString(uiLocale, I18n.trPattern(pattern))
+    }
+
+    // Week-range header title following locale word order. The range
+    // skeleton itself is a translated template, so zh-CN can move the year
+    // to the front: "2026年10月11日 – 17日" for the same-month leg and
+    // "3月29日 – 2026年4月4日" across months. English output is unchanged.
+    function formatWeekRange(start, end) {
+        if (start.getMonth() === end.getMonth())
+            return I18n.tr("%1 – %2, %3")
+                .arg(formatDatePattern(start, "MMM d"))
+                .arg(String(end.getDate()))
+                .arg(String(end.getFullYear()))
+        return I18n.tr("%1 – %2")
+            .arg(formatDatePattern(start, "MMM d"))
+            .arg(formatDatePattern(end, "MMM d, yyyy"))
+    }
+
 
     // KosApplicationWindow binds these values to the shared C++ preferences
     // object. Controls can stay application-agnostic and still update live.
@@ -81,6 +127,25 @@ QtObject {
         return systemAccent
     }
 
+    // M04: the macOS "today" marker red. One literal for the whole app — the
+    // week header disc, the now-line, the now-dot, the time pill and the mini
+    // month's today disc all read this.
+    readonly property color todayRed: "#E5484D"
+
+    // M05: hue-neutral light/dark legs that must NOT ride the slate-tinted
+    // window ramp (same rationale as buttonNeutral below). One definition for
+    // the Tahoe content plane and the app-owned detail popover, replacing the
+    // literals that used to be scattered across Main.qml (tahoe.contentPlane),
+    // CalendarScheduleView.qml (scheduleField) and EventDetailsPopover.qml —
+    // separate copies of the same pair could drift silently when re-themed.
+    readonly property color neutralPlane: dark ? "#1E1E1E" : "#FFFFFF"
+    readonly property color popoverSurface: dark ? "#262626" : "#F5F5F5"
+    readonly property color popoverBorder: dark
+        ? Qt.rgba(1, 1, 1, 0.12) : Qt.rgba(0, 0, 0, 0.12)
+    readonly property color popoverInk: dark ? "#F2F2F2" : "#1A1A1A"
+    readonly property color popoverInkSecondary: dark
+        ? Qt.rgba(1, 1, 1, 0.58) : Qt.rgba(0, 0, 0, 0.55)
+
     // Forced Light/Dark modes never inherit the opposite system background.
     readonly property color window: mix(
         paletteWindow, dark ? darkWindowSeed : lightWindowSeed,
@@ -97,6 +162,19 @@ QtObject {
     readonly property color button: mix(windowRaised, accent, dark ? 0.085 : 0.045)
     readonly property color buttonHover: mix(button, accent, dark ? 0.13 : 0.09)
     readonly property color buttonPressed: mix(button, accent, dark ? 0.21 : 0.16)
+
+    // macOS 26 alerts: a non-primary action is a filled capsule one step away
+    // from the surface under it, not the near-invisible outlined `button`.
+    // Dark mixes from the *neutral* surface the dialog actually draws
+    // (#262626), not the slate-tinted `card` token, so the capsule stays
+    // hue-neutral; the 0.143 step keeps the old relative luminance (Y 0.0599).
+    readonly property color buttonNeutral: dark
+        ? mix(Qt.rgba(0.149, 0.149, 0.149, 1), Qt.rgba(1, 1, 1, 1), 0.143)
+        : mix(card, Qt.rgba(0, 0, 0, 1), 0.095)
+    readonly property color buttonNeutralHover: mix(
+        buttonNeutral, dark ? Qt.rgba(1, 1, 1, 1) : Qt.rgba(0, 0, 0, 1), 0.055)
+    readonly property color buttonNeutralPressed: mix(
+        buttonNeutral, dark ? Qt.rgba(1, 1, 1, 1) : Qt.rgba(0, 0, 0, 1), 0.105)
 
     readonly property bool glassActive: !reduceTransparency
         && (materialMode === "glass"
