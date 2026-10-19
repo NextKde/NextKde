@@ -89,8 +89,8 @@ void PimClientDbusTest::clientTracksRemoteService()
             if (todo.value(QStringLiteral("id")).toString() == linkedTodoId) {
                 return todo.value(QStringLiteral("title")).toString()
                     == QStringLiteral("Client-linked update")
-                    && todo.value(QStringLiteral("due")).toString().startsWith(
-                        QStringLiteral("2026-09-06T12:00"));
+                    && QDateTime::fromString(todo.value(QStringLiteral("due")).toString(), Qt::ISODate)
+                        == QDateTime::fromString(QStringLiteral("2026-09-06T12:00:00+08:00"), Qt::ISODate);
             }
         }
         return false;
