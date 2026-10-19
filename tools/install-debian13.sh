@@ -56,7 +56,8 @@ SCRIPT_VERSION="1.0.0"
 
 # ── 默认值 ──────────────────────────────────────────────────────────────────
 REPO_URL="https://github.com/SuceV587/NextKde.git"
-BRANCH="main"
+BRANCH="stable"
+INSTALLER_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 CLONE_DIR="${HOME}/NextKde"
 KOS_PREFIX="${KOS_PREFIX:-}"
 KOS_SPATIAL="${KOS_BUILD_SPATIAL:-auto}"   # auto | on | off
@@ -119,8 +120,8 @@ clone → 构建 → 安装 → 校验。
 克隆与安装位置
   --dir <路径>         clone 到哪里（默认 $HOME/NextKde）
   --repo <URL>         仓库地址（默认官方 upstream）
-  --branch <名称>      分支或 tag（默认 main）
-  --mirror <前缀>      clone 失败时使用镜像前缀，例：--mirror https://ghfast.top/
+  --branch <名称>      stable（默认）、main 或版本 Tag；--version 是同义选项
+  --mirror <前缀>      GitHub HTTPS 镜像后备；正式版信息仍从 GitHub API 获取
   --prefix <路径>      安装前缀 KOS_PREFIX（默认 $HOME/.local）
 
 安装内容
@@ -155,7 +156,7 @@ parse_args() {
         case "$1" in
             --dir)       [[ -n "${2:-}" ]] || die "--dir 需要一个路径"; CLONE_DIR="$2"; shift 2 ;;
             --repo)      [[ -n "${2:-}" ]] || die "--repo 需要一个地址"; REPO_URL="$2"; shift 2 ;;
-            --branch)    [[ -n "${2:-}" ]] || die "--branch 需要一个名称"; BRANCH="$2"; shift 2 ;;
+            --branch|--version)    [[ -n "${2:-}" ]] || die "--branch 需要一个名称"; BRANCH="$2"; shift 2 ;;
             --mirror)    [[ -n "${2:-}" ]] || die "--mirror 需要一个前缀"; GIT_MIRROR="$2"; shift 2 ;;
             --prefix)    [[ -n "${2:-}" ]] || die "--prefix 需要一个路径"; KOS_PREFIX="$2"; shift 2 ;;
             --spatial)   [[ -n "${2:-}" ]] || die "--spatial 需要 auto|on|off"; KOS_SPATIAL="${2,,}"; shift 2 ;;
@@ -546,7 +547,7 @@ ensure_quickshell() {
 # 与 tools/kosctl 的 Debian 分支保持一致。这里刻意在脚本内自带一份：
 # upstream main 的 kosctl 还没有 apt 分支，而本脚本要求“从零可用”。
 debian_core_build_packages=(
-    git cmake ninja-build g++ golang-go curl patchelf pkg-config
+    git python3 cmake ninja-build g++ golang-go curl patchelf pkg-config
     extra-cmake-modules libwayland-dev wayland-protocols libxkbcommon-dev
     qt6-base-dev qt6-declarative-dev qt6-tools-dev qt6-l10n-tools qt6-translations-l10n qt6-quick3d-dev qt6-svg-dev qt6-wayland-dev
     qt6-image-formats-plugins qt6-5compat-dev libqt6svg6
@@ -660,43 +661,32 @@ install_dependencies() {
 clone_repo() {
     step "获取 KOS 源码"
 
-    if [[ -d "$CLONE_DIR/.git" ]]; then
+    if [[ -e "$CLONE_DIR/.git" ]]; then
         info "已存在 git 仓库：$CLONE_DIR"
-        if ! git -C "$CLONE_DIR" diff --quiet || ! git -C "$CLONE_DIR" diff --cached --quiet; then
-            warn "工作区有未提交改动，跳过更新，直接使用当前检出"
-        else
-            run git -C "$CLONE_DIR" "${GIT_NET_ARGS[@]}" fetch --prune origin \
-                || warn "fetch 失败，使用本地已有提交"
-            if git -C "$CLONE_DIR" show-ref --verify --quiet "refs/heads/$BRANCH"; then
-                run git -C "$CLONE_DIR" checkout "$BRANCH" || true
-            fi
-            run git -C "$CLONE_DIR" "${GIT_NET_ARGS[@]}" pull --ff-only \
-                || warn "无法快进到最新，沿用当前检出"
-        fi
     elif [[ -e "$CLONE_DIR" ]]; then
-        die "$CLONE_DIR 已存在且不是 git 仓库。
-    请移走它，或用 --dir 指定另一个目录。"
+        die "$CLONE_DIR 已存在且不是 git 仓库，请用 --dir 指定新目录。"
     else
         mkdir -p "$(dirname "$CLONE_DIR")"
-        local url="$REPO_URL"
-        info "克隆 $url（分支 $BRANCH）→ $CLONE_DIR"
-        if ! run git "${GIT_NET_ARGS[@]}" clone --branch "$BRANCH" --depth 1 \
-                "$url" "$CLONE_DIR"; then
-            rm -rf "$CLONE_DIR"
-            if [[ -n "$GIT_MIRROR" ]]; then
-                warn "直连克隆失败，改用镜像前缀 $GIT_MIRROR"
-                url="${GIT_MIRROR%/}/${REPO_URL}"
-                run git "${GIT_NET_ARGS[@]}" clone --branch "$BRANCH" --depth 1 \
-                    "$url" "$CLONE_DIR" \
-                    || die "克隆失败。可尝试：--proxy http://127.0.0.1:7890 或 --mirror <前缀>"
-            else
-                die "克隆失败。国内网络常见原因：GitHub 不可直连。
-    可尝试：
-      bash install-debian13.sh --proxy http://127.0.0.1:7890
-      bash install-debian13.sh --mirror https://ghfast.top/"
+        # Bootstrap the selector from the default branch. Nothing is built or
+        # installed until it has selected the requested release successfully.
+        if ! run git "${GIT_NET_ARGS[@]}" clone --depth 1 "$REPO_URL" "$CLONE_DIR"; then
+            # Never delete a partial directory: it may contain user files.
+            if [[ -z "$GIT_MIRROR" || -e "$CLONE_DIR" || "$REPO_URL" != https://github.com/* || "$GIT_MIRROR" != https://* ]]; then
+                die "克隆失败；请检查代理，或用 --dir 指定新目录。"
             fi
+            run git "${GIT_NET_ARGS[@]}" clone --depth 1 "${GIT_MIRROR%/}/$REPO_URL" "$CLONE_DIR" \
+                || die "镜像克隆失败"
+            run git -C "$CLONE_DIR" remote set-url origin "$REPO_URL"
+
         fi
     fi
+    local selector="$INSTALLER_DIR/source-release.py"
+    [[ -f "$selector" ]] || selector="$CLONE_DIR/tools/source-release.py"
+    [[ -f "$selector" ]] || die "缺少 source-release.py；请使用包含发布入口的新安装脚本。"
+    local -a env_pairs=()
+    mapfile -t env_pairs < <(kos_env)
+    run env "${env_pairs[@]}" python3 "$selector" --root "$CLONE_DIR" select "$BRANCH" --repo "$REPO_URL" --mirror "$GIT_MIRROR" \
+        || die "无法切换到请求的版本；未继续构建或安装。"
 
     [[ -x "$CLONE_DIR/tools/kosctl" ]] \
         || die "仓库结构异常：$CLONE_DIR/tools/kosctl 不存在或不可执行"
@@ -794,7 +784,8 @@ print_summary() {
     printf '    1) 注销并重新登录（或重启）—— KWin 特效与桌面接管在下次登录生效\n'
     printf '    2) 不想注销：cd %s && ./tools/kosctl start\n' "$CLONE_DIR"
     printf '    3) 排查问题：cd %s && ./tools/kosctl doctor\n' "$CLONE_DIR"
-    printf '    4) 以后升级：重新执行本脚本，或 cd %s && git pull && ./tools/kosctl install\n' "$CLONE_DIR"
+    printf '    4) 以后升级：cd %s && ./tools/kosctl update && ./tools/kosctl install && ./tools/kosctl start\n' "$CLONE_DIR"
+    printf '       查看部署版本：./tools/kosctl version；开发版需明确使用 update main\n'
     printf '\n'
 }
 
@@ -834,11 +825,8 @@ main() {
     clone_repo
     build_and_install
 
-    if verify_install; then
-        ok "全部校验通过"
-    else
-        warn "有校验项未通过，请查看上面的告警与日志"
-    fi
+    verify_install || die "安装校验未通过，请查看日志；不能报告安装成功。"
+    ok "全部校验通过"
 
     if (( DO_START )); then
         step "立即生效（kosctl start）"

@@ -2,6 +2,23 @@
 set -euo pipefail
 
 project_dir=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
+# These commands must not create build directories or probe desktop processes.
+case "${1:-}" in
+    update|version)
+        command -v python3 >/dev/null 2>&1 || { echo "python3 is required" >&2; exit 1; }
+        if [[ "$1" == update ]]; then
+            if [[ "$project_dir" == /nix/store/* ]]; then
+                echo "Update the NextKDE flake input/tag and rebuild NixOS; Nix store sources are immutable." >&2
+                exit 1
+            fi
+            (( $# <= 2 )) || { echo "Usage: kosctl update [stable|main|vX.Y.Z[-rc.N]]" >&2; exit 2; }
+            exec python3 "$project_dir/tools/source-release.py" --root "$project_dir" select "${2:-stable}"
+        fi
+        (( $# == 1 )) || { echo "Usage: kosctl version" >&2; exit 2; }
+        exec python3 "$project_dir/tools/source-release.py" --root "$project_dir" version \
+            --installed "${KOS_RELEASE_RECORD:-${KOS_PREFIX:-$HOME/.local}/share/kos/release.json}"
+        ;;
+esac
 build_dir=${KOS_BUILD_DIR:-"$project_dir/.build/kosctl"}
 prefix=${KOS_PREFIX:-"$HOME/.local"}
 config_dir=${XDG_CONFIG_HOME:-"$HOME/.config"}
@@ -57,7 +74,7 @@ is_nixos() {
 # installation, and the README describe the same default build. The KWin list
 # is needed only while compositor plugins are enabled.
 arch_core_build_packages=(
-    quickshell cmake ninja gcc qt6-base qt6-declarative qt6-tools qt6-translations qt6-quick3d qt6-svg qt6-imageformats qt6-5compat qt6-wayland go curl
+    git python quickshell cmake ninja gcc qt6-base qt6-declarative qt6-tools qt6-translations qt6-quick3d qt6-svg qt6-imageformats qt6-5compat qt6-wayland go curl
     extra-cmake-modules wayland
     kwindowsystem kiconthemes kglobalaccel kio patchelf
 )
@@ -81,7 +98,7 @@ arch_optional_runtime_packages=(
 # "Could NOT find Libdrm". The xcb extension headers are the same story:
 # kwin-dev does not pull them and the KWinX11 export needs them.
 debian_core_build_packages=(
-    git cmake ninja-build g++ golang-go curl patchelf pkg-config
+    git python3 cmake ninja-build g++ golang-go curl patchelf pkg-config
     quickshell
     extra-cmake-modules libwayland-dev wayland-protocols libxkbcommon-dev
     qt6-base-dev qt6-declarative-dev qt6-tools-dev qt6-l10n-tools qt6-translations-l10n qt6-quick3d-dev qt6-svg-dev qt6-wayland-dev
@@ -240,12 +257,18 @@ record_kwin_plugin_api_version() {
 
 usage() {
     cat <<'EOF'
-Usage: ./tools/kosctl <doctor|build|install [lockscreen|apps]|start|dev [shell|settings]|run|uninstall [lockscreen]|glass-settings|nix [build|install|start|shell]|nix-status|shortcuts install|shortcuts uninstall>
+Usage: ./tools/kosctl <update [stable|main|vX.Y.Z[-rc.N]]|version|doctor|build|install [lockscreen|apps]|start|dev [shell|settings]|run|uninstall [lockscreen]|glass-settings|nix [build|install|start|shell]|nix-status|shortcuts install|shortcuts uninstall>
 
 NixOS remote install:
   git clone <repo> && cd Nextkde
   ./tools/kosctl nix install      # build + deploy systemd services
   ./tools/kosctl start            # apply now
+
+Source selection (does not install or restart anything):
+  ./tools/kosctl update             # latest official release; fails if none exists
+  ./tools/kosctl update main        # explicitly choose development
+  ./tools/kosctl update v0.1.0      # explicitly choose a version tag
+  ./tools/kosctl version            # deployed files and source checkout separately
 
 Optional components are installed by naming them:
   ./tools/kosctl install lockscreen   # lock screen (user level, no root)
@@ -267,7 +290,7 @@ EOF
 doctor() {
     local failed=0
     local nixos_hint=0
-    for command_name in cmake ninja c++ go; do
+    for command_name in cmake ninja c++ go python3; do
         if command -v "$command_name" >/dev/null 2>&1; then
             printf 'ok   %-12s %s\n' "$command_name" "$(command -v "$command_name")"
         else
@@ -720,6 +743,7 @@ build() {
             go build -trimpath -buildvcs=false \
                 -o "$build_dir/bin/kos-data-service" .
     )
+    python3 "$project_dir/tools/source-release.py" --root "$project_dir" stamp "$build_dir/release.json"
 }
 
 # materialize_kos_ui — turn the repo's source-level Kos.Ui alias into real
@@ -815,10 +839,14 @@ deploy_artifacts() {
         }
     done
 
+    # Replace managed runtime trees rather than overlaying versions. Back up
+    # local runtime edits and kos settings before removing stale QML/plugins.
+    python3 "$project_dir/tools/deploy-runtime.py" \
+        --prefix "$prefix" --config "$config_dir" \
+        --state "${XDG_STATE_HOME:-$HOME/.local/state}"
     mkdir -p "$prefix/libexec" "$prefix/bin" "$prefix/lib" \
         "$prefix/share/kos/platform/kwin" "$prefix/share/kos/settings" \
         "$prefix/share/shared/qml" "$prefix/share/applications"
-
     # --- Binaries ---
     rm -f "$prefix/libexec/kos-platform" "$prefix/libexec/kos-ai-worker" \
         "$prefix/libexec/kos-data-service" "$prefix/bin/kos-settings"
@@ -1812,6 +1840,8 @@ install_all() {
     fi
     take_over_plasma_desktop
     warn_notification_claimers
+    python3 "$project_dir/tools/source-release.py" stamp "$prefix/share/kos/release.json" \
+        --from-file "$build_dir/release.json"
     print_install_summary
 }
 
@@ -1958,6 +1988,7 @@ uninstall() {
     if command -v systemctl >/dev/null 2>&1; then
         systemctl --user daemon-reload || true
     fi
+    rm -f "$prefix/share/kos/release.json"
     rm -f "$prefix/libexec/kos-platform" "$prefix/libexec/kos-ai-worker" \
         "$prefix/libexec/kos-data-service" "$prefix/bin/kos-settings"
     rm -f "$prefix/lib/libonnxruntime.so" "$prefix/lib/libonnxruntime.so.1" \
@@ -1997,6 +2028,7 @@ nix_deploy_artifacts() {
         return 1
     fi
     deploy_artifacts "$result_dir"
+    install -m 0644 "$result_dir/share/kos/release.json" "$prefix/share/kos/release.json"
 }
 
 nix_install() {

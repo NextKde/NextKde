@@ -8,7 +8,7 @@
 
 stdenv.mkDerivation {
   pname = "kwin-context-menu-input";
-  version = "unstable";
+  version = lib.removeSuffix "\n" (builtins.readFile "${src}/VERSION");
   src = "${src}/kwin/context-menu-input";
 
   nativeBuildInputs = [

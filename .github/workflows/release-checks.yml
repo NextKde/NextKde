@@ -1,0 +1,33 @@
+name: release-checks
+
+on:
+  push:
+    tags: ['v[0-9]*']
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Existing tag to check (does not publish a Release)'
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  identity:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.tag || github.ref }}
+          fetch-depth: 0
+      - name: Check tag and desktop version
+        env:
+          RELEASE_TAG: ${{ inputs.tag || github.ref_name }}
+        run: python3 tools/source-release.py check-release "$RELEASE_TAG"
+      - name: Save source identity
+        run: python3 tools/source-release.py stamp "$RUNNER_TEMP/release.json"
+      - uses: actions/upload-artifact@v7
+        with:
+          name: release-identity
+          path: ${{ runner.temp }}/release.json
