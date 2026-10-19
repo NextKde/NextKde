@@ -35,6 +35,7 @@ try {
     // AppearanceTokens lives there, and the layer assertions below need it
     // instantiated rather than merely imported.
     symlinkSync(join(shell, "desktop"), join(directory, "desktop"), "dir");
+    symlinkSync(join(shell, "shared"), join(directory, "shared"), "dir");
 
     const result = spawnSync(process.argv[2] || "quickshell",
         ["-p", directory], {

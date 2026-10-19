@@ -57,7 +57,7 @@ def run():
         for name in ["config", "state", "runtime"]:
             (root / name).mkdir(mode=0o700)
         (root / "runtime" / wayland).symlink_to(runtime / wayland)
-        for name in ["desktop", "Kos"]:
+        for name in ["desktop", "Kos", "shared"]:
             (root / name).symlink_to(REPO / "shell" / name, target_is_directory=True)
         shutil.copy(Path(__file__).with_name("shell.qml"), root / "shell.qml")
         with Server(str(root / "platform.sock"), Platform) as server:

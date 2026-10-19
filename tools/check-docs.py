@@ -42,7 +42,15 @@ def relative_links(path: Path) -> list[tuple[int, str]]:
 
 def main() -> int:
     failures: list[str] = []
-    markdown_files = sorted(ROOT.rglob("*.md"))
+    # Downloaded SDKs and generated build trees carry upstream Markdown whose
+    # relative links refer to files outside their binary distribution. They
+    # are not project documentation and must not make a successful install
+    # break this source check.
+    generated_roots = {".git", ".build", "build", "tmp", "result"}
+    markdown_files = sorted(
+        path for path in ROOT.rglob("*.md")
+        if path.relative_to(ROOT).parts[0] not in generated_roots
+    )
     for markdown in markdown_files:
         for line_number, target in relative_links(markdown):
             resolved = (markdown.parent / target).resolve()

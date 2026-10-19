@@ -63,6 +63,7 @@ Usage: ./tools/run-tests.sh [--all] [--layer <name>] [--jobs N] [--build-only]
 Environment:
   KOS_TEST_BUILD_DIR   build directory (default .build/tests)
   KOS_TEST_TMPDIR      scratch directory for compilers and Go
+  KOS_TEST_RUNTIME_TMPDIR short runtime fixture directory (default /tmp)
   KOS_BUILD_TYPE       Debug (default) or Release
   KOS_BUILD_SPATIAL    AUTO (default), ON or OFF for the depth engine and the
                        3D wallpaper plugin; ON makes missing OpenCV or ONNX
@@ -99,6 +100,12 @@ cmake --build "$build_dir" --parallel "$build_jobs"
 if [[ "$build_only" == true ]]; then
     exit 0
 fi
+
+# Compiler temporaries stay in the build tree, but runtime fixtures create
+# Unix sockets. Quickshell adds several path components, so a long checkout
+# path can exceed sockaddr_un.sun_path and break IPC before assertions run.
+export TMPDIR="${KOS_TEST_RUNTIME_TMPDIR:-/tmp}"
+mkdir -p "$TMPDIR"
 
 printf '==> testing label%s: %s\n' \
     "$([[ ${#layers[@]} -gt 1 ]] && echo s)" "$(IFS=', '; echo "${layers[*]}")"

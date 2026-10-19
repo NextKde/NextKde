@@ -53,7 +53,7 @@ def run():
         for name in ["config", "state", "runtime"]:
             (root / name).mkdir(mode=0o700)
         (root / "runtime" / wayland).symlink_to(runtime / wayland)
-        for name in ["desktop", "Kos"]:
+        for name in ["desktop", "Kos", "shared"]:
             (root / name).symlink_to(REPO / "shell" / name, target_is_directory=True)
         shutil.copy(Path(__file__).with_name("shell.qml"), root / "shell.qml")
         with Server(str(root / "platform.sock"), Platform) as server:
@@ -74,7 +74,7 @@ def run():
                 assert "WIDGET_EXPERIENCE_PASS" in output, output
                 assert not re.search(r"WIDGET_EXPERIENCE_FAIL|ReferenceError|TypeError|Cannot assign|Unable to assign|is not a type", output), output
                 saved = json.loads(state["appearance/config.json"])
-                assert saved["version"] == 29 and saved["widgetStyle"] == "color", saved
+                assert saved["version"] == 30 and saved["widgetStyle"] == "color", saved
                 assert set(saved["hiddenDeskCenterWidgets"]) == set(WIDGETS) - {"clock"}, saved
                 assert json.loads(state["appearance/icon-appearance.json"])["mode"] == "grayscale"
                 print(f"PASS: {expected} load, empty desktop recovery, gestures, 18 appearance combinations, persistence")

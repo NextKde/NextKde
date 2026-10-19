@@ -67,6 +67,7 @@ async function run() {
 try {
     copyFileSync(new URL("shell.qml", import.meta.url), join(directory, "shell.qml"));
     symlinkSync(join(repository, "shell/desktop"), join(directory, "desktop"), "dir");
+    symlinkSync(join(repository, "shell/shared"), join(directory, "shared"), "dir");
     symlinkSync(join(repository, "shell/Kos"), join(directory, "Kos"), "dir");
     mkdirSync(join(directory, "config"));
     await new Promise((resolve) => server.listen(socket, resolve));
