@@ -1,0 +1,100 @@
+#!/usr/bin/env python3
+"""Real virtual-output Cover fault cases; no authentication or host screenshots."""
+import os
+from pathlib import Path
+import shutil
+import signal
+import subprocess
+import tempfile
+import time
+
+APP = Path(__file__).resolve().parents[1]
+assert os.environ.get('KOS_T10_TEST') == '1'
+assert os.environ['WAYLAND_DISPLAY'].startswith('wayland-kos-t10-')
+OUT = Path(os.environ['KOS_T10_EVIDENCE'])
+
+def run_case(name, action=None, source=None, unready=False):
+    with tempfile.TemporaryDirectory(prefix='kos-cover-') as temp:
+        root = Path(temp) / 'app'
+        shutil.copytree(APP, root, ignore=shutil.ignore_patterns('tests', '__pycache__'))
+        if source is not None:
+            (root / 'companion/cover.py').write_text('import json,time\nwhile True:\n print(json.dumps(' + repr(dict(source=source, fit='crop', version='default')) + '),flush=True); time.sleep(.5)\n')
+        qml = (root / 'cover.qml').read_text()
+        if 'id: host' not in qml:
+            qml = qml.replace('Greeter.WallpaperHost {', 'Greeter.WallpaperHost {\n id: host')
+        qml = qml.replace('onFrameSubmitted: root.record', 'onFrameSubmitted: root.record')
+        qml = qml.replace('            onBackingWindowVisibleChanged:', '            Timer { id: snapshot; interval: 200; running: true; repeat: true; onTriggered: { if ("' + name + '" === "valid-resource" && !host.resourceReady) return; snapshot.stop(); host.grabToImage(r => { r.saveToFile("' + str(OUT) + '/' + name + '-" + window.screen.name + ".png"); root.record("Snapshot"); }); } }\n            onBackingWindowVisibleChanged:')
+        if unready:
+            # Suppress one output's readiness/submission signals as a controlled
+            # Shell gate fixture. It must still time out without that signal.
+            qml = qml.replace('if (resourceSettled)', 'if (resourceSettled && window.screen.name !== "Virtual-1")')
+            qml = qml.replace('onFrameSubmitted: root.record', 'onFrameSubmitted: if (window.screen.name !== "Virtual-1") root.record')
+        (root / 'cover.qml').write_text(qml)
+        log = OUT / (name + '.log')
+        env = dict(os.environ, WAYLAND_DEBUG='1')
+        with log.open('w') as stream:
+            process = subprocess.Popen(['qs', '-p', str(root / 'cover.qml')], env=env, stdout=stream, stderr=stream, start_new_session=True)
+            start = time.monotonic()
+            def wait(marker, count=1):
+                deadline = time.monotonic() + 6
+                while time.monotonic() < deadline:
+                    text = log.read_text(errors='replace')
+                    if text.count(marker) >= count: return text
+                    if process.poll() is not None: raise AssertionError(text)
+                    time.sleep(.05)
+                raise AssertionError(log.read_text(errors='replace'))
+            try:
+                wait('FrameSubmitted', 1 if unready else 2)
+                wait('Snapshot', 2)
+                if action: action(process, root, wait)
+                code = process.wait(timeout=18)
+                text = log.read_text(errors='replace')
+                assert code == (-signal.SIGKILL if name == 'cover-crash' else 0), (name, code)
+                if action is ready or action is outputs: assert 'ShellReady' in text
+                if action is abort: assert 'Recovery' in text
+                assert 'ReferenceError' not in text and 'TypeError' not in text and 'Failed to load configuration' not in text, text
+                assert 'set_keyboard_interactivity(0)' in text, text
+                assert 'get_layer_surface' in text and ', 3, "kos-early-cover")' in text, text
+                assert 'set_input_region' in text, text
+                if action is None:
+                    assert 'Timeout' in text and 14 <= time.monotonic() - start < 18
+                print(f'PASS T10 {name}: exit={code}, recovery={time.monotonic()-start:.3f}s', flush=True)
+            finally:
+                if process.poll() is None:
+                    os.killpg(process.pid, signal.SIGKILL); process.wait()
+
+
+def ready(process, root, wait):
+    subprocess.run(['qs', '-p', str(root / 'cover.qml'), 'ipc', 'call', 'cover', 'ready'], check=True, timeout=4)
+
+
+def abort(process, root, wait):
+    subprocess.run(['qs', '-p', str(root / 'cover.qml'), 'ipc', 'call', 'cover', 'abort'], check=True, timeout=4)
+
+
+def crash(process, root, wait):
+    os.killpg(process.pid, signal.SIGKILL)
+
+
+def outputs(process, root, wait):
+    import json
+    inventory = json.loads(subprocess.check_output(['kscreen-doctor', '-j']))
+    connector = inventory['outputs'][1]['name']
+    subprocess.run(['kscreen-doctor', 'output.' + connector + '.disable'], check=True, timeout=4)
+    wait('OutputRemoved')
+    subprocess.run(['kscreen-doctor', 'output.' + connector + '.enable'], check=True, timeout=4)
+    wait('FrameSubmitted', 3)
+    ready(process, root, wait)
+
+import base64, io
+from PIL import Image
+fixture = io.BytesIO(); Image.new('RGB', (320,200), '#b3652a').save(fixture, format='PNG')
+run_case('valid-resource', ready, 'data:image/png;base64,' + base64.b64encode(fixture.getvalue()).decode())
+run_case('shell-ready', ready)
+run_case('recovery-ipc', abort)
+run_case('cover-crash', crash)
+run_case('output-removal', outputs)
+run_case('shell-never-ready')
+run_case('one-output-unready', unready=True)
+run_case('missing-resource', ready, 'file:///nonexistent/kos-cover.png')
+print('PASS T10 session matrix complete', flush=True)

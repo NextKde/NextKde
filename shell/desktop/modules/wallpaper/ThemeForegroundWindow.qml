@@ -34,7 +34,7 @@ PanelWindow {
     }
     // Unknown geometry fails closed rather than drawing over an application.
     readonly property bool clippingReady: blockingWindows.length<=16 && blockingWindows.every(w=>!!w.geometry)
-    visible: ScreenLifecycle.outputAvailable && ThemeWallpaperService.active
+    visible: !SessionEntryService.staticPresentation && ScreenLifecycle.outputAvailable && ThemeWallpaperService.active
         && !ThemeWallpaperService.locked
         && clippingReady
 

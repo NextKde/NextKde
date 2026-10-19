@@ -1,0 +1,5 @@
+# VM-only ~/.config/systemd/user/plasma-kwin_wayland.service.d/handoff.conf
+# Applies to the authenticated user's unit. No environment import is required.
+[Service]
+ExecStart=
+ExecStart=/opt/kos-handoff/kwin/bin/kwin_wayland_wrapper --xwayland

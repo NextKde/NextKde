@@ -12,6 +12,7 @@ function fixture() {
     const first = buffer('/a.png'), second = buffer('/b.png'), later = [], reports = [];
     const state = { currentImage: first, nextImage: second, effectImage: second,
         source: '/b.png', cleanupFrames: 0, revealProgress: 0.99, previewTarget: false,
+        SessionEntryService: {pending:false}, entryTransitionConsumed:false,
         transition: 'left', activeTransition: 'left', useReveal: true,
         Image: {Ready:1, Error:3}, Qt: {callLater: fn => later.push(fn)},
         revealAnimation: {running:false, start() {this.running = true;}, stop() {this.running = false;}},
@@ -73,3 +74,16 @@ function fixture() {
     assert.equal(first.source, ''); assert.equal(second.source, '');
 }
 console.log('wallpaper handoff: resident buffer swap, staggered cleanup and rapid-selection continuity passed');
+
+{
+    const {state} = fixture();
+    state.SessionEntryService.pending = true;
+    state.transition = 'top';
+    state.startTransition();
+    assert.equal(state.activeTransition, 'none');
+    assert.equal(state.entryTransitionConsumed, true);
+    state.SessionEntryService.pending = false;
+    state.source = '/a.png';
+    state.requestSource();
+    assert.equal(state.activeTransition, 'top', 'daily preference resumes after entry');
+}

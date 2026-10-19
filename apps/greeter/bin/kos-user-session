@@ -1,0 +1,132 @@
+#!/usr/bin/env python3
+"""Fixed authenticated Plasma entry. No installation or manager switch."""
+import os
+from pathlib import Path
+import signal
+import subprocess
+import sys
+import time
+
+APP = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(APP / 'companion'))
+from handoff import Runtime, build, PUBLIC_ROOT
+from session_output import prepare_session_output, phase, diagnostic
+from plasma_session import installed_command
+
+COMMAND = ['/usr/lib/plasma-dbus-run-session-if-needed', '/usr/bin/startplasma-wayland']
+
+
+def check():
+    return installed_command()
+
+
+def reject_existing():
+    if os.environ.get('WAYLAND_DISPLAY') or os.environ.get('DISPLAY'):
+        raise ValueError('existing-graphical-environment')
+    active = subprocess.run(['/usr/bin/systemctl', '--user', 'is-active', '--quiet', 'kos-shell.service'], timeout=5, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    if active.returncode == 0: raise ValueError('shared-kos-shell-active')
+    if active.returncode not in (3, 4): raise ValueError('shared-service-check-failed')
+    # logind also catches a Plasma desktop without KOS, including other seats.
+    uid = os.geteuid()
+    listing = subprocess.run(['/usr/bin/loginctl', 'list-sessions', '--no-legend', '--no-pager'], check=True, capture_output=True, text=True, timeout=5)
+    for row in listing.stdout.splitlines():
+        fields = row.split()
+        if len(fields) < 2 or fields[1] != str(uid): continue
+        result = subprocess.run(['/usr/bin/loginctl', 'show-session', fields[0], '-p', 'Type', '-p', 'State', '--no-pager'], check=True, capture_output=True, text=True, timeout=5)
+        props = dict(line.split('=', 1) for line in result.stdout.splitlines() if '=' in line)
+        if props.get('Type') in ('wayland', 'x11') and props.get('State') != 'closing' and fields[0] != os.environ.get('XDG_SESSION_ID'):
+            raise ValueError('other-graphical-session')
+
+
+def run_session(runtime, root=PUBLIC_ROOT, owner=0, command=None):
+    """Test harness may substitute command; the executable CLI never accepts it."""
+    lock = None
+    child = None
+    cover = None
+    handlers = {}
+    interrupted = None
+    interrupted_at = None
+    try:
+        lock = runtime.lock()
+        phase('HandoffReferenceStarting')
+        try:
+            desc = build(runtime.session, runtime.uid, root, owner, verify_resources=False)
+            runtime.write(desc, root, owner, verify_resources=False)
+            runtime.consume(root, owner, remove=False, verify_resources=False)
+            valid = True
+        except (OSError, ValueError, TypeError, KeyError):
+            # Failure reasons are fixed codes; never dump JSON or environment.
+            diagnostic('KOS_HANDOFF default-background', error=True)
+            valid = False
+        phase('HandoffReferenceReady')
+        env = dict(os.environ)
+        for k in ('KOS_HANDOFF_PATH', 'KOS_HANDOFF_SESSION', 'KOS_HANDOFF_SHA256'):
+            env.pop(k, None)
+        if valid:
+            env['KOS_HANDOFF_PATH'] = str(Path(env['XDG_RUNTIME_DIR']) / ('kos-handoff-' + runtime.session) / 'handoff.json')
+            env['KOS_HANDOFF_SESSION'] = runtime.session
+            env['KOS_HANDOFF_SHA256'] = runtime.digest.hex()
+        # These values are local to the child. Never systemd/dbus import them.
+        def forward(sig, _):
+            nonlocal interrupted, interrupted_at
+            interrupted = sig
+            if interrupted_at is None: interrupted_at = time.monotonic()
+            if child is not None and child.poll() is None:
+                os.killpg(child.pid, sig)
+
+        for sig in (signal.SIGTERM, signal.SIGINT, signal.SIGHUP):
+            handlers[sig] = signal.signal(sig, forward)
+        if interrupted is not None: return 128 + interrupted
+        phase('PlasmaStarting')
+        child = subprocess.Popen(COMMAND if command is None else command, env=env, start_new_session=True, restore_signals=False)
+        if command is None:
+            try:
+                phase('CoverSupervisorStarting')
+                cover = subprocess.Popen(['/usr/bin/python3', str(APP / 'companion/cover.py'), '--supervise', str(child.pid)], env=env, start_new_session=True, restore_signals=False)
+            except OSError:
+                diagnostic('KOS_COVER unavailable', error=True)
+        if interrupted is not None: forward(interrupted, None)
+        while True:
+            try: return child.wait(timeout=.1)
+            except subprocess.TimeoutExpired:
+                if interrupted_at is not None and time.monotonic() - interrupted_at >= 5:
+                    os.killpg(child.pid, signal.SIGKILL)
+                    return child.wait()
+    finally:
+        if cover is not None and cover.poll() is None:
+            try: os.killpg(cover.pid, signal.SIGTERM)
+            except ProcessLookupError: pass
+            try: cover.wait(timeout=2)
+            except subprocess.TimeoutExpired:
+                try: os.killpg(cover.pid, signal.SIGKILL)
+                except ProcessLookupError: pass
+                cover.wait()
+        for sig, handler in handlers.items(): signal.signal(sig, handler)
+        runtime.close()
+        if lock is not None: os.close(lock)
+
+
+def main():
+    global COMMAND
+    try:
+        if sys.argv[1:] == ['--check']:
+            check(); diagnostic('PASS fixed Plasma session entry (not a login test)'); return 0
+        prepare_session_output('kos-user-session')
+        if sys.argv[1:]: raise ValueError('unexpected-arguments')
+        COMMAND = check()
+        runtime = Runtime(os.environ.get('XDG_RUNTIME_DIR', ''))
+        try:
+            phase('SessionPreflightStarting')
+            reject_existing()
+            phase('SessionPreflightReady')
+        except BaseException:
+            runtime.close(); raise
+        root = APP / 'public-display' if APP == Path('/run/kos-greeter-test/app') else PUBLIC_ROOT
+        return run_session(runtime, root)
+    except (OSError, ValueError, subprocess.SubprocessError):
+        diagnostic('KOS_SESSION refused-or-failed', error=True)
+        return 1
+
+
+if __name__ == '__main__':
+    sys.exit(main())

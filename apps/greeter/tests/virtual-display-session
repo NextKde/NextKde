@@ -1,0 +1,124 @@
+#!/usr/bin/env python3
+"""Runs only as --exit-with-session child of a test virtual KWin."""
+import copy
+import json
+import os
+from pathlib import Path
+import shutil
+import subprocess
+import sys
+import tempfile
+import time
+
+APP = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(APP / 'companion'))
+import display
+
+assert os.environ.get('KOS_T06_VIRTUAL_TEST') == '1'
+assert os.environ['WAYLAND_DISPLAY'].startswith('kos-t06-virtual-')
+backend = display.Backend()
+inventory = backend.snapshot()
+assert len(inventory) == 2, inventory
+first, second = inventory
+identity = 'edid-sha256:' + 'f' * 64
+policy = dict(schemaVersion=1, outputs=[dict(hardwareId=identity, connector=first['connector'],
+    mode=first['currentMode'], scale=1.5, rotation=0, position=[0, 0], priority=1, hdr=False, vrr='never')])
+
+class VirtualBackend(display.Backend):
+    def snapshot(self):
+        inventory = super().snapshot()
+        # Only the test identity adapter is synthetic; KScreen writes/readback
+        # and QML windows use the actual independent virtual compositor.
+        for output in inventory:
+            if output['connector'] == first['connector']: output['hardwareId'] = identity
+        return inventory
+
+controller = display.Controller(VirtualBackend(), policy, True)
+result = controller.tick()
+assert result['status'] == 'applied', result
+assert next(o for o in result['outputs'] if o['connector'] == first['connector'])['scale'] == 1.5, result
+print('PASS virtual KWin: atomic startup scale 1.5 and actual readback', flush=True)
+
+with tempfile.TemporaryDirectory(prefix='kos-t06-qml-') as temp:
+    root = Path(temp) / 'app'
+    shutil.copytree(APP, root, ignore=shutil.ignore_patterns('__pycache__', 'tests'))
+    (root / 'companion/accounts.py').write_text('print("[]")\n')
+    driver = '''
+    onOutputStateChanged: console.info("T06_STATE " + JSON.stringify(root.outputState))
+    property bool testPrepared: false
+    property string testGeometry: ""
+    Timer {
+        interval: 100; running: true; repeat: true
+        onTriggered: {
+            if (root.activeScreen && window.width > 32 && window.height > 32) {
+                if (!root.testPrepared) {
+                    root.selectUser(null); root.phase = "AwaitingPrompt";
+                    response.text = "fixture-response"; root.testPrepared = true;
+                }
+                if (response.text !== "fixture-response") throw new Error("Migration lost response");
+                if (root.outputState && root.outputState.requestCount !== 0) throw new Error("Runtime display unexpectedly modeset");
+                if (formViewport.x < 0 || formViewport.y < 0 || formViewport.x + formViewport.width > window.width + 1 || formViewport.y + formViewport.height > window.height + 1)
+                    throw new Error("Form viewport outside output");
+                let geometry = root.activeScreen.name + " " + window.width + "x" + window.height + " " + root.activeScreen.x + "," + root.activeScreen.y;
+                if (geometry !== root.testGeometry) { root.testGeometry = geometry; console.info("T06_VIEW " + geometry); }
+            }
+        }
+    }
+    Timer { interval: 18000; running: true; onTriggered: root.terminate() }
+'''
+    source = (root / 'shell.qml').read_text()
+    (root / 'shell.qml').write_text(source.rsplit('}', 1)[0] + driver + '}\n')
+    log = Path(temp) / 'qml.log'
+    with log.open('wb') as stream:
+        env = os.environ.copy(); env.pop('GREETD_SOCK', None); env['KOS_GREETER_OUTPUT_APPLY'] = '1'
+        ui = subprocess.Popen(['/usr/bin/qs', '--log-rules', '*.debug=false', '-p', str(root)], env=env, stdout=stream, stderr=stream)
+        def wait_for(marker):
+            deadline = time.monotonic() + 5
+            while time.monotonic() < deadline:
+                text = log.read_text(errors='replace')
+                if marker in text: return
+                if ui.poll() is not None: raise AssertionError(text)
+                time.sleep(.1)
+            raise AssertionError('Missing ' + marker + '\n' + log.read_text(errors='replace'))
+        try:
+            wait_for('T06_VIEW ' + first['connector'])
+            a, b = first['connector'], second['connector']
+            display.run([display.DOCTOR, 'output.' + b + '.scale.2', 'output.' + b + '.position.1024,0',
+                         'output.' + b + '.priority.1', 'output.' + a + '.priority.2'])
+            wait_for('T06_VIEW ' + second['connector'])
+            print('PASS virtual KWin: priority migration, scale 2, viewport bounds, response retained', flush=True)
+            display.run([display.DOCTOR, 'output.' + a + '.disable'])
+            after = backend.snapshot()
+            assert next(o for o in after if o['connector'] == second['connector'])['enabled']
+            time.sleep(1.3)
+            initial = log.read_text(errors='replace').count('T06_VIEW ' + first['connector'])
+            display.run([display.DOCTOR, 'output.' + a + '.enable', 'output.' + a + '.priority.1', 'output.' + b + '.disable'])
+            # Check a new migration line after the second screen went away.
+            deadline = time.monotonic() + 5
+            while time.monotonic() < deadline:
+                if log.read_text(errors='replace').count('T06_VIEW ' + first['connector']) > initial: break
+                time.sleep(.1)
+            else: raise AssertionError(log.read_text(errors='replace'))
+            print('PASS virtual KWin: output disable/removal and restoration, same authentication item', flush=True)
+            # This KWin rejects negative layout requests even when the helper
+            # exits successfully; actual readback must detect that and stop.
+            negative = copy.deepcopy(policy)
+            negative['outputs'][0]['position'] = [-200, -100]
+            rejected = display.Controller(VirtualBackend(), negative, True)
+            refused = rejected.tick()
+            assert refused['status'] == 'fallback', refused
+            count = refused['requestCount']
+            for _ in range(3): assert rejected.tick()['requestCount'] == count
+            print('PASS virtual KWin: ineffective negative-layout request detected, supported fallback, no resubmit', flush=True)
+            # Small logical output exercises outer scroll viewport.
+            display.run([display.DOCTOR, 'output.' + a + '.scale.3'])
+            time.sleep(1)
+            assert ui.poll() is None
+            print('PASS virtual KWin: small-screen scroll viewport remained mapped', flush=True)
+        finally:
+            ui.terminate()
+            ui.wait(timeout=5)
+    output = log.read_text(errors='replace')
+    assert 'fixture-response' not in output
+    assert 'Error:' not in output and 'TypeError' not in output and 'ReferenceError' not in output, output
+    print('\n'.join(line for line in output.splitlines() if 'T06_VIEW ' in line), flush=True)

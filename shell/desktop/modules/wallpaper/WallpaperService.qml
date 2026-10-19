@@ -13,6 +13,7 @@ import "../../../Kos/Ui/foundation/WallpaperCatalog.js" as Catalog
 // Plasma wallpaper is read only for first-run migration and fallback.
 QtObject {
     id: service
+    signal presentationChangeRequested()
 
     property Settings config: Settings {
         location: "file://" + Quickshell.stateDir + "/wallpaper.ini"
@@ -127,6 +128,7 @@ QtObject {
         const path = localPath(value)
         if (!path || takeoverPending)
             return false
+        if (userSelected) presentationChangeRequested()
         transitionSeed = Math.random()
         readyOutputNames = []
         settledOutputNames = []
@@ -143,6 +145,7 @@ QtObject {
 
     function chooseTheme(id) {
         if ((!Catalog.theme(id) && !ThemePackService.has(id)) || takeoverPending) return false
+        presentationChangeRequested()
         SpatialWallpaperService.cancelPreparation()
         AppearanceConfigService.updateSpatialWallpaperEnabled(false)
         if (mode !== "theme" || themeId !== id) {
@@ -312,6 +315,7 @@ QtObject {
         const mode = String(value)
         if (["crop", "fit", "stretch", "center"].indexOf(mode) < 0)
             return false
+        presentationChangeRequested()
         config.fitMode = mode
         config.sync()
         return true

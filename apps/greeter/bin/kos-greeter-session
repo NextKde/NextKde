@@ -1,0 +1,51 @@
+#!/usr/bin/env python3
+"""Explicit isolated experiment entry; never installs or switches a manager."""
+import os
+from pathlib import Path
+import shlex
+import sys
+
+ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT / 'companion'))
+from session_output import prepare_session_output, phase, diagnostic
+from greeter_config import prepare as prepare_greeter_config
+from plasma_session import installed_command, greetd_executable
+
+def main():
+    if sys.argv[1:] == ['--check']:
+        check()
+        return
+    prepare_session_output('kos-greeter-session')
+    if sys.argv[1:] not in (['--isolated-seat'], ['--temporary-seat'], ['--installed-seat']):
+        sys.exit('Use --check, --isolated-seat in a VM, or --temporary-seat via the explicit timed test scripts. No deployment is performed.')
+    if sys.argv[1:] == ['--installed-seat'] and ROOT != Path('/usr/local/lib/kos-greeter/app'):
+        sys.exit('Installed seat must run from the root-managed installed app.')
+    if not os.environ.get('GREETD_SOCK'):
+        sys.exit('Refusing to start without a greetd socket.')
+    if os.environ.get('WAYLAND_DISPLAY') or os.environ.get('DISPLAY'):
+        sys.exit('Refusing an existing graphical session; use a disposable VM greetd seat.')
+    check()
+    try:
+        environment = prepare_greeter_config(os.environ)
+    except (OSError, ValueError):
+        diagnostic('KOS_GREETER_CONFIG unavailable', error=True)
+        sys.exit(70)
+    environment['KOS_GREETER_OUTPUT_APPLY'] = '1'
+    phase('GreeterCompositorStarting')
+    os.execve('/usr/bin/dbus-run-session', [
+        'dbus-run-session', '--', '/usr/bin/kwin_wayland', '--drm', '--no-lockscreen', '--no-global-shortcuts',
+        '--no-kactivities', '--exit-with-session', shlex.join(['/usr/bin/python3', str(ROOT / 'bin/kos-greeter-ui')])], environment)
+
+def check():
+    command = installed_command()
+    paths = ['/usr/bin/dbus-run-session', '/usr/bin/kwin_wayland', '/usr/bin/qs', '/usr/bin/python3', greetd_executable(), '/usr/bin/kscreen-doctor', *command]
+    for path in paths:
+        if not os.access(path, os.X_OK):
+            sys.exit('Missing executable: ' + path)
+    for path in (ROOT / 'bin/kos-user-session', ROOT / 'bin/kos-greeter-ui'):
+        if not path.is_file() or not os.access(path, os.R_OK):
+            sys.exit('Missing readable session helper: ' + str(path))
+    diagnostic('Dependency and installed session allowlist check passed (not a login test).')
+
+if __name__ == '__main__':
+    main()

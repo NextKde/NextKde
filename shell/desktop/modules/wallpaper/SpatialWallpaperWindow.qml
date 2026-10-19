@@ -1,4 +1,5 @@
 import QtQuick
+import QtQuick.Window
 import Quickshell
 import Quickshell.Io
 import Quickshell.Wayland
@@ -31,9 +32,64 @@ PanelWindow {
     property real pointerY: 0
     readonly property bool active: wallpaperLayer.active
 
+    Connections {
+        target: SessionEntryService
+        function onImageMatchesChanged() {
+            // Verification may finish after an otherwise idle desktop image
+            // has settled. Submit another frame for the readiness gate.
+            if (SessionEntryService.pending && SessionEntryService.imageMatches)
+                root.contentItem.Window.window.update()
+        }
+    }
+
+    Connections {
+        target: root.contentItem.Window.window
+        function onFrameSwapped() {
+            if (SessionEntryService.pending && SessionEntryService.defaultBackground) {
+                SessionEntryService.frame(root.screen.name, "", "crop"); return;
+            }
+            if (SessionEntryService.pending && wallpaperLayer.active && wallpaperLayer.visualReady
+                && !SpatialWallpaperService.activationPending && wallpaperLayer.opacity >= 0.999) {
+                SessionEntryService.frame(root.screen.name, WallpaperService.wallpaperUrl.toString(), WallpaperService.fitMode);
+                return;
+            }
+            if (SessionEntryService.pending && ordinaryWallpaper.visible
+                && ordinaryWallpaper.ready && !ordinaryWallpaper.transitioning
+                && ordinaryWallpaper.currentImage.source.toString() === ordinaryWallpaper.source.toString()
+                && !ThemeWallpaperService.active && !wallpaperLayer.active)
+                SessionEntryService.frame(root.screen.name, ordinaryWallpaper.source.toString(), ordinaryWallpaper.fitMode)
+        }
+    }
+    WallpaperImageLayer {
+        id: entryWallpaper
+        backgroundColor: "#16283b"
+        anchors.fill: parent
+        z: 200
+        targetScreen: root.screen
+        source: SessionEntryService.sessionImage
+        fitMode: SessionEntryService.sessionFit
+        transition: "none"
+        visible: SessionEntryService.sessionImage !== ""
+        opacity: SessionEntryService.released ? 1 - SessionEntryService.progress : 1
+    }
+    Connections {
+        target: root.contentItem.Window.window
+        function onFrameSwapped() {
+            if (SessionEntryService.pending && entryWallpaper.visible && entryWallpaper.ready
+                && !entryWallpaper.transitioning
+                && entryWallpaper.currentImage.source.toString() === entryWallpaper.source.toString())
+                SessionEntryService.frame(root.screen.name, entryWallpaper.source.toString(), entryWallpaper.fitMode)
+        }
+    }
+    Rectangle {
+        anchors.fill: parent; z: 201; color: "#16283b"
+        visible: SessionEntryService.defaultBackground
+        opacity: SessionEntryService.released ? 1 - SessionEntryService.progress : 1
+    }
     ThemeWallpaperLayer {
         anchors.fill: parent
         targetScreen: root.screen
+        rendererEnabled: !SessionEntryService.staticPresentation
     }
 
     WallpaperImageLayer {
@@ -41,10 +97,10 @@ PanelWindow {
         anchors.fill: parent
         targetScreen: root.screen
         previewTarget: WallpaperPreviewService.active
-        source: ThemeWallpaperService.active ? ""
+        source: SessionEntryService.staticPresentation || ThemeWallpaperService.active ? ""
             : WallpaperPreviewService.active ? WallpaperPreviewService.image
-            : WallpaperService.takeoverEnabled ? WallpaperService.wallpaperUrl : ""
-        fitMode: WallpaperService.fitMode
+            : (WallpaperService.takeoverEnabled ? WallpaperService.wallpaperUrl : "")
+        fitMode: SessionEntryService.sessionImage ? SessionEntryService.sessionFit : WallpaperService.fitMode
         transition: WallpaperService.transition
         visible: !ThemeWallpaperService.active && (WallpaperPreviewService.active || WallpaperService.takeoverEnabled) && ordinaryWallpaper.ready
             && wallpaperLayer.opacity < 1
@@ -54,6 +110,7 @@ PanelWindow {
         id: wallpaperLayer
         anchors.fill: parent
         targetScreen: root.screen
+        renderingEnabled: !SessionEntryService.staticPresentation
         pointerX: root.pointerX
         pointerY: root.pointerY
     }

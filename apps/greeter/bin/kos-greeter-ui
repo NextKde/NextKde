@@ -1,0 +1,61 @@
+#!/usr/bin/env python3
+"""Bounded UI reconnect inside the existing Greeter compositor, never PAM."""
+import os
+from pathlib import Path
+import signal
+import subprocess
+import sys
+import time
+
+APP = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(APP / 'companion'))
+from session_output import diagnostic
+
+COMMAND = ['/usr/bin/qs', '--log-rules', '*.debug=false', '-p', str(APP/'shell.qml')]
+
+
+def run_ui(command=None, limit=3, delay=1):
+    child = None
+    stopped = False
+    stopped_at = None
+    handlers = {}
+    def stop(sig, _):
+        nonlocal stopped, stopped_at
+        stopped = True
+        if stopped_at is None: stopped_at = time.monotonic()
+        if child is not None and child.poll() is None:
+            try: child.send_signal(sig)
+            except ProcessLookupError: pass
+    try:
+        for sig in (signal.SIGTERM, signal.SIGINT, signal.SIGHUP):
+            handlers[sig] = signal.signal(sig, stop)
+        for attempt in range(limit):
+            if stopped: return 70
+            # Inherit stdin and reviewed journal streams; never capture protocol.
+            child = subprocess.Popen(COMMAND if command is None else command, restore_signals=False)
+            while True:
+                try: code = child.wait(timeout=.2); break
+                except subprocess.TimeoutExpired:
+                    if stopped_at is not None and time.monotonic() - stopped_at >= 2:
+                        child.kill(); code = child.wait(); break
+            if stopped: return 70
+            if code == 0: return 0  # greetd remains authority for scheduled-session success.
+            if attempt + 1 < limit:
+                diagnostic('KOS_GREETER_UI restart ' + str(attempt + 1))
+                time.sleep(delay)
+        diagnostic('KOS_GREETER_UI restart-limit')
+        return 70
+    except OSError:
+        diagnostic('KOS_GREETER_UI unavailable', error=True)
+        return 70
+    finally:
+        for sig, handler in handlers.items(): signal.signal(sig, handler)
+        if child is not None and child.poll() is None:
+            child.terminate()
+            try: child.wait(timeout=2)
+            except subprocess.TimeoutExpired: child.kill(); child.wait()
+
+
+if __name__ == '__main__':
+    if sys.argv[1:]: sys.exit(70)
+    sys.exit(run_ui())

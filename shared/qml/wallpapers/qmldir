@@ -1,3 +1,5 @@
 ThemeWallpaperScene 1.0 ThemeWallpaperScene.qml
 
 ThemeWallpaperThumbnail 1.0 ThemeWallpaperThumbnail.qml
+
+StaticWallpaperImage 1.0 StaticWallpaperImage.qml

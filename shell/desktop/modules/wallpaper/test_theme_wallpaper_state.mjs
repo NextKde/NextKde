@@ -6,7 +6,8 @@ const methods = source.slice(source.indexOf('    function isLocalImage('),source
 const config = {image:'/original.jpg', mode:'image', themeId:'starfield', slideshowEnabled:true,
     takeoverEnabled:false, sync() {}};
 const state = {config, takeoverPending:false, transitionSeed:0, readyOutputNames:['DP-1'],
-    settledOutputNames:['DP-1'], appliedProxyKey:'original', calls:0,
+    settledOutputNames:['DP-1'], appliedProxyKey:'original', calls:0, presentationChanges:0,
+    presentationChangeRequested(){ state.presentationChanges++; },
     Catalog:{theme:id => ['starfield','blackhole','weather'].includes(id) ? {id} : null},
     ThemePackService:{has: () => false, accent: () => ''},
     SpatialWallpaperService:{cancelPreparation() {}},
@@ -16,8 +17,10 @@ const state = {config, takeoverPending:false, transitionSeed:0, readyOutputNames
 Object.defineProperties(state,{mode:{get(){return config.mode;}},themeId:{get(){return config.themeId;}}});
 vm.createContext(state);vm.runInContext(methods,state);
 assert.equal(state.chooseTheme('invalid'),false);
+assert.equal(state.presentationChanges,0);
 assert.equal(config.mode,'image');
 assert.equal(state.chooseTheme('blackhole'),true);
+assert.equal(state.presentationChanges,1);
 assert.equal(config.mode,'theme');assert.equal(config.themeId,'blackhole');
 assert.equal(config.image,'/original.jpg','the original image remains available for restore/lockscreen');
 assert.equal(config.slideshowEnabled,false);assert.equal(config.takeoverEnabled,true);
@@ -26,6 +29,7 @@ state.reportThemeReady('DP-1','weather');assert.equal(state.readyOutputNames.len
 state.reportThemeReady('DP-1','blackhole');assert.equal(state.readyOutputNames.length,1);
 state.chooseTheme('blackhole');assert.equal(state.readyOutputNames.length,1,'reselecting a ready theme must not stall takeover');
 state.chooseImage('/new.jpg',true);
+assert.equal(state.presentationChanges,3,'theme reselection and explicit image selection notify entry presentation');
 assert.equal(config.mode,'image');assert.equal(config.image,'/new.jpg');
 assert.equal(state.readyOutputNames.length,0);
 console.log('Theme wallpaper: validation, original-image preservation, readiness, reselection and return to images passed.');

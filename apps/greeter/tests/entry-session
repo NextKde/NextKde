@@ -1,0 +1,152 @@
+#!/usr/bin/env python3
+"""Runs the production gate and Cover in an isolated virtual KWin."""
+import hashlib, json, os, shutil, signal, subprocess, tempfile, time
+from pathlib import Path
+APP = Path(__file__).resolve().parents[1]
+REPO = APP.parents[1]
+OUT = Path(os.environ['KOS_T11_EVIDENCE'])
+assert os.environ['WAYLAND_DISPLAY'].startswith('wayland-kos-t11-')
+
+def run_case(name, delay=0, lost=False, bad=False, default=False, late=False, fit="crop"):
+    for capture in OUT.glob(name+'-Virtual-*.png'): capture.unlink()
+    with tempfile.TemporaryDirectory(prefix='kos-entry-') as temp:
+        root = Path(temp); app = root/'app'
+        shutil.copytree(APP, app, ignore=shutil.ignore_patterns('tests','__pycache__'))
+        from PIL import Image
+        image = root/'fixture.png'; Image.new('RGB',(320,200),'#b3652a').save(image)
+        digest = hashlib.sha256(image.read_bytes()).hexdigest()
+        import sys
+        sys.path.insert(0, str(APP/'companion'))
+        from resources import Store, NOTICE
+        public = root/'public'
+        store = Store(public)
+        manifest = store.publish(os.geteuid(), image.read_bytes(), consent=True, notice=NOTICE, fit=fit)
+        (app/'companion/entry.py').write_text((APP/'companion/entry.py').read_text().replace('Reader(PUBLIC_ROOT if root is None else root, owner)', 'Reader('+repr(str(public))+', '+str(os.geteuid())+')'))
+        if bad: store.revoke(os.geteuid())
+        state = dict(session='a'*32, hash=digest, version=manifest['version'], fit=fit, source='data:image/png;base64,'+__import__('base64').b64encode(image.read_bytes()).decode())
+        if default: state.update(hash='',version='default',source='')
+        (app/'companion/cover.py').write_text('import json,time\nwhile True:\n print(json.dumps('+repr(state)+'),flush=True); time.sleep(.5)\n')
+        service = (REPO/'shell/desktop/modules/common/SessionEntryService.qml').read_text()
+        service = service.replace('import qs.desktop.modules.wallpaper','').replace('import qs.desktop.modules.dock','')
+        service = service.replace('WindowService.providerReady', 'config.ready')
+        service = service.replace('WallpaperService','wallpaper').replace('ConfigService.ready','config.ready').replace('Appearanceconfig','appearance')
+        # AppearanceConfigService was replaced by the previous literal replacement.
+        service = service.replace('AppearanceConfigService','appearance').replace('Appearanceconfig','appearance')
+        service = service.replace('    readonly property string coverPath:', '    readonly property string unusedCoverPath:')
+        service = service.replace('    id: root','    id: root\n    property string coverPath: '+json.dumps(str(app/'cover.qml'))+'\n    property QtObject wallpaper: QtObject { signal presentationChangeRequested(); property string mode: "image"; property string fitMode: "crop"; property bool takeoverEnabled: true; property url wallpaperUrl: '+json.dumps(image.as_uri() if not bad else (root/'wrong.png').as_uri())+' }\n    property QtObject config: QtObject { property bool ready: true }\n    property QtObject appearance: QtObject { property bool ready: true; property bool barIntegratedWithDock: false; property bool spatialWallpaperEnabled: false }',1)
+        (root/'SessionEntryService.qml').write_text(service)
+        (root/'qmldir').write_text('singleton SessionEntryService 1.0 SessionEntryService.qml\n')
+        (root/'WallpaperPreviewService.qml').write_text('pragma Singleton\nimport QtQuick\nQtObject { property bool active: false }\n')
+        with (root/'qmldir').open('a') as out: out.write('singleton WallpaperPreviewService 1.0 WallpaperPreviewService.qml\n')
+        service=service.replace('import Quickshell.Io','import Quickshell.Io\nimport "."')
+        (root/'SessionEntryService.qml').write_text(service)
+        qml = '''import QtQuick
+import QtQuick.Window
+import Quickshell
+import Quickshell.Wayland
+import "." as Entry
+ShellRoot {
+ Timer { interval: DELAY; running: true; onTriggered: { Entry.SessionEntryService.essential("bar", true); Entry.SessionEntryService.essential("dock", true); } }
+ Variants { model: Quickshell.screens
+  PanelWindow { id: window; required property var modelData; screen: modelData
+   anchors { top: true; bottom: true; left: true; right: true }
+   WlrLayershell.layer: WlrLayer.Bottom
+   color: "#16283b"
+   Image { id: image; anchors.fill: parent; source: Entry.SessionEntryService.sessionImage || Entry.SessionEntryService.wallpaper.wallpaperUrl; fillMode: Image.PreserveAspectCrop }
+   Connections { target: Entry.SessionEntryService
+    function onImageMatchesChanged() { if (Entry.SessionEntryService.imageMatches) image.Window.window.update(); }
+   }
+   Rectangle { width: parent.width; height: 30; color: "white"; opacity: Entry.SessionEntryService.progress }
+   Connections { target: image.Window.window
+    function onFrameSwapped() { if ((Entry.SessionEntryService.defaultBackground || image.status === Image.Ready) && !(LOST && window.screen.name === "Virtual-1")) Entry.SessionEntryService.frame(window.screen.name, image.source.toString(), "crop"); }
+   }
+  }
+ }
+ Timer { interval: 14000; running: true; onTriggered: Qt.quit() }
+}
+'''.replace('DELAY',str(max(1,delay))).replace('LOST','true' if lost else 'false')
+        if os.environ.get('KOS_T12_PRODUCTION_LAYER') == '1':
+            # Production static image layer and formal wallpaper window; dynamic
+            # and spatial services are stubs with both modes initially active.
+            wall = REPO/'shell/desktop/modules/wallpaper'
+            formal=(wall/'SpatialWallpaperWindow.qml').read_text().replace('import qs.desktop.modules.common', 'import "."')
+            if lost: formal=formal.replace('function onFrameSwapped() {', 'function onFrameSwapped() { if (root.screen.name === "Virtual-1") return;')
+            if fit in ('fit','center'):
+                capture='\n    Timer { interval: 200; running: true; repeat: true\n        onTriggered: {\n            if (SessionEntryService.released && SessionEntryService.sessionImage !== "") {\n                stop(); entryWallpaper.grabToImage(function(result) { result.saveToFile(CAPTURE); });\n            }\n        }\n    }\n'
+                formal=formal.rsplit('}',1)[0]+capture.replace('CAPTURE', json.dumps(str(OUT/(name+'-'))))+'}'
+                formal=formal.replace(json.dumps(str(OUT/(name+'-'))),json.dumps(str(OUT/(name+'-')))+' + root.screen.name + ".png"')
+            (root/'SpatialWallpaperWindow.qml').write_text(formal)
+            layer=(wall/'WallpaperImageLayer.qml').read_text().replace('import qs.desktop.modules.common', 'import "."')
+            layer=layer.replace('"../../../Kos/Ui/wallpapers"', json.dumps((APP/'wallpapers').as_uri()))
+            layer=layer.replace('"../../../Kos/Ui/foundation/WallpaperCatalog.js"', json.dumps((REPO/'shared/qml/foundation/WallpaperCatalog.js').as_uri()))
+            (root/'WallpaperImageLayer.qml').write_text(layer)
+            shutil.copytree(wall/'shaders', root/'shaders')
+            stubs={
+                'WallpaperService': 'property bool takeoverEnabled: true; property url wallpaperUrl: ""; property string fitMode: "crop"; property string transition: "top"; property real transitionSeed: 0; function reportImageReady(a,b) {} function reportTransitionSettled(a,b) {} function reportImageFailed(a) {}',
+                'WallpaperPreviewService': 'property bool active: false; property url image: ""; property real transitionSeed: 0; property real direction: 1; function imageReady(a,b) {} function imageFailed(a) {}',
+                'ThemeWallpaperService': 'property bool active: true',
+            }
+            for stub_name, props in stubs.items():
+                (root/(stub_name+'.qml')).write_text('pragma Singleton\nimport QtQuick\nQtObject { '+props+' }\n')
+                if stub_name != 'WallpaperPreviewService':
+                    with (root/'qmldir').open('a') as out: out.write('singleton '+stub_name+' 1.0 '+stub_name+'.qml\n')
+            (root/'ThemeWallpaperLayer.qml').write_text('import QtQuick\nItem { property var targetScreen; property bool rendererEnabled: true }\n')
+            (root/'DepthWallpaperLayer.qml').write_text('import QtQuick\nItem { property var targetScreen; property bool renderingEnabled: true; property bool active: renderingEnabled; property real pointerX; property real pointerY; property bool visualReady: true; property bool meshRendererAvailable: false; property real renderedPointerX: 0; property real renderedPointerY: 0 }\n')
+            with (root/'qmldir').open('a') as out:
+                for type_name in ('SpatialWallpaperWindow','WallpaperImageLayer','ThemeWallpaperLayer','DepthWallpaperLayer'):
+                    out.write(type_name+' 1.0 '+type_name+'.qml\n')
+            start=qml.index('  PanelWindow {')
+            end=qml.index('\n }\n Timer { interval: 14000',start)
+            qml=qml[:start]+'''  Entry.SpatialWallpaperWindow { required property var modelData; screen: modelData }'''+qml[end:]
+        (root/'shell.qml').write_text(qml)
+        log = OUT/(name+'.log')
+        with log.open('w') as stream:
+            if late:
+                early = subprocess.Popen(['qs','-p',str(root/'shell.qml')],stdout=stream,stderr=stream,start_new_session=True)
+                time.sleep(2)
+            cover = subprocess.Popen(['qs','-p',str(app/'cover.qml')],stdout=stream,stderr=stream,start_new_session=True)
+            shell = None
+            try:
+                time.sleep(.3)
+                shell = early if late else subprocess.Popen(['qs','-p',str(root/'shell.qml')],stdout=stream,stderr=stream,start_new_session=True)
+                start = time.monotonic()
+                while time.monotonic()-start < 17:
+                    text = log.read_text(errors='replace')
+                    marker = 'KOS_ENTRY Timeout' if lost or bad else 'KOS_ENTRY RevealComplete'
+                    # Desktop and Cover animations finish independently.
+                    if marker in text and (lost or bad or 'KOS_COVER RevealComplete' in text): break
+                    if shell.poll() is not None: raise AssertionError(text)
+                    time.sleep(.05)
+                else: raise AssertionError(text)
+                assert not any(x in text for x in ('ReferenceError','TypeError','Failed to load configuration')),text
+                if lost or bad: assert 'KOS_ENTRY RevealStarted' not in text,text
+                else:
+                    assert 'KOS_COVER RevealStarted' in text and 'KOS_COVER RevealComplete' in text,text
+                    assert time.monotonic()-start >= delay/1000,text
+                if fit in ('fit','center') and os.environ.get('KOS_T12_PRODUCTION_LAYER') == '1':
+                    for screen in ('Virtual-0','Virtual-1'):
+                        capture=OUT/(name+'-'+screen+'.png')
+                        until=time.monotonic()+3
+                        while not capture.exists() and time.monotonic()<until: time.sleep(.05)
+                        with Image.open(capture) as pixels:
+                            assert pixels.getpixel((0,0))[:3] == (22,40,59), (name,pixels.getpixel((0,0)))
+                            assert pixels.getpixel((512,384))[:3] == (179,101,42), name
+                print('PASS T11 '+name,flush=True)
+            finally:
+                for p in (shell,cover):
+                    if p and p.poll() is None: os.killpg(p.pid,signal.SIGTERM)
+                for p in (shell,cover):
+                    if p:
+                        try: p.wait(timeout=2)
+                        except subprocess.TimeoutExpired: os.killpg(p.pid,signal.SIGKILL);p.wait()
+run_case('cold-fixture')
+run_case('warm-fixture')
+run_case('default-fallback',default=True)
+run_case('late-cover',late=True)
+run_case('delayed-essential',delay=2000)
+run_case('lost-output-ready',lost=True)
+run_case('hash-mismatch',bad=True)
+
+if os.environ.get("KOS_T12_PRODUCTION_LAYER") == "1":
+    run_case("fit-background",fit="fit")
+    run_case("center-background",fit="center")

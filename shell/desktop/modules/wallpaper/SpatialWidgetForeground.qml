@@ -1,4 +1,5 @@
 import QtQuick
+import qs.desktop.modules.common
 
 // This item lives in the desktop's Bottom-layer window. It has no input
 // press handlers; hovering only changes paint, leaving clicks to the widget.
@@ -11,14 +12,14 @@ Item {
     property bool suspended: false
     readonly property bool meshRendererAvailable: subject.meshRendererAvailable
     readonly property bool ready: subject.visualReady && SpatialWallpaperService.layeredReady
-    visible: ready && !suspended
+    visible: ready && !suspended && !SessionEntryService.staticPresentation
 
     DepthWallpaperLayer {
         id: subject
         anchors.fill: parent
         targetScreen: root.targetScreen
         foregroundOnly: true
-        renderingEnabled: SpatialWallpaperService.layeredReady
+        renderingEnabled: !SessionEntryService.staticPresentation && SpatialWallpaperService.layeredReady
             && !root.suspended && root.widgetRects.length > 0
         pointerX: root.pointerX
         pointerY: root.pointerY

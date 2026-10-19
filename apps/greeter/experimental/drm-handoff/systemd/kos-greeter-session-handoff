@@ -1,0 +1,44 @@
+#!/usr/bin/python3 -I
+"""Explicit VM-only entry, used only by the experimental greetd configuration."""
+import importlib.machinery
+import importlib.util
+import os
+from pathlib import Path
+import sys
+APP = Path('/usr/local/lib/kos-greeter/app')
+KWIN = '/opt/kos-handoff/kwin/bin/kwin_wayland'
+
+def launch_plan(environment):
+    if environment.get('WAYLAND_DISPLAY') or environment.get('DISPLAY'):
+        raise ValueError('existing-graphical-session')
+    fd = int(environment.get('KOS_KWIN_HANDOFF_CONTROL_FD', '-1'))
+    if fd < 3 or not environment.get('GREETD_SOCK'):
+        raise ValueError('missing-private-channel')
+    import socket
+    channel = socket.socket(fileno=os.dup(fd))
+    try:
+        if channel.getsockopt(socket.SOL_SOCKET, socket.SO_TYPE) != socket.SOCK_SEQPACKET:
+            raise ValueError('invalid-private-channel')
+    finally:
+        channel.close()
+    os.set_inheritable(fd, True)
+    return ['/usr/bin/dbus-run-session', '--', KWIN, '--drm', '--no-lockscreen',
+            '--no-global-shortcuts', '--no-kactivities', '--exit-with-session',
+            str(APP / 'bin/kos-greeter-ui')]
+
+def main():
+    if sys.argv[1:]:
+        return 70
+    from pathlib import Path
+    if Path(__file__).resolve() != Path('/opt/kos-handoff/libexec/kos-greeter-session-handoff'):
+        return 70
+    sys.path.insert(0, str(APP / 'companion'))
+    from greeter_config import prepare
+    environment = prepare(os.environ)
+    environment['KOS_GREETER_OUTPUT_APPLY'] = '1'
+    command = launch_plan(environment)
+    os.execve(command[0], command, environment)
+
+if __name__ == '__main__':
+    try: sys.exit(main())
+    except (OSError, ValueError, ImportError): sys.exit(70)

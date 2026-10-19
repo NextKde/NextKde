@@ -1,0 +1,70 @@
+#!/usr/bin/env python3
+"""Check first mapping/frame of real background windows, on isolated outputs."""
+import base64, io, json, os, shutil, signal, subprocess, tempfile, time
+from pathlib import Path
+from PIL import Image
+APP=Path(__file__).resolve().parents[1]
+OUT=Path(os.environ['KOS_STARTUP_BACKGROUND_EVIDENCE'])
+assert os.environ['WAYLAND_DISPLAY'].startswith('wayland-kos-background-')
+blob=io.BytesIO();Image.new('RGB',(400,300),'#b3652a').save(blob,format='PNG')
+source='data:image/png;base64,'+base64.b64encode(blob.getvalue()).decode()
+for name in ('wallpaper-delayed','cover-delayed','cover-feed-timeout'):
+ with tempfile.TemporaryDirectory(prefix='kos-first-frame-') as tmp:
+  app=Path(tmp)/'app';shutil.copytree(APP,app,ignore=shutil.ignore_patterns('tests','__pycache__'))
+  # Inspect the production host's first submitted frame, not an already-ready screenshot.
+  component=app/'qml/WallpaperWindows.qml' if name=='wallpaper-delayed' else app/'cover.qml'
+  qml=component.read_text()
+  qml=qml.replace('onFrameSubmitted:', '''property bool firstFrame: true
+                onFrameSubmitted: {
+                    if (firstFrame) {
+                        firstFrame = false;
+                        if ("CASE" !== "cover-feed-timeout" && !resourceReady) throw new Error("MAPPED_BEFORE_IMAGE");
+                        grabToImage(result => { result.saveToFile("OUTPUT/CASE-" + window.screen.name + ".png"); console.info("FIRST_FRAME " + window.screen.name); });
+                    }
+                }
+                onDecoded: console.info("DECODED " + window.screen.name)
+                onFrameSubmitted:'''.replace('CASE',name).replace('OUTPUT',str(OUT)),1)
+  # Two handlers cannot coexist: keep original event body inside a second signal connection.
+  qml=qml.replace('                onDecoded: console.info("DECODED " + window.screen.name)\n                onFrameSubmitted:', '                signal originalFrameSubmitted()\n                onOriginalFrameSubmitted:',1)
+  # WallpaperWindows already contains an onDecoded handler.
+  component.write_text(qml)
+  if name=='wallpaper-delayed':
+   (app/'shell.qml').write_text('''import QtQuick
+import Quickshell
+import "qml" as Greeter
+ShellRoot {
+ Greeter.WallpaperWindows { id: backgrounds }
+ Timer { interval: 1200; running: true; onTriggered: { backgrounds.state = STATE; backgrounds.sourceReady = true; } }
+ Timer { interval: 3500; running: true; onTriggered: Qt.quit() }
+}
+'''.replace('STATE',json.dumps(dict(source=source,fit='crop',version='fixture'))))
+   entry=app/'shell.qml'
+  else:
+   script='import time,json\ntime.sleep(1.2)\nwhile True:\n print(json.dumps('+repr(dict(source=source,fit='crop',version='fixture',session='a'*32,hash='b'*64))+'),flush=True);time.sleep(.5)\n'
+   if name=='cover-feed-timeout':script='import time\ntime.sleep(20)\n'
+   (app/'companion/cover.py').write_text(script);entry=app/'cover.qml'
+  log=OUT/(name+'.log')
+  with log.open('w') as stream:
+   process=subprocess.Popen(['qs','-p',str(entry)],stdout=stream,stderr=stream,start_new_session=True)
+   started=time.monotonic()
+   try:
+    time.sleep(.7)
+    assert 'FIRST_FRAME' not in log.read_text(),log.read_text()
+    deadline=time.monotonic()+7
+    while time.monotonic()<deadline:
+     text=log.read_text()
+     if text.count('FIRST_FRAME')==2:break
+     if process.poll() is not None:raise AssertionError(text)
+     time.sleep(.05)
+    else:raise AssertionError(text)
+    assert 'MAPPED_BEFORE_IMAGE' not in text and 'ERROR' not in text and 'Binding loop' not in text,text
+    if name=='cover-feed-timeout': assert 1.8 <= time.monotonic()-started < 4,text
+    expected=(22,40,59) if name=='cover-feed-timeout' else (179,101,42)
+    for screen in ('Virtual-0','Virtual-1'):
+     image=Image.open(OUT/(name+'-'+screen+'.png')).convert('RGB')
+     assert image.getpixel((512,384))==expected,(name,screen,image.getpixel((512,384)))
+    print('PASS first-frame '+name,flush=True)
+   finally:
+    if process.poll() is None:os.killpg(process.pid,signal.SIGTERM)
+    try:process.wait(timeout=2)
+    except subprocess.TimeoutExpired:os.killpg(process.pid,signal.SIGKILL);process.wait()

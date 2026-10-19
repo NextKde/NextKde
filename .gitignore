@@ -54,3 +54,7 @@ reasonix.toml
 # Session-local assistant metadata + local effect build dir
 .mimosa/
 kwin/kwin-effects-stageanim/build/
+
+# Greeter research, review records and generated test media stay local.
+/docs/kos-greeter/evidence/
+/docs/kos-greeter/reviews/

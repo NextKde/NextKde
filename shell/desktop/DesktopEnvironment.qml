@@ -763,6 +763,13 @@ Item {
     // hide it while its tray delegates are still being constructed. Qt 6.11
     // can crash while cleaning that incomplete QQuickWindow scene. Wait for
     // the persisted integration choice before making the Bar visible.
+    Connections {
+        target: AppearanceConfigService
+        function onReadyChanged() {
+            if (AppearanceConfigService.ready && shell.barIntegratedWithDock)
+                SessionEntryService.essential("bar", true)
+        }
+    }
     Bar {
         enabled: AppearanceConfigService.ready
             && !shell.barIntegratedWithDock

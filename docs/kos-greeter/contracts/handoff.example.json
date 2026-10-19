@@ -1,0 +1,46 @@
+{
+  "schemaVersion": 1,
+  "sessionId": "EXAMPLE-NOT-A-REAL-SESSION",
+  "issuedAt": "2026-10-11T10:00:00+08:00",
+  "expiresAt": "2026-10-11T10:02:00+08:00",
+  "user": {
+    "uid": 1000
+  },
+  "resource": {
+    "path": "/EXAMPLE/published/background.png",
+    "sha256": "REPLACE_WITH_VERIFIED_SHA256"
+  },
+  "wallpaper": {
+    "kind": "image",
+    "fit": "crop",
+    "phase": null
+  },
+  "outputs": [
+    {
+      "connector": "eDP-2",
+      "hardwareId": "REPLACE_WITH_VERIFIED_ID",
+      "width": 2560,
+      "height": 1600,
+      "refreshHz": 239.998,
+      "scale": 1.5,
+      "rotation": 0,
+      "position": [
+        0,
+        0
+      ],
+      "crop": [
+        0,
+        0,
+        1,
+        1
+      ],
+      "vrr": "never",
+      "hdr": false
+    }
+  ],
+  "transition": {
+    "suppressInitialWallpaperTransition": true,
+    "exitDurationMs": 240,
+    "revealDurationMs": 240
+  }
+}

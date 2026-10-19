@@ -1,0 +1,60 @@
+#!/usr/bin/env python3
+import base64, json, os, shutil, subprocess, tempfile
+from PIL import Image, ImageStat
+from pathlib import Path
+assert os.environ.get('KOS_T08_VIRTUAL') == '1'
+APP=Path(__file__).resolve().parents[1]
+with tempfile.TemporaryDirectory() as tmp:
+    root=Path(tmp)/'app';shutil.copytree(APP,root,ignore=shutil.ignore_patterns('tests','__pycache__'))
+    shutil.copytree(APP.parents[1]/'shared/qml/wallpapers',root/'wallpapers',dirs_exist_ok=True)
+    pattern = Image.new('RGB', (1280, 900))
+    for y in range(900):
+        for x in range(1280): pattern.putpixel((x, y), (250 if (x//4)%2 else 20, 100, 30))
+    pattern.save(root/'pattern.png')
+    data = 'data:image/png;base64,' + base64.b64encode((root/'pattern.png').read_bytes()).decode()
+    fixture = json.dumps({'uid': -1, 'source': data, 'fit': 'crop', 'version': 'fixture'})
+    (root/'companion/wallpaper.py').write_text('print(' + repr(fixture) + ')\n')
+    (root/'companion/accounts.py').write_text('print("[]")\n')
+    source=(APP/'shell.qml').read_text().replace('id: visual\n            anchors.fill: parent', 'id: visual\n            width: 640; height: 400')
+    driver='''
+    property int checkStage: 0
+    property point initialSample: Qt.point(0, 0)
+    Timer { interval: 300; running: true; repeat: true; onTriggered: {
+        if (!root.startupComplete) return;
+        if (root.checkStage === 0) {
+            root.selectUser(null); root.phase = "AwaitingPrompt"; root.notice = "密码";
+            visual.width = 640; visual.height = 400;
+            root.checkStage = 1;
+        } else if (root.checkStage === 1) {
+            response.background.grabToImage(r => r.saveToFile("FIELD"));
+            root.initialSample = response.background.sampleOrigin;
+            visual.width = 900; root.checkStage = 2;
+        } else if (root.checkStage === 2) {
+            console.info("POSITION " + visual.width + " " + root.initialSample.x + " " + response.background.sampleOrigin.x + " " + response.mapToItem(primaryWallpaper, 0, 0).x);
+            if (response.background.sampleOrigin.x === root.initialSample.x) throw new Error("Resize left stale sample");
+            root.feedback = "测试错误提示 ".repeat(60);
+            root.checkStage = 3;
+        } else if (root.checkStage === 3) {
+            root.initialSample = response.background.sampleOrigin;
+            formViewport.contentItem.contentY = 35; root.checkStage = 4;
+        } else {
+            let actual = response.mapToItem(primaryWallpaper, 0, 0);
+            if (Math.abs(actual.x - response.background.sampleOrigin.x) > .1 || Math.abs(actual.y - response.background.sampleOrigin.y) > .1)
+                throw new Error("Sample does not track field");
+            if (response.background.sampleOrigin.y === root.initialSample.y) throw new Error("Scroll left stale sample");
+            console.info("PASS glass sample tracks resize and scrolling"); Qt.quit();
+        }
+    } }
+'''
+    (root/'shell.qml').write_text(source.rsplit('}',1)[0]+driver.replace('FIELD', str(root/'field.png'))+'}\n')
+    env=os.environ.copy();env.pop('GREETD_SOCK',None)
+    try:
+        result=subprocess.run(['qs','--log-rules','*.debug=false','-p',str(root)],env=env,capture_output=True,text=True,timeout=8)
+    except subprocess.TimeoutExpired as error:
+        raise AssertionError((error.stdout or b'').decode(errors='replace') + (error.stderr or b'').decode(errors='replace')) from error
+    log=result.stdout+result.stderr
+    assert result.returncode==0 and 'Error:' not in log and 'ReferenceError' not in log,log
+    assert 'PASS glass sample tracks resize and scrolling' in log,log
+    stats = ImageStat.Stat(Image.open(root/'field.png').convert('RGB').crop((45,17,205,23)))
+    assert stats.mean[0] > 80 and stats.stddev[0] < 40, (stats.mean, stats.stddev)
+    print('PASS actual shell data-URL wallpaper glass and sample tracks resize/scrolling')
