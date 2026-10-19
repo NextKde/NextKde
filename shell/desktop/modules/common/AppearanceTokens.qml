@@ -8,7 +8,7 @@ import "../../../Kos/Ui"
 QtObject {
     id: tokens
 
-    readonly property int version: 9
+    readonly property int version: 10
     readonly property string style: AppearanceConfigService.shellStyle
     readonly property bool isWindows12: style === "windows12"
     readonly property bool isMacos: style === "macos"
@@ -394,12 +394,59 @@ QtObject {
     }
 
     readonly property QtObject typography: QtObject {
+        // The families every shell surface binds to `font.family`.
+        //
+        // One switch decides them: 使用系统字体 (useSystemFont) draws the desktop
+        // with the family KDE is configured with, and off keeps the families the
+        // shell was designed around. There is no third state -- the alternative
+        // was a per-surface choice, which is exactly the ~110 literals this role
+        // replaced.
+        //
+        // Only the *family* follows the switch. Sizes stay where each surface
+        // put them: the Bar and Dock are laid out for their own pixel sizes, and
+        // KDE's point size would reflow them rather than restyle them.
+        //
+        // Applications do not read this: they name no family and have always
+        // drawn with whatever Qt's platform theme applied, which the KDE
+        // platform theme fills from the same kdeglobals entry. So the switch is
+        // only about the surface that overrode that font in the first place.
+        readonly property bool followsSystemFont:
+            AppearanceConfigService.useSystemFont
+            && SystemFontService.family.length > 0
+        readonly property string systemFamily: SystemFontService.family
         readonly property string recommendedDisplayFamily: "SF Pro Display"
         readonly property bool hasRecommendedDisplayFamily:
             Qt.fontFamilies().indexOf(recommendedDisplayFamily) >= 0
-        // An empty family delegates fallback to the user's Qt/KDE font setup.
-        readonly property string displayFamily: hasRecommendedDisplayFamily
-            ? recommendedDisplayFamily : ""
+        // Body text: labels, list rows, controls. The designed shell spells
+        // "Noto Sans CJK SC" on ~80 of them.
+        readonly property string textFamily: followsSystemFont
+            ? SystemFontService.family : "Noto Sans CJK SC"
+        // Display type: large numerals, dock clocks, menu labels.
+        readonly property string displayFamily: followsSystemFont
+            ? SystemFontService.family
+            : (hasRecommendedDisplayFamily ? recommendedDisplayFamily : "")
+        // The two surfaces that carried a Qt fallback list of their own
+        // ("SF Pro Display, Noto Sans CJK SC, sans-serif" and
+        // "Noto Sans CJK SC, sans-serif") asked for a chain rather than a single
+        // family. The designed chain is kept verbatim while the switch is off,
+        // so a machine with no SF Pro installed still resolves through Noto
+        // exactly as it did; with the switch on there is one family and no chain
+        // left to resolve.
+        readonly property string displayChain: followsSystemFont
+            ? SystemFontService.family
+            : "SF Pro Display, Noto Sans CJK SC, sans-serif"
+        readonly property string textChain: followsSystemFont
+            ? SystemFontService.family
+            : "Noto Sans CJK SC, sans-serif"
+        // Monospace readouts (traffic rates, debug reports). They keep a
+        // fixed-advance face because alignment is their whole point, so only the
+        // system-font case replaces them.
+        readonly property string monospaceFamily: followsSystemFont
+            ? SystemFontService.family : "monospace"
+        // Colour emoji are not interface type: a reference to the emoji font
+        // must never be replaced by the interface font, or the desktop would
+        // draw tofu wherever it draws an emoji glyph.
+        readonly property string emojiFamily: "Noto Color Emoji"
     }
 
     readonly property QtObject dock: QtObject {

@@ -35,7 +35,7 @@ Item {
 
     FontMetrics {
         id: labelMetrics
-        font.family: "SF Pro Display, Noto Sans CJK SC, sans-serif"
+        font.family: AppearanceTokens.typography.displayChain
         font.pixelSize: 13
         font.weight: Font.DemiBold
     }

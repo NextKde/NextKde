@@ -11,6 +11,7 @@
 - **玻璃材质**：`liquid`、`soft`、`frosted` 三套预设各自保存模糊、液态强度与受限光学参数；当前样式的 `blurStrength` 与 `liquidStrength`（均为 `0.0...1.0`）同步给自定义 KWin `glass` effect，平台同时把模糊强度写入 KDE 自带的 `Effect-blur`，并通知两种特效重新读取配置。Quickshell 显式 Blur Region 结合全局 `CornerExponent` 与 per-surface shape/scrim；普通窗口只走同一模糊管线，不执行折射、染色、高光、噪点或圆角裁切。没有 Dock、Bar 或启动器的独立强度接口。
 - **玻璃文字墨色**：墨色跟随**玻璃本身**的明暗，不跟随桌面主题。`glassFollowsAppearanceMode`（默认关闭）决定玻璃是否跟随解析后的外观：关闭时玻璃恒为深色，文字保持 iOS 式的固定白墨；开启后浅色外观得到浅色玻璃 + 黑色文字，深色外观仍是深色玻璃 + 白色文字。判定统一走 `AppearanceTokens.isDarkTheme`——它已经包含「玻璃不跟随时恒为深色」这一层，因此不得改用 `systemIsDark` / `resolvedAppearanceIsDark`，否则玻璃不跟随外观时会得到深色玻璃 + 黑色文字。墨色由 `AppearanceTokens.content.glassInk(alpha)` 经 `IconAppearanceService.glassContentColor` 解析：Material 与「跟随浅色外观的玻璃」取调色板自身的 on-surface 墨色，只有真正深色的玻璃取白墨；`GlassText` 的可读性描边随之只在白墨时启用。控制中心、快速搜索、`LiquidGlassSurface` 的墨色层级、Bar 的流量箭头与关闭态 Wi-Fi 字形改由该 token 取值（它们原先写死白墨）；Dock 磁贴字形与通知中心的墨色原本就按 `ThemeService.isDark`（即 `isDarkTheme`）取值，行为不变。Overview、DeskCenter、启动器与 Dock 小组件自带固定白墨（它们按设计不读取外观），不在该语义范围内。
 - **全局图标外观**：`IconAppearanceService` 持久化 `color | grayscale | tint`、不透明度和染色颜色。Dock、启动台、快速搜索、Bar/托盘和 DeskCenter 共同消费，不再由 Dock 配置单独拥有。
+- **界面字体**：`useSystemFont`（默认关闭）。关闭时 Shell 使用设计字体（`SF Pro Display` / `Noto Sans CJK SC`）；开启后整个 Shell 的所有表面改用 KDE 在 `kdeglobals` 的 `[General] font=` 里配置的字体族。字体族由 `SystemFontService` 直接读 `kdeglobals` 并 watch 该文件，因此在系统设置里换字体无需重启 Shell；开关本身只决定"用哪一族"，不保存字体名。应用不使用该开关：它们从不指定字体族，经 KDE platform theme 一直就是系统字体。
 - **Shell 形态**：`shellStyle`，值为 `windows12 | macos | material`。设置页已可选择并持久化；Dock 与 DeskCenter 已接入形态 Token；DeskCenter 卡片后端由 `DeskWidgetCard` 选择。Bar 不随形态分叉。
 - **Bar 布局**：`barIntegratedWithDock` 是独立布尔配置，适用于底部与侧边 Dock；`barLayoutMode` 提供 `full | floating | transparent`，`barVisibilityMode` 提供 `always | smart | persistent`。融合后顶部 Bar 收起，底部 Dock 托管时间与系统状态，侧边 Dock 使用纵向状态与信息布局。
 - **Dock 窗口动画**：`dockWindowAnimationStyle`，值为 `scale | genie`，默认 `scale`。由 `DockWindowAnimationTargetService` 向 KWin dock-window-animation effect 发布图标矩形，设置页可选择并持久化。
@@ -77,6 +78,7 @@ Plasma 配置 ──► WallpaperColorSource ──► ArtworkColorSource ──
 4. Dock 的固定项、尺寸、位置、窗口分组和显示策略仍归 `DockConfigService` 所有；全局图标模式归 `IconAppearanceService`，切换形态不得覆盖这些用户设置。
 5. 独立进程 `apps/settings` 不允许 import `shell/desktop/`，只通过 IPC 读写。
 6. **`shared/qml/colorize/` 属于 `Kos.Ui` 公共层，不得 import `qs.desktop.modules.*`。** 需要与 shell 通信时用「注入属性 + 出站 signal」，由 `AppearanceTokens` 中的两个 `Connections` 完成接线。
+7. **字体族只有 `AppearanceTokens.typography` 一个来源。** 新增表面绑定 `font.family: AppearanceTokens.typography.textFamily`（正文）或 `displayFamily` / `displayChain` / `textChain`（显示字与带 Qt 回退链）；不得再写字面量字体族，也不得直接读 `SystemFontService`。彩色 emoji 用 `emojiFamily`，它永远不跟随界面字体。只跟随字体族、不跟随字号：Bar/Dock 的布局按各自的 pixelSize 标定。
 
 
 ## 3. 文件索引
@@ -84,7 +86,9 @@ Plasma 配置 ──► WallpaperColorSource ──► ArtworkColorSource ──
 | 文件 | 责任 |
 | --- | --- |
 | `shell/desktop/modules/common/AppearanceConfigService.qml` | schema、校验、迁移、保存、Glass effect 同步 |
-| `shell/desktop/modules/common/AppearanceTokens.qml` | 五组只读语义 Token；同时托管壁纸取色与 shell 配置之间的两个 `Connections` 适配器 |
+| `shell/desktop/modules/common/AppearanceTokens.qml` | 五组只读语义 Token（含 `typography`，界面字体的唯一来源）；同时托管壁纸取色与 shell 配置之间的两个 `Connections` 适配器 |
+| `shell/desktop/modules/common/SystemFontService.qml` | 单例。watch `kdeglobals` 的 `[General] font=`，暴露 KDE 当前界面字体族；`使用系统字体` 的字体来源 |
+| `shell/desktop/modules/common/SystemFontPolicy.mjs` | 纯函数：解析 kdeglobals 的 `font=`（KDE 6 的 `family,pointSize` 与 Qt 的完整 QFont 序列化都接受），解析规则可脱离 Qt 单测 |
 | `shared/qml/colorize/WallpaperColorSource.qml` | 单例。读 Plasma 壁纸配置（文件名经 `plasmashellrc` 的 shell 包名解析，见第 2 节数据流），解析壁纸包（按屏幕宽高比选图），对外只暴露 `darkMode` 注入与 `paletteChanged` / `paletteCleared` 信号 |
 | `shared/qml/colorize/ArtworkColorSource.qml` | `Item`。用 Quickshell `ColorQuantizer` 从图像抽两个可区分的主色；MPRIS 封面与本地壁纸通用 |
 | `shared/qml/colorize/ColorScheme.qml` | 单例。接收种子色，按 `scheme` 分派给莫奈 / 中国传统色 / 日系配色，产出 49 个角色 × light/dark。纯同步计算，不启动任何进程 |
@@ -136,11 +140,11 @@ Shell 自带图案由 `BundledIcons` 的稳定名称登记，消费者使用
 Quickshell.stateDir + "/appearance/config.json"
 ```
 
-schema 29（代表字段）：
+schema 31（代表字段）：
 
 ```json
 {
-  "version": 29,
+  "version": 31,
   "globalBlurStrength": 0.0,
   "globalLiquidStrength": 1.0,
   "materialPresetBlurStrength": 0.1,
@@ -166,6 +170,7 @@ schema 29（代表字段）：
   "barVisibilityMode": "always",
   "barLayoutMode": "transparent",
   "dockWindowAnimationStyle": "scale",
+  "useSystemFont": false,
   "hiddenDeskCenterWidgets": [],
   "hiddenStatusCells": []
 }
@@ -173,7 +178,7 @@ schema 29（代表字段）：
 
 - 每个玻璃预设还持久化 `Refraction`、`EdgeSize`、`NormalPow`、`RGBFringing`、`OffsetStrength`、`Softness` 和 `Reflection`；示例只列出代表字段。预设参数均由范围表校验，不能以手改配置绕过设置页的有效范围。
 - 默认 `glassStyle` 为 `liquid`，`shellStyle` 为 `macos`，`barLayoutMode` 为 `transparent`，`themeMode` 为 `system`（合法值 `system` / `light` / `dark`）。切换玻璃样式会应用该样式的完整预设；Material 使用独立的模糊预设且禁用液态折射。
-- schema 1–10 完成早期全局强度、Shell/Bar/主题迁移；v16 起为每种玻璃样式保存独立预设，v17–v24 多次校准 soft/frosted 的默认光学值，v26 将液态预设的旧 body lens 默认值迁移为 0，v27 增加 Material 配色来源。当前版本还保存独立的 `widgetStyle`、空间壁纸/服务开关和组件隐藏列表，读取旧文件后会写回 schema 29。
+- schema 1–10 完成早期全局强度、Shell/Bar/主题迁移；v16 起为每种玻璃样式保存独立预设，v17–v24 多次校准 soft/frosted 的默认光学值，v26 将液态预设的旧 body lens 默认值迁移为 0，v27 增加 Material 配色来源，v30 增加 Bar 的 mac 风格底与色调，v31 增加 `useSystemFont`。当前版本还保存独立的 `widgetStyle`、空间壁纸/服务开关和组件隐藏列表。没有 `useSystemFont` 的旧文件按关闭处理（正是它们原本的观感），因此缺失该键不会触发重写。
 - 非法或缺失的 `shellStyle` 回退为 `macos` 并写回；非法或缺失的 `dockWindowAnimationStyle` 回退为 `scale`；非法或缺失的 `themeMode` 回退为 `system`；非法或缺失的 `materialColorScheme` 回退为 `monet`（v27 之前写出的文件因此保持原有莫奈配色，升级不会改变观感）；非法强度不会覆盖内存默认值。
 - 强度输入会裁剪到 `0...1`；未知形态输入被拒绝。
 - 保存采用 350ms 防抖，并经 `JsonConfigStore` 调用平台的 `state.write`，由 `QSaveFile` 原子替换。
@@ -202,6 +207,7 @@ target：`appearance-settings`。所有更新都返回完整 JSON snapshot。
 | `updateBarVisibilityMode` | string | 更新 Bar 显示方式（`always`/`smart`/`persistent`） |
 | `updateBarLayoutMode` | string | 更新 Bar 布局（`full`/`floating`/`transparent`） |
 | `updateDockWindowAnimationStyle` | string | 更新 Dock 窗口动画风格（`scale`/`genie`） |
+| `updateUseSystemFont` | bool | 切换「使用系统字体」：开启后 Shell 全部表面改用 `kdeglobals` 的界面字体族 |
 | `resetStrengths` | 无 | 只重置两项玻璃强度 |
 
 snapshot 示例：
@@ -235,9 +241,11 @@ snapshot 示例：
   "barVisibilityMode": "always",
   "barLayoutMode": "transparent",
   "dockWindowAnimationStyle": "scale",
+  "useSystemFont": false,
+  "systemFontFamily": "Maple Mono NF CN",
   "hiddenDeskCenterWidgets": [],
   "hiddenStatusCells": [],
-  "tokenVersion": 9
+  "tokenVersion": 10
 }
 ```
 
@@ -250,7 +258,7 @@ quickshell --path shell ipc call appearance-settings updateShellStyle material
 
 `SettingsBridge` 会拒绝缺少任一核心字段的响应，并用 `lastError` 告知 QML。增加 snapshot 字段时应保持向后兼容；删除或重命名字段需要同时升级桥接层。
 
-## 6. AppearanceTokens v9
+## 6. AppearanceTokens v10
 
 数值单位：`height/radius/gap` 与 duration 分别为逻辑像素和毫秒；以 `Ratio` 结尾的值乘以消费组件的 `iconSize` 或基准高度。字符串用于选择布局策略或视觉 delegate。
 
@@ -318,7 +326,20 @@ quickshell --path shell ipc call appearance-settings updateShellStyle material
 
 QML 无法把半径告诉合成器——`ext-background-effect` 只有 `set_blur_region`，载荷是整数矩形列表，没有 radius 字段。逐 surface 的精确形状因此走项目自有的 `kos-surface-shape-v1`，细节见 `PlatformArchitecture.md`。
 
-Token schema 当前为 `AppearanceTokens.version === 9`。现有 Dock、Bar、widget、glass 与 motion Token 表保持上表语义；修改现有 Token 语义或删除字段时必须升版本。v9 新增 `shape.cornerExponent`，并把非 Windows 12 形态的 `dock.radiusRatio` 统一到 0.50。
+### Typography
+
+| Token | 关闭「使用系统字体」 | 开启后 |
+| --- | --- | --- |
+| `typography.textFamily` | `Noto Sans CJK SC` | `SystemFontService.family` |
+| `typography.displayFamily` | 已装则 `SF Pro Display`，否则空字符串（交给 Qt 回退） | `SystemFontService.family` |
+| `typography.displayChain` / `textChain` | 原样保留 `"SF Pro Display, Noto Sans CJK SC, sans-serif"` / `"Noto Sans CJK SC, sans-serif"` | `SystemFontService.family` |
+| `typography.monospaceFamily` | `monospace` | `SystemFontService.family` |
+| `typography.emojiFamily` | `Noto Color Emoji` | `Noto Color Emoji`（不跟随） |
+| `typography.followsSystemFont` | `false` | `useSystemFont && SystemFontService.family.length > 0` |
+
+`typography` 只投影**字体族**。字号仍由各表面自己决定，这是刻意的：Bar 和 Dock 的几何按各自的 `pixelSize` 标定，套用 KDE 的磅值只会重排而不是换字体。`SystemFontService` 读不到 `kdeglobals` 时回退到 `Qt.application.font.family`，所以开启开关永远不会得到空字体族。
+
+Token schema 当前为 `AppearanceTokens.version === 10`。现有 Dock、Bar、widget、glass 与 motion Token 表保持上表语义；修改现有 Token 语义或删除字段时必须升版本。v9 新增 `shape.cornerExponent`，并把非 Windows 12 形态的 `dock.radiusRatio` 统一到 0.50。v10 新增 `typography` 组（界面字体族的唯一来源）。
 
 ## 7. 消费规则
 
@@ -351,10 +372,12 @@ radius: AppearanceConfigService.shellStyle === "macos" ? 24 : 12
 - Dock 温度页、独立 Bar 温度摘要和 DeskCenter 温度区必须只读取公共 `MetricsService`。该 singleton 从 `kos-data-service` 的原子快照取值；任何 surface 都不得另外读取 `/proc`、`/sys` 或启动新的采样进程。快照尚未就绪时 Dock 页仍占位并显示 `--`，不能从轮播中消失。
 - Material 的 `tonal` 需要从系统 palette/壁纸 palette 派生，不得在组件里硬编码紫色。设置页紫色仅用于预览识别。
 - 可读性遮罩和最小对比度优先于透明度；局部 multiplier 只允许弱化或增强材质细节。
+- 新增文字表面只绑定 `AppearanceTokens.typography`：正文 `textFamily`，显示字 `displayFamily`，原本写了 Qt 回退链的沿用同名 `displayChain` / `textChain`。禁止再出现 `"SF Pro Display"` / `"Noto Sans CJK SC"` 字面量，也禁止直接读 `SystemFontService`——两者都会绕过「使用系统字体」。彩色 emoji 例外，仍用 `emojiFamily`。
 
 ## 8. 设置页行为
 
 - 侧栏顺序为：显示 → 主题 → 顶栏 → Dock → 启动台 → 快捷键 → 接入状态。
+- “显示”页的“界面字体”卡片只有一个开关“使用系统字体”，并显示当前解析到的字体族。字体本身不在这里选：它是 KDE 系统设置里的界面字体，`SystemFontService` watch `kdeglobals`，改完系统字体回来不需要重新开关。开关状态以 Shell 返回的 snapshot 为准，IPC 失败时不悬挂。
 - “显示”保留系统明暗与玻璃强度；“主题”只选择 Shell 形态，避免把配色与形态耦合。
 - 三张卡片展示 Bar、Dock 和桌面卡片的形态缩略图；点击后同步调用 IPC，成功响应决定最终选中态。
 - 选择 Material 形态后，卡片下方出现“主题色系”：三张色卡并列（莫奈色 / 中国传统色 / 日系配色），每张用**该方案在当前壁纸下的真实颜色**画出（主色大块 + 伴随色与两种外观的表面色条），选中态用各自的强调色描边，并显示当前吸附到的传统色名。换成其它形态时这一块连同其高度一起消失，因为玻璃形态不消费这个设置；切换仍写入配置，所以在形态之间往返不会丢失选择。
@@ -643,6 +666,8 @@ node tests/color-scheme/test_color_scheme.mjs
 node tests/traditional-color/test_traditional_color.mjs
 node tests/traditional-color/run.mjs
 node tests/dock/policy.test.mjs
+node tests/system-font/policy.test.mjs   # kdeglobals font= 解析（纯 node）
+node tests/system-font/run.mjs           # 使用系统字体在真实模块树里的解析结果（需 quickshell）
 # 无显示环境下编译 QML 模块需把 TMPDIR 指到大分区，/tmp 常为小容量 tmpfs
 TMPDIR=$PWD/.build/tmp cmake --build .build/apps-dev --target kos_ui
 # 源码运行链路（不设任何环境变量；无显示时用 offscreen 平台）。

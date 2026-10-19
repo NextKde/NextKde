@@ -147,7 +147,7 @@ Item {
                             color: ThemeService.foregroundColor
                             opacity: 0.82
                             font {
-                                family: "Noto Sans CJK SC"
+                                family: AppearanceTokens.typography.textFamily
                                 pixelSize: Math.max(9,
                                     Math.round(widget.iconSize * 0.21))
                                 weight: Font.Medium
@@ -162,7 +162,7 @@ Item {
                                 ? modelData.value + "°" : "--°"
                             color: ThemeService.foregroundColor
                             font {
-                                family: "SF Pro Display"
+                                family: AppearanceTokens.typography.displayFamily
                                 pixelSize: Math.max(11,
                                     Math.round(widget.iconSize * 0.27))
                                 weight: Font.DemiBold
@@ -258,7 +258,7 @@ Item {
             color: "white"
             anchors.verticalCenter: parent.verticalCenter
             font {
-                family: "SF Pro Display"
+                family: AppearanceTokens.typography.displayFamily
                 pixelSize: Math.max(9, Math.round(widget.iconSize * 0.48))
                 weight: Font.DemiBold
             }
@@ -270,7 +270,7 @@ Item {
             opacity: 0.68
             anchors.verticalCenter: parent.verticalCenter
             font {
-                family: "Noto Sans CJK SC"
+                family: AppearanceTokens.typography.textFamily
                 pixelSize: Math.max(6, Math.round(widget.iconSize * 0.28))
                 weight: Font.Medium
             }

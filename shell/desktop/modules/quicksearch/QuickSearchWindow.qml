@@ -495,7 +495,7 @@ PanelWindow {
                 }
                 color: ThemeService.foregroundColor
                 font {
-                    family: "Noto Sans CJK SC"
+                    family: AppearanceTokens.typography.textFamily
                     pixelSize: 15
                 }
                 clip: true
@@ -762,7 +762,7 @@ PanelWindow {
                     GlassText {
                         width: parent.width - 24
                         text: I18n.tr("Clipboard Preferences")
-                        font { pixelSize: 13; bold: true; family: "Noto Sans CJK SC" }
+                        font { pixelSize: 13; bold: true; family: AppearanceTokens.typography.textFamily }
                         color: ThemeService.foregroundColor
                         style: ThemeService.isDark ? Text.Outline : Text.Normal
                         styleColor: dialog.textOutlineColor
@@ -799,7 +799,7 @@ PanelWindow {
                         spacing: 2
                         GlassText {
                             text: I18n.tr("Monitor image content")
-                            font { pixelSize: 12; weight: Font.Medium; family: "Noto Sans CJK SC" }
+                            font { pixelSize: 12; weight: Font.Medium; family: AppearanceTokens.typography.textFamily }
                             color: ThemeService.foregroundColor
                             style: ThemeService.isDark ? Text.Outline : Text.Normal
                             styleColor: dialog.textOutlineColor
@@ -848,7 +848,7 @@ PanelWindow {
 
                     GlassText {
                         text: I18n.tr("History size")
-                        font { pixelSize: 12; weight: Font.Medium; family: "Noto Sans CJK SC" }
+                        font { pixelSize: 12; weight: Font.Medium; family: AppearanceTokens.typography.textFamily }
                         color: ThemeService.foregroundColor
                         style: ThemeService.isDark ? Text.Outline : Text.Normal
                         styleColor: dialog.textOutlineColor
@@ -919,7 +919,7 @@ PanelWindow {
                             width: parent.width - 20
                             anchors.verticalCenter: parent.verticalCenter
                             text: I18n.tr("⌨ Configure global shortcut (Meta+V)")
-                            font { pixelSize: 11; family: "Noto Sans CJK SC" }
+                            font { pixelSize: 11; family: AppearanceTokens.typography.textFamily }
                             color: ThemeService.foregroundColor
                             style: ThemeService.isDark ? Text.Outline : Text.Normal
                             styleColor: dialog.textOutlineColor

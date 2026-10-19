@@ -177,6 +177,15 @@ QtObject {
     property bool barMacStyle: false
     property real barMacTint: 0.30
     property string dockWindowAnimationStyle: "scale"
+    // 使用系统字体: draw every shell surface with the family KDE is configured
+    // with instead of the families the shell was designed around. Off by
+    // default -- the designed faces are part of the appearance the shell
+    // shipped with, and a machine without them has always fallen back per
+    // surface. The family itself is not stored here: SystemFontService reads it
+    // live from kdeglobals and AppearanceTokens.typography projects it onto the
+    // Text items, so switching the option back and forth never pins a font name
+    // into the config.
+    property bool useSystemFont: false
     // Which individual surfaces are shown. Both lists hold the ids that are
     // *hidden*; an absent id is visible, so a newly added widget or StatusArea
     // cell appears by default and an upgrade never silently removes one.
@@ -586,6 +595,18 @@ QtObject {
         return true
     }
 
+    // 使用系统字体. The switch itself is the only thing stored: which family that
+    // means is KDE's, read live from kdeglobals by SystemFontService, so a font
+    // changed in System Settings follows without re-toggling this.
+    function updateUseSystemFont(rawValue) {
+        const value = _toBool(rawValue)
+        if (useSystemFont === value)
+            return false
+        useSystemFont = value
+        saveTimer.restart()
+        return true
+    }
+
     function resetStrengths() {
         const globalBlurChanged = Math.abs(globalBlurStrength - 0.42) > 0.001
         const globalLiquidChanged = Math.abs(globalLiquidStrength - 1.0) > 0.001
@@ -644,7 +665,7 @@ QtObject {
         if (!service._widgetStyleResolved)
             return // Migration will restart the save timer once icons are loaded.
         const payload = JSON.stringify({
-            version: 30,
+            version: 31,
             globalBlurStrength: service.globalBlurStrength,
             globalLiquidStrength: service.globalLiquidStrength,
             materialPresetBlurStrength: service.materialPresetBlurStrength,
@@ -691,6 +712,7 @@ QtObject {
             barMacStyle: service.barMacStyle,
             barMacTint: service.barMacTint,
             dockWindowAnimationStyle: service.dockWindowAnimationStyle,
+            useSystemFont: service.useSystemFont,
             // Sorted before writing so a reorder in the UI never produces a
             // spurious diff, and so the file stays readable by hand.
             hiddenDeskCenterWidgets: service.hiddenDeskCenterWidgets.slice().sort(),
@@ -775,6 +797,12 @@ QtObject {
                     const hasBarMacStyle = typeof object.barMacStyle === "boolean"
                         && Number.isFinite(Number(object.barMacTint))
                     const animationStyle = String(object.dockWindowAnimationStyle ?? "")
+                    // v31 adds 使用系统字体. A file written before it has no key,
+                    // and "off" is exactly the appearance those installations
+                    // already had, so the missing key keeps the default. The
+                    // file is still written back once, because the version
+                    // changed -- but nothing the user sees moves.
+                    const hasUseSystemFont = typeof object.useSystemFont === "boolean"
                     // v28 adds per-surface visibility. Files written before it
                     // carry neither key, and the empty arrays they fall back to
                     // mean "everything visible" -- the behaviour those
@@ -844,6 +872,8 @@ QtObject {
                     }
                     if (service.isValidDockWindowAnimationStyle(animationStyle))
                         service.dockWindowAnimationStyle = animationStyle
+                    if (hasUseSystemFont)
+                        service.useSystemFont = object.useSystemFont
                     if (service.isValidGlassStyle(glassStyle))
                         service.glassStyle = glassStyle
 
@@ -944,7 +974,7 @@ QtObject {
                     service.globalLiquidStrength = service.activePresetLiquidStrength
                     service.liquidStrength = service.activePresetLiquidStrength
 
-                    if (Number(object.version) !== 30
+                    if (Number(object.version) !== 31
                             || !service.isValidWidgetStyle(widgetStyle)
                             || !service.isValidShellStyle(style)
                             || !service.isValidThemeMode(themeMode)
@@ -956,7 +986,8 @@ QtObject {
                             || !service.isValidBarVisibilityMode(barVisibility)
                             || !service.isValidBarLayoutMode(barLayout)
                             || !service.isValidGlassStyle(glassStyle)
-                            || !service.isValidDockWindowAnimationStyle(animationStyle))
+                            || !service.isValidDockWindowAnimationStyle(animationStyle)
+                            || !hasUseSystemFont)
                         service.saveTimer.restart()
                 } catch (error) {
                     console.warn("[AppearanceConfig] parse error: " + error)

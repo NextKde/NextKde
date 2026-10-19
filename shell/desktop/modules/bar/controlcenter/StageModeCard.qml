@@ -47,7 +47,7 @@ ControlCenterCard {
         text: I18n.tr("Stage")
         elide: Text.ElideRight
         color: ThemeService.foregroundColor
-        font { pixelSize: 12; weight: Font.Medium; family: "Noto Sans CJK SC" }
+        font { pixelSize: 12; weight: Font.Medium; family: AppearanceTokens.typography.textFamily }
     }
     GlassText {
         anchors { left: stageDisc.right; leftMargin: 8; right: parent.right; rightMargin: 8; bottom: parent.bottom; bottomMargin: 7 }
@@ -56,7 +56,7 @@ ControlCenterCard {
         color: stageModeCard.stageMode.enabled
             ? ThemeService.tileActiveGlyph : ThemeService.foregroundColor
         opacity: stageModeCard.stageMode.enabled ? 0.9 : 0.5
-        font { pixelSize: 11; family: "Noto Sans CJK SC" }
+        font { pixelSize: 11; family: AppearanceTokens.typography.textFamily }
     }
     ToolTip.visible: stagePointer.containsMouse
     ToolTip.delay: 500

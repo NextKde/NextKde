@@ -56,7 +56,7 @@ Item {
                     ? Text.Outline : Text.Normal
                 styleColor: Qt.rgba(0, 0, 0, 0.40)
                 font {
-                    family: "Noto Sans CJK SC, sans-serif"
+                    family: AppearanceTokens.typography.textChain
                     pixelSize: 9
                     weight: Font.Normal
                 }
@@ -69,7 +69,7 @@ Item {
                     ? Text.Outline : Text.Normal
                 styleColor: Qt.rgba(0, 0, 0, 0.40)
                 font {
-                    family: "Noto Sans CJK SC, sans-serif"
+                    family: AppearanceTokens.typography.textChain
                     pixelSize: 9
                     weight: Font.Normal
                 }

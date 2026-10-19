@@ -106,7 +106,7 @@ ControlCenterCard {
             width: parent.width
             text: "Wi‑Fi"
             color: wifiCard.materialForegroundColor
-            font { pixelSize: 12; weight: Font.Bold; family: "Noto Sans CJK SC" }
+            font { pixelSize: 12; weight: Font.Bold; family: AppearanceTokens.typography.textFamily }
         }
         GlassText {
             width: parent.width
@@ -115,7 +115,7 @@ ControlCenterCard {
             elide: Text.ElideRight
             color: wifiCard.materialSecondaryForegroundColor
             opacity: 1.0
-            font { pixelSize: 10; family: "Noto Sans CJK SC" }
+            font { pixelSize: 10; family: AppearanceTokens.typography.textFamily }
         }
     }
     GlassText {

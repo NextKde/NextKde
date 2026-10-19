@@ -45,7 +45,7 @@ Item {
     // member.
     readonly property font rateFont: {
         const spec = Qt.font({
-            family: "SF Pro Display",
+            family: AppearanceTokens.typography.displayFamily,
             pixelSize: 9,
             weight: Font.DemiBold
         })

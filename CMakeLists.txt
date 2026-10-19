@@ -365,6 +365,17 @@ if(BUILD_TESTING)
                     ${KOS_QUICKSHELL_EXECUTABLE}
             )
             set_tests_properties(kos-shell.glass-ink PROPERTIES TIMEOUT 15)
+            # 使用系统字体: reads the font.family every surface actually resolved,
+            # in both states of the option. A Text that keeps its designed
+            # family still renders a plausible interface, so only the resolved
+            # value catches a broken link in the chain.
+            add_test(NAME kos-shell.system-font
+                COMMAND ${KOS_NODE_EXECUTABLE}
+                    ${CMAKE_CURRENT_SOURCE_DIR}/tests/system-font/run.mjs
+                    ${KOS_QUICKSHELL_EXECUTABLE}
+            )
+            set_tests_properties(kos-shell.system-font PROPERTIES TIMEOUT 25
+                ENVIRONMENT "QML2_IMPORT_PATH=${CMAKE_BINARY_DIR}/qml")
             # Reads the resolved plate and ink of the Bar's mac style in the
             # states its slider can put it in. The ink follows the wallpaper
             # blended with the plate at the chosen tint, and an ink that read
@@ -449,6 +460,14 @@ if(BUILD_TESTING)
                 ${CMAKE_CURRENT_SOURCE_DIR}/tests/traditional-color/test_traditional_color.mjs
         )
         set_tests_properties(kos-ui.traditional-color PROPERTIES TIMEOUT 10)
+        # The kdeglobals `font=` grammar 使用系统字体 builds on, without Qt: the
+        # shell test above proves the chain, this one pins the parser's corner
+        # cases (a serialised QFont, a family alone, the wrong group).
+        add_test(NAME kos-ui.system-font-policy
+            COMMAND ${KOS_NODE_EXECUTABLE}
+                ${CMAKE_CURRENT_SOURCE_DIR}/tests/system-font/policy.test.mjs
+        )
+        set_tests_properties(kos-ui.system-font-policy PROPERTIES TIMEOUT 10)
         # These four were written and passing but never added to the suite, so
         # nothing ran them. They cover the Dock's adaptive layout and auto-hide
         # math, the appearance configuration migration, and the platform
@@ -619,6 +638,7 @@ if(BUILD_TESTING)
     if(KOS_QUICKSHELL_EXECUTABLE)
         set_tests_properties(kos-shell.static-work-runtime kos-shell.squircle-mask
             kos-shell.liquid-glass-panel kos-shell.glass-ink
+            kos-shell.system-font
             kos-shell.bar-mac-style
             kos-shell.traditional-color-runtime
             kos-shell.dock-hover-hit kos-shell.dock-magnification-runtime

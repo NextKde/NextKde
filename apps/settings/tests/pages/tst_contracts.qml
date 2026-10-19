@@ -26,6 +26,46 @@ Item {
         indexOf: function(value) { return this.options.findIndex(x => x.id === value) },
         labelOf: function(value) { return String(value) }
     })
+    // The appearance bridge the font switch is checked against. Its reply is
+    // asynchronous, like the Shell's: the write goes out now and the snapshot
+    // that moves the page value comes back on a later event-loop turn. A switch
+    // that guessed its own new state instead of waiting for that snapshot would
+    // pass a synchronous fake and fail against this one.
+    QtObject {
+        id: appearanceBridge
+        property string lastError: ""
+        property var fontCalls: []
+        property bool useSystemFont: false
+        property int replyDelay: 0
+        signal appearanceSnapshotChanged(var state)
+
+        function updateUseSystemFont(enabled) {
+            fontCalls = fontCalls.concat([enabled])
+            replyTimer.wanted = enabled
+            replyTimer.restart()
+        }
+        function appearanceSnapshot() {
+            appearanceSnapshotChanged(snapshot(useSystemFont))
+        }
+        function snapshot(enabled) {
+            return {globalBlurStrength: 0.4, globalLiquidStrength: 1,
+                glassStyle: "liquid", shellStyle: "macos",
+                useSystemFont: enabled, systemFontFamily: "Maple Mono NF CN",
+                glassFollowsAppearanceMode: false, spatialWallpaperEnabled: false}
+        }
+    }
+    Timer {
+        id: replyTimer
+        property bool wanted: false
+        repeat: false
+        interval: appearanceBridge.replyDelay
+        onTriggered: {
+            appearanceBridge.useSystemFont = wanted
+            appearanceBridge.appearanceSnapshotChanged(
+                appearanceBridge.snapshot(wanted))
+        }
+    }
+
     SignalSpy { id: styleSpy; signalName: "shellStyleObserved" }
     SignalSpy { id: seedSpy; signalName: "materialSeedObserved" }
     SignalSpy { id: settingSpy; signalName: "settingRequested" }
@@ -85,6 +125,50 @@ Item {
             page.applyState({shellStyle: "macos", materialColorSwatches: "broken-json"})
             compare(seedSpy.signalArguments[1][0], "")
         }
+        // 使用系统字体: one click must be enough. The switch's `checked` is a
+        // binding to the page value, and QML does not restore a binding that was
+        // assigned to, so an onToggled handler that writes the confirmed value
+        // back into `checked` kills the binding on the first click. The switch
+        // then keeps showing the old state while the Shell has already applied
+        // the new one, and the next click re-sends the same request -- the
+        // "needs several clicks" report this test exists to prevent.
+        function test_system_font_switch_needs_one_click() {
+            appearanceBridge.fontCalls = []
+            appearanceBridge.useSystemFont = false
+            appearanceBridge.replyDelay = 0
+            const page = createTemporaryObject(
+                Qt.createComponent("../../pages/DisplaySettingsPage.qml"), harness,
+                {colors: harness.palette, width: 700, glassStyles: harness.styles,
+                    bridge: appearanceBridge})
+            verify(page !== null)
+            page.applyState(appearanceBridge.snapshot(false))
+            let control = null
+            function walk(item) {
+                for (let i = 0; i < item.children.length; ++i) {
+                    const child = item.children[i]
+                    if (child.objectName === "use-system-font-switch")
+                        control = child
+                    walk(child)
+                }
+            }
+            walk(page)
+            verify(control !== null, "the font switch is laid out")
+            compare(control.checked, false, "the saved value is off")
+
+            // Click, then let the asynchronous reply land.
+            mouseClick(control)
+            compare(appearanceBridge.fontCalls.length, 1, "one click sends one write")
+            tryVerify(() => control.checked === true, 1000)
+            compare(page.useSystemFont, true)
+
+            // And back, which is where a destroyed binding showed up as a switch
+            // that refused to move at all.
+            mouseClick(control)
+            compare(appearanceBridge.fontCalls.length, 2)
+            compare(appearanceBridge.fontCalls[1], false)
+            tryVerify(() => control.checked === false, 1000)
+        }
+
         function test_navigation_releases_inactive_pages() {
             const component = Qt.createComponent("../../main.qml")
             compare(component.status, Component.Ready, component.errorString())
