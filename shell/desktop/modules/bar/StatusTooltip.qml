@@ -37,10 +37,10 @@ AnimatedPopupWindow {
         gravity: !root.dockHosted ? Edges.Bottom
             : root.dockEdge === "left" ? Edges.Right
             : root.dockEdge === "right" ? Edges.Left : Edges.Top
-        margins.top: root.dockHosted && root.dockEdge === "bottom" ? -6 : 0
-        margins.bottom: root.dockHosted ? 0 : -6
-        margins.left: root.dockHosted && root.dockEdge === "right" ? -6 : 0
-        margins.right: root.dockHosted && root.dockEdge === "left" ? -6 : 0
+        margins.top: root.dockHosted && root.dockEdge === "bottom" ? 4 : 0
+        margins.bottom: root.dockHosted ? 0 : 4
+        margins.left: root.dockHosted && root.dockEdge === "right" ? 4 : 0
+        margins.right: root.dockHosted && root.dockEdge === "left" ? 4 : 0
     }
 
     BackgroundEffect.blurRegion: root.visible && AppearanceTokens.surface.usesBackdrop
