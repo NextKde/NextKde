@@ -311,8 +311,8 @@ Install equivalent packages on other distributions. See the
 [Quickshell documentation](https://quickshell.org/docs/) for Quickshell.
 
 Source selection requires Git and Python 3.9+. Only the latest official release is maintained; see [release policy](Releasing.md).
-There is no validated official baseline yet. Default `update` stops when no official
-release exists. To explicitly try development, use `./tools/kosctl update main`
+Default `update` selects the latest official Release and stops if none is available.
+To explicitly try development, use `./tools/kosctl update main`
 (or `--version main` for the Debian installer). `./tools/kosctl version` reports
 installed files and source separately. Source selection does not install or restart the desktop.
 
