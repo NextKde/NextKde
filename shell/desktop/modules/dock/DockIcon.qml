@@ -680,10 +680,17 @@ Item {
             label.updateGeometry()
     }
     onDockNameEligibleChanged: updateDockName()
+    // The host owns the shared name label when it exposes updateNameLabel —
+    // the same test updateDockName() already relies on. Magnification is the
+    // wrong signal for this decision: styles without distance magnification
+    // (material/windows12) still own a label, and gating the fallback popup on
+    // magnification made both surfaces show at once (double tooltip).
+    readonly property bool _dockOwnsNameLabel: magnificationRoot !== null
+        && typeof magnificationRoot.updateNameLabel === "function"
     // Non-Dock hosts retain the existing lazy popup fallback. The shared Dock
     // never constructs this separate surface or uses its dwell timer.
     Loader {
-        active: !icon._usesSharedMagnification && icon._hovering && icon.dockNameEligible
+        active: !icon._dockOwnsNameLabel && icon._hovering && icon.dockNameEligible
             && !icon._hasWindows && !icon.isRunning
         sourceComponent: DockAppNameTooltip { targetIcon: icon }
     }
