@@ -296,18 +296,25 @@ private ListenFree SDK. The legacy local Music app remains available through
 Install equivalent packages on other distributions. See the
 [Quickshell documentation](https://quickshell.org/docs/) for Quickshell.
 
+Source selection requires Git and Python 3.9+. Only the latest official release is maintained; see [release policy](Releasing.md).
+There is no validated official baseline yet. Default `update` stops when no official
+release exists. To explicitly try development, use `./tools/kosctl update main`
+(or `--version main` for the Debian installer). `./tools/kosctl version` reports
+installed files and source separately. Source selection does not install or restart the desktop.
+
 ### 2. Clone the repository
 
 ```sh
 git clone https://github.com/SuceV587/NextKde.git
 cd NextKde
+./tools/kosctl update  # stop here if source selection fails
 ```
 
 ### 3. Check and install
 
 ```sh
 ./tools/kosctl doctor
-./tools/kosctl install
+./tools/kosctl install &&
 ./tools/kosctl start
 ```
 
@@ -421,8 +428,8 @@ registered on the bus; disable it as the warning says.
 ### Update
 
 ```sh
-git pull
-./tools/kosctl install
+./tools/kosctl update &&
+./tools/kosctl install &&
 ./tools/kosctl start
 ```
 
@@ -464,7 +471,7 @@ above).
 
 ```nix
 nextkde = {
-  url = "git+https://github.com/SuceV587/NextKde.git";
+  url = "git+https://github.com/SuceV587/NextKde.git?ref=main"; # development; pin a published tag for releases
   inputs.nixpkgs.follows = "nixpkgs";
 };
 ```

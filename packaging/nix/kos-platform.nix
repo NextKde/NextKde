@@ -10,7 +10,7 @@
 
 stdenv.mkDerivation {
     pname = "kos-platform";
-    version = "unstable";
+    version = lib.removeSuffix "\n" (builtins.readFile "${src}/VERSION");
     src = "${src}/platform";
 
     # The standalone AI library lives at `services/ai/` in the source

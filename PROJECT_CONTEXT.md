@@ -156,3 +156,13 @@ Tracked follow-ups from the apps-platform merge, not merge defects:
   `AppTheme` text, field, border, and focus colors into the Shell-oriented
   `LiquidTextField`; standalone application UI should use the wrapper rather
   than the fixed light-glass defaults.
+
+## Release policy
+
+Only the latest official desktop release is maintained. main is development;
+release/X.Y accepts fixes and release preparation only. Immutable vX.Y.Z tags
+and GitHub Releases identify published versions. Maintainer VM acceptance can lead
+directly to a final release; public RC releases and community testing are not required.
+VERSION is the desktop distribution identity. See docs/Releasing.md.
+All runtime verification and tests run in a dedicated VM or hosted CI, not on
+the maintainer workstation. Do not publish a Release without explicit authorization.

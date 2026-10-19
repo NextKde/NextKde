@@ -8,7 +8,7 @@
 
 stdenv.mkDerivation {
   pname = "kwin-glass";
-  version = "unstable";
+  version = lib.removeSuffix "\n" (builtins.readFile "${src}/VERSION");
   src = "${src}/kwin/glass-effect";
 
   nativeBuildInputs = [

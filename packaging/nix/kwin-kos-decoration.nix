@@ -8,7 +8,7 @@
 
 stdenv.mkDerivation {
   pname = "kwin-kos-decoration";
-  version = "unstable";
+  version = lib.removeSuffix "\n" (builtins.readFile "${src}/VERSION");
   src = "${src}/kwin/kos-decoration";
 
   nativeBuildInputs = [

@@ -60,7 +60,7 @@ let
 in
 stdenv.mkDerivation {
   pname = "kos-desktop";
-  version = "unstable";
+  version = lib.removeSuffix "\n" (builtins.readFile "${src}/VERSION");
   inherit src;
 
   dontBuild = true;
@@ -130,6 +130,16 @@ stdenv.mkDerivation {
       $out/lib/systemd/user/
     cp ${patched-shell-service}/lib/systemd/user/kos-shell.service \
       $out/lib/systemd/user/
+
+    mkdir -p $out/share/kos
+    cat > $out/share/kos/release.json <<'RELEASE_JSON'
+    ${builtins.toJSON {
+      version = lib.removeSuffix "\n" (builtins.readFile "${src}/VERSION");
+      revision = if builtins.isAttrs src then src.rev or (src.dirtyRev or "unknown") else "unknown";
+      dirty = if !builtins.isAttrs src then null else if src ? rev then false else if src ? dirtyRev then true else null;
+      tag = "";
+    }}
+    RELEASE_JSON
 
     runHook postInstall
   '';

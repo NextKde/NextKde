@@ -11,7 +11,7 @@ let
 in
 stdenv.mkDerivation {
   pname = "kos-weather";
-  version = "unstable";
+  version = lib.removeSuffix "\n" (builtins.readFile "${src}/VERSION");
   inherit src;
 
   nativeBuildInputs = [

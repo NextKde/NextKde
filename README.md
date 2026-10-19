@@ -45,6 +45,12 @@ Calendar, Todo, Weather, and ListenFree are available as
 bundle, including ListenFree, requires Qt 6.10+ and its additional audio dependencies;
 see the [application installation guide](docs/GettingStarted.md#optional-standalone-applications).
 
+Source selection requires Git and Python 3.9+. Only the latest official release is maintained; see [release policy](docs/Releasing.md).
+There is no validated official baseline yet. Default `update` stops when no official
+release exists. To explicitly try development, use `./tools/kosctl update main`
+(or `--version main` for the Debian installer). `./tools/kosctl version` reports
+installed files and source separately. Source selection does not install or restart the desktop.
+
 ## Get started
 
 Use a **KDE Plasma 6 Wayland** session with **KWin 6.6+**, **Quickshell 0.3.x**,
@@ -56,8 +62,9 @@ After preparing the dependencies for your distribution:
 ```sh
 git clone https://github.com/SuceV587/NextKde.git
 cd NextKde
-./tools/kosctl doctor
-./tools/kosctl install
+./tools/kosctl update &&
+./tools/kosctl doctor &&
+./tools/kosctl install &&
 ./tools/kosctl start
 ```
 
@@ -78,8 +85,8 @@ optional lock screen setup, first-login notes, updating, and uninstalling.
 Update and apply:
 
 ```sh
-git pull
-./tools/kosctl install
+./tools/kosctl update &&
+./tools/kosctl install &&
 ./tools/kosctl start
 ```
 

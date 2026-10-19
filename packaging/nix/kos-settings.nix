@@ -10,7 +10,7 @@
 
 stdenv.mkDerivation {
     pname = "kos-settings";
-    version = "unstable";
+    version = lib.removeSuffix "\n" (builtins.readFile "${src}/VERSION");
     inherit src;
 
     nativeBuildInputs = [

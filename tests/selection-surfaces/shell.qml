@@ -9,7 +9,7 @@ ShellRoot {
     property int phase: 0
     property var appHighlights: []
     property var folderHighlights: []
-    AppLauncherWindow { id: launcher; outputAvailable: false }
+    AppLauncherWindow { id: launcher; outputAvailable: true }
     ControlCenterPanel { id: center }
     function check(value, message) {
         if (!value) throw new Error(message)
@@ -34,15 +34,18 @@ ShellRoot {
                     AppLauncherConfigService.rootItems = []
                     AppLauncherService.dockWidth = 600
                     AppLauncherService.dockHeight = 60
-                    launcher.open = true
                     launcher.applications = [
                         {id: "selection-a.desktop", name: "Alpha", icon: ""},
                         {id: "selection-b.desktop", name: "Beta", icon: ""}
                     ]
                     launcher.applicationsDirty = false
+                    launcher.open = true
                 } else if (phase === 1) {
+                    if (!JSON.parse(launcher.inspectGlass()).settledOpen)
+                        return
                     appHighlights = namedItems(launcher.contentItem, "launcher-app-selection-highlight")
                     check(appHighlights.length === 2, "shipping launcher creates two selection plates")
+                    check(appHighlights.every(h => h.enabled), "settled launcher accepts app selection")
                     check(appHighlights.every(h => !h.selected), "opening launcher must not preselect first app")
                     launcher.keyboardSelectionActive = true
                     launcher.selectedIndex = 1
@@ -66,11 +69,20 @@ ShellRoot {
                     check(folderHighlights.every(h => !h.enabled), "folder editing suppresses selection")
                     launcher.folderEditMode = false
                     AppearanceConfigService.shellStyle = "material"
-                    check(appHighlights.every(h => h.enabled), "Material uses default glass selection")
-                    check(folderHighlights.every(h => h.enabled), "Material folder apps use default glass selection")
+                } else if (phase === 3) {
+                    check(launcher.glassSelectionEnabled && folderHighlights.every(h => h.enabled),
+                        "Material folder apps use default glass selection")
+                    launcher.folderDialogOpen = false
+                    launcher.openFolder = null
+                    launcher.displayedFolder = null
                     AppearanceConfigService.shellStyle = "windows12"
+                } else if (phase === 4) {
                     check(appHighlights.every(h => h.enabled), "Windows uses default glass selection")
+                    AppearanceConfigService.shellStyle = "material"
+                } else if (phase === 5) {
+                    check(appHighlights.every(h => h.enabled), "Material uses default glass selection")
                     AppearanceConfigService.shellStyle = "macos"
+                } else if (phase === 6) {
                     check(appHighlights[1].selected, "keyboard selection survives style changes")
                     const controls = namedItems(center.contentItem, "control-center-selection-highlight")
                     check(controls.length >= 10, "shipping control center wires main cards and navigation")

@@ -37,7 +37,14 @@ if command -v pkg-config >/dev/null && pkg-config --exists KF6Package KF6ConfigC
     libs="$(pkg-config --libs KF6Package KF6ConfigCore Qt6Core)"
 else
     # Distros that ship the CMake config but no .pc files.
-    cflags="-I/usr/include/qt6 -I/usr/include/qt6/QtCore -I/usr/include/qt6/QtGui -I/usr/include/qt6/QtXml
+    # Debian/Ubuntu put Qt under the multiarch include directory. KF6 may
+    # omit .pc files even when Qt's pkg-config metadata is available.
+    if command -v pkg-config >/dev/null && pkg-config --exists Qt6Core Qt6Gui Qt6Xml; then
+        qt_cflags=$(pkg-config --cflags Qt6Core Qt6Gui Qt6Xml)
+    else
+        qt_cflags="-I/usr/include/qt6 -I/usr/include/qt6/QtCore -I/usr/include/qt6/QtGui -I/usr/include/qt6/QtXml"
+    fi
+    cflags="$qt_cflags
             -I/usr/include/KF6/KPackage -I/usr/include/KF6/KConfigCore -I/usr/include/KF6/KConfig
             -I/usr/include/KF6/KCoreAddons -I/usr/include/KF6/KArchive"
     libs="-L/usr/lib64 -lKF6Package -lKF6ConfigCore -lKF6CoreAddons -lKF6Archive -lQt6Core -lQt6Xml"

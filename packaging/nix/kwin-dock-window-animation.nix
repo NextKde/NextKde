@@ -8,7 +8,7 @@
 
 stdenv.mkDerivation {
   pname = "kwin-dock-window-animation";
-  version = "unstable";
+  version = lib.removeSuffix "\n" (builtins.readFile "${src}/VERSION");
   src = "${src}/kwin/dock-window-animation";
 
   nativeBuildInputs = [

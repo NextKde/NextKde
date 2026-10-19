@@ -4,7 +4,7 @@ name: tests
 # means exactly the same thing in both places.
 on:
   push:
-    branches: [main]
+    branches: [main, 'release/**']
   pull_request:
   workflow_dispatch:
 
@@ -17,6 +17,14 @@ permissions:
   contents: read
 
 jobs:
+  source-release:
+    name: source release selection
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+      - name: Test release selection without installing the desktop
+        run: python3 -m unittest discover -s tools/tests -p 'test_*release*.py'
+
   tests:
     name: data + platform + logic + headless
     runs-on: ubuntu-24.04

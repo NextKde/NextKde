@@ -15,7 +15,7 @@
     {
       packages.${system} = let
         kos-desktop = pkgs.callPackage ./packaging/nix/package.nix {
-          src = ./.;
+          src = self;
         };
       in {
         inherit kos-desktop;
