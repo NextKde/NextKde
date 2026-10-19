@@ -27,6 +27,21 @@ TestCase {
         enter(["2", "+", "×", "3", "="])
         compare(engine.value, 6)
     }
+    function test_function_of_parenthesized_result() {
+        enter(["(", "2", "+", "3", ")", "x²", "="])
+        compare(engine.value, 25)
+    }
+    function test_implicit_multiplication() {
+        enter(["2", "(", "3", "+", "4", ")", "="])
+        compare(engine.value, 14)
+        engine.clear()
+        enter(["(", "2", "+", "3", ")", "4", "="])
+        compare(engine.value, 20)
+    }
+    function test_power_associativity() {
+        enter(["2", "^", "3", "^", "2", "="])
+        compare(engine.value, 512)
+    }
     function test_live_conversion_value() {
         enter(["5", "0", "0", "×", "2", "0", "0"])
         compare(engine.value, 100000)

@@ -91,10 +91,21 @@ QtObject {
     function currentValue() {
         if (typing)
             return isFinite(parseFloat(entry)) ? parseFloat(entry) : 0
+        if (tokens.length > 0 && tokens[tokens.length - 1] === ")")
+            return evaluate(tokens.slice(operandStart(tokens)))
         for (var i = tokens.length - 1; i >= 0; i--)
             if (typeof tokens[i] === "number")
                 return tokens[i]
         return 0
+    }
+
+    function operandStart(list) {
+        var depth = 0
+        for (var i = list.length - 1; i >= 0; i--) {
+            if (list[i] === ")") depth++
+            else if (list[i] === "(" && --depth === 0) return i
+        }
+        return list.length - 1
     }
 
     // Grouping for the digits as they are typed, so a trailing "." survives.
@@ -154,6 +165,8 @@ QtObject {
             evaluated = false
         }
         if (!typing) {
+            if (tokens.length > 0 && tokens[tokens.length - 1] === ")")
+                tokens = tokens.concat(["×"])
             entry = key === "." ? "0." : key
             typing = true
         } else if (key === ".") {
@@ -268,6 +281,9 @@ QtObject {
             evaluated = false
         }
         commit()
+        if (tokens.length > 0 && (typeof tokens[tokens.length - 1] === "number"
+                                 || tokens[tokens.length - 1] === ")"))
+            tokens = tokens.concat(["×"])
         tokens = tokens.concat(["("])
         updateDisplay()
     }
@@ -289,7 +305,9 @@ QtObject {
             entry = "0"
             typing = false
         }
-        if (next.length > 0 && typeof next[next.length - 1] === "number")
+        if (next.length > 0 && next[next.length - 1] === ")")
+            next = next.slice(0, operandStart(next)).concat([value])
+        else if (next.length > 0 && typeof next[next.length - 1] === "number")
             next[next.length - 1] = value
         else
             next.push(value)
@@ -398,9 +416,9 @@ QtObject {
 
         function parsePower() {
             var value = parseExponent()
-            while (peek() === "^" || peek() === "√") {
+            if (peek() === "^" || peek() === "√") {
                 var op = list[pos++]
-                var right = parseExponent()
+                var right = parsePower()
                 value = op === "^" ? Math.pow(value, right) : Math.pow(right, 1 / value)
             }
             return value
