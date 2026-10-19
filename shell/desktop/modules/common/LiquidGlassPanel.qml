@@ -59,6 +59,11 @@ Item {
     // Optional fixed capture bounds, independent of the animated blurAnchor outline.
     property Item captureAnchor: null
     readonly property bool fixedCaptureSupported: surfaceRegion.fixedCaptureSupported
+    // G10e — in-scene backdrop for the QML fallback. Popup windows are their
+    // own surfaces and cannot capture the main window's sample copy, so they
+    // point this at a screen-aligned hidden copy inside the popup window.
+    // Null keeps every existing panel on its previous path.
+    property Item backdropItem: null
     // Opacity of the compositor finish, independent of QML content opacity.
     property real materialOpacity: 1.0
     readonly property bool materialOpacitySupported: surfaceRegion.materialOpacitySupported
@@ -271,6 +276,7 @@ Item {
         border.width: 0
         border.color: "transparent"
 
+        backdropItem: root.backdropItem
         baseColor: root.baseColor
         ambientPrimary: root.ambientPrimary
         ambientSecondary: root.ambientSecondary
