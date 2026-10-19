@@ -72,6 +72,7 @@ const cases = {
         try {
             copyFileSync(new URL("./builtins.qml", import.meta.url), join(directory, "shell.qml"));
             symlinkSync(join(repository, "shell/desktop"), join(directory, "desktop"), "dir");
+            symlinkSync(join(repository, "shell/shared"), join(directory, "shared"), "dir");
             symlinkSync(join(repository, "shell/Kos"), join(directory, "Kos"), "dir");
             mkdirSync(join(directory, "config"));
             await new Promise((resolve) => server.listen(socket, resolve));
@@ -145,6 +146,7 @@ const cases = {
             // and AppearanceTokens reaches the shared library through the Kos/Ui alias
             // with a path relative to its own file.
             symlinkSync(join(shell, "desktop"), join(directory, "desktop"), "dir");
+            symlinkSync(join(shell, "shared"), join(directory, "shared"), "dir");
             symlinkSync(join(shell, "Kos"), join(directory, "Kos"), "dir");
 
             // The magnification tokens (and therefore the hover lift this test is about)
@@ -206,6 +208,7 @@ const cases = {
             // and AppearanceTokens reaches the shared library through the Kos/Ui alias
             // with a path relative to its own file.
             symlinkSync(join(shell, "desktop"), join(directory, "desktop"), "dir");
+            symlinkSync(join(shell, "shared"), join(directory, "shared"), "dir");
             symlinkSync(join(shell, "Kos"), join(directory, "Kos"), "dir");
 
             // The magnification tokens (and therefore the hover lift this test is about)
@@ -280,6 +283,7 @@ const cases = {
             // and AppearanceTokens reaches the shared library through the Kos/Ui alias
             // with a path relative to its own file.
             symlinkSync(join(shell, "desktop"), join(directory, "desktop"), "dir");
+            symlinkSync(join(shell, "shared"), join(directory, "shared"), "dir");
             symlinkSync(join(shell, "Kos"), join(directory, "Kos"), "dir");
 
             // The magnification tokens (and therefore the hover lift this test is about)
@@ -358,10 +362,15 @@ const cases = {
             copyFileSync(new URL("./fixtures/WindowService.qml", import.meta.url), join(dock, 'WindowService.qml'));
             for (const name of ['LiquidGlassPanel.qml', 'AppearanceTokens.qml'])
                 copyFileSync(new URL(`fixtures/${name}`, import.meta.url), join(common, name));
+            writeFileSync(join(dock, 'ConfigService.qml'), `pragma Singleton
+import QtQuick
+QtObject { readonly property real effectiveHoverScale: 1.1 }
+`);
             writeFileSync(join(dock, 'qmldir'), `module qs.desktop.modules.dock
         DockRevealHandle 1.0 DockRevealHandle.qml
         DockAutoHideController 1.0 DockAutoHideController.qml
         singleton DockAnimation 1.0 DockAnimation.qml
+        singleton ConfigService 1.0 ConfigService.qml
         singleton WindowService 1.0 WindowService.qml
         `);
             writeFileSync(join(common, 'qmldir'), `module qs.desktop.modules.common
@@ -449,6 +458,7 @@ const cases = {
         try {
             copyFileSync(new URL("./reveal-indicator.qml", import.meta.url), join(directory, "shell.qml"));
             symlinkSync(join(repository, "shell/desktop"), join(directory, "desktop"), "dir");
+            symlinkSync(join(repository, "shell/shared"), join(directory, "shared"), "dir");
             symlinkSync(join(repository, "shell/Kos"), join(directory, "Kos"), "dir");
             mkdirSync(join(directory, "config"));
             await new Promise((resolve) => server.listen(socket, resolve));
