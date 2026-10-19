@@ -63,6 +63,19 @@ Item {
     // Legacy transport only. v8 derives capture from this panel's declaration;
     // older compositors still need a window-owned BackgroundEffect region.
     readonly property var blurRegion: root.useKwinEffect && !continuousBlurSupported ? surfaceRegion : null
+
+    // Diagnostics read the declaration directly; blurRegion is legacy transport.
+    function inspectGlass() {
+        const shape = surfaceRegion.surfaceShape;
+        return {
+            continuousBlurSupported: root.continuousBlurSupported,
+            shapeActive: shape ? shape.active : false,
+            shapeEnabled: shape ? shape.enabled : false,
+            materialOpacity: shape ? shape.materialOpacity : null,
+            blurSigma: root.effectiveBlurSigma
+        };
+    }
+
     // Item whose x/y already are this panel's position in the surface. A panel
     // that fills a positioned wrapper (the Dock's capsule, the launcher card)
     // anchors to it, so its own x/y read 0 wherever the glass sits; point this

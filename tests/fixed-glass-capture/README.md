@@ -13,8 +13,12 @@ KWin with its own D-Bus session, virtual output, and configuration. It never
 installs or reloads the running desktop's effect. Unrelated window-opening
 animations are disabled so the test exercises the surface's outline animation.
 
-The real effect trace must report one 832 × 532 texture-chain allocation,
-unchanged capture bounds, and more than ten distinct visible outlines through
+The fixture declares a fixed 832 × 532 capture and sigma 12. With v8, the
+Gaussian kernel adds a 3σ margin on each side, producing one 904 × 604
+texture-chain allocation; legacy protocols retain 832 × 532. The runner reads
+the fixture's capture configuration and negotiated capability to calculate the
+expected size and position. The real effect trace must report unchanged
+capture bounds and more than ten distinct visible outlines through
 expansion, contraction, and expansion again. The existing legacy blur-region
 C++ test also checks fixed capture bounds through 61 intermediate shapes,
 nonzero coordinates, disabled shapes, and reset to the legacy policy.

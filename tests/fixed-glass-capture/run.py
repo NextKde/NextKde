@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 """Run the built effect in a private virtual KWin, without touching the desktop."""
 import os
+import json
+import math
 from pathlib import Path
 import re
 import shutil
@@ -47,8 +49,17 @@ with tempfile.TemporaryDirectory(prefix='kos-fixed-glass-') as directory:
     backgrounds = set(re.findall(r'backgroundRect QRect\(([^)]*)\)', text))
     outlines = set(re.findall(r'geom QRectF\(([^)]*)\)', text))
     assert 'FIXED_CAPTURE_PASS' in text, f'Client test failed; see {log}'
-    assert len(allocations) == 1 and allocations[0] == ('832', '532'), f'Unexpected allocations: {allocations}; see {log}'
-    assert len(backgrounds) == 1, f'Capture moved during animation: {backgrounds}'
+    config_match = re.search(r'FIXED_CAPTURE_CONFIG (\{[^\n]*\})', text)
+    assert config_match, f'Client capture configuration missing; see {log}'
+    capture = json.loads(config_match.group(1))
+    # v8 adds the Gaussian kernel support around the fixed capture. Legacy
+    # clients keep the original rectangle; both must allocate only once.
+    padding = math.ceil(3 * capture['sigma']) if capture['continuous'] else 0
+    width, height = capture['width'] + 2 * padding, capture['height'] + 2 * padding
+    expected_size = (str(width), str(height))
+    expected_background = f"{capture['x'] - padding},{capture['y'] - padding} {width}x{height}"
+    assert allocations == [expected_size], f'Unexpected allocations: {allocations}; expected {expected_size}; see {log}'
+    assert backgrounds == {expected_background}, f'Unexpected capture bounds: {backgrounds}; expected {expected_background}; see {log}'
     assert len(outlines) > 10, f'Outline did not animate: {outlines}'
     assert not re.search(r'ReferenceError|TypeError|Binding loop|Failed to load configuration|Shader.*failed', text), f'Runtime error; see {log}'
-    print(f'PASS: {len(outlines)} changing outlines, one 832x532 capture allocation; {log}')
+    print(f'PASS: {len(outlines)} changing outlines, one {width}x{height} capture allocation; {log}')

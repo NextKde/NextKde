@@ -101,18 +101,22 @@ PanelWindow {
     readonly property bool dockAtRight: AppLauncherService.dockPosition === "right"
 
     function inspectGlass() {
-        const region = launcherSurface.blurRegion;
-        const shape = region ? region.surfaceShape : null;
+        const glass = launcherSurface.inspectGlass();
+        const legacyBlurDeclared = BackgroundEffect.blurRegion !== null;
         return JSON.stringify({
             screen: root.screen ? root.screen.name : null,
             open: root.open, outputAvailable: root.outputAvailable,
             visible: root.visible, panelVisible: root.panelVisible,
             glassOpacity: popupMotion.glassOpacity, pendingIcons: popupMotion.pendingIcons,
             settledOpen: popupMotion.settledOpen,
-            blurDeclared: BackgroundEffect.blurRegion !== null,
-            shapeActive: shape ? shape.active : false,
-            shapeEnabled: shape ? shape.enabled : false,
-            materialOpacity: shape ? shape.materialOpacity : null,
+            blurDeclared: glass.continuousBlurSupported
+                ? glass.shapeActive && glass.shapeEnabled : legacyBlurDeclared,
+            legacyBlurRegionDeclared: legacyBlurDeclared,
+            continuousBlurSupported: glass.continuousBlurSupported,
+            shapeActive: glass.shapeActive,
+            shapeEnabled: glass.shapeEnabled,
+            materialOpacity: glass.materialOpacity,
+            blurSigma: glass.blurSigma,
             geometry: {x: background.x, y: background.y, width: background.width, height: background.height}
         });
     }
