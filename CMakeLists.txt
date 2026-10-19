@@ -165,6 +165,11 @@ if(BUILD_TESTING)
                 ${CMAKE_CURRENT_SOURCE_DIR}/shell/desktop/modules/common/test_visibility_policy.mjs
         )
         set_tests_properties(kos-shell.visibility-policy PROPERTIES TIMEOUT 10)
+        add_test(NAME kos-shell.audio-output-names
+            COMMAND ${KOS_NODE_EXECUTABLE}
+                ${CMAKE_CURRENT_SOURCE_DIR}/shell/desktop/modules/common/test_audio_output_names.mjs
+        )
+        set_tests_properties(kos-shell.audio-output-names PROPERTIES TIMEOUT 10)
         find_program(KOS_QMLTESTRUNNER_EXECUTABLE NAMES qmltestrunner
             HINTS /usr/lib/qt6/bin /usr/lib64/qt6/bin)
         if(KOS_QMLTESTRUNNER_EXECUTABLE)
