@@ -1800,7 +1800,7 @@ KosApplicationWindow {
                                     // ref-main 实测：说明文字峰值纯白 (255,255,255) 且重于 rating，Demibold 白字
                                     Label {
                                         visible: airQualityCard.hasAqi
-                                        text: qsTr("Air quality index is %1, which is similar to yesterday at about this time.")
+                                        text: qsTr("Air quality index: %1.")
                                             .arg(Math.round(root.number(backend.airQuality, "usAqi", 0)))
                                         color: root.skyText
                                         font.pixelSize: 11

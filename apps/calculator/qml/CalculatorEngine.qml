@@ -65,7 +65,7 @@ QtObject {
         var list = tokens.slice()
         if (typing)
             list.push(isFinite(parseFloat(entry)) ? parseFloat(entry) : 0)
-        while (list.length > 0 && typeof list[list.length - 1] === "string")
+        while (list.length > 0 && isBinaryOperator(list[list.length - 1]))
             list.pop()
         return list.length === 0 ? 0 : evaluate(list)
     }
@@ -189,13 +189,17 @@ QtObject {
         typing = false
     }
 
+    function isBinaryOperator(token) {
+        return ["+", "-", "×", "÷", "^", "√", "E"].indexOf(token) >= 0
+    }
+
     function operator(key) {
         if (failed)
             return
         commit()
         evaluated = false
         var next = tokens.slice()
-        if (next.length > 0 && typeof next[next.length - 1] === "string")
+        if (next.length > 0 && isBinaryOperator(next[next.length - 1]))
             next[next.length - 1] = key
         else
             next.push(key)
@@ -208,7 +212,7 @@ QtObject {
             return
         commit()
         var next = tokens.slice()
-        while (next.length > 0 && typeof next[next.length - 1] === "string")
+        while (next.length > 0 && isBinaryOperator(next[next.length - 1]))
             next.pop()
         if (next.length === 0)
             return

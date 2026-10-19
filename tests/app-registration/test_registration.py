@@ -12,7 +12,7 @@ class RegistrationTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory); prefix = root / 'prefix'; config = root / 'config'; state = root / 'state'
             for path in (prefix / 'bin', prefix / 'share/applications', config / 'kos'): path.mkdir(parents=True)
-            for name in ('listenfree', 'kos-todo', 'kos-calendar', 'kos-weather', 'kos-music'):
+            for name in ('listenfree', 'kos-todo', 'kos-calendar', 'kos-weather', 'kos-calculator', 'kos-music'):
                 executable = prefix / 'bin' / name; executable.write_text('#!/bin/sh\nexit 0\n'); executable.chmod(0o755)
                 (prefix / 'share/applications' / (name + '.desktop')).write_text('[Desktop Entry]\nName=KOS Music\nMimeType=audio/mpeg;audio/flac;audio/wav;\n')
             legacy = (prefix / 'bin/kos-music').read_bytes()

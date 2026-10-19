@@ -55,7 +55,7 @@ previews = [prefix / location / f'kos-{app}-preview{suffix}'
 preview_dir = prefix / 'opt/nextkde-ui-preview'
 paths = [*mime_files, buttons, *legacy_files, *previews]
 if args.dry_run:
-    print('Promote: kos-todo, kos-calendar, kos-weather; default music: listenfree')
+    print('Promote: kos-todo, kos-calendar, kos-weather, kos-calculator; default music: listenfree')
     print('Retire: legacy music binaries and registrations, and the three preview registrations; retain user data')
     print('Audio MIME types:', ', '.join(mimes))
     raise SystemExit(0)

@@ -19,6 +19,14 @@ TestCase {
         enter(["(", "2", "+", "3", ")", "×", "4", "="])
         compare(engine.value, 20)
     }
+    function test_equals_after_parentheses() {
+        enter(["(", "2", "+", "3", ")", "="])
+        compare(engine.value, 5)
+    }
+    function test_replacing_trailing_operator() {
+        enter(["2", "+", "×", "3", "="])
+        compare(engine.value, 6)
+    }
     function test_live_conversion_value() {
         enter(["5", "0", "0", "×", "2", "0", "0"])
         compare(engine.value, 100000)
