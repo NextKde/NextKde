@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<component type="desktop-application">
+  <id>org.nextkde.Kos.Calculator</id>
+  <name>KOS Calculator</name>
+  <summary>Basic and scientific calculation with a calculation history</summary>
+  <metadata_license>CC0-1.0</metadata_license>
+  <project_license>GPL-3.0-or-later</project_license>
+  <developer id="org.nextkde"><name>NextKde Contributors</name></developer>
+  <description><p>A calculator in the platform's own design: a basic keypad, a scientific keypad, and a history column that groups the last hundred lines into the previous seven and thirty days.</p></description>
+  <launchable type="desktop-id">kos-calculator.desktop</launchable>
+  <provides><binary>kos-calculator</binary></provides>
+  <categories><category>Utility</category><category>Calculator</category></categories>
+  <url type="homepage">https://github.com/SuceV587/NextKde</url>
+  <content_rating type="oars-1.1"/>
+</component>
