@@ -51,6 +51,16 @@ Rectangle {
     readonly property bool sceneSampling: backdropItem !== null
         && !usesMaterialSurface && visible && width > 0 && height > 0
     readonly property rect sceneSourceRect: {
+        // mapToItem emits no change signal of its own. Reading the host
+        // container's position and the board size here makes the binding
+        // follow them: a positioner (Grid, Layout) assigns delegate x/y only
+        // after the delegate exists, and without a real dependency the
+        // capture stayed pinned to the pre-layout rect, so every card sampled
+        // the same corner of the board.
+        const hostX = parent ? parent.x : 0
+        const hostY = parent ? parent.y : 0
+        const boardWidth = backdropItem ? backdropItem.width : 0
+        const boardHeight = backdropItem ? backdropItem.height : 0
         const revision = _sceneRevision
         if (!backdropItem)
             return Qt.rect(0, 0, 0, 0)
