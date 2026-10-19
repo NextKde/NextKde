@@ -1,5 +1,7 @@
 <!DOCTYPE RCC><RCC version="1.0">
 <qresource prefix="/effects/glass/">
+  <file>generated/gaussian.frag</file>
+  <file>generated/gaussian_core.frag</file>
   <file>generated/downsample.frag</file>
   <file>generated/downsample_core.frag</file>
   <file>generated/noise.frag</file>

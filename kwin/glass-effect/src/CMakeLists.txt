@@ -25,6 +25,11 @@ set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS
 # own helper include before that insertion.
 string(REPLACE "#include \"snells-glass.glsl\"" "${SNELLS_GLASS_SHADER}" GLASS_SHADER "${GLASS_SHADER}")
 
+# Generated resources belong to the build tree. Source-only VM sync must not
+# erase shader products that Ninja still considers configured and up to date.
+file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/generated")
+configure_file(blur.qrc "${CMAKE_CURRENT_BINARY_DIR}/blur.qrc" COPYONLY)
+
 # Generate a core shader variant from a single .glsl source.
 # Output goes into generated/ to keep source shaders/ clean.
 function(generate_shader_variants input_glsl output_base)
@@ -42,8 +47,8 @@ function(generate_shader_variants input_glsl output_base)
     # KWin <= 6.6 resolves a second, core-profile variant of every shader by
     # appending a "_core" suffix to the resource name (6.7 merged the two
     # variants into one), so publish the same bytes under both names.
-    file(WRITE "generated/${output_base}${ARGN}" "${COMPAT_CORE}\n${SHADER_SRC_EXPANDED}")
-    file(WRITE "generated/${output_base}_core${ARGN}" "${COMPAT_CORE}\n${SHADER_SRC_EXPANDED}")
+    file(WRITE "${CMAKE_CURRENT_BINARY_DIR}/generated/${output_base}${ARGN}" "${COMPAT_CORE}\n${SHADER_SRC_EXPANDED}")
+    file(WRITE "${CMAKE_CURRENT_BINARY_DIR}/generated/${output_base}_core${ARGN}" "${COMPAT_CORE}\n${SHADER_SRC_EXPANDED}")
 endfunction()
 
 # Generate vertex shaders
@@ -52,6 +57,7 @@ generate_shader_variants(shaders/onscreen_rounded_vertex.glsl onscreen_rounded .
 
 # Generate fragment shaders
 generate_shader_variants(shaders/downsample.glsl downsample .frag)
+generate_shader_variants(shaders/gaussian.glsl gaussian .frag)
 generate_shader_variants(shaders/upsample.glsl upsample .frag)
 generate_shader_variants(shaders/noise.glsl noise .frag)
 generate_shader_variants(shaders/onscreen_rounded.glsl onscreen_rounded .frag)
@@ -60,7 +66,7 @@ set(glass_SOURCES
     blur.cpp
     settings.cpp
     surfaceshapemanager.cpp
-    blur.qrc
+    "${CMAKE_CURRENT_BINARY_DIR}/blur.qrc"
     main.cpp
 )
 

@@ -3,6 +3,9 @@
 #include "wayland-kos-surface-shape-v1-client-protocol.h"
 
 #include <QEvent>
+#include <QHash>
+#include <QSet>
+#include <cmath>
 #include <QGuiApplication>
 #include <QPlatformSurfaceEvent>
 #include <QLoggingCategory>
@@ -22,15 +25,26 @@ Q_LOGGING_CATEGORY(surfaceShapeLog, "kos.surfaceShape", QtWarningMsg)
 class SurfaceShapeSyncItem : public QQuickItem
 {
 public:
-    SurfaceShapeSyncItem(SurfaceShape *shape, QQuickItem *parent)
-        : QQuickItem(parent), m_shape(shape) {}
-
+    explicit SurfaceShapeSyncItem(QQuickWindow *window) : QQuickItem(window->contentItem()) {
+        connect(window, &QObject::destroyed, this, [window] { items.remove(window); });
+    }
+    static SurfaceShapeSyncItem *attach(SurfaceShape *shape, QQuickWindow *window) {
+        auto *item = items.value(window);
+        if (!item) { item = new SurfaceShapeSyncItem(window); items.insert(window, item); }
+        item->shapes.insert(shape);
+        return item;
+    }
+    void detach(SurfaceShape *shape) {
+        shapes.remove(shape);
+        if (shapes.isEmpty()) { items.remove(window()); delete this; }
+    }
 protected:
-    void updatePolish() override { m_shape->sync(); }
-
+    void updatePolish() override;
 private:
-    SurfaceShape *m_shape;
+    static QHash<QQuickWindow *, SurfaceShapeSyncItem *> items;
+    QSet<SurfaceShape *> shapes;
 };
+QHash<QQuickWindow *, SurfaceShapeSyncItem *> SurfaceShapeSyncItem::items;
 
 namespace
 {
@@ -106,7 +120,8 @@ private:
         if (qstrcmp(interface, kos_surface_shape_manager_v1_interface.name) == 0) {
             self->m_manager = static_cast<kos_surface_shape_manager_v1 *>(
                 wl_registry_bind(registry, name,
-                    &kos_surface_shape_manager_v1_interface, std::min(version, 7u)));
+                    &kos_surface_shape_manager_v1_interface, std::min(version, uint32_t(std::clamp(qEnvironmentVariableIntValue("KOS_SURFACE_SHAPE_MAX_VERSION") > 0
+                        ? qEnvironmentVariableIntValue("KOS_SURFACE_SHAPE_MAX_VERSION") : 8, 1, 8)))));
             self->m_globalName = name;
             Q_EMIT self->available();
         }
@@ -144,6 +159,56 @@ private:
 };
 }
 
+void SurfaceShapeSyncItem::updatePolish()
+{
+    wl_surface *surface = nullptr;
+    bool dirty = false;
+    for (SurfaceShape *shape : std::as_const(shapes)) {
+        if (!shape->m_syncPending) continue;
+        shape->sync();
+        if (shape->m_surface) surface = shape->m_surface;
+        dirty = true;
+    }
+    auto *manager = ShapeProtocol::instance().manager();
+    if (dirty && surface && manager
+        && wl_proxy_get_version(reinterpret_cast<wl_proxy *>(manager)) >= 8) {
+        kos_surface_shape_manager_v1_commit(manager, surface);
+        // Ensure a wl_surface.commit even for uniform-only state changes.
+        window()->update();
+    }
+}
+
+bool SurfaceShape::continuousBlurSupported() const
+{
+    return m_shape && wl_proxy_get_version(reinterpret_cast<wl_proxy *>(m_shape)) >= 8;
+}
+void SurfaceShape::setBlurSigma(qreal value) {
+    value = std::isfinite(value) ? std::clamp(value, 0.0, 32.0) : 0.0;
+    if (m_blurSigma == value) return;
+    m_blurSigma = value; Q_EMIT finishChanged(); scheduleSync();
+}
+void SurfaceShape::setEffectType(int value) {
+    value = std::clamp(value, 0, 1); if (m_effectType == value) return;
+    m_effectType = value; Q_EMIT finishChanged(); scheduleSync();
+}
+void SurfaceShape::setMaterial(int value) {
+    value = std::clamp(value, 0, 2); if (m_material == value) return;
+    m_material = value; Q_EMIT finishChanged(); scheduleSync();
+}
+void SurfaceShape::setTintMode(int value) {
+    value = std::clamp(value, 0, 3); if (m_tintMode == value) return;
+    m_tintMode = value; Q_EMIT finishChanged(); scheduleSync();
+}
+void SurfaceShape::setTintColor(const QColor &value) {
+    if (m_tintColor == value) return;
+    m_tintColor = value; Q_EMIT finishChanged(); scheduleSync();
+}
+void SurfaceShape::setTintOpacity(qreal value) {
+    value = std::isfinite(value) ? std::clamp(value, 0.0, 1.0) : 0.0;
+    if (m_tintOpacity == value) return;
+    m_tintOpacity = value; Q_EMIT finishChanged(); scheduleSync();
+}
+
 SurfaceShape::SurfaceShape(QObject *parent)
     : QObject(parent)
 {
@@ -155,7 +220,8 @@ SurfaceShape::SurfaceShape(QObject *parent)
 
 SurfaceShape::~SurfaceShape()
 {
-    delete m_syncItem;
+    if (m_syncItem) static_cast<SurfaceShapeSyncItem *>(m_syncItem.data())->detach(this);
+    m_syncItem = nullptr;
     releaseShape();
     disconnectAncestors();
 }
@@ -176,6 +242,7 @@ void SurfaceShape::setTarget(QQuickItem *target)
         // leave x/y/width/height untouched; panels animate scale on entry
         // (issue #214: wallpaper preview corners lagged the window edge).
         connect(m_target, &QQuickItem::scaleChanged, this, &SurfaceShape::scheduleSync);
+        connect(m_target, &QQuickItem::rotationChanged, this, &SurfaceShape::scheduleSync);
         // The gate above reads effective visibility and opacity, so those have
         // to re-run the sync the same way a geometry change does.
         connect(m_target, &QQuickItem::visibleChanged, this, &SurfaceShape::scheduleSync);
@@ -208,6 +275,10 @@ void SurfaceShape::rewireAncestors()
         // moves the target through mapRectToScene without any geometry signal.
         m_ancestorConnections.append(connect(item, &QQuickItem::scaleChanged,
                                              this, &SurfaceShape::scheduleSync));
+        m_ancestorConnections.append(connect(item, &QQuickItem::widthChanged, this, &SurfaceShape::scheduleSync));
+        m_ancestorConnections.append(connect(item, &QQuickItem::heightChanged, this, &SurfaceShape::scheduleSync));
+        m_ancestorConnections.append(connect(item, &QQuickItem::parentChanged, this, &SurfaceShape::rewireAncestors));
+        m_ancestorConnections.append(connect(item, &QQuickItem::rotationChanged, this, &SurfaceShape::scheduleSync));
         m_ancestorConnections.append(connect(item, &QQuickItem::visibleChanged,
                                              this, &SurfaceShape::scheduleSync));
         m_ancestorConnections.append(connect(item, &QQuickItem::opacityChanged,
@@ -349,13 +420,14 @@ void SurfaceShape::handleWindowChanged(QQuickWindow *window)
 {
     if (m_window == window) { scheduleSync(); return; }
     if (m_window) m_window->removeEventFilter(this);
-    delete m_syncItem;
+    if (m_syncItem) static_cast<SurfaceShapeSyncItem *>(m_syncItem.data())->detach(this);
+    m_syncItem = nullptr;
     m_syncPending = false;
     releaseShape();
     m_window = window;
     if (m_window) {
         m_window->installEventFilter(this);
-        m_syncItem = new SurfaceShapeSyncItem(this, m_window->contentItem());
+        m_syncItem = SurfaceShapeSyncItem::attach(this, m_window);
     }
     rewireAncestors();
 }
@@ -434,11 +506,16 @@ void SurfaceShape::sync()
             capture.x(), capture.y(), std::max(0, capture.width()), std::max(0, capture.height()));
     }
     if (materialOpacitySupported()) {
-        kos_surface_shape_v1_set_material_opacity(m_shape,
-            wl_fixed_from_double(m_materialOpacity));
+        qreal effectiveOpacity = m_materialOpacity;
+        if (continuousBlurSupported()) {
+            for (QQuickItem *item = m_target; item; item = item->parentItem())
+                effectiveOpacity *= item->opacity();
+        }
+        kos_surface_shape_v1_set_material_opacity(m_shape, wl_fixed_from_double(effectiveOpacity));
     }
+    const qreal sceneScale = m_target->width() > 0 ? geometry.width() / m_target->width() : 1;
     kos_surface_shape_v1_set_corner(m_shape,
-        wl_fixed_from_double(m_radius), wl_fixed_from_double(m_exponent));
+        wl_fixed_from_double(m_radius * (continuousBlurSupported() ? sceneScale : 1)), wl_fixed_from_double(m_exponent));
     kos_surface_shape_v1_set_enabled(m_shape,
         (m_enabled && effectivelyShown(m_target)) ? 1 : 0);
     if (revealSupported() && m_revealDirty) {
@@ -457,7 +534,7 @@ void SurfaceShape::sync()
             (m_scrimEnabled && effectivelyShown(m_target)) ? 1 : 0,
             m_scrimTint,
             wl_fixed_from_double(m_scrimCap),
-            wl_fixed_from_double(m_scrimDecay));
+            wl_fixed_from_double(continuousBlurSupported() ? std::min(m_scrimDecay, 1.0) : m_scrimDecay));
     } else if (!warnedScrimUnavailable) {
         warnedScrimUnavailable = true;
         qWarning() << "kos-surface-shape: compositor bound below protocol version 3;"
@@ -473,11 +550,27 @@ void SurfaceShape::sync()
         qWarning() << "kos-surface-shape: compositor bound below protocol version 4;"
                    << "the per-shape blur override is unavailable";
     }
+    if (continuousBlurSupported()) {
+        kos_surface_shape_v1_set_material(m_shape, m_effectType, m_material);
+        kos_surface_shape_v1_set_blur_sigma(m_shape, wl_fixed_from_double(m_blurSigma));
+        kos_surface_shape_v1_set_tint(m_shape, m_tintMode,
+            wl_fixed_from_double(m_tintColor.redF()), wl_fixed_from_double(m_tintColor.greenF()),
+            wl_fixed_from_double(m_tintColor.blueF()), wl_fixed_from_double(m_tintOpacity));
+    }
+
 }
 
 void SurfaceShape::releaseShape()
 {
-    if (m_shape) kos_surface_shape_v1_destroy(m_shape);
+    if (m_shape) {
+        const bool transaction = continuousBlurSupported();
+        kos_surface_shape_v1_destroy(m_shape);
+        auto *manager = ShapeProtocol::instance().manager();
+        if (transaction && manager && m_surface) {
+            kos_surface_shape_manager_v1_commit(manager, m_surface);
+            if (m_window) m_window->update();
+        }
+    }
     const bool wasActive = m_shape != nullptr;
     m_shape = nullptr;
     m_surface = nullptr;

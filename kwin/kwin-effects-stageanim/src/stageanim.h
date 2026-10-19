@@ -37,6 +37,9 @@
 #else
 #define STAGE_LIVE_CONTENT_RENDER 0
 #endif
+#ifndef STAGE_LIVE_CONTENT_RENDER_67
+#define STAGE_LIVE_CONTENT_RENDER_67 0
+#endif
 
 #include <QFileSystemWatcher>
 #include <QPointer>

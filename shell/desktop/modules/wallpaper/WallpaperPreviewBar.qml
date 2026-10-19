@@ -68,9 +68,9 @@ PanelWindow {
     Region {
         id: previewBlurUnion
         regions: WallpaperPreviewService.active && !stage.spatialPromptActive
-            ? (stage.listExpanded
-                ? [surface.blurRegion, listToggle.blurRegion, backdropPanel.blurRegion, sidePill.blurRegion, effectFeedback.blurRegion]
-                : [surface.blurRegion, listToggle.blurRegion, sidePill.blurRegion]) : []
+            ? [surface, listToggle, backdropPanel, sidePill, effectFeedback]
+                .filter(panel => panel.visible && panel.opacity > 0 && panel.blurRegion !== null)
+                .map(panel => panel.blurRegion) : []
     }
 
     Connections {
@@ -95,12 +95,9 @@ PanelWindow {
             WallpaperPreviewService.images.length) / 3) * 120))
         z: 0
         radius: 28
+        cornerExponent: AppearanceTokens.shape.cornerExponent
+        readability: "transparent"
         material: "regular"
-        useKwinEffect: AppearanceTokens.surface.usesKwinBlur
-        fallbackEnabled: AppearanceTokens.surface.paintInQml
-        blurAnchor: backdropPanel
-        scrimEnabled: AppearanceTokens.surface.usesBackdrop
-        scrimLevel: "transparent"
 
         Item {
             id: wallpaperViewport
@@ -257,12 +254,9 @@ PanelWindow {
         width: sideActions.count * 44 + 16
         height: 44
         radius: height / 2
+        cornerExponent: AppearanceTokens.shape.cornerExponent
+        readability: "transparent"
         material: "regular"
-        useKwinEffect: AppearanceTokens.surface.usesKwinBlur
-        fallbackEnabled: AppearanceTokens.surface.paintInQml
-        scrimEnabled: AppearanceTokens.surface.usesBackdrop
-        scrimLevel: "transparent"
-        blurAnchor: sidePill
 
         Row {
             anchors.centerIn: parent
@@ -398,14 +392,11 @@ PanelWindow {
         width: Math.min(400, stage.width - 32)
         height: 64
         radius: height / 2
-        material: "thick"
-        scrimEnabled: true
-        scrimLevel: "readable"
-        scrimOpacity: 1.0
-        blurOverrideEnabled: true
-        blurStrength: 1.0
-        fallbackEnabled: true
-        blurAnchor: surface
+        cornerExponent: AppearanceTokens.shape.cornerExponent
+        readability: "transparent"
+        material: "regular"
+        tintColor: "#101820"
+        tintOpacity: 0.08
 
         Rectangle {
             id: segmentTrack
@@ -499,14 +490,11 @@ PanelWindow {
         y: surface.y + (surface.height - height) / 2
         width: 52; height: 52
         radius: width / 2
-        material: "thick"
-        scrimEnabled: true
-        scrimLevel: "readable"
-        scrimOpacity: 1.0
-        blurOverrideEnabled: true
-        blurStrength: 1.0
-        fallbackEnabled: true
-        blurAnchor: listToggle
+        cornerExponent: AppearanceTokens.shape.cornerExponent
+        material: "regular"
+        readability: "transparent"
+        tintColor: "#101820"
+        tintOpacity: 0.08
         scale: toggleArea.pressed ? 0.94 : toggleArea.containsMouse ? 1.04 : 1
         Behavior on scale { NumberAnimation { duration: 160; easing.type: Easing.OutCubic } }
         Rectangle {
