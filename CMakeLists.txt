@@ -80,6 +80,13 @@ if(BUILD_TESTING)
             COMMAND ${KOS_NODE_EXECUTABLE}
                 ${CMAKE_CURRENT_SOURCE_DIR}/tests/dock/tooltip-mutex.test.mjs)
         set_tests_properties(kos-dock.tooltip-mutex PROPERTIES LABELS logic TIMEOUT 10)
+        # Regression: the DeskCenter weather card overlapped its hero/symbol/
+        # condition text on short cards; the size formulas must keep their
+        # availability terms above the weekly forecast.
+        add_test(NAME kos-deskcenter.weather-card
+            COMMAND ${KOS_NODE_EXECUTABLE}
+                ${CMAKE_CURRENT_SOURCE_DIR}/tests/deskcenter/weather-card-205.test.mjs)
+        set_tests_properties(kos-deskcenter.weather-card PROPERTIES LABELS logic TIMEOUT 10)
         add_test(NAME kos-applauncher.screen-routing
             COMMAND ${KOS_NODE_EXECUTABLE}
                 --test ${CMAKE_CURRENT_SOURCE_DIR}/tests/applauncher/screen-routing.test.mjs)

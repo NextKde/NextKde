@@ -1202,16 +1202,29 @@ PanelWindow {
                     anchors { left: parent.left; top: parent.top; leftMargin: 15; topMargin: 29 }
                     text: WeatherService.temperature
 	                    color: AppearanceTokens.content.ink("white")
-                    font { family: "SF Pro Display"; pixelSize: Math.min(42, parent.height * 0.32); weight: Font.Normal }
+                    // Shrink with the available band above the weekly forecast so
+                    // short cards never push the glyph box into the forecast row
+                    // (issue #205). Tall cards keep the authored 42 px.
+                    font {
+                        family: "SF Pro Display"
+                        pixelSize: Math.min(42, parent.height * 0.32,
+                            Math.max(16, (parent.height - weeklyForecast.height - 38) / 1.5))
+                        weight: Font.Normal
+                    }
                 }
                 Text {
+                    id: weatherConditionSymbol
                     anchors { right: parent.right; top: parent.top; rightMargin: 18; topMargin: 14 }
                     text: WeatherService.conditionSymbol(WeatherService.weatherCode, WeatherService.isDay)
 	                    color: AppearanceTokens.content.ink(root.weatherTheme.accent)
-                    font.pixelSize: Math.min(34, parent.height * 0.26)
+                    font.pixelSize: Math.min(34, parent.height * 0.26,
+                        Math.max(16, (parent.height - weeklyForecast.height - 72) * 0.75))
                 }
                 Text {
-                    anchors { right: parent.right; top: parent.top; rightMargin: 16; topMargin: 48 }
+                    anchors {
+                        right: parent.right; rightMargin: 16
+                        top: weatherConditionSymbol.bottom; topMargin: 2
+                    }
                     text: WeatherService.conditionText(WeatherService.weatherCode)
 	                    color: AppearanceTokens.content.ink("white")
                     font { pixelSize: 15; weight: Font.DemiBold }
