@@ -148,8 +148,10 @@ assert.match(pageCacheSource, /asynchronous:[\s\S]*index\s*!==\s*root\.currentIn
     "inactive page construction cannot block the selected page");
 
 const collapsibleSidebar = read("./foundation/KosSidebar.qml");
-assert.match(collapsibleSidebar, /color:\s*AppTheme\.sidebarSurface/,
-    "collapsible sidebars retain the adaptive semantic material");
+assert.match(collapsibleSidebar, /property color surfaceColor:\s*AppTheme\.sidebarSurface/,
+    "collapsible sidebars default to the adaptive semantic material");
+assert.match(collapsibleSidebar, /color:\s*root\.surfaceColor/,
+    "collapsible sidebars render the selected semantic material");
 assert.doesNotMatch(collapsibleSidebar, /withAlpha\(AppTheme\.sidebar/,
     "collapsible sidebars do not expose desktop content");
 assert.match(collapsibleSidebar, /enabled:\s*expanded/,
@@ -159,6 +161,21 @@ for (const app of ["calendar", "todo", "weather", "music"]) {
     if (app === "music") {
         assert.match(source, /color:\s*AppTheme\.sidebarSurface/,
             `${app} has an adaptive semantic sidebar material`);
+    } else if (app === "calendar") {
+        // Calendar deliberately uses a flush sidebar and custom window dots.
+        // Keep the focus, recovery and keyboard contracts without requiring
+        // the older floating-card component names.
+        assert.match(source, /objectName:\s*"applicationSidebar"[\s\S]*enabled:\s*root\.sidebarExpanded/,
+            "collapsed calendar navigation cannot take keyboard focus");
+        assert.match(source, /onClicked:\s*root\.sidebarExpanded\s*=\s*!root\.sidebarExpanded/,
+            "calendar navigation can be restored");
+        assert.match(source, /Accessible\.role:\s*Accessible\.Button/,
+            "calendar window actions remain accessible buttons");
+        for (const action of ["showMinimized", "toggleFullScreen", "close"])
+            assert.ok(source.includes(`root.${action}()`), `calendar exposes ${action}`);
+        for (const key of ["Return", "Enter", "Space"])
+            assert.ok(source.includes(`Keys.on${key}Pressed: windowDot.activate()`),
+                `calendar window actions accept ${key}`);
     } else {
         assert.match(source, /KosSidebar\s*\{[\s\S]*expanded:\s*root\.sidebarExpanded/,
             `${app} uses the adaptive collapsible sidebar`);
@@ -173,7 +190,9 @@ for (const app of ["calendar", "todo", "weather", "music"]) {
         `${app} uses the shared rounded button controls`);
     assert.match(source, /KosSettingsDialog\s*\{/,
         `${app} exposes the shared settings panel`);
-    assert.match(source, /Accessible\.name:\s*qsTr\(".*settings"\)/,
+    assert.match(source, app === "calendar"
+        ? /text:\s*qsTr\("Calendar settings"\)/
+        : /Accessible\.name:\s*qsTr\(".*settings"\)/,
         `${app} settings entry has an accessible label`);
     assert.match(source, /function handleActivation\(activationArgs, workingDirectory\)/,
         `${app} accepts normalized reuse context from the shared runner`);

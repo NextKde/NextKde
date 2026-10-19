@@ -17,7 +17,7 @@ parser.add_argument('--dry-run', action='store_true')
 parser.add_argument('--no-cache', action='store_true', help='Skip desktop cache refresh when staging a package')
 args = parser.parse_args()
 prefix, config = args.prefix.resolve(), args.config_home.resolve()
-apps = ('todo', 'calendar', 'weather')
+apps = ('todo', 'calendar', 'weather', 'calculator')
 for name in ('listenfree', *(f'kos-{name}' for name in apps)):
     if not os.access(prefix / 'bin' / name, os.X_OK) or not (prefix / 'share/applications' / (name + '.desktop')).is_file():
         raise SystemExit('Install the new application before registering it: ' + name)
@@ -55,7 +55,7 @@ previews = [prefix / location / f'kos-{app}-preview{suffix}'
 preview_dir = prefix / 'opt/nextkde-ui-preview'
 paths = [*mime_files, buttons, *legacy_files, *previews]
 if args.dry_run:
-    print('Promote: kos-todo, kos-calendar, kos-weather; default music: listenfree')
+    print('Promote: kos-todo, kos-calendar, kos-weather, kos-calculator; default music: listenfree')
     print('Retire: legacy music binaries and registrations, and the three preview registrations; retain user data')
     print('Audio MIME types:', ', '.join(mimes))
     raise SystemExit(0)

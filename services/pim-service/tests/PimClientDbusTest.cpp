@@ -2,6 +2,7 @@
 
 #include <QDBusConnection>
 #include <QDBusConnectionInterface>
+#include <QDateTime>
 #include <QProcess>
 #include <QProcessEnvironment>
 #include <QSignalSpy>
@@ -89,8 +90,8 @@ void PimClientDbusTest::clientTracksRemoteService()
             if (todo.value(QStringLiteral("id")).toString() == linkedTodoId) {
                 return todo.value(QStringLiteral("title")).toString()
                     == QStringLiteral("Client-linked update")
-                    && todo.value(QStringLiteral("due")).toString().startsWith(
-                        QStringLiteral("2026-09-06T12:00"));
+                    && QDateTime::fromString(todo.value(QStringLiteral("due")).toString(), Qt::ISODate).toSecsSinceEpoch() / 60
+                        == QDateTime::fromString(QStringLiteral("2026-09-06T12:00:00+08:00"), Qt::ISODate).toSecsSinceEpoch() / 60;
             }
         }
         return false;

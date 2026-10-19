@@ -17,7 +17,7 @@ ApplicationWindow {
     property var applicationSettings: null
     property bool modernDesign: false
     flags: modernDesign ? Qt.Window | Qt.FramelessWindowHint : Qt.Window
-    readonly property real windowCornerRadius: modernDesign && visibility !== Window.FullScreen && visibility !== Window.Maximized ? 32 : 0
+    readonly property real windowCornerRadius: modernDesign && visibility !== Window.FullScreen && visibility !== Window.Maximized ? 8 : 0
     property int beforeFullScreen: Window.Windowed
     function toggleFullScreen() {
         if (visibility === Window.FullScreen) {

@@ -4,6 +4,7 @@
 .agents/
 CLAUDE.md
 .zcode/
+.loop/
 .idea/
 
 # Quickshell runtime logs and generated crash data

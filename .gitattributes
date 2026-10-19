@@ -1,0 +1,6 @@
+# Iteration screenshots are useful in Git history but are not runtime sources.
+# Keep GitHub source release archives small and free of local automation output.
+/.loop export-ignore
+/tmp export-ignore
+/docs/ui-calendar export-ignore
+/docs/ui-weather export-ignore

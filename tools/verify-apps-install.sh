@@ -4,7 +4,7 @@ set -eu
 prefix=${1:-${KOS_INSTALL_PREFIX:-"$HOME/.local"}}
 failed=0
 
-for app in calendar todo weather; do
+for app in calendar todo weather calculator; do
     binary="$prefix/bin/kos-$app"
     desktop="$prefix/share/applications/kos-$app.desktop"
     icon="$prefix/share/icons/hicolor/scalable/apps/kos-$app.svg"

@@ -77,7 +77,8 @@ void WeatherClientTest::readsVersionedSnapshot()
                 "weatherCode": 2,
                 "temperatureMaximum": 34,
                 "temperatureMinimum": 25
-            }]
+            }],
+            "airQuality": {"time": "2026-08-30T12:00", "usAqi": 42, "category": "Good"}
         }
     })json");
     snapshot.close();
@@ -94,6 +95,8 @@ void WeatherClientTest::readsVersionedSnapshot()
     QCOMPARE(client.daily().size(), 1);
     QCOMPARE(client.fetchedAt(), 1000);
     QCOMPARE(client.staleAt(), 2000);
+    QCOMPARE(client.airQuality().value(QStringLiteral("usAqi")).toDouble(), 42.0);
+    QCOMPARE(client.airQuality().value(QStringLiteral("category")).toString(), QStringLiteral("Good"));
 }
 
 void WeatherClientTest::rejectsUnsupportedSnapshot()
