@@ -185,6 +185,11 @@ QVariantList WeatherClient::daily() const
     return m_daily;
 }
 
+QVariantMap WeatherClient::airQuality() const
+{
+    return m_airQuality;
+}
+
 QVariantList WeatherClient::searchResults() const
 {
     return m_searchResults;
@@ -429,6 +434,7 @@ void WeatherClient::applyWeather(const QJsonObject &weather)
     m_current = weather.value(QStringLiteral("current")).toObject().toVariantMap();
     m_hourly = arrayToList(weather.value(QStringLiteral("hourly")));
     m_daily = arrayToList(weather.value(QStringLiteral("daily")));
+    m_airQuality = weather.value(QStringLiteral("airQuality")).toObject().toVariantMap();
     m_fetchedAt = weather.value(QStringLiteral("fetchedAt")).toInteger();
     m_staleAt = weather.value(QStringLiteral("staleAt")).toInteger();
     m_loading = m_status == QLatin1String("loading");
