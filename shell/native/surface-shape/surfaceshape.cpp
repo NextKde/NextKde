@@ -172,6 +172,10 @@ void SurfaceShape::setTarget(QQuickItem *target)
         connect(m_target, &QQuickItem::yChanged, this, &SurfaceShape::scheduleSync);
         connect(m_target, &QQuickItem::widthChanged, this, &SurfaceShape::scheduleSync);
         connect(m_target, &QQuickItem::heightChanged, this, &SurfaceShape::scheduleSync);
+        // scale (and the other transforms) feed mapRectToScene in sync() but
+        // leave x/y/width/height untouched; panels animate scale on entry
+        // (issue #214: wallpaper preview corners lagged the window edge).
+        connect(m_target, &QQuickItem::scaleChanged, this, &SurfaceShape::scheduleSync);
         // The gate above reads effective visibility and opacity, so those have
         // to re-run the sync the same way a geometry change does.
         connect(m_target, &QQuickItem::visibleChanged, this, &SurfaceShape::scheduleSync);
@@ -199,6 +203,10 @@ void SurfaceShape::rewireAncestors()
         m_ancestorConnections.append(connect(item, &QQuickItem::xChanged,
                                              this, &SurfaceShape::scheduleSync));
         m_ancestorConnections.append(connect(item, &QQuickItem::yChanged,
+                                             this, &SurfaceShape::scheduleSync));
+        // Same transform reasoning as in setTarget(): an ancestor scaling
+        // moves the target through mapRectToScene without any geometry signal.
+        m_ancestorConnections.append(connect(item, &QQuickItem::scaleChanged,
                                              this, &SurfaceShape::scheduleSync));
         m_ancestorConnections.append(connect(item, &QQuickItem::visibleChanged,
                                              this, &SurfaceShape::scheduleSync));

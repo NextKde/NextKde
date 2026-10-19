@@ -87,6 +87,12 @@ if(BUILD_TESTING)
             COMMAND ${KOS_NODE_EXECUTABLE}
                 ${CMAKE_CURRENT_SOURCE_DIR}/tests/deskcenter/weather-card-205.test.mjs)
         set_tests_properties(kos-deskcenter.weather-card PROPERTIES LABELS logic TIMEOUT 10)
+        # Regression: SurfaceShape ignored scale changes, so panels animating
+        # scale on entry (wallpaper preview) fringed at the corners.
+        add_test(NAME kos-surface-shape.scale-sync
+            COMMAND ${KOS_NODE_EXECUTABLE}
+                ${CMAKE_CURRENT_SOURCE_DIR}/tests/surface-shape/scale-sync-214.test.mjs)
+        set_tests_properties(kos-surface-shape.scale-sync PROPERTIES LABELS logic TIMEOUT 10)
         add_test(NAME kos-applauncher.screen-routing
             COMMAND ${KOS_NODE_EXECUTABLE}
                 --test ${CMAKE_CURRENT_SOURCE_DIR}/tests/applauncher/screen-routing.test.mjs)
