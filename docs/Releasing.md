@@ -84,6 +84,7 @@ NixOS 用户通过 flake 输入 Tag 和 lock 文件固定版本，通过更新 f
 6. 人工创建正式 Release，附上说明与验证范围，明确设为 Latest。首次发布时同步更新
    README 中“尚无正式版”的过渡说明。创建 Tag 和发布 Release 需要单独的发布授权，
    提交流程和安装工具的 PR 不会自动执行它们。
+   维护者也可以明确授权代理自动完成这些发布操作；相同的最终提交验收和 Tag 检查门槛仍适用。
 7. 新版发布后确认默认安装解析到它；上一版停止维护。
 
 `.github/workflows/release-checks.yml` 仅检查 Tag/VERSION 一致性并保存版本记录，
