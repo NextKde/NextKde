@@ -29,8 +29,8 @@ KOS 是 KDE Plasma 6 Wayland 上的 Quickshell 桌面 Shell。它提供顶部栏
 启动器、搜索、通知和设置界面；KDE、KWin、NetworkManager 等系统组件仍然保留。
 
 源码版本选择需要 Git 和 Python 3.9+。发布与维护规则见 [发布流程](docs/Releasing.md)。只维护最新正式版。
-目前尚未建立正式版基线；默认 `update` 会明确停止。愿意使用开发版时，
-将其改为 `./tools/kosctl update main`；Debian 安装器使用 `--version main`。
+默认 `update` 选择 [最新正式 Release](https://github.com/SuceV587/NextKde/releases/latest)，
+没有可用正式版时明确停止。愿意使用开发版时，使用 `./tools/kosctl update main`；Debian 安装器使用 `--version main`。
 切换源码后还需要执行安装；`./tools/kosctl version` 分别显示部署与源码版本。
 
 ## 从零开始
