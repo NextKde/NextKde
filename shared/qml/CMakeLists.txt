@@ -45,6 +45,7 @@ qt_add_qml_module(kos_ui
         controls/ControlForm.qml
         controls/LiquidTextField.qml
         controls/LiquidSegmentedControl.qml
+        controls/SelectionHighlight.qml
     RESOURCES
         i18n/qmldir
         i18n/ZhCatalog.mjs

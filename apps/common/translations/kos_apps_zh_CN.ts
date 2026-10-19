@@ -21,6 +21,21 @@
       <source>all-day</source>
       <translation>全天</translation>
     </message>
+    <message>
+      <source>All-day</source>
+      <translation>全天</translation>
+    </message>
+  </context>
+  <context>
+    <name>EventDetailsPopover</name>
+    <message>
+      <source>Edit</source>
+      <translation>编辑</translation>
+    </message>
+    <message>
+      <source>Close</source>
+      <translation>关闭</translation>
+    </message>
   </context>
   <context>
     <name>CalendarTaskEditorDialog</name>
@@ -124,6 +139,54 @@
       <location line="+6" />
       <source>Delete task</source>
       <translation>删除任务</translation>
+    </message>
+    <message>
+      <source>New task</source>
+      <translation>新建任务</translation>
+    </message>
+    <message>
+      <source>Save</source>
+      <translation>保存</translation>
+    </message>
+    <message>
+      <source>Cancel</source>
+      <translation>取消</translation>
+    </message>
+    <message>
+      <source>Delete this task?</source>
+      <translation>删除此任务？</translation>
+    </message>
+    <message>
+      <source>The task is removed from every view. This cannot be undone.</source>
+      <translation>此任务将从所有视图中删除，且无法撤销。</translation>
+    </message>
+    <message>
+      <source>Title is required.</source>
+      <translation>请填写标题。</translation>
+    </message>
+    <message>
+      <source>A linked task needs a due date.</source>
+      <translation>关联任务需要设置截止日期。</translation>
+    </message>
+    <message>
+      <source>Due date must be %1.</source>
+      <translation>截止日期格式必须为 %1。</translation>
+    </message>
+    <message>
+      <source>Due time must be %1.</source>
+      <translation>截止时间格式必须为 %1。</translation>
+    </message>
+    <message>
+      <source>Task list</source>
+      <translation>任务清单</translation>
+    </message>
+    <message>
+      <source>Task priority</source>
+      <translation>任务优先级</translation>
+    </message>
+    <message>
+      <source>Task notes</source>
+      <translation>任务备注</translation>
     </message>
   </context>
   <context>
@@ -359,6 +422,50 @@
       <location line="+6" />
       <source>Delete event</source>
       <translation>删除日程</translation>
+    </message>
+    <message>
+      <source>Title is required.</source>
+      <translation>请填写标题。</translation>
+    </message>
+    <message>
+      <source>Start date must be %1.</source>
+      <translation>开始日期格式必须为 %1。</translation>
+    </message>
+    <message>
+      <source>End date must be %1.</source>
+      <translation>结束日期格式必须为 %1。</translation>
+    </message>
+    <message>
+      <source>Start time must be %1.</source>
+      <translation>开始时间格式必须为 %1。</translation>
+    </message>
+    <message>
+      <source>End time must be %1.</source>
+      <translation>结束时间格式必须为 %1。</translation>
+    </message>
+    <message>
+      <source>End must not be before start.</source>
+      <translation>结束日期不能早于开始日期。</translation>
+    </message>
+    <message>
+      <source>End time must be after start time.</source>
+      <translation>结束时间必须晚于开始时间。</translation>
+    </message>
+    <message>
+      <source>Save</source>
+      <translation>保存</translation>
+    </message>
+    <message>
+      <source>Cancel</source>
+      <translation>取消</translation>
+    </message>
+    <message>
+      <source>Delete this event?</source>
+      <translation>删除此日程？</translation>
+    </message>
+    <message>
+      <source>The event is removed from every view. This cannot be undone.</source>
+      <translation>此日程将从所有视图中删除，且无法撤销。</translation>
     </message>
   </context>
   <context>
@@ -621,6 +728,11 @@
       <translation>任务已在日历与待办中更新</translation>
     </message>
     <message>
+      <location filename="../../weather/qml/Main.qml" line="+0" />
+      <source>My Location</source>
+      <translation>我的位置</translation>
+    </message>
+    <message>
       <location line="+2" />
       <source>Event removed</source>
       <translation>日程已删除</translation>
@@ -681,6 +793,10 @@
       <location filename="../../weather/qml/Main.qml" line="+111" />
       <source>Today</source>
       <translation>今天</translation>
+    </message>
+    <message>
+      <source>Now</source>
+      <translation>现在</translation>
     </message>
     <message>
       <location line="-300" />
@@ -1234,6 +1350,202 @@
       <source>Weather data by Open-Meteo. Forecast times use the selected location's timezone.</source>
       <translation>天气数据由 Open-Meteo 提供。预报时间采用所选地点的时区。</translation>
     </message>
+    <message>
+      <source>Search</source>
+      <translation>搜索</translation>
+    </message>
+    <message>
+      <source>Minimize</source>
+      <translation>最小化</translation>
+    </message>
+    <message>
+      <source>Zoom</source>
+      <translation>缩放</translation>
+    </message>
+    <message>
+      <source>Close</source>
+      <translation>关闭</translation>
+    </message>
+    <message>
+      <source>Hide sidebar</source>
+      <translation>隐藏侧栏</translation>
+    </message>
+    <message>
+      <source>Show sidebar</source>
+      <translation>显示侧栏</translation>
+    </message>
+    <message>
+      <source>Add event</source>
+      <translation>添加日程</translation>
+    </message>
+    <message>
+      <source>Year</source>
+      <translation>年</translation>
+    </message>
+    <message>
+      <source>New task…</source>
+      <translation>新建任务…</translation>
+    </message>
+    <message>
+      <source>Calendars</source>
+      <translation>日历</translation>
+    </message>
+    <message>
+      <source>Show completed tasks</source>
+      <translation>显示已完成任务</translation>
+    </message>
+    <message>
+      <source>Task lists</source>
+      <translation>任务清单</translation>
+    </message>
+    <message>
+      <source>Show today</source>
+      <translation>显示今天</translation>
+    </message>
+    <message>
+      <source>%1; %2 items</source>
+      <translation>%1；%2 项</translation>
+    </message>
+    <message>
+      <source>Calculator</source>
+      <translation>计算器</translation>
+    </message>
+    <message>
+      <source>Basic</source>
+      <translation>基本</translation>
+    </message>
+    <message>
+      <source>Scientific</source>
+      <translation>科学</translation>
+    </message>
+    <message>
+      <source>Convert</source>
+      <translation>换算</translation>
+    </message>
+    <message>
+      <source>mi</source>
+      <translation>英里</translation>
+    </message>
+    <message>
+      <source>km</source>
+      <translation>千米</translation>
+    </message>
+    <message>
+      <source>Weather service connected; showing cached data</source>
+      <translation>天气服务已连接，正在显示缓存数据</translation>
+    </message>
+    <message>
+      <source>Air Quality</source>
+      <translation>空气质量</translation>
+    </message>
+    <message>
+      <source>Air quality index: %1.</source>
+      <translation>空气质量指数：%1。</translation>
+    </message>
+    <message>
+      <source>Gusts</source>
+      <translation>阵风</translation>
+    </message>
+    <message>
+      <source>Gusts: </source>
+      <translation>阵风：</translation>
+    </message>
+    <message>
+      <source>New Moon</source>
+      <translation>新月</translation>
+    </message>
+    <message>
+      <source>Waxing Crescent</source>
+      <translation>蛾眉月</translation>
+    </message>
+    <message>
+      <source>First Quarter</source>
+      <translation>上弦月</translation>
+    </message>
+    <message>
+      <source>Waxing Gibbous</source>
+      <translation>盈凸月</translation>
+    </message>
+    <message>
+      <source>Full Moon</source>
+      <translation>满月</translation>
+    </message>
+    <message>
+      <source>Waning Gibbous</source>
+      <translation>亏凸月</translation>
+    </message>
+    <message>
+      <source>Last Quarter</source>
+      <translation>下弦月</translation>
+    </message>
+    <message>
+      <source>Waning Crescent</source>
+      <translation>残月</translation>
+    </message>
+    <message>
+      <source>Moon Phase</source>
+      <translation>月相</translation>
+    </message>
+    <message>
+      <source>PM</source>
+      <translation>下午</translation>
+    </message>
+    <message>
+      <source>AM</source>
+      <translation>上午</translation>
+    </message>
+    <message>
+      <source>Sunset</source>
+      <translation>日落</translation>
+    </message>
+    <message>
+      <source>UV Index</source>
+      <translation>紫外线指数</translation>
+    </message>
+    <message>
+      <source>Visibility</source>
+      <translation>能见度</translation>
+    </message>
+    <message>
+      <source>Pressure</source>
+      <translation>气压</translation>
+    </message>
+    <message>
+      <source>Feels Like</source>
+      <translation>体感温度</translation>
+    </message>
+    <message>
+      <source>Conditions</source>
+      <translation>天气状况</translation>
+    </message>
+    <message>
+      <source>Temperature (%1)</source>
+      <translation>温度（%1）</translation>
+    </message>
+    <message>
+      <source>Hourly conditions</source>
+      <translation>逐小时天气状况</translation>
+    </message>
+    <message>
+      <source>Hourly precipitation</source>
+      <translation>逐小时降水</translation>
+    </message>
+    <message>
+      <source>Hourly wind</source>
+      <translation>逐小时风况</translation>
+    </message>
+    <message>
+      <source>Wind speed %1 %2</source>
+      <translation>风速 %1 %2</translation>
+    </message>
+    <message>
+      <source>10-Day Forecast</source>
+      <translation>10 日预报</translation>
+    </message>
+    <message>
+      <source>10-day forecast</source>
+      <translation>10 日预报</translation>
+    </message>
   </context>
   <context>
     <name>PimClient</name>
@@ -1473,6 +1785,69 @@
       <location line="+63" />
       <source>Weather request failed</source>
       <translation>天气请求失败</translation>
+    </message>
+  </context>
+  <context>
+    <name>CalculatorEngine</name>
+    <message>
+      <source>Error</source>
+      <translation>错误</translation>
+    </message>
+  </context>
+  <context>
+    <name>HistoryPane</name>
+    <message>
+      <source>Edit</source>
+      <translation>编辑</translation>
+    </message>
+    <message>
+      <source>Delete (%1)</source>
+      <translation>删除（%1）</translation>
+    </message>
+    <message>
+      <source>Clear All</source>
+      <translation>全部清空</translation>
+    </message>
+  </context>
+  <context>
+    <name>HistoryStore</name>
+    <message>
+      <source>Previous 7 Days</source>
+      <translation>过去 7 天</translation>
+    </message>
+    <message>
+      <source>Previous 30 Days</source>
+      <translation>过去 30 天</translation>
+    </message>
+  </context>
+  <context>
+    <name>Keypad</name>
+    <message>
+      <source>Deg</source>
+      <translation>角度</translation>
+    </message>
+    <message>
+      <source>Rad</source>
+      <translation>弧度</translation>
+    </message>
+  </context>
+  <context>
+    <name>UnitPicker</name>
+    <message>
+      <source>单位</source>
+      <translation>单位</translation>
+    </message>
+    <message>
+      <source>离线参考汇率</source>
+      <translation>离线参考汇率</translation>
+    </message>
+    <message>
+      <source>快照：%1</source>
+      <translation>快照：%1</translation>
+    </message>
+    <message>
+      <source>搜索所有单位</source>
+      <translation>搜索所有单位</translation>
     </message>
   </context>
 </TS>

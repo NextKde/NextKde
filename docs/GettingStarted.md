@@ -279,7 +279,7 @@ for later installs. Merely removing OpenCV does not keep it out of the default
 
 ### Optional standalone applications
 
-Calendar, Todo, Weather, and ListenFree are not built by the core
+Calendar, Calculator, Todo, Weather, and ListenFree are not built by the core
 `kosctl install`. The default application bundle requires Qt 6.10+, compatible
 KF6 libraries, Go 1.26+, and the audio dependencies documented in
 [apps/README.md](../apps/README.md) and the
@@ -292,6 +292,20 @@ KF6 libraries, Go 1.26+, and the audio dependencies documented in
 This invokes `tools/install-apps.sh`, checks dependencies, and prepares the
 private ListenFree SDK. The legacy local Music app remains available through
 `music-dev`; it is disabled in the default application installer.
+
+To build Calendar, Calculator, Todo and Weather without the optional audio SDK,
+install the core desktop first, then use the application preset directly:
+
+```sh
+cmake --preset apps-release -DKOS_BUILD_LISTENFREE=OFF -DBUILD_TESTING=OFF
+cmake --build --preset apps-release --parallel 4
+cmake --install .build/apps-release
+systemctl --user daemon-reload
+busctl --user call org.freedesktop.DBus /org/freedesktop/DBus org.freedesktop.DBus ReloadConfig
+```
+
+This installs into `~/.local` by default. Calculator currency conversion uses an
+explicitly dated offline reference table, not live exchange rates.
 
 Install equivalent packages on other distributions. See the
 [Quickshell documentation](https://quickshell.org/docs/) for Quickshell.

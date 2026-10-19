@@ -67,6 +67,7 @@
     "kos-settings.power-config"
   ],
   "headless": [
+    "kos-calculator.engine",
     "kos-shell.dock-selection-highlight",
     "kos-shell.desktop-lyrics",
     "kos-ui.interaction-controls",

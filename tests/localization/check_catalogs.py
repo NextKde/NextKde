@@ -34,7 +34,7 @@ for context in app_root.findall("context"):
         for text in texts:
             check_placeholders(source, text)
         app_translations[(context.findtext("name"), source)] = texts
-current = sources(["apps/calendar", "apps/todo", "apps/weather", "shared/qml/foundation", "shared/pim"])
+current = sources(["apps/calendar", "apps/calculator", "apps/todo", "apps/weather", "shared/qml/foundation", "shared/pim"])
 for context in current.findall("context"):
     for message in context.findall("message"):
         key = (context.findtext("name"), message.findtext("source"))
