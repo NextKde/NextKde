@@ -18,7 +18,9 @@ KDE Plasma 6 **Wayland**, Quickshell 0.3.x. Start with this file, then
   New integration belongs in the service. Preserve state roots, socket envelopes and migrations.
 - Core installation owns the complete Settings/runtime QML trees. The optional apps installer
   must not overwrite fragments of core Settings. Standard apps are Calendar, Calculator, Todo
-  and Weather; ListenFree/its SDK and legacy Music are explicit opt-ins.
+  and Weather; ListenFree and its SDK require explicit opt-in. Legacy Music source is removed;
+  preserve its installed files, user data and audio associations on standard upgrades.
+  Only explicit ListenFree installation owns legacy player migration.
 - Never hot-replace/reload KWin plugins in a running compositor. Install, then logout/login or reboot.
 - Run project verification only in a VM or hosted CI. Preserve unrelated worktree changes.
 

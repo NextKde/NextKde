@@ -68,7 +68,6 @@ partial replacement of core Settings. Also check an app-only prefix without core
 Qt 6.5+, compatible KF6 and Go 1.26+ are the standard bundle baseline.
 `./tools/kosctl install apps --with-listenfree` explicitly enables the audio SDK and additional
 [ListenFree dependencies](../apps/listenfree/packaging/linux/README.md), including Qt 6.10+.
-The `music-dev` preset builds the legacy Music application separately.
 See [apps](../apps/README.md) for individual presets and registration.
 
 ## Review checklist

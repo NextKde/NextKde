@@ -121,7 +121,8 @@ KWin 插件及桌面接管需注销登录/重启。浅版本切换不下载旧�
 ```
 
 显式音频需 Qt 6.10+ 及[ListenFree 依赖](../apps/listenfree/packaging/linux/README.md)，准备 SDK、注册并迁移旧 Music。
-选音频时可用 `KOS_LISTENFREE_SDK` 指定现有 SDK。`apps-dev`/`apps-release` 只选标准四个，`music-dev` 单建旧 Music。
+选音频时可用 `KOS_LISTENFREE_SDK` 指定现有 SDK。`apps-dev`/`apps-release` 只选标准四个。
+旧 Music 不再构建，普通升级保留已安装的播放器、曲库和音频关联。
 计算器汇率为注明日期离线参考，不是实时。详见[应用](../apps/README.md)。
 
 ## 桌面接管与可选锁屏

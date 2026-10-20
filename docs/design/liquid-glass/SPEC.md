@@ -153,7 +153,7 @@ Footnote 10/13、Caption 10/13；正文 13pt，**最小 10pt**。
 
 | 现值（出处） | 归并到 |
 |---|---|
-| 24（MusicEditorDialog:173）、21（AlertDialog:78）、19（MusicDialog:20） | Title1 22/26（弹层标题） |
+| 24（MusicEditorDialog:173）、21（AlertDialog:78） | Title1 22/26（弹层标题） |
 | 17（NotificationHistoryCard:187）、16（WallpaperOptionsDialog:29） | Title2 17/22 |
 | 18（NotificationHistoryEntry:164）、15 | Title3 15/20 |
 | 14（SettingsCheckBox:35）、13（ContextMenu:132、LiquidSelect:200、GlobalMenu:39、SegmentedTabBar:79 等） | Body 13/16 |
@@ -175,7 +175,7 @@ Footnote 10/13、Caption 10/13；正文 13pt，**最小 10pt**。
 | `space.xs` | 4 | 高频实测：NotificationHistoryCard:135、StatusTooltip:57 |
 | `space.sm` | 8 | SessionMenu:138、SettingsTransferDialog:25、WallpaperOptionsDialog:51 |
 | `space.md` | 12 | HIG「带边框控件周围约 12pt」+ dialogs 表单（EventEditorDialog:170 等） |
-| `space.lg` | 20 | MusicDialog:7、KosFloatPanel contentPadding:20 |
+| `space.lg` | 20 | KosFloatPanel contentPadding:20 |
 
 废值归并：1/3/5/6/7/9/10/14 → 就近档（6→4 或 8 按视觉密度，14→12）。
 
@@ -246,10 +246,10 @@ reduceMotion 继承全局、状态不得仅用颜色区分。
 
 ### 3.4 GlassMenu
 - 复用 GlassPopover 宿主与运动；属性：`padding: space.sm` 8
-  （收编实测 0/6/8 三档，`ContextMenu.qml:53`/`MusicMenu.qml:7`/`SessionMenu.qml:138`）。
+  （收编实测 0/6/8 三档，`ContextMenu.qml:53`/`WallpaperValueMenu.qml:67`/`SessionMenu.qml:138`）。
 - 项：高 ≥28（HIG 命中区）、item radius 8（`ContextMenu.qml:117`、`GlobalMenu.qml:206`）、
   字号 Body 13（`ContextMenu.qml:132`）、项间距 `space.xs` 4。
-- 收编对象：MusicMenu（AppTheme Rectangle 背景）、WallpaperValueMenu（自绘 19 radius）、
+- 收编对象：WallpaperValueMenu（自绘 19 radius）、
   SessionMenu（自绘 + 比例字号）、GlobalMenu 内部复用 listenfree ContextMenu（:290）。
 
 ### 3.5 GlassTooltip
@@ -306,7 +306,7 @@ reduceMotion 继承全局、状态不得仅用颜色区分。
 - 弹层：radius card 16（收编 AppTheme.mediumRadius/19 散值）、
   高 `min(360, 内容+12)`（:232，收编 280/300 两版）、菜单偏移 5（:92-96）、
   popup padding `space.sm` 8。
-- 收编三份并存：LiquidSelect / KosComboBox / MusicComboBox（INVENTORY 冲突⑪）。
+- 收编两份并存：LiquidSelect / KosComboBox。
 
 ### 3.13 GlassScrollBar
 - 现状四种做法无统一组件（原生 ScrollBar policy ×3、内联 Basic.ScrollBar、
@@ -385,9 +385,9 @@ reduceMotion 继承全局、状态不得仅用颜色区分。
 
 1. bar 直用 LiquidGlassPanel 的 6 个面板 → ControlCenterGlass 配方（§1.1）。
 2. dock tooltip → GlassTooltip 玻璃配方（§3.5）。
-3. 菜单四来源（listenfree ContextMenu / MusicMenu / WallpaperValueMenu / SessionMenu）
+3. 菜单三来源（listenfree ContextMenu / WallpaperValueMenu / SessionMenu）
   → GlassMenu（§3.4）。
-4. ComboBox 三份 → GlassComboBox；CheckBox 三份 → GlassCheckbox；Segmented 两套 →
+4. ComboBox 两份 → GlassComboBox；CheckBox 三份 → GlassCheckbox；Segmented 两套 →
   统一比例制（§3.8）；ScrollBar 四做法 → GlassScrollBar + KosKineticScroll；
   Slider 收编 LiquidSlider（KosSlider/ColorRampSlider 保留，§3.14）、
   Switch 收编 LiquidGlassSwitch（§3.15）、NavBar 立容器契约 GlassNavBar（§3.16）。

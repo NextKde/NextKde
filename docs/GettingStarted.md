@@ -138,8 +138,9 @@ is reset to OFF. Apps installation leaves core Settings/runtime QML untouched an
 
 Explicit audio opt-in adds Qt 6.10+ and the [ListenFree dependencies](../apps/listenfree/packaging/linux/README.md),
 prepares its SDK, registers it and migrates legacy Music. `KOS_LISTENFREE_SDK` can select an existing
-SDK only when opting in. `apps-dev`/`apps-release` select the standard four; `music-dev` builds legacy
-Music. Calculator currency conversion uses a dated offline reference, not live rates.
+SDK only when opting in. `apps-dev`/`apps-release` select the standard four. Legacy Music is no
+longer built; standard upgrades preserve an existing player, library and audio associations.
+Calculator currency conversion uses a dated offline reference, not live rates.
 See [apps](../apps/README.md) for per-app details.
 
 ## Desktop takeover and optional lockscreen

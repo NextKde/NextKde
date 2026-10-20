@@ -16,7 +16,6 @@ manageable:
 | Calculator | `kos-calculator` | `apps-dev` |
 | Todo | `kos-todo` | `todo-dev` |
 | Weather | `kos-weather` | `weather-dev` |
-| Music (legacy, retained) | `kos-music` | `music-dev` |
 | KOS ListenFree (opt-in music player) | `listenfree` | `listenfree-dev` |
 
 `apps-dev` builds Calendar, Calculator, Todo and Weather. Each application owns its executable, QML
@@ -34,9 +33,9 @@ Apps using `apps/common` can load their QML from a source tree and hot reload it
 edits need neither a rebuild nor a restart:
 
 ```bash
-.build/music-dev/apps/music/kos-music --watch-qml apps/music/qml
+.build/calendar-dev/apps/calendar/kos-calendar --watch-qml apps/calendar/qml
 # or skip the argument via the environment
-KOS_APP_QML_DIR=apps/music/qml .build/music-dev/apps/music/kos-music
+KOS_APP_QML_DIR=apps/calendar/qml .build/calendar-dev/apps/calendar/kos-calendar
 ```
 
 The path names the directory holding `Main.qml` (or the entry file itself).
@@ -44,9 +43,8 @@ The path names the directory holding `Main.qml` (or the entry file itself).
 300 ms debounce; the new code is fully compiled on a throwaway engine first
 (including referenced siblings), and text that does not compile reports its
 errors and keeps the current window. Controllers created in C++ and injected
-into QML through initial properties (such as music's `music`) survive a reload:
-playback, the queue, the database connection, and the MPRIS registration keep
-running. QML-owned state (the current page, open dialogs) resets.
+into QML through initial properties survive a reload. QML-owned state
+(the current page, open dialogs) resets.
 `shared/qml` (Kos.Ui) is compiled into the binary and still needs a rebuild.
 
 A watch run is an isolated development instance: it never displaces the
@@ -101,6 +99,8 @@ until its source-path-dependent QML loader is migrated separately.
 ## Default applications
 
 The four standard apps retain their `kos-*` desktop IDs, services and data.
+Legacy `kos-music` source and build targets have been removed. Standard installation
+and upgrades leave an existing legacy player, its library and audio associations intact.
 Only `--with-listenfree` registers ListenFree and retires legacy KOS Music after
 checking the replacement. User data, other players' defaults and later choices
 are preserved. The desktop music widget raises the current MPRIS player, or

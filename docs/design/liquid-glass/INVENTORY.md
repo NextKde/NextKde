@@ -62,7 +62,7 @@
 **重复实现**
 1. 控件双家族并行：`shell/Kos/Ui/controls/Liquid*.qml`（LiquidGlassButton/LiquidSegmentedControl/LiquidTextField/LiquidSelect/LiquidSlider/LiquidSwitch）与 `shell/Kos/Ui/foundation/Kos*.qml`（KosButton/KosToolButton/KosTextField/KosComboBox/KosCheckBox/KosDialog…共 30 文件，见 `shell/Kos/Ui/foundation/`）。liquid 版自带玻璃高光，foundation 版走 KosSurface。
 2. Segmented 两份：`LiquidSegmentedControl.qml`（:87 materialForm 半径 `height/2`，否则 `height*0.38`）与 listenfree `SegmentedTabBar.qml`（`apps/listenfree/music_player_desktop/components/SegmentedTabBar.qml`，参数未逐项抄录——抽查级）。
-3. TextField 两份：`LiquidTextField.qml` 与 `KosTextField.qml`；ComboBox：`LiquidSelect.qml` vs `KosComboBox.qml` vs `apps/music/qml/MusicComboBox.qml`（三份）。
+3. TextField 两份：`LiquidTextField.qml` 与 `KosTextField.qml`；ComboBox：`LiquidSelect.qml` 与 `KosComboBox.qml`（两份）。
 4. 按钮内按压/悬停液态参数各自硬编码：`LiquidGlassButton.qml:25` `_expansion = pressed?1.0:(hovered?0.3:0)`，无共享 motion token。
 
 **互相冲突**
@@ -115,21 +115,19 @@
 |---|---|---|---|---|
 | **ContextMenu**（listenfree 通用菜单） | 四源一致 `apps/listenfree/music_player_desktop/components/ContextMenu.qml:53-132` | QML `Menu`，background = **GlassSurface** | `padding:0`(:53)、item 字号 13(:132)、item 高亮 radius 8(:117) | — |
 | **SongContextMenu** | `…/SongContextMenu.qml:5` (33 行) | ContextMenu 薄子类 | — | — |
-| **MusicMenu / MusicMenuItem** | `apps/music/qml/MusicMenu.qml:5-11`、`MusicMenuItem.qml:10-33` | `Menu` + Rectangle 背景 | padding 6(:7)、`radius:AppTheme.mediumRadius`(:11)；item leftPadding 12/topPadding 6(:10-12)、spacing 10(:16)、`radius:AppTheme.smallRadius`(:33) | 背景=AppTheme Rectangle，与 listenfree GlassSurface 配方不同（冲突⑦） |
 | **WallpaperValueMenu** | `apps/settings/WallpaperValueMenu.qml:41-119` (182 行) | 自绘弹层 | spacing 9(:41)、字号 13 Medium(:45-46)、`padding:6`(:67)、外层 radius 19(:81)、内层 17-19(:92-119) | — |
 | **SessionMenu** | `apps/lockscreen/contents/lockscreen/SessionMenu.qml:138-286` (298 行) | 自绘卡片 | `padding:8`(:138)、卡片 radius 14(:147)、item radius 9(:269)、item 字号 = `Math.round(itemHeight*0.34)`(:286) | **字号随高度比例算**，无固定档位（冲突⑧） |
 | **GlobalMenu** | WT `shell/desktop/modules/bar/GlobalMenu.qml:9-290` (330 行) | KDE AppMenu 的 QML 原生渲染器（DBusMenu→QML 数据） | 字号 13 DemiBold(:39-40)、spacing 1(:182)、radius 8(:206,262)、内部复用 listenfree `ContextMenu`(:290) | — |
 
-**结论**：菜单背景四种来源——GlassSurface（listenfree/GlobalMenu）、AppTheme Rectangle（music）、自绘（settings/lockscreen）；padding 0/6/8；item radius 8/smallRadius/9。收敛方向见 SPEC v1 GlassMenu。
+**结论**：菜单背景包括 GlassSurface（listenfree/GlobalMenu）与自绘（settings/lockscreen）；padding 0/6/8。旧 Music 菜单已移除，收敛方向见 SPEC v1 GlassMenu。
 
-## 6. Dialog 全量（11 个）
+## 6. Dialog 全量（10 个）
 
 | 文件 | 来源 | 行数 | 模态/按钮 | 关键参数 |
 |---|---|---|---|---|
 | `apps/calendar/qml/EventEditorDialog.qml` | cal | 370 | `modal:true`(:21)、standardButtons Save\|Cancel(:25) | spacing 12(:170)、`radius:AppTheme.smallRadius`(:256)、字号 11(:204,281) |
 | `apps/calendar/qml/CalendarTaskEditorDialog.qml` | cal | 222 | modal(:19)、Save\|Cancel(:23) | spacing 12(:97)、smallRadius(:102)、字号 11/10(:114,196) |
 | `apps/todo/qml/TodoEditorDialog.qml` | todo | 274 | modal(:22)、Save\|Cancel(:26) | spacing 12(:135)、smallRadius(:140)、字号 11(:153) |
-| `apps/music/qml/MusicDialog.qml` | music | 35 | modal(:8) | `padding:20`(:7)、`radius:AppTheme.largeRadius`(:10)、字号 19(:20)、内 padding 14(:27) |
 | `apps/listenfree/.../AlertDialog.qml` | 四源 | 173 | opacity 驱动显隐(:22) | 字号 21(:78)/12(:87)、spacing 12(:71)/7(:96)、option pill radius 11(:106) |
 | `apps/listenfree/.../SettingsTransferDialog.qml` | 四源 | 80 | — | 字号 12(:43,55)、spacing 8(:25,27)/6(:33) |
 | `apps/listenfree/music_player_desktop/pages/MusicEditorDialog.qml` | 四源 | 505 | `visible: open || opacity > .01`(:61) | radius 16(:131)/24(:231)/20(:241)、字号 24(:173)/18(:182)、spacing 5-7 |
@@ -146,8 +144,7 @@
 | **SettingsCheckBox** | 四源 `apps/listenfree/music_player_desktop/components/SettingsCheckBox.qml:10-35` | 20×20(:10-11)、`radius:5`(:23)、label 字号 14(:35) | 与 KosCheckBox 并存；**KosCheckBox 还有两份**：`shell/Kos/Ui/foundation/KosCheckBox.qml` 与 `shared/qml/foundation/KosCheckBox.qml`（同名三份，冲突⑩） |
 | **KosCheckBox** | WT `shell/Kos/Ui/foundation/KosCheckBox.qml`、`shared/qml/foundation/KosCheckBox.qml` | — | — |
 | **LiquidSelect**（ComboBox·liquid） | WT `shell/Kos/Ui/controls/LiquidSelect.qml:16-232` | 高 36(:17)、`fieldRadius:height/2`(:35)、字号 13(:200,211)、弹层高 `min(360, 内容+12)`(:232)、accent `#0a84ff`(:26)、sheetColor 深 `#262b31`/浅 `#f6f8fb`(:29)、outline α .16 深/.12 浅(:30)、菜单偏移 5(:92-96) | — |
-| **KosComboBox**（foundation） | WT `shell/Kos/Ui/foundation/KosComboBox.qml:6-38` | 高 `AppTheme.controlHeight`(:6)、indicator 文字 "⌄" 字号 16(:15)、radius `AppTheme.smallRadius`(:18)、popup padding 6(:35)、高 `min(内容+12, 300)`(:34) | 与 LiquidSelect 三份并存（music 版，冲突⑪） |
-| **MusicComboBox** | `apps/music/qml/MusicComboBox.qml:7-62` | 高 `AppTheme.controlHeight`(:7)、radius smallRadius(:11)、popup padding 6(:51)、高 `min(内容+12, 280)`(:52)、popup `radius:AppTheme.mediumRadius`(:62) | — |
+| **KosComboBox**（foundation） | WT `shell/Kos/Ui/foundation/KosComboBox.qml:6-38` | 高 `AppTheme.controlHeight`(:6)、indicator 文字 "⌄" 字号 16(:15)、radius `AppTheme.smallRadius`(:18)、popup padding 6(:35)、高 `min(内容+12, 300)`(:34) | 与 LiquidSelect 两份并存 |
 | **ScrollBar** | 无统一组件：calendar 用原生 `ScrollBar.*.policy`（`CalendarScheduleView.qml:227` 等 3 处）；listenfree 内联 `Basic.ScrollBar`（`EqualizerPopup.qml:64` 等）+ 局部 `StableScrollBar`（`LyricsMatchPopup.qml:223`，policy AlwaysOff）；shell 侧滚动由 `KosKineticScroll.qml` 提供 | — | 四种做法，无 token（冲突⑫） |
 | **SegmentedTabBar**（listenfree，参数补全） | 四源 `apps/listenfree/music_player_desktop/components/SegmentedTabBar.qml:8-79` | cellWidth 72、cellHeight 40、`cellRadius:cellHeight/2`(:12)、outerPadding 2(:13)、字号 13(:79)、hoverBackground `#24ffffff`(:17)、**有 `reduceMotion` 属性（默认 false，:19）** | 与 LiquidSegmentedControl（比例半径 0.38/0.42/0.34）口径不同；且这是全库唯一自带 reduceMotion 属性的控件，shell 侧无人读取（见 §10.4） |
 
@@ -157,7 +154,7 @@
 
 | 用途 | 出现过的值（出处示例） | HIG 归并 |
 |---|---|---|
-| 大标题/弹层标题 | 24（MusicEditorDialog:173）、21（AlertDialog:78）、19（MusicDialog:20） | Title1 22±（26/32 为 LargeTitle） |
+| 大标题/弹层标题 | 24（MusicEditorDialog:173）、21（AlertDialog:78） | Title1 22±（26/32 为 LargeTitle） |
 | 列表强调/数字 | 18（NotificationHistoryEntry:164）、17（NotificationHistoryCard:187）、16（WallpaperOptionsDialog:29）、15（BundledIcon 尺寸，非字） | Title2/Title3 17/15 |
 | 正文/菜单项 | 13（ContextMenu:132、LiquidSelect:200、SegmentedTabBar:79、GlobalMenu:39、NotificationHistoryCard:155）、14（SettingsCheckBox:35）、12（StatusTooltip:63、ActionFeedbackToast:57、NotificationHistoryPane:387） | Body 13/Headline 13 Bold；12≈Callout |
 | 次要文本 | 11（DockAppNameTooltip:85、NotificationHistory:121,135,144、dialogs 多处）、10（StatusTooltip:70、NotificationHistoryCard:199） | Subheadline 11 / Footnote·Caption 10 |
@@ -170,8 +167,8 @@
 
 | 类别 | 值 | 场景 |
 |---|---|---|
-| padding | 0（ContextMenu:53）、6（MusicMenu:7、WallpaperValueMenu:67、KosComboBox:35）、8（SessionMenu:138）、14（EventDetailsPopover:31、MusicDialog:27）、20（MusicDialog:7、KosFloatPanel contentPadding:20） | 弹层内边距 4 档并存：0/6/8/14（+20） |
-| spacing | 1（GlobalMenu:182）、3（StatusTooltip:57）、4（NotificationHistoryCard:135）、5-7（MusicEditorDialog/AlertDialog/Toast）、8-10（dialogs/MusicMenuItem）、12（dialogs 表单） | 1..12 连续值，无档位收敛 |
+| padding | 0（ContextMenu:53）、6（WallpaperValueMenu:67、KosComboBox:35）、8（SessionMenu:138）、14（EventDetailsPopover:31）、20（KosFloatPanel contentPadding:20） | 弹层内边距 4 档并存：0/6/8/14（+20） |
+| spacing | 1（GlobalMenu:182）、3（StatusTooltip:57）、4（NotificationHistoryCard:135）、5-7（MusicEditorDialog/AlertDialog/Toast）、8-10（dialogs）、12（dialogs 表单） | 1..12 连续值，无档位收敛 |
 | margins | +4（tooltip 贴边正间隙，StatusTooltip:40-43、DockAppNameTooltip:67-69；原 -6 负 margin 经 G7 裁定 B 改为 +4）、12/16（KosFloatPanel shadowOffset） | 贴边保留正间隙，不再压进锚点 |
 
 ## 9. 深浅主题 tint 实测对照表（代码值）
