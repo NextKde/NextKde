@@ -32,6 +32,12 @@ ownership; they are not chronological work logs or proof that a feature passed r
 | Wallpaper ownership and theme format | [Wallpaper](WallpaperArchitecture.md), [theme packs](ThemePackFormat.md), [depth engine](DepthEngine.md) |
 | Network, PIM and weather | [Network](NetworkArchitecture.md), [PIM](PimArchitecture.md), [weather](WeatherArchitecture.md) |
 | Optional applications | [Applications](../apps/README.md), [legacy Music](MusicArchitecture.md), [ListenFree build](../apps/listenfree/packaging/linux/README.md) |
+| Reusable QML components, Gallery and sidebar demo | [nextkdeAppDemo](https://github.com/NextKde/nextkdeAppDemo) |
+
+The component Gallery and sidebar demo are maintained in `nextkdeAppDemo`. Their preview
+entry points are no longer shipped with NextKde. This repository retains the shared QML
+components and Shell glass implementation used by its runtime; changes in the demo repository
+are not automatically synchronized here.
 
 ## Keeping this reference current
 
