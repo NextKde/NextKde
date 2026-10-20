@@ -30,6 +30,10 @@
 | 壁纸所有权及主题格式 | [壁纸](WallpaperArchitecture.zh-CN.md)、[主题包](ThemePackFormat.zh-CN.md)、[深度引擎](DepthEngine.md) |
 | 网络、PIM、天气 | [网络](NetworkArchitecture.md)、[PIM](PimArchitecture.md)、[天气](WeatherArchitecture.md) |
 | 可选应用 | [应用](../apps/README.md)、[旧 Music](MusicArchitecture.md)、[ListenFree 构建](../apps/listenfree/packaging/linux/README.md) |
+| 可复用 QML 组件、Gallery 与侧栏 Demo | [nextkdeAppDemo](https://github.com/NextKde/nextkdeAppDemo) |
+
+组件 Gallery 与侧栏 Demo 由 `nextkdeAppDemo` 独立维护，NextKde 不再附带它们的预览入口。
+主仓库保留运行时使用的共享 QML 组件和 Shell 玻璃实现；Demo 仓库的改动不会自动同步到这里。
 
 ## 持续维护
 

@@ -320,16 +320,15 @@ KosSlider 保留为 foundation 非玻璃形态；ColorRampSlider 维持专用。
 SPEC §3.2 的「scrim 单一来源」契约成立：默认路径单一（compositor），双重变暗需
 显式 opt-in，无需重议。
 
-## 12. G10 补全 — 无 KWin 场景采样组件
+## 13. Shell 场景采样组件
 
-> 以下为 G10 新增，行号基于工作树 `codex/liquid-glass-foundation`。
+Gallery 已迁至 [nextkdeAppDemo](https://github.com/NextKde/nextkdeAppDemo)。下列是
+主项目仍保留的 Shell 实现，不是独立 Demo 仓库的组件清单。
 
 | 组件 | 位置 | 作用 | 关键契约 |
 |---|---|---|---|
 | **GlassBackdrop** | `shell/desktop/modules/common/GlassBackdrop.qml`（`qmldir` singleton） | 宿主声明主窗口内的隐藏采样源 | `sourceItem: Item`；`null` = 所有表面走旧行为。另提供 `scrimCap(level)` / `scrimDecay(level)` / `defaultScrimTint`，是 QML 与 KWin 共用的 preset 表 |
 | **scene_liquid.frag** | `shell/desktop/shaders/scene_liquid.frag(.qsb)`（`compile.sh` 烘焙） | 无 KWin 时的采样着色 | 1/6 捕获 + 9 tap 模糊；`adaptiveScrim` 逐式移植；`scrimEnabled/scrimCap/scrimDecay/scrimTint` uniform |
-| **GalleryBackdropBoard** | `shell/gallery/components/GalleryBackdropBoard.qml` | 四象限 + 40 黑白点的背景板（可见窗口与隐藏副本共用） | 颜色/几何与旧内联板一致（#e53935 / #fdd835 / #00acc1 / #d81b60，36px 点） |
-| **GalleryBackdropSample** | `shell/gallery/components/GalleryBackdropSample.qml` | 弹窗窗口内按屏幕坐标平移的隐藏副本 | `screenX/screenY/screenWidth/screenHeight` 来自 `anchor.rect` 与 `screen` |
 
 `LiquidGlassSurface` 新增 `backdropItem`（默认 `GlassBackdrop.sourceItem`）、
 `scrimEnabled/scrimCap/scrimDecay/scrimTint/scrimLevel`、`sceneSampling` 与
@@ -337,8 +336,6 @@ SPEC §3.2 的「scrim 单一来源」契约成立：默认路径单一（compos
 由 `ShaderEffect` 一次画完采样 + 着色 + SDF 裁剪。`LiquidGlassPanel` 只转发
 有效 preset（`scrimLevel` 默认 `"custom"` 保持旧调用零变化）。
 
-G11 补上 `LiquidGlassPanel.backdropItem` 的默认值（`GlassBackdrop.sourceItem`，
-原为 `null`）：所有走 panel 的表面——nav、param panel、toast、dialog、
-notification、menu、decision 卡片——不再需要逐处接线；`sourceItem` 为 `null`
-时仍回到旧路径，`useKwinEffect: true` 路径不变。`GlassPopup` / `GlassTooltip`
-的显式采样源覆盖保持不变。
+`LiquidGlassPanel.backdropItem` 默认接 `GlassBackdrop.sourceItem`，宿主可显式覆盖。
+`sourceItem` 为 `null` 时不启用场景采样。Shell 的原有 KWin 接入保留；独立 Demo
+仓库的纯 QML 组件尚未自动替换这些实现。
