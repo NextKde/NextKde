@@ -293,13 +293,15 @@ assert.match(read("../../shell/desktop/modules/bar/NetworkTraffic.qml"),
     "the Bar traffic arrow repaints when the ink it strokes with moves");
 for (const [path, description] of [
     ["../../shell/desktop/modules/bar/controlcenter/SubmenuCard.qml", "Control Centre chrome"],
-    ["../../shell/desktop/modules/bar/NetworkTraffic.qml", "Bar traffic arrow"],
     ["../../shell/desktop/modules/bar/WifiSignalIcon.qml", "shared Wi-Fi glyph"],
     ["../../shell/desktop/modules/quicksearch/QuickSearchWindow.qml", "Quick Search chrome"],
 ]) {
     assert.match(read(path), /content\.glassInk\(/,
         `${description} takes the glass ink instead of a white literal`);
 }
+assert.match(read("../../shell/desktop/modules/bar/NetworkTraffic.qml"),
+    /readonly property color glyphInk:\s*ThemeService\.barInk/,
+    "the Bar traffic arrow shares the status labels' opaque appearance ink");
 // NetworkPanel now delegates ink to the surface, which resolves the same
 // glass roles. Assert both ends of that delegation rather than requiring the
 // older direct AppearanceTokens call in every consumer.

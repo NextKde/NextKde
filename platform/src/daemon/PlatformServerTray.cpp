@@ -2,9 +2,11 @@
 #include "PlatformDbus.h"
 
 #include <QByteArray>
+#include <QDBusArgument>
 #include <QDBusConnection>
 #include <QFile>
 #include <QFutureWatcher>
+#include <QHash>
 #include <QMetaType>
 #include <QSet>
 #include <QStringList>
@@ -17,6 +19,30 @@ using namespace Detail;
 namespace {
 
 constexpr int kTrayIdentifyCacheTtlMs = 3000;
+
+QString trayTooltipTitle(const QVariant &value)
+{
+    if (value.metaType() != QMetaType::fromType<QDBusArgument>())
+        return {};
+    const auto argument = qvariant_cast<QDBusArgument>(value);
+    if (argument.currentSignature() != QStringLiteral("(sa(iiay)ss)"))
+        return {};
+    QString iconName, title, description;
+    argument.beginStructure();
+    argument >> iconName;
+    argument.beginArray();
+    while (!argument.atEnd()) {
+        int width, height;
+        QByteArray pixels;
+        argument.beginStructure();
+        argument >> width >> height >> pixels;
+        argument.endStructure();
+    }
+    argument.endArray();
+    argument >> title >> description;
+    argument.endStructure();
+    return title.trimmed();
+}
 
 struct TrayIdentityResult {
     bool ok = false;
@@ -167,6 +193,8 @@ TrayIdentityResult trayIdentifyWorker()
     }
 
     const QStringList items = itemsVariant.toStringList();
+    QHash<QString, int> namePriorities;
+    QSet<QString> ambiguousIds;
     for (const QString &item : items) {
         const qsizetype slash = item.indexOf(QLatin1Char('/'));
         if (slash <= 0)
@@ -181,6 +209,8 @@ TrayIdentityResult trayIdentifyWorker()
         const QString title = dbusGetProperty(bus, service, path,
             QStringLiteral("org.kde.StatusNotifierItem"),
             QStringLiteral("Title")).toString();
+        const QString tooltipTitle = trayTooltipTitle(dbusGetProperty(bus, service, path,
+            QStringLiteral("org.kde.StatusNotifierItem"), QStringLiteral("ToolTip")));
         const uint pid = dbusUnixProcessId(bus, service);
 
         // /proc reads are local files; a process that exits between the bus
@@ -225,8 +255,22 @@ TrayIdentityResult trayIdentifyWorker()
         }
         if (name.isEmpty())
             name = title.trimmed().section(QLatin1Char('\n'), 0, 0).trimmed();
-        if (!name.isEmpty())
-            out.names.insert(id, name);
+        if (!name.isEmpty()) {
+            // Electron applications reuse chrome_status_icon_1. The shell can
+            // identify entries with their own title/tooltip; reserve the ID
+            // fallback for an anonymous entry (QQ), not its named sibling
+            // (ChatGPT). Equally anonymous collisions stay unresolved.
+            const int priority = title.trimmed().isEmpty() && tooltipTitle.isEmpty() ? 2 : 1;
+            if (priority > namePriorities.value(id, 0)) {
+                out.names.insert(id, name);
+                namePriorities.insert(id, priority);
+                ambiguousIds.remove(id);
+            } else if (priority == namePriorities.value(id)
+                && !ambiguousIds.contains(id) && out.names.value(id).toString() != name) {
+                out.names.remove(id);
+                ambiguousIds.insert(id);
+            }
+        }
     }
     out.ok = true;
     return out;

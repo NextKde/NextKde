@@ -19,6 +19,7 @@ ColumnLayout {
     readonly property var modes: ["color", "grayscale", "tint"]
     property real iconOpacity: 0.5
     property string tintColor: "#a855f7"
+    property bool trayFollowsBarColor: true
     property real huePosition: 0.75
     property real tonePosition: 0.5
     property bool opacityDirty: false
@@ -90,6 +91,7 @@ ColumnLayout {
         modeIndex = index >= 0 ? index : 0
         iconOpacity = Number.isFinite(Number(state.iconOpacity)) ? Number(state.iconOpacity) : 0.5
         tintColor = String(state.iconTintColor || "#a855f7").toLowerCase()
+        trayFollowsBarColor = state.trayFollowsBarColor !== false
         const color = colorFromHex(tintColor)
         huePosition = hueFor(color)
         tonePosition = nearestTone(color)
@@ -135,6 +137,53 @@ ColumnLayout {
             id: appearanceRows
             anchors.left: parent.left
             anchors.right: parent.right
+            Item {
+                width: parent.width; height: 72
+                RowLayout {
+                    anchors.fill: parent; anchors.leftMargin: 16; anchors.rightMargin: 16; spacing: 12
+                    Controls.SettingIcon {
+                        colors: iconAppearance.colors
+                        materialForm: iconAppearance.materialForm
+                        symbol: "◐"
+                        tint: "#64d2ff"
+                    }
+                    ColumnLayout {
+                        Layout.fillWidth: true
+                        spacing: 3
+                        Text {
+                            text: I18n.tr("Application tray follows appearance")
+                            color: colors.primaryText
+                            font.pixelSize: 14
+                            Layout.fillWidth: true
+                            wrapMode: Text.WordWrap
+                        }
+                        Text {
+                            text: iconAppearance.trayFollowsBarColor
+                                ? I18n.tr("Follow appearance: use the same black or white as network rates and temperature.")
+                                : I18n.tr("Original colors: preserve application icons.")
+                            color: colors.secondaryText
+                            font.pixelSize: 12
+                            Layout.fillWidth: true
+                            wrapMode: Text.WordWrap
+                        }
+                    }
+                    LiquidControls.LiquidGlassSwitch {
+                        objectName: "tray-follows-bar-color-switch"
+                        width: 64
+                        height: 25
+                        checked: iconAppearance.trayFollowsBarColor
+                        enabled: iconAppearance.bridge !== null
+                        materialForm: iconAppearance.materialForm
+                        accentColor: colors.accent
+                        trackColor: colors.divider
+                        onToggled: function(checked) {
+                            if (iconAppearance.bridge)
+                                iconAppearance.bridge.updateTrayFollowsBarColor(checked)
+                        }
+                    }
+                }
+            }
+            Rectangle { width: parent.width - 53; x: 53; height: 1; color: colors.separator }
             Item {
                 width: parent.width; height: 52
                 RowLayout {

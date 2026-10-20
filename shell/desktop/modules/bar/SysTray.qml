@@ -2,7 +2,6 @@ import Quickshell
 import Quickshell.Wayland
 import Quickshell.Services.SystemTray
 import QtQuick
-import QtQuick.Effects
 import "../../../shared/qml/i18n"
 import qs.desktop.modules.common
 import qs.desktop.modules.dock
@@ -404,7 +403,6 @@ Item {
                 name: root.collectionExpanded ? "status-collection-collapse" : "status-collection-expand"
                 size: 18
                 color: ThemeService.barInk
-                opacity: root.collectedKeys.length > 0 || toggleMouse.containsMouse || root.draggedKey !== "" ? 0.9 : 0.5
             }
             MouseArea {
                 id: toggleMouse
@@ -527,11 +525,6 @@ Item {
                 Drag.proposedAction: Qt.MoveAction
                 Drag.onDragFinished: function(action) { root.nativeDragFinished(trayItem.trayKey, action) }
                 readonly property string tooltip: modelData ? SysTrayIdentityService.friendlyName(modelData) : ""
-                readonly property bool isSymbolicMask: Boolean(modelData?.isMask)
-                    || (typeof modelData?.icon === "string" && (
-                        modelData.icon.indexOf("symbolic") !== -1
-                        || modelData.icon.indexOf("-mask") !== -1
-                    ))
 
                 function openMenu() {
                     if (!modelData.hasMenu)
@@ -568,22 +561,14 @@ Item {
                     z: -1
                 }
 
-                AppIcon {
+                TrayIcon {
                     width: root.iconSize
                     height: root.iconSize
                     anchors.centerIn: parent
-                    source: trayItem.modelData.icon
-                    opacityMultiplier: IconAppearanceService.mode !== "color"
-                        ? IconAppearanceService.opacity : 1.0
-                    saturation: IconAppearanceService.saturation
-                    tintEnabled: IconAppearanceService.tintEnabled
-                    tintColor: IconAppearanceService.tintColor
+                    entry: trayItem.modelData
+                    applicationId: trayItem.modelData.id || ""
+                    applicationName: trayItem.tooltip
                     rotation: root.verticalDock && !trayItem.inCollection ? -90 : 0
-                    layer.enabled: trayItem.isSymbolicMask && IconAppearanceService.mode === "color"
-                    layer.effect: MultiEffect {
-                        colorization: 1.0
-                        colorizationColor: ThemeService.foregroundColor
-                    }
                 }
 
                 MouseArea {

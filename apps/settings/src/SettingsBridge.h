@@ -109,6 +109,7 @@ public:
     Q_INVOKABLE void updateGlobalIconMode(const QString& mode);
     Q_INVOKABLE void updateGlobalIconOpacity(double opacity);
     Q_INVOKABLE void updateGlobalIconTintColor(const QString& color);
+    Q_INVOKABLE void updateTrayFollowsBarColor(bool enabled);
     Q_INVOKABLE void updateShellStyle(const QString& style);
     Q_INVOKABLE void updateMaterialColorScheme(const QString& scheme);
     Q_INVOKABLE void updateBarIntegratedWithDock(bool enabled);

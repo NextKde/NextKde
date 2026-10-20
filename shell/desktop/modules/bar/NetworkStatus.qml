@@ -35,11 +35,7 @@ Item {
         || (NetworkService.deviceState === "connected"
             && NetworkService.connectivity === "none")
     readonly property bool connected: NetworkService.deviceState === "connected"
-    readonly property color statusIconColor: IconAppearanceService.mode === "tint"
-        ? IconAppearanceService.styledSymbolicColor()
-        : ThemeService.barInk
-    readonly property real statusIconOpacity: IconAppearanceService.mode !== "color"
-        ? IconAppearanceService.opacity : 1.0
+    readonly property color statusIconColor: ThemeService.barInk
     // The readability edge both glyphs carry is dropped while the mac-style
     // ground paints a plate under them.
     readonly property bool outlined: AppearanceTokens.isDarkTheme
@@ -59,7 +55,7 @@ Item {
         height: root.iconSize
         name: "status-ethernet"
         color: root.statusIconColor
-        opacity: root.statusIconOpacity * (root.connected ? 0.96 : 0.68)
+        opacity: root.connected ? 1.0 : 0.68
     }
 
     WifiSignalIcon {
@@ -73,12 +69,10 @@ Item {
             && NetworkService.connectionType === "wifi"
         signalStrength: NetworkService.signalStrength
         glyphColor: root.statusIconColor
-        opacity: root.statusIconOpacity * (root.connected ? 0.96 : 0.68)
+        opacity: root.connected ? 1.0 : 0.68
         layer.enabled: true
         layer.effect: MultiEffect {
-            shadowEnabled: !AppearanceTokens.bar.macStyle
-                && (IconAppearanceService.mode !== "color"
-                    || ThemeService.isDark)
+            shadowEnabled: root.outlined
             shadowColor: Qt.rgba(0, 0, 0, 0.82)
             shadowOpacity: 0.62
             shadowBlur: 0.32

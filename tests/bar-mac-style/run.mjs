@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { copyFileSync, mkdirSync, mkdtempSync, rmSync, symlinkSync } from "node:fs";
+import { copyFileSync, cpSync, mkdirSync, mkdtempSync, rmSync, symlinkSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { fileURLToPath } from "node:url";
 import { join } from "node:path";
@@ -13,7 +13,8 @@ import { spawnSync } from "node:child_process";
 // plausible -- an ink read off the plate instead of the blend only fails on a
 // bright wallpaper at a low tint. It needs the shipping module tree for the same reason as the
 // LiquidGlassPanel fixture -- the singletons reach across qs.desktop.modules.*
-// and Kos.Ui -- so it symlinks the real tree instead of copying it.
+// and Kos.Ui. Copy the runtime tree and stub the platform transport so this
+// appearance test can run without changing the user's active desktop state.
 //
 // State and config directories are redirected into the scratch tree so the
 // appearance service reads a fresh state instead of the developer's own.
@@ -24,7 +25,9 @@ const directory = mkdtempSync(join(tmpdir(), "kos-bar-mac-style-"));
 try {
     copyFileSync(new URL("shell.qml", import.meta.url),
         join(directory, "shell.qml"));
-    symlinkSync(join(shell, "desktop"), join(directory, "desktop"), "dir");
+    cpSync(join(shell, "desktop"), join(directory, "desktop"), { recursive: true });
+    copyFileSync(new URL("../status-area/PlatformFixture.qml", import.meta.url),
+        join(directory, "desktop/modules/platform/PlatformClient.qml"));
     symlinkSync(join(shell, "shared"), join(directory, "shared"), "dir");
     symlinkSync(join(shell, "Kos"), join(directory, "Kos"), "dir");
     mkdirSync(join(directory, "state"));
@@ -60,7 +63,7 @@ try {
         + "wallpaper, and the ink follows the wallpaper/plate blend at both "
         + "ends of the tint");
 } finally {
-    // The scratch tree is nothing but symlinks, and some sandboxes route rm
+    // Some sandboxes route rm
     // through a trash directory the process cannot write. Cleanup failing says
     // nothing about the style, so it must not be able to fail the test.
     try {

@@ -4,7 +4,7 @@ import Quickshell.Widgets
 
 // One renderer for application artwork across Dock, QuickSearch and Launcher.
 // Layout owns width/height; this component owns source loading consistency.
-// Supports grayscale + selective transparency + tonal tint via ShaderEffect.
+// Supports grayscale, transparency, tonal tint and flat tray ink via ShaderEffect.
 Item {
     id: root
     property string source: ""
@@ -15,6 +15,8 @@ Item {
     property real   saturation:        1.0
     property real   tintEnabled:       0.0
     property color  tintColor:         "#a855f7"
+    property bool   recolorEnabled:    false
+    property color  recolorColor:      "white"
     property bool   smooth:            true
 
     // Icon loads must stay on the GUI thread. QIcon::fromTheme() hands back
@@ -28,10 +30,10 @@ Item {
 
     // The shader pass only earns its FBO when it actually rewrites pixels:
     // desaturation, tonal tint, or the dimmed monochrome opacity. In the
-    // default color mode all three are identity, so the icon draws directly
+    // default color mode these inputs are identity, so the icon draws directly
     // and skips both the FBO allocation and the second rasterization.
     readonly property bool needsEffect: saturation !== 1.0
-        || tintEnabled !== 0.0 || opacityMultiplier !== 1.0
+        || tintEnabled !== 0.0 || opacityMultiplier !== 1.0 || recolorEnabled
 
     // The artwork is two components rather than one tree with a binding on
     // `layer.enabled`, and that is load-bearing. Enabling a layer on an item
@@ -99,6 +101,8 @@ Item {
                 property real sat: root.saturation
                 property real iconTintEnabled: root.tintEnabled
                 property color iconTintColor: root.tintColor
+                property real iconRecolorEnabled: root.recolorEnabled ? 1.0 : 0.0
+                property color iconRecolorColor: root.recolorColor
                 fragmentShader: Qt.resolvedUrl("../../shaders/icon_effect.frag.qsb")
             }
         }
