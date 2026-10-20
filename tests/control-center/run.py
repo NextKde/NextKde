@@ -38,11 +38,12 @@ def main():
             KOS_DATA_SOCKET=str(root / 'no-data.sock'), WAYLAND_DISPLAY='control-center-test',
             DISPLAY='', QT_QPA_PLATFORM='wayland', QT_QUICK_BACKEND='software',
             QML_IMPORT_PATH=qml_path, QML2_IMPORT_PATH=qml_path)
+        # KWin 6.8 virtual outputs support OpenGL only; Qt Quick stays software.
         with (root / 'kwin.log').open('w+') as log:
             compositor = subprocess.Popen(['kwin_wayland', '--virtual', '--width', '1280',
                 '--height', '900', '--no-lockscreen', '--no-global-shortcuts', '--no-kactivities',
                 '--socket', 'control-center-test'],
-                env=dict(env, QT_QPA_PLATFORM='offscreen', KWIN_COMPOSE='Q'), stdout=log, stderr=log)
+                env=dict(env, QT_QPA_PLATFORM='offscreen', KWIN_COMPOSE='O2'), stdout=log, stderr=log)
             try:
                 for _ in range(100):
                     if (root / 'runtime/control-center-test').exists():

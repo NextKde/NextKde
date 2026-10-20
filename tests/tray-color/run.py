@@ -60,6 +60,7 @@ def main():
             QML_IMPORT_PATH=os.environ.get("QML_IMPORT_PATH", str(REPO / ".build/kosctl/qml")),
             XDG_RUNTIME_DIR=str(root / "runtime"), WAYLAND_DISPLAY="tray-color-test", DISPLAY="")
         env.pop("QT_QUICK_BACKEND", None)
+        client_output = ""
         with (root / "kwin.log").open("w+") as log:
             compositor = subprocess.Popen(["kwin_wayland", "--virtual", "--width", "800",
                 "--height", "600", "--no-lockscreen", "--no-global-shortcuts", "--no-kactivities",
@@ -75,6 +76,11 @@ def main():
                     time.sleep(0.05)
                 result = subprocess.run(["quickshell", "-p", str(root), "--no-color"],
                     env=env, capture_output=True, text=True, timeout=15)
+                client_output = result.stdout + result.stderr
+            except subprocess.TimeoutExpired as error:
+                client_output = "\n".join(part.decode(errors="replace") if isinstance(part, bytes) else part
+                    for part in [error.stdout, error.stderr] if part)
+                raise
             finally:
                 compositor.terminate()
                 try:
@@ -82,6 +88,16 @@ def main():
                 except subprocess.TimeoutExpired:
                     compositor.kill()
                     compositor.wait()
+                logs = {"kwin.log": (root / "kwin.log").read_text(), "quickshell.log": client_output}
+                for name, text in logs.items():
+                    print(f"\n--- {name} ---\n{text}", flush=True)
+                if os.environ.get("KOS_TRAY_COLOR_QA"):
+                    qa = Path(os.environ["KOS_TRAY_COLOR_QA"])
+                    if missing_template:
+                        qa = qa / "missing-template"
+                    qa.mkdir(parents=True, exist_ok=True)
+                    for name, text in logs.items():
+                        (qa / name).write_text(text)
         output = result.stdout + result.stderr
         if missing_template:
             # This missing file is deliberate. All other image/runtime errors
