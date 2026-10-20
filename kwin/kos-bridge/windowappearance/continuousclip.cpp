@@ -187,7 +187,7 @@ bool ContinuousClip::available()
         vertex = LegacyVertex;
         fragment = LegacyFragment;
     }
-    fragment.replace("#version 140", "#version 140\n#if GL_OES_standard_derivatives\n#extension GL_OES_standard_derivatives : enable\n#endif");
+    // fwidth is core in GLSL 1.40 / GLES 3.00; KWin generates the shader header.
     // Preserve KWin's transfer functions, colorimetry, HDR, saturation and
     // modulation. Add the contour before its existing color pipeline.
     const QByteArray vertexMain("void main()\n{");
