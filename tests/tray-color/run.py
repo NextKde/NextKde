@@ -114,8 +114,8 @@ def main():
         assert frames["white"].tobytes() == frames["tinted"].tobytes() == frames["color"].tobytes()
         for name, ink, backdrop in [("white", (255, 255, 255), (22, 54, 113)), ("black", (0, 0, 0), (240, 240, 240))]:
             gallery = Image.open(root / f"applications-{name}.png").convert("RGB")
-            for x in [4, 36, 68]:
-                colors = dict((color, count) for count, color in gallery.crop((x, 4, x + 24, 28)).getcolors(576))
+            for x, y in [(4, 4), (36, 4), (68, 4), (4, 36)]:
+                colors = dict((color, count) for count, color in gallery.crop((x, y, x + 24, y + 24)).getcolors(576))
                 assert colors.get(ink, 0) > 20, (name, x, "template is not opaque ink")
                 assert colors.get(backdrop, 0) > 20, (name, x, "template lost transparent details")
         print("PASS: tray and production status controls share opaque appearance ink in color/grayscale/tint; alpha and settings round-trip")

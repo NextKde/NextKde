@@ -81,7 +81,7 @@ ShellRoot {
     FloatingWindow {
         visible: true
         implicitWidth: 320
-        implicitHeight: 80
+        implicitHeight: 112
         Rectangle {
             id: scene
             anchors.fill: parent
@@ -111,7 +111,7 @@ ShellRoot {
             NotificationHistoryToggle { x: 280; y: 4; iconSize: 24 }
             Rectangle {
                 id: applicationGallery
-                y: 40; width: 320; height: 32
+                y: 40; width: 320; height: 64
                 color: ThemeService.isDark ? "#163671" : "#f0f0f0"
                 TrayIcon {
                     id: codexTemplate
@@ -132,6 +132,12 @@ ShellRoot {
                     x: 68; y: 4; width: 24; height: 24
                     applicationId: "tray-icon tray app clash-verge-rev-tray"
                     applicationName: "clash-verge"
+                    originalSource: Quickshell.env("TRAY_TEST_ICON")
+                }
+                TrayIcon {
+                    x: 4; y: 36; width: 24; height: 24
+                    applicationId: "chrome_status_icon_1"
+                    applicationName: "WorkBuddy"
                     originalSource: Quickshell.env("TRAY_TEST_ICON")
                 }
                 Text {

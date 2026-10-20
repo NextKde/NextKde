@@ -66,6 +66,12 @@ its registry source. Do not depend on workstation absolute paths or font glyphs.
 icons, media art and file thumbnails follow their own contracts. System-theme exceptions such as
 the Dock trash icon resolve through `SystemIconResolver`, with centralized candidates and bundled fallback.
 
+Tray identity resolution lives in `modules/bar/TrayIdentity.mjs`: explicit tooltip/title
+labels and app-specific IDs win over daemon fallback names keyed by a shared generated ID.
+Two anonymous entries sharing an ID remain unresolved; topology changes invalidate cached
+names and stale in-flight replies. Monochrome templates use exact app aliases, preserve live
+attention/status artwork, and fall back to original artwork when a replacement cannot load.
+
 Use token geometry and motion values consistently across Dock, bar and widgets. Dock window-animation
 targets use stable layout slot centers and static icon size in compositor-global coordinates;
 hover magnification must not move a minimize target. Keep desktop file spacing in

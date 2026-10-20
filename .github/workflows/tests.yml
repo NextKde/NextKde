@@ -22,6 +22,9 @@ jobs:
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v7
+      - name: Verify tray identity and template matching
+        run: node shell/desktop/modules/bar/test_tray_identity.mjs
+
       - name: Test release selection without installing the desktop
         run: python3 -m unittest discover -s tools/tests -p 'test_*release*.py'
       - name: Check project contracts and documentation
@@ -58,7 +61,8 @@ jobs:
             qt6-base qt6-declarative qt6-wayland qt6-tools qt6-translations qt6-5compat \
             extra-cmake-modules wayland plasma-workspace libplasma kpackage \
             kwindowsystem kiconthemes kglobalaccel kio kconfig \
-            go dbus nodejs python opencv onnxruntime-cpu
+            go dbus nodejs python opencv onnxruntime-cpu \
+            quickshell kwin python-pillow mesa
 
       # Warm Go's build cache across runs. `kos-data-service.go` compiles the
       # whole standard library on a cold cache (>50 s locally, ~1 s warm),
@@ -105,6 +109,17 @@ jobs:
             -L '^logic$' \
             --output-log "$GITHUB_WORKSPACE/.build/tests/test-results/logic.log" \
             --output-junit "$GITHUB_WORKSPACE/.build/tests/test-results/logic.xml"
+
+      - name: Render monochrome tray templates on a private compositor
+        if: ${{ !cancelled() && steps.prepare.outcome == 'success' }}
+        env:
+          KOS_TRAY_COLOR_QA: ${{ github.workspace }}/.build/tests/test-results/tray-color
+        run: |
+          mkdir -p .build/tests/test-results
+          ctest --test-dir .build/tests --output-on-failure --no-tests=error \
+            -R '^kos-ui.tray-color$' \
+            --output-log "$GITHUB_WORKSPACE/.build/tests/test-results/tray-color.log" \
+            --output-junit "$GITHUB_WORKSPACE/.build/tests/test-results/tray-color.xml"
 
       - name: Run offscreen UI regressions
         if: ${{ !cancelled() && steps.prepare.outcome == 'success' }}

@@ -12,6 +12,7 @@ AppIcon {
     property string applicationId: ""
     property string applicationName: ""
     property bool followAppearance: IconAppearanceService.trayFollowsBarColor
+    property bool templateLoadFailed: false
     readonly property string bundledTemplate: Templates.bundledTemplate(applicationId, applicationName)
     readonly property bool needsAttention: entry !== null
         && entry.status === SystemTrayItem.NeedsAttention
@@ -25,7 +26,7 @@ AppIcon {
     }
 
     // The filled Clash silhouette needs less space to match the other tray glyphs.
-    scale: useTemplate && bundledTemplate === "clash-verge.png" ? 0.85 : 1.0
+    scale: useTemplate && !templateLoadFailed && bundledTemplate === "clash-verge.png" ? 0.85 : 1.0
 
     readonly property string templateSource: {
         const revision = IconThemeReloadService.revision
@@ -37,7 +38,14 @@ AppIcon {
         }
         return originalSource
     }
-    source: useTemplate ? templateSource : originalSource
+    onTemplateSourceChanged: templateLoadFailed = false
+    onOriginalSourceChanged: templateLoadFailed = false
+    onUseTemplateChanged: templateLoadFailed = false
+    onImageStatusChanged: {
+        if (imageStatus === Image.Error && source !== originalSource)
+            templateLoadFailed = true
+    }
+    source: useTemplate && !templateLoadFailed ? templateSource : originalSource
     recolorEnabled: followAppearance
     recolorColor: ThemeService.barInk
 }

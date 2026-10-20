@@ -4,6 +4,7 @@ import Quickshell
 import Quickshell.Services.SystemTray
 import "../../../shared/qml/i18n"
 import qs.desktop.modules.platform
+import "TrayIdentity.mjs" as Identity
 
 // 系统托盘应用身份智能解析服务 / System Tray Identity Service
 //
@@ -18,6 +19,7 @@ QtObject {
     // 解析后的应用名映射字典：itemId -> 友好应用名
     property var resolvedNames: ({})
     property int revision: 0
+    property int _generation: 0
 
     // 内置常见已知应用快速别名表（零延迟同步兜底，与 daemon 侧的
     // trayIdentityAlias 保持一致；新增条目时两边都要改）
@@ -37,89 +39,11 @@ QtObject {
         "code": "VS Code"
     })
 
-    // 判断一个 ID 是否为生硬的内部生成标识符
-    function isInternalId(id) {
-        if (!id || typeof id !== "string") return true
-        const str = id.trim()
-        if (str.length === 0) return true
-        // Chromium / Electron 自动生成的托盘 ID
-        if (str.indexOf("chrome_status_icon") === 0) return true
-        if (str.indexOf("_status_icon_") >= 0) return true
-        if (str.indexOf("tray-icon tray app") === 0) return true
-        // 随机生成的无意义短哈希标识（如 2cUW32wlKy）
-        if (/^[0-9a-zA-Z]{8,16}$/.test(str) && !/^[A-Z][a-z]+$/.test(str)) return true
-        return false
-    }
+    function isInternalId(id) { return Identity.isInternalId(id) }
 
-    // 有些应用用自己的名字拼出 ID（如 WorkBuddy_status_icon_1），剥掉生成的
-    // 后缀就能还原；纯运行时生成的 ID（chrome_status_icon_1）剥完不剩任何
-    // 信息，此处返回空，绝不猜测它属于哪个应用。
-    function _nameFromId(id) {
-        if (!id) return ""
-        if (/^chrome[_-]status[_-]icon/i.test(id)) return ""
-        let name = id.replace(/^tray[-\s]?icon(\s+tray\s+app)?\s+/i, "")
-        name = name.replace(/[_-]status[_-]icon[_-]?[0-9]*$/i, "").replace(/[_-]+$/, "").trim()
-        // 只有确实剥掉了生成片段才算还原出名字：没有剥掉说明该 ID 自身就是
-        // 无信息的标识（例如随机哈希），照原样显示等于没有名字。
-        if (name === id.trim()) return ""
-        if (name.length < 2 || !/^[A-Za-z0-9._-]+$/.test(name)) return ""
-        if (svc._genericNames[name.toLowerCase()]) return ""
-        // 已含大写说明是应用自己的拼写（WorkBuddy）；带分隔符的名字是应用自己
-        // 的风格（cc-switch），只有单个小写单词才需要首字母大写。
-        if (name.indexOf("-") < 0 && name.indexOf("_") < 0
-                && name === name.toLowerCase())
-            name = name.charAt(0).toUpperCase() + name.slice(1)
-        return name
-    }
-
-    readonly property var _genericNames: ({
-        "app": true, "apprun": true, "resources": true, "electron": true,
-        "node": true, "chrome": true, "chromium": true, "python": true,
-        "python3": true, "java": true, "sh": true, "bash": true, "env": true,
-        "flatpak": true, "snap": true, "tray": true, "icon": true
-    })
-
-    // 获取托盘项的友好显示名称
     function friendlyName(item) {
-        if (!item) return ""
-        const _rev = svc.revision // 触发 QML 响应式依赖
-
-        // 1. 优先使用显式设置的有效 Tooltip 标题
-        if (item.tooltipTitle && typeof item.tooltipTitle === "string" && item.tooltipTitle.trim().length > 0) {
-            const tt = item.tooltipTitle.trim()
-            if (!isInternalId(tt)) return tt
-        }
-
-        // 2. 其次使用显式设置的有效 Title
-        if (item.title && typeof item.title === "string" && item.title.trim().length > 0) {
-            const title = item.title.trim()
-            if (!isInternalId(title)) return title
-        }
-
-        const id = (item.id || "").trim()
-
-        // 3. 从异步解析结果中查找
-        if (id && svc.resolvedNames[id]) {
-            return svc.resolvedNames[id]
-        }
-
-        // 4. 如果 id 自身是有意义的可读名称，则可以作为兜底
-        if (id && !isInternalId(id)) {
-            const lower = id.toLowerCase()
-            if (svc._knownAliases[lower]) {
-                return svc._knownAliases[lower]
-            }
-            return id
-        }
-
-        // 5. id 是生成标识时，仍尝试从它自己拼出的名字还原
-        const fromId = svc._nameFromId(id)
-        if (fromId) return fromId
-
-        // 6. 最后兜底回到改动前的行为：宁可显示原始 ID，也不要把提示整个变
-        // 空。daemon 未部署 tray.identify（旧版本或连接断开）时，第 3 步永远
-        // 不会命中，此处保证 QQ / WorkBuddy 一类应用至少仍有可读的提示。
-        return item.tooltipTitle || item.title || id || ""
+        const revision = svc.revision
+        return Identity.friendlyName(item, svc.resolvedNames, svc._knownAliases, SystemTray.items.values)
     }
 
     // 托盘项的变化很密集（聊天类应用每条消息都会改 tooltip），而 daemon 侧的
@@ -138,12 +62,23 @@ QtObject {
     }
 
     // 触发异步解析更新
+    function invalidate() {
+        svc._generation++
+        if (Object.keys(svc.resolvedNames).length) {
+            svc.resolvedNames = ({})
+            svc.revision++
+        }
+        refresh()
+    }
+
     function refresh() {
         _refreshTimer.restart()
     }
 
     function _query() {
+        const generation = svc._generation
         PlatformClient.request("tray.identify", {}, function(response) {
+            if (generation !== svc._generation) return
             if (!response?.ok) {
                 console.warn("[SysTrayIdentityService] identify failed: "
                     + (response?.error?.message || "platform unavailable"))
@@ -180,13 +115,13 @@ QtObject {
             required property var modelData
             property Connections _itemConn: Connections {
                 target: modelData
-                function onIdChanged() { svc.refresh() }
+                function onIdChanged() { svc.invalidate() }
                 function onTitleChanged() { svc.refresh() }
                 function onTooltipTitleChanged() { svc.refresh() }
             }
         }
-        onObjectAdded: svc.refresh()
-        onObjectRemoved: svc.refresh()
+        onObjectAdded: svc.invalidate()
+        onObjectRemoved: svc.invalidate()
     }
 
     // daemon 重启或晚于 Shell 启动时，重连成功就是重新解析的时机；不依赖
@@ -194,7 +129,7 @@ QtObject {
     property Connections _clientConn: Connections {
         target: PlatformClient
         function onTransportChanged(connected) {
-            if (connected) svc.refresh()
+            svc.invalidate()
         }
     }
 

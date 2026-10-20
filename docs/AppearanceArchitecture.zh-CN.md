@@ -50,6 +50,10 @@ Settings 调用 `appearance-settings` 快照/更新并取得完整快照。新�
 Shell 图案在 `BundledIcons` 用稳定名称登记，通过 `BundledIcon` 或注册表来源绘制，不依赖本机绝对路径或字体字形。
 应用图标、媒体封面、文件缩略图各有契约。Dock 回收站等系统主题例外经 `SystemIconResolver` 集中候选和内置回退。
 
+托盘身份在 `modules/bar/TrayIdentity.mjs` 解析：应用明确提供的提示标题、标题与专用 ID 优先于
+按共享生成 ID 缓存的 daemon 回退名。两个匿名项共用 ID 时保持未解析；托盘增删会清空缓存并丢弃
+过期的在途响应。单色模板使用精确应用别名，保留实时提醒/状态图案，替代模板加载失败时回退原始图标。
+
 Dock、Bar、组件统一使用几何/动效 Token。窗口动画目标使用合成器全局坐标中的稳定槽位中心及静态图标尺寸，悬停放大不改变最小化落点。
 桌面间距见[桌面图标](DesktopIcons.zh-CN.md)。Material 表面与连续窗口圆角渲染所有者不同，不重复裁剪或阴影。
 

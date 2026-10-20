@@ -36,6 +36,7 @@
     "kos-shell.date-projection",
     "kos-shell.squircle",
     "kos-shell.tray-attention-match",
+    "kos-shell.tray-identity",
     "kos-shell.notification-count-match",
     "kos-shell.control-center-submenu-state",
     "kos-shell.visibility-policy",
