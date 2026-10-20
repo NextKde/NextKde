@@ -470,11 +470,9 @@ Dock texture. Stage retains its outer capture of the already-rounded source.
 Bridge must not cache the animation output: doing so skips downstream animation
 draw calls on undamaged frames. Continuous shadow bounds reserve the larger of
 the active and inactive extents, so a focus change does not resize the source FBO.
-Bridge and Dock build and link against KWin 6.7.5. Their 18 translation units
-also pass compiler syntax checks against upstream 6.6.0 and 6.6.5 headers.
-Alternate-header checks use installed Qt/KF and generated KWin SDK headers;
-they do not establish linking or runtime behavior on a 6.6 installation.
-Compositor behavior remains unverified.
+CI builds/links Bridge, Dock and Glass with complete KWin 6.6/6.7/6.8 SDKs and runs
+offline/API checks. Live compositor coverage is separately recorded per Release;
+see [release policy](../../docs/Releasing.md).
 
 Dock allocates its legacy cache only when the provider is unavailable or declines
 the window. That capture includes the KOS controls in arc mode too. Allocation
@@ -489,16 +487,15 @@ unchanged/invalid files keep existing textures. Stacking updates share a single
 snapshot per notification burst; resolved app settings retain only configured
 rules. Native shadow atlases still held by windows survive LRU eviction through
 a weak lookup, avoiding repeated generation. See the
-[resource and performance review](../../docs/WindowAppearancePerformanceReview.md)
+[resource and performance review](../../docs/WindowAppearance.md)
 for remaining costs and manual acceptance steps.
 
 Configuration: `~/.config/kos/window-appearance.json`. See
 [the version 2 example](windowappearance/window-appearance.example.json) and
-[implementation limits and user verification steps](../../docs/WindowAppearanceVerification.md).
+[implementation limits and user verification steps](../../docs/WindowAppearance.md).
 Version 1 is accepted; explicitly configured widths without a unit remain logical
-pixels. Version 2 defaults to one physical pixel. No plugins were installed or
-loaded during these checks; bridge, decoration and Glass require matching builds
-for the KWin installation that will load them.
+pixels. Version 2 defaults to one physical pixel. Bridge, decoration and Glass require matching builds
+for the KWin installation that will load them. Run acceptance only in a VM.
 
 For repeatable API checks against another KWin source checkout:
 

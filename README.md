@@ -108,6 +108,8 @@ See the [daily-use guide](docs/GettingStarted.md#daily-use) for details.
 
 </details>
 
+Read the [documentation index](docs/README.md) for canonical guides and AI contributor references.
+
 ## Under the surface
 
 ```text

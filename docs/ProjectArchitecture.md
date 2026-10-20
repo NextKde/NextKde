@@ -3,7 +3,8 @@
 KOS is organized by runtime boundary and lifecycle, not by the command used
 to reach a feature. The core produces one Quickshell process, one C++ platform
 daemon, one Go data daemon, one settings app, and KWin effects and decoration.
-Calendar, Todo, Weather, and ListenFree are optional standalone applications.
+Calendar, Calculator, Todo and Weather form the optional standard app bundle.
+ListenFree is separately opt-in.
 The legacy Music application remains available as a separate build target.
 
 ```text
@@ -42,8 +43,8 @@ command output. It consumes `PlatformClient.qml` and `DataClient.qml`, which
 queue requests and correlate responses by `requestId`.
 
 `shared/qml` contains portable Qt Quick controls and shell-specific adapters.
-The `colorize` adapters use Quickshell image quantization and process APIs;
-standalone applications must avoid importing those adapters. Shared components
+The `colorize` JS algorithms are portable; Shell adapters use Quickshell image quantization.
+Standalone applications must avoid importing Shell-specific adapters. Shared components
 must not import `shell/desktop` feature modules. `shared/contracts` is the source of truth for protocol
 versions, error codes, and default shortcut definitions.
 
@@ -56,7 +57,7 @@ versions, error codes, and default shortcut definitions.
 | `kos-ai-worker` | lazily started child process | isolated local model download, CPU inference, and depth cache; exits after 15 idle seconds |
 | `kos-data-service` | systemd `--user` resident | telemetry, activity ledger, desktop snapshots, weather cache |
 | `kos-settings` | on demand | settings UI; communicates with Shell IPC only |
-| `kos-calendar`, `kos-todo`, `kos-weather`, `listenfree` | on demand | optional independent Qt Quick applications; ListenFree is the default music app |
+| `kos-calendar`, `kos-calculator`, `kos-todo`, `kos-weather`, opt-in `listenfree` | on demand | optional independent Qt Quick applications; ListenFree is explicitly selected |
 | `kos-music` | on demand | optional legacy music app, retained for separate builds |
 | `kos-pim-service` | D-Bus activated | shared Calendar/Todo storage and reminders |
 | KWin effect `.so` files | KWin managed | compositor effects, independent plugin IDs |
@@ -201,13 +202,10 @@ about a second warm. `services/data-service/CMakeLists.txt` passes an absolute
 `.build/tests/services/data-service/go-test-cache`, which is the directory the
 ctest entry point actually uses.
 
-The five KWin components (four effects and one decoration) under `kwin` and
-`shell/native/surface-shape` are built by a **separate CI job** that
-only compiles them (`KOS_BUILD_KWIN_PLUGINS=ON`, `BUILD_TESTING=OFF`). That is
-deliberately narrower than "the plugins work": loading them needs a running
-compositor, and installing them needs a SELinux relabel check, and neither
-exists in a container. Compilation is the part that can be verified
-automatically; the rest stays a real-machine check.
+KWin compatibility uses three complete SDK jobs (6.6, 6.7 and 6.8). Each builds and
+links the root plugins and Glass, runs offline bridge regressions and checks official API headers.
+Container GPU skips require VM coverage. Live compositor loading, rendering and platform-specific
+installation checks remain separate VM acceptance; see [Releasing](Releasing.md).
 
 ## Change strategy
 

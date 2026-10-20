@@ -25,9 +25,12 @@ small application runtime rather than a feature layer; applications do not
 import one another. The Weather preset additionally builds and installs its Go
 data service, which the application starts on demand.
 
+Contributor builds, tests, launches and graphical checks run only in a dedicated VM/hosted CI;
+see [Development](../docs/Development.md).
+
 ## Development: QML hot reload
 
-The four apps using `apps/common` can load their QML from a source tree and hot reload it, so QML
+Apps using `apps/common` can load their QML from a source tree and hot reload it, so QML
 edits need neither a rebuild nor a restart:
 
 ```bash
@@ -88,6 +91,9 @@ colour; reduced transparency; and reduced motion. Preferences use one shared
 store and propagate to other running KOS applications. On KDE Plasma the app
 runtime uses `KWindowEffects` for native blur and background contrast when the
 compositor advertises them, with a readable solid fallback everywhere else.
+
+Application installation preserves core Settings and its shared runtime QML; an apps-only prefix
+does not require an installed core.
 
 `settings` predates this workspace and remains on its existing build path
 until its source-path-dependent QML loader is migrated separately.

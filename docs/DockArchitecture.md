@@ -734,3 +734,11 @@ and `kos-dock.motion`; existing runtime test names and dependency gates remain.
 The launch-feedback scene and Wayland sweep can also be selected manually in
 that VM. Test counts refer to suites after consolidation, rather than one CTest
 entry per small file.
+
+## Timing and input review invariants
+
+Evaluate pointer and window events with bounded scheduling; repeatedly restarting a debounce must
+not postpone hide/reveal indefinitely. Keep tooltip and interactive popup input masks distinct.
+Use actual popup readiness signals instead of an assumed one-frame delay. Intentional hover/preview
+and naming delays are separate policies: do not set every timer to zero to hide latency.
+Measure input-to-frame behavior in the VM; animation duration arithmetic is not a latency measurement.
