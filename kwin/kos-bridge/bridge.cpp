@@ -159,6 +159,9 @@ BridgeEffect::BridgeEffect()
             KWin::effects->addRepaintFull();
         }
     });
+    connect(KWin::effects, &KWin::EffectsHandler::activeFullScreenEffectChanged,
+            this, &BridgeEffect::updateNativeThumbnails);
+    updateNativeThumbnails();
 }
 
 BridgeEffect::~BridgeEffect()
@@ -201,6 +204,28 @@ bool BridgeEffect::isActive() const
     return true;
 }
 
+void BridgeEffect::updateNativeThumbnails()
+{
+    const auto *effect = KWin::effects->activeFullScreenEffect();
+    const bool nativeThumbnails = effect && (effect->inherits("KWin::OverviewEffect")
+        || effect->inherits("KWin::WindowViewEffect"));
+    if (m_nativeThumbnails == nativeThumbnails) {
+        return;
+    }
+    m_nativeThumbnails = nativeThumbnails;
+    if (nativeThumbnails) {
+        // KWin thumbnails render scene items directly, bypassing drawWindow.
+        // Restore native rounding before their first capture, including hidden windows.
+        m_continuousClip->clear();
+        for (auto *window : KWin::effects->stackingOrder()) {
+            if (appearanceEligible(window) || m_appearance->continuousStyle(window)) {
+                m_appearance->prepare(window, false);
+            }
+        }
+    }
+    KWin::effects->addRepaintFull();
+}
+
 void BridgeEffect::prePaintWindow(KWin::RenderView *view,
                                  KWin::EffectWindow *window,
                                  KWin::WindowPrePaintData &data
@@ -212,7 +237,7 @@ void BridgeEffect::prePaintWindow(KWin::RenderView *view,
     // Radius and appearance bounds must exist before the scene computes its
     // opaque region and culls windows against the current damage.
     if (m_appearance && appearanceEligible(window)) {
-        m_appearance->prepare(window, m_continuousClip->availableFor(window));
+        m_appearance->prepare(window, !m_nativeThumbnails && m_continuousClip->availableFor(window));
         const auto style = m_appearance->continuousStyle(window);
         if (m_continuousClip->configure(window, style)) {
             // The mask opens the corners. The scene must paint the actual
@@ -278,6 +303,7 @@ bool BridgeEffect::drawSharedWindow(const KWin::RenderTarget &target,
     const KWin::RenderViewport &viewport, KWin::EffectWindow *window, int mask,
     const KWin::Region &region, KWin::WindowPaintData &data, const WindowSourceMorph &morph)
 {
+    if (m_nativeThumbnails) return false;
     const auto style = m_appearance->continuousStyle(window);
     if (!style) return false;
     if (!m_continuousClip->configure(window, style)) {

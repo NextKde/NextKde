@@ -56,6 +56,7 @@ public:
                           KWin::WindowPaintData &, const WindowSourceMorph &) override;
 
 private:
+    void updateNativeThumbnails();
     void paintButtons(const KWin::RenderTarget &, const KWin::RenderViewport &,
                       KWin::EffectWindow *, const KWin::Region &,
                       const KWin::WindowPaintData &, bool sourceCapture);
@@ -68,6 +69,7 @@ private:
     std::unique_ptr<ButtonInput> m_input;
     std::unique_ptr<WindowAppearanceManager> m_appearance;
     std::unique_ptr<WindowAppearance::ContinuousClip> m_continuousClip;
+    bool m_nativeThumbnails = false;
 
     // The window that was active last, so that the panel it had can be repainted
     // along with the one the focus moved to -- see the windowActivated connection
