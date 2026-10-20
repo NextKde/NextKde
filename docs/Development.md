@@ -1,123 +1,86 @@
-# Development & debugging
+# Development and review for AI contributors
 
-[← NextKDE](../README.md) · [Contributing](../CONTRIBUTING.md)
+[简体中文](Development.zh-CN.md)
 
-Run commands from the repository root. Run project tests and graphical verification in a virtual machine.
+[Documentation](README.md) · [Contribution rules](../CONTRIBUTING.md)
 
-## Development and debugging
+All commands that build, test, launch or diagnose the project below run **inside a dedicated VM
+or hosted CI**. Never run them on the maintainer workstation. Host source edits and Git are allowed.
 
-Preview the UI without installing it (reuses installed services):
+## Choose the correct runtime
 
-```sh
-./tools/kosctl run
-```
-
-To debug source QML, run this in one terminal and leave it running; press
-`Ctrl+C` to stop it:
-
-```sh
-./tools/kosctl dev
-```
-
-It starts only the source QML and reuses systemd's `kos-platform.service` and
-`kos-data.service`. It does not build, deploy, restart services, or create a
-second socket pair.
-
-Settings opened from the source Shell's gear automatically targets that same
-source session. You can also launch it manually from a second terminal:
-
-```sh
-KOS_SHELL_DIR="$PWD/shell" kos-settings
-```
-
-Do not combine `qs -c` and `qs -p`: they are mutually exclusive. A Settings
-app opened separately from the desktop menu still targets the installed Shell;
-use the source Shell's gear or the command above while debugging.
-
-QML changes hot-reload live under `kosctl dev` (see above). To ship them to an installed desktop, use `install` + `start` like the C++/Go/KWin path below.
-
-After changing C++, Go, or KWin plugins:
+From the repository root in the VM:
 
 ```sh
 ./tools/kosctl install
 ./tools/kosctl start
-```
-
-`start` applies Shell, platform-service, and data-service updates immediately.
-Updated KWin effect binaries load after the next logout/login or reboot; this
-avoids hot-replacing plugins inside the running compositor.
-
-> `kosctl dev` reuses the already-installed `kos-platform` and `kos-data` from
-> systemd — it does not rebuild them for you. After changing platform's C++ or
-> data-service's Go, install and restart the service before `dev` connects to
-> the new code:
->
-> - platform (C++): `./tools/kosctl install && ./tools/kosctl start` restarts `kos-platform.service`
-> - data-service (Go): same — restarts `kos-data.service`
->
-> Only Shell QML hot-reloads under `dev`; platform, data-service, and KWin
-> plugins do not — they must be reinstalled and their services restarted.
-
-Useful commands:
-
-```sh
-./tools/kosctl doctor
-./tools/kosctl run
 ./tools/kosctl dev
-./tools/kosctl shortcuts install
-./tools/kosctl glass-settings
 ```
 
-Architecture and test documentation lives in [docs/](../docs/). Before opening a
-pull request you **must** run:
+`install` deploys the current checkout and enables units; `start` restarts installed services.
+KWin binaries require logout/login or reboot. Do not hot-reload plugins.
+`dev` runs source Shell QML using installed platform/data services; it does not rebuild those
+daemons. Reinstall and restart after native/service changes. `run` previews the source UI.
+For Settings development use `./tools/kosctl dev settings`; verify the printed executable, QML,
+Shell and module paths. A desktop-menu Settings launch normally serves the installed session.
+Do not combine mutually exclusive Quickshell `-c` and `-p` arguments.
+Both `QML_IMPORT_PATH` and `QML2_IMPORT_PATH` must select the matching native modules when
+launching manually. Never report a source Shell with stale native services as final acceptance.
+
+## Verification gates
+
+In the VM/CI:
 
 ```sh
-git diff --check
 python3 platform/tests/test_contract.py
 python3 tools/check-docs.py
-./tools/run-tests.sh          # data / service layer tests (required)
-```
-
-`./tools/run-tests.sh` is the single entry point, and CI runs the same command.
-It defaults to the **data / service layer** — the part that must never crash,
-the part that needs no display, and the part CI verifies:
-
-```sh
-./tools/run-tests.sh              # data layer (default)
+./tools/run-tests.sh                 # data layer only by default
 ./tools/run-tests.sh --layer platform
-./tools/run-tests.sh --all        # includes the UI layer; needs a graphical session
-./tools/run-tests.sh --help       # all options
+./tools/run-tests.sh --layer logic
+./tools/run-tests.sh --layer headless
+./tools/run-tests.sh --all           # includes graphical UI; real VM session
 ```
 
-If you touch QML or the UI, also run `--all`: the UI layer needs a QML engine
-(and a compositor for the panel tests), so it cannot run in the CI container and
-should be run in a virtual machine with a graphical session.
+Check whitespace with `git diff --check`. CI uses the same CTest registrations but builds once
+and runs data/platform/logic/headless groups separately. `.github/ci-tests.json` guards required
+registration and complete result reporting. Headless UI runs offscreen in CI; compositor flows
+still need a VM. Read [.github/workflows/tests.yml](../.github/workflows/tests.yml) for exact gates.
 
+Three full SDK jobs build/link plugins and Glass for KWin 6.6, 6.7 and 6.8, run offline regressions,
+and check official API headers. Missing GL contexts can skip GPU readback in containers; run those
+checks in the VM and record the result. Build compatibility is separate from real desktop loading.
+Record actual test counts instead of copying a historical count from an old report.
 
-### Optional standalone applications
+## Optional apps
 
-The repository also includes independent Qt Quick applications for Calendar,
-Todo, Weather, and ListenFree. They are not built with the Shell by default.
-Use `apps-dev` or `apps-release` to build them together, or the `calendar-dev`,
-`todo-dev`, `weather-dev`, and `listenfree-dev` presets for one application.
-The default application presets include ListenFree and require Qt 6.10+,
-compatible KF6 libraries, Go 1.26+, and the audio dependencies in the
-[ListenFree Linux build guide](../apps/listenfree/packaging/linux/README.md).
-Prepare the private SDK before configuring the application bundle. With an
-existing compatible SDK, skip preparation and substitute its path below.
-Build the default bundle:
+Core installation excludes the independent apps. In the VM, test the **actual default entry point**:
 
 ```sh
-./tools/prepare-listenfree-sdk.sh
-cmake --preset apps-dev -DKOS_LISTENFREE_SDK="$PWD/.build/listenfree-sdk"
+./tools/kosctl install apps
+cmake --preset apps-dev
 cmake --build --preset apps-dev
 ctest --preset apps-dev
 ```
 
-The legacy local Music application uses the separate `music-dev` preset.
+The bundle selects Calendar, Calculator, Todo and Weather, with ListenFree OFF even if an old
+CMake cache enabled it. Verify no audio SDK creation or MIME/legacy-player migration and no
+partial replacement of core Settings. Also check an app-only prefix without core Settings.
+Qt 6.5+, compatible KF6 and Go 1.26+ are the standard bundle baseline.
+`./tools/kosctl install apps --with-listenfree` explicitly enables the audio SDK and additional
+[ListenFree dependencies](../apps/listenfree/packaging/linux/README.md), including Qt 6.10+.
+The `music-dev` preset builds the legacy Music application separately.
+See [apps](../apps/README.md) for individual presets and registration.
 
-Run `./tools/install-apps.sh` for a per-user install and service registration.
-See [apps/README.md](../apps/README.md) for dependencies and module details. Weather
-shares the `kos-data-service` Open-Meteo cache with the Shell; Calendar and Todo
-share the on-demand PIM service.
+## Review checklist
 
+1. Confirm source ownership, protocol/config compatibility, bounded retries, cancellation and
+   disconnected-service behavior in the relevant architecture document.
+2. Check QML uses service adapters and portable apps never import Quickshell modules.
+3. Check new runtime assets, qmldir entries, install/packaging paths and state migrations.
+4. Run relevant automated coverage in VM/CI; use a real VM Shell for changed visual interactions.
+   Confirm `Configuration Loaded`, exercise changed flows and inspect QML/runtime errors.
+   Stop only the instance you started and restore normal services.
+5. Review the staged tree including new files, documentation links/translations, licenses,
+   and evidence claims. Keep temporary logs/screenshots outside the committed documentation.
+
+For a release, additionally follow [exact-commit VM acceptance](Releasing.md).

@@ -1,136 +1,107 @@
-# NextKDE 发布与版本维护
+# Releases and maintenance
 
-NextKDE **只维护最新正式版**。main 持续开发；旧版保留下载和回退入口，不提供长期维护。
-发行分支 `release/0.1` 的目标版本为 `0.1.0`，开发分支保留开发标识。
-版本文件中的正式版本号表示待发布内容；在验收、Tag 和 Release 完成前不表示已经发布。
+[简体中文](Releasing.zh-CN.md)
 
-## 分支和版本
+Only the **latest official release** is maintained. `main` is development;
+`release/X.Y` prepares a release and its patches. Old tags remain available for provenance
+and compatible reinstall rollback, without parallel long-term maintenance. Public beta/RC
+releases are optional; maintainer acceptance can lead directly to a final release.
 
-- `main`：开发分支。通过 PR 接收功能、修复和重构。
-- `release/X.Y`：准备发行时从选定 main 提交创建，只接受修复、发布文档和版本调整。
-  正式版发布后沿用这条分支做补丁，不另建稳定分支。
-- 默认不发布 RC。维护者在虚拟机验收选定提交后，可直接发布正式版，不依赖社区试用。
-- 工具兼容预发布 Tag，但预发布不是本项目发布的必经步骤。
-- `vX.Y.Z`：正式版。GitHub 最新正式 Release 是普通用户默认的安装目标。
-- 正式版修复递增 Z；新一批功能递增 Y。0.x 阶段仍应明确说明不兼容变化。
-- 新正式版取代旧版后，旧发行分支停止接收补丁，可以删除分支，保留 Tag。
-- 已发布 Tag 不移动、不覆盖。main 与发行分支的修复通过 PR 相互同步。
+## Identity and source selection
 
-## 安装、更新和版本查询
-
-源码入口需要 Git 和 Python 3.9+，只修改源码，不安装、不重启、不迁移用户配置：
+`VERSION` identifies the desktop distribution; it does not replace IPC versions, database schemas
+or individual app versions. `main` keeps a development suffix. A release branch uses exact `X.Y.Z`.
+Increment Z for patches and Y for a new feature batch; disclose incompatible changes even in 0.x.
+Published `vX.Y.Z` tags are immutable. Synchronize fixes between main and the release branch.
 
 ```sh
-./tools/kosctl update                 # 默认：GitHub 最新正式 Release
-./tools/kosctl update v0.1.0          # 指定正式版；示例，不表示此版本已存在
-./tools/kosctl update main            # 明确选择开发版
-./tools/kosctl version                # 分别显示部署版本和源码版本
+./tools/kosctl update             # GitHub Latest official Release
+./tools/kosctl update v0.1.0      # explicit historical tag
+./tools/kosctl update main        # explicit development
+./tools/kosctl version            # deployed files and source separately
 ```
 
-选择器从 origin 获取精确引用，检出为 detached HEAD，保留已有本地分支。
-有未提交改动、未跟踪文件、未完成的 Git 操作，或版本获取失败时停止，不重置、不覆盖、
-不静默沿用旧提交。默认 stable 从 GitHub Releases API 获取非草稿、非预发布的
-`vX.Y.Z`；没有正式版就明确报错，不自动切到 main。API 限流或网络失败时也不降级。
-Fork 默认查询自己的 origin；非 GitHub origin 可以显式指定版本 Tag。
-GitHub “Latest” 应由维护者指向当前受支持的正式版，而不是旧系列补丁。
+Git and Python 3.9+ are required for selection. `update` fetches an exact origin ref and checks
+out detached HEAD, preserving branches. It stops for dirty/untracked files, incomplete Git operations,
+missing releases, API limits or network errors. It does not reset the tree or silently choose main.
+Forks query their own origin; non-GitHub remotes require an explicit ref. Shallow clones remain shallow
+when selecting refs; existing full clones retain their history. Deleting current files does not shrink
+historical Git objects automatically.
 
-选择完成后，在确认配置兼容性和备份要求后执行：
+`update` selects source only; `install` deploys the checkout; `start` activates installed services.
+KWin updates require logout/login or reboot. The Debian installer defaults to stable;
+`--version main` opts into development and `--version vX.Y.Z` pins a release (`--branch` is an alias).
+It may install dependencies first but must select the requested source before building NextKDE.
+
+## Prepare, accept, publish
+
+1. Choose the scope and commit. Create or reuse `release/X.Y`; accept only fixes, release docs
+   and version changes there. A patch to 0.1 uses `release/0.1`.
+2. Update the [English-first bilingual release notes](releases/TEMPLATE.md), dependencies,
+   upgrade/rollback limits, known issues and affected PRs. Review current docs and translations.
+3. Set VERSION to the target version. Push the exact candidate to run all **six** tests jobs:
+   source release selection; data/platform/logic/headless; apps; KWin 6.6, 6.7 and 6.8 SDKs.
+   Each SDK must use its complete matching dependency snapshot, build/link plugins and Glass,
+   run offline regressions and inspect official headers. A different commit's green CI is insufficient.
+4. Save a VM snapshot, then complete the acceptance below on that exact commit. Fix issues and
+   repeat affected checks. Record commit, environment, commands, results and skipped coverage.
+5. With explicit publication authorization and all gates passed, create immutable `vX.Y.Z`
+   at the accepted commit. Require `release-checks` to pass Tag/VERSION identity.
+6. Create the final Release, attach source/checksums and bilingual validation scope, verify artifact
+   digests and set **Latest** deliberately. The workflow checks identity; it never publishes itself.
+7. In the VM, use the actual no-argument `kosctl update` against the real GitHub Latest endpoint,
+   install/start, reboot and verify Installed/Source and plugins. Attach this result. Restore the VM
+   snapshot and leave it shut down after exporting evidence. The previous release stops maintenance.
+
+## Required VM acceptance
+
+Run project builds/tests/GUI/diagnostics **only in the VM or hosted CI**, never on the maintainer host.
+Record distro, architecture, Qt, KWin, Quickshell and GPU/backend. SDK success does not prove
+three live desktop sessions. Clearly label unverified distributions, features and schema downgrades.
+
+- Run contract/documentation checks, source-release regressions, relevant tests and real graphical
+  Shell flows. Confirm configuration loaded and inspect runtime/QML errors.
+- Test fresh **default core install**, installed stable → candidate upgrade, same-version reinstall,
+  candidate → previous supported tag reinstall rollback, retained settings and backup recovery.
+- Test the actual **`./tools/kosctl install apps`** default command, not a manual CMake substitute.
+  Confirm four standard apps, ListenFree OFF, no SDK preparation, unchanged music MIME/legacy player,
+  unchanged core Settings, an old ON cache reset to OFF and a fresh apps-only prefix.
+  Test explicit audio selection separately; missing audio dependencies must fail before SDK build.
+- Verify service activation/autostart, reboot/logout plugin loading, launcher/Dock/bar/settings/
+  notifications and affected app interactions. Test uninstall/reboot recovery to Plasma.
+- Verify invalid refs, dirty sources, unavailable API/network and build/deploy failures stop correctly;
+  Installed cannot falsely report a complete deployment after partial replacement.
+- Preserve personal configuration; confirm removed runtime files disappear and backups can be read.
+  Optional components and full model inference need separate acceptance if claimed.
+
+## Backups and rollback
+
+Before replacing managed Shell/Settings runtime trees, installation backs up those trees,
+`~/.config/kos` and the prior release record to
+`${XDG_STATE_HOME:-$HOME/.local/state}/kos/install-backups/`. Failure to back up stops replacement.
+New trees are recreated to remove stale QML/plugins. User state remains. Backup retention is manual.
+Backups do not include all system plugins, dependencies or application data. Deployment is not atomic;
+partial replacement invalidates the old record. The record is
+`${KOS_PREFIX:-$HOME/.local}/share/kos/release.json`; running processes may still be older.
+
+After checking configuration/schema and dependency compatibility, reinstall a validated older tag:
 
 ```sh
+./tools/kosctl update v0.1.0 &&
 ./tools/kosctl install &&
 ./tools/kosctl start
 ```
 
-KWin 原生插件更新可能仍需注销/重新登录。`install` 继续安装当前检出，供开发者使用；
-它不会自行选版本。`update` 不表示桌面已经安装成功，也不提供自动回退承诺。
-切换到一个旧 Tag 后，可用命令由那个 Tag 的代码决定。
+Then logout/login or reboot. Stop relevant services before restoring an old-format config backup.
+Do not erase personal data as a rollback strategy. Cross-schema downgrade requires its own test;
+older pre-policy tags may not remove newer runtime leftovers. Full recovery requires system backup
+or a VM snapshot. NixOS uses pinned flake inputs/lock and rebuilds, not `update` inside Nix store;
+see [NixOS](nixos-quickstart.md). Packaged version reporting reads the actual deployment record;
+`KOS_RELEASE_RECORD` selects another real deployment explicitly.
 
-Debian 安装器默认相当于 `update stable`，`--version main` 显式选择开发版，
-`--version vX.Y.Z` 固定版本；旧参数 `--branch` 保留为同义选项。
-安装器可能先安装依赖，但只有成功切换到请求的源码版本后才构建和部署 NextKDE。
-首次 clone 默认分支仅用于取得选择器，不代表安装 main。
-镜像仅作为 Git HTTPS 传输后备；正式版本信息仍从 GitHub API 获取，可使用代理。
+## Serious defects after publication
 
-`kosctl version` 的 Installed 表示上次成功部署的核心桌面文件；不会把当前源码或
-当前进程冒充已安装版本。旧安装没有记录会显示 unknown，需要重新成功安装才有记录。
-运行中进程可能尚未重启。独立应用仍有自己的版本，本记录不覆盖它们。
-部署不是事务：替换文件前，先将上一份 Shell/Settings 运行目录、`~/.config/kos` 和
-版本记录备份到 `${XDG_STATE_HOME:-$HOME/.local/state}/kos/install-backups/`，然后清空并
-重建两个运行目录，避免已删除的 QML 页面或可选原生插件残留。备份成功后才开始替换；
-备份失败则停止并保留原安装。运行目录里的本地代码修改会留在备份中，不继续混入新版本。
-个人配置和状态目录不清空。备份只覆盖这些路径，不包含系统插件、全部应用数据或依赖，
-不能冒充完整回滚包。备份暂不自动清理，确认不再需要后可以手动删除。
-替换开始后撤销旧版本记录，部分失败不会保留错误的“旧版仍完整”标识。
-记录在 `${KOS_PREFIX:-$HOME/.local}/share/kos/release.json`。
-Nix 包记录其构建输入的版本和可获得的 revision；归档来源无法获得提交时明确显示 unknown。
-NixOS 用户通过 flake 输入 Tag 和 lock 文件固定版本，通过更新 flake 并重建升级，
-不对 Nix store 执行 `kosctl update`。打包的 kosctl 默认查询 NixOS 系统配置中核心包的
-`/run/current-system/sw/share/kos/release.json`，不会把控制工具自身的版本当成桌面已安装版本。
-非系统配置部署可通过 `KOS_RELEASE_RECORD` 显式选择实际部署的记录。
-
-## 准备第一版及后续版本
-
-1. 选定功能范围和提交，创建 `release/X.Y`。第一版建议从 `release/0.1` 开始。
-2. 根据 [发布说明模板](releases/TEMPLATE.md) 编写本版说明，关联关键 PR，明确支持环境。
-   第一版已有 [v0.1.0 发布准备稿](releases/v0.1.0.md)，其中待办完成前不代表已发布。
-3. 发行分支将根目录 `VERSION` 改为目标正式版本 `X.Y.Z`；main 可继续保留开发后缀。
-   CMake 使用其中的数字版本，Nix 和部署记录保留完整版本。
-   桌面发行版本不替代 IPC 协议、数据库 schema 或独立应用自己的版本。
-4. 对最终提交完成必需测试、CI 和专用虚拟机验收，记录提交号、环境和结果。
-   发现问题就在发行分支修复，并将相关修复同步回 main；修复后重验受影响的部分。
-   不要求先公开 RC，也不以有人参与试用作为发布条件。
-5. 维护者确认验收通过后，人工创建不可变 `vX.Y.Z` Tag，运行 release-checks。
-   Tag 必须指向 VERSION 与之完全一致的、已经完成验收的提交。
-6. 人工创建正式 Release，附上说明与验证范围，明确设为 Latest。首次发布时同步更新
-   README 中“尚无正式版”的过渡说明。创建 Tag 和发布 Release 需要单独的发布授权，
-   提交流程和安装工具的 PR 不会自动执行它们。
-   维护者也可以明确授权代理自动完成这些发布操作；相同的最终提交验收和 Tag 检查门槛仍适用。
-7. 新版发布后确认默认安装解析到它；上一版停止维护。
-
-`.github/workflows/release-checks.yml` 仅检查 Tag/VERSION 一致性并保存版本记录，
-不会创建或发布任何 Release，也不能替代 CI 和虚拟机验收。
-推送 Tag 前应核对该提交对应的 tests 工作流通过，不能以 main 其他提交的绿灯替代。
-
-## 虚拟机验收（禁止在维护者本机运行）
-
-当前 CI 要求核心测试、发布工具和应用测试均通过，并对 KWin 6.6、6.7、6.8 分别使用
-固定 Arch 仓库快照的完整 SDK，断言实际包版本属于目标系列。每组编译/链接全部插件与
-Glass 特效、执行离线回归及官方头文件检查。SDK 结果证明构建/API 兼容，不能冒充三套
-真实桌面均已运行验收；运行环境和 GPU 跳过项必须在最终 VM 记录中另行声明。
-
-先保存虚拟机快照，测试数据应可丢弃。记录发行版、架构、Qt、KWin、Quickshell 版本及提交号。
-未覆盖的环境写成未验证，不把一次 Arch 验证写成支持所有发行版。
-
-- 在虚拟机运行现有测试入口及贡献指南列出的契约、文档检查；保留 CI 和 VM 日志。
-- `python3 -m unittest discover -s tools/tests -p 'test_*release*.py'` 检查版本选择保护行为。
-- 全新安装、已安装版升级、首次发行前的开发版迁移，分别验证。
-- 注销/登录、自启动、重启服务、KWin 特效加载，确认桌面可恢复到 Plasma。
-- 面板、Dock、启动器、设置、通知、窗口预览和主要交互正常。
-- 可选应用、锁屏仅在声明发布覆盖它们时验收，不能以核心成功代替。
-- 请求不存在的版本、无正式 Release、网络失败、脏工作区时应停止，不报告成功。
-- 指定 Tag 安装、再升级到下一 Tag，确认 Installed/Source 区别及版本记录。
-- 构建或部署失败时退出非零；部署部分失败不能声称旧版仍完整。
-- 升级保留个人配置；测试备份恢复和回退步骤，确认旧文件不会污染新版本，反之亦然。
-
-本阶段通过重新安装所选旧 Tag 完成程序文件回退，没有实现事务升级或一键回滚。
-确认目标版本包含运行目录清理逻辑，且配置/schema 与系统依赖兼容后，在虚拟机验证：
-
-```sh
-./tools/kosctl update vX.Y.Z &&
-./tools/kosctl install &&
-./tools/kosctl start
-```
-
-`vX.Y.Z` 必须替换为实际存在且经过验证的旧 Tag。KWin 插件回退后注销/重新登录，
-不能热重载运行中的插件。若新版迁移过配置，先停止相关服务，再按该版发布说明恢复
-兼容的配置备份；不要在新程序仍运行时覆盖旧格式配置。跨 schema 回退需要单独验证。
-早于本流程的旧 Tag 可能仍使用覆盖复制安装，不能承诺清理新版残留文件。
-不能把清空用户数据作为常规回退流程；只恢复已验证的程序版本和必要配置备份。
-首次没有上一正式版时，使用 VM 快照恢复，并明确首版回退限制。
-
-## 正式版出现严重问题
-
-先标注受影响 Release，并提供已经验证的恢复办法。必要时人工撤回 Latest 推荐，
-明确告知暂时没有可推荐版本；不能仅编辑说明后仍让默认安装继续选坏版本。
-从当前正式版创建或沿用发行分支，只修问题，递增补丁版本，按同一检查流程发布。
-修复同步回 main。旧系列不逐一补丁，不移动有问题的 Tag。
+Mark the affected Release and document a verified recovery path. If necessary withdraw Latest
+recommendation explicitly so default installation does not keep selecting a known bad version.
+Prepare a patch on the current release branch, increment Z, run the same gates, publish and
+synchronize the fix to main. Do not move the bad tag or promise patches for every old series.

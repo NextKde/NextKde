@@ -2,7 +2,7 @@
 
 `main.cpp` only creates the application, composes the backends and QML runtime,
 and handles application command-line entry points. The QML context still exposes
-`settingsBridge` and `windowSettings`; this refactor preserves all 101 existing
+`settingsBridge` and `windowSettings`; preserve the existing
 SettingsBridge invokable signatures and their default arguments.
 
 ## Modules
@@ -62,16 +62,8 @@ retry/fallback, diagnostic replies, failed start/exit, watchdog responsiveness,
 local gallery deduplication/name collisions, managed deletion boundaries, and
 asynchronous thumbnail caching with rounded alpha.
 
-Existing tests continue to exercise the compiled facade through actual QML,
-including notification IPC round trips, color image generation, installed entry
-selection, hot reload, pages and controls. Host execution was explicitly
-permitted for this work; all runtime data is isolated from user configuration.
-
-2026-10-15 validation: current sources built successfully; all 16 settings CTest
-groups passed, including 14 checks in backend-modules. The source review also
-confirmed that 130 unchanged feature method bodies retain their original logic.
-
-Follow-up lifecycle validation adds two deterministic checks: completion is
-returned to the owning thread, and destroying an owner with both probes running
-joins both workers without delivering a stale callback. Backend-modules now has
-16 passing checks.
+Existing tests exercise the compiled facade through actual QML, including notification IPC,
+color generation, installed entry selection, hot reload, pages and controls. Lifecycle tests cover
+completion on the owning thread and destruction with both probes running, with no stale callback.
+Run all verification only in the VM/hosted CI per [Development](../../../docs/Development.md).
+Do not treat a historical refactoring report as evidence for the current source.

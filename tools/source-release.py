@@ -99,8 +99,14 @@ def select(root, target, repository=None, mirror=None):
         raise ValueError("Choose stable, main, or an explicit vX.Y.Z[-rc.N] tag")
     # Fetch the exact remote ref. Never reuse an old FETCH_HEAD after failure,
     # overwrite local tags, reset branches, or silently continue on network errors.
+    fetch_args = ["fetch", "--no-tags"]
+    # Installer clones are shallow. Keep exact-ref updates shallow too, or a
+    # release on another branch can pull discarded screenshot history back in.
+    # Existing full developer checkouts keep their complete history.
+    if git(root, "rev-parse", "--is-shallow-repository") == "true":
+        fetch_args += ["--depth", "1"]
     try:
-        subprocess.run(["git", "-C", str(root), "fetch", "--no-tags", "origin", ref], check=True)
+        subprocess.run(["git", "-C", str(root), *fetch_args, "origin", ref], check=True)
     except subprocess.CalledProcessError:
         if not mirror:
             raise
@@ -108,7 +114,7 @@ def select(root, target, repository=None, mirror=None):
             raise ValueError("Mirror fallback requires HTTPS GitHub origin and HTTPS mirror")
         # A mirror changes transport only; keep origin and release API canonical.
         mirror_url = mirror.rstrip("/") + "/" + remote
-        subprocess.run(["git", "-C", str(root), "fetch", "--no-tags", mirror_url, ref], check=True)
+        subprocess.run(["git", "-C", str(root), *fetch_args, mirror_url, ref], check=True)
     revision = git(root, "rev-parse", "FETCH_HEAD^{commit}")
     if target != "main":
         version = git(root, "show", revision + ":VERSION")

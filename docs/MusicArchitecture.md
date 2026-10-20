@@ -1,5 +1,9 @@
 # Music architecture
 
+This page describes the **legacy, opt-in `apps/music` application** (`music-dev` preset).
+The standard apps bundle excludes music players. ListenFree is a separate explicit opt-in;
+see [application installation](GettingStarted.md#optional-standalone-applications).
+
 KOS Music is an independent Qt Quick process. It owns the local and online
 track catalog, playback engine, and MPRIS provider. The conversion backend remains
 available to engine tests; track menus no longer expose conversion jobs. Quickshell
