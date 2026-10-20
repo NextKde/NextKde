@@ -10,9 +10,7 @@ LiquidGlassPanel {
     baseColor: ThemeService.backgroundColor
     material: "regular"
     materialDepth: 0
-    blurOverrideEnabled: true
-    // The normalized minimum maps to KWin blur level 1.
-    blurStrength: 0
+    blurSigma: tonal ? -1 : Math.max(6, 18 * AppearanceConfigService.effectiveLauncherBlur)
     scrimEnabled: AppearanceTokens.surface.usesBackdrop
     scrimLevel: AppearanceTokens.bar.popupScrimLevel
     ambientPrimary: WallpaperColorSource.primary
