@@ -66,7 +66,7 @@ Supported operations are:
 
 - `metrics.snapshot`;
 - `activity.snapshot` and `activity.active-app`;
-- `desktop.snapshot` and `desktop.refresh`;
+- `desktop.snapshot`, `desktop.refresh`, `desktop.outputs` and `desktop.place`;
 - `weather.snapshot`, `weather.search`, `weather.refresh`,
   `weather.set-location`, and `weather.set-units`.
 

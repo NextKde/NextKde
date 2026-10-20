@@ -282,9 +282,9 @@ greeter integration is being reworked; see the README for the status.
 
 Environment overrides: KOS_BUILD_DIR, KOS_PREFIX, KOS_BUILD_TYPE, KOS_BUILD_KWIN_PLUGINS, KOS_BUILD_SPATIAL, GOPROXY
 
-The KOS window decoration is installed with the KWin plugins but is not
-selected by anything here. Choose it in System Settings > Window Decorations;
-the window buttons belong to it and are drawn only while it is selected.
+The first core install selects KOS window decoration and saves the previous choice.
+Later decoration choices are preserved. Change it in Settings > Window and animations;
+window buttons belong to KOS decoration and are drawn only while it is selected.
 EOF
 }
 
