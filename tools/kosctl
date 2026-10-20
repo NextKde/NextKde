@@ -960,9 +960,6 @@ deploy_artifacts() {
     # Kos.Ui below.
     # Retire the short-lived glass facade; LiquidGlassPanel owns the API.
     rm -f "$shell_config/desktop/modules/common/GlassPanel.qml"
-    # The component Gallery is maintained in NextKde/nextkdeAppDemo.
-    rm -f "$shell_config/gallery.qml"
-    rm -rf "$shell_config/gallery"
     rm -rf "$shell_config/Kos/Ui/colorize" \
            "$shell_config/Kos/Ui/foundation" \
            "$shell_config/Kos/Ui/controls" \
