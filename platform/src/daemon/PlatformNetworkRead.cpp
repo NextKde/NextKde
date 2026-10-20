@@ -232,6 +232,7 @@ NetworkWorkerResult networkRefreshWorker()
                 {QStringLiteral("connectionName"), connectionName},
                 {QStringLiteral("ssid"), ssid},
                 {QStringLiteral("ipv4"), ipv4},
+                {QStringLiteral("macAddress"), selected.value(QStringLiteral("HwAddress")).toString()},
                 {QStringLiteral("signalStrength"), signalStrength}};
     }
 
