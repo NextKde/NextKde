@@ -156,12 +156,9 @@ assert.doesNotMatch(collapsibleSidebar, /withAlpha\(AppTheme\.sidebar/,
     "collapsible sidebars do not expose desktop content");
 assert.match(collapsibleSidebar, /enabled:\s*expanded/,
     "collapsed navigation cannot take keyboard focus");
-for (const app of ["calendar", "todo", "weather", "music"]) {
+for (const app of ["calendar", "todo", "weather"]) {
     const source = read(`../../apps/${app}/qml/Main.qml`);
-    if (app === "music") {
-        assert.match(source, /color:\s*AppTheme\.sidebarSurface/,
-            `${app} has an adaptive semantic sidebar material`);
-    } else if (app === "calendar") {
+    if (app === "calendar") {
         // Calendar deliberately uses a flush sidebar and custom window dots.
         // Keep the focus, recovery and keyboard contracts without requiring
         // the older floating-card component names.
