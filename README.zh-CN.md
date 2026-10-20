@@ -285,11 +285,11 @@ sudo dnf install \
 - 安装成功后，三个 `kos-*.service` 用户单元会启用，并在下次登录时自动启动；可用
   `systemctl --user status kos-platform.service kos-data.service kos-shell.service` 校验。
 
-Calendar、Todo、Weather 和 ListenFree 是独立的可选应用，不由默认的
-`kosctl install` 构建。默认应用安装需要 Qt 6.10+、兼容的 KF6、Go 1.26+ 和额外音频依赖。
-安装前请阅读 [apps/README.zh-CN.md](apps/README.zh-CN.md) 与
-[ListenFree Linux 构建说明](apps/listenfree/packaging/linux/README.md)，然后运行
-`./tools/kosctl install apps`（或 `./tools/install-apps.sh`）；安装器检查依赖并准备私有 SDK。
+Calendar、Calculator、Todo 和 Weather 是独立的可选应用，不由默认的
+`kosctl install` 构建。执行 `./tools/kosctl install apps` 安装这四款应用；
+只有显式执行 `./tools/kosctl install apps --with-listenfree` 才准备音频 SDK 并编译 ListenFree。
+依赖及安装说明见 [应用指南](apps/README.zh-CN.md) 和
+[ListenFree Linux 构建说明](apps/listenfree/packaging/linux/README.md)。
 旧版本地 Music 仅由 `music-dev` 单独构建，在默认应用安装器中关闭。
 
 其他发行版请安装对应软件包。Quickshell 的安装方式见
@@ -298,7 +298,7 @@ Calendar、Todo、Weather 和 ListenFree 是独立的可选应用，不由默认
 ### 2. 下载代码
 
 ```sh
-git clone https://github.com/SuceV587/NextKde.git
+git clone --depth 1 https://github.com/SuceV587/NextKde.git
 cd NextKde
 ./tools/kosctl update  # 最新正式版；失败后不要继续执行安装步骤
 ```
@@ -508,25 +508,20 @@ sudo nixos-rebuild switch --flake .#your-host
 
 ### 可选独立应用
 
-仓库还提供日历、待办、天气和 ListenFree 独立 Qt Quick 应用。它们默认不随 Shell
-构建；使用 `apps-dev` / `apps-release` 预设可统一构建，也可使用
-`calendar-dev`、`todo-dev`、`weather-dev` 或 `listenfree-dev` 单独构建。
-默认应用预设包含 ListenFree，先安装兼容的 Qt 6.10+、KF6、Go 1.26+ 及音频依赖，再准备
-私有 SDK。已有兼容 SDK 时可跳过准备步骤，并将下面的路径换成你的 SDK 路径。
-具体依赖见 [ListenFree Linux 构建说明](apps/listenfree/packaging/linux/README.md)。
-构建默认应用组合：
+仓库提供日历、计算器、待办和天气四款标准独立应用，默认不随 Shell 构建。
+`./tools/kosctl install apps` 及 `apps-dev` / `apps-release` 预设默认只构建这四款，
+不准备音频 SDK。ListenFree 需要显式选择：
 
 ```sh
-./tools/prepare-listenfree-sdk.sh
-cmake --preset apps-dev -DKOS_LISTENFREE_SDK="$PWD/.build/listenfree-sdk"
-cmake --build --preset apps-dev
-ctest --preset apps-dev
+./tools/kosctl install apps --with-listenfree
 ```
 
-旧版本地 Music 仅由 `music-dev` 单独构建。
+只有 ListenFree 额外要求 Qt 6.10+ 和音频依赖，首次构建私有 SDK 耗时较长。
+标准安装需要 Qt 6.5+、兼容 KF6 和数据服务所需的 Go 1.26+；不会更改现有音乐播放器及音频文件关联。
+也可使用 `calendar-dev`、`todo-dev`、`weather-dev` 或 `listenfree-dev` 单独构建；
+旧版本地 Music 仅由 `music-dev` 单独构建。详见 [应用指南](apps/README.zh-CN.md)。
 
-用户级安装与服务注册可运行 `./tools/install-apps.sh`。依赖和模块说明见
-[apps/README.md](apps/README.md)。天气应用与 Shell 共用 `kos-data-service` 的缓存和
+天气应用与 Shell 共用 `kos-data-service` 的缓存和
 Open-Meteo 数据；日历与待办共用按需启动的 PIM 服务。
 
 KOS 不替代 KDE Plasma：它复用 KWin、NetworkManager、PipeWire、BlueZ 和 systemd，

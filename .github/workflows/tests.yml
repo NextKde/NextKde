@@ -270,11 +270,8 @@ jobs:
             extra-cmake-modules kcalendarcore kwindowsystem kconfig
       - name: Configure applications and tests
         run: |
-          cmake -S . -B .build/applications -G Ninja \
-            -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTING=ON \
-            -DKOS_BUILD_PLATFORM=OFF -DKOS_BUILD_KWIN_PLUGINS=OFF \
-            -DKOS_BUILD_SPATIAL=OFF -DKOS_BUILD_CALENDAR=ON \
-            -DKOS_BUILD_TODO=ON -DKOS_BUILD_WEATHER=ON -DKOS_BUILD_CALCULATOR=ON
+          cmake --preset apps-release -B .build/applications \
+            -DBUILD_TESTING=ON -DKOS_BUILD_SPATIAL=OFF
       - name: Build applications
         run: cmake --build .build/applications --parallel "$(nproc)"
       - name: Run application and data regressions

@@ -12,17 +12,24 @@ import tempfile
 TOOLS = [
     ('bash', 'bash', 'bash'), ('cmake', 'cmake', 'cmake'),
     ('ninja', 'ninja', 'ninja-build'), ('c++', 'gcc', 'g++'), ('cc', 'gcc', 'gcc'),
+    ('pkg-config', 'pkgconf', 'pkg-config'),
+]
+AUDIO_TOOLS = [
     ('curl', 'curl', 'curl'), ('tar', 'tar', 'tar'), ('bzip2', 'bzip2', 'bzip2'),
     ('patch', 'patch', 'patch'), ('sha256sum', 'coreutils', 'coreutils'),
-    ('pkg-config', 'pkgconf', 'pkg-config'), ('flock', 'util-linux', 'util-linux'),
+    ('flock', 'util-linux', 'util-linux'),
 ]
 LIBRARIES = [
-    ('Qt6Core >= 6.10', 'qt6-base', 'qt6-base-dev'),
-    ('Qt6Widgets', 'qt6-base', 'qt6-base-dev'), ('Qt6DBus', 'qt6-base', 'qt6-base-dev'),
-    ('Qt6Sql', 'qt6-base', 'qt6-base-dev'), ('Qt6Test', 'qt6-base', 'qt6-base-dev'),
+    ('Qt6Core >= 6.5', 'qt6-base', 'qt6-base-dev'),
+    ('Qt6DBus', 'qt6-base', 'qt6-base-dev'),
+    ('Qt6Sql', 'qt6-base', 'qt6-base-dev'),
     ('Qt6Quick', 'qt6-declarative', 'qt6-declarative-dev'),
     ('Qt6QuickControls2', 'qt6-declarative', 'qt6-declarative-dev'),
     ('Qt6QuickDialogs2', 'qt6-declarative', 'qt6-declarative-dev'),
+]
+AUDIO_LIBRARIES = [
+    ('Qt6Core >= 6.10', 'qt6-base', 'qt6-base-dev'),
+    ('Qt6Widgets', 'qt6-base', 'qt6-base-dev'),
     ('Qt6Multimedia', 'qt6-multimedia', 'qt6-multimedia-dev'),
     ('Qt6ShaderTools', 'qt6-shadertools', 'qt6-shadertools-dev'),
     ('Qt6WebEngineWidgets', 'qt6-webengine', 'qt6-webengine-dev'),
@@ -78,10 +85,12 @@ def run(command):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--sdk-only', action='store_true')
+    parser.add_argument('--with-listenfree', action='store_true')
     args = parser.parse_args()
+    with_listenfree = args.with_listenfree or args.sdk_only
     family = distribution()
     missing = []
-    tools = TOOLS + ([] if args.sdk_only else [
+    tools = TOOLS + (AUDIO_TOOLS if with_listenfree else []) + ([] if args.sdk_only else [
         ('busctl', 'systemd', 'systemd'), ('systemctl', 'systemd', 'systemd'),
         ('readlink', 'coreutils', 'coreutils'), ('go', 'go', 'golang-go')])
     for executable, arch, ubuntu in tools:
@@ -89,15 +98,16 @@ def main():
     if shutil.which('cmake'):
         version = run(['cmake', '--version']).stdout
         match = re.search(r'(\d+)\.(\d+)', version)
-        if match and tuple(map(int, match.groups())) < (3, 28):
-            missing.append(('CMake >= 3.28 (installed ' + match.group(0) + ')', 'cmake', 'cmake'))
+        minimum = (3, 28) if with_listenfree else (3, 21)
+        if match and tuple(map(int, match.groups())) < minimum:
+            missing.append(('CMake >= ' + '.'.join(map(str, minimum)) + ' (installed ' + match.group(0) + ')', 'cmake', 'cmake'))
     if not args.sdk_only and shutil.which('go'):
         version = run(['go', 'version']).stdout
         match = re.search(r'go(\d+)\.(\d+)', version)
         if match and tuple(map(int, match.groups())) < (1, 26):
             missing.append(('Go >= 1.26 (installed ' + match.group(0) + ')', 'go', 'golang-go'))
     if shutil.which('pkg-config'):
-        for probe, arch, ubuntu in LIBRARIES:
+        for probe, arch, ubuntu in LIBRARIES + (AUDIO_LIBRARIES if with_listenfree else []):
             if run(['pkg-config', '--exists', probe]).returncode:
                 missing.append((probe, arch, ubuntu))
     qt_version = run(['pkg-config', '--modversion', 'Qt6Core']).stdout.strip() if shutil.which('pkg-config') else ''
@@ -109,7 +119,8 @@ def main():
         with tempfile.TemporaryDirectory(prefix='kos-deps-') as build:
             result = run(['cmake', '-S', str(Path(__file__).parent / 'app-dependencies'),
                 '-B', build, '-G', 'Ninja', '-DKOS_SDK_ONLY=' + ('ON' if args.sdk_only else 'OFF'),
-                '-DKOS_BUILD_TAGLIB=' + ('ON' if run(['pkg-config', '--exists', 'taglib >= 2.3.1']).returncode else 'OFF')])
+                '-DKOS_WITH_LISTENFREE=' + ('ON' if with_listenfree else 'OFF'),
+                '-DKOS_BUILD_TAGLIB=' + ('ON' if with_listenfree and run(['pkg-config', '--exists', 'taglib >= 2.3.1']).returncode else 'OFF')])
             for package in re.findall(r'KOS_MISSING:(\w+)', result.stdout):
                 missing.append((package, *CMAKE_PACKAGES[package]))
             if result.returncode:
@@ -123,7 +134,7 @@ def main():
         if command: print('\nInstall the missing packages:\n' + command)
         if any(label.startswith(('Go >=', 'CMake >=')) for label, _, _ in missing):
             print('If the distro package is too old, install a supported newer toolchain; reinstalling the old version is insufficient.')
-        if old_qt:
+        if with_listenfree and old_qt:
             release = os_release()
             distro_id = release.get('ID', '')
             pretty = release.get('PRETTY_NAME', distro_id or 'this distribution')

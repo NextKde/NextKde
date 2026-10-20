@@ -3,6 +3,12 @@ set -eu
 
 prefix=${1:-${KOS_INSTALL_PREFIX:-"$HOME/.local"}}
 failed=0
+with_listenfree=false
+case "${2:-}" in
+    --with-listenfree) with_listenfree=true ;;
+    "") ;;
+    *) echo "Unknown verification option: $2" >&2; exit 2 ;;
+esac
 
 for app in calendar todo weather calculator; do
     binary="$prefix/bin/kos-$app"
@@ -19,21 +25,25 @@ for app in calendar todo weather calculator; do
     QT_QPA_PLATFORM=offscreen "$binary" --version >/dev/null || failed=1
 done
 
-# ListenFree replaces the legacy music application in the installed bundle.
-if test -x "$prefix/bin/listenfree"; then
-    test -f "$prefix/share/applications/listenfree.desktop" || failed=1
-    test -f "$prefix/share/icons/hicolor/scalable/apps/listenfree.svg" || failed=1
-    if command -v desktop-file-validate >/dev/null 2>&1; then
-        desktop-file-validate "$prefix/share/applications/listenfree.desktop" || failed=1
+# Only the explicitly selected music bundle owns legacy music migration.
+if "$with_listenfree"; then
+    # ListenFree replaces the legacy music application in the installed bundle.
+    if test -x "$prefix/bin/listenfree"; then
+        test -f "$prefix/share/applications/listenfree.desktop" || failed=1
+        test -f "$prefix/share/icons/hicolor/scalable/apps/listenfree.svg" || failed=1
+        if command -v desktop-file-validate >/dev/null 2>&1; then
+            desktop-file-validate "$prefix/share/applications/listenfree.desktop" || failed=1
+        fi
+        QT_QPA_PLATFORM=offscreen "$prefix/bin/listenfree" --version >/dev/null || failed=1
+    else
+        echo "Incomplete registration: listenfree" >&2
+        failed=1
     fi
-    QT_QPA_PLATFORM=offscreen "$prefix/bin/listenfree" --version >/dev/null || failed=1
-else
-    echo "Incomplete registration: listenfree" >&2
-    failed=1
-fi
-if test -e "$prefix/bin/kos-music" || test -e "$prefix/share/applications/kos-music.desktop"; then
-    echo "Legacy music application has not been retired." >&2
-    failed=1
+    if test -e "$prefix/bin/kos-music" || test -e "$prefix/share/applications/kos-music.desktop"; then
+        echo "Legacy music application has not been retired." >&2
+        failed=1
+    fi
+
 fi
 
 # apps/settings/main.qml runs as its own process and resolves
