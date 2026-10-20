@@ -124,8 +124,6 @@ jobs:
         if: ${{ !cancelled() && steps.prepare.outcome == 'success' }}
         env:
           KOS_TRAY_COLOR_QA: ${{ github.workspace }}/.build/tests/test-results/tray-color
-          QT_DEBUG_PLUGINS: "1"
-          WAYLAND_DEBUG: client
         run: |
           mkdir -p .build/tests/test-results
           ctest --test-dir .build/tests --output-on-failure --no-tests=error \
@@ -135,10 +133,6 @@ jobs:
 
       - name: Run offscreen UI regressions
         if: ${{ !cancelled() && steps.prepare.outcome == 'success' }}
-        env:
-          KOS_CONTROL_CENTER_QA: ${{ github.workspace }}/.build/tests/test-results/control-center
-          QT_DEBUG_PLUGINS: "1"
-          WAYLAND_DEBUG: client
         run: |
           mkdir -p .build/tests/test-results
           ctest --test-dir .build/tests --output-on-failure --no-tests=error \

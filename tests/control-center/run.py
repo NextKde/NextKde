@@ -3,11 +3,11 @@
 import os
 from pathlib import Path
 import re
-import shlex
 import shutil
 import subprocess
 import sys
 import tempfile
+import time
 
 REPO = Path(__file__).resolve().parents[2]
 
@@ -38,35 +38,30 @@ def main():
             KOS_DATA_SOCKET=str(root / 'no-data.sock'), WAYLAND_DISPLAY='control-center-test',
             DISPLAY='', QT_QPA_PLATFORM='wayland', QT_QUICK_BACKEND='software',
             QML_IMPORT_PATH=qml_path, QML2_IMPORT_PATH=qml_path)
-        session = root / 'session.sh'
-        session.write_text('#!/bin/sh\nexec ' + shlex.join([
-            'env', 'QT_QPA_PLATFORM=wayland', 'quickshell', '--path', str(root), '--no-color'
-        ]) + ' > ' + shlex.quote(str(root / 'quickshell.log')) + ' 2>&1\n')
-        session.chmod(0o755)
         with (root / 'kwin.log').open('w+') as log:
             compositor = subprocess.Popen(['kwin_wayland', '--virtual', '--width', '1280',
                 '--height', '900', '--no-lockscreen', '--no-global-shortcuts', '--no-kactivities',
-                '--socket', 'control-center-test', '--exit-with-session', str(session)],
+                '--socket', 'control-center-test'],
                 env=dict(env, QT_QPA_PLATFORM='offscreen', KWIN_COMPOSE='Q'), stdout=log, stderr=log)
             try:
-                compositor.wait(timeout=30)
+                for _ in range(100):
+                    if (root / 'runtime/control-center-test').exists():
+                        break
+                    if compositor.poll() is not None:
+                        log.seek(0)
+                        raise AssertionError(log.read())
+                    time.sleep(0.05)
+                result = subprocess.run(['quickshell', '--path', str(root), '--no-color'],
+                    env=env, capture_output=True, text=True, timeout=25)
             finally:
-                if compositor.poll() is None:
-                    compositor.terminate()
-                    try:
-                        compositor.wait(timeout=3)
-                    except subprocess.TimeoutExpired:
-                        compositor.kill()
-                        compositor.wait()
-        qml_log = root / 'quickshell.log'
-        output = qml_log.read_text() if qml_log.exists() else 'Quickshell was not started'
-        compositor_log = (root / 'kwin.log').read_text()
-        if os.environ.get('KOS_CONTROL_CENTER_QA'):
-            qa = Path(os.environ['KOS_CONTROL_CENTER_QA'])
-            qa.mkdir(parents=True, exist_ok=True)
-            for path in root.glob('*.log'):
-                shutil.copy(path, qa / path.name)
-        assert compositor.returncode == 0 and 'CONTROL_CENTER_MODULES_PASS' in output, output + '\nKWin:\n' + compositor_log
+                compositor.terminate()
+                try:
+                    compositor.wait(timeout=3)
+                except subprocess.TimeoutExpired:
+                    compositor.kill()
+                    compositor.wait()
+        output = result.stdout + result.stderr
+        assert result.returncode == 0 and 'CONTROL_CENTER_MODULES_PASS' in output, output
         assert not re.search(r'CONTROL_CENTER_MODULES_FAIL|ReferenceError|TypeError|'
             r'Cannot assign|Unable to assign|Binding loop|is not a type|is not a function', output), output
         count = re.search(r'CONTROL_CENTER_MODULES_PASS (\d+) checks', output).group(1)

@@ -3,11 +3,11 @@
 import os
 from pathlib import Path
 import re
-import shlex
 import shutil
 import subprocess
 import sys
 import tempfile
+import time
 from PIL import Image
 
 REPO = Path(__file__).resolve().parents[2]
@@ -60,31 +60,29 @@ def main():
             QML_IMPORT_PATH=os.environ.get("QML_IMPORT_PATH", str(REPO / ".build/kosctl/qml")),
             XDG_RUNTIME_DIR=str(root / "runtime"), WAYLAND_DISPLAY="tray-color-test", DISPLAY="")
         env.pop("QT_QUICK_BACKEND", None)
-        # Socket creation precedes KWin's shell globals. Let the compositor
-        # start the client after workspace initialization instead of racing it.
-        session = root / "session.sh"
-        session.write_text("#!/bin/sh\nexec " + shlex.join([
-            "env", "QT_QPA_PLATFORM=wayland", "quickshell", "-p", str(root), "--no-color"
-        ]) + " > " + shlex.quote(str(root / "quickshell.log")) + " 2>&1\n")
-        session.chmod(0o755)
         with (root / "kwin.log").open("w+") as log:
             compositor = subprocess.Popen(["kwin_wayland", "--virtual", "--width", "800",
                 "--height", "600", "--no-lockscreen", "--no-global-shortcuts", "--no-kactivities",
-                "--socket", "tray-color-test", "--exit-with-session", str(session)],
+                "--socket", "tray-color-test"],
                 env=dict(env, QT_QPA_PLATFORM="offscreen", KWIN_COMPOSE="O2"), stdout=log, stderr=log)
             try:
-                compositor.wait(timeout=20)
+                for _ in range(100):
+                    if (root / "runtime/tray-color-test").exists():
+                        break
+                    if compositor.poll() is not None:
+                        log.seek(0)
+                        raise AssertionError(log.read())
+                    time.sleep(0.05)
+                result = subprocess.run(["quickshell", "-p", str(root), "--no-color"],
+                    env=env, capture_output=True, text=True, timeout=15)
             finally:
-                if compositor.poll() is None:
-                    compositor.terminate()
-                    try:
-                        compositor.wait(timeout=3)
-                    except subprocess.TimeoutExpired:
-                        compositor.kill()
-                        compositor.wait()
-        qml_log = root / "quickshell.log"
-        output = qml_log.read_text() if qml_log.exists() else "Quickshell was not started"
-        compositor_log = (root / "kwin.log").read_text()
+                compositor.terminate()
+                try:
+                    compositor.wait(timeout=3)
+                except subprocess.TimeoutExpired:
+                    compositor.kill()
+                    compositor.wait()
+        output = result.stdout + result.stderr
         if missing_template:
             # This missing file is deliberate. All other image/runtime errors
             # and binding loops still fail the same checks as the normal case.
@@ -95,9 +93,9 @@ def main():
             if missing_template:
                 qa = qa / "missing-template"
             qa.mkdir(parents=True, exist_ok=True)
-            for path in [*root.glob("*.png"), *root.glob("*.log")]:
+            for path in root.glob("*.png"):
                 shutil.copy(path, qa / path.name)
-        assert compositor.returncode == 0 and "TRAY_COLOR_PASS" in output, output + "\nKWin:\n" + compositor_log
+        assert result.returncode == 0 and "TRAY_COLOR_PASS" in output, output
         assert not re.search(r"TRAY_COLOR_FAIL|ReferenceError|TypeError|Binding loop|Cannot assign|Unable to assign|"
             r"Failed to (create|compile)|Cannot open|Shader.*error|is not a type", output), output
         frames = {name: Image.open(root / f"{name}.png").convert("RGB")
