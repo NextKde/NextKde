@@ -32,6 +32,11 @@ Slide clips continuous windows to outputs touched by their frame. Shader fallbac
 check shader errors before changing the clipping geometry. GLSL 1.40 / GLES 3.00 provide `fwidth` natively;
 let KWin generate shader headers without adding a derivatives extension.
 
+Overview and Present Windows thumbnails render scene items directly, bypassing Bridge's draw hook.
+While either effect is active, Bridge releases continuous captures and restores native arcs before
+thumbnail capture, including previously hidden continuous windows. Normal painting resumes continuous
+corners after the effect exits; Slide keeps its output clipping.
+
 ## Configuration
 
 `~/.config/kos/window-appearance.json` uses schema 2; the parser accepts schema 1 migration.
