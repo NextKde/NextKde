@@ -10,6 +10,7 @@ ShellRoot {
     id: test
     property int stage: 0
     property string saved: ""
+    property bool capturePending: false
     QtObject {
         id: mockTrayItem
         property string icon: Quickshell.env("TRAY_TEST_ICON")
@@ -61,14 +62,20 @@ ShellRoot {
         return null
     }
     function capture(name) {
+        if (capturePending) return
+        capturePending = true
         scene.grabToImage(result => {
             check(result.saveToFile(Quickshell.env("CAPTURE_DIR") + "/" + name + ".png"), "capture " + name)
             if (name === "white" || name === "black") {
                 applicationGallery.grabToImage(gallery => {
                     check(gallery.saveToFile(Quickshell.env("CAPTURE_DIR") + "/applications-" + name + ".png"), "application capture")
+                    test.capturePending = false
                     test.stage++
                 })
-            } else test.stage++
+            } else {
+                test.capturePending = false
+                test.stage++
+            }
         })
     }
     FloatingWindow {
@@ -142,6 +149,7 @@ ShellRoot {
     Timer {
         interval: 400; repeat: true; running: true
         onTriggered: {
+            if (test.capturePending) return
             try {
                 switch (test.stage) {
                 case 0:
