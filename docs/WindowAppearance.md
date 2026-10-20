@@ -28,6 +28,10 @@ geometry/scale/config/budget changes; do not oscillate allocation every frame. R
 window removal/disable. Native shadow atlas caching uses a 32 MiB LRU; active references and other
 GPU resources are outside that limit. Neither limit is total compositor VRAM usage.
 
+Slide clips continuous windows to outputs touched by their frame. Shader fallback bypasses this guard;
+check shader errors before changing the clipping geometry. GLSL 1.40 / GLES 3.00 provide `fwidth` natively;
+let KWin generate shader headers without adding a derivatives extension.
+
 ## Configuration
 
 `~/.config/kos/window-appearance.json` uses schema 2; the parser accepts schema 1 migration.
