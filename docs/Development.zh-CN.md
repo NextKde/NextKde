@@ -61,7 +61,7 @@ ctest --preset apps-dev
 确认没有音频 SDK、MIME/旧播放器迁移或部分覆盖核心 Settings；另验无核心 Settings 的应用专用前缀。
 标准应用基线为 Qt 6.5+、匹配 KF6、Go 1.26+。
 `./tools/kosctl install apps --with-listenfree` 才启用音频 SDK 和[额外依赖](../apps/listenfree/packaging/linux/README.md)，包括 Qt 6.10+。
-`music-dev` 单独构建旧 Music，单应用预设和注册见[应用指南](../apps/README.md)。
+单应用预设和注册见[应用指南](../apps/README.md)。
 
 ## 审阅清单
 

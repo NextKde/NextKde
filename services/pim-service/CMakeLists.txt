@@ -56,8 +56,7 @@ if(BUILD_TESTING)
     set_tests_properties(kos-pim.store PROPERTIES TIMEOUT 20 LABELS data)
 
     # dbus-run-session gates only these two D-Bus tests: a machine without it
-    # still builds and runs the store test, so this probe must not be REQUIRED
-    # (apps/music/CMakeLists.txt guards its identical probe the same way).
+    # still builds and runs the store test, so this probe must not be REQUIRED.
     find_program(DBUS_RUN_SESSION_EXECUTABLE dbus-run-session)
     if(DBUS_RUN_SESSION_EXECUTABLE)
         qt_add_executable(kos-pim-dbus-test

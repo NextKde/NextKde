@@ -14,7 +14,6 @@
 | 计算器 | `kos-calculator` | `apps-dev` |
 | 待办 | `kos-todo` | `todo-dev` |
 | 天气 | `kos-weather` | `weather-dev` |
-| 音乐（旧版，保留） | `kos-music` | `music-dev` |
 | KOS ListenFree（显式安装的音乐应用） | `listenfree` | `listenfree-dev` |
 
 使用 `apps-dev` 可构建日历、计算器、待办和天气。每个应用拥有自己的可执行文件、QML
@@ -29,16 +28,15 @@
 基于 `apps/common` 的 KOS 应用支持直接从源码树加载 QML 并热重载，改 QML 不需要重编或重启：
 
 ```bash
-.build/music-dev/apps/music/kos-music --watch-qml apps/music/qml
+.build/calendar-dev/apps/calendar/kos-calendar --watch-qml apps/calendar/qml
 # 或者用环境变量省去参数
-KOS_APP_QML_DIR=apps/music/qml .build/music-dev/apps/music/kos-music
+KOS_APP_QML_DIR=apps/calendar/qml .build/calendar-dev/apps/calendar/kos-calendar
 ```
 
 参数指向存放 `Main.qml` 的目录（或入口文件本身）。监视树内的
 `*.qml`/`*.mjs`，保存后 300ms 防抖重建窗口；新代码会先在一次性引擎上
 完整编译校验（含被引用的兄弟组件），编译不过就报错并保留当前窗口。
-由 C++ 创建、经 initial properties 注入 QML 的控制器（如 music 的
-`music`）跨重载存活，播放、队列、数据库连接与 MPRIS 注册不会中断；
+由 C++ 创建、经 initial properties 注入 QML 的控制器跨重载存活；
 QML 自己拥有的状态（当前页面、打开的对话框）会重置。`shared/qml`
 （Kos.Ui）编译在二进制里，改动它仍需重编。
 
@@ -84,6 +82,8 @@ PIM 服务，并刷新 Plasma 应用缓存。桌面入口使用绝对可执行�
 
 ## 默认应用与升级
 
-标准四款应用沿用其 `kos-*` 桌面 ID、服务和用户数据。只有 `--with-listenfree` 会注册 ListenFree，
+标准四款应用沿用其 `kos-*` 桌面 ID、服务和用户数据。
+旧 `kos-music` 的源码和构建目标已移除，普通安装与升级仍保留已安装的旧播放器、曲库和音频关联。
+只有 `--with-listenfree` 会注册 ListenFree，
 通过运行检查后备份并移除旧 KOS Music 的程序与注册文件。用户数据、其他播放器的默认关联和后续用户选择保留。
 桌面音乐组件优先唤起当前 MPRIS 播放器，没有播放器时尝试打开 ListenFree；未安装时需要自行选择播放器。

@@ -47,7 +47,6 @@ stdenv.mkDerivation {
     "-DKOS_BUILD_CALENDAR=OFF"
     "-DKOS_BUILD_TODO=OFF"
     "-DKOS_BUILD_WEATHER=ON"
-    "-DKOS_BUILD_MUSIC=OFF"
     "-DBUILD_TESTING=OFF"
   ];
 

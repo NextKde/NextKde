@@ -5,7 +5,8 @@ to reach a feature. The core produces one Quickshell process, one C++ platform
 daemon, one Go data daemon, one settings app, and KWin effects and decoration.
 Calendar, Calculator, Todo and Weather form the optional standard app bundle.
 ListenFree is separately opt-in.
-The legacy Music application remains available as a separate build target.
+Legacy Music source and build targets have been removed; existing installations are preserved
+on standard upgrades. Explicit ListenFree installation owns legacy player migration.
 
 ```text
 NextKde/
@@ -58,7 +59,6 @@ versions, error codes, and default shortcut definitions.
 | `kos-data-service` | systemd `--user` resident | telemetry, activity ledger, desktop snapshots, weather cache |
 | `kos-settings` | on demand | settings UI; communicates with Shell IPC only |
 | `kos-calendar`, `kos-calculator`, `kos-todo`, `kos-weather`, opt-in `listenfree` | on demand | optional independent Qt Quick applications; ListenFree is explicitly selected |
-| `kos-music` | on demand | optional legacy music app, retained for separate builds |
 | `kos-pim-service` | D-Bus activated | shared Calendar/Todo storage and reminders |
 | KWin effect `.so` files | KWin managed | compositor effects, independent plugin IDs |
 

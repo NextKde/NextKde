@@ -46,7 +46,6 @@ fi
 cmake --preset apps-release -S "$project_dir" -B "$build_dir" \
     -DCMAKE_INSTALL_PREFIX="$prefix" \
     -DKOS_LISTENFREE_SDK="$sdk" \
-    -DKOS_BUILD_MUSIC=OFF \
     -DKOS_BUILD_LISTENFREE="$listenfree" \
     -DBUILD_TESTING=OFF
 jobs=${CMAKE_BUILD_PARALLEL_LEVEL:-$(nproc 2>/dev/null || echo 4)}
