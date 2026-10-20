@@ -47,8 +47,15 @@ AppIcon {
     onOriginalSourceChanged: templateLoadFailed = false
     onUseTemplateChanged: templateLoadFailed = false
     onImageStatusChanged: {
-        if (imageStatus === Image.Error && source !== originalSource)
-            templateLoadFailed = true
+        if (imageStatus === Image.Error) {
+            // A synchronous image failure can arrive while source is still
+            // evaluating. Change it only after that binding has unwound, and
+            // recheck the current image so a stale failure cannot win a race.
+            Qt.callLater(function() {
+                if (root.imageStatus === Image.Error && root.source !== root.originalSource)
+                    root.templateLoadFailed = true
+            })
+        }
     }
     source: useTemplate && !templateLoadFailed ? templateSource : originalSource
     recolorEnabled: followAppearance

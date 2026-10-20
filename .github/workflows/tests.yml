@@ -127,7 +127,7 @@ jobs:
         run: |
           mkdir -p .build/tests/test-results
           ctest --test-dir .build/tests --output-on-failure --no-tests=error \
-            -R '^kos-ui.tray-color$' \
+            -R '^kos-ui.tray-(color|template-fallback)$' \
             --output-log "$GITHUB_WORKSPACE/.build/tests/test-results/tray-color.log" \
             --output-junit "$GITHUB_WORKSPACE/.build/tests/test-results/tray-color.xml"
 

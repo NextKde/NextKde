@@ -140,6 +140,7 @@ ShellRoot {
                     entry: mockClashItem
                 }
                 TrayIcon {
+                    id: workbuddyTemplate
                     x: 4; y: 36; width: 24; height: 24
                     applicationId: "chrome_status_icon_1"
                     applicationName: "WorkBuddy"
@@ -184,6 +185,16 @@ ShellRoot {
                     test.stage++
                     break
                 case 2:
+                    if (Quickshell.env("TRAY_TEST_MISSING_TEMPLATE") === "1") {
+                        test.check(workbuddyTemplate.templateLoadFailed
+                            && workbuddyTemplate.source === workbuddyTemplate.originalSource
+                            && workbuddyTemplate.imageStatus === Image.Ready,
+                            "missing template restores the application's original artwork")
+                    } else {
+                        test.check(workbuddyTemplate.source !== workbuddyTemplate.originalSource
+                            && workbuddyTemplate.imageStatus === Image.Ready,
+                            "WorkBuddy template loads")
+                    }
                     test.check(monochromeBattery.fillColor === ThemeService.barInk
                         && monochromeBattery.boltColor === ThemeService.barInk
                         && monochromeBattery.opacity === 1, "battery shares full appearance ink")
