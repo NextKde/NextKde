@@ -133,6 +133,8 @@ jobs:
 
       - name: Run offscreen UI regressions
         if: ${{ !cancelled() && steps.prepare.outcome == 'success' }}
+        env:
+          KOS_CONTROL_CENTER_QA: ${{ github.workspace }}/.build/tests/test-results/control-center
         run: |
           mkdir -p .build/tests/test-results
           ctest --test-dir .build/tests --output-on-failure --no-tests=error \
