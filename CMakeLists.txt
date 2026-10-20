@@ -515,6 +515,11 @@ if(BUILD_TESTING)
     find_program(KOS_TEST_KWIN NAMES kwin_wayland)
     find_program(KOS_TEST_DBUS_RUN NAMES dbus-run-session)
     if(KOS_PYTHON_EXECUTABLE AND KOS_INTERACTION_QUICKSHELL AND KOS_TEST_KWIN AND KOS_TEST_DBUS_RUN)
+        add_test(NAME kos-ui.tray-color
+            COMMAND ${KOS_PYTHON_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/tray-color/run.py)
+        set_tests_properties(kos-ui.tray-color PROPERTIES
+            ENVIRONMENT "QML_IMPORT_PATH=${CMAKE_BINARY_DIR}/qml;QML2_IMPORT_PATH=${CMAKE_BINARY_DIR}/qml"
+            LABELS "ui;compositor" TIMEOUT 30 RUN_SERIAL TRUE)
         add_test(NAME kos-ui.status-panels
             COMMAND ${KOS_PYTHON_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/status-area/run-panels.py)
         add_test(NAME kos-ui.status-panels-opengl

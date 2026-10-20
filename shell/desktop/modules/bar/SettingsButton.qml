@@ -37,8 +37,8 @@ Item {
         color: ThemeService.isDark ? Qt.rgba(1, 1, 1, 0.16) : Qt.rgba(0, 0, 0, 0.08)
     }
 
-    // 外观（描边色 / 不透明度）来自 IconAppearanceService，与状态区其余
-    // 图标保持一致；图案本身来自 BundledIcons，不查系统主题。
+    // Shell status glyphs use the same opaque ink as temperature/rate labels.
+    // Dock and launcher artwork styling must not tint or dim these controls.
     BundledIcon {
         // Same readability edge the bar text carries (Text.Outline).
         outlined: AppearanceTokens.isDarkTheme && !AppearanceTokens.bar.macStyle
@@ -47,14 +47,9 @@ Item {
         width: root.iconSize
         height: root.iconSize
         name: "status-settings"
-        color: IconAppearanceService.mode === "tint"
-            ? IconAppearanceService.styledSymbolicColor()
-            : ThemeService.barInk
-        opacity: IconAppearanceService.mode !== "color"
-            ? IconAppearanceService.opacity : 1.0
+        color: ThemeService.barInk
         scale: pointer.pressed ? 0.90 : pointer.containsMouse ? 1.06 : 1
         Behavior on scale { NumberAnimation { duration: AppearanceTokens.motion.fastDuration; easing.type: Easing.OutCubic } }
-        Behavior on opacity { NumberAnimation { duration: AppearanceTokens.motion.fastDuration } }
     }
 
     MouseArea {

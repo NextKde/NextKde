@@ -19,6 +19,7 @@ BluetoothPanel 1.0 BluetoothPanel.qml
 ControlCenterToggle 1.0 ControlCenterToggle.qml
 ControlCenterPanel 1.0 ControlCenterPanel.qml
 SysTray 1.0 SysTray.qml
+TrayIcon 1.0 TrayIcon.qml
 UsageRing 1.0 UsageRing.qml
 UsageSparkline 1.0 UsageSparkline.qml
 SettingsButton 1.0 SettingsButton.qml

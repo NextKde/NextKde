@@ -43,6 +43,7 @@ Item {
 
     property var failures: []
     property int stage: 0
+    readonly property color appearanceInk: AppearanceTokens.isDarkTheme ? "#ffffff" : "#000000"
 
     function rgba(color) {
         if (color === undefined)
@@ -110,7 +111,7 @@ Item {
                     AppearanceTokens.bar.macStyle === false)
                 root.check("the default style keeps the theme ink",
                     root.sameColor(ThemeService.barInk,
-                        ThemeService.foregroundColor),
+                        root.appearanceInk),
                     root.rgba(ThemeService.barInk))
                 root.check("the default style keeps the readability backdrop",
                     label.style === Text.Normal && label.shadowEnabled, label.style)
@@ -191,7 +192,7 @@ Item {
                     AppearanceTokens.bar.macStyle === false)
                 root.check("an integrated Bar keeps the theme ink",
                     root.sameColor(ThemeService.barInk,
-                        ThemeService.foregroundColor),
+                        root.appearanceInk),
                     root.rgba(ThemeService.barInk))
                 root.check("an integrated Bar keeps its readability backdrop",
                     label.style === Text.Normal && label.shadowEnabled, label.style)
@@ -218,7 +219,7 @@ Item {
                     AppearanceTokens.bar.macStyle === false)
                 root.check("turning the style off restores the theme ink",
                     root.sameColor(ThemeService.barInk,
-                        ThemeService.foregroundColor),
+                        root.appearanceInk),
                     root.rgba(ThemeService.barInk))
                 if (root.failures.length > 0)
                     console.error("BAR_MAC_STYLE_FAIL: " + root.failures.join("; "))
