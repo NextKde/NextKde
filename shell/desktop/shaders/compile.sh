@@ -58,4 +58,7 @@ echo "Compiling stage round shader..."
 # layer.effect 形态的嵌套层在本机 freedreno 栈上于 plane 离屏层内失效）。
 qsb --qt6 -o stage_round.frag.qsb stage_round.frag
 
-echo "Done: icon_effect.frag.qsb + squircle.frag.qsb + card_shadow.vert.qsb + card_shadow.frag.qsb + depth_parallax.frag.qsb + layered_wallpaper.frag.qsb + spatial_foreground.frag.qsb + stage_tilt.frag.qsb + stage_round.frag.qsb"
+echo "Compiling scene liquid fragment shader..."
+qsb --qt6 -o scene_liquid.frag.qsb scene_liquid.frag
+
+echo "Done: icon_effect.frag.qsb + squircle.frag.qsb + card_shadow.vert.qsb + card_shadow.frag.qsb + depth_parallax.frag.qsb + layered_wallpaper.frag.qsb + spatial_foreground.frag.qsb + stage_tilt.frag.qsb + stage_round.frag.qsb + scene_liquid.frag.qsb"

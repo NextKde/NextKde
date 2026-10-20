@@ -86,6 +86,11 @@ Item {
     readonly property bool fixedCaptureSupported: surfaceRegion.fixedCaptureSupported
     // Compatibility name for the complete-effect fade, never tint opacity.
     property alias materialOpacity: root.effectOpacity
+    // G10e/G11 — in-scene backdrop for the QML fallback. Defaults to the host's
+    // scene sample so every panel samples without per-call wiring; popup windows
+    // override it with their own screen-aligned hidden copy. Null keeps every
+    // existing panel on its previous path (production sets no GlassBackdrop).
+    property Item backdropItem: GlassBackdrop.sourceItem
     readonly property bool materialOpacitySupported: surfaceRegion.materialOpacitySupported
 
     property bool compositorRevealEnabled: false
@@ -185,21 +190,14 @@ Item {
     property bool scrimPearl: false
     readonly property int scrimTint: scrimTintOverride >= 0
         ? scrimTintOverride
-        : (AppearanceConfigService.glassFollowsAppearanceMode
-            ? (AppearanceTokens.isDarkTheme ? 0 : 1)
-            : 0) // 0 = black, 1 = white
+        : GlassBackdrop.defaultScrimTint // 0 = black, 1 = white
 
     // Named presets concretize the readability/transparency tradeoff as one
     // ceiling (cap) plus a per-surface calm factor (decay). "custom" ignores
-    // these and takes the explicit scrimCap/scrimDecay verbatim.
-    readonly property real _presetCap: _effectiveReadability === "readable" ? 0.72
-        : _effectiveReadability === "balanced" ? 0.47
-        : _effectiveReadability === "transparent" ? 0.22
-        : _effectiveReadability === "subtle" ? 0.15 : 0.5
-    readonly property real _presetDecay: _effectiveReadability === "readable" ? 1.0
-        : _effectiveReadability === "balanced" ? 0.75
-        : _effectiveReadability === "transparent" ? 0.5
-        : _effectiveReadability === "subtle" ? 0.45 : 1.0
+    // these and takes the explicit scrimCap/scrimDecay verbatim. The table
+    // lives on GlassBackdrop so the QML fallback resolves the same numbers.
+    readonly property real _presetCap: GlassBackdrop.scrimCap(_effectiveReadability)
+    readonly property real _presetDecay: GlassBackdrop.scrimDecay(_effectiveReadability)
     readonly property real _effectiveScrimCap:
         _effectiveReadability === "custom" ? scrimCap : _presetCap
     readonly property real _effectiveScrimDecay:
@@ -301,6 +299,7 @@ Item {
         border.width: 0
         border.color: "transparent"
 
+        backdropItem: root.backdropItem
         baseColor: root.baseColor
         ambientPrimary: root.ambientPrimary
         ambientSecondary: root.ambientSecondary
@@ -311,6 +310,13 @@ Item {
         surfaceOpacity: root.surfaceOpacity
         tonalOpacity: root.tonalOpacity
         adaptiveDarkScrim: root.adaptiveDarkScrim
+        // The QML fallback's in-scene scrim uses the same preset values the
+        // compositor path publishes above, so the two finishes agree on how
+        // strongly a backdrop is compressed.
+        scrimEnabled: root.scrimEnabled && !root.useKwinEffect
+        scrimCap: root._effectiveScrimCap * Math.max(0, Math.min(1, root.scrimOpacity))
+        scrimDecay: root._effectiveScrimDecay * Math.max(0, Math.min(1, root.scrimOpacity))
+        scrimTint: root.scrimTint
         bottomEdgeVisible: root.bottomEdgeVisible
         bottomShadeVisible: root.bottomShadeVisible
 
