@@ -19,15 +19,15 @@ a local depth PNG, dimensions, cache status and model contract. The request can
 take up to five minutes during the first model download or a large inference.
 
 After depth generation, the worker optionally prepares a foreground matte, a
-filled background, and a near-field motion map under `spatial-v3/`. The matte
+filled background, and a near-field motion map under `spatial-v4/`. The matte
 uses a pinned local IS-Net general-use ONNX model. A depth island checks that
 the model selected the nearby subject; depth-guided GrabCut fills small gaps
 near that subject. If model download or inference fails, the bounded GrabCut
 path remains available. The preparation contract is
-`isnet-general-use-softmatte-lowhalo-v13`; the model confidence matte is kept
+`isnet-general-use-softmatte-depthholes-v15`; the model confidence matte is kept
 soft at the contour and the background fill halo is bounded to the expected
 parallax travel. Mismatched cached
-metadata forces regeneration. Preparation is limited to 2560 pixels wide.
+metadata forces regeneration. Preparation limits the longest dimension to 2560 pixels.
 The model runs only in `kos-ai-worker`. A rejected spatial result still returns
 the depth map and leaves the normal wallpaper usable.
 
@@ -77,7 +77,7 @@ grass cannot be made artifact-free from one photograph with the current assets.
 
 ## Pinned model
 
-The current candidate is Depth Anything V2 Small / ViT-S from the
+The pinned model is Depth Anything V2 Small / ViT-S from the
 `fabio-sim/Depth-Anything-ONNX` `v2.0.0` release. The original Depth Anything V2
 project links this ONNX implementation from its community-support section.
 The AI worker downloads the dynamic-shape ONNX asset once to
@@ -139,3 +139,7 @@ The ONNX Runtime archive is currently Linux x64. The `kos-ai` public API is
 standard C++ and the model/runtime design allows platform-specific SDKs, but
 Windows and macOS packaging have not been implemented or validated in this
 project yet.
+
+For AI contributors, model/cache contracts are defined in `services/ai/include/LiquidAI/` and
+`services/ai/src/SpatialAssetGenerator.cpp`; update this reference with those changes. Build/protocol
+coverage does not imply real model download or inference acceptance. All verification runs in VM/CI.

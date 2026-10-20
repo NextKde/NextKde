@@ -1,31 +1,19 @@
 # NextKDE vX.Y.Z
 
-> 模板，不代表已发布。发布前替换占位符并删除此提示。
-> 默认在维护者验收后直接发布正式版，不要求 RC；人工发布前确认以下记录完整。
+[简体中文](TEMPLATE.zh-CN.md)
 
-## 本版变化
+## English
 
-- 新增功能（附关键 PR 链接）：
-- 外观与交互调整（说明设计变化）：
-- 问题修复：
+State the user-visible changes and linked PRs. Separate fixes, incompatible changes and known issues.
+Include exact immutable tag/commit and CI links. Report the actual VM distribution, architecture,
+Qt/KWin/Quickshell and GPU. Distinguish SDK compatibility from real desktop execution.
+List default core/apps installation, upgrade/rollback, configuration/backup, reboot/plugin and UI
+results, plus omitted features. Link attached evidence/source/checksums. Do not publish placeholders
+or claims copied from another commit. Explain install/update and rollback limits; link the canonical guides.
 
-## 环境与验证
+## 简体中文
 
-- 精确提交：
-- 验证发行版 / 架构 / KWin / Qt / Quickshell：
-- CI 运行链接：
-- 虚拟机验收记录（全新安装、升级、登录、主要交互）：
-- 未验证环境与可选组件：
-
-## 安装与升级
-
-- 指定版本：`./tools/kosctl update vX.Y.Z`
-- 查看版本：`./tools/kosctl version`
-- 必需依赖变化、配置备份、迁移与不兼容变化：
-- 安装后是否需要注销/重新登录：
-
-## 已知问题与回退
-
-- 已知问题：
-- 经验证的恢复步骤、配置兼容性与回退限制：
-- 只维护最新正式版，旧版停止维护。本版是否取代上一正式版：
+提供与英文等价的用户改动及 PR、修复、不兼容变化、已知问题。列出不可变 Tag/精确提交、CI、
+实际 VM 系统/架构/Qt/KWin/Quickshell/GPU，区分 SDK 兼容与真实桌面运行。
+说明默认核心/应用安装、升级/回退、配置/备份、重启/插件、UI 的实测及未覆盖项，链接证据/源码/校验和。
+不发布占位符或复制其他提交的结论；说明安装更新及回退限制，并链接权威指南。

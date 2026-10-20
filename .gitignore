@@ -55,3 +55,7 @@ reasonix.toml
 # Session-local assistant metadata + local effect build dir
 .mimosa/
 kwin/kwin-effects-stageanim/build/
+
+# UI iteration captures and automation ledgers stay local, not in product docs.
+/docs/ui-calendar/
+/docs/ui-weather/

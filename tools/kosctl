@@ -272,7 +272,8 @@ Source selection (does not install or restart anything):
 
 Optional components are installed by naming them:
   ./tools/kosctl install lockscreen   # lock screen (user level, no root)
-  ./tools/kosctl install apps         # standalone apps (tools/install-apps.sh)
+  ./tools/kosctl install apps         # Calendar, Calculator, Todo, Weather
+  ./tools/kosctl install apps --with-listenfree # also build ListenFree + audio SDK
   ./tools/kosctl uninstall lockscreen
 
 Plain `install` / `uninstall` cover the core desktop only -- no apps, no lock
@@ -281,9 +282,9 @@ greeter integration is being reworked; see the README for the status.
 
 Environment overrides: KOS_BUILD_DIR, KOS_PREFIX, KOS_BUILD_TYPE, KOS_BUILD_KWIN_PLUGINS, KOS_BUILD_SPATIAL, GOPROXY
 
-The KOS window decoration is installed with the KWin plugins but is not
-selected by anything here. Choose it in System Settings > Window Decorations;
-the window buttons belong to it and are drawn only while it is selected.
+The first core install selects KOS window decoration and saves the previous choice.
+Later decoration choices are preserved. Change it in Settings > Window and animations;
+window buttons belong to KOS decoration and are drawn only while it is selected.
 EOF
 }
 
@@ -1824,7 +1825,7 @@ remove_lockscreen() {
 # pull heavy optional dependencies. Naming them keeps that cost out of the
 # default install.
 install_apps() {
-    "$project_dir/tools/install-apps.sh"
+    "$project_dir/tools/install-apps.sh" "$@"
 }
 
 install_all() {
@@ -2115,7 +2116,7 @@ case "${1:-}" in
         case "${2:-}" in
             "") install_all ;;
             lockscreen) install_lockscreen ;;
-            apps) install_apps ;;
+            apps) install_apps "${@:3}" ;;
             *) usage >&2; exit 2 ;;
         esac ;;
     start) start_all ;;

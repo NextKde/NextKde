@@ -32,7 +32,7 @@ Weather-only build can still launch the build-tree service on demand.
 ## Contract
 
 All socket messages use the version-1 envelope documented in
-[`ShellDataService.md`](ShellDataService.md). Weather clients use these
+[`DataServiceArchitecture.md`](DataServiceArchitecture.md). Weather clients use these
 operations:
 
 - `weather.snapshot`: returns the current weather object;

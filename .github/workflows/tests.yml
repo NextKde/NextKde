@@ -35,7 +35,7 @@ jobs:
 
     # Arch, not Ubuntu: `tools/kosctl` provisions `arch_core_build_packages`
     # from `pacman`, and this image gives those packages the same names and the
-    # same Qt 6.11 the project is developed against. Ubuntu's names differ and
+    # current Qt SDK. Ubuntu's names differ and
     # mapping them would be a second, drifting source of truth.
     container: archlinux:base-devel
 
@@ -270,11 +270,8 @@ jobs:
             extra-cmake-modules kcalendarcore kwindowsystem kconfig
       - name: Configure applications and tests
         run: |
-          cmake -S . -B .build/applications -G Ninja \
-            -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTING=ON \
-            -DKOS_BUILD_PLATFORM=OFF -DKOS_BUILD_KWIN_PLUGINS=OFF \
-            -DKOS_BUILD_SPATIAL=OFF -DKOS_BUILD_CALENDAR=ON \
-            -DKOS_BUILD_TODO=ON -DKOS_BUILD_WEATHER=ON -DKOS_BUILD_CALCULATOR=ON
+          cmake --preset apps-release -B .build/applications \
+            -DBUILD_TESTING=ON -DKOS_BUILD_SPATIAL=OFF
       - name: Build applications
         run: cmake --build .build/applications --parallel "$(nproc)"
       - name: Run application and data regressions

@@ -1,5 +1,5 @@
-# Iteration screenshots are useful in Git history but are not runtime sources.
-# Keep GitHub source release archives small and free of local automation output.
+# Local automation output is not part of source releases.
+# Keep defensive exclusions for UI iteration directories as well.
 /.loop export-ignore
 /tmp export-ignore
 /docs/ui-calendar export-ignore

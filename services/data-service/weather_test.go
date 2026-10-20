@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"testing/synctest"
 	"time"
 )
 
@@ -642,40 +643,31 @@ func (failingWeatherProvider) Summaries(context.Context, []WeatherLocation, stri
 }
 
 func TestFailedWeatherRefreshPreservesCachedConditions(t *testing.T) {
-	directory := t.TempDir()
-	state := defaultWeatherState()
-	state.Status = weatherStatusReady
-	state.Current = &WeatherCurrent{Time: "cached", Temperature: 24}
-	service := &Service{
-		state:           State{Weather: state},
-		statePath:       filepath.Join(directory, "state.json"),
-		snapshotPath:    filepath.Join(directory, "snapshot.json"),
-		weatherProvider: failingWeatherProvider{},
-		last:            time.Now(),
-	}
-
-	if !service.startWeatherRefresh(true) {
-		t.Fatal("refresh was not accepted")
-	}
-	deadline := time.Now().Add(2 * time.Second)
-	for time.Now().Before(deadline) {
-		service.mu.Lock()
-		status := service.state.Weather.Status
-		message := service.state.Weather.Error
-		current := service.state.Weather.Current
-		service.mu.Unlock()
-		if status != weatherStatusLoading {
-			if status != weatherStatusReady || current == nil || current.Time != "cached" {
-				t.Fatalf("cached conditions were not preserved: %#v", service.state.Weather)
-			}
-			if !strings.Contains(message, "network unavailable") {
-				t.Fatalf("unexpected error message %q", message)
-			}
-			return
+	synctest.Test(t, func(t *testing.T) {
+		directory := t.TempDir()
+		state := defaultWeatherState()
+		state.Status = weatherStatusReady
+		state.Current = &WeatherCurrent{Time: "cached", Temperature: 24}
+		service := &Service{
+			state:           State{Weather: state},
+			statePath:       filepath.Join(directory, "state.json"),
+			snapshotPath:    filepath.Join(directory, "snapshot.json"),
+			weatherProvider: failingWeatherProvider{},
+			last:            time.Now(),
 		}
-		time.Sleep(10 * time.Millisecond)
-	}
-	t.Fatal("weather refresh did not complete")
+
+		if !service.startWeatherRefresh(true) {
+			t.Fatal("refresh was not accepted")
+		}
+		synctest.Wait()
+		weather := service.state.Weather
+		if weather.Status != weatherStatusReady || weather.Current == nil || weather.Current.Time != "cached" {
+			t.Fatalf("cached conditions were not preserved: %#v", weather)
+		}
+		if !strings.Contains(weather.Error, "network unavailable") {
+			t.Fatalf("unexpected error message %q", weather.Error)
+		}
+	})
 }
 
 func TestWeatherBackoffGrowsExponentiallyAndCaps(t *testing.T) {
@@ -700,48 +692,39 @@ func TestWeatherBackoffGrowsExponentiallyAndCaps(t *testing.T) {
 // attempt via exponential backoff instead of allowing every 10s tick to
 // spawn another HTTP request.
 func TestFailedWeatherRefreshBacksOffAndGatesNextTick(t *testing.T) {
-	directory := t.TempDir()
-	state := defaultWeatherState()
-	service := &Service{
-		state:           State{Weather: state},
-		statePath:       filepath.Join(directory, "state.json"),
-		snapshotPath:    filepath.Join(directory, "snapshot.json"),
-		weatherProvider: failingWeatherProvider{},
-		last:            time.Now(),
-	}
-	service.state.Activity.TodayApps = map[string]AppUsage{}
-	service.state.Activity.UptimeByDay = map[string]float64{}
-
-	if !service.startWeatherRefresh(true) {
-		t.Fatal("refresh was not accepted")
-	}
-	deadline := time.Now().Add(2 * time.Second)
-	for time.Now().Before(deadline) {
-		service.mu.Lock()
-		status := service.state.Weather.Status
-		service.mu.Unlock()
-		if status == weatherStatusError {
-			break
+	synctest.Test(t, func(t *testing.T) {
+		directory := t.TempDir()
+		state := defaultWeatherState()
+		service := &Service{
+			state:           State{Weather: state},
+			statePath:       filepath.Join(directory, "state.json"),
+			snapshotPath:    filepath.Join(directory, "snapshot.json"),
+			weatherProvider: failingWeatherProvider{},
+			last:            time.Now(),
 		}
-		time.Sleep(10 * time.Millisecond)
-	}
-	service.mu.Lock()
-	weather := service.state.Weather
-	streak := service.weatherFailStreak
-	service.mu.Unlock()
-	if weather.Status != weatherStatusError || weather.Current != nil {
-		t.Fatalf("unexpected weather after failure: %#v", weather)
-	}
-	if streak != 1 {
-		t.Fatalf("fail streak = %d, want 1", streak)
-	}
-	expectedEarliest := time.Now().Add(weatherBackoff(1) - 5*time.Second).UnixMilli()
-	if weather.NextRefreshAt < expectedEarliest {
-		t.Fatalf("NextRefreshAt = %d, want >= %d (backoff)", weather.NextRefreshAt, expectedEarliest)
-	}
-	// The non-forced tick must now be gated by NextRefreshAt even though
-	// Current is nil.
-	if service.startWeatherRefresh(false) {
-		t.Fatal("backoff gate did not suppress the automatic refresh")
-	}
+		service.state.Activity.TodayApps = map[string]AppUsage{}
+		service.state.Activity.UptimeByDay = map[string]float64{}
+
+		if !service.startWeatherRefresh(true) {
+			t.Fatal("refresh was not accepted")
+		}
+		synctest.Wait()
+		weather := service.state.Weather
+		streak := service.weatherFailStreak
+		if weather.Status != weatherStatusError || weather.Current != nil {
+			t.Fatalf("unexpected weather after failure: %#v", weather)
+		}
+		if streak != 1 {
+			t.Fatalf("fail streak = %d, want 1", streak)
+		}
+		expectedEarliest := time.Now().Add(weatherBackoff(1) - 5*time.Second).UnixMilli()
+		if weather.NextRefreshAt < expectedEarliest {
+			t.Fatalf("NextRefreshAt = %d, want >= %d (backoff)", weather.NextRefreshAt, expectedEarliest)
+		}
+		// The non-forced tick must now be gated by NextRefreshAt even though
+		// Current is nil.
+		if service.startWeatherRefresh(false) {
+			t.Fatal("backoff gate did not suppress the automatic refresh")
+		}
+	})
 }

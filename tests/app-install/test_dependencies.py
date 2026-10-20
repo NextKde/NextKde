@@ -15,11 +15,11 @@ deps = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(deps)
 
 class DependencyTests(unittest.TestCase):
-    def check(self, family, missing=(), qt='6.10.2', markers='', go='1.26.0', sdk=False, absent=(), release=None):
+    def check(self, family, missing=(), qt='6.10.2', markers='', go='1.26.0', sdk=False, absent=(), release=None, audio=True, cmake='3.31.0'):
         calls = []
         def command(args):
             calls.append(args)
-            if args[:2] == ['cmake', '--version']: output = 'cmake version 3.31.0'
+            if args[:2] == ['cmake', '--version']: output = 'cmake version ' + cmake
             elif args[:2] == ['go', 'version']: output = 'go version go' + go + ' linux/arm64'
             elif args[:2] == ['pkg-config', '--modversion']: output = qt
             elif args[:2] == ['pkg-config', '--exists']:
@@ -32,7 +32,7 @@ class DependencyTests(unittest.TestCase):
         # test passes on an Arch CI container and fails on any Debian-family host,
         # which is exactly where the Debian branch is meant to be exercised.
         release = release or {'ID': family, 'PRETTY_NAME': family.capitalize() + ' Linux'}
-        with patch.object(deps, 'distribution', return_value=family), patch.object(deps, 'os_release', return_value=release), patch.object(deps.shutil, 'which', side_effect=lambda name: None if name in absent else '/usr/bin/tool'), patch.object(deps, 'run', side_effect=command), patch('sys.argv', ['check'] + (['--sdk-only'] if sdk else [])), contextlib.redirect_stdout(output):
+        with patch.object(deps, 'distribution', return_value=family), patch.object(deps, 'os_release', return_value=release), patch.object(deps.shutil, 'which', side_effect=lambda name: None if name in absent else '/usr/bin/tool'), patch.object(deps, 'run', side_effect=command), patch('sys.argv', ['check'] + (['--sdk-only'] if sdk else ['--with-listenfree'] if audio else [])), contextlib.redirect_stdout(output):
             result = deps.main()
         return result, output.getvalue(), calls
 
@@ -92,6 +92,20 @@ class DependencyTests(unittest.TestCase):
         result, _, calls = self.check('arch', go='1.22.0', sdk=True)
         self.assertEqual(result, 0)
         self.assertNotIn(['go', 'version'], calls)
+
+    def test_standard_apps_do_not_probe_audio_or_private_sdk_dependencies(self):
+        result, _, calls = self.check('ubuntu', qt='6.8.3', cmake='3.25.1', audio=False,
+            missing=['Qt6Core >= 6.10', 'Qt6WebEngineWidgets', 'libavcodec', 'taglib >= 2.3.1'],
+            absent=['curl', 'bzip2', 'patch', 'flock'])
+        self.assertEqual(result, 0)
+        self.assertFalse(any(call[:3] == ['pkg-config', '--exists', 'Qt6WebEngineWidgets'] for call in calls))
+        self.assertFalse(any('taglib >= 2.3.1' in call for call in calls))
+        self.assertTrue(any('-DKOS_WITH_LISTENFREE=OFF' in call for call in calls))
+
+    def test_standard_apps_still_require_the_data_service_go_toolchain(self):
+        result, output, _ = self.check('ubuntu', go='1.22.0', audio=False)
+        self.assertEqual(result, 1)
+        self.assertIn('Go >= 1.26', output)
 
     def test_distribution_derivatives(self):
         with tempfile.TemporaryDirectory() as directory:

@@ -1,151 +1,67 @@
-# KOS NixOS 快速启动指南
+# NixOS installation
 
-## 概述
+[简体中文](nixos-quickstart.zh-CN.md)
 
-KOS 提供了专门针对 NixOS 的控制接口，简化了在 NixOS 上的安装和管理。
+This is a declarative packaging recipe, not a claim of complete NixOS runtime acceptance.
+See the exact tested environments in the [release notes](releases/v0.1.1.md).
+Pin a published tag and retain `flake.lock`; only the latest official release is maintained.
+The example uses the existing historical v0.1.0 tag; select the newer published tag from
+[Releases](https://github.com/SuceV587/NextKde/releases/latest) when upgrading.
 
-## 安装
+## Module setup
 
-只维护最新正式版，见 [发布流程](Releasing.md)。目前尚未建立正式版基线，
-下面明确使用 main 开发版。正式版发布后，将输入 URL 的 `ref=main` 改为真实的
-`ref=vX.Y.Z`（占位符不可直接使用），执行 `nix flake update nextkde` 并按下文重建。
-保留 flake.lock 固定提交；新正式版发布后需要主动修改 Tag 并更新 lock 文件。
-Nix 包读取根目录 VERSION，`kosctl version` 显示包版本与可获得的构建提交号。
-Nix store 中的 kosctl 不用于切换源码；通过 flake 输入升级。
-
-
-### 方法 1: 使用 NixOS 模块 (推荐)
-
-1. 在你的 `flake.nix` 中添加 KOS 作为输入:
+Add to system `flake.nix` inputs:
 
 ```nix
-{
-  inputs = {
-    # ... 其他输入
-    nextkde = {
-      url = "git+https://github.com/SuceV587/NextKde.git?ref=main"; # 当前显式选择开发版
-      inputs.nixpkgs.follows = "nixpkgs";
-    };
-  };
-}
+nextkde = {
+  url = "git+https://github.com/SuceV587/NextKde.git?ref=v0.1.0";
+  inputs.nixpkgs.follows = "nixpkgs";
+};
 ```
 
-2. 在 NixOS 配置中启用 KOS:
+Pass `specialArgs = { inherit inputs; };` to `nixpkgs.lib.nixosSystem`, then in the module:
 
 ```nix
 { inputs, ... }:
 {
-  imports = [
-    inputs.nextkde.nixosModules.kos
-  ];
-
+  imports = [ inputs.nextkde.nixosModules.kos ];
   services.kos.enable = true;
+  services.kos.weather.enable = true; # optional standalone Weather app
 }
 ```
 
-3. 重新构建系统:
+After changing the tag, update the lock and rebuild; replace `your-host` with your configuration:
 
-```bash
-sudo nixos-rebuild switch
+```sh
+nix flake update nextkde
+sudo nixos-rebuild switch --flake .#your-host
+kosctl version
+systemctl --user status kos-shell-init kos-platform kos-data kos-shell
 ```
 
-### 方法 2: 手动安装
+Packages read root VERSION and record the available source revision. The packaged `kosctl version`
+reads the installed core record under `/run/current-system/sw/share/kos/release.json`;
+`KOS_RELEASE_RECORD` explicitly selects a different deployment. Do not run source `update` inside
+read-only Nix store. Development inputs may explicitly use `ref=main`; they are not stable releases.
 
-```bash
-git clone https://github.com/SuceV587/NextKde.git
-cd NextKde
-./tools/kosctl update main # 显式选择开发版；有正式版后用 update
-./tools/nix-start.sh start
+## Runtime ownership and troubleshooting
+
+`flake.nix` owns packages, KWin integrations and user units. `kos-shell-init` copies the selected
+package's QML/runtime modules before Shell starts. Native plugin changes need logout/login or reboot.
+Read user-unit logs if initialization or services fail; fix the declarative input/package rather
+than repeatedly chmod or overwrite the store:
+
+```sh
+journalctl --user -b -u kos-shell-init -u kos-platform -u kos-data -u kos-shell
 ```
 
-## 使用
+The legacy `kos-ctl` helper exists, but its store-discovery/sync behavior is separate from the
+module-managed initialization. Prefer the selected system generation and its units for versioned
+upgrades. Do not infer the deployed version from an arbitrary matching store directory.
+`tools/nix-start.sh` is an alternative development helper; do not mix manual units with declarative
+units during acceptance. Settings packages must include their QML and ECM build dependency;
+missing modules are a packaging failure, not a reason to bypass initialization.
 
-### kos-ctl 命令 (推荐)
-
-安装后，你可以使用 `kos-ctl` 命令管理 KOS:
-
-```bash
-kos-ctl start      # 启动 KOS
-kos-ctl stop       # 停止 KOS
-kos-ctl restart    # 重启 KOS
-kos-ctl status     # 查看状态
-kos-ctl logs       # 查看日志
-kos-ctl doctor     # 诊断问题
-kos-ctl sync       # 同步配置
-kos-ctl enable     # 启用开机自启
-kos-ctl disable    # 禁用开机自启
-```
-
-### nix-start.sh 脚本
-
-如果 `kos-ctl` 尚未安装，可以使用备用脚本:
-
-```bash
-./tools/nix-start.sh start
-./tools/nix-start.sh status
-./tools/nix-start.sh logs
-```
-
-## 常见问题
-
-### 服务启动失败
-
-如果遇到服务启动失败:
-
-```bash
-# 检查问题
-kos-ctl doctor
-
-# 查看详细日志
-kos-ctl logs
-```
-
-### Shell 配置问题
-
-如果界面显示异常:
-
-```bash
-# 重新同步配置
-kos-ctl sync
-kos-ctl restart
-```
-
-### 权限问题
-
-NixOS 上的只读文件权限是正常的，KOS 会自动处理:
-
-```bash
-# 脚本会自动修复权限问题
-kos-ctl start
-```
-
-## 架构说明
-
-KOS 在 NixOS 上使用以下组件:
-
-- **kos-platform**: 系统集成服务
-- **kos-data**: 数据服务
-- **kos-shell**: Quickshell 桌面界面
-- **kos-shell-init**: 配置初始化服务
-
-所有组件都通过 systemd 用户服务管理，支持自动重启和会话集成。
-
-## 卸载
-
-1. 在 NixOS 配置中禁用:
-
-```nix
-services.kos.enable = false;
-```
-
-2. 重新构建系统:
-
-```bash
-sudo nixos-rebuild switch
-```
-
-3. 清理垃圾:
-
-```bash
-nix-collect-garbage
-```
+Disable with `services.kos.enable = false;` and rebuild. Preserve configuration/state needed for
+recovery. Use a compatible prior NixOS generation for system rollback; cross-schema downgrade still
+requires validation. All contributor builds/tests and graphical acceptance run in VM/CI only.

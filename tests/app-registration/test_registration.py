@@ -32,13 +32,25 @@ class RegistrationTests(unittest.TestCase):
             (config / 'kde-mimeapps.list').write_text('[Default Applications]\naudio/mpeg=kos-music.desktop;\n')
             (config / 'kos/window-buttons.json').write_text(json.dumps({'apps': {'custom': {'showButtons': True}, 'kos-todo-preview': {'showButtons': False}}, 'rules': [{'match': {'class': 'custom'}, 'showButtons': True}]}))
             command = [sys.executable, str(ROOT / 'tools/register-default-apps.py'), '--prefix', str(prefix), '--config-home', str(config), '--state-home', str(state), '--no-cache']
+            # Installing standard apps must not invoke even an already installed
+            # broken player, retire music, or mark its later migration complete.
+            player = prefix / 'bin/listenfree'
+            player.write_text('#!/bin/sh\nexit 17\n')
             before = (config / 'mimeapps.list').read_bytes()
+            subprocess.run(command, check=True, stdout=subprocess.PIPE)
+            self.assertEqual((config / 'mimeapps.list').read_bytes(), before)
+            self.assertTrue((prefix / 'bin/kos-music').exists())
+            self.assertFalse((state / 'kos/application-registration/listenfree-migrated.json').exists())
+            self.assertNotIn('listenfree', json.loads((config / 'kos/window-buttons.json').read_text())['apps'])
+            player.write_text('#!/bin/sh\nexit 0\n')
+            command += ['--with-listenfree']
             subprocess.run(command + ['--dry-run'], check=True, stdout=subprocess.PIPE)
             self.assertEqual((config / 'mimeapps.list').read_bytes(), before)
             subprocess.run(command, check=True, stdout=subprocess.PIPE)
             subprocess.run(command, check=True, stdout=subprocess.PIPE) # Upgrades are repeatable.
             prefs = configparser.ConfigParser(); prefs.read(config / 'mimeapps.list')
             self.assertEqual(prefs['Default Applications']['audio/mpeg'], 'listenfree.desktop;')
+            self.assertEqual(prefs['Default Applications']['audio/flac'], 'listenfree.desktop;')
             self.assertEqual(prefs['Default Applications']['audio/wav'], 'vlc.desktop;')
             self.assertEqual(prefs['Default Applications']['text/plain'], 'editor.desktop;')
             self.assertEqual(prefs['Added Associations']['audio/mpeg'], 'listenfree.desktop;')
@@ -71,19 +83,34 @@ class RegistrationTests(unittest.TestCase):
             subprocess.run(command, check=True, stdout=subprocess.PIPE)
             for path, content in chosen.items(): self.assertEqual(path.read_bytes(), content)
 
+    def test_standard_bundle_registers_without_any_music_player(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory); prefix = root / 'prefix'
+            (prefix / 'bin').mkdir(parents=True)
+            (prefix / 'share/applications').mkdir(parents=True)
+            for app in ('calendar', 'calculator', 'todo', 'weather'):
+                binary = prefix / 'bin' / ('kos-' + app)
+                binary.write_text('#!/bin/sh\nexit 0\n'); binary.chmod(0o755)
+                (prefix / 'share/applications' / ('kos-' + app + '.desktop')).write_text('[Desktop Entry]\nName=App\n')
+            subprocess.run([sys.executable, str(ROOT / 'tools/register-default-apps.py'),
+                '--prefix', str(prefix), '--config-home', str(root / 'config'),
+                '--state-home', str(root / 'state'), '--no-cache'], check=True, stdout=subprocess.PIPE)
+            self.assertFalse((root / 'config/mimeapps.list').exists())
+            self.assertFalse((root / 'state/kos/application-registration/listenfree-migrated.json').exists())
+
     def test_broken_replacement_keeps_legacy_installation(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory); prefix = root / 'prefix'
             (prefix / 'bin').mkdir(parents=True)
             (prefix / 'share/applications').mkdir(parents=True)
-            for name in ('listenfree', 'kos-todo', 'kos-calendar', 'kos-weather', 'kos-music'):
+            for name in ('listenfree', 'kos-todo', 'kos-calendar', 'kos-weather', 'kos-calculator', 'kos-music'):
                 binary = prefix / 'bin' / name
                 binary.write_text('#!/bin/sh\nexit ' + ('1' if name == 'listenfree' else '0') + '\n')
                 binary.chmod(0o755)
                 (prefix / 'share/applications' / (name + '.desktop')).write_text('[Desktop Entry]\nMimeType=audio/mpeg;\n')
             result = subprocess.run([sys.executable, str(ROOT / 'tools/register-default-apps.py'),
                 '--prefix', str(prefix), '--config-home', str(root / 'config'),
-                '--state-home', str(root / 'state'), '--no-cache'], capture_output=True)
+                '--state-home', str(root / 'state'), '--no-cache', '--with-listenfree'], capture_output=True)
             self.assertNotEqual(result.returncode, 0)
             self.assertTrue((prefix / 'bin/kos-music').exists())
             self.assertTrue((prefix / 'share/applications/kos-music.desktop').exists())
