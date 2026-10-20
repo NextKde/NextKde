@@ -1,5 +1,6 @@
 import QtQuick
 import Quickshell
+import Quickshell.Services.SystemTray
 import qs.desktop.modules.common
 import qs.desktop.modules.platform
 import qs.desktop.modules.bar
@@ -9,6 +10,11 @@ ShellRoot {
     id: test
     property int stage: 0
     property string saved: ""
+    QtObject {
+        id: mockTrayItem
+        property string icon: Quickshell.env("TRAY_TEST_ICON")
+        property int status: SystemTrayItem.Active
+    }
     Component.onCompleted: {
         test.check(IconAppearanceService.trayFollowsBarColor, "tray defaults to a monochrome template")
         IconAppearanceService.trayFollowsBarColor = false
@@ -105,7 +111,7 @@ ShellRoot {
                     x: 4; y: 4; width: 24; height: 24
                     applicationId: "com.openai.codex"
                     applicationName: "Codex"
-                    originalSource: Quickshell.env("TRAY_TEST_ICON")
+                    entry: mockTrayItem
                 }
                 TrayIcon {
                     id: qqTemplate
@@ -205,11 +211,24 @@ ShellRoot {
                     break
                 case 12: test.capture("color"); break
                 case 13:
+                    mockTrayItem.status = SystemTrayItem.NeedsAttention
+                    test.check(codexTemplate.source === mockTrayItem.icon,
+                        "attention uses the application's live artwork")
+                    mockTrayItem.status = SystemTrayItem.Active
+                    test.check(codexTemplate.source !== mockTrayItem.icon,
+                        "normal state restores the monochrome template")
+                    mockTrayItem.icon = qqTemplate.source
+                    test.check(codexTemplate.source === mockTrayItem.icon,
+                        "icon updates without NeedsAttention preserve application artwork")
+                    mockTrayItem.icon = Quickshell.env("TRAY_TEST_ICON")
+                    test.check(codexTemplate.source === mockTrayItem.icon,
+                        "subsequent icon frames remain application-owned")
                     test.settingsSwitch.toggle()
                     test.check(!test.settingsSwitch.checked, "settings confirms disabled toggle")
                     test.stage++
                     break
                 case 14:
+                    if (IconAppearanceService.saveTimer.running) break
                     test.check(JSON.parse(JsonConfigStore.texts[IconAppearanceService.configPath]).trayFollowsBarColor === false, "off is saved")
                     console.log("TRAY_COLOR_PASS")
                     Qt.quit()

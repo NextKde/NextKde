@@ -1,19 +1,31 @@
 import QtQuick
 import Quickshell
+import Quickshell.Services.SystemTray
 import qs.desktop.modules.common
 import qs.desktop.modules.dock
 import "TrayIconTemplates.mjs" as Templates
 
 AppIcon {
     id: root
-    property string originalSource: ""
+    property var entry: null
+    property string originalSource: entry?.icon || ""
     property string applicationId: ""
     property string applicationName: ""
     property bool followAppearance: IconAppearanceService.trayFollowsBarColor
     readonly property string bundledTemplate: Templates.bundledTemplate(applicationId, applicationName)
+    readonly property bool needsAttention: entry !== null
+        && entry.status === SystemTrayItem.NeedsAttention
+    property bool dynamicArtwork: false
+    readonly property bool useTemplate: followAppearance && !needsAttention && !dynamicArtwork
+
+    // An application that changes its icon owns subsequent status artwork.
+    Connections {
+        target: root.entry
+        function onIconChanged() { root.dynamicArtwork = true }
+    }
 
     // The filled Clash silhouette needs less space to match the other tray glyphs.
-    scale: followAppearance && bundledTemplate === "clash-verge.png" ? 0.85 : 1.0
+    scale: useTemplate && bundledTemplate === "clash-verge.png" ? 0.85 : 1.0
 
     readonly property string templateSource: {
         const revision = IconThemeReloadService.revision
@@ -25,7 +37,7 @@ AppIcon {
         }
         return originalSource
     }
-    source: followAppearance ? templateSource : originalSource
+    source: useTemplate ? templateSource : originalSource
     recolorEnabled: followAppearance
     recolorColor: ThemeService.barInk
 }

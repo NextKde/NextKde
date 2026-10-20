@@ -565,7 +565,7 @@ Item {
                     width: root.iconSize
                     height: root.iconSize
                     anchors.centerIn: parent
-                    originalSource: trayItem.modelData.icon
+                    entry: trayItem.modelData
                     applicationId: trayItem.modelData.id || ""
                     applicationName: trayItem.tooltip
                     rotation: root.verticalDock && !trayItem.inCollection ? -90 : 0
