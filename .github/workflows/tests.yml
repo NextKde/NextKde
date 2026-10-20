@@ -62,7 +62,17 @@ jobs:
             extra-cmake-modules wayland plasma-workspace libplasma kpackage \
             kwindowsystem kiconthemes kglobalaccel kio kconfig \
             go dbus nodejs python opencv onnxruntime-cpu \
-            quickshell kwin python-pillow mesa
+            quickshell kwin python-pillow mesa libcap
+
+      # Arch gives KWin CAP_SYS_NICE, which Docker's default capability
+      # bounding set excludes. execve then fails with EPERM before KWin starts.
+      # Virtual outputs with software rendering do not need elevated scheduling.
+      - name: Remove privileged scheduling from the CI compositor
+        run: |
+          kwin_test_binary=$(command -v kwin_wayland)
+          if [ -n "$(getcap "$kwin_test_binary")" ]; then
+            setcap -r "$kwin_test_binary"
+          fi
 
       # Warm Go's build cache across runs. `kos-data-service.go` compiles the
       # whole standard library on a cold cache (>50 s locally, ~1 s warm),
