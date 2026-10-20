@@ -60,171 +60,45 @@ that object directly. KWin effects under `kwin/` remain separate
 `.so` targets because KWin discovers each plugin by ID.
 `kwin/kos-decoration` is a KDecoration3 plugin rather
 than an effect: it installs to the `org.kde.kdecoration3` plugin directory.
-`kosctl install` installs it with the effects and never writes the selection:
-choosing it is the user's, through `[org.kde.kdecoration2] library` in
-`kwinrc` (System Settings ▸ Window Decorations). The bridge effect reads that
-same key, so the window buttons exist exactly while this decoration is
-selected — including on client-side decorated windows, which get no panel with
-any other decoration selected.
-
-It draws a title bar and a caption and stops there: no buttons (the kos-bridge
-effect draws the panel over them instead), no glass, and no shape of its own.
-In particular it does not call
-`KDecoration3::Decoration::setBorderRadius()`. That call is how KWin clips a
-window — the client's own opaque content included — which means making it
-*replaces* whatever shape the window had before this decoration was selected:
-Breeze keeps its corner rounding and its outline in user settings
-(`~/.config/breezerc`, `[Common] RoundedCorners` / `OutlineEnabled`), and a
-decoration that paints neither has no business overriding them. The title bar
-is painted square for the same reason: a corner drawn inside it cannot know
-the shape the window actually ends up with, so any radius there disagrees with
-KWin's clip along the diagonal.
-
-The frosted material is likewise not painted here — the title bar is an opaque
-fill in the window's own colour, and no blur region is published. It has to be
-opaque: the kos-bridge effect reads that strip back to choose the button
-panel's tint, so a translucent bar over the compositor's blur would tint the
-panel from a blend of the bar and whatever sits behind the window.
-
-Glass deliberately has two rendering paths. A surface that declares a shape
-receives the full liquid/soft material; every other window receives only the
-blur result, Quickshell surfaces that declare nothing included -- which is how
-the Material form reads as frost. That path does not refract, tint, highlight or
-add noise, and the SDF mask it is cut with takes KWin's own window radius rather
-than a declared shape: client and decoration remain responsible for their own
-shape. The vendored effect also subtracts opaque client content, which prevents
-transparent layer-shell windows from blurring unused space and avoids painting
-behind opaque application content.
+`kosctl install` installs the decoration and selects KOS on first installation through the
+Settings backend, saving the prior choice. Later choices are preserved. Bridge's controls are tied
+to that decoration. Geometry belongs to Bridge: the decoration consumes its resolved corner/shadow
+properties and must not introduce another radius/outline. The title bar fills its intersection with
+the resolved contour; without Bridge metadata it stays square. See [WindowAppearance](WindowAppearance.md).
 
 ## Per-surface glass shape protocol
 
-`ext-background-effect` carries only a union of integer rectangles. There is no
-radius or corner field, so the region can say which background pixels are
-captured but not what shape the material drawn over them has. The radius would
-have to be guessed from the region's own outline, and that guess describes at
-best one circular card on one surface: it cannot express the superellipse, and
-it cannot hold two shapes in one surface (the Dock pill and its Home Indicator,
-or several control-centre cards). Glass no longer guesses. The shape is declared
-explicitly over `kos-surface-shape-v1`, and the region-driven path that remains
-for a surface declaring nothing feeds the SDF KWin's own window radius -- the
-same value the ordinary-window path has always used -- so there is one source of
-rounding rather than one source plus an inference.
+The shared definition is [`kos-surface-shape-v1.xml`](../shell/native/surface-shape/kos-surface-shape-v1.xml),
+currently **v8** for manager and shape. Capability negotiation preserves old request numbering.
+The client `Kos.SurfaceShape` QML native module lives in `shell/native/surface-shape/`; the server
+is `kwin/glass-effect/src/surfaceshapemanager.{h,cpp}`, owned by the effect.
 
-`shell/native/surface-shape/kos-surface-shape-v1.xml` is a project-local protocol that carries the
-missing fields. It is deliberately not a Quickshell fork:
+Versions 1–7 keep established immediate updates. v8 adds manager-committed batches latched with
+`wl_surface.commit`, explicit material profiles, continuous blur sigma and tint independent of
+readability scrim. Material opacity fades the complete effect. Explicit v8 shape ownership remains
+active even for empty/hidden geometry; falling back to whole-surface blur there would paint pixels
+the client intentionally removed. Legacy clients/undeclared windows retain their compatible paths.
+See [WindowAppearance](WindowAppearance.md#surface-shape-protocol) for geometry/fallback invariants.
+The XML is authoritative for clamps and legacy scrim encodings; do not send unnegotiated requests.
 
-```text
-kos_surface_shape_manager_v1.get_shape(wl_surface) ──► kos_surface_shape_v1
-    set_geometry(x, y, width, height)   surface-local logical units
-    set_corner(radius, exponent)        both wl_fixed
-    set_enabled(enabled)
-    set_role(role)                      v2 compatibility no-op
-    set_scrim(enabled, tint, cap, decay) protocol v3; tint 0=black, 1=white
-    set_blur(enabled, level)             v4; final blur level 1...15
-    set_capture_geometry(x, y, w, h)     v5; fixed capture bounds
-    set_material_opacity(opacity)        v6; whole material opacity
-    set_reveal(enabled, opened, duration, serial) v7; compositor reveal
-    reveal_finished(opened, serial)      v7 event
-```
+`SurfaceShape` maps item geometry to surface-local coordinates and tracks ancestor movement.
+`LiquidGlassPanel` owns one declaration per panel, permitting several distinct shapes on one surface.
+Material/frosted and ordinary-window paths must not accidentally acquire liquid refraction.
+Per-shape metadata and the standard region are different contracts; do not infer geometry from a
+layer-shell namespace or reintroduce legacy alignment heuristics for v8.
 
-The manager and shape interfaces are version 7; each shape uses the negotiated
-manager version. `set_role` remains solely to
-keep the opcode layout compatible with v2 clients; KOS does not publish roles.
-`set_scrim` is sent only when the bound compositor advertises v3, so clients
-remain safe with an older effect. `cap` is the maximum scrim opacity, clamped
-to `0...1`. `decay` is clamped to `0...4` and picks the mode: at or below `1` it
-scales the backdrop-derived ramp; above `1` it selects fixed mode, where `cap`
-is the exact opacity and the backdrop luminance is never sampled; above `2` it
-selects the fixed neutral graphite material instead of the black/white tint;
-above `3` selects the fixed warm pearl material.
-Each above-`1` encoding lets a compositor that predates that mode clamp the
-request back to the one below it instead of failing.
+Preserve these lifecycle/build requirements:
 
-One surface may hold any number of shapes, which is what keeps the multi-card
-case open. Three pieces implement it and all three build from this repository:
-
-| Piece | Path | Role |
-| --- | --- | --- |
-| Protocol | `shell/native/surface-shape/kos-surface-shape-v1.xml` | Shared wire definition. |
-| Client | `shell/native/surface-shape/` | QML native module `Kos.SurfaceShape`. Its `SurfaceShape` type attaches to any `QQuickItem`, publishes the item's `mapRectToScene()` rectangle, and walks the ancestor chain so a parent move is not missed. |
-| Server | `kwin/glass-effect/src/surfaceshapemanager.{h,cpp}` | Creates the global inside the glass effect and keeps per-surface state. |
-
-`LiquidGlassPanel` owns a declaration per panel, so
-each popup's shape objects are independent. Where a surface declares shapes the
-effect drops the region-derived content geometry and draws one shape per card
-instead, re-uploading `box`, `cornerRadius` and `cornerExponent` between draws --
-`cornerRadius` and `cornerExponent` straight from `set_corner()`, so the SDF
-outline is the client's rather than the compositor's; the noise pass is per shape
-as well. Blur Region still decides which background pixels are captured.
-
-A surface that declares nothing is unglassed, not unshaped. Its material keeps
-following the region: the effect adopts the region's own geometry as the material
-shape and floors its blur strength at level 6, because a region-only surface has
-no `set_blur` level to carry and would otherwise render at the single-pass
-`BlurStrength` kwinrc asks for -- a tinted plate rather than frost. The floor is
-gated on the surface being a KOS surface (`isQuickshellSurface`: a Quickshell
-window, or one that declared a shape), so an ordinary blurred window with a
-region and no shape still follows kwinrc exactly. The desk clock's gear is the
-case it exists for.
-
-The swap is all-or-nothing, and it is committed only once at least one shape
-became geometry to draw. A shape that is off-screen, clipped away or zero-sized
-must not take the surface's whole glass with it: the region geometry it was meant
-to refine is then the only thing left, and dropping it leaves the window
-unblurred until something else damages those pixels -- "the middle of the Dock
-has no glass" rather than a missing shape. The same rule covers a declared set
-that does not describe this surface's region. Alignment between the two is a
-single translation, so a set that is a strict subset or superset of the region
-slides every shape by the difference -- a card panel whose overlay sheet was left
-out of the union moved its glass 238px. When the declared bounds do not match the
-region's, the draws are dropped and the region supplies both geometry and blur
-level, which is what a region shaped by one of its own cards (the desk clock's
-gear) relies on.
-
-Three properties of this arrangement are load-bearing:
-
-- **Its build is not a plugin build.** The client module links Qt and
-  wayland-client only -- no KWin. It needs `enable_language(C)` in its own
-  `CMakeLists.txt`, because `project(KOS ... LANGUAGES CXX)` makes CMake accept
-  the `wayland-…-protocol.c` that `ecm_add_wayland_client_protocol()` appends and
-  then silently never compile it: the module still links, and fails only at
-  `dlopen` with `undefined symbol: kos_surface_shape_v1_interface`.
-- **It must reach Qt's import path, not `KDE_INSTALL_QMLDIR`.** The latter
-  resolves to `<prefix>/lib/qml`, which is not a directory Qt searches;
-  `QT_INSTALL_QML` is `<prefix>/lib/qt6/qml` and holds every module on the
-  system. The install target uses the latter, which is why the source-tree run
-  needs `QML2_IMPORT_PATH` (set by `kosctl dev`) and the installed run does not.
-- **The global is owned by the effect, so its teardown is a contract.** Disabling
-  the glass effect destroys the manager. `wl_global_destroy` removes the global
-  but leaves existing bound resources alive, so their user data must be cleared
-  explicitly before the manager is freed. The
-  server must *detach* client-owned shape resources rather than destroy them:
-  destroying one drops its id from the client's object map, and the `destroy`
-  the client is about to send for the vanished global returns as
-  `invalid object` -- a fatal protocol error that takes the whole connection
-  with it. Detached resources no-op every request and are reclaimed by the
-  client's own destroy. On the client side the mirror rule is that
-  `global_remove` must release the proxies locally (`wl_proxy_destroy`) and must
-  not marshal requests against the removed global. Every
-  `SurfaceShape` re-attaches off the next `global` event, so a toggle costs one
-  round trip and no explicit re-registration.
-
-> **Packaging status.** SurfaceShape is built when either the platform or KWin
-> plugins are enabled, independently of the effects themselves. Nix builds it
-> as `kos-surface-shape` and exposes it under the aggregate package’s
-> `qml/Kos/SurfaceShape`; launchers add that directory to the QML import path.
-> A build that disables both platform and KWin plugins must provide the module
-> separately before launching the shell.
-
-> **Applying a rebuilt effect.** KWin keeps the effect library mapped for as long
-> as the compositor lives. The `Effects` D-Bus `unloadEffect` / `loadEffect` pair
-> re-instantiates the effect object from the copy already in memory, so a
-> rebuilt `glass.so` installed underneath a running session is never read: the
-> effect reloads, reports itself loaded, and keeps rendering the old code. A
-> rebuild takes effect on the next compositor start and nowhere else, which is
-> why a fix can look inert while the file on disk is already correct. Check the
-> timestamp of the installed plugin against the compositor's start time before
-> concluding a change did nothing.
+- The client links Qt/wayland-client, without KWin. Enable C for generated Wayland protocol `.c`
+  sources, or linking can succeed while dlopen fails with a missing interface symbol.
+- Deploy native QML modules on actual Qt import paths. Source launchers set both `QML_IMPORT_PATH`
+  and `QML2_IMPORT_PATH` to matching build modules; installed/Nix launchers expose deployed modules.
+  SurfaceShape builds if platform or KWin builds are enabled; disabling both requires it separately.
+- Removing a Wayland global does not free bound resources. On effect teardown, detach client-owned
+  resources and clear user data; detached requests no-op until client destruction. On global removal,
+  clients destroy local proxies without sending requests to the removed server and reattach when it returns.
+- KWin holds native libraries for the compositor lifetime. Install rebuilt effects and logout/login
+  or reboot; unloading/loading effect objects cannot prove new disk code is executing. No host validation.
 
 ## JSONL contract
 

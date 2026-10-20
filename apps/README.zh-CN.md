@@ -22,9 +22,11 @@
 不是功能层；应用之间不会互相导入。天气 preset 还会构建并安装 Go 数据服务，
 应用会在需要时自动启动它。
 
+贡献者构建、测试、启动和图形验证仅在专用 VM/托管 CI，见[开发指南](../docs/Development.zh-CN.md)。
+
 ## 开发调试：QML 热重载
 
-基于 `apps/common` 的四款 KOS 应用支持直接从源码树加载 QML 并热重载，改 QML 不需要重编或重启：
+基于 `apps/common` 的 KOS 应用支持直接从源码树加载 QML 并热重载，改 QML 不需要重编或重启：
 
 ```bash
 .build/music-dev/apps/music/kos-music --watch-qml apps/music/qml
@@ -43,7 +45,7 @@ QML 自己拥有的状态（当前页面、打开的对话框）会重置。`sha
 watch 运行是独立的开发实例：不与已运行的正式实例争单例激活。
 各应用的 C++ 改动仍需重编；只有 QML/JS 改动走热重载。
 
-要在 Plasma 开发机上注册为持久的用户级系统应用，请运行：
+要在 Plasma 虚拟机中注册为持久的用户级系统应用，请运行：
 
 ```sh
 ./tools/install-apps.sh
@@ -74,6 +76,8 @@ PIM 服务，并刷新 Plasma 应用缓存。桌面入口使用绝对可执行�
 四个 KOS 应用共用的配置中，并会同步到其他正在运行的应用。在 KDE Plasma
 上，应用运行时会在合成器支持时通过 `KWindowEffects` 请求原生背景模糊和
 背景对比；不可用时会自动切换为保证可读性的实色方案。
+
+应用安装保留核心 Settings 及共享运行 QML，应用专用前缀不要求已安装核心。
 
 `settings` 早于该工作区存在，在它依赖源码路径的 QML 加载方式单独迁移前，
 仍沿用现有构建路径。

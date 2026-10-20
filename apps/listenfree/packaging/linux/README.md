@@ -1,5 +1,7 @@
 # KOS ListenFree Linux build
 
+[简体中文](README.zh-CN.md)
+
 KOS ListenFree is the NextKDE adaptation of ListenFree. It is installed as
 `listenfree`, with desktop ID `listenfree.desktop`, and replaces the legacy
 `kos-music` installation. The old source and user data remain available. Keep the upstream component notices in
@@ -15,8 +17,7 @@ To include ListenFree in the NextKDE application installation, explicitly opt in
 Without `--with-listenfree`, only Calendar, Calculator, Todo and Weather are installed.
 
 The audio-enabled installer checks dependencies and prints missing package names and install
-commands for Arch and Ubuntu. It requires Qt 6.10+ (Arch rolling / Ubuntu
-26.04+ stock packages), KDE Frameworks 6 and Go 1.26+ for the data service.
+commands for Arch and Ubuntu. It requires Qt 6.10+ (with a matching Qt/KF6 toolchain), KDE Frameworks 6 and Go 1.26+ for the data service.
 Older Ubuntu stock Qt cannot satisfy this requirement; installing the same
 old package again is insufficient. A complete compatible Qt/KF6 toolchain
 can be supplied through the usual CMake and pkg-config search paths.
@@ -58,6 +59,7 @@ NextKDE's `tools/register-default-apps.py --with-listenfree` migrates legacy mus
 File-manager launches accept paths and file URLs, including multiple files;
 subsequent launches deliver those files to the resident instance.
 
+Run contributor builds, tests and runtime verification only in a VM or hosted CI.
 This component has its own dependency and test requirements. NextKDE's ordinary
 data/service test preset does not implicitly enable it. Run its CTest suites from
 the configured build with the private libraries and Qmmp plugins on their paths.
