@@ -32,6 +32,7 @@ for (const [appId, name, expected] of [
     ["com.openai.codex.desktop", "", "openai.svg"],
     ["tray-icon tray app clash-verge-rev-tray", "", "clash-verge.png"],
     ["wechat", "", "wechat.svg"],
+    ["splayer_next", "", "music.svg"], ["clash_verge", "", "clash-verge.png"],
     ["top.imsyy.splayer_next", "", "music.svg"],
     ["my-codex-helper", "", ""], ["not-chatgpt", "", ""],
     ["clash-verge-updater", "", ""], [id, id, ""]
