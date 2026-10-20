@@ -17,7 +17,12 @@ AppIcon {
     readonly property bool needsAttention: entry !== null
         && entry.status === SystemTrayItem.NeedsAttention
     property bool dynamicArtwork: false
-    readonly property bool useTemplate: followAppearance && !needsAttention && !dynamicArtwork
+    // Clash refreshes its normal tray artwork as connection/proxy state changes.
+    // Its colored badge has an opaque round background, so flattening that
+    // artwork would erase the cat's details. Keep its template for normal
+    // refreshes, while explicit attention artwork still belongs to the app.
+    readonly property bool useTemplate: followAppearance && !needsAttention
+        && (!dynamicArtwork || bundledTemplate === "clash-verge.png")
 
     // An application that changes its icon owns subsequent status artwork.
     Connections {
