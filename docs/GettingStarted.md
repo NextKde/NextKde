@@ -306,6 +306,8 @@ builds the legacy local Music app separately.
 Both paths use `tools/install-apps.sh` and install into `~/.local` by default.
 `apps-dev` and `apps-release` also select only the four standard apps; advanced
 builds can explicitly set `-DKOS_BUILD_LISTENFREE=ON` and provide the SDK.
+Settings and its shared QML runtime belong to the core `kosctl install`; an
+application-only installation leaves that installed core runtime unchanged.
 Calculator currency conversion uses an explicitly dated offline reference
 table, not live exchange rates. See [apps/README.md](../apps/README.md).
 

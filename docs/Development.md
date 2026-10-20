@@ -96,23 +96,23 @@ should be run in a virtual machine with a graphical session.
 
 ### Optional standalone applications
 
-The repository also includes independent Qt Quick applications for Calendar,
-Todo, Weather, and ListenFree. They are not built with the Shell by default.
-Use `apps-dev` or `apps-release` to build them together, or the `calendar-dev`,
-`todo-dev`, `weather-dev`, and `listenfree-dev` presets for one application.
-The default application presets include ListenFree and require Qt 6.10+,
-compatible KF6 libraries, Go 1.26+, and the audio dependencies in the
-[ListenFree Linux build guide](../apps/listenfree/packaging/linux/README.md).
-Prepare the private SDK before configuring the application bundle. With an
-existing compatible SDK, skip preparation and substitute its path below.
-Build the default bundle:
+The standard independent Qt Quick apps are Calendar, Calculator, Todo and
+Weather. `apps-dev` and `apps-release` select these four; the core Shell build
+does not include them. Use `calendar-dev`, `todo-dev`, or `weather-dev` for a
+single app. Build the default bundle without an audio SDK:
 
 ```sh
-./tools/prepare-listenfree-sdk.sh
-cmake --preset apps-dev -DKOS_LISTENFREE_SDK="$PWD/.build/listenfree-sdk"
+cmake --preset apps-dev
 cmake --build --preset apps-dev
 ctest --preset apps-dev
 ```
+
+ListenFree is opt-in. Use `./tools/kosctl install apps --with-listenfree` for
+installation, or prepare the private SDK and configure `listenfree-dev` with
+`-DKOS_LISTENFREE_SDK=/path/to/sdk` for development. Only the audio-enabled build
+requires Qt 6.10+ and the additional dependencies in the
+[ListenFree Linux build guide](../apps/listenfree/packaging/linux/README.md).
+The four standard apps need Qt 6.5+, compatible KF6 and Go 1.26+.
 
 The legacy local Music application uses the separate `music-dev` preset.
 

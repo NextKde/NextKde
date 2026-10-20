@@ -6,13 +6,15 @@ KOS ListenFree is the NextKDE adaptation of ListenFree. It is installed as
 `licenses/` when distributing a build. The existing ListenFree data directory
 and MPRIS name remain compatible across upgrades.
 
-For the complete NextKDE application bundle, run:
+To include ListenFree in the NextKDE application installation, explicitly opt in:
 
 ```sh
-./tools/kosctl install apps
+./tools/kosctl install apps --with-listenfree
 ```
 
-The installer checks dependencies and prints missing package names and install
+Without `--with-listenfree`, only Calendar, Calculator, Todo and Weather are installed.
+
+The audio-enabled installer checks dependencies and prints missing package names and install
 commands for Arch and Ubuntu. It requires Qt 6.10+ (Arch rolling / Ubuntu
 26.04+ stock packages), KDE Frameworks 6 and Go 1.26+ for the data service.
 Older Ubuntu stock Qt cannot satisfy this requirement; installing the same
@@ -52,7 +54,7 @@ paths can be used instead of the SDK layout.
 The executable and private audio runtime install under `opt/listenfree` within
 the chosen prefix. The launcher sets the private library and plugin paths.
 After installation run `update-desktop-database PREFIX/share/applications`.
-NextKDE's `tools/register-default-apps.py` migrates legacy music associations, retains other chosen defaults, backs up and removes the old installed music files, and retires temporary Todo/Calendar/Weather preview entries.
+NextKDE's `tools/register-default-apps.py --with-listenfree` migrates legacy music associations, retains other chosen defaults, backs up and removes the old installed music files, and retires temporary Todo/Calendar/Weather preview entries.
 File-manager launches accept paths and file URLs, including multiple files;
 subsequent launches deliver those files to the resident instance.
 
