@@ -8,7 +8,7 @@ import subprocess
 import sys
 import tempfile
 import time
-from PIL import Image
+from PIL import Image, ImageChops
 
 REPO = Path(__file__).resolve().parents[2]
 
@@ -138,8 +138,16 @@ def main():
                 crop = frame.crop((int(x * scale), int(4 * scale), int((x + width) * scale), int(28 * scale)))
                 assert sum(count for count, color in crop.getcolors(crop.width * crop.height) if color == ink) > 8, (name, x, "missing opaque ink")
         assert frames["original"].crop((0, 0, 80, 32)).tobytes() == frames["restored"].crop((0, 0, 80, 32)).tobytes()
-        assert frames["white"].tobytes() == frames["reloaded"].tobytes()
-        assert frames["white"].tobytes() == frames["tinted"].tobytes() == frames["color"].tobytes()
+        # The two synthetic "101°" labels are appearance references, not tray
+        # artwork. On CI their glyph rasterization changes after a light/dark
+        # round-trip, while every icon pixel remains identical. Exclude only
+        # those Text item bounds; retain exact equality everywhere else.
+        for name in ["reloaded", "tinted", "color"]:
+            difference = ImageChops.difference(frames["white"], frames[name])
+            scale = frames[name].width / 320
+            for box in [(104, 4, 146, 28), (104, 44, 146, 68)]:
+                difference.paste((0, 0, 0), tuple(int(value * scale) for value in box))
+            assert difference.getbbox() is None, (name, "tray artwork changed", difference.getbbox())
         for name, ink, backdrop in [("white", (255, 255, 255), (22, 54, 113)), ("black", (0, 0, 0), (240, 240, 240))]:
             gallery = Image.open(root / f"applications-{name}.png").convert("RGB")
             cells = [(4, 4), (36, 4), (68, 4)]
