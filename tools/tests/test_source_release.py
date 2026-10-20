@@ -46,6 +46,30 @@ class SelectionTests(unittest.TestCase):
         self.assertEqual(self.git(self.root, "rev-parse", "HEAD"), self.first)
         self.assertEqual(self.git(self.root, "rev-parse", "main"), self.latest)
         self.assertEqual(release.identity(self.root)["version"], "0.1.0")
+        self.assertEqual(self.git(self.root, "rev-parse", "--is-shallow-repository"), "false")
+
+    def test_shallow_selection_does_not_download_removed_iteration_blobs(self):
+        capture = self.remote / "old-iteration.bin"
+        capture.write_bytes(os.urandom(4096))
+        self.git(self.remote, "add", ".")
+        self.git(self.remote, "commit", "-m", "old UI iteration capture")
+        blob = self.git(self.remote, "rev-parse", "HEAD:old-iteration.bin")
+        capture.unlink()
+        (self.remote / "VERSION").write_text("0.1.1\n")
+        self.git(self.remote, "add", "-A")
+        self.git(self.remote, "commit", "-m", "clean source release")
+        self.git(self.remote, "tag", "v0.1.1")
+        expected = self.git(self.remote, "rev-parse", "HEAD")
+        (self.remote / "VERSION").write_text("0.2.0-dev\n")
+        self.git(self.remote, "commit", "-am", "continue development")
+        shutil.rmtree(self.root)
+        subprocess.run(["git", "clone", "--depth", "1", self.remote.as_uri(), str(self.root)],
+            check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        release.select(self.root, "v0.1.1")
+        self.assertEqual(self.git(self.root, "rev-parse", "HEAD"), expected)
+        self.assertEqual(self.git(self.root, "rev-parse", "--is-shallow-repository"), "true")
+        historical = subprocess.run(["git", "-C", str(self.root), "cat-file", "-e", blob], capture_output=True)
+        self.assertNotEqual(historical.returncode, 0, "Removed screenshot history was downloaded")
 
     def test_stable_resolves_then_uses_exact_tag(self):
         with patch.object(release, "latest_release", return_value="v0.1.0"):

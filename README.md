@@ -40,9 +40,10 @@ KWin, NetworkManager, PipeWire, BlueZ, and systemd.
 - **Desktop files** — open, rename, copy, move, delete, and choose an application.
 - **Settings & motion** — configure the bar, dock, launcher, shortcuts, window decoration, and animations.
 
-Calendar, Todo, Weather, and ListenFree are available as
-[optional standalone applications](apps/README.md). The default application
-bundle, including ListenFree, requires Qt 6.10+ and its additional audio dependencies;
+Calendar, Calculator, Todo and Weather are available as
+[optional standalone applications](apps/README.md). `./tools/kosctl install apps`
+installs these four. ListenFree and its audio SDK require an explicit
+`./tools/kosctl install apps --with-listenfree`;
 see the [application installation guide](docs/GettingStarted.md#optional-standalone-applications).
 
 Source selection requires Git and Python 3.9+. Only the latest official release is maintained; see [release policy](docs/Releasing.md).
@@ -60,7 +61,7 @@ and window decoration.
 After preparing the dependencies for your distribution:
 
 ```sh
-git clone https://github.com/SuceV587/NextKde.git
+git clone --depth 1 https://github.com/SuceV587/NextKde.git
 cd NextKde
 ./tools/kosctl update &&
 ./tools/kosctl doctor &&

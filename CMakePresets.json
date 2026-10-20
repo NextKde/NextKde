@@ -40,18 +40,18 @@
         "KOS_BUILD_TODO": "ON",
         "KOS_BUILD_WEATHER": "ON",
         "KOS_BUILD_MUSIC": "OFF",
-        "KOS_BUILD_LISTENFREE": "ON"
+        "KOS_BUILD_LISTENFREE": "OFF"
       }
     },
     {
       "name": "apps-dev",
-      "displayName": "All standalone apps (development)",
+      "displayName": "Calendar, Calculator, Todo and Weather (development)",
       "inherits": "apps-base",
       "binaryDir": "${sourceDir}/.build/apps-dev"
     },
     {
       "name": "apps-release",
-      "displayName": "All standalone apps (release install)",
+      "displayName": "Calendar, Calculator, Todo and Weather (release install)",
       "inherits": "apps-base",
       "binaryDir": "${sourceDir}/.build/apps-release",
       "cacheVariables": {

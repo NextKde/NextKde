@@ -279,33 +279,37 @@ for later installs. Merely removing OpenCV does not keep it out of the default
 
 ### Optional standalone applications
 
-Calendar, Calculator, Todo, Weather, and ListenFree are not built by the core
-`kosctl install`. The default application bundle requires Qt 6.10+, compatible
-KF6 libraries, Go 1.26+, and the audio dependencies documented in
-[apps/README.md](../apps/README.md) and the
-[ListenFree Linux build guide](../apps/listenfree/packaging/linux/README.md).
+Calendar, Calculator, Todo and Weather are installed separately from the core
+`kosctl install`. The standard bundle needs Qt 6.5+, compatible KF6 libraries
+and Go 1.26+ for the data service. The installer checks the selected dependencies
+before building; it does not install system packages with sudo.
 
 ```sh
 ./tools/kosctl install apps
 ```
 
-This invokes `tools/install-apps.sh`, checks dependencies, and prepares the
-private ListenFree SDK. The legacy local Music app remains available through
-`music-dev`; it is disabled in the default application installer.
-
-To build Calendar, Calculator, Todo and Weather without the optional audio SDK,
-install the core desktop first, then use the application preset directly:
+The default bundle does not download or build ListenFree or its audio SDK. To
+include the music player explicitly, use:
 
 ```sh
-cmake --preset apps-release -DKOS_BUILD_LISTENFREE=OFF -DBUILD_TESTING=OFF
-cmake --build --preset apps-release --parallel 4
-cmake --install .build/apps-release
-systemctl --user daemon-reload
-busctl --user call org.freedesktop.DBus /org/freedesktop/DBus org.freedesktop.DBus ReloadConfig
+./tools/kosctl install apps --with-listenfree
 ```
 
-This installs into `~/.local` by default. Calculator currency conversion uses an
-explicitly dated offline reference table, not live exchange rates.
+Only that option requires Qt 6.10+ and the additional audio dependencies in the
+[ListenFree Linux build guide](../apps/listenfree/packaging/linux/README.md).
+It prepares the private SDK, then registers ListenFree and migrates the legacy
+Music installation. A standard install leaves existing music players and audio
+file associations unchanged. Existing SDKs can be selected with
+`KOS_LISTENFREE_SDK=/path/to/sdk` when opting in. The `music-dev` preset still
+builds the legacy local Music app separately.
+
+Both paths use `tools/install-apps.sh` and install into `~/.local` by default.
+`apps-dev` and `apps-release` also select only the four standard apps; advanced
+builds can explicitly set `-DKOS_BUILD_LISTENFREE=ON` and provide the SDK.
+Settings and its shared QML runtime belong to the core `kosctl install`; an
+application-only installation leaves that installed core runtime unchanged.
+Calculator currency conversion uses an explicitly dated offline reference
+table, not live exchange rates. See [apps/README.md](../apps/README.md).
 
 Install equivalent packages on other distributions. See the
 [Quickshell documentation](https://quickshell.org/docs/) for Quickshell.
@@ -319,7 +323,7 @@ installed files and source separately. Source selection does not install or rest
 ### 2. Clone the repository
 
 ```sh
-git clone https://github.com/SuceV587/NextKde.git
+git clone --depth 1 https://github.com/SuceV587/NextKde.git
 cd NextKde
 ./tools/kosctl update  # stop here if source selection fails
 ```
