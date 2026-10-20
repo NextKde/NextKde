@@ -3,7 +3,7 @@ import QtTest
 import "../../shared/qml/foundation"
 
 TestCase {
-    name: "MusicLyricTransition"
+    name: "SharedLyricTransition"
     when: windowShown
     visible: true
     width: 600

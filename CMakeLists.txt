@@ -23,7 +23,6 @@ option(KOS_BUILD_KWIN_PLUGINS "Build the KWin plugins and the window decoration"
 option(KOS_BUILD_CALENDAR "Build the Calendar application" OFF)
 option(KOS_BUILD_TODO "Build the Todo application" OFF)
 option(KOS_BUILD_WEATHER "Build the Weather application" OFF)
-option(KOS_BUILD_MUSIC "Build the legacy Music application" OFF)
 option(KOS_BUILD_LISTENFREE "Build KOS ListenFree (requires its native SDK)" OFF)
 option(KOS_BUILD_CALCULATOR "Build the Calculator application" OFF)
 # The depth engine (kos-ai) needs OpenCV and the ONNX Runtime, and the 3D
@@ -561,6 +560,12 @@ if(BUILD_TESTING)
         set_tests_properties(kos-ui.shared-motion PROPERTIES
             ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_QUICK_BACKEND=software"
             LABELS "ui;headless" TIMEOUT 20)
+        add_test(NAME kos-ui.lyric-transition
+            COMMAND ${KOS_INTERACTION_QMLTEST}
+                -input ${CMAKE_CURRENT_SOURCE_DIR}/tests/interaction-controls/tst_lyrics.qml)
+        set_tests_properties(kos-ui.lyric-transition PROPERTIES
+            ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_QUICK_BACKEND=software"
+            LABELS ui TIMEOUT 15)
         add_test(NAME kos-ui.kinetic-scroll
             COMMAND ${KOS_INTERACTION_QMLTEST}
                 -input ${CMAKE_CURRENT_SOURCE_DIR}/tests/interaction-controls/tst_kinetic_scroll.qml)
@@ -607,7 +612,7 @@ if(BUILD_TESTING)
     #   ui       needs a QML engine (and, for the panel tests, a compositor)
     #
     # The data/service layer is labelled where those tests are registered, in
-    # apps/common, apps/weather, apps/music, services/pim-service and
+    # apps/common, apps/weather, services/pim-service and
     # services/data-service, because those directories only exist when their
     # parent feature is configured.
     # Every label has to be applied under the same condition that registered
@@ -690,7 +695,7 @@ if(KOS_BUILD_PLATFORM)
     add_subdirectory(apps/settings)
 endif()
 
-if(KOS_BUILD_CALENDAR OR KOS_BUILD_TODO OR KOS_BUILD_WEATHER OR KOS_BUILD_MUSIC
+if(KOS_BUILD_CALENDAR OR KOS_BUILD_TODO OR KOS_BUILD_WEATHER
         OR KOS_BUILD_CALCULATOR)
     add_subdirectory(shared/qml)
     add_subdirectory(apps/common)
@@ -709,7 +714,7 @@ include(KosApplication)
 
 # Every application ships behind an opt-in flag, but its tests must not: the
 # C++ suites that cover app-owned code are the only thing that exercises
-# ApplicationPreferences, WeatherClient, the music database and the PIM store,
+# ApplicationPreferences, WeatherClient and the PIM store,
 # and gating them behind their own app turned the whole layer into tests that
 # nothing ever ran. Each directory below configures and builds its test targets
 # without turning its application on -- the flags above still decide whether the
@@ -721,18 +726,16 @@ include(KosApplication)
 #  - apps/weather:     the client test compiles src/WeatherClient.cpp directly
 #                      rather than linking the app, so no data-service is
 #                      involved.
-#  - apps/music:       needs PkgConfig plus gstreamer/taglib; skipped when they
-#                      are missing so such a machine still configures the rest.
 #  - services/pim-service: the store/DBus tests link kos_pim_service_core, and
 #                      the two DBus tests also run the service binary, which
 #                      this directory builds unconditionally.
 #  - services/data-service: a bare `go test ./...`, independent of any C++.
 #
-# This block sits after include(KosApplication) because apps/music and
-# services/pim-service call kos_add_application, which that include defines.
+# This block sits after include(KosApplication) because services/pim-service
+# calls kos_add_application, which that include defines.
 if(BUILD_TESTING)
     if(NOT (KOS_BUILD_CALENDAR OR KOS_BUILD_TODO OR KOS_BUILD_WEATHER
-            OR KOS_BUILD_MUSIC OR KOS_BUILD_CALCULATOR))
+            OR KOS_BUILD_CALCULATOR))
         add_subdirectory(apps/common)
     endif()
 
@@ -752,25 +755,6 @@ if(BUILD_TESTING)
         set(KOS_WEATHER_TESTS_ONLY ON)
         add_subdirectory(apps/weather)
         unset(KOS_WEATHER_TESTS_ONLY)
-    endif()
-
-    if(NOT KOS_BUILD_MUSIC)
-        find_package(PkgConfig QUIET)
-        if(PkgConfig_FOUND)
-            pkg_check_modules(KOS_MUSIC_GSTREAMER QUIET IMPORTED_TARGET
-                gstreamer-1.0 gstreamer-audio-1.0 gstreamer-pbutils-1.0)
-            pkg_check_modules(KOS_MUSIC_TAGLIB QUIET IMPORTED_TARGET
-                taglib>=1.12)
-            if(TARGET PkgConfig::KOS_MUSIC_GSTREAMER
-                    AND TARGET PkgConfig::KOS_MUSIC_TAGLIB)
-                # Tests only: KOS_MUSIC_TESTS_ONLY makes this directory skip
-                # kos_add_application, so no app (and no Kos::Ui dependency)
-                # is pulled in.
-                set(KOS_MUSIC_TESTS_ONLY ON)
-                add_subdirectory(apps/music)
-                unset(KOS_MUSIC_TESTS_ONLY)
-            endif()
-        endif()
     endif()
 
     # apps/lockscreen is a data-only Plasma Look-and-Feel package: there is no
@@ -811,9 +795,6 @@ if(KOS_BUILD_TODO)
 endif()
 if(KOS_BUILD_WEATHER)
     add_subdirectory(apps/weather)
-endif()
-if(KOS_BUILD_MUSIC)
-    add_subdirectory(apps/music)
 endif()
 if(KOS_BUILD_LISTENFREE)
     add_subdirectory(apps/listenfree)

@@ -370,16 +370,6 @@ assert.doesNotMatch(todo, /function todayKey\(\)[\s\S]{0,80}new Date\(\)/,
 assert.match(todo, /pendingItemId[\s\S]*onSnapshotChanged:\s*root\.openPendingItem/,
     "Todo retains widget item deep links until its async snapshot arrives");
 
-const music = read("../../apps/music/qml/Main.qml");
-assert.match(music,
-    /KosPageCache[\s\S]{0,220}cacheLimit:\s*3[\s\S]{0,120}pinnedIndexes:\s*\[0\]/,
-    "Music uses a bounded cache and retains the primary library page");
-assert.match(music, /function activationUri[\s\S]*workingDirectory/,
-    "reused Music instances resolve relative files in the caller's directory");
-assert.match(music,
-    /ButtonGroup \{ id: navigationGroup \}[\s\S]*ButtonGroup\.group: navigationGroup[\s\S]*ButtonGroup\.group: navigationGroup/,
-    "Music navigation stays exclusively selected when its active item is clicked again");
-
 const weather = read("../../apps/weather/qml/Main.qml");
 assert.match(weather, /ButtonGroup \{ id: unitsGroup \}[\s\S]*ButtonGroup\.group: unitsGroup[\s\S]*ButtonGroup\.group: unitsGroup/,
     "Weather unit choices form one exclusive accessible group");
