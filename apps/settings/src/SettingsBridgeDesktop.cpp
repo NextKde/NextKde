@@ -437,27 +437,27 @@ void SettingsBridge::startIntegrationProbe(const QVariantMap& replyMap)
             const bool interrupted = worker->isInterruptionRequested();
             // loadedEffects is an async Q_PROPERTY, not a D-Bus method: read it
             // through the Properties interface so the round-trip carries the
-            // same explicit timeout as everything else in this probe.
+            // same explicit timeout as everything else in this probe. The
+            // property lives on KWin's /Effects object (not /org/kde/KWin),
+            // and Properties.Get wraps its reply in a D-Bus variant whose
+            // payload demarshals to QStringList.
             QStringList loadedEffects;
             bool kwinAvailable = false;
             if (!interrupted) {
                 QDBusInterface effectsService(QStringLiteral("org.kde.KWin"),
-                    QStringLiteral("/org/kde/KWin"),
+                    QStringLiteral("/Effects"),
                     QStringLiteral("org.freedesktop.DBus.Properties"), sessionBus);
                 effectsService.setTimeout(kDbusProbeTimeoutMs);
                 const QDBusMessage propertyReply = effectsService.call(QStringLiteral("Get"),
                     QStringLiteral("org.kde.kwin.Effects"), QStringLiteral("loadedEffects"));
-                kwinAvailable = propertyReply.type() == QDBusMessage::ReplyMessage;
-                if (kwinAvailable && !propertyReply.arguments().isEmpty()) {
-                    const QDBusArgument argument
-                        = qvariant_cast<QDBusArgument>(propertyReply.arguments().constFirst());
-                    argument.beginArray();
-                    while (!argument.atEnd()) {
-                        QDBusVariant element;
-                        argument >> element;
-                        loadedEffects.append(element.variant().toString());
-                    }
-                    argument.endArray();
+                kwinAvailable = propertyReply.type() == QDBusMessage::ReplyMessage
+                    && !propertyReply.arguments().isEmpty();
+                if (kwinAvailable) {
+                    const QVariant value = propertyReply.arguments().constFirst();
+                    const QVariant payload
+                        = value.metaType() == QMetaType::fromType<QDBusVariant>()
+                        ? qvariant_cast<QDBusVariant>(value).variant() : value;
+                    loadedEffects = payload.toStringList();
                 }
             }
             result.insert(
