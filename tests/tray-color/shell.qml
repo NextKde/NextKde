@@ -108,7 +108,7 @@ ShellRoot {
                     test.capture("original")
                     break
                 case 1:
-                    IconAppearanceService.mode = "grayscale"
+                    IconAppearanceService.updateMode("grayscale")
                     test.stage++
                     break
                 case 2:
@@ -139,12 +139,12 @@ ShellRoot {
                 case 8: test.capture("reloaded"); break
                 case 9:
                     IconAppearanceService.updateTintColor("#ff0000")
-                    IconAppearanceService.mode = "tint"
+                    IconAppearanceService.updateMode("tint")
                     test.stage++
                     break
                 case 10: test.capture("tinted"); break
                 case 11:
-                    IconAppearanceService.mode = "color"
+                    IconAppearanceService.updateMode("color")
                     test.stage++
                     break
                 case 12: test.capture("color"); break
