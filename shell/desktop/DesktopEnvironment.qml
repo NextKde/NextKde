@@ -459,7 +459,6 @@ Item {
                 liquidStrength: AppearanceConfigService.globalLiquidStrength,
                 iconMode: IconAppearanceService.mode,
                 iconOpacity: IconAppearanceService.opacity,
-                trayFollowsBarColor: IconAppearanceService.trayFollowsBarColor,
                 // JSON has no QColor primitive. Send the canonical #rrggbb
                 // form so the standalone Settings C++ bridge does not parse
                 // the value as an object and fall back to its previous tint.
@@ -543,11 +542,6 @@ Item {
 
         function updateGlobalIconTintColor(color: string): string {
             IconAppearanceService.updateTintColor(color)
-            return snapshot()
-        }
-
-        function updateTrayFollowsBarColor(enabled: bool): string {
-            IconAppearanceService.updateTrayFollowsBarColor(enabled)
             return snapshot()
         }
 

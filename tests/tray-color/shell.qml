@@ -1,10 +1,9 @@
 import QtQuick
 import Quickshell
-import Quickshell.Services.SystemTray
 import qs.desktop.modules.common
-import qs.desktop.modules.platform
 import qs.desktop.modules.bar
 import qs.desktop.modules.dock
+import qs.desktop.modules.platform
 
 ShellRoot {
     id: test
@@ -14,58 +13,16 @@ ShellRoot {
     QtObject {
         id: mockTrayItem
         property string icon: Quickshell.env("TRAY_TEST_ICON")
-        property int status: SystemTrayItem.Active
-    }
-    QtObject {
-        id: mockClashItem
-        property string icon: Quickshell.env("TRAY_TEST_ICON")
-        property int status: SystemTrayItem.Active
     }
     Component.onCompleted: {
-        test.check(IconAppearanceService.trayFollowsBarColor, "tray defaults to a monochrome template")
-        IconAppearanceService.trayFollowsBarColor = false
+        test.check(!IconAppearanceService.monochrome, "tray defaults to the dock's color mode")
+        IconAppearanceService.mode = "color"
         AppearanceConfigService.themeMode = "dark"
         AppearanceConfigService.glassFollowsAppearanceMode = true
         AppearanceConfigService.barMacStyle = false
-        IconAppearanceService.opacity = 0.2
-    }
-    property var settingsSection: null
-    property var settingsSwitch: null
-    QtObject {
-        id: palette
-        property bool dark: false
-        property color primaryText: "#111111"
-        property color secondaryText: "#666666"
-        property color card: "#ffffff"
-        property color separator: "#dddddd"
-        property color accent: "#0066cc"
-        property color divider: "#dddddd"
-        property color iconForeground: "#ffffff"
-        property color iconMuted: "#666666"
-        property color selectedForeground: "#ffffff"
-        function role(name, fallback) { return fallback }
-    }
-    QtObject {
-        id: bridge
-        signal appearanceSnapshotChanged(var state)
-        function appearanceSnapshot() {
-            appearanceSnapshotChanged({trayFollowsBarColor: IconAppearanceService.trayFollowsBarColor})
-        }
-        function updateTrayFollowsBarColor(enabled) {
-            test.check(IconAppearanceService.updateTrayFollowsBarColor(enabled),
-                "preference update changes state: " + enabled)
-            appearanceSnapshot()
-        }
+        IconAppearanceService.opacity = 1.0
     }
     function check(ok, message) { if (!ok) throw new Error(message) }
-    function findSwitch(item) {
-        if (item.objectName === "tray-follows-bar-color-switch") return item
-        for (const child of item.children || []) {
-            const found = findSwitch(child)
-            if (found) return found
-        }
-        return null
-    }
     function capture(name) {
         if (capturePending) return
         capturePending = true
@@ -95,8 +52,11 @@ ShellRoot {
                 id: trayIcon
                 x: 0; y: 4; width: 40; height: 24
                 source: Quickshell.env("TRAY_TEST_ICON")
-                recolorEnabled: IconAppearanceService.trayFollowsBarColor
-                recolorColor: ThemeService.barInk
+                opacityMultiplier: IconAppearanceService.mode === "color"
+                    ? 1.0 : IconAppearanceService.opacity
+                saturation: IconAppearanceService.saturation
+                tintEnabled: IconAppearanceService.tintEnabled
+                tintColor: IconAppearanceService.tintColor
             }
             // A normal consumer of the shared shader must retain its grayscale.
             AppIcon {
@@ -119,32 +79,9 @@ ShellRoot {
                 y: 40; width: 320; height: 64
                 color: ThemeService.isDark ? "#163671" : "#f0f0f0"
                 TrayIcon {
-                    id: codexTemplate
+                    id: trayEntry
                     x: 4; y: 4; width: 24; height: 24
-                    applicationId: "com.openai.codex"
-                    applicationName: "Codex"
                     entry: mockTrayItem
-                }
-                TrayIcon {
-                    id: qqTemplate
-                    x: 36; y: 4; width: 24; height: 24
-                    applicationId: "chrome_status_icon_1"
-                    applicationName: "QQ"
-                    originalSource: Quickshell.env("TRAY_TEST_ICON")
-                }
-                TrayIcon {
-                    id: clashTemplate
-                    x: 68; y: 4; width: 24; height: 24
-                    applicationId: "tray-icon tray app clash-verge-rev-tray"
-                    applicationName: "clash-verge"
-                    entry: mockClashItem
-                }
-                TrayIcon {
-                    id: workbuddyTemplate
-                    x: 4; y: 36; width: 24; height: 24
-                    applicationId: "chrome_status_icon_1"
-                    applicationName: "WorkBuddy"
-                    originalSource: Quickshell.env("TRAY_TEST_ICON")
                 }
                 Text {
                     x: 104; y: 4; width: 42; height: 24
@@ -167,47 +104,19 @@ ShellRoot {
                 case 0:
                     test.check(IconAppearanceService.ready, "config loads")
                     test.check(trayIcon.imageStatus === Image.Ready, "test icon loads")
-                    test.check(!IconAppearanceService.trayFollowsBarColor, "original mode preserves artwork")
+                    test.check(!IconAppearanceService.monochrome, "color mode preserves artwork")
                     test.capture("original")
                     break
                 case 1:
-                    test.check(!IconAppearanceService.trayFollowsBarColor, "original remains selected before toggle")
                     IconAppearanceService.mode = "grayscale"
-                    const component = Qt.createComponent(Quickshell.env("TRAY_SETTINGS_SECTION"))
-                    test.check(component.status === Component.Ready, component.errorString())
-                    test.settingsSection = component.createObject(scene,
-                        {colors: palette, bridge: bridge, width: 620, visible: false})
-                    test.check(test.settingsSection !== null, component.errorString())
-                    test.settingsSwitch = test.findSwitch(test.settingsSection)
-                    test.check(test.settingsSwitch && !test.settingsSwitch.checked, "settings defaults off")
-                    test.settingsSwitch.toggle()
-                    test.check(test.settingsSwitch.checked, "settings confirms enabled toggle")
                     test.stage++
                     break
                 case 2:
-                    if (Quickshell.env("TRAY_TEST_MISSING_TEMPLATE") === "1") {
-                        test.check(workbuddyTemplate.templateLoadFailed
-                            && workbuddyTemplate.source === workbuddyTemplate.originalSource
-                            && workbuddyTemplate.imageStatus === Image.Ready,
-                            "missing template restores the application's original artwork")
-                    } else {
-                        test.check(workbuddyTemplate.source !== workbuddyTemplate.originalSource
-                            && workbuddyTemplate.imageStatus === Image.Ready,
-                            "WorkBuddy template loads")
-                    }
-                    test.check(monochromeBattery.fillColor === ThemeService.barInk
-                        && monochromeBattery.boltColor === ThemeService.barInk
-                        && monochromeBattery.opacity === 1, "battery shares full appearance ink")
-                    for (const icon of [codexTemplate, qqTemplate, clashTemplate]) {
-                        test.check(icon.source !== icon.originalSource && icon.imageStatus === Image.Ready,
-                            "real application template loads: " + icon.applicationName)
-                    }
-                    if (JsonConfigStore.texts[IconAppearanceService.configPath] === undefined) {
-                        test.check(IconAppearanceService.saveTimer.running, "save is scheduled")
-                        break
-                    }
+                    if (IconAppearanceService.saveTimer.running) break
                     test.saved = JsonConfigStore.texts[IconAppearanceService.configPath]
-                    test.check(JSON.parse(test.saved).trayFollowsBarColor === true, "toggle is saved")
+                    test.check(JSON.parse(test.saved).mode === "grayscale", "mode is saved")
+                    test.check(trayEntry.source === trayEntry.originalSource,
+                        "tray keeps the application artwork")
                     test.capture("white")
                     break
                 case 3:
@@ -216,21 +125,20 @@ ShellRoot {
                     break
                 case 4: test.capture("black"); break
                 case 5:
-                    IconAppearanceService.applyText('{"mode":"tint","tintColor":"#ff0000"}')
-                    test.check(IconAppearanceService.trayFollowsBarColor, "legacy config defaults to uniform templates")
-                    IconAppearanceService.applyText('{"mode":"tint","tintColor":"#ff0000","trayFollowsBarColor":false}')
-                    test.check(codexTemplate.source === codexTemplate.originalSource, "original mode restores application artwork")
+                    IconAppearanceService.applyText('{"mode":"color","tintColor":"#ff0000"}')
+                    test.check(!IconAppearanceService.monochrome, "color mode restores original artwork")
                     test.stage++
                     break
                 case 6: test.capture("restored"); break
                 case 7:
                     IconAppearanceService.applyText(test.saved)
-                    test.check(IconAppearanceService.trayFollowsBarColor, "saved toggle reloads")
+                    test.check(IconAppearanceService.mode === "grayscale", "saved mode reloads")
                     AppearanceConfigService.themeMode = "dark"
                     test.stage++
                     break
                 case 8: test.capture("reloaded"); break
                 case 9:
+                    IconAppearanceService.updateTintColor("#ff0000")
                     IconAppearanceService.mode = "tint"
                     test.stage++
                     break
@@ -241,35 +149,14 @@ ShellRoot {
                     break
                 case 12: test.capture("color"); break
                 case 13:
-                    const clashSource = clashTemplate.source
-                    mockClashItem.icon = qqTemplate.source
-                    test.check(clashTemplate.source === clashSource && clashTemplate.scale === 0.85,
-                        "normal Clash icon refresh keeps its detailed template and size")
-                    mockClashItem.status = SystemTrayItem.NeedsAttention
-                    test.check(clashTemplate.source === mockClashItem.icon,
-                        "Clash attention still uses live application artwork")
-                    mockClashItem.status = SystemTrayItem.Active
-                    test.check(clashTemplate.source === clashSource,
-                        "Clash restores its template after attention ends")
-                    mockTrayItem.status = SystemTrayItem.NeedsAttention
-                    test.check(codexTemplate.source === mockTrayItem.icon,
-                        "attention uses the application's live artwork")
-                    mockTrayItem.status = SystemTrayItem.Active
-                    test.check(codexTemplate.source !== mockTrayItem.icon,
-                        "normal state restores the monochrome template")
-                    mockTrayItem.icon = qqTemplate.source
-                    test.check(codexTemplate.source === mockTrayItem.icon,
-                        "icon updates without NeedsAttention preserve application artwork")
-                    mockTrayItem.icon = Quickshell.env("TRAY_TEST_ICON")
-                    test.check(codexTemplate.source === mockTrayItem.icon,
-                        "subsequent icon frames remain application-owned")
-                    test.settingsSwitch.toggle()
-                    test.check(!test.settingsSwitch.checked, "settings confirms disabled toggle")
+                    test.check(monochromeBattery.fillColor === ThemeService.barInk
+                        && monochromeBattery.boltColor === ThemeService.barInk
+                        && monochromeBattery.opacity === 1, "battery shares full appearance ink")
                     test.stage++
                     break
                 case 14:
                     if (IconAppearanceService.saveTimer.running) break
-                    test.check(JSON.parse(JsonConfigStore.texts[IconAppearanceService.configPath]).trayFollowsBarColor === false, "off is saved")
+                    test.check(JSON.parse(JsonConfigStore.texts[IconAppearanceService.configPath]).mode === "color", "color mode is saved")
                     console.log("TRAY_COLOR_PASS")
                     Qt.quit()
                 }

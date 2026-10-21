@@ -181,12 +181,6 @@ void SettingsBridge::updateGlobalIconTintColor(const QString& color)
     callAppearance({ QStringLiteral("updateGlobalIconTintColor"), color });
 }
 
-void SettingsBridge::updateTrayFollowsBarColor(bool enabled)
-{
-    callAppearance({ QStringLiteral("updateTrayFollowsBarColor"),
-        enabled ? QStringLiteral("true") : QStringLiteral("false") });
-}
-
 void SettingsBridge::updateShellStyle(const QString& style)
 {
     callAppearance({ QStringLiteral("updateShellStyle"), style });
@@ -324,8 +318,6 @@ QVariantMap SettingsBridge::appearanceSnapshotFromReply(const QString& payload)
             object.value(QStringLiteral("iconMode")).toString(QStringLiteral("color")) },
         { QStringLiteral("iconOpacity"),
             object.value(QStringLiteral("iconOpacity")).toDouble(0.5) },
-        { QStringLiteral("trayFollowsBarColor"),
-            object.value(QStringLiteral("trayFollowsBarColor")).toBool(true) },
         { QStringLiteral("iconTintColor"),
             object.value(QStringLiteral("iconTintColor")).toString(QStringLiteral("#a855f7")) },
         { QStringLiteral("shellStyle"), object.value(QStringLiteral("shellStyle")).toString() },

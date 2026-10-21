@@ -5,8 +5,9 @@ import Quickshell.Io
 import qs.desktop.modules.platform
 
 // Shell-wide application artwork styling, independent of Dock state.
-// Tray artwork can instead follow the bar's opaque ink; shell-owned status
-// controls always use that ink, like the temperature and network-rate labels.
+// Tray artwork follows the same mode as Dock artwork. Shell-owned status
+// controls always use the bar's opaque ink, like the temperature and
+// network-rate labels.
 QtObject {
     id: service
 
@@ -16,7 +17,6 @@ QtObject {
     property string mode: "color" // "color" | "grayscale" | "tint"
     property real opacity: 0.5
     property color tintColor: "#a855f7"
-    property bool trayFollowsBarColor: true
     readonly property real saturation: mode === "color" ? 1.0 : 0.0
     readonly property real tintEnabled: mode === "tint" ? 1.0 : 0.0
     readonly property bool monochrome: mode !== "color"
@@ -42,10 +42,6 @@ QtObject {
         const next = String(value).toLowerCase()
         if (!isValidColor(next) || tintColor.toString().toLowerCase() === next) return false
         tintColor = next; saveTimer.restart(); return true
-    }
-    function updateTrayFollowsBarColor(value) {
-        if (typeof value !== "boolean" || trayFollowsBarColor === value) return false
-        trayFollowsBarColor = value; saveTimer.restart(); return true
     }
     function styledColor(source) {
         if (mode === "color") return source
@@ -88,7 +84,7 @@ QtObject {
     }
     function save() {
         const payload = JSON.stringify({ version: 1, mode, opacity,
-            tintColor: tintColor.toString(), trayFollowsBarColor }, null, 2)
+            tintColor: tintColor.toString() }, null, 2)
         JsonConfigStore.writePath(configPath, payload)
     }
     // The icon settings used to live inside dock/config.json. An existing
@@ -117,7 +113,6 @@ QtObject {
             if (Number.isFinite(loadedOpacity)) opacity = loadedOpacity
             const loadedTint = String(object.tintColor ?? object.iconTintColor ?? "").toLowerCase()
             if (isValidColor(loadedTint)) tintColor = loadedTint
-            trayFollowsBarColor = object.trayFollowsBarColor !== false
         } catch (error) { console.warn("[IconAppearance] parse error: " + error) }
         ready = true
     }

@@ -130,14 +130,14 @@ jobs:
             --output-log "$GITHUB_WORKSPACE/.build/tests/test-results/logic.log" \
             --output-junit "$GITHUB_WORKSPACE/.build/tests/test-results/logic.xml"
 
-      - name: Render monochrome tray templates on a private compositor
+      - name: Render tray icons and appearance settings on a private compositor
         if: ${{ !cancelled() && steps.prepare.outcome == 'success' }}
         env:
           KOS_TRAY_COLOR_QA: ${{ github.workspace }}/.build/tests/test-results/tray-color
         run: |
           mkdir -p .build/tests/test-results
           ctest --test-dir .build/tests --output-on-failure --no-tests=error \
-            -R '^kos-ui.tray-(color|template-fallback)$' \
+            -R '^kos-ui.tray-color$' \
             --output-log "$GITHUB_WORKSPACE/.build/tests/test-results/tray-color.log" \
             --output-junit "$GITHUB_WORKSPACE/.build/tests/test-results/tray-color.xml"
 
@@ -328,7 +328,7 @@ jobs:
             .build/applications/CMakeFiles/CMakeConfigureLog.yaml
 
   tray:
-    name: tray identity + rendering + missing-template fallback
+    name: tray identity + rendering
     if: ${{ github.event_name == 'workflow_dispatch' && inputs.scope == 'tray' }}
     runs-on: ubuntu-24.04
     timeout-minutes: 12
@@ -361,9 +361,6 @@ jobs:
       - name: Check tray rendering and appearance settings
         if: ${{ !cancelled() && steps.native.outcome == 'success' }}
         run: python tests/tray-color/run.py
-      - name: Check missing-template fallback without binding loops
-        if: ${{ !cancelled() && steps.native.outcome == 'success' }}
-        run: python tests/tray-color/run.py --missing-template
       - name: Upload tray diagnostics
         if: always()
         uses: actions/upload-artifact@v7
