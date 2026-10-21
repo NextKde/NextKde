@@ -26,6 +26,15 @@ KWin 6.6/6.7/6.8 完整 SDK。SDK 编译和离线检查不能证明真实合成�
 - 可复现回归测试放入 `tests/` 或所属模块；探针、日志、截图和会话报告放入忽略的 `tmp/` 或外部 CI/Release 制品。
 - `.gitignore` 只收固定生成路径；一次性临时文件放 `tmp/`。保留第三方许可和资源来源。
 
+## 提交信息
+
+人类贡献者保持为 author 和 committer。提交信息不得带 AI 署名 trailer
+（`Co-Authored-By` 指向 `noreply@anthropic.com` 等 AI 服务地址），author/committer
+邮箱也不得是 AI 服务地址：GitHub 会把这些计入贡献者面板。
+`.github/workflows/block-ai-coauthor.yml` 会在 PR 上拒绝命中这些规则的新提交。
+PR 被拒时，改写受影响提交的信息（`git commit --amend` 或 `git rebase -i` 的 reword），
+用 `--force-with-lease` 推送即可；author 不变。
+
 ## 文档约定
 
 [文档索引](docs/README.zh-CN.md)定义每个主题的权威入口。

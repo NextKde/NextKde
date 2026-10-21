@@ -31,6 +31,16 @@ Report the exact commit, environment, commands, results, skipped coverage and re
 - `.gitignore` covers stable generated paths; one-off scratch files belong in `tmp/`.
   Preserve third-party notices, licenses and asset provenance.
 
+## Commit messages
+
+Keep the human contributor as author and committer. A commit message must not carry an AI
+attribution trailer (`Co-Authored-By` naming an AI service address such as
+`noreply@anthropic.com`), and the author/committer email must not be an AI service address:
+GitHub counts both toward the contributors panel. `.github/workflows/block-ai-coauthor.yml`
+rejects new pull-request commits that match. To fix a rejected pull request, rewrite the
+affected message (`git commit --amend` or a `git rebase -i` reword) and push with
+`--force-with-lease`; the author stays unchanged.
+
 ## Documentation contract
 
 [The documentation index](docs/README.md) identifies the canonical owner of each topic.
