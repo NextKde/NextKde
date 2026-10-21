@@ -1,0 +1,51 @@
+name: block-ai-coauthor
+
+# Gate at PR time. Once merged, the trailers live in history; running this on
+# push-to-main would scan what we just approved and add minutes without
+# changing any verdict.
+on:
+  pull_request:
+
+concurrency:
+  group: block-ai-coauthor-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  block-ai-coauthor:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Fetch base branch tip
+        run: git fetch --no-tags --depth=1 origin ${{ github.base_ref }}
+
+      - name: Reject AI agent attribution in new commits
+        env:
+          # Email literals. The values come from observed commits in this repo
+          # (Claude / Devin / Qoder) plus the known Copilot and CodeRabbit
+          # noreply formats; add more as they show up in real PRs. The local
+          # `agent@kos-vm.local` is an in-house CI committer and intentionally
+          # excluded.
+          PATTERN: '(noreply@anthropic\.com|copilot@github\.com|copilot\[bot\]@users\.noreply\.github\.com|devin-ai-integration\[bot\]@users\.noreply\.github\.com|noreply@qoder\.com|coderabbitai\[bot\]@users\.noreply\.github\.com)'
+        run: |
+          set -eu
+
+          # Co-Authored-By trailer (and any line that names the AI email).
+          if git log "origin/${{ github.base_ref }}..HEAD" --pretty=%B \
+              | grep -qiE "co-authored-by:[[:space:]]*.*${PATTERN}"; then
+            echo "::error::AI agent attribution detected. Strip the Co-authored-by trailer before merging."
+            exit 1
+          fi
+
+          # Author or committer email directly. Same effect on the GitHub
+          # contributors panel when GitHub matches the email to an account.
+          if git log "origin/${{ github.base_ref }}..HEAD" --pretty='%ae|%ce' \
+              | grep -qiE "${PATTERN}"; then
+            echo "::error::AI agent attribution detected. Commit author or committer uses an AI service email."
+            exit 1
+          fi
