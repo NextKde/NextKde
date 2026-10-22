@@ -60,8 +60,12 @@ Pane {
     // Our vertical factor against the reference is 1.33 (40px hour pitch vs
     // 27), so row 18 -> 24, gap 1 -> 1, and the 60px band -> 80px. The band
     // height is DERIVED from the row height so the two can never drift.
-    readonly property int allDayRowHeight: 24
-    readonly property int allDayRowGap: 1
+    // A01 (R006): the spec's literal numbers are the contract — row 18,
+    // vertical gap 2, column inset 2–3, band minimum about 28. The earlier
+    // 1.33 vertical-factor scaling (row 24) was dropped: the spec is written
+    // in logical pixels for THIS window, not rescaled from the reference.
+    readonly property int allDayRowHeight: 18
+    readonly property int allDayRowGap: 2
     // A04's cap: the tallest band this view will draw before a column spends its
     // last slot on a `+N` remainder row.
     readonly property int allDayMaxRows: 3
@@ -82,19 +86,25 @@ Pane {
     }
     readonly property int allDayBandRows: Math.max(1,
         Math.min(allDayMaxRows, allDayContentRows))
-    // Step 3: the reference's band inset, measured 1:1 (top rule y=124, the
-    // first chip starting at y=126 => ~1 ref-px), x our 1.33 vertical factor
-    // => ~1.3, taken as 1. It feeds allDayBandHeight, so the band follows.
-    readonly property int allDayBandInset: 1
+    // Step 3 (A01): column inset 2 per side — the spec's 2–3 range, taken at
+    // its lower edge so adjacent chips keep a 4px gutter between columns. It
+    // feeds allDayBandHeight, so the band follows.
+    readonly property int allDayBandInset: 2
     // R109 (A03 clause b): how far a continuing chip reaches back past its own
     // column edge. The joint is 2px of field plus the neighbour's 1px rule and
     // the field leftover is known only to ±1 (R108), so the reach is
     // deliberately one px larger than the measured 3px: the fill is opaque, so
     // the overlap is invisible and the slack costs nothing.
-    readonly property int allDayJointOverlap: 4
-    readonly property int allDayBandHeight: allDayBandInset * 2
+    // R006: the field gap between neighbouring chips is now 2 * inset 2 = 4px,
+    // so a reach of 4 only MEETS the neighbour and the subpixel rounding of the
+    // column origin leaves a 1px white seam (measured at x716/x835 on the R006
+    // capture). 6 re-establishes a real 2px overlap; the fill is opaque, so it
+    // is invisible.
+    readonly property int allDayJointOverlap: 6
+    // A01 (a): the band never drops below ~28 even on a single row, per spec.
+    readonly property int allDayBandHeight: Math.max(28, allDayBandInset * 2
         + allDayBandRows * allDayRowHeight
-        + (allDayBandRows - 1) * allDayRowGap
+        + (allDayBandRows - 1) * allDayRowGap)
 
     // T02: the two grid-line weights. Neutral (no blue tint), 1px each;
     // the half-hour line is one step lighter than the hour line. The light
@@ -234,14 +244,14 @@ Pane {
     function allDayRecord(item) {
         return itemRecord(item) ?? ({})
     }
-    // The stored all-day end is exclusive, so the last covered day is end − 1.
+    // A03 (R006): the stored ALL-DAY end is the last covered day itself
+    // (inclusive), NOT exclusive. Measured on kos-pim-service: a fixture
+    // DTEND;VALUE=DATE:20261024 surfaces as end "2026-10-23", and the editor
+    // writes the user's picked end date verbatim. Subtracting a day here
+    // cost the strip its last column and broke the continuation test.
     function lastCoveredDay(record) {
         const end = String(record.end ?? "").slice(0, 10)
-        if (!isoDayPattern(end))
-            return ""
-        const parts = end.split("-")
-        return isoDay(new Date(Number(parts[0]), Number(parts[1]) - 1,
-                               Number(parts[2]) - 1))
+        return isoDayPattern(end) ? end : ""
     }
     function allDayContinues(item, date, direction) {
         const record = allDayRecord(item)
@@ -645,6 +655,10 @@ Pane {
                                     color: "transparent"
                                     border.width: 3
                                     border.color: allDayChip.inkColor
+                                    // A03: macOS prints the strip's title once, on
+                                    // its first day — a continuing column carries
+                                    // neither the ring icon nor a repeated label.
+                                    visible: !allDayChip.continuesLeft
                                 }
 
                                 Label {
@@ -652,6 +666,7 @@ Pane {
                                     anchors.leftMargin: 19
                                         + (allDayChip.continuesLeft ? root.allDayJointOverlap : 0)
                                     anchors.rightMargin: 4
+                                    visible: !allDayChip.continuesLeft
                                     text: root.itemTitle(allDayChip.modelData)
                                     // R080: was AppTheme.text (grey) — the band chip is the
                                     // same chip family as the timed chip and the ref inks

@@ -1246,18 +1246,24 @@ KosApplicationWindow {
                 const item = { kind: "event", record: event }
                 const start = String(value(event, "start", "")).slice(0, 10)
                 const end = String(value(event, "end", "")).slice(0, 10)
+                // A03 (R006): an ALL-DAY end is the last covered day itself
+                // (inclusive — kos-pim-service emits DTEND;VALUE=DATE:20261024
+                // as end "2026-10-23", and the editor writes the picked end
+                // verbatim). A TIMED end is exclusive, so it keeps the −1.
+                const lastDay = end > start
+                    ? (Boolean(value(event, "allDay", false))
+                        ? end : previousDateKey(end))
+                    : start
                 // Keep the old per-day semantics: a multi-day event lands on
-                // its start day and every strictly-covered day, not the end.
-                addDayRange(result, start,
-                    end > start ? previousDateKey(end) : start, item)
+                // its start day and every covered day.
+                addDayRange(result, start, lastDay, item)
                 const todoId = String(value(event, "linkedTodoId", ""))
                 if (todoId.length > 0) {
                     let todoDays = representedTodos.get(todoId)
                     if (todoDays === undefined)
                         representedTodos.set(todoId,
                             todoDays = Object.create(null))
-                    addDayRange(todoDays, start,
-                        end > start ? previousDateKey(end) : start, item)
+                    addDayRange(todoDays, start, lastDay, item)
                 }
             }
         }
@@ -1398,15 +1404,14 @@ KosApplicationWindow {
         if (itemAllDay(item)) {
             const endText = String(value(record, "end", ""))
             const end = new Date(endText)
-            // Stored end is exclusive: the last covered day is end − 1.
+            // A03 (R006): the stored all-day end is the last covered day
+            // itself (inclusive) — same semantics as buildItemsByDate above.
             if (!Number.isNaN(end.getTime()) && endText.length >= 10
                     && sameDay(start, end)) {
                 return dateLine + " · " + qsTr("All day")
             }
             if (!Number.isNaN(end.getTime()) && endText.length >= 10) {
-                const lastDay = new Date(end.getFullYear(), end.getMonth(),
-                                         end.getDate() - 1)
-                return dateLine + " – " + AppTheme.formatDate(lastDay, Locale.LongFormat)
+                return dateLine + " – " + AppTheme.formatDate(end, Locale.LongFormat)
                     + " · " + qsTr("All day")
             }
             return dateLine + " · " + qsTr("All day")
