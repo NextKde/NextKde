@@ -1,22 +1,22 @@
 # LQ0 — 液态组件接入与剩余 spec 收敛
 
 ## 本轮
-- LQ18c 收尾 2/N：**X01–X05 + P02/P03 复拍**（light 1100×692 / 760×540；X03 dark 1100×692）。
-  - **无代码改动**，7/7 PASS，未发现需 token 级修正的偏差。
-  - X01 760：内容 bbox 恰 760×540；标题 x240–614、日期组 x630–740（16 gap，右内 20）、
-    分段中心 490 = 画布中心；无碰撞/裁切。
-  - X02：分段 collapsed x436（中心 550 = 窗口中心）↔ expanded x546（中心 660 = 画布中心），
-    侧栏 220→0，画布 0–1100 连续无接缝。
-  - X03 dark：侧栏 41 / 画布 30（层级正确）、小时线 59 / 半时 43、事件暗蓝去饱和无霓虹。
-  - X04：空周 2026-10-05–11 七列 + 8–19 刻度 + 半时线 + 全天带，无占位插画。
-  - X05：密集周 2026-03-30–04-05，周四 08:00 三道 + `+1` 无跨道墨迹；全天条 Mon–Thu 连续
-    （y160 扫描 fill 274–737 在列缝无底色断口）；全天底缝 y≈183 vs 首条计时线 y≈203。
-    接受项：两条 45px 道只有 “…”（既有 3 道外推）。
-  - P02：标签列全部 x384，单行字段 30 高同半径，Save/Cancel 347×27 固定 footer。
-  - P03：760 下编辑器 380×480（x190/y30，底 y510，余 30）；95 字标题在 30 高字段内滚动不撑宽；
-    详情浮层 340 宽 + 36 阴影全在屏内，标题 2 行换行。
-  - 环境注记：760 截图的 grab 缓冲仍是 1100×692（内容画在左上 760×540），证据已裁切。
-  - 证据：`R24-*.png`；入库 `docs/ui-calendar/round-24-*.png`（9 张）。Bash ~25/25。
+- LQ18c 收尾 4/N：**V03 月视图跨天连续条**（light 1100×692 + 760×540 实拍）。
+  - 判定：每格用相邻日是否含同一 item 决定左接/右接；key = `seriesId|start`
+    （`Main.qml monthItemKey`）。不能按对象引用比——`itemsForDate` 跨 property var 边界
+    会转成副本，`===` 失效（首版实测两格都判不接）。
+  - 续接块：去左右 6px 内缩、外侧角改 0（Qt 6.10 per-corner radius）、色条只在首日；
+    单日块保持 r5/6px 内缩/色条。单元格横向 padding 下沉到日期行与单日块，否则贴不了边。
+  - 实拍：Tue 20–Thu 22 `Offsite workshop` 一线贯通（中格两侧方角无内缩、无第二根色条，
+    末格右 r5 收口）；同帧 `Team offsite` 12–13、`Weekend trip` 17–18 亦连续；
+    `Focus day` 23 单日圆角对照 ✓；760×540 同构 ✓。
+  - 反向回归：April 行 `Multi-day review` 4 格连续（跨 3 月格 0.5 压暗，与 macOS 压暗一致）；
+    连续两天的 `Morning planning` 仍各自独立带色条，key 未误连每日项 ✓。
+  - 残余：续接块仍是半透明 chip（α .16/.30），列发丝在 **4x** 下透出 1px 竖线
+    （1x 不可辨，采样 (205,220,231) vs fill (222,236,246)）；见仍差 #8。
+  - 证据：`R26-v03-month-2.png`、`R26-v03-zoom3/4.png`、`R26-v03-month-760c.png`、
+    `R26-v03-april.png`、`R26-v03-april-zoom.png`；入库
+    `docs/ui-calendar/round-26-v03-*.png`。Bash ~25/25。
 
 ## 队列（一轮一条；[x]=已完成）
 - [x] LQ01 基线：light week 1100×720 / 760×540；日志无启动回归。
@@ -31,9 +31,10 @@
 - [x] LQ10 右键菜单：`MenuActionRow` 行高 30/图标 16/左内 10、plain + hoverFill、1px 分隔线；
   r16 regular E3 卡片、36px 阴影边；light/dark 已拍。O04–O07（O09 未做）。
 - [x] LQ11 tooltip：实心卡 + 发丝 + E1、r12/11px/6×10、1000ms、单实例、下方定位 +
-  上方翻转 + 水平 clamp；light 已拍。**右侧 clamp 未生效、dark/翻转分支未验证**（见仍差）。
+  水平 clamp；light/dark 与出现/消失连续帧均已拍，右缘 clamp 生效；上方翻转在当前布局
+  不可达（见外推 O09）。
 - [x] LQ12 月视图：连续网格/V04 去 agenda 卡/V05 day 共用/V02/M04 已实拍通过；
-  V03 跨天连续条未做（见仍差 #1）。
+  V03 跨天连续条未做（见仍差 #4）。
 - [x] LQ13 全天条：A01–A04（最小 28、行 24×1.33、gap 2、inset 2、连续跨天、`+N` 溢出）；
   light 实拍通过，dark 未验。
 - [x] LQ14a 事件块 E01–E03/E05 + N02：tint 预混同全天条、stripe 3/3、顶部 1px、now 线/pill。
@@ -46,15 +47,22 @@
   工具栏 chrome hover/press 有连续帧；inactive 按代码证据（见外推）。
 - [x] LQ18a X06 日历/settings 同尺度对照：PASS（仅取证）。
 - [x] LQ18b X07 弹框/浮层/菜单/tooltip 同尺度对照：PASS（仅取证）。
-- [ ] LQ18c spec 全量 PASS 回归：第 1 组 D01–D13（D03 仍差）、第 2 组 O01–O09（O09 仍差）、
-  X01–X05 + P02/P03（本轮 7/7 PASS）已完成 → 下一轮 tooltip 剩余腿（dark / 上方翻转 /
-  连续帧），其余 PENDING 逐条核对清零。
+- [ ] LQ18c spec 全量 PASS 回归：第 1 组 D01–D13（D03 仍差）、第 2 组 O01–O09（O09 的
+  菜单/浮层翻转仍差）、X01–X05 + P02/P03、tooltip 剩余腿（dark/连续帧已过，翻转不可达）、
+  V03 月跨天连续条（已过，余 4x 透线）已完成 → 其余 PENDING 逐条核对清零
+  （下一条 V03b 续接块 1px 透线）。
 
 ## 已改
+- LQ18c 收尾 4/N（V03）：`CalendarMonthView.qml` 新增 `itemKey` 属性与 `itemContinues()`
+  （相邻日同 key 判接续）、cell 横向 padding 改为 0 + 日期行/单日 chip 各 6px、续接 chip
+  贴边 + per-corner 方角 + 色条仅首日；`Main.qml` 新增 `monthItemKey()` 并在 monthPage
+  接线 `itemKey: root.monthItemKey`。week/day/all-day 未动。
+- LQ18c 收尾 3/N：**无代码改动**（tooltip dark/连续帧只取证；翻转经几何推导判不可达，
+  未为验证新增 hint 或缩窗）。
 - LQ18c 收尾 2/N：**无代码改动**（X01–X05 + P02/P03 只取证/量测/判读；spec 状态更新）。
 - LQ18c 收尾 1/N：`Main.qml` `openHelpTag()` 去掉 `helpTag.parent = helpTagAnchor`（Popup
   回到窗口 overlay 层，压在页面内容之上）；`positionHelpTag()` x/y 改窗口绝对坐标。修复
-  tooltip 被页标题/日期导航遮挡（仍差 #1 的层叠部分）。
+  tooltip 被页标题/日期导航遮挡（R150 light 实拍结清；R152 dark 卡压侧栏行 ink 亦在上层）。
 - LQ18c 第 2 组：**无代码改动**（只取证/量测/判读；tooltip 层叠缺陷只记录未修）。
 - LQ18c 第 1 组：`EventEditorDialog.qml:42`、`CalendarTaskEditorDialog.qml:42` 标题 17→20 DemiBold
   （D04）；`KosButton.qml` 新增 `buttonRadius`（-1=旧式 r10），两编辑器 5+5 条 footer/确认
@@ -91,31 +99,42 @@
 - `shared/qml/**`：同步 nextkdeAppDemo 液态组件与 shaders。
 
 ## 仍差
-1. tooltip 剩余腿：**层叠已修**（本轮 light 实拍：卡在页面标题与「今天」胶囊之上）。dark 腿、
-   上方翻转、出现/消失的连续帧仍未验证（移开后的消失静态帧已拍，过程无连续帧）；
-   右缘 clamp 已验证生效。
-2. D03 弹框卡片结构：面为硬编码 `#ffffff`（非 `cardSurface`）、无 1px `border`、阴影是单只
+1. D03 弹框卡片结构：面为硬编码 `#ffffff`（非 `cardSurface`）、无 1px `border`、阴影是单只
    `LiquidOuterShadow`（E4 自定义）而非 `shadowAmbient`+`shadowKey` 双层。视觉无硬边，但三条
    只中“软阴影”一条；改机制不是 token 级，需先定是否保留 LQ07 的 E4 方案。
-3. E06 未验证：completed timed 项只有 strikeout + opacity .5，没有独立完成勾标；
+2. E06 未验证：completed timed 项只有 strikeout + opacity .5，没有独立完成勾标；
    参考图没有 todo 事件，需按 HIG/task 行语言补勾标后再判。
-4. N01 部分验证：今天红圈与 now 线同屏已拍；"今天 + 另一选中日"同时出现的灰/描边
+3. N01 部分验证：今天红圈与 now 线同屏已拍；"今天 + 另一选中日"同时出现的灰/描边
    对比未重拍（本轮未改选中样式）。
-5. 月视图 V03：跨天事件仍是每格独立 chip（相邻列间断口），月格连续条未做。
-6. 事件编辑器：组合框仍是 250 底 + 1px 边（与旁边 plain 240 有色差）；备注框焦点环仍是
+4. 月视图 V03：跨天事件仍是每格独立 chip（相邻列间断口），月格连续条未做。
+5. 事件编辑器：组合框仍是 250 底 + 1px 边（与旁边 plain 240 有色差）；备注框焦点环仍是
    2px 内嵌，未换 task editor 的外扩环。
-7. 浮层/菜单：详情浮层为**单张中性卡**（参考是 246 壳 + 内部白行），面 240 与菜单 255
+6. 浮层/菜单：详情浮层为**单张中性卡**（参考是 246 壳 + 内部白行），面 240 与菜单 255
    差 Δ15（参考 Δ9）；阴影偏弱、菜单亮卡无磨砂色偏/hover r8 偏小、O09 翻转未做；任务编辑器
    固定 560 高留白 151px。
-8. 切到 day 视图时 `Main.qml:1653 itemColor` 对 undefined item 报两次 TypeError（瞬时，
+7. 切到 day 视图时 `Main.qml:1653 itemColor` 对 undefined item 报两次 TypeError（瞬时，
    渲染无异常；疑似 delegate 拆除时序，非本轮引入）。
-（密集 08:00 簇 45px 道 + 标题 ellipsis 为参考同款外推，已移入 rounds.md，不再列。）
+8. V03 续接块仍为半透明 chip，列发丝在 4x 下透出 1px 竖线（1x 不可辨；采样边界
+   (205,220,231) vs 块内 (222,236,246)）。拟把续接块改
+   `AppTheme.mix(AppTheme.neutralPlane, itemColor, α)` 不透明填充，单日块保持现状（V03b）。
+（tooltip 各腿已结清：dark、出现/消失连续帧通过；上方翻转在当前布局不可达，见外推；
+密集 08:00 簇 45px 道 + 标题 ellipsis 为参考同款外推，已移入 rounds.md，不再列。）
 
 ## 外推待确认
+- V03 用“每格独立判左右接”而非整周 span 层：只有跨日项在相邻格恰好同一行时才视觉连续。
+  fixture 的跨日项都是全天（排序恒在首行）故成立；若一条非 all-day 跨日事件与当天其他
+  事件排序交错，相邻格会不同行。整周 span 层数据模型可支撑，但属结构性改动，未做。
+- 跨月格连续条在非本月格随整格 0.5 压暗（April 行实测 Mar 30–Apr 1 淡、Apr 2 全亮），
+  与 macOS“非本月整格压暗”一致，不是新缺陷。
+- 760×540 复拍：`resize` 延迟一次重绘才落地，命令后立即 grab 仍返回 1100×692 缓冲；
+  本次以随后的 April / October 两张窄窗实拍为准（内容 760×540 画在缓冲左上）。
 - O06：动作菜单里没有破坏性项，故“破坏性项置底 + destructive + 不重复快捷键”按 **N/A**
   判 PASS（无快捷键文本为实拍）；若后续加入“删除日历”类项，必须置底并染 destructive。
-- O09：右缘水平 clamp 本轮实测生效（tooltip 卡右停在窗口内 ~10px）；tooltip 只有垂直翻转，
-  菜单/浮层只做右对齐/内缩，没有方向翻转；浮层边缘行为本轮未测。
+- O09：右缘水平 clamp 已验证（tooltip 卡右停在窗口内 ~10px）；tooltip 垂直翻转**当前布局
+  不可达**：带 hint 的锚点只有工具栏（y36–64）与日期组（y81–107），卡底 ≤145；最靠底的
+  mini 月箭头（heading y510–536）无 hint，且 540 min 高下该块被 `bottomMargin 12 +
+  fixedHeight 170` 钉在底部、heading 底距窗底恒 156 > 28+10+8，故任何允许窗高都不触发。
+  代码保留但未实证；不为此新增 hint 或违规缩窗。菜单/浮层仍只做右对齐/内缩，无方向翻转。
 - O07：菜单 hover (244,244,245) = 白 255 + `rowHoverFill` α.04；侧栏 237 + 同 token = 227。
   同一 token、不同底，判同一视觉语言；不是新 token。
 - D13 的“应用其他窗口仍可交互”：评审 VM 只有一个窗口，无法实拍。按 HIG 语义（modal 只
@@ -198,9 +217,11 @@
   窄事件惯例外推），不算 X05 的“unintended overlap”。
 
 ## Next round
-LQ18c 收尾 3/N：**tooltip 剩余腿**——
-1) dark 腿：直接以 dark 启动，hover `添加日程` 拍卡（面/发丝/阴影 dark token）；
-2) 上方翻转：该窗口唯一近底锚点是侧栏 mini calendar 的左右翻月箭头（侧栏展开，y≈490/692；
-   760×540 下更靠底）。悬停看卡是否翻到锚点上方且不越窗口下缘；
-3) 若一次驱动内可加 `nativeRecord`（~30ms）则补出现/消失连续帧，否则继续标「未验证」。
-只做 tooltip，不顺手改别的。之后剩 D03 / E06 / N01 / V03 / O09 等逐条清零。
+V03b：**续接块不透明化**，消除 4x 下的 1px 列发丝透出（仍差 #8）。
+1) `CalendarMonthView.qml` 续接 chip（`continuesLeft || continuesRight`）的 color 改
+   `AppTheme.mix(AppTheme.neutralPlane, root.itemColor(modelData),
+   AppTheme.dark ? 0.30 : 0.16)`；单日 chip 保持 `withAlpha`（保留选中/hover 透底）。
+2) light 复拍 2026-10-20..22 条，4x 裁切采样两处格线边界：应等于块内 fill，不再出现
+   (205,220,231)；顺带复拍 `Focus day` 23 单日块确认未变。
+3) 不动 V03 已过的角/色条/贴边行为，不做整周 span 层，不碰 week/day。
+只做 V03b。之后剩 D03 / E06 / N01 / 编辑器组合框 / 浮层菜单 / O09 菜单翻转 / TypeError 清零。
