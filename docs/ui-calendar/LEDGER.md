@@ -1,18 +1,15 @@
 # LQ0 — 液态组件接入与剩余 spec 收敛
 
 ## 本轮
-- LQ18c 收尾 10/N：**week 视图 00:00 三枚纯黑 chip 定位并修复**（R32 新发现）。两个根因叠加：
-  ① `CalendarScheduleView.timedSpan` 用 `record.start ?? record.due`，而 todo 的 `start` 是
-  空串而非 undefined，三条带 DUE 的任务（4/1 09:30、4/1 14:30、4/2 11:00）因此全部落在
-  00:00 的 1 小时块；② `Main.listColor` 返回 `#rrggbb` **字符串**，凡按颜色对象取 `.r/.g/.b`
-  的混合路径（timed chip 填充 `AppTheme.mix`、`chipInk` 文字、月视图 `withAlpha`）都拿到
-  undefined ⇒ NaN ⇒ 无效色，填充与标题 ink 双双纯黑（左侧 3px 条直接吃字符串，所以仍显示
-  列表色）。改为空串回退 `due`、`listColor` 解析成 QColor 对象（未知 id 仍走原哈希调色板，
-  非法值回退 accent）。复拍 contentY=0：00:00–07:00 行干净；三条任务落回各自 due 时刻且
-  正常着色（绿 Personal「Revie…」09:30、蓝 Inbox「Prep…」14:30、绿「A deli…」11:00），
-  4x 下填充 (221,245,235)、绿条 + 深绿 ink 可读。事件 chip 与其它 PASS 行为不动。
-  证据 `R33-repro-light.png`（前）、`R33-fixed-top-light.png`（后，contentY=0）、
-  `R33-fixed-light.png`（后，07–18）、`R33-todo-zoom.png` / `R33-black-zoom.png`（4x 前/后）。
+- LQ18c 收尾 11/N：**O09 结清（菜单腿）**。Next round 原本写“四个菜单触发点”，实仓只有一处
+  `Menu`（`Main.qml:2360` 工具栏 More；O04 的右键菜单尚未建 UI），侧栏行/日期组/事件 chip
+  都没有菜单，故“量四个触发点”不成立，按唯一触发点取证。1100：More box x1056..1084，菜单
+  卡右缘 ≈1064 = 窗口−36；760：More x716..744，卡右缘 ≈720..724 = 窗口−36..−40，`menuShadowInset`
+  36 的阴影槽全程留在窗内，卡与阴影都不越界；菜单向下展开，卡底 ≈212 远低于 540 内容高。
+  结论：O09 的“不越界”由“右对齐锚点 + 窗口坐标 clamp”已满足；**垂直翻转在当前布局不可达**
+  （唯一触发点在顶部，向下空间恒足，同 tooltip 判法）；项目顺序翻转只在翻转发生时才需要，
+  判 N/A。证据 `R34-menu-1100.png`（1100 满宽，卡右 1064）、`R34-menu-760.png`（内容 760
+  画在 1100 缓冲的已知 grab 问题，卡右 ≈720）。产品代码零改动。
 
 ## 队列（一轮一条；[x]=已完成）
 - [x] LQ01 基线：light week 1100×720 / 760×540；日志无启动回归。
@@ -56,11 +53,16 @@
   （`X-KOS-` → `X-KDE-KOS-`）；改 fixture 后 timed/全天两种 chip 均 ✓ + strikeout 实拍通过。
 - [x] LQ18c 收尾 10/N：**R32 三枚纯黑 chip 修复**——`start` 空串未回退 `due`（落 00:00）
   + `listColor` 返回字符串致混合路径 NaN 变纯黑；改后任务回到 due 时刻并正常着色。
-- [ ] LQ18c spec 全量 PASS 回归：第 1 组 D01–D13（D03 仍差）、第 2 组 O01–O09（O09 的
-  菜单/浮层翻转仍差）、X01–X05 + P02/P03、tooltip 剩余腿、V03/V03b 月跨天连续条已完成
+- [x] LQ18c 收尾 11/N：**O09 菜单腿结清**——唯一触发点（工具栏 More）在 1100/760 两档都完整
+  落在窗内（卡右 = 窗口−36/−40，阴影槽未被裁切）；垂直翻转不可达，项目顺序翻转 N/A。
+- [ ] LQ18c spec 全量 PASS 回归：第 1 组 D01–D13（D03 仍差）、第 2 组 O01–O09（**O09 已结清**）、
+  X01–X05 + P02/P03、tooltip 剩余腿、V03/V03b 月跨天连续条已完成
   → 其余 PENDING 逐条核对清零（N01、E06 已结清）。
 
 ## 已改
+- LQ18c 收尾 11/N（O09）：**无产品代码改动**。曾给 `actionsMenu` 加 `objectName` 想用
+  `inspectGeometry` 读窗口坐标，实测 Popup 在 overlay 层、`objectNamed` 遍历不到
+  （返回 `available:false`），已撤回该行；判定改为靠实拍像素（卡右与窗口右缘距离）。
 - LQ18c 收尾 10/N（R32 黑 chip）：`CalendarScheduleView.qml:306-312` timedSpan 起点
   `String(record.start ?? record.due ?? "")` → `String(record.start || record.due || "")`
   （todo 的 start 是空串）；`Main.qml:1640-1666` 新增 `parseListColor()` 并把 `listColor()`
@@ -137,8 +139,8 @@
    `LiquidOuterShadow`（E4 自定义）而非 `shadowAmbient`+`shadowKey` 双层。视觉无硬边，但三条
    只中“软阴影”一条；改机制不是 token 级，需先定是否保留 LQ07 的 E4 方案。
 2. 浮层/菜单：详情浮层为**单张中性卡**（参考是 246 壳 + 内部白行），面 240 与菜单 255
-   差 Δ15（参考 Δ9）；阴影偏弱、菜单亮卡无磨砂色偏/hover r8 偏小、O09 翻转未做；任务编辑器
-   固定 560 高留白 151px。
+   差 Δ15（参考 Δ9）；阴影偏弱、菜单亮卡无磨砂色偏/hover r8 偏小；任务编辑器
+   固定 560 高留白 151px。（O09 菜单翻转不可达，见外推；tooltip 翻转同理。）
 3. 切到 day 视图时 `Main.qml:1679 itemColor` 对 undefined item 报两次 TypeError（瞬时，
    渲染无异常；疑似 delegate 拆除时序，非本轮引入）。
 （tooltip 各腿已结清：dark、出现/消失连续帧通过；上方翻转在当前布局不可达，见外推；
@@ -155,6 +157,11 @@ V03/V03b 月跨天连续条已结清，细节见 rounds.md R153–R154。）
   本次以随后的 April / October 两张窄窗实拍为准（内容 760×540 画在缓冲左上）。
 - O06：动作菜单里没有破坏性项，故“破坏性项置底 + destructive + 不重复快捷键”按 **N/A**
   判 PASS（无快捷键文本为实拍）；若后续加入“删除日历”类项，必须置底并染 destructive。
+- O09 菜单：全仓只有一个 Menu 触发点（工具栏 More；box 1100 下 x1056..1084、760 下 x716..744），
+  菜单恒向下展开，卡右缘 = 窗口−36（1100）/ −36..−40（760），36px 阴影槽在窗内，不越界。
+  垂直翻转需要“锚点下方空间 < 卡高（≈248）”的生产者，当前布局（工具栏在顶部、min 高 540）
+  不存在；水平方向用右对齐 + clamp 而非翻转（卡始终向左生长）。项目顺序翻转仅在翻转发生时
+  才需要，判 N/A。未为验证新增底部触发点。
 - O09：右缘水平 clamp 已验证（tooltip 卡右停在窗口内 ~10px）；tooltip 垂直翻转**当前布局
   不可达**：带 hint 的锚点只有工具栏（y36–64）与日期组（y81–107），卡底 ≤145；最靠底的
   mini 月箭头（heading y510–536）无 hint，且 540 min 高下该块被 `bottomMargin 12 +
@@ -252,8 +259,7 @@ V03/V03b 月跨天连续条已结清，细节见 rounds.md R153–R154。）
   窄事件惯例外推），不算 X05 的“unintended overlap”。
 
 ## Next round
-O09 菜单方向翻转：当前菜单/浮层只做右对齐与内缩，贴右缘/下缘不翻转（tooltip 的垂直分支
-也不可达）。先量菜单在 1100/760 两档、四个触发点（工具栏 More、侧栏列表行、日期组、事件
-chip 右键）的可用空间，按 spec O09“空间不足时向上/向左翻转”给 Menu 的定位加翻转分支，
-复拍贴边触发点并给翻转前后连续帧。不动 D03 与浮层内部白行（需产品裁决）。之后剩 D03 /
-浮层菜单层级 / 遗留 TypeError。
+修复切到 day 视图时 `Main.qml:1679 itemColor` 对 undefined item 的两次 TypeError（瞬时，渲染
+无异常；疑似 delegate 拆除时序）。先看该函数所有调用点，给 undefined/空对象加早退（不改变
+week/month 既有颜色），切 day/week 各拍一帧并确认 live-runtime 日志不再出现 TypeError。
+不动 D03 与浮层内部白行（需产品裁决）；之后剩 D03 / 浮层菜单层级 / 任务编辑器留白。
