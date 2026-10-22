@@ -289,6 +289,130 @@ Pane {
         return result
     }
 
+    // E04: timed blocks carry a true interval, not just an hour bucket. The
+    // model gives start/end as local date-times; a block drawn on a day it
+    // does not start on begins at 00:00, and one that runs past midnight ends
+    // at 24:00. Minutes are enough for layout — nothing here needs a zone.
+    function minutesOfDay(text) {
+        const match = String(text).match(/T(\d{2}):(\d{2})/)
+        return match ? Number(match[1]) * 60 + Number(match[2]) : -1
+    }
+    function timedSpan(item, date) {
+        const record = itemRecord(item) ?? ({})
+        const startText = String(record.start ?? record.due ?? "")
+        const endText = String(record.end ?? "")
+        const day = isoDay(date)
+        const startMinute = minutesOfDay(startText)
+        let start = String(startText).slice(0, 10) === day
+            ? Math.max(0, startMinute) : 0
+        const endMinute = minutesOfDay(endText)
+        const endDay = String(endText).slice(0, 10)
+        let end
+        if (endMinute < 0)
+            end = start + 60
+        else if (endDay > day)
+            end = 1440
+        else if (endDay === day)
+            end = endMinute
+        else
+            end = start + 60
+        if (end <= start)
+            end = start + 60
+        return { start: Math.min(start, 1439), end: Math.min(end, 1440) }
+    }
+    // E03: a block too short to hold its 11px title is drawn one readable
+    // line tall instead — 18px of fill plus the 2px top field, i.e. 30
+    // minutes at the 40px pitch. It never runs into the next block in its
+    // own lane (visualEnd is clamped to that block's start).
+    readonly property int minTimedBlockMinutes: 30
+
+    // E04: one layout per day column, reused by all 24 hour cells. Blocks are
+    // grouped into overlap clusters (a chain of transitively overlapping
+    // intervals), lanes are assigned greedily inside each cluster, and the
+    // width is split by the cluster's lane count — so a lone afternoon block
+    // stays full-width even when the morning had a parallel pair. Lanes are
+    // capped at 3, matching the existing `+N` overflow rule.
+    function timedLayout(date) {
+        const source = itemsForDate(date)
+        const entries = []
+        for (let index = 0; index < source.length; index++) {
+            const item = source[index]
+            if (itemAllDay(item))
+                continue
+            const span = timedSpan(item, date)
+            entries.push({ item: item, start: span.start, end: span.end,
+                           lane: 0, lanes: 1, visualEnd: span.end,
+                           hidden: false })
+        }
+        entries.sort(function(left, right) {
+            if (left.start !== right.start)
+                return left.start - right.start
+            // Longer blocks claim the first lane so a 2h event keeps one
+            // uninterrupted column beside a short overlap.
+            if (left.end !== right.end)
+                return right.end - left.end
+            return itemTitle(left.item).localeCompare(itemTitle(right.item))
+        })
+        let index = 0
+        while (index < entries.length) {
+            let clusterEnd = entries[index].end
+            let stop = index + 1
+            while (stop < entries.length && entries[stop].start < clusterEnd) {
+                clusterEnd = Math.max(clusterEnd, entries[stop].end)
+                ++stop
+            }
+            const laneEnds = []
+            for (let cursor = index; cursor < stop; ++cursor) {
+                let lane = 0
+                while (lane < laneEnds.length
+                       && laneEnds[lane] > entries[cursor].start)
+                    ++lane
+                laneEnds[lane] = entries[cursor].end
+                entries[cursor].lane = lane
+            }
+            const lanes = Math.min(laneEnds.length, 3)
+            for (let cursor = index; cursor < stop; ++cursor) {
+                entries[cursor].lanes = lanes
+                entries[cursor].hidden = entries[cursor].lane >= lanes
+            }
+            for (let lane = 0; lane < laneEnds.length; ++lane) {
+                const laneEntries = []
+                for (let cursor = index; cursor < stop; ++cursor) {
+                    if (entries[cursor].lane === lane)
+                        laneEntries.push(entries[cursor])
+                }
+                for (let cursor = 0; cursor < laneEntries.length; ++cursor) {
+                    const entry = laneEntries[cursor]
+                    const nextStart = cursor + 1 < laneEntries.length
+                        ? laneEntries[cursor + 1].start : 1440
+                    entry.visualEnd = Math.min(1440,
+                        Math.max(entry.end,
+                            Math.min(entry.start + minTimedBlockMinutes,
+                                     nextStart)))
+                }
+            }
+            index = stop
+        }
+        return entries
+    }
+
+    // The entries that touch this hour cell, including a short block's
+    // readability extension into the following cell.
+    function timedBlocksFor(date, hour) {
+        const layout = timedLayout(date)
+        const cellStart = hour * 60
+        const cellEnd = cellStart + 60
+        const result = []
+        for (let index = 0; index < layout.length; index++) {
+            const entry = layout[index]
+            if (entry.visualEnd <= cellStart || entry.start >= cellEnd)
+                continue
+            result.push(entry)
+        }
+        result.sort(function(left, right) { return left.lane - right.lane })
+        return result
+    }
+
     function usefulStartHour() {
         let earliest = 24
         for (let day = 0; day < dayCount; day++) {
@@ -746,8 +870,8 @@ Pane {
                         readonly property int rowIndex: Math.floor(index / (root.dayCount + 1))
                         readonly property int columnIndex: index % (root.dayCount + 1)
                         readonly property date columnDate: root.dateForColumn(columnIndex - 1)
-                        readonly property var cellItems: columnIndex > 0
-                            ? root.hourItems(columnDate, rowIndex) : []
+                        readonly property var cellBlocks: columnIndex > 0
+                            ? root.timedBlocksFor(columnDate, rowIndex) : []
 
                         // P1-7 (A1): the day columns were pointer-only. Column 0 is
                         // the shared gutter (no date), so it stays out of the focus
@@ -998,32 +1122,87 @@ Pane {
                                 // and the chip's bottom AA edge sits ON the next
                                 // rule (y356/357). At 1.33 that is one pixel of
                                 // clearance at the TOP, none at the bottom.
-                                anchors.topMargin: 2
+                                // E04: the one-pixel top field now lives in the
+                                // chip's own y (first segment only) — a block
+                                // continuing from the previous hour must start
+                                // at the cell's top edge, flush with the rule.
+                                anchors.topMargin: 0
                                 anchors.bottomMargin: 0
-                                readonly property var visibleItems: hourCell.cellItems.slice(0, 3)
-                                readonly property bool hasOverflow: hourCell.cellItems.length > 3
-                                readonly property int overflowCount: hourCell.cellItems.length - visibleItems.length
+                                readonly property var visibleBlocks: {
+                                    const result = []
+                                    for (let index = 0;
+                                         index < hourCell.cellBlocks.length;
+                                         ++index) {
+                                        const entry = hourCell.cellBlocks[index]
+                                        if (!entry.hidden)
+                                            result.push(entry)
+                                    }
+                                    return result
+                                }
+                                readonly property var hiddenBlocks: {
+                                    const result = []
+                                    for (let index = 0;
+                                         index < hourCell.cellBlocks.length;
+                                         ++index) {
+                                        const entry = hourCell.cellBlocks[index]
+                                        if (entry.hidden)
+                                            result.push(entry)
+                                    }
+                                    return result
+                                }
+                                readonly property bool hasOverflow: hiddenBlocks.length > 0
+                                readonly property int overflowCount: hiddenBlocks.length
                                 // 20 logical px reserved at the right edge for the +N label
                                 readonly property int overflowReserve: chipHost.hasOverflow ? 20 : 0
 
                                 Repeater {
-                                    model: chipHost.visibleItems
+                                    model: chipHost.visibleBlocks
 
                                     delegate: Rectangle {
                                         id: timedChip
                                         required property int index
                                         required property var modelData
+                                        readonly property var item: modelData.item
+                                        // E04: this chip is the slice of the
+                                        // item's interval that falls inside this
+                                        // hour cell. startsHere / endsHere round
+                                        // only the run's two outer ends, so a
+                                        // block spanning several hours reads as
+                                        // one continuous fill; the lane fields
+                                        // come from the column-wide cluster
+                                        // layout (root.timedLayout).
+                                        readonly property int cellStartMinute:
+                                            hourCell.rowIndex * 60
+                                        readonly property int segmentStart:
+                                            Math.max(modelData.start, cellStartMinute)
+                                        readonly property int segmentEnd:
+                                            Math.min(modelData.visualEnd,
+                                                     cellStartMinute + 60)
+                                        readonly property bool startsHere:
+                                            modelData.start >= cellStartMinute
+                                        readonly property bool endsHere:
+                                            modelData.visualEnd
+                                                <= cellStartMinute + 60
+                                        readonly property real pxPerMinute:
+                                            root.hourHeight / 60
                                         width: (chipHost.width
-                                            - (chipHost.visibleItems.length - 1) * 2
-                                            - chipHost.overflowReserve)
-                                            / chipHost.visibleItems.length
-                                        x: index * (width + 2)
-                                        // R-CHIP (user ruling 2026-10-17): the
-                                        // ref's timed chip fills 0.96 of its
-                                        // hour (26 on 27). 38 at hourHeight 40.
-                                        // T01 side-by-side rework follows.
-                                        height: Math.round(
-                                            root.hourHeight * 0.96)
+                                            - chipHost.overflowReserve
+                                            - (modelData.lanes - 1) * 2)
+                                            / modelData.lanes
+                                        x: modelData.lane * (width + 2)
+                                        y: Math.round(
+                                               (segmentStart - cellStartMinute)
+                                               * pxPerMinute)
+                                            + (startsHere ? 2 : 0)
+                                        height: Math.max(2, Math.round(
+                                            (segmentEnd - segmentStart)
+                                            * pxPerMinute)
+                                            - (startsHere ? 2 : 0))
+                                        // E04 replaces the old fixed 0.96 of
+                                        // an hour: the height above is the
+                                        // item's real interval, so a 2h block
+                                        // reaches the next hour's rule and a
+                                        // 30min block only fills half a cell.
                                         // R077: the ref marks every calendar-coloured chip with a
                                         // saturated same-hue bar at its left edge. Measured 1:1 on
                                         // refs/macos-calendar.png: the blue chip's bar reads x=409-411
@@ -1040,7 +1219,7 @@ Pane {
                                         // R079: the ref's chip ink is the calendar colour moved
                                         // halfway to its own pole. R089 hoisted the expression to
                                         // root.chipInk — see there for the measurement.
-                                        readonly property color inkColor: root.chipInk(modelData)
+                                        readonly property color inkColor: root.chipInk(timedChip.item)
                                         // R124: 3, not 5. The chip's corner had been borrowing
                                         // the all-day pill's row/3 ratio (6 on an 18px row),
                                         // which is 0.33 x height. Re-measured on the ref's own
@@ -1050,7 +1229,16 @@ Pane {
                                         // entirely. x1.33 ⇒ 2.7, and E01 says "radius about 3".
                                         // Scoped to the timed chip ONLY - the all-day pill keeps
                                         // row/3 and A01/A03 stay closed on it.
-                                        radius: 3
+                                        // E04: only the run's outer ends keep the
+                                        // 3px cut; a segment joining the next hour
+                                        // is square so the block has no seam.
+                                        topLeftRadius: startsHere ? 3 : 0
+                                        topRightRadius: startsHere ? 3 : 0
+                                        bottomLeftRadius: endsHere ? 3 : 0
+                                        bottomRightRadius: endsHere ? 3 : 0
+                                        // E03: a short block's one title line
+                                        // must stay inside its own fill.
+                                        clip: true
                                         // E05 (LQ14): the same pre-blend the all-day
                                         // strip uses (R109), so a category's tint is
                                         // identical in the band and the grid — it was
@@ -1059,7 +1247,7 @@ Pane {
                                         // double-compositing on the weekend tint.
                                         color: AppTheme.mix(
                                             root.allDayBackdrop(hourCell.columnIndex - 1),
-                                            root.itemColor(modelData),
+                                            root.itemColor(timedChip.item),
                                             AppTheme.dark ? 0.32 : 0.17)
                                         // R078: NO border. The ref's chip is fill-only, and its
                                         // edges only ever go LIGHTER than the fill, never darker.
@@ -1088,10 +1276,14 @@ Pane {
                                             width: timedChip.stripeWidth
                                             anchors.top: parent.top
                                             anchors.bottom: parent.bottom
-                                            anchors.topMargin: 2
-                                            anchors.bottomMargin: 2
+                                            // E04: the stripe follows the block's
+                                            // outer ends too — inset at the run's
+                                            // first/last segment, continuous
+                                            // across hour boundaries.
+                                            anchors.topMargin: timedChip.startsHere ? 2 : 0
+                                            anchors.bottomMargin: timedChip.endsHere ? 2 : 0
                                             radius: Math.round(timedChip.stripeWidth / 2)
-                                            color: root.itemColor(timedChip.modelData)
+                                            color: root.itemColor(timedChip.item)
                                         }
 
                                         // E02 (R-CHIP user ruling 2026-10-17):
@@ -1101,6 +1293,12 @@ Pane {
                                         // the time range, same chip ink.
                                         Column {
                                             anchors.fill: parent
+                                            // E04: the title belongs to the run's
+                                            // first segment; the continuation is
+                                            // fill only, like the reference's
+                                            // multi-hour block. It also frees the
+                                            // short-segment contract (E03).
+                                            visible: timedChip.startsHere
                                             // R077: clear the bar. The ref's text ink begins 7 ref px
                                             // from the chip's fill edge (chip x=326, ink x=333) ⇒ ~13
                                             // at our scale = inset + width + the 5 already here.
@@ -1113,14 +1311,14 @@ Pane {
 
                                             Label {
                                                 width: parent.width
-                                                text: root.itemTitle(timedChip.modelData)
+                                                text: root.itemTitle(timedChip.item)
                                                 // R-CHIP: E02 title 11–12 medium.
                                                 font.pixelSize: 11
                                                 font.weight: Font.Medium
                                                 // R079: was AppTheme.text (grey). The ref's ink is
                                                 // the chip's own calendar colour at half value.
                                                 color: timedChip.inkColor
-                                                font.strikeout: root.itemCompleted(timedChip.modelData)
+                                                font.strikeout: root.itemCompleted(timedChip.item)
                                                 elide: Text.ElideRight
                                             }
                                             // R246: the ref's 2-hour chips open their
@@ -1176,7 +1374,7 @@ Pane {
                                                 Label {
                                                     id: secondaryLabel
                                                     width: parent.width - 16
-                                                    text: root.itemSecondary(timedChip.modelData)
+                                                    text: root.itemSecondary(timedChip.item)
                                                     font.pixelSize: 10
                                                     color: timedChip.inkColor
                                                     elide: Text.ElideRight
@@ -1187,19 +1385,19 @@ Pane {
                                         // as the all-day chip; the name is title + time
                                         // (itemSecondary carries the formatted time).
                                         activeFocusOnTab: true
-                                        Keys.onReturnPressed: root.itemActivated(timedChip.modelData)
-                                        Keys.onSpacePressed: root.itemActivated(timedChip.modelData)
+                                        Keys.onReturnPressed: root.itemActivated(timedChip.item)
+                                        Keys.onSpacePressed: root.itemActivated(timedChip.item)
                                         Accessible.role: Accessible.ListItem
-                                        Accessible.name: root.itemTitle(timedChip.modelData)
-                                            + (root.itemSecondary(timedChip.modelData) !== ""
-                                               ? ", " + root.itemSecondary(timedChip.modelData) : "")
-                                        Accessible.onPressAction: root.itemActivated(timedChip.modelData)
+                                        Accessible.name: root.itemTitle(timedChip.item)
+                                            + (root.itemSecondary(timedChip.item) !== ""
+                                               ? ", " + root.itemSecondary(timedChip.item) : "")
+                                        Accessible.onPressAction: root.itemActivated(timedChip.item)
                                         // Focus ring only (R078: resting chip is fill-only).
                                         border.color: timedChip.inkColor
                                         border.width: timedChip.activeFocus ? 1 : 0
 
                                         TapHandler {
-                                            onTapped: root.itemActivated(timedChip.modelData)
+                                            onTapped: root.itemActivated(timedChip.item)
                                         }
                                     }
                                 }
@@ -1214,7 +1412,7 @@ Pane {
                                     // band's R089 row — plain ink text, no fill, ink
                                     // taken from the FIRST hidden item.
                                     color: chipHost.hasOverflow
-                                        ? root.chipInk(hourCell.cellItems[3])
+                                        ? root.chipInk(chipHost.hiddenBlocks[0].item)
                                         : "transparent"
                                     font.pixelSize: 10
                                     elide: Text.ElideRight
