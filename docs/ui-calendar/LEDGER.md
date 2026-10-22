@@ -1,13 +1,12 @@
 # LQ0 — 液态组件接入与剩余 spec 收敛
 
 ## 本轮
-- LQ18c 收尾 13/N：**任务编辑器高度内容自适应**。固定 560 → `height =
-  min(560, max(implicitHeight, 测值))` 且 `bottomPadding: 0`；编辑态卡片 560→464，
-  备注框底到保存条 95→16px（两轮实拍量得：改前卡 78..637、表单止 405、保存条 517；
-  改后卡 123..588、表单止 451、保存条 466）。标题行/字段/备注/三行 footer 行内尺寸
-  零变化，footer 高度固定故 D05 不被压。light 实拍 `R36-before-editor.png` /
-  `R36-final-editor.png`（1100×692，2026-04-01 day，openItem todo → 编辑）。
-  New task 两行 footer / 删除确认态未复拍。
+- LQ18c spec 回归 1/N：**D01 弹框 scrim 取证结清**。light 1100×692，week 2026-10-15，
+  toolbarAdd 点开“新建日程”，帧 `R38-d01-scrim.png` 同帧三项全中：
+  ① 卡片独立浮起——卡面纯白 255、圆角、卡外近缘 170 / 稍远 180（E4 阴影晕）对远区 191；
+  ② 父窗整体压暗且非纯黑——白画布/工具栏均 191 = 255×.75（黑 α.25），周末列 249→187、
+  chip 基色同步 ×.75，全窗含边缘 (20,20)/(1085,300) 一致；③ 父窗内容仍可辨——2x 裁切下
+  “周一 12 / 周二 13”与 “Team offsite / Design sprint” chip 文字清晰可读。无产品改动。
 
 ## 队列（一轮一条；[x]=已完成）
 - [x] LQ01 基线：light week 1100×720 / 760×540；日志无启动回归。
@@ -57,11 +56,19 @@
   加 undefined 早退；day/week 往返 5 次日志 0 条 TypeError，两视图目视不变。
 - [x] LQ18c 收尾 13/N：**任务编辑器高度内容自适应**——编辑态 560→464，备注→保存
   95→16px；footer 固定高度不变，D05 三行未压。
-- [ ] LQ18c spec 全量 PASS 回归：第 1 组 D01–D13（D03 仍差）、第 2 组 O01–O09（**O09 已结清**）、
+- [x] LQ18c 收尾 14/N：**菜单 hover 圆角结清**——实测水平内缩 8 ⇒ r_inner 8，原 r8 正确，
+  无产品改动；light hover 帧已拍（前：开菜单无 hover；后：首行 hover 244）。
+- [ ] LQ18c spec 全量 PASS 回归：第 1 组 D01–D13（**D01 已结清**；D03 仍差）、第 2 组
+  O01–O09（O09 已结清）、
   X01–X05 + P02/P03、tooltip 剩余腿、V03/V03b 月跨天连续条已完成
   → 其余 PENDING 逐条核对清零（N01、E06 已结清）。
 
 ## 已改
+- LQ18c spec 回归 1/N（D01）：**无产品改动**。scrim 为 `LiquidDialog.qml:16`
+  `Overlay.modal: Rectangle { color: Qt.rgba(0,0,0,0.25) }` 的既有实现，本轮只取证。
+- LQ18c 收尾 14/N（菜单 hover 圆角）：**无产品改动**（试改 r12 → 量得水平内缩 8 → 撤回）。
+  `Main.qml:1243-1246` 只把旧注释补成实测口径：行 x 已含 `menuSurfaceInset` 4 + `menuRowInset`
+  4 = 水平内缩 8，故 `r_inner = max(6,16−8) = 8`。行背景仍 `x: menuRowInset / radius: 8`。
 - LQ18c 收尾 13/N（任务编辑器高度）：`CalendarTaskEditorDialog.qml:22-39` 新增
   `maxDialogHeight`（min(560, parent−64)）与 `measuredDialogHeight`（24 + header
   implicit + footer implicit + formLayout implicit），`height =
@@ -107,8 +114,8 @@
    `LiquidOuterShadow`（E4 自定义）而非 `shadowAmbient`+`shadowKey` 双层。视觉无硬边，但三条
    只中“软阴影”一条；改机制不是 token 级，需先定是否保留 LQ07 的 E4 方案。
 2. 浮层/菜单：详情浮层为**单张中性卡**（参考是 246 壳 + 内部白行），面 240 与菜单 255
-   差 Δ15（参考 Δ9）；阴影偏弱、菜单亮卡无磨砂色偏/hover r8 偏小。（O09 菜单翻转不可达，
-   见外推；tooltip 翻转同理。）
+   差 Δ15（参考 Δ9）；阴影偏弱、菜单亮卡无磨砂色偏。（O09 菜单翻转不可达，见外推；
+   tooltip 翻转同理。hover 圆角 r8 已于本轮实测结清，不再列。）
 （tooltip 各腿已结清：dark、出现/消失连续帧通过；上方翻转在当前布局不可达，见外推；
 密集 08:00 簇 45px 道 + 标题 ellipsis 为参考同款外推，已移入 rounds.md，不再列。
 V03/V03b 月跨天连续条已结清，细节见 rounds.md R153–R154。）
@@ -228,7 +235,7 @@ V03/V03b 月跨天连续条已结清，细节见 rounds.md R153–R154。）
   窄事件惯例外推），不算 X05 的“unintended overlap”。
 
 ## Next round
-菜单 hover 高亮圆角结清（仍差 #2 的最后一小块）：量 `MenuActionRow` 的 hover 矩形 inset
-（state 旧记 8/r8）：若 inset 确为 8，按 r_inner = max(6, 16−8) = 8 判**已正确**、只补记录；
-若实际为 4，则改为 r12。light 下 `pointerObject` move 到菜单某行拍 hover 帧（用
-`toolbarMore` 开菜单），不重排菜单几何。D03 需产品裁决、浮层内部白行需数据模型确认，均不动。
+LQ18c spec 回归 2/N：**D02 弹框圆角取证**。用 light 1100×692 的同一张 D01 帧（或重拍
+`R39-d02-dialog.png`）4x 裁卡左上/右上角，量圆角半径、确认无直角；同时确认只有一层
+1px 描边（或无色差描边）。期望与 `AppTheme.largeRadius` / 卡 `r24` 对齐（LQ07 既有记录，
+`LiquidDialog.qml:18-22` radius 24）。只判 D02，不顺手改 D03 结构。
