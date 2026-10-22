@@ -1,21 +1,26 @@
 # LQ0 — 液态组件接入与剩余 spec 收敛
 
 ## 本轮
-- LQ18c spec 回归 11/N：**D10 退出腿 PASS（无产品改动）**。定性：上一轮「无中间帧」
-  是抓帧延迟伪影，退出 Transition 一直在播。`probeDialog` 以 8ms 直读真实 popup 属性
-  （`r057`，tmp 不入库）：Esc 后 `revealProgress` 1→.997→.977→.928→.826→.657→.421→.073→0，
-  全程 ≈120ms，增量递减 = InCubic；`scale` 1→.9629（卡宽 380→365.9 = 0.96 目标）；
-  `visible` 直到动画结束才 false。像素帧 `r057-exit-0012..0015` 卡片混合透明度
-  ≈.68/.63/.46/.04 佐证（scrim 已先消失）。进入腿沿用 R056 的 220ms OutCubic PASS。
-  退出时 `Overlay.modal` 在 close 起点即消失（popup.opened=false），卡片继续淡出；
-  spec D10 未要求 scrim 过渡、无动效参考帧，未改产品，记入外推。
-  reduceMotion 仍只有代码证据（duration 0 / scale 1），未实拍。
+- LQ18c spec 回归 12/N：**D11 窄窗弹框完整性/自身滚动 PASS（无产品改动）**。
+  760×540 light，日视图 2026-04-02：
+  - 事件编辑器（编辑态）：卡 **380×508**，卡底 y533 < 540、卡左 198/右 576 在窗内；
+    表单 Flickable 332×262、`contentHeight 418`（溢出 156）；空白行间
+    `windowWheel x350 y240 angleY:-600` → `contentY 0→156`（精确停在
+    `418−262` 上限），卡高/位置不变；footer 固定在 Flickable 外，
+    保存/取消/删除日程 三行完整可见、单行未换行。滚动后帧 `r058-ne-scrolled2x.png`：
+    内容换成 重复/提醒/备注，footer 三钮位置零位移，右缘 6px 滚动条 thumb 出现。
+  - 任务编辑器（编辑态，三行 footer）：卡 **380×428** < cap 476
+    （`min(560, 540−64)`），表单 `contentHeight 243 = height 243` → 无需滚动，
+    Flickable 自身不撑高；保存/取消/删除任务 三行完整可见、未换行，
+    卡底 y510 < 540。New task 态 380×436、247=247、两行 footer 同样完整。
+  - 结论：内容超长只由弹框内部 Flickable 消化、卡高恒 = min(620/560, parent−32/−64)，
+    footer 永不压缩/换行。玻璃预算不变 2/2 持续、1/1 瞬态。
 
 ## 上一轮
-- LQ18c spec 回归 10/N：**D10 进入腿 PASS**（事件编辑器，`r056-enter-*` 40 帧 @≈33ms）：
-  卡片宽 374→378→380 px（scale 0.984→0.995→1.0，吻合 `KosDialog.qml:10` `0.96+0.04p`）、
-  面亮度 224→236→249→254→255，首末 ≈194ms ≈ `motionNormal` 220ms，增量递减 = OutCubic。
-  退出腿当时判未验证，本轮推翻定性为抓帧伪影。
+- LQ18c spec 回归 11/N：**D10 退出腿 PASS（无产品改动）**。退出 Transition 一直在播，
+  120ms InCubic；`probeDialog` 8ms 采样 `revealProgress` 1→0、`scale` 1→.9629，
+  `visible` 到动画结束才 false；像素帧 α≈.68/.63/.46/.04 佐证。进入腿沿用 R056
+  （220ms OutCubic）。scrim 先于卡片消失记入外推；reduceMotion 仍仅代码证据。
 
 ## 队列（一轮一条；[x]=已完成）
 - [x] LQ01 基线：light week 1100×720 / 760×540；日志无启动回归。
@@ -83,13 +88,24 @@
 - [x] LQ18c spec 回归 8/N：**D08 按钮三态 PASS**——五枚按钮 hover/pressed 填充各一档
   （保存 69,152,204/85,161,208；中性 215,216,217/204,205,206）、2px focusRing
   (123,182,219) 四边可见、Esc 在编辑/确认两态均关闭。仅加 `objectName`（零视觉改动）。
-- [ ] LQ18c spec 全量 PASS 回归：第 1 组 D01–D13（**D01–D10 已取证**；D11–D13 未做，
+- [x] LQ18c spec 回归 12/N：**D11 窄窗完整性/自身滚动 PASS**——760×540 事件编辑器卡
+  380×508、表单 262/418 由内部 Flickable 滚到 contentY 156，footer 三钮固定完整；
+  任务编辑器编辑态 380×428、243=243 免滚动，三行 footer 完整；无产品改动。
+- [ ] LQ18c spec 全量 PASS 回归：第 1 组 D01–D13（**D01–D11 已取证**；D12–D13 未做，
   D03 的 token/描边待裁决）、第 2 组
   O01–O09（O09 已结清）、
   X01–X05 + P02/P03、tooltip 剩余腿、V03/V03b 月跨天连续条已完成
   → 其余 PENDING 逐条核对清零（N01、E06 已结清）。
 
 ## 已改
+- LQ18c spec 回归 12/N（D11）：**无产品改动**。只驱动/量测：`EventEditorDialog.qml:31-33`
+  `height: min(620, parent−32)`、`:503-533` Flickable 与 `:550-563` 轮滚 MouseArea、
+  `:388-390` footer 固定高；`CalendarTaskEditorDialog.qml:32-39` `maxDialogHeight =
+  min(560, parent−64)` 与 `:434-470` Flickable(`objectName editorScroll`)、`:94-97`
+  footer。证据：`probeDialog`（卡 w/h）、`scrollInfo`（Flickable h/contentHeight/contentY）、
+  轮滚于空白行间（x350 y240，避开字段）/TASK 直接 `openForTodo(record)` 进三行态。
+  帧 `r058-narrow-event-editor3.png`、`r058-ne-scrolled.png`、`r058-narrow-task-edit.png`
+  （2x 裁切同名 +2x）；light 760×540。
 - LQ18c spec 回归 11/N（D10 退出）：**无产品改动**。只把 harness 的 `probeDialog` 探针
   从 `children` 视觉树改为遍历声明式 `data` 列表——Popup 是 Window 的 QObject 子项，
   不在 contentItem 视觉树中，故 R056 读不到；改后成功直读四个 dialog 的
@@ -201,6 +217,10 @@ V03/V03b 月跨天连续条已结清，细节见 rounds.md R153–R154。）
 - D10 抓帧延迟：nativeRecord 的 `pointerDriver.capture` 单帧耗时可达 ~20–100ms，120ms 的
   退出动画可能整段落在两次抓帧之间（R056 的 32 帧未拍到中间帧即此因）；本轮改用 8ms
   属性探针 + 4 帧像素佐证。此后 <150ms 的动效一律配属性采样，不以抓帧缺帧判失败。
+- 760×540 + 模态弹框开启时，`captureClient` 的缓冲顶部 ≈148px 是陈旧/翻转内容带
+  （R056 窄窗退出帧同款，见 `r056-exit760-0020.png`）。本轮 resize 抖动、重复抓帧均
+  不能刷新；改由 `probeDialog` 卡 w/h + 像素量卡底/左右缘 + footer 位置取证，把该
+  顶带记为无效区，不据此判产品缺陷。任务编辑器新开/编辑两态均可取到 footer 与表单。
 - D10 进入录制的 f22（838ms）先于 f23 呈全显白卡、随后 f23 才回到 alpha .54，判为
   grab/合成器时序伪影（同一 popup 不可能先全显再淡入），不据此改产品。
 - D09 的「完成必须有取消」对设置面板不适用：`shared/qml/foundation/KosSettingsDialog.qml:447-451`
@@ -332,8 +352,9 @@ V03/V03b 月跨天连续条已结清，细节见 rounds.md R153–R154。）
   窄事件惯例外推），不算 X05 的“unintended overlap”。
 
 ## Next round
-LQ18c spec 回归 12/N：**D11 窄窗弹框完整性与自身滚动**。760×540 下分别打开事件编辑器
-（三行 footer）与任务编辑器，确认内容超长时由弹框内部滚动（Flickable）而非撑出窗口；
-卡高 = min(620/560, parent−32/−64)，footer 三行按钮完整可见、文字不换行；需要时实拍
-滚动前/后两帧（滚动可用 `regionWheel` 或 Flickable contentY）。D10 本轮已 PASS，不动
-`KosDialog` 的 reveal 声明与任何弹框几何；若发现不符，只改窄窗内的滚动/高度约束。
+LQ18c spec 回归 13/N：**D12 弹框“关闭唯一性”与无 sheet 套 sheet**。逐一核对事件编辑器 /
+任务编辑器（编辑、新建、删除确认）、设置面板、Import/Export：每层只有一个真正关闭动作
+（取消/关闭/Done，或 X），不出现第二个“看起来像关闭”的按钮；确认没有弹框再套弹框（文件
+选择器是独立顶层窗口，按 R46 口径用活动窗口的 `spectacle -a` 取证）。可复用 `probeDialog`
+计数与 footer 实拍；若无产品问题只取证。不动 D11 已 PASS 的卡高公式、Flickable 与 footer
+结构（事件编辑器 380×508/262↔418、任务编辑器 380×428/243=243）。
