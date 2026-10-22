@@ -820,7 +820,10 @@ Pane {
 
                         // T03: hour labels 10-11px, right-aligned 7px from the
                         // grid's left edge (parent.right IS the gutter/day
-                        // boundary, i.e. the grid line). The vertical offset is
+                        // boundary, i.e. the grid line). rightMargin 2 + this
+                        // font's ~6px digit side bearing puts the INK 8px from
+                        // the line (r3-week-full.png measured ink gap 13 at
+                        // margin 7 — spec wants 6–8 visual). The vertical offset is
                         // derived from implicitHeight because this font's line
                         // box is ~1.47em — a hardcoded -7 only centres font 9.
                         // Stays anchored, so it cannot inflate the 40px row.
@@ -832,7 +835,7 @@ Pane {
                             anchors.top: parent.top
                             anchors.topMargin: -Math.round(digitText.implicitHeight / 2) + 4
                             anchors.right: parent.right
-                            anchors.rightMargin: 7
+                            anchors.rightMargin: 2
                             width: meridiemText.width + 3 + digitText.width
                             height: digitText.implicitHeight
                             // R158: when the timeline is hour-aligned
