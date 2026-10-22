@@ -55,13 +55,14 @@ Pane {
 
     // A01 step 2 (R072): the all-day band's row geometry, derived from one
     // anchor and measured off the reference at 1:1. Reference rows sit at
-    // y126-143, y145-162, y164-181 => row 18, gap 1, pitch 19, three rows
-    // spanning a 60px band (top rule y124, bottom separator y183-184).
-    // Our vertical factor against the reference is 1.33 (40px hour pitch vs
-    // 27), so row 18 -> 24, gap 1 -> 1, and the 60px band -> 80px. The band
-    // height is DERIVED from the row height so the two can never drift.
+    // y126-143, y145-162, y164-181 => row 18, gap ~2 (1 empty px + the 1px
+    // chip rim), pitch 19-20, three rows spanning a 60px band (top rule y124,
+    // bottom separator y183-184). Our vertical factor against the reference
+    // is 1.33 (40px hour pitch vs 27), so row 18 -> 24, gap 1 -> 2 and the
+    // 60px band -> 80px. The band height is DERIVED from the row height so
+    // the two can never drift.
     readonly property int allDayRowHeight: 24
-    readonly property int allDayRowGap: 1
+    readonly property int allDayRowGap: 2
     // A04's cap: the tallest band this view will draw before a column spends its
     // last slot on a `+N` remainder row.
     readonly property int allDayMaxRows: 3
@@ -71,9 +72,9 @@ Pane {
     // side and nothing else. A hard 3-row box cannot do that: in a week whose
     // tallest column carries one all-day item it still reserved all three rows.
     // The row count is DERIVED from the content instead, floored at ONE row —
-    // the spec's "min about 28" reads 1 + 24 + 1 = 26 here, against the
-    // reference's own 1-row band (1 + 18 + 1 = 20) x our 1.33 vertical factor
-    // = 26.6 — and capped at allDayMaxRows so A04's overflow row stays reachable.
+    // the spec's "min about 28" is exactly 2 + 24 + 2 here, against the
+    // reference's own 1-row band (2 + 18 + 2 = 22) x our 1.33 vertical factor
+    // = 29.3 — and capped at allDayMaxRows so A04's overflow row stays reachable.
     readonly property int allDayContentRows: {
         let height = 0
         for (let index = 0; index < dayCount; ++index)
@@ -83,9 +84,11 @@ Pane {
     readonly property int allDayBandRows: Math.max(1,
         Math.min(allDayMaxRows, allDayContentRows))
     // Step 3: the reference's band inset, measured 1:1 (top rule y=124, the
-    // first chip starting at y=126 => ~1 ref-px), x our 1.33 vertical factor
-    // => ~1.3, taken as 1. It feeds allDayBandHeight, so the band follows.
-    readonly property int allDayBandInset: 1
+    // first chip starting at y=126 => ~2 ref-px counting the 1px rule's own
+    // coverage), kept at 2 at our scale so a one-row band is exactly
+    // 2 + 24 + 2 = 28, the A01 minimum. It feeds allDayBandHeight, so the
+    // band follows.
+    readonly property int allDayBandInset: 2
     // R109 (A03 clause b): how far a continuing chip reaches back past its own
     // column edge. The joint is 2px of field plus the neighbour's 1px rule and
     // the field leftover is known only to ±1 (R108), so the reach is
@@ -222,7 +225,7 @@ Pane {
     // Compared as ISO day strings. The stored all-day start/end are date-times in
     // the event's own zone, and `new Date("YYYY-MM-DD")` parses as UTC midnight,
     // which shifts the day in a negative-offset zone — so the date part is read
-    // as text and only the "end − 1 day" step uses local components.
+    // as text and never round-tripped through a Date.
     function isoDay(date) {
         return date.getFullYear() + "-"
             + String(date.getMonth() + 1).padStart(2, "0") + "-"
@@ -234,14 +237,13 @@ Pane {
     function allDayRecord(item) {
         return itemRecord(item) ?? ({})
     }
-    // The stored all-day end is exclusive, so the last covered day is end − 1.
+    // The stored all-day end is the LAST COVERED DAY (inclusive) — KCalendarCore
+    // does not use RFC 5545's exclusive convention for all-day events — so the
+    // last covered day is the stored end itself. The date part is read as text
+    // so no zone shift can move the day.
     function lastCoveredDay(record) {
         const end = String(record.end ?? "").slice(0, 10)
-        if (!isoDayPattern(end))
-            return ""
-        const parts = end.split("-")
-        return isoDay(new Date(Number(parts[0]), Number(parts[1]) - 1,
-                               Number(parts[2]) - 1))
+        return isoDayPattern(end) ? end : ""
     }
     function allDayContinues(item, date, direction) {
         const record = allDayRecord(item)

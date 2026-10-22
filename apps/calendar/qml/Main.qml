@@ -1417,18 +1417,20 @@ KosApplicationWindow {
                 const item = { kind: "event", record: event }
                 const start = String(value(event, "start", "")).slice(0, 10)
                 const end = String(value(event, "end", "")).slice(0, 10)
-                // Keep the old per-day semantics: a multi-day event lands on
-                // its start day and every strictly-covered day, not the end.
-                addDayRange(result, start,
-                    end > start ? previousDateKey(end) : start, item)
+                // KCalendarCore treats an all-day end as the LAST COVERED day
+                // (inclusive), unlike a timed end, which is exclusive. The old
+                // unconditional previousDateKey(end) therefore dropped the run's
+                // last column — a Tue-Fri all-day bar rendered Tue-Thu (A03).
+                const lastDay = end > start
+                    ? (itemAllDay(item) ? end : previousDateKey(end)) : start
+                addDayRange(result, start, lastDay, item)
                 const todoId = String(value(event, "linkedTodoId", ""))
                 if (todoId.length > 0) {
                     let todoDays = representedTodos.get(todoId)
                     if (todoDays === undefined)
                         representedTodos.set(todoId,
                             todoDays = Object.create(null))
-                    addDayRange(todoDays, start,
-                        end > start ? previousDateKey(end) : start, item)
+                    addDayRange(todoDays, start, lastDay, item)
                 }
             }
         }
@@ -1569,15 +1571,13 @@ KosApplicationWindow {
         if (itemAllDay(item)) {
             const endText = String(value(record, "end", ""))
             const end = new Date(endText)
-            // Stored end is exclusive: the last covered day is end − 1.
+            // All-day end is the last covered day (inclusive), not exclusive.
             if (!Number.isNaN(end.getTime()) && endText.length >= 10
                     && sameDay(start, end)) {
                 return dateLine + " · " + qsTr("All day")
             }
             if (!Number.isNaN(end.getTime()) && endText.length >= 10) {
-                const lastDay = new Date(end.getFullYear(), end.getMonth(),
-                                         end.getDate() - 1)
-                return dateLine + " – " + AppTheme.formatDate(lastDay, Locale.LongFormat)
+                return dateLine + " – " + AppTheme.formatDate(end, Locale.LongFormat)
                     + " · " + qsTr("All day")
             }
             return dateLine + " · " + qsTr("All day")
