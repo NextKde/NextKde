@@ -779,10 +779,27 @@ Pane {
                                     border.color: allDayChip.inkColor
                                 }
 
+                                // E06: a completed task keeps the strikeout but also
+                                // carries a drawn completion mark — an SVG check, never
+                                // an emoji. It sits right of the all-day ring (the ring
+                                // still names the item type) and takes the chip ink, so
+                                // the chip's own .5 completion opacity subdues it with
+                                // the title instead of making it a second colour.
+                                VectorIcon {
+                                    visible: root.itemCompleted(allDayChip.modelData)
+                                    x: 19 + (allDayChip.continuesLeft
+                                             ? root.allDayJointOverlap : 0)
+                                    anchors.verticalCenter: parent.verticalCenter
+                                    size: 10
+                                    name: "check"
+                                    color: allDayChip.inkColor
+                                }
+
                                 Label {
                                     anchors.fill: parent
                                     anchors.leftMargin: 19
                                         + (allDayChip.continuesLeft ? root.allDayJointOverlap : 0)
+                                        + (root.itemCompleted(allDayChip.modelData) ? 13 : 0)
                                     anchors.rightMargin: 4
                                     text: root.itemTitle(allDayChip.modelData)
                                     // R080: was AppTheme.text (grey) — the band chip is the
@@ -1321,17 +1338,35 @@ Pane {
                                             anchors.bottomMargin: 2
                                             spacing: 1
 
-                                            Label {
+                                            // E06: the completion mark leads the
+                                            // title, drawn (never an emoji) in the
+                                            // chip's own ink; Row only lays out x,
+                                            // so the icon centres on the title line.
+                                            Row {
                                                 width: parent.width
-                                                text: root.itemTitle(timedChip.item)
-                                                // R-CHIP: E02 title 11–12 medium.
-                                                font.pixelSize: 11
-                                                font.weight: Font.Medium
-                                                // R079: was AppTheme.text (grey). The ref's ink is
-                                                // the chip's own calendar colour at half value.
-                                                color: timedChip.inkColor
-                                                font.strikeout: root.itemCompleted(timedChip.item)
-                                                elide: Text.ElideRight
+                                                spacing: 3
+
+                                                VectorIcon {
+                                                    visible: root.itemCompleted(timedChip.item)
+                                                    anchors.verticalCenter: parent.verticalCenter
+                                                    size: 10
+                                                    name: "check"
+                                                    color: timedChip.inkColor
+                                                }
+
+                                                Label {
+                                                    width: parent.width
+                                                        - (root.itemCompleted(timedChip.item) ? 13 : 0)
+                                                    text: root.itemTitle(timedChip.item)
+                                                    // R-CHIP: E02 title 11–12 medium.
+                                                    font.pixelSize: 11
+                                                    font.weight: Font.Medium
+                                                    // R079: was AppTheme.text (grey). The ref's ink is
+                                                    // the chip's own calendar colour at half value.
+                                                    color: timedChip.inkColor
+                                                    font.strikeout: root.itemCompleted(timedChip.item)
+                                                    elide: Text.ElideRight
+                                                }
                                             }
                                             // R246: the ref's 2-hour chips open their
                                             // secondary line with a small outlined clock
