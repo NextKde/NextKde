@@ -1,6 +1,20 @@
 # LQ0 — 液态组件接入与剩余 spec 收敛
 
 ## 本轮
+- LQ18c 全量回归 15/N：**PENDING 对账完成（无产品改动、未构建、未重拍）**。把 `spec.md`
+  表内 **40 个 PENDING 行**逐条与 rounds.md 已取证记录对齐，并把状态回填进 spec.md：
+  **37 行 PASS + 3 行 PARTIAL**，每条都带 rounds 出处。映射：
+  - M04=LQ12（mini 红圈/灰盘/外月 muted）；A01–A04=LQ13（28/80、连续条、`+2`）；
+    E01–E04=LQ14a/LQ14b（E02 字号 R240/R241；E05 仅蓝/绿腿）；E06=R31/R33；
+    N01=R157；N02=LQ14a；V01/V02/V04/V05=LQ12；V03=R153/R154；
+    D01/D02=回归 1/N、2/N；D06–D13=回归 6/N–14/N；
+    O01–O08=R149（dark + 出现/消失连续帧 R152）；O09=R34+R152（可达面）；
+    X07=R148。D05 旧注记“任务编辑器 footer 待验”同步更新为已由 LQ08 / LQ18c 13/N 结清。
+  - **唯一剩余清单（3 条，见「仍差」）**：E05 黄名单腿无证据；D04 内联
+    `Todo list`/`Priority` 仍 11 Normal；D03 卡面/描边两条待裁决。
+  - 未动 D12/D13 的结论与帧；无代码、几何、token、玻璃预算变更。
+
+## 上一轮
 - LQ18c spec 回归 14/N：**D13 弹框遮罩「父窗变暗可辨」PASS（无产品改动）**。1100×692 light
   week 2026-04-02，`toolbarAdd` 打开「新建日程」事件编辑器：
   - scrim 合成乘性且全窗均匀 **×0.75**：白画布 255→**191**、侧栏 237→**178**、
@@ -16,21 +30,6 @@
   - 参考 `macos26/alert-macos.png`：父窗整体中性灰、白卡、无内容可比对；α .25 同向。
     帧 `r060-d13-scrim.png`、`r060-d13-parent-left-2x.png`、`r060-d13-parent-right-2x.png`。
 
-## 上一轮
-- LQ18c spec 回归 13/N：**D12 弹框关闭唯一性 PASS（一处产品改动）**。1100×692 light：
-  - 设置面板（`KosSettingsDialog`，日历/任务/天气共用）：原头部有 `×`
-    （Accessible "Close settings"）+ footer `完成` 两个关闭口 → **删除头部 `×`**，
-    现在唯一关闭是 footer `完成`（Esc 亦关，`closePolicy: CloseOnEscape`）；
-    `恢复默认设置` 非关闭。卡面/圆角/内容/footer 布局零变化（`r059-settings.png`）。
-  - 事件编辑器：编辑态 footer 保存/取消/删除日程，确认态取消/删除日程，
-    卡内无 `×`；删除确认是**同卡内状态切换**（footer 列替换），不是第二个 Popup
-    → 无 sheet 套 sheet（`r059-event-edit.png` / `r059-event-confirm.png`）。
-  - 任务编辑器 New task：保存/取消，无 `×`（`r059-task-new.png`）；编辑/确认态
-    沿用同结构（D05/D07 已实证）。
-  - Import/Export：独立顶层系统 FileDialog，打开/取消单一关闭口，背后无日历弹框
-    （`spectacle -a`：`r059-import.png`，R46 口径）。
-  - 浮层→编辑器：Edit 先 `root.close()` 再 `editRequested()`（`EventDetailsPopover.qml:239-240`），
-    不会两层瞬时玻璃叠放。玻璃预算不变 2/2、1/1；日志无 error。
 
 ## 队列（一轮一条；[x]=已完成）
 - [x] LQ01 基线：light week 1100×720 / 760×540；日志无启动回归。
@@ -107,13 +106,16 @@
 - [x] LQ18c spec 回归 14/N：**D13 scrim PASS**——开弹框时父窗均匀 ×0.75（白 191/
   侧栏 178/周末 187），内容文字 2x 可读，非纯黑；跨窗可交互按 `modal: true`
   窗口内 Overlay 判 PASS（单窗口无实拍）。
-- [ ] LQ18c spec 全量 PASS 回归：第 1 组 D01–D13（**D01–D13 全部取证**；D03 的
-  token/描边待裁决）、第 2 组
-  O01–O09（O01–O08 R149、O09 已结清）、
-  X01–X05 + P02/P03、tooltip 剩余腿、V03/V03b 月跨天连续条已完成
-  → 其余 PENDING 逐条核对清零（N01、E06 已结清）。
+- [x] LQ18c 全量回归 15/N：**PENDING 对账**——40 行全部对齐，spec.md 回填 37 PASS +
+  3 PARTIAL；唯一剩余 = E05 黄名单腿 / D04 内联标签 / D03 两条裁决。
+- [ ] LQ18c 全量回归 16/N：E05 黄名单腿取证（加 fixture 黄色 list）；之后 D04 内联标签
+  → 最终回归。
 
 ## 已改
+- LQ18c 全量回归 15/N（对账）：**无产品改动**。只改 `tmp/ui-acceptance/calendar/spec.md`
+  状态列（40 个 PENDING → 37 PASS + 3 PARTIAL，附 rounds 出处），并把 D05 的
+  “任务编辑器 footer 待验”旧注记更新为已由 LQ08 / LQ18c 13/N 结清。未构建、未启动、
+  未截图；D12/D13 的帧与结论未动。
 - LQ18c spec 回归 14/N（D13）：**无产品改动**。只驱动/量测：`LiquidDialog.qml:16`
   `Overlay.modal` 黑 α .25（实测全窗 ×0.75）；`EventEditorDialog.qml:30` /
   `CalendarTaskEditorDialog.qml:19` 的 `modal: true` 为窗口内 Overlay（不跨窗）；
@@ -220,19 +222,19 @@
   透出）；单日 chip 仍 `withAlpha`。其余零改动。
 
 ## 仍差
-1. D03 弹框卡片结构：双层阴影已改为 `shadowAmbient`+`shadowKey`（本轮 PASS）；剩两条
-   待裁决——① 面仍硬编码 `#ffffff` / `#29292d` 而非 `cardSurface`（该 token 在玻璃会话下
-   α .54 半透明，会透出弹框背后内容且合成 ≠255，见外推）；② 无 1px `border`
-   （`alert-macos.png` 无可见描边，字面要求与之冲突）。
-2. 浮层/菜单：详情浮层为**单张中性卡**（参考是 246 壳 + 内部白行），面 240 与菜单 255
-   差 Δ15（参考 Δ9）；阴影偏弱、菜单亮卡无磨砂色偏。（O09 菜单翻转不可达，见外推；
-   tooltip 翻转同理。hover 圆角 r8 已于本轮实测结清，不再列。）
-3. D04 内联标签字重：联动待办行的 `Todo list` / `Priority`（`EventEditorDialog.qml:752/:764`）
-   仍为 11px Normal，仅在勾选“同时将此日程显示为待办任务”时出现；D04 要求标签 11 DemiBold，
-   下轮同步并复拍勾选态。（主字段七标签本轮已改并 PASS。）
-（tooltip 各腿已结清：dark、出现/消失连续帧通过；上方翻转在当前布局不可达，见外推；
-密集 08:00 簇 45px 道 + 标题 ellipsis 为参考同款外推，已移入 rounds.md，不再列。
-V03/V03b 月跨天连续条已结清，细节见 rounds.md R153–R154。）
+1. **E05 黄名单腿（唯一无证据条目）**：隔离 profile 的 list 只有蓝 `#4f8cff`、绿
+   `#39c487`，“yellow text remains readable”没有实拍；一致性的其它子句（全天/计时同
+   token 同色）已 PASS。下轮第 1 条：只给 fixture 加黄色 list + 事件/待办，light 实拍
+   侧栏色点、全天条、timed chip 三处同色与黄底文字可读性。
+2. **D04 内联标签字重**：`EventEditorDialog.qml:752/:764` 的 `Todo list` / `Priority`
+   仍为 11px Normal，仅在勾选“同时将此日程显示为待办任务”时出现；D04 要求标签 11
+   DemiBold。主字段七标签已改并 PASS，下轮同步并复拍勾选态。
+3. **D03 卡片结构两条待裁决**：① 面硬编码 `#ffffff` / `#29292d` 而非 `cardSurface`
+   （该 token 在玻璃会话下 α .54/.46 半透明且带 accent 微染色，与 D01 实测 255 及参考
+   白卡冲突）；② 无 1px `border`（`alert-macos.png` 无可见描边）。双层阴影已改为
+   `shadowAmbient`+`shadowKey` 并 PASS。需人工裁决，见「外推待确认」。
+（浮层/菜单观感差异不是 spec ID 失败，已归入 X07 外推词条；tooltip 各腿、O09 可达面、
+V03/V03b 均已结清，细节见 rounds.md R152–R154。）
 
 ## 外推待确认
 - D12 设置面板删除 `×` 后，标题文本仍从卡内 x≈415 起（图标右缘+间距应为 345），
@@ -384,8 +386,16 @@ V03/V03b 月跨天连续条已结清，细节见 rounds.md R153–R154。）
 - LQ16：密集簇 3 道时标题只余 3 字 + ellipsis 属参考同款行为（参考无重叠密集图，按 macOS
   窄事件惯例外推），不算 X05 的“unintended overlap”。
 
+- E05 黄色腿：隔离 profile 的 `pim/metadata.json` 只有蓝/绿两个 list（`#4f8cff` /
+  `#39c487`），“yellow text remains readable”无法从现有帧判定，也未声称通过；渲染路径
+  与蓝/绿相同（`listColor` → `mix` → `chipInk`），下轮加黄色 fixture 取证。
+- 对账口径（15/N）：spec.md 回填只引用已有实拍/量测记录，不重拍、不把外推升格为实拍。
+  X03 dark-empty、D10 reduceMotion、D13 跨窗、O09 垂直翻转仍保留各自
+  “未实拍/不可达（N/A）”的原始口径。
+
 ## Next round
-LQ18c spec 全量 PASS 回归 15/N：**PENDING 对账**。把 `spec.md` 表内全部 PENDING 行
-与 state.md / rounds.md 的已取证记录逐条对齐，产出唯一剩余清单（预期仅 D03 两条
-待裁决项；O01–O08 = R149、D13 本轮已结清）。只对账，不重拍、不改产品；若发现
-无证据的条目，单独列出并作为下一轮的第 1 条。不要动 D12/D13 的既有帧与结论。
+LQ18c 全量回归 16/N：**E05 黄色类别腿取证**。只动隔离 profile 的 `pim/metadata.json`
+（加一条黄色 list，如 `#f2c14e`）与一条事件/待办，light 1100×692 week 实拍：侧栏色点、
+全天条、timed chip 三处同色；黄色 chip 文字（`chipInk`）可读性用 4x 裁切判定。
+只取证，预期无产品改动；若黄底文字不可读再最小修复并复拍（回路最多 2 次）。
+不动 D12/D13 结论与帧，不动 E05 已 PASS 的蓝/绿部分。
