@@ -20,6 +20,11 @@ LiquidDialog {
     // P02: one consistent field height for every editor control.
     readonly property int fieldHeight: 30
     readonly property int labelColumnWidth: 56
+    // LQ18c: plain combo field surface — same tokens as the liquid text fields
+    // beside them (α .06, r10, no idle rim) so every control in the form reads
+    // as one grammar. Mirrors CalendarTaskEditorDialog.fieldFill.
+    readonly property color fieldFill: AppTheme.dark
+        ? Qt.rgba(1, 1, 1, .06) : Qt.rgba(0, 0, 0, .06)
 
     title: editing ? qsTr("Edit event") : qsTr("New event")
     modal: true
@@ -751,6 +756,9 @@ LiquidDialog {
                         Layout.preferredHeight: fieldHeight
                         model: root.availableLists
                         textRole: "name"
+                        fillColor: root.fieldFill
+                        cornerRadius: 10
+                        strokeWidth: 0
                         Accessible.name: qsTr("Linked todo list")
                     }
                     Label { text: qsTr("Priority"); color: AppTheme.mutedText; font.pixelSize: 11 }
@@ -760,6 +768,9 @@ LiquidDialog {
                         Layout.preferredHeight: fieldHeight
                         model: [qsTr("None"), qsTr("Low"), qsTr("Medium"),
                             qsTr("High")]
+                        fillColor: root.fieldFill
+                        cornerRadius: 10
+                        strokeWidth: 0
                         Accessible.name: qsTr("Linked todo priority")
                     }
                 }
@@ -782,6 +793,9 @@ LiquidDialog {
                     Layout.preferredHeight: fieldHeight
                     model: [qsTr("Does not repeat"), qsTr("Daily"), qsTr("Weekly"),
                         qsTr("Monthly"), qsTr("Yearly")]
+                    fillColor: root.fieldFill
+                    cornerRadius: 10
+                    strokeWidth: 0
                     Accessible.name: qsTr("Event recurrence")
                 }
             }
@@ -804,6 +818,9 @@ LiquidDialog {
                     model: [qsTr("None"), qsTr("At start"), qsTr("5 minutes before"),
                         qsTr("15 minutes before"), qsTr("30 minutes before"),
                         qsTr("1 hour before"), qsTr("1 day before")]
+                    fillColor: root.fieldFill
+                    cornerRadius: 10
+                    strokeWidth: 0
                     Accessible.name: qsTr("Event reminder")
                 }
             }
