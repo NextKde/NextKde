@@ -1754,13 +1754,32 @@ KosApplicationWindow {
             }
         }
 
+        // LQ05: the sidebar is the second persistent glass surface (2/2).
+        // The calendar has no wallpaper or scrolling content behind it, so the
+        // flat underlay stands in for the sampled desktop: regular fill (§3,
+        // white .58 / #1C1C1E .52) over 212 / 53 composites exactly to the
+        // reference's measured 237 light plane and the existing 40 dark plane.
         Rectangle {
             id: sidebarPlane
+            objectName: "calendarSidebarUnderlay"
             anchors.left: parent.left
             anchors.top: parent.top
             anchors.bottom: parent.bottom
             width: sidebar.width
-            color: root.tahoe.sidebarPlane
+            color: root.tahoeDark ? "#353535" : "#D4D4D4"
+        }
+        LiquidSurface {
+            id: sidebarMaterial
+            objectName: "calendarSidebarMaterial"
+            anchors.fill: sidebarPlane
+            radius: 0
+            tintColor: root.tahoeDark ? "#1C1C1E" : "#FFFFFF"
+            tintStrength: root.tahoeDark ? 0.52 : 0.58
+            // Unsampled surface: pigmented diffuse finish only, never a fake
+            // blur; the flat reference plane carries no specular glint.
+            diffuseStrength: 1
+            reflectionStrength: 0
+            rimColor: "transparent"
         }
 
         Rectangle {
