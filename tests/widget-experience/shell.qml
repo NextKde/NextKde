@@ -18,6 +18,25 @@ ShellRoot {
     property var cards: null
     property var combinations: []
     property real holdStartedAt: 0
+    property int timerStage: 0
+    property bool capturePending: false
+
+    function captureBell(name) {
+        if (capturePending) return
+        const bell = find(desktop.contentItem, "timer-end-bell")
+        check(bell && bell.visible, "countdown bell is visible")
+        capturePending = true
+        check(bell.grabToImage(function(result) {
+            try {
+                check(result.saveToFile(Quickshell.env("WIDGET_CAPTURE_DIR") + "/" + name + ".png"), "save " + name)
+                capturePending = false
+                timerStage++
+            } catch (error) {
+                console.error("WIDGET_EXPERIENCE_FAIL: " + error)
+                Qt.quit()
+            }
+        }), "capture " + name)
+    }
 
     function find(item, name) {
         if (item.objectName === name) return item
@@ -122,6 +141,40 @@ ShellRoot {
                         AppearanceConfigService.shellStyle = next.form
                         AppearanceConfigService.updateWidgetStyle(next.style)
                         IconAppearanceService.mode = next.icon
+                        return
+                    }
+                    // Keep the real countdown alive while changing the widget
+                    // surface. Capture its Canvas, not just a colour property:
+                    // a stale texture can have the right binding and wrong pixels.
+                    switch (test.timerStage) {
+                    case 0:
+                        interval = 300
+                        AppearanceConfigService.shellStyle = "macos"
+                        AppearanceConfigService.updateWidgetStyle("color")
+                        desktop.addTimerMinutes(15)
+                        desktop.toggleTimer()
+                        click(find(desktop.contentItem, "clock-timer-button"))
+                        test.timerStage++
+                        return
+                    case 1:
+                        check(desktop.timerView && desktop.timerRunning, "countdown remains active")
+                        captureBell("timer-color")
+                        return
+                    case 2:
+                        AppearanceConfigService.updateWidgetStyle("glass")
+                        test.timerStage++
+                        return
+                    case 3:
+                        check(desktop.timerView && desktop.timerRunning, "countdown survives glass switch")
+                        captureBell("timer-glass")
+                        return
+                    case 4:
+                        AppearanceConfigService.updateWidgetStyle("color")
+                        test.timerStage++
+                        return
+                    case 5:
+                        check(desktop.timerView && desktop.timerRunning, "countdown survives colour restore")
+                        captureBell("timer-restored")
                         return
                     }
                     // The runner restarts this same fixture with the saved colour

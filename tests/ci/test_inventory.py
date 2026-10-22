@@ -19,8 +19,9 @@ def test_entry(name, label, **properties):
 class InventoryTests(unittest.TestCase):
     def setUp(self):
         self.entries = [test_entry("data", "data"), test_entry("logic", "logic"),
-                        test_entry("ui", "headless")]
-        self.required = {"data-platform": ["data"], "logic": ["logic"], "headless": ["ui"]}
+                        test_entry("widget", "widgets"), test_entry("ui", "headless")]
+        self.required = {"data-platform": ["data"], "logic": ["logic"],
+                         "widgets": ["widget"], "headless": ["ui"]}
 
     def test_missing_registration_and_changed_label(self):
         self.entries.pop()
@@ -73,6 +74,14 @@ class InventoryTests(unittest.TestCase):
             errors = ci.results(report, directory)[1]
             self.assertIn("Failed in logic: logic", errors)
             self.assertTrue(any(error.startswith("Invalid headless report:") for error in errors))
+
+    def test_widget_regression_must_run_and_report(self):
+        report = ci.inventory(self.entries, self.required)
+        self.assertNotIn("widget", report["excluded"])
+        with tempfile.TemporaryDirectory() as temporary:
+            directory = Path(temporary)
+            errors = ci.results(report, directory)[1]
+            self.assertIn("No result in widgets: widget", errors)
 
 
 if __name__ == "__main__":

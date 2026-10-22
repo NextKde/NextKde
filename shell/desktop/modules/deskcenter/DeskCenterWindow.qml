@@ -754,6 +754,7 @@ PanelWindow {
 
 	                Rectangle {
                     id: timerButton
+                    objectName: "clock-timer-button"
                     width: 21
                     height: 21
                     radius: width / 2
@@ -839,11 +840,18 @@ PanelWindow {
                         y: timerDial.y + timerTimeText.y - height - 2
                         spacing: 5
                         Canvas {
+                            id: timerBell
+                            objectName: "timer-end-bell"
                             width: 14
                             height: 16
+                            readonly property color strokeColor: AppearanceTokens.content.onBackdrop
+                                ? "#ffffff" : "#ffb028"
+                            // The clock bypasses the ancestor saturation layer.
+                            // Invalidate this cached artwork when its ink changes.
+                            onStrokeColorChanged: requestPaint()
                             onPaint: {
                                 const ctx = getContext("2d")
-	                                ctx.reset(); ctx.strokeStyle = AppearanceTokens.content.onBackdrop ? "#ffffff" : "#ffb028"; ctx.lineWidth = 1.3; ctx.lineCap = "round"
+	                                ctx.reset(); ctx.strokeStyle = timerBell.strokeColor.toString(); ctx.lineWidth = 1.3; ctx.lineCap = "round"
                                 ctx.beginPath(); ctx.moveTo(3, 10); ctx.quadraticCurveTo(4, 8.7, 4, 6.4)
                                 ctx.quadraticCurveTo(4, 3.8, 7, 3.8); ctx.quadraticCurveTo(10, 3.8, 10, 6.4)
                                 ctx.quadraticCurveTo(10, 8.7, 11, 10); ctx.lineTo(3, 10); ctx.stroke()

@@ -67,6 +67,9 @@
     "kos-shell.traffic-history",
     "kos-settings.power-config"
   ],
+  "widgets": [
+    "kos-ui.widget-experience"
+  ],
   "headless": [
     "kos-calculator.engine",
     "kos-shell.dock-selection-highlight",

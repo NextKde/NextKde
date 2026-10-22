@@ -150,6 +150,17 @@ jobs:
             --output-log "$GITHUB_WORKSPACE/.build/tests/test-results/headless.log" \
             --output-junit "$GITHUB_WORKSPACE/.build/tests/test-results/headless.xml"
 
+      - name: Run widget appearance and countdown rendering regressions
+        if: ${{ !cancelled() && steps.prepare.outcome == 'success' }}
+        env:
+          KOS_WIDGET_QA: ${{ github.workspace }}/.build/tests/test-results/widget-experience
+        run: |
+          mkdir -p .build/tests/test-results
+          ctest --test-dir .build/tests --output-on-failure --no-tests=error \
+            -L '^widgets$' \
+            --output-log "$GITHUB_WORKSPACE/.build/tests/test-results/widgets.log" \
+            --output-junit "$GITHUB_WORKSPACE/.build/tests/test-results/widgets.xml"
+
       - name: Summarise actual test results
         if: always()
         run: python tools/ci_tests.py report
