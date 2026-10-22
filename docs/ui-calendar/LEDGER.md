@@ -1,28 +1,26 @@
 # LQ0 — 液态组件接入与剩余 spec 收敛
 
+DONE
+
 ## 本轮
-- LQ18c 全量回归 17/N：**D04 内联标签字重 PASS（产品改动 2 处，仅两行属性）**。
-  `EventEditorDialog.qml:761/:773` 的 `Todo list` / `Priority` 由 11 Normal 改为
-  **11 DemiBold**，与七个主字段标签同式；字号、`AppTheme.mutedText`、RowLayout spacing 8、
-  两个组合框的 fill/radius/stroke、可见性绑定全部零改动。
-  light+dark 1100×692 实拍（打开事件编辑器 → 点勾「同时将此日程显示为待办任务」）：
-  - light 墨量（暗像素/bbox）：内联 **.470/.556**，主字段 .533–.590，同尺寸 11 Normal
-    提示行 **.267** → 内联进入 DemiBold 档；
-  - dark（亮像素/bbox）：内联 **.353/.416**，主字段 .519，提示行 **.126**；
-  - 布局未动：两标签 ink y408..417 与组合框文字同基线，行仍 404..421，下方「重复」
-    仍 y448；「优先级」完整无裁切。
-  - 帧 `r063-d04-link-unchecked.png`（勾选前）、`r063-d04-link-checked.png`（light）、
-    `r063-d04-link-checked-dark.png`、`r063-d04-inline-4x.png`、`r063-d04-inline-dark-3x.png`。
-  - spec.md D04 由 PARTIAL 回填 **PASS**。玻璃预算不变：持续 2/2，瞬态 1/1（弹框）。
+- LQ18c 全量回归 18/N：**D03 卡片结构结清（裁决，无产品改动）**。复核
+  `macos26/alert-macos.png` 卡面：面 = 不透明 **232**（#E8E8E8，均匀、无透底）；
+  四缘均有 1px **255 白高光内缘**（左 x565 `255→242→234→232`、右 x914、顶 y341–342、
+  底 y549–550），外侧为 148–188 柔影——即参考的“边”是白高光，不是深色 hairline。
+  `sheets-macos-notes.png` 主体面 **255**，故编辑器类弹框写 255 与 sheet 参考一致。
+  我们的 `R40-d03-shadow.png`：面 255、边缘仅 1px AA（216）后接 174→191 双层柔影，
+  dark 面 41,41,45；`R40-d03-tl-after-4x.png` 无内描边、无双环。
+  - 裁决：① 面保留硬编码不透明 `#ffffff`/`#29292d`（`LiquidDialog.qml:37`）——
+    `cardSurface` 在玻璃会话下 α .54/.46 + accent 微染，会透底并违背参考的不透明卡面；
+    ② 1px `border` 按参考图豁免——参考唯一边处理是 1px 白高光（255 对 232），其“亮缘”
+    角色在 255 面上已由面本身承担；参考无对比色 hairline，我们边缘为单层 AA（D02 已判
+    无双层描边）；③ 阴影维持 ambient+key（回归 3/N 已 PASS）。不改 token、不改视觉、不重拍。
+  - `spec.md` D03 由 PARTIAL 回填 **PASS**；「仍差」清空 → 写 DONE。
+  - 玻璃预算不变：持续 2/2，瞬态 1/1（弹框）。
 
-## 上一轮（LQ18c 16/N E05）
-- E05 黄名单腿 PASS（无产品改动）：隔离 profile 加 `Yellow #f2c14e` list + 两条黄色
-  VTODO；侧栏点色精确、全天/计时 chip 同填充 (253,244,225)、stripe #f2c14e、
-  ink (121,96,39) 对比度 5.46:1、4x 可读。spec E05 回填 PASS。
-
-## 前一轮（LQ18c 15/N 对账）
-- 40 个 PENDING 行与 rounds.md 取证对齐，spec.md 回填 37 PASS + 3 PARTIAL；
-  唯一剩余为 E05 黄腿 / D04 内联标签 / D03 两条裁决，现只剩 D03。
+## 上一轮（LQ18c 17/N D04）
+- `EventEditorDialog.qml:761/:773` 内联 `Todo list`/`Priority` 11 Normal→DemiBold；
+  light/dark 墨量均进入 DemiBold 档、布局零变；spec D04 回填 PASS。
 
 ## 队列（一轮一条；[x]=已完成）
 - [x] LQ01 基线：light week 1100×720 / 760×540；日志无启动回归。
@@ -109,18 +107,13 @@
   对同尺寸 Normal 提示行 .267/.126；布局零变；spec D04 回填 PASS。
 
 ## 已改
-- LQ18c 全量回归 17/N（D04 内联标签）：`EventEditorDialog.qml:761/:773` 两个内联
-  `Label` 各补 `font.weight: Font.DemiBold`，并把单行声明展开为多行（与七个主字段
-  标签同式）；字号 11、颜色、间距、组合框参数、可见性绑定零改动。
-- 更早的已改记录（LQ01–LQ18c 16/N）见 `rounds.md`，不再在 state 滚动窗口重复。
+- LQ18c 全量回归 18/N（D03）：**无产品改动**。`LiquidDialog.qml:24/:30` 已是
+  ambient+key 双影、`:37` 已是不透明硬编码面、r24 未动；本轮只做裁决与 spec 回填。
+- 更早的已改记录（LQ01–LQ18c 17/N）见 `rounds.md`，不再在 state 滚动窗口重复。
 
 ## 仍差
-1. **D03 卡片结构两条待裁决**：① 面硬编码 `#ffffff` / `#29292d` 而非 `cardSurface`
-   （该 token 在玻璃会话下 α .54/.46 半透明且带 accent 微染色，与 D01 实测 255 及参考
-   白卡冲突）；② 无 1px `border`（`alert-macos.png` 无可见描边）。双层阴影已改为
-   `shadowAmbient`+`shadowKey` 并 PASS。下轮按“参考图优先”结清并回填 spec。
-（浮层/菜单观感差异不是 spec ID 失败，已归入 X07 外推词条；tooltip 各腿、O09 可达面、
-V03/V03b 均已结清，细节见 rounds.md R152–R154。）
+无（全部 spec ID PASS，最终回归 18/N 完成）。浮层/菜单观感差异不是 spec ID 失败，
+已归入 X07 外推词条；tooltip 各腿、O09 可达面、V03/V03b 均已结清，细节见 rounds.md。
 
 ## 外推待确认
 - D12 设置面板删除 `×` 后，标题文本仍从卡内 x≈415 起（图标右缘+间距应为 345），
@@ -151,14 +144,19 @@ V03/V03b 均已结清，细节见 rounds.md R152–R154。）
 - 文件选择器（Import/Export）是独立顶层窗口：主窗 `captureClient` 只含日历窗口，整屏
   `spectacle` 在无人值守 VM 下返回空白（输出被blank），活动窗口 `spectacle -a` 可用。
   故 D09 ② 的 Import/Export 证据是活动窗口截图，不是合成桌面截图。
-- D03 的 `cardSurface`：`AppTheme.qml:192-193` = `withAlpha(card, glassActive ? .54/.46 : 1)`。
-  评审 VM 是有合成器模糊的玻璃会话，玻璃激活时弹框面会变成 α .54/.46，背后的窗口内容
-  与 scrim 会透出，和参考 `alert-macos.png` 的不透明白卡、以及 D01 已实测的 255 冲突；
-  即使 `glassActive=false`，`card = mix(windowRaised, accent, .018)`（`:159`）也带 accent
-  微染色，不等于 255。故 D03 的“face = cardSurface”按参考图与既有 PASS 行为优先，
-  **保留硬编码卡面**。若产品要字面满足 spec，应先裁决“弹框允许半透明/微染色”。
-- D03 的 1px `border` 同样按参考图（无可见描边）判为可豁免；两条都需人工裁决，
-  不代表实现缺陷。
+- D03 `cardSurface` 豁免（已裁决，D03 回填 PASS）：`AppTheme.qml:192-193` =
+  `withAlpha(card, glassActive ? .54/.46 : 1)`。评审 VM 是玻璃会话，玻璃激活时弹框面会变
+  α .54/.46，背后窗口与 scrim 透出，与参考 `alert-macos.png` 的不透明、均匀、无透底卡面
+  冲突（实测参考面 232 全卡一致）；`glassActive=false` 时 `card = mix(windowRaised, accent,
+  .018)`（`:159`）仍带 accent 微染。故保留 `LiquidDialog.qml:37` 硬编码不透明面
+  `#ffffff`/`#29292d`。参考 sheet（`sheets-macos-notes.png`）主体面为 255，编辑器类弹框
+  取 255 与之同族；alert 的 232 属 alert material，不作为编辑器面值。
+- D03 `border` 豁免（已裁决，D03 回填 PASS）：复核发现参考**确有** 1px 白高光内缘
+  （四缘 255 对 232 面，见本轮量测），并非“无描边”。但它不是对比色 hairline，而是
+  与卡面同族的亮缘；我们卡面本身已是 255，亮缘角色由面承担，且边缘只有单层 AA
+  （D02 已判无双层描边）。若将来把卡面降到 232 以逐像素贴 alert，则必须同时补
+  `AppTheme.innerHighlight` 1px 内缘，并重测 D04 墨量 / D06 次按钮对比 / D08 三态填充；
+  需人工裁决是否做此全局改动。
 - 任务编辑器高度：编辑态（三行 footer）实测卡 464、备注→保存 16px；New task（两行 footer）
   与删除确认态未复拍。高度公式随 footer implicitHeight 联动，两态只会更矮（760×540 下限
   476 仍高于 464，不触发滚动），风险低。
@@ -185,9 +183,6 @@ V03/V03b 均已结清，细节见 rounds.md R152–R154。）
   同一 token、不同底，判同一视觉语言；不是新 token。
 - D13 的“应用其他窗口仍可交互”：评审 VM 只有一个窗口，无法实拍。按 HIG 语义（modal 只
   冻结本窗口）与 `Dialog.modal: true` 的实现判 PASS，不声称有跨窗口实拍。
-- D03 与参考冲突：`alert-macos.png` 卡面没有可见描边，D03 字面却要求 1px `border`。本轮保留
-  “无描边 + E4 大软阴影”（贴合参考图），把 D03 记为仍差；若必须满足字面，需裁决描边可见度
-  是否可接受。
 - X07 色调分层：浮层 240（plain α .06 over neutralPlane）与菜单 255（regular 玻璃压白纸）
   同屏可辨。参考自身也分层（sheet 255 / popover 壳 246 / tooltip 226 / 菜单染色玻璃），
   故按“角色分层”判同一语言；但参考浮层壳内有白行，我们是单卡，观感更平。是否给浮层加
@@ -281,9 +276,5 @@ V03/V03b 均已结清，细节见 rounds.md R152–R154。）
   “未实拍/不可达（N/A）”的原始口径。
 
 ## Next round
-LQ18c 全量回归 18/N：**D03 卡片结构两条结清**。复核 `macos26/alert-macos.png` 的卡面
-（不透明白卡、无可见 1px 描边）与 D01 实拍 255；把 ① `LiquidDialog.qml:22` 面保留硬编码
-`#ffffff`/`#29292d`（不用半透明/染色的 `cardSurface`）、② 无 1px border 判为**按参考图
-豁免**，把 spec.md D03 由 PARTIAL 回填 PASS 并在「外推待确认」写明豁免理由；不切换
-token、不改视觉、不重拍（D03 已有的 4x 阴影帧足够）。完成后做一次 DONE 前自检：
-「仍差」清空则单独一行写 `DONE`。
+无 — 全部 spec ID PASS、最终回归 18/N 完成，已写 DONE。等待人工复核；若追加新
+ID/参考图，从新条目继续。
