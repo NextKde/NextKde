@@ -408,6 +408,7 @@ LiquidDialog {
 
             // Primary: the AcceptRole standard button of the shared footer.
             KosButton {
+                objectName: "eventEditorSaveButton"
                 // D06: the alert action bar is a capsule, not a rounded rect.
                 buttonRadius: height / 2
                 Layout.fillWidth: true
@@ -420,6 +421,7 @@ LiquidDialog {
 
             // Secondary: the RejectRole standard button of the shared footer.
             KosButton {
+                objectName: "eventEditorCancelButton"
                 // D06: the alert action bar is a capsule, not a rounded rect.
                 buttonRadius: height / 2
                 Layout.fillWidth: true
@@ -429,6 +431,7 @@ LiquidDialog {
             }
 
             KosButton {
+                objectName: "eventEditorDeleteButton"
                 // D06: the alert action bar is a capsule, not a rounded rect.
                 buttonRadius: height / 2
                 Layout.fillWidth: true
@@ -470,6 +473,7 @@ LiquidDialog {
 
             KosButton {
                 id: confirmCancelButton
+                objectName: "eventEditorConfirmCancelButton"
                 // D06: the alert action bar is a capsule, not a rounded rect.
                 buttonRadius: height / 2
                 Layout.fillWidth: true
@@ -481,6 +485,7 @@ LiquidDialog {
             }
 
             KosButton {
+                objectName: "eventEditorConfirmDeleteButton"
                 // D06: the alert action bar is a capsule, not a rounded rect.
                 buttonRadius: height / 2
                 Layout.fillWidth: true
