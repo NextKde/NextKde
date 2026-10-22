@@ -1,12 +1,14 @@
 # LQ0 — 液态组件接入与剩余 spec 收敛
 
 ## 本轮
-- LQ18c spec 回归 1/N：**D01 弹框 scrim 取证结清**。light 1100×692，week 2026-10-15，
-  toolbarAdd 点开“新建日程”，帧 `R38-d01-scrim.png` 同帧三项全中：
-  ① 卡片独立浮起——卡面纯白 255、圆角、卡外近缘 170 / 稍远 180（E4 阴影晕）对远区 191；
-  ② 父窗整体压暗且非纯黑——白画布/工具栏均 191 = 255×.75（黑 α.25），周末列 249→187、
-  chip 基色同步 ×.75，全窗含边缘 (20,20)/(1085,300) 一致；③ 父窗内容仍可辨——2x 裁切下
-  “周一 12 / 周二 13”与 “Team offsite / Design sprint” chip 文字清晰可读。无产品改动。
+- LQ18c spec 回归 2/N：**D02 弹框圆角取证结清**。复用 `R38-d01-scrim.png`（light 1100×692，
+  “新建日程”），四角 4x 裁帧 `R39-d02-{tl,tr,bl,br}-4x.png`：
+  ① 卡边界实测 x368–746 / y49–667 = 379×619（声明 380×620，差 1px 为 AA）；
+  ② TL/TR/BL/BR 四角均为圆弧、无直角；按 TL 逐行白像素左缘拟合 r=24 逐点吻合
+  （y49 inset 18→y68 inset 0，r24 理论 19.1→0.5），BL 拟合 25–26 为半像素/AA 采样差；
+  ③ 单层边缘：卡外阴影梯度 161–173 → 1px AA（216/229）→ 卡面 255，无内层 1px 描边线，
+  无双层描边。r24 = `AppTheme.largeRadius`（`AppTheme.qml:231`），LiquidDialog
+  `LiquidDialog.qml:18-22` 声明 radius 24，与实测一致。无产品改动。
 
 ## 队列（一轮一条；[x]=已完成）
 - [x] LQ01 基线：light week 1100×720 / 760×540；日志无启动回归。
@@ -58,12 +60,16 @@
   95→16px；footer 固定高度不变，D05 三行未压。
 - [x] LQ18c 收尾 14/N：**菜单 hover 圆角结清**——实测水平内缩 8 ⇒ r_inner 8，原 r8 正确，
   无产品改动；light hover 帧已拍（前：开菜单无 hover；后：首行 hover 244）。
-- [ ] LQ18c spec 全量 PASS 回归：第 1 组 D01–D13（**D01 已结清**；D03 仍差）、第 2 组
+- [x] LQ18c spec 回归 2/N：**D02 弹框圆角 PASS**——四角 r≈24 = `AppTheme.largeRadius`，
+  无直角；边缘单层 AA 无内描边。仅取证，无产品改动。
+- [ ] LQ18c spec 全量 PASS 回归：第 1 组 D01–D13（**D01、D02 已结清**；D03 仍差）、第 2 组
   O01–O09（O09 已结清）、
   X01–X05 + P02/P03、tooltip 剩余腿、V03/V03b 月跨天连续条已完成
   → 其余 PENDING 逐条核对清零（N01、E06 已结清）。
 
 ## 已改
+- LQ18c spec 回归 2/N（D02）：**无产品改动**。`LiquidDialog.qml:18-22` 的 r24 与
+  `AppTheme.largeRadius` 一致，本轮只做 4x 角部取证（`R39-d02-*-4x.png`，由 D01 帧裁切）。
 - LQ18c spec 回归 1/N（D01）：**无产品改动**。scrim 为 `LiquidDialog.qml:16`
   `Overlay.modal: Rectangle { color: Qt.rgba(0,0,0,0.25) }` 的既有实现，本轮只取证。
 - LQ18c 收尾 14/N（菜单 hover 圆角）：**无产品改动**（试改 r12 → 量得水平内缩 8 → 撤回）。
@@ -235,7 +241,12 @@ V03/V03b 月跨天连续条已结清，细节见 rounds.md R153–R154。）
   窄事件惯例外推），不算 X05 的“unintended overlap”。
 
 ## Next round
-LQ18c spec 回归 2/N：**D02 弹框圆角取证**。用 light 1100×692 的同一张 D01 帧（或重拍
-`R39-d02-dialog.png`）4x 裁卡左上/右上角，量圆角半径、确认无直角；同时确认只有一层
-1px 描边（或无色差描边）。期望与 `AppTheme.largeRadius` / 卡 `r24` 对齐（LQ07 既有记录，
-`LiquidDialog.qml:18-22` radius 24）。只判 D02，不顺手改 D03 结构。
+LQ18c spec 回归 3/N：**D03 弹框卡面 token + 双层阴影**。只做两件：
+① `LiquidDialog.qml:23` 硬编码卡面 `dark ? "#29292d" : "#ffffff"` 换成 `AppTheme.cardSurface`
+（先读 `AppTheme.qml:192` 的实际合成值；若 light 合成 ≠255 需先拍现状对照，不可悄悄改变
+现 PASS 的 D01 卡面 255）；
+② 阴影从单只 `LiquidOuterShadow`（softness 20 / spread 52 / opacity .32）改为
+`shadowAmbient` + `shadowKey` 双层（`AppTheme.qml:207-210`），保持“卡外近缘 170 / 稍远 180 /
+远区 191”的量级不变。
+**1px border 本轮不擅自加**：`alert-macos.png` 无可见描边，D03 字面要求 border，属语义冲突；
+先在 state.md 记为待裁决，不改可见外观。若①的 token 会让卡面变灰，则①也只记录不改。
