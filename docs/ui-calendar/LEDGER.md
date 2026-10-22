@@ -1,20 +1,19 @@
 # LQ0 — 液态组件接入与剩余 spec 收敛
 
 ## 本轮
-- LQ18c spec 回归 3/N：**D03 弹框双层阴影**。`LiquidDialog.qml:17-33` 单只
-  `LiquidOuterShadow`（#606064/#000、α .32、softness 20、spread 52）换成
-  `shadowAmbient`（softness 24/spread 52）+ `shadowKey`（softness 10/spread 28）两层，
-  shadowOpacity 各 1（α 由 token 携带），卡面/圆角/backdrop 零改动。
-  - light 实测（`R40-d03-shadow.png` 1100×692 vs `R38-d01-scrim.png`）：卡面仍 **255**；
-    左缘外近缘 163→**174**、4px 外 172→**181**、8px 外 175→**183**、远区 190→**191**，
-    顶缘 161→172 同向。梯度更连续、无第二道环。
-  - 4x 角部（`R40-d03-tl-{before,after}-4x.png`）圆角逐像素同形，无内描边/双环。
-  - dark（`R40-d03-shadow-dark.png`）：卡面 41,41,45 不变；近缘 17→远 22 的 Δ5 接触阴影，
-    无可见重影。dark 旧帧 r137 卡面 38（早于 dark 卡色改动），只作方向对照。
-  - ① `cardSurface` 未采用：`AppTheme.qml:192` = `withAlpha(card, glassActive ? .54/.46 : 1)`，
-    玻璃会话下 α .54 会透出弹框背后的内容且合成 ≠255；非玻璃时 `card= mix(windowRaised,
-    accent, .018)` 也是 accent 微染色 ≠255。保留硬编码 255/`#29292d`，记入外推待裁决。
-  - 1px `border` 按上轮口径仍不加（`alert-macos.png` 无可见描边），D03 待裁决。
+- LQ18c spec 回归 5/N：**D04 标签字重修正**。`EventEditorDialog.qml` 七个主字段标签
+  （标题/开始/结束/地点/重复/提醒/备注）各加 `font.weight: Font.DemiBold`，字号仍 11、
+  颜色仍 `AppTheme.mutedText`。
+  - 实拍 `R41-d04-labels.png`（light）/`R41-d04-labels-dark.png`（dark，1100×692，新建日程）：
+    同区域墨量逐标签翻倍（标题 34→87、开始 16→78、结束 48→87、地点 31→68、重复 68→108、
+    提醒 42→109、备注 50→85），墨色 light 107→100、dark 中性档不变；11px 下横笔仍多为
+    1–2px、最大游程 +1，属 11px 字体的栅格极限，字重变化由墨量而非笔画宽度体现。
+  - 层级仍三级可分：20 DemiBold 标题墨量 763 / 13 常规值 199（近黑 39,46,60）/
+    11 DemiBold 标签 87（muted 100,107,120）；dark 同构（标题 1077 亮 244 /
+    值 428 亮 230 / 标签 192 中性 146）。标签变重但仍比正文暗一档，未抢正文。
+  - 卡几何、标题 bbox、字段填充、组合框、按钮零变化；日志 0 error/TypeError。
+  - 残留：联动待办行内联标签 Todo list/Priority（`:752/:764`）仍 Normal，仅勾选
+    “显示为待办任务”时出现，本轮未纳入（见仍差 #3）。
 
 ## 队列（一轮一条；[x]=已完成）
 - [x] LQ01 基线：light week 1100×720 / 760×540；日志无启动回归。
@@ -71,13 +70,25 @@
 - [x] LQ18c spec 回归 3/N：**D03 双层阴影 PASS**——ambient+key 双层 token 阴影，
   light 近/中/远 174/183/191（目标 170/180/191），卡面 255 不变；cardSurface/1px border
   两条待裁决（见仍差 #1）。
-- [ ] LQ18c spec 全量 PASS 回归：第 1 组 D01–D13（**D01、D02、D03-阴影 已结清**；D03
-  的 token/描边待裁决、D04 起未做）、第 2 组
+- [x] LQ18c spec 回归 4/N：**D04 弹框文字层级取证**——标题 20 DemiBold 左内 24 PASS；
+  正文 13 常规 PASS；字段标签 11px 但 **Normal 非 DemiBold**（spec 不符，见仍差 #3）。
+- [x] LQ18c spec 回归 5/N：**D04 标签字重修正**——7 个主字段标签加 DemiBold，墨量翻倍、
+  三级层级保持；light/dark 实拍通过。内联 Todo list/Priority 未纳入（见仍差 #3）。
+- [ ] LQ18c spec 全量 PASS 回归：第 1 组 D01–D13（**D01、D02、D03-阴影、D04 已取证**；
+  D03 的 token/描边待裁决、D05 起未做）、第 2 组
   O01–O09（O09 已结清）、
   X01–X05 + P02/P03、tooltip 剩余腿、V03/V03b 月跨天连续条已完成
   → 其余 PENDING 逐条核对清零（N01、E06 已结清）。
 
 ## 已改
+- LQ18c spec 回归 5/N（D04）：`EventEditorDialog.qml` 七个主字段标签（`text: qsTr("Title")`
+  :584、Start :628、End :664、Location :700、Repeat :784、Reminder :808、Notes :833）
+  各在 `font.pixelSize: 11` 后加 `font.weight: Font.DemiBold`。字号、`AppTheme.mutedText`、
+  `Layout.preferredWidth: root.labelColumnWidth`、对齐方式、间距、卡面、字段控件、
+  按钮组全部零改动。
+- LQ18c spec 回归 4/N（D04）：**无产品改动**。只量测 `R40-d03-shadow(.dark).png` 的文字
+  bbox/墨高/横笔/墨色，并核对 `EventEditorDialog.qml:42-52` 标题 20 DemiBold、
+  `:575/:632/:668/:704/:743/:788/:837` 七个标签均 11px 且无 `font.weight`。
 - LQ18c spec 回归 3/N（D03）：`shared/qml/controls/LiquidDialog.qml:17-33` 背景层由单只
   `LiquidOuterShadow`（`#606064`/`#000000`、α .32、softness 20、spread 52、offset 0）
   改为 `shadowAmbient`（softness 24、spread 52、opacity 1）+ `shadowKey`（softness 10、
@@ -139,6 +150,9 @@
 2. 浮层/菜单：详情浮层为**单张中性卡**（参考是 246 壳 + 内部白行），面 240 与菜单 255
    差 Δ15（参考 Δ9）；阴影偏弱、菜单亮卡无磨砂色偏。（O09 菜单翻转不可达，见外推；
    tooltip 翻转同理。hover 圆角 r8 已于本轮实测结清，不再列。）
+3. D04 内联标签字重：联动待办行的 `Todo list` / `Priority`（`EventEditorDialog.qml:752/:764`）
+   仍为 11px Normal，仅在勾选“同时将此日程显示为待办任务”时出现；D04 要求标签 11 DemiBold，
+   下轮同步并复拍勾选态。（主字段七标签本轮已改并 PASS。）
 （tooltip 各腿已结清：dark、出现/消失连续帧通过；上方翻转在当前布局不可达，见外推；
 密集 08:00 簇 45px 道 + 标题 ellipsis 为参考同款外推，已移入 rounds.md，不再列。
 V03/V03b 月跨天连续条已结清，细节见 rounds.md R153–R154。）
@@ -266,9 +280,9 @@ V03/V03b 月跨天连续条已结清，细节见 rounds.md R153–R154。）
   窄事件惯例外推），不算 X05 的“unintended overlap”。
 
 ## Next round
-LQ18c spec 回归 4/N：**D04 弹框文字层级**。复用 `R40-d03-shadow.png`（light）与
-`R40-d03-shadow-dark.png`（dark）两帧，只取证不改代码：
-① 标题“新建日程”左对齐、DemiBold 20（对齐 `LiquidDialog.qml:9-15` 的 header Label）；
-② 字段标签（标题/开始/结束/地点/重复/提醒/备注）11 DemiBold；
-③ 正文/输入值 11–13 常规；逐项给出像素行高与字重证据，确认三级层级一眼可辨。
-若发现与 spec 不符（如标签非 DemiBold），只记录差异，不改字号/字重，留到单列一轮。
+LQ18c spec 回归 6/N：**D06 弹框按钮高亮/胶囊取证**（`R41-d04-labels.png` light 与
+`R41-d04-labels-dark.png` dark 已含完整按钮组，可直接复用，无需重启）。判三条：
+① 主按钮（保存）实心 accent + 胶囊圆角（`buttonRadius: height/2`）、文字居中白色；
+② 次按钮（取消）浅灰填充 + 同款胶囊、文字居中深色（light 深色字 / dark 亮字）；
+③ 两枚同高同宽、圆角一致。量按钮 bbox / 填充色 / 文字墨色 / 四角内缩拟合；若胶囊被
+写成固定 r 而非 height/2，记录差在哪。**只取证，不改代码**；若发现硬伤，下一轮单列修。
