@@ -1,6 +1,22 @@
 # LQ0 — 液态组件接入与剩余 spec 收敛
 
 ## 本轮
+- LQ18c spec 回归 14/N：**D13 弹框遮罩「父窗变暗可辨」PASS（无产品改动）**。1100×692 light
+  week 2026-04-02，`toolbarAdd` 打开「新建日程」事件编辑器：
+  - scrim 合成乘性且全窗均匀 **×0.75**：白画布 255→**191**、侧栏 237→**178**、
+    周末列 249→**187**、工具栏 255→**191**（四角/中边/右缘同值），即
+    `LiquidDialog.qml:16` 的 `Overlay.modal` 黑 α .25；无漏遮、非纯黑。
+  - 可辨性：卡左/卡右 2x 裁切里「日历 / 计划任务 / 显示已完成 / Inbox」「周一 30」
+    「周五 3 / 周六 4 / 周日 5」「今天」「Morning planning」chip 文字均清晰可读。
+  - 卡为不透明白实体压在 scrim 上：卡内标题 255、字段 240；卡外近缘 170–181
+    （E4 阴影梯度）对远区 190–191。
+  - 「应用其他窗口仍可交互」：`EventEditorDialog.qml:30`、`CalendarTaskEditorDialog.qml:19`
+    `modal: true` 是窗口内 Overlay（只冻结本窗口），评审 VM 单窗口无法实拍跨窗，
+    按实现/外推判 PASS，不声称实拍。
+  - 参考 `macos26/alert-macos.png`：父窗整体中性灰、白卡、无内容可比对；α .25 同向。
+    帧 `r060-d13-scrim.png`、`r060-d13-parent-left-2x.png`、`r060-d13-parent-right-2x.png`。
+
+## 上一轮
 - LQ18c spec 回归 13/N：**D12 弹框关闭唯一性 PASS（一处产品改动）**。1100×692 light：
   - 设置面板（`KosSettingsDialog`，日历/任务/天气共用）：原头部有 `×`
     （Accessible "Close settings"）+ footer `完成` 两个关闭口 → **删除头部 `×`**，
@@ -15,12 +31,6 @@
     （`spectacle -a`：`r059-import.png`，R46 口径）。
   - 浮层→编辑器：Edit 先 `root.close()` 再 `editRequested()`（`EventDetailsPopover.qml:239-240`），
     不会两层瞬时玻璃叠放。玻璃预算不变 2/2、1/1；日志无 error。
-
-## 上一轮
-- LQ18c spec 回归 12/N：**D11 窄窗完整性/自身滚动 PASS（无产品改动）**。
-  760×540 事件编辑器卡 380×508、表单 262↔418 由内部 Flickable 滚到上限 156，
-  footer 三钮固定完整；任务编辑器编辑态 380×428、243=243 免滚动、New task
-  380×436 两行 footer 完整。卡高恒 = min(620/560, parent−32/−64)。
 
 ## 队列（一轮一条；[x]=已完成）
 - [x] LQ01 基线：light week 1100×720 / 760×540；日志无启动回归。
@@ -94,13 +104,21 @@
 - [x] LQ18c spec 回归 13/N：**D12 关闭唯一性 PASS**——设置面板头部重复 `×` 已删
   （footer `完成` 为唯一关闭口）；事件/任务编辑器无 `×`，删除确认是同卡状态非套弹框；
   Import/Export 系统对话框单关闭口。
-- [ ] LQ18c spec 全量 PASS 回归：第 1 组 D01–D13（**D01–D12 已取证**；D13 未做，
-  D03 的 token/描边待裁决）、第 2 组
-  O01–O09（O09 已结清）、
+- [x] LQ18c spec 回归 14/N：**D13 scrim PASS**——开弹框时父窗均匀 ×0.75（白 191/
+  侧栏 178/周末 187），内容文字 2x 可读，非纯黑；跨窗可交互按 `modal: true`
+  窗口内 Overlay 判 PASS（单窗口无实拍）。
+- [ ] LQ18c spec 全量 PASS 回归：第 1 组 D01–D13（**D01–D13 全部取证**；D03 的
+  token/描边待裁决）、第 2 组
+  O01–O09（O01–O08 R149、O09 已结清）、
   X01–X05 + P02/P03、tooltip 剩余腿、V03/V03b 月跨天连续条已完成
   → 其余 PENDING 逐条核对清零（N01、E06 已结清）。
 
 ## 已改
+- LQ18c spec 回归 14/N（D13）：**无产品改动**。只驱动/量测：`LiquidDialog.qml:16`
+  `Overlay.modal` 黑 α .25（实测全窗 ×0.75）；`EventEditorDialog.qml:30` /
+  `CalendarTaskEditorDialog.qml:19` 的 `modal: true` 为窗口内 Overlay（不跨窗）；
+  未开设置面板（`KosWorkspaceDialog.qml:24-27` 是另一条 dim 路径，D12 已拍其卡面）。
+  代码、几何、token、玻璃预算均零变化。
 - LQ18c spec 回归 13/N（D12）：`shared/qml/foundation/KosSettingsDialog.qml:108-116`
   删除 header RowLayout 末尾的 `KosToolButton { text:"×" … onClicked: root.close() }`，
   以注释说明 footer `完成` 是唯一关闭口。头部仍为 ⚙(36)+标题列，`implicitHeight 72`、
@@ -367,8 +385,7 @@ V03/V03b 月跨天连续条已结清，细节见 rounds.md R153–R154。）
   窄事件惯例外推），不算 X05 的“unintended overlap”。
 
 ## Next round
-LQ18c spec 回归 14/N：**D13 弹框出现时父窗口内容可辨认（变暗而非被覆盖）**。事件编辑器
-打开时量 scrim 合成（参考：父窗内容仍是可辨认的灰、非纯黑）与卡周边梯度，复用 D01 的
-scrim 帧口径；同时用代码证据结“应用其他窗口仍可交互”（VM 单窗口，`Dialog.modal: true`
-只冻结本窗口，按外推判 PASS，不声称实拍）。不动 D12 刚改的 `KosSettingsDialog` 头部结构，
-不动 D11 的卡高/Flickable/footer。若 scrim 合成与之前 D01 实测不一致，只取证不改。
+LQ18c spec 全量 PASS 回归 15/N：**PENDING 对账**。把 `spec.md` 表内全部 PENDING 行
+与 state.md / rounds.md 的已取证记录逐条对齐，产出唯一剩余清单（预期仅 D03 两条
+待裁决项；O01–O08 = R149、D13 本轮已结清）。只对账，不重拍、不改产品；若发现
+无证据的条目，单独列出并作为下一轮的第 1 条。不要动 D12/D13 的既有帧与结论。
