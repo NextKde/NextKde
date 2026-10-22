@@ -703,9 +703,11 @@ PanelWindow {
                 id: widgetContentLayer
                 objectName: "widget-content-layer"
                 anchors.fill: parent
-                // Glass widgets use monochrome content independently of the
-                // application icons. Colour cards retain their own artwork.
+                // The clock resolves monochrome ink in its face. Keep its text
+                // out of the extra saturation texture so it renders at the
+                // window's resolution. Other glass artwork is desaturated.
                 layer.enabled: AppearanceConfigService.widgetStyle === "glass"
+                    && card.modelData.id !== "clock"
 	                layer.effect: MultiEffect {
 	                    saturation: -1.0
 	                    colorization: 0.0
@@ -733,86 +735,26 @@ PanelWindow {
                 // different surface -- its own colour, its own opacity, its own
                 // outline. The clock only adds its face below.
 
-                Canvas {
+                DeskClockFace {
                     id: analogClock
                     anchors.fill: parent
                     anchors.margins: 14
-                    onPaint: {
-                        const ctx = getContext("2d")
-                        const size = Math.min(width, height)
-                        const center = size / 2
-                        const radius = Math.max(0, size / 2 - 3)
-                        if (radius <= 0)
-                            return
-                        const date = clock.date
-                        ctx.reset()
-                        ctx.translate((width - size) / 2 + center, (height - size) / 2 + center)
-                        // In the shared glass modes the card material is the
-                        // face: do not paint a second opaque white disc.
-                        if (!AppearanceTokens.content.onBackdrop) {
-                            ctx.fillStyle = "#fafafa"
-                            ctx.beginPath(); ctx.arc(0, 0, radius, 0, Math.PI * 2); ctx.fill()
-                        }
-                        if (!AppearanceTokens.isMaterial) {
-                            ctx.strokeStyle = AppearanceTokens.content.ink("#dedede", 0.42).toString()
-                            ctx.lineWidth = 1
-                            ctx.beginPath(); ctx.arc(0, 0, radius, 0, Math.PI * 2); ctx.stroke()
-                        }
-	                        ctx.strokeStyle = AppearanceTokens.content.ink("#171717").toString()
-                        ctx.lineCap = "round"
-                        for (let mark = 0; mark < 12; mark++) {
-                            const angle = mark * Math.PI / 6
-                            ctx.lineWidth = mark % 3 === 0 ? 1.8 : 0.8
-                            ctx.beginPath()
-                            ctx.moveTo(Math.sin(angle) * (radius - 4), -Math.cos(angle) * (radius - 4))
-                            ctx.lineTo(Math.sin(angle) * (radius - (mark % 3 === 0 ? 10 : 7)), -Math.cos(angle) * (radius - (mark % 3 === 0 ? 10 : 7)))
-                            ctx.stroke()
-                        }
-                        // Full hour numerals make the small analogue clock
-                        // readable at a glance, rather than relying on ticks
-                        // alone. Their radius leaves a clear channel for the
-                        // hands in this one-cell tile.
-	                        ctx.fillStyle = AppearanceTokens.content.ink("#242126").toString()
-                        ctx.font = "bold " + Math.max(7, Math.round(radius * 0.18)) + "px sans-serif"
-                        ctx.textAlign = "center"
-                        ctx.textBaseline = "middle"
-                        for (let number = 1; number <= 12; number++) {
-                            const angle = number * Math.PI / 6
-                            const numberRadius = radius * 0.68
-                            ctx.fillText(String(number),
-                                Math.sin(angle) * numberRadius,
-                                -Math.cos(angle) * numberRadius)
-                        }
-                        const hour = (date.getHours() % 12 + date.getMinutes() / 60) * Math.PI / 6
-                        const minute = date.getMinutes() * Math.PI / 30
-                        const second = date.getSeconds() * Math.PI / 30
-                        if (AppearanceTokens.isMaterial)
-                            ctx.strokeStyle = AppearanceTokens.colors.primary.toString()
-                        ctx.lineWidth = 2.5; ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(Math.sin(hour) * radius * 0.48, -Math.cos(hour) * radius * 0.48); ctx.stroke()
-                        if (AppearanceTokens.isMaterial)
-                            ctx.strokeStyle = AppearanceTokens.colors.tertiary.toString()
-                        ctx.lineWidth = 1.8; ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(Math.sin(minute) * radius * 0.70, -Math.cos(minute) * radius * 0.70); ctx.stroke()
-	                        ctx.strokeStyle = AppearanceTokens.content.accent(AppearanceTokens.colors.secondary.toString(), "#ee7659").toString(); ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(Math.sin(second) * radius * 0.76, -Math.cos(second) * radius * 0.76); ctx.stroke()
-	                        ctx.fillStyle = AppearanceTokens.content.accent(AppearanceTokens.colors.primary.toString(), "#ee7659").toString(); ctx.beginPath(); ctx.arc(0, 0, 2.2, 0, Math.PI * 2); ctx.fill()
-                    }
-                    Connections { target: clock; function onDateChanged() { analogClock.requestPaint() } }
-                    // A Canvas reads the scheme only when it paints, so a
-                    // shell-style switch (material -> macos) or a colour-source
-                    // switch has to ask for a repaint explicitly, independently
-                    // of both the date tick and the widget surface switch.
-                    Connections {
-                        target: AppearanceTokens
-                        function onColorRevisionChanged() { analogClock.requestPaint() }
-                        function onIsMaterialChanged() { analogClock.requestPaint() }
-                    }
-	                    Connections {
-	                        target: AppearanceTokens.content
-	                        function onOnBackdropChanged() { analogClock.requestPaint() }
-                    }
+                    date: clock.date
+                    monochrome: AppearanceConfigService.widgetStyle === "glass"
+                    faceColor: AppearanceTokens.content.onBackdrop ? "transparent" : "#fafafa"
+                    rimColor: AppearanceTokens.isMaterial ? "transparent"
+                        : AppearanceTokens.content.ink("#dedede", 0.42)
+                    numeralColor: AppearanceTokens.content.ink("#242126")
+                    markColor: AppearanceTokens.content.ink("#171717")
+                    hourColor: AppearanceTokens.isMaterial ? AppearanceTokens.colors.primary : markColor
+                    minuteColor: AppearanceTokens.isMaterial ? AppearanceTokens.colors.tertiary : markColor
+                    secondColor: AppearanceTokens.content.accent(AppearanceTokens.colors.secondary, "#ee7659")
+                    hubColor: AppearanceTokens.content.accent(AppearanceTokens.colors.primary, "#ee7659")
                 }
 
 	                Rectangle {
                     id: timerButton
+                    objectName: "clock-timer-button"
                     width: 21
                     height: 21
                     radius: width / 2
@@ -898,11 +840,18 @@ PanelWindow {
                         y: timerDial.y + timerTimeText.y - height - 2
                         spacing: 5
                         Canvas {
+                            id: timerBell
+                            objectName: "timer-end-bell"
                             width: 14
                             height: 16
+                            readonly property color strokeColor: AppearanceTokens.content.onBackdrop
+                                ? "#ffffff" : "#ffb028"
+                            // The clock bypasses the ancestor saturation layer.
+                            // Invalidate this cached artwork when its ink changes.
+                            onStrokeColorChanged: requestPaint()
                             onPaint: {
                                 const ctx = getContext("2d")
-	                                ctx.reset(); ctx.strokeStyle = AppearanceTokens.content.onBackdrop ? "#ffffff" : "#ffb028"; ctx.lineWidth = 1.3; ctx.lineCap = "round"
+	                                ctx.reset(); ctx.strokeStyle = timerBell.strokeColor.toString(); ctx.lineWidth = 1.3; ctx.lineCap = "round"
                                 ctx.beginPath(); ctx.moveTo(3, 10); ctx.quadraticCurveTo(4, 8.7, 4, 6.4)
                                 ctx.quadraticCurveTo(4, 3.8, 7, 3.8); ctx.quadraticCurveTo(10, 3.8, 10, 6.4)
                                 ctx.quadraticCurveTo(10, 8.7, 11, 10); ctx.lineTo(3, 10); ctx.stroke()
