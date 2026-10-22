@@ -167,6 +167,24 @@ Flow {
             font.pixelSize: 11
             wrapMode: Text.Wrap
         }
+        Text {
+            objectName: "kmusicElapsed"
+            Layout.fillWidth: true
+            visible: !!page.music.busy
+            text: I18n.tr("Elapsed: %1").arg(Math.floor((page.music.elapsedSeconds || 0) / 60)
+                + ":" + ("0" + ((page.music.elapsedSeconds || 0) % 60)).slice(-2))
+            color: page.colors.secondaryText
+            font.pixelSize: 11
+        }
+        Text {
+            objectName: "kmusicBuildHint"
+            Layout.fillWidth: true
+            visible: !!page.music.busy && page.music.stage === "build"
+            text: I18n.tr("Compiling from source. This may take several minutes; the download has finished.")
+            color: page.colors.secondaryText
+            font.pixelSize: 11
+            wrapMode: Text.Wrap
+        }
         ProgressBar {
             Layout.fillWidth: true
             visible: !!page.music.busy
@@ -238,9 +256,15 @@ Flow {
 
     function musicStage(stage) {
         switch (stage) {
-        case "bootstrap": return I18n.tr("Downloading installer…")
+        case "bootstrap": return I18n.tr("Downloading installer… Attempt %1/%2")
+            .arg(page.music.attempt || 1).arg(page.music.maxAttempts || 3)
+        case "retry-bootstrap": return I18n.tr("Installer download failed. Retrying… Attempt %1/%2")
+            .arg(page.music.attempt).arg(page.music.maxAttempts)
+        case "retry-download": return I18n.tr("Source download failed. Retrying… Attempt %1/%2")
+            .arg(page.music.attempt).arg(page.music.maxAttempts)
         case "check": return I18n.tr("Checking dependencies…")
-        case "download": return I18n.tr("Downloading KMusic…")
+        case "download": return I18n.tr("Downloading KMusic… Attempt %1/%2 (up to 5 minutes each)")
+            .arg(page.music.attempt || 1).arg(page.music.maxAttempts || 5)
         case "build": return I18n.tr("Building KMusic…")
         case "install": return I18n.tr("Installing KMusic…")
         case "uninstall": return I18n.tr("Uninstalling KMusic…")
@@ -255,7 +279,9 @@ Flow {
         case "DEPENDENCY_UNSATISFIED": return I18n.tr("Install or update the dependencies listed below, then try again.")
         case "UNSUPPORTED_PLATFORM": return I18n.tr("KMusic source installation supports Arch, Ubuntu and Debian on x86_64 and aarch64.")
         case "RELEASE_UNAVAILABLE": return I18n.tr("The installation release has not been published yet")
-        case "DOWNLOAD_FAILED": return I18n.tr("Download failed. Check your connection and try again.")
+        case "DOWNLOAD_FAILED": return I18n.tr("Download failed after %1 attempt(s). Check your connection and try again.").arg(page.music.attempt || 1)
+        case "DOWNLOAD_TIMEOUT": return I18n.tr("Download timed out after %1 attempt(s). Check your connection and try again.").arg(page.music.attempt || 1)
+        case "OPERATION_TIMEOUT": return I18n.tr("The operation timed out and was stopped. View the log before trying again.")
         case "INTEGRITY_FAILED": return I18n.tr("Installer verification failed. The operation was stopped.")
         case "INSTALL_BUSY": return I18n.tr("Another KMusic installation is already running.")
         case "CANCELLED": return I18n.tr("Operation cancelled")

@@ -3,6 +3,15 @@
 // 规则：值必须与改造前界面上的中文逐字一致（含空格、间隔符与省略号），
 // 改动文案时同步更新对应键，不要只改一边。
 export const catalog = {
+    "Elapsed: %1": "已用时间：%1",
+    "Compiling from source. This may take several minutes; the download has finished.": "下载已完成，正在从源码编译，可能需要几分钟。",
+    "Downloading installer… Attempt %1/%2": "正在下载安装器… 第 %1/%2 次尝试",
+    "Installer download failed. Retrying… Attempt %1/%2": "安装器下载失败，正在重试… 第 %1/%2 次尝试",
+    "Source download failed. Retrying… Attempt %1/%2": "源码下载失败，正在重试… 第 %1/%2 次尝试",
+    "Downloading KMusic… Attempt %1/%2 (up to 5 minutes each)": "正在下载 KMusic… 第 %1/%2 次尝试（每次最多 5 分钟）",
+    "Download failed after %1 attempt(s). Check your connection and try again.": "下载失败，已尝试 %1 次。请检查网络后重试。",
+    "Download timed out after %1 attempt(s). Check your connection and try again.": "下载超时，已尝试 %1 次。请检查网络后重试。",
+    "The operation timed out and was stopped. View the log before trying again.": "操作超时，已停止。请查看日志后重试。",
     "Service": "服务",
     "Keep Settings open until the operation finishes, or cancel it here.": "操作期间请保持设置窗口打开，也可以在此取消。",
     "The operation failed. View the log for details.": "操作失败，请查看日志。",

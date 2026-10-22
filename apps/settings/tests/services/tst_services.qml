@@ -148,6 +148,24 @@ TestCase {
         confirmation.accept()
         compare(fakeStore.removals, 1)
     }
+    function test_music_download_feedback() {
+        const page = createTemporaryObject(factory, this, {store: fakeStore})
+        fakeStore.music = {available: true, busy: true, stage: "download", attempt: 3, maxAttempts: 5, elapsedSeconds: 305}
+        compare(findChild(page, "kmusicStatus").text, "Downloading KMusic… Attempt 3/5 (up to 5 minutes each)")
+        compare(findChild(page, "kmusicElapsed").text, "Elapsed: 5:05")
+        fakeStore.music = {available: true, busy: true, stage: "retry-download", attempt: 4, maxAttempts: 5}
+        compare(findChild(page, "kmusicStatus").text, "Source download failed. Retrying… Attempt 4/5")
+        fakeStore.music = {available: true, busy: true, stage: "build"}
+        verify(findChild(page, "kmusicBuildHint").visible)
+        compare(findChild(page, "kmusicStatus").text, "Building KMusic…")
+        fakeStore.music = {available: true, busy: false, code: "DOWNLOAD_TIMEOUT", attempt: 5}
+        compare(findChild(page, "kmusicError").text, "Download timed out after 5 attempt(s). Check your connection and try again.")
+        verify(findChild(page, "kmusicAction").enabled)
+        compare(findChild(page, "kmusicStatus").visible, false)
+        I18n.language = "zh-CN"
+        compare(findChild(page, "kmusicError").text, "下载超时，已尝试 5 次。请检查网络后重试。")
+    }
+
     function test_music_unpublished_release() {
         fakeStore.music = {available: false, installed: false, busy: false}
         const page = createTemporaryObject(factory, this, {store: fakeStore})

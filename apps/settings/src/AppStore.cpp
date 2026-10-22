@@ -65,6 +65,26 @@ AppStore::AppStore(const QString& directory, QObject* parent)
     });
     m_killTimer.setSingleShot(true);
     connect(&m_killTimer, &QTimer::timeout, this, [this] { stopProcess(SIGKILL); });
+    m_deadline.setSingleShot(true);
+    connect(&m_deadline, &QTimer::timeout, this, [this] {
+        const bool downloading = m_reply || m_state.value("stage") == "download";
+        m_timeoutCode = downloading ? QStringLiteral("DOWNLOAD_TIMEOUT") : QStringLiteral("OPERATION_TIMEOUT");
+        appendLog(("Timeout at stage " + m_state.value("stage").toString() + '\n').toUtf8());
+        if (m_reply) { m_reply->abort(); return; }
+        stopProcess(SIGTERM);
+        m_killTimer.start(10000);
+    });
+    m_retryTimer.setSingleShot(true);
+    connect(&m_retryTimer, &QTimer::timeout, this, [this] {
+        if (m_cancelled || !m_state.value("busy").toBool()) return;
+        if (m_retryIndex >= 0) downloadNext(m_retryIndex, m_retryAttempt);
+        else run(QStringLiteral("install"));
+    });
+    m_elapsedTimer.setInterval(1000);
+    connect(&m_elapsedTimer, &QTimer::timeout, this, [this] {
+        m_state["elapsedSeconds"] = m_elapsed.elapsed() / 1000;
+        emit changed();
+    });
     refresh();
 }
 
@@ -111,6 +131,10 @@ void AppStore::setStage(const QString& stage)
 void AppStore::fail(const QString& code, const QString& message)
 {
     m_killTimer.stop();
+    m_deadline.stop();
+    m_retryTimer.stop();
+    m_elapsedTimer.stop();
+    appendLog((code + ": " + message + '\n').toUtf8());
     m_log.close();
     m_state["busy"] = false;
     m_state["code"] = code;
@@ -136,6 +160,13 @@ void AppStore::begin(const QString& action)
     if (!m_published) { fail(QStringLiteral("RELEASE_UNAVAILABLE")); return; }
     m_requestedAction = action;
     m_cancelled = false;
+    m_sourceAttempt = 1;
+    m_timeoutCode.clear();
+    m_elapsed.start();
+    m_elapsedTimer.start();
+    m_state["elapsedSeconds"] = 0;
+    m_state["attempt"] = 1;
+    m_state["maxAttempts"] = 3;
     m_state["busy"] = true;
     m_state["code"] = "";
     m_state["message"] = "";
@@ -158,7 +189,7 @@ void AppStore::begin(const QString& action)
     downloadNext(0);
 }
 
-void AppStore::downloadNext(int index)
+void AppStore::downloadNext(int index, int attempt)
 {
     if (index == installerFiles.size()) {
         run(m_requestedAction == "install" ? QStringLiteral("check") : m_requestedAction);
@@ -166,22 +197,42 @@ void AppStore::downloadNext(int index)
     }
     const QString relative = installerFiles.at(index);
     if (validFile(relative)) { downloadNext(index + 1); return; }
-    const QString url = QStringLiteral("https://raw.githubusercontent.com/NextKde/KMusic/")
+    const QString url = m_downloadBaseUrl
         + m_release.value("revision").toString() + '/' + relative;
     QNetworkRequest request{QUrl(url)};
-    request.setTransferTimeout(30000);
+    request.setTransferTimeout(m_bootstrapTimeout);
     request.setAttribute(QNetworkRequest::RedirectPolicyAttribute, QNetworkRequest::SameOriginRedirectPolicy);
+    m_timeoutCode.clear();
+    m_state["attempt"] = attempt;
+    m_state["maxAttempts"] = 3;
+    setStage(QStringLiteral("bootstrap"));
+    m_deadline.start(m_bootstrapTimeout);
     auto* reply = m_network.get(request);
     m_reply = reply;
     connect(reply, &QNetworkReply::downloadProgress, this, [reply](qint64 received, qint64 total) {
-        if (received > maximumOutput || total > maximumOutput) reply->abort();
+        if (received > maximumOutput || total > maximumOutput) {
+            reply->setProperty("tooLarge", true);
+            reply->abort();
+        }
     });
-    connect(reply, &QNetworkReply::finished, this, [this, reply, relative, index] {
+    connect(reply, &QNetworkReply::finished, this, [this, reply, relative, index, attempt] {
+        m_deadline.stop();
         m_reply = nullptr;
         reply->deleteLater();
         if (m_cancelled) { fail(QStringLiteral("CANCELLED")); return; }
+        if (reply->property("tooLarge").toBool()) { fail(QStringLiteral("INTEGRITY_FAILED")); return; }
         if (reply->error() != QNetworkReply::NoError) {
-            fail(QStringLiteral("DOWNLOAD_FAILED"), reply->errorString()); return;
+            const auto error = reply->error();
+            const int status = reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();
+            const bool timedOut = !m_timeoutCode.isEmpty() || error == QNetworkReply::TimeoutError;
+            const bool transient = timedOut || error == QNetworkReply::ConnectionRefusedError
+                || error == QNetworkReply::RemoteHostClosedError || error == QNetworkReply::HostNotFoundError
+                || error == QNetworkReply::TemporaryNetworkFailureError || error == QNetworkReply::NetworkSessionFailedError
+                || status == 408 || status == 429 || status >= 500;
+            appendLog((relative + ": " + reply->errorString() + '\n').toUtf8());
+            if (transient && attempt < 3) { scheduleRetry(index, attempt + 1); return; }
+            fail(timedOut ? QStringLiteral("DOWNLOAD_TIMEOUT") : QStringLiteral("DOWNLOAD_FAILED"), reply->errorString());
+            return;
         }
         const auto bytes = reply->readAll();
         const auto expected = m_release.value("sha256").toObject().value(relative).toString();
@@ -201,6 +252,35 @@ void AppStore::downloadNext(int index)
     });
 }
 
+void AppStore::scheduleRetry(int index, int attempt)
+{
+    m_deadline.stop();
+    m_retryIndex = index;
+    m_retryAttempt = attempt;
+    m_state["attempt"] = attempt;
+    m_state["maxAttempts"] = index >= 0 ? 3 : 5;
+    appendLog((QStringLiteral("Retrying download, attempt %1/%2\n")
+        .arg(attempt).arg(m_state.value("maxAttempts").toInt())).toUtf8());
+    setStage(index >= 0 ? QStringLiteral("retry-bootstrap") : QStringLiteral("retry-download"));
+    m_retryTimer.start(m_retryDelay * (attempt - 1));
+}
+
+void AppStore::processStage(const QString& stage)
+{
+    if (stage == "build" || stage == "install") m_leftDownload = true;
+    if (m_cancelled || !m_timeoutCode.isEmpty()) return;
+    if (stage != "check" && stage != "download" && stage != "build"
+        && stage != "install" && stage != "uninstall" && stage != "status") return;
+    if (m_state.value("stage") == stage) return; // Repeated progress cannot extend the deadline.
+    m_state["attempt"] = m_sourceAttempt;
+    m_state["maxAttempts"] = 5;
+    const int timeout = stage == "download" ? m_downloadTimeout
+        : stage == "build" ? 30 * 60 * 1000
+        : (stage == "install" || stage == "uninstall") ? 5 * 60 * 1000 : 60000;
+    m_deadline.start(timeout);
+    setStage(stage);
+}
+
 void AppStore::run(const QString& action)
 {
     // Recheck both files immediately before every invocation, including status.
@@ -212,7 +292,11 @@ void AppStore::run(const QString& action)
     m_result = {};
     m_resultCount = 0;
     m_protocolError = false;
-    setStage(action);
+    m_timeoutCode.clear();
+    m_leftDownload = false;
+    // The install command first performs dependency checks, before it emits download/build.
+    setStage(QString());
+    processStage(action == "install" ? QStringLiteral("check") : action);
     QStringList args{installerDirectory() + QStringLiteral("/install.sh"), action};
     if (action == "install") args << QStringLiteral("--version") << m_release.value("revision").toString();
     m_process.setProgram(QStringLiteral("/bin/sh"));
@@ -234,7 +318,7 @@ void AppStore::consumeLine(const QByteArray& line)
         m_protocolError = true; return;
     }
     if (event.value("type").toString() == "progress" && m_resultCount == 0) {
-        setStage(event.value("stage").toString());
+        processStage(event.value("stage").toString());
     } else if (event.value("type").toString() == "result") {
         ++m_resultCount;
         m_result = event;
@@ -278,6 +362,20 @@ void AppStore::finish(int exitCode, QProcess::ExitStatus status)
     consumeOutput();
     if (!m_output.isEmpty()) consumeLine(m_output);
     m_output.clear();
+    m_deadline.stop();
+    const bool downloadFailed = !m_protocolError && m_resultCount == 1
+        && m_result.value("success").isBool() && !m_result.value("success").toBool()
+        && m_result.value("code").toString() == "DOWNLOAD_FAILED";
+    // Only restart the disposable source-download phase. Never replay a build or installation.
+    const bool retryable = !m_protocolError && !m_leftDownload && m_action == "install"
+        && m_state.value("stage") == "download"
+        && (m_timeoutCode == "DOWNLOAD_TIMEOUT" || downloadFailed);
+    if (!m_cancelled && retryable && m_sourceAttempt < 5) {
+        scheduleRetry(-1, ++m_sourceAttempt);
+        return;
+    }
+    if (m_cancelled && !m_leftDownload) { fail(QStringLiteral("CANCELLED")); return; }
+    if (!m_timeoutCode.isEmpty()) { fail(m_timeoutCode); return; }
     if (m_protocolError || m_resultCount != 1 || !m_result.value("success").isBool()) {
         fail(QStringLiteral("RESULT_UNKNOWN")); return;
     }
@@ -298,6 +396,7 @@ void AppStore::finish(int exitCode, QProcess::ExitStatus status)
     }
     if (m_action == "check") { run(QStringLiteral("install")); return; }
     if (m_action != "status") { run(QStringLiteral("status")); return; }
+    m_elapsedTimer.stop();
     m_log.close();
     m_state["busy"] = false;
     m_state["stage"] = "";
@@ -320,6 +419,12 @@ void AppStore::cancel()
 {
     if (!m_state.value("busy").toBool()) return;
     m_cancelled = true;
+    m_deadline.stop();
+    if (m_retryTimer.isActive()) {
+        m_retryTimer.stop();
+        fail(QStringLiteral("CANCELLED"));
+        return;
+    }
     setStage(QStringLiteral("cancelling"));
     if (m_reply) { m_reply->abort(); return; }
     stopProcess(SIGTERM);
