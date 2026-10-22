@@ -1888,7 +1888,24 @@ KosApplicationWindow {
                 // (R097/R098) is untouched.
                 labels: [qsTr("Day"), qsTr("Week"), qsTr("Month"), qsTr("Year")]
                 currentIndex: root.viewIndex <= 2 ? 2 - root.viewIndex : 3
+                // LQ03: this capsule sits ON the toolbar's L1 glass, so it must
+                // not draw a second LiquidSurface (glass-on-glass is banned).
+                // materialForm paints a plain track + opaque pill; measured
+                // against the reference: track 228x28 r=14, pill inset 2
+                // (24 high, 52 wide in a 56 slot), track α .025 over the
+                // plane (249..253), pill #E7E7E7 (230..235), hairline edge
+                // (~222 at the rounded ends). All four labels stay at
+                // labelPrimary — only the pill marks the selection.
+                materialForm: true
                 backgroundColor: root.tahoe.segmentTrack
+                // The default material outline (α .14) is tuned for a dialog
+                // plane; here it drew a crisp grey ring the reference does not
+                // have (reference top edge is 249..253, i.e. no visible line;
+                // only the rounded ends darken to ~222 through edge AA). α .05
+                // keeps a hairline hint without the ring. Extrapolated value.
+                borderColor: root.tahoeDark
+                    ? Qt.rgba(1, 1, 1, 0.10)
+                    : Qt.rgba(0x28 / 255, 0x40 / 255, 0x64 / 255, 0.05)
                 selectionColor: root.tahoe.segmentPill
                 textColor: root.tahoe.labelPrimary
                 // R099/C05: the reference has NO muted label state here — all

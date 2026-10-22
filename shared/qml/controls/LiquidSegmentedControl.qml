@@ -21,6 +21,11 @@ Item {
     property color selectionColor: Foundation.AppTheme.cardHover
     property color textColor: Foundation.AppTheme.text
     property color mutedTextColor: Foundation.AppTheme.mutedText
+    // Material-form container outline. Overridable because hosts draw the
+    // track on very different planes: the default 14% border is right for a
+    // dialog, but on an already-white toolbar it reads heavier than the
+    // reference's hairline. Keeping the default preserves every existing use.
+    property color borderColor: Foundation.AppTheme.border
     // A tonal host draws the Material 3 segmented button: a full-radius outline
     // container with a filled, shadowless selection. The liquid lens below
     // reflection and sampling are hidden rather than blended in that form.
@@ -106,7 +111,7 @@ Item {
             radius: height / 2
             color: root.backgroundColor
             border.width: 1
-            border.color: Foundation.AppTheme.border
+            border.color: root.borderColor
         }
         LiquidSurface {
             anchors.fill: parent
