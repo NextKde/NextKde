@@ -1618,6 +1618,9 @@ KosApplicationWindow {
     }
 
     function itemCompleted(item) {
+        // R35: same teardown-window guard as itemColor().
+        if (!item)
+            return false
         const record = itemRecord(item)
         return item.kind === "todo"
             ? Boolean(value(record, "completed", false))
@@ -1625,6 +1628,9 @@ KosApplicationWindow {
     }
 
     function itemTodoId(item) {
+        // R35: same teardown-window guard as itemColor().
+        if (!item)
+            return ""
         const record = itemRecord(item)
         if (item.kind === "todo")
             return String(value(record, "seriesId", value(record, "id", "")))
@@ -1675,6 +1681,13 @@ KosApplicationWindow {
     }
 
     function itemColor(item) {
+        // R35: schedule delegates tear down on a view switch and their
+        // bindings re-evaluate once with `modelData === undefined`, which
+        // threw on `item.kind` (two TypeErrors per day-view entry). Falling
+        // back to the accent is the colour a non-todo record already gets,
+        // so live week/month frames are unchanged.
+        if (!item)
+            return AppTheme.accent
         const record = itemRecord(item)
         if (item.kind === "todo")
             return listColor(value(record, "listId", "inbox"))
