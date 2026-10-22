@@ -1,14 +1,20 @@
 # LQ0 — 液态组件接入与剩余 spec 收敛
 
 ## 本轮
-- LQ18c spec 回归 2/N：**D02 弹框圆角取证结清**。复用 `R38-d01-scrim.png`（light 1100×692，
-  “新建日程”），四角 4x 裁帧 `R39-d02-{tl,tr,bl,br}-4x.png`：
-  ① 卡边界实测 x368–746 / y49–667 = 379×619（声明 380×620，差 1px 为 AA）；
-  ② TL/TR/BL/BR 四角均为圆弧、无直角；按 TL 逐行白像素左缘拟合 r=24 逐点吻合
-  （y49 inset 18→y68 inset 0，r24 理论 19.1→0.5），BL 拟合 25–26 为半像素/AA 采样差；
-  ③ 单层边缘：卡外阴影梯度 161–173 → 1px AA（216/229）→ 卡面 255，无内层 1px 描边线，
-  无双层描边。r24 = `AppTheme.largeRadius`（`AppTheme.qml:231`），LiquidDialog
-  `LiquidDialog.qml:18-22` 声明 radius 24，与实测一致。无产品改动。
+- LQ18c spec 回归 4/N：**D04 弹框文字层级**（只取证，无产品改动）。复用
+  `R40-d03-shadow.png`（light）与 `R40-d03-shadow-dark.png`（dark）。
+  - ① 标题 PASS：`EventEditorDialog.qml:42-52` = 20 DemiBold；实拍 bbox x392–470、y79–96
+    （墨高 18、深色 23,32,51），卡左 368 ⇒ 左内 **24px** 与 `padding:24` 一致；右缘 470
+    远未居中（卡右 746），左对齐成立。dark 帧同坐标同尺寸。
+  - ② 字段标签：尺寸 11px PASS，**字重不符**——7 个标签（标题/开始/结束/地点/重复/提醒/备注）
+    均无 `font.weight`，即 Normal；spec 要 11 **DemiBold**。实拍墨高 10px、中位横笔 1px、
+    墨色 ~ (108,116,134)（mutedText），与 20px 标题的中位横笔 2px 形成两档。
+    按本轮口径只记录，不改字号/字重（Next round 单列）。
+  - ③ 正文/输入值 PASS：字段值（2026/10/15、09:00、不重复/无）为控件默认字级
+    （Application.font，13px）常规，墨高 11、墨色 (28,37,59) 近 text；占位符同字号 muted；
+    落在 spec 的 11–13 常规区间。
+  - 层级：20 DemiBold 深色标题 / 13 常规深色值 / 11 常规 muted 标签，三级靠字号+颜色可辨；
+    dark 帧同构（卡 41,41,45，标题 x392–470）。
 
 ## 队列（一轮一条；[x]=已完成）
 - [x] LQ01 基线：light week 1100×720 / 760×540；日志无启动回归。
@@ -62,12 +68,27 @@
   无产品改动；light hover 帧已拍（前：开菜单无 hover；后：首行 hover 244）。
 - [x] LQ18c spec 回归 2/N：**D02 弹框圆角 PASS**——四角 r≈24 = `AppTheme.largeRadius`，
   无直角；边缘单层 AA 无内描边。仅取证，无产品改动。
-- [ ] LQ18c spec 全量 PASS 回归：第 1 组 D01–D13（**D01、D02 已结清**；D03 仍差）、第 2 组
+- [x] LQ18c spec 回归 3/N：**D03 双层阴影 PASS**——ambient+key 双层 token 阴影，
+  light 近/中/远 174/183/191（目标 170/180/191），卡面 255 不变；cardSurface/1px border
+  两条待裁决（见仍差 #1）。
+- [x] LQ18c spec 回归 4/N：**D04 弹框文字层级取证**——标题 20 DemiBold 左内 24 PASS；
+  正文 13 常规 PASS；字段标签 11px 但 **Normal 非 DemiBold**（spec 不符，见仍差 #3）。
+- [ ] LQ18c spec 全量 PASS 回归：第 1 组 D01–D13（**D01、D02、D03-阴影、D04 已取证**；
+  D03 的 token/描边待裁决、D05 起未做）、第 2 组
   O01–O09（O09 已结清）、
   X01–X05 + P02/P03、tooltip 剩余腿、V03/V03b 月跨天连续条已完成
   → 其余 PENDING 逐条核对清零（N01、E06 已结清）。
 
 ## 已改
+- LQ18c spec 回归 4/N（D04）：**无产品改动**。只量测 `R40-d03-shadow(.dark).png` 的文字
+  bbox/墨高/横笔/墨色，并核对 `EventEditorDialog.qml:42-52` 标题 20 DemiBold、
+  `:575/:632/:668/:704/:743/:788/:837` 七个标签均 11px 且无 `font.weight`。
+- LQ18c spec 回归 3/N（D03）：`shared/qml/controls/LiquidDialog.qml:17-33` 背景层由单只
+  `LiquidOuterShadow`（`#606064`/`#000000`、α .32、softness 20、spread 52、offset 0）
+  改为 `shadowAmbient`（softness 24、spread 52、opacity 1）+ `shadowKey`（softness 10、
+  spread 28、opacity 1），offset 均 0。α 由 token 自带（light .105/.13、dark .24/.34），
+  经 shader 边缘 falloff ×.5 后 light 合计 ≈.1175（旧 .16），实测落点吻合目标梯度。
+  `dialogFill`、r24、`LiquidBackdrop`、header/footer 全部零改动。
 - LQ18c spec 回归 2/N（D02）：**无产品改动**。`LiquidDialog.qml:18-22` 的 r24 与
   `AppTheme.largeRadius` 一致，本轮只做 4x 角部取证（`R39-d02-*-4x.png`，由 D01 帧裁切）。
 - LQ18c spec 回归 1/N（D01）：**无产品改动**。scrim 为 `LiquidDialog.qml:16`
@@ -116,17 +137,28 @@
   透出）；单日 chip 仍 `withAlpha`。其余零改动。
 
 ## 仍差
-1. D03 弹框卡片结构：面为硬编码 `#ffffff`（非 `cardSurface`）、无 1px `border`、阴影是单只
-   `LiquidOuterShadow`（E4 自定义）而非 `shadowAmbient`+`shadowKey` 双层。视觉无硬边，但三条
-   只中“软阴影”一条；改机制不是 token 级，需先定是否保留 LQ07 的 E4 方案。
+1. D03 弹框卡片结构：双层阴影已改为 `shadowAmbient`+`shadowKey`（本轮 PASS）；剩两条
+   待裁决——① 面仍硬编码 `#ffffff` / `#29292d` 而非 `cardSurface`（该 token 在玻璃会话下
+   α .54 半透明，会透出弹框背后内容且合成 ≠255，见外推）；② 无 1px `border`
+   （`alert-macos.png` 无可见描边，字面要求与之冲突）。
 2. 浮层/菜单：详情浮层为**单张中性卡**（参考是 246 壳 + 内部白行），面 240 与菜单 255
    差 Δ15（参考 Δ9）；阴影偏弱、菜单亮卡无磨砂色偏。（O09 菜单翻转不可达，见外推；
    tooltip 翻转同理。hover 圆角 r8 已于本轮实测结清，不再列。）
+3. D04 字段标签字重：7 个标签为 11px **Normal** muted（实测墨高 10、中位横笔 1），
+   spec 要 11 **DemiBold**。R40 只取证未改；Next round 单列修正并复拍层级。
 （tooltip 各腿已结清：dark、出现/消失连续帧通过；上方翻转在当前布局不可达，见外推；
 密集 08:00 簇 45px 道 + 标题 ellipsis 为参考同款外推，已移入 rounds.md，不再列。
 V03/V03b 月跨天连续条已结清，细节见 rounds.md R153–R154。）
 
 ## 外推待确认
+- D03 的 `cardSurface`：`AppTheme.qml:192-193` = `withAlpha(card, glassActive ? .54/.46 : 1)`。
+  评审 VM 是有合成器模糊的玻璃会话，玻璃激活时弹框面会变成 α .54/.46，背后的窗口内容
+  与 scrim 会透出，和参考 `alert-macos.png` 的不透明白卡、以及 D01 已实测的 255 冲突；
+  即使 `glassActive=false`，`card = mix(windowRaised, accent, .018)`（`:159`）也带 accent
+  微染色，不等于 255。故 D03 的“face = cardSurface”按参考图与既有 PASS 行为优先，
+  **保留硬编码卡面**。若产品要字面满足 spec，应先裁决“弹框允许半透明/微染色”。
+- D03 的 1px `border` 同样按参考图（无可见描边）判为可豁免；两条都需人工裁决，
+  不代表实现缺陷。
 - 任务编辑器高度：编辑态（三行 footer）实测卡 464、备注→保存 16px；New task（两行 footer）
   与删除确认态未复拍。高度公式随 footer implicitHeight 联动，两态只会更矮（760×540 下限
   476 仍高于 464，不触发滚动），风险低。
@@ -241,12 +273,9 @@ V03/V03b 月跨天连续条已结清，细节见 rounds.md R153–R154。）
   窄事件惯例外推），不算 X05 的“unintended overlap”。
 
 ## Next round
-LQ18c spec 回归 3/N：**D03 弹框卡面 token + 双层阴影**。只做两件：
-① `LiquidDialog.qml:23` 硬编码卡面 `dark ? "#29292d" : "#ffffff"` 换成 `AppTheme.cardSurface`
-（先读 `AppTheme.qml:192` 的实际合成值；若 light 合成 ≠255 需先拍现状对照，不可悄悄改变
-现 PASS 的 D01 卡面 255）；
-② 阴影从单只 `LiquidOuterShadow`（softness 20 / spread 52 / opacity .32）改为
-`shadowAmbient` + `shadowKey` 双层（`AppTheme.qml:207-210`），保持“卡外近缘 170 / 稍远 180 /
-远区 191”的量级不变。
-**1px border 本轮不擅自加**：`alert-macos.png` 无可见描边，D03 字面要求 border，属语义冲突；
-先在 state.md 记为待裁决，不改可见外观。若①的 token 会让卡面变灰，则①也只记录不改。
+LQ18c spec 回归 5/N：**D04 标签字重修正**。`EventEditorDialog.qml` 七个字段标签
+（:575 标题、:632 开始、:668 结束、:704 地点、:743 重复、:788 提醒、:837 备注）各加
+`font.weight: Font.DemiBold`，字号仍 11、颜色仍 `AppTheme.mutedText`，其它零改动；
+构建后用既有命令复拍 light/dark，量测中位横笔是否由 1 变 ≥2、墨高不变，并目视确认
+标题/值/标签三级仍可辨、标签不抢正文。若 DemiBold 在 muted 色下与值同重（层级塌陷），
+只记录差异并停手，写清「差在哪」。
