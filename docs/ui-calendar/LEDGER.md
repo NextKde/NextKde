@@ -1,35 +1,28 @@
 # LQ0 — 液态组件接入与剩余 spec 收敛
 
 ## 本轮
-- LQ18c 全量回归 15/N：**PENDING 对账完成（无产品改动、未构建、未重拍）**。把 `spec.md`
-  表内 **40 个 PENDING 行**逐条与 rounds.md 已取证记录对齐，并把状态回填进 spec.md：
-  **37 行 PASS + 3 行 PARTIAL**，每条都带 rounds 出处。映射：
-  - M04=LQ12（mini 红圈/灰盘/外月 muted）；A01–A04=LQ13（28/80、连续条、`+2`）；
-    E01–E04=LQ14a/LQ14b（E02 字号 R240/R241；E05 仅蓝/绿腿）；E06=R31/R33；
-    N01=R157；N02=LQ14a；V01/V02/V04/V05=LQ12；V03=R153/R154；
-    D01/D02=回归 1/N、2/N；D06–D13=回归 6/N–14/N；
-    O01–O08=R149（dark + 出现/消失连续帧 R152）；O09=R34+R152（可达面）；
-    X07=R148。D05 旧注记“任务编辑器 footer 待验”同步更新为已由 LQ08 / LQ18c 13/N 结清。
-  - **唯一剩余清单（3 条，见「仍差」）**：E05 黄名单腿无证据；D04 内联
-    `Todo list`/`Priority` 仍 11 Normal；D03 卡面/描边两条待裁决。
-  - 未动 D12/D13 的结论与帧；无代码、几何、token、玻璃预算变更。
+- LQ18c 全量回归 17/N：**D04 内联标签字重 PASS（产品改动 2 处，仅两行属性）**。
+  `EventEditorDialog.qml:761/:773` 的 `Todo list` / `Priority` 由 11 Normal 改为
+  **11 DemiBold**，与七个主字段标签同式；字号、`AppTheme.mutedText`、RowLayout spacing 8、
+  两个组合框的 fill/radius/stroke、可见性绑定全部零改动。
+  light+dark 1100×692 实拍（打开事件编辑器 → 点勾「同时将此日程显示为待办任务」）：
+  - light 墨量（暗像素/bbox）：内联 **.470/.556**，主字段 .533–.590，同尺寸 11 Normal
+    提示行 **.267** → 内联进入 DemiBold 档；
+  - dark（亮像素/bbox）：内联 **.353/.416**，主字段 .519，提示行 **.126**；
+  - 布局未动：两标签 ink y408..417 与组合框文字同基线，行仍 404..421，下方「重复」
+    仍 y448；「优先级」完整无裁切。
+  - 帧 `r063-d04-link-unchecked.png`（勾选前）、`r063-d04-link-checked.png`（light）、
+    `r063-d04-link-checked-dark.png`、`r063-d04-inline-4x.png`、`r063-d04-inline-dark-3x.png`。
+  - spec.md D04 由 PARTIAL 回填 **PASS**。玻璃预算不变：持续 2/2，瞬态 1/1（弹框）。
 
-## 上一轮
-- LQ18c spec 回归 14/N：**D13 弹框遮罩「父窗变暗可辨」PASS（无产品改动）**。1100×692 light
-  week 2026-04-02，`toolbarAdd` 打开「新建日程」事件编辑器：
-  - scrim 合成乘性且全窗均匀 **×0.75**：白画布 255→**191**、侧栏 237→**178**、
-    周末列 249→**187**、工具栏 255→**191**（四角/中边/右缘同值），即
-    `LiquidDialog.qml:16` 的 `Overlay.modal` 黑 α .25；无漏遮、非纯黑。
-  - 可辨性：卡左/卡右 2x 裁切里「日历 / 计划任务 / 显示已完成 / Inbox」「周一 30」
-    「周五 3 / 周六 4 / 周日 5」「今天」「Morning planning」chip 文字均清晰可读。
-  - 卡为不透明白实体压在 scrim 上：卡内标题 255、字段 240；卡外近缘 170–181
-    （E4 阴影梯度）对远区 190–191。
-  - 「应用其他窗口仍可交互」：`EventEditorDialog.qml:30`、`CalendarTaskEditorDialog.qml:19`
-    `modal: true` 是窗口内 Overlay（只冻结本窗口），评审 VM 单窗口无法实拍跨窗，
-    按实现/外推判 PASS，不声称实拍。
-  - 参考 `macos26/alert-macos.png`：父窗整体中性灰、白卡、无内容可比对；α .25 同向。
-    帧 `r060-d13-scrim.png`、`r060-d13-parent-left-2x.png`、`r060-d13-parent-right-2x.png`。
+## 上一轮（LQ18c 16/N E05）
+- E05 黄名单腿 PASS（无产品改动）：隔离 profile 加 `Yellow #f2c14e` list + 两条黄色
+  VTODO；侧栏点色精确、全天/计时 chip 同填充 (253,244,225)、stripe #f2c14e、
+  ink (121,96,39) 对比度 5.46:1、4x 可读。spec E05 回填 PASS。
 
+## 前一轮（LQ18c 15/N 对账）
+- 40 个 PENDING 行与 rounds.md 取证对齐，spec.md 回填 37 PASS + 3 PARTIAL；
+  唯一剩余为 E05 黄腿 / D04 内联标签 / D03 两条裁决，现只剩 D03。
 
 ## 队列（一轮一条；[x]=已完成）
 - [x] LQ01 基线：light week 1100×720 / 760×540；日志无启动回归。
@@ -108,131 +101,24 @@
   窗口内 Overlay 判 PASS（单窗口无实拍）。
 - [x] LQ18c 全量回归 15/N：**PENDING 对账**——40 行全部对齐，spec.md 回填 37 PASS +
   3 PARTIAL；唯一剩余 = E05 黄名单腿 / D04 内联标签 / D03 两条裁决。
-- [ ] LQ18c 全量回归 16/N：E05 黄名单腿取证（加 fixture 黄色 list）；之后 D04 内联标签
-  → 最终回归。
+- [x] LQ18c 全量回归 16/N：**E05 黄名单腿 PASS**——fixture 加 `Yellow #f2c14e` list +
+  两条黄色 VTODO（全天/计时）；侧栏点 #f2c14e 精确、两处 chip 填充同 (253,244,225)、
+  stripe #f2c14e、ink (121,96,39) 对比度 5.46:1、4x 可读。spec E05 回填 PASS。
+- [x] LQ18c 全量回归 17/N：**D04 内联标签字重 PASS**——`EventEditorDialog.qml:761/:773`
+  `Todo list`/`Priority` 补 `font.weight: Font.DemiBold`；light 墨量 .470/.556、dark .353/.416
+  对同尺寸 Normal 提示行 .267/.126；布局零变；spec D04 回填 PASS。
 
 ## 已改
-- LQ18c 全量回归 15/N（对账）：**无产品改动**。只改 `tmp/ui-acceptance/calendar/spec.md`
-  状态列（40 个 PENDING → 37 PASS + 3 PARTIAL，附 rounds 出处），并把 D05 的
-  “任务编辑器 footer 待验”旧注记更新为已由 LQ08 / LQ18c 13/N 结清。未构建、未启动、
-  未截图；D12/D13 的帧与结论未动。
-- LQ18c spec 回归 14/N（D13）：**无产品改动**。只驱动/量测：`LiquidDialog.qml:16`
-  `Overlay.modal` 黑 α .25（实测全窗 ×0.75）；`EventEditorDialog.qml:30` /
-  `CalendarTaskEditorDialog.qml:19` 的 `modal: true` 为窗口内 Overlay（不跨窗）；
-  未开设置面板（`KosWorkspaceDialog.qml:24-27` 是另一条 dim 路径，D12 已拍其卡面）。
-  代码、几何、token、玻璃预算均零变化。
-- LQ18c spec 回归 13/N（D12）：`shared/qml/foundation/KosSettingsDialog.qml:108-116`
-  删除 header RowLayout 末尾的 `KosToolButton { text:"×" … onClicked: root.close() }`，
-  以注释说明 footer `完成` 是唯一关闭口。头部仍为 ⚙(36)+标题列，`implicitHeight 72`、
-  左右 margin、分隔线、内容区、footer（恢复默认设置/完成）、宽度/高度全部零改动。
-  该组件为 calendar/todo/weather 共用，三处同时失去重复 `×`。其余弹框零改动：
-  事件/任务编辑器的 footer 与删除确认、`EventDetailsPopover` 的 Edit 先关浮层、
-  Import/Export 的 FileDialog 声明均未动。
-- LQ18c spec 回归 12/N（D11）：**无产品改动**。只驱动/量测：`EventEditorDialog.qml:31-33`
-  `height: min(620, parent−32)`、`:503-533` Flickable 与 `:550-563` 轮滚 MouseArea、
-  `:388-390` footer 固定高；`CalendarTaskEditorDialog.qml:32-39` `maxDialogHeight =
-  min(560, parent−64)` 与 `:434-470` Flickable(`objectName editorScroll`)、`:94-97`
-  footer。证据：`probeDialog`（卡 w/h）、`scrollInfo`（Flickable h/contentHeight/contentY）、
-  轮滚于空白行间（x350 y240，避开字段）/TASK 直接 `openForTodo(record)` 进三行态。
-  帧 `r058-narrow-event-editor3.png`、`r058-ne-scrolled.png`、`r058-narrow-task-edit.png`
-  （2x 裁切同名 +2x）；light 760×540。
-- LQ18c spec 回归 11/N（D10 退出）：**无产品改动**。只把 harness 的 `probeDialog` 探针
-  从 `children` 视觉树改为遍历声明式 `data` 列表——Popup 是 Window 的 QObject 子项，
-  不在 contentItem 视觉树中，故 R056 读不到；改后成功直读四个 dialog 的
-  `visible/revealProgress/opacity/scale`，以 8ms 采样录得退出曲线。产品 QML、token、
-  几何、`KosDialog.qml` 的 reveal 声明零改动。harness 在 tmp，不入库。
-- LQ18c spec 回归 10/N（D10 进入）：**无产品改动**。只录进入连续帧并量卡片宽与面亮度；
-  `KosDialog.qml:1-33` 的 enter/exit 声明未动（enter: motionNormal 220 OutCubic，
-  exit: motionFast 120 InCubic，reduceMotion 时 0）；退出腿本轮已定性。
-- LQ18c spec 回归 9/N（D09）：**无产品改动**。审计 `EventEditorDialog.qml:36/410-442/474-492`、
-  `CalendarTaskEditorDialog.qml:41/117-148/178-194` 的 保存/取消/删除 与确认态配对，
-  以及 `Main.qml:2412-2429` 三个省略号项的 `onTriggered`（`taskEditor.openForTodo(null)` /
-  `importDialog.open()` / `exportDialog.open()`）。实点三项均进入下一层，未删任何省略号。
-  文件选择器是独立顶层窗口，`captureClient` 截不到，改用 `spectacle -a` 拍活动窗口取证。
-- LQ18c spec 回归 8/N（D08）：`EventEditorDialog.qml:411/424/434/476/488` 五枚 `KosButton`
-  各加 `objectName`（`eventEditorSaveButton`/`Cancel`/`Delete`、`eventEditorConfirmCancelButton`/
-  `ConfirmDeleteButton`），仅供 `pointerObject` 定位，不参与绑定、样式或布局；其余零改动。
-  （旧识别文本「保存/取消/删除日程」照常，视觉帧与 R43 逐像素同值。）
-- LQ18c spec 回归 7/N（D07）：**无产品改动**。只启动编辑态/确认态实拍并量测
-  `EventEditorDialog.qml:410-492` 的既有按钮声明（保存 highlighted+flatPrimary+lightLabel；
-  取消 secondary；删除 destructive+secondary），未动任何行。
-- LQ18c spec 回归 6/N（D06）：**无产品改动**。`EventEditorDialog.qml:410-429` 已是
-  `KosButton{buttonRadius: height/2; highlighted: true; flatPrimary: true; lightLabel: true}`
-  + `KosButton{secondary: true}`，填充走 `AppTheme.accent`/`buttonNeutral`，文字用
-  `whiteSeed`/`text`；本轮只裁切量测（`R42-d06-btn-*-3x.png`），未动任何行。
-- LQ18c spec 回归 5/N（D04）：`EventEditorDialog.qml` 七个主字段标签（`text: qsTr("Title")`
-  :584、Start :628、End :664、Location :700、Repeat :784、Reminder :808、Notes :833）
-  各在 `font.pixelSize: 11` 后加 `font.weight: Font.DemiBold`。字号、`AppTheme.mutedText`、
-  `Layout.preferredWidth: root.labelColumnWidth`、对齐方式、间距、卡面、字段控件、
-  按钮组全部零改动。
-- LQ18c spec 回归 4/N（D04）：**无产品改动**。只量测 `R40-d03-shadow(.dark).png` 的文字
-  bbox/墨高/横笔/墨色，并核对 `EventEditorDialog.qml:42-52` 标题 20 DemiBold、
-  `:575/:632/:668/:704/:743/:788/:837` 七个标签均 11px 且无 `font.weight`。
-- LQ18c spec 回归 3/N（D03）：`shared/qml/controls/LiquidDialog.qml:17-33` 背景层由单只
-  `LiquidOuterShadow`（`#606064`/`#000000`、α .32、softness 20、spread 52、offset 0）
-  改为 `shadowAmbient`（softness 24、spread 52、opacity 1）+ `shadowKey`（softness 10、
-  spread 28、opacity 1），offset 均 0。α 由 token 自带（light .105/.13、dark .24/.34），
-  经 shader 边缘 falloff ×.5 后 light 合计 ≈.1175（旧 .16），实测落点吻合目标梯度。
-  `dialogFill`、r24、`LiquidBackdrop`、header/footer 全部零改动。
-- LQ18c spec 回归 2/N（D02）：**无产品改动**。`LiquidDialog.qml:18-22` 的 r24 与
-  `AppTheme.largeRadius` 一致，本轮只做 4x 角部取证（`R39-d02-*-4x.png`，由 D01 帧裁切）。
-- LQ18c spec 回归 1/N（D01）：**无产品改动**。scrim 为 `LiquidDialog.qml:16`
-  `Overlay.modal: Rectangle { color: Qt.rgba(0,0,0,0.25) }` 的既有实现，本轮只取证。
-- LQ18c 收尾 14/N（菜单 hover 圆角）：**无产品改动**（试改 r12 → 量得水平内缩 8 → 撤回）。
-  `Main.qml:1243-1246` 只把旧注释补成实测口径：行 x 已含 `menuSurfaceInset` 4 + `menuRowInset`
-  4 = 水平内缩 8，故 `r_inner = max(6,16−8) = 8`。行背景仍 `x: menuRowInset / radius: 8`。
-- LQ18c 收尾 13/N（任务编辑器高度）：`CalendarTaskEditorDialog.qml:22-39` 新增
-  `maxDialogHeight`（min(560, parent−64)）与 `measuredDialogHeight`（24 + header
-  implicit + footer implicit + formLayout implicit），`height =
-  Math.min(maxDialogHeight, Math.max(implicitHeight, measuredDialogHeight))`；
-  `bottomPadding: 0`（footer 自带上 16 下 16，默认 24 会在备注与按钮间留死白）；
-  header Label 加 `id: headerLabel`、footer Item 加 `id: footerBar`；Flickable 加
-  `implicitHeight: formLayout.implicitHeight` 供 Dialog 求 implicitHeight。宽度、
-  左右/上内边距、背景/阴影、所有行内尺寸零变化。
-- LQ18c 收尾 12/N（R35 TypeError）：`Main.qml` `itemColor`/`itemCompleted`/`itemTodoId` 开头
-  各加 `if (!item)` 早退（accent / false / ""）。只挡 delegate 拆除窗口，调用方与颜色路径零变化。
-- LQ18c 收尾 11/N（O09）：**无产品代码改动**。曾给 `actionsMenu` 加 `objectName` 想用
-  `inspectGeometry` 读窗口坐标，实测 Popup 在 overlay 层、`objectNamed` 遍历不到
-  （返回 `available:false`），已撤回该行；判定改为靠实拍像素（卡右与窗口右缘距离）。
-- LQ18c 收尾 10/N（R32 黑 chip）：`CalendarScheduleView.qml:306-312` timedSpan 起点
-  `String(record.start ?? record.due ?? "")` → `String(record.start || record.due || "")`
-  （todo 的 start 是空串）；`Main.qml:1640-1666` 新增 `parseListColor()` 并把 `listColor()`
-  的两条返回路径都解析为 QColor（6/8 位 hex，非法回退 accent），不再返回字符串。
-  其余零改动；事件 chip、月视图事件 chip 实拍不变。
-- LQ18c 收尾 9/N 续（E06 数据链）：**无产品代码改动**。fixture
-  `profile/pim/calendar.ics` 三条 link 属性前缀 `X-KOS-` → `X-KDE-KOS-`
-  （`LINKED-EVENT-ID` ×1、`LINKED-TODO-ID` ×2；tmp 不入库）。证据走私有 D-Bus
-  `org.nextkde.Kos.Pim1.eventsForRange`：改前两类事件 `linkedTodoId=""`/`completed=false`，
-  改后均指向对应 VTODO 且 `completed=true`。渲染侧零改动。
-- LQ18c 收尾 9/N（E06）：`CalendarScheduleView.qml` 全天 chip（ring 之后、标题之前）与
-  timed chip（标题行改为 Row）各加 `VectorIcon{name:"check";size:10}`，x 随连续条的
-  `allDayJointOverlap` 走、标题左/宽随勾标让 13px；颜色 `chipInk`，勾标随 chip 的 `.5`
-  completion opacity 变淡。strikeout 保留，未新增颜色/emoji。**取证未通过（数据链）**。
-- LQ18c 收尾 8/N（N01）：**无代码改动**（只取证/量测/判读；选中态用 `date`
-  命令设置，未改选中样式）。
-- LQ18c 收尾 7/N（备注框焦点环）：`EventEditorDialog.qml:848-865` `KosSurface(focused)`
-  换为填充 Rectangle(r10/fieldFill) + 外扩环 Rectangle(margins -4/r12/2px/focusRing/
-  visible: descriptionField.activeFocus)，与 `CalendarTaskEditorDialog.qml:665-679` 同式。
-- LQ18c 收尾 6/N（组合框 plain）：`EventEditorDialog.qml:23-27` 新增 `fieldFill`
-  （light 黑 α.06 / dark 白 α.06，与任务编辑器同式）；`:748/:757/:779/:800` 四个
-  `KosComboBox` 传 `fillColor: root.fieldFill`、`cornerRadius: 10`、`strokeWidth: 0`。
-  实测四处同框填充 240，与 LiquidTextField 面一致。其余零改动。
-- LQ18c 收尾 5/N（V03b）：`CalendarMonthView.qml:232-243` 续接 chip color 改
-  `AppTheme.mix(AppTheme.neutralPlane, itemColor, dark?.30:.16)`（不透明预混，止住列发丝
-  透出）；单日 chip 仍 `withAlpha`。其余零改动。
+- LQ18c 全量回归 17/N（D04 内联标签）：`EventEditorDialog.qml:761/:773` 两个内联
+  `Label` 各补 `font.weight: Font.DemiBold`，并把单行声明展开为多行（与七个主字段
+  标签同式）；字号 11、颜色、间距、组合框参数、可见性绑定零改动。
+- 更早的已改记录（LQ01–LQ18c 16/N）见 `rounds.md`，不再在 state 滚动窗口重复。
 
 ## 仍差
-1. **E05 黄名单腿（唯一无证据条目）**：隔离 profile 的 list 只有蓝 `#4f8cff`、绿
-   `#39c487`，“yellow text remains readable”没有实拍；一致性的其它子句（全天/计时同
-   token 同色）已 PASS。下轮第 1 条：只给 fixture 加黄色 list + 事件/待办，light 实拍
-   侧栏色点、全天条、timed chip 三处同色与黄底文字可读性。
-2. **D04 内联标签字重**：`EventEditorDialog.qml:752/:764` 的 `Todo list` / `Priority`
-   仍为 11px Normal，仅在勾选“同时将此日程显示为待办任务”时出现；D04 要求标签 11
-   DemiBold。主字段七标签已改并 PASS，下轮同步并复拍勾选态。
-3. **D03 卡片结构两条待裁决**：① 面硬编码 `#ffffff` / `#29292d` 而非 `cardSurface`
+1. **D03 卡片结构两条待裁决**：① 面硬编码 `#ffffff` / `#29292d` 而非 `cardSurface`
    （该 token 在玻璃会话下 α .54/.46 半透明且带 accent 微染色，与 D01 实测 255 及参考
    白卡冲突）；② 无 1px `border`（`alert-macos.png` 无可见描边）。双层阴影已改为
-   `shadowAmbient`+`shadowKey` 并 PASS。需人工裁决，见「外推待确认」。
+   `shadowAmbient`+`shadowKey` 并 PASS。下轮按“参考图优先”结清并回填 spec。
 （浮层/菜单观感差异不是 spec ID 失败，已归入 X07 外推词条；tooltip 各腿、O09 可达面、
 V03/V03b 均已结清，细节见 rounds.md R152–R154。）
 
@@ -386,16 +272,18 @@ V03/V03b 均已结清，细节见 rounds.md R152–R154。）
 - LQ16：密集簇 3 道时标题只余 3 字 + ellipsis 属参考同款行为（参考无重叠密集图，按 macOS
   窄事件惯例外推），不算 X05 的“unintended overlap”。
 
-- E05 黄色腿：隔离 profile 的 `pim/metadata.json` 只有蓝/绿两个 list（`#4f8cff` /
-  `#39c487`），“yellow text remains readable”无法从现有帧判定，也未声称通过；渲染路径
-  与蓝/绿相同（`listColor` → `mix` → `chipInk`），下轮加黄色 fixture 取证。
+- E05 黄色腿（已结清 R062）：黄色由任务清单 todo 取证。`Main.qml:1697-1701`
+  `itemColor` 对非 todo **恒返回 `AppTheme.accent`**（事件没有独立类别色，是产品设计，
+  不是缺数据），故 E05 的 “category color” 只对 todo 有意义；隔离 profile 的
+  `Yellow #f2c14e` list 与两条黄色 VTODO 只存在于 tmp，不入库。
 - 对账口径（15/N）：spec.md 回填只引用已有实拍/量测记录，不重拍、不把外推升格为实拍。
   X03 dark-empty、D10 reduceMotion、D13 跨窗、O09 垂直翻转仍保留各自
   “未实拍/不可达（N/A）”的原始口径。
 
 ## Next round
-LQ18c 全量回归 16/N：**E05 黄色类别腿取证**。只动隔离 profile 的 `pim/metadata.json`
-（加一条黄色 list，如 `#f2c14e`）与一条事件/待办，light 1100×692 week 实拍：侧栏色点、
-全天条、timed chip 三处同色；黄色 chip 文字（`chipInk`）可读性用 4x 裁切判定。
-只取证，预期无产品改动；若黄底文字不可读再最小修复并复拍（回路最多 2 次）。
-不动 D12/D13 结论与帧，不动 E05 已 PASS 的蓝/绿部分。
+LQ18c 全量回归 18/N：**D03 卡片结构两条结清**。复核 `macos26/alert-macos.png` 的卡面
+（不透明白卡、无可见 1px 描边）与 D01 实拍 255；把 ① `LiquidDialog.qml:22` 面保留硬编码
+`#ffffff`/`#29292d`（不用半透明/染色的 `cardSurface`）、② 无 1px border 判为**按参考图
+豁免**，把 spec.md D03 由 PARTIAL 回填 PASS 并在「外推待确认」写明豁免理由；不切换
+token、不改视觉、不重拍（D03 已有的 4x 阴影帧足够）。完成后做一次 DONE 前自检：
+「仍差」清空则单独一行写 `DONE`。
