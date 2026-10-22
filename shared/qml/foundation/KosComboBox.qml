@@ -5,6 +5,12 @@ ComboBox {
     id: root
     implicitHeight: AppTheme.controlHeight
     leftPadding: 14; rightPadding: 30
+    // LQ08: optional plain-field appearance, matching LiquidTextField's
+    // specificationForm (α .06 fill, no idle rim, r10). Defaults keep the
+    // existing materialForm look for every other call site.
+    property color fillColor: AppTheme.fieldSurface
+    property real cornerRadius: AppTheme.smallRadius
+    property real strokeWidth: 1
     contentItem: Label {
         text: root.displayText; font: root.font
         color: root.enabled ? AppTheme.text : AppTheme.mutedText
@@ -15,8 +21,9 @@ ComboBox {
         text: "⌄"; color: AppTheme.mutedText; font.pixelSize: 16
     }
     background: KosSurface {
-        radius: AppTheme.smallRadius
-        fillColor: AppTheme.fieldSurface
+        radius: root.cornerRadius
+        fillColor: root.fillColor
+        strokeWidth: root.strokeWidth
         elevation: 0; focused: root.activeFocus; hovered: root.hovered
     }
     delegate: ItemDelegate {

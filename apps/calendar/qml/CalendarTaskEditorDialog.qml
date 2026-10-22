@@ -5,7 +5,7 @@ import QtQuick.Controls
 import QtQuick.Layouts
 import Kos.Ui
 
-KosWorkspaceDialog {
+LiquidDialog {
     id: root
 
     property string editingId: ""
@@ -23,6 +23,26 @@ KosWorkspaceDialog {
     anchors.centerIn: parent
     standardButtons: Dialog.Save | Dialog.Cancel
     readonly property int fieldHeight: 30
+    // LQ08: same label column as the event editor so both editors share one
+    // form grammar; field fill/radius tokens match LiquidTextField's plain
+    // specificationForm for the combos and the notes frame.
+    readonly property int labelColumnWidth: 56
+    readonly property color fieldFill: AppTheme.dark
+        ? Qt.rgba(1, 1, 1, .06) : Qt.rgba(0, 0, 0, .06)
+    // LQ08: shared liquid dialog shell, same as the event editor — r24 card,
+    // E4 shadow, .25 scrim, plain interior (no glass inside L2). Title and
+    // body padding follow the Dialog row of liquid-spec §4.4; the footer keeps
+    // its own 16px insets so D05's stacked bars stay put.
+    padding: 24
+    header: Label {
+        text: root.title
+        padding: 24
+        bottomPadding: 8
+        color: AppTheme.text
+        font.pixelSize: 17
+        font.weight: Font.DemiBold
+        elide: Text.ElideRight
+    }
 
     // D05: the dialog's actions are stacked, not a row — one full-width bar
     // per action, all the same width and height with a hairline gap, primary
@@ -48,12 +68,6 @@ KosWorkspaceDialog {
     readonly property string cancelLabel: {
         const b = labelSource.count > 0 ? labelSource.standardButton(Dialog.Cancel) : null
         return b ? b.text : qsTr("Cancel")
-    }
-
-    background: KosSurface {
-        radius: AppTheme.smallRadius + 4
-        fillColor: AppTheme.dark ? "#262626" : "#F7F7F7"
-        elevation: 0.5
     }
 
     footer: Item {
@@ -487,19 +501,27 @@ KosWorkspaceDialog {
                 wrapMode: Text.WordWrap
             }
 
-            Label { text: qsTr("Title"); color: AppTheme.mutedText; font.pixelSize: 11 }
             RowLayout {
                 Layout.fillWidth: true
                 spacing: 8
 
-                KosTextField {
+                Label {
+                    text: qsTr("Title")
+                    Layout.preferredWidth: root.labelColumnWidth
+                    Layout.alignment: Qt.AlignVCenter
+                    color: AppTheme.mutedText
+                    font.pixelSize: 11
+                }
+
+                LiquidTextField {
                     id: titleField
                     Layout.fillWidth: true
                     Layout.preferredHeight: root.fieldHeight
+                    specificationForm: true
+                    invalid: root.hasError("title")
+                    outlineColor: AppTheme.destructive
                     placeholderText: qsTr("Task title")
                     Accessible.name: qsTr("Task title")
-                    outlineColor: root.hasError("title")
-                        ? AppTheme.destructive : AppTheme.border
                     onTextChanged: root.clearError("title")
                 }
 
@@ -513,7 +535,13 @@ KosWorkspaceDialog {
                 Layout.fillWidth: true
                 spacing: 8
 
-                Label { text: qsTr("List"); color: AppTheme.mutedText; font.pixelSize: 11 }
+                Label {
+                    text: qsTr("List")
+                    Layout.preferredWidth: root.labelColumnWidth
+                    Layout.alignment: Qt.AlignVCenter
+                    color: AppTheme.mutedText
+                    font.pixelSize: 11
+                }
                 KosComboBox {
                     id: listBox
                     Accessible.name: qsTr("Task list")
@@ -521,6 +549,9 @@ KosWorkspaceDialog {
                     Layout.preferredHeight: root.fieldHeight
                     model: root.availableLists
                     textRole: "name"
+                    fillColor: root.fieldFill
+                    cornerRadius: 10
+                    strokeWidth: 0
                 }
                 Label { text: qsTr("Priority"); color: AppTheme.mutedText; font.pixelSize: 11 }
                 KosComboBox {
@@ -529,6 +560,9 @@ KosWorkspaceDialog {
                     Layout.preferredWidth: 110
                     Layout.preferredHeight: root.fieldHeight
                     model: [qsTr("None"), qsTr("Low"), qsTr("Medium"), qsTr("High")]
+                    fillColor: root.fieldFill
+                    cornerRadius: 10
+                    strokeWidth: 0
                 }
             }
 
@@ -536,27 +570,35 @@ KosWorkspaceDialog {
                 Layout.fillWidth: true
                 spacing: 8
 
-                Label { text: qsTr("Due date"); color: AppTheme.mutedText; font.pixelSize: 11 }
-                KosTextField {
+                Label {
+                    text: qsTr("Due date")
+                    Layout.preferredWidth: root.labelColumnWidth
+                    Layout.alignment: Qt.AlignVCenter
+                    color: AppTheme.mutedText
+                    font.pixelSize: 11
+                }
+                LiquidTextField {
                     id: dueDateField
                     Layout.fillWidth: true
                     Layout.preferredHeight: root.fieldHeight
+                    specificationForm: true
+                    invalid: root.hasError("dueDate")
+                    outlineColor: AppTheme.destructive
                     placeholderText: root.datePattern
                     Accessible.name: qsTr("Task due date")
-                    outlineColor: root.hasError("dueDate")
-                        ? AppTheme.destructive : AppTheme.border
                     onTextChanged: root.clearError("dueDate")
                 }
 
-                KosTextField {
+                LiquidTextField {
                     id: dueTimeField
                     Layout.preferredWidth: 92
                     Layout.preferredHeight: root.fieldHeight
+                    specificationForm: true
+                    invalid: root.hasError("dueTime")
+                    outlineColor: AppTheme.destructive
                     placeholderText: root.timePattern
                     enabled: !allDayCheck.checked
                     Accessible.name: qsTr("Task due time")
-                    outlineColor: root.hasError("dueTime")
-                        ? AppTheme.destructive : AppTheme.border
                     onTextChanged: root.clearError("dueTime")
                 }
 
@@ -576,8 +618,19 @@ KosWorkspaceDialog {
                 wrapMode: Text.WordWrap
             }
 
-            Label { text: qsTr("Notes"); color: AppTheme.mutedText; font.pixelSize: 11 }
-            // Canonical editable-notes scroller: an explicit Flickable owns
+            RowLayout {
+                Layout.fillWidth: true
+                spacing: 8
+
+                Label {
+                    text: qsTr("Notes")
+                    Layout.preferredWidth: root.labelColumnWidth
+                    Layout.alignment: Qt.AlignTop
+                    color: AppTheme.mutedText
+                    font.pixelSize: 11
+                }
+
+                // Canonical editable-notes scroller: an explicit Flickable owns
             // the TextArea. The editor's height follows its wrapped content,
             // so the flickable gets real vertical extent and the rendered
             // glyphs move with contentY (no implicit-ScrollView adoption
@@ -593,12 +646,24 @@ KosWorkspaceDialog {
                 Layout.fillWidth: true
                 Layout.preferredHeight: 96
 
-                KosSurface {
+                // LQ08: plain field surface, same tokens as the liquid text
+                // fields around it — black/white α .06 at r10, no idle rim;
+                // focus draws the same 2px ring offset 2 instead of the old
+                // inner 2px KosSurface stroke.
+                Rectangle {
                     anchors.fill: parent
-                    radius: AppTheme.smallRadius
-                    fillColor: AppTheme.fieldSurface
-                    elevation: 0
-                    focused: notesField.activeFocus
+                    radius: 10
+                    color: root.fieldFill
+                }
+
+                Rectangle {
+                    anchors.fill: parent
+                    anchors.margins: -4
+                    radius: 12
+                    color: "transparent"
+                    border.width: 2
+                    border.color: AppTheme.focusRing
+                    visible: notesField.activeFocus
                 }
 
                 Flickable {
@@ -660,6 +725,7 @@ KosWorkspaceDialog {
                         }
                     }
                 }
+            }
             }
         }
     }
