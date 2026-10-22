@@ -1,6 +1,22 @@
 # LQ0 — 液态组件接入与剩余 spec 收敛
 
 ## 本轮
+- LQ18c 全量回归 16/N：**E05 黄色类别腿 PASS（无产品改动）**。隔离 profile
+  `pim/metadata.json` 加 list `Yellow #f2c14e`（revision 11），`calendar.ics` 加两条
+  黄色 VTODO（全天 `DUE;VALUE=DATE:20260404`、计时 `DUE 20260402T153000`），
+  light 1100×692 week 2026-04-02 实拍：
+  - 侧栏色点核心 (242,193,78) = `#f2c14e` 精确；
+  - 全天条「Yellow offsite task」与计时「Yellow task」填充同为 **(253,244,225)**
+    （同一 mix token），计时条 stripe 核心 (242,193,78) 精确；
+  - 黄底文字 `chipInk` 核心 (121,96,39)（= 黄 RGB 减半），对 (253,244,225) 对比度
+    **5.46:1**（AA 正文 ≥4.5）；4x 裁切下「Yellow offsite task」「Yellow task」
+    「Yellow」均清晰可读，环形图标同 ink 色。
+  - 帧 `r062-e05-yellow-week2.png`、`r062-e05b-{allday,timed,sidebar}-4x.png`。
+  - 顺带确认：日历**事件**恒用 host accent（`Main.qml:1697-1701` `itemColor` 非 todo
+    直接返回 `AppTheme.accent`），类别色只走任务清单；E05 的“category color”腿由
+    todo 取证，spec 已按此回填 PASS。
+
+## 上一轮（LQ18c 15/N PENDING 对账）
 - LQ18c 全量回归 15/N：**PENDING 对账完成（无产品改动、未构建、未重拍）**。把 `spec.md`
   表内 **40 个 PENDING 行**逐条与 rounds.md 已取证记录对齐，并把状态回填进 spec.md：
   **37 行 PASS + 3 行 PARTIAL**，每条都带 rounds 出处。映射：
@@ -14,7 +30,7 @@
     `Todo list`/`Priority` 仍 11 Normal；D03 卡面/描边两条待裁决。
   - 未动 D12/D13 的结论与帧；无代码、几何、token、玻璃预算变更。
 
-## 上一轮
+## 前一轮（LQ18c 14/N）
 - LQ18c spec 回归 14/N：**D13 弹框遮罩「父窗变暗可辨」PASS（无产品改动）**。1100×692 light
   week 2026-04-02，`toolbarAdd` 打开「新建日程」事件编辑器：
   - scrim 合成乘性且全窗均匀 **×0.75**：白画布 255→**191**、侧栏 237→**178**、
@@ -108,10 +124,18 @@
   窗口内 Overlay 判 PASS（单窗口无实拍）。
 - [x] LQ18c 全量回归 15/N：**PENDING 对账**——40 行全部对齐，spec.md 回填 37 PASS +
   3 PARTIAL；唯一剩余 = E05 黄名单腿 / D04 内联标签 / D03 两条裁决。
-- [ ] LQ18c 全量回归 16/N：E05 黄名单腿取证（加 fixture 黄色 list）；之后 D04 内联标签
-  → 最终回归。
+- [x] LQ18c 全量回归 16/N：**E05 黄名单腿 PASS**——fixture 加 `Yellow #f2c14e` list +
+  两条黄色 VTODO（全天/计时）；侧栏点 #f2c14e 精确、两处 chip 填充同 (253,244,225)、
+  stripe #f2c14e、ink (121,96,39) 对比度 5.46:1、4x 可读。spec E05 回填 PASS。
 
 ## 已改
+- LQ18c 全量回归 16/N（E05）：**无产品改动**。只改隔离 profile 的
+  `pim/metadata.json`（新增 `{"color":"#f2c14e","id":"yellow","name":"Yellow",
+  "position":2}`，revision 10→11）与 `pim/calendar.ics`（新增两条 VTODO：
+  `Yellow offsite task` `DUE;VALUE=DATE:20260404`、`Yellow task`
+  `DUE 20260402T153000`，均 `X-KDE-KOS-LIST-ID:yellow`）；两者都在 tmp、不入库。
+  产品 QML/token/几何/玻璃预算零变更，未构建。spec.md 的 E05 行由 PARTIAL 改为 PASS
+  并补取证口径；并未触碰其他 PASS 行。
 - LQ18c 全量回归 15/N（对账）：**无产品改动**。只改 `tmp/ui-acceptance/calendar/spec.md`
   状态列（40 个 PENDING → 37 PASS + 3 PARTIAL，附 rounds 出处），并把 D05 的
   “任务编辑器 footer 待验”旧注记更新为已由 LQ08 / LQ18c 13/N 结清。未构建、未启动、
@@ -222,14 +246,10 @@
   透出）；单日 chip 仍 `withAlpha`。其余零改动。
 
 ## 仍差
-1. **E05 黄名单腿（唯一无证据条目）**：隔离 profile 的 list 只有蓝 `#4f8cff`、绿
-   `#39c487`，“yellow text remains readable”没有实拍；一致性的其它子句（全天/计时同
-   token 同色）已 PASS。下轮第 1 条：只给 fixture 加黄色 list + 事件/待办，light 实拍
-   侧栏色点、全天条、timed chip 三处同色与黄底文字可读性。
-2. **D04 内联标签字重**：`EventEditorDialog.qml:752/:764` 的 `Todo list` / `Priority`
+1. **D04 内联标签字重**：`EventEditorDialog.qml:752/:764` 的 `Todo list` / `Priority`
    仍为 11px Normal，仅在勾选“同时将此日程显示为待办任务”时出现；D04 要求标签 11
    DemiBold。主字段七标签已改并 PASS，下轮同步并复拍勾选态。
-3. **D03 卡片结构两条待裁决**：① 面硬编码 `#ffffff` / `#29292d` 而非 `cardSurface`
+2. **D03 卡片结构两条待裁决**：① 面硬编码 `#ffffff` / `#29292d` 而非 `cardSurface`
    （该 token 在玻璃会话下 α .54/.46 半透明且带 accent 微染色，与 D01 实测 255 及参考
    白卡冲突）；② 无 1px `border`（`alert-macos.png` 无可见描边）。双层阴影已改为
    `shadowAmbient`+`shadowKey` 并 PASS。需人工裁决，见「外推待确认」。
@@ -386,16 +406,17 @@ V03/V03b 均已结清，细节见 rounds.md R152–R154。）
 - LQ16：密集簇 3 道时标题只余 3 字 + ellipsis 属参考同款行为（参考无重叠密集图，按 macOS
   窄事件惯例外推），不算 X05 的“unintended overlap”。
 
-- E05 黄色腿：隔离 profile 的 `pim/metadata.json` 只有蓝/绿两个 list（`#4f8cff` /
-  `#39c487`），“yellow text remains readable”无法从现有帧判定，也未声称通过；渲染路径
-  与蓝/绿相同（`listColor` → `mix` → `chipInk`），下轮加黄色 fixture 取证。
+- E05 黄色腿（已结清 R062）：黄色由任务清单 todo 取证。`Main.qml:1697-1701`
+  `itemColor` 对非 todo **恒返回 `AppTheme.accent`**（事件没有独立类别色，是产品设计，
+  不是缺数据），故 E05 的 “category color” 只对 todo 有意义；隔离 profile 的
+  `Yellow #f2c14e` list 与两条黄色 VTODO 只存在于 tmp，不入库。
 - 对账口径（15/N）：spec.md 回填只引用已有实拍/量测记录，不重拍、不把外推升格为实拍。
   X03 dark-empty、D10 reduceMotion、D13 跨窗、O09 垂直翻转仍保留各自
   “未实拍/不可达（N/A）”的原始口径。
 
 ## Next round
-LQ18c 全量回归 16/N：**E05 黄色类别腿取证**。只动隔离 profile 的 `pim/metadata.json`
-（加一条黄色 list，如 `#f2c14e`）与一条事件/待办，light 1100×692 week 实拍：侧栏色点、
-全天条、timed chip 三处同色；黄色 chip 文字（`chipInk`）可读性用 4x 裁切判定。
-只取证，预期无产品改动；若黄底文字不可读再最小修复并复拍（回路最多 2 次）。
-不动 D12/D13 结论与帧，不动 E05 已 PASS 的蓝/绿部分。
+LQ18c 全量回归 17/N：**D04 内联标签字重**。`EventEditorDialog.qml:752/:764` 的
+`Todo list` / `Priority` 两个内联标签补 `font.weight: Font.DemiBold`，与七个主字段
+标签同式；不动字号/布局/间距/字段控件。构建后 light 1100×692 打开事件编辑器 →
+勾选「同时将此日程显示为待办任务」实拍两标签，量墨量并与主字段标签对比；预期
+产品改动仅两行。若 harness 点不到复选框，记「未验证」而不是声称通过。
