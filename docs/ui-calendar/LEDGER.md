@@ -1,24 +1,21 @@
 # LQ0 — 液态组件接入与剩余 spec 收敛
 
 ## 本轮
-- LQ18c spec 回归 10/N：**D10 进出过渡取证——进入腿 PASS，退出腿未验证**。
-  进入（事件编辑器，Esc 后重开详情→More 无；实拍 `r056-enter-*` 40 帧 @≈33ms）：
-  卡片宽 374→378→380 px（scale 0.984→0.995→1.0，与 `KosDialog.qml:10`
-  `0.96+0.04p` 吻合）、面亮度 224→236→249→254→255（p≈0.54→0.72→0.91→0.985→1），
-  首末 ≈194ms ≈ `motionNormal` 220ms，增量递减 = OutCubic。f22（838ms）为合成器
-  乱序帧（全显白卡），f23–f26 才是动画主体。
-  退出（Esc，`r056-exit-*` 32 帧）：f8(355ms) 仍为全显白卡 + scrim 187，f9(395ms)
-  已无 scrim（bg 249）、无卡；相邻帧仅 40ms，**没有任何中间 scale/alpha 帧**，与
-  `KosDialog.qml:24-32` 声明的 120ms InCubic 不符。第二次同法复录结果相同。
-  reduceMotion 仅代码证据（`AppTheme.qml:239-241` 时长 0、`KosDialog.qml:10` scale=1），
-  未实拍。
+- LQ18c spec 回归 11/N：**D10 退出腿 PASS（无产品改动）**。定性：上一轮「无中间帧」
+  是抓帧延迟伪影，退出 Transition 一直在播。`probeDialog` 以 8ms 直读真实 popup 属性
+  （`r057`，tmp 不入库）：Esc 后 `revealProgress` 1→.997→.977→.928→.826→.657→.421→.073→0，
+  全程 ≈120ms，增量递减 = InCubic；`scale` 1→.9629（卡宽 380→365.9 = 0.96 目标）；
+  `visible` 直到动画结束才 false。像素帧 `r057-exit-0012..0015` 卡片混合透明度
+  ≈.68/.63/.46/.04 佐证（scrim 已先消失）。进入腿沿用 R056 的 220ms OutCubic PASS。
+  退出时 `Overlay.modal` 在 close 起点即消失（popup.opened=false），卡片继续淡出；
+  spec D10 未要求 scrim 过渡、无动效参考帧，未改产品，记入外推。
+  reduceMotion 仍只有代码证据（duration 0 / scale 1），未实拍。
 
 ## 上一轮
-- LQ18c spec 回归 9/N：**D09 保存/取消配对 + 省略号动作 → PASS（仅取证，无产品改动）**。
-  两个编辑器编辑态均 保存/取消/删除、确认态 取消(主)+删除(弱/红)、新建任务仅 保存+取消；
-  More 菜单 New task/Import/Export 三项实点均进入真实下一层，省略号全部保留。
-  - 帧：`R46-menu-open.png`、`R46-newtask.png`、`R46-import-active.png`、
-    `R46-export-active.png`。
+- LQ18c spec 回归 10/N：**D10 进入腿 PASS**（事件编辑器，`r056-enter-*` 40 帧 @≈33ms）：
+  卡片宽 374→378→380 px（scale 0.984→0.995→1.0，吻合 `KosDialog.qml:10` `0.96+0.04p`）、
+  面亮度 224→236→249→254→255，首末 ≈194ms ≈ `motionNormal` 220ms，增量递减 = OutCubic。
+  退出腿当时判未验证，本轮推翻定性为抓帧伪影。
 
 ## 队列（一轮一条；[x]=已完成）
 - [x] LQ01 基线：light week 1100×720 / 760×540；日志无启动回归。
@@ -86,19 +83,21 @@
 - [x] LQ18c spec 回归 8/N：**D08 按钮三态 PASS**——五枚按钮 hover/pressed 填充各一档
   （保存 69,152,204/85,161,208；中性 215,216,217/204,205,206）、2px focusRing
   (123,182,219) 四边可见、Esc 在编辑/确认两态均关闭。仅加 `objectName`（零视觉改动）。
-- [ ] LQ18c spec 全量 PASS 回归：第 1 组 D01–D13（**D01–D09 已取证**；
-  D03 的 token/描边待裁决、D09 起未做）、第 2 组
+- [ ] LQ18c spec 全量 PASS 回归：第 1 组 D01–D13（**D01–D10 已取证**；D11–D13 未做，
+  D03 的 token/描边待裁决）、第 2 组
   O01–O09（O09 已结清）、
   X01–X05 + P02/P03、tooltip 剩余腿、V03/V03b 月跨天连续条已完成
   → 其余 PENDING 逐条核对清零（N01、E06 已结清）。
 
 ## 已改
-- LQ18c spec 回归 10/N（D10）：**无产品改动**。只录进入/退出连续帧并量卡片宽与面亮度；
+- LQ18c spec 回归 11/N（D10 退出）：**无产品改动**。只把 harness 的 `probeDialog` 探针
+  从 `children` 视觉树改为遍历声明式 `data` 列表——Popup 是 Window 的 QObject 子项，
+  不在 contentItem 视觉树中，故 R056 读不到；改后成功直读四个 dialog 的
+  `visible/revealProgress/opacity/scale`，以 8ms 采样录得退出曲线。产品 QML、token、
+  几何、`KosDialog.qml` 的 reveal 声明零改动。harness 在 tmp，不入库。
+- LQ18c spec 回归 10/N（D10 进入）：**无产品改动**。只录进入连续帧并量卡片宽与面亮度；
   `KosDialog.qml:1-33` 的 enter/exit 声明未动（enter: motionNormal 220 OutCubic，
-  exit: motionFast 120 InCubic，reduceMotion 时 0）。另在 harness/Main.qml 加
-  `probeDialog` 探针（tmp 不入库）想直读 popup 的 revealProgress：popup 对象在 overlay
-  层，既不在 contentItem 树、也不在 activeFocusItem 链上，未读到；`Overlay` 未导入，
-  探针对产品零影响。
+  exit: motionFast 120 InCubic，reduceMotion 时 0）；退出腿本轮已定性。
 - LQ18c spec 回归 9/N（D09）：**无产品改动**。审计 `EventEditorDialog.qml:36/410-442/474-492`、
   `CalendarTaskEditorDialog.qml:41/117-148/178-194` 的 保存/取消/删除 与确认态配对，
   以及 `Main.qml:2412-2429` 三个省略号项的 `onTriggered`（`taskEditor.openForTodo(null)` /
@@ -187,12 +186,6 @@
 3. D04 内联标签字重：联动待办行的 `Todo list` / `Priority`（`EventEditorDialog.qml:752/:764`）
    仍为 11px Normal，仅在勾选“同时将此日程显示为待办任务”时出现；D04 要求标签 11 DemiBold，
    下轮同步并复拍勾选态。（主字段七标签本轮已改并 PASS。）
-4. **D10 退出过渡（新）**：Esc 关闭实测无可见过渡——1100×692 两轮录制都在相邻帧
-   33–40ms 内从「全显白卡 + scrim 187」直接到「无 scrim、无卡」，无中间 scale/alpha 帧，
-   与 `KosDialog.qml:24-32` 声明的 120ms InCubic 不符。进入腿已 PASS。下轮先查 popup item
-   是否在 exit Transition 前就被隐藏/移除（modal overlay 随 close 立即消失？），再让退出
-   可见；若确认是 Qt Dialog close 绕过 exit，需改用显式动画后 `close()` 或改 `visible`
-   驱动，不能牺牲进入腿与 D01/D02/D03 的几何。
 （tooltip 各腿已结清：dark、出现/消失连续帧通过；上方翻转在当前布局不可达，见外推；
 密集 08:00 簇 45px 道 + 标题 ellipsis 为参考同款外推，已移入 rounds.md，不再列。
 V03/V03b 月跨天连续条已结清，细节见 rounds.md R153–R154。）
@@ -201,6 +194,13 @@ V03/V03b 月跨天连续条已结清，细节见 rounds.md R153–R154。）
 - D10 reduceMotion 腿未实拍：`AppTheme.qml:72` `reduceMotion: false` 无赋值入口，本环境
   无法切换；按 `:239-241` 的 `motionNormal/Fast = 0` 与 `KosDialog.qml:10` 的
   `scale: reduceMotion ? 1 : …` 判「不动」，仅代码证据。
+- D10 退出时 scrim 先于卡片消失：`Overlay.modal` 跟随 popup.opened（close 起点即 false），
+  卡片随后仍按 120ms InCubic 淡出（帧 0012 无 scrim、卡 α≈.68）。spec D10 只约定卡片
+  scale/时长/曲线，参考图无动效帧，故未改产品。若要求 scrim 与卡片同步淡出，需先裁决：
+  自绘遮罩会动到 D01/D03 已 PASS 的层级与点击阻挡。
+- D10 抓帧延迟：nativeRecord 的 `pointerDriver.capture` 单帧耗时可达 ~20–100ms，120ms 的
+  退出动画可能整段落在两次抓帧之间（R056 的 32 帧未拍到中间帧即此因）；本轮改用 8ms
+  属性探针 + 4 帧像素佐证。此后 <150ms 的动效一律配属性采样，不以抓帧缺帧判失败。
 - D10 进入录制的 f22（838ms）先于 f23 呈全显白卡、随后 f23 才回到 alpha .54，判为
   grab/合成器时序伪影（同一 popup 不可能先全显再淡入），不据此改产品。
 - D09 的「完成必须有取消」对设置面板不适用：`shared/qml/foundation/KosSettingsDialog.qml:447-451`
@@ -332,9 +332,8 @@ V03/V03b 月跨天连续条已结清，细节见 rounds.md R153–R154。）
   窄事件惯例外推），不算 X05 的“unintended overlap”。
 
 ## Next round
-LQ18c spec 回归 11/N：**D10 退出腿修复/定性**。复现 Esc 关闭的事件编辑器，确认 exit
-Transition 是否播放：先查 modal popup 的 item 生命周期（overlay 是否随 close 立即隐藏），
-再决定修法——若 item 被提前隐藏，改为显式控制 `visible` 或延后 hide；改后按本轮同法
-录 `r057-exit-*` 连续帧，必须看到卡片宽 380→≈365（0.96）且面 alpha 1→0，时长 ≈120ms
-InCubic。进入腿保持 220ms OutCubic、D01/D02/D03 几何零变化。同时用代码分支记录
-reduceMotion（duration 0 / scale 1）并标「未实拍」。退出帧不齐就标未验证，不声称 PASS。
+LQ18c spec 回归 12/N：**D11 窄窗弹框完整性与自身滚动**。760×540 下分别打开事件编辑器
+（三行 footer）与任务编辑器，确认内容超长时由弹框内部滚动（Flickable）而非撑出窗口；
+卡高 = min(620/560, parent−32/−64)，footer 三行按钮完整可见、文字不换行；需要时实拍
+滚动前/后两帧（滚动可用 `regionWheel` 或 Flickable contentY）。D10 本轮已 PASS，不动
+`KosDialog` 的 reveal 声明与任何弹框几何；若发现不符，只改窄窗内的滚动/高度约束。
