@@ -78,9 +78,9 @@ stdenv.mkDerivation {
     ln -s ${kos-settings}/bin/kos-settings $out/bin/kos-settings
 
     # --- Weather app (optional) ---
-    if [ -n "${if buildWeather then "1" else ""}" ]; then
+    ${lib.optionalString buildWeather ''
       ln -s ${kos-weather}/bin/kos-weather $out/bin/kos-weather
-    fi
+    ''}
 
     # --- Shared QML / Shell ---
     mkdir -p $out/share/kos-desktop

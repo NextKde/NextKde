@@ -30,11 +30,17 @@
       nixosModules.kos = { config, lib, pkgs, ... }:
       let
         cfg = config.services.kos;
-        kos = self.packages.${system}.kos-desktop.override { buildWeather = cfg.weather.enable; };
+        # Build against the host's architecture, Qt and KWin, including overlays.
+        kos = pkgs.callPackage ./packaging/nix/package.nix {
+          src = self;
+          buildWeather = cfg.weather.enable;
+        };
         qs_bin = "${pkgs.quickshell}/bin/quickshell";
-        
+
+        sync-shell = pkgs.callPackage ./packaging/nix/sync-shell.nix { inherit kos; };
+
         # NixOS control interface
-        kos-ctl = pkgs.callPackage ./packaging/nix/kos-ctl.nix {};
+        kos-ctl = pkgs.callPackage ./packaging/nix/kos-ctl.nix { inherit sync-shell; };
       in {
         options.services.kos = {
           enable = lib.mkEnableOption "KOS Desktop Shell";
@@ -78,33 +84,7 @@
               wantedBy = [ "graphical-session.target" ];
               serviceConfig = {
                 Type = "oneshot";
-                ExecStart = pkgs.writeShellScript "kos-shell-init" ''
-                  set -e
-                  shell_config="$HOME/.config/quickshell/kos"
-                  
-                  # Fix permissions on existing files before removal
-                  # (Nix store copies may be read-only)
-                  if [[ -d "$shell_config" ]]; then
-                    find "$shell_config" -type d -exec chmod u+w {} + 2>/dev/null || true
-                    find "$shell_config" -type f -exec chmod u+w {} + 2>/dev/null || true
-                    rm -rf "$shell_config"
-                  fi
-                  
-                  # Create fresh directories
-                  mkdir -p "$shell_config/shared/qml"
-                  
-                  # Copy shell QML (follow symlinks, ignore source permissions)
-                  cp -rL --no-preserve=mode ${kos}/share/kos-desktop/shell/. "$shell_config/"
-                  
-                  cp -rL --no-preserve=mode ${kos}/qml/Kos/Spatial3D ${kos}/qml/Kos/SurfaceShape "$shell_config/Kos/"
-
-                  # Copy shared QML controls
-                  if [[ -d ${kos}/share/shared/qml/controls ]]; then
-                    cp -rL --no-preserve=mode ${kos}/share/shared/qml/controls "$shell_config/shared/qml/"
-                  elif [[ -d ${kos}/share/kos-desktop/shared/qml/controls ]]; then
-                    cp -rL --no-preserve=mode ${kos}/share/kos-desktop/shared/qml/controls "$shell_config/shared/qml/"
-                  fi
-                '';
+                ExecStart = sync-shell;
               };
             };
 

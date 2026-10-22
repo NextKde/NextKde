@@ -9,7 +9,9 @@
 stdenv.mkDerivation {
   pname = "kwin-kos-decoration";
   version = lib.removeSuffix "\n" (builtins.readFile "${src}/VERSION");
-  src = "${src}/kwin/kos-decoration";
+  # Keep the sibling kos-bridge sources used by this plugin available.
+  inherit src;
+  sourceRoot = "source/kwin/kos-decoration";
 
   nativeBuildInputs = [
     cmake

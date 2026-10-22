@@ -50,9 +50,13 @@ systemctl --user status kos-shell-init kos-platform kos-data kos-shell
 journalctl --user -b -u kos-shell-init -u kos-platform -u kos-data -u kos-shell
 ```
 
-旧 `kos-ctl` 确实存在，但其 store 搜索/sync 不等于模块初始化；版本化升级优先使用当前系统 generation 及 unit，
-不从任意匹配 store 目录推断已部署版本。`tools/nix-start.sh` 是另一开发辅助，验收不混用手工与声明式 unit。
+模块使用宿主的包集构建，包括宿主的 Qt/KWin 版本及 overlay。
+旧 `kos-ctl` 和 `kos-shell-init` 共用同一部署脚本，绑定模块选定的包；`kos-ctl sync` 也会复制原生 QML 模块，
+不再搜索任意匹配的 store 目录。版本化升级使用选定的系统 generation。
+`tools/nix-start.sh` 是另一开发辅助，验收不混用手工与声明式 unit。
 Settings 包需包含 QML 和 ECM 构建依赖；缺模块是打包错误，不绕过初始化。
 
 设 `services.kos.enable = false;` 并重建以停用，保留恢复需要的配置/状态。
 系统回退使用兼容旧 NixOS generation，跨 schema 降级仍需验证。贡献者构建/测试/图形验收只在 VM/CI。
+GitHub 的 `nix packaging` 工作流分别构建关闭和开启 Weather 的模块，检查宿主 overlay 和 ARM 求值，
+并在不启动桌面的情况下检查 QML 部署。

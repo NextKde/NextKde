@@ -55,9 +55,10 @@ than repeatedly chmod or overwrite the store:
 journalctl --user -b -u kos-shell-init -u kos-platform -u kos-data -u kos-shell
 ```
 
-The legacy `kos-ctl` helper exists, but its store-discovery/sync behavior is separate from the
-module-managed initialization. Prefer the selected system generation and its units for versioned
-upgrades. Do not infer the deployed version from an arbitrary matching store directory.
+The module builds against the host's package set, including its Qt/KWin versions and overlays.
+The legacy `kos-ctl` helper and `kos-shell-init` share the same deployment script, bound to the
+module's selected package. `kos-ctl sync` also copies the native QML modules; it never searches
+for an arbitrary matching store directory. Use the selected system generation for versioned upgrades.
 `tools/nix-start.sh` is an alternative development helper; do not mix manual units with declarative
 units during acceptance. Settings packages must include their QML and ECM build dependency;
 missing modules are a packaging failure, not a reason to bypass initialization.
@@ -65,3 +66,5 @@ missing modules are a packaging failure, not a reason to bypass initialization.
 Disable with `services.kos.enable = false;` and rebuild. Preserve configuration/state needed for
 recovery. Use a compatible prior NixOS generation for system rollback; cross-schema downgrade still
 requires validation. All contributor builds/tests and graphical acceptance run in VM/CI only.
+The `nix packaging` GitHub workflow builds the module with Weather both disabled and enabled,
+checks host overlays and ARM evaluation, and exercises QML deployment without launching a desktop.
