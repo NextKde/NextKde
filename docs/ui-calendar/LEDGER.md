@@ -1,18 +1,21 @@
 # LQ0 — 液态组件接入与剩余 spec 收敛
 
 ## 本轮
-- LQ18c 收尾 6/N：**编辑器组合框 plain 化**（仍差 #4 前半条）。
-  - 改动：`EventEditorDialog.qml:23-27` 新增 `fieldFill`（与任务编辑器同表达式：
-    light 黑 α.06 / dark 白 α.06）；4 个 `KosComboBox`（待办清单/优先级/重复/提醒）
-    各加 `fillColor: root.fieldFill`、`cornerRadius: 10`、`strokeWidth: 0`。
-  - 判定（light 1100×692，编辑 `Morning planning`）：四处 combo 填充均 **240**，
-    与同框 `地点`/`开始·时间`/`结束·日期` 的 LiquidTextField 面一致；原 250 底 + 1px
-    边已消失，左缘仅余 r10 抗锯齿（249→244/245→240，Δ4 单像素，1x 不可辨）。
-    勾选「同时将此日程显示为待办任务」后待办清单/优先级同样 240 ✓。
-  - 未改备注框焦点环（#4 后半条留下一轮），其余弹框几何零改动。
-  - 证据：`R28-event-editor-light.png`、`R28-event-editor-todo-light.png`；入库
-    `docs/ui-calendar/round-28-event-editor-{light,combos-light}.png`。日志仅既有
-    `Main.qml:1664` TypeError 两条。
+- LQ18c 收尾 8/N：**N01 补拍——今天红盘 / 其他选中日灰盘 / now 红线同屏**（仍差结清）。
+  - 无代码改动。light 1100×692，周 2026-10-19…25；选中日 Wed 21、今天 Fri 23。
+  - 今日：主表头红盘 **22×22**（x805–826 / y126–147，面 (229,72,77)，白数字）；
+    mini 月红盘 18×18（x129–146 / y619–636，同红、白字）。
+  - 选中日：主表头灰盘 **22×22**（x569–590 / y126–147，面 (229,229,229)=#E5E5E5，
+    暗字 (40,49,66)）；mini 月灰盘 #8E8E93、白字、18×18。
+  - 两者主表头几何同构（同 22px、同 y 带 126–147），只差填充/字色 ⇒ 红/灰可辨。
+  - now 线 rows **261–262** 面 (229,72,77)，横跨周五列；gutter 红 pill 228–269 /
+    251–270、白字 `01:53`。01:52:58 对应 186+112.5×40/60=261 ⇒ proper tick。
+    选中灰盘不改变列底色、不遮 now 线；now 红与选中灰不同列不同形，无混淆。
+  - 设置选中日走 `date 2026-10-21`（handleActivation→selectedDate），视觉与点选同态；
+    点选路径见「外推」（harness 限制）。
+  - 证据：`R30-n01-today-selected-light.png`、`R30-n01-nowline-light.png`、
+    `R30-n01-header-4x.png`、`R30-n01-mini-6x.png`；入库
+    `docs/ui-calendar/round-30-n01-{today-selected,nowline}-light.png`。
 
 ## 队列（一轮一条；[x]=已完成）
 - [x] LQ01 基线：light week 1100×720 / 760×540；日志无启动回归。
@@ -47,12 +50,22 @@
   单日块复拍未变。V03 线全部结清。
 - [x] LQ18c 收尾 6/N：**编辑器组合框 plain 化**——四处 combo 填充 240，与旁侧字段同面，
   1px 边消失。
+- [x] LQ18c 收尾 7/N：**事件编辑器备注框焦点环外扩**——聚焦时 r12 环外扩 4px，失焦
+  无描边，与任务编辑器逐像素同构。
+- [x] LQ18c 收尾 8/N：**N01 补拍**——今天红盘（22×22 红/白字）与选中日灰盘
+  （22×22 #E5E5E5/暗字）同屏可辨；now 线 261–262 红、gutter 01:53 pill 可读，
+  选中灰不压 now 红。N01 PASS。
 - [ ] LQ18c spec 全量 PASS 回归：第 1 组 D01–D13（D03 仍差）、第 2 组 O01–O09（O09 的
   菜单/浮层翻转仍差）、X01–X05 + P02/P03、tooltip 剩余腿（dark/连续帧已过，翻转不可达）、
   V03/V03b 月跨天连续条（已过）已完成 → 其余 PENDING 逐条核对清零
-  （下一条：备注框焦点环外扩，仍差 #4 后半条）。
+  （N01 已结清；下一条：E06 完成态勾标）。
 
 ## 已改
+- LQ18c 收尾 8/N（N01）：**无代码改动**（只取证/量测/判读；选中态用 `date`
+  命令设置，未改选中样式）。
+- LQ18c 收尾 7/N（备注框焦点环）：`EventEditorDialog.qml:848-865` `KosSurface(focused)`
+  换为填充 Rectangle(r10/fieldFill) + 外扩环 Rectangle(margins -4/r12/2px/focusRing/
+  visible: descriptionField.activeFocus)，与 `CalendarTaskEditorDialog.qml:665-679` 同式。
 - LQ18c 收尾 6/N（组合框 plain）：`EventEditorDialog.qml:23-27` 新增 `fieldFill`
   （light 黑 α.06 / dark 白 α.06，与任务编辑器同式）；`:748/:757/:779/:800` 四个
   `KosComboBox` 传 `fillColor: root.fieldFill`、`cornerRadius: 10`、`strokeWidth: 0`。
@@ -111,14 +124,10 @@
    只中“软阴影”一条；改机制不是 token 级，需先定是否保留 LQ07 的 E4 方案。
 2. E06 未验证：completed timed 项只有 strikeout + opacity .5，没有独立完成勾标；
    参考图没有 todo 事件，需按 HIG/task 行语言补勾标后再判。
-3. N01 部分验证：今天红圈与 now 线同屏已拍；"今天 + 另一选中日"同时出现的灰/描边
-   对比未重拍（本轮未改选中样式）。
-4. 事件编辑器：备注框焦点环仍是 2px 内嵌，未换 task editor 的外扩环（组合框 plain 化
-   已于本轮结清）。
-5. 浮层/菜单：详情浮层为**单张中性卡**（参考是 246 壳 + 内部白行），面 240 与菜单 255
+3. 浮层/菜单：详情浮层为**单张中性卡**（参考是 246 壳 + 内部白行），面 240 与菜单 255
    差 Δ15（参考 Δ9）；阴影偏弱、菜单亮卡无磨砂色偏/hover r8 偏小、O09 翻转未做；任务编辑器
    固定 560 高留白 151px。
-6. 切到 day 视图时 `Main.qml:1664 itemColor` 对 undefined item 报两次 TypeError（瞬时，
+4. 切到 day 视图时 `Main.qml:1664 itemColor` 对 undefined item 报两次 TypeError（瞬时，
    渲染无异常；疑似 delegate 拆除时序，非本轮引入）。
 （tooltip 各腿已结清：dark、出现/消失连续帧通过；上方翻转在当前布局不可达，见外推；
 密集 08:00 簇 45px 道 + 标题 ellipsis 为参考同款外推，已移入 rounds.md，不再列。
@@ -202,6 +211,11 @@ V03/V03b 月跨天连续条已结清，细节见 rounds.md R153–R154。）
 - timed 填充 α 由 .19 统一到全天条的 .17（light）/.32（dark），E05 一致性优先；与参考
   fill (222,237,254) 的差别来自 accent 色相（项目 accent 偏青），本轮不改全局 accent。
 - fixture 只写隔离 profile 的 `calendar.ics`（3 个 10-22 事件），不入库。
+- harness 指针限制（R30 发现）：`pointer` press/release 在本 harness 下**不触发
+  `TapHandler`**——日期头与全天 chip 两处实测均无响应，而同驱动下分段按钮
+  （MouseArea/Button 路径）正常切视图。故不能据此判产品缺陷；选中态改用 `date`
+  命令（handleActivation→selectedDate）设置，与点选后视觉状态相同。真机鼠标点选
+  日期头仍未实拍。
 
 - E04 不再需要跨行 z 序：每个小时格只画本格区间的切片，跨行块在相邻格上下相接（上行
   底部贴线、下行 y=0 起），不跨越 delegate 边界，因此不会压到后续行的发丝线。
@@ -221,10 +235,9 @@ V03/V03b 月跨天连续条已结清，细节见 rounds.md R153–R154。）
   窄事件惯例外推），不算 X05 的“unintended overlap”。
 
 ## Next round
-备注框焦点环外扩（仍差 #4 后半条）：`EventEditorDialog.qml` 的 `notesFrame`（约 `:840-853`）
-仍是单只 `KosSurface`（`focused` → 2px 内嵌环）。改为与任务编辑器同款两层 Rectangle：
-填充 `radius 10 / color fieldFill`，外加 `anchors.margins: -4 / radius 12 / border 2 /
-AppTheme.focusRing / visible: descriptionField.activeFocus` 的外扩环；`notesScroll` 与
-高度 96 不动。light 实拍：先点进备注框取焦点帧（外环 r12、距面 2px），再点标题框取
-失焦帧（外环消失），与任务编辑器备注框同尺度对照。
-之后剩 D03 / E06 / N01 / 浮层菜单 / O09 菜单翻转 / TypeError 清零。
+E06（完成态勾标）：`CalendarScheduleView.qml` 的 timed/all-day chip 目前完成项只有
+strikeout + opacity .5，无独立完成标记。做法：在 chip 文本前加 8–10px 勾标
+（`VectorIcon` 或自绘 Path，**不用 emoji**），颜色随 ink/次要色，保持 subdued；
+先读 E06 与既有 todo chip（月视图绿色 todo、任务编辑器完成语义），再改。
+fixture 需一条 completed 项：在隔离 profile 里建/勾选一条任务后 light 200% 裁切取证
+（不动真实数据，fixture 不入库）。之后剩 D03 / 浮层菜单 / O09 菜单翻转 / TypeError。
