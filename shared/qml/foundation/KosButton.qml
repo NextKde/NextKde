@@ -14,6 +14,9 @@ Button {
     // D06: macOS alert primaries are a flat fill — no drop shadow and no
     // 1px rim, unlike a toolbar/default emphasis (opt-in, so nothing else moves).
     property bool flatPrimary: false
+    // D06: macOS alert action bars are capsules (radius = height/2). -1 keeps
+    // the legacy rounded-rect so toolbar/list buttons do not move.
+    property real buttonRadius: -1
     readonly property bool emphasized: highlighted || (checkable && checked)
 
     hoverEnabled: true
@@ -49,7 +52,9 @@ Button {
     background: KosSurface {
         implicitWidth: 72
         implicitHeight: AppTheme.controlHeight
-        radius: AppTheme.modernDesign ? height / 2 : Math.min(AppTheme.smallRadius, height / 2)
+        radius: root.buttonRadius >= 0
+            ? root.buttonRadius
+            : (AppTheme.modernDesign ? height / 2 : Math.min(AppTheme.smallRadius, height / 2))
         fillColor: {
             if (root.emphasized)
                 return root.down ? AppTheme.accentPressed

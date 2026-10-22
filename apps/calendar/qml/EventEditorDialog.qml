@@ -39,7 +39,9 @@ LiquidDialog {
         padding: 24
         bottomPadding: 8
         color: AppTheme.text
-        font.pixelSize: 17
+        // D04: dialog titles are 20 DemiBold (LiquidDialog's default); the
+        // editor used to override down to 17 and lost the alert hierarchy.
+        font.pixelSize: 20
         font.weight: Font.DemiBold
         elide: Text.ElideRight
     }
@@ -401,6 +403,8 @@ LiquidDialog {
 
             // Primary: the AcceptRole standard button of the shared footer.
             KosButton {
+                // D06: the alert action bar is a capsule, not a rounded rect.
+                buttonRadius: height / 2
                 Layout.fillWidth: true
                 text: root.saveLabel
                 highlighted: true
@@ -411,6 +415,8 @@ LiquidDialog {
 
             // Secondary: the RejectRole standard button of the shared footer.
             KosButton {
+                // D06: the alert action bar is a capsule, not a rounded rect.
+                buttonRadius: height / 2
                 Layout.fillWidth: true
                 text: root.cancelLabel
                 secondary: true
@@ -418,6 +424,8 @@ LiquidDialog {
             }
 
             KosButton {
+                // D06: the alert action bar is a capsule, not a rounded rect.
+                buttonRadius: height / 2
                 Layout.fillWidth: true
                 text: qsTr("Delete event")
                 visible: root.editing
@@ -457,6 +465,8 @@ LiquidDialog {
 
             KosButton {
                 id: confirmCancelButton
+                // D06: the alert action bar is a capsule, not a rounded rect.
+                buttonRadius: height / 2
                 Layout.fillWidth: true
                 text: root.cancelLabel
                 highlighted: true
@@ -466,6 +476,8 @@ LiquidDialog {
             }
 
             KosButton {
+                // D06: the alert action bar is a capsule, not a rounded rect.
+                buttonRadius: height / 2
                 Layout.fillWidth: true
                 text: qsTr("Delete event")
                 destructive: true
