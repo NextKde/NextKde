@@ -1,26 +1,26 @@
 # LQ0 — 液态组件接入与剩余 spec 收敛
 
 ## 本轮
-- LQ18c spec 回归 12/N：**D11 窄窗弹框完整性/自身滚动 PASS（无产品改动）**。
-  760×540 light，日视图 2026-04-02：
-  - 事件编辑器（编辑态）：卡 **380×508**，卡底 y533 < 540、卡左 198/右 576 在窗内；
-    表单 Flickable 332×262、`contentHeight 418`（溢出 156）；空白行间
-    `windowWheel x350 y240 angleY:-600` → `contentY 0→156`（精确停在
-    `418−262` 上限），卡高/位置不变；footer 固定在 Flickable 外，
-    保存/取消/删除日程 三行完整可见、单行未换行。滚动后帧 `r058-ne-scrolled2x.png`：
-    内容换成 重复/提醒/备注，footer 三钮位置零位移，右缘 6px 滚动条 thumb 出现。
-  - 任务编辑器（编辑态，三行 footer）：卡 **380×428** < cap 476
-    （`min(560, 540−64)`），表单 `contentHeight 243 = height 243` → 无需滚动，
-    Flickable 自身不撑高；保存/取消/删除任务 三行完整可见、未换行，
-    卡底 y510 < 540。New task 态 380×436、247=247、两行 footer 同样完整。
-  - 结论：内容超长只由弹框内部 Flickable 消化、卡高恒 = min(620/560, parent−32/−64)，
-    footer 永不压缩/换行。玻璃预算不变 2/2 持续、1/1 瞬态。
+- LQ18c spec 回归 13/N：**D12 弹框关闭唯一性 PASS（一处产品改动）**。1100×692 light：
+  - 设置面板（`KosSettingsDialog`，日历/任务/天气共用）：原头部有 `×`
+    （Accessible "Close settings"）+ footer `完成` 两个关闭口 → **删除头部 `×`**，
+    现在唯一关闭是 footer `完成`（Esc 亦关，`closePolicy: CloseOnEscape`）；
+    `恢复默认设置` 非关闭。卡面/圆角/内容/footer 布局零变化（`r059-settings.png`）。
+  - 事件编辑器：编辑态 footer 保存/取消/删除日程，确认态取消/删除日程，
+    卡内无 `×`；删除确认是**同卡内状态切换**（footer 列替换），不是第二个 Popup
+    → 无 sheet 套 sheet（`r059-event-edit.png` / `r059-event-confirm.png`）。
+  - 任务编辑器 New task：保存/取消，无 `×`（`r059-task-new.png`）；编辑/确认态
+    沿用同结构（D05/D07 已实证）。
+  - Import/Export：独立顶层系统 FileDialog，打开/取消单一关闭口，背后无日历弹框
+    （`spectacle -a`：`r059-import.png`，R46 口径）。
+  - 浮层→编辑器：Edit 先 `root.close()` 再 `editRequested()`（`EventDetailsPopover.qml:239-240`），
+    不会两层瞬时玻璃叠放。玻璃预算不变 2/2、1/1；日志无 error。
 
 ## 上一轮
-- LQ18c spec 回归 11/N：**D10 退出腿 PASS（无产品改动）**。退出 Transition 一直在播，
-  120ms InCubic；`probeDialog` 8ms 采样 `revealProgress` 1→0、`scale` 1→.9629，
-  `visible` 到动画结束才 false；像素帧 α≈.68/.63/.46/.04 佐证。进入腿沿用 R056
-  （220ms OutCubic）。scrim 先于卡片消失记入外推；reduceMotion 仍仅代码证据。
+- LQ18c spec 回归 12/N：**D11 窄窗完整性/自身滚动 PASS（无产品改动）**。
+  760×540 事件编辑器卡 380×508、表单 262↔418 由内部 Flickable 滚到上限 156，
+  footer 三钮固定完整；任务编辑器编辑态 380×428、243=243 免滚动、New task
+  380×436 两行 footer 完整。卡高恒 = min(620/560, parent−32/−64)。
 
 ## 队列（一轮一条；[x]=已完成）
 - [x] LQ01 基线：light week 1100×720 / 760×540；日志无启动回归。
@@ -91,13 +91,23 @@
 - [x] LQ18c spec 回归 12/N：**D11 窄窗完整性/自身滚动 PASS**——760×540 事件编辑器卡
   380×508、表单 262/418 由内部 Flickable 滚到 contentY 156，footer 三钮固定完整；
   任务编辑器编辑态 380×428、243=243 免滚动，三行 footer 完整；无产品改动。
-- [ ] LQ18c spec 全量 PASS 回归：第 1 组 D01–D13（**D01–D11 已取证**；D12–D13 未做，
+- [x] LQ18c spec 回归 13/N：**D12 关闭唯一性 PASS**——设置面板头部重复 `×` 已删
+  （footer `完成` 为唯一关闭口）；事件/任务编辑器无 `×`，删除确认是同卡状态非套弹框；
+  Import/Export 系统对话框单关闭口。
+- [ ] LQ18c spec 全量 PASS 回归：第 1 组 D01–D13（**D01–D12 已取证**；D13 未做，
   D03 的 token/描边待裁决）、第 2 组
   O01–O09（O09 已结清）、
   X01–X05 + P02/P03、tooltip 剩余腿、V03/V03b 月跨天连续条已完成
   → 其余 PENDING 逐条核对清零（N01、E06 已结清）。
 
 ## 已改
+- LQ18c spec 回归 13/N（D12）：`shared/qml/foundation/KosSettingsDialog.qml:108-116`
+  删除 header RowLayout 末尾的 `KosToolButton { text:"×" … onClicked: root.close() }`，
+  以注释说明 footer `完成` 是唯一关闭口。头部仍为 ⚙(36)+标题列，`implicitHeight 72`、
+  左右 margin、分隔线、内容区、footer（恢复默认设置/完成）、宽度/高度全部零改动。
+  该组件为 calendar/todo/weather 共用，三处同时失去重复 `×`。其余弹框零改动：
+  事件/任务编辑器的 footer 与删除确认、`EventDetailsPopover` 的 Edit 先关浮层、
+  Import/Export 的 FileDialog 声明均未动。
 - LQ18c spec 回归 12/N（D11）：**无产品改动**。只驱动/量测：`EventEditorDialog.qml:31-33`
   `height: min(620, parent−32)`、`:503-533` Flickable 与 `:550-563` 轮滚 MouseArea、
   `:388-390` footer 固定高；`CalendarTaskEditorDialog.qml:32-39` `maxDialogHeight =
@@ -207,6 +217,11 @@
 V03/V03b 月跨天连续条已结清，细节见 rounds.md R153–R154。）
 
 ## 外推待确认
+- D12 设置面板删除 `×` 后，标题文本仍从卡内 x≈415 起（图标右缘+间距应为 345），
+  实测既不贴图标、也不在卡/列中心；删 × 只能让居中元素右移 ~20px，解释不了 70px，
+  判为既有头部布局/字体度量问题，本轮未动（D12 只要求关闭唯一性）。
+- `KosSettingsDialog` 是 calendar/todo/weather 共用组件：本轮删 `×` 三处同时生效；
+  本轮只实拍 calendar，todo/weather 未复拍（视觉上仅少一个按钮，风险低）。
 - D10 reduceMotion 腿未实拍：`AppTheme.qml:72` `reduceMotion: false` 无赋值入口，本环境
   无法切换；按 `:239-241` 的 `motionNormal/Fast = 0` 与 `KosDialog.qml:10` 的
   `scale: reduceMotion ? 1 : …` 判「不动」，仅代码证据。
@@ -352,9 +367,8 @@ V03/V03b 月跨天连续条已结清，细节见 rounds.md R153–R154。）
   窄事件惯例外推），不算 X05 的“unintended overlap”。
 
 ## Next round
-LQ18c spec 回归 13/N：**D12 弹框“关闭唯一性”与无 sheet 套 sheet**。逐一核对事件编辑器 /
-任务编辑器（编辑、新建、删除确认）、设置面板、Import/Export：每层只有一个真正关闭动作
-（取消/关闭/Done，或 X），不出现第二个“看起来像关闭”的按钮；确认没有弹框再套弹框（文件
-选择器是独立顶层窗口，按 R46 口径用活动窗口的 `spectacle -a` 取证）。可复用 `probeDialog`
-计数与 footer 实拍；若无产品问题只取证。不动 D11 已 PASS 的卡高公式、Flickable 与 footer
-结构（事件编辑器 380×508/262↔418、任务编辑器 380×428/243=243）。
+LQ18c spec 回归 14/N：**D13 弹框出现时父窗口内容可辨认（变暗而非被覆盖）**。事件编辑器
+打开时量 scrim 合成（参考：父窗内容仍是可辨认的灰、非纯黑）与卡周边梯度，复用 D01 的
+scrim 帧口径；同时用代码证据结“应用其他窗口仍可交互”（VM 单窗口，`Dialog.modal: true`
+只冻结本窗口，按外推判 PASS，不声称实拍）。不动 D12 刚改的 `KosSettingsDialog` 头部结构，
+不动 D11 的卡高/Flickable/footer。若 scrim 合成与之前 D01 实测不一致，只取证不改。

@@ -106,14 +106,9 @@ KosDialog {
                 }
             }
 
-            KosToolButton {
-                text: "×"
-                font.pixelSize: 18
-                Accessible.name: qsTr("Close settings")
-                ToolTip.visible: hovered
-                ToolTip.text: Accessible.name
-                onClicked: root.close()
-            }
+            // D12: no second close affordance in the header. The footer's
+            // Done is the single exit (Esc also closes); macOS sheets and
+            // alerts carry no "×" of their own.
         }
 
         Rectangle {
