@@ -984,6 +984,22 @@ Pane {
                                 id: chipHost
                                 anchors.fill: parent
                                 anchors.margins: 3
+                                // E02 (LQ14): the reference's chip nearly fills its
+                                // hour vertically — 26 ref px inside a 27 px pitch,
+                                // i.e. ~1 px clear at the top and flush at the
+                                // bottom. Horizontally the fill starts 2 ref px past
+                                // the column rule (x488 AA, x489 fill, rule x487),
+                                // x1.33 => 3, which the 3 px side margin already
+                                // gives. The 3 px top/bottom margin used to push a
+                                // 38 px chip down into the next hour's rule; use the
+                                // vertical measurement instead.
+                                // Reference: 1 ref px of field between the hour
+                                // rule (y329) and the chip's AA edge (y331),
+                                // and the chip's bottom AA edge sits ON the next
+                                // rule (y356/357). At 1.33 that is one pixel of
+                                // clearance at the TOP, none at the bottom.
+                                anchors.topMargin: 2
+                                anchors.bottomMargin: 0
                                 readonly property var visibleItems: hourCell.cellItems.slice(0, 3)
                                 readonly property bool hasOverflow: hourCell.cellItems.length > 3
                                 readonly property int overflowCount: hourCell.cellItems.length - visibleItems.length
@@ -1035,8 +1051,16 @@ Pane {
                                         // Scoped to the timed chip ONLY - the all-day pill keeps
                                         // row/3 and A01/A03 stay closed on it.
                                         radius: 3
-                                        color: AppTheme.withAlpha(root.itemColor(modelData),
-                                            AppTheme.dark ? 0.36 : 0.19)
+                                        // E05 (LQ14): the same pre-blend the all-day
+                                        // strip uses (R109), so a category's tint is
+                                        // identical in the band and the grid — it was
+                                        // 0.19 translucent here against 0.17 opaque
+                                        // there, 3-4 levels darker on white and
+                                        // double-compositing on the weekend tint.
+                                        color: AppTheme.mix(
+                                            root.allDayBackdrop(hourCell.columnIndex - 1),
+                                            root.itemColor(modelData),
+                                            AppTheme.dark ? 0.32 : 0.17)
                                         // R078: NO border. The ref's chip is fill-only, and its
                                         // edges only ever go LIGHTER than the fill, never darker.
                                         // Measured 1:1 on refs/macos-calendar.png at three
