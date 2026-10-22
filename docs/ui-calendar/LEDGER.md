@@ -1,22 +1,18 @@
 # LQ0 — 液态组件接入与剩余 spec 收敛
 
 ## 本轮
-- LQ18c 收尾 4/N：**V03 月视图跨天连续条**（light 1100×692 + 760×540 实拍）。
-  - 判定：每格用相邻日是否含同一 item 决定左接/右接；key = `seriesId|start`
-    （`Main.qml monthItemKey`）。不能按对象引用比——`itemsForDate` 跨 property var 边界
-    会转成副本，`===` 失效（首版实测两格都判不接）。
-  - 续接块：去左右 6px 内缩、外侧角改 0（Qt 6.10 per-corner radius）、色条只在首日；
-    单日块保持 r5/6px 内缩/色条。单元格横向 padding 下沉到日期行与单日块，否则贴不了边。
-  - 实拍：Tue 20–Thu 22 `Offsite workshop` 一线贯通（中格两侧方角无内缩、无第二根色条，
-    末格右 r5 收口）；同帧 `Team offsite` 12–13、`Weekend trip` 17–18 亦连续；
-    `Focus day` 23 单日圆角对照 ✓；760×540 同构 ✓。
-  - 反向回归：April 行 `Multi-day review` 4 格连续（跨 3 月格 0.5 压暗，与 macOS 压暗一致）；
-    连续两天的 `Morning planning` 仍各自独立带色条，key 未误连每日项 ✓。
-  - 残余：续接块仍是半透明 chip（α .16/.30），列发丝在 **4x** 下透出 1px 竖线
-    （1x 不可辨，采样 (205,220,231) vs fill (222,236,246)）；见仍差 #8。
-  - 证据：`R26-v03-month-2.png`、`R26-v03-zoom3/4.png`、`R26-v03-month-760c.png`、
-    `R26-v03-april.png`、`R26-v03-april-zoom.png`；入库
-    `docs/ui-calendar/round-26-v03-*.png`。Bash ~25/25。
+- LQ18c 收尾 6/N：**编辑器组合框 plain 化**（仍差 #4 前半条）。
+  - 改动：`EventEditorDialog.qml:23-27` 新增 `fieldFill`（与任务编辑器同表达式：
+    light 黑 α.06 / dark 白 α.06）；4 个 `KosComboBox`（待办清单/优先级/重复/提醒）
+    各加 `fillColor: root.fieldFill`、`cornerRadius: 10`、`strokeWidth: 0`。
+  - 判定（light 1100×692，编辑 `Morning planning`）：四处 combo 填充均 **240**，
+    与同框 `地点`/`开始·时间`/`结束·日期` 的 LiquidTextField 面一致；原 250 底 + 1px
+    边已消失，左缘仅余 r10 抗锯齿（249→244/245→240，Δ4 单像素，1x 不可辨）。
+    勾选「同时将此日程显示为待办任务」后待办清单/优先级同样 240 ✓。
+  - 未改备注框焦点环（#4 后半条留下一轮），其余弹框几何零改动。
+  - 证据：`R28-event-editor-light.png`、`R28-event-editor-todo-light.png`；入库
+    `docs/ui-calendar/round-28-event-editor-{light,combos-light}.png`。日志仅既有
+    `Main.qml:1664` TypeError 两条。
 
 ## 队列（一轮一条；[x]=已完成）
 - [x] LQ01 基线：light week 1100×720 / 760×540；日志无启动回归。
@@ -47,12 +43,23 @@
   工具栏 chrome hover/press 有连续帧；inactive 按代码证据（见外推）。
 - [x] LQ18a X06 日历/settings 同尺度对照：PASS（仅取证）。
 - [x] LQ18b X07 弹框/浮层/菜单/tooltip 同尺度对照：PASS（仅取证）。
+- [x] LQ18c 收尾 5/N：**V03b 续接块预混不透明**——4x 边界 Δ1（原 (205,220,231) 已消），
+  单日块复拍未变。V03 线全部结清。
+- [x] LQ18c 收尾 6/N：**编辑器组合框 plain 化**——四处 combo 填充 240，与旁侧字段同面，
+  1px 边消失。
 - [ ] LQ18c spec 全量 PASS 回归：第 1 组 D01–D13（D03 仍差）、第 2 组 O01–O09（O09 的
   菜单/浮层翻转仍差）、X01–X05 + P02/P03、tooltip 剩余腿（dark/连续帧已过，翻转不可达）、
-  V03 月跨天连续条（已过，余 4x 透线）已完成 → 其余 PENDING 逐条核对清零
-  （下一条 V03b 续接块 1px 透线）。
+  V03/V03b 月跨天连续条（已过）已完成 → 其余 PENDING 逐条核对清零
+  （下一条：备注框焦点环外扩，仍差 #4 后半条）。
 
 ## 已改
+- LQ18c 收尾 6/N（组合框 plain）：`EventEditorDialog.qml:23-27` 新增 `fieldFill`
+  （light 黑 α.06 / dark 白 α.06，与任务编辑器同式）；`:748/:757/:779/:800` 四个
+  `KosComboBox` 传 `fillColor: root.fieldFill`、`cornerRadius: 10`、`strokeWidth: 0`。
+  实测四处同框填充 240，与 LiquidTextField 面一致。其余零改动。
+- LQ18c 收尾 5/N（V03b）：`CalendarMonthView.qml:232-243` 续接 chip color 改
+  `AppTheme.mix(AppTheme.neutralPlane, itemColor, dark?.30:.16)`（不透明预混，止住列发丝
+  透出）；单日 chip 仍 `withAlpha`。其余零改动。
 - LQ18c 收尾 4/N（V03）：`CalendarMonthView.qml` 新增 `itemKey` 属性与 `itemContinues()`
   （相邻日同 key 判接续）、cell 横向 padding 改为 0 + 日期行/单日 chip 各 6px、续接 chip
   贴边 + per-corner 方角 + 色条仅首日；`Main.qml` 新增 `monthItemKey()` 并在 monthPage
@@ -106,19 +113,16 @@
    参考图没有 todo 事件，需按 HIG/task 行语言补勾标后再判。
 3. N01 部分验证：今天红圈与 now 线同屏已拍；"今天 + 另一选中日"同时出现的灰/描边
    对比未重拍（本轮未改选中样式）。
-4. 月视图 V03：跨天事件仍是每格独立 chip（相邻列间断口），月格连续条未做。
-5. 事件编辑器：组合框仍是 250 底 + 1px 边（与旁边 plain 240 有色差）；备注框焦点环仍是
-   2px 内嵌，未换 task editor 的外扩环。
-6. 浮层/菜单：详情浮层为**单张中性卡**（参考是 246 壳 + 内部白行），面 240 与菜单 255
+4. 事件编辑器：备注框焦点环仍是 2px 内嵌，未换 task editor 的外扩环（组合框 plain 化
+   已于本轮结清）。
+5. 浮层/菜单：详情浮层为**单张中性卡**（参考是 246 壳 + 内部白行），面 240 与菜单 255
    差 Δ15（参考 Δ9）；阴影偏弱、菜单亮卡无磨砂色偏/hover r8 偏小、O09 翻转未做；任务编辑器
    固定 560 高留白 151px。
-7. 切到 day 视图时 `Main.qml:1653 itemColor` 对 undefined item 报两次 TypeError（瞬时，
+6. 切到 day 视图时 `Main.qml:1664 itemColor` 对 undefined item 报两次 TypeError（瞬时，
    渲染无异常；疑似 delegate 拆除时序，非本轮引入）。
-8. V03 续接块仍为半透明 chip，列发丝在 4x 下透出 1px 竖线（1x 不可辨；采样边界
-   (205,220,231) vs 块内 (222,236,246)）。拟把续接块改
-   `AppTheme.mix(AppTheme.neutralPlane, itemColor, α)` 不透明填充，单日块保持现状（V03b）。
 （tooltip 各腿已结清：dark、出现/消失连续帧通过；上方翻转在当前布局不可达，见外推；
-密集 08:00 簇 45px 道 + 标题 ellipsis 为参考同款外推，已移入 rounds.md，不再列。）
+密集 08:00 簇 45px 道 + 标题 ellipsis 为参考同款外推，已移入 rounds.md，不再列。
+V03/V03b 月跨天连续条已结清，细节见 rounds.md R153–R154。）
 
 ## 外推待确认
 - V03 用“每格独立判左右接”而非整周 span 层：只有跨日项在相邻格恰好同一行时才视觉连续。
@@ -217,11 +221,10 @@
   窄事件惯例外推），不算 X05 的“unintended overlap”。
 
 ## Next round
-V03b：**续接块不透明化**，消除 4x 下的 1px 列发丝透出（仍差 #8）。
-1) `CalendarMonthView.qml` 续接 chip（`continuesLeft || continuesRight`）的 color 改
-   `AppTheme.mix(AppTheme.neutralPlane, root.itemColor(modelData),
-   AppTheme.dark ? 0.30 : 0.16)`；单日 chip 保持 `withAlpha`（保留选中/hover 透底）。
-2) light 复拍 2026-10-20..22 条，4x 裁切采样两处格线边界：应等于块内 fill，不再出现
-   (205,220,231)；顺带复拍 `Focus day` 23 单日块确认未变。
-3) 不动 V03 已过的角/色条/贴边行为，不做整周 span 层，不碰 week/day。
-只做 V03b。之后剩 D03 / E06 / N01 / 编辑器组合框 / 浮层菜单 / O09 菜单翻转 / TypeError 清零。
+备注框焦点环外扩（仍差 #4 后半条）：`EventEditorDialog.qml` 的 `notesFrame`（约 `:840-853`）
+仍是单只 `KosSurface`（`focused` → 2px 内嵌环）。改为与任务编辑器同款两层 Rectangle：
+填充 `radius 10 / color fieldFill`，外加 `anchors.margins: -4 / radius 12 / border 2 /
+AppTheme.focusRing / visible: descriptionField.activeFocus` 的外扩环；`notesScroll` 与
+高度 96 不动。light 实拍：先点进备注框取焦点帧（外环 r12、距面 2px），再点标题框取
+失焦帧（外环消失），与任务编辑器备注框同尺度对照。
+之后剩 D03 / E06 / N01 / 浮层菜单 / O09 菜单翻转 / TypeError 清零。
