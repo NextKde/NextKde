@@ -1,24 +1,23 @@
 # LQ0 — 液态组件接入与剩余 spec 收敛
 
 ## 本轮
-- LQ04 ✓ 工具栏 4 个图标动作（侧栏开关、添加、搜索、更多）从本地 `GlassSurface` 圆钮换成
-  `LiquidActionButton`（`materialForm` + `iconOnly`）的 **host-owned plain 行**：无自有表面/无镜片/无阴影，
-  仅 28×28 命中区 + hover/press 平铺填充；胶囊上的叠玻璃消除。更多按钮原来的手写三点 Row 也并入
-  `iconName:"more"`（VectorIcon 已有该路径）。
-- 实拍：`LQ04-1100-light.png`、`LQ04-toolbar-zoom.png`、`LQ04-hover-add.png` +
-  `LQ04-hover-add-zoom.png`、`LQ04-1100-dark.png`、`LQ04-toolbar-dark-zoom.png`（tmp，不入库）。
-- 量测：按钮盒 28、图标 16；左组从 x=16 起、间隔 8；右组贴右 16、搜索与更多中心距 36；
-  分段仍 228×28 居中主区（center 550）。hover 填充 light `#747480` α .08 / dark 白 α .06，
-  按下用 `selectionFill`；`LiquidActionButton` materialForm 按下 scale .98。
-- 交互回归：悬停「添加」出现灰色圆形 hover 填充 + tooltip「添加日程」，命中区与 tooltip 未退化；
-  键盘焦点保留 1px 内描边（TabFocus）。app + pim 运行日志 **0 error / 0 warning**。
-- 日期导航 prev/Today/next 检查：位于日期带、本就在不透明平面上用普通 Rectangle 行，无玻璃、无叠层，
-  本轮无需改动（保留给后续可能的液态统一）。
+- LQ03 ✓ Day/Week/Month/Year 分段改 materialForm 平铺形态：胶囊 228×28 居中主区（center 550），
+  4 段各 57，pill 52×24 内缩 2；track α .025 over 白（实测 252）、pill `#E7E7E7`（实测 231）、
+  4 个标签统一 `labelPrimary`（选中仅 pill + DemiBold 标记），与参考一致。
+- 关键修正：原控件默认 `materialForm:false` 会在工具栏 L1 玻璃上再画一层 `LiquidSurface`（叠玻璃且
+  选中 pill 被镜片洗成白色）。现 `materialForm:true`，不再有第二层玻璃/LiquidSurface。
+- 新增 `LiquidSegmentedControl.borderColor`（默认 `AppTheme.border`，其它调用点不变）；日历传
+  light α .05 / dark 白 α .10。原因：默认 α .14 描边在白底上是一圈清晰灰环，参考顶边实测 249..253
+  （无线），只有圆头两端因 AA 到 ~222。
+- 实拍：`LQ03-1100-light.png`、`LQ03-toolbar-zoom.png`、`LQ03-compare.png`、`LQ03-1100-light-v2.png`、
+  `LQ03-compare-v2.png`；dark `LQ03-1100-dark.png`、`LQ03-dark-zoom.png`（tmp，不入库）。
+- 量测（v2）：pill 231 / track 252 / 描边 244..247；dark pill (60,60,60)、track (42,42,43)。
+  交互走控件既有 `selectionRequested`（映射不变），app + pim 日志 **0 error / 0 warning**。
 
 ## 队列（一轮一条；[x]=已完成）
 - [x] LQ01 基线：在新组件树上启动 light week，截 1100×720 与 760×540；记录 runtime log 的 error/warning，确认无启动回归。
 - [x] LQ02 工具栏：`Main.qml` 顶部工具栏换 `LiquidSurface`(regular) + `LiquidOuterShadow`；保留 L02–L04 的 40 高、按钮 28–30、分段居中几何；持续玻璃 1/2。
-- [ ] LQ03 分段控件：Day/Week/Month/Year 换 `LiquidSegmentedControl`，高 28、胶囊、pill 当前视图；宽度随 4 段重算并保持主区域居中。
+- [x] LQ03 分段控件：Day/Week/Month/Year 换 `LiquidSegmentedControl`，高 28、胶囊、pill 当前视图；宽度随 4 段重算并保持主区域居中。
 - [x] LQ04 工具栏按钮：prev/Today/next、侧栏开关、搜索、添加、更多换 `LiquidActionButton` / `LiquidNavigationButton`（iconOnly/specificationForm）；命中区与 tooltip 不退化；**host-owned plain 行，消除叠玻璃**。
 - [ ] LQ05 侧栏表面：侧栏换 `LiquidSurface`(regular)（持续玻璃 2/2）；分隔线、行高 30、选中行 tint α .13 保持。
 - [ ] LQ06 侧栏分类：`KosCheckBox` → `LiquidCheckBox`，16×16、圆角 4、选中 accent + 白勾；复验 S03/S04。
@@ -37,6 +36,11 @@
       以及 spec.md 全量 PENDING 清零、所有 PASS 重新回归。
 
 ## 已改
+- LQ03 `apps/calendar/qml/Main.qml:1889-1912`：`viewSegment` 加 `materialForm: true`（L0/L1 上不再叠
+  LiquidSurface），track/pill 使用既有 `segmentTrack`/`segmentPill`，并新增 `borderColor`（light α .05 /
+  dark 白 α .10）。
+- LQ03 `shared/qml/controls/LiquidSegmentedControl.qml:23-28,109`：新增 `property color borderColor`
+  （默认 `Foundation.AppTheme.border`，其它调用点行为不变），material 容器描边改读它。
 - LQ04 `apps/calendar/qml/Main.qml:955-993`：`ToolbarButton` 改为继承 `LiquidActionButton`，
   `materialForm: true` / `iconOnly: true` / `surfaceColor: "transparent"`，自带 `hint`、TabFocus、
   tooltip；background 换成 host-owned plain Rectangle（r=height/2，hover=`rowHoverFill`，
@@ -44,23 +48,20 @@
 - LQ04 `apps/calendar/qml/Main.qml:1875-1906`、`1948-1958`、`2095-2106`：侧栏开关/添加/搜索/更多
   去掉 `lensBackdrop`/`lensBackdropWindow`/`lensActiveOverride`；更多按钮由手写三点 `AbstractButton`
   + `GlassSurface` 改为 `ToolbarButton { iconName: "more" }`。
-- LQ02 `apps/calendar/qml/Main.qml:215-223`：toolbarInsetLeft 12→16、toolbarInsetRight 14→16，
-  新增 `toolbarFloat: 8` / `toolbarRadius: toolbarHeight/2`。
-- LQ02 `apps/calendar/qml/Main.qml:1841-1873`：新增 `toolbarMaterial`（z:-1）＝ `LiquidOuterShadow`
-  （shadowLevel 2）+ `LiquidSurface`（regular：light #FFF .58 / dark #1C1C1E .52，rim .45/.30）。
+- LQ02 `apps/calendar/qml/Main.qml:215-223`、`1841-1873`：工具栏浮动胶囊（inset 16、float 8、r 20，
+  `LiquidOuterShadow` L2 + `LiquidSurface` regular）。
 - `shared/qml/**`：同步 nextkdeAppDemo 液态组件（LiquidStyle/LiquidSurface/LiquidBackdrop/
   LiquidCard/LiquidActionButton/LiquidNavigationButton/LiquidCheckBox/LiquidDialog/
   LiquidOuterShadow/VectorIcon 等及 shaders）。
-- LQ01：无源码改动，仅建立视觉基线。
 
 ## 仍差
-1. 日/周/月/年仍是旧分段样式，未用 `LiquidSegmentedControl`（LQ03）。
-2. 侧栏仍是旧平面，未用 `LiquidSurface`(regular)（LQ05）。
-3. 编辑器/详情浮层/菜单/tooltip 仍是旧组件（LQ07–LQ11）。
-4. 工具栏胶囊是静态材质，无背景采样；其下没有可折射内容（外推，见下）。
-5. 窄窗列宽约 77px，事件块标题截断到 4–5 字；是否属预期留待 LQ15 判。
-6. 月视图、全天条、事件块的 tint/描边细节尚未对照（LQ12–LQ14）。
-7. tooltip 仍是旧样式（白底方角），悬停验证只确认「会出、文案对」，样式归 LQ11。
+1. 侧栏仍是旧平面，未用 `LiquidSurface`(regular)（LQ05）。
+2. 编辑器/详情浮层/菜单/tooltip 仍是旧组件（LQ07–LQ11）。
+3. 工具栏胶囊是静态材质，无背景采样；其下没有可折射内容（外推，见下）。
+4. 窄窗列宽约 77px，事件块标题截断到 4–5 字；是否属预期留待 LQ15 判。
+5. 月视图、全天条、事件块的 tint/描边细节尚未对照（LQ12–LQ14）。
+6. tooltip 仍是旧样式（白底方角），悬停验证只确认「会出、文案对」，样式归 LQ11。
+7. 分段描边为折中值：参考只有圆头两端 ~222、顶边无线，单一描边无法同时满足；现取 α .05（244..247）。
 
 ## 外推待确认
 - 工具栏玻璃按「整条浮动胶囊」解释：参考图顶部是透明窗面 + 独立玻璃圆钮，没有整条玻璃带；
@@ -69,10 +70,12 @@
   主要靠阴影与边缘辨认。若需要更强可见度，后续可加 α .06 的 plain 填充或 1px 内描边。
 - 工具栏按钮的 hover/press 填充刻意不用 LiquidActionButton 自带的 materialForm 背景（其颜色取自
   `Foundation.AppTheme`，与日历 tahoe 调色板不同源），改由宿主 plain 行提供，确保 light/dark 与侧栏行一致。
+- LQ03 分段容器描边：token 表只有输入框 border α .14；参考实测顶边 249..253（≈无线）、圆头两端 ~222，
+  故日历取 light α .05 / dark 白 α .10（表外值）。若后续拿到深色参考再定。
+- LQ03 dark 分段色为外推：track 白 α .06、pill `#3C3C3C`（实测 42,42,43 / 60,60,60），无深色参考。
 - 日历侧栏用 `LiquidNavigationButton` 还是保留分类勾选行：按参考图为勾选行，暂定保留行结构，
   仅换表面与复选框；LQ05/LQ06 实拍后确认。
 - 1100×720 在 VM 内实际内容高 692；基线以 692 记录，不视为布局差异。
 
 ## Next round
-LQ03 分段控件：Day/Week/Month/Year 换 `LiquidSegmentedControl`，高 28、胶囊、pill 当前视图；
-宽度随 4 段重算并保持主区域居中。
+LQ05 侧栏表面：侧栏换 `LiquidSurface`(regular)（持续玻璃 2/2）；分隔线、行高 30、选中行 tint α .13 保持。
