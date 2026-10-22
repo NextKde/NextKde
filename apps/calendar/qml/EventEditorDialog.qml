@@ -5,7 +5,7 @@ import QtQuick.Controls
 import QtQuick.Layouts
 import Kos.Ui
 
-KosWorkspaceDialog {
+LiquidDialog {
     id: root
 
     property string editingId: ""
@@ -29,12 +29,19 @@ KosWorkspaceDialog {
     height: Math.min(620, parent ? parent.height - 32 : 620)
     anchors.centerIn: parent
     standardButtons: Dialog.Save | Dialog.Cancel
-    // P02: calendar-local neutral surface — the shared blue-gray windowRaised
-    // tint is replaced with a flat neutral panel; same elevation language.
-    background: KosSurface {
-        radius: AppTheme.smallRadius + 4
-        fillColor: AppTheme.dark ? "#262626" : "#F7F7F7"
-        elevation: 0.5
+    // LQ07: shared liquid dialog shell — r24 card, E4 shadow, .25 scrim, and a
+    // plain interior (no glass inside L2). Title and body padding follow the
+    // Dialog row of liquid-spec §4.4; the footer keeps its own 16px insets so
+    // D05's measured 347px bars are unchanged.
+    padding: 24
+    header: Label {
+        text: root.title
+        padding: 24
+        bottomPadding: 8
+        color: AppTheme.text
+        font.pixelSize: 17
+        font.weight: Font.DemiBold
+        elide: Text.ElideRight
     }
 
     function twoDigits(value) {
@@ -564,14 +571,15 @@ KosWorkspaceDialog {
                     font.pixelSize: 11
                 }
 
-                KosTextField {
+                LiquidTextField {
                     id: titleField
                     Layout.fillWidth: true
                     Layout.preferredHeight: fieldHeight
+                    specificationForm: true
+                    invalid: root.hasError("title")
+                    outlineColor: AppTheme.destructive
                     placeholderText: qsTr("Event title")
                     Accessible.name: qsTr("Event title")
-                    outlineColor: root.hasError("title")
-                        ? AppTheme.destructive : AppTheme.border
                     onTextChanged: root.clearError("title")
                 }
             }
@@ -606,25 +614,27 @@ KosWorkspaceDialog {
                     color: AppTheme.mutedText
                     font.pixelSize: 11
                 }
-                KosTextField {
+                LiquidTextField {
                     id: startDateField
                     Layout.fillWidth: true
                     Layout.preferredHeight: fieldHeight
+                    specificationForm: true
+                    invalid: root.hasError("startDate")
+                    outlineColor: AppTheme.destructive
                     placeholderText: root.datePattern
                     Accessible.name: qsTr("Start date")
-                    outlineColor: root.hasError("startDate")
-                        ? AppTheme.destructive : AppTheme.border
                     onTextChanged: root.clearError("startDate")
                 }
-                KosTextField {
+                LiquidTextField {
                     id: startTimeField
                     Layout.preferredWidth: 92
                     Layout.preferredHeight: fieldHeight
+                    specificationForm: true
+                    invalid: root.hasError("startTime")
+                    outlineColor: AppTheme.destructive
                     placeholderText: root.timePattern
                     enabled: !allDayCheck.checked
                     Accessible.name: qsTr("Start time")
-                    outlineColor: root.hasError("startTime")
-                        ? AppTheme.destructive : AppTheme.border
                     onTextChanged: root.clearError("startTime")
                 }
             }
@@ -640,25 +650,27 @@ KosWorkspaceDialog {
                     color: AppTheme.mutedText
                     font.pixelSize: 11
                 }
-                KosTextField {
+                LiquidTextField {
                     id: endDateField
                     Layout.fillWidth: true
                     Layout.preferredHeight: fieldHeight
+                    specificationForm: true
+                    invalid: root.hasError("endDate")
+                    outlineColor: AppTheme.destructive
                     placeholderText: root.datePattern
                     Accessible.name: qsTr("End date")
-                    outlineColor: root.hasError("endDate")
-                        ? AppTheme.destructive : AppTheme.border
                     onTextChanged: root.clearError("endDate")
                 }
-                KosTextField {
+                LiquidTextField {
                     id: endTimeField
                     Layout.preferredWidth: 92
                     Layout.preferredHeight: fieldHeight
+                    specificationForm: true
+                    invalid: root.hasError("endTime")
+                    outlineColor: AppTheme.destructive
                     placeholderText: root.timePattern
                     enabled: !allDayCheck.checked
                     Accessible.name: qsTr("End time")
-                    outlineColor: root.hasError("endTime")
-                        ? AppTheme.destructive : AppTheme.border
                     onTextChanged: root.clearError("endTime")
                 }
             }
@@ -674,10 +686,11 @@ KosWorkspaceDialog {
                     color: AppTheme.mutedText
                     font.pixelSize: 11
                 }
-                KosTextField {
+                LiquidTextField {
                     id: locationField
                     Layout.fillWidth: true
                     Layout.preferredHeight: fieldHeight
+                    specificationForm: true
                     placeholderText: qsTr("Optional location")
                     Accessible.name: qsTr("Event location")
                 }
@@ -805,8 +818,12 @@ KosWorkspaceDialog {
 
                     KosSurface {
                         anchors.fill: parent
-                        radius: AppTheme.smallRadius
-                        fillColor: AppTheme.fieldSurface
+                        radius: 10
+                        fillColor: AppTheme.dark ? Qt.rgba(1, 1, 1, .06)
+                                                 : Qt.rgba(0, 0, 0, .06)
+                        // Plain form field: no idle outline, like the liquid
+                        // text fields around it; focus still draws a ring.
+                        strokeWidth: 0
                         elevation: 0
                         focused: descriptionField.activeFocus
                     }

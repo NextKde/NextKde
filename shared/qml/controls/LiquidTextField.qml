@@ -7,6 +7,8 @@ TextField {
     id: root
     // Plain input inside a host-owned navigation material; opt-in only.
     property bool specificationForm: false
+    // Validation state for the plain form: one 1px ring in `outlineColor`.
+    property bool invalid: false
     property string liquidIntensity: LiquidStyle.intensityLevel
     readonly property var _intensity: LiquidStyle.intensityProfile(liquidIntensity)
     opacity: specificationForm && !enabled ? .38 : 1
@@ -87,6 +89,14 @@ TextField {
             border.width: 2
             border.color: root.focusedOutlineColor
             visible: root.specificationForm && root.activeFocus && root.enabled
+        }
+        Rectangle {
+            anchors.fill: parent
+            radius: root.cornerRadius
+            color: "transparent"
+            border.width: 1
+            border.color: root.outlineColor
+            visible: root.specificationForm && root.invalid
         }
         LiquidSurface {
             id: liquidSurface
