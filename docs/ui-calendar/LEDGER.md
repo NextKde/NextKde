@@ -1,29 +1,22 @@
 # LQ0 — 液态组件接入与剩余 spec 收敛
 
 ## 本轮
-- LQ18c 第 2 组 `O01–O09 浮层/tooltip/菜单` 复拍核对（light 1100×692，沿用同一实例）。
-  - 驱动：`toolbarAdd`/`toolbarMore` hover + 2×none（≥1s）→ tooltip；`pointer move 600,420`
-    关标签；点 `toolbarMore` 开菜单；`pointer (900,124)` hover「导入」；`openItem
-    "Morning planning"` 开详情浮层。
-  - tooltip：`添加日程` 居中于 + 按钮（卡 x35–92 / y74–99，11px、6×10、r12、面 #F2F2F2、
-    发丝边）；`日历操作` 贴右缘时**水平 clamp 生效**，卡右停在窗口内 ~10px 不越界；
-    移开即消失、单实例。O01/O02/O03 按字面 PASS。
-  - 菜单：卡 845–1062 × 67–210（宽 220）、行 30、图标 16、图标左内 ~10、三组
-    （新建任务｜导入/导出｜设置）、无子菜单、无快捷键文本、无破坏性项；hover 行
-    (244,244,245)=白底+`rowHoverFill`，与侧栏同一 token 语言。O04/O05/O07 PASS，
-    O06 N/A（无破坏性项）、O08 PASS（材质/圆角/阴影/字重按角色分层）。
-  - 浮层：240 面、r16、无硬边；20 DemiBold 标题 + 12 灰阶元数据 + 右对齐胶囊「编辑」。
-  - **新发现（最高优先）**：tooltip 被页面大标题与日期导航**压在下面**（8x 裁切可见 `20…`
-    字头压过卡片、「今天」胶囊盖住卡左缘）。`Main.qml:1175 helpTag.parent =
-    helpTagAnchor` 疑为根因（Menu 未设 parent 则正常置顶）。属层叠机制非 token，按纪律
-    只记仍差、本轮未改。
-  - O09 **仍差**：仅 tooltip 垂直翻转 + 水平 clamp；菜单/浮层只右对齐/内缩，无方向翻转；
-    浮层边缘未测。tooltip dark 腿仍未验证。
-  - 证据：`O-tooltip-light.png`、`O-tooltip-right-light.png`、`O-tooltip-add-8x.png`、
-    `O-tooltip-right-8x.png`、`O-menu-light.png`、`O-menu-hover-light.png`、
-    `O-popover-light.png`；入库 `docs/ui-calendar/round-22-{menu-hover,popover,
-    tooltip-add-8x,tooltip-right-8x}.png`。
-  - 日志：无 QML 错误。Bash ~26/25（读码+两次驱动+三次像素量测；未构建）。
+- LQ18c 收尾 2/N：**X01–X05 + P02/P03 复拍**（light 1100×692 / 760×540；X03 dark 1100×692）。
+  - **无代码改动**，7/7 PASS，未发现需 token 级修正的偏差。
+  - X01 760：内容 bbox 恰 760×540；标题 x240–614、日期组 x630–740（16 gap，右内 20）、
+    分段中心 490 = 画布中心；无碰撞/裁切。
+  - X02：分段 collapsed x436（中心 550 = 窗口中心）↔ expanded x546（中心 660 = 画布中心），
+    侧栏 220→0，画布 0–1100 连续无接缝。
+  - X03 dark：侧栏 41 / 画布 30（层级正确）、小时线 59 / 半时 43、事件暗蓝去饱和无霓虹。
+  - X04：空周 2026-10-05–11 七列 + 8–19 刻度 + 半时线 + 全天带，无占位插画。
+  - X05：密集周 2026-03-30–04-05，周四 08:00 三道 + `+1` 无跨道墨迹；全天条 Mon–Thu 连续
+    （y160 扫描 fill 274–737 在列缝无底色断口）；全天底缝 y≈183 vs 首条计时线 y≈203。
+    接受项：两条 45px 道只有 “…”（既有 3 道外推）。
+  - P02：标签列全部 x384，单行字段 30 高同半径，Save/Cancel 347×27 固定 footer。
+  - P03：760 下编辑器 380×480（x190/y30，底 y510，余 30）；95 字标题在 30 高字段内滚动不撑宽；
+    详情浮层 340 宽 + 36 阴影全在屏内，标题 2 行换行。
+  - 环境注记：760 截图的 grab 缓冲仍是 1100×692（内容画在左上 760×540），证据已裁切。
+  - 证据：`R24-*.png`；入库 `docs/ui-calendar/round-24-*.png`（9 张）。Bash ~25/25。
 
 ## 队列（一轮一条；[x]=已完成）
 - [x] LQ01 基线：light week 1100×720 / 760×540；日志无启动回归。
@@ -53,11 +46,15 @@
   工具栏 chrome hover/press 有连续帧；inactive 按代码证据（见外推）。
 - [x] LQ18a X06 日历/settings 同尺度对照：PASS（仅取证）。
 - [x] LQ18b X07 弹框/浮层/菜单/tooltip 同尺度对照：PASS（仅取证）。
-- [ ] LQ18c spec 全量 PASS 回归：第 1 组 D01–D13（D03 仍差）、第 2 组 O01–O09
-  （O09 仍差，新发现 tooltip 层叠）已完成 → 先修 tooltip 层叠，再 X01–X05 + P02/P03
-  复拍，其余 PENDING 逐条核对清零。
+- [ ] LQ18c spec 全量 PASS 回归：第 1 组 D01–D13（D03 仍差）、第 2 组 O01–O09（O09 仍差）、
+  X01–X05 + P02/P03（本轮 7/7 PASS）已完成 → 下一轮 tooltip 剩余腿（dark / 上方翻转 /
+  连续帧），其余 PENDING 逐条核对清零。
 
 ## 已改
+- LQ18c 收尾 2/N：**无代码改动**（X01–X05 + P02/P03 只取证/量测/判读；spec 状态更新）。
+- LQ18c 收尾 1/N：`Main.qml` `openHelpTag()` 去掉 `helpTag.parent = helpTagAnchor`（Popup
+  回到窗口 overlay 层，压在页面内容之上）；`positionHelpTag()` x/y 改窗口绝对坐标。修复
+  tooltip 被页标题/日期导航遮挡（仍差 #1 的层叠部分）。
 - LQ18c 第 2 组：**无代码改动**（只取证/量测/判读；tooltip 层叠缺陷只记录未修）。
 - LQ18c 第 1 组：`EventEditorDialog.qml:42`、`CalendarTaskEditorDialog.qml:42` 标题 17→20 DemiBold
   （D04）；`KosButton.qml` 新增 `buttonRadius`（-1=旧式 r10），两编辑器 5+5 条 footer/确认
@@ -94,10 +91,9 @@
 - `shared/qml/**`：同步 nextkdeAppDemo 液态组件与 shaders。
 
 ## 仍差
-1. **tooltip 层叠**：`helpTag` 被页面标题/日期导航绘在其上（`Main.qml:1175
-   helpTag.parent = helpTagAnchor` 疑为根因；Menu 未设 parent 即正常置顶）。两处 tooltip
-   8x 实拍均可见遮挡。修法待验证：改窗口级坐标（root.contentItem / Overlay.overlay）。
-   dark 腿、上方翻转、出现/消失连续帧仍未验证（右缘 clamp 本轮已验证生效）。
+1. tooltip 剩余腿：**层叠已修**（本轮 light 实拍：卡在页面标题与「今天」胶囊之上）。dark 腿、
+   上方翻转、出现/消失的连续帧仍未验证（移开后的消失静态帧已拍，过程无连续帧）；
+   右缘 clamp 已验证生效。
 2. D03 弹框卡片结构：面为硬编码 `#ffffff`（非 `cardSurface`）、无 1px `border`、阴影是单只
    `LiquidOuterShadow`（E4 自定义）而非 `shadowAmbient`+`shadowKey` 双层。视觉无硬边，但三条
    只中“软阴影”一条；改机制不是 token 级，需先定是否保留 LQ07 的 E4 方案。
@@ -202,10 +198,9 @@
   窄事件惯例外推），不算 X05 的“unintended overlap”。
 
 ## Next round
-LQ18c 收尾 1/N：**修 tooltip 层叠**（只改这一处）。`Main.qml:1175 openHelpTag()`
-`helpTag.parent = helpTagAnchor` 使 Popup 落到兄弟内容之下；改为窗口级坐标：
-a) 不再把 parent 设为 anchor（用 root.contentItem 或 `Overlay.overlay`），b)
-`positionHelpTag()` 的 x/y 由 anchor 相对坐标改为窗口绝对坐标（去掉 origin 减法）。
-构建 → 同一 light 会话复拍 `添加日程` 与右缘 `日历操作` 两张 8x，确认：卡在标题/日期
-导航之上、位置/间距/右缘 clamp 不回退、移开即消失。若第一次不成就复原并记「仍差」。
-之后下一轮再回 X01–X05 + P02/P03 复拍。
+LQ18c 收尾 3/N：**tooltip 剩余腿**——
+1) dark 腿：直接以 dark 启动，hover `添加日程` 拍卡（面/发丝/阴影 dark token）；
+2) 上方翻转：该窗口唯一近底锚点是侧栏 mini calendar 的左右翻月箭头（侧栏展开，y≈490/692；
+   760×540 下更靠底）。悬停看卡是否翻到锚点上方且不越窗口下缘；
+3) 若一次驱动内可加 `nativeRecord`（~30ms）则补出现/消失连续帧，否则继续标「未验证」。
+只做 tooltip，不顺手改别的。之后剩 D03 / E06 / N01 / V03 / O09 等逐条清零。
