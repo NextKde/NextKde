@@ -44,8 +44,19 @@ KosApplicationWindow {
         return d
     }
     property date now: reviewClock()
-    property date visibleMonth: new Date(new Date().getFullYear(), new Date().getMonth(), 1)
-    property date selectedDate: new Date()
+    // N01 review hook: KosReviewSelect (KOS_CALENDAR_REVIEW_SELECT="YYYY-MM-DD")
+    // pins the startup selection to a non-today date so the gray "other
+    // selection" can be captured next to the red today disc. Unset keeps today.
+    function reviewSelection() {
+        const override = typeof KosReviewSelect !== "undefined" ? String(KosReviewSelect) : ""
+        if (override === "")
+            return new Date()
+        const p = override.split("-").map(s => parseInt(s, 10) || 1)
+        return new Date(p[0], (p[1] || 1) - 1, p[2] || 1)
+    }
+    property date visibleMonth: new Date(reviewSelection().getFullYear(),
+                                         reviewSelection().getMonth(), 1)
+    property date selectedDate: reviewSelection()
     property int viewIndex: 0
     property string searchQuery: ""
     property bool showEvents: true
