@@ -1,15 +1,13 @@
 # LQ0 — 液态组件接入与剩余 spec 收敛
 
 ## 本轮
-- LQ18c 收尾 11/N：**O09 结清（菜单腿）**。Next round 原本写“四个菜单触发点”，实仓只有一处
-  `Menu`（`Main.qml:2360` 工具栏 More；O04 的右键菜单尚未建 UI），侧栏行/日期组/事件 chip
-  都没有菜单，故“量四个触发点”不成立，按唯一触发点取证。1100：More box x1056..1084，菜单
-  卡右缘 ≈1064 = 窗口−36；760：More x716..744，卡右缘 ≈720..724 = 窗口−36..−40，`menuShadowInset`
-  36 的阴影槽全程留在窗内，卡与阴影都不越界；菜单向下展开，卡底 ≈212 远低于 540 内容高。
-  结论：O09 的“不越界”由“右对齐锚点 + 窗口坐标 clamp”已满足；**垂直翻转在当前布局不可达**
-  （唯一触发点在顶部，向下空间恒足，同 tooltip 判法）；项目顺序翻转只在翻转发生时才需要，
-  判 N/A。证据 `R34-menu-1100.png`（1100 满宽，卡右 1064）、`R34-menu-760.png`（内容 760
-  画在 1100 缓冲的已知 grab 问题，卡右 ≈720）。产品代码零改动。
+- LQ18c 收尾 13/N：**任务编辑器高度内容自适应**。固定 560 → `height =
+  min(560, max(implicitHeight, 测值))` 且 `bottomPadding: 0`；编辑态卡片 560→464，
+  备注框底到保存条 95→16px（两轮实拍量得：改前卡 78..637、表单止 405、保存条 517；
+  改后卡 123..588、表单止 451、保存条 466）。标题行/字段/备注/三行 footer 行内尺寸
+  零变化，footer 高度固定故 D05 不被压。light 实拍 `R36-before-editor.png` /
+  `R36-final-editor.png`（1100×692，2026-04-01 day，openItem todo → 编辑）。
+  New task 两行 footer / 删除确认态未复拍。
 
 ## 队列（一轮一条；[x]=已完成）
 - [x] LQ01 基线：light week 1100×720 / 760×540；日志无启动回归。
@@ -55,11 +53,25 @@
   + `listColor` 返回字符串致混合路径 NaN 变纯黑；改后任务回到 due 时刻并正常着色。
 - [x] LQ18c 收尾 11/N：**O09 菜单腿结清**——唯一触发点（工具栏 More）在 1100/760 两档都完整
   落在窗内（卡右 = 窗口−36/−40，阴影槽未被裁切）；垂直翻转不可达，项目顺序翻转 N/A。
+- [x] LQ18c 收尾 12/N：**day 视图 TypeError 清零**——`itemColor`/`itemCompleted`/`itemTodoId`
+  加 undefined 早退；day/week 往返 5 次日志 0 条 TypeError，两视图目视不变。
+- [x] LQ18c 收尾 13/N：**任务编辑器高度内容自适应**——编辑态 560→464，备注→保存
+  95→16px；footer 固定高度不变，D05 三行未压。
 - [ ] LQ18c spec 全量 PASS 回归：第 1 组 D01–D13（D03 仍差）、第 2 组 O01–O09（**O09 已结清**）、
   X01–X05 + P02/P03、tooltip 剩余腿、V03/V03b 月跨天连续条已完成
   → 其余 PENDING 逐条核对清零（N01、E06 已结清）。
 
 ## 已改
+- LQ18c 收尾 13/N（任务编辑器高度）：`CalendarTaskEditorDialog.qml:22-39` 新增
+  `maxDialogHeight`（min(560, parent−64)）与 `measuredDialogHeight`（24 + header
+  implicit + footer implicit + formLayout implicit），`height =
+  Math.min(maxDialogHeight, Math.max(implicitHeight, measuredDialogHeight))`；
+  `bottomPadding: 0`（footer 自带上 16 下 16，默认 24 会在备注与按钮间留死白）；
+  header Label 加 `id: headerLabel`、footer Item 加 `id: footerBar`；Flickable 加
+  `implicitHeight: formLayout.implicitHeight` 供 Dialog 求 implicitHeight。宽度、
+  左右/上内边距、背景/阴影、所有行内尺寸零变化。
+- LQ18c 收尾 12/N（R35 TypeError）：`Main.qml` `itemColor`/`itemCompleted`/`itemTodoId` 开头
+  各加 `if (!item)` 早退（accent / false / ""）。只挡 delegate 拆除窗口，调用方与颜色路径零变化。
 - LQ18c 收尾 11/N（O09）：**无产品代码改动**。曾给 `actionsMenu` 加 `objectName` 想用
   `inspectGeometry` 读窗口坐标，实测 Popup 在 overlay 层、`objectNamed` 遍历不到
   （返回 `available:false`），已撤回该行；判定改为靠实拍像素（卡右与窗口右缘距离）。
@@ -89,65 +101,22 @@
 - LQ18c 收尾 5/N（V03b）：`CalendarMonthView.qml:232-243` 续接 chip color 改
   `AppTheme.mix(AppTheme.neutralPlane, itemColor, dark?.30:.16)`（不透明预混，止住列发丝
   透出）；单日 chip 仍 `withAlpha`。其余零改动。
-- LQ18c 收尾 4/N（V03）：`CalendarMonthView.qml` 新增 `itemKey` 属性与 `itemContinues()`
-  （相邻日同 key 判接续）、cell 横向 padding 改为 0 + 日期行/单日 chip 各 6px、续接 chip
-  贴边 + per-corner 方角 + 色条仅首日；`Main.qml` 新增 `monthItemKey()` 并在 monthPage
-  接线 `itemKey: root.monthItemKey`。week/day/all-day 未动。
-- LQ18c 收尾 3/N：**无代码改动**（tooltip dark/连续帧只取证；翻转经几何推导判不可达，
-  未为验证新增 hint 或缩窗）。
-- LQ18c 收尾 2/N：**无代码改动**（X01–X05 + P02/P03 只取证/量测/判读；spec 状态更新）。
-- LQ18c 收尾 1/N：`Main.qml` `openHelpTag()` 去掉 `helpTag.parent = helpTagAnchor`（Popup
-  回到窗口 overlay 层，压在页面内容之上）；`positionHelpTag()` x/y 改窗口绝对坐标。修复
-  tooltip 被页标题/日期导航遮挡（R150 light 实拍结清；R152 dark 卡压侧栏行 ink 亦在上层）。
-- LQ18c 第 2 组：**无代码改动**（只取证/量测/判读；tooltip 层叠缺陷只记录未修）。
-- LQ18c 第 1 组：`EventEditorDialog.qml:42`、`CalendarTaskEditorDialog.qml:42` 标题 17→20 DemiBold
-  （D04）；`KosButton.qml` 新增 `buttonRadius`（-1=旧式 r10），两编辑器 5+5 条 footer/确认
-  按钮传 `height/2`，弹框按钮由圆角矩形改为胶囊（D06）。其余 D 组只核对不改。
-- LQ18b：**无代码改动**；产出四个 L2 面的同尺度取证与判读。
-- LQ18a：**无代码改动**；settings 以仓库源码跑起（`KOS_SHELL_DIR`），产出同尺度并排证据。
-- LQ17：`Main.qml:368-370` `SidebarRow`、`:492-493` `CategoryRow` background 增加
-  `row.down → rowPressFill`（原只有 hover；菜单行早已有按下态，本轮补齐侧栏两类行）。
-- LQ16：`CalendarScheduleView.qml:866-875` timed 网格宽 = `gutter + dayCount*dayColumnWidth`
-  （1100→1095），不再把右缘余量摊进列；header/all-day/timed 三区边界逐像素一致。
-- LQ15：`CalendarScheduleView.qml:47-55` 整数列宽（`Math.floor`）；`:866` 宽度随 root 变化。
-- LQ14b：`CalendarScheduleView.qml` `minutesOfDay/timedSpan/timedLayout/timedBlocksFor` 区间
-  布局（簇内 lane、≤3、最短 30min）；hour cell 改用 `timedBlocksFor`；delegate 按 segment
-  给 y/height、首段顶场/末段贴线、标题仅首段、stripe 跨行连续、外角 r3 接缝方角、+N 由隐藏
-  lane 决定。细节移入 rounds.md。
-- LQ14a：`CalendarScheduleView.qml:987-999` chipHost 上 2/下 0；`:1035-1044` timed 填充改为
-  全天条同款 `mix(allDayBackdrop, itemColor, .17/.32)`（E05 同色）。细节移入 rounds.md。
-- LQ13：`CalendarScheduleView.qml:56-97` 全天带 gap/inset 2、一行 28、三行 80；
-  `:220-245` `lastCoveredDay` = 含当天 end；`Main.qml:1419-1434` all-day 末天不再减一
-  （timed 不变），`:1574-1590` 全天日期范围同步。细节移入 rounds.md。
-- LQ12：`apps/calendar/qml/CalendarMonthView.qml:56-70` 网格无间距 + `lineColor` hairlines；
-  `:69-90` 表头底边线；`:255-280` 每格右/下 1px 线；`Main.qml` 月页删除底部 agenda
-  `KosCard`（原 145/170 高）。细节移入 rounds.md。
-- LQ11：`Main.qml:40-43` help tag 状态；`:245-262` tooltip token；`:924/:1000/:1033`
-  三个组件的 hover/press 钩子（移除 attached ToolTip）；`:1090-1136` 自绘 Popup
-  （卡/发丝/E1/r12/11px/6×10）；`:1137-1173` 延迟 1000ms、`TextMetrics`、arm/disarm/open；
-  `:1178-1205` 定位（下方优先、越界翻转/clamp）。light 证据见 rounds.md。
-- LQ10：`Main.qml` 菜单 token、`rowPressFill`、`MenuActionRow`/`MenuGroupSeparator`、触发定位 +
-  自绘 `Menu`（卡片/阴影/玻璃、四项图标、分组）。细节移入 rounds.md。
-- LQ08：`apps/calendar/qml/CalendarTaskEditorDialog.qml:8,26-46,53` 基类/标题/内边距；
-  字段 `:500-590`；备注 `:621-670`；`shared/qml/foundation/KosComboBox.qml:4-21` 新增外观参数。
-- LQ07：`EventEditorDialog.qml:8` 基类 `LiquidDialog`；`LiquidTextField.invalid` 新增。
-- LQ02–LQ06 详见 rounds.md（工具栏/分段/按钮/侧栏/勾选）。
-- `shared/qml/**`：同步 nextkdeAppDemo 液态组件与 shaders。
 
 ## 仍差
 1. D03 弹框卡片结构：面为硬编码 `#ffffff`（非 `cardSurface`）、无 1px `border`、阴影是单只
    `LiquidOuterShadow`（E4 自定义）而非 `shadowAmbient`+`shadowKey` 双层。视觉无硬边，但三条
    只中“软阴影”一条；改机制不是 token 级，需先定是否保留 LQ07 的 E4 方案。
 2. 浮层/菜单：详情浮层为**单张中性卡**（参考是 246 壳 + 内部白行），面 240 与菜单 255
-   差 Δ15（参考 Δ9）；阴影偏弱、菜单亮卡无磨砂色偏/hover r8 偏小；任务编辑器
-   固定 560 高留白 151px。（O09 菜单翻转不可达，见外推；tooltip 翻转同理。）
-3. 切到 day 视图时 `Main.qml:1679 itemColor` 对 undefined item 报两次 TypeError（瞬时，
-   渲染无异常；疑似 delegate 拆除时序，非本轮引入）。
+   差 Δ15（参考 Δ9）；阴影偏弱、菜单亮卡无磨砂色偏/hover r8 偏小。（O09 菜单翻转不可达，
+   见外推；tooltip 翻转同理。）
 （tooltip 各腿已结清：dark、出现/消失连续帧通过；上方翻转在当前布局不可达，见外推；
 密集 08:00 簇 45px 道 + 标题 ellipsis 为参考同款外推，已移入 rounds.md，不再列。
 V03/V03b 月跨天连续条已结清，细节见 rounds.md R153–R154。）
 
 ## 外推待确认
+- 任务编辑器高度：编辑态（三行 footer）实测卡 464、备注→保存 16px；New task（两行 footer）
+  与删除确认态未复拍。高度公式随 footer implicitHeight 联动，两态只会更矮（760×540 下限
+  476 仍高于 464，不触发滚动），风险低。
 - V03 用“每格独立判左右接”而非整周 span 层：只有跨日项在相邻格恰好同一行时才视觉连续。
   fixture 的跨日项都是全天（排序恒在首行）故成立；若一条非 all-day 跨日事件与当天其他
   事件排序交错，相邻格会不同行。整周 span 层数据模型可支撑，但属结构性改动，未做。
@@ -259,7 +228,7 @@ V03/V03b 月跨天连续条已结清，细节见 rounds.md R153–R154。）
   窄事件惯例外推），不算 X05 的“unintended overlap”。
 
 ## Next round
-修复切到 day 视图时 `Main.qml:1679 itemColor` 对 undefined item 的两次 TypeError（瞬时，渲染
-无异常；疑似 delegate 拆除时序）。先看该函数所有调用点，给 undefined/空对象加早退（不改变
-week/month 既有颜色），切 day/week 各拍一帧并确认 live-runtime 日志不再出现 TypeError。
-不动 D03 与浮层内部白行（需产品裁决）；之后剩 D03 / 浮层菜单层级 / 任务编辑器留白。
+菜单 hover 高亮圆角结清（仍差 #2 的最后一小块）：量 `MenuActionRow` 的 hover 矩形 inset
+（state 旧记 8/r8）：若 inset 确为 8，按 r_inner = max(6, 16−8) = 8 判**已正确**、只补记录；
+若实际为 4，则改为 r12。light 下 `pointerObject` move 到菜单某行拍 hover 帧（用
+`toolbarMore` 开菜单），不重排菜单几何。D03 需产品裁决、浮层内部白行需数据模型确认，均不动。

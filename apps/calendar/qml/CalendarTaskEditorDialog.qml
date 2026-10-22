@@ -19,7 +19,24 @@ LiquidDialog {
     modal: true
     // P02/P03: compact neutral editor, matching the event editor treatment.
     width: Math.min(380, parent ? parent.width - 48 : 380)
-    height: Math.min(560, parent ? parent.height - 64 : 560)
+    // LQ18c 收尾 13/N: the card hugs its form instead of pinning 560. The
+    // fixed height left 95px of blank card between the notes box and the
+    // action stack (measured 1100x692, edit state). Dialog's implicit height
+    // already sums header + content + footer + padding once the Flickable
+    // below reports an implicit height; the second term is a safety net so a
+    // platform that reports implicitContentHeight as 0 can never collapse
+    // the form to nothing. The 560 cap keeps the old scroll behaviour on a
+    // short window, and the footer keeps its own fixed height, so D05's
+    // three stacked bars are never compressed.
+    //
+    // bottomPadding is 0 because the footer sits flush with the card's bottom
+    // edge and carries its own 16px inset; the default 24 here rendered as a
+    // dead band between the notes box and the action stack. Top/left/right
+    // padding stay 24, so the form's geometry under the header is unchanged.
+    readonly property real maxDialogHeight: Math.min(560, parent ? parent.height - 64 : 560)
+    readonly property real measuredDialogHeight: 24 + headerLabel.implicitHeight
+        + footerBar.implicitHeight + formLayout.implicitHeight
+    height: Math.min(maxDialogHeight, Math.max(implicitHeight, measuredDialogHeight))
     anchors.centerIn: parent
     standardButtons: Dialog.Save | Dialog.Cancel
     readonly property int fieldHeight: 30
@@ -34,7 +51,9 @@ LiquidDialog {
     // body padding follow the Dialog row of liquid-spec §4.4; the footer keeps
     // its own 16px insets so D05's stacked bars stay put.
     padding: 24
+    bottomPadding: 0
     header: Label {
+        id: headerLabel
         text: root.title
         padding: 24
         bottomPadding: 8
@@ -73,6 +92,7 @@ LiquidDialog {
     }
 
     footer: Item {
+        id: footerBar
         implicitHeight: 16
             + (root.confirmingDelete ? confirmCol.implicitHeight : footerCol.implicitHeight) + 16
 
@@ -445,6 +465,8 @@ LiquidDialog {
         interactive: false
         contentWidth: width
         contentHeight: formLayout.implicitHeight
+        // Feeds Dialog.implicitHeight so the card can shrink to the form.
+        implicitHeight: formLayout.implicitHeight
         boundsBehavior: Flickable.StopAtBounds
 
         // P03: macOS overlay scrollbar — floats over the form, no track, so a
