@@ -19,6 +19,7 @@ Pane {
     required property date currentTime
     required property int firstDayOfWeek
     property var itemsForDate: function(date) { return [] }
+    property var itemKey: function(item) { return "" }
     property var itemTitle: function(item) { return "" }
     property var itemColor: function(item) { return AppTheme.accent }
     property var itemCompleted: function(item) { return false }
@@ -44,6 +45,26 @@ Pane {
         const jsDay = (firstDayOfWeek + column) % 7
         return Qt.locale().dayName(jsDay === 0 ? 7 : jsDay,
                                    Locale.ShortFormat)
+    }
+
+    // V03: a multi-day item appears in every covered day's bucket, but the
+    // bucket crosses the itemsForDate property boundary (JS object → QVariant
+    // copy), so object identity does not survive. Match on the item key
+    // (series id + span start) instead: it is stable across the covered days
+    // of one event, while daily recurring occurrences keep distinct starts and
+    // therefore stay separate chips.
+    function itemContinues(item, date, dayOffset) {
+        const key = root.itemKey(item)
+        if (key.length === 0)
+            return false
+        const other = new Date(date.getFullYear(), date.getMonth(),
+                               date.getDate() + dayOffset)
+        const list = root.itemsForDate(other)
+        for (let index = 0; index < list.length; index++) {
+            if (root.itemKey(list[index]) === key)
+                return true
+        }
+        return false
     }
 
     contentItem: GridLayout {
@@ -118,8 +139,13 @@ Pane {
                 readonly property int visibleItemCount: Math.max(0, Math.min(3,
                     Math.floor((height - topPadding - bottomPadding
                         - (monthGrid.dayDiscSize + 2)) / (monthGrid.chipHeight + 2))))
-                leftPadding: 6
-                rightPadding: 6
+                // V03: horizontal padding lives on the date row and on
+                // single-day chips, not on the cell itself — a chip that
+                // continues into the neighbouring column must be able to run
+                // flush to the cell edge (0 margin) and butt against its
+                // continuation with no canvas-coloured seam.
+                leftPadding: 0
+                rightPadding: 0
                 topPadding: 5
                 bottomPadding: 5
                 opacity: inVisibleMonth ? 1 : 0.5
@@ -131,6 +157,8 @@ Pane {
 
                     RowLayout {
                         Layout.fillWidth: true
+                        Layout.leftMargin: 6
+                        Layout.rightMargin: 6
                         spacing: 2
 
                         Rectangle {
@@ -185,9 +213,22 @@ Pane {
                             id: itemChip
 
                             required property var modelData
+                            readonly property bool continuesLeft:
+                                root.itemContinues(modelData, dayButton.cellDate, -1)
+                            readonly property bool continuesRight:
+                                root.itemContinues(modelData, dayButton.cellDate, 1)
                             Layout.fillWidth: true
                             Layout.preferredHeight: monthGrid.chipHeight
+                            // V03: continued edges run flush to the cell
+                            // boundary and drop their outer rounding so the
+                            // two cells' chips read as one bar.
+                            Layout.leftMargin: itemChip.continuesLeft ? 0 : 6
+                            Layout.rightMargin: itemChip.continuesRight ? 0 : 6
                             radius: 5
+                            topLeftRadius: itemChip.continuesLeft ? 0 : itemChip.radius
+                            bottomLeftRadius: itemChip.continuesLeft ? 0 : itemChip.radius
+                            topRightRadius: itemChip.continuesRight ? 0 : itemChip.radius
+                            bottomRightRadius: itemChip.continuesRight ? 0 : itemChip.radius
                             color: AppTheme.withAlpha(root.itemColor(modelData),
                                 AppTheme.dark ? 0.30 : 0.16)
                             opacity: root.itemCompleted(modelData) ? 0.52 : 1
@@ -198,6 +239,9 @@ Pane {
                                 anchors.bottom: parent.bottom
                                 width: 3
                                 radius: 2
+                                // V03: the colour stripe marks the bar's
+                                // first day only, not every continued cell.
+                                visible: !itemChip.continuesLeft
                                 color: root.itemColor(itemChip.modelData)
                             }
 

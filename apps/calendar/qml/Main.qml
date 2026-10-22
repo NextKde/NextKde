@@ -1548,6 +1548,14 @@ KosApplicationWindow {
         return String(value(record, "seriesId", value(record, "id", "")))
     }
 
+    // V03: month chips use this to decide whether a multi-day chip runs into
+    // the neighbouring cell. Same series + same span start = the same bar on
+    // successive days; a recurring occurrence changes start per day.
+    function monthItemKey(item) {
+        const record = itemRecord(item)
+        return itemStableId(item) + "|" + String(value(record, "start", ""))
+    }
+
     // P1-2: locale-aware via AppTheme.formatClock — 24h locales keep "HH:MM",
     // 12h locales get the compact form ("11AM" / "1:30PM").
     function itemTime(item) {
@@ -2871,6 +2879,7 @@ KosApplicationWindow {
                             currentTime: root.now
                             firstDayOfWeek: root.localeFirstDayOfWeek
                             itemsForDate: root.itemsForDate
+                            itemKey: root.monthItemKey
                             itemTitle: root.itemTitle
                             itemColor: root.itemColor
                             itemCompleted: root.itemCompleted
