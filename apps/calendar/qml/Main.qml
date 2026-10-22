@@ -1637,17 +1637,32 @@ KosApplicationWindow {
     readonly property var listPalette: ["#0A84FF", "#34C759", "#FF9F0A",
         "#BF5AF2", "#FF375F", "#64D2FF"]
 
+    // R33: this used to return the raw `#rrggbb` STRING. Every caller treats
+    // the result as a colour, and the two that blend (`AppTheme.mix`,
+    // `AppTheme.withAlpha`, `chipInk`) read `.r/.g/.b` off it — undefined on a
+    // string, so the whole chip resolved to black (fill AND ink). Parse into
+    // a colour object once, here, so todos and events share one type.
+    function parseListColor(text) {
+        const match = String(text).match(/^#([0-9a-fA-F]{6})([0-9a-fA-F]{2})?$/)
+        if (!match)
+            return AppTheme.accent
+        const rgb = parseInt(match[1], 16)
+        return Qt.rgba(((rgb >> 16) & 255) / 255, ((rgb >> 8) & 255) / 255,
+                       (rgb & 255) / 255,
+                       match[2] ? parseInt(match[2], 16) / 255 : 1)
+    }
+
     function listColor(id) {
         for (let index = 0; index < pim.lists.length; index++) {
             const list = pim.lists[index]
             if (String(value(list, "id", "")) === String(id))
-                return String(value(list, "color", AppTheme.accent))
+                return root.parseListColor(value(list, "color", ""))
         }
         let hash = 0
         const key = String(id)
         for (let index = 0; index < key.length; index++)
             hash = (hash * 31 + key.charCodeAt(index)) & 0x7fffffff
-        return root.listPalette[hash % root.listPalette.length]
+        return root.parseListColor(root.listPalette[hash % root.listPalette.length])
     }
 
     function listName(id) {

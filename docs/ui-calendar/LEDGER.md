@@ -1,16 +1,18 @@
 # LQ0 — 液态组件接入与剩余 spec 收敛
 
 ## 本轮
-- LQ18c 收尾 9/N（E06 续）：**数据链定位并打通，E06 PASS**。根因既不在勾标绘制也不在
-  service 逻辑：fixture 里 3 条 link 属性手写成了 `X-KOS-LINKED-*-ID`，而
-  KCalendarCore 只认 `X-KDE-KOS-*`（同文件其余 17 条自定义属性都是后者；`X-KDE-KOS-LIST-ID`
-  能正常解出 listId 即为证）。改名后私有 D-Bus `eventsForRange(2026-03-29, 03-31)` 立即返回
-  `Morning planning → todo=ui-review-todo-0, completed=true`、`Multi-day review →
-  ui-review-todo-multiday, completed=true`。复拍：timed chip（周日 08:00）与全天带四段续接
-  chip 均为 **✓ + strikeout 同屏**，勾为 10px 矢量、chip ink、随 `.5` completion opacity
-  变淡，无 emoji、无新颜色。证据 `R32-e06-timed-light.png`、`R32-e06-allday-light.png`、
-  合图 `R32-e06-evidence.png`（timed 5×、全天 3×）。
-  副产物：把 timeline 滚到 contentY=0 才发现的 3 枚纯黑 timed chip（见仍差 #2），非本轮引入。
+- LQ18c 收尾 10/N：**week 视图 00:00 三枚纯黑 chip 定位并修复**（R32 新发现）。两个根因叠加：
+  ① `CalendarScheduleView.timedSpan` 用 `record.start ?? record.due`，而 todo 的 `start` 是
+  空串而非 undefined，三条带 DUE 的任务（4/1 09:30、4/1 14:30、4/2 11:00）因此全部落在
+  00:00 的 1 小时块；② `Main.listColor` 返回 `#rrggbb` **字符串**，凡按颜色对象取 `.r/.g/.b`
+  的混合路径（timed chip 填充 `AppTheme.mix`、`chipInk` 文字、月视图 `withAlpha`）都拿到
+  undefined ⇒ NaN ⇒ 无效色，填充与标题 ink 双双纯黑（左侧 3px 条直接吃字符串，所以仍显示
+  列表色）。改为空串回退 `due`、`listColor` 解析成 QColor 对象（未知 id 仍走原哈希调色板，
+  非法值回退 accent）。复拍 contentY=0：00:00–07:00 行干净；三条任务落回各自 due 时刻且
+  正常着色（绿 Personal「Revie…」09:30、蓝 Inbox「Prep…」14:30、绿「A deli…」11:00），
+  4x 下填充 (221,245,235)、绿条 + 深绿 ink 可读。事件 chip 与其它 PASS 行为不动。
+  证据 `R33-repro-light.png`（前）、`R33-fixed-top-light.png`（后，contentY=0）、
+  `R33-fixed-light.png`（后，07–18）、`R33-todo-zoom.png` / `R33-black-zoom.png`（4x 前/后）。
 
 ## 队列（一轮一条；[x]=已完成）
 - [x] LQ01 基线：light week 1100×720 / 760×540；日志无启动回归。
@@ -52,13 +54,18 @@
   选中灰不压 now 红。N01 PASS。
 - [x] LQ18c 收尾 9/N：**E06 完成态勾标 PASS**——数据链根因是 fixture link 属性前缀写错
   （`X-KOS-` → `X-KDE-KOS-`）；改 fixture 后 timed/全天两种 chip 均 ✓ + strikeout 实拍通过。
+- [x] LQ18c 收尾 10/N：**R32 三枚纯黑 chip 修复**——`start` 空串未回退 `due`（落 00:00）
+  + `listColor` 返回字符串致混合路径 NaN 变纯黑；改后任务回到 due 时刻并正常着色。
 - [ ] LQ18c spec 全量 PASS 回归：第 1 组 D01–D13（D03 仍差）、第 2 组 O01–O09（O09 的
   菜单/浮层翻转仍差）、X01–X05 + P02/P03、tooltip 剩余腿、V03/V03b 月跨天连续条已完成
   → 其余 PENDING 逐条核对清零（N01、E06 已结清）。
-- [ ] 新发现（R32）：week 视图 contentY=0 处 00:00 行的 3 枚纯黑 chip（见仍差 #2），
-  待单独一轮定位。
 
 ## 已改
+- LQ18c 收尾 10/N（R32 黑 chip）：`CalendarScheduleView.qml:306-312` timedSpan 起点
+  `String(record.start ?? record.due ?? "")` → `String(record.start || record.due || "")`
+  （todo 的 start 是空串）；`Main.qml:1640-1666` 新增 `parseListColor()` 并把 `listColor()`
+  的两条返回路径都解析为 QColor（6/8 位 hex，非法回退 accent），不再返回字符串。
+  其余零改动；事件 chip、月视图事件 chip 实拍不变。
 - LQ18c 收尾 9/N 续（E06 数据链）：**无产品代码改动**。fixture
   `profile/pim/calendar.ics` 三条 link 属性前缀 `X-KOS-` → `X-KDE-KOS-`
   （`LINKED-EVENT-ID` ×1、`LINKED-TODO-ID` ×2；tmp 不入库）。证据走私有 D-Bus
@@ -129,17 +136,10 @@
 1. D03 弹框卡片结构：面为硬编码 `#ffffff`（非 `cardSurface`）、无 1px `border`、阴影是单只
    `LiquidOuterShadow`（E4 自定义）而非 `shadowAmbient`+`shadowKey` 双层。视觉无硬边，但三条
    只中“软阴影”一条；改机制不是 token 级，需先定是否保留 LQ07 的 E4 方案。
-2. **week 视图 00:00 行有 3 枚纯黑 chip（R32 新发现）**：周 2026-03-30～04-05、
-   timeline contentY=0 时，y188–225（00:00–01:00）出现 3 个圆角纯黑块（填充 (0,0,0)），
-   左侧仍带 3px 列表色条（蓝 Inbox ×1、绿 Personal ×2），无可见标题；该周恰有 3 条带
-   DUE 的任务（4/1 09:30、4/1 14:30、4/2 11:00），疑为任务进 timed 网格时 start 字段缺失/
-   记录为空所致（同 Main.qml:1664 的 TypeError 家族），未定论。R31 同时刻因 contentY≈240
-   在视口外未见；本轮未改产品代码，**非本轮引入**。证据 `R32-e06-allday-light.png`、
-   `R32-black-4x.png`。需单独一轮定位（勿与 E06 混）。
-3. 浮层/菜单：详情浮层为**单张中性卡**（参考是 246 壳 + 内部白行），面 240 与菜单 255
+2. 浮层/菜单：详情浮层为**单张中性卡**（参考是 246 壳 + 内部白行），面 240 与菜单 255
    差 Δ15（参考 Δ9）；阴影偏弱、菜单亮卡无磨砂色偏/hover r8 偏小、O09 翻转未做；任务编辑器
    固定 560 高留白 151px。
-4. 切到 day 视图时 `Main.qml:1664 itemColor` 对 undefined item 报两次 TypeError（瞬时，
+3. 切到 day 视图时 `Main.qml:1679 itemColor` 对 undefined item 报两次 TypeError（瞬时，
    渲染无异常；疑似 delegate 拆除时序，非本轮引入）。
 （tooltip 各腿已结清：dark、出现/消失连续帧通过；上方翻转在当前布局不可达，见外推；
 密集 08:00 簇 45px 道 + 标题 ellipsis 为参考同款外推，已移入 rounds.md，不再列。
@@ -229,6 +229,11 @@ V03/V03b 月跨天连续条已结清，细节见 rounds.md R153–R154。）
   命令（handleActivation→selectedDate）设置，与点选后视觉状态相同。真机鼠标点选
   日期头仍未实拍。
 
+- R33：`listColor` 改返回 QColor 后，月视图/详情浮层的 todo 着色走同一路径（此前对 todo 的
+  `withAlpha`/`mix` 同样拿到 NaN）；月视图本周的 todo chip 被 `+N` 收起，未单独复拍，
+  但事件 chip 与前一版逐像素同值。仅直接证据为 timed chip。
+- R33：只有 “有 DUE 但无 start 的 todo” 走 due 回退；date-only 的 due 若 `allDay` 为 false
+  仍会得 00:00 一小时块（KCalendarCore 对纯日期 DUE 置 allDay，当前 fixture 无此组合）。
 - E04 不再需要跨行 z 序：每个小时格只画本格区间的切片，跨行块在相邻格上下相接（上行
   底部贴线、下行 y=0 起），不跨越 delegate 边界，因此不会压到后续行的发丝线。
 - E04 短块最短可读 30min（fill 18px）为表外外推：参考图无 <1h 事件；E03 要求"短块一行
@@ -247,9 +252,8 @@ V03/V03b 月跨天连续条已结清，细节见 rounds.md R153–R154。）
   窄事件惯例外推），不算 X05 的“unintended overlap”。
 
 ## Next round
-定位 week 视图 00:00 行的 3 枚纯黑 chip（仍差 #2）：先把 timeline 置 contentY=0、`date
-2026-03-30` 复拍确认仍在；再用 `inspectGeometry`/临时 harness dump 取该 3 枚 chip 的
-`item`（task 的 record.start 为空 → itemHour 0？）与 `itemColor`/fill 求值路径，对照
-`Main.qml:1664` TypeError 与 `itemsByDate` 里 todo 记录的构造。**只定位、只修这一处**，
-修完用同组命令复拍 4/1–4/2 两列。E06 已 PASS，勿再动勾标。之后剩 D03 / 浮层菜单 /
-O09 菜单翻转 / 遗留 TypeError。
+O09 菜单方向翻转：当前菜单/浮层只做右对齐与内缩，贴右缘/下缘不翻转（tooltip 的垂直分支
+也不可达）。先量菜单在 1100/760 两档、四个触发点（工具栏 More、侧栏列表行、日期组、事件
+chip 右键）的可用空间，按 spec O09“空间不足时向上/向左翻转”给 Menu 的定位加翻转分支，
+复拍贴边触发点并给翻转前后连续帧。不动 D03 与浮层内部白行（需产品裁决）。之后剩 D03 /
+浮层菜单层级 / 遗留 TypeError。

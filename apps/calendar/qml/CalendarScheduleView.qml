@@ -305,7 +305,11 @@ Pane {
     }
     function timedSpan(item, date) {
         const record = itemRecord(item) ?? ({})
-        const startText = String(record.start ?? record.due ?? "")
+        // R33: todos carry `start` as an EMPTY STRING, not undefined — `??`
+        // let it through and every dated task fell back to a 00:00 one-hour
+        // block. Fall through to `due` for empty starts (same rule the
+        // all-day band and itemHour already use).
+        const startText = String(record.start || record.due || "")
         const endText = String(record.end ?? "")
         const day = isoDay(date)
         const startMinute = minutesOfDay(startText)
