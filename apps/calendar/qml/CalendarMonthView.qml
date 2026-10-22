@@ -28,6 +28,19 @@ Pane {
     signal itemActivated(var item)
     signal createRequested(date date)
 
+    // V01/FIX-01: the grid is as tall as the month actually needs — 4, 5
+    // or 6 whole weeks — so a five-week month does not get a sixth row of
+    // neighbouring-month days (which reads as a half-empty band) and every
+    // row keeps the same height.  Apple's month view grows the rows in a
+    // short month instead of padding the grid out to six.
+    readonly property int weekCount: {
+        const first = new Date(visibleDate.getFullYear(), visibleDate.getMonth(), 1)
+        const offset = (first.getDay() - firstDayOfWeek + 7) % 7
+        const daysInMonth = new Date(visibleDate.getFullYear(),
+                                    visibleDate.getMonth() + 1, 0).getDate()
+        return Math.ceil((offset + daysInMonth) / 7)
+    }
+
     function dateForCell(index) {
         const first = new Date(visibleDate.getFullYear(), visibleDate.getMonth(), 1)
         const offset = (first.getDay() - firstDayOfWeek + 7) % 7
@@ -80,7 +93,8 @@ Pane {
         // V01: the month grid is continuous. Cells butt together (no
         // spacing) and each one paints its own right/bottom hairline, so
         // the rules join into one uninterrupted 7-column grid at any size.
-        readonly property real dayHeight: Math.max(0, (height - headerHeight) / 6)
+        readonly property real dayHeight: Math.max(0,
+            (height - headerHeight) / root.weekCount)
         readonly property color lineColor: AppTheme.withAlpha(
             AppTheme.text, AppTheme.dark ? 0.13 : 0.085)
         columns: 7
@@ -116,7 +130,7 @@ Pane {
         }
 
         Repeater {
-            model: 42
+            model: root.weekCount * 7
 
             delegate: AbstractButton {
                 id: dayButton
@@ -329,7 +343,7 @@ Pane {
                         anchors.bottom: parent.bottom
                         height: 1
                         color: monthGrid.lineColor
-                        visible: dayButton.index < 35
+                        visible: dayButton.index < (root.weekCount - 1) * 7
                     }
                 }
             }
