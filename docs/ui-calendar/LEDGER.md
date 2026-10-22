@@ -1,22 +1,25 @@
 # LQ0 — 液态组件接入与剩余 spec 收敛
 
 ## 本轮
-- LQ15 窄窗 760×540 回归（X01/X02/P03/D11）：
-  - 发现：timed GridLayout 的列宽 `(760-52)/7=101.14` 被 QQuickGridLayout 逐列向上取整
-    为 102，网格实际 766 宽 > 窗口，最后一列右缘与 chip 被裁出窗口（1100 下同样 +2px，
-    只是不明显）；且 `width: timelineScroll.availableWidth` 在实时 resize 后不更新
-    （900 宽时网格仍 766，而表头已 121/列），窄→宽会整片错位。
-  - 修复：`CalendarScheduleView.qml:47-55` `dayColumnWidth` 取 `Math.floor`（整数列宽）；
-    `:858-868` 网格宽度改绑 `root.width`，resize 后与表头/全天带同拍。
-  - 实拍：760 网格线 x=52/153/254/355/457/558/659/759（pitch 101，不再溢出），最后一列
-    chip 右内缩 3px 完整可见；工具栏/大标题/星期行/分段（266..494，中心 380）无碰撞裁切；
-    侧栏折叠时画布自 x=0 铺满、无接缝。详情浮层与编辑器在 540 高内完整可见（上下边距 27），
-    按钮单行不换行。geometry 日志：网格宽 760→900 随 resize 同步。
-  - 证据：`LQ15-week-760-light-v5.png`、`LQ15-week-760-light-v4.png`（修复后窄窗）、
-    `LQ15-details-760-light.png`、`LQ15-editor-760-light.png`。
-  - `LQ15-week-900-light.png` 因 grabWindow 在 resize 中取到旧 760 缓冲而无效，已保留但不作
-    证据；900 宽只以 geometry 日志确认列宽 121/网格 900。
-  - LQ14b 细节已移入 rounds.md 尾部。
+- LQ17 底色与 chrome（S01/S04/C05）：
+  - S01 light：侧栏玻璃合成 **237**（参考侧栏实测 237，逐像素相等）、画布 **255**，
+    R==G==B、上下无渐变/无蓝偏；seam 单发丝。dark：侧栏 41、画布 30（侧栏比画布亮 11，
+    层级与 light 反向正确，无参考图、按既有外推）。
+  - S04 light：`CategoryRow` 勾选=实心+白勾、未勾=彩色空心边框（同屏实拍可辨）；
+    hover 背景 227（Δ10），按下背景 220（Δ17）；参考选中行为 226（Δ11），
+    hover 比选中亮、按下比选中暗，三级次序成立；圆角沿用既有 r6。
+  - S04 本轮补的差：`CategoryRow`/`SidebarRow` 原来只有 hover，按下无任何反馈
+    （与菜单行不一致）。两处 background 增加 `down → rowPressFill`。
+  - C05 窗口圆点：hover/press 帧圆点颜色逐像素不变（255,119,112），无浮起/描边；
+    与 `apps/settings/main.qml:947-961` 一致（settings 也无 hover/press 视觉）。
+    无第二组胶囊/重复窗口控件；工具栏仍是单胶囊。
+  - C05 工具栏 chrome（shared liquid 按钮）：dark 常态 34 → hover 47 → press 59，
+    三段连续帧；press 有缩小位移（shared 控件）。
+  - inactive 腿：单窗口环境无法失焦实拍；源码两侧都无 `active` 绑定，语义上与 settings
+    一致，按代码证据记入 spec，不打实拍 PASS。
+  - 证据：LQ17-light-sidebar / LQ17-row-hover / LQ17-row-press / LQ17-row-after /
+    LQ17-dots-hover-6x / LQ17-dots-press-6x / LQ17-dots-hp / LQ17-dark-row-hp /
+    LQ17-dark-sidebar / LQ17-dark-chrome-hover / LQ17-dark-chrome-press。
 
 ## 队列（一轮一条；[x]=已完成）
 - [x] LQ01 基线：light week 1100×720 / 760×540；日志无启动回归。
@@ -39,13 +42,19 @@
 - [x] LQ14a 事件块 E01–E03/E05 + N02：tint 预混同全天条、stripe 3/3、顶部 1px、now 线/pill。
 - [x] LQ14b E04：timed 块按真实起点/时长绘制、重叠簇分道（≤3）、短块 30min 可读；light 实拍通过。
 - [x] LQ15 窄窗：760×540 回归完成；timed 网格整数列宽 + 宽度随 resize 同步，窄窗不再溢出。
-- [ ] LQ16 空/密/深色：X04/X05/X03 回归；L0 无玻璃，深色无霓虹事件块。
-- [ ] LQ17 底色与 chrome：S01/S04/C05，画布/侧栏层级、窗口圆点三态。
+- [x] LQ16 空/密/深色：X04/X05/X03 回归通过；timed 网格改整数列宽 span，1100 右缘余量
+  1x 不可辨。
+- [x] LQ17 底色与 chrome：S01/S04/C05 通过——侧栏 237/画布 255（dark 41/30）、
+  分类行勾选/未勾选可辨 + hover 227/按下 220、圆点 hover/press 与 settings 同为不变，
+  工具栏 chrome hover/press 有连续帧；inactive 按代码证据（见外推）。
 - [ ] LQ18 最终对照：X06 + X07；spec 全量 PENDING 清零、PASS 回归。
 
 ## 已改
-- LQ15：`CalendarScheduleView.qml:47-55` 整数列宽（`Math.floor`）；`:858-868` timed 网格宽度
-  绑 `root.width`。窄窗下 7 列 + 52 gutter 恰好 ≤ 视口，表头/全天/timed 共用同一整数列宽。
+- LQ17：`Main.qml:368-370` `SidebarRow`、`:492-493` `CategoryRow` background 增加
+  `row.down → rowPressFill`（原只有 hover；菜单行早已有按下态，本轮补齐侧栏两类行）。
+- LQ16：`CalendarScheduleView.qml:866-875` timed 网格宽 = `gutter + dayCount*dayColumnWidth`
+  （1100→1095），不再把右缘余量摊进列；header/all-day/timed 三区边界逐像素一致。
+- LQ15：`CalendarScheduleView.qml:47-55` 整数列宽（`Math.floor`）；`:866` 宽度随 root 变化。
 - LQ14b：`CalendarScheduleView.qml` `minutesOfDay/timedSpan/timedLayout/timedBlocksFor` 区间
   布局（簇内 lane、≤3、最短 30min）；hour cell 改用 `timedBlocksFor`；delegate 按 segment
   给 y/height、首段顶场/末段贴线、标题仅首段、stripe 跨行连续、外角 r3 接缝方角、+N 由隐藏
@@ -84,10 +93,17 @@
    连续帧未验证。不要第三次原样重试。
 7. 浮层/菜单：详情阴影偏弱、菜单亮卡无磨砂色偏/hover r8 偏小、O09 翻转未做；任务编辑器
    固定 560 高留白 151px。归 LQ15/LQ18。
-8. LQ15：D11 的“长内容/内部滚动”分支本轮未重测（现有 fixture 无长备注）；整数列宽在
-   1100/900 会留 ≤5px 右缘画布色（无裁切），需在 LQ18 宽窗全量回归时确认是否可接受。
+8. 密集 08:00 簇（4 事件/3 道）：每道约 45px，标题只剩 "O…/M…"（有意 ellipsis、无交叠）；
+   若要求可辨识需窄道减 padding/字号，未做。dark 右缘 5px 画布条 1x 不可辨（见外推）。
 
 ## 外推待确认
+- C05 inactive 腿未实拍：评审环境只有一个窗口，无法让主窗失焦；`Main.qml` 圆点与
+  `apps/settings/main.qml:947-961` 均无 `active` 绑定（失焦外观不变），按“与实际 settings
+  相同”判为不变，而非新增灰化。若后续有多窗口评审环境，可补一张失焦帧坐实。
+- S04 的“selected row gray r6”按 R096 口径落在 `CategoryRow`：我们的数据模型没有“选中
+  日历行”语义（`pim.lists` 只是图例、无选中态），参考图 Personal 行的 226 灰仅作
+  hover/按下的 ΔL 标尺；不新造选中语义。
+- 本轮 dark 侧栏 41（light 237）为既有 LQ05 玻璃合成值 + 深色外推，无深色参考图。
 - tooltip 旧计划“深色实心 rgba(0,0,0,.85)”与 spec O02 / 参考图冲突：参考是中性浅卡 + 轻边框 +
   柔阴影，已按 spec 执行（light `#F2F2F2`、dark `#3C3C3C`、边框 .10/.12）。
 - tooltip 延迟按 O01 的“约 1 秒”取 1000ms（旧计划的 500ms 作废）。
@@ -136,9 +152,14 @@
   与既有 +N 规则一致。标题/时间行只画首段，跨行后段为纯填充（参考多小时块同形）。
 - LQ15 整数列宽是表外修正：分数列宽被 QQuickGridLayout 向上取整，760 下 7×102+52=766
   会溢出 6px。选 floor 而非“把余数塞给最后一列”：GridLayout 各列等宽，加宽末列会让所有
-  列跟着变宽；余数留在最右画布（760 下 1px、1100 下 5px），不可见。
+  列跟着变宽；余数留在最右画布（760 下 1px、1100 下 5px）。
+- LQ16：1100 下右缘 5px 为画布色（light 255 vs 周末 field 249；dark 30 vs 37），
+  1x 实拍不可辨、4x 裁切可见。若 LQ18 判不可接受，只有两条路：末列吸收余量（七列不再
+  等宽、牵动 16 处 geometry）或逐列宽度函数（同上）；本轮不选。
+- LQ16：密集簇 3 道时标题只余 3 字 + ellipsis 属参考同款行为（参考无重叠密集图，按 macOS
+  窄事件惯例外推），不算 X05 的“unintended overlap”。
 
 ## Next round
-LQ16 空/密/深色：X04/X05/X03 回归——空日历保留完整网格/时间标尺且无占位大图；密集日
-标题不交叠、全天/timed 边界清楚；dark 下 L0 无玻璃、事件块无霓虹。顺带确认整数列宽在
-1100 宽窗的右缘 5px 不留可见白条。
+LQ18 最终对照：X06 + X07，并做 spec 全量 PASS 回归与 PENDING 清零（E06/N01/V03/编辑器
+色差/tooltip 右缘/浮层阴影等仍差按序处理或明确外推）。先跑一遍全量视图与 light/dark
+1100/760 四组合，逐条回填 spec 状态；只做其中第一条，不打包。
