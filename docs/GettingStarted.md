@@ -86,6 +86,54 @@ sudo dnf install \
 Qt private headers are separate packages; add `qt6-qtdeclarative-private-devel` if QuickPrivate
 is missing. Fedora uses a single `libxcb-devel`, unlike Debian's split extension packages.
 
+### openSUSE Tumbleweed (community-contributed)
+
+Tumbleweed does not currently provide Quickshell 0.3.x in its default repositories. Add the signed
+DankLinux OBS repository, then install Quickshell with the build dependencies:
+
+```sh
+sudo zypper addrepo --refresh --priority 120 \
+  https://download.opensuse.org/repositories/home:/AvengeMedia:/danklinux/openSUSE_Tumbleweed/ \
+  danklinux-obs
+sudo zypper refresh danklinux-obs
+
+sudo zypper install \
+  quickshell \
+  git python313 cmake ninja gcc-c++ go curl patchelf \
+  pkgconf-pkg-config gettext-tools \
+  qt6-base-common-devel qt6-declarative-devel qt6-declarative-imports \
+  qt6-tools-devel qt6-translations \
+  qt6-quick3d-devel qt6-quick3d-imports qt6-svg-devel qt6-imageformats \
+  qt6-wayland-devel qt6-wayland-imports \
+  qt6-qt5compat-devel qt6-qt5compat-imports \
+  qt6-base-private-devel qt6-declarative-private-devel \
+  kf6-extra-cmake-modules \
+  wayland-devel wayland-protocols-devel \
+  libxkbcommon-devel libxkbcommon-x11-devel \
+  kf6-kwindowsystem-devel kf6-kiconthemes-devel kf6-kglobalaccel-devel \
+  kf6-kio-devel kf6-kcalendarcore-devel kf6-kconfig-devel kf6-ki18n-devel \
+  kf6-kguiaddons-devel kf6-kcmutils-devel kf6-kcoreaddons-devel \
+  kwin6-devel kdecoration6-devel libplasma6-devel \
+  libdrm-devel libgbm-devel libepoxy-devel libxcb-devel libX11-devel \
+  vulkan-devel zlib-devel
+```
+
+Current Tumbleweed installs the libxkbcommon headers below `/usr/include/libxkbcommon`; export that
+prefix before building. Quickshell must also match the installed Qt version, including after a
+Tumbleweed Qt update.
+
+```sh
+export CPATH="/usr/include/libxkbcommon${CPATH:+:$CPATH}"
+git clone --depth 1 https://github.com/SuceV587/NextKde.git
+cd NextKde
+./tools/kosctl update main
+./tools/kosctl doctor
+./tools/kosctl install
+./tools/kosctl start
+```
+
+Log out and back in after installation so KWin loads the new effects and decoration.
+
 ### Optional integrations and spatial wallpaper
 
 NetworkManager, WirePlumber/PipeWire, BlueZ, brightnessctl, wl-clipboard/cliphist, xdg-utils and

@@ -77,6 +77,53 @@ sudo dnf install \
 
 Qt 私有头独立打包，缺 QuickPrivate 时补 `qt6-qtdeclarative-private-devel`；Fedora 的 `libxcb-devel` 不同于 Debian 拆分包。
 
+### openSUSE Tumbleweed（社区提供）
+
+Tumbleweed 默认软件源目前不提供
+Quickshell 0.3.x；先添加带签名的 DankLinux OBS 仓库，再将 Quickshell 与构建依赖一起安装：
+
+```sh
+sudo zypper addrepo --refresh --priority 120 \
+  https://download.opensuse.org/repositories/home:/AvengeMedia:/danklinux/openSUSE_Tumbleweed/ \
+  danklinux-obs
+sudo zypper refresh danklinux-obs
+
+sudo zypper install \
+  quickshell \
+  git python313 cmake ninja gcc-c++ go curl patchelf \
+  pkgconf-pkg-config gettext-tools \
+  qt6-base-common-devel qt6-declarative-devel qt6-declarative-imports \
+  qt6-tools-devel qt6-translations \
+  qt6-quick3d-devel qt6-quick3d-imports qt6-svg-devel qt6-imageformats \
+  qt6-wayland-devel qt6-wayland-imports \
+  qt6-qt5compat-devel qt6-qt5compat-imports \
+  qt6-base-private-devel qt6-declarative-private-devel \
+  kf6-extra-cmake-modules \
+  wayland-devel wayland-protocols-devel \
+  libxkbcommon-devel libxkbcommon-x11-devel \
+  kf6-kwindowsystem-devel kf6-kiconthemes-devel kf6-kglobalaccel-devel \
+  kf6-kio-devel kf6-kcalendarcore-devel kf6-kconfig-devel kf6-ki18n-devel \
+  kf6-kguiaddons-devel kf6-kcmutils-devel kf6-kcoreaddons-devel \
+  kwin6-devel kdecoration6-devel libplasma6-devel \
+  libdrm-devel libgbm-devel libepoxy-devel libxcb-devel libX11-devel \
+  vulkan-devel zlib-devel
+```
+
+当前 Tumbleweed 将 libxkbcommon 头文件安装在 `/usr/include/libxkbcommon`，构建前导出该路径。
+Tumbleweed 升级 Qt 后，还需确保 Quickshell 与当前 Qt 匹配。
+
+```sh
+export CPATH="/usr/include/libxkbcommon${CPATH:+:$CPATH}"
+git clone --depth 1 https://github.com/SuceV587/NextKde.git
+cd NextKde
+./tools/kosctl update main
+./tools/kosctl doctor
+./tools/kosctl install
+./tools/kosctl start
+```
+
+安装后注销并重新登录，使 KWin 加载新的特效和窗口装饰。
+
 ## 可选集成与空间壁纸
 
 NetworkManager、WirePlumber/PipeWire、BlueZ、brightnessctl、wl-clipboard/cliphist、xdg-utils、Spectacle 提供各功能接入，包名依系统而异。
