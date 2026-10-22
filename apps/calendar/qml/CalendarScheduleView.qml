@@ -861,9 +861,13 @@ Pane {
                 // follow a live resize (the grid stayed at its first-layout
                 // 766 while the header row re-flowed to 900), so the timed
                 // columns no longer matched the header/all-day boundaries.
-                // The viewport is padding-free and the vertical bar overlays,
-                // so the Pane width is the exact span.
-                width: root.width
+                // LQ16: an explicit `root.width` lets QQuickGridLayout hand the
+                // leftover pixels out to the day columns (1100 -> 149.7 pitch),
+                // so the timed hairlines drifted up to +4px from the header and
+                // all-day rows toward the right edge. Span the grid over the
+                // same integer columns the header uses; the <1px remainder stays
+                // on the canvas plane, exactly as before the resize.
+                width: root.gutterWidth + root.dayCount * root.dayColumnWidth
                 implicitWidth: width
                 columns: root.dayCount + 1
                 columnSpacing: 0
