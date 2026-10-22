@@ -586,6 +586,7 @@ LiquidDialog {
                     Layout.alignment: Qt.AlignVCenter
                     color: AppTheme.mutedText
                     font.pixelSize: 11
+                    font.weight: Font.DemiBold
                 }
 
                 LiquidTextField {
@@ -630,6 +631,7 @@ LiquidDialog {
                     Layout.alignment: Qt.AlignVCenter
                     color: AppTheme.mutedText
                     font.pixelSize: 11
+                    font.weight: Font.DemiBold
                 }
                 LiquidTextField {
                     id: startDateField
@@ -666,6 +668,7 @@ LiquidDialog {
                     Layout.alignment: Qt.AlignVCenter
                     color: AppTheme.mutedText
                     font.pixelSize: 11
+                    font.weight: Font.DemiBold
                 }
                 LiquidTextField {
                     id: endDateField
@@ -702,6 +705,7 @@ LiquidDialog {
                     Layout.alignment: Qt.AlignVCenter
                     color: AppTheme.mutedText
                     font.pixelSize: 11
+                    font.weight: Font.DemiBold
                 }
                 LiquidTextField {
                     id: locationField
@@ -786,6 +790,7 @@ LiquidDialog {
                     Layout.alignment: Qt.AlignVCenter
                     color: AppTheme.mutedText
                     font.pixelSize: 11
+                    font.weight: Font.DemiBold
                 }
                 KosComboBox {
                     id: recurrenceBox
@@ -810,6 +815,7 @@ LiquidDialog {
                     Layout.alignment: Qt.AlignVCenter
                     color: AppTheme.mutedText
                     font.pixelSize: 11
+                    font.weight: Font.DemiBold
                 }
                 KosComboBox {
                     id: reminderBox
@@ -835,6 +841,7 @@ LiquidDialog {
                     Layout.alignment: Qt.AlignTop
                     color: AppTheme.mutedText
                     font.pixelSize: 11
+                    font.weight: Font.DemiBold
                 }
 
                 // Canonical editable-notes scroller, same as the task editor.
