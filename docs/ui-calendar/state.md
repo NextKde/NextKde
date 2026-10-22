@@ -1,20 +1,24 @@
 # LQ0 — 液态组件接入与剩余 spec 收敛
 
 ## 本轮
-- LQ18c spec 回归 4/N：**D04 弹框文字层级**（只取证，无产品改动）。复用
-  `R40-d03-shadow.png`（light）与 `R40-d03-shadow-dark.png`（dark）。
-  - ① 标题 PASS：`EventEditorDialog.qml:42-52` = 20 DemiBold；实拍 bbox x392–470、y79–96
-    （墨高 18、深色 23,32,51），卡左 368 ⇒ 左内 **24px** 与 `padding:24` 一致；右缘 470
-    远未居中（卡右 746），左对齐成立。dark 帧同坐标同尺寸。
-  - ② 字段标签：尺寸 11px PASS，**字重不符**——7 个标签（标题/开始/结束/地点/重复/提醒/备注）
-    均无 `font.weight`，即 Normal；spec 要 11 **DemiBold**。实拍墨高 10px、中位横笔 1px、
-    墨色 ~ (108,116,134)（mutedText），与 20px 标题的中位横笔 2px 形成两档。
-    按本轮口径只记录，不改字号/字重（Next round 单列）。
-  - ③ 正文/输入值 PASS：字段值（2026/10/15、09:00、不重复/无）为控件默认字级
-    （Application.font，13px）常规，墨高 11、墨色 (28,37,59) 近 text；占位符同字号 muted；
-    落在 spec 的 11–13 常规区间。
-  - 层级：20 DemiBold 深色标题 / 13 常规深色值 / 11 常规 muted 标签，三级靠字号+颜色可辨；
-    dark 帧同构（卡 41,41,45，标题 x392–470）。
+- LQ18c spec 回归 6/N：**D06 弹框按钮高亮/胶囊取证 → PASS（仅取证，无产品改动）**。
+  复用 `R41-d04-labels.png`（light）/`R41-d04-labels-dark.png`（dark，1100×692，新建日程，
+  按钮组完整），3x 裁切 `R42-d06-btn-{light,dark}-3x.png`。
+  - ① 主按钮：保存实心 `(48,140,198)`（= 系统强调色，KDE 高亮 #308CC6；KosButton
+    `highlighted+flatPrimary+lightLabel`），核心文字纯白 (255,255,250)；胶囊 bbox
+    x383–731、y584–615，中心 (557,599.5)，文字 bbox x546–568/y595–605，
+    中心 (557,600) ⇒ 水平零偏、垂直 0.5px（AA）。
+  - ② 次按钮：取消填充 light `(227,229,230)`（`buttonNeutral`）、dark `(69,69,69)`；
+    同款胶囊同宽同高、文字居中；light 文字近 `AppTheme.text`（核心 36,34,54，子像素边），
+    dark 文字亮 (233,246,248)。取消中心 (557,636.5) 与胶囊中心完全重合。
+  - ③ 尺寸/圆角：两枚均 349×31（有效高 31.0 = round(34×densityScale .91)），
+    间距 6（584–615、621–652）；胶囊左缘逐行 395/393/391/389/388/387/386/385/384/383
+    与 r=15.5=h/2 的圆拟合一致（固定 r 会在首行给出 ~0 内缩），故 `buttonRadius:
+    height/2` 真胶囊；两枚逐行左缘完全相同 ⇒ 圆角一致。卡面 x368–746，按钮左右内缩 15–16。
+  - dark 几何逐像素同构；`KosButton` 填充/文字 token 走 `AppTheme.accent`/`buttonNeutral`/
+    `text`，无硬编码。参考 `alert-macos.png`：同样竖排通栏胶囊（强调 306×38、次 214 灰），
+    结构一致；accent 色相随 KOS 系统高亮（允许差），次按钮与卡面 Δ light 28 vs 参考 18，
+    仅因卡面 255 vs 232（D03 已记录），不构成本条缺陷。
 
 ## 队列（一轮一条；[x]=已完成）
 - [x] LQ01 基线：light week 1100×720 / 760×540；日志无启动回归。
@@ -73,6 +77,11 @@
   两条待裁决（见仍差 #1）。
 - [x] LQ18c spec 回归 4/N：**D04 弹框文字层级取证**——标题 20 DemiBold 左内 24 PASS；
   正文 13 常规 PASS；字段标签 11px 但 **Normal 非 DemiBold**（spec 不符，见仍差 #3）。
+- [x] LQ18c spec 回归 5/N：**D04 标签字重修正**——7 个主字段标签加 DemiBold，墨量翻倍、
+  三级层级保持；light/dark 实拍通过。内联 Todo list/Priority 未纳入（见仍差 #3）。
+- [x] LQ18c spec 回归 6/N：**D06 按钮高亮/胶囊 PASS**——主按钮实心 accent + 白字、
+  次按钮浅灰 + 深/亮字；两枚 349×31、同 r=h/2 胶囊、文字水平零偏、垂直 ≤0.5px；
+  light/dark 同构。仅取证，无产品改动（详见 rounds.md R43）。
 - [ ] LQ18c spec 全量 PASS 回归：第 1 组 D01–D13（**D01、D02、D03-阴影、D04 已取证**；
   D03 的 token/描边待裁决、D05 起未做）、第 2 组
   O01–O09（O09 已结清）、
@@ -80,6 +89,15 @@
   → 其余 PENDING 逐条核对清零（N01、E06 已结清）。
 
 ## 已改
+- LQ18c spec 回归 6/N（D06）：**无产品改动**。`EventEditorDialog.qml:410-429` 已是
+  `KosButton{buttonRadius: height/2; highlighted: true; flatPrimary: true; lightLabel: true}`
+  + `KosButton{secondary: true}`，填充走 `AppTheme.accent`/`buttonNeutral`，文字用
+  `whiteSeed`/`text`；本轮只裁切量测（`R42-d06-btn-*-3x.png`），未动任何行。
+- LQ18c spec 回归 5/N（D04）：`EventEditorDialog.qml` 七个主字段标签（`text: qsTr("Title")`
+  :584、Start :628、End :664、Location :700、Repeat :784、Reminder :808、Notes :833）
+  各在 `font.pixelSize: 11` 后加 `font.weight: Font.DemiBold`。字号、`AppTheme.mutedText`、
+  `Layout.preferredWidth: root.labelColumnWidth`、对齐方式、间距、卡面、字段控件、
+  按钮组全部零改动。
 - LQ18c spec 回归 4/N（D04）：**无产品改动**。只量测 `R40-d03-shadow(.dark).png` 的文字
   bbox/墨高/横笔/墨色，并核对 `EventEditorDialog.qml:42-52` 标题 20 DemiBold、
   `:575/:632/:668/:704/:743/:788/:837` 七个标签均 11px 且无 `font.weight`。
@@ -144,8 +162,9 @@
 2. 浮层/菜单：详情浮层为**单张中性卡**（参考是 246 壳 + 内部白行），面 240 与菜单 255
    差 Δ15（参考 Δ9）；阴影偏弱、菜单亮卡无磨砂色偏。（O09 菜单翻转不可达，见外推；
    tooltip 翻转同理。hover 圆角 r8 已于本轮实测结清，不再列。）
-3. D04 字段标签字重：7 个标签为 11px **Normal** muted（实测墨高 10、中位横笔 1），
-   spec 要 11 **DemiBold**。R40 只取证未改；Next round 单列修正并复拍层级。
+3. D04 内联标签字重：联动待办行的 `Todo list` / `Priority`（`EventEditorDialog.qml:752/:764`）
+   仍为 11px Normal，仅在勾选“同时将此日程显示为待办任务”时出现；D04 要求标签 11 DemiBold，
+   下轮同步并复拍勾选态。（主字段七标签本轮已改并 PASS。）
 （tooltip 各腿已结清：dark、出现/消失连续帧通过；上方翻转在当前布局不可达，见外推；
 密集 08:00 簇 45px 道 + 标题 ellipsis 为参考同款外推，已移入 rounds.md，不再列。
 V03/V03b 月跨天连续条已结清，细节见 rounds.md R153–R154。）
@@ -273,9 +292,12 @@ V03/V03b 月跨天连续条已结清，细节见 rounds.md R153–R154。）
   窄事件惯例外推），不算 X05 的“unintended overlap”。
 
 ## Next round
-LQ18c spec 回归 5/N：**D04 标签字重修正**。`EventEditorDialog.qml` 七个字段标签
-（:575 标题、:632 开始、:668 结束、:704 地点、:743 重复、:788 提醒、:837 备注）各加
-`font.weight: Font.DemiBold`，字号仍 11、颜色仍 `AppTheme.mutedText`，其它零改动；
-构建后用既有命令复拍 light/dark，量测中位横笔是否由 1 变 ≥2、墨高不变，并目视确认
-标题/值/标签三级仍可辨、标签不抢正文。若 DemiBold 在 muted 色下与值同重（层级塌陷），
-只记录差异并停手，写清「差在哪」。
+LQ18c spec 回归 7/N：**D07 弹框按钮权重取证**（主按钮最多一个；删除用
+`AppTheme.destructive` 且不与主按钮同权重）。现有 R41 两张是**新建**日程、只有
+保存/取消，删除按钮不可见 → 需启动 VM 打开一条**已有事件**的编辑器（编辑态三按钮：
+保存 / 取消 / 删除日程）并各拍 light 一张，另拍删除确认态（取消高亮 + 删除）一张。
+判：① 同屏仅一枚实心 accent 主按钮；② 删除按钮填充不与主按钮同权重（代码为
+`destructive: true; secondary: true` → 中性灰底 + `AppTheme.destructive` 文字），
+实拍取删除文字墨色与灰底值，确认无第二枚 accent 实心；③ 确认态里 Cancel 成为唯一
+主按钮、Delete 仍为弱权重。**只取证，不改代码**；若发现删除按钮与主按钮同权（或出现
+两枚强调钮）则下一轮单列修。编辑态可用 review-command.py 打开既有事件。
