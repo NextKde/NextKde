@@ -6,6 +6,8 @@
 #include <QJsonDocument>
 #include <QStandardPaths>
 #include <QTemporaryDir>
+#include <QTcpServer>
+#include <QTcpSocket>
 #include <QtTest>
 
 // Only synthetic installers are executed. Run these tests in a disposable VM.
@@ -45,6 +47,20 @@ class AppStoreTest : public QObject {
         write(temporary.path() + "/app-store/catalog.json", QJsonDocument(QJsonObject{{"schemaVersion", 1}, {"kmusic", entry}}).toJson());
         write(cache + "/install.sh", script);
         write(cache + "/packaging/installer.py", implementation);
+    }
+    static QByteArray progress(const QByteArray& stage)
+    {
+        return "printf '{\"schemaVersion\":1,\"type\":\"progress\",\"appId\":\"org.nextkde.KMusic\",\"action\":\"install\",\"stage\":\""
+            + stage + "\"}\\n'\n";
+    }
+    static QByteArray countAttempts()
+    {
+        return "mkdir -p \"$KOS_STORE_TEST_ROOT\"\nprintf x >> \"$KOS_STORE_TEST_ROOT-attempts\"\n";
+    }
+    int attempts() const
+    {
+        QFile file(root + "-attempts");
+        return file.open(QIODevice::ReadOnly) ? file.readAll().size() : 0;
     }
     QByteArray successBody() const
     {
@@ -131,12 +147,150 @@ private slots:
         QCOMPARE(store.music().value("code").toString(), "DEPENDENCY_UNSATISFIED");
         QCOMPARE(store.music().value("dependencies").toList().size(), 1);
     }
-    void cancellationAndConcurrentClick()
+    void sourceDownloadTimeoutStopsAfterFiveAttempts()
     {
-        prepare("sleep 30\n" + successBody());
+        prepare(countAttempts() + progress("download") + "sleep 30\n" + successBody());
+        AppStore store(temporary.path());
+        QCOMPARE(store.m_downloadTimeout, 300000);
+        store.m_downloadTimeout = 60;
+        store.m_retryDelay = 1;
+        store.install();
+        QTRY_VERIFY_WITH_TIMEOUT(!store.music().value("busy").toBool(), 5000);
+        QCOMPARE(store.music().value("code").toString(), "DOWNLOAD_TIMEOUT");
+        QCOMPARE(attempts(), 5);
+        QVERIFY(!store.m_deadline.isActive());
+        QVERIFY(!store.m_retryTimer.isActive());
+        QVERIFY(!store.music().value("installed").toBool());
+    }
+    void sourceDownloadFailureThenSuccess()
+    {
+        prepare(countAttempts() + progress("download")
+            + "if [ $(wc -c < \"$KOS_STORE_TEST_ROOT-attempts\") -lt 3 ]; then\n"
+              "result install '\"success\":false,\"code\":\"DOWNLOAD_FAILED\"'\nexit 1\nfi\n"
+            + progress("build") + successBody());
+        AppStore store(temporary.path());
+        store.m_retryDelay = 1;
+        store.install();
+        QTRY_VERIFY_WITH_TIMEOUT(!store.music().value("busy").toBool(), 5000);
+        QCOMPARE(attempts(), 3);
+        QCOMPARE(store.music().value("code").toString(), "");
+        QVERIFY(store.music().value("installed").toBool());
+    }
+    void cancelRetryAndStartFresh()
+    {
+        prepare(countAttempts() + progress("download")
+            + "result install '\"success\":false,\"code\":\"DOWNLOAD_FAILED\"'\nexit 1");
+        AppStore store(temporary.path());
+        store.m_retryDelay = 1000;
+        store.install();
+        QTRY_COMPARE_WITH_TIMEOUT(store.music().value("stage").toString(), "retry-download", 5000);
+        store.cancel();
+        QCOMPARE(store.music().value("code").toString(), "CANCELLED");
+        QVERIFY(!store.music().value("busy").toBool());
+        QVERIFY(!store.m_retryTimer.isActive());
+        QCOMPARE(attempts(), 1);
+        store.install();
+        QTRY_COMPARE_WITH_TIMEOUT(store.music().value("stage").toString(), "retry-download", 5000);
+        QCOMPARE(store.music().value("attempt").toInt(), 2); // new operation reset the budget
+        store.cancel();
+    }
+    void neverReplayBuildFailure()
+    {
+        prepare(countAttempts() + progress("download") + progress("build")
+            + "result install '\"success\":false,\"code\":\"DOWNLOAD_FAILED\"'\nexit 1");
+        AppStore store(temporary.path());
+        store.m_retryDelay = 1;
+        store.install();
+        QTRY_VERIFY_WITH_TIMEOUT(!store.music().value("busy").toBool(), 5000);
+        QCOMPARE(attempts(), 1);
+        QCOMPARE(store.music().value("code").toString(), "DOWNLOAD_FAILED");
+    }
+    void repeatedProgressDoesNotExtendDownloadDeadline()
+    {
+        prepare(progress("download") + "sleep 30\n");
         AppStore store(temporary.path());
         store.install();
-        QTRY_COMPARE_WITH_TIMEOUT(store.music().value("stage").toString(), "install", 5000);
+        QTRY_COMPARE_WITH_TIMEOUT(store.music().value("stage").toString(), "download", 5000);
+        const int remaining = store.m_deadline.remainingTime();
+        store.processStage("download");
+        QVERIFY(store.m_deadline.remainingTime() <= remaining);
+        store.processStage("build");
+        QVERIFY(store.m_deadline.remainingTime() > store.m_downloadTimeout);
+        store.cancel();
+        QTRY_VERIFY_WITH_TIMEOUT(!store.music().value("busy").toBool(), 5000);
+    }
+    void bootstrapRecovery_data()
+    {
+        QTest::addColumn<QString>("mode");
+        QTest::addColumn<int>("expectedRequests");
+        QTest::addColumn<QString>("expectedCode");
+        QTest::newRow("timeout") << QStringLiteral("hang") << 3 << QStringLiteral("DOWNLOAD_TIMEOUT");
+        QTest::newRow("server-error") << QStringLiteral("503") << 3 << QStringLiteral("DOWNLOAD_FAILED");
+        QTest::newRow("not-found") << QStringLiteral("404") << 1 << QStringLiteral("DOWNLOAD_FAILED");
+        QTest::newRow("hash-mismatch") << QStringLiteral("corrupt") << 1 << QStringLiteral("INTEGRITY_FAILED");
+        QTest::newRow("recovery") << QStringLiteral("recover") << 3 << QStringLiteral("");
+        QTest::newRow("cancel-active") << QStringLiteral("cancel") << 1 << QStringLiteral("CANCELLED");
+        QTest::newRow("cancel-backoff") << QStringLiteral("cancel-backoff") << 1 << QStringLiteral("CANCELLED");
+    }
+    void bootstrapRecovery()
+    {
+        QFETCH(QString, mode);
+        QFETCH(int, expectedRequests);
+        QFETCH(QString, expectedCode);
+        prepare(successBody());
+        QFile script(cache + "/install.sh");
+        QVERIFY(script.open(QIODevice::ReadOnly));
+        const auto bytes = script.readAll();
+        script.close();
+        QVERIFY(script.remove()); // require a real HTTP download, served only on loopback
+        QTcpServer server;
+        QVERIFY(server.listen(QHostAddress::LocalHost));
+        int requests = 0;
+        connect(&server, &QTcpServer::newConnection, &server, [&] {
+            auto* socket = server.nextPendingConnection();
+            connect(socket, &QTcpSocket::disconnected, socket, &QObject::deleteLater);
+            connect(socket, &QTcpSocket::readyRead, socket, [&, socket] {
+                auto request = socket->property("request").toByteArray() + socket->readAll();
+                socket->setProperty("request", request);
+                if (!request.contains("\r\n\r\n") || socket->property("handled").toBool()) return;
+                socket->setProperty("handled", true);
+                ++requests;
+                if (mode == "hang" || mode == "cancel") return;
+                const bool success = mode == "recover" && requests == 3;
+                const QByteArray body = success ? bytes : QByteArray("failure");
+                const QByteArray status = success || mode == "corrupt" ? "200 OK"
+                    : mode == "404" ? "404 Not Found" : "503 Unavailable";
+                socket->write("HTTP/1.1 " + status + "\r\nConnection: close\r\nContent-Length: "
+                    + QByteArray::number(body.size()) + "\r\n\r\n" + body);
+                socket->disconnectFromHost();
+            });
+        });
+        AppStore store(temporary.path());
+        QCOMPARE(store.m_bootstrapTimeout, 30000);
+        store.m_downloadBaseUrl = QStringLiteral("http://127.0.0.1:%1/").arg(server.serverPort());
+        store.m_bootstrapTimeout = mode == "cancel" ? 5000 : 150;
+        store.m_retryDelay = mode == "cancel-backoff" ? 1000 : 1;
+        store.install();
+        if (mode == "cancel") {
+            QTRY_COMPARE_WITH_TIMEOUT(requests, 1, 5000);
+            store.cancel();
+        } else if (mode == "cancel-backoff") {
+            QTRY_COMPARE_WITH_TIMEOUT(store.music().value("stage").toString(), "retry-bootstrap", 5000);
+            store.cancel();
+        }
+        QTRY_VERIFY_WITH_TIMEOUT(!store.music().value("busy").toBool(), 5000);
+        QCOMPARE(store.music().value("code").toString(), expectedCode);
+        QCOMPARE(requests, expectedRequests);
+        QVERIFY(!store.m_deadline.isActive());
+        QVERIFY(!store.m_retryTimer.isActive());
+        QCOMPARE(store.music().value("installed").toBool(), mode == "recover");
+    }
+    void cancellationAndConcurrentClick()
+    {
+        prepare(progress("build") + "sleep 30\n" + successBody());
+        AppStore store(temporary.path());
+        store.install();
+        QTRY_COMPARE_WITH_TIMEOUT(store.music().value("stage").toString(), "build", 5000);
         store.uninstall(); // ignored while installing
         QVERIFY(store.music().value("busy").toBool());
         store.cancel();

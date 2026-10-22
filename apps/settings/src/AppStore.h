@@ -1,5 +1,6 @@
 #pragma once
 
+#include <QElapsedTimer>
 #include <QFile>
 #include <QJsonObject>
 #include <QNetworkAccessManager>
@@ -27,7 +28,10 @@ signals:
     void changed();
 private:
     void begin(const QString& action);
-    void downloadNext(int index);
+    friend class AppStoreTest;
+    void downloadNext(int index, int attempt = 1);
+    void scheduleRetry(int index, int attempt);
+    void processStage(const QString& stage);
     void run(const QString& action);
     void consumeOutput();
     void consumeLine(const QByteArray& line);
@@ -47,6 +51,20 @@ private:
     QPointer<QNetworkReply> m_reply;
     QProcess m_process;
     QTimer m_killTimer;
+    QTimer m_deadline;
+    QTimer m_retryTimer;
+    QTimer m_elapsedTimer;
+    QElapsedTimer m_elapsed;
+    // Milliseconds; tests shorten these deadlines without running real installers.
+    QString m_downloadBaseUrl = QStringLiteral("https://raw.githubusercontent.com/NextKde/KMusic/");
+    int m_bootstrapTimeout = 30000;
+    int m_downloadTimeout = 5 * 60 * 1000;
+    int m_retryDelay = 2000;
+    int m_sourceAttempt = 1;
+    int m_retryIndex = 0;
+    int m_retryAttempt = 1;
+    bool m_leftDownload = false;
+    QString m_timeoutCode;
     QByteArray m_output;
     QJsonObject m_result;
     QString m_requestedAction;
