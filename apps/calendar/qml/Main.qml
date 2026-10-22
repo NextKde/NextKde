@@ -212,8 +212,15 @@ KosApplicationWindow {
         readonly property int toolbarButtonSize: 28
         readonly property int toolbarIconSize: 16
         readonly property int toolbarGap: 8
-        readonly property int toolbarInsetLeft: 12
-        readonly property int toolbarInsetRight: 14
+        // LQ02: the toolbar is now material-hosted (one floating capsule),
+        // so its contents keep 8px between the button box and the capsule's
+        // inner edge (capsule inset 8 + these 16 = 24 from the window edge).
+        readonly property int toolbarInsetLeft: 16
+        readonly property int toolbarInsetRight: 16
+        // LQ02: floating-toolbar geometry from liquid-spec §3/§4 — 8px float,
+        // capsule radius (= 40/2), regular fill.
+        readonly property int toolbarFloat: 8
+        readonly property real toolbarRadius: toolbarHeight / 2
         readonly property int segmentWidth: 228
         readonly property int segmentHeight: 28
 
@@ -1830,6 +1837,40 @@ KosApplicationWindow {
             // centre binding tracks it continuously.
             readonly property real mainLeft: sidebar.width
             readonly property real mainWidth: width - mainLeft
+
+            // LQ02: L1 persistent material 1/2 — one floating regular-glass
+            // capsule carrying the whole toolbar. It is intentionally static
+            // (no backdrop): the toolbar sits above the opaque window planes,
+            // which are flush, so there is no scrolling content under it to
+            // refract; the bezel, specular arc and outer shadow carry the
+            // material instead. Persistent glass stays 1/2 until the sidebar
+            // becomes the second (LQ05).
+            Item {
+                id: toolbarMaterial
+                objectName: "calendarToolbarMaterial"
+                anchors.fill: parent
+                anchors.leftMargin: root.tahoe.toolbarFloat
+                anchors.rightMargin: root.tahoe.toolbarFloat
+                z: -1
+
+                LiquidOuterShadow {
+                    anchors.fill: parent
+                    radius: root.tahoe.toolbarRadius
+                    shadowLevel: 2
+                    outwardOffset: LiquidStyle.controlShadowOutset
+                }
+                LiquidSurface {
+                    anchors.fill: parent
+                    radius: root.tahoe.toolbarRadius
+                    // Regular fill from liquid-spec §3: white .58 / #1C1C1E .52.
+                    tintColor: root.tahoeDark ? "#1C1C1E" : "#FFFFFF"
+                    tintStrength: root.tahoeDark ? 0.52 : 0.58
+                    rimColor: root.tahoeDark
+                        ? Qt.rgba(1, 1, 1, 0.30) : Qt.rgba(1, 1, 1, 0.45)
+                    edgeWidth: 14
+                    reflectionStrength: 1
+                }
+            }
 
             ToolbarButton {
                 id: sidebarToggleButton
