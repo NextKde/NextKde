@@ -1,24 +1,27 @@
 # LQ0 — 液态组件接入与剩余 spec 收敛
 
 ## 本轮
-- LQ18c spec 回归 6/N：**D06 弹框按钮高亮/胶囊取证 → PASS（仅取证，无产品改动）**。
-  复用 `R41-d04-labels.png`（light）/`R41-d04-labels-dark.png`（dark，1100×692，新建日程，
-  按钮组完整），3x 裁切 `R42-d06-btn-{light,dark}-3x.png`。
-  - ① 主按钮：保存实心 `(48,140,198)`（= 系统强调色，KDE 高亮 #308CC6；KosButton
-    `highlighted+flatPrimary+lightLabel`），核心文字纯白 (255,255,250)；胶囊 bbox
-    x383–731、y584–615，中心 (557,599.5)，文字 bbox x546–568/y595–605，
-    中心 (557,600) ⇒ 水平零偏、垂直 0.5px（AA）。
-  - ② 次按钮：取消填充 light `(227,229,230)`（`buttonNeutral`）、dark `(69,69,69)`；
-    同款胶囊同宽同高、文字居中；light 文字近 `AppTheme.text`（核心 36,34,54，子像素边），
-    dark 文字亮 (233,246,248)。取消中心 (557,636.5) 与胶囊中心完全重合。
-  - ③ 尺寸/圆角：两枚均 349×31（有效高 31.0 = round(34×densityScale .91)），
-    间距 6（584–615、621–652）；胶囊左缘逐行 395/393/391/389/388/387/386/385/384/383
-    与 r=15.5=h/2 的圆拟合一致（固定 r 会在首行给出 ~0 内缩），故 `buttonRadius:
-    height/2` 真胶囊；两枚逐行左缘完全相同 ⇒ 圆角一致。卡面 x368–746，按钮左右内缩 15–16。
-  - dark 几何逐像素同构；`KosButton` 填充/文字 token 走 `AppTheme.accent`/`buttonNeutral`/
-    `text`，无硬编码。参考 `alert-macos.png`：同样竖排通栏胶囊（强调 306×38、次 214 灰），
-    结构一致；accent 色相随 KOS 系统高亮（允许差），次按钮与卡面 Δ light 28 vs 参考 18，
-    仅因卡面 255 vs 232（D03 已记录），不构成本条缺陷。
+- LQ18c spec 回归 9/N：**D09 保存/取消配对 + 省略号动作 → PASS（仅取证，无产品改动）**。
+  ① 配对：两个编辑器的编辑态都是 `standardButtons: Dialog.Save|Cancel` + footer
+  保存/取消/删除；确认态为 取消(主)+删除(弱/红)；新建任务实拍只有 保存+取消（无 uid
+  时不显示删除）；文件对话框自带 打开/保存+取消。② 省略号：More 菜单三项逐个实点——
+  `New task…` → 新建任务弹框；`Import iCalendar…` → 导入文件选择器（标题「导入
+  iCalendar — KOS Calendar」、过滤 `iCalendar 文件 (*.ics)`、打开/取消）；`Export
+  iCalendar…` → 导出保存器（同标题、保存/取消）。三项都是真实下一层，省略号全部保留。
+  - 帧：`R46-menu-open.png`、`R46-newtask.png`、`R46-import-active.png`、
+    `R46-export-active.png`。
+
+## 上一轮
+- LQ18c spec 回归 8/N：**D08 弹框按钮三态 + Esc 关闭 → PASS**。
+  五枚按钮（编辑态 保存/取消/删除、确认态 取消/删除）各加 `objectName`（仅可测性，
+  视觉零改动）；`pointerObject` 驱动 hover/press，`invoke forceActiveFocus` 驱动键盘焦点。
+  - 填充：保存 accent 48,140,198 → hover 69,152,204 → press 85,161,208（按下另有缩放）；
+    取消/删除 neutral 227,229,230 → hover 215,216,217 → press 204,205,206；确认态取消
+    走 accent 同序列、删除走 neutral 同序列，红字在三态下不变。
+  - 焦点环：编辑态三枚 + 确认态取消均为 2px `focusRing` (123,182,219)，上下左右四边实测；
+    确认态取消打开即有环（代码 `confirmCancelButton.forceActiveFocus()`）。
+  - Esc：编辑态、确认态各发一次，scrim 178→237、弹框消失。
+  - 帧：`R45-d08-*.png`；3x 拼版 `R45-d08-states-3x.png`。
 
 ## 队列（一轮一条；[x]=已完成）
 - [x] LQ01 基线：light week 1100×720 / 760×540；日志无启动回归。
@@ -82,13 +85,29 @@
 - [x] LQ18c spec 回归 6/N：**D06 按钮高亮/胶囊 PASS**——主按钮实心 accent + 白字、
   次按钮浅灰 + 深/亮字；两枚 349×31、同 r=h/2 胶囊、文字水平零偏、垂直 ≤0.5px；
   light/dark 同构。仅取证，无产品改动（详见 rounds.md R43）。
-- [ ] LQ18c spec 全量 PASS 回归：第 1 组 D01–D13（**D01、D02、D03-阴影、D04 已取证**；
-  D03 的 token/描边待裁决、D05 起未做）、第 2 组
+- [x] LQ18c spec 回归 7/N：**D07 按钮权重 PASS**——编辑态仅保存为实心 accent，取消/删除同 227,229,230；确认态仅取消为实心 accent，删除保持弱权重 + 红字（#d83b3b 色族）。仅取证，无产品改动（详见 rounds.md R44）。
+- [x] LQ18c spec 回归 8/N：**D08 按钮三态 PASS**——五枚按钮 hover/pressed 填充各一档
+  （保存 69,152,204/85,161,208；中性 215,216,217/204,205,206）、2px focusRing
+  (123,182,219) 四边可见、Esc 在编辑/确认两态均关闭。仅加 `objectName`（零视觉改动）。
+- [ ] LQ18c spec 全量 PASS 回归：第 1 组 D01–D13（**D01–D09 已取证**；
+  D03 的 token/描边待裁决、D09 起未做）、第 2 组
   O01–O09（O09 已结清）、
   X01–X05 + P02/P03、tooltip 剩余腿、V03/V03b 月跨天连续条已完成
   → 其余 PENDING 逐条核对清零（N01、E06 已结清）。
 
 ## 已改
+- LQ18c spec 回归 9/N（D09）：**无产品改动**。审计 `EventEditorDialog.qml:36/410-442/474-492`、
+  `CalendarTaskEditorDialog.qml:41/117-148/178-194` 的 保存/取消/删除 与确认态配对，
+  以及 `Main.qml:2412-2429` 三个省略号项的 `onTriggered`（`taskEditor.openForTodo(null)` /
+  `importDialog.open()` / `exportDialog.open()`）。实点三项均进入下一层，未删任何省略号。
+  文件选择器是独立顶层窗口，`captureClient` 截不到，改用 `spectacle -a` 拍活动窗口取证。
+- LQ18c spec 回归 8/N（D08）：`EventEditorDialog.qml:411/424/434/476/488` 五枚 `KosButton`
+  各加 `objectName`（`eventEditorSaveButton`/`Cancel`/`Delete`、`eventEditorConfirmCancelButton`/
+  `ConfirmDeleteButton`），仅供 `pointerObject` 定位，不参与绑定、样式或布局；其余零改动。
+  （旧识别文本「保存/取消/删除日程」照常，视觉帧与 R43 逐像素同值。）
+- LQ18c spec 回归 7/N（D07）：**无产品改动**。只启动编辑态/确认态实拍并量测
+  `EventEditorDialog.qml:410-492` 的既有按钮声明（保存 highlighted+flatPrimary+lightLabel；
+  取消 secondary；删除 destructive+secondary），未动任何行。
 - LQ18c spec 回归 6/N（D06）：**无产品改动**。`EventEditorDialog.qml:410-429` 已是
   `KosButton{buttonRadius: height/2; highlighted: true; flatPrimary: true; lightLabel: true}`
   + `KosButton{secondary: true}`，填充走 `AppTheme.accent`/`buttonNeutral`，文字用
@@ -170,6 +189,13 @@
 V03/V03b 月跨天连续条已结清，细节见 rounds.md R153–R154。）
 
 ## 外推待确认
+- D09 的「完成必须有取消」对设置面板不适用：`shared/qml/foundation/KosSettingsDialog.qml:447-451`
+  只有 `Done`（关闭）。设置项即时生效（无暂存/提交两态），`Done` 是关闭而非保存，配一个
+  “取消”会暗示可回滚却无快照实现。故按语义判不冲突；若要求字面满足，需先裁决是否给设置
+  加快照/回滚（产品语义变更）。
+- 文件选择器（Import/Export）是独立顶层窗口：主窗 `captureClient` 只含日历窗口，整屏
+  `spectacle` 在无人值守 VM 下返回空白（输出被blank），活动窗口 `spectacle -a` 可用。
+  故 D09 ② 的 Import/Export 证据是活动窗口截图，不是合成桌面截图。
 - D03 的 `cardSurface`：`AppTheme.qml:192-193` = `withAlpha(card, glassActive ? .54/.46 : 1)`。
   评审 VM 是有合成器模糊的玻璃会话，玻璃激活时弹框面会变成 α .54/.46，背后的窗口内容
   与 scrim 会透出，和参考 `alert-macos.png` 的不透明白卡、以及 D01 已实测的 255 冲突；
@@ -292,12 +318,9 @@ V03/V03b 月跨天连续条已结清，细节见 rounds.md R153–R154。）
   窄事件惯例外推），不算 X05 的“unintended overlap”。
 
 ## Next round
-LQ18c spec 回归 7/N：**D07 弹框按钮权重取证**（主按钮最多一个；删除用
-`AppTheme.destructive` 且不与主按钮同权重）。现有 R41 两张是**新建**日程、只有
-保存/取消，删除按钮不可见 → 需启动 VM 打开一条**已有事件**的编辑器（编辑态三按钮：
-保存 / 取消 / 删除日程）并各拍 light 一张，另拍删除确认态（取消高亮 + 删除）一张。
-判：① 同屏仅一枚实心 accent 主按钮；② 删除按钮填充不与主按钮同权重（代码为
-`destructive: true; secondary: true` → 中性灰底 + `AppTheme.destructive` 文字），
-实拍取删除文字墨色与灰底值，确认无第二枚 accent 实心；③ 确认态里 Cancel 成为唯一
-主按钮、Delete 仍为弱权重。**只取证，不改代码**；若发现删除按钮与主按钮同权（或出现
-两枚强调钮）则下一轮单列修。编辑态可用 review-command.py 打开既有事件。
+LQ18c spec 回归 10/N：**D10 弹框出现/消失过渡**。核 `shared/qml/controls/KosDialog.qml`
+（或 `LiquidDialog.qml`）的 reveal 实现：scale 0.96→1、进 OutCubic 220ms / 出 InCubic
+120ms、`reduceMotion` 时不动。用 `nativeRecord` 连续帧分别录一次打开与 Esc 关闭（事件
+编辑器），量首/中/末帧的卡片 bounds 推算 scale 与时长；再按 `reduceMotion` 代码分支判
+是否跳过动画。判据：进出都有缩放而非瞬变；时长与曲线与 spec 相符；连续帧齐全才可 PASS，
+否则标「未验证」。不动其它弹框几何/阴影。
