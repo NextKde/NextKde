@@ -14,15 +14,10 @@ KosApplicationWindow {
 
     modernDesign: true
     visible: true
-    // The bare attached ToolTip renders the installed Basic style verbatim,
-    // whose panel is `palette.toolTipBase` + `palette.toolTipText` (R134). The
-    // app sets no palette, so on the dark leg that leaks a pure-white panel
-    // with near-black ink onto a (30,30,30) window. Theme the two tooltip
-    // slots per leg on the window palette: dark panel #3C3C3C (the tahoe
-    // elevated lift over #1E1E1E) with #F2F2F2 ink; light panel #F2F2F2 (one
-    // step below the white plane) with black ink. Radius stays Basic's 0
-    // (square) — the reference has no tooltip at all (R063), so the choice is
-    // ours and is recorded here for both legs.
+    // LQ11: toolbar help tags are app-drawn (the `HelpTag` popup below), so
+    // the attached ToolTip never renders. The two palette slots stay set for
+    // any stock tooltip that might still be reached from a shared control:
+    // dark panel #3C3C3C with #F2F2F2 ink, light panel #F2F2F2 with black ink.
     palette.toolTipBase: root.tahoeDark ? "#3C3C3C" : "#F2F2F2"
     palette.toolTipText: root.tahoe.labelPrimary
     title: qsTr("Calendar")
@@ -40,6 +35,10 @@ KosApplicationWindow {
     property bool showTasks: true
     property bool showCompletedTasks: false
     property string statusMessage: ""
+    // LQ11: one help tag for the whole window, armed by whichever control is
+    // hovered. Single instance by construction, so tags can never stack.
+    property Item helpTagAnchor: null
+    property string helpTagText: ""
 
     // Apple 26 ("Tahoe") design tokens. Light values are verbatim from the
     // shared Sketch library's document.tokenExport dump — see
@@ -241,6 +240,23 @@ KosApplicationWindow {
         // Same reserved shadow gutter as the detail popover (E3 spread 32 +
         // offset 3 + slack): the visible card is inset, the popup grows.
         readonly property int menuShadowInset: 36
+
+        // LQ11 help tag (tooltip): spec O02's neutral card + hairline + soft
+        // shadow, 11px label, 6x10 inset, smallRadius(12). Solid, not glass:
+        // a tooltip is an L2 transient and 1/1 is already spent by the menu,
+        // plus the spec bans glass inside transients. E1's spread 8 + offset 1
+        // needs a 9px gutter; the 10px gap makes the popup start 1px clear of
+        // the control, so the tag never steals the hover that owns it.
+        readonly property int helpTagDelay: 1000
+        readonly property int helpTagFontSize: 11
+        readonly property int helpTagPadH: 10
+        readonly property int helpTagPadV: 6
+        readonly property int helpTagRadius: 12
+        readonly property int helpTagShadowGutter: 9
+        readonly property int helpTagGap: 10
+        readonly property color helpTagFill: root.tahoeDark ? "#3C3C3C" : "#F2F2F2"
+        readonly property color helpTagBorder: root.tahoeDark
+            ? Qt.rgba(1, 1, 1, 0.12) : Qt.rgba(0, 0, 0, 0.10)
 
         // G03/G04 玻璃按钮投影(浅色,应用内绘制,G08)。集中命名,只调这里。
         // 用 QtQuick.Effects 的 RectangularShadow(Qt 6.9+):几何与玻璃本体
@@ -905,8 +921,9 @@ KosApplicationWindow {
         implicitHeight: root.tahoe.controlHeight
         hoverEnabled: true
         Accessible.name: hint
-        ToolTip.visible: hovered && hint.length > 0
-        ToolTip.text: hint
+        onHoveredChanged: hovered ? root.armHelpTag(control)
+                                  : root.disarmHelpTag(control)
+        onPressedChanged: if (control.pressed) root.disarmHelpTag(control)
 
         contentItem: Label {
             text: control.symbol
@@ -980,8 +997,9 @@ KosApplicationWindow {
         // blur just closed. Tab keeps keyboard accessibility.
         focusPolicy: Qt.TabFocus
         Accessible.name: hint
-        ToolTip.visible: hovered && hint.length > 0
-        ToolTip.text: hint
+        onHoveredChanged: hovered ? root.armHelpTag(control)
+                                  : root.disarmHelpTag(control)
+        onPressedChanged: if (control.pressed) root.disarmHelpTag(control)
 
         // Host-owned plain row. Round to match the round button footprint the
         // capsule used to carry; the fill is the same neutral row-hover token
@@ -1012,8 +1030,9 @@ KosApplicationWindow {
             ? textLabel.implicitWidth + 20 : root.tahoe.dateNavHeight
         hoverEnabled: true
         Accessible.name: hint
-        ToolTip.visible: hovered && hint.length > 0
-        ToolTip.text: hint
+        onHoveredChanged: hovered ? root.armHelpTag(control)
+                                  : root.disarmHelpTag(control)
+        onPressedChanged: if (control.pressed) root.disarmHelpTag(control)
 
         background: Rectangle {
             radius: height / 2
@@ -1059,6 +1078,124 @@ KosApplicationWindow {
                 }
             }
         }
+    }
+
+    // LQ11: help tag. Solid neutral card + 1px hairline + E1 outer shadow,
+    // r12 / 11px / 6x10 (spec O02). One popup instance for the window, shown
+    // 1s after hover (O01) and torn down as soon as the pointer leaves.
+    // Placement follows the anchor: below by default (matches the macOS 26
+    // help-tag reference), flips above when the bottom is out of room (O09),
+    // and slides horizontally inside an 8px window margin. The 9px gutter
+    // is reserved for the shadow, not part of the visible card.
+    Popup {
+        id: helpTag
+        objectName: "helpTag"
+        visible: false
+        padding: 0
+        closePolicy: Popup.NoAutoClose
+        modal: false
+        dim: false
+
+        contentItem: Item {
+            implicitWidth: helpTagMetrics.advanceWidth
+                           + 2 * root.tahoe.helpTagPadH
+                           + 2 * root.tahoe.helpTagShadowGutter
+            implicitHeight: helpTagMetrics.boundingRect.height
+                            + 2 * root.tahoe.helpTagPadV
+                            + 2 * root.tahoe.helpTagShadowGutter
+
+            Label {
+                id: helpTagLabel
+                x: root.tahoe.helpTagShadowGutter + root.tahoe.helpTagPadH
+                y: root.tahoe.helpTagShadowGutter + root.tahoe.helpTagPadV
+                text: root.helpTagText
+                color: root.tahoe.labelPrimary
+                font.pixelSize: root.tahoe.helpTagFontSize
+            }
+        }
+
+        background: Item {
+            Rectangle {
+                id: helpTagCard
+                anchors.fill: parent
+                anchors.margins: root.tahoe.helpTagShadowGutter
+                radius: root.tahoe.helpTagRadius
+                color: root.tahoe.helpTagFill
+                border.width: 1
+                border.color: root.tahoe.helpTagBorder
+            }
+            LiquidOuterShadow {
+                anchors.fill: helpTagCard
+                radius: root.tahoe.helpTagRadius
+                shadowLevel: 1
+            }
+        }
+    }
+
+    Timer {
+        id: helpTagTimer
+        interval: root.tahoe.helpTagDelay
+        onTriggered: root.openHelpTag()
+    }
+
+    // TextMetrics measures the resolved font synchronously; sizing the popup
+    // from the label's implicitWidth at open() time used stale metrics and
+    // left CJK labels hanging past the card's right edge.
+    TextMetrics {
+        id: helpTagMetrics
+        font: helpTagLabel.font
+        text: root.helpTagText
+    }
+
+    function armHelpTag(item) {
+        if (!item || !item.visible || item.hint.length === 0)
+            return
+        helpTagAnchor = item
+        helpTagText = item.hint
+        helpTagTimer.restart()
+    }
+
+    function disarmHelpTag(item) {
+        if (helpTagAnchor !== item)
+            return
+        helpTagTimer.stop()
+        helpTagAnchor = null
+        helpTag.close()
+    }
+
+    function openHelpTag() {
+        if (!helpTagAnchor || !helpTagAnchor.hovered) {
+            helpTagAnchor = null
+            return
+        }
+        // Re-parent before opening so x/y can be expressed against the
+        // hovered control, which is the only stable origin across views.
+        helpTag.parent = helpTagAnchor
+        helpTag.open()
+        positionHelpTag()
+    }
+
+    function positionHelpTag() {
+        const item = helpTagAnchor
+        if (!item)
+            return
+        const win = root.contentItem
+        const origin = item.mapToItem(win, 0, 0)
+        const gutter = root.tahoe.helpTagShadowGutter
+        const cardW = Math.ceil(helpTagMetrics.advanceWidth)
+                      + 2 * root.tahoe.helpTagPadH
+        const cardH = Math.ceil(helpTagMetrics.boundingRect.height)
+                      + 2 * root.tahoe.helpTagPadV
+        const edge = 8
+        helpTag.width = cardW + 2 * gutter
+        helpTag.height = cardH + 2 * gutter
+        let cardX = origin.x + (item.width - cardW) / 2
+        cardX = Math.max(edge, Math.min(cardX, win.width - cardW - edge))
+        let cardY = origin.y + item.height + root.tahoe.helpTagGap
+        if (cardY + cardH > win.height - edge)
+            cardY = origin.y - cardH - root.tahoe.helpTagGap
+        helpTag.x = cardX - origin.x - gutter
+        helpTag.y = cardY - origin.y - gutter
     }
 
     // The reference's month arrows are 5x9 px of ink at 1:1 (x22..27 /
