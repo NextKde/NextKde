@@ -1,27 +1,24 @@
 # LQ0 — 液态组件接入与剩余 spec 收敛
 
 ## 本轮
-- LQ18c spec 回归 9/N：**D09 保存/取消配对 + 省略号动作 → PASS（仅取证，无产品改动）**。
-  ① 配对：两个编辑器的编辑态都是 `standardButtons: Dialog.Save|Cancel` + footer
-  保存/取消/删除；确认态为 取消(主)+删除(弱/红)；新建任务实拍只有 保存+取消（无 uid
-  时不显示删除）；文件对话框自带 打开/保存+取消。② 省略号：More 菜单三项逐个实点——
-  `New task…` → 新建任务弹框；`Import iCalendar…` → 导入文件选择器（标题「导入
-  iCalendar — KOS Calendar」、过滤 `iCalendar 文件 (*.ics)`、打开/取消）；`Export
-  iCalendar…` → 导出保存器（同标题、保存/取消）。三项都是真实下一层，省略号全部保留。
-  - 帧：`R46-menu-open.png`、`R46-newtask.png`、`R46-import-active.png`、
-    `R46-export-active.png`。
+- LQ18c spec 回归 10/N：**D10 进出过渡取证——进入腿 PASS，退出腿未验证**。
+  进入（事件编辑器，Esc 后重开详情→More 无；实拍 `r056-enter-*` 40 帧 @≈33ms）：
+  卡片宽 374→378→380 px（scale 0.984→0.995→1.0，与 `KosDialog.qml:10`
+  `0.96+0.04p` 吻合）、面亮度 224→236→249→254→255（p≈0.54→0.72→0.91→0.985→1），
+  首末 ≈194ms ≈ `motionNormal` 220ms，增量递减 = OutCubic。f22（838ms）为合成器
+  乱序帧（全显白卡），f23–f26 才是动画主体。
+  退出（Esc，`r056-exit-*` 32 帧）：f8(355ms) 仍为全显白卡 + scrim 187，f9(395ms)
+  已无 scrim（bg 249）、无卡；相邻帧仅 40ms，**没有任何中间 scale/alpha 帧**，与
+  `KosDialog.qml:24-32` 声明的 120ms InCubic 不符。第二次同法复录结果相同。
+  reduceMotion 仅代码证据（`AppTheme.qml:239-241` 时长 0、`KosDialog.qml:10` scale=1），
+  未实拍。
 
 ## 上一轮
-- LQ18c spec 回归 8/N：**D08 弹框按钮三态 + Esc 关闭 → PASS**。
-  五枚按钮（编辑态 保存/取消/删除、确认态 取消/删除）各加 `objectName`（仅可测性，
-  视觉零改动）；`pointerObject` 驱动 hover/press，`invoke forceActiveFocus` 驱动键盘焦点。
-  - 填充：保存 accent 48,140,198 → hover 69,152,204 → press 85,161,208（按下另有缩放）；
-    取消/删除 neutral 227,229,230 → hover 215,216,217 → press 204,205,206；确认态取消
-    走 accent 同序列、删除走 neutral 同序列，红字在三态下不变。
-  - 焦点环：编辑态三枚 + 确认态取消均为 2px `focusRing` (123,182,219)，上下左右四边实测；
-    确认态取消打开即有环（代码 `confirmCancelButton.forceActiveFocus()`）。
-  - Esc：编辑态、确认态各发一次，scrim 178→237、弹框消失。
-  - 帧：`R45-d08-*.png`；3x 拼版 `R45-d08-states-3x.png`。
+- LQ18c spec 回归 9/N：**D09 保存/取消配对 + 省略号动作 → PASS（仅取证，无产品改动）**。
+  两个编辑器编辑态均 保存/取消/删除、确认态 取消(主)+删除(弱/红)、新建任务仅 保存+取消；
+  More 菜单 New task/Import/Export 三项实点均进入真实下一层，省略号全部保留。
+  - 帧：`R46-menu-open.png`、`R46-newtask.png`、`R46-import-active.png`、
+    `R46-export-active.png`。
 
 ## 队列（一轮一条；[x]=已完成）
 - [x] LQ01 基线：light week 1100×720 / 760×540；日志无启动回归。
@@ -96,6 +93,12 @@
   → 其余 PENDING 逐条核对清零（N01、E06 已结清）。
 
 ## 已改
+- LQ18c spec 回归 10/N（D10）：**无产品改动**。只录进入/退出连续帧并量卡片宽与面亮度；
+  `KosDialog.qml:1-33` 的 enter/exit 声明未动（enter: motionNormal 220 OutCubic，
+  exit: motionFast 120 InCubic，reduceMotion 时 0）。另在 harness/Main.qml 加
+  `probeDialog` 探针（tmp 不入库）想直读 popup 的 revealProgress：popup 对象在 overlay
+  层，既不在 contentItem 树、也不在 activeFocusItem 链上，未读到；`Overlay` 未导入，
+  探针对产品零影响。
 - LQ18c spec 回归 9/N（D09）：**无产品改动**。审计 `EventEditorDialog.qml:36/410-442/474-492`、
   `CalendarTaskEditorDialog.qml:41/117-148/178-194` 的 保存/取消/删除 与确认态配对，
   以及 `Main.qml:2412-2429` 三个省略号项的 `onTriggered`（`taskEditor.openForTodo(null)` /
@@ -184,11 +187,22 @@
 3. D04 内联标签字重：联动待办行的 `Todo list` / `Priority`（`EventEditorDialog.qml:752/:764`）
    仍为 11px Normal，仅在勾选“同时将此日程显示为待办任务”时出现；D04 要求标签 11 DemiBold，
    下轮同步并复拍勾选态。（主字段七标签本轮已改并 PASS。）
+4. **D10 退出过渡（新）**：Esc 关闭实测无可见过渡——1100×692 两轮录制都在相邻帧
+   33–40ms 内从「全显白卡 + scrim 187」直接到「无 scrim、无卡」，无中间 scale/alpha 帧，
+   与 `KosDialog.qml:24-32` 声明的 120ms InCubic 不符。进入腿已 PASS。下轮先查 popup item
+   是否在 exit Transition 前就被隐藏/移除（modal overlay 随 close 立即消失？），再让退出
+   可见；若确认是 Qt Dialog close 绕过 exit，需改用显式动画后 `close()` 或改 `visible`
+   驱动，不能牺牲进入腿与 D01/D02/D03 的几何。
 （tooltip 各腿已结清：dark、出现/消失连续帧通过；上方翻转在当前布局不可达，见外推；
 密集 08:00 簇 45px 道 + 标题 ellipsis 为参考同款外推，已移入 rounds.md，不再列。
 V03/V03b 月跨天连续条已结清，细节见 rounds.md R153–R154。）
 
 ## 外推待确认
+- D10 reduceMotion 腿未实拍：`AppTheme.qml:72` `reduceMotion: false` 无赋值入口，本环境
+  无法切换；按 `:239-241` 的 `motionNormal/Fast = 0` 与 `KosDialog.qml:10` 的
+  `scale: reduceMotion ? 1 : …` 判「不动」，仅代码证据。
+- D10 进入录制的 f22（838ms）先于 f23 呈全显白卡、随后 f23 才回到 alpha .54，判为
+  grab/合成器时序伪影（同一 popup 不可能先全显再淡入），不据此改产品。
 - D09 的「完成必须有取消」对设置面板不适用：`shared/qml/foundation/KosSettingsDialog.qml:447-451`
   只有 `Done`（关闭）。设置项即时生效（无暂存/提交两态），`Done` 是关闭而非保存，配一个
   “取消”会暗示可回滚却无快照实现。故按语义判不冲突；若要求字面满足，需先裁决是否给设置
@@ -318,9 +332,9 @@ V03/V03b 月跨天连续条已结清，细节见 rounds.md R153–R154。）
   窄事件惯例外推），不算 X05 的“unintended overlap”。
 
 ## Next round
-LQ18c spec 回归 10/N：**D10 弹框出现/消失过渡**。核 `shared/qml/controls/KosDialog.qml`
-（或 `LiquidDialog.qml`）的 reveal 实现：scale 0.96→1、进 OutCubic 220ms / 出 InCubic
-120ms、`reduceMotion` 时不动。用 `nativeRecord` 连续帧分别录一次打开与 Esc 关闭（事件
-编辑器），量首/中/末帧的卡片 bounds 推算 scale 与时长；再按 `reduceMotion` 代码分支判
-是否跳过动画。判据：进出都有缩放而非瞬变；时长与曲线与 spec 相符；连续帧齐全才可 PASS，
-否则标「未验证」。不动其它弹框几何/阴影。
+LQ18c spec 回归 11/N：**D10 退出腿修复/定性**。复现 Esc 关闭的事件编辑器，确认 exit
+Transition 是否播放：先查 modal popup 的 item 生命周期（overlay 是否随 close 立即隐藏），
+再决定修法——若 item 被提前隐藏，改为显式控制 `visible` 或延后 hide；改后按本轮同法
+录 `r057-exit-*` 连续帧，必须看到卡片宽 380→≈365（0.96）且面 alpha 1→0，时长 ≈120ms
+InCubic。进入腿保持 220ms OutCubic、D01/D02/D03 几何零变化。同时用代码分支记录
+reduceMotion（duration 0 / scale 1）并标「未实拍」。退出帧不齐就标未验证，不声称 PASS。
