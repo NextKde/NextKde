@@ -235,14 +235,22 @@ Pane {
                     Item { Layout.fillHeight: true }
                 }
 
+                // N01: "today red date, OTHER SELECTED DAY GRAY/OUTLINE".
+                // Selection is a neutral gray — the #8E8E93 systemGray family,
+                // not the accent: fill #767680 @12% (reads ≈#ECECEF on the
+                // white plane) with a 1px gray outline; today keeps the red
+                // disc, so the two states stay distinguishable together.
                 background: Rectangle {
                     radius: AppTheme.smallRadius
                     color: dayButton.selected
-                        ? AppTheme.withAlpha(AppTheme.accent, AppTheme.dark ? 0.19 : 0.10)
+                        ? Qt.rgba(0x76 / 255, 0x76 / 255, 0x80 / 255,
+                                  AppTheme.dark ? 0.30 : 0.12)
                         : (dayButton.hovered ? AppTheme.cardHover : "transparent")
                     border.width: dayButton.selected || dayButton.activeFocus ? 1 : 0
-                    border.color: AppTheme.withAlpha(AppTheme.accent,
-                        dayButton.selected ? 0.62 : 0.38)
+                    border.color: dayButton.selected
+                        ? Qt.rgba(0x8E / 255, 0x8E / 255, 0x93 / 255,
+                                  AppTheme.dark ? 0.55 : 0.45)
+                        : AppTheme.withAlpha(AppTheme.accent, 0.38)
                 }
             }
         }
