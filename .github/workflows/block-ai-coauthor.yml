@@ -22,7 +22,9 @@ jobs:
           fetch-depth: 0
 
       - name: Fetch base branch tip
-        run: git fetch --no-tags --depth=1 origin ${{ github.base_ref }}
+        # Preserve base ancestry: a shallow boundary on a newer main makes
+        # origin/main..HEAD include unrelated history from an older PR base.
+        run: git fetch --no-tags origin ${{ github.base_ref }}
 
       - name: Reject AI agent attribution in new commits
         env:
