@@ -56,12 +56,17 @@ Pane {
         readonly property int headerHeight: 30
         readonly property int dayDiscSize: 24
         readonly property int chipHeight: 18
-        readonly property real dayHeight: Math.max(0, (height - headerHeight - 6 * rowSpacing) / 6)
+        // V01: the month grid is continuous. Cells butt together (no
+        // spacing) and each one paints its own right/bottom hairline, so
+        // the rules join into one uninterrupted 7-column grid at any size.
+        readonly property real dayHeight: Math.max(0, (height - headerHeight) / 6)
+        readonly property color lineColor: AppTheme.withAlpha(
+            AppTheme.text, AppTheme.dark ? 0.13 : 0.085)
         columns: 7
         uniformCellWidths: true
         uniformCellHeights: false
-        columnSpacing: 3
-        rowSpacing: 3
+        columnSpacing: 0
+        rowSpacing: 0
 
         Repeater {
             model: 7
@@ -78,6 +83,14 @@ Pane {
                 verticalAlignment: Text.AlignVCenter
                 font.pixelSize: 11
                 font.weight: Font.DemiBold
+
+                Rectangle {
+                    anchors.left: parent.left
+                    anchors.right: parent.right
+                    anchors.bottom: parent.bottom
+                    height: 1
+                    color: monthGrid.lineColor
+                }
             }
         }
 
@@ -243,6 +256,26 @@ Pane {
                     border.width: dayButton.selected || dayButton.activeFocus ? 1 : 0
                     border.color: AppTheme.withAlpha(AppTheme.accent,
                         dayButton.selected ? 0.62 : 0.38)
+
+                    // V01: shared cell rules. Drawn on the background so the
+                    // selected/hover fill stays inside them; the last column
+                    // and last row have no outer edge.
+                    Rectangle {
+                        anchors.right: parent.right
+                        anchors.top: parent.top
+                        anchors.bottom: parent.bottom
+                        width: 1
+                        color: monthGrid.lineColor
+                        visible: dayButton.index % 7 !== 6
+                    }
+                    Rectangle {
+                        anchors.left: parent.left
+                        anchors.right: parent.right
+                        anchors.bottom: parent.bottom
+                        height: 1
+                        color: monthGrid.lineColor
+                        visible: dayButton.index < 35
+                    }
                 }
             }
         }
