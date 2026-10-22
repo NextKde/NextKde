@@ -1170,9 +1170,10 @@ KosApplicationWindow {
             helpTagAnchor = null
             return
         }
-        // Re-parent before opening so x/y can be expressed against the
-        // hovered control, which is the only stable origin across views.
-        helpTag.parent = helpTagAnchor
+        // LQ18c: do NOT re-parent to the hovered control. A Popup that is
+        // left on the window's overlay stacks above the page (title, date
+        // nav); reparenting put it below its siblings and let page ink
+        // bleed over the card. x/y below are window (contentItem) space.
         helpTag.open()
         positionHelpTag()
     }
@@ -1196,8 +1197,8 @@ KosApplicationWindow {
         let cardY = origin.y + item.height + root.tahoe.helpTagGap
         if (cardY + cardH > win.height - edge)
             cardY = origin.y - cardH - root.tahoe.helpTagGap
-        helpTag.x = cardX - origin.x - gutter
-        helpTag.y = cardY - origin.y - gutter
+        helpTag.x = cardX - gutter
+        helpTag.y = cardY - gutter
     }
 
     // The reference's month arrows are 5x9 px of ink at 1:1 (x22..27 /
