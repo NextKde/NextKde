@@ -1,21 +1,16 @@
 # LQ0 — 液态组件接入与剩余 spec 收敛
 
 ## 本轮
-- LQ18c 收尾 8/N：**N01 补拍——今天红盘 / 其他选中日灰盘 / now 红线同屏**（仍差结清）。
-  - 无代码改动。light 1100×692，周 2026-10-19…25；选中日 Wed 21、今天 Fri 23。
-  - 今日：主表头红盘 **22×22**（x805–826 / y126–147，面 (229,72,77)，白数字）；
-    mini 月红盘 18×18（x129–146 / y619–636，同红、白字）。
-  - 选中日：主表头灰盘 **22×22**（x569–590 / y126–147，面 (229,229,229)=#E5E5E5，
-    暗字 (40,49,66)）；mini 月灰盘 #8E8E93、白字、18×18。
-  - 两者主表头几何同构（同 22px、同 y 带 126–147），只差填充/字色 ⇒ 红/灰可辨。
-  - now 线 rows **261–262** 面 (229,72,77)，横跨周五列；gutter 红 pill 228–269 /
-    251–270、白字 `01:53`。01:52:58 对应 186+112.5×40/60=261 ⇒ proper tick。
-    选中灰盘不改变列底色、不遮 now 线；now 红与选中灰不同列不同形，无混淆。
-  - 设置选中日走 `date 2026-10-21`（handleActivation→selectedDate），视觉与点选同态；
-    点选路径见「外推」（harness 限制）。
-  - 证据：`R30-n01-today-selected-light.png`、`R30-n01-nowline-light.png`、
-    `R30-n01-header-4x.png`、`R30-n01-mini-6x.png`；入库
-    `docs/ui-calendar/round-30-n01-{today-selected,nowline}-light.png`。
+- LQ18c 收尾 9/N（E06 续）：**数据链定位并打通，E06 PASS**。根因既不在勾标绘制也不在
+  service 逻辑：fixture 里 3 条 link 属性手写成了 `X-KOS-LINKED-*-ID`，而
+  KCalendarCore 只认 `X-KDE-KOS-*`（同文件其余 17 条自定义属性都是后者；`X-KDE-KOS-LIST-ID`
+  能正常解出 listId 即为证）。改名后私有 D-Bus `eventsForRange(2026-03-29, 03-31)` 立即返回
+  `Morning planning → todo=ui-review-todo-0, completed=true`、`Multi-day review →
+  ui-review-todo-multiday, completed=true`。复拍：timed chip（周日 08:00）与全天带四段续接
+  chip 均为 **✓ + strikeout 同屏**，勾为 10px 矢量、chip ink、随 `.5` completion opacity
+  变淡，无 emoji、无新颜色。证据 `R32-e06-timed-light.png`、`R32-e06-allday-light.png`、
+  合图 `R32-e06-evidence.png`（timed 5×、全天 3×）。
+  副产物：把 timeline 滚到 contentY=0 才发现的 3 枚纯黑 timed chip（见仍差 #2），非本轮引入。
 
 ## 队列（一轮一条；[x]=已完成）
 - [x] LQ01 基线：light week 1100×720 / 760×540；日志无启动回归。
@@ -55,12 +50,24 @@
 - [x] LQ18c 收尾 8/N：**N01 补拍**——今天红盘（22×22 红/白字）与选中日灰盘
   （22×22 #E5E5E5/暗字）同屏可辨；now 线 261–262 红、gutter 01:53 pill 可读，
   选中灰不压 now 红。N01 PASS。
+- [x] LQ18c 收尾 9/N：**E06 完成态勾标 PASS**——数据链根因是 fixture link 属性前缀写错
+  （`X-KOS-` → `X-KDE-KOS-`）；改 fixture 后 timed/全天两种 chip 均 ✓ + strikeout 实拍通过。
 - [ ] LQ18c spec 全量 PASS 回归：第 1 组 D01–D13（D03 仍差）、第 2 组 O01–O09（O09 的
-  菜单/浮层翻转仍差）、X01–X05 + P02/P03、tooltip 剩余腿（dark/连续帧已过，翻转不可达）、
-  V03/V03b 月跨天连续条（已过）已完成 → 其余 PENDING 逐条核对清零
-  （N01 已结清；下一条：E06 完成态勾标）。
+  菜单/浮层翻转仍差）、X01–X05 + P02/P03、tooltip 剩余腿、V03/V03b 月跨天连续条已完成
+  → 其余 PENDING 逐条核对清零（N01、E06 已结清）。
+- [ ] 新发现（R32）：week 视图 contentY=0 处 00:00 行的 3 枚纯黑 chip（见仍差 #2），
+  待单独一轮定位。
 
 ## 已改
+- LQ18c 收尾 9/N 续（E06 数据链）：**无产品代码改动**。fixture
+  `profile/pim/calendar.ics` 三条 link 属性前缀 `X-KOS-` → `X-KDE-KOS-`
+  （`LINKED-EVENT-ID` ×1、`LINKED-TODO-ID` ×2；tmp 不入库）。证据走私有 D-Bus
+  `org.nextkde.Kos.Pim1.eventsForRange`：改前两类事件 `linkedTodoId=""`/`completed=false`，
+  改后均指向对应 VTODO 且 `completed=true`。渲染侧零改动。
+- LQ18c 收尾 9/N（E06）：`CalendarScheduleView.qml` 全天 chip（ring 之后、标题之前）与
+  timed chip（标题行改为 Row）各加 `VectorIcon{name:"check";size:10}`，x 随连续条的
+  `allDayJointOverlap` 走、标题左/宽随勾标让 13px；颜色 `chipInk`，勾标随 chip 的 `.5`
+  completion opacity 变淡。strikeout 保留，未新增颜色/emoji。**取证未通过（数据链）**。
 - LQ18c 收尾 8/N（N01）：**无代码改动**（只取证/量测/判读；选中态用 `date`
   命令设置，未改选中样式）。
 - LQ18c 收尾 7/N（备注框焦点环）：`EventEditorDialog.qml:848-865` `KosSurface(focused)`
@@ -122,8 +129,13 @@
 1. D03 弹框卡片结构：面为硬编码 `#ffffff`（非 `cardSurface`）、无 1px `border`、阴影是单只
    `LiquidOuterShadow`（E4 自定义）而非 `shadowAmbient`+`shadowKey` 双层。视觉无硬边，但三条
    只中“软阴影”一条；改机制不是 token 级，需先定是否保留 LQ07 的 E4 方案。
-2. E06 未验证：completed timed 项只有 strikeout + opacity .5，没有独立完成勾标；
-   参考图没有 todo 事件，需按 HIG/task 行语言补勾标后再判。
+2. **week 视图 00:00 行有 3 枚纯黑 chip（R32 新发现）**：周 2026-03-30～04-05、
+   timeline contentY=0 时，y188–225（00:00–01:00）出现 3 个圆角纯黑块（填充 (0,0,0)），
+   左侧仍带 3px 列表色条（蓝 Inbox ×1、绿 Personal ×2），无可见标题；该周恰有 3 条带
+   DUE 的任务（4/1 09:30、4/1 14:30、4/2 11:00），疑为任务进 timed 网格时 start 字段缺失/
+   记录为空所致（同 Main.qml:1664 的 TypeError 家族），未定论。R31 同时刻因 contentY≈240
+   在视口外未见；本轮未改产品代码，**非本轮引入**。证据 `R32-e06-allday-light.png`、
+   `R32-black-4x.png`。需单独一轮定位（勿与 E06 混）。
 3. 浮层/菜单：详情浮层为**单张中性卡**（参考是 246 壳 + 内部白行），面 240 与菜单 255
    差 Δ15（参考 Δ9）；阴影偏弱、菜单亮卡无磨砂色偏/hover r8 偏小、O09 翻转未做；任务编辑器
    固定 560 高留白 151px。
@@ -235,9 +247,9 @@ V03/V03b 月跨天连续条已结清，细节见 rounds.md R153–R154。）
   窄事件惯例外推），不算 X05 的“unintended overlap”。
 
 ## Next round
-E06（完成态勾标）：`CalendarScheduleView.qml` 的 timed/all-day chip 目前完成项只有
-strikeout + opacity .5，无独立完成标记。做法：在 chip 文本前加 8–10px 勾标
-（`VectorIcon` 或自绘 Path，**不用 emoji**），颜色随 ink/次要色，保持 subdued；
-先读 E06 与既有 todo chip（月视图绿色 todo、任务编辑器完成语义），再改。
-fixture 需一条 completed 项：在隔离 profile 里建/勾选一条任务后 light 200% 裁切取证
-（不动真实数据，fixture 不入库）。之后剩 D03 / 浮层菜单 / O09 菜单翻转 / TypeError。
+定位 week 视图 00:00 行的 3 枚纯黑 chip（仍差 #2）：先把 timeline 置 contentY=0、`date
+2026-03-30` 复拍确认仍在；再用 `inspectGeometry`/临时 harness dump 取该 3 枚 chip 的
+`item`（task 的 record.start 为空 → itemHour 0？）与 `itemColor`/fill 求值路径，对照
+`Main.qml:1664` TypeError 与 `itemsByDate` 里 todo 记录的构造。**只定位、只修这一处**，
+修完用同组命令复拍 4/1–4/2 两列。E06 已 PASS，勿再动勾标。之后剩 D03 / 浮层菜单 /
+O09 菜单翻转 / 遗留 TypeError。
