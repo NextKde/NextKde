@@ -1436,6 +1436,28 @@ KosApplicationWindow {
         return match ? Number(match[1]) : 0
     }
 
+    // E04: minutes since midnight of a timed item's start; the minute part
+    // positions the chip inside its start-hour cell.
+    function itemStartMinutes(item) {
+        const match = itemDateTime(item).match(/T(\d{2}):(\d{2})/)
+        return match ? Number(match[1]) * 60 + Number(match[2]) : 0
+    }
+
+    // E04: duration in minutes. The stored end is exclusive; a missing or
+    // non-positive end falls back to a one-hour slot (todos carry only a due
+    // time, so they take the default slot too).
+    function itemDurationMinutes(item) {
+        const startMatch = itemDateTime(item).match(/T(\d{2}):(\d{2})/)
+        if (!startMatch)
+            return 60
+        const endMatch = String(value(itemRecord(item), "end", "")).match(/T(\d{2}):(\d{2})/)
+        if (!endMatch)
+            return 60
+        const duration = Number(endMatch[1]) * 60 + Number(endMatch[2])
+            - (Number(startMatch[1]) * 60 + Number(startMatch[2]))
+        return duration > 0 ? duration : 60
+    }
+
     function itemAllDay(item) {
         return Boolean(value(itemRecord(item), "allDay", false))
     }
@@ -2647,6 +2669,8 @@ KosApplicationWindow {
                         itemAllDay: root.itemAllDay
                         itemRecord: root.itemRecord
                         itemHour: root.itemHour
+                        itemStartMinutes: root.itemStartMinutes
+                        itemDurationMinutes: root.itemDurationMinutes
                         onDateSelected: function(date) { root.selectedDate = date }
                         onItemActivated: function(item) { root.openItem(item) }
                         onCreateRequested: function(date, hour) {
@@ -2679,6 +2703,8 @@ KosApplicationWindow {
                         itemAllDay: root.itemAllDay
                         itemRecord: root.itemRecord
                         itemHour: root.itemHour
+                        itemStartMinutes: root.itemStartMinutes
+                        itemDurationMinutes: root.itemDurationMinutes
                         onDateSelected: function(date) { root.selectedDate = date }
                         onItemActivated: function(item) { root.openItem(item) }
                         onCreateRequested: function(date, hour) {

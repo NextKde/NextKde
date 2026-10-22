@@ -34,6 +34,10 @@ Pane {
     // two outer ends.
     property var itemRecord: function(item) { return ({}) }
     property var itemHour: function(item) { return 0 }
+    // E04: the timed chip's minute offset inside its start hour, and its
+    // duration in minutes (start/end per record; todos default to one hour).
+    property var itemStartMinutes: function(item) { return 0 }
+    property var itemDurationMinutes: function(item) { return 60 }
 
     signal dateSelected(date date)
     signal itemActivated(var item)
@@ -1018,12 +1022,23 @@ Pane {
                                             - chipHost.overflowReserve)
                                             / chipHost.visibleItems.length
                                         x: index * (width + 2)
-                                        // R-CHIP (user ruling 2026-10-17): the
-                                        // ref's timed chip fills 0.96 of its
-                                        // hour (26 on 27). 38 at hourHeight 40.
-                                        // T01 side-by-side rework follows.
-                                        height: Math.round(
-                                            root.hourHeight * 0.96)
+                                        // E04: the chip starts at its minute
+                                        // offset inside the start hour (the
+                                        // host's 3px margin gives the top
+                                        // inset) and spans its real duration
+                                        // at the same 0.96/hour fill the ref
+                                        // measures on its 1h chip (26 on 27).
+                                        y: (root.itemStartMinutes(modelData)
+                                            % 60) * root.hourHeight / 60
+                                        // Minimum is one text row + the 2px
+                                        // top margin, so a 15–30min block
+                                        // still carries its single title line
+                                        // (E03) instead of the old fixed 38.
+                                        readonly property int durationMinutes:
+                                            Math.max(15, root.itemDurationMinutes(modelData))
+                                        height: Math.max(19, Math.round(
+                                            root.hourHeight * 0.96
+                                            * durationMinutes / 60))
                                         // R077: the ref marks every calendar-coloured chip with a
                                         // saturated same-hue bar at its left edge. Measured 1:1 on
                                         // refs/macos-calendar.png: the blue chip's bar reads x=409-411
@@ -1123,15 +1138,13 @@ Pane {
                                             // digits' baseline).
                                             Row {
                                                 width: parent.width
-                                                // P2-9: the old `>= 34` was a
-                                                // dead guard — timedChip.height
-                                                // is Math.round(hourHeight*0.96)
-                                                // = 38, so it was always true.
-                                                // The intent (hide the secondary
+                                                // P2-9: the guard hid the secondary
                                                 // line when a chip runs too short
-                                                // to carry it) is now expressed
-                                                // against hourHeight so it tracks
-                                                // a future height change.
+                                                // to carry it. E04 made the height
+                                                // duration-derived, so it is live
+                                                // again: a 1h chip is 38 (shows
+                                                // the time range), a 30min chip
+                                                // is 19 (title only, E03).
                                                 visible: secondaryLabel.text !== ""
                                                     && timedChip.height >= root.hourHeight - 8
                                                 spacing: 5
