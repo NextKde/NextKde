@@ -1,12 +1,20 @@
 # LQ0 — 液态组件接入与剩余 spec 收敛
 
 ## 本轮
-- LQ18c spec 回归 1/N：**D01 弹框 scrim 取证结清**。light 1100×692，week 2026-10-15，
-  toolbarAdd 点开“新建日程”，帧 `R38-d01-scrim.png` 同帧三项全中：
-  ① 卡片独立浮起——卡面纯白 255、圆角、卡外近缘 170 / 稍远 180（E4 阴影晕）对远区 191；
-  ② 父窗整体压暗且非纯黑——白画布/工具栏均 191 = 255×.75（黑 α.25），周末列 249→187、
-  chip 基色同步 ×.75，全窗含边缘 (20,20)/(1085,300) 一致；③ 父窗内容仍可辨——2x 裁切下
-  “周一 12 / 周二 13”与 “Team offsite / Design sprint” chip 文字清晰可读。无产品改动。
+- LQ18c spec 回归 3/N：**D03 弹框双层阴影**。`LiquidDialog.qml:17-33` 单只
+  `LiquidOuterShadow`（#606064/#000、α .32、softness 20、spread 52）换成
+  `shadowAmbient`（softness 24/spread 52）+ `shadowKey`（softness 10/spread 28）两层，
+  shadowOpacity 各 1（α 由 token 携带），卡面/圆角/backdrop 零改动。
+  - light 实测（`R40-d03-shadow.png` 1100×692 vs `R38-d01-scrim.png`）：卡面仍 **255**；
+    左缘外近缘 163→**174**、4px 外 172→**181**、8px 外 175→**183**、远区 190→**191**，
+    顶缘 161→172 同向。梯度更连续、无第二道环。
+  - 4x 角部（`R40-d03-tl-{before,after}-4x.png`）圆角逐像素同形，无内描边/双环。
+  - dark（`R40-d03-shadow-dark.png`）：卡面 41,41,45 不变；近缘 17→远 22 的 Δ5 接触阴影，
+    无可见重影。dark 旧帧 r137 卡面 38（早于 dark 卡色改动），只作方向对照。
+  - ① `cardSurface` 未采用：`AppTheme.qml:192` = `withAlpha(card, glassActive ? .54/.46 : 1)`，
+    玻璃会话下 α .54 会透出弹框背后的内容且合成 ≠255；非玻璃时 `card= mix(windowRaised,
+    accent, .018)` 也是 accent 微染色 ≠255。保留硬编码 255/`#29292d`，记入外推待裁决。
+  - 1px `border` 按上轮口径仍不加（`alert-macos.png` 无可见描边），D03 待裁决。
 
 ## 队列（一轮一条；[x]=已完成）
 - [x] LQ01 基线：light week 1100×720 / 760×540；日志无启动回归。
@@ -58,12 +66,26 @@
   95→16px；footer 固定高度不变，D05 三行未压。
 - [x] LQ18c 收尾 14/N：**菜单 hover 圆角结清**——实测水平内缩 8 ⇒ r_inner 8，原 r8 正确，
   无产品改动；light hover 帧已拍（前：开菜单无 hover；后：首行 hover 244）。
-- [ ] LQ18c spec 全量 PASS 回归：第 1 组 D01–D13（**D01 已结清**；D03 仍差）、第 2 组
+- [x] LQ18c spec 回归 2/N：**D02 弹框圆角 PASS**——四角 r≈24 = `AppTheme.largeRadius`，
+  无直角；边缘单层 AA 无内描边。仅取证，无产品改动。
+- [x] LQ18c spec 回归 3/N：**D03 双层阴影 PASS**——ambient+key 双层 token 阴影，
+  light 近/中/远 174/183/191（目标 170/180/191），卡面 255 不变；cardSurface/1px border
+  两条待裁决（见仍差 #1）。
+- [ ] LQ18c spec 全量 PASS 回归：第 1 组 D01–D13（**D01、D02、D03-阴影 已结清**；D03
+  的 token/描边待裁决、D04 起未做）、第 2 组
   O01–O09（O09 已结清）、
   X01–X05 + P02/P03、tooltip 剩余腿、V03/V03b 月跨天连续条已完成
   → 其余 PENDING 逐条核对清零（N01、E06 已结清）。
 
 ## 已改
+- LQ18c spec 回归 3/N（D03）：`shared/qml/controls/LiquidDialog.qml:17-33` 背景层由单只
+  `LiquidOuterShadow`（`#606064`/`#000000`、α .32、softness 20、spread 52、offset 0）
+  改为 `shadowAmbient`（softness 24、spread 52、opacity 1）+ `shadowKey`（softness 10、
+  spread 28、opacity 1），offset 均 0。α 由 token 自带（light .105/.13、dark .24/.34），
+  经 shader 边缘 falloff ×.5 后 light 合计 ≈.1175（旧 .16），实测落点吻合目标梯度。
+  `dialogFill`、r24、`LiquidBackdrop`、header/footer 全部零改动。
+- LQ18c spec 回归 2/N（D02）：**无产品改动**。`LiquidDialog.qml:18-22` 的 r24 与
+  `AppTheme.largeRadius` 一致，本轮只做 4x 角部取证（`R39-d02-*-4x.png`，由 D01 帧裁切）。
 - LQ18c spec 回归 1/N（D01）：**无产品改动**。scrim 为 `LiquidDialog.qml:16`
   `Overlay.modal: Rectangle { color: Qt.rgba(0,0,0,0.25) }` 的既有实现，本轮只取证。
 - LQ18c 收尾 14/N（菜单 hover 圆角）：**无产品改动**（试改 r12 → 量得水平内缩 8 → 撤回）。
@@ -110,9 +132,10 @@
   透出）；单日 chip 仍 `withAlpha`。其余零改动。
 
 ## 仍差
-1. D03 弹框卡片结构：面为硬编码 `#ffffff`（非 `cardSurface`）、无 1px `border`、阴影是单只
-   `LiquidOuterShadow`（E4 自定义）而非 `shadowAmbient`+`shadowKey` 双层。视觉无硬边，但三条
-   只中“软阴影”一条；改机制不是 token 级，需先定是否保留 LQ07 的 E4 方案。
+1. D03 弹框卡片结构：双层阴影已改为 `shadowAmbient`+`shadowKey`（本轮 PASS）；剩两条
+   待裁决——① 面仍硬编码 `#ffffff` / `#29292d` 而非 `cardSurface`（该 token 在玻璃会话下
+   α .54 半透明，会透出弹框背后内容且合成 ≠255，见外推）；② 无 1px `border`
+   （`alert-macos.png` 无可见描边，字面要求与之冲突）。
 2. 浮层/菜单：详情浮层为**单张中性卡**（参考是 246 壳 + 内部白行），面 240 与菜单 255
    差 Δ15（参考 Δ9）；阴影偏弱、菜单亮卡无磨砂色偏。（O09 菜单翻转不可达，见外推；
    tooltip 翻转同理。hover 圆角 r8 已于本轮实测结清，不再列。）
@@ -121,6 +144,14 @@
 V03/V03b 月跨天连续条已结清，细节见 rounds.md R153–R154。）
 
 ## 外推待确认
+- D03 的 `cardSurface`：`AppTheme.qml:192-193` = `withAlpha(card, glassActive ? .54/.46 : 1)`。
+  评审 VM 是有合成器模糊的玻璃会话，玻璃激活时弹框面会变成 α .54/.46，背后的窗口内容
+  与 scrim 会透出，和参考 `alert-macos.png` 的不透明白卡、以及 D01 已实测的 255 冲突；
+  即使 `glassActive=false`，`card = mix(windowRaised, accent, .018)`（`:159`）也带 accent
+  微染色，不等于 255。故 D03 的“face = cardSurface”按参考图与既有 PASS 行为优先，
+  **保留硬编码卡面**。若产品要字面满足 spec，应先裁决“弹框允许半透明/微染色”。
+- D03 的 1px `border` 同样按参考图（无可见描边）判为可豁免；两条都需人工裁决，
+  不代表实现缺陷。
 - 任务编辑器高度：编辑态（三行 footer）实测卡 464、备注→保存 16px；New task（两行 footer）
   与删除确认态未复拍。高度公式随 footer implicitHeight 联动，两态只会更矮（760×540 下限
   476 仍高于 464，不触发滚动），风险低。
@@ -235,7 +266,9 @@ V03/V03b 月跨天连续条已结清，细节见 rounds.md R153–R154。）
   窄事件惯例外推），不算 X05 的“unintended overlap”。
 
 ## Next round
-LQ18c spec 回归 2/N：**D02 弹框圆角取证**。用 light 1100×692 的同一张 D01 帧（或重拍
-`R39-d02-dialog.png`）4x 裁卡左上/右上角，量圆角半径、确认无直角；同时确认只有一层
-1px 描边（或无色差描边）。期望与 `AppTheme.largeRadius` / 卡 `r24` 对齐（LQ07 既有记录，
-`LiquidDialog.qml:18-22` radius 24）。只判 D02，不顺手改 D03 结构。
+LQ18c spec 回归 4/N：**D04 弹框文字层级**。复用 `R40-d03-shadow.png`（light）与
+`R40-d03-shadow-dark.png`（dark）两帧，只取证不改代码：
+① 标题“新建日程”左对齐、DemiBold 20（对齐 `LiquidDialog.qml:9-15` 的 header Label）；
+② 字段标签（标题/开始/结束/地点/重复/提醒/备注）11 DemiBold；
+③ 正文/输入值 11–13 常规；逐项给出像素行高与字重证据，确认三级层级一眼可辨。
+若发现与 spec 不符（如标签非 DemiBold），只记录差异，不改字号/字重，留到单列一轮。
