@@ -3,15 +3,14 @@ pragma ComponentBehavior: Bound
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
-import QtQuick.Effects
 import Kos.Ui
 
 // P01: compact app-owned neutral detail popover for a calendar item.
 // Title, then time/date, then optional location/notes, a subdued Edit
 // action and a close affordance. Local neutral palette (no blue-gray tint),
-// hairline border and an app-painted soft shadow. The popover never edits
-// anything itself: closing it never saves, and Edit hands the record to the
-// existing editor dialogs.
+// plain upper-layer fill and a soft shared outer shadow. The popover never
+// edits anything itself: closing it never saves, and Edit hands the record
+// to the existing editor dialogs.
 Popup {
     id: root
 
@@ -19,14 +18,15 @@ Popup {
     // light/dark choice; the greys themselves stay neutral). The values now
     // live in AppTheme (M05) so the popover and the Tahoe content plane are
     // themed from one place.
-    readonly property color surfaceColor: AppTheme.popoverSurface
     readonly property color borderColor: AppTheme.popoverBorder
     readonly property color titleColor: AppTheme.popoverInk
     readonly property color secondaryColor: AppTheme.popoverInkSecondary
     // Interior margin reserved for the app-painted shadow: the visible
     // surface is inset by this much on every side while the popup itself
     // grows by 2 * shadowInset, so the surface box keeps its size/position.
-    readonly property real shadowInset: 14
+    // 36 = shadowLevel 3 spread 32 + its 3px downward offset + slack, so the
+    // shared shadow shader never gets clipped by the Popup bounds.
+    readonly property real shadowInset: 36
 
     property string itemTitle: ""
     property string itemTime: ""
@@ -56,37 +56,45 @@ Popup {
     // padding, so the content width stays 340 - 2 * 14 = 312.
     width: 340 + 2 * shadowInset
     padding: 14 + shadowInset
+    // LQ09: the 340-wide surface keeps its box; only its radius moves from
+    // 12 to the popover token 16. Contents keep the 14px inset, so every
+    // P01 label position is unchanged (the popup bounds are just larger).
     modal: false
     closePolicy: Popup.CloseOnPressOutside | Popup.CloseOnEscape
     onClosed: root.dismissed()
 
     background: Item {
-        // Soft app-painted shadow behind a neutral surface. It is painted
-        // INSIDE the popup's own bounds (into the shadowInset margin) so
-        // the Popup cannot clip it; autoPaddingEnabled lets the blur bleed
-        // ~2px past the surface on the top/left/right and ~4px below.
+        // LQ09: the detail popover is an L2 transient over L0 content. Its
+        // base plane is the same solid sheet as the content plane, then the
+        // spec's upper-layer fill (plain α .06) rides on a LiquidSurface —
+        // never a second glass layer, so the popover stays legible even when
+        // it crosses the toolbar/sidebar glass. Radius 16 and the soft
+        // shared E2-class outer shadow follow liquid-spec §4 (弹出框).
         Rectangle {
-            x: root.shadowInset - 2
-            y: root.shadowInset - 2
-            width: parent.width - 2 * root.shadowInset + 4
-            height: parent.height - 2 * root.shadowInset + 6
-            radius: 14
-            color: AppTheme.dark ? "#99000000" : "#40000000"
-            layer.enabled: true
-            layer.effect: MultiEffect {
-                blurEnabled: true
-                blurMax: 24
-                blur: 0.4
-                autoPaddingEnabled: true
-            }
-        }
-        Rectangle {
+            id: popoverPlane
             anchors.fill: parent
             anchors.margins: root.shadowInset
-            radius: 12
-            color: root.surfaceColor
+            radius: 16
+            color: AppTheme.neutralPlane
             border.width: 1
-            border.color: root.borderColor
+            border.color: AppTheme.dark ? root.borderColor : "transparent"
+        }
+        // Painted before the plane so the plane owns the centre; the shader
+        // has zero alpha inside its body. It stays INSIDE the popup's own
+        // bounds (the shadowInset margin) so the Popup cannot clip it.
+        LiquidOuterShadow {
+            anchors.fill: popoverPlane
+            radius: 16
+            shadowLevel: 3
+        }
+        LiquidSurface {
+            anchors.fill: popoverPlane
+            radius: 16
+            backdrop: null
+            tintColor: AppTheme.dark ? "#FFFFFF" : "#000000"
+            tintStrength: .06
+            diffuseStrength: 1
+            reflectionStrength: 0
         }
     }
 
@@ -237,9 +245,10 @@ Popup {
 
     // Clamp into the window content on open, on parent resize, and on
     // content-height changes so the popover never leaves the client
-    // viewport and its shadow keeps an interior margin (P03). The guard
-    // makes the re-clamp safe against a transient/unavailable parent and
-    // against re-entry.
+    // viewport and its shadow keeps an interior margin (P03). Bounds are
+    // converted to the visible surface (root.x + shadowInset) because the
+    // Popup itself now carries the shadow margin. The guard makes the
+    // re-clamp safe against a transient/unavailable parent and re-entry.
     property bool _clamping: false
     function reclamp() {
         if (_clamping || !root.opened) return
@@ -252,11 +261,14 @@ Popup {
             const host = root.parent
             if (!host || host.width <= 0 || host.height <= 0) return
             const margin = 12
-            const maxX = host.width - root.width - margin
-            const maxY = host.height - root.height - margin
-            if (maxX < margin || maxY < margin) return
-            root.x = Math.max(margin, Math.min(root.x, maxX))
-            root.y = Math.max(margin, Math.min(root.y, maxY))
+            const inset = root.shadowInset
+            const minX = margin - inset
+            const minY = margin - inset
+            const maxX = host.width - (root.width - 2 * inset) - margin - inset
+            const maxY = host.height - (root.height - 2 * inset) - margin - inset
+            if (maxX < minX || maxY < minY) return
+            root.x = Math.max(minX, Math.min(root.x, maxX))
+            root.y = Math.max(minY, Math.min(root.y, maxY))
         })
     }
     function openAt(point) {
@@ -267,17 +279,24 @@ Popup {
             const host = root.parent
             if (!host || host.width <= 0 || host.height <= 0) return
             const margin = 12
-            const maxX = host.width - root.width - margin
-            const maxY = host.height - root.height - margin
+            const inset = root.shadowInset
+            const surfaceW = root.width - 2 * inset
+            const surfaceH = root.height - 2 * inset
+            const maxX = Math.max(margin, host.width - surfaceW - margin)
+            const maxY = Math.max(margin, host.height - surfaceH - margin)
+            let surfaceX
+            let surfaceY
             if (point) {
-                root.x = Math.max(margin, Math.min(point.x, Math.max(margin, maxX)))
-                root.y = Math.max(margin, Math.min(point.y, Math.max(margin, maxY)))
+                surfaceX = Math.max(margin, Math.min(point.x, maxX))
+                surfaceY = Math.max(margin, Math.min(point.y, maxY))
             } else {
-                root.x = Math.max(margin, Math.min(
-                    (host.width - root.width) / 2, Math.max(margin, maxX)))
-                root.y = Math.max(margin, Math.min(
-                    (host.height - root.height) / 2, Math.max(margin, maxY)))
+                surfaceX = Math.max(margin, Math.min(
+                    (host.width - surfaceW) / 2, maxX))
+                surfaceY = Math.max(margin, Math.min(
+                    (host.height - surfaceH) / 2, maxY))
             }
+            root.x = surfaceX - inset
+            root.y = surfaceY - inset
         })
     }
 
