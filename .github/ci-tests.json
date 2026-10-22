@@ -60,6 +60,7 @@
     "kos-ui.traditional-color",
     "kos-settings.window-config",
     "kos-settings.backend-modules",
+    "kos-settings.app-store",
     "kos-dock.model",
     "kos-dock.policy",
     "kos-dock.motion",

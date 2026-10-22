@@ -5,11 +5,15 @@ set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_AUTOMOC ON)
 
-find_package(Qt6 6.5 REQUIRED COMPONENTS Core DBus Gui Qml Quick)
+find_package(Qt6 6.5 REQUIRED COMPONENTS Core DBus Gui Qml Quick Network)
 find_package(KF6Config REQUIRED)
+find_package(KF6KIO REQUIRED)
+find_package(KF6Service REQUIRED)
 
 qt_add_executable(kos-settings
     src/main.cpp
+    src/AppStore.cpp
+    src/AppStore.h
     src/SettingsBridge.h
     src/SettingsBridge.cpp
     src/SettingsBridgeDesktop.cpp
@@ -36,6 +40,9 @@ target_link_libraries(kos-settings PRIVATE
     Qt6::Qml
     Qt6::Quick
     KF6::ConfigCore
+    KF6::KIOGui
+    KF6::Service
+    Qt6::Network
 )
 
 # Development host: released packages will embed or install this QML tree.
@@ -53,12 +60,19 @@ target_compile_definitions(kos-settings PRIVATE
 install(TARGETS kos-settings RUNTIME DESTINATION bin)
 file(GLOB SETTINGS_RUNTIME_QML CONFIGURE_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/*.qml")
 install(FILES ${SETTINGS_RUNTIME_QML} DESTINATION share/kos/settings)
-install(DIRECTORY icons DESTINATION share/kos/settings)
+install(DIRECTORY icons app-store DESTINATION share/kos/settings)
 install(DIRECTORY pages components DESTINATION share/kos/settings
     FILES_MATCHING PATTERN "*.qml")
 
 if(BUILD_TESTING)
     find_package(Qt6 6.5 REQUIRED COMPONENTS Test)
+    add_executable(kos-app-store-test tests/store/backend.cpp src/AppStore.cpp)
+    target_include_directories(kos-app-store-test PRIVATE src)
+    target_link_libraries(kos-app-store-test PRIVATE Qt6::Core Qt6::Gui Qt6::Network
+        Qt6::Test KF6::KIOGui KF6::Service)
+    add_test(NAME kos-settings.app-store COMMAND kos-app-store-test)
+    set_tests_properties(kos-settings.app-store PROPERTIES LABELS logic TIMEOUT 30)
+
     add_executable(kos-settings-backend-test
         tests/backend/ModulesTest.cpp
         src/SettingsProbeTasks.cpp

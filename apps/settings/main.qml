@@ -11,6 +11,12 @@ import "../../shared/qml/i18n"
 
 ApplicationWindow {
     id: window
+    onClosing: function(event) {
+        if (typeof appStore !== "undefined" && appStore.music.busy) {
+            event.accepted = false
+            window.currentPage = 9
+        }
+    }
 
     width: 1100
     height: 720
@@ -231,7 +237,7 @@ ApplicationWindow {
             subtitle: I18n.tr("Wallpaper")
         },
         {
-            subtitle: I18n.tr("Services and components")
+            subtitle: I18n.tr("Extensions and services")
         },
         {
             subtitle: I18n.tr("Stage scheduling")
@@ -594,7 +600,7 @@ ApplicationWindow {
                         SidebarEntry {
                             Layout.fillWidth: true
                             pageIndex: 9
-                            label: I18n.tr("Services and components")
+                            label: I18n.tr("Extensions and services")
                             navSymbol: "◇"
                             navTint: "#5ac8fa"
                         }
@@ -805,6 +811,7 @@ ApplicationWindow {
                         active: window.displayedPage === 9
                         visible: active
                         sourceComponent: ServicesSettingsPage {
+                            store: typeof appStore !== "undefined" ? appStore : null
                             bridge: (typeof settingsBridge !== "undefined") ? settingsBridge : null
                             colors: theme
                         }

@@ -1,3 +1,4 @@
+#include "AppStore.h"
 #include "PowerSettings.h"
 #include "CacheMaintenance.h"
 #include "SettingsBridge.h"
@@ -5,6 +6,7 @@
 #include "WindowSettings.h"
 
 #include <QDebug>
+#include <QFileInfo>
 #include <QGuiApplication>
 #include <QQmlApplicationEngine>
 #include <QQmlContext>
@@ -56,6 +58,8 @@ int main(int argc, char* argv[])
                       << QStringLiteral("(%1%2)").arg(entry.source,
                              entry.checkoutRoot.isEmpty() ? QString()
                                                           : QStringLiteral(", reloads on change"));
+    AppStore appStore(QFileInfo(entry.qmlPath).absolutePath());
+    engine.rootContext()->setContextProperty(QStringLiteral("appStore"), &appStore);
     const QUrl entrypoint = QUrl::fromLocalFile(entry.qmlPath);
     engine.load(entrypoint);
     if (engine.rootObjects().isEmpty())
