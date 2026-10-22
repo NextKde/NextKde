@@ -115,7 +115,7 @@ ShellRoot {
                         check(card.usesColorArtwork === (previous.style === "color"), "card artwork independent of icon colour: " + JSON.stringify(previous))
                         check(AppearanceTokens.content.onBackdrop === backdrop, "content ink follows widget surface")
                         check(!!card.blurRegion === backdrop, "correct compositor surface backend")
-                        check(find(card, "widget-content-layer").layer.enabled === (previous.style === "glass"), "widget effects independent of icon colour")
+                        check(!find(card, "widget-content-layer").layer.enabled, "clock text stays outside the saturation texture")
                     }
                     const next = test.combinations[test.stage - 8]
                     if (next) {
