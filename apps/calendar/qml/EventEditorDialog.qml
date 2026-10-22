@@ -845,16 +845,23 @@ LiquidDialog {
                     Layout.fillWidth: true
                     Layout.preferredHeight: 96
 
-                    KosSurface {
+                    // LQ18c: plain field surface + outward focus ring, same
+                    // two-layer treatment as the task editor (the KosSurface
+                    // `focused` ring was drawn inside the fill).
+                    Rectangle {
                         anchors.fill: parent
                         radius: 10
-                        fillColor: AppTheme.dark ? Qt.rgba(1, 1, 1, .06)
-                                                 : Qt.rgba(0, 0, 0, .06)
-                        // Plain form field: no idle outline, like the liquid
-                        // text fields around it; focus still draws a ring.
-                        strokeWidth: 0
-                        elevation: 0
-                        focused: descriptionField.activeFocus
+                        color: root.fieldFill
+                    }
+
+                    Rectangle {
+                        anchors.fill: parent
+                        anchors.margins: -4
+                        radius: 12
+                        color: "transparent"
+                        border.width: 2
+                        border.color: AppTheme.focusRing
+                        visible: descriptionField.activeFocus
                     }
 
                     Flickable {
