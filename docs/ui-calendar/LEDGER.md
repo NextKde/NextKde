@@ -1,25 +1,29 @@
 # LQ0 — 液态组件接入与剩余 spec 收敛
 
 ## 本轮
-- LQ17 底色与 chrome（S01/S04/C05）：
-  - S01 light：侧栏玻璃合成 **237**（参考侧栏实测 237，逐像素相等）、画布 **255**，
-    R==G==B、上下无渐变/无蓝偏；seam 单发丝。dark：侧栏 41、画布 30（侧栏比画布亮 11，
-    层级与 light 反向正确，无参考图、按既有外推）。
-  - S04 light：`CategoryRow` 勾选=实心+白勾、未勾=彩色空心边框（同屏实拍可辨）；
-    hover 背景 227（Δ10），按下背景 220（Δ17）；参考选中行为 226（Δ11），
-    hover 比选中亮、按下比选中暗，三级次序成立；圆角沿用既有 r6。
-  - S04 本轮补的差：`CategoryRow`/`SidebarRow` 原来只有 hover，按下无任何反馈
-    （与菜单行不一致）。两处 background 增加 `down → rowPressFill`。
-  - C05 窗口圆点：hover/press 帧圆点颜色逐像素不变（255,119,112），无浮起/描边；
-    与 `apps/settings/main.qml:947-961` 一致（settings 也无 hover/press 视觉）。
-    无第二组胶囊/重复窗口控件；工具栏仍是单胶囊。
-  - C05 工具栏 chrome（shared liquid 按钮）：dark 常态 34 → hover 47 → press 59，
-    三段连续帧；press 有缩小位移（shared 控件）。
-  - inactive 腿：单窗口环境无法失焦实拍；源码两侧都无 `active` 绑定，语义上与 settings
-    一致，按代码证据记入 spec，不打实拍 PASS。
-  - 证据：LQ17-light-sidebar / LQ17-row-hover / LQ17-row-press / LQ17-row-after /
-    LQ17-dots-hover-6x / LQ17-dots-press-6x / LQ17-dots-hp / LQ17-dark-row-hp /
-    LQ17-dark-sidebar / LQ17-dark-chrome-hover / LQ17-dark-chrome-press。
+- LQ18b `X07` 弹框/浮层/菜单/tooltip 同尺度对照：**PASS（仅取证，无代码改动）**。
+  - 同一 light 会话、1100×692、day view 2026-04-02，按面逐张实拍（瞬态玻璃 ≤1，不能真同屏）：
+    `openItem "Morning"` → 详情浮层；浮层「编辑」(679,438) → 事件编辑弹框（取消 557,596）；
+    More (1070,50) → 菜单；hover toolbarAdd ≥1s → tooltip。四张再 1:1 拼版。
+  - 实测卡面/边/圆角/字级/阴影（像素值）：
+    - Dialog：面 **255**、无描边、r24、标题 **20 DemiBold**、自定义大阴影（spread 52、
+      softness 20、α .32）。
+    - Popover：面 **240**、亮色描边透明、r16、标题 **15 DemiBold**、E3。
+    - Menu：面 **255**（regular 玻璃压白纸无可见色偏）、玻璃 rim、r16、行字 **13**、E3。
+    - Tooltip：面 **242**、发丝 **217（黑 .10 压 242）**、r12、字 **11**、E1。
+  - 节奏判定：圆角 24 > 16 = 16 > 12、字级 20 > 15 > 13 > 11、阴影 E1–E3 + 弹框更大一档，
+    四个面是同一套梯子；描边策略（弹框/浮层无、菜单 rim、tooltip 发丝）与参考一致。
+  - 两个色调层：白卡（弹框/菜单 255）与中性卡（浮层 240 / tooltip 242）。参考自身同样
+    分层——sheet 255、popover 壳 246 + 内部白行、tooltip 226、菜单为染色玻璃——按角色分层
+    不构成“两套设计语言”，判 PASS。
+  - 残留（已记仍差/外推，不在本轮改）：浮层是单张中性卡（参考壳内还有白行），与菜单的
+    面差 Δ15（参考 Δ9）；亮色菜单无磨砂色偏（LQ10 既有）；tooltip 242 比参考 226 浅，
+    按 O02 token 优先。
+  - 取证：`X07-base-day.png`、`X07-dialog.png`、`X07-popover.png`、`X07-menu.png`、
+    `X07-tooltip.png`、`X07-tooltip-8x.png`、`X07-surfaces-1x.png`（1:1 + 5x 角 + 色板）；
+    入库副本 `docs/ui-calendar/x07-surfaces-light.png`。
+  - 日志：仅既有 `Main.qml:1655` TypeError 两条（打开弹框时，非本轮引入）。
+  - Bash ~20/25（启动 + 4 组驱动 + PIL 量测/拼版两次）。
 
 ## 队列（一轮一条；[x]=已完成）
 - [x] LQ01 基线：light week 1100×720 / 760×540；日志无启动回归。
@@ -47,9 +51,14 @@
 - [x] LQ17 底色与 chrome：S01/S04/C05 通过——侧栏 237/画布 255（dark 41/30）、
   分类行勾选/未勾选可辨 + hover 227/按下 220、圆点 hover/press 与 settings 同为不变，
   工具栏 chrome hover/press 有连续帧；inactive 按代码证据（见外推）。
-- [ ] LQ18 最终对照：X06 + X07；spec 全量 PENDING 清零、PASS 回归。
+- [x] LQ18a X06 日历/settings 同尺度对照：PASS（仅取证）。
+- [x] LQ18b X07 弹框/浮层/菜单/tooltip 同尺度对照：PASS（仅取证）。
+- [ ] LQ18c spec 全量 PASS 回归：D01–D13 → O01–O09 → 其余 PENDING 逐条复拍/代码核对，
+  落 PASS/仍差并把 PENDING 清零。
 
 ## 已改
+- LQ18b：**无代码改动**；产出四个 L2 面的同尺度取证与判读。
+- LQ18a：**无代码改动**；settings 以仓库源码跑起（`KOS_SHELL_DIR`），产出同尺度并排证据。
 - LQ17：`Main.qml:368-370` `SidebarRow`、`:492-493` `CategoryRow` background 增加
   `row.down → rowPressFill`（原只有 hover；菜单行早已有按下态，本轮补齐侧栏两类行）。
 - LQ16：`CalendarScheduleView.qml:866-875` timed 网格宽 = `gutter + dayCount*dayColumnWidth`
@@ -89,14 +98,28 @@
    渲染无异常；疑似 delegate 拆除时序，非本轮引入）。待 LQ15 回归时消掉。
 5. 事件编辑器：组合框仍是 250 底 + 1px 边（与旁边 plain 240 有色差）；备注框焦点环仍是
    2px 内嵌，未换 task editor 的外扩环。LQ18 前统一。
-6. tooltip：右缘 clamp 无效、卡右 ~4px 杂散笔画未定位；dark 腿、上方翻转、出现/消失
-   连续帧未验证。不要第三次原样重试。
-7. 浮层/菜单：详情阴影偏弱、菜单亮卡无磨砂色偏/hover r8 偏小、O09 翻转未做；任务编辑器
-   固定 560 高留白 151px。归 LQ15/LQ18。
+6. tooltip：右缘 clamp 自 LQ11 起仍无效（本轮未复验）；卡右 ~4px“杂散笔画”本轮已定位为
+   下方页面大标题字头/字尾在 62px 小卡两侧露出，**不是描边错误**；dark 腿、上方翻转、
+   出现/消失连续帧未验证。
+7. 浮层/菜单：详情浮层为**单张中性卡**（参考是 246 壳 + 内部白行），面 240 与菜单 255
+   差 Δ15（参考 Δ9）；阴影偏弱、菜单亮卡无磨砂色偏/hover r8 偏小、O09 翻转未做；任务编辑器
+   固定 560 高留白 151px。归 LQ18c。
 8. 密集 08:00 簇（4 事件/3 道）：每道约 45px，标题只剩 "O…/M…"（有意 ellipsis、无交叠）；
    若要求可辨识需窄道减 padding/字号，未做。dark 右缘 5px 画布条 1x 不可辨（见外推）。
 
 ## 外推待确认
+- X07 色调分层：浮层 240（plain α .06 over neutralPlane）与菜单 255（regular 玻璃压白纸）
+  同屏可辨。参考自身也分层（sheet 255 / popover 壳 246 / tooltip 226 / 菜单染色玻璃），
+  故按“角色分层”判同一语言；但参考浮层壳内有白行，我们是单卡，观感更平。是否给浮层加
+  内部白行需产品/数据模型确认。
+- X07 tooltip 面 242 vs 参考实测 226：沿用 O02 的 smallRadius/中性卡 token 优先，不按
+  参考图像素改（与 LQ11 外推一致）。
+- X07 圆角：参考 popover/menu 角按 2x 约 20pt，我们按 liquid-spec §4 取 16；token 优先。
+- X06：settings 以仓库源码（session checkout）启动，橙条“开发者热更新模式”为 dev HUD；
+  生产安装副本无此条。chrome/材料对照不受其影响，但截图里它占据内容区。
+- X06：settings 的 QML 无窗口圆角自遮罩（app-only 截图直角），calendar 自遮罩 r30；
+  KOS 会话里 settings 的圆角应由合成器负责。composited 桌面同屏圆角逐角本轮未拍，
+  故只把“圆点/顶带/尺寸/调色”记为 PASS，不把直角截图当作圆角差异。
 - C05 inactive 腿未实拍：评审环境只有一个窗口，无法让主窗失焦；`Main.qml` 圆点与
   `apps/settings/main.qml:947-961` 均无 `active` 绑定（失焦外观不变），按“与实际 settings
   相同”判为不变，而非新增灰化。若后续有多窗口评审环境，可补一张失焦帧坐实。
@@ -160,6 +183,8 @@
   窄事件惯例外推），不算 X05 的“unintended overlap”。
 
 ## Next round
-LQ18 最终对照：X06 + X07，并做 spec 全量 PASS 回归与 PENDING 清零（E06/N01/V03/编辑器
-色差/tooltip 右缘/浮层阴影等仍差按序处理或明确外推）。先跑一遍全量视图与 light/dark
-1100/760 四组合，逐条回填 spec 状态；只做其中第一条，不打包。
+LQ18c `spec 全量 PASS 回归`第 1 组：D01–D13（弹框）。同一 light 会话按
+`openItem → 编辑` 打开事件编辑弹框，逐条核对：scrim 可辨、圆角 token、表面/描边/双层阴影、
+标题/正文/标签字级、按钮竖排等宽同高、主/次/破坏性层级、hover/press/focus、Esc、
+窄窗 760×540 不裁切、无 sheet 套 sheet、父窗仍可辨。每条落 PASS 或写清仍差；不做新实现
+（除非是零成本 token 偏差）。之后再做 O01–O09 与其余 PENDING。
