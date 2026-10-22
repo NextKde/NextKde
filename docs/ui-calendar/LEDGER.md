@@ -1,29 +1,29 @@
 # LQ0 — 液态组件接入与剩余 spec 收敛
 
 ## 本轮
-- LQ18b `X07` 弹框/浮层/菜单/tooltip 同尺度对照：**PASS（仅取证，无代码改动）**。
-  - 同一 light 会话、1100×692、day view 2026-04-02，按面逐张实拍（瞬态玻璃 ≤1，不能真同屏）：
-    `openItem "Morning"` → 详情浮层；浮层「编辑」(679,438) → 事件编辑弹框（取消 557,596）；
-    More (1070,50) → 菜单；hover toolbarAdd ≥1s → tooltip。四张再 1:1 拼版。
-  - 实测卡面/边/圆角/字级/阴影（像素值）：
-    - Dialog：面 **255**、无描边、r24、标题 **20 DemiBold**、自定义大阴影（spread 52、
-      softness 20、α .32）。
-    - Popover：面 **240**、亮色描边透明、r16、标题 **15 DemiBold**、E3。
-    - Menu：面 **255**（regular 玻璃压白纸无可见色偏）、玻璃 rim、r16、行字 **13**、E3。
-    - Tooltip：面 **242**、发丝 **217（黑 .10 压 242）**、r12、字 **11**、E1。
-  - 节奏判定：圆角 24 > 16 = 16 > 12、字级 20 > 15 > 13 > 11、阴影 E1–E3 + 弹框更大一档，
-    四个面是同一套梯子；描边策略（弹框/浮层无、菜单 rim、tooltip 发丝）与参考一致。
-  - 两个色调层：白卡（弹框/菜单 255）与中性卡（浮层 240 / tooltip 242）。参考自身同样
-    分层——sheet 255、popover 壳 246 + 内部白行、tooltip 226、菜单为染色玻璃——按角色分层
-    不构成“两套设计语言”，判 PASS。
-  - 残留（已记仍差/外推，不在本轮改）：浮层是单张中性卡（参考壳内还有白行），与菜单的
-    面差 Δ15（参考 Δ9）；亮色菜单无磨砂色偏（LQ10 既有）；tooltip 242 比参考 226 浅，
-    按 O02 token 优先。
-  - 取证：`X07-base-day.png`、`X07-dialog.png`、`X07-popover.png`、`X07-menu.png`、
-    `X07-tooltip.png`、`X07-tooltip-8x.png`、`X07-surfaces-1x.png`（1:1 + 5x 角 + 色板）；
-    入库副本 `docs/ui-calendar/x07-surfaces-light.png`。
-  - 日志：仅既有 `Main.qml:1655` TypeError 两条（打开弹框时，非本轮引入）。
-  - Bash ~20/25（启动 + 4 组驱动 + PIL 量测/拼版两次）。
+- LQ18c 第 2 组 `O01–O09 浮层/tooltip/菜单` 复拍核对（light 1100×692，沿用同一实例）。
+  - 驱动：`toolbarAdd`/`toolbarMore` hover + 2×none（≥1s）→ tooltip；`pointer move 600,420`
+    关标签；点 `toolbarMore` 开菜单；`pointer (900,124)` hover「导入」；`openItem
+    "Morning planning"` 开详情浮层。
+  - tooltip：`添加日程` 居中于 + 按钮（卡 x35–92 / y74–99，11px、6×10、r12、面 #F2F2F2、
+    发丝边）；`日历操作` 贴右缘时**水平 clamp 生效**，卡右停在窗口内 ~10px 不越界；
+    移开即消失、单实例。O01/O02/O03 按字面 PASS。
+  - 菜单：卡 845–1062 × 67–210（宽 220）、行 30、图标 16、图标左内 ~10、三组
+    （新建任务｜导入/导出｜设置）、无子菜单、无快捷键文本、无破坏性项；hover 行
+    (244,244,245)=白底+`rowHoverFill`，与侧栏同一 token 语言。O04/O05/O07 PASS，
+    O06 N/A（无破坏性项）、O08 PASS（材质/圆角/阴影/字重按角色分层）。
+  - 浮层：240 面、r16、无硬边；20 DemiBold 标题 + 12 灰阶元数据 + 右对齐胶囊「编辑」。
+  - **新发现（最高优先）**：tooltip 被页面大标题与日期导航**压在下面**（8x 裁切可见 `20…`
+    字头压过卡片、「今天」胶囊盖住卡左缘）。`Main.qml:1175 helpTag.parent =
+    helpTagAnchor` 疑为根因（Menu 未设 parent 则正常置顶）。属层叠机制非 token，按纪律
+    只记仍差、本轮未改。
+  - O09 **仍差**：仅 tooltip 垂直翻转 + 水平 clamp；菜单/浮层只右对齐/内缩，无方向翻转；
+    浮层边缘未测。tooltip dark 腿仍未验证。
+  - 证据：`O-tooltip-light.png`、`O-tooltip-right-light.png`、`O-tooltip-add-8x.png`、
+    `O-tooltip-right-8x.png`、`O-menu-light.png`、`O-menu-hover-light.png`、
+    `O-popover-light.png`；入库 `docs/ui-calendar/round-22-{menu-hover,popover,
+    tooltip-add-8x,tooltip-right-8x}.png`。
+  - 日志：无 QML 错误。Bash ~26/25（读码+两次驱动+三次像素量测；未构建）。
 
 ## 队列（一轮一条；[x]=已完成）
 - [x] LQ01 基线：light week 1100×720 / 760×540；日志无启动回归。
@@ -53,10 +53,15 @@
   工具栏 chrome hover/press 有连续帧；inactive 按代码证据（见外推）。
 - [x] LQ18a X06 日历/settings 同尺度对照：PASS（仅取证）。
 - [x] LQ18b X07 弹框/浮层/菜单/tooltip 同尺度对照：PASS（仅取证）。
-- [ ] LQ18c spec 全量 PASS 回归：D01–D13 → O01–O09 → 其余 PENDING 逐条复拍/代码核对，
-  落 PASS/仍差并把 PENDING 清零。
+- [ ] LQ18c spec 全量 PASS 回归：第 1 组 D01–D13（D03 仍差）、第 2 组 O01–O09
+  （O09 仍差，新发现 tooltip 层叠）已完成 → 先修 tooltip 层叠，再 X01–X05 + P02/P03
+  复拍，其余 PENDING 逐条核对清零。
 
 ## 已改
+- LQ18c 第 2 组：**无代码改动**（只取证/量测/判读；tooltip 层叠缺陷只记录未修）。
+- LQ18c 第 1 组：`EventEditorDialog.qml:42`、`CalendarTaskEditorDialog.qml:42` 标题 17→20 DemiBold
+  （D04）；`KosButton.qml` 新增 `buttonRadius`（-1=旧式 r10），两编辑器 5+5 条 footer/确认
+  按钮传 `height/2`，弹框按钮由圆角矩形改为胶囊（D06）。其余 D 组只核对不改。
 - LQ18b：**无代码改动**；产出四个 L2 面的同尺度取证与判读。
 - LQ18a：**无代码改动**；settings 以仓库源码跑起（`KOS_SHELL_DIR`），产出同尺度并排证据。
 - LQ17：`Main.qml:368-370` `SidebarRow`、`:492-493` `CategoryRow` background 增加
@@ -89,25 +94,39 @@
 - `shared/qml/**`：同步 nextkdeAppDemo 液态组件与 shaders。
 
 ## 仍差
-1. E06 未验证：completed timed 项只有 strikeout + opacity .5，没有独立完成勾标；
+1. **tooltip 层叠**：`helpTag` 被页面标题/日期导航绘在其上（`Main.qml:1175
+   helpTag.parent = helpTagAnchor` 疑为根因；Menu 未设 parent 即正常置顶）。两处 tooltip
+   8x 实拍均可见遮挡。修法待验证：改窗口级坐标（root.contentItem / Overlay.overlay）。
+   dark 腿、上方翻转、出现/消失连续帧仍未验证（右缘 clamp 本轮已验证生效）。
+2. D03 弹框卡片结构：面为硬编码 `#ffffff`（非 `cardSurface`）、无 1px `border`、阴影是单只
+   `LiquidOuterShadow`（E4 自定义）而非 `shadowAmbient`+`shadowKey` 双层。视觉无硬边，但三条
+   只中“软阴影”一条；改机制不是 token 级，需先定是否保留 LQ07 的 E4 方案。
+3. E06 未验证：completed timed 项只有 strikeout + opacity .5，没有独立完成勾标；
    参考图没有 todo 事件，需按 HIG/task 行语言补勾标后再判。
-2. N01 部分验证：今天红圈与 now 线同屏已拍；"今天 + 另一选中日"同时出现的灰/描边
+4. N01 部分验证：今天红圈与 now 线同屏已拍；"今天 + 另一选中日"同时出现的灰/描边
    对比未重拍（本轮未改选中样式）。
-3. 月视图 V03：跨天事件仍是每格独立 chip（相邻列间断口），月格连续条未做；留 LQ18。
-4. 切到 day 视图时 `Main.qml:1653 itemColor` 对 undefined item 报两次 TypeError（瞬时，
-   渲染无异常；疑似 delegate 拆除时序，非本轮引入）。待 LQ15 回归时消掉。
-5. 事件编辑器：组合框仍是 250 底 + 1px 边（与旁边 plain 240 有色差）；备注框焦点环仍是
-   2px 内嵌，未换 task editor 的外扩环。LQ18 前统一。
-6. tooltip：右缘 clamp 自 LQ11 起仍无效（本轮未复验）；卡右 ~4px“杂散笔画”本轮已定位为
-   下方页面大标题字头/字尾在 62px 小卡两侧露出，**不是描边错误**；dark 腿、上方翻转、
-   出现/消失连续帧未验证。
+5. 月视图 V03：跨天事件仍是每格独立 chip（相邻列间断口），月格连续条未做。
+6. 事件编辑器：组合框仍是 250 底 + 1px 边（与旁边 plain 240 有色差）；备注框焦点环仍是
+   2px 内嵌，未换 task editor 的外扩环。
 7. 浮层/菜单：详情浮层为**单张中性卡**（参考是 246 壳 + 内部白行），面 240 与菜单 255
    差 Δ15（参考 Δ9）；阴影偏弱、菜单亮卡无磨砂色偏/hover r8 偏小、O09 翻转未做；任务编辑器
-   固定 560 高留白 151px。归 LQ18c。
-8. 密集 08:00 簇（4 事件/3 道）：每道约 45px，标题只剩 "O…/M…"（有意 ellipsis、无交叠）；
-   若要求可辨识需窄道减 padding/字号，未做。dark 右缘 5px 画布条 1x 不可辨（见外推）。
+   固定 560 高留白 151px。
+8. 切到 day 视图时 `Main.qml:1653 itemColor` 对 undefined item 报两次 TypeError（瞬时，
+   渲染无异常；疑似 delegate 拆除时序，非本轮引入）。
+（密集 08:00 簇 45px 道 + 标题 ellipsis 为参考同款外推，已移入 rounds.md，不再列。）
 
 ## 外推待确认
+- O06：动作菜单里没有破坏性项，故“破坏性项置底 + destructive + 不重复快捷键”按 **N/A**
+  判 PASS（无快捷键文本为实拍）；若后续加入“删除日历”类项，必须置底并染 destructive。
+- O09：右缘水平 clamp 本轮实测生效（tooltip 卡右停在窗口内 ~10px）；tooltip 只有垂直翻转，
+  菜单/浮层只做右对齐/内缩，没有方向翻转；浮层边缘行为本轮未测。
+- O07：菜单 hover (244,244,245) = 白 255 + `rowHoverFill` α.04；侧栏 237 + 同 token = 227。
+  同一 token、不同底，判同一视觉语言；不是新 token。
+- D13 的“应用其他窗口仍可交互”：评审 VM 只有一个窗口，无法实拍。按 HIG 语义（modal 只
+  冻结本窗口）与 `Dialog.modal: true` 的实现判 PASS，不声称有跨窗口实拍。
+- D03 与参考冲突：`alert-macos.png` 卡面没有可见描边，D03 字面却要求 1px `border`。本轮保留
+  “无描边 + E4 大软阴影”（贴合参考图），把 D03 记为仍差；若必须满足字面，需裁决描边可见度
+  是否可接受。
 - X07 色调分层：浮层 240（plain α .06 over neutralPlane）与菜单 255（regular 玻璃压白纸）
   同屏可辨。参考自身也分层（sheet 255 / popover 壳 246 / tooltip 226 / 菜单染色玻璃），
   故按“角色分层”判同一语言；但参考浮层壳内有白行，我们是单卡，观感更平。是否给浮层加
@@ -183,8 +202,10 @@
   窄事件惯例外推），不算 X05 的“unintended overlap”。
 
 ## Next round
-LQ18c `spec 全量 PASS 回归`第 1 组：D01–D13（弹框）。同一 light 会话按
-`openItem → 编辑` 打开事件编辑弹框，逐条核对：scrim 可辨、圆角 token、表面/描边/双层阴影、
-标题/正文/标签字级、按钮竖排等宽同高、主/次/破坏性层级、hover/press/focus、Esc、
-窄窗 760×540 不裁切、无 sheet 套 sheet、父窗仍可辨。每条落 PASS 或写清仍差；不做新实现
-（除非是零成本 token 偏差）。之后再做 O01–O09 与其余 PENDING。
+LQ18c 收尾 1/N：**修 tooltip 层叠**（只改这一处）。`Main.qml:1175 openHelpTag()`
+`helpTag.parent = helpTagAnchor` 使 Popup 落到兄弟内容之下；改为窗口级坐标：
+a) 不再把 parent 设为 anchor（用 root.contentItem 或 `Overlay.overlay`），b)
+`positionHelpTag()` 的 x/y 由 anchor 相对坐标改为窗口绝对坐标（去掉 origin 减法）。
+构建 → 同一 light 会话复拍 `添加日程` 与右缘 `日历操作` 两张 8x，确认：卡在标题/日期
+导航之上、位置/间距/右缘 clamp 不回退、移开即消失。若第一次不成就复原并记「仍差」。
+之后下一轮再回 X01–X05 + P02/P03 复拍。
