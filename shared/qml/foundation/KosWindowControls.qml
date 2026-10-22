@@ -5,6 +5,11 @@ import QtQuick.Window
 Row {
     id: root
     required property var targetWindow
+    // Keep legacy fullscreen behaviour by default; square desktop apps opt in.
+    property bool maximizeMode: false
+    property real circleSize: 18
+    property real buttonWidth: 22
+    property real buttonHeight: 32
     objectName: "windowControls"
     spacing: 10
     HoverHandler { id: groupHover }
@@ -14,24 +19,31 @@ Row {
             id: button
             required property string modelData
             objectName: "window" + modelData + "Button"
-            width: 22; height: 32
+            width: root.buttonWidth; height: root.buttonHeight
             hoverEnabled: true
             focusPolicy: Qt.StrongFocus
             Accessible.name: modelData === "fullscreen"
-                ? (root.targetWindow.visibility === Window.FullScreen ? qsTr("Exit full screen") : qsTr("Full screen"))
+                ? (root.maximizeMode
+                    ? (root.targetWindow.visibility === Window.Maximized ? qsTr("Restore") : qsTr("Maximize"))
+                    : (root.targetWindow.visibility === Window.FullScreen ? qsTr("Exit full screen") : qsTr("Full screen")))
                 : modelData === "minimize" ? qsTr("Minimize") : qsTr("Close")
             ToolTip.visible: hovered
             ToolTip.text: Accessible.name
             ToolTip.delay: 700
             onClicked: {
-                if (modelData === "fullscreen") root.targetWindow.toggleFullScreen()
+                if (modelData === "fullscreen") {
+                    if (root.maximizeMode) {
+                        if (root.targetWindow.visibility === Window.Maximized) root.targetWindow.showNormal()
+                        else root.targetWindow.showMaximized()
+                    } else root.targetWindow.toggleFullScreen()
+                }
                 else if (modelData === "minimize") root.targetWindow.showMinimized()
                 else root.targetWindow.close()
             }
             background: Item {
                 Rectangle {
                     anchors.centerIn: parent
-                    width: 18; height: 18; radius: 9
+                    width: root.circleSize; height: root.circleSize; radius: width / 2
                     color: button.modelData === "fullscreen" ? "#2fc866" : button.modelData === "minimize" ? "#ffbf18" : "#ff5f57"
                     border.width: button.activeFocus ? 2 : 1
                     border.color: button.activeFocus ? AppTheme.text : Qt.darker(color, 1.28)

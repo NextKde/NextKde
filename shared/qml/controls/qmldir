@@ -1,4 +1,12 @@
 module kos.shared.controls
+singleton LiquidStyle 1.0 LiquidStyle.qml
+LiquidBackdrop 1.0 LiquidBackdrop.qml
+LiquidSurface 1.0 LiquidSurface.qml
+LiquidCard 1.0 LiquidCard.qml
+LiquidActionButton 1.0 LiquidActionButton.qml
+LiquidNavigationButton 1.0 LiquidNavigationButton.qml
+LiquidCheckBox 1.0 LiquidCheckBox.qml
+LiquidDialog 1.0 LiquidDialog.qml
 ColorRampSlider 1.0 ColorRampSlider.qml
 LiquidGlassButton 1.0 LiquidGlassButton.qml
 LiquidGlassSwitch 1.0 LiquidGlassSwitch.qml
@@ -11,3 +19,4 @@ singleton ControlForm 1.0 ControlForm.qml
 
 VectorIcon 1.0 VectorIcon.qml
 SelectionHighlight 1.0 SelectionHighlight.qml
+LiquidOuterShadow 1.0 LiquidOuterShadow.qml

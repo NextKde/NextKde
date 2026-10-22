@@ -1,6 +1,7 @@
 import QtQuick
+import "../controls" as Controls
 
-LiquidTextField {
+Controls.LiquidTextField {
     // Application surfaces do not share the Shell launcher's always-dark
     // palette. Bind every semantic colour to AppTheme so forced light/dark and
     // live system appearance changes keep text and focus affordances legible.

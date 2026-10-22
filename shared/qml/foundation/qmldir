@@ -21,6 +21,7 @@ KosSidebarToggle 1.0 KosSidebarToggle.qml
 KosCheckBox 1.0 KosCheckBox.qml
 KosComboBox 1.0 KosComboBox.qml
 KosTextArea 1.0 KosTextArea.qml
+KosTextField 1.0 KosTextField.qml
 KosWorkspaceDialog 1.0 KosWorkspaceDialog.qml
 KosItemDelegate 1.0 KosItemDelegate.qml
 

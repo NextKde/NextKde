@@ -2,12 +2,11 @@ pragma ComponentBehavior: Bound
 
 import QtQuick
 import QtQuick.Controls
+import QtQuick.Window
+import "../foundation" as Foundation
 
-// A plain rounded select dropdown, shared by the settings apps. Deliberately
-// not a platform-styled ComboBox and not a glass material: a flat rounded
-// field whose choices live in a small rounded sheet (the look
-// WallpaperValueMenu established for settings rows), lifted into the shared
-// family so every app can use it.
+// Host-owned select state with a shared liquid surface or preserved Material
+// outline. Decorative reflection is independent from actual keyboard focus.
 Item {
     id: root
 
@@ -15,15 +14,22 @@ Item {
     // The floor keeps a placeholder-only field from collapsing.
     implicitWidth: Math.max(72, 13 + label.implicitWidth + 9 + chevron.implicitWidth + 12)
     implicitHeight: 36
+    activeFocusOnTab: true
+    opacity: enabled ? 1 : .38
 
+    property LiquidBackdrop backdrop: LiquidStyle.backdropFor(root.Window.window)
+    property bool reduceMotion: Foundation.AppTheme.reduceMotion
     property var model: []
     property string textRole: ""
     property int currentIndex: 0
     property string placeholder: ""
+    property string appearanceMode: "system"
     // App accent for the selection highlight; bind it at the call site, like
     // LiquidGlassSwitch. SystemPalette.highlight would follow the desktop
     // colour scheme (often pink) instead of the app's accent.
     property color accentColor: "#0a84ff"
+    property color focusRingColor: accentColor
+    property color selectedTextColor: accentColor
     property color textColor: darkAppearance ? "#f5f5f7" : "#1d1d1f"
     property color mutedTextColor: darkAppearance ? "#98989d" : "#6e6e73"
     property color sheetColor: darkAppearance ? "#262b31" : "#f6f8fb"
@@ -46,6 +52,8 @@ Item {
     }
 
     readonly property bool darkAppearance: {
+        if (root.appearanceMode === "dark") return true
+        if (root.appearanceMode === "light") return false
         const color = controlPalette.window
         return color.r * 0.2126 + color.g * 0.7152 + color.b * 0.0722 < 0.5
     }
@@ -97,6 +105,8 @@ Item {
         menu.open()
     }
 
+    function closeMenu() { menu.close() }
+
     function toggleMenu() {
         if (menu.opened) menu.close()
         else openMenu()
@@ -129,78 +139,63 @@ Item {
         }
     }
 
-    Rectangle {
+    Item {
         id: field
         anchors.fill: parent
-        radius: root.fieldRadius
-        // Liquid rim: a gradient-drawn border -- a bright hairline at the top
-        // easing down to a faint one, like light catching the upper edge of a
-        // glass pill. Tonal (M3) hosts get a solid border instead: both stops
-        // share one colour, accent while focused.
-        gradient: Gradient {
-            orientation: Gradient.Vertical
-            GradientStop {
-                position: 0
-                color: root.materialForm
-                    ? (root.activeFocus || menu.opened ? root.accentColor : root.outlineColor)
-                    : (root.darkAppearance
-                       ? Qt.rgba(1, 1, 1, root._hovered || menu.opened ? 0.75 : 0.65)
-                       : Qt.rgba(1, 1, 1, 1.0))
-            }
-            GradientStop {
-                position: 1
-                color: root.materialForm
-                    ? (root.activeFocus || menu.opened ? root.accentColor : root.outlineColor)
-                    : (root.darkAppearance ? Qt.rgba(0, 0, 0, 0.35) : Qt.rgba(0, 0, 0, 0.18))
-            }
-        }
 
-        // Translucent grey fill, one pixel inside the rim, deliberately flat --
-        // all the highlight lives on the edge, so the pill's silhouette stays
-        // readable. Hover and open deepen it slightly.
+        // Preserve the tonal branch's solid outline and flat inset fill.
         Rectangle {
             anchors.fill: parent
-            anchors.margins: 1
-            radius: root.fieldRadius - 1
-            color: root.darkAppearance
-                ? Qt.rgba(1, 1, 1, root._hovered || menu.opened ? 0.12 : 0.08)
-                : Qt.rgba(0, 0, 0, root._hovered || menu.opened ? 0.08 : 0.05)
-            Behavior on color { ColorAnimation { duration: 150; easing.type: Easing.OutCubic } }
-        }
-
-        // Specular glint parked in the upper-left arc, like the LiquidGlassButton
-        // highlight scaled down for the pill. Brightens on hover/open.
-        Rectangle {
-            anchors.top: parent.top
-            anchors.topMargin: parent.height * 0.10
-            anchors.left: parent.left
-            anchors.leftMargin: parent.width * 0.06
-            width: Math.min(parent.width * 0.42, parent.height * 1.6)
-            height: parent.height * 0.32
-            radius: width / 2
-            opacity: root._hovered || menu.opened ? 1.0 : 0.7
-            gradient: Gradient {
-                orientation: Gradient.Vertical
-                GradientStop {
-                    position: 0
-                    color: Qt.rgba(1, 1, 1, root.darkAppearance ? 0.16 : 0.32)
-                }
-                GradientStop { position: 1; color: Qt.rgba(1, 1, 1, 0.0) }
+            visible: root.materialForm
+            radius: root.fieldRadius
+            color: root.activeFocus || menu.opened ? root.focusRingColor : root.outlineColor
+            Rectangle {
+                anchors.fill: parent
+                anchors.margins: 1
+                radius: Math.max(0, root.fieldRadius - 1)
+                color: root.darkAppearance
+                    ? Qt.rgba(1, 1, 1, root._hovered || menu.opened ? .12 : .08)
+                    : Qt.rgba(0, 0, 0, root._hovered || menu.opened ? .08 : .05)
             }
-            Behavior on opacity { NumberAnimation { duration: 150; easing.type: Easing.OutCubic } }
         }
-
+        LiquidSurface {
+            anchors.fill: parent
+            visible: !root.materialForm
+            radius: root.fieldRadius
+            backdrop: root.backdrop
+            darkAppearance: root.darkAppearance
+            tintColor: root.darkAppearance ? "#ffffff" : "#000000"
+            tintStrength: root.darkAppearance
+                ? (root._hovered || menu.opened ? .12 : .08)
+                : (root._hovered || menu.opened ? .08 : .05)
+            readability: 0
+            blurStrength: .35
+            refractionStrength: 1.5
+            magnification: 1.015
+            reflectionStrength: pointer.pressed ? .65 : root._hovered || menu.opened ? .52 : .38
+            rimColor: root.outlineColor
+            Behavior on reflectionStrength { NumberAnimation { duration: root.reduceMotion ? 0 : 150; easing.type: Easing.OutCubic } }
+        }
+        Rectangle {
+            anchors.fill: parent
+            anchors.margins: -1
+            radius: root.fieldRadius
+            visible: !root.materialForm && (root.activeFocus || menu.opened)
+            color: "transparent"
+            border.width: 2
+            border.color: root.focusRingColor
+        }
         Text {
             id: label
             x: 13
+            width: Math.max(0, parent.width - x - 12 - chevron.implicitWidth - 9)
             anchors.verticalCenter: parent.verticalCenter
             text: root.labelAt(root._visualIndex) || root.placeholder
-            color: root.labelAt(root._visualIndex).length > 0
-                ? root.textColor : root.mutedTextColor
+            color: root.labelAt(root._visualIndex).length > 0 ? root.textColor : root.mutedTextColor
             font.pixelSize: 13
             font.weight: Font.Medium
+            elide: Text.ElideRight
         }
-
         Text {
             id: chevron
             anchors.right: parent.right
@@ -238,20 +233,40 @@ Item {
         // presses close here; the pill toggles through its own MouseArea.
         closePolicy: Popup.CloseOnEscape | Popup.CloseOnPressOutsideParent
         onOpened: scroller.focusCurrent()
+        onClosed: { if (root.enabled) root.forceActiveFocus(Qt.PopupFocusReason) }
         enter: Transition {
             ParallelAnimation {
-                NumberAnimation { property: "opacity"; from: 0; to: 1; duration: 140; easing.type: Easing.OutCubic }
-                NumberAnimation { property: "scale"; from: 0.97; to: 1; duration: 150; easing.type: Easing.OutCubic }
+                NumberAnimation { property: "opacity"; from: 0; to: 1; duration: root.reduceMotion ? 0 : 140; easing.type: Easing.OutCubic }
+                NumberAnimation { property: "scale"; from: 0.97; to: 1; duration: root.reduceMotion ? 0 : 150; easing.type: Easing.OutCubic }
             }
         }
         exit: Transition {
-            NumberAnimation { property: "opacity"; to: 0; duration: 100 }
+            NumberAnimation { property: "opacity"; to: 0; duration: root.reduceMotion ? 0 : 100 }
         }
-        background: Rectangle {
-            radius: 12
-            color: root.sheetColor
-            border.width: 1
-            border.color: root.outlineColor
+        background: Item {
+            Rectangle {
+                anchors.fill: parent
+                visible: root.materialForm
+                radius: 12
+                color: root.sheetColor
+                border.width: 1
+                border.color: root.outlineColor
+            }
+            LiquidSurface {
+                anchors.fill: parent
+                visible: !root.materialForm
+                radius: 12
+                backdrop: root.backdrop
+                darkAppearance: root.darkAppearance
+                tintColor: Qt.rgba(root.sheetColor.r, root.sheetColor.g, root.sheetColor.b, 1)
+                tintStrength: root.sheetColor.a
+                readability: 0
+                blurStrength: .55
+                refractionStrength: 1.5
+                magnification: 1.015
+                reflectionStrength: .35
+                rimColor: root.outlineColor
+            }
         }
         contentItem: Flickable {
             id: scroller
@@ -332,13 +347,22 @@ Item {
                                    : "transparent")
                             Behavior on color { ColorAnimation { duration: 120 } }
                         }
+                        Rectangle {
+                            anchors.fill: parent
+                            anchors.margins: 1
+                            radius: 7
+                            visible: choiceDelegate.activeFocus
+                            color: "transparent"
+                            border.width: 2
+                            border.color: root.focusRingColor
+                        }
                         Text {
                             anchors.left: parent.left
                             anchors.leftMargin: 14
                             anchors.verticalCenter: parent.verticalCenter
                             text: root.labelAt(parent.index)
                             color: choiceDelegate.index === root._visualIndex
-                                ? root.accentColor : root.textColor
+                                ? root.selectedTextColor : root.textColor
                             font.pixelSize: 13
                             font.weight: choiceDelegate.index === root._visualIndex
                                 ? Font.DemiBold : Font.Normal
@@ -349,7 +373,7 @@ Item {
                             anchors.verticalCenter: parent.verticalCenter
                             visible: choiceDelegate.index === root._visualIndex
                             name: "check"
-                            color: root.accentColor
+                            color: root.selectedTextColor
                             size: 13
                         }
                         MouseArea {

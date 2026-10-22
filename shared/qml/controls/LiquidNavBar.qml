@@ -1,19 +1,12 @@
 import QtQuick
+import QtQuick.Window
+import "../foundation" as Foundation
 import QtQuick.Controls as Controls
 import Qt5Compat.GraphicalEffects
 
-// Liquid glass bottom navigation bar, ported from the vue-web-liquid-glass
-// LiquidGlassBottomNavBar component. Interaction is click-only (desktop):
-// clicking an item slides the thumb over with a spring settle. The glass
-// look follows LiquidGlassSwitch (pure QML gradients, no shaders):
-//   - opaque white pill at rest, dissolves into a refracting glass lens
-//     while active; the lens fades out 280 ms after the click
-//   - spring physics: velocity = diff * 0.5 (Vue rAF loop) -> elastic
-//     settle with squash & stretch wobble
-//   - the thumb transform carries a 100 ms ease-out (physics layer is
-//     frame-driven, the display layer eases toward it)
-//   - item layer sits above the thumb at rest, below it while the lens is
-//     active, so items show through the translucent glass
+// Desktop click navigation with the existing spring/display animation layers.
+// Shared LiquidSurface supplies directional reflection and optional in-window
+// sampling; active delegates retain their existing placement beneath the lens.
 Item {
     id: root
 
@@ -39,6 +32,11 @@ Item {
     property real labelFontPixelSize: 0 // 0 = use the selected size preset
     property int labelFontWeight: Font.Normal
     property bool alwaysShowGlass: false
+    property bool reduceMotion: Foundation.AppTheme.reduceMotion
+    property LiquidBackdrop backdrop: LiquidStyle.backdropForItem(root, root.Window.window)
+    readonly property bool sampling: _isActive && lensSurface.sampling
+    HoverHandler { id: materialHover }
+    property int _pressedIndex: -1
     // ── Form ──────────────────────────────────────────────────────────────
     // A tonal host draws the Material 3 navigation: one flat container colour in
     // the selected pill, a hairline-free track, and no lens. The glass lens and
@@ -54,11 +52,11 @@ Item {
     // every dimension is scaled proportionally so the component adapts to any
     // height while keeping the same proportions and breathing space.
     readonly property var presets: ({
-        tiny:   { height: 34, itemWidth: 56,  thumbHeight: 24, fontSize: 7,  iconSize: 14, thumbScale: 1.3,  thumbScaleY: 1.3  },
-        small:  { height: 42, itemWidth: 60,  thumbHeight: 38, fontSize: 8,  iconSize: 16, thumbScale: 1.3,  thumbScaleY: 1.3  },
-        medium: { height: 54, itemWidth: 80,  thumbHeight: 50, fontSize: 9,  iconSize: 20, thumbScale: 1.3,  thumbScaleY: 1.3  },
-        large:  { height: 67, itemWidth: 100, thumbHeight: 62, fontSize: 11, iconSize: 24, thumbScale: 1.3,  thumbScaleY: 1.25 },
-        XL:     { height: 80, itemWidth: 120, thumbHeight: 72, fontSize: 13, iconSize: 28, thumbScale: 1.3,  thumbScaleY: 1.25 }
+        tiny:   { height: 34, itemWidth: 56,  thumbHeight: 24, fontSize: 7,  iconSize: 14, thumbScale: 1.4,  thumbScaleY: 1.4  },
+        small:  { height: 42, itemWidth: 60,  thumbHeight: 38, fontSize: 8,  iconSize: 16, thumbScale: 1.4,  thumbScaleY: 1.4  },
+        medium: { height: 54, itemWidth: 80,  thumbHeight: 50, fontSize: 9,  iconSize: 20, thumbScale: 1.4,  thumbScaleY: 1.4  },
+        large:  { height: 67, itemWidth: 100, thumbHeight: 62, fontSize: 11, iconSize: 24, thumbScale: 1.4,  thumbScaleY: 1.35 },
+        XL:     { height: 80, itemWidth: 120, thumbHeight: 72, fontSize: 13, iconSize: 28, thumbScale: 1.4,  thumbScaleY: 1.35 }
     })
 
     readonly property var dims: presets[size] ?? presets.medium
@@ -112,9 +110,9 @@ Item {
     property real _displayX: 0
     property real _displayScaleX: 1
     property real _displayScaleY: 1
-    Behavior on _displayX { NumberAnimation { duration: 100; easing.type: Easing.OutCubic } }
-    Behavior on _displayScaleX { NumberAnimation { duration: 100; easing.type: Easing.OutCubic } }
-    Behavior on _displayScaleY { NumberAnimation { duration: 100; easing.type: Easing.OutCubic } }
+    Behavior on _displayX { NumberAnimation { duration: root.reduceMotion ? 0 : 100; easing.type: Easing.OutCubic } }
+    Behavior on _displayScaleX { NumberAnimation { duration: root.reduceMotion ? 0 : 100; easing.type: Easing.OutCubic } }
+    Behavior on _displayScaleY { NumberAnimation { duration: root.reduceMotion ? 0 : 100; easing.type: Easing.OutCubic } }
 
     readonly property bool _isActive: !root.materialForm
         && (alwaysShowGlass || _glassVisible)
@@ -186,7 +184,7 @@ Item {
     }
 
     function select(index) {
-        if (index < 0 || index >= root.model.length)
+        if (root.disabled || !root.enabled || index < 0 || index >= root.model.length)
             return
         if (index !== root.currentIndex) {
             root.currentIndex = index
@@ -198,9 +196,35 @@ Item {
         hideGlassTimer.start()
     }
 
+    function _beginPress(index) {
+        if (disabled || !enabled || index < 0 || index >= model.length) return
+        const target = clickTargets.itemAt(index)
+        if (target) target.forceActiveFocus()
+        _pressedIndex = index
+        hideGlassTimer.stop()
+        _glassVisible = true
+        // Preserve the existing safety timeout when a click is cancelled.
+        hideGlassTimer.start()
+    }
+    function _endPress() { _pressedIndex = -1 }
+    function _selectAndFocus(index) {
+        const targetIndex = Math.max(0, Math.min(model.length - 1, index))
+        select(targetIndex)
+        const target = clickTargets.itemAt(targetIndex)
+        if (target) target.forceActiveFocus()
+    }
+    function settleWithoutMotion() {
+        physicsTimer.stop()
+        _currentThumbX = targetX(_selectedIndex)
+        _wobbleScaleX = 1; _wobbleScaleY = 1
+        syncDisplay()
+    }
+    onReduceMotionChanged: { if (reduceMotion) settleWithoutMotion() }
+    onDisabledChanged: { if (disabled) _endPress() }
+    onEnabledChanged: { if (!enabled) _endPress() }
     onCurrentIndexChanged: {
-        // Animate to the new slot (spring settle)
-        physicsTimer.start()
+        if (reduceMotion) settleWithoutMotion()
+        else physicsTimer.start()
     }
 
     onModelChanged: {
@@ -222,38 +246,35 @@ Item {
         }
     }
 
-    // ---- Glass background (the pill strip) ----
-    // Same structure as the LiquidGlassSwitch track: tinted base, inner
-    // depth gradient and a subtle top sheen. The sheen is a full-pill
-    // rounded rect whose gradient fades out by 40% height, so it clips
-    // itself to the arc -- no layer+OpacityMask needed on the track at all.
-    Rectangle {
+    // Preserve the track fill; only the non-Material finish reflects light.
+    Item {
         id: track
         anchors.fill: parent
-        radius: height / 2
-        color: root.trackColor
-
         Rectangle {
             anchors.fill: parent
-            radius: parent.radius
-            visible: !root.materialForm
-            gradient: Gradient {
-                orientation: Gradient.Vertical
-                GradientStop { position: 0; color: Qt.rgba(0, 0, 0, 0.10) }
-                GradientStop { position: 0.5; color: Qt.rgba(0, 0, 0, 0.03) }
-                GradientStop { position: 1; color: Qt.rgba(1, 1, 1, 0.08) }
-            }
+            visible: root.materialForm
+            radius: height / 2
+            color: root.trackColor
         }
-
-        // Track highlight (subtle top sheen)
-        Rectangle {
+        LiquidSurface {
             anchors.fill: parent
-            radius: parent.radius
-            gradient: Gradient {
-                orientation: Gradient.Vertical
-                GradientStop { position: 0; color: Qt.rgba(1, 1, 1, 0.10) }
-                GradientStop { position: 0.4; color: Qt.rgba(1, 1, 1, 0.0) }
-            }
+            visible: !root.materialForm
+            radius: height / 2
+            backdrop: root.backdrop
+            convexLens: true
+            edgeShadeStrength: .08
+            blurStrength: 0
+            readability: 0
+            edgeWidth: Math.min(10, height * .28)
+            refractionStrength: materialHover.hovered ? 4.5 : 3
+            magnification: materialHover.hovered ? 1.045 : 1.025
+            reflectionStrength: materialHover.hovered ? .72 : .50
+            tintColor: Foundation.AppTheme.dark ? "#20252f" : "#ffffff"
+            tintStrength: .30
+            Behavior on refractionStrength { NumberAnimation { duration: Foundation.AppTheme.reduceMotion ? 0 : Foundation.AppTheme.motionFast } }
+            Behavior on magnification { NumberAnimation { duration: Foundation.AppTheme.reduceMotion ? 0 : Foundation.AppTheme.motionFast } }
+            Behavior on reflectionStrength { NumberAnimation { duration: Foundation.AppTheme.reduceMotion ? 0 : Foundation.AppTheme.motionFast } }
+            Behavior on tintStrength { NumberAnimation { duration: Foundation.AppTheme.reduceMotion ? 0 : Foundation.AppTheme.motionFast } }
         }
     }
 
@@ -262,10 +283,28 @@ Item {
     // NOTE: Repeater does not lay out delegates - x MUST be set explicitly,
     // otherwise every MouseArea stacks at (0,0).
     Repeater {
+        id: clickTargets
         model: root.model
         delegate: MouseArea {
+            id: targetDelegate
             required property var modelData
             required property int index
+            activeFocusOnTab: enabled
+            Accessible.role: Accessible.PageTab
+            Accessible.name: String(modelData.label || modelData.id || index)
+            Accessible.selected: index === root.currentIndex
+            Accessible.focusable: enabled
+            Accessible.focused: activeFocus
+            Accessible.onPressAction: root.select(index)
+            Keys.onPressed: function(event) {
+                if (event.key === Qt.Key_Left) root._selectAndFocus(index - 1)
+                else if (event.key === Qt.Key_Right) root._selectAndFocus(index + 1)
+                else if (event.key === Qt.Key_Home) root._selectAndFocus(0)
+                else if (event.key === Qt.Key_End) root._selectAndFocus(root.model.length - 1)
+                else if (event.key === Qt.Key_Space || event.key === Qt.Key_Return || event.key === Qt.Key_Enter) root.select(index)
+                else return
+                event.accepted = true
+            }
             x: index * root.itemWidth
             z: 30
             width: root.itemWidth
@@ -277,16 +316,32 @@ Item {
             Controls.ToolTip.text: String(modelData.label || "")
             Controls.ToolTip.delay: 600
 
-            onPressed: {
-                // Timers are scoped ids, not root properties
-                hideGlassTimer.stop()
-                root._glassVisible = true
-                // Safety net: if onClicked never fires (press then drag away),
-                // the glass still fades out on its own
-                hideGlassTimer.start()
-            }
+            onPressed: root._beginPress(index)
+            onReleased: root._endPress()
+            onCanceled: root._endPress()
             onClicked: root.select(index)
+
         }
+    }
+
+    readonly property int _focusedIndex: {
+        for (let i = 0; i < clickTargets.count; ++i) {
+            const target = clickTargets.itemAt(i)
+            if (target && target.activeFocus) return i
+        }
+        return -1
+    }
+    Rectangle {
+        z: 80
+        x: root._focusedIndex * root.itemWidth + 3
+        y: 3
+        width: root.itemWidth - 6
+        height: root.sliderHeight - 6
+        radius: height / 2
+        color: "transparent"
+        border.width: 2
+        border.color: Foundation.AppTheme.focusRing
+        visible: false
     }
 
     // ---- The glass/white thumb (z 40) ----
@@ -298,13 +353,7 @@ Item {
         width: root.thumbWidth
         height: root.thumbHeight
 
-        // Clip thumb contents to the pill arc only while the glass lens is
-        // on screen: its chromatic aberration borders are offset +/-0.5 px
-        // and would poke outside the arc. At rest every child is already
-        // pill-rounded inside the bounds, so the layer is off and no
-        // source+mask FBO pair is kept alive or re-uploaded per physics
-        // frame. The gate follows the lens's animated opacity, so the mask
-        // stays on through the 100 ms crossfade -- no unclipped frame.
+        // Keep the existing expanded-lens compositing mask through crossfade.
         layer.enabled: glassLens.opacity > 0
         layer.effect: OpacityMask {
             maskSource: Rectangle {
@@ -329,35 +378,36 @@ Item {
         ]
 
         // Layer 1: opaque white pill at rest, dissolves while the lens is active
-        Rectangle {
+        Item {
             id: thumbBase
             anchors.fill: parent
-            radius: height / 2
-            color: root.materialForm ? root.accentColor : "#ffffff"
             opacity: root._isActive ? 0 : 1
-            Behavior on opacity { NumberAnimation { duration: 100 } }
-
-            // Flat container colour in the tonal form; the iPadOS form keeps its
-            // vertical wash, so the same pill carries both finishes.
-            gradient: Gradient {
-                orientation: Gradient.Vertical
-                GradientStop { position: 0; color: root.materialForm ? root.accentColor : "#ffffff" }
-                GradientStop { position: 0.5; color: root.materialForm ? root.accentColor : "#f5f5f7" }
-                GradientStop { position: 1; color: root.materialForm ? root.accentColor : "#e8e8ed" }
-            }
+            Behavior on opacity { NumberAnimation { duration: root.reduceMotion ? 0 : 100 } }
             Rectangle {
-                anchors.top: parent.top
-                anchors.topMargin: 1
-                anchors.horizontalCenter: parent.horizontalCenter
-                width: parent.width * 0.5
-                height: parent.height * 0.35
-                radius: width / 2
+                anchors.fill: parent
+                visible: root.materialForm
+                radius: height / 2
+                color: root.accentColor
+            }
+            LiquidSurface {
+                anchors.fill: parent
                 visible: !root.materialForm
-                gradient: Gradient {
-                    orientation: Gradient.Vertical
-                    GradientStop { position: 0; color: Qt.rgba(1, 1, 1, 0.7) }
-                    GradientStop { position: 1; color: Qt.rgba(1, 1, 1, 0.0) }
-                }
+                radius: height / 2
+                backdrop: root.backdrop
+                convexLens: true
+                edgeShadeStrength: .08
+                blurStrength: 0
+                readability: 0
+                edgeWidth: Math.min(10, height * .28)
+                refractionStrength: materialHover.hovered ? 4.5 : 3
+                magnification: materialHover.hovered ? 1.045 : 1.025
+                reflectionStrength: materialHover.hovered ? .72 : .50
+                tintColor: Foundation.AppTheme.dark ? "#20252f" : "#ffffff"
+                tintStrength: .80
+                Behavior on refractionStrength { NumberAnimation { duration: Foundation.AppTheme.reduceMotion ? 0 : Foundation.AppTheme.motionFast } }
+                Behavior on magnification { NumberAnimation { duration: Foundation.AppTheme.reduceMotion ? 0 : Foundation.AppTheme.motionFast } }
+                Behavior on reflectionStrength { NumberAnimation { duration: Foundation.AppTheme.reduceMotion ? 0 : Foundation.AppTheme.motionFast } }
+                Behavior on tintStrength { NumberAnimation { duration: Foundation.AppTheme.reduceMotion ? 0 : Foundation.AppTheme.motionFast } }
             }
         }
 
@@ -366,83 +416,30 @@ Item {
             id: glassLens
             anchors.fill: parent
             opacity: root._isActive ? 1 : 0
-            Behavior on opacity { NumberAnimation { duration: 100 } }
+            Behavior on opacity { NumberAnimation { duration: root.reduceMotion ? 0 : 100 } }
 
-            // Chromatic aberration - RGB split edges
-            Rectangle {
+            LiquidSurface {
+                id: lensSurface
                 anchors.fill: parent
                 radius: height / 2
-                color: "transparent"
-                border.width: 1
-                border.color: Qt.rgba(1, 0.2, 0.2, 0.25)
-                x: -0.5
-            }
-            Rectangle {
-                anchors.fill: parent
-                radius: height / 2
-                color: "transparent"
-                border.width: 1
-                border.color: Qt.rgba(0.2, 0.9, 1, 0.25)
-                x: 0.5
-            }
-
-            // Main glass body - semi-transparent with refraction gradient
-            Rectangle {
-                anchors.fill: parent
-                radius: height / 2
-                color: Qt.rgba(1, 1, 1, 0.10)
-                gradient: Gradient {
-                    orientation: Gradient.Horizontal
-                    GradientStop { position: 0; color: Qt.rgba(1, 1, 1, 0.25) }
-                    GradientStop { position: 0.5; color: Qt.rgba(1, 1, 1, 0.12) }
-                    GradientStop { position: 1; color: Qt.rgba(1, 1, 1, 0.25) }
-                }
-
-                // Inner depth shadow
-                Rectangle {
-                    anchors.fill: parent
-                    radius: parent.radius
-                    gradient: Gradient {
-                        orientation: Gradient.Vertical
-                        GradientStop { position: 0; color: Qt.rgba(0, 0, 0, 0.0) }
-                        GradientStop { position: 0.6; color: Qt.rgba(0, 0, 0, 0.0) }
-                        GradientStop { position: 1; color: Qt.rgba(0, 0, 0, 0.15) }
-                    }
-                }
+                backdrop: root.backdrop
+                convexLens: true
+                edgeShadeStrength: .08
+                blurStrength: 0
+                readability: 0
+                edgeWidth: Math.min(10, height * .28)
+                refractionStrength: materialHover.hovered ? 4.5 : 3
+                magnification: materialHover.hovered ? 1.045 : 1.025
+                reflectionStrength: materialHover.hovered ? .72 : .50
+                tintColor: root._isActive ? "#ffffff" : (Foundation.AppTheme.dark ? "#20252f" : "#ffffff")
+                tintStrength: root._isActive ? .06 : .80
+                Behavior on refractionStrength { NumberAnimation { duration: Foundation.AppTheme.reduceMotion ? 0 : Foundation.AppTheme.motionFast } }
+                Behavior on magnification { NumberAnimation { duration: Foundation.AppTheme.reduceMotion ? 0 : Foundation.AppTheme.motionFast } }
+                Behavior on reflectionStrength { NumberAnimation { duration: Foundation.AppTheme.reduceMotion ? 0 : Foundation.AppTheme.motionFast } }
+                Behavior on tintStrength { NumberAnimation { duration: Foundation.AppTheme.reduceMotion ? 0 : Foundation.AppTheme.motionFast } }
             }
 
-            // Specular highlight (soft, diffused)
-            Rectangle {
-                anchors.top: parent.top
-                anchors.topMargin: 2
-                anchors.horizontalCenter: parent.horizontalCenter
-                width: parent.width * 0.4
-                height: parent.height * 0.25
-                radius: width / 2
-                gradient: Gradient {
-                    orientation: Gradient.Vertical
-                    GradientStop { position: 0; color: Qt.rgba(1, 1, 1, 0.5) }
-                    GradientStop { position: 0.5; color: Qt.rgba(1, 1, 1, 0.2) }
-                    GradientStop { position: 1; color: Qt.rgba(1, 1, 1, 0.0) }
-                }
-            }
 
-            // Edge glow - soft rim light
-            Rectangle {
-                anchors.fill: parent
-                radius: height / 2
-                color: "transparent"
-                border.width: 1
-                border.color: Qt.rgba(1, 1, 1, 0.30)
-            }
-
-            // Accent tint overlay (subtle color bleed when active)
-            Rectangle {
-                anchors.fill: parent
-                radius: height / 2
-                color: root.accentColor
-                opacity: 0.10
-            }
         }
     }
 
@@ -463,8 +460,8 @@ Item {
             height: root.sliderHeight
             opacity: index === root.currentIndex ? 1.0 : 0.6
             scale: index === root.currentIndex ? 1.05 : 1.0
-            Behavior on opacity { NumberAnimation { duration: 100 } }
-            Behavior on scale { NumberAnimation { duration: 100 } }
+            Behavior on opacity { NumberAnimation { duration: root.reduceMotion ? 0 : 100 } }
+            Behavior on scale { NumberAnimation { duration: root.reduceMotion ? 0 : 100 } }
 
             Column {
                 anchors.centerIn: parent

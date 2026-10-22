@@ -1,152 +1,136 @@
 import QtQuick
 import QtQuick.Controls
+import QtQuick.Window
+import "../foundation" as Foundation
 
-// A compact glass field for search and inline text entry. It avoids a bright
-// desktop-style focus outline; focus is communicated by a lifted material, a
-// thin tinted inner edge and a gentle liquid scale-up instead. The launcher
-// already owns the backdrop material, so this control must not paint a dark
-// client-side shadow behind the field.
 TextField {
     id: root
-
+    // Plain input inside a host-owned navigation material; opt-in only.
+    property bool specificationForm: false
+    property string liquidIntensity: LiquidStyle.intensityLevel
+    readonly property var _intensity: LiquidStyle.intensityProfile(liquidIntensity)
+    opacity: specificationForm && !enabled ? .38 : 1
     implicitHeight: 34
     leftPadding: 12
     rightPadding: 12
     verticalAlignment: TextInput.AlignVCenter
     selectByMouse: true
 
-    property color glassColor: Qt.rgba(1, 1, 1, 0.10)
-    property real cornerRadius: height
+    property color glassColor: darkAppearance
+        ? Qt.rgba(32 / 255, 37 / 255, 47 / 255, .20) : Qt.rgba(1, 1, 1, .20)
+    property real cornerRadius: specificationForm ? 10 : height
     property color outlineColor: Qt.rgba(1, 1, 1, 0.08)
-    property color focusedOutlineColor: Qt.rgba(1, 1, 1, 0.24)
-    property color textColor: "#f5f5f7"
-    property color mutedTextColor: "#98989d"
-    // Opt-in material finish for glass surfaces that already have compositor
-    // backdrop sampling. Keep it off for ordinary application text fields.
-    // A tonal host draws the Material 3 search field: a filled container with an
-    // outline that strengthens on focus, and no lens. The liquid finish (hover
-    // lift, specular rims, ambient pickup) is the glass form's, so it is off
-    // here rather than blended. Follows the application-wide form by default.
+    property color focusedOutlineColor: Foundation.AppTheme.focusRing
+    property color textColor: Foundation.AppTheme.text
+    property color mutedTextColor: Foundation.AppTheme.mutedText
     property bool materialForm: ControlForm.materialForm
+    property bool unfilteredBackdrop: false
+    property bool shadowEnabled: false
+    property int shadowLevel: LiquidStyle.shadowLevel
+    property real shadowOpacity: LiquidStyle.shadowProfile(shadowLevel).opacity
+    property bool convexLens: true
     property bool liquidFinish: false
-    property real liquidStrength: 1.0
+    property real liquidStrength: 1
+    property LiquidBackdrop backdrop: LiquidStyle.backdropForItem(root, root.Window.window)
+    property bool darkAppearance: Foundation.AppTheme.dark
+    property bool reduceMotion: Foundation.AppTheme.reduceMotion
+    property real refractionStrength: _liquid && hover.hovered ? _intensity.hoverRefraction : _intensity.refraction
+    property real magnification: _liquid && hover.hovered ? _intensity.hoverMagnification : _intensity.magnification
+    property real blurStrength: convexLens ? _intensity.blur : 0.2
+    property real readability: 0
     property color ambientPrimary: "transparent"
     property color ambientSecondary: "transparent"
-    property real ambientStrength: 0.0
+    property real ambientStrength: 0
+    readonly property bool sampling: _liquid && liquidSurface.sampling
+    readonly property bool _liquid: liquidFinish && !materialForm && !specificationForm
+    readonly property color _fill: specificationForm
+        ? (darkAppearance ? Qt.rgba(1, 1, 1, .06) : Qt.rgba(0, 0, 0, .06))
+        : Qt.rgba(glassColor.r, glassColor.g, glassColor.b,
+        Math.min(1, glassColor.a + (_liquid ? (hover.hovered ? .05 : 0)
+            : (hover.hovered ? .035 : 0))))
 
     color: textColor
     placeholderTextColor: mutedTextColor
-
-    // Liquid focus expansion, matching the reference's
-    // cubic-bezier(0.25, 0.8, 0.25, 1) over 300ms.
-    scale: root.activeFocus && !root.materialForm ? 1.02 : 1.0
+    selectionColor: Foundation.AppTheme.accent
+    selectedTextColor: Foundation.AppTheme.accentText
+    scale: _liquid && hover.hovered ? 1.01 : 1
     Behavior on scale {
-        NumberAnimation {
-            duration: 300
-            easing.type: Easing.Bezier
-            easing.bezierCurve: [0.25, 0.8, 0.25, 1, 1, 1]
-        }
+        NumberAnimation { duration: root.reduceMotion ? 0 : Foundation.AppTheme.motionFast; easing.type: Easing.OutCubic }
     }
+    HoverHandler { id: hover; cursorShape: Qt.IBeamCursor }
 
-    HoverHandler {
-        id: hover
-        cursorShape: Qt.IBeamCursor
-    }
-
-    background: Rectangle {
-        id: fieldSurface
-        // A full-height radius produces the continuous pill silhouette used
-        // by the launcher search field; Qt clamps it to a half-circle endcap.
-        radius: root.cornerRadius
-        color: root.activeFocus
-            ? Qt.rgba(root.glassColor.r, root.glassColor.g, root.glassColor.b,
-                      Math.min(1.0, root.glassColor.a + 0.08))
-            : (hover.hovered
-               ? Qt.rgba(root.glassColor.r, root.glassColor.g, root.glassColor.b,
-                         Math.min(1.0, root.glassColor.a + 0.035))
-               : root.glassColor)
-        border.width: 1
-        border.color: root.liquidFinish && !root.materialForm
-            ? (root.activeFocus ? Qt.rgba(1, 1, 1, 0.38)
-                : Qt.rgba(1, 1, 1, hover.hovered ? 0.25 : 0.19))
-            : (root.activeFocus ? root.focusedOutlineColor : root.outlineColor)
-
-        Behavior on color { ColorAnimation { duration: 150; easing.type: Easing.OutCubic } }
-        Behavior on border.color { ColorAnimation { duration: 150; easing.type: Easing.OutCubic } }
-
-        Rectangle {
-            anchors.fill: parent
-            radius: parent.radius
-            visible: root.liquidFinish && !root.materialForm
-            gradient: Gradient {
-                orientation: Gradient.Vertical
-                GradientStop { position: 0; color: Qt.rgba(1, 1, 1, root.activeFocus ? 0.16 : 0.10) }
-                GradientStop { position: 0.55; color: Qt.rgba(1, 1, 1, 0.0) }
-                GradientStop { position: 1; color: Qt.rgba(1, 1, 1, 0.0) }
-            }
+    background: Item {
+        LiquidOuterShadow {
+            anchors.fill: parent; radius: root.cornerRadius
+            outwardOffset: LiquidStyle.controlShadowOutset
+            z: -1
+            shadowLevel: root.shadowLevel
+            visible: root._liquid && root.shadowEnabled; shadowOpacity: root.shadowOpacity
         }
-
-        // The launcher uses the same QML material vocabulary as the Control
-        // Center cards: a broad upper reflection, restrained colour pickup,
-        // and two narrow specular edges. KWin still supplies the real scene
-        // blur/refraction beneath this visual finish.
         Rectangle {
             anchors.fill: parent
-            radius: parent.radius
-            visible: root.liquidFinish && !root.materialForm
-            opacity: Math.max(0.0, Math.min(1.0, root.liquidStrength))
-            gradient: Gradient {
-                orientation: Gradient.Vertical
-                GradientStop { position: 0.0; color: Qt.rgba(1, 1, 1, root.activeFocus ? 0.42 : 0.32) }
-                GradientStop { position: 0.12; color: Qt.rgba(0.88, 0.94, 1, root.activeFocus ? 0.20 : 0.14) }
-                GradientStop { position: 0.40; color: Qt.rgba(1, 1, 1, 0.035) }
-                GradientStop { position: 0.72; color: Qt.rgba(0.86, 0.93, 1, 0.018) }
-                GradientStop { position: 1.0; color: Qt.rgba(0.03, 0.06, 0.12, 0.08) }
-            }
+            visible: !root._liquid
+            radius: root.cornerRadius
+            color: root._fill
+            border.width: root.specificationForm ? 0 : 1
+            border.color: root.outlineColor
+            Behavior on color { ColorAnimation { duration: root.reduceMotion ? 0 : 150 } }
+            Behavior on border.color { ColorAnimation { duration: root.reduceMotion ? 0 : 150 } }
         }
-
         Rectangle {
             anchors.fill: parent
-            radius: parent.radius
-            visible: root.liquidFinish && !root.materialForm && root.ambientStrength > 0
-            opacity: Math.max(0.0, Math.min(1.0, root.liquidStrength))
+            // Qt Rectangle borders stroke inward: expand by gap + stroke.
+            // One ring only; keep the field's own border disabled in this form.
+            anchors.margins: -4
+            radius: root.cornerRadius + 2
+            color: "transparent"
+            border.width: 2
+            border.color: root.focusedOutlineColor
+            visible: root.specificationForm && root.activeFocus && root.enabled
+        }
+        LiquidSurface {
+            id: liquidSurface
+            convexLens: root.convexLens
+            edgeShadeStrength: 0
+            fullHighlight: true
+            gradientFill: true
+            fillCenterExtent: LiquidStyle.controlFillCenterExtent
+            fillWhiteRimX: LiquidStyle.controlFillWhiteRimX
+            fillWhiteRimY: root.darkAppearance ? 0 : LiquidStyle.controlFillWhiteRimY
+            fillEdgeSpanY: root.darkAppearance ? LiquidStyle.controlFillEdgeSpanDark : -1
+            fillEdgeColor: root.darkAppearance ? LiquidStyle.controlFillEdgeDark : LiquidStyle.controlFillEdge
+            whiteEdgeDepth: 0
+            whiteEdgeAlpha: 0
+            unfilteredBackdrop: root.unfilteredBackdrop
+            anchors.fill: parent
+            visible: root._liquid
+            radius: root.cornerRadius
+            backdrop: root.backdrop
+            darkAppearance: root.darkAppearance
+            tintColor: root.darkAppearance ? LiquidStyle.controlFillCenterDark : LiquidStyle.controlFillCenter
+            tintStrength: LiquidStyle.controlFillOpacity
+            Behavior on tintStrength { NumberAnimation { duration: root.reduceMotion ? 0 : Foundation.AppTheme.motionFast } }
+            blurStrength: root.blurStrength
+            readability: root.readability
+            refractionStrength: root.refractionStrength * Math.max(0, Math.min(1, root.liquidStrength))
+            magnification: 1 + (root.magnification - 1) * Math.max(0, Math.min(1, root.liquidStrength))
+            edgeWidth: Math.min(10, height * .28)
+            reflectionStrength: root.liquidStrength * (hover.hovered ? root._intensity.hoverReflection : root._intensity.reflection)
+            Behavior on reflectionStrength { NumberAnimation { duration: root.reduceMotion ? 0 : Foundation.AppTheme.motionFast } }
+            Behavior on refractionStrength { NumberAnimation { duration: root.reduceMotion ? 0 : Foundation.AppTheme.motionFast } }
+            Behavior on magnification { NumberAnimation { duration: root.reduceMotion ? 0 : Foundation.AppTheme.motionFast } }
+            rimColor: root.outlineColor
+        }
+        Rectangle {
+            anchors.fill: parent
+            radius: root.cornerRadius
+            visible: root._liquid && root.ambientStrength > 0
+            opacity: Math.max(0, Math.min(1, root.liquidStrength))
             gradient: Gradient {
                 orientation: Gradient.Horizontal
-                GradientStop { position: 0.0; color: Qt.rgba(root.ambientPrimary.r, root.ambientPrimary.g, root.ambientPrimary.b, root.ambientStrength * 0.28) }
+                GradientStop { position: 0; color: Qt.rgba(root.ambientPrimary.r, root.ambientPrimary.g, root.ambientPrimary.b, root.ambientStrength * 0.28) }
                 GradientStop { position: 0.56; color: Qt.rgba(root.ambientSecondary.r, root.ambientSecondary.g, root.ambientSecondary.b, root.ambientStrength * 0.16) }
-                GradientStop { position: 1.0; color: Qt.rgba(1, 1, 1, 0.0) }
-            }
-        }
-
-        Rectangle {
-            visible: root.liquidFinish && !root.materialForm
-            x: Math.min(parent.width / 2, parent.radius + 3)
-            y: 0.8
-            width: Math.max(0, parent.width - x * 2)
-            height: 0.9
-            gradient: Gradient {
-                orientation: Gradient.Horizontal
-                GradientStop { position: 0.0; color: Qt.rgba(1, 1, 1, 0.0) }
-                GradientStop { position: 0.18; color: Qt.rgba(1, 1, 1, 0.28) }
-                GradientStop { position: 0.50; color: Qt.rgba(1, 1, 1, root.activeFocus ? 0.62 : 0.48) }
-                GradientStop { position: 0.82; color: Qt.rgba(1, 1, 1, 0.28) }
-                GradientStop { position: 1.0; color: Qt.rgba(1, 1, 1, 0.0) }
-            }
-        }
-
-        Rectangle {
-            visible: root.liquidFinish && !root.materialForm
-            x: Math.min(parent.width / 2, parent.radius + 3)
-            y: parent.height - 1.5
-            width: Math.max(0, parent.width - x * 2)
-            height: 0.8
-            gradient: Gradient {
-                orientation: Gradient.Horizontal
-                GradientStop { position: 0.0; color: Qt.rgba(0, 0, 0, 0.0) }
-                GradientStop { position: 0.20; color: Qt.rgba(0.02, 0.05, 0.10, 0.10) }
-                GradientStop { position: 0.50; color: Qt.rgba(0.02, 0.05, 0.10, 0.18) }
-                GradientStop { position: 0.80; color: Qt.rgba(0.02, 0.05, 0.10, 0.10) }
-                GradientStop { position: 1.0; color: Qt.rgba(0, 0, 0, 0.0) }
+                GradientStop { position: 1; color: "transparent" }
             }
         }
     }
