@@ -1242,8 +1242,12 @@ KosApplicationWindow {
 
     // LQ10: menu rows are plain (spec §4: no glass inside a menu) and reuse
     // the sidebar's fill language for hover — rowHoverFill / pressFill, same
-    // tokens SidebarRow uses — on an 8px rounded inset, not a capsule, so a
+    // tokens SidebarRow uses — on an inset rounded row, not a capsule, so a
     // 30px menu row reads as a row rather than a second selection pill.
+    // LQ18c: the row's x already carries menuSurfaceInset (4) inside the card,
+    // plus this menuRowInset (4) ⇒ the fill sits 8px inside the card edge, so
+    // r_inner = max(6, 16 − 8) = 8 (measured R37: fill 852..1055 inside card
+    // 844..1063). Keep 8; r12 would only fit an 4px inset.
     component MenuActionRow: MenuItem {
         id: menuAction
 
