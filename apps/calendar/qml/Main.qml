@@ -458,46 +458,30 @@ KosApplicationWindow {
         }
 
         contentItem: Item {
-            Rectangle {
+            // S03/LQ06: the shared liquid checkbox draws the box; the row
+            // still owns interaction, so the box is a disabled visual with
+            // the category colour and the reference's 12px / r3 geometry.
+            LiquidCheckBox {
                 id: box
                 x: row.boxLeft
                 anchors.verticalCenter: parent.verticalCenter
                 width: root.tahoe.categoryBoxSize
                 height: root.tahoe.categoryBoxSize
-                radius: root.tahoe.categoryBoxRadius
-                color: row.swatchOnly || row.checked
-                    ? row.boxColor : "transparent"
-                border.width: !row.swatchOnly && !row.checked ? 1 : 0
-                border.color: row.boxColor
+                enabled: false
+                padding: 0
                 opacity: row.enabled ? 1 : 0.48
-
-                // White check drawn as two rounded bars in a V: the short
-                // stroke falls from upper-left down to the vertex at the
-                // lower left, the long stroke rises from the vertex to the
-                // upper right. Inside an 8x8 guide in the 12px box.
-                Item {
-                    anchors.centerIn: parent
-                    width: 8; height: 8
-                    visible: row.checked && !row.swatchOnly
-                    opacity: row.enabled ? 1 : 0.9
-
-                    // Short stroke: upper-left (1.5,4.2) falling to the
-                    // shared vertex (2.9,5.6) in the 8x8 guide.
-                    Rectangle {
-                        width: 2; height: 1.98; radius: 1
-                        color: "#FFFFFF"
-                        rotation: -45
-                        x: 1.2; y: 3.91
-                    }
-                    // Long stroke: shared vertex (2.9,5.6) rising to
-                    // upper-right (6.3,2.2).
-                    Rectangle {
-                        width: 2; height: 4.81; radius: 1
-                        color: "#FFFFFF"
-                        rotation: 45
-                        x: 3.6; y: 1.495
-                    }
-                }
+                text: ""
+                checkable: false
+                checked: row.swatchOnly ? true : row.checked
+                indicatorSize: root.tahoe.categoryBoxSize
+                indicatorRadius: root.tahoe.categoryBoxRadius
+                fillColor: row.boxColor
+                fillStrength: 1
+                uncheckedFillStrength: 0
+                indicatorBorderWidth: row.swatchOnly ? 0 : 1
+                indicatorBorderColor: row.boxColor
+                checkColor: "#FFFFFF"
+                checkVisible: !row.swatchOnly
             }
 
             Label {
