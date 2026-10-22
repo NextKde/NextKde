@@ -847,12 +847,14 @@ Pane {
                         // box is ~1.47em — a hardcoded -7 only centres font 9.
                         // Stays anchored, so it cannot inflate the 40px row.
                         // R-GUTTER: 12-hour two-tone — digits labelPrimary, smaller AM/PM, same baseline.
-                        // The +4 shifts the whole label down so the digit ink is centred ON the hour
-                        // line (ref behaviour: ink centre = hour line); baseline-only centring leaves ink ~4px high.
+                        // The +1 (was +4; r9b measured ink centre 3px BELOW
+                        // the tick at +4) shifts the whole label so the digit
+                        // ink is centred ON the hour line (ref behaviour: ink
+                        // centre = hour line); baseline-only centring leaves ink ~4px high.
                         Item {
                             id: hourLabel
                             anchors.top: parent.top
-                            anchors.topMargin: -Math.round(digitText.implicitHeight / 2) + 4
+                            anchors.topMargin: -Math.round(digitText.implicitHeight / 2) + 1
                             anchors.right: parent.right
                             anchors.rightMargin: 2
                             width: meridiemText.width + 3 + digitText.width
