@@ -31,7 +31,19 @@ KosApplicationWindow {
     minimumWidth: 760
     minimumHeight: 540
 
-    property date now: new Date()
+    // N02 review hook: KosReviewNow (context property from
+    // KOS_CALENDAR_REVIEW_NOW="HH:MM") pins the clock so the now-line lands
+    // on-screen in screenshot rounds; unset keeps real time.
+    function reviewClock() {
+        const override = typeof KosReviewNow !== "undefined" ? String(KosReviewNow) : ""
+        if (override === "")
+            return new Date()
+        const parts = override.split(":")
+        const d = new Date()
+        d.setHours(parseInt(parts[0], 10) || 0, parseInt(parts[1], 10) || 0, 0, 0)
+        return d
+    }
+    property date now: reviewClock()
     property date visibleMonth: new Date(new Date().getFullYear(), new Date().getMonth(), 1)
     property date selectedDate: new Date()
     property int viewIndex: 0
@@ -285,7 +297,7 @@ KosApplicationWindow {
         repeat: true
         running: true
         triggeredOnStart: true
-        onTriggered: root.now = new Date()
+        onTriggered: root.now = root.reviewClock()
     }
 
     // Sidebar row chrome, from Items/Level 0 + States/Selected: the selection
