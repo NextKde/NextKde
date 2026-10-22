@@ -952,24 +952,26 @@ KosApplicationWindow {
         }
     }
 
-    // L02: compact glass icon button for the unified toolbar — 28x28 with a
-    // 16px calendar-local vector icon. Same GlassSurface material/lens/
-    // interaction as the big buttons; only the geometry differs.
-    component ToolbarButton: AbstractButton {
+    // LQ04: toolbar icon action. The floating capsule behind the toolbar is
+    // the only glass in this region (persistent 1/2), so the button itself is
+    // a host-owned plain row: no surface, no lens, no shadow — just a 28x28
+    // hit area whose hover/press fill reads against the capsule. `materialForm`
+    // keeps LiquidActionButton off its liquid background path entirely.
+    component ToolbarButton: LiquidActionButton {
         id: control
 
-        property string iconName: ""
         property string hint: ""
-        property Item lensBackdrop: null
-        property Item lensBackdropWindow: null
-        // Optional position-based override: -1 lets GlassSurface decide from
-        // the backdrop; 0 forces the static fallback, 1 forces the lens on
-        // (only meaningful together with a bound backdrop).
-        property int lensActiveOverride: -1
 
+        materialForm: true
+        iconOnly: true
         implicitWidth: root.tahoe.toolbarButtonSize
         implicitHeight: root.tahoe.toolbarButtonSize
+        iconSize: root.tahoe.toolbarIconSize
+        iconColor: root.tahoe.labelPrimary
+        textColor: root.tahoe.labelPrimary
+        surfaceColor: "transparent"
         hoverEnabled: true
+
         // Clicks on toolbar buttons must not steal focus from the inline
         // search input: a press that moved focus would fire the input's blur
         // handler before onClicked, and toggle() would then reopen what the
@@ -979,53 +981,15 @@ KosApplicationWindow {
         ToolTip.visible: hovered && hint.length > 0
         ToolTip.text: hint
 
-        // Control stretches contentItem to the button box, so the icon is a
-        // fixed-size child centred inside a plain filler Item.
-        contentItem: Item {
-            CalendarToolbarIcon {
-                anchors.centerIn: parent
-                name: control.iconName
-                size: root.tahoe.toolbarIconSize
-                color: root.tahoe.labelPrimary
-            }
-        }
-
-        background: GlassSurface {
-            opacity: control.enabled ? 1 : 0.5
-            backdrop: control.lensBackdrop
-            backdropWindow: control.lensBackdropWindow
-            activeOverride: control.lensActiveOverride
-            hovered: control.hovered
-            pressed: control.pressed
-        }
-    }
-
-    // Calendar-local copy of the three toolbar glyph paths from the shared
-    // VectorIcon (panel/plus/search). Same data-SVG technique and 2px round
-    // stroke styling; kept inside this file because the shared Kos.Ui module
-    // list does not export VectorIcon to applications.
-    component CalendarToolbarIcon: Item {
-        id: icon
-
-        property string name: "check"
-        property color color: "white"
-        property real size: 16
-        implicitWidth: size
-        implicitHeight: size
-        readonly property var paths: ({
-            panel: "M3 5h18v14H3zM3 9h18M7 9v10",
-            plus: "M12 4v16M4 12h16",
-            search: "M10 3a7 7 0 1 0 0 14 7 7 0 0 0 0-14M15 15l6 6"
-        })
-        Image {
-            anchors.fill: parent
-            sourceSize: Qt.size(icon.size * 2, icon.size * 2)
-            source: "data:image/svg+xml;utf8," + encodeURIComponent(
-                '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path fill="none" stroke="rgb('
-                + Math.round(icon.color.r * 255) + ',' + Math.round(icon.color.g * 255) + ','
-                + Math.round(icon.color.b * 255) + ')" stroke-opacity="' + icon.color.a
-                + '" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="'
-                + (icon.paths[icon.name] || icon.paths.search) + '"/></svg>')
+        // Host-owned plain row. Round to match the round button footprint the
+        // capsule used to carry; the fill is the same neutral row-hover token
+        // the sidebar rows use, so no second material appears.
+        background: Rectangle {
+            radius: height / 2
+            color: control.down ? root.tahoe.selectionFill
+                : (control.hovered ? root.tahoe.rowHoverFill : "transparent")
+            border.width: control.visualFocus ? 1 : 0
+            border.color: root.tahoe.labelPrimary
         }
     }
 
@@ -1881,12 +1845,6 @@ KosApplicationWindow {
                 iconName: "panel"
                 hint: root.sidebarExpanded ? qsTr("Hide sidebar")
                                            : qsTr("Show sidebar")
-                // Expanded sidebar: the button sits on the static sidebar
-                // plane (fallback). Collapsed: it lands on the main canvas,
-                // so it samples the real viewport like the right-side group.
-                lensBackdrop: root.scheduleViewport
-                lensBackdropWindow: root.contentItem
-                lensActiveOverride: !root.sidebarExpanded
                 onClicked: root.sidebarExpanded = !root.sidebarExpanded
             }
 
@@ -1899,9 +1857,6 @@ KosApplicationWindow {
                 iconName: "plus"
                 hint: qsTr("Add event")
                 enabled: pim.connected && pim.writable
-                lensBackdrop: root.scheduleViewport
-                lensBackdropWindow: root.contentItem
-                lensActiveOverride: !root.sidebarExpanded
                 onClicked: eventEditor.openForDate(root.selectedDate)
             }
 
@@ -1953,8 +1908,6 @@ KosApplicationWindow {
                 anchors.verticalCenter: parent.verticalCenter
                 iconName: "search"
                 hint: qsTr("Search")
-                lensBackdrop: root.scheduleViewport
-                lensBackdropWindow: root.contentItem
                 onClicked: toolbarSearch.toggle()
             }
 
@@ -2092,46 +2045,16 @@ KosApplicationWindow {
                 }
             }
 
-            // More: three small solid dots, no glyph font involved.
-            AbstractButton {
+            // More: three dots, host-owned plain row like its neighbours.
+            ToolbarButton {
                 id: moreButton
                 objectName: "toolbarMore"
                 anchors.right: parent.right
                 anchors.rightMargin: root.tahoe.toolbarInsetRight
                 anchors.verticalCenter: parent.verticalCenter
-                width: root.tahoe.toolbarButtonSize
-                height: root.tahoe.toolbarButtonSize
-                hoverEnabled: true
-                Accessible.name: qsTr("Calendar actions")
-                ToolTip.visible: hovered
-                ToolTip.text: Accessible.name
+                iconName: "more"
+                hint: qsTr("Calendar actions")
                 onClicked: actionsMenu.popup(this, 0, height + 2)
-
-                contentItem: Item {
-                    // Three small solid dots in a fixed-size centred Row, so
-                    // Control stretching the contentItem cannot shove the
-                    // dots into a corner.
-                    Row {
-                        anchors.centerIn: parent
-                        spacing: 3
-                        Repeater {
-                            model: 3
-                            delegate: Rectangle {
-                                required property int index
-                                width: 3.5; height: 3.5; radius: 1.75
-                                color: root.tahoe.labelPrimary
-                            }
-                        }
-                    }
-                }
-
-                background: GlassSurface {
-                    opacity: moreButton.enabled ? 1 : 0.5
-                    backdrop: root.scheduleViewport
-                    backdropWindow: root.contentItem
-                    hovered: moreButton.hovered
-                    pressed: moreButton.pressed
-                }
             }
 
             // L05: Escape always reaches the open search, whichever item in
