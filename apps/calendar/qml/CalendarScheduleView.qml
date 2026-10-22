@@ -1005,7 +1005,14 @@ Pane {
                             Item {
                                 id: chipHost
                                 anchors.fill: parent
-                                anchors.margins: 3
+                                // E02: horizontal event inset "about 4" (r10
+                                // measured the fill 2-3px inside the column
+                                // rule at margins 3); top/bottom stay 3 so the
+                                // E04 start offset and height math are untouched.
+                                anchors.leftMargin: 4
+                                anchors.rightMargin: 4
+                                anchors.topMargin: 3
+                                anchors.bottomMargin: 3
                                 readonly property var visibleItems: hourCell.cellItems.slice(0, 3)
                                 readonly property bool hasOverflow: hourCell.cellItems.length > 3
                                 readonly property int overflowCount: hourCell.cellItems.length - visibleItems.length
