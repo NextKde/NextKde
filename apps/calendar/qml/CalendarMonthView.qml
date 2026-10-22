@@ -229,8 +229,19 @@ Pane {
                             bottomLeftRadius: itemChip.continuesLeft ? 0 : itemChip.radius
                             topRightRadius: itemChip.continuesRight ? 0 : itemChip.radius
                             bottomRightRadius: itemChip.continuesRight ? 0 : itemChip.radius
-                            color: AppTheme.withAlpha(root.itemColor(modelData),
-                                AppTheme.dark ? 0.30 : 0.16)
+                            // V03b: a continued bar must read as one solid
+                            // run — a translucent fill lets the neighbouring
+                            // cells' hairline show through at its edge (1px
+                            // rule visible at 4x). Pre-blend onto the canvas
+                            // plane instead; single-day chips keep the alpha
+                            // tint so the selection/hover tint underneath
+                            // still reads through.
+                            color: itemChip.continuesLeft || itemChip.continuesRight
+                                ? AppTheme.mix(AppTheme.neutralPlane,
+                                    root.itemColor(modelData),
+                                    AppTheme.dark ? 0.30 : 0.16)
+                                : AppTheme.withAlpha(root.itemColor(modelData),
+                                    AppTheme.dark ? 0.30 : 0.16)
                             opacity: root.itemCompleted(modelData) ? 0.52 : 1
 
                             Rectangle {
