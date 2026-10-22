@@ -15,10 +15,20 @@ Foundation.KosDialog {
     }
     Overlay.modal: Rectangle { color: Qt.rgba(0, 0, 0, 0.25) }
     background: Item {
+        // D03: ambient + key, the same two-layer grammar as KosSurface. The
+        // light token alphas (.105/.13) through the shader's edge falloff (×.5)
+        // keep the old single-layer near-edge coverage (.32 × .5) within a few
+        // levels.
         LiquidOuterShadow {
             anchors.fill: parent; radius: 24
-            shadowColor: Foundation.AppTheme.dark ? "#606064" : "#000000"
-            shadowOpacity: .32; softness: 20; spread: 52
+            shadowColor: Foundation.AppTheme.shadowAmbient
+            shadowOpacity: 1; softness: 24; spread: 52
+            outwardOffset: 0; offset: Qt.vector2d(0, 0)
+        }
+        LiquidOuterShadow {
+            anchors.fill: parent; radius: 24
+            shadowColor: Foundation.AppTheme.shadowKey
+            shadowOpacity: 1; softness: 10; spread: 28
             outwardOffset: 0; offset: Qt.vector2d(0, 0)
         }
         Rectangle {
