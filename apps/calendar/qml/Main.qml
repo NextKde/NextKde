@@ -366,6 +366,7 @@ KosApplicationWindow {
             height: row.height
             radius: height / 2
             color: row.selected ? root.tahoe.selectionFill
+                : row.down ? root.tahoe.rowPressFill
                 : (row.hovered ? root.tahoe.rowHoverFill : "transparent")
         }
 
@@ -488,7 +489,8 @@ KosApplicationWindow {
             width: row.width - 12
             height: row.height
             radius: 6
-            color: row.hovered ? root.tahoe.rowHoverFill : "transparent"
+            color: row.down ? root.tahoe.rowPressFill
+                : (row.hovered ? root.tahoe.rowHoverFill : "transparent")
         }
 
         contentItem: Item {
