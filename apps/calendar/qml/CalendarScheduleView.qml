@@ -45,8 +45,14 @@ Pane {
     // scrollbar edge). Columns are laid out from width, never from content
     // implicit widths; dayCount 1 gets the same gutter with no empty gap.
     readonly property real gutterWidth: 52
+    // LQ15: whole-pixel columns. QQuickGridLayout rounds a fractional
+    // preferred width UP for every column, so 101.14 became 102 at 760 and
+    // the timed grid ended at 766 — the last column and its right hairline
+    // were clipped and the header/all-day rows drifted out of alignment
+    // toward the right edge. Flooring keeps the grid's implicit width at or
+    // under the viewport; the <1px remainder stays on the canvas plane.
     readonly property real dayColumnWidth: dayCount > 0
-        ? (scheduleSpanWidth - gutterWidth) / dayCount : 0
+        ? Math.floor((scheduleSpanWidth - gutterWidth) / dayCount) : 0
     readonly property real scheduleSpanWidth: width
     // T01: single source for the hour pitch of the timed grid. The hour-cell
     // delegate height and the initial scroll offset both derive from this, so
@@ -851,11 +857,13 @@ Pane {
 
             GridLayout {
                 objectName: "scheduleTimedGrid"
-                // The grid is exactly the viewport width — never wider. Pin
-                // implicitWidth to the same value so the ScrollView's
-                // Flickable contentWidth cannot adopt a stale implicit sum
-                // (that runaway made the grid outlive the window on resize).
-                width: timelineScroll.availableWidth
+                // LQ15: track the Pane width directly. `availableWidth` did not
+                // follow a live resize (the grid stayed at its first-layout
+                // 766 while the header row re-flowed to 900), so the timed
+                // columns no longer matched the header/all-day boundaries.
+                // The viewport is padding-free and the vertical bar overlays,
+                // so the Pane width is the exact span.
+                width: root.width
                 implicitWidth: width
                 columns: root.dayCount + 1
                 columnSpacing: 0
