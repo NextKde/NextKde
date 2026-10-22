@@ -178,6 +178,9 @@ KosApplicationWindow {
         readonly property color rowHoverFill: root.tahoeDark
             ? Qt.rgba(1, 1, 1, 0.06)
             : Qt.rgba(0x74 / 255, 0x74 / 255, 0x80 / 255, 0.08)
+        readonly property color rowPressFill: root.tahoeDark
+            ? Qt.rgba(1, 1, 1, 0.12)
+            : Qt.rgba(0x74 / 255, 0x74 / 255, 0x80 / 255, 0.14)
 
         // S02/S03: compact category rows for the 220px sidebar. One 12px
         // rounded checkbox at inset 12 carries the whole state (filled +
@@ -223,6 +226,21 @@ KosApplicationWindow {
         readonly property real toolbarRadius: toolbarHeight / 2
         readonly property int segmentWidth: 228
         readonly property int segmentHeight: 28
+
+        // LQ10: menu (liquid-spec §4 "菜单"): 30px rows, radius 16 surface,
+        // 16px icons in a 20px column, plain rows inside (no nested glass).
+        readonly property int menuWidth: 220
+        readonly property int menuRowHeight: 30
+        readonly property int menuRadius: 16
+        readonly property int menuIconSize: 16
+        readonly property int menuTextSize: 13
+        readonly property int menuRowInset: 4
+        readonly property int menuIconInset: 6
+        readonly property int menuTextGap: 8
+        readonly property int menuSurfaceInset: 4
+        // Same reserved shadow gutter as the detail popover (E3 spread 32 +
+        // offset 3 + slack): the visible card is inset, the popup grows.
+        readonly property int menuShadowInset: 36
 
         // G03/G04 玻璃按钮投影(浅色,应用内绘制,G08)。集中命名,只调这里。
         // 用 QtQuick.Effects 的 RectangularShadow(Qt 6.9+):几何与玻璃本体
@@ -1079,6 +1097,79 @@ KosApplicationWindow {
             rotation: -45
             x: 2.2
             y: 4.31
+        }
+    }
+
+    // LQ10: menu rows are plain (spec §4: no glass inside a menu) and reuse
+    // the sidebar's fill language for hover — rowHoverFill / pressFill, same
+    // tokens SidebarRow uses — on an 8px rounded inset, not a capsule, so a
+    // 30px menu row reads as a row rather than a second selection pill.
+    component MenuActionRow: MenuItem {
+        id: menuAction
+
+        property string iconName: ""
+        property bool destructive: false
+
+        implicitHeight: root.tahoe.menuRowHeight
+        leftPadding: 0
+        rightPadding: 0
+        topPadding: 0
+        bottomPadding: 0
+
+        background: Rectangle {
+            x: root.tahoe.menuRowInset
+            width: menuAction.width - 2 * root.tahoe.menuRowInset
+            height: menuAction.height
+            radius: 8
+            color: menuAction.down ? root.tahoe.rowPressFill
+                : (menuAction.hovered || menuAction.highlighted
+                   ? root.tahoe.rowHoverFill : "transparent")
+        }
+
+        contentItem: Item {
+            VectorIcon {
+                x: root.tahoe.menuIconInset
+                anchors.verticalCenter: parent.verticalCenter
+                size: root.tahoe.menuIconSize
+                name: menuAction.iconName
+                color: menuAction.destructive ? AppTheme.destructive
+                                              : root.tahoe.labelPrimary
+                opacity: menuAction.enabled ? 1 : 0.38
+            }
+
+            Label {
+                x: root.tahoe.menuIconInset + root.tahoe.menuIconSize
+                   + root.tahoe.menuTextGap
+                anchors.verticalCenter: parent.verticalCenter
+                width: Math.max(0, menuAction.width - x - 10)
+                text: menuAction.text
+                color: menuAction.destructive ? AppTheme.destructive
+                                              : root.tahoe.labelPrimary
+                opacity: menuAction.enabled ? 1 : 0.38
+                font.pixelSize: root.tahoe.menuTextSize
+                elide: Text.ElideRight
+            }
+        }
+    }
+
+    component MenuGroupSeparator: MenuSeparator {
+        implicitHeight: 9
+        leftPadding: 0
+        rightPadding: 0
+        topPadding: 0
+        bottomPadding: 0
+        // The Basic style paints a full-bleed background line; the menu owns
+        // its separator (10px inset, 1px hairline), so drop the style's.
+        background: null
+
+        contentItem: Item {
+            Rectangle {
+                x: 10
+                y: (parent.height - height) / 2
+                width: Math.max(0, parent.width - 20)
+                height: 1
+                color: root.tahoe.separator
+            }
         }
     }
 
@@ -2074,7 +2165,18 @@ KosApplicationWindow {
                 anchors.verticalCenter: parent.verticalCenter
                 iconName: "more"
                 hint: qsTr("Calendar actions")
-                onClicked: actionsMenu.popup(this, 0, height + 2)
+                onClicked: {
+                    // LQ10: right-align the visible card to the button and
+                    // keep the reserved shadow gutter inside the window.
+                    const inset = root.tahoe.menuShadowInset
+                    const surface = root.tahoe.menuWidth
+                    const maxX = root.width - moreButton.x
+                                 - (surface + 2 * inset)
+                    const popupX = Math.min(moreButton.width - surface - inset,
+                                            maxX)
+                    actionsMenu.popup(moreButton, popupX,
+                                      moreButton.height + 2 - inset)
+                }
             }
 
             // L05: Escape always reaches the open search, whichever item in
@@ -2087,28 +2189,69 @@ KosApplicationWindow {
                 onActivated: toolbarSearch.close()
             }
 
+            // LQ10: app-owned menu presentation. The menu is the one L2
+            // transient glass surface (regular fill + E3 shadow, spec §4) and
+            // its rows stay plain — no second glass layer. The popup grows by
+            // a 36px shadow gutter on every side so the E3 shadow is never
+            // clipped; only the inset card is visible.
             Menu {
                 id: actionsMenu
-                y: moreButton.height
-                MenuItem {
+                width: root.tahoe.menuWidth + 2 * root.tahoe.menuShadowInset
+                padding: root.tahoe.menuShadowInset
+                         + root.tahoe.menuSurfaceInset
+
+                background: Item {
+                    Rectangle {
+                        id: menuPlane
+                        anchors.fill: parent
+                        anchors.margins: root.tahoe.menuShadowInset
+                        radius: root.tahoe.menuRadius
+                        color: AppTheme.neutralPlane
+                        border.width: 1
+                        border.color: root.tahoeDark
+                            ? Qt.rgba(1, 1, 1, 0.12) : Qt.rgba(0, 0, 0, 0.06)
+                    }
+                    LiquidOuterShadow {
+                        anchors.fill: menuPlane
+                        radius: root.tahoe.menuRadius
+                        shadowLevel: 3
+                    }
+                    LiquidSurface {
+                        anchors.fill: menuPlane
+                        radius: root.tahoe.menuRadius
+                        tintColor: root.tahoeDark ? "#1C1C1E" : "#FFFFFF"
+                        tintStrength: root.tahoeDark ? 0.52 : 0.58
+                        rimColor: root.tahoeDark
+                            ? Qt.rgba(1, 1, 1, 0.30)
+                            : Qt.rgba(1, 1, 1, 0.45)
+                        edgeWidth: 14
+                        reflectionStrength: 1
+                    }
+                }
+
+                MenuActionRow {
                     text: qsTr("New task…")
+                    iconName: "plus"
                     enabled: pim.connected && pim.writable
                     onTriggered: taskEditor.openForTodo(null)
                 }
-                MenuSeparator {}
-                MenuItem {
+                MenuGroupSeparator {}
+                MenuActionRow {
                     text: qsTr("Import iCalendar…")
+                    iconName: "download"
                     enabled: pim.connected && pim.writable
                     onTriggered: importDialog.open()
                 }
-                MenuItem {
+                MenuActionRow {
                     text: qsTr("Export iCalendar…")
+                    iconName: "preview"
                     enabled: pim.connected && pim.ready
                     onTriggered: exportDialog.open()
                 }
-                MenuSeparator {}
-                MenuItem {
+                MenuGroupSeparator {}
+                MenuActionRow {
                     text: qsTr("Calendar settings")
+                    iconName: "settings"
                     onTriggered: settingsDialog.open()
                 }
             }
