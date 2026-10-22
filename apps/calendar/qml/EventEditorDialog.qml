@@ -758,7 +758,12 @@ LiquidDialog {
                     visible: linkTodoCheck.checked
                     spacing: 8
 
-                    Label { text: qsTr("Todo list"); color: AppTheme.mutedText; font.pixelSize: 11 }
+                    Label {
+                        text: qsTr("Todo list")
+                        color: AppTheme.mutedText
+                        font.pixelSize: 11
+                        font.weight: Font.DemiBold
+                    }
                     KosComboBox {
                         id: todoListBox
                         Layout.fillWidth: true
@@ -770,7 +775,12 @@ LiquidDialog {
                         strokeWidth: 0
                         Accessible.name: qsTr("Linked todo list")
                     }
-                    Label { text: qsTr("Priority"); color: AppTheme.mutedText; font.pixelSize: 11 }
+                    Label {
+                        text: qsTr("Priority")
+                        color: AppTheme.mutedText
+                        font.pixelSize: 11
+                        font.weight: Font.DemiBold
+                    }
                     KosComboBox {
                         id: todoPriorityBox
                         Layout.preferredWidth: 110
