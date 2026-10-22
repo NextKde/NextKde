@@ -1,26 +1,27 @@
 # LQ0 — 液态组件接入与剩余 spec 收敛
 
 ## 本轮
-- LQ03 ✓ Day/Week/Month/Year 分段改 materialForm 平铺形态：胶囊 228×28 居中主区（center 550），
-  4 段各 57，pill 52×24 内缩 2；track α .025 over 白（实测 252）、pill `#E7E7E7`（实测 231）、
-  4 个标签统一 `labelPrimary`（选中仅 pill + DemiBold 标记），与参考一致。
-- 关键修正：原控件默认 `materialForm:false` 会在工具栏 L1 玻璃上再画一层 `LiquidSurface`（叠玻璃且
-  选中 pill 被镜片洗成白色）。现 `materialForm:true`，不再有第二层玻璃/LiquidSurface。
-- 新增 `LiquidSegmentedControl.borderColor`（默认 `AppTheme.border`，其它调用点不变）；日历传
-  light α .05 / dark 白 α .10。原因：默认 α .14 描边在白底上是一圈清晰灰环，参考顶边实测 249..253
-  （无线），只有圆头两端因 AA 到 ~222。
-- 实拍：`LQ03-1100-light.png`、`LQ03-toolbar-zoom.png`、`LQ03-compare.png`、`LQ03-1100-light-v2.png`、
-  `LQ03-compare-v2.png`；dark `LQ03-1100-dark.png`、`LQ03-dark-zoom.png`（tmp，不入库）。
-- 量测（v2）：pill 231 / track 252 / 描边 244..247；dark pill (60,60,60)、track (42,42,43)。
-  交互走控件既有 `selectionRequested`（映射不变），app + pim 日志 **0 error / 0 warning**。
+- LQ06 ✓ 侧栏分类勾选改共用 `LiquidCheckBox`：`LiquidCheckBox.qml` 增加
+  `indicatorSize/indicatorRadius/fillColor/fillStrength/uncheckedFillStrength/checkColor/
+  checkVisible/indicatorBorderWidth/indicatorBorderColor`（默认 22/r7/accent 不变）；
+  `Main.qml:464` 用 disabled 视觉实例承接勾选框，行仍由 `CategoryRow` 处理点击。
+- 未按队列写 16×16/r4：实测参考勾选框 **12×12**（行 82..93 / x17..28），且 S03 已 PASS
+  12-square r3；16px 相对本应用 13px 标签会明显偏大（16:13 vs 参考 12:16）。故保持 12/r3，
+  仅做组件迁移与勾选绘制统一。
+- 实拍 `LQ06-1100-light-v3.png` / `LQ06-hover-v3.png` / `LQ06-toggle.png`（tmp，不入库）：
+  勾选框 x12..23（嵌套行 x36..47）、高 12、行距 30、标签 gap 8；hover 行填充 227
+  （参考选中行 226），行圆角 6。点击勾选框坐标仍能切换分类（disabled 视觉实例不吞事件），
+  勾选/未勾选（橙色 1px 空心）可辨；app + pim 日志 0 error / 0 warning。
+- 仍差（下轮可顺带）：勾号用 12px 下 8px 字号 ✓，笔画比参考的粗勾细；圆角保持 3（参考视觉约 4，
+  1px 内歧义且 S03 记为 3）。
 
 ## 队列（一轮一条；[x]=已完成）
 - [x] LQ01 基线：在新组件树上启动 light week，截 1100×720 与 760×540；记录 runtime log 的 error/warning，确认无启动回归。
 - [x] LQ02 工具栏：`Main.qml` 顶部工具栏换 `LiquidSurface`(regular) + `LiquidOuterShadow`；保留 L02–L04 的 40 高、按钮 28–30、分段居中几何；持续玻璃 1/2。
 - [x] LQ03 分段控件：Day/Week/Month/Year 换 `LiquidSegmentedControl`，高 28、胶囊、pill 当前视图；宽度随 4 段重算并保持主区域居中。
 - [x] LQ04 工具栏按钮：prev/Today/next、侧栏开关、搜索、添加、更多换 `LiquidActionButton` / `LiquidNavigationButton`（iconOnly/specificationForm）；命中区与 tooltip 不退化；**host-owned plain 行，消除叠玻璃**。
-- [ ] LQ05 侧栏表面：侧栏换 `LiquidSurface`(regular)（持续玻璃 2/2）；分隔线、行高 30、选中行 tint α .13 保持。
-- [ ] LQ06 侧栏分类：`KosCheckBox` → `LiquidCheckBox`，16×16、圆角 4、选中 accent + 白勾；复验 S03/S04。
+- [x] LQ05 侧栏表面：侧栏换 `LiquidSurface`(regular)（持续玻璃 2/2）；分隔线、行高 30、选中行 tint α .13 保持。
+- [x] LQ06 侧栏分类：勾选框改共用 `LiquidCheckBox` 视觉（12×12/r3，分类色 + 白勾，未选 1px 空心）；复验 S03/S04。
 - [ ] LQ07 事件编辑器：`EventEditorDialog` 换 `LiquidDialog`（圆角 24、E4、scrim .25）+ `LiquidTextField`；保持 D05–D12。
 - [ ] LQ08 任务编辑器：`CalendarTaskEditorDialog` 同上，按钮竖排通栏等宽、主次仅填充区分。
 - [ ] LQ09 详情浮层：`EventDetailsPopover` 用 `LiquidSurface`（上层 fill α .06，禁叠玻璃）+ `LiquidOuterShadow`；P01/P02 不回归。
@@ -36,32 +37,28 @@
       以及 spec.md 全量 PENDING 清零、所有 PASS 重新回归。
 
 ## 已改
-- LQ03 `apps/calendar/qml/Main.qml:1889-1912`：`viewSegment` 加 `materialForm: true`（L0/L1 上不再叠
-  LiquidSurface），track/pill 使用既有 `segmentTrack`/`segmentPill`，并新增 `borderColor`（light α .05 /
-  dark 白 α .10）。
-- LQ03 `shared/qml/controls/LiquidSegmentedControl.qml:23-28,109`：新增 `property color borderColor`
-  （默认 `Foundation.AppTheme.border`，其它调用点行为不变），material 容器描边改读它。
-- LQ04 `apps/calendar/qml/Main.qml:955-993`：`ToolbarButton` 改为继承 `LiquidActionButton`，
-  `materialForm: true` / `iconOnly: true` / `surfaceColor: "transparent"`，自带 `hint`、TabFocus、
-  tooltip；background 换成 host-owned plain Rectangle（r=height/2，hover=`rowHoverFill`，
-  press=`selectionFill`，focus 1px 内描边）。删除已无用的本地 `CalendarToolbarIcon`。
-- LQ04 `apps/calendar/qml/Main.qml:1875-1906`、`1948-1958`、`2095-2106`：侧栏开关/添加/搜索/更多
-  去掉 `lensBackdrop`/`lensBackdropWindow`/`lensActiveOverride`；更多按钮由手写三点 `AbstractButton`
-  + `GlassSurface` 改为 `ToolbarButton { iconName: "more" }`。
-- LQ02 `apps/calendar/qml/Main.qml:215-223`、`1841-1873`：工具栏浮动胶囊（inset 16、float 8、r 20，
-  `LiquidOuterShadow` L2 + `LiquidSurface` regular）。
+- LQ06 `apps/calendar/qml/Main.qml:464`：CategoryRow 的勾选框由手绘 Rectangle+双斜条 V
+  改为 `LiquidCheckBox`（disabled 视觉、行持有交互）；12×12、r3、solid 分类色、白勾、
+  未选 1px 分类色空心。`shared/qml/controls/LiquidCheckBox.qml:12-38`：尺寸/圆角/填充色/
+  填充强度/勾色/勾可见/描边可配，默认值保持 22/r7/accent/15px 深色勾不变。
+- LQ05 `apps/calendar/qml/Main.qml:1757-1785`：侧栏底面改 `#D4D4D4` / `#353535` 替身，其上叠
+  `LiquidSurface`(regular)（白 .58 / `#1C1C1E` .52、`diffuseStrength:1`、rim/reflection 关）。
+  合成 light 237、dark 40；分隔线、行高、选中 tint 未改。
+- LQ02–LQ04 详情见 rounds.md（工具栏 LiquidSurface+阴影、LQ03 分段 materialForm、LQ04 plain 行）。
 - `shared/qml/**`：同步 nextkdeAppDemo 液态组件（LiquidStyle/LiquidSurface/LiquidBackdrop/
   LiquidCard/LiquidActionButton/LiquidNavigationButton/LiquidCheckBox/LiquidDialog/
   LiquidOuterShadow/VectorIcon 等及 shaders）。
 
 ## 仍差
-1. 侧栏仍是旧平面，未用 `LiquidSurface`(regular)（LQ05）。
-2. 编辑器/详情浮层/菜单/tooltip 仍是旧组件（LQ07–LQ11）。
-3. 工具栏胶囊是静态材质，无背景采样；其下没有可折射内容（外推，见下）。
+1. 编辑器/详情浮层/菜单/tooltip 仍是旧组件（LQ07–LQ11）。
+2. 工具栏胶囊是静态材质，无背景采样；其下没有可折射内容（外推，见下）。
+3. 侧栏接缝：参考 236→255 几乎无线（仅 AA），现分隔线实测 224 略清晰；归 LQ17 chrome 复核。
 4. 窄窗列宽约 77px，事件块标题截断到 4–5 字；是否属预期留待 LQ15 判。
 5. 月视图、全天条、事件块的 tint/描边细节尚未对照（LQ12–LQ14）。
 6. tooltip 仍是旧样式（白底方角），悬停验证只确认「会出、文案对」，样式归 LQ11。
 7. 分段描边为折中值：参考只有圆头两端 ~222、顶边无线，单一描边无法同时满足；现取 α .05（244..247）。
+8. 侧栏勾号笔画比参考细（12px 框内 8px 字号 ✓，参考笔画约 2px）；框圆角保持 3、参考视觉约 4，
+   1px 内歧义按 S03 从 3。留 LQ18 终检决定是否加粗/改 r4。
 
 ## 外推待确认
 - 工具栏玻璃按「整条浮动胶囊」解释：参考图顶部是透明窗面 + 独立玻璃圆钮，没有整条玻璃带；
@@ -75,7 +72,13 @@
 - LQ03 dark 分段色为外推：track 白 α .06、pill `#3C3C3C`（实测 42,42,43 / 60,60,60），无深色参考。
 - 日历侧栏用 `LiquidNavigationButton` 还是保留分类勾选行：按参考图为勾选行，暂定保留行结构，
   仅换表面与复选框；LQ05/LQ06 实拍后确认。
+- LQ05 侧栏无真实背景可采样（窗口是不透明平面）：用 `#D4D4D4` / `#353535` 作未采样替身，使 regular
+  填复合到参考实测 237 / 原深色 40；`diffuseStrength:1` 只给 pigmented 面光，不声称模糊。替身值属
+  表外；若后续拿到壁纸或透明窗口，应换真 backdrop 并删除替身。
 - 1100×720 在 VM 内实际内容高 692；基线以 692 记录，不视为布局差异。
+- LQ06 队列原写 16×16/r4：参考实测 12×12（x17..28 / y82..93），且 S03 已记 12/r3 PASS；
+  1.35 倍的 16 是把参考图 (814 宽) 当 1100 逻辑宽的误换算。按参考与 S03 保持 12/r3，
+  组件可配参数留给后续需要 16 的弹框勾选。
 
 ## Next round
-LQ05 侧栏表面：侧栏换 `LiquidSurface`(regular)（持续玻璃 2/2）；分隔线、行高 30、选中行 tint α .13 保持。
+LQ07 事件编辑器：`EventEditorDialog` 换 `LiquidDialog`（圆角 24、E4、scrim .25）+ `LiquidTextField`；保持 D05–D12。
