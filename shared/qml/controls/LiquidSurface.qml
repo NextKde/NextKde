@@ -4,7 +4,7 @@ import "../foundation" as Foundation
 
 Item {
     id: root
-    property real radius: 22
+    property real radius: 20
     property LiquidBackdrop backdrop: LiquidStyle.backdropFor(root.Window.window)
     property bool darkAppearance: Foundation.AppTheme.dark
     property color tintColor: darkAppearance ? "#141c30" : "#ffffff"
@@ -15,7 +15,7 @@ Item {
     property real magnification: 1.025
     property real edgeWidth: 12
     property real reflectionStrength: 1
-    property color rimColor: Qt.rgba(1, 1, 1, 0.30)
+    property color rimColor: darkAppearance ? Qt.rgba(1, 1, 1, 0.30) : Qt.rgba(1, 1, 1, 0.45)
     readonly property bool sampling: canSampleBackdrop && _mappingValid
         && optics.status !== ShaderEffect.Error
     readonly property bool canSampleBackdrop: backdrop !== null && backdrop.canSample(root)
