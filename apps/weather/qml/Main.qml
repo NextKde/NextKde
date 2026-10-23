@@ -1722,9 +1722,10 @@ KosApplicationWindow {
 
                                 // ② 流动高光带：对角亮带随 sheenPhase 往复（additive，只落在字形内）
                                 const c = total * (0.10 + 0.80 * sheenPhase)
-                                const sheen = ctx.createLinearGradient(x0 + c - 85, base - 60, x0 + c + 85, base + 18)
+                                // R82：峰值 0.85→1.0、半带宽 85→110（R81 残余流光偏微妙的既定加强路线，体渐变不动以便归因）
+                                const sheen = ctx.createLinearGradient(x0 + c - 110, base - 60, x0 + c + 110, base + 18)
                                 sheen.addColorStop(0, "rgba(255,255,255,0)")
-                                sheen.addColorStop(0.5, "rgba(255,255,255,0.85)")
+                                sheen.addColorStop(0.5, "rgba(255,255,255,1.0)")
                                 sheen.addColorStop(1, "rgba(255,255,255,0)")
                                 ctx.globalCompositeOperation = "lighter"
                                 ctx.fillStyle = sheen
