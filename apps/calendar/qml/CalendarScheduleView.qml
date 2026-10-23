@@ -59,15 +59,15 @@ Pane {
     // they can no longer drift apart.
     readonly property int hourHeight: 40
 
-    // A01 step 2 (R072): the all-day band's row geometry, derived from one
-    // anchor and measured off the reference at 1:1. Reference rows sit at
-    // y126-143, y145-162, y164-181 => row 18, gap ~2 (1 empty px + the 1px
-    // chip rim), pitch 19-20, three rows spanning a 60px band (top rule y124,
-    // bottom separator y183-184). Our vertical factor against the reference
-    // is 1.33 (40px hour pitch vs 27), so row 18 -> 24, gap 1 -> 2 and the
-    // 60px band -> 80px. The band height is DERIVED from the row height so
-    // the two can never drift.
-    readonly property int allDayRowHeight: 24
+    // A01 step 2 (R072): the all-day band's row geometry, measured off the
+    // reference at 1:1. Reference rows sit at y126-143, y145-162, y164-181 =>
+    // row ~17, gap 2, pitch 19, three rows spanning a ~57px band (top rule
+    // y124, bottom separator y183-184). These are deliberately NOT pushed
+    // through the 1.33 vertical factor used for the hour grid: the band is
+    // chrome above the grid, and matching it 1:1 keeps the grid top near the
+    // header the way the reference has it. The band height is DERIVED from the
+    // row height so the two can never drift.
+    readonly property int allDayRowHeight: 17
     readonly property int allDayRowGap: 2
     // A04's cap: the tallest band this view will draw before a column spends its
     // last slot on a `+N` remainder row.
@@ -163,9 +163,12 @@ Pane {
     readonly property color todayRed: AppTheme.todayRed
     readonly property color selectionGrey: AppTheme.dark
         ? Qt.rgba(1, 1, 1, 0.16) : Qt.rgba(0, 0, 0, 0.10)
-    readonly property color normalDateColor: AppTheme.dark
-        ? "#F2F2F2" : "#1A1A1A"
-    readonly property color weekendText: AppTheme.mutedText
+    // Ref: weekday columns print the day name and number at full text ink
+    // (#272727 core at 1:1); only the weekend columns step back to a mid grey
+    // (#8c8c8c core). Measured per column — an earlier reading sampled a
+    // Sunday cell and mistook its grey for the whole header.
+    readonly property color normalDateColor: AppTheme.text
+    readonly property color weekendText: AppTheme.dark ? "#8F8F94" : "#8C8C8C"
 
     // N02: the current-time line is ONE object in four parts — a faint rule
     // across the whole grid, a full-strength rule and its dot on today's
@@ -546,23 +549,37 @@ Pane {
                         (headerCell.headerDate.getDay() + 6) % 7 + 1,
                         Locale.ShortFormat)
                     color: headerCell.weekend ? root.weekendText
-                                              : AppTheme.text
-                    font.pixelSize: 11
+                                              : root.normalDateColor
+                    font.pixelSize: 13
                 }
 
-                Rectangle {
+                Item {
+                    id: dateMarker
                     anchors.verticalCenter: parent.verticalCenter
-                    width: 22; height: 22; radius: 11
-                    color: headerCell.today ? root.todayRed
-                        : (headerCell.selected && !headerCell.today
-                           ? root.selectionGrey : "transparent")
+                    // Ref only draws the disc on today/selected, so an ordinary
+                    // day must not reserve its 22px — otherwise every weekday
+                    // name floats away from its number.
+                    readonly property bool marked: headerCell.today
+                        || headerCell.selected
+                    width: marked ? 22 : dateLabel.implicitWidth
+                    height: marked ? 22 : dateLabel.implicitHeight
+
+                    Rectangle {
+                        anchors.fill: parent
+                        radius: 11
+                        visible: dateMarker.marked
+                        color: headerCell.today ? root.todayRed
+                                                : root.selectionGrey
+                    }
 
                     Label {
+                        id: dateLabel
                         anchors.centerIn: parent
                         text: String(headerCell.headerDate.getDate())
                         color: headerCell.today ? "#FFFFFF"
-                            : root.normalDateColor
-                        font.pixelSize: 12
+                            : (headerCell.weekend ? root.weekendText
+                                                  : root.normalDateColor)
+                        font.pixelSize: 13
                         font.weight: headerCell.today
                             ? Font.DemiBold : Font.Normal
                     }
@@ -755,23 +772,22 @@ Pane {
                                 // week), so the reach is gated on one existing.
                                 Layout.leftMargin: continuesLeft && allDayColumn.index > 0
                                     ? -root.allDayJointOverlap : 0
-                                // R109: the fill is OPAQUE — a pre-blend of itemColor over
-                                // this column's own backdrop, not a translucent overlay.
-                                // Translucent was unfixable at the joint: two overlapping
-                                // chips composite twice and read 11% darker than the bar
-                                // (R108, 191 against a 220 fill). Over white the blended
-                                // value is identical to the old `withAlpha` fill (220).
+                                // Ref: an ordinary calendar's all-day chip is a
+                                // NEUTRAL 3% black wash (#f8f8f8 over white) with
+                                // dark text; the calendar colour lives only in the
+                                // ring. Only birthday/holiday calendars fill the
+                                // pill with colour, and this app has no such type.
+                                // R109 still governs the joint: an OPAQUE chip keeps
+                                // overlapping continuations from double-darkening.
                                 color: AppTheme.mix(root.allDayBackdrop(allDayColumn.columnDate),
-                                    root.itemColor(modelData),
-                                    AppTheme.dark ? 0.32 : 0.17)
+                                    AppTheme.dark ? Qt.rgba(1, 1, 1, 1) : Qt.rgba(0, 0, 0, 1),
+                                    AppTheme.dark ? 0.08 : 0.03)
                                 opacity: root.itemCompleted(modelData) ? 0.5 : 1
-                                // R080: the band chip's ink is the same rule as the timed
-                                // chip's (R079). R089 hoisted it to root.chipInk.
-                                readonly property color inkColor: root.chipInk(modelData)
 
                                 // R-H: hand-drawn ring icon — 12×12 outer, border 3 ⇒ 6 hole, 3 px in from the
-                                // left, inked like the text. On a left-continuing chip the icon tracks the
-                                // column rule (the chip itself reaches back past it by allDayJointOverlap).
+                                // left. Ref inks the ring in the calendar colour while the
+                                // title stays neutral; that is the only place the calendar
+                                // shows on an all-day chip.
                                 Rectangle {
                                     x: 3 + (allDayChip.continuesLeft ? root.allDayJointOverlap : 0)
                                     anchors.verticalCenter: parent.verticalCenter
@@ -780,7 +796,7 @@ Pane {
                                     radius: 6
                                     color: "transparent"
                                     border.width: 3
-                                    border.color: allDayChip.inkColor
+                                    border.color: root.itemColor(allDayChip.modelData)
                                 }
 
                                 // E06: a completed task keeps the strikeout but also
@@ -796,21 +812,20 @@ Pane {
                                     anchors.verticalCenter: parent.verticalCenter
                                     size: 10
                                     name: "check"
-                                    color: allDayChip.inkColor
+                                    color: AppTheme.text
                                 }
 
                                 Label {
                                     anchors.fill: parent
-                                    anchors.leftMargin: 19
+                                    anchors.leftMargin: 17
                                         + (allDayChip.continuesLeft ? root.allDayJointOverlap : 0)
                                         + (root.itemCompleted(allDayChip.modelData) ? 13 : 0)
                                     anchors.rightMargin: 4
                                     text: root.itemTitle(allDayChip.modelData)
-                                    // R080: was AppTheme.text (grey) — the band chip is the
-                                    // same chip family as the timed chip and the ref inks
-                                    // both the same way.
-                                    color: allDayChip.inkColor
-                                    font.pixelSize: 10
+                                    // Ref: all-day titles are ordinary text ink, not
+                                    // the calendar colour (which lives in the ring).
+                                    color: AppTheme.text
+                                    font.pixelSize: 11
                                     font.strikeout: root.itemCompleted(allDayChip.modelData)
                                     verticalAlignment: Text.AlignVCenter
                                     elide: Text.ElideRight
@@ -828,7 +843,7 @@ Pane {
                                 Accessible.onPressAction: root.itemActivated(allDayChip.modelData)
                                 // Focus ring only: R078/R109 keep the resting chip
                                 // fill-only, so the border appears on focus alone.
-                                border.color: allDayChip.inkColor
+                                border.color: AppTheme.accent
                                 border.width: allDayChip.activeFocus ? 1 : 0
 
                                 TapHandler {

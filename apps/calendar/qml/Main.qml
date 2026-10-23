@@ -203,7 +203,7 @@ KosApplicationWindow {
         // and a 27px single-line localised title. L07: the right navigation
         // group is 26 high with 13px text, low-contrast neutral chrome.
         readonly property int dateBandHeight: 48
-        readonly property int dateBandInset: 20
+        readonly property int dateBandInset: 12
         readonly property int dateTitleSize: 27
         readonly property int dateNavHeight: 26
         readonly property int dateNavTextSize: 13
@@ -1773,6 +1773,24 @@ KosApplicationWindow {
         Qt.callLater(updateEventRange)
     }
 
+    // Week heading names the month that owns most of the seven days, as the
+    // reference does ("April 2026" for Sun Mar 29 - Sat Apr 4). Counting beats
+    // "the fourth day" because the week's first weekday is locale-dependent.
+    function weekMajorityMonth(start) {
+        const counts = {}
+        for (let i = 0; i < 7; ++i) {
+            const day = new Date(start.getFullYear(), start.getMonth(), start.getDate() + i)
+            const key = day.getFullYear() * 12 + day.getMonth()
+            counts[key] = (counts[key] || 0) + 1
+        }
+        let best = null
+        for (const key in counts) {
+            if (best === null || counts[key] > counts[best])
+                best = key
+        }
+        return new Date(Math.floor(best / 12), best % 12, 1)
+    }
+
     function headerTitle() {
         if (activeView === "year")
             return String(visibleMonth.getFullYear())
@@ -1780,10 +1798,7 @@ KosApplicationWindow {
             return AppTheme.formatDate(visibleMonth, "MMMM yyyy")
         if (activeView === "day")
             return AppTheme.formatDate(selectedDate, Locale.LongFormat)
-        const end = new Date(weekStart.getFullYear(), weekStart.getMonth(),
-                             weekStart.getDate() + 6)
-        // Week range follows locale word order via I18n templates (P2-5/I5).
-        return AppTheme.formatWeekRange(weekStart, end)
+        return AppTheme.formatDate(weekMajorityMonth(weekStart), "MMMM yyyy")
     }
 
     // The reference pairs the header title with a count line ("67 Messages,
