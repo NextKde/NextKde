@@ -5,11 +5,6 @@ import "../foundation" as Foundation
 Item {
     id: root
 
-    SystemPalette {
-        id: controlPalette
-        colorGroup: SystemPalette.Active
-    }
-
     implicitWidth: 240
     implicitHeight: 44
 
@@ -24,8 +19,10 @@ Item {
     property bool darkAppearance: {
         if (appearanceMode === "dark") return true
         if (appearanceMode === "light") return false
-        const color = controlPalette.window
-        return color.r * 0.2126 + color.g * 0.7152 + color.b * 0.0722 < 0.5
+        // Same dark decision as the rest of the family (LiquidSurface,
+        // LiquidTextField, …): the app-wide AppTheme.dark, which also falls
+        // back to light when the system palette itself is unusable.
+        return Foundation.AppTheme.dark
     }
     property color thumbColor: darkAppearance ? Qt.rgba(1, 1, 1, 0.38) : Qt.rgba(1, 1, 1, 0.72)
     property color thumbBorderColor: darkAppearance

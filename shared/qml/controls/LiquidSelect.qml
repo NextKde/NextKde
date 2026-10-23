@@ -2,6 +2,7 @@ pragma ComponentBehavior: Bound
 
 import QtQuick
 import QtQuick.Controls
+import "../foundation" as Foundation
 
 // A plain rounded select dropdown, shared by the settings apps. Deliberately
 // not a platform-styled ComboBox and not a glass material: a flat rounded
@@ -41,16 +42,13 @@ Item {
     // arrives (same contract as LiquidSegmentedControl).
     signal activated(int index)
 
-    SystemPalette {
-        id: controlPalette
-        colorGroup: SystemPalette.Active
-    }
-
     readonly property bool darkAppearance: {
         if (root.appearanceMode === "dark") return true
         if (root.appearanceMode === "light") return false
-        const color = controlPalette.window
-        return color.r * 0.2126 + color.g * 0.7152 + color.b * 0.0722 < 0.5
+        // Same dark decision as the rest of the family (LiquidSurface,
+        // LiquidTextField, …): the app-wide AppTheme.dark, which also falls
+        // back to light when the system palette itself is unusable.
+        return Foundation.AppTheme.dark
     }
 
     property bool _hovered: false
