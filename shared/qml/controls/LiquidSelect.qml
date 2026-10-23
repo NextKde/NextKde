@@ -14,12 +14,13 @@ Item {
     // Width follows the content: left pad + label + gap + glyph + right pad.
     // The floor keeps a placeholder-only field from collapsing.
     implicitWidth: Math.max(72, 13 + label.implicitWidth + 9 + chevron.implicitWidth + 12)
-    implicitHeight: 36
+    implicitHeight: 34
 
     property var model: []
     property string textRole: ""
     property int currentIndex: 0
     property string placeholder: ""
+    property string appearanceMode: "system"
     // App accent for the selection highlight; bind it at the call site, like
     // LiquidGlassSwitch. SystemPalette.highlight would follow the desktop
     // colour scheme (often pink) instead of the app's accent.
@@ -46,6 +47,8 @@ Item {
     }
 
     readonly property bool darkAppearance: {
+        if (root.appearanceMode === "dark") return true
+        if (root.appearanceMode === "light") return false
         const color = controlPalette.window
         return color.r * 0.2126 + color.g * 0.7152 + color.b * 0.0722 < 0.5
     }
@@ -163,8 +166,8 @@ Item {
             anchors.margins: 1
             radius: root.fieldRadius - 1
             color: root.darkAppearance
-                ? Qt.rgba(1, 1, 1, root._hovered || menu.opened ? 0.12 : 0.08)
-                : Qt.rgba(0, 0, 0, root._hovered || menu.opened ? 0.08 : 0.05)
+                ? Qt.rgba(1, 1, 1, root._hovered || menu.opened ? 0.12 : 0.06)
+                : Qt.rgba(0, 0, 0, root._hovered || menu.opened ? 0.08 : 0.04)
             Behavior on color { ColorAnimation { duration: 150; easing.type: Easing.OutCubic } }
         }
 
@@ -276,7 +279,7 @@ Item {
                         required property var modelData
                         required property int index
                         width: menu.width - 12
-                        height: 36
+                        height: 28
                         enabled: root.enabled
                         activeFocusOnTab: false
 
@@ -328,7 +331,7 @@ Item {
                                 ? Qt.rgba(root.accentColor.r, root.accentColor.g,
                                           root.accentColor.b, root.darkAppearance ? 0.22 : 0.13)
                                 : (hit.containsMouse
-                                   ? (root.darkAppearance ? Qt.rgba(1, 1, 1, 0.07) : Qt.rgba(0, 0, 0, 0.05))
+                                   ? (root.darkAppearance ? Qt.rgba(1, 1, 1, 0.08) : Qt.rgba(0, 0, 0, 0.06))
                                    : "transparent")
                             Behavior on color { ColorAnimation { duration: 120 } }
                         }
