@@ -1,45 +1,43 @@
-# R304 — 2027-02 四周月份：date 生效、4 行等分；窄窗全窗帧仍带黑顶带
+# R305 — 窄窗采集根因实测确认；grabToImage 不可用；harness 采集重建（尺寸日志）
 
 ## 本轮
-- `date 2027-02-15` 本轮实测生效（R302 记的“date 未切换月份”未复现）：月头
-  “2027年2月”、选中 15、侧栏迷你月历 2027年2月 全部正确。
-- 4 周月份核对（2027-02：周一起始，2/1 周一，28 天）：
-  - 主网格 **4 行**，无第 5 行外月日期。
-  - 行界（540 布局坐标）246 / 344 / 441 / 540 → 行高 **98 / 97 / 99**（±1 取整），
-    与 FIX-01 `dayHeight=(540−148)/4` 一致；等分成立。
-  - 证据帧 `R303-2027-02-760.png`（可读月体帧，见下方采集缺陷）。
-- 采集缺陷：`grabWindow()` buffer 仍为 **1100×692**，而 window 逻辑尺寸 760×540；
-  R302 的 `minimum*=maximum*` 钉法本轮未让 KWin 下发 configure。
-  - 单次 `resize 760×540`、`770×560 → 760×540` 两次尝试 buffer 均不变（已停手，不再换法试）。
-  - 结果：760×540 全窗帧顶部 152px（=692−540）呈黑带，盖住工具栏与月头；
-    月体/侧栏自 y=152 起完整、几何可用于量测。
-  - `grabWindow` 截图顶裁（原策略）与实验底裁均无法消除黑带：黑带在 buffer 内，
-    不是裁剪偏移；判定为陈旧 surface 下的场景合成问题，**不是**产品布局改动。
+- **根因确认（实测，非推断）**：Wayland 下客户端 `QWindow::resize()` 不会让 toplevel
+  surface 重配/重绘。resize 760×540 后 `grabWindow()` 仍是 1100×692，其不透明内容为
+  `QRect(0,152 761×389)`（场景只画在 buffer 行 152..540）；再把窗口 resize 回 1100×692，
+  grab 返回**同一张陈旧内容**（宽仍 761）——surface 不恢复。
+  xdg-shell 无客户端主动 toplevel resize；`setMinimumSize/setMaximumSize` 不会让 KWin
+  下发 configure（R304 现象复现）。Qt 只改了自身 QWindow 几何（日志 `window 760×540`），
+  buffer 停在初始的 1100×692。
+- `QQuickItem::grabToImage()`（contentItem）在该状态下 **ready 信号永不触发**（无渲染帧），
+  不能作为采集旁路；已放弃，不再试。
+- harness 采集已重建并加载：记录 `window` / `content item` / `dpr`，`grabWindow()` 后按
+  alpha bbox 定位场景块再裁切。
+  - 健康窗口（新启动、未 resize）实测输出 **1100×692 全帧**，bbox 全幅，无回归。
+  - 一旦 resize 过，本会话后续抓帧全部不可用，**必须重启 app** 才能再采。
 
 ## 已改
+- `tmp/.../harness/ReviewInput/ReviewInput.cpp`（tmp，不入库）capture()：顶裁 → alpha-bbox
+  裁切 + 尺寸日志；`libreviewinput.so` 已重建并加载。
 - 产品代码无改动（验证轮）。
-- `tmp/.../harness/ReviewInput/ReviewInput.cpp`（tmp，不入库）：capture 增加
-  `grab buffer/window` 尺寸日志（qInfo）；底裁实验已回退为原顶裁逻辑。
-  **注意：已加载的 `libreviewinput.so` 仍是底裁实验构建，下轮先
-  `make -C tmp/ui-acceptance/calendar/harness/ReviewInput/build` 重建再采集。**
 
 ## 仍差
-1. 760×540 全窗帧顶部 152px 黑带（grab buffer 1100×692 未被 configure）——本轮未解，已按两步上限停手。
-2. 同因：工具栏/月头区在此帧不可视，未做视觉复核。
+1. 760×540 全窗帧仍不可得：resize 后 surface 冻结，现有窄窗帧只是旧缓冲里的
+   760×388 中段切片（无工具栏/月头/底部），不能做全窗视觉复核。
+2. 2027-02 的 4 行等分只在“中段切片”内量过，全窗几何未复核。
 3. 动效未验证（无连续帧，不声称通过）。
-4. 合成器级玻璃帧（窗口圆角/外阴影/桌面 backdrop）无法实拍：portal 授权无人值守。
+4. 合成器级玻璃帧（窗口圆角/外阴影/desktop backdrop）仍不可拍：portal 授权无人值守。
+5. 旧 `harness/LEDGER.md` 的 Next round 段落停在 R183，与 state.md 不同步（不影响本轮）。
 
 ## 外推待确认
-- 月视图按实际周数分行（4/5/6）无参考图，按 Apple Calendar 行为外推；4 周分支本轮
-  已是实测几何。
-- 窄窗 min==max 仅用于 review harness，不进产品代码。
-- 工具栏左侧“侧栏切换 + 加号”同处一舱、参考为两枚独立岛；沿用已接受布局，本轮未重开。
+- 若 review 窗口**以 760×540 启动**（初始 configure 即窄尺寸），采集应正常；待验证。
+- 窄窗启动开关应只影响窄窗轮次，默认仍 1100×692，避免破坏既有量测基线。
 
 ## 需要你
 a) 若要合成器级玻璃帧，需人工在 portal 截屏授权弹窗点一次“允许”（本环境无人值守）。
 
 ## Next round
-重建 harness 插件（顶裁 + 尺寸日志）；修窄窗采集：查明 KWin 不下发 configure 的原因
-（C++ 侧 `QWindow::setMinimumSize/setMaximumSize/resize` 或 showNormal 后再 resize），
-成功判据 = `grab buffer` 为 760×540 且全窗帧无黑带；随后重拍 2027-02 全窗，
-复核 4 行等分与工具栏/月头。
+1. 让窗口**以 760×540 启动**而不是事后 resize：harness 根窗口按开关（env 或 harness
+   属性）声明 `width/height 760×540`（默认仍 1100×692），重启后直接 `captureClient`。
+   成功判据 = 全帧 760×540、无透明带、含工具栏/月头/底行。
+2. 通过后重拍 2027-02 全窗，复核 4 行等分与工具栏/月头。
+若 #1 仍被 Wayland 初始尺寸忽略：停手，在 state 记阻塞，不再换法。
