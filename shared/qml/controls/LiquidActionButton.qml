@@ -28,7 +28,7 @@ Button {
         tintColor: root.highlighted || root.checked ? Foundation.AppTheme.accent
             : Foundation.AppTheme.dark ? "#17223b" : "#ffffff"
         tintStrength: root.highlighted || root.checked
-            ? (root.down ? 0.30 : root.hovered ? 0.26 : 0.24)
+            ? (root.down ? 0.30 : root.hovered ? 0.26 : 0.21)
             : root.secondary ? 0.03 : 0.05
         opacity: root.flat && !root.hovered && !root.checked && !root.activeFocus ? 0.45 : 1
         // §4.1：hover 叠 hoverFill（light 黑 .06 / dark 白 .08）、pressed 叠 pressFill
