@@ -32,9 +32,11 @@ TextField {
     property real ambientStrength: 0
     readonly property bool sampling: _liquid && liquidSurface.sampling
     readonly property bool _liquid: liquidFinish && !materialForm
+    // §5 Disabled：整体 α .38；hover 边框与 focus 外环在禁用时关断/移除。
+    opacity: enabled ? 1 : 0.38
     // §4.1 输入框：Default=plainFill（填充恒定），Hover=边框 α .14，不改填充。
     readonly property color _fill: glassColor
-    readonly property color _hoverBorder: hover.hovered
+    readonly property color _hoverBorder: enabled && hover.hovered
         ? Qt.rgba(outlineColor.r, outlineColor.g, outlineColor.b, 0.14)
         : outlineColor
     // §5 Focus：外环 2px accent，偏移 2；无彩/明度越界时回退 focusFallback。
@@ -93,7 +95,8 @@ TextField {
             border.width: 2
             border.color: root._focusColor
             color: "transparent"
-            visible: root.activeFocus
+            // §5 焦点补充：失焦或禁用即移除外环。
+            visible: root.activeFocus && root.enabled
         }
     }
 }

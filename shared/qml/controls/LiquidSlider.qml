@@ -166,7 +166,8 @@ Item {
         }
     }
 
-    opacity: enabled ? 1.0 : 0.45
+    // §5 Disabled：整体 α .38，无高光/阴影/hover（hover/press 由 MouseArea enabled 关断）。
+    opacity: enabled ? 1.0 : 0.38
 
     function positionForPointer(pointerX) {
         return Math.max(0, Math.min(1, (pointerX - edgeInset) / travel))

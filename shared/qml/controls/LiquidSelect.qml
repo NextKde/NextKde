@@ -54,6 +54,8 @@ Item {
     }
 
     property bool _hovered: false
+    // §5 Disabled：整体 α .38；hover/按键由 MouseArea（enabled 绑定）与 openMenu 关断。
+    opacity: enabled ? 1 : 0.38
     // §4.1 输入框：Hover=边框 α .14，不改填充（液态 rim 的 hover 另行外推记账）。
     readonly property color _fieldBorder: root._hovered
         ? Qt.rgba(root.outlineColor.r, root.outlineColor.g, root.outlineColor.b, 0.14)
