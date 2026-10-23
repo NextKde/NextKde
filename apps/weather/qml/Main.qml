@@ -1530,6 +1530,14 @@ KosApplicationWindow {
             }
         }
 
+        // §2.7 光源左上 + §3 color.separator(0.10)：侧栏(左)的右缘属"下/右"暗侧，
+        // 补 1px 暗分隔让侧栏与主区的玻璃边界可读（§2.2 边界），不新增第二层玻璃。
+        Rectangle {
+            Layout.fillHeight: true
+            Layout.preferredWidth: 1
+            color: Qt.rgba(0, 0, 0, 0.10)
+        }
+
         ColumnLayout {
             Layout.fillWidth: true
             Layout.fillHeight: true
