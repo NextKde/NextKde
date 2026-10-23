@@ -63,8 +63,8 @@ KosApplicationWindow {
             : (selected ? Qt.rgba(1, 1, 1, 0.27)
                : (pressed ? Qt.rgba(1, 1, 1, 0.12)
                   : (hovered ? Qt.rgba(1, 1, 1, 0.08) : "transparent")))
-        border.width: filled ? 1 : 0
-        border.color: subtle ? Qt.rgba(1, 1, 1, 0.22) : Qt.rgba(1, 1, 1, 0.30)
+        // 用户裁决 2026-10-23（R80 0.5）：内容区白描边一律去掉——盘钮填充层即材质，
+        // 不再叠 1px 白边（spec §2.7 亮边由顶部 specular 高光承担）。
         Rectangle {
             // specular top sheen, clipped to the circle
             visible: parent.filled
@@ -484,16 +484,12 @@ KosApplicationWindow {
         implicitHeight: 66
         radius: root.tileRadius
         // 中性白玻璃（用户裁定 2026-10-23）：填充走 cardGlassRgb/cardGlassAlpha（白 α0.14/0.16），
-        // 禁蓝色 tint；白天卡比天空亮、夜里更亮。rim：每卡恰一条 1px 白描边（第二批「一个元素只允许一条 1px 边」）
+        // 禁蓝色 tint；白天卡比天空亮、夜里更亮。白描边已按用户裁决 2026-10-23（R80 0.5）去除。
         property bool hot: metricHover.hovered
-        // unified with full-width cards (AQ/10-day): fill 0.16 + stroke 0.22; ref-main shows one shared card material
+        // unified with full-width cards (AQ/10-day): fill 0.16; ref-main shows one shared card material
         property real hoverFill: hot ? root.cardGlassAlphaHot : root.cardGlassAlpha
         Behavior on hoverFill { NumberAnimation { duration: AppTheme.motionNormal; easing.type: Easing.OutCubic } }
-        // §4 卡片（L0）hover 只 +2% 亮度：描边不随 hover 变化
-        property real hoverStroke: 0.22
         color: Qt.rgba(root.cardGlassRgb.r, root.cardGlassRgb.g, root.cardGlassRgb.b, hoverFill)
-        border.width: 1
-        border.color: Qt.rgba(1, 1, 1, hoverStroke)
         Accessible.role: Accessible.StaticText
         Accessible.name: metric.labelText + ": " + metric.valueText
 
@@ -570,6 +566,23 @@ KosApplicationWindow {
         sequences: [StandardKey.Refresh]
         onActivated: backend.refresh()
     }
+
+    // 液态玻璃采样源（§2.2：玻璃采样 L0 内容、拒绝自捕获）。声明在不透明天空矩形
+    // 之前 → 被 sky 全覆盖、屏上不可见，仅供 LiquidBackdrop 捕获。内容 = 胶囊背后
+    // 的真实合成（天空副本 + 半透明侧栏面 sidebarSurface@α，侧栏本体系 α0.32/0.36
+    // 玻璃面，星空/云可透）；不含任何玻璃消费方。
+    Rectangle {
+        id: sidebarGlassUnderlay
+        width: sidebar.width
+        height: root.height
+        gradient: Gradient {
+            GradientStop { position: 0.0; color: root.skyStops[0] }
+            GradientStop { position: 0.45; color: root.skyStops[1] }
+            GradientStop { position: 1.0; color: root.skyStops[2] }
+        }
+        Rectangle { anchors.fill: parent; color: AppTheme.sidebarSurface }
+    }
+    LiquidBackdrop { id: sidebarBackdrop; sourceItem: sidebarGlassUnderlay }
 
     Rectangle {
         anchors.fill: parent
@@ -1036,17 +1049,18 @@ KosApplicationWindow {
                     Layout.minimumWidth: 0
                     Layout.preferredHeight: 30
 
-                    KosTextField {
+                    LiquidTextField {
                         id: locationField
                         anchors.fill: parent
                         leftPadding: 34
                         cornerRadius: 15
-                        // 阶段三功能层 Liquid Glass：specular 高光与细描边。
-                        // 按参考图量得高光强度温和，用 liquidStrength 0.2 缩放。
-                        // 实测：ref-main 搜索胶囊填充 vs 侧栏底 Δ(+24,+29,+38)≈白@0.13-0.15，
-                        // 我方 0.22 时 Δ(+38,+36,+32) 对比 1.5 倍偏强；并与功能层
-                        // 同层玻璃（⚙/↻ 盘、分段胶囊 白@0.14）统一。
-                        materialForm: false
+                        // 用户裁决 2026-10-23（R80 #0）：直用 shared 新液态玻璃组件
+                        // LiquidTextField（不再经 KosTextField 包装），darkAppearance 走
+                        // 组件默认绑定 AppTheme.dark（§2.6 小控件随主题翻转，dark 探针取证）。
+                        // 真采样：backdrop 指向侧栏背板注册的 LiquidBackdrop，LiquidSurface
+                        // 走 shader（折射/放大/反射渐变/rim）而非 fallback 平涂。
+                        // 填充/描边沿用 ref-main 实测拟合值：填充白@0.15、rim 白@0.30。
+                        backdrop: sidebarBackdrop
                         liquidFinish: true
                         liquidStrength: 0.2
                         glassColor: Qt.rgba(1, 1, 1, 0.15)
@@ -1941,11 +1955,7 @@ KosApplicationWindow {
                                                     property bool hot: windHover.hovered
                                                     property real hoverFill: hot ? root.cardGlassAlphaHot : root.cardGlassAlpha
                                                     Behavior on hoverFill { NumberAnimation { duration: AppTheme.motionNormal; easing.type: Easing.OutCubic } }
-                                                    // §4 卡片（L0）hover 只 +2% 亮度：描边不随 hover 变化
-                                                    property real hoverStroke: 0.22
                                                     color: Qt.rgba(root.cardGlassRgb.r, root.cardGlassRgb.g, root.cardGlassRgb.b, hoverFill)
-                                                    border.width: 1
-                                                    border.color: Qt.rgba(1, 1, 1, hoverStroke)
 
                                                     property real windDir: root.number(backend.current, "windDirection", 0)
                                                     // arrow points where the wind blows TO (Open-Meteo direction is where it comes FROM)
@@ -2128,11 +2138,7 @@ KosApplicationWindow {
                                                     property bool hot: moonHover.hovered
                                                     property real hoverFill: hot ? root.cardGlassAlphaHot : root.cardGlassAlpha
                                                     Behavior on hoverFill { NumberAnimation { duration: AppTheme.motionNormal; easing.type: Easing.OutCubic } }
-                                                    // §4 卡片（L0）hover 只 +2% 亮度：描边不随 hover 变化
-                                                    property real hoverStroke: 0.22
                                                     color: Qt.rgba(root.cardGlassRgb.r, root.cardGlassRgb.g, root.cardGlassRgb.b, hoverFill)
-                                                    border.width: 1
-                                                    border.color: Qt.rgba(1, 1, 1, hoverStroke)
 
                                                     property real phaseVal: root.number(backend.current, "moonPhase", Number.NaN)
                                                     property bool hasPhase: Number.isFinite(phaseVal)
@@ -2356,11 +2362,7 @@ KosApplicationWindow {
                                                     property bool hot: sunsetHover.hovered
                                                     property real hoverFill: hot ? root.cardGlassAlphaHot : root.cardGlassAlpha
                                                     Behavior on hoverFill { NumberAnimation { duration: AppTheme.motionNormal; easing.type: Easing.OutCubic } }
-                                                    // §4 卡片（L0）hover 只 +2% 亮度：描边不随 hover 变化
-                                                    property real hoverStroke: 0.22
                                                     color: Qt.rgba(root.cardGlassRgb.r, root.cardGlassRgb.g, root.cardGlassRgb.b, hoverFill)
-                                                    border.width: 1
-                                                    border.color: Qt.rgba(1, 1, 1, hoverStroke)
 
                                                     // daily[0].sunset 形如 "2026-10-17T17:57"（Open-Meteo 本地 ISO，无时区后缀）——自旧 66px 日落瓦片原样迁入
                                                     readonly property string sunsetRaw:
@@ -2466,11 +2468,7 @@ KosApplicationWindow {
                                                     property bool hot: uvHover.hovered
                                                     property real hoverFill: hot ? root.cardGlassAlphaHot : root.cardGlassAlpha
                                                     Behavior on hoverFill { NumberAnimation { duration: AppTheme.motionNormal; easing.type: Easing.OutCubic } }
-                                                    // §4 卡片（L0）hover 只 +2% 亮度：描边不随 hover 变化
-                                                    property real hoverStroke: 0.22
                                                     color: Qt.rgba(root.cardGlassRgb.r, root.cardGlassRgb.g, root.cardGlassRgb.b, hoverFill)
-                                                    border.width: 1
-                                                    border.color: Qt.rgba(1, 1, 1, hoverStroke)
 
                                                     readonly property real uvVal: root.number(backend.current, "uvIndex", NaN)
                                                     readonly property string uvText: Number.isFinite(uvVal) ? String(Math.round(uvVal)) : "—"
@@ -2613,8 +2611,7 @@ KosApplicationWindow {
                                 background: KosSurface {
                                     radius: 20
                                     fillColor: Qt.rgba(root.cardGlassRgb.r, root.cardGlassRgb.g, root.cardGlassRgb.b, root.currentIsDay ? root.cardGlassAlpha : 0.16)
-                                    strokeWidth: 1
-                                    strokeColor: Qt.rgba(1, 1, 1, 0.22)
+                                    strokeWidth: 0 // 用户裁决 2026-10-23（R80 0.5）：内容区白描边去除
                                     elevation: 0
                                 }
 
@@ -2665,8 +2662,6 @@ KosApplicationWindow {
                                                 // 参考实测（ref-main 814×498 Pillow 采样）：胶囊内 (28,90,168) vs 卡面 (0,83,180)
                                                 // ——相对卡面 R+28/G+7/B−12，解出脱饱和中性灰 ≈#767676 @ α0.22-0.26（压暗蓝通道）；白@0.14 方向相反（整体提亮），故按参考改灰。
                                                 color: Qt.rgba(0.46, 0.46, 0.46, 0.24)
-                                                border.width: 1
-                                                border.color: Qt.rgba(1, 1, 1, 0.22)
                                             }
 
                                             // 选中段胶囊（当前段背后）——ref-main 814×498 Pillow 实测：选中胶囊 26×22@814（段宽 28、胶囊高 24，
@@ -3210,14 +3205,11 @@ KosApplicationWindow {
                                 property bool cardHot: dailyHover.hovered
                                 property real hoverFill: cardHot ? root.cardGlassAlphaHot : root.cardGlassAlpha
                                 Behavior on hoverFill { NumberAnimation { duration: AppTheme.motionNormal; easing.type: Easing.OutCubic } }
-                                // §4 卡片（L0）hover 只 +2% 亮度：描边不随 hover 变化
-                                property real hoverStroke: 0.22
 
                                 background: KosSurface {
                                     radius: 20
                                     fillColor: Qt.rgba(root.cardGlassRgb.r, root.cardGlassRgb.g, root.cardGlassRgb.b, dailyCard.hoverFill)
-                                    strokeWidth: 1
-                                    strokeColor: Qt.rgba(1, 1, 1, dailyCard.hoverStroke)
+                                    strokeWidth: 0 // 用户裁决 2026-10-23（R80 0.5）：内容区白描边去除
                                     elevation: 0
                                 }
 
