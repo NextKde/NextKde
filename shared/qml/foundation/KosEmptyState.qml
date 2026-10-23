@@ -21,20 +21,20 @@ Item {
 
     signal actionTriggered()
 
-    implicitWidth: 420
+    implicitWidth: 320
     implicitHeight: content.implicitHeight
 
     ColumnLayout {
         id: content
         anchors.centerIn: parent
-        width: Math.min(root.width, 420)
-        spacing: 10
+        width: Math.min(root.width, 320)
+        spacing: 12
 
         Label {
             Layout.alignment: Qt.AlignHCenter
             text: root.symbol
             color: root.symbolColor
-            font.pixelSize: 48
+            font.pixelSize: 40
             Accessible.name: root.title
         }
 
@@ -44,7 +44,7 @@ Item {
             color: root.titleColor
             horizontalAlignment: Text.AlignHCenter
             wrapMode: Text.WordWrap
-            font.pixelSize: 21
+            font.pixelSize: 17
             font.weight: Font.DemiBold
         }
 
@@ -54,6 +54,7 @@ Item {
             color: root.descriptionColor
             horizontalAlignment: Text.AlignHCenter
             wrapMode: Text.WordWrap
+            font.pixelSize: 14
             lineHeight: 1.22
             visible: text.length > 0
         }
