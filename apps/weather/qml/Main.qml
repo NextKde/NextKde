@@ -50,6 +50,8 @@ KosApplicationWindow {
         property bool pressed: false
         property bool hovered: false
         property bool subtle: false
+        // §5 Focus：失焦或禁用即移除外环（绑定方以 activeFocus && enabled 驱动）
+        property bool focused: false
         readonly property bool filled: selected || pressed || hovered || subtle
         radius: width / 2
         color: subtle ? Qt.rgba(1, 1, 1, 0.14)
@@ -68,6 +70,17 @@ KosApplicationWindow {
                 GradientStop { position: 0; color: Qt.rgba(1, 1, 1, 0.28) }
                 GradientStop { position: 0.22; color: Qt.rgba(1, 1, 1, 0) }
             }
+        }
+        Rectangle {
+            // §5 Focus：2px accent 外环，偏移 2（margins −4 扣描边 2 留白恰 2px，外环计入描边宽度）；
+            // 色走 LiquidStyle.focusColor（accent 无彩/明度越界回退 #3478f6，§3 color.focusFallback）
+            visible: parent.focused
+            anchors.fill: parent
+            anchors.margins: -4
+            radius: parent.radius + 2
+            border.width: 2
+            border.color: LiquidStyle.focusColor(AppTheme.accent)
+            color: "transparent"
         }
     }
     readonly property bool nightClearSky:
@@ -1398,7 +1411,10 @@ KosApplicationWindow {
                         font.pixelSize: 16
                         Layout.preferredWidth: 34
                         Layout.alignment: Qt.AlignVCenter
-                        background: GlassCircleBg { subtle: true }
+                        background: GlassCircleBg {
+                            subtle: true
+                            focused: settingsButton.activeFocus && settingsButton.enabled
+                        }
                         contentItem: Label {
                             text: settingsButton.text
                             font: settingsButton.font
@@ -1419,7 +1435,10 @@ KosApplicationWindow {
                         font.pixelSize: 18
                         Layout.preferredWidth: 34
                         enabled: backend.connected && !backend.loading
-                        background: GlassCircleBg { subtle: true }
+                        background: GlassCircleBg {
+                            subtle: true
+                            focused: refreshButton.activeFocus && refreshButton.enabled
+                        }
                         contentItem: Label {
                             id: refreshGlyph
                             text: refreshButton.text
@@ -1460,6 +1479,7 @@ KosApplicationWindow {
                         rightPadding: 0
                         Layout.preferredWidth: AppTheme.controlHeight
                         background: GlassCircleBg {
+                            focused: metricButton.activeFocus && metricButton.enabled
                             selected: metricButton.checked
                             pressed: metricButton.down
                             hovered: metricButton.hovered
@@ -1488,6 +1508,7 @@ KosApplicationWindow {
                         rightPadding: 0
                         Layout.preferredWidth: AppTheme.controlHeight
                         background: GlassCircleBg {
+                            focused: imperialButton.activeFocus && imperialButton.enabled
                             selected: imperialButton.checked
                             pressed: imperialButton.down
                             hovered: imperialButton.hovered
@@ -2629,7 +2650,17 @@ KosApplicationWindow {
                                                 x: 0
                                                 width: 44
                                                 height: 34
-                                                background: null
+                                                background: Rectangle {
+                                                    // §5 Focus：2px accent 外环，偏移 2（margins −4 扣描边 2 留白恰 2px）；
+                                                    // 圆角 = 胶囊 17+2（R10/LiquidSelect 先例）；失焦或禁用即移除
+                                                    visible: parent.activeFocus && parent.enabled
+                                                    anchors.fill: parent
+                                                    anchors.margins: -4
+                                                    radius: 19
+                                                    border.width: 2
+                                                    border.color: LiquidStyle.focusColor(AppTheme.accent)
+                                                    color: "transparent"
+                                                }
                                                 // ref tile-conditions：实心云体 + 右上探出小日盘，云与日之间有缺口（SF cloud.sun.fill 构图）
                                                 // Control 会覆写 contentItem 几何，Canvas 需包 Item 再居中；segment 属于外层 hourlySegmented
                                                 contentItem: Item {
@@ -2681,7 +2712,16 @@ KosApplicationWindow {
                                                 x: 44
                                                 width: 44
                                                 height: 34
-                                                background: null
+                                                background: Rectangle {
+                                                    // §5 Focus：同段 0（2px accent 外环偏移 2，胶囊 17+2）
+                                                    visible: parent.activeFocus && parent.enabled
+                                                    anchors.fill: parent
+                                                    anchors.margins: -4
+                                                    radius: 19
+                                                    border.width: 2
+                                                    border.color: LiquidStyle.focusColor(AppTheme.accent)
+                                                    color: "transparent"
+                                                }
                                                 // ref-main 实测降水段为实心水滴 6×9px@814（胶囊高 25px），我方胶囊 36px 按 1.44 折算 ≈ 9×13
                                                 // Control 会覆写 contentItem 几何，Canvas 需包 Item 再居中（ref 胶囊中心 225 vs 水滴中心 225.5 居中）
                                                 // LEDGER 仍差 15：ref 水滴墨/胶囊高比 0.386，canvas 12×16→15×20（×1.25），墨迹 8×11→~10×14
@@ -2722,7 +2762,16 @@ KosApplicationWindow {
                                                 x: 88
                                                 width: 44
                                                 height: 34
-                                                background: null
+                                                background: Rectangle {
+                                                    // §5 Focus：同段 0（2px accent 外环偏移 2，胶囊 17+2）
+                                                    visible: parent.activeFocus && parent.enabled
+                                                    anchors.fill: parent
+                                                    anchors.margins: -4
+                                                    radius: 19
+                                                    border.width: 2
+                                                    border.color: LiquidStyle.focusColor(AppTheme.accent)
+                                                    color: "transparent"
+                                                }
                                                 // ref SF wind：三道横向流线，右端卷成小螺旋，整体重心居中
                                                 contentItem: Item {
                                                     anchors.fill: parent
