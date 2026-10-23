@@ -8,11 +8,12 @@
   因此 `grabWindow()` 自捕获就是玻璃的真实合成结果；合成器截图只会额外带上窗口圆角/
   外阴影与桌面壁纸，不会改变玻璃材质本身。
 - 合成器采集仍试了一次作对照（均失败，已停止重试）：
-  - KWin `ScreenShot2.CaptureScreen` → `ScreenShot2.Error.NoAuthorized`。
+  - KWin `ScreenShot2.CaptureScreen("Virtual-1")` → `ScreenShot2.Error.NoAuthorized`。
   - `spectacle -f -b`（走 xdg-desktop-portal）落盘 1280×800 **纯白**；
     portal 非交互 Screenshot 请求 10s 无 Response（授权弹窗无人可点）。
   → 无人值守拿不到合成帧，属环境/授权限制。
-- 视觉对照（760×540 自捕获 light，工具栏 3x、侧栏 2x 放大后与主参考图逐区比对）：
+- 视觉对照（760×540 自捕获 light，`FIX02b-760-month-light.png`，工具栏 3x、侧栏 2x
+  放大后与 `.loop/refs/macos-calendar.png` 逐区比对）：
   - 工具栏：浮动玻璃舱，圆角/1px 内描边/轻微提亮与参考浮动岛一致；日周月年选中
     “月”为抬升胶囊，对应参考 Day/Week/Month/Year 选中态；红绿灯在右（KDE CSD）
     与参考在左属平台差异。
