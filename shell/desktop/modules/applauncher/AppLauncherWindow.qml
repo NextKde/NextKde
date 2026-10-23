@@ -1621,8 +1621,14 @@ PanelWindow {
                             readonly property int fullscreenRowCount: root.isFullscreenMode
                                 ? Math.max(1, Math.min(5,
                                     Math.floor(fullscreenAvailableHeight / cellHeight))) : 0
+                            // Card presentations start the scrolling viewport
+                            // below the search header, so a scrolled row can
+                            // never paint over or behind the field.
+                            readonly property real cardGridTop:
+                                header.y + header.height + 8
                             height: root.isFullscreenMode
-                                ? fullscreenRowCount * cellHeight : parent.height - 32
+                                ? fullscreenRowCount * cellHeight
+                                : parent.height - cardGridTop - 18
                             x: Math.round((parent.width - width) / 2)
                             y: root.isFullscreenMode
                                 // Keep Launchpad content visually connected to
@@ -1631,17 +1637,13 @@ PanelWindow {
                                 // short grid in all remaining vertical space.
                                 ? fullscreenTopClearance + Math.round(Math.min(24,
                                     Math.max(0, fullscreenAvailableHeight - height) * 0.20))
-                                : 14
+                                : cardGridTop
                             clip: true
                             interactive: !root.isFullscreenMode
                             boundsBehavior: Flickable.StopAtBounds
-                            // Reserve the search header in the resting
-                            // layout without moving the viewport itself. The
-                            // first row therefore never crowds the input, but
-                            // scrolling tiles can still travel behind the
-                            // header and emerge naturally below it.
-                            topMargin: root.isFullscreenMode ? 0
-                                : header.height + 8
+                            // The viewport already begins below the header;
+                            // no extra top inset is needed for card modes.
+                            topMargin: 0
                             // The visible card and grid cell share one source
                             // of truth. Density supplies the desired gap; cell
                             // width is then evenly divided across the usable
