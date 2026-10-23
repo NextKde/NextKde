@@ -42,6 +42,9 @@ KosApplicationWindow {
     // sky top bar. `selected` shows the tinted glass disc, unselected stays
     // transparent until hover; `subtle` is the always-on action-button glass
     // (same family as KosSidebarToggle: fill white@0.14 + border white@0.22).
+    // hover/press 按 §4.1 叠 hoverFill/pressFill（dark 变体白 .08/.12：
+    // 位于天空媒体之上、glyph 恒白，§2.6 随背景翻转与 ref-main 白色控件冲突处按 §9 以参考图为准）。
+    // subtle 底 0.14 与 selected 0.27 系 ref-main 拟合值（§9 参考图优先），不随本轮改。
     component GlassCircleBg: Rectangle {
         property bool selected: false
         property bool pressed: false
@@ -51,7 +54,8 @@ KosApplicationWindow {
         radius: width / 2
         color: subtle ? Qt.rgba(1, 1, 1, 0.14)
             : (selected ? Qt.rgba(1, 1, 1, 0.27)
-               : ((hovered || pressed) ? Qt.rgba(1, 1, 1, 0.14) : "transparent"))
+               : (pressed ? Qt.rgba(1, 1, 1, 0.12)
+                  : (hovered ? Qt.rgba(1, 1, 1, 0.08) : "transparent")))
         border.width: filled ? 1 : 0
         border.color: subtle ? Qt.rgba(1, 1, 1, 0.22) : Qt.rgba(1, 1, 1, 0.30)
         Rectangle {
@@ -3346,6 +3350,7 @@ KosApplicationWindow {
         height: root.sidebarExpanded ? 46 : 44
         z: 10
         KosSidebarToggle {
+            id: sidebarToggle
             targetWindow: root
             anchors.right: parent.right
             anchors.rightMargin: root.sidebarExpanded ? 5 : 0
@@ -3357,7 +3362,12 @@ KosApplicationWindow {
             glyphPaneColor: Qt.rgba(1, 1, 1, 0.95)
             background: Rectangle {
                 radius: width / 2
-                color: Qt.rgba(1, 1, 1, 0.14)
+                // 底 0.14 系 ref-main 拟合玻璃（§9 参考图优先）；hover 按 §4.1 玻璃项
+                // 「叠 hoverFill」：0.14 上叠 dark hoverFill 白 .08 → 合成 α≈0.21。
+                color: sidebarToggle.hovered
+                    ? Qt.rgba(1, 1, 1, 1 - (1 - 0.14) * (1 - 0.08))
+                    : Qt.rgba(1, 1, 1, 0.14)
+                Behavior on color { ColorAnimation { duration: 150 } } // §4.1 过渡 150ms
                 border.width: 1
                 border.color: Qt.rgba(1, 1, 1, 0.22)
                 Rectangle {
