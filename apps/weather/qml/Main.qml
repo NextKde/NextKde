@@ -35,7 +35,7 @@ KosApplicationWindow {
     // 可拟合为 α~0.30 的深蓝玻璃 (0,96,210)。夜景无参考：维持白玻璃族不变。
     readonly property color cardGlassRgb: root.currentIsDay ? Qt.rgba(0, 0.376, 0.824, 1.0) : Qt.rgba(1, 1, 1, 1.0)
     readonly property real cardGlassAlpha: root.currentIsDay ? 0.30 : 0.16
-    readonly property real cardGlassAlphaHot: root.currentIsDay ? 0.36 : 0.21
+    readonly property real cardGlassAlphaHot: root.cardGlassAlpha + 0.02 // §4 卡片（L0）hover 只 +2% 亮度（原 0.36/0.21 系 +0.06 超标）
     readonly property int tileRadius: 16 // ref-main UV 瓦角部拟合 r≈10.5@814 × 1.46 窗比 ≈ 15.3，LEDGER WIND 瓦 r≈11±1 同证；AppTheme.smallRadius(12) 是 shared 基础件不动，weather 内显式覆盖
 
     // Liquid Glass circular button background (stage 3, style A) for the
@@ -460,15 +460,11 @@ KosApplicationWindow {
         // unified with full-width cards (AQ/10-day): fill 0.16 + stroke 0.22; ref-main shows one shared card material
         property real hoverFill: hot ? root.cardGlassAlphaHot : root.cardGlassAlpha
         Behavior on hoverFill { NumberAnimation { duration: AppTheme.motionNormal; easing.type: Easing.OutCubic } }
-        property real hoverStroke: hot ? 0.32 : 0.22
-        Behavior on hoverStroke { NumberAnimation { duration: AppTheme.motionNormal; easing.type: Easing.OutCubic } }
+        // §4 卡片（L0）hover 只 +2% 亮度：描边不随 hover 变化
+        property real hoverStroke: 0.22
         color: Qt.rgba(root.cardGlassRgb.r, root.cardGlassRgb.g, root.cardGlassRgb.b, hoverFill)
         border.width: 1
         border.color: Qt.rgba(1, 1, 1, hoverStroke)
-        transform: Translate {
-            y: AppTheme.reduceMotion ? 0 : (metric.hot ? -3 : 0)
-            Behavior on y { NumberAnimation { duration: AppTheme.motionNormal; easing.type: Easing.OutCubic } }
-        }
         Accessible.role: Accessible.StaticText
         Accessible.name: metric.labelText + ": " + metric.valueText
 
@@ -1879,15 +1875,11 @@ KosApplicationWindow {
                                                     property bool hot: windHover.hovered
                                                     property real hoverFill: hot ? root.cardGlassAlphaHot : root.cardGlassAlpha
                                                     Behavior on hoverFill { NumberAnimation { duration: AppTheme.motionNormal; easing.type: Easing.OutCubic } }
-                                                    property real hoverStroke: hot ? 0.32 : 0.22
-                                                    Behavior on hoverStroke { NumberAnimation { duration: AppTheme.motionNormal; easing.type: Easing.OutCubic } }
+                                                    // §4 卡片（L0）hover 只 +2% 亮度：描边不随 hover 变化
+                                                    property real hoverStroke: 0.22
                                                     color: Qt.rgba(root.cardGlassRgb.r, root.cardGlassRgb.g, root.cardGlassRgb.b, hoverFill)
                                                     border.width: 1
                                                     border.color: Qt.rgba(1, 1, 1, hoverStroke)
-                                                    transform: Translate {
-                                                        y: AppTheme.reduceMotion ? 0 : (windCard.hot ? -3 : 0)
-                                                        Behavior on y { NumberAnimation { duration: AppTheme.motionNormal; easing.type: Easing.OutCubic } }
-                                                    }
 
                                                     property real windDir: root.number(backend.current, "windDirection", 0)
                                                     // arrow points where the wind blows TO (Open-Meteo direction is where it comes FROM)
@@ -2070,15 +2062,11 @@ KosApplicationWindow {
                                                     property bool hot: moonHover.hovered
                                                     property real hoverFill: hot ? root.cardGlassAlphaHot : root.cardGlassAlpha
                                                     Behavior on hoverFill { NumberAnimation { duration: AppTheme.motionNormal; easing.type: Easing.OutCubic } }
-                                                    property real hoverStroke: hot ? 0.32 : 0.22
-                                                    Behavior on hoverStroke { NumberAnimation { duration: AppTheme.motionNormal; easing.type: Easing.OutCubic } }
+                                                    // §4 卡片（L0）hover 只 +2% 亮度：描边不随 hover 变化
+                                                    property real hoverStroke: 0.22
                                                     color: Qt.rgba(root.cardGlassRgb.r, root.cardGlassRgb.g, root.cardGlassRgb.b, hoverFill)
                                                     border.width: 1
                                                     border.color: Qt.rgba(1, 1, 1, hoverStroke)
-                                                    transform: Translate {
-                                                        y: AppTheme.reduceMotion ? 0 : (moonCard.hot ? -3 : 0)
-                                                        Behavior on y { NumberAnimation { duration: AppTheme.motionNormal; easing.type: Easing.OutCubic } }
-                                                    }
 
                                                     property real phaseVal: root.number(backend.current, "moonPhase", Number.NaN)
                                                     property bool hasPhase: Number.isFinite(phaseVal)
@@ -2267,15 +2255,11 @@ KosApplicationWindow {
                                                     property bool hot: sunsetHover.hovered
                                                     property real hoverFill: hot ? root.cardGlassAlphaHot : root.cardGlassAlpha
                                                     Behavior on hoverFill { NumberAnimation { duration: AppTheme.motionNormal; easing.type: Easing.OutCubic } }
-                                                    property real hoverStroke: hot ? 0.32 : 0.22
-                                                    Behavior on hoverStroke { NumberAnimation { duration: AppTheme.motionNormal; easing.type: Easing.OutCubic } }
+                                                    // §4 卡片（L0）hover 只 +2% 亮度：描边不随 hover 变化
+                                                    property real hoverStroke: 0.22
                                                     color: Qt.rgba(root.cardGlassRgb.r, root.cardGlassRgb.g, root.cardGlassRgb.b, hoverFill)
                                                     border.width: 1
                                                     border.color: Qt.rgba(1, 1, 1, hoverStroke)
-                                                    transform: Translate {
-                                                        y: AppTheme.reduceMotion ? 0 : (sunsetCard.hot ? -3 : 0)
-                                                        Behavior on y { NumberAnimation { duration: AppTheme.motionNormal; easing.type: Easing.OutCubic } }
-                                                    }
 
                                                     // daily[0].sunset 形如 "2026-10-17T17:57"（Open-Meteo 本地 ISO，无时区后缀）——自旧 66px 日落瓦片原样迁入
                                                     readonly property string sunsetRaw:
@@ -2381,15 +2365,11 @@ KosApplicationWindow {
                                                     property bool hot: uvHover.hovered
                                                     property real hoverFill: hot ? root.cardGlassAlphaHot : root.cardGlassAlpha
                                                     Behavior on hoverFill { NumberAnimation { duration: AppTheme.motionNormal; easing.type: Easing.OutCubic } }
-                                                    property real hoverStroke: hot ? 0.32 : 0.22
-                                                    Behavior on hoverStroke { NumberAnimation { duration: AppTheme.motionNormal; easing.type: Easing.OutCubic } }
+                                                    // §4 卡片（L0）hover 只 +2% 亮度：描边不随 hover 变化
+                                                    property real hoverStroke: 0.22
                                                     color: Qt.rgba(root.cardGlassRgb.r, root.cardGlassRgb.g, root.cardGlassRgb.b, hoverFill)
                                                     border.width: 1
                                                     border.color: Qt.rgba(1, 1, 1, hoverStroke)
-                                                    transform: Translate {
-                                                        y: AppTheme.reduceMotion ? 0 : (uvCard.hot ? -3 : 0)
-                                                        Behavior on y { NumberAnimation { duration: AppTheme.motionNormal; easing.type: Easing.OutCubic } }
-                                                    }
 
                                                     readonly property real uvVal: root.number(backend.current, "uvIndex", NaN)
                                                     readonly property string uvText: Number.isFinite(uvVal) ? String(Math.round(uvVal)) : "—"
@@ -2573,13 +2553,13 @@ KosApplicationWindow {
                                         Item {
                                             id: hourlySegmented
                                             implicitWidth: 132
-                                            implicitHeight: 36
+                                            implicitHeight: 34 // §4 分段控件「高 28/34」（原 36 超标）
                                             Layout.alignment: Qt.AlignTop | Qt.AlignRight
                                             property int segment: 0
 
                                             Rectangle {
                                                 anchors.fill: parent
-                                                radius: 18
+                                                radius: 17 // 胶囊 = h/2（高 34）
                                                 // 参考实测（ref-main 814×498 Pillow 采样）：胶囊内 (28,90,168) vs 卡面 (0,83,180)
                                                 // ——相对卡面 R+28/G+7/B−12，解出脱饱和中性灰 ≈#767676 @ α0.22-0.26（压暗蓝通道）；白@0.14 方向相反（整体提亮），故按参考改灰。
                                                 color: Qt.rgba(0.46, 0.46, 0.46, 0.24)
@@ -2593,15 +2573,15 @@ KosApplicationWindow {
                                                 x: 2 + 44 * hourlySegmented.segment
                                                 y: 2
                                                 width: 40
-                                                height: 32
-                                                radius: 16
+                                                height: 30
+                                                radius: 15
                                                 color: Qt.rgba(1, 1, 1, 0.27)
                                             }
 
                                             AbstractButton {
                                                 x: 0
                                                 width: 44
-                                                height: 36
+                                                height: 34
                                                 background: null
                                                 // ref tile-conditions：实心云体 + 右上探出小日盘，云与日之间有缺口（SF cloud.sun.fill 构图）
                                                 // Control 会覆写 contentItem 几何，Canvas 需包 Item 再居中；segment 属于外层 hourlySegmented
@@ -2653,7 +2633,7 @@ KosApplicationWindow {
                                             AbstractButton {
                                                 x: 44
                                                 width: 44
-                                                height: 36
+                                                height: 34
                                                 background: null
                                                 // ref-main 实测降水段为实心水滴 6×9px@814（胶囊高 25px），我方胶囊 36px 按 1.44 折算 ≈ 9×13
                                                 // Control 会覆写 contentItem 几何，Canvas 需包 Item 再居中（ref 胶囊中心 225 vs 水滴中心 225.5 居中）
@@ -2694,7 +2674,7 @@ KosApplicationWindow {
                                             AbstractButton {
                                                 x: 88
                                                 width: 44
-                                                height: 36
+                                                height: 34
                                                 background: null
                                                 // ref SF wind：三道横向流线，右端卷成小螺旋，整体重心居中
                                                 contentItem: Item {
@@ -3100,12 +3080,8 @@ KosApplicationWindow {
                                 property bool cardHot: dailyHover.hovered
                                 property real hoverFill: cardHot ? root.cardGlassAlphaHot : root.cardGlassAlpha
                                 Behavior on hoverFill { NumberAnimation { duration: AppTheme.motionNormal; easing.type: Easing.OutCubic } }
-                                property real hoverStroke: cardHot ? 0.32 : 0.22
-                                Behavior on hoverStroke { NumberAnimation { duration: AppTheme.motionNormal; easing.type: Easing.OutCubic } }
-                                transform: Translate {
-                                    y: AppTheme.reduceMotion ? 0 : (dailyCard.cardHot ? -3 : 0)
-                                    Behavior on y { NumberAnimation { duration: AppTheme.motionNormal; easing.type: Easing.OutCubic } }
-                                }
+                                // §4 卡片（L0）hover 只 +2% 亮度：描边不随 hover 变化
+                                property real hoverStroke: 0.22
 
                                 background: KosSurface {
                                     radius: 20
