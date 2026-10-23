@@ -1769,8 +1769,11 @@ KosApplicationWindow {
                                     // ref-main Pillow 实测 Conditions 卡圆角 r≈14px@814 × 1.4598 窗高比 ≈ 20.4 → 20（同心圆角锚点，阶段三 A）
                                     radius: 20
                                     fillColor: Qt.rgba(root.cardGlassRgb.r, root.cardGlassRgb.g, root.cardGlassRgb.b, root.cardGlassAlpha)
-                                    strokeWidth: 1
-                                    strokeColor: Qt.rgba(1, 1, 1, 0.22)
+                                    // 用户裁决 2026-10-23（R80 0.5）：内容区白描边一律去掉，
+                                    // 此为最后一处卡片 rim（R25 每卡一条 rim 的判定被本轮推翻）。
+                                    strokeWidth: 0
+                                    // innerHighlight（AppTheme 白@0.58 内侧 1px 高光线）同属白描边，一并去除
+                                    showInnerHighlight: false
                                     elevation: 0
                                 }
 
@@ -2612,6 +2615,8 @@ KosApplicationWindow {
                                     radius: 20
                                     fillColor: Qt.rgba(root.cardGlassRgb.r, root.cardGlassRgb.g, root.cardGlassRgb.b, root.currentIsDay ? root.cardGlassAlpha : 0.16)
                                     strokeWidth: 0 // 用户裁决 2026-10-23（R80 0.5）：内容区白描边去除
+                                    // innerHighlight（AppTheme 白@0.58 内侧 1px 高光线）同属白描边，一并去除
+                                    showInnerHighlight: false
                                     elevation: 0
                                 }
 
@@ -3210,6 +3215,8 @@ KosApplicationWindow {
                                     radius: 20
                                     fillColor: Qt.rgba(root.cardGlassRgb.r, root.cardGlassRgb.g, root.cardGlassRgb.b, dailyCard.hoverFill)
                                     strokeWidth: 0 // 用户裁决 2026-10-23（R80 0.5）：内容区白描边去除
+                                    // innerHighlight（AppTheme 白@0.58 内侧 1px 高光线）同属白描边，一并去除
+                                    showInnerHighlight: false
                                     elevation: 0
                                 }
 
@@ -3486,8 +3493,9 @@ KosApplicationWindow {
                     ? Qt.rgba(1, 1, 1, 1 - (1 - 0.14) * (1 - 0.08))
                     : Qt.rgba(1, 1, 1, 0.14)
                 Behavior on color { ColorAnimation { duration: 150 } } // §4.1 过渡 150ms
-                border.width: 1
-                border.color: Qt.rgba(1, 1, 1, 0.22)
+                // 用户裁决 2026-10-23（R80 0.5）：白描边去掉，与 GlassCircleBg 同轮收口
+                //（盘钮填充层即材质，spec §2.7 亮边由顶部 specular 高光承担）。
+                border.width: 0
                 Rectangle {
                     // specular top sheen, clipped to the circle
                     anchors.fill: parent
