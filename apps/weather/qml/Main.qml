@@ -1666,17 +1666,16 @@ KosApplicationWindow {
                             font.weight: Font.DemiBold
                         }
 
-                        // R85（用户裁决 #0.7 第三轮「更大更粗上移+一点 3D」）：hero 温度数字为
-                        // iOS 液态玻璃字——① 体渐变压平 0.30/0.26/0.22（第二轮定值，本轮不动）；
-                        // ② 无 additive 扫光带（已删）；③ 上/左柔和渐变受光（第二轮定值，本轮不动）；
-                        // ④ 呼吸动效：整字 opacity 0.86↔1.0，周期 5s InOutSine（§2.12 reduceMotion 钉 1.0）；
-                        // ⑤ 本轮新增静态厚度（只许静态、不许动效/镜面）：底部柔和暗边
-                        //    （shadow 偏移 +1.5px、α0.12、blur 3）+ 顶部极轻亮边（shadow 偏移 −1.5px、
-                        //    α0.12、blur 3）——不依赖动画，reduceMotion 下照常绘制；
-                        // ⑥ 字号 70→92（° 44→58），整体上移：Layout.topMargin −14 → −24（+10px，单处）。
-                        // 字重：裁决要求全系统最粗档——IBM Plex Sans 止于 Bold(700)，Ubuntu Sans
-                        // 可变字重上限 ExtraBold(800)（fc-match "Ubuntu Sans:weight=800" 实证），
-                        // 全系统无 900/Black，实取 Ubuntu Sans 800。
+                        // R86（用户裁决 #0.7 第四轮「字变黑了+3D 没有」）：黑字根因 = 旧两个阴影 pass
+                        // 调 fillText 前未设 fillStyle（Canvas 默认 #000000 先画不透明黑字）——本版每个
+                        // pass 都显式设 fillStyle。3D 厚度改"偏移实体层"（柔影 α0.12+blur3 在 92px 上
+                        // 等于看不见）：
+                        //   a. 厚度层1 translate(0,3) rgba(10,30,72,0.42) shadowBlur=0
+                        //   b. 厚度层2 translate(0,1.5) rgba(10,30,72,0.22)（阶梯厚度）
+                        //   c. 主体体渐变 0.30/0.26/0.22（保持浅色半透，禁纯白/禁黑实心）
+                        //   d. 顶部高光 translate(0,-1) rgba(255,255,255,0.35) source-atop（只叠在已绘字形上）
+                        // 禁 lighter、禁移动高光带、禁纯白硬 rim。字族/字重/字号/位置/呼吸（Ubuntu Sans
+                        // 800 / 92px / topMargin −24 / opacity 0.86↔1.0 5s）本轮不动。
                         Canvas {
                             id: heroTempLiquid
                             Layout.alignment: Qt.AlignHCenter
@@ -1718,18 +1717,18 @@ KosApplicationWindow {
 
                                 const paintRuns = (fn) => { for (const r of runs) { ctx.font = r.font; fn(r.t, x0 + r.x, r.y) } }
 
-                                // ⑤ 静态厚度底边：柔和暗 shadow（偏移 +1.5、α0.12、blur 3，用户裁决 #0.7 第三轮）
+                                // a. 厚度层1：向下偏移 3px 深色实体（显式 fillStyle，shadowBlur=0）
                                 ctx.save()
-                                ctx.shadowColor = "rgba(8,22,52,0.12)"
-                                ctx.shadowOffsetY = 1.5
-                                ctx.shadowBlur = 3
+                                ctx.translate(0, 3)
+                                ctx.fillStyle = "rgba(10,30,72,0.42)"
+                                ctx.shadowBlur = 0
                                 paintRuns((t, x, y) => ctx.fillText(t, x, y))
                                 ctx.restore()
-                                // ⑤ 静态厚度顶边：极轻亮 shadow（偏移 −1.5、α0.12、blur 3）
+                                // b. 厚度层2：向下偏移 1.5px 中间阶梯（阶梯厚度，非模糊阴影）
                                 ctx.save()
-                                ctx.shadowColor = "rgba(255,255,255,0.12)"
-                                ctx.shadowOffsetY = -1.5
-                                ctx.shadowBlur = 3
+                                ctx.translate(0, 1.5)
+                                ctx.fillStyle = "rgba(10,30,72,0.22)"
+                                ctx.shadowBlur = 0
                                 paintRuns((t, x, y) => ctx.fillText(t, x, y))
                                 ctx.restore()
 
@@ -1747,6 +1746,15 @@ KosApplicationWindow {
                                 lite.addColorStop(1, "rgba(255,255,255,0)")
                                 ctx.fillStyle = lite
                                 paintRuns((t, x, y) => ctx.fillText(t, x, y))
+
+                                // d. 顶部高光：translate(0,-1) + source-atop，只叠在已绘字形 alpha 上
+                                //（第四轮给定 rgba(255,255,255,0.35)；若上屏整字过亮/失效，本轮内回调并记 LEDGER）
+                                ctx.save()
+                                ctx.translate(0, -1)
+                                ctx.globalCompositeOperation = "source-atop"
+                                ctx.fillStyle = "rgba(255,255,255,0.35)"
+                                paintRuns((t, x, y) => ctx.fillText(t, x, y))
+                                ctx.restore()
                             }
                         }
 
