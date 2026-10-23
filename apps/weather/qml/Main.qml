@@ -35,11 +35,11 @@ KosApplicationWindow {
     // 白@α 反解三通道矛盾 R 0.33/B 0.91，证独立蓝墨非白@α），与 glyph 色 #90cbff 同源
     readonly property color cardHeaderText: "#90cbff"
 
-    // ref-main 白天场景所有内容卡填充暗于周围天空（Pillow 实测：指标卡 (38.5,115.8,196.9)
-    // vs 卡间天空 (54.7,124.3,197.0)；AQ 卡 (9.5,93.7,179.0) vs 缝隙 (38.3,101.7,175.9)），
-    // 可拟合为 α~0.30 的深蓝玻璃 (0,96,210)。夜景无参考：维持白玻璃族不变。
-    readonly property color cardGlassRgb: root.currentIsDay ? Qt.rgba(0, 0.376, 0.824, 1.0) : Qt.rgba(1, 1, 1, 1.0)
-    readonly property real cardGlassAlpha: root.currentIsDay ? 0.30 : 0.16
+    // 用户裁定 2026-10-23：卡片改**中性白玻璃**，禁止蓝色 tint 压在蓝色天空上（旧值
+    // α0.30 的 (0,96,210) 深蓝玻璃在模糊蓝底上糊成一片）。白底 α0.14（夜景 0.16 不变），
+    // 层级仍按 §1：L0 内容不用玻璃，白 α 属标准材质；对比度以 §2.10 正文 ≥4.5:1 复核。
+    readonly property color cardGlassRgb: Qt.rgba(1, 1, 1, 1.0)
+    readonly property real cardGlassAlpha: root.currentIsDay ? 0.14 : 0.16
     readonly property real cardGlassAlphaHot: root.cardGlassAlpha + 0.02 // §4 卡片（L0）hover 只 +2% 亮度（原 0.36/0.21 系 +0.06 超标）
     readonly property int tileRadius: 16 // ref-main UV 瓦角部拟合 r≈10.5@814 × 1.46 窗比 ≈ 15.3，LEDGER WIND 瓦 r≈11±1 同证；AppTheme.smallRadius(12) 是 shared 基础件不动，weather 内显式覆盖
 
@@ -191,15 +191,18 @@ KosApplicationWindow {
 
     // Cloud puffs: fixed-seed PRNG so the layout is identical on every
     // launch; each cloud drifts across the full screen (HIG ambient loop
-    // 2-12s: one crossing takes 8-12s).
+    // 2-12s: one crossing takes 8-12s). ref-main 观感拟合（用户第二批背景轮）：
+    // 云deck集中在顶部 ~50%（ref 云带在 top 8-45%），分两层——后层大而淡的云堤 +
+    // 前层较实的结构云（paint 时分层出阴影底/受光顶，光源左上 §2.7）。
     readonly property var cloudField: {
         const random = mulberry32(20261019)
         const clouds = []
         for (let index = 0; index < 7; index++) {
-            const cloudWidth = 160 + random() * 180
+            const backBank = index < 3
+            const cloudWidth = backBank ? 260 + random() * 200 : 150 + random() * 170
             const driftMs = 8000 + random() * 4000
             const puffs = []
-            for (let puff = 0; puff < 4; puff++) {
+            for (let puff = 0; puff < 5; puff++) {
                 puffs.push({
                     cxRatio: 0.15 + random() * 0.7,
                     cyRatio: 0.35 + random() * 0.35,
@@ -210,10 +213,10 @@ KosApplicationWindow {
             puffs.sort(function(a, b) { return a.cxRatio - b.cxRatio })
             clouds.push({
                 xRatio: random(),
-                yRatio: random() * 0.55,
+                yRatio: random() * 0.32,
                 cloudWidth: cloudWidth,
-                cloudHeight: cloudWidth * 0.38,
-                opacity: 0.10 + random() * 0.14,
+                cloudHeight: cloudWidth * (backBank ? 0.24 : 0.38),
+                opacity: backBank ? 0.16 + random() * 0.10 : 0.30 + random() * 0.18,
                 driftMs: driftMs,
                 phaseMs: random() * driftMs,
                 puffs: puffs
@@ -340,7 +343,10 @@ KosApplicationWindow {
             return ["#3d5a7d", "#2a4a70", "#5f83a8"]
         if ((c >= 71 && c <= 77) || c === 85 || c === 86)
             return ["#7b90a6", "#5d7690", "#a9bccd"]
-        if (c === 3 || c === 45 || c === 48) return ["#6a7b90", "#4a5d75", "#8ba0b5"]
+        // ref-main 观感拟合（用户 2026-10-23 第二批判据：以 ref-main 观感为准）：云隙蓝天梯度，
+        // 顶部灰蓝由云deck覆盖，中段 y0.45 实测 ≈#1560b2，底部深蓝 ≈#0c5aa8。原灰调
+        // ["#6a7b90","#4a5d75","#8ba0b5"] 是"粗糙感"来源之一（ref 顶部云隙间仍为饱和蓝）。
+        if (c === 3 || c === 45 || c === 48) return ["#6288b5", "#1560b2", "#0c5aa8"]
         return ["#4a74ab", "#1469bc", "#5a90c9"]   // clear / mainly clear / partly cloudy day
     }
 
@@ -477,7 +483,8 @@ KosApplicationWindow {
 
         implicitHeight: 66
         radius: root.tileRadius
-        // 昼夜分材质：ref-main 白天所有卡填充暗于周围天空，拟合为 α~0.30 深蓝玻璃 (0,96,210)；夜间维持白玻璃
+        // 中性白玻璃（用户裁定 2026-10-23）：填充走 cardGlassRgb/cardGlassAlpha（白 α0.14/0.16），
+        // 禁蓝色 tint；白天卡比天空亮、夜里更亮。rim：每卡恰一条 1px 白描边（第二批「一个元素只允许一条 1px 边」）
         property bool hot: metricHover.hovered
         // unified with full-width cards (AQ/10-day): fill 0.16 + stroke 0.22; ref-main shows one shared card material
         property real hoverFill: hot ? root.cardGlassAlphaHot : root.cardGlassAlpha
@@ -904,33 +911,50 @@ KosApplicationWindow {
                 x: cloud.entryX
                 y: (cloudFieldLayer.height - height) * modelData.yRatio
                 width: cloudW
-                height: cloudW * 0.38
-                opacity: modelData.opacity
+                height: cloudW * (modelData.cloudHeight / modelData.cloudWidth)
+                // 夜间压暗：夜空无参考图（refs 日间 only），白云在暗天上调低存在感。
+                opacity: modelData.opacity * (root.currentIsDay ? 1 : 0.55)
                 Accessible.ignored: true
 
                 Canvas {
                     anchors.fill: parent
                     onWidthChanged: requestPaint()
+                    onHeightChanged: requestPaint()
                     onPaint: {
                         const ctx = getContext("2d")
                         ctx.clearRect(0, 0, width, height)
-                        for (let i = 0; i < modelData.puffs.length; i++) {
-                            const p = modelData.puffs[i]
-                            const cx = p.cxRatio * width
-                            const cy = p.cyRatio * height
-                            // Keep the gradient inside the canvas: alpha must
-                            // reach 0 before any clipped edge, otherwise puffs
-                            // show hard rectangular borders.
-                            const r = Math.max(Math.min(p.rRatio * height * 1.2,
-                                                        cy, height - cy,
-                                                        cx, width - cx), 8)
-                            const grad = ctx.createRadialGradient(cx, cy, 0, cx, cy, r)
-                            grad.addColorStop(0, "rgba(255,255,255," + p.alphaMul.toFixed(3) + ")")
-                            grad.addColorStop(1, "rgba(255,255,255,0)")
-                            ctx.fillStyle = grad
-                            ctx.beginPath()
-                            ctx.arc(cx, cy, r, 0, Math.PI * 2)
-                            ctx.fill()
+                        // Structured cloud per ref-main 观感（用户第二批背景轮）：三遍
+                        // 叠加出明暗结构——阴影底（右下偏移，深蓝 rgba(24,67,127) 系
+                        // ref 云影实测）、白色云体、受光顶（左上偏移，纯白高光，光源
+                        // 左上 §2.7）。偏移量按 canvas 比例缩放，clamp 同步平移。
+                        const passes = [
+                            { dxR: 0.06, dyR: 0.20, rgb: "24,67,127", mul: 0.85 },
+                            { dxR: 0.0,  dyR: 0.0,  rgb: "255,255,255", mul: 0.85 },
+                            { dxR: -0.03, dyR: -0.12, rgb: "255,255,255", mul: 1.0 }
+                        ]
+                        for (let pass = 0; pass < passes.length; pass++) {
+                            const ps = passes[pass]
+                            const dx = ps.dxR * width
+                            const dy = ps.dyR * height
+                            for (let i = 0; i < modelData.puffs.length; i++) {
+                                const p = modelData.puffs[i]
+                                const cx = p.cxRatio * width + dx
+                                const cy = p.cyRatio * height + dy
+                                // Keep the gradient inside the canvas: alpha must
+                                // reach 0 before any clipped edge, otherwise puffs
+                                // show hard rectangular borders.
+                                const r = Math.max(Math.min(p.rRatio * height * 1.2,
+                                                            cy, height - cy,
+                                                            cx, width - cx), 8)
+                                const grad = ctx.createRadialGradient(cx, cy, 0, cx, cy, r)
+                                grad.addColorStop(0, "rgba(" + ps.rgb + ","
+                                                  + (p.alphaMul * ps.mul).toFixed(3) + ")")
+                                grad.addColorStop(1, "rgba(" + ps.rgb + ",0)")
+                                ctx.fillStyle = grad
+                                ctx.beginPath()
+                                ctx.arc(cx, cy, r, 0, Math.PI * 2)
+                                ctx.fill()
+                            }
                         }
                     }
                 }
