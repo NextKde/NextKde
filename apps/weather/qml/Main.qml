@@ -2176,17 +2176,28 @@ KosApplicationWindow {
                                                             ctx.reset()
                                                             var c = 52
                                                             var r = 52
-                                                            // 暗面：整盘剪影（月亮相位剪影，同族白 0.14）
-                                                            ctx.beginPath()
-                                                            ctx.arc(c, c, r, 0, 2 * Math.PI)
-                                                            ctx.fillStyle = "rgba(255,255,255,0.14)"
-                                                            ctx.fill()
-                                                            if (!moonCard.hasPhase)
+                                                            if (!moonCard.hasPhase) {
+                                                                // 无数据：整盘剪影（同族白 0.14）
+                                                                ctx.beginPath()
+                                                                ctx.arc(c, c, r, 0, 2 * Math.PI)
+                                                                ctx.fillStyle = "rgba(255,255,255,0.14)"
+                                                                ctx.fill()
                                                                 return
-                                                            // 亮面：外弧（盈月亮在右，亏月亮在左）+ 终止线半椭圆折线，一次成形
+                                                            }
                                                             var p = ((moonCard.phaseVal % 1) + 1) % 1
                                                             var cosT = Math.cos(2 * Math.PI * p)
                                                             var waxing = p < 0.5
+                                                            // 暗面：ref tile-cards 月相卡暗侧明显暗于卡底（非白 0.14 剪影）→ 深蓝灰实影
+                                                            ctx.beginPath()
+                                                            ctx.arc(c, c, r, 0, 2 * Math.PI)
+                                                            ctx.fillStyle = "rgba(43,60,94,0.55)"
+                                                            ctx.fill()
+                                                            // 裁到盘内：终止线 shadow 不越月盘外缘
+                                                            ctx.save()
+                                                            ctx.beginPath()
+                                                            ctx.arc(c, c, r, 0, 2 * Math.PI)
+                                                            ctx.clip()
+                                                            // 亮面：外弧（盈月亮在右，亏月亮在左）+ 终止线半椭圆折线，一次成形
                                                             ctx.beginPath()
                                                             if (waxing)
                                                                 ctx.arc(c, c, r, -Math.PI / 2, Math.PI / 2, false)   // 顶极→底极经右侧
@@ -2201,8 +2212,13 @@ KosApplicationWindow {
                                                             }
                                                             ctx.closePath()
                                                             // 亮面冷蓝白：ref tile-cards 月亮相照片亮面实测均值 (161,192,228)；峰值 (228,236,247) 系纹理不可平面复刻
+                                                            // 填充带暗影（shadow 落在暗侧）→ ref 的软终止线：界线由亮面实缘渐入暗面
+                                                            ctx.save()
+                                                            ctx.shadowColor = "rgba(43,60,94,0.55)"
+                                                            ctx.shadowBlur = 6
                                                             ctx.fillStyle = "#a1c0e4"
                                                             ctx.fill()
+                                                            ctx.restore()
                                                             // 亮面程序化斑驳纹理：ref tile-cards 月亮相照片分布校准（中位 159,189,228 / p90 184,208,234 / 峰值 228,236,247）；
                                                             // 全部确定性坐标（无随机），保证逐帧稳定可做帧差回归
                                                             ctx.save()
@@ -2243,6 +2259,25 @@ KosApplicationWindow {
                                                             glow.addColorStop(1, "rgba(228,236,247,0)")
                                                             ctx.fillStyle = glow
                                                             ctx.fillRect(0, 0, 2 * r, 2 * r)
+                                                            // 环形山：ref tile-cards 月相照可见的小坑细节——暗底 + 右下亮缘（左上光源），确定性坐标
+                                                            var craters = [[0.42, 0.30, 0.07], [0.62, 0.48, 0.05], [0.34, 0.62, 0.06],
+                                                                           [0.72, 0.68, 0.05], [0.50, 0.18, 0.045], [0.25, 0.48, 0.05],
+                                                                           [0.58, 0.78, 0.045]]
+                                                            for (var cr = 0; cr < craters.length; cr++) {
+                                                                var cx = c + craters[cr][0] * r
+                                                                var cy = c + craters[cr][1] * r
+                                                                var crx = craters[cr][2] * r
+                                                                ctx.beginPath()
+                                                                ctx.arc(cx, cy, crx, 0, 2 * Math.PI)
+                                                                ctx.fillStyle = "rgba(126,155,201,0.30)"
+                                                                ctx.fill()
+                                                                ctx.beginPath()
+                                                                ctx.arc(cx, cy, crx, Math.PI * 0.15, Math.PI * 0.85, false)   // 右下弧 = 受光缘
+                                                                ctx.strokeStyle = "rgba(222,232,246,0.45)"
+                                                                ctx.lineWidth = 1
+                                                                ctx.stroke()
+                                                            }
+                                                            ctx.restore()
                                                             ctx.restore()
                                                         }
                                                     }
