@@ -145,7 +145,7 @@ Item {
             GradientStop {
                 position: 0
                 color: root.materialForm
-                    ? (root.activeFocus || menu.opened ? root.accentColor : root.outlineColor)
+                    ? (root.menu.opened ? root.accentColor : root.outlineColor)
                     : (root.darkAppearance
                        ? Qt.rgba(1, 1, 1, root._hovered || menu.opened ? 0.75 : 0.65)
                        : Qt.rgba(1, 1, 1, 1.0))
@@ -153,7 +153,7 @@ Item {
             GradientStop {
                 position: 1
                 color: root.materialForm
-                    ? (root.activeFocus || menu.opened ? root.accentColor : root.outlineColor)
+                    ? (root.menu.opened ? root.accentColor : root.outlineColor)
                     : (root.darkAppearance ? Qt.rgba(0, 0, 0, 0.35) : Qt.rgba(0, 0, 0, 0.18))
             }
         }
@@ -225,6 +225,18 @@ Item {
         onExited: root._hovered = false
         onPressed: root.forceActiveFocus()
         onClicked: root.toggleMenu()
+    }
+
+    // §5 Focus：仅一层外环，2px accent、距外缘留白 2（margins -4 扣除描边 2），
+    // 圆角 = 基准 +2；accent 无彩/明度越界时回退 focusFallback。
+    Rectangle {
+        anchors.fill: parent
+        anchors.margins: -4
+        radius: root.fieldRadius + 2
+        border.width: 2
+        border.color: LiquidStyle.focusColor(root.accentColor)
+        color: "transparent"
+        visible: root.activeFocus && root.enabled
     }
 
     // ── Choice sheet ─────────────────────────────────────────────────────

@@ -33,18 +33,12 @@ TextField {
     readonly property bool sampling: _liquid && liquidSurface.sampling
     readonly property bool _liquid: liquidFinish && !materialForm
     readonly property color _fill: Qt.rgba(glassColor.r, glassColor.g, glassColor.b,
-        Math.min(1, glassColor.a + (activeFocus ? 0.08 : hover.hovered ? 0.035 : 0)))
+        Math.min(1, glassColor.a + (hover.hovered ? 0.035 : 0)))
+    // §5 Focus：外环 2px accent，偏移 2；无彩/明度越界时回退 focusFallback。
+    readonly property color _focusColor: LiquidStyle.focusColor(Foundation.AppTheme.accent)
 
     color: textColor
     placeholderTextColor: mutedTextColor
-    scale: activeFocus && !materialForm && !reduceMotion ? 1.02 : 1
-    Behavior on scale {
-        NumberAnimation {
-            duration: root.reduceMotion ? 0 : 300
-            easing.type: Easing.Bezier
-            easing.bezierCurve: [0.25, 0.8, 0.25, 1, 1, 1]
-        }
-    }
     HoverHandler { id: hover; cursorShape: Qt.IBeamCursor }
 
     background: Item {
@@ -54,7 +48,7 @@ TextField {
             radius: root.cornerRadius
             color: root._fill
             border.width: 1
-            border.color: root.activeFocus ? root.focusedOutlineColor : root.outlineColor
+            border.color: root.outlineColor
             Behavior on color { ColorAnimation { duration: root.reduceMotion ? 0 : 150 } }
             Behavior on border.color { ColorAnimation { duration: root.reduceMotion ? 0 : 150 } }
         }
@@ -73,7 +67,7 @@ TextField {
             magnification: 1 + (root.magnification - 1) * Math.max(0, Math.min(1, root.liquidStrength))
             edgeWidth: Math.min(12, height / 2)
             reflectionStrength: root.liquidStrength
-            rimColor: root.activeFocus ? root.focusedOutlineColor : root.outlineColor
+            rimColor: root.outlineColor
         }
         Rectangle {
             anchors.fill: parent
@@ -86,6 +80,17 @@ TextField {
                 GradientStop { position: 0.56; color: Qt.rgba(root.ambientSecondary.r, root.ambientSecondary.g, root.ambientSecondary.b, root.ambientStrength * 0.16) }
                 GradientStop { position: 1; color: "transparent" }
             }
+        }
+        // §5 Focus：仅一层外环，2px、距外缘留白 2（margins -4 扣除描边 2）；
+        // 圆角 = 基准 +2；不叠加缩放/阴影/第二描边，填充与尺寸不变。
+        Rectangle {
+            anchors.fill: parent
+            anchors.margins: -4
+            radius: root.cornerRadius + 2
+            border.width: 2
+            border.color: root._focusColor
+            color: "transparent"
+            visible: root.activeFocus
         }
     }
 }
