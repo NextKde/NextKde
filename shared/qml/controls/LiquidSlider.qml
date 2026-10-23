@@ -30,9 +30,9 @@ Item {
     property color thumbColor: darkAppearance ? Qt.rgba(1, 1, 1, 0.38) : Qt.rgba(1, 1, 1, 0.72)
     property color thumbBorderColor: darkAppearance
         ? Qt.rgba(1, 1, 1, 0.45) : Qt.rgba(0, 0, 0, 0.16)
-    property real trackHeight: 6
-    property real thumbWidth: 32
-    property real thumbHeight: 16
+    property real trackHeight: 4
+    property real thumbWidth: 20
+    property real thumbHeight: 20
     property bool chromaticAberration: false
     property bool wobbleEnabled: false
 
