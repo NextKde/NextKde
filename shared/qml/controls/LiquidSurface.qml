@@ -92,12 +92,4 @@ Item {
         border.width: 1
         border.color: root.rimColor
     }
-    Rectangle {
-        anchors.fill: parent
-        anchors.margins: 1
-        radius: Math.max(0, root.radius - 1)
-        color: "transparent"
-        border.width: 1
-        border.color: Qt.rgba(1, 1, 1, 0.05 * Math.max(0, Math.min(1, root.reflectionStrength)))
-    }
 }
