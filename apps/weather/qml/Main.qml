@@ -1666,16 +1666,16 @@ KosApplicationWindow {
                             font.weight: Font.DemiBold
                         }
 
-                        // R86（用户裁决 #0.7 第四轮「字变黑了+3D 没有」）：黑字根因 = 旧两个阴影 pass
-                        // 调 fillText 前未设 fillStyle（Canvas 默认 #000000 先画不透明黑字）——本版每个
-                        // pass 都显式设 fillStyle。3D 厚度改"偏移实体层"（柔影 α0.12+blur3 在 92px 上
-                        // 等于看不见）：
-                        //   a. 厚度层1 translate(0,3) rgba(10,30,72,0.42) shadowBlur=0
-                        //   b. 厚度层2 translate(0,1.5) rgba(10,30,72,0.22)（阶梯厚度）
-                        //   c. 主体体渐变 0.30/0.26/0.22（保持浅色半透，禁纯白/禁黑实心）
-                        //   d. 顶部高光 translate(0,-1) rgba(255,255,255,0.35) source-atop（只叠在已绘字形上）
-                        // 禁 lighter、禁移动高光带、禁纯白硬 rim。字族/字重/字号/位置/呼吸（Ubuntu Sans
-                        // 800 / 92px / topMargin −24 / opacity 0.86↔1.0 5s）本轮不动。
+                        // R93（用户裁决 #0.7 第五轮「立体感仍然不够」）：根因 = 字面太透（深色厚度层
+                        // 从字面里透出变"脏"）+ 仅 2 层厚度不足以形成可辨立体块。本轮改法（照数字实现）：
+                        //   1. 挤出体：14 层堆叠（累计 translate(0,1)），fillStyle rgba(8,26,64, 0.88−i·0.045)，
+                        //      shadowBlur=0；绘制顺序先挤出体后字面
+                        //   2. 字面：体渐变 rgba(255,255,255,0.92/0.86/0.80)（上亮下暗，接近不透明）
+                        //   3. 倒角两笔（字面之上）：上沿高光 translate(0,−1.2) rgba(255,255,255,0.55)；
+                        //      下沿暗线 translate(0,+0.8) rgba(8,26,64,0.55)
+                        //   4. 可选透视 scale(1,0.94)：未用（记 LEDGER）
+                        // 呼吸保留；仍禁 lighter、禁移动高光带、禁纯白硬 rim。字族/字重/字号/位置不动
+                        // （Ubuntu Sans 800 / 92px / topMargin −24 / opacity 0.86↔1.0 5s）。
                         Canvas {
                             id: heroTempLiquid
                             Layout.alignment: Qt.AlignHCenter
@@ -1717,42 +1717,36 @@ KosApplicationWindow {
 
                                 const paintRuns = (fn) => { for (const r of runs) { ctx.font = r.font; fn(r.t, x0 + r.x, r.y) } }
 
-                                // a. 厚度层1：向下偏移 3px 深色实体（显式 fillStyle，shadowBlur=0）
+                                // 1. 挤出体：14 层堆叠，每层累计下移 1px，α 由 0.835 衰减到 0.25
+                                //（fillStyle 显式设置，shadowBlur=0；先挤出体后字面）
                                 ctx.save()
-                                ctx.translate(0, 3)
-                                ctx.fillStyle = "rgba(10,30,72,0.42)"
                                 ctx.shadowBlur = 0
-                                paintRuns((t, x, y) => ctx.fillText(t, x, y))
-                                ctx.restore()
-                                // b. 厚度层2：向下偏移 1.5px 中间阶梯（阶梯厚度，非模糊阴影）
-                                ctx.save()
-                                ctx.translate(0, 1.5)
-                                ctx.fillStyle = "rgba(10,30,72,0.22)"
-                                ctx.shadowBlur = 0
-                                paintRuns((t, x, y) => ctx.fillText(t, x, y))
+                                for (let i = 1; i <= 14; i++) {
+                                    ctx.translate(0, 1.0)
+                                    ctx.fillStyle = "rgba(8,26,64," + (0.88 - i * 0.045) + ")"
+                                    paintRuns((t, x, y) => ctx.fillText(t, x, y))
+                                }
                                 ctx.restore()
 
-                                // ① 体渐变压平 0.30/0.26/0.22（第二轮定值不动；梯度范围按 92px 折算）
+                                // 2. 字面：体渐变 0.92/0.86/0.80（上亮下暗，接近不透明；stop 位 0/0.55/1 不变）
                                 const body = ctx.createLinearGradient(0, base - 68, 0, base + 18)
-                                body.addColorStop(0, "rgba(255,255,255,0.30)")
-                                body.addColorStop(0.55, "rgba(255,255,255,0.26)")
-                                body.addColorStop(1, "rgba(255,255,255,0.22)")
+                                body.addColorStop(0, "rgba(255,255,255,0.92)")
+                                body.addColorStop(0.55, "rgba(255,255,255,0.86)")
+                                body.addColorStop(1, "rgba(255,255,255,0.80)")
                                 ctx.fillStyle = body
                                 paintRuns((t, x, y) => ctx.fillText(t, x, y))
 
-                                // ③ 柔和受光：上/左方向渐变亮部 α0.18（第二轮定值不动）
-                                const lite = ctx.createLinearGradient(0, base - 68, 0, base + 2)
-                                lite.addColorStop(0, "rgba(255,255,255,0.18)")
-                                lite.addColorStop(1, "rgba(255,255,255,0)")
-                                ctx.fillStyle = lite
-                                paintRuns((t, x, y) => ctx.fillText(t, x, y))
-
-                                // d. 顶部高光：translate(0,-1) + source-atop，只叠在已绘字形 alpha 上
-                                //（第四轮给定 rgba(255,255,255,0.35)；若上屏整字过亮/失效，本轮内回调并记 LEDGER）
+                                // 3a. 倒角上沿高光：translate(0,-1.2) 整形上移轻叠（destination-in 花招不可用，
+                                // 裁决允许整体接受轻微上移）
                                 ctx.save()
-                                ctx.translate(0, -1)
-                                ctx.globalCompositeOperation = "source-atop"
-                                ctx.fillStyle = "rgba(255,255,255,0.35)"
+                                ctx.translate(0, -1.2)
+                                ctx.fillStyle = "rgba(255,255,255,0.55)"
+                                paintRuns((t, x, y) => ctx.fillText(t, x, y))
+                                ctx.restore()
+                                // 3b. 倒角下沿暗线：translate(0,+0.8)
+                                ctx.save()
+                                ctx.translate(0, 0.8)
+                                ctx.fillStyle = "rgba(8,26,64,0.55)"
                                 paintRuns((t, x, y) => ctx.fillText(t, x, y))
                                 ctx.restore()
                             }
