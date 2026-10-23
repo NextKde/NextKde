@@ -340,7 +340,7 @@ KosApplicationWindow {
         }
         if (c >= 95) return ["#2a3752", "#3c4c6e", "#5a6b8c"]
         if ((c >= 51 && c <= 67) || (c >= 80 && c <= 82))
-            return ["#3d5a7d", "#2a4a70", "#5f83a8"]
+            return ["#9ab5c4", "#92aebe", "#b9c5ce"]   // ref-main Chicago 白天卡实测：top(154,181,196)/mid(146,174,190)/bottom(185,197,206)——旧值 ["#3d5a7d","#2a4a70","#5f83a8"] 过暗（实测 (61,90,125)，ref 白天卡均 >150 亮度）
         if ((c >= 71 && c <= 77) || c === 85 || c === 86)
             return ["#7b90a6", "#5d7690", "#a9bccd"]
         // ref-main 观感拟合（用户 2026-10-23 第二批判据：以 ref-main 观感为准）：云隙蓝天梯度，
