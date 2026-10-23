@@ -1666,20 +1666,23 @@ KosApplicationWindow {
                             font.weight: Font.DemiBold
                         }
 
-                        // R84（用户裁决 #0.7 第二轮「拆 3D/塑料感」+ 字重加粗）：hero 温度数字为
-                        // iOS 液态玻璃字——① 体渐变压平（0.55/0.14/0.36 → 0.30/0.26/0.22，同一色相只留
-                        // 极轻上下差，消除柱面感）；② 无 additive 扫光带（已删）；③ rim 不画实线——
-                        // 改 α≤0.18 的上/左方向柔和渐变受光，下/右不画暗边，字形边界靠体色差自然收口；
-                        // ④ 动效改不位移的呼吸：整字 opacity 0.86↔1.0，周期 5s InOutSine；
-                        // §2.12 减动态：reduceMotion 时动画不跑、opacity 钉在 1.0。
-                        // 字重：裁决要求最粗可用档（Black→ExtraBold→Bold 兜底）——本机 IBM Plex Sans
-                        // 静态族最重 Bold（700），无 Black/ExtraBold，实取 700。
+                        // R85（用户裁决 #0.7 第三轮「更大更粗上移+一点 3D」）：hero 温度数字为
+                        // iOS 液态玻璃字——① 体渐变压平 0.30/0.26/0.22（第二轮定值，本轮不动）；
+                        // ② 无 additive 扫光带（已删）；③ 上/左柔和渐变受光（第二轮定值，本轮不动）；
+                        // ④ 呼吸动效：整字 opacity 0.86↔1.0，周期 5s InOutSine（§2.12 reduceMotion 钉 1.0）；
+                        // ⑤ 本轮新增静态厚度（只许静态、不许动效/镜面）：底部柔和暗边
+                        //    （shadow 偏移 +1.5px、α0.12、blur 3）+ 顶部极轻亮边（shadow 偏移 −1.5px、
+                        //    α0.12、blur 3）——不依赖动画，reduceMotion 下照常绘制；
+                        // ⑥ 字号 70→92（° 44→58），整体上移：Layout.topMargin −14 → −24（+10px，单处）。
+                        // 字重：裁决要求全系统最粗档——IBM Plex Sans 止于 Bold(700)，Ubuntu Sans
+                        // 可变字重上限 ExtraBold(800)（fc-match "Ubuntu Sans:weight=800" 实证），
+                        // 全系统无 900/Black，实取 Ubuntu Sans 800。
                         Canvas {
                             id: heroTempLiquid
                             Layout.alignment: Qt.AlignHCenter
-                            Layout.topMargin: -14
-                            width: 240
-                            height: 92
+                            Layout.topMargin: -24
+                            width: 340
+                            height: 124
                             property string digits: Math.round(root.number(backend.current, "temperature", 0)).toString()
                             Accessible.role: Accessible.StaticText
                             Accessible.name: digits + "°"
@@ -1698,34 +1701,48 @@ KosApplicationWindow {
                                 const ctx = getContext("2d")
                                 ctx.reset()
                                 ctx.textBaseline = "alphabetic"
-                                const base = 74
+                                const base = 97
                                 const runs = [
-                                    { t: digits, x: 0, y: base, px: 70 },
-                                    { t: "°", x: 0, y: base - 12, px: 44 } // x 后按量宽回填；base-12 沿旧 y:8 顶对齐折算
+                                    { t: digits, x: 0, y: base, px: 92 },
+                                    { t: "°", x: 0, y: base - 16, px: 58 } // x 后按量宽回填；base−16 系 44px 时 base−12 的比例折算
                                 ]
-                                ctx.font = "700 70px 'IBM Plex Sans'"
+                                ctx.font = "800 92px 'Ubuntu Sans'"
                                 const dw = ctx.measureText(digits).width
-                                ctx.font = "700 44px 'IBM Plex Sans'"
+                                ctx.font = "800 58px 'Ubuntu Sans'"
                                 const ow = ctx.measureText("°").width
-                                runs[1].x = dw + 2 // 旧 Row spacing -11 的视觉间隙 ~3-4px（量宽不含侧边距，取 2）
-                                const total = dw + 2 + ow
+                                runs[1].x = dw + 3 // 92px 下维持视觉间隙 ~3-4px
+                                const total = dw + 3 + ow
                                 const x0 = Math.round((width - total) / 2)
                                 for (const r of runs)
-                                    r.font = "700 " + r.px + "px 'IBM Plex Sans'"
+                                    r.font = "800 " + r.px + "px 'Ubuntu Sans'"
 
                                 const paintRuns = (fn) => { for (const r of runs) { ctx.font = r.font; fn(r.t, x0 + r.x, r.y) } }
 
-                                // ① 体渐变压平：0.55/0.14/0.36 → 0.30/0.26/0.22（近似均匀，同一色相极轻上下差）
-                                const body = ctx.createLinearGradient(0, base - 52, 0, base + 14)
+                                // ⑤ 静态厚度底边：柔和暗 shadow（偏移 +1.5、α0.12、blur 3，用户裁决 #0.7 第三轮）
+                                ctx.save()
+                                ctx.shadowColor = "rgba(8,22,52,0.12)"
+                                ctx.shadowOffsetY = 1.5
+                                ctx.shadowBlur = 3
+                                paintRuns((t, x, y) => ctx.fillText(t, x, y))
+                                ctx.restore()
+                                // ⑤ 静态厚度顶边：极轻亮 shadow（偏移 −1.5、α0.12、blur 3）
+                                ctx.save()
+                                ctx.shadowColor = "rgba(255,255,255,0.12)"
+                                ctx.shadowOffsetY = -1.5
+                                ctx.shadowBlur = 3
+                                paintRuns((t, x, y) => ctx.fillText(t, x, y))
+                                ctx.restore()
+
+                                // ① 体渐变压平 0.30/0.26/0.22（第二轮定值不动；梯度范围按 92px 折算）
+                                const body = ctx.createLinearGradient(0, base - 68, 0, base + 18)
                                 body.addColorStop(0, "rgba(255,255,255,0.30)")
                                 body.addColorStop(0.55, "rgba(255,255,255,0.26)")
                                 body.addColorStop(1, "rgba(255,255,255,0.22)")
                                 ctx.fillStyle = body
                                 paintRuns((t, x, y) => ctx.fillText(t, x, y))
 
-                                // ② 柔和受光：上/左方向渐变亮部（α≤0.18），无实线 rim、无下/右暗边；
-                                // 字形与外界的边界靠体色差自然收口（拆塑料高光，用户裁决 #0.7 第二轮 2）
-                                const lite = ctx.createLinearGradient(0, base - 52, 0, base + 2)
+                                // ③ 柔和受光：上/左方向渐变亮部 α0.18（第二轮定值不动）
+                                const lite = ctx.createLinearGradient(0, base - 68, 0, base + 2)
                                 lite.addColorStop(0, "rgba(255,255,255,0.18)")
                                 lite.addColorStop(1, "rgba(255,255,255,0)")
                                 ctx.fillStyle = lite
