@@ -18,6 +18,11 @@ KosApplicationWindow {
     readonly property string distanceUnit: backend.units === "imperial" ? qsTr("mi") : qsTr("km")
     readonly property int weatherSidebarWidth: Math.round(307 * AppTheme.densityScale) // ref-main 干净行（y=47 无卡无胶囊）Pillow 实测侧栏→主区过渡 x≈211.5@814 ×1.4501≈307；旧 x205 实为卡片右缘（卡右缘与侧栏缘间有 ~6px 侧栏底色带，y=440 带色 (60,91,128) ≈ 侧栏底），2026-10-18 勘误；AppTheme.sidebarWidth(224) 系 shared 值（music 引用）不动
     readonly property var upcomingHours: upcomingForecast()
+    // §3 control.compact：窄窗（root.compact <940，KosApplicationWindow）工具盘圆形钮收为 compact lg=30；
+    // 默认窗宽取 AppTheme.controlHeight（34），窄窗外逐字节等价
+    readonly property int trayControlHeight: root.compact
+        ? Math.round(30 * AppTheme.densityScale)
+        : AppTheme.controlHeight
     property string pendingLocationId: ""
     readonly property int currentWeatherCode: number(backend.current, "weatherCode", -1)
     readonly property bool currentIsDay: Boolean(value(backend.current, "isDay", true))
@@ -1409,7 +1414,8 @@ KosApplicationWindow {
                         id: settingsButton
                         text: "⚙"
                         font.pixelSize: 16
-                        Layout.preferredWidth: 34
+                        Layout.preferredWidth: root.trayControlHeight
+                        Layout.preferredHeight: root.trayControlHeight // §3 control.compact.lg=30（窄窗）
                         Layout.alignment: Qt.AlignVCenter
                         background: GlassCircleBg {
                             subtle: true
@@ -1433,7 +1439,8 @@ KosApplicationWindow {
                         id: refreshButton
                         text: "↻"
                         font.pixelSize: 18
-                        Layout.preferredWidth: 34
+                        Layout.preferredWidth: root.trayControlHeight
+                        Layout.preferredHeight: root.trayControlHeight // §3 control.compact.lg=30（窄窗）
                         enabled: backend.connected && !backend.loading
                         background: GlassCircleBg {
                             subtle: true
@@ -1477,7 +1484,8 @@ KosApplicationWindow {
                         checkable: true
                         leftPadding: 0
                         rightPadding: 0
-                        Layout.preferredWidth: AppTheme.controlHeight
+                        Layout.preferredWidth: root.trayControlHeight
+                        Layout.preferredHeight: root.trayControlHeight // §3 control.compact.lg=30（窄窗）
                         background: GlassCircleBg {
                             focused: metricButton.activeFocus && metricButton.enabled
                             selected: metricButton.checked
@@ -1506,7 +1514,8 @@ KosApplicationWindow {
                         checkable: true
                         leftPadding: 0
                         rightPadding: 0
-                        Layout.preferredWidth: AppTheme.controlHeight
+                        Layout.preferredWidth: root.trayControlHeight
+                        Layout.preferredHeight: root.trayControlHeight // §3 control.compact.lg=30（窄窗）
                         background: GlassCircleBg {
                             focused: imperialButton.activeFocus && imperialButton.enabled
                             selected: imperialButton.checked
@@ -2621,13 +2630,14 @@ KosApplicationWindow {
                                         Item {
                                             id: hourlySegmented
                                             implicitWidth: 132
-                                            implicitHeight: 34 // §4 分段控件「高 28/34」（原 36 超标）
+                                            // §4 分段控件「高 28/34」（原 36 超标）：默认 34、窄窗（compact）取 28
+                                            implicitHeight: root.compact ? 28 : 34
                                             Layout.alignment: Qt.AlignTop | Qt.AlignRight
                                             property int segment: 0
 
                                             Rectangle {
                                                 anchors.fill: parent
-                                                radius: 17 // 胶囊 = h/2（高 34）
+                                                radius: hourlySegmented.height / 2 // 胶囊 = h/2（高 34；窄窗 28）
                                                 // 参考实测（ref-main 814×498 Pillow 采样）：胶囊内 (28,90,168) vs 卡面 (0,83,180)
                                                 // ——相对卡面 R+28/G+7/B−12，解出脱饱和中性灰 ≈#767676 @ α0.22-0.26（压暗蓝通道）；白@0.14 方向相反（整体提亮），故按参考改灰。
                                                 color: Qt.rgba(0.46, 0.46, 0.46, 0.24)
@@ -2641,22 +2651,22 @@ KosApplicationWindow {
                                                 x: 2 + 44 * hourlySegmented.segment
                                                 y: 2
                                                 width: 40
-                                                height: 30
-                                                radius: 15
+                                                height: hourlySegmented.height - 4 // 滑块内缩 2（§4 分段控件「滑块内缩 2」）
+                                                radius: height / 2 // 胶囊随高（34→30、28→24）
                                                 color: Qt.rgba(1, 1, 1, 0.27)
                                             }
 
                                             AbstractButton {
                                                 x: 0
                                                 width: 44
-                                                height: 34
+                                                height: hourlySegmented.height
                                                 background: Rectangle {
                                                     // §5 Focus：2px accent 外环，偏移 2（margins −4 扣描边 2 留白恰 2px）；
                                                     // 圆角 = 胶囊 17+2（R10/LiquidSelect 先例）；失焦或禁用即移除
                                                     visible: parent.activeFocus && parent.enabled
                                                     anchors.fill: parent
                                                     anchors.margins: -4
-                                                    radius: 19
+                                                    radius: hourlySegmented.height / 2 + 2 // 胶囊 r+2（§5 Focus「圆角 +2」）
                                                     border.width: 2
                                                     border.color: LiquidStyle.focusColor(AppTheme.accent)
                                                     color: "transparent"
@@ -2711,13 +2721,13 @@ KosApplicationWindow {
                                             AbstractButton {
                                                 x: 44
                                                 width: 44
-                                                height: 34
+                                                height: hourlySegmented.height
                                                 background: Rectangle {
                                                     // §5 Focus：同段 0（2px accent 外环偏移 2，胶囊 17+2）
                                                     visible: parent.activeFocus && parent.enabled
                                                     anchors.fill: parent
                                                     anchors.margins: -4
-                                                    radius: 19
+                                                    radius: hourlySegmented.height / 2 + 2 // 胶囊 r+2（§5 Focus「圆角 +2」）
                                                     border.width: 2
                                                     border.color: LiquidStyle.focusColor(AppTheme.accent)
                                                     color: "transparent"
@@ -2761,13 +2771,13 @@ KosApplicationWindow {
                                             AbstractButton {
                                                 x: 88
                                                 width: 44
-                                                height: 34
+                                                height: hourlySegmented.height
                                                 background: Rectangle {
                                                     // §5 Focus：同段 0（2px accent 外环偏移 2，胶囊 17+2）
                                                     visible: parent.activeFocus && parent.enabled
                                                     anchors.fill: parent
                                                     anchors.margins: -4
-                                                    radius: 19
+                                                    radius: hourlySegmented.height / 2 + 2 // 胶囊 r+2（§5 Focus「圆角 +2」）
                                                     border.width: 2
                                                     border.color: LiquidStyle.focusColor(AppTheme.accent)
                                                     color: "transparent"
