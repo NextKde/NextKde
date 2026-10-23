@@ -54,6 +54,10 @@ Item {
     }
 
     property bool _hovered: false
+    // §4.1 输入框：Hover=边框 α .14，不改填充（液态 rim 的 hover 另行外推记账）。
+    readonly property color _fieldBorder: root._hovered
+        ? Qt.rgba(root.outlineColor.r, root.outlineColor.g, root.outlineColor.b, 0.14)
+        : root.outlineColor
     // Optimistic visual selection, confirmed or rolled back by
     // confirmationTimer once the owner's async write lands (or doesn't).
     property int _visualIndex: 0
@@ -145,7 +149,7 @@ Item {
             GradientStop {
                 position: 0
                 color: root.materialForm
-                    ? (root.menu.opened ? root.accentColor : root.outlineColor)
+                    ? (root.menu.opened ? root.accentColor : root._fieldBorder)
                     : (root.darkAppearance
                        ? Qt.rgba(1, 1, 1, root._hovered || menu.opened ? 0.75 : 0.65)
                        : Qt.rgba(1, 1, 1, 1.0))
@@ -153,21 +157,21 @@ Item {
             GradientStop {
                 position: 1
                 color: root.materialForm
-                    ? (root.menu.opened ? root.accentColor : root.outlineColor)
+                    ? (root.menu.opened ? root.accentColor : root._fieldBorder)
                     : (root.darkAppearance ? Qt.rgba(0, 0, 0, 0.35) : Qt.rgba(0, 0, 0, 0.18))
             }
         }
 
         // Translucent grey fill, one pixel inside the rim, deliberately flat --
         // all the highlight lives on the edge, so the pill's silhouette stays
-        // readable. Hover and open deepen it slightly.
+        // readable. §4.1：hover 不加深填充（只动边框）；menu.opened 深化为弹层开合态。
         Rectangle {
             anchors.fill: parent
             anchors.margins: 1
             radius: root.fieldRadius - 1
             color: root.darkAppearance
-                ? Qt.rgba(1, 1, 1, root._hovered || menu.opened ? 0.12 : 0.06)
-                : Qt.rgba(0, 0, 0, root._hovered || menu.opened ? 0.08 : 0.04)
+                ? Qt.rgba(1, 1, 1, menu.opened ? 0.12 : 0.06)
+                : Qt.rgba(0, 0, 0, menu.opened ? 0.08 : 0.04)
             Behavior on color { ColorAnimation { duration: 150; easing.type: Easing.OutCubic } }
         }
 

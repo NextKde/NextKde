@@ -32,8 +32,11 @@ TextField {
     property real ambientStrength: 0
     readonly property bool sampling: _liquid && liquidSurface.sampling
     readonly property bool _liquid: liquidFinish && !materialForm
-    readonly property color _fill: Qt.rgba(glassColor.r, glassColor.g, glassColor.b,
-        Math.min(1, glassColor.a + (hover.hovered ? 0.035 : 0)))
+    // §4.1 输入框：Default=plainFill（填充恒定），Hover=边框 α .14，不改填充。
+    readonly property color _fill: glassColor
+    readonly property color _hoverBorder: hover.hovered
+        ? Qt.rgba(outlineColor.r, outlineColor.g, outlineColor.b, 0.14)
+        : outlineColor
     // §5 Focus：外环 2px accent，偏移 2；无彩/明度越界时回退 focusFallback。
     readonly property color _focusColor: LiquidStyle.focusColor(Foundation.AppTheme.accent)
 
@@ -48,7 +51,7 @@ TextField {
             radius: root.cornerRadius
             color: root._fill
             border.width: 1
-            border.color: root.outlineColor
+            border.color: root._hoverBorder
             Behavior on color { ColorAnimation { duration: root.reduceMotion ? 0 : 150 } }
             Behavior on border.color { ColorAnimation { duration: root.reduceMotion ? 0 : 150 } }
         }
