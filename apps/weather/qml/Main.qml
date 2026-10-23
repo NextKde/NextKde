@@ -1666,32 +1666,79 @@ KosApplicationWindow {
                             font.weight: Font.DemiBold
                         }
 
-                        Row {
+                        // R81（用户裁决 #0.7）：hero 温度数字改 iOS 液态时钟效果——
+                        // 玻璃质感（半透竖向渐变体）+ 边缘高光（§2.7 上/左亮 1px、下/右暗 1px 的 rim）
+                        // + 流动动效（对角高光带往复扫过字形内部，additive 'lighter'）。
+                        // 动效时长沿 sunGlowLayer 350ms×2 环境动效先例（Infinite 循环，非 §3 五档交互时长）；
+                        // §2.12 减动态：reduceMotion 时动画停住、sheenPhase 钉在初值，仅静态绘制一次。
+                        Canvas {
+                            id: heroTempLiquid
                             Layout.alignment: Qt.AlignHCenter
-                            Layout.topMargin: -14 // ref 城市底→数字顶 gap 11px×1.46≈16px；默认行高 padding 多出 ~14px，负 topMargin 收紧（实测偏差下轮微调）
-                            // 第 52 轮：按参考图实测缩放。ref-main（814x498 整窗）hero 数字字高 33px = 窗高 6.6%；
-                            // tile-hero 切片数字 66px，按其比例折算 iPad 窗高亦 ≈6-6.6%。旧 160px 出自
-                            // 80px/498 的单位错配测量，导致实测字高 115px = 窗高 15.8%（超标 2.4 倍）。
-                            // 70px × 0.72（Plex Thin 字高/pixelSize 实测比）≈ 50px = 727 窗高的 6.9%，落入参考邻域。
-                            spacing: -11 // 随字号按 70/160 缩放（旧 -25），目标 ° 与数字间隙 ~3-4px
-                            Label {
-                                id: heroTempDigits
-                                text: Math.round(root.number(backend.current, "temperature", 0))
-                                Accessible.name: text + "°"
-                                color: root.skyText
-                                font.family: "IBM Plex Sans"
-                                font.pixelSize: 70
-                                font.weight: Font.Thin
+                            Layout.topMargin: -14
+                            width: 240
+                            height: 92
+                            property string digits: Math.round(root.number(backend.current, "temperature", 0)).toString()
+                            property real sheenPhase: 0
+                            Accessible.role: Accessible.StaticText
+                            Accessible.name: digits + "°"
+                            onDigitsChanged: requestPaint()
+                            onSheenPhaseChanged: requestPaint()
+
+                            SequentialAnimation {
+                                running: !AppTheme.reduceMotion
+                                loops: Animation.Infinite
+                                NumberAnimation { target: heroTempLiquid; property: "sheenPhase"; from: 0; to: 1; duration: 1750; easing.type: Easing.InOutSine }
+                                NumberAnimation { target: heroTempLiquid; property: "sheenPhase"; from: 1; to: 0; duration: 1750; easing.type: Easing.InOutSine }
                             }
-                            Label {
-                                text: "°"
-                                color: root.skyText
-                                font.family: "IBM Plex Sans"
-                                font.pixelSize: 44 // 保持旧 100/160=0.625 比例：70×0.625≈44
-                                font.weight: Font.Thin
-                                // 下移 8px（旧 19 按 70/160 缩放）使 ° 顶部与数字顶部对齐（Plex 字形度量）
-                                y: 8
-                                Accessible.ignored: true
+
+                            onPaint: {
+                                const ctx = getContext("2d")
+                                ctx.reset()
+                                ctx.textBaseline = "alphabetic"
+                                const base = 74
+                                const runs = [
+                                    { t: digits, x: 0, y: base, px: 70 },
+                                    { t: "°", x: 0, y: base - 12, px: 44 } // x 后按量宽回填；base-12 沿旧 y:8 顶对齐折算
+                                ]
+                                ctx.font = "100 70px 'IBM Plex Sans'"
+                                const dw = ctx.measureText(digits).width
+                                ctx.font = "100 44px 'IBM Plex Sans'"
+                                const ow = ctx.measureText("°").width
+                                runs[1].x = dw + 2 // 旧 Row spacing -11 的视觉间隙 ~3-4px（量宽不含侧边距，取 2）
+                                const total = dw + 2 + ow
+                                const x0 = Math.round((width - total) / 2)
+                                for (const r of runs)
+                                    r.font = "100 " + r.px + "px 'IBM Plex Sans'"
+
+                                const paintRuns = (fn) => { for (const r of runs) { ctx.font = r.font; fn(r.t, x0 + r.x, r.y) } }
+
+                                // ① 玻璃体：竖向半透白渐变（上厚下薄再回亮，玻璃厚度感）
+                                const body = ctx.createLinearGradient(0, base - 52, 0, base + 14)
+                                body.addColorStop(0, "rgba(255,255,255,0.55)")
+                                body.addColorStop(0.55, "rgba(255,255,255,0.14)")
+                                body.addColorStop(1, "rgba(255,255,255,0.36)")
+                                ctx.fillStyle = body
+                                paintRuns((t, x, y) => ctx.fillText(t, x, y))
+
+                                // ② 流动高光带：对角亮带随 sheenPhase 往复（additive，只落在字形内）
+                                const c = total * (0.10 + 0.80 * sheenPhase)
+                                const sheen = ctx.createLinearGradient(x0 + c - 85, base - 60, x0 + c + 85, base + 18)
+                                sheen.addColorStop(0, "rgba(255,255,255,0)")
+                                sheen.addColorStop(0.5, "rgba(255,255,255,0.85)")
+                                sheen.addColorStop(1, "rgba(255,255,255,0)")
+                                ctx.globalCompositeOperation = "lighter"
+                                ctx.fillStyle = sheen
+                                paintRuns((t, x, y) => ctx.fillText(t, x, y))
+                                ctx.globalCompositeOperation = "source-over"
+
+                                // ③ 边缘 rim（§2.7 光源左上：上/左亮边、下/右暗边）
+                                ctx.lineWidth = 1.2
+                                ctx.strokeStyle = "rgba(8,28,64,0.32)"
+                                ctx.translate(0.6, 0.8)
+                                paintRuns((t, x, y) => ctx.strokeText(t, x, y))
+                                ctx.translate(-1.2, -1.6)
+                                ctx.strokeStyle = "rgba(255,255,255,0.85)"
+                                paintRuns((t, x, y) => ctx.strokeText(t, x, y))
                             }
                         }
 
