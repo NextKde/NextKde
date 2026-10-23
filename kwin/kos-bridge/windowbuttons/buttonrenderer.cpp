@@ -84,16 +84,26 @@ bool exposedAt(KWin::EffectWindow *window, const QPointF &point)
         if (above->isDesktop()) {
             continue;
         }
+        // Shell surfaces (dock, OSD, notification) may have large transparent frames
+        // or dedicated input routing that should not occlude underlying window buttons.
+        if (above->isSkipSwitcher() || above->isDock()
+            || above->isOnScreenDisplay() || above->isNotification()) {
+            continue;
+        }
         if (KWin::Window *w = above->window()) {
+            // Internal windows (KRunner, OSDs, outlines, tab switchers) are owned by KWin.
+            // When an internal window is being torn down, its QWindow handle may already
+            // be destroyed while the InternalWindow object remains in the stacking order;
+            // calling InternalWindow::hitTest() dereferences m_handle->mask() and segfaults.
+            if (w->isInternal()) {
+                if (above->frameGeometry().contains(point)) {
+                    return false;
+                }
+                continue;
+            }
             if (w->hitTest(point)) {
                 return false;
             }
-            continue;
-        }
-        // Fallback for windows without a backing KWin::Window: shell surfaces
-        // may have large transparent frames spanning the desktop.
-        if (above->isSkipSwitcher() || above->isDock()
-            || above->isOnScreenDisplay() || above->isNotification()) {
             continue;
         }
         if (above->frameGeometry().contains(point)) {
