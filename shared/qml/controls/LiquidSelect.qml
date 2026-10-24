@@ -259,7 +259,8 @@ Item {
         onOpened: scroller.focusCurrent()
         enter: Transition {
             ParallelAnimation {
-                NumberAnimation { property: "opacity"; from: 0; to: 1; duration: 140; easing.type: Easing.OutCubic }
+                // §3 motion.duration.fast=150 / §2.11 只允许五档（原 demo 140 不在档）。
+                NumberAnimation { property: "opacity"; from: 0; to: 1; duration: 150; easing.type: Easing.OutCubic }
                 NumberAnimation { property: "scale"; from: 0.97; to: 1; duration: 150; easing.type: Easing.OutCubic }
             }
         }
@@ -349,7 +350,8 @@ Item {
                                 : (hit.containsMouse
                                    ? (root.darkAppearance ? Qt.rgba(1, 1, 1, 0.08) : Qt.rgba(0, 0, 0, 0.06))
                                    : "transparent")
-                            Behavior on color { ColorAnimation { duration: 120 } }
+                            // §4.1「过渡 150ms」/ §3 motion.duration.fast=150（原 demo 120 不在档）。
+                            Behavior on color { ColorAnimation { duration: 150 } }
                         }
                         Text {
                             anchors.left: parent.left

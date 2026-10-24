@@ -50,10 +50,12 @@ Item {
     SequentialAnimation on _stretch {
         id: wobbleAnim
         running: false
-        NumberAnimation { to: 0.15; duration: 80; easing.type: Easing.OutQuad }
-        NumberAnimation { to: -0.06; duration: 120; easing.type: Easing.InOutQuad }
+        // §2.11 / §3 motion.duration：只允许 100/150/220/320/400 五档
+        // （原 demo 80/120/100/80 中 80/120 不在档）。
+        NumberAnimation { to: 0.15; duration: 100; easing.type: Easing.OutQuad }
+        NumberAnimation { to: -0.06; duration: 150; easing.type: Easing.InOutQuad }
         NumberAnimation { to: 0.03; duration: 100; easing.type: Easing.InOutQuad }
-        NumberAnimation { to: 0.0; duration: 80; easing.type: Easing.OutQuad }
+        NumberAnimation { to: 0.0; duration: 100; easing.type: Easing.OutQuad }
     }
 
     // §5 Disabled：整体 α .38（原 demo 0.5）；§4.2「禁用：α .38，无高光/阴影/hover」
@@ -194,7 +196,11 @@ Item {
     // Interaction
     MouseArea {
         id: mouseArea
-        anchors.fill: parent
+        // §3 control.hit.touch=44 / §4.2「图标按钮：视觉 28/34，热区 ≥ 28（指针）/ 44（触控）」：
+        // 视觉 34 不变，命中区向外扩到 ≥44×44（原 demo 与视觉同尺寸 34×34）。
+        anchors.centerIn: parent
+        width: Math.max(parent.width, 44)
+        height: Math.max(parent.height, 44)
         enabled: root.enabled
         hoverEnabled: true
         cursorShape: enabled ? Qt.PointingHandCursor : Qt.ArrowCursor
