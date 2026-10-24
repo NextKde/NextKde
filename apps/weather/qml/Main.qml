@@ -1452,14 +1452,22 @@ KosApplicationWindow {
         }
         // R113：滑落水珠不再独占 40ms Timer，由根级统一节拍（66ms）驱动；clock 按真实
         // elapsed 推进，速度 8–15 px/s 逐值不变。仅重绘本 256×256 局部 Canvas。
+        // R114（CPU 轮）：水珠只以 8–15 px/s 缓慢下滑，无需跟随 15fps 环境节拍重绘局部
+        // Canvas——每 3 个节拍重绘一次（≈5fps，单步位移 1.6–3.0px），姿态/速度/轨迹由
+        // 真实 elapsed 累计，逐值不变；GUI 线程上的 Canvas 光栅与 JS 调用降至 1/3。
         property double lastClockMs: 0
+        property int repaintPhase: 0
         Connections {
             target: root
             function onAmbientSecChanged() {
                 if (!root.rainySky || AppTheme.reduceMotion) {
                     slidingDrops.lastClockMs = 0
+                    slidingDrops.repaintPhase = 0
                     return
                 }
+                slidingDrops.repaintPhase = (slidingDrops.repaintPhase + 1) % 3
+                if (slidingDrops.repaintPhase !== 0)
+                    return
                 const now = Date.now()
                 if (slidingDrops.lastClockMs > 0)
                     slidingDrops.clock += (now - slidingDrops.lastClockMs) / 1000
