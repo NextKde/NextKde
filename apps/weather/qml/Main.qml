@@ -955,9 +955,6 @@ KosApplicationWindow {
         property real clock: 0
         property double lastClockMs: 0
         property int updatePhase: 0
-        // 探针：只留雨膜，不画任何水珠（静态+滑动头）。用于 R134 批 12 第 4 项
-        // 「擦雾亮带」的隔离证据；probeFilmOnly 为 true 时仍保留滑痕擦除。
-        property bool probeFilmOnly: true
         Accessible.ignored: true
         // 偏移图就绪后重画一次（Image 项异步加载完成 → 同步重绘水图）。
         Component.onCompleted: if (offsetSpriteImage.status === Image.Ready) requestPaint()
