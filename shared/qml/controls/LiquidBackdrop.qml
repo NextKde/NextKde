@@ -7,6 +7,10 @@ Item {
     property bool active: true
     property bool registerAsDefault: true
     property bool hideSource: false
+    // live=true keeps the old per-frame capture (60Hz). Consumers whose source only
+    // changes on colour/geometry transitions can set live=false and call refresh()
+    // at a low rate instead — avoids a continuous full-window re-render source.
+    property bool live: true
     property real resolutionScale: 1
     property int maximumTextureSize: 2048
     readonly property var hostWindow: root.Window.window
@@ -15,6 +19,9 @@ Item {
         && sourceItem.width > 0 && sourceItem.height > 0
         && sourceExcludesCapture()
     readonly property alias texture: capture
+
+    // Force a one-shot capture (only meaningful when live=false).
+    function refresh() { capture.scheduleUpdate() }
 
     function sourceExcludesCapture() {
         for (let ancestor = root; ancestor; ancestor = ancestor.parent) {
@@ -46,7 +53,7 @@ Item {
         textureSize: Qt.size(Math.max(1, Math.ceil(sourceRect.width * captureScale)),
                              Math.max(1, Math.ceil(sourceRect.height * captureScale)))
         hideSource: root.hideSource
-        live: true
+        live: root.live
         recursive: false
         smooth: true
         wrapMode: ShaderEffectSource.ClampToEdge

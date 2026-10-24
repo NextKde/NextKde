@@ -63,6 +63,12 @@ KosApplicationWindow {
         onTriggered: root.skyReady = true
     }
     onSkyPeriodChanged: root.refreshSkyStops()
+    // live:false 的采样源：天空色每帧变化（12s 过渡）时补一次捕获；静止时不捕获。
+    onSkyTopChanged: sidebarBackdrop.refresh()
+    onSkyMidChanged: sidebarBackdrop.refresh()
+    onSkyBottomChanged: sidebarBackdrop.refresh()
+    onWidthChanged: sidebarBackdrop.refresh()
+    onHeightChanged: sidebarBackdrop.refresh()
     onCurrentWeatherCodeChanged: root.refreshSkyStops()
     Component.onCompleted: root.refreshSkyStops()
     readonly property color skyText: "#ffffff"
@@ -769,7 +775,16 @@ KosApplicationWindow {
         }
         Rectangle { anchors.fill: parent; color: AppTheme.sidebarSurface }
     }
-    LiquidBackdrop { id: sidebarBackdrop; sourceItem: sidebarGlassUnderlay }
+    // CPU 轮（批 9 后续）：静采源只在天空色/尺寸变化时重捕获，不再 live:true 每帧
+    // 强制重绘（§1 L0 采样源、不参与玻璃预算）。12s 天空过渡期间 onSky*Changed 每帧
+    // 触发 refresh()，观感与 live 等价；静止时 0 次捕获。
+    LiquidBackdrop {
+        id: sidebarBackdrop
+        sourceItem: sidebarGlassUnderlay
+        live: false
+        onAvailableChanged: refresh()
+        Component.onCompleted: refresh()
+    }
 
     Rectangle {
         anchors.fill: parent
