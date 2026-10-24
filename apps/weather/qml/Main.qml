@@ -97,6 +97,36 @@ KosApplicationWindow {
     // R140｜§2.10：原 #90cbff 在压深卡面上仅 2.09–3.17:1（<4.5:1）。同色相向亮端推到 **#eef7ff**
     // （本轮实拍卡面实测 4.69–5.31:1），保「浅蓝墨」族感不改色相。
     readonly property color cardHeaderText: "#eef7ff"
+    // R143｜§2.10 侧栏底部对比收口（「仍差」②）：侧栏底是 `AppTheme.sidebarSurface` 玻璃面
+    // （shared token 不动）叠在压深后的天空上，实测 clear (107,135,163) / rain (126,139,149)
+    // / fog (105,140,172) / dawn (166,126,100) / dusk (173,122,99)。其上原白字仅 3.49–3.74:1
+    // （<4.5:1）。只改这**一列控件的墨色**，侧栏材质与 glass 预算不动。
+    // 侧栏底的实测合成色：`AppTheme.sidebarSurface`(α0.32/0.36) 叠在天空渐变的底端之上。
+    // 夜间天空接近 #0c1a33，同一深墨会掉到 ~1.2:1，故墨色按**底亮度自适应**：亮底用深墨
+    // （黑 α0.92，实测 clear 5.28 / dusk 5.39:1）、暗底回到白墨。切换点取两种墨的等对比交点
+    // **L=0.174**（α0.92 墨在灰底 L=0.174 处深/白同为 4.25:1，是该点两侧最大最小对比的最优解）。
+    // 注意：§2.6 规定「侧栏不随背景翻转」，本轮让侧栏**状态墨**翻转属 §2.10 与 §2.6 的冲突取舍，
+    // 已记入 LEDGER「外推待确认」。
+    readonly property color sidebarFooterBackdrop: {
+        const s = AppTheme.sidebar
+        const a = AppTheme.sidebarSurface.a
+        return Qt.rgba(s.r * a + root.skyBottom.r * (1 - a),
+                       s.g * a + root.skyBottom.g * (1 - a),
+                       s.b * a + root.skyBottom.b * (1 - a), 1)
+    }
+    readonly property bool sidebarFooterOnLight: AppTheme.relativeLuminance(sidebarFooterBackdrop) > 0.174
+    readonly property color sidebarControlInk: sidebarFooterOnLight
+        ? Qt.rgba(0, 0, 0, 0.92) : Qt.rgba(1, 1, 1, 0.92)
+    readonly property color sidebarControlInkDisabled: sidebarFooterOnLight
+        ? Qt.rgba(0, 0, 0, 0.35) : Qt.rgba(1, 1, 1, 0.38)
+    // 状态行（● Open-Meteo / Cached / Offline）：原直接复用 §3 系统色 positive #16875f /
+    // warning #b96800，在侧栏底上仅 1.21 / 1.12:1。亮底用同色相压深（mix 黑 t=0.8）→
+    // positive (5,27,19) / warning (37,21,0)，实测 4.74–5.13:1；暗底沿用系统色本身
+    // （#16875f / #b96800 在夜空底上 3.5–4.5:1，取 dark 变体 #30d58a / #ffb340 可达 8:1+）。
+    readonly property color sidebarStatusPositive: sidebarFooterOnLight
+        ? Qt.rgba(0.0182, 0.1070, 0.0745, 1) : "#30d58a"
+    readonly property color sidebarStatusWarning: sidebarFooterOnLight
+        ? Qt.rgba(0.1445, 0.0808, 0, 1) : "#ffb340"
 
     // 用户裁定 2026-10-23：卡片改**中性白玻璃**，禁止蓝色 tint 压在蓝色天空上（旧值
     // α0.30 的 (0,96,210) 深蓝玻璃在模糊蓝底上糊成一片）。白底 α0.14（夜景 0.16 不变），
@@ -2421,7 +2451,8 @@ KosApplicationWindow {
                             text: settingsButton.text
                             font: settingsButton.font
                             color: settingsButton.enabled
-                                ? "white" : Qt.rgba(1, 1, 1, 0.38)
+                                ? root.sidebarControlInk
+                                : root.sidebarControlInkDisabled
                             horizontalAlignment: Text.AlignHCenter
                             verticalAlignment: Text.AlignVCenter
                         }
@@ -2447,7 +2478,8 @@ KosApplicationWindow {
                             text: refreshButton.text
                             font: refreshButton.font
                             color: refreshButton.enabled
-                                ? "white" : Qt.rgba(1, 1, 1, 0.38)
+                                ? root.sidebarControlInk
+                                : root.sidebarControlInkDisabled
                             horizontalAlignment: Text.AlignHCenter
                             verticalAlignment: Text.AlignVCenter
                             RotationAnimation on rotation {
@@ -2492,7 +2524,7 @@ KosApplicationWindow {
                         contentItem: Label {
                             text: metricButton.text
                             font: metricButton.font
-                            color: "white"
+                            color: root.sidebarControlInk
                             horizontalAlignment: Text.AlignHCenter
                             verticalAlignment: Text.AlignVCenter
                             elide: Text.ElideRight
@@ -2522,7 +2554,7 @@ KosApplicationWindow {
                         contentItem: Label {
                             text: imperialButton.text
                             font: imperialButton.font
-                            color: "white"
+                            color: root.sidebarControlInk
                             horizontalAlignment: Text.AlignHCenter
                             verticalAlignment: Text.AlignVCenter
                             elide: Text.ElideRight
@@ -2545,7 +2577,7 @@ KosApplicationWindow {
                             ? "●  Open-Meteo"
                             : "○  " + qsTr("Offline cache"))
                     color: backend.connected && !backend.stale
-                        ? AppTheme.positive : AppTheme.warning
+                        ? root.sidebarStatusPositive : root.sidebarStatusWarning
                     wrapMode: Text.WordWrap
                     font.pixelSize: 11
                     Accessible.name: backend.stale
