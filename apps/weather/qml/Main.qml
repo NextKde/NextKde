@@ -62,6 +62,18 @@ KosApplicationWindow {
         running: true
         onTriggered: root.skyReady = true
     }
+    // R113（CPU 轮）：环境动画统一节拍。此前云漂移(50ms) / hero 呼吸(66ms) / 日晕呼吸(100ms) /
+    // 水珠滑落(40ms) 各自独立 Timer，事件并集 ≈45–60 次/秒 → 全窗口每秒被合成 45–60 次。
+    // R108 单独降每条的频率无效（其并集仍是几十次/秒），故合并为单一 66ms(15fps) 时钟：
+    // 所有消费者同一事件循环内响应，一帧只合成一次。端点/周期逐值不变（cos 曲线按 ambientSec 求值）。
+    property double ambientSec: 0
+    Timer {
+        id: ambientTick
+        interval: 66; repeat: true
+        running: !AppTheme.reduceMotion
+        onRunningChanged: if (!running) root.ambientSec = 0
+        onTriggered: root.ambientSec = root.ambientSec + 0.066
+    }
     onSkyPeriodChanged: root.refreshSkyStops()
     // live:false 的采样源：天空色每帧变化（12s 过渡）时补一次捕获；静止时不捕获。
     onSkyTopChanged: sidebarBackdrop.refresh()
@@ -870,17 +882,10 @@ KosApplicationWindow {
         // CPU 轮（批 8）：原 SequentialAnimation 以 60Hz 推进 opacity（晴空场景的全窗口
         // 重绘驱动源之一）。改为定时器驱动同一余弦呼吸曲线，端点 0.10↔0.24、
         // 周期 7s 不变；reduceMotion 时钉在 0.17（原实现 reduceMotion 下停在动画初值）。
-        // R108：全屏层 33ms(30fps)→100ms(10fps)——7s 正弦在 10fps 下单步 Δopacity
-        // ≤0.0063，肉眼不可辨；全窗口合成次数降为 1/3。
-        property real breatheT: 0
+        // R108：33ms(30fps)→100ms(10fps)；R113：改由根级统一节拍驱动（不再单独占一条 Timer，
+        // 7s 周期/0.10↔0.24 端点逐值不变，按 root.ambientSec 求同一余弦曲线）。
         opacity: AppTheme.reduceMotion ? 0.17
-                 : 0.10 + 0.14 * (0.5 + 0.5 * Math.cos(2 * Math.PI * breatheT / 7.0))
-        Timer {
-            interval: 100; repeat: true
-            running: root.dayClearSky && !AppTheme.reduceMotion
-            onRunningChanged: if (!running) sunGlowLayer.breatheT = 0
-            onTriggered: sunGlowLayer.breatheT = (sunGlowLayer.breatheT + 0.100) % 7.0
-        }
+                 : 0.10 + 0.14 * (0.5 + 0.5 * Math.cos(2 * Math.PI * root.ambientSec / 7.0))
 
         Canvas {
             anchors.fill: parent
@@ -1291,14 +1296,16 @@ KosApplicationWindow {
             onHeightChanged: requestPaint()
             // 纹理平移驱动：Timer 只改 panX（合成器搬运已烘焙纹理），
             // 不触发 requestPaint / Canvas JS。reduceMotion 下停走（§2.12）。
-            // R108：33ms(30fps)→50ms(20fps)——三层全宽纹理的逐帧合成次数降为 2/3；
-            // 最快前层位移 131px/s → 6.5px/步，云为柔和渐变体，无可见跳步。
+            // R108：33ms(30fps)→50ms(20fps)。R113：不再单独占一条 Timer，改由根级统一节拍
+            // （66ms）驱动；位移仍按真实 elapsed 计算，driftMs 9000/16364/30000 逐值不变。
             property double lastPanMs: 0
-            Timer {
-                interval: 50; repeat: true
-                running: root.cloudySky && !AppTheme.reduceMotion
-                onRunningChanged: if (!running) cloudTexture.lastPanMs = 0
-                onTriggered: {
+            Connections {
+                target: root
+                function onAmbientSecChanged() {
+                    if (!root.cloudySky || AppTheme.reduceMotion) {
+                        cloudTexture.lastPanMs = 0
+                        return
+                    }
                     const now = Date.now()
                     if (cloudTexture.lastPanMs > 0) {
                         cloudTexture.panX += (now - cloudTexture.lastPanMs)
@@ -1443,12 +1450,20 @@ KosApplicationWindow {
             }
             return rows
         }
-        Timer {
-            interval: 40
-            repeat: true
-            running: root.rainySky && !AppTheme.reduceMotion
-            onTriggered: {
-                slidingDrops.clock += 0.04
+        // R113：滑落水珠不再独占 40ms Timer，由根级统一节拍（66ms）驱动；clock 按真实
+        // elapsed 推进，速度 8–15 px/s 逐值不变。仅重绘本 256×256 局部 Canvas。
+        property double lastClockMs: 0
+        Connections {
+            target: root
+            function onAmbientSecChanged() {
+                if (!root.rainySky || AppTheme.reduceMotion) {
+                    slidingDrops.lastClockMs = 0
+                    return
+                }
+                const now = Date.now()
+                if (slidingDrops.lastClockMs > 0)
+                    slidingDrops.clock += (now - slidingDrops.lastClockMs) / 1000
+                slidingDrops.lastClockMs = now
                 slidingCanvas.requestPaint()
             }
         }
@@ -2168,15 +2183,10 @@ KosApplicationWindow {
                             // 改为 33ms 定时器驱动同一余弦曲线（cos 在两端导数为 0 = InOutSine 等价），
                             // 端点 0.86/1.0 与 5s 周期不变，仅时间分辨率降到 30fps（5s 慢渐变不可辨）。
                             // R108：33ms(30fps)→66ms(15fps)，opacity 单步 Δ≤0.006（5s 正弦），肉眼不可辨。
-                            property real breatheT: 0
+                            // R113：改由根级统一节拍驱动（不再单独占一条 Timer），
+                            // 端点 0.86/1.0 与 5s 周期逐值不变。
                             opacity: AppTheme.reduceMotion ? 1.0
-                                     : 0.86 + 0.14 * (0.5 + 0.5 * Math.cos(2 * Math.PI * breatheT / 5.0))
-                            Timer {
-                                interval: 66; repeat: true
-                                running: !AppTheme.reduceMotion
-                                onRunningChanged: if (!running) heroTempLiquid.breatheT = 0
-                                onTriggered: heroTempLiquid.breatheT = (heroTempLiquid.breatheT + 0.066) % 5.0
-                            }
+                                     : 0.86 + 0.14 * (0.5 + 0.5 * Math.cos(2 * Math.PI * root.ambientSec / 5.0))
 
 
                             // 4) 白色 50% 字面 + 柔光晕（磨砂感）
