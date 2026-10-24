@@ -870,11 +870,16 @@ bool startKWinBridge(const KWinEventHandler &handler)
             return;
         }
         const QString script = qEnvironmentVariable("KOS_PLATFORM_KWIN_SCRIPT");
+        scripting.setTimeout(1500);
         if (script.isEmpty() || !QFileInfo(script).isReadable()) {
             reportFailure(QStringLiteral("KOS_PLATFORM_KWIN_SCRIPT is missing or unreadable: ") + script);
             scriptLoader->stop();
             return;
         }
+        // Desktop stacking now belongs to the platform bridge. Retire the
+        // former Shell-owned scripts before installing its single owner.
+        scripting.call(QStringLiteral("unloadScript"), QStringLiteral("kos-stage-stack"));
+        scripting.call(QStringLiteral("unloadScript"), QStringLiteral("kos-desktop-stack-v1"));
         scripting.call(QStringLiteral("unloadScript"),
                        QStringLiteral("kos-window-bridge"));
         const QDBusReply<int> loaded = scripting.call(QStringLiteral("loadScript"),
