@@ -66,13 +66,16 @@ KosApplicationWindow {
     // 水珠滑落(40ms) 各自独立 Timer，事件并集 ≈45–60 次/秒 → 全窗口每秒被合成 45–60 次。
     // R108 单独降每条的频率无效（其并集仍是几十次/秒），故合并为单一 66ms(15fps) 时钟：
     // 所有消费者同一事件循环内响应，一帧只合成一次。端点/周期逐值不变（cos 曲线按 ambientSec 求值）。
+    // R115（CPU 轮）：66ms(15fps) → 100ms(10fps)。R114 逐帧实测稳态帧率被本时钟钉在 15fps，
+    // 单帧 GUI+RT ≈11.4ms → 帧数直接线性决定 CPU。10fps 下单步量：hero 呼吸 Δopacity 0.0088、
+    // 云前层 13.1px（柔和渐变无硬边）、水珠滑落重绘保持 ≈5fps（见 slidingDrops，步长不变）。
     property double ambientSec: 0
     Timer {
         id: ambientTick
-        interval: 66; repeat: true
+        interval: 100; repeat: true
         running: !AppTheme.reduceMotion
         onRunningChanged: if (!running) root.ambientSec = 0
-        onTriggered: root.ambientSec = root.ambientSec + 0.066
+        onTriggered: root.ambientSec = root.ambientSec + 0.100
     }
     onSkyPeriodChanged: root.refreshSkyStops()
     // live:false 的采样源：天空色每帧变化（12s 过渡）时补一次捕获；静止时不捕获。
@@ -201,6 +204,11 @@ KosApplicationWindow {
                 baseOpacity: 0.35 + random() * 0.6,
                 twinkleMs: 2400 + random() * 4800
             })
+        }
+        // R115（CPU 轮）：闪烁相位与间歇用**独立** PRNG 生成，绝不扰动上面的位置/尺寸序列
+        // （同一条 random 流继续取数会让后续星位变化）。相位仍每次启动随机。
+        for (let index = 0; index < stars.length; index++) {
+            stars[index].twinklePauseMs = Math.random() * stars[index].twinkleMs
         }
         return stars
     }
@@ -926,29 +934,21 @@ KosApplicationWindow {
                 height: width
                 radius: width / 2
                 color: "white"
-                opacity: modelData.baseOpacity
                 Accessible.ignored: true
 
-                SequentialAnimation on opacity {
-                    running: root.nightClearSky && !AppTheme.reduceMotion
-                    loops: Animation.Infinite
-
-                    PauseAnimation {
-                        duration: Math.random() * modelData.twinkleMs
-                    }
-                    NumberAnimation {
-                        from: modelData.baseOpacity
-                        to: modelData.baseOpacity * 0.35
-                        duration: modelData.twinkleMs / 2
-                        easing.type: Easing.InOutSine
-                    }
-                    NumberAnimation {
-                        from: modelData.baseOpacity * 0.35
-                        to: modelData.baseOpacity
-                        duration: modelData.twinkleMs / 2
-                        easing.type: Easing.InOutSine
-                    }
-                }
+                // R115（CPU 轮）：原为每颗星一条 `SequentialAnimation on opacity`
+                // （PauseAnimation + 两个 InOutSine NumberAnimation，循环）——动画在**显示
+                // 刷新率**（60Hz）推进，48 颗星 = 夜晴场景的全窗口 60Hz 重绘驱动源。
+                // 改为按根级节拍（root.ambientSec）求同一条余弦曲线：同一端点
+                // baseOpacity ↔ baseOpacity×0.35、同一周期（twinklePauseMs + twinkleMs）、
+                // cos 与 InOutSine 在两端导数为 0 的缓动等价；reduceMotion / 非夜晴钉在 baseOpacity
+                // （与原 `running` 门控停在初值等价，§2.12）。
+                property real twinklePeriodSec: (modelData.twinklePauseMs + modelData.twinkleMs) / 1000.0
+                opacity: (AppTheme.reduceMotion || !root.nightClearSky)
+                         ? modelData.baseOpacity
+                         : modelData.baseOpacity * (0.675 + 0.325 * Math.cos(
+                             2 * Math.PI * (((root.ambientSec * 1000.0 + modelData.twinklePauseMs)
+                                             / 1000.0) % twinklePeriodSec) / twinklePeriodSec))
             }
         }
     }
@@ -1452,9 +1452,10 @@ KosApplicationWindow {
         }
         // R113：滑落水珠不再独占 40ms Timer，由根级统一节拍（66ms）驱动；clock 按真实
         // elapsed 推进，速度 8–15 px/s 逐值不变。仅重绘本 256×256 局部 Canvas。
-        // R114（CPU 轮）：水珠只以 8–15 px/s 缓慢下滑，无需跟随 15fps 环境节拍重绘局部
+        // R114（CPU 轮）：水珠只以 8–15 px/s 缓慢下滑，无需跟随环境节拍重绘局部
         // Canvas——每 3 个节拍重绘一次（≈5fps，单步位移 1.6–3.0px），姿态/速度/轨迹由
         // 真实 elapsed 累计，逐值不变；GUI 线程上的 Canvas 光栅与 JS 调用降至 1/3。
+        // R115：根级节拍 66→100ms 后，为保持同一 ≈5fps 与同一步长，divisor 3 → 2。
         property double lastClockMs: 0
         property int repaintPhase: 0
         Connections {
@@ -1465,7 +1466,7 @@ KosApplicationWindow {
                     slidingDrops.repaintPhase = 0
                     return
                 }
-                slidingDrops.repaintPhase = (slidingDrops.repaintPhase + 1) % 3
+                slidingDrops.repaintPhase = (slidingDrops.repaintPhase + 1) % 2
                 if (slidingDrops.repaintPhase !== 0)
                     return
                 const now = Date.now()
