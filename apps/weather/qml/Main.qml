@@ -1373,68 +1373,95 @@ KosApplicationWindow {
     }
 
     // 批 2｜云层三层（后/中/前，z 序由声明顺序决定：先声明者在下）。
-    // 每层独立 Repeater + 独立 driftMs，速度比 1 : 0.55 : 0.3（§3 motion 五档无
-    // 环境漂移档，时长为用户裁决的比例推导值，记 LEDGER 外推）。
+    // 批 5｜预烘焙改法：每层把所有云**一次**画进单张 2×宽 Canvas 纹理（左右各一份，
+    // 周期 = 窗口宽，循环无缝），之后只平移纹理 x，禁止每帧重绘。烘焙只在
+    // 尺寸 / clouds（cloudCover / weatherCode）变化时发生，计数见 [cloud-bake] 日志。
+    // 速度比仍为 1 : 0.55 : 0.3（批 2 裁决，driftMs 由 cloudLayers 下发）。
     component CloudLayer: Item {
         id: cloudLayer
         property var clouds: []
+        property int driftMs: 30000
         anchors.fill: parent
         visible: root.cloudySky
         clip: true
 
-        Repeater {
-            model: cloudLayer.clouds
+        Canvas {
+            id: cloudTexture
+            width: cloudLayer.width * 2
+            height: cloudLayer.height
+            // 夜间压暗：夜空无参考图（refs 日间 only），白云在暗天上调低存在感。
+            opacity: root.currentIsDay ? 1 : 0.55
+            Accessible.ignored: true
+            // 烘焙计数：初始化 1 次，尺寸/天气变化各 1 次；稳定运行期间不再增长。
+            property int bakeCount: 0
+            // 纹理平移量（px）：由下方 33ms Timer 推进，x 绑定到它。
+            property real panX: 0
+            x: -panX
 
-            delegate: Item {
-                id: cloud
-                required property var modelData
-                readonly property real cloudW: Math.min(modelData.cloudWidth, cloudLayer.width * 0.45)
-
-                // Clouds start spread across the window per the seeded xRatio so the
-                // sky is populated on the very first frame; reduce-motion leaves them
-                // parked there as static content instead of an empty sky.
-                property real entryX: modelData.xRatio * Math.max(cloudLayer.width - cloudW, 0)
-                x: cloud.entryX
-                y: (cloudLayer.height - height) * modelData.yRatio
-                width: cloudW
-                height: cloudW * (modelData.cloudHeight / modelData.cloudWidth)
-                // 夜间压暗：夜空无参考图（refs 日间 only），白云在暗天上调低存在感。
-                opacity: modelData.opacity * (root.currentIsDay ? 1 : 0.55)
-                Accessible.ignored: true
-
-                Canvas {
-                    anchors.fill: parent
-                    onWidthChanged: requestPaint()
-                    onHeightChanged: requestPaint()
-                    onPaint: {
-                        const ctx = getContext("2d")
-                        ctx.clearRect(0, 0, width, height)
-                        // Structured cloud per ref-main 观感（用户第二批背景轮）：三遍
-                        // 叠加出明暗结构——阴影底（右下偏移，深蓝 rgba(24,67,127) 系
-                        // ref 云影实测）、白色云体、受光顶（左上偏移，纯白高光，光源
-                        // 左上 §2.7）。偏移量按 canvas 比例缩放，clamp 同步平移。
-                        const passes = [
-                            { dxR: 0.06, dyR: 0.20, rgb: "24,67,127", mul: 0.85 },
-                            { dxR: 0.0,  dyR: 0.0,  rgb: "255,255,255", mul: 0.85 },
-                            { dxR: -0.03, dyR: -0.12, rgb: "255,255,255", mul: 1.0 }
-                        ]
+            onWidthChanged: requestPaint()
+            onHeightChanged: requestPaint()
+            // 纹理平移驱动：33ms Timer 只改 panX（合成器搬运已烘焙纹理），
+            // 不触发 requestPaint / Canvas JS。reduceMotion 下停走（§2.12）。
+            property double lastPanMs: 0
+            Timer {
+                interval: 33; repeat: true
+                running: root.cloudySky && !AppTheme.reduceMotion
+                onRunningChanged: if (!running) cloudTexture.lastPanMs = 0
+                onTriggered: {
+                    const now = Date.now()
+                    if (cloudTexture.lastPanMs > 0) {
+                        cloudTexture.panX += (now - cloudTexture.lastPanMs)
+                                             * cloudLayer.width / cloudLayer.driftMs
+                        if (cloudTexture.panX >= cloudLayer.width)
+                            cloudTexture.panX -= cloudLayer.width
+                    }
+                    cloudTexture.lastPanMs = now
+                }
+            }
+            onPaint: {
+                bakeCount += 1
+                console.log("[cloud-bake]", (cloudLayer.clouds.length > 0
+                                             ? cloudLayer.clouds[0].layer : "empty"),
+                            "n=" + cloudLayer.clouds.length,
+                            "bake#" + bakeCount, "w=" + width, "h=" + height,
+                            "t=" + Date.now())
+                const ctx = getContext("2d")
+                ctx.clearRect(0, 0, width, height)
+                // Structured cloud per ref-main 观感（用户第二批背景轮）：三遍
+                // 叠加出明暗结构——阴影底（右下偏移，深蓝 rgba(24,67,127) 系
+                // ref 云影实测）、白色云体、受光顶（左上偏移，纯白高光，光源
+                // 左上 §2.7）。偏移量按云体尺寸缩放，clamp 同步平移。
+                const passes = [
+                    { dxR: 0.06, dyR: 0.20, rgb: "24,67,127", mul: 0.85 },
+                    { dxR: 0.0,  dyR: 0.0,  rgb: "255,255,255", mul: 0.85 },
+                    { dxR: -0.03, dyR: -0.12, rgb: "255,255,255", mul: 1.0 }
+                ]
+                const periodW = width / 2
+                for (let rep = 0; rep < 2; rep++) {
+                    for (let c = 0; c < cloudLayer.clouds.length; c++) {
+                        const cloud = cloudLayer.clouds[c]
+                        const cw = Math.min(cloud.cloudWidth, periodW * 0.45)
+                        const ch = cw * (cloud.cloudHeight / cloud.cloudWidth)
+                        const ox = rep * periodW
+                                   + cloud.xRatio * Math.max(periodW - cw, 0)
+                        const oy = (height - ch) * cloud.yRatio
                         for (let pass = 0; pass < passes.length; pass++) {
                             const ps = passes[pass]
-                            const dx = ps.dxR * width
-                            const dy = ps.dyR * height
-                            for (let i = 0; i < modelData.puffs.length; i++) {
-                                const p = modelData.puffs[i]
-                                const cx = p.cxRatio * width + dx
-                                const cy = p.cyRatio * height + dy
+                            const dx = ps.dxR * cw
+                            const dy = ps.dyR * ch
+                            for (let i = 0; i < cloud.puffs.length; i++) {
+                                const p = cloud.puffs[i]
+                                const cx = ox + p.cxRatio * cw + dx
+                                const cy = oy + p.cyRatio * ch + dy
                                 // Keep the gradient inside the canvas: alpha must
                                 // reach 0 before any clipped edge, otherwise puffs
                                 // show hard rectangular borders.
-                                const r = Math.max(Math.min(p.rRatio * height * 1.2,
+                                const r = Math.max(Math.min(p.rRatio * ch * 1.2,
                                                             cy, height - cy,
                                                             cx, width - cx), 8)
                                 const grad = ctx.createRadialGradient(cx, cy, 0, cx, cy, r)
                                 grad.addColorStop(0, "rgba(" + ps.rgb + ","
-                                                  + (p.alphaMul * ps.mul).toFixed(3) + ")")
+                                                  + (cloud.opacity * p.alphaMul * ps.mul).toFixed(3) + ")")
                                 grad.addColorStop(1, "rgba(" + ps.rgb + ",0)")
                                 ctx.fillStyle = grad
                                 ctx.beginPath()
@@ -1444,29 +1471,16 @@ KosApplicationWindow {
                         }
                     }
                 }
-
-                SequentialAnimation on x {
-                    running: root.cloudySky && !AppTheme.reduceMotion
-                    loops: Animation.Infinite
-
-                    // First pass runs from the seeded on-screen position; every later
-                    // pass re-enters from the left edge after the staggered pause.
-                    NumberAnimation {
-                        from: cloud.entryX
-                        to: cloudLayer.width + 20
-                        duration: modelData.driftMs
-                        easing.type: Easing.Linear
-                    }
-                    ScriptAction { script: cloud.entryX = -cloud.cloudW - 20 }
-                    PauseAnimation { duration: modelData.phaseMs }
-                }
             }
         }
+
+        // clouds 绑定在 cloudCover / weatherCode 变化后重算 → 唯一的重烘焙触发点。
+        onCloudsChanged: cloudTexture.requestPaint()
     }
 
-    CloudLayer { id: cloudBackLayer; clouds: root.cloudFieldBack }
-    CloudLayer { id: cloudMidLayer; clouds: root.cloudFieldMid }
-    CloudLayer { id: cloudFrontLayer; clouds: root.cloudFieldFront }
+    CloudLayer { id: cloudBackLayer; clouds: root.cloudFieldBack; driftMs: root.cloudLayers[0].driftMs }
+    CloudLayer { id: cloudMidLayer; clouds: root.cloudFieldMid; driftMs: root.cloudLayers[1].driftMs }
+    CloudLayer { id: cloudFrontLayer; clouds: root.cloudFieldFront; driftMs: root.cloudLayers[2].driftMs }
 
     // 批 4｜大气洗层（雾/雾凇/沙尘）：位于云层之上、闪电之下，蒙住整个天空。
     // 纯静态半透填充，无动画。
