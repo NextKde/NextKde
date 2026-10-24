@@ -2266,7 +2266,14 @@ KosApplicationWindow {
                     // 双列 masonry（ref-main 步骤 a+b+c）：GridLayout 内两个独立列容器 = 真 masonry——
                     // 行式布局曾把左列瓦片压到右列 Conditions 底下产生 86px 天窗；左列 AQ→指标瓦片、右列 Conditions→10 天卡各自独立堆叠；compact 窄窗回落单列
                     GridLayout {
+                        id: cardGrid
                         Layout.fillWidth: true
+                        // CPU 轮（R117）：卡片区是纯静态内容（圆角 AA 填充 + 双层软影 + 文字），
+                        // 但随环境节拍（云漂移/hero 呼吸）每 100ms 被整窗重合成一次 →
+                        // 每帧都把整片卡片重新光栅化。layer.enabled 让它只光栅化一次并缓存为
+                        // 纹理，此后逐帧只做一次 blit；卡片内容/尺寸/主题变化时才重建。
+                        // 视觉零改动（§1 L0 内容区，非玻璃）。
+                        layer.enabled: true
                         columns: root.compact ? 1 : 2
                         // ref-main(814x498) y260 行实测 AQ 卡右缘 x505 → Conditions 卡左缘 x519 ≈13px 间隙 × 1.4598 窗高比 ≈ 19px
                         columnSpacing: 19
