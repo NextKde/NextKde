@@ -67,8 +67,10 @@ KosApplicationWindow {
     // R108 单独降每条的频率无效（其并集仍是几十次/秒），故合并为单一 66ms(15fps) 时钟：
     // 所有消费者同一事件循环内响应，一帧只合成一次。端点/周期逐值不变（cos 曲线按 ambientSec 求值）。
     // R115（CPU 轮）：66ms(15fps) → 100ms(10fps)。R114 逐帧实测稳态帧率被本时钟钉在 15fps，
-    // 单帧 GUI+RT ≈11.4ms → 帧数直接线性决定 CPU。10fps 下单步量：hero 呼吸 Δopacity 0.0088、
-    // 云前层 13.1px（柔和渐变无硬边）、水珠滑落重绘保持 ≈5fps（见 slidingDrops，步长不变）。
+    // 单帧 GUI+RT ≈11.4ms → 帧数直接线性决定 CPU。
+    // R116（CPU 轮）：本档曾试降到 133ms(7.5fps)，同会话 A/B 实测 17.7→16.0 / 16.9→17.2
+    // （两对均值 17.3→16.6，落在 loadavg 噪声内）→ **帧率已不是 10fps 以下的瓶颈，试值已回退**，
+    // 保持 100ms(10fps)；本轮真实改动见 sidebarBackdrop.hideSource。
     property double ambientSec: 0
     Timer {
         id: ambientTick
@@ -799,6 +801,10 @@ KosApplicationWindow {
         id: sidebarBackdrop
         sourceItem: sidebarGlassUnderlay
         live: false
+        // R116（CPU 轮）：采样源在场景里被后面的不透明天空矩形整块覆盖，本就不上屏；
+        // 但 ShaderEffectSource 默认 hideSource:false 会让它每帧仍参与合成（整窗高渐变 +
+        // 侧栏面填充，纯过绘制）。置 true 后只留 1 次按需捕获，稳态每帧少两层全窗/全高绘制。
+        hideSource: true
         onAvailableChanged: refresh()
         Component.onCompleted: refresh()
     }
@@ -1456,6 +1462,8 @@ KosApplicationWindow {
         // Canvas——每 3 个节拍重绘一次（≈5fps，单步位移 1.6–3.0px），姿态/速度/轨迹由
         // 真实 elapsed 累计，逐值不变；GUI 线程上的 Canvas 光栅与 JS 调用降至 1/3。
         // R115：根级节拍 66→100ms 后，为保持同一 ≈5fps 与同一步长，divisor 3 → 2。
+        // R116：133ms(7.5fps) 试值同会话 A/B 无可测收益（见 ambientTick 注释）已回退，故本项
+        // divisor 仍 2 → ≈5fps、单步 1.6–3.0px，逐值不变。
         property double lastClockMs: 0
         property int repaintPhase: 0
         Connections {
