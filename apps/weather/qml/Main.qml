@@ -216,7 +216,8 @@ KosApplicationWindow {
         const rad = (root.windDirectionDeg + 180) * Math.PI / 180
         return Math.sin(rad) * Math.min(root.windSpeedValue / 40, 1) * 260
     }
-    readonly property int rainParticlePool: 420
+    // 批 3.5｜雨效重做（用户 2026-10-24）：密度池 420 → 700（裁决第 7 条）。
+    readonly property int rainParticlePool: 700
     readonly property int snowParticlePool: 320
     readonly property int rainParticleCount:
         Math.round(root.rainParticlePool * root.precipitationIntensity)
@@ -1084,23 +1085,55 @@ KosApplicationWindow {
         Component.onCompleted: precip.seedParticles()
         onActiveCountChanged: precip.requestPaint()
 
+        // 批 3.5｜三层景深参数（用户 2026-10-24 裁决第 1 条，同一 Canvas 按层 stroke）。
+        // 粒子数比 近:中:远 = 1 : 1.4 : 1.8（远处更多更淡）。
+        readonly property var rainLayerConfigs: [
+            { lw: 2.2, trailMin: 26, trailMax: 40, vyMin: 620, vyMax: 760, aMin: 0.30, aMax: 0.55 },
+            { lw: 1.5, trailMin: 16, trailMax: 26, vyMin: 460, vyMax: 580, aMin: 0.22, aMax: 0.42 },
+            { lw: 0.9, trailMin:  8, trailMax: 14, vyMin: 300, vyMax: 380, aMin: 0.10, aMax: 0.22 }
+        ]
+        // 42 槽循环内 10/14/18 → 1 : 1.4 : 1.8；取前 N 个活跃粒子时比例不变。
+        function rainLayerForIndex(index) {
+            const slot = index % 42
+            return slot < 10 ? 0 : (slot < 24 ? 1 : 2)
+        }
+
         function seedParticles() {
             if (width <= 0 || height <= 0) return
             const random = root.mulberry32(precip.snow ? 20261018 : 20261017)
             const list = []
+            const cfg = precip.rainLayerConfigs
             for (let i = 0; i < precip.poolSize; i++) {
+                if (precip.snow) {
+                    list.push({
+                        x: random() * width,
+                        y: random() * height,
+                        size: 2.0 + random() * 3.0,          // 雪：直径
+                        vy: 78 + random() * 42,              // 78–120 px/s
+                        opacity: 0.35 + random() * 0.45,
+                        swayAmp: 8 + random() * 14,
+                        swayMs: 2000 + random() * 2000,
+                        phaseMs: random() * 2000,
+                        layer: -1
+                    })
+                    continue
+                }
+                const layer = precip.rainLayerForIndex(i)
+                const c = cfg[layer]
                 list.push({
                     x: random() * width,
                     y: random() * height,
-                    // 雨：size=拖尾长度；雪：size=直径
-                    size: precip.snow ? (2.0 + random() * 3.0) : (10 + random() * 10),
-                    // 雨 420–580 px/s；雪 78–120 px/s
-                    vy: precip.snow ? (78 + random() * 42) : (420 + random() * 160),
-                    opacity: precip.snow ? (0.35 + random() * 0.45)
-                                         : (0.20 + random() * 0.28),
-                    swayAmp: precip.snow ? (8 + random() * 14) : 0,
-                    swayMs: precip.snow ? (2000 + random() * 2000) : 1,
-                    phaseMs: random() * 2000
+                    layer: layer,
+                    trail: c.trailMin + random() * (c.trailMax - c.trailMin),
+                    vy: c.vyMin + random() * (c.vyMax - c.vyMin),
+                    // 亮度长尾：α = lo + pow(random,3)×(hi−lo)
+                    // （即裁决 0.12 + pow(r,3)×0.5 归一化到各层 α 区间）
+                    alpha: c.aMin + Math.pow(random(), 3) * (c.aMax - c.aMin),
+                    // 角度抖动：风矢量方向 ±3°
+                    jitter: (random() * 2 - 1) * 3 * Math.PI / 180,
+                    // 落地反馈：随机 20/700 滴在生命周期内各触发一次
+                    splash: random() < 0.03,
+                    splashed: false
                 })
             }
             precip.particles = list
@@ -1115,10 +1148,18 @@ KosApplicationWindow {
             for (let i = 0; i < count; i++) {
                 const p = precip.particles[i]
                 p.y += p.vy * dt
-                p.x += vx * dt
+                if (precip.snow) {
+                    p.x += vx * dt
+                } else {
+                    // 单滴速度矢量 = 风矢量绕 ±3° 抖动后叠加下落
+                    const cj = Math.cos(p.jitter)
+                    const sj = Math.sin(p.jitter)
+                    p.x += (vx * cj - p.vy * sj) * dt
+                }
                 if (p.y > height + 30) {
                     p.y = -30
                     p.x = Math.random() * width
+                    p.splashed = false
                 }
                 if (p.x > width + 30) p.x -= width + 60
                 if (p.x < -30) p.x += width + 60
@@ -1150,21 +1191,54 @@ KosApplicationWindow {
                     ctx.fill()
                 }
             } else {
-                // 雨：沿速度矢量反向画拖尾 → 风向直接决定斜角（非单一竖直方向）
+                // 批 3.5｜三层景深雨：远层先画、近层后画（远→中→近）。
+                // 每滴 = 沿自身速度矢量方向的线性渐变（头 α、尾 0），禁止实色线。
+                const night = !root.currentIsDay
+                const rgb = night ? "207,224,255" : "219,233,255"   // 夜间 #cfe0ff / 白天 #dbe9ff
+                const dim = night ? 0.7 : 1.0                        // 夜间整体 α ×0.7
                 const vx = root.windDriftX
-                ctx.strokeStyle = "#dbe9ff"
-                ctx.lineWidth = 1.4
-                ctx.lineCap = "round"
-                for (let i = 0; i < count; i++) {
-                    const p = precip.particles[i]
-                    const mag = Math.sqrt(vx * vx + p.vy * p.vy) || 1
-                    const ux = vx / mag
-                    const uy = p.vy / mag
-                    ctx.globalAlpha = p.opacity
-                    ctx.beginPath()
-                    ctx.moveTo(p.x, p.y)
-                    ctx.lineTo(p.x - ux * p.size, p.y - uy * p.size)
-                    ctx.stroke()
+                // 落地溅射雾带：底部 20px
+                ctx.fillStyle = "rgba(219,233,255,0.05)"
+                ctx.fillRect(0, height - 20, width, 20)
+                for (let layer = 2; layer >= 0; layer--) {
+                    const cfg = precip.rainLayerConfigs[layer]
+                    for (let i = 0; i < count; i++) {
+                        const p = precip.particles[i]
+                        if (p.layer !== layer) continue
+                        const cj = Math.cos(p.jitter)
+                        const sj = Math.sin(p.jitter)
+                        const rvx = vx * cj - p.vy * sj
+                        const rvy = vx * sj + p.vy * cj
+                        const mag = Math.sqrt(rvx * rvx + rvy * rvy) || 1
+                        const ux = rvx / mag
+                        const uy = rvy / mag
+                        const a = Math.min(1, p.alpha * dim)
+                        // 落地反馈：进入底部 30px 的前 20 滴改画 3px 扩散椭圆，一次/生命周期
+                        if (p.splash && !p.splashed && p.y > height - 30) {
+                            p.splashed = true
+                            ctx.save()
+                            ctx.translate(p.x, height - 3)
+                            ctx.scale(1, 0.4)
+                            ctx.fillStyle = "rgba(" + rgb + "," + a.toFixed(3) + ")"
+                            ctx.beginPath()
+                            ctx.arc(0, 0, 3, 0, Math.PI * 2)
+                            ctx.fill()
+                            ctx.restore()
+                            continue
+                        }
+                        const tx = p.x - ux * p.trail
+                        const ty = p.y - uy * p.trail
+                        const grad = ctx.createLinearGradient(p.x, p.y, tx, ty)
+                        grad.addColorStop(0, "rgba(" + rgb + "," + a.toFixed(3) + ")")
+                        grad.addColorStop(1, "rgba(" + rgb + ",0)")
+                        ctx.strokeStyle = grad
+                        ctx.lineWidth = cfg.lw
+                        ctx.lineCap = "round"
+                        ctx.beginPath()
+                        ctx.moveTo(p.x, p.y)
+                        ctx.lineTo(tx, ty)
+                        ctx.stroke()
+                    }
                 }
             }
             ctx.globalAlpha = 1
