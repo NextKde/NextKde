@@ -915,7 +915,8 @@ KosApplicationWindow {
         property real specular: 0.28
         property real fog: 0.05
         // 批 12 第 4 项：雨膜压暗系数。滑落水珠擦过处膜被擦掉 → 亮带。
-        property real filmDim: 0.22
+        // R133：0.22 → 0.30（外推区间上限），加强雨天玻璃膜层与滑痕亮带的可见度。
+        property real filmDim: 0.30
     }
 
     // 批 12｜水图 512×512（静止时不重绘，只有下滑水珠的局部脏矩形会更新）：
@@ -946,6 +947,10 @@ KosApplicationWindow {
         height: 512
         property var staticStamps: []
         property var slideDrops: []
+        // R133：滑痕状态模型（每滴一段 top/bottom，≤48px）。Canvas 2D context 只在
+        // onPaint 内有效——旧实现在 advanceSlides 里直接 ctx.clearRect 不生效（探针实测
+        // 水图在 8s 时仍无任何滑痕）。改为「状态 + onPaint 重建」，滑动时才 requestPaint。
+        property var slideTrail: []
         property var slideLastY: []
         property real clock: 0
         property double lastClockMs: 0
@@ -1017,20 +1022,6 @@ KosApplicationWindow {
             ctx.drawImage(offsetSpriteImage, x - size / 2, y - size / 2, size, size)
         }
 
-        // 脏矩形内重画静态水珠；skipX/skipY0/skipY1 给出被擦掉的窄带，带内不恢复。
-        function redrawStamps(ctx, x0, y0, x1, y1, skipX, skipY0, skipY1) {
-            for (let i = 0; i < staticStamps.length; i++) {
-                const s = staticStamps[i]
-                const h = s.size / 2
-                if (s.x + h < x0 || s.x - h > x1 || s.y + h < y0 || s.y - h > y1)
-                    continue
-                if (skipX !== undefined && Math.abs(s.x - skipX) < h + 2
-                        && s.y > skipY0 - h && s.y < skipY1 + h)
-                    continue
-                stampAt(ctx, s.x, s.y, s.size, s.alpha)
-            }
-        }
-
         function slideY(drop) {
             const period = drop.stick + drop.slide
             const t = clock + drop.y0 / 512 * period
@@ -1040,7 +1031,7 @@ KosApplicationWindow {
             return (drop.y0 + n * drop.dist + progressed * drop.dist) % height
         }
 
-        // 只更新下滑水珠的窄条脏矩形；静止（粘住）时该滴不动、不重绘。
+        // 只更新滑痕状态；静止（粘住）时该滴不动、不 requestPaint。
         function advanceSlides() {
             if (!root.rainySky || AppTheme.reduceMotion
                     || offsetSpriteImage.status !== Image.Ready
@@ -1050,7 +1041,7 @@ KosApplicationWindow {
             if (lastClockMs > 0)
                 clock += (now - lastClockMs) / 1000
             lastClockMs = now
-            const ctx = getContext("2d")
+            let changed = false
             for (let i = 0; i < slideDrops.length; i++) {
                 const drop = slideDrops[i]
                 const y = slideY(drop)
@@ -1063,53 +1054,61 @@ KosApplicationWindow {
                 if (prev === y)
                     continue
                 if (Math.abs(y - prev) > 20) {
-                    // 取模回绕：只处理新头部，不把整列当成轨迹擦掉。
-                    ctx.clearRect(drop.x - half, y - half, half * 2, half * 2)
-                    redrawStamps(ctx, drop.x - half, y - half,
-                                 drop.x + half, y + half, drop.x, y, y)
-                    stampAt(ctx, drop.x, y, drop.size, 1.0)
-                    slideLastY[i] = y
-                    continue
-                }
-                const y0 = Math.min(prev, y) - half
-                const y1 = Math.max(prev, y) + half
-                // 擦掉这条窄带 = 去掉水图覆盖率 → shader 不折射也不加雾 → 亮带轨迹。
-                ctx.clearRect(drop.x - half, y0, half * 2, y1 - y0)
-                redrawStamps(ctx, drop.x - half, y0, drop.x + half, y1,
-                             drop.x, y0, y1)
-                // 头部水珠仍是折射水珠（offset map），不是白色拖尾。
-                stampAt(ctx, drop.x, y, drop.size, 1.0)
-                // 雨膜只保留最近 48px：更早的滑痕补回膜 + 静态水珠，避免长跑把整图擦空。
-                const trailPx = 48
-                const dySeg = y1 - y0
-                const r1 = y0 - trailPx
-                if (r1 > 2) {
-                    const r0 = Math.max(0, r1 - dySeg)
-                    ctx.fillStyle = "rgba(128,128,255,0.55)"
-                    ctx.fillRect(drop.x - half, r0, half * 2, r1 - r0)
-                    redrawStamps(ctx, drop.x - half, r0, drop.x + half, r1,
-                                 drop.x, y0, y1)
+                    // 取模/跨周期跳变：新一轮滑落，轨迹从头部重新开始。
+                    slideTrail[i] = { top: y - half, bottom: y + half }
+                } else {
+                    const t = slideTrail[i]
+                    if (!t) {
+                        slideTrail[i] = { top: Math.min(prev, y) - half,
+                                          bottom: Math.max(prev, y) + half }
+                    } else {
+                        t.bottom = Math.max(t.bottom, y + half)
+                        t.top = Math.max(t.bottom - 48, Math.min(t.top, y - half))
+                    }
                 }
                 slideLastY[i] = y
+                changed = true
             }
-            ctx.globalAlpha = 1
-            waterMapSource.scheduleUpdate()
+            // 只有真正位移时才整图重建一次水图（≤5fps）；粘住/静止时零重绘。
+            if (changed)
+                requestPaint()
         }
 
         onPaint: {
             const ctx = getContext("2d")
             ctx.clearRect(0, 0, width, height)
             // 批 12 第 4 项：整张水图铺一层"雨膜"底色——A=膜覆盖（0.55）、B=1 标记有膜。
-            // shader 按 film 把天空压暗；滑落水珠 clearRect 擦过 → film=0 → 亮带。
+            // shader 按 film 把天空压暗；滑落水珠擦过 → film=0 → 亮带。
             ctx.fillStyle = "rgba(128,128,255,0.55)"
             ctx.fillRect(0, 0, width, height)
             if (offsetSpriteImage.status !== Image.Ready)
                 return
             buildStamps()
+            if (slideTrail.length !== slideDrops.length)
+                slideTrail = []
             for (let i = 0; i < staticStamps.length; i++) {
                 const s = staticStamps[i]
                 stampAt(ctx, s.x, s.y, s.size, s.alpha)
             }
+            // 滑痕：在静态水珠之上擦掉一段窄带（薄膜 + 水珠一起去掉）→ shader 里 film=0/A=0。
+            // 用 destination-out 画圆头胶囊（宽 ≈ 珠径 0.7、两端半圆），避免出现硬边矩形。
+            ctx.globalCompositeOperation = "destination-out"
+            ctx.strokeStyle = "rgba(0,0,0,0.92)"
+            ctx.lineCap = "round"
+            for (let i = 0; i < slideDrops.length; i++) {
+                const t = slideTrail[i]
+                if (!t)
+                    continue
+                const x = slideDrops[i].x
+                const half = slideDrops[i].size / 2 + 1
+                ctx.lineWidth = slideDrops[i].size * 0.7
+                ctx.beginPath()
+                ctx.moveTo(x, t.top + half)
+                ctx.lineTo(x, Math.max(t.top + half, t.bottom - half))
+                ctx.stroke()
+            }
+            ctx.globalCompositeOperation = "source-over"
+            // 头部水珠仍是折射水珠（offset map），不是白色拖尾。
             slideLastY = []
             for (let i = 0; i < slideDrops.length; i++) {
                 const drop = slideDrops[i]
