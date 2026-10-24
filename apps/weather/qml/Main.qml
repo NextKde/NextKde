@@ -813,7 +813,119 @@ KosApplicationWindow {
         Component.onCompleted: refresh()
     }
 
+    // 批 12｜天空折射源容器：所有天空层（渐变 / 云 / 日晕 / 星空 / 月亮 / 洗层）
+    // 通过 `parent: skyComposite` 收进来，作为 ShaderEffectSource 的唯一采样源。
+    // 属于 L0 天空材质，不入玻璃预算（§1/§2.2）。
+    Item {
+        id: skyComposite
+        anchors.fill: parent
+    }
+
+    ShaderEffectSource {
+        id: skyRefractionSource
+        anchors.fill: parent
+        sourceItem: skyComposite
+        // 雨天：源不直接上屏，只经水图折射后由下方 ShaderEffect 输出；
+        // 非雨天完全旁路（hideSource=false、live=false），成本为零。
+        hideSource: root.rainySky
+        live: root.rainySky
+        recursive: false
+        wrapMode: ShaderEffectSource.ClampToEdge
+    }
+
+    // 批 12｜雨＝折射（不是画白点）：waterMap 的 RG 是偏移图，A 是覆盖率；
+    // uv' = uv + (RG−0.5)·strength·A → 一次纹理查表完成透镜折射；
+    // 再把偏移向量当法线做单点镜面高光（光源左上 §2.7）+ 极淡雾。
+    ShaderEffect {
+        id: rainRefraction
+        anchors.fill: parent
+        visible: root.rainySky
+        vertexShader: Qt.resolvedUrl("shaders/rain_refract.vert.qsb")
+        fragmentShader: Qt.resolvedUrl("shaders/rain_refract.frag.qsb")
+        property var source: skyRefractionSource
+        property var waterMap: waterMapSource
+        property vector2d surfaceSize: Qt.vector2d(Math.max(1, width), Math.max(1, height))
+        property vector2d mapRepeat: Qt.vector2d(width / 512.0, height / 512.0)
+        property real strength: 0.12
+        property real specular: 0.28
+        property real fog: 0.05
+    }
+
+    // 批 12｜水图 512×512（运行时 Canvas 绘制一次，静止时不重绘）：
+    // 网格 40px + ±40% 抖动 + 按列错位；主层 ~160 颗、远层 ~90 颗、冷凝小点 ~200 颗。
+    // 每颗用 drop-offset.png（R=y 偏移 / G=x 偏移 / B=深度 / A=覆盖率）盖图。
+    Canvas {
+        id: waterMapCanvas
+        width: 512
+        height: 512
+        property var offsetSprite: null
+        Accessible.ignored: true
+        Component.onCompleted: offsetSprite = loadImage("particles/drop-offset.png")
+        onImageLoaded: requestPaint()
+        onPaint: {
+            const ctx = getContext("2d")
+            ctx.clearRect(0, 0, width, height)
+            if (!offsetSprite)
+                return
+            let seed = 20261024
+            function rnd() {
+                seed |= 0
+                seed = (seed + 0x6D2B79F5) | 0
+                let t = Math.imul(seed ^ (seed >>> 15), 1 | seed)
+                t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t
+                return ((t ^ (t >>> 14)) >>> 0) / 4294967296
+            }
+            function stamp(x, y, size, alpha) {
+                ctx.globalAlpha = alpha
+                ctx.drawImage(offsetSprite, x - size / 2, y - size / 2, size, size)
+            }
+            const cell = 40
+            const cols = Math.ceil(width / cell)
+            const rows = Math.ceil(height / cell)
+            // 主层 ~160 颗（12–20px）：格内抖动 ±40%，每列独立错位破坏整齐感。
+            let placed = 0
+            for (let row = 0; row < rows && placed < 160; row++) {
+                for (let col = 0; col < cols && placed < 160; col++) {
+                    if (rnd() < 0.05)
+                        continue
+                    const jx = (rnd() - 0.5) * cell * 0.8
+                    const jy = (rnd() - 0.5) * cell * 0.8
+                    const colShift = ((col * 7) % 5 - 2) * 7
+                    stamp(col * cell + cell / 2 + jx + colShift,
+                          row * cell + cell / 2 + jy,
+                          16 + rnd() * 10, 1.0)
+                    placed++
+                }
+            }
+            // 远层 ~90 颗（6–10px，UV×1.85 → 视觉上更小更淡）。
+            for (let i = 0; i < 90; i++) {
+                stamp(rnd() * width, rnd() * height,
+                      9 + rnd() * 4, 0.55)
+            }
+            // 冷凝小点 ~200 颗（1–3px，α 极低）。
+            for (let i = 0; i < 200; i++) {
+                stamp(rnd() * width, rnd() * height,
+                      1 + rnd() * 2, 0.18)
+            }
+            ctx.globalAlpha = 1
+            waterMapSource.scheduleUpdate()
+        }
+    }
+
+    ShaderEffectSource {
+        id: waterMapSource
+        width: 512
+        height: 512
+        sourceItem: waterMapCanvas
+        hideSource: true
+        live: false
+        wrapMode: ShaderEffectSource.Repeat
+        textureSize: Qt.size(512, 512)
+    }
+
     Rectangle {
+        id: skyGradientRect
+        parent: skyComposite
         anchors.fill: parent
         gradient: Gradient {
             GradientStop { position: 0.0; color: root.skyTop }
@@ -833,6 +945,7 @@ KosApplicationWindow {
     // band is wasted behind it.
     Item {
         id: clearSkyCloudLayer
+        parent: skyComposite
         anchors.fill: parent
         visible: root.dayClearSky
         clip: true
@@ -899,6 +1012,7 @@ KosApplicationWindow {
 
     Item {
         id: sunGlowLayer
+        parent: skyComposite
         anchors.fill: parent
         visible: root.dayClearSky
         clip: true
@@ -933,6 +1047,7 @@ KosApplicationWindow {
 
     Item {
         id: starFieldLayer
+        parent: skyComposite
         anchors.fill: parent
         visible: root.nightClearSky
         clip: true
@@ -974,6 +1089,7 @@ KosApplicationWindow {
     // 静态几何（仅随数据时间变化），reduceMotion 下无任何动画。
     Item {
         id: skyMoonLayer
+        parent: skyComposite
         visible: root.moonVisible
         clip: true
         Accessible.ignored: true
@@ -1063,6 +1179,7 @@ KosApplicationWindow {
     // obligation).
     Item {
         id: nightClearCloudLayer
+        parent: skyComposite
         anchors.fill: parent
         visible: root.nightClearSky
         clip: true
@@ -1399,14 +1516,15 @@ KosApplicationWindow {
         onCloudsChanged: cloudTexture.requestPaint()
     }
 
-    CloudLayer { id: cloudBackLayer; clouds: root.cloudFieldBack; driftMs: root.cloudLayers[0].driftMs }
-    CloudLayer { id: cloudMidLayer; clouds: root.cloudFieldMid; driftMs: root.cloudLayers[1].driftMs }
-    CloudLayer { id: cloudFrontLayer; clouds: root.cloudFieldFront; driftMs: root.cloudLayers[2].driftMs }
+    CloudLayer { id: cloudBackLayer; parent: skyComposite; clouds: root.cloudFieldBack; driftMs: root.cloudLayers[0].driftMs }
+    CloudLayer { id: cloudMidLayer; parent: skyComposite; clouds: root.cloudFieldMid; driftMs: root.cloudLayers[1].driftMs }
+    CloudLayer { id: cloudFrontLayer; parent: skyComposite; clouds: root.cloudFieldFront; driftMs: root.cloudLayers[2].driftMs }
 
     // 批 4｜大气洗层（雾/雾凇/沙尘）：位于云层之上、闪电之下，蒙住整个天空。
     // 纯静态半透填充，无动画。
     Rectangle {
         id: atmosphereWashLayer
+        parent: skyComposite
         anchors.fill: parent
         visible: root.atmosphereWashAlpha > 0
         color: root.atmosphereWashColor
@@ -1414,34 +1532,9 @@ KosApplicationWindow {
         Accessible.ignored: true
     }
 
-    // 批 10｜水珠材质层（扁平透镜水痕，取代批 9 的“玻璃球”画法）：
-    // 一张 512×512 可平铺贴图（PIL 程序化生成），共 260 颗水珠
-    // （上半区 147 / 下半区 113 = 1.3:1；70% 2–5px / 25% 5–9px / 5% 9–14px），
-    // 外加极淡雨幕 65 条（有效 α 0.04–0.07）。
-    // 每颗：内部 α 0.03–0.08 近透明 + 单点偏心高光 + 1px 折射环（α 0.10–0.18），
-    // 无整圈亮边、无下缘暗边——扁平透镜而非 3D 玻璃球。
-    // R107 CPU：远层（按 0.35/0.55）与雨幕（按 0.08/0.55）已预乘烘焙进同一张纹理，
-    // 全屏只剩 1 个 Image 层（原近/远/雨幕 3 层），减少逐帧全窗口 alpha 合成。
-    // 属于天空材质（§1 L0），不参与玻璃预算；静态平铺，无位移、无逐帧重绘。
-    // opacity 基准 0.55，随 precipitationIntensity 在 ±0.15 内联动，夜间 ×0.7。
-    Image {
-        id: waterDropLayer
-        anchors.fill: parent
-        clip: true
-        visible: root.rainySky
-        source: "particles/water-drops.png"
-        fillMode: Image.Tile
-        smooth: true
-        // 静态平铺纹理只需光栅化一次；窗口因云漂移持续重绘时从 layer 纹理搬运，
-        // 不再每帧逐 tile 采样 512² 贴图（opacity 变化只重合成、不重绘 layer 内容）。
-        layer.enabled: true
-        readonly property real intensityLink: 0.15 * (2 * root.precipitationIntensity - 1)
-        opacity: root.rainySky
-                 ? Math.max(0, Math.min(1, (0.55 + waterDropLayer.intensityLink)
-                              * (root.currentIsDay ? 1.0 : 0.7)))
-                 : 0
-        Accessible.ignored: true
-    }
+    // 批 12｜旧「白点贴图」水珠层（water-drops.png + Image.Tile）已删除：
+    // 水珠不再画高光白点，而是由天空折射 ShaderEffect（见上方 rainRefraction +
+    // waterMapCanvas / drop-offset.png）按偏移图采样背景生成。不留两套并存。
 
     // 批 11｜少数水珠缓慢滑落（唯一动态）：12 颗固定种子水珠，**纯垂直** 8–15 px/s，
     // 每滑 40–60px 留一颗 2–4px 小水珠；头部最多 1px 渐隐，**无长尾迹**
