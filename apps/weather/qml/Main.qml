@@ -856,16 +856,18 @@ KosApplicationWindow {
         visible: root.dayClearSky
         clip: true
         // CPU 轮（批 8）：原 SequentialAnimation 以 60Hz 推进 opacity（晴空场景的全窗口
-        // 重绘驱动源之一）。改为 33ms 定时器驱动同一余弦呼吸曲线，端点 0.10↔0.24、
+        // 重绘驱动源之一）。改为定时器驱动同一余弦呼吸曲线，端点 0.10↔0.24、
         // 周期 7s 不变；reduceMotion 时钉在 0.17（原实现 reduceMotion 下停在动画初值）。
+        // R108：全屏层 33ms(30fps)→100ms(10fps)——7s 正弦在 10fps 下单步 Δopacity
+        // ≤0.0063，肉眼不可辨；全窗口合成次数降为 1/3。
         property real breatheT: 0
         opacity: AppTheme.reduceMotion ? 0.17
                  : 0.10 + 0.14 * (0.5 + 0.5 * Math.cos(2 * Math.PI * breatheT / 7.0))
         Timer {
-            interval: 33; repeat: true
+            interval: 100; repeat: true
             running: root.dayClearSky && !AppTheme.reduceMotion
             onRunningChanged: if (!running) sunGlowLayer.breatheT = 0
-            onTriggered: sunGlowLayer.breatheT = (sunGlowLayer.breatheT + 0.033) % 7.0
+            onTriggered: sunGlowLayer.breatheT = (sunGlowLayer.breatheT + 0.100) % 7.0
         }
 
         Canvas {
@@ -1326,11 +1328,13 @@ KosApplicationWindow {
 
             onWidthChanged: requestPaint()
             onHeightChanged: requestPaint()
-            // 纹理平移驱动：33ms Timer 只改 panX（合成器搬运已烘焙纹理），
+            // 纹理平移驱动：Timer 只改 panX（合成器搬运已烘焙纹理），
             // 不触发 requestPaint / Canvas JS。reduceMotion 下停走（§2.12）。
+            // R108：33ms(30fps)→50ms(20fps)——三层全宽纹理的逐帧合成次数降为 2/3；
+            // 最快前层位移 131px/s → 6.5px/步，云为柔和渐变体，无可见跳步。
             property double lastPanMs: 0
             Timer {
-                interval: 33; repeat: true
+                interval: 50; repeat: true
                 running: root.cloudySky && !AppTheme.reduceMotion
                 onRunningChanged: if (!running) cloudTexture.lastPanMs = 0
                 onTriggered: {
@@ -2203,14 +2207,15 @@ KosApplicationWindow {
                             // 是晴/多云场景全窗口重绘的唯一 60fps 驱动源（实测基线 20.5–20.9%）。
                             // 改为 33ms 定时器驱动同一余弦曲线（cos 在两端导数为 0 = InOutSine 等价），
                             // 端点 0.86/1.0 与 5s 周期不变，仅时间分辨率降到 30fps（5s 慢渐变不可辨）。
+                            // R108：33ms(30fps)→66ms(15fps)，opacity 单步 Δ≤0.006（5s 正弦），肉眼不可辨。
                             property real breatheT: 0
                             opacity: AppTheme.reduceMotion ? 1.0
                                      : 0.86 + 0.14 * (0.5 + 0.5 * Math.cos(2 * Math.PI * breatheT / 5.0))
                             Timer {
-                                interval: 33; repeat: true
+                                interval: 66; repeat: true
                                 running: !AppTheme.reduceMotion
                                 onRunningChanged: if (!running) heroTempLiquid.breatheT = 0
-                                onTriggered: heroTempLiquid.breatheT = (heroTempLiquid.breatheT + 0.033) % 5.0
+                                onTriggered: heroTempLiquid.breatheT = (heroTempLiquid.breatheT + 0.066) % 5.0
                             }
 
 
