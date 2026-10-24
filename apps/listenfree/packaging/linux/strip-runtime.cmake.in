@@ -1,0 +1,18 @@
+if(CMAKE_INSTALL_DO_STRIP)
+    file(GLOB_RECURSE runtime_libraries
+        "$ENV{DESTDIR}${CMAKE_INSTALL_PREFIX}/opt/listenfree/lib/*.so*"
+        "$ENV{DESTDIR}${CMAKE_INSTALL_PREFIX}/opt/listenfree/qmmp/*.so*")
+    foreach(library IN LISTS runtime_libraries)
+        if(IS_SYMLINK "${library}" OR IS_DIRECTORY "${library}")
+            continue()
+        endif()
+        file(READ "${library}" magic LIMIT 4 HEX)
+        if(magic STREQUAL "7f454c46")
+            execute_process(COMMAND "@CMAKE_STRIP@" --strip-unneeded "${library}"
+                RESULT_VARIABLE strip_result ERROR_VARIABLE strip_error)
+            if(NOT strip_result EQUAL 0)
+                message(FATAL_ERROR "Unable to strip ${library}: ${strip_error}")
+            endif()
+        endif()
+    endforeach()
+endif()

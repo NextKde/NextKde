@@ -87,7 +87,7 @@ Basic.Popup {
                 Column {
                     width:parent.width;spacing:10;visible:popup.tab===2
                     Repeater {
-                        model:[{key:"aura",name:qsTr("动态流转"),detail:qsTr("封面色彩交融，缓慢流动的光场"),symbol:"≈"},{key:"blur",name:qsTr("模糊专辑"),detail:qsTr("柔和纹理铺满屏幕"),symbol:"▦"},{key:"mv",name:qsTr("MV 画面"),detail:qsTr("自动匹配视频，暂无画面时显示封面"),symbol:"▷"}]
+                        model:[{key:"aura",name:qsTr("动态流转"),detail:qsTr("封面色彩交融，缓慢流动的光场"),symbol:"≈"},{key:"blur",name:qsTr("模糊专辑"),detail:qsTr("柔和纹理铺满屏幕"),symbol:"▦"},{key:"mv",name:qsTr("MV 画面"),detail:qsTr("自动匹配视频，暂无画面时显示封面"),symbol:"▷"}].filter(function(choice) { return choice.key !== "mv" || AppTheme.videoAvailable })
                         delegate:Choice {
                             required property var modelData
                             width:parent.width;height:72

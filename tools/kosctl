@@ -274,6 +274,7 @@ Optional components are installed by naming them:
   ./tools/kosctl install lockscreen   # lock screen (user level, no root)
   ./tools/kosctl install apps         # Calendar, Calculator, Todo, Weather
   ./tools/kosctl install apps --with-listenfree # also build ListenFree + audio SDK
+  ./tools/kosctl install apps --with-listenfree-video # also enable video features
   ./tools/kosctl uninstall lockscreen
 
 Plain `install` / `uninstall` cover the core desktop only -- no apps, no lock

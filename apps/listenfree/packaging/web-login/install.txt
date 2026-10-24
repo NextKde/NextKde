@@ -1,0 +1,22 @@
+KOS ListenFree: optional web login / 可选网页登录组件
+
+The player works without Qt WebEngine. Cookie login remains available.
+网页登录组件安装后即可使用；Cookie 登录无需此组件。
+
+Distribution packages may provide listenfree-web-login separately.
+If your distribution does not package it, build it from your matching NextKDE checkout:
+如发行版尚未提供 listenfree-web-login 软件包，在对应 NextKDE 源码目录运行：
+
+cmake -S apps/listenfree/packaging/web-login -B .build/listenfree-web-login -G Ninja -DCMAKE_BUILD_TYPE=Release
+cmake --build .build/listenfree-web-login
+cmake --install .build/listenfree-web-login --prefix "$HOME/.local" --component listenfree-web-login --strip
+
+Requires CMake 3.28+, a C++20 compiler, Qt 6.10+ Widgets/Network/WebEngine development files,
+OpenSSL and libsecret development files. No ListenFree audio SDK is required.
+Use the same prefix as your player. The helper installs beside the player under opt/listenfree.
+Packagers may also expose the helper in PATH. The package manager owns system dependencies.
+
+For the main application build, LISTENFREE_BUILD_WEB_LOGIN=ON builds this target,
+but installing it still requires --component listenfree-web-login explicitly.
+Cookies are validated and saved in the system keyring by the helper; no credential
+is passed in command-line arguments, output logs or temporary files.

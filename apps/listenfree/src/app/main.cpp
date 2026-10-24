@@ -19,7 +19,9 @@
 #include "qmlbridge/folia_scene.h"
 #include "qmlbridge/cover_image_provider.h"
 #include "qmlbridge/remote_artwork_provider.h"
+#if LISTENFREE_BUILD_VIDEO
 #include "media/artwork_video.h"
+#endif
 #include "qmlbridge/background_contrast.h"
 #include "qmlbridge/account_service.h"
 #include "qmlbridge/duplicate_service.h"
@@ -158,6 +160,7 @@ int main(int argc, char* argv[]) {
     listenfree::qmlbridge::SettingsController settingsController(settingsRepository);
     listenfree::qmlbridge::AccountService accounts(dataDirectory);
     listenfree::AccountBrowser accountBrowser(accounts);
+    QObject::connect(&accountBrowser, &listenfree::AccountBrowser::notice, &controller, &listenfree::qmlbridge::PortableSession::notice);
     QObject::connect(&accounts,&listenfree::qmlbridge::AccountService::accountsChanged,&sourceController,[&] {
         auto cookie=accounts.cookieForRequest("bilibili");
         sourceController.bilibili().setCookie(cookie);
@@ -190,14 +193,14 @@ int main(int argc, char* argv[]) {
     QObject::connect(&controller, &listenfree::qmlbridge::PortableSession::localLibraryChanged,
                      &libraryController, &listenfree::qmlbridge::LibraryController::refreshTotalCount);
     QObject::connect(&app, &QCoreApplication::aboutToQuit, &controller, [&] { libraryController.cancel(); controller.shutdown(); });
-    controller.setDynamicArtworkEnabled(settingsController.value("appearance.dynamicArtworkEnabled", true).toBool());
+    controller.setDynamicArtworkEnabled(LISTENFREE_BUILD_VIDEO && settingsController.value("appearance.dynamicArtworkEnabled", true).toBool());
     controller.setBilibiliSourceEnabled(settingsController.value("account.bilibili.sourceEnabled", false).toBool());
     QObject::connect(&settingsController, &listenfree::qmlbridge::SettingsController::valueChanged, &controller, [&](const QString& key, const QVariant& value) {
         if (key == "lyrics.chineseConversion") emit controller.lyricsChanged();
         if (key == "lyrics.autoMatchEnabled") controller.setAutoLyricMatchEnabled(value.toBool());
         if (key == "list.rememberScrollPosition" && !value.toBool()) {database.clearScrollPositions();settingsController.forgetScrollPositions();}
         if (key == "library.autoWatch") libraryController.setAutoWatchEnabled(value.toBool());
-        if (key == "appearance.dynamicArtworkEnabled") controller.setDynamicArtworkEnabled(value.toBool());
+        if (key == "appearance.dynamicArtworkEnabled") controller.setDynamicArtworkEnabled(LISTENFREE_BUILD_VIDEO && value.toBool());
         if (key == "account.bilibili.sourceEnabled") controller.setBilibiliSourceEnabled(value.toBool());
     });
     qmlRegisterType<listenfree::qmlbridge::SpringValue>("ListenFree.Native", 1, 0, "SpringValue");
@@ -222,8 +225,11 @@ int main(int argc, char* argv[]) {
     engine.addImageProvider("covers", new CoverImageProvider(controller.collectionCoverIndex()));
     engine.addImageProvider("artwork", new RemoteArtworkProvider);
     engine.rootContext()->setContextProperty("backendArtworkTextures", true);
+    engine.rootContext()->setContextProperty("backendVideoAvailable", bool(LISTENFREE_BUILD_VIDEO));
+#if LISTENFREE_BUILD_VIDEO
     auto* artworkVideoFactory = new listenfree::media::ArtworkVideoFactory(&engine);
     engine.rootContext()->setContextProperty("backendArtworkVideoFactory", artworkVideoFactory);
+#endif
     BackgroundContrast backgroundContrast;
     engine.rootContext()->setContextProperty("backendBackgroundContrast", &backgroundContrast);
     engine.rootContext()->setContextProperty("backendCatalog", &controller);

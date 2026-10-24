@@ -15,7 +15,7 @@ deps = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(deps)
 
 class DependencyTests(unittest.TestCase):
-    def check(self, family, missing=(), qt='6.10.2', markers='', go='1.26.0', sdk=False, absent=(), release=None, audio=True, cmake='3.31.0'):
+    def check(self, family, missing=(), qt='6.10.2', markers='', go='1.26.0', sdk=False, absent=(), release=None, audio=True, cmake='3.31.0', features=()):
         calls = []
         def command(args):
             calls.append(args)
@@ -32,7 +32,7 @@ class DependencyTests(unittest.TestCase):
         # test passes on an Arch CI container and fails on any Debian-family host,
         # which is exactly where the Debian branch is meant to be exercised.
         release = release or {'ID': family, 'PRETTY_NAME': family.capitalize() + ' Linux'}
-        with patch.object(deps, 'distribution', return_value=family), patch.object(deps, 'os_release', return_value=release), patch.object(deps.shutil, 'which', side_effect=lambda name: None if name in absent else '/usr/bin/tool'), patch.object(deps, 'run', side_effect=command), patch('sys.argv', ['check'] + (['--sdk-only'] if sdk else ['--with-listenfree'] if audio else [])), contextlib.redirect_stdout(output):
+        with patch.object(deps, 'distribution', return_value=family), patch.object(deps, 'os_release', return_value=release), patch.object(deps.shutil, 'which', side_effect=lambda name: None if name in absent else '/usr/bin/tool'), patch.object(deps, 'run', side_effect=command), patch('sys.argv', ['check'] + (['--sdk-only'] if sdk else ['--with-listenfree'] if audio else []) + list(features)), contextlib.redirect_stdout(output):
             result = deps.main()
         return result, output.getvalue(), calls
 
@@ -48,9 +48,23 @@ class DependencyTests(unittest.TestCase):
         self.assertIn('sudo pacman -S --needed ffmpeg libpulse', output)
 
     def test_ubuntu_development_packages(self):
-        result, output, _ = self.check('ubuntu', missing=['Qt6WebEngineWidgets', 'libavcodec'])
+        result, output, _ = self.check('ubuntu', missing=['Qt6WebEngineWidgets', 'libavcodec'], features=['--with-listenfree-web-login'])
         self.assertEqual(result, 1)
         self.assertIn('sudo apt update && sudo apt install libavcodec-dev qt6-webengine-dev', output)
+
+    def test_default_audio_does_not_require_video_or_browser(self):
+        result, _, calls = self.check('ubuntu', missing=['Qt6Multimedia', 'Qt6WebEngineWidgets'])
+        self.assertEqual(result, 0)
+        self.assertNotIn(['pkg-config', '--exists', 'Qt6Multimedia'], calls)
+        self.assertNotIn(['pkg-config', '--exists', 'Qt6WebEngineWidgets'], calls)
+        self.assertTrue(any('-DLISTENFREE_BUILD_VIDEO=OFF' in call for call in calls))
+
+    def test_video_requires_multimedia_but_not_webengine(self):
+        result, output, calls = self.check('ubuntu', missing=['Qt6Multimedia', 'Qt6WebEngineWidgets'],
+                                          features=['--with-listenfree-video'])
+        self.assertEqual(result, 1)
+        self.assertIn('qt6-multimedia-dev', output)
+        self.assertNotIn(['pkg-config', '--exists', 'Qt6WebEngineWidgets'], calls)
 
     def test_ubuntu_old_qt_explicit_version(self):
         result, output, _ = self.check('ubuntu', missing=['Qt6Core >= 6.10'], qt='6.4.2',

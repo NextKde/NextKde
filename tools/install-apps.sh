@@ -7,13 +7,16 @@ prefix=${KOS_INSTALL_PREFIX:-"$HOME/.local"}
 build_dir=${KOS_APPS_BUILD_DIR:-"$project_dir/.build/apps-release"}
 unit_dir=${XDG_CONFIG_HOME:-"$HOME/.config"}/systemd/user
 listenfree=OFF
+listenfree_video=OFF
 for argument in "$@"; do
     case "$argument" in
         --with-listenfree) listenfree=ON ;;
+        --with-listenfree-video) listenfree=ON; listenfree_video=ON ;;
         --help|-h)
-            echo "Usage: $0 [--with-listenfree]"
+            echo "Usage: $0 [--with-listenfree] [--with-listenfree-video]"
             echo "Default: Calendar, Calculator, Todo and Weather."
             echo "--with-listenfree also builds the music player and its private audio SDK."
+            echo "--with-listenfree-video additionally enables MV, animated covers and video backgrounds."
             exit 0 ;;
         *) echo "Unknown application install option: $argument" >&2; exit 2 ;;
     esac
@@ -25,7 +28,9 @@ if ! command -v python3 >/dev/null 2>&1; then
 fi
 sdk=""
 if test "$listenfree" = ON; then
-    python3 "$script_dir/check-apps-dependencies.py" --with-listenfree
+    set -- --with-listenfree
+    if test "$listenfree_video" = ON; then set -- "$@" --with-listenfree-video; fi
+    python3 "$script_dir/check-apps-dependencies.py" "$@"
     if test -n "${KOS_LISTENFREE_SDK:-}"; then
         sdk="$KOS_LISTENFREE_SDK"
         if test ! -d "$sdk"; then
@@ -47,6 +52,10 @@ cmake --preset apps-release -S "$project_dir" -B "$build_dir" \
     -DCMAKE_INSTALL_PREFIX="$prefix" \
     -DKOS_LISTENFREE_SDK="$sdk" \
     -DKOS_BUILD_LISTENFREE="$listenfree" \
+    -DLISTENFREE_BUILD_VIDEO="$listenfree_video" \
+    -DLISTENFREE_BUILD_WEB_LOGIN=OFF \
+    -DLISTENFREE_BUILD_TOOLS=OFF \
+    -DLISTENFREE_BUILD_TESTS=OFF \
     -DBUILD_TESTING=OFF
 jobs=${CMAKE_BUILD_PARALLEL_LEVEL:-$(nproc 2>/dev/null || echo 4)}
 case "$jobs" in ''|*[!0-9]*) jobs=4 ;; esac
@@ -55,7 +64,7 @@ mkdir -p "$build_dir/tmp"
 # /tmp can be a small tmpfs; the core kosctl redirects the same way.
 TMPDIR="$build_dir/tmp" GOTMPDIR="$build_dir/tmp" \
     cmake --build "$build_dir" --parallel "$jobs"
-cmake --install "$build_dir"
+cmake --install "$build_dir" --strip
 
 # ~/.local/share/systemd/user is a standard user-unit search path. Keep a
 # config-level copy as an intentional upgrade for older NextKde installs.

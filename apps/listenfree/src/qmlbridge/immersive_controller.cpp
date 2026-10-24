@@ -2,7 +2,9 @@
 #include "online/bilibili_client.h"
 #include <qmmp/visual.h>
 #include <QNetworkReply>
+#if LISTENFREE_BUILD_VIDEO
 #include <QVideoFrame>
+#endif
 #include <QCryptographicHash>
 #include <QDateTime>
 #include <QTextDocumentFragment>
@@ -12,7 +14,9 @@
 #include <QJsonObject>
 #include <QJsonArray>
 #include <QFileInfo>
+#if LISTENFREE_BUILD_VIDEO
 #include <QVideoFrame>
+#endif
 #include <QCryptographicHash>
 #include <QDateTime>
 #include <QTextDocumentFragment>
@@ -35,9 +39,7 @@ ImmersiveController::ImmersiveController(QObject* parent) : QObject(parent) {
     connect(&loadTimeout_, &QTimer::timeout, this, [this] { failVideo(tr("MV 加载超时，请重新选择或使用本地视频")); });
 }
 ImmersiveController::~ImmersiveController() {
-    cancelRequest();loadTimeout_.stop();nativeVideo_.reset();
-    if(video_)video_->disconnect(this);
-    video_.reset();proxy_.reset();
+    clearVideo();
 }
 void ImmersiveController::setActive(bool value) {
     if (active_ == value) return;
@@ -94,6 +96,7 @@ void ImmersiveController::sample() {
     }
     spectrum_ = next; emit spectrumChanged();
 }
+#if LISTENFREE_BUILD_VIDEO
 void ImmersiveController::cancelRequest() {
     ++generation_;
     if (request_) { auto* reply = request_.data(); request_ = nullptr; reply->abort(); reply->deleteLater(); }
@@ -322,4 +325,18 @@ void ImmersiveController::syncVideo(bool force) {
     if (playing_ && video_->playbackState() != QMediaPlayer::PlayingState) video_->play();
     else if (!playing_ && video_->playbackState() != QMediaPlayer::PausedState) video_->pause();
 }
+#else
+void ImmersiveController::cancelRequest() {}
+void ImmersiveController::clearVideo() { videoReady_ = false; }
+void ImmersiveController::failVideo(const QString& message) { error_ = message; emit mvChanged(); }
+void ImmersiveController::attachVideoSink(QObject*) {}
+void ImmersiveController::searchMv(const QString&, const QString&) {}
+void ImmersiveController::autoMatchMv(const QString&, const QString&, qint64) {}
+void ImmersiveController::selectMv(int) {}
+void ImmersiveController::openLocalVideo(const QUrl&) {}
+void ImmersiveController::setOffsetMs(int) {}
+void ImmersiveController::setBilibiliCookie(const QByteArray&) {}
+void ImmersiveController::syncVideo(bool) {}
+#endif
+
 }

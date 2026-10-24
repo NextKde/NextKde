@@ -48,7 +48,7 @@ corresponding patched sources), and optionally `deps/usr/` for matching native
 development packages. Qmmp patch order is documented in
 `licenses/THIRD-PARTY-NOTICES.txt`; source and binary plugins must use the same
 patch set. Do not use the unmodified system Qmmp as a drop-in replacement.
-Qt 6.10+, Qt WebEngine, KDE Frameworks 6 WindowSystem, FFmpeg, OpenSSL, zlib and
+Qt 6.10+, KDE Frameworks 6 WindowSystem, FFmpeg, OpenSSL, zlib and
 ICU development files must also be available. Individual `LISTENFREE_*` CMake
 paths can be used instead of the SDK layout.
 
@@ -63,3 +63,54 @@ Run contributor builds, tests and runtime verification only in a VM or hosted CI
 This component has its own dependency and test requirements. NextKDE's ordinary
 data/service test preset does not implicitly enable it. Run its CTest suites from
 the configured build with the private libraries and Qmmp plugins on their paths.
+
+## Optional features and installation size
+
+The default player requires neither Qt WebEngine nor Qt Multimedia. Local/online
+audio, Cookie login, static artwork, lyrics and spectrum visualizations remain available.
+FFmpeg remains an audio decoding/HLS dependency; disabling video does not remove it.
+
+| CMake option | Default | Effect |
+| --- | --- | --- |
+| `LISTENFREE_BUILD_WEB_LOGIN` | `OFF` | Builds the separate `listenfree-web-login` executable; requires Qt WebEngine. |
+| `LISTENFREE_BUILD_VIDEO` | `OFF` | Enables MV playback, animated artwork and local/Wallpaper Engine video backgrounds; requires Qt Multimedia and its QML module. |
+| `LISTENFREE_BUILD_TOOLS` | `OFF` | Includes development probes and benchmarks in the default build. |
+| `LISTENFREE_STRIP_INSTALL` | `ON` | Strips Release installations, including copied private audio libraries/plugins; keeps build-tree symbols. |
+
+Enable video with `./tools/kosctl install apps --with-listenfree-video`, or configure
+`-DLISTENFREE_BUILD_VIDEO=ON` directly. Turning it off excludes the video native sources
+and video QML files from the application, hides their controls, and falls back to static
+artwork/automatic backgrounds for saved video preferences. Lyrics and spectrum remain
+usable. The installer explicitly resets both optional flags on each run, so an old CMake
+cache cannot silently restore heavy dependencies.
+
+Web login is selected at login time. If the helper is absent, the login action offers
+installation instructions and Cookie login remains available. Build/install the helper
+independently using the [bundled instructions](../web-login/install.txt); no audio SDK is
+needed for that build. Alternatively enable `LISTENFREE_BUILD_WEB_LOGIN=ON` in the player
+build and install it explicitly with:
+
+```sh
+cmake --install .build/listenfree --component listenfree-web-login --strip
+```
+
+A normal player installation never includes the helper, even when its build option is ON.
+Package maintainers should place its WebEngine dependency on the optional package only.
+The player searches beside its executable, then PATH. The helper accepts a provider ID and
+the existing profile directory, verifies login, and saves credentials in the same system
+keyring namespace. Exit code 0 triggers account refresh; 1 means cancellation. Failure or
+a ten-minute timeout does not terminate the player. Cookie values never travel through
+process arguments, logs or temporary files. Install the helper from the same revision as
+the player and into the same prefix.
+
+Use `-DLISTENFREE_STRIP_INSTALL=OFF` without `cmake --install --strip` to retain installed
+Release symbols for diagnostics. Debug/RelWithDebInfo installations retain symbols unless
+`--strip` is explicitly requested. Distribution debug packages can extract symbols from
+the build tree before stripping. The NextKDE app installer uses `--strip` explicitly.
+
+For feature changes, test OFF/OFF, ON/OFF, OFF/ON and ON/ON configurations in a VM/CI.
+Run CTest with `QT_QPA_PLATFORM=offscreen`, `QMMP_PLUGINS` and the private library path set;
+video/rendering tests also need a VM graphical session. Check the light installed ELF
+closure and launch it with the optional runtime libraries/QML module unavailable, including
+settings and immersive views with pre-existing video preferences. Install the helper through
+its explicit component and verify that a normal install leaves it absent.

@@ -1,7 +1,6 @@
 pragma ComponentBehavior: Bound
 import QtQuick
 import QtQuick.Window
-import QtMultimedia
 
 Item {
     id: root
@@ -16,7 +15,7 @@ Item {
         const revision=settingsStore.revision
         return settingsStore.value(key,fallback)
     }
-    readonly property string backgroundType: immersive ? "AutoCover" : setting("background.type","AutoCover")
+    readonly property string backgroundType: immersive || (!AppTheme.videoAvailable && ["Video", "Wallpaper"].indexOf(setting("background.type","AutoCover")) >= 0) ? "AutoCover" : setting("background.type","AutoCover")
     readonly property bool localMedia: backgroundType === "Video" || backgroundType === "Wallpaper"
     readonly property url localMediaFile: localMedia ? setting(backgroundType === "Wallpaper" ? "background.wallpaper" : "background.video", "") : ""
     readonly property var resolvedMedia: localMedia && settingsStore
@@ -126,33 +125,7 @@ Item {
         anchors.fill: parent
         active: root.videoBackground
         z: 1
-        sourceComponent: Item {
-            id: videoBackgroundItem
-            property var movie: typeof backendArtworkVideoFactory !== "undefined"
-                ? backendArtworkVideoFactory.create(videoBackgroundItem) : null
-            Binding { target: videoBackgroundItem.movie; property: "videoSink"; value: backgroundVideo.videoSink; when: !!videoBackgroundItem.movie }
-            Binding { target: videoBackgroundItem.movie; property: "playing"; value: root.exposed; when: !!videoBackgroundItem.movie }
-            Binding { target: videoBackgroundItem.movie; property: "source"; value: root.resolvedMedia.source || ""; when: !!videoBackgroundItem.movie }
-            VideoOutput {
-                id: backgroundVideo
-                objectName: "backgroundVideoOutput"
-                anchors.fill: parent
-                fillMode: VideoOutput.PreserveAspectCrop
-                visible: root.blurRadius <= 0
-            }
-            ArtworkBackground {
-                anchors.fill: parent
-                visible: root.blurRadius > 0
-                mode: "BlurredArtwork"
-                neutralImage: true
-                blurRadius: root.blurRadius
-                motionTexture: videoBackgroundItem.movie && videoBackgroundItem.movie.ready ? backgroundVideo : null
-            }
-            Connections {
-                target: videoBackgroundItem.movie
-                function onReadyChanged() { if (videoBackgroundItem.movie.ready) root.sampleContrastSoon() }
-            }
-        }
+        Component.onCompleted: if (AppTheme.videoAvailable) setSource("BackgroundVideo.qml", {host: root})
     }
     Text {
         anchors.centerIn: parent
