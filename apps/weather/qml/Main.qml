@@ -836,6 +836,70 @@ KosApplicationWindow {
     // 批 12｜雨＝折射（不是画白点）：waterMap 的 RG 是偏移图，A 是覆盖率；
     // uv' = uv + (RG−0.5)·strength·A → 一次纹理查表完成透镜折射；
     // 再把偏移向量当法线做单点镜面高光（光源左上 §2.7）+ 极淡雾。
+    //
+    // 批 12 余项①（R131）：折射只覆盖天空区。下方 mask 是"全窗白底 + 卡片/侧栏黑矩形"，
+    // shader 在掩码 0 处输出未偏移的天空 → 半透卡(α≈0.14)与侧栏底下不再透出水珠，
+    // 与「ShaderEffect 区域只覆盖天空区（不含卡片/侧栏）」等价，且不需要把天空拆层。
+    // 掩码用 Canvas 而不是 Item 树：本机软件光栅下 hideSource:true 的源项只捕获首帧、
+    // 之后不再重绘（R128/R129 同族根因），而水图 Canvas（x:-4096 + hideSource:false）
+    // 已被证明可持续绘制。坐标与屏幕一致（x/y 移出窗口只影响合成，不影响 Canvas 坐标系）。
+    Canvas {
+        id: refractionMaskCanvas
+        x: -4096
+        y: -4096
+        width: Math.max(1, root.width)
+        height: Math.max(1, root.height)
+        // 不上屏，只作纹理源；保持 visible 以便 onPaint 正常触发。
+        Component.onCompleted: maskKick.start()
+        onWidthChanged: requestPaint()
+        onHeightChanged: requestPaint()
+        onPaint: {
+            var ctx = getContext("2d")
+            ctx.clearRect(0, 0, width, height)
+            ctx.fillStyle = "#ffffff"
+            ctx.fillRect(0, 0, width, height)
+            ctx.fillStyle = "#000000"
+            var list = [sidebar, airQualityCard, conditionsCard,
+                        hourlyConditionsCard, dailyCard]
+            for (var i = 0; i < list.length; i++) {
+                var it = list[i]
+                var p = it.mapToItem(root.contentItem, 0, 0)
+                ctx.fillRect(p.x, p.y, it.width, it.height)
+            }
+            refractionMaskSource.scheduleUpdate()
+        }
+        // 首帧可能早于布局完成；1.2s 后补一次（一次性）。
+        Timer { id: maskKick; interval: 1200; running: false; repeat: false
+                onTriggered: refractionMaskCanvas.requestPaint() }
+        // 滚动/数据变化会让卡片位置/高度改变，重画掩码。
+        Connections {
+            target: mainFlick
+            function onContentYChanged() { refractionMaskCanvas.requestPaint() }
+            function onContentHeightChanged() { refractionMaskCanvas.requestPaint() }
+        }
+    }
+
+    ShaderEffectSource {
+        id: refractionMaskSource
+        // 同水图源：源项与采样项都移出窗口（不上屏），只用其纹理。若留在窗口内
+        // 且 hideSource:false，本机会把白底掩码直接合成到屏上（R131 实测：晴天整窗变白）。
+        x: -4096
+        y: -4096
+        width: Math.max(1, root.width)
+        height: Math.max(1, root.height)
+        sourceItem: refractionMaskCanvas
+        hideSource: false
+        // 只在掩码矩形变化（布局/滚动）时重捕获。首次捕获可能早于布局完成，
+        // 故 1s 后再补一次（一次性，非每帧）。
+        live: false
+        recursive: false
+        wrapMode: ShaderEffectSource.ClampToEdge
+        textureSize: Qt.size(Math.max(1, width), Math.max(1, height))
+        Component.onCompleted: maskSettle.start()
+        Timer { id: maskSettle; interval: 1000; running: false; repeat: false
+                onTriggered: refractionMaskSource.scheduleUpdate() }
+    }
+
     ShaderEffect {
         id: rainRefraction
         anchors.fill: parent
@@ -844,6 +908,7 @@ KosApplicationWindow {
         fragmentShader: Qt.resolvedUrl("shaders/rain_refract.frag.qsb")
         property var source: skyRefractionSource
         property var waterMap: waterMapSource
+        property var maskSource: refractionMaskSource
         property vector2d surfaceSize: Qt.vector2d(Math.max(1, width), Math.max(1, height))
         property vector2d mapRepeat: Qt.vector2d(width / 512.0, height / 512.0)
         property real strength: 0.12
