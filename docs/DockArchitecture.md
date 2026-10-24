@@ -434,6 +434,16 @@ Card presentations keep the search header outside the scrolling app grid: the
 grid viewport starts below the header, so a scrolled row is clipped at that
 boundary instead of painting over the search field.
 
+`LauncherIconMotion.qml` drives tile position and scale from one animated
+progress value, with a separate 200 ms opacity track alongside the 300 ms
+spread. Both use GUI-thread `NumberAnimation`, as does the stationary glass
+fade in `LauncherMotion.qml`. Keep opacity at its current value when starting
+or reversing: forcing it to 1 to prewarm render-thread Animators can expose a
+fully visible tile before the fade starts. Hidden neighbor pages snap without
+holding the controller open; cold delegates start at the contracted pose and
+follow their resolved grid offsets. `tests/interaction-controls/tst_motion.qml`
+covers the entrance, reversal, cold delegates and hidden-page lifecycle.
+
 Launcher persistence is separate at
 `Quickshell.stateDir + "/applauncher/config.json"`. Schema version 3 owns
 `displayMode`, per-mode `layoutProfiles`, `rootItems` (`app` or `folder`),
