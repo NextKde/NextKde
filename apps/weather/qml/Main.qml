@@ -128,6 +128,31 @@ KosApplicationWindow {
     readonly property color sidebarStatusWarning: sidebarFooterOnLight
         ? Qt.rgba(0.1445, 0.0808, 0, 1) : "#ffb340"
 
+    // R144｜§2.10 侧栏搜索胶囊对比收口：胶囊底 = 白@0.15（LiquidTextField glassColor）叠在
+    // 侧栏背板顶部之上。实测胶囊内底 clear (127,137,152) / rain (148,162,172) / night (141,150,165)
+    // / dusk (149,149,167)，原 `textColor #ffffff` + `mutedTextColor 白@0.66`（占位符）在其上仅
+    // **2.40 / 1.95 / 2.14:1**（<4.5:1）。与 R143 侧栏底部同一取舍：墨色按底亮度自适应，
+    // 亮底用黑@0.92（实测 5.56–7.43:1）、占位符黑@0.78（实测 4.72–5.97:1），暗底回退白墨。
+    // 阈值沿用 R143 的等对比交点 L=0.174（见 sidebarFooterOnLight 注释）。
+    readonly property color sidebarBackdropTop: {
+        const s = AppTheme.sidebar
+        const a = AppTheme.sidebarSurface.a
+        return Qt.rgba(s.r * a + root.skyTop.r * (1 - a),
+                       s.g * a + root.skyTop.g * (1 - a),
+                       s.b * a + root.skyTop.b * (1 - a), 1)
+    }
+    readonly property color searchPillBackdrop: { // 玻璃胶囊白@0.15 叠在背板顶部
+        const b = sidebarBackdropTop
+        return Qt.rgba(0.15 + b.r * 0.85, 0.15 + b.g * 0.85, 0.15 + b.b * 0.85, 1)
+    }
+    readonly property bool searchFieldOnLight: AppTheme.relativeLuminance(searchPillBackdrop) > 0.174
+    readonly property color searchFieldInk: searchFieldOnLight
+        ? Qt.rgba(0, 0, 0, 0.92) : "#ffffff"
+    readonly property color searchFieldMutedInk: searchFieldOnLight
+        ? Qt.rgba(0, 0, 0, 0.78) : Qt.rgba(1, 1, 1, 0.66)
+    readonly property color searchFieldGlyphInk: searchFieldOnLight
+        ? Qt.rgba(0, 0, 0, 0.78) : Qt.rgba(1, 1, 1, 0.72)
+
     // 用户裁定 2026-10-23：卡片改**中性白玻璃**，禁止蓝色 tint 压在蓝色天空上（旧值
     // α0.30 的 (0,96,210) 深蓝玻璃在模糊蓝底上糊成一片）。白底 α0.14（夜景 0.16 不变），
     // 层级仍按 §1：L0 内容不用玻璃，白 α 属标准材质；对比度以 §2.10 正文 ≥4.5:1 复核。
@@ -2053,8 +2078,10 @@ KosApplicationWindow {
                         liquidStrength: 0.2
                         glassColor: Qt.rgba(1, 1, 1, 0.15)
                         outlineColor: Qt.rgba(1, 1, 1, 0.30)
-                        textColor: "#ffffff"
-                        mutedTextColor: Qt.rgba(1, 1, 1, 0.66)
+                        // R144｜§2.10：原 textColor #ffffff / mutedTextColor 白@0.66 在胶囊底上
+                        // 仅 2.40 / 1.95:1。改为按底亮度自适应的 label 墨（亮底黑@0.92 / 黑@0.78）。
+                        textColor: root.searchFieldInk
+                        mutedTextColor: root.searchFieldMutedInk
                         placeholderText: qsTr("Search")
                         Accessible.name: qsTr("Location search")
                         onAccepted: backend.searchLocations(text)
@@ -2083,7 +2110,9 @@ KosApplicationWindow {
                             height: 10
                             radius: 5
                             color: "transparent"
-                            border.color: Qt.rgba(1, 1, 1, 0.72)
+                            // R144｜§2.6 小控件随背景翻转 + §2.10：胶囊底变亮后白描边笔画
+                            // 仅 2.4:1，改随底亮度自适应墨色（亮底黑@0.78 = 4.72:1）。
+                            border.color: root.searchFieldGlyphInk
                             border.width: 1.4
                         }
                         Rectangle { // 手柄，45° 朝右下
@@ -2092,7 +2121,7 @@ KosApplicationWindow {
                             width: 1.4
                             height: 5.2
                             radius: 0.7
-                            color: Qt.rgba(1, 1, 1, 0.72)
+                            color: root.searchFieldGlyphInk
                             rotation: -45
                             transformOrigin: Item.TopLeft
                         }
