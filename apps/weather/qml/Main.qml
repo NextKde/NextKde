@@ -1089,21 +1089,172 @@ KosApplicationWindow {
 
         onWidthChanged: precip.seedParticles()
         onHeightChanged: precip.seedParticles()
-        Component.onCompleted: precip.seedParticles()
+        Component.onCompleted: {
+            precip.seedParticles()
+            precip.bakeSprites()
+        }
+        // 批 6｜sprite 纹理 holder（不参与绘制，只供 ctx.drawImage 取像素）。
+        Image { id: rainSpriteDayNear; visible: false; asynchronous: false; smooth: true; source: precip.spriteUrls.length > 0 ? precip.spriteUrls[0] : ""; onStatusChanged: if (status === Image.Ready) precip.requestPaint() }
+        Image { id: rainSpriteDayMid; visible: false; asynchronous: false; smooth: true; source: precip.spriteUrls.length > 1 ? precip.spriteUrls[1] : ""; onStatusChanged: if (status === Image.Ready) precip.requestPaint() }
+        Image { id: rainSpriteDayFar; visible: false; asynchronous: false; smooth: true; source: precip.spriteUrls.length > 2 ? precip.spriteUrls[2] : ""; onStatusChanged: if (status === Image.Ready) precip.requestPaint() }
+        Image { id: rainSpriteNightNear; visible: false; asynchronous: false; smooth: true; source: precip.spriteUrls.length > 3 ? precip.spriteUrls[3] : ""; onStatusChanged: if (status === Image.Ready) precip.requestPaint() }
+        Image { id: rainSpriteNightMid; visible: false; asynchronous: false; smooth: true; source: precip.spriteUrls.length > 4 ? precip.spriteUrls[4] : ""; onStatusChanged: if (status === Image.Ready) precip.requestPaint() }
+        Image { id: rainSpriteNightFar; visible: false; asynchronous: false; smooth: true; source: precip.spriteUrls.length > 5 ? precip.spriteUrls[5] : ""; onStatusChanged: if (status === Image.Ready) precip.requestPaint() }
+        Image { id: snowSprite; visible: false; asynchronous: false; smooth: true; source: precip.spriteUrls.length > 6 ? precip.spriteUrls[6] : ""; onStatusChanged: if (status === Image.Ready) precip.requestPaint() }
         onActiveCountChanged: precip.requestPaint()
         onFlashAlphaChanged: if (precip.thunder) precip.requestPaint()
 
         // 批 3.5｜三层景深参数（用户 2026-10-24 裁决第 1 条，同一 Canvas 按层 stroke）。
         // 粒子数比 近:中:远 = 1 : 1.4 : 1.8（远处更多更淡）。
+        // 批 6｜spriteW = 预烘焙雨丝纹理宽度（近 3 / 中 2 / 远 1，对应 lw 2.2/1.5/0.9）。
         readonly property var rainLayerConfigs: [
-            { lw: 2.2, trailMin: 26, trailMax: 40, vyMin: 620, vyMax: 760, aMin: 0.30, aMax: 0.55 },
-            { lw: 1.5, trailMin: 16, trailMax: 26, vyMin: 460, vyMax: 580, aMin: 0.22, aMax: 0.42 },
-            { lw: 0.9, trailMin:  8, trailMax: 14, vyMin: 300, vyMax: 380, aMin: 0.10, aMax: 0.22 }
+            { lw: 2.2, spriteW: 3, trailMin: 26, trailMax: 40, vyMin: 620, vyMax: 760, aMin: 0.30, aMax: 0.55 },
+            { lw: 1.5, spriteW: 2, trailMin: 16, trailMax: 26, vyMin: 460, vyMax: 580, aMin: 0.22, aMax: 0.42 },
+            { lw: 0.9, spriteW: 1, trailMin:  8, trailMax: 14, vyMin: 300, vyMax: 380, aMin: 0.10, aMax: 0.22 }
         ]
         // 42 槽循环内 10/14/18 → 1 : 1.4 : 1.8；取前 N 个活跃粒子时比例不变。
         function rainLayerForIndex(index) {
             const slot = index % 42
             return slot < 10 ? 0 : (slot < 24 ? 1 : 2)
+        }
+
+        // 批 6｜雨/雪 sprite：启动时程序化烘焙一次（离屏 RGBA 像素 → PNG data URL → Image），
+        // 之后每帧只做 save/translate/rotate/globalAlpha/drawImage，不再逐滴 createLinearGradient
+        // 或 stroke（原 665 滴/帧的渐变+描边是主线程 CPU 主耗）。
+        // 烘焙计数与时间戳打印到 stdout，用于证明稳定运行期间无重复烘焙。
+        property var spriteUrls: []
+        property int spriteBakeCount: 0
+        property var _crcTable: null
+
+        function _b64(bytes) {
+            const tbl = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/"
+            let out = ""
+            for (let i = 0; i < bytes.length; i += 3) {
+                const b0 = bytes[i]
+                const b1 = i + 1 < bytes.length ? bytes[i + 1] : 0
+                const b2 = i + 2 < bytes.length ? bytes[i + 2] : 0
+                out += tbl.charAt(b0 >> 2)
+                out += tbl.charAt(((b0 & 3) << 4) | (b1 >> 4))
+                out += i + 1 < bytes.length ? tbl.charAt(((b1 & 15) << 2) | (b2 >> 6)) : "="
+                out += i + 2 < bytes.length ? tbl.charAt(b2 & 63) : "="
+            }
+            return out
+        }
+
+        function _crc32(bytes) {
+            if (!precip._crcTable) {
+                const t = []
+                for (let n = 0; n < 256; n++) {
+                    let c = n
+                    for (let k = 0; k < 8; k++) c = (c & 1) ? (0xEDB88320 ^ (c >>> 1)) : (c >>> 1)
+                    t.push(c >>> 0)
+                }
+                precip._crcTable = t
+            }
+            let c = 0xFFFFFFFF
+            for (let i = 0; i < bytes.length; i++)
+                c = precip._crcTable[(c ^ bytes[i]) & 0xff] ^ (c >>> 8)
+            return (c ^ 0xFFFFFFFF) >>> 0
+        }
+
+        function _adler32(bytes) {
+            let a = 1
+            let b = 0
+            for (let i = 0; i < bytes.length; i++) {
+                a = (a + bytes[i]) % 65521
+                b = (b + a) % 65521
+            }
+            return ((b << 16) | a) >>> 0
+        }
+
+        function _be32(v) {
+            return [(v >>> 24) & 255, (v >>> 16) & 255, (v >>> 8) & 255, v & 255]
+        }
+
+        function _chunk(type, data) {
+            const name = []
+            for (let i = 0; i < 4; i++) name.push(type.charCodeAt(i))
+            const body = name.concat(data)
+            return precip._be32(data.length).concat(body, precip._be32(precip._crc32(body)))
+        }
+
+        // 最小 PNG 编码器（RGBA/8bit，zlib 存储块不压缩——sprite 只有几百字节）。
+        function pngDataUrl(w, h, rgba) {
+            const raw = []
+            for (let y = 0; y < h; y++) {
+                raw.push(0)                                    // filter: none
+                for (let x = 0; x < w; x++) {
+                    const i = (y * w + x) * 4
+                    raw.push(rgba[i], rgba[i + 1], rgba[i + 2], rgba[i + 3])
+                }
+            }
+            const z = [0x78, 0x01]                             // zlib header（无压缩）
+            let off = 0
+            while (off < raw.length) {
+                const n = Math.min(65535, raw.length - off)
+                z.push(off + n >= raw.length ? 0x01 : 0x00)    // BFINAL + BTYPE 00
+                z.push(n & 255, (n >>> 8) & 255)
+                const nn = (~n) & 0xffff
+                z.push(nn & 255, (nn >>> 8) & 255)
+                for (let i = 0; i < n; i++) z.push(raw[off + i])
+                off += n
+            }
+            const ad = precip._adler32(raw)
+            z.push((ad >>> 24) & 255, (ad >>> 16) & 255, (ad >>> 8) & 255, ad & 255)
+            const ihdr = precip._be32(w).concat(precip._be32(h), [8, 6, 0, 0, 0])
+            const png = [137, 80, 78, 71, 13, 10, 26, 10]
+                .concat(precip._chunk("IHDR", ihdr))
+                .concat(precip._chunk("IDAT", z))
+                .concat(precip._chunk("IEND", []))
+            return "data:image/png;base64," + precip._b64(png)
+        }
+
+        // 雨丝：竖向 alpha 渐变（底=head α=1，顶=tail α=0），边缘 1px 抗锯齿。
+        function _rainPixels(w, h, r, g, b) {
+            const px = []
+            for (let y = 0; y < h; y++) {
+                const t = y / (h - 1)
+                const aHead = Math.round(255 * Math.pow(t, 0.9))
+                for (let x = 0; x < w; x++) {
+                    let edge = 1
+                    if (w === 3 && (x === 0 || x === 2)) edge = 0.55
+                    else if (w === 2) edge = 0.85
+                    px.push(r, g, b, Math.round(aHead * edge))
+                }
+            }
+            return px
+        }
+
+        // 雪：8×8 圆形柔边。
+        function _snowPixels(n) {
+            const px = []
+            const c = (n - 1) / 2
+            for (let y = 0; y < n; y++) {
+                for (let x = 0; x < n; x++) {
+                    const d = Math.sqrt((x - c) * (x - c) + (y - c) * (y - c)) / (c + 0.5)
+                    const a = Math.max(0, 1 - d)
+                    px.push(255, 255, 255, Math.round(255 * Math.pow(a, 1.4)))
+                }
+            }
+            return px
+        }
+
+        function bakeSprites() {
+            if (precip.spriteUrls.length > 0) return
+            const day = [255, 255, 255]
+            const night = [207, 224, 255]                      // #cfe0ff（夜间色相）
+            precip.spriteUrls = [
+                precip.pngDataUrl(3, 40, precip._rainPixels(3, 40, day[0], day[1], day[2])),
+                precip.pngDataUrl(2, 26, precip._rainPixels(2, 26, day[0], day[1], day[2])),
+                precip.pngDataUrl(1, 14, precip._rainPixels(1, 14, day[0], day[1], day[2])),
+                precip.pngDataUrl(3, 40, precip._rainPixels(3, 40, night[0], night[1], night[2])),
+                precip.pngDataUrl(2, 26, precip._rainPixels(2, 26, night[0], night[1], night[2])),
+                precip.pngDataUrl(1, 14, precip._rainPixels(1, 14, night[0], night[1], night[2])),
+                precip.pngDataUrl(8, 8, precip._snowPixels(8))
+            ]
+            precip.spriteBakeCount++
+            console.log("[rain-bake] n=7 count=" + precip.spriteBakeCount
+                        + " t=" + Date.now())
         }
 
         function seedParticles() {
@@ -1288,15 +1439,16 @@ KosApplicationWindow {
             if (width <= 0 || height <= 0) return
             const count = Math.min(precip.activeCount, precip.particles.length)
             if (precip.snow) {
-                ctx.fillStyle = "#ffffff"
-                for (let i = 0; i < count; i++) {
-                    const p = precip.particles[i]
-                    const sway = Math.sin((precip.clockMs + p.phaseMs)
-                                          * 2 * Math.PI / p.swayMs) * p.swayAmp
-                    ctx.globalAlpha = p.opacity
-                    ctx.beginPath()
-                    ctx.arc(p.x + sway, p.y, p.size / 2, 0, Math.PI * 2)
-                    ctx.fill()
+                // 批 6｜雪：8×8 柔边 sprite，drawImage 绘制（不再逐粒 arc+fill）。
+                if (snowSprite.status === Image.Ready) {
+                    for (let i = 0; i < count; i++) {
+                        const p = precip.particles[i]
+                        const sway = Math.sin((precip.clockMs + p.phaseMs)
+                                              * 2 * Math.PI / p.swayMs) * p.swayAmp
+                        ctx.globalAlpha = p.opacity
+                        ctx.drawImage(snowSprite, p.x + sway - p.size / 2,
+                                      p.y - p.size / 2, p.size, p.size)
+                    }
                 }
             } else {
                 // 批 3.5｜三层景深雨：远层先画、近层后画（远→中→近）。
@@ -1308,8 +1460,15 @@ KosApplicationWindow {
                 // 落地溅射雾带：底部 20px
                 ctx.fillStyle = "rgba(219,233,255,0.05)"
                 ctx.fillRect(0, height - 20, width, 20)
+                // 批 6｜每滴 = 预烘焙 sprite 的 drawImage（save→translate→rotate→globalAlpha）。
+                // 远→中→近顺序不变；旋转角使 sprite 的 -Y（上）对齐尾迹方向。
+                const sprites = night
+                    ? [rainSpriteNightNear, rainSpriteNightMid, rainSpriteNightFar]
+                    : [rainSpriteDayNear, rainSpriteDayMid, rainSpriteDayFar]
                 for (let layer = 2; layer >= 0; layer--) {
                     const cfg = precip.rainLayerConfigs[layer]
+                    const sprite = sprites[layer]
+                    if (sprite.status !== Image.Ready) continue
                     for (let i = 0; i < count; i++) {
                         const p = precip.particles[i]
                         if (p.layer !== layer) continue
@@ -1334,18 +1493,15 @@ KosApplicationWindow {
                             ctx.restore()
                             continue
                         }
-                        const tx = p.x - ux * p.trail
-                        const ty = p.y - uy * p.trail
-                        const grad = ctx.createLinearGradient(p.x, p.y, tx, ty)
-                        grad.addColorStop(0, "rgba(" + rgb + "," + a.toFixed(3) + ")")
-                        grad.addColorStop(1, "rgba(" + rgb + ",0)")
-                        ctx.strokeStyle = grad
-                        ctx.lineWidth = cfg.lw
-                        ctx.lineCap = "round"
-                        ctx.beginPath()
-                        ctx.moveTo(p.x, p.y)
-                        ctx.lineTo(tx, ty)
-                        ctx.stroke()
+                        // 角度：局部 -Y 需对齐尾迹方向 (-ux,-uy)
+                        const angle = Math.atan2(-ux, uy)
+                        ctx.save()
+                        ctx.translate(p.x, p.y)
+                        ctx.rotate(angle)
+                        ctx.globalAlpha = a
+                        ctx.drawImage(sprite, -cfg.spriteW / 2, -p.trail,
+                                      cfg.spriteW, p.trail)
+                        ctx.restore()
                     }
                 }
             }
