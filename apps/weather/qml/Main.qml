@@ -1399,10 +1399,13 @@ KosApplicationWindow {
         function buildBolt() {
             lightningLayer.strikeXRatio = 0.12 + Math.random() * 0.76
             const segments = 9 + Math.floor(Math.random() * 4)
-            const stepY = height / segments
+            // 落雷限制在云层带内（顶缘 3% → 62% 高度），不再贯穿整屏到内容区
+            const boltTop = height * 0.03
+            const boltHeight = height * 0.59
+            const stepY = boltHeight / segments
             const points = []
             let x = width * lightningLayer.strikeXRatio
-            let y = 0
+            let y = boltTop
             for (let i = 0; i <= segments; i++) {
                 points.push({ x: x, y: y })
                 x += (Math.random() - 0.5) * 46
@@ -1461,7 +1464,8 @@ KosApplicationWindow {
 
         Timer {
             id: lightningTimer
-            interval: 4200
+            // 首闪 0.9–1.5s 内随机到来（进入雷暴场景即可感知），其后间隔仍 3.5–8.5s 随机
+            interval: 900 + Math.random() * 600
             repeat: true
             running: root.thunderSky && !AppTheme.reduceMotion
             onTriggered: {
