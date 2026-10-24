@@ -1248,9 +1248,11 @@ KosApplicationWindow {
         }
     }
 
-    RainLayerSystem { fallSpeed: 690; lifespanMs: 1060; particleCount: 160; baseAlpha: 0.42; alphaVar: 0.13; spriteWidth: 40; spriteSource: "particles/rain-near.png" }
-    RainLayerSystem { fallSpeed: 520; lifespanMs: 1400; particleCount: 224; baseAlpha: 0.32; alphaVar: 0.10; spriteWidth: 26; spriteSource: "particles/rain-mid.png" }
-    RainLayerSystem { fallSpeed: 340; lifespanMs: 2140; particleCount: 281; baseAlpha: 0.16; alphaVar: 0.06; spriteWidth: 14; spriteSource: "particles/rain-far.png" }
+    // 批 8｜雨＝装饰（用户 2026-10-24）：落雨粒子 665 → 150（40/50/60），
+    // 观感主体改由下方"雨点材质层"承担；速度/α/拖尾尺寸仍沿用批 7 定值。
+    RainLayerSystem { fallSpeed: 690; lifespanMs: 1060; particleCount: 40; baseAlpha: 0.42; alphaVar: 0.13; spriteWidth: 40; spriteSource: "particles/rain-near.png" }
+    RainLayerSystem { fallSpeed: 520; lifespanMs: 1400; particleCount: 50; baseAlpha: 0.32; alphaVar: 0.10; spriteWidth: 26; spriteSource: "particles/rain-mid.png" }
+    RainLayerSystem { fallSpeed: 340; lifespanMs: 2140; particleCount: 60; baseAlpha: 0.16; alphaVar: 0.06; spriteWidth: 14; spriteSource: "particles/rain-far.png" }
 
     // 批 7｜雪 = ParticleSystem + Emitter + Wander + ImageParticle（8×8 柔边圆 sprite）。
     ParticleSystem {
@@ -1416,6 +1418,54 @@ KosApplicationWindow {
         opacity: root.atmosphereWashAlpha
         Accessible.ignored: true
     }
+
+    // 批 8｜雨点材质层（用户 2026-10-24：雨是装饰，重点是"玻璃表面的雨点材质"）。
+    // 两张程序化生成的可平铺贴图（PIL，脚本随代码提交），fillMode: Image.Tile 铺满；
+    // 属于天空材质（§1 L0），不参与玻璃预算。位移只动 x/y 变换（不重绘/不重烘），
+    // 近层对角 9 px/s、远层 9/1.6 ≈ 5.6 px/s；opacity 8s 呼吸 0.42↔0.52，
+    // 再乘降水强度因子（0.55 + 0.45×intensity）与夜间 0.7 压暗。
+    component RainMaterialLayer: Item {
+        id: material
+        anchors.fill: parent
+        clip: true
+        visible: root.rainySky
+        Accessible.ignored: true
+        property string tileSource
+        property real opacityFactor: 1.0
+        property real driftAxisMs: 80500
+        property real breathe: 0.42
+        property real intensityScale: 0.55 + 0.45 * root.precipitationIntensity
+        opacity: root.rainySky
+                 ? material.breathe * material.intensityScale * material.opacityFactor
+                   * (root.currentIsDay ? 1.0 : 0.7)
+                 : 0
+        SequentialAnimation on breathe {
+            running: root.rainySky && !AppTheme.reduceMotion
+            loops: Animation.Infinite
+            NumberAnimation { from: 0.42; to: 0.52; duration: 4000; easing.type: Easing.InOutSine }
+            NumberAnimation { from: 0.52; to: 0.42; duration: 4000; easing.type: Easing.InOutSine }
+        }
+        Image {
+            id: materialTile
+            width: material.width + 512
+            height: material.height + 512
+            source: material.tileSource
+            fillMode: Image.Tile
+            smooth: true
+            NumberAnimation on x {
+                from: 0; to: -512; duration: material.driftAxisMs
+                loops: Animation.Infinite; easing.type: Easing.Linear
+                running: root.rainySky && !AppTheme.reduceMotion
+            }
+            NumberAnimation on y {
+                from: 0; to: -512; duration: material.driftAxisMs
+                loops: Animation.Infinite; easing.type: Easing.Linear
+                running: root.rainySky && !AppTheme.reduceMotion
+            }
+        }
+    }
+    RainMaterialLayer { tileSource: "particles/rain-material-far.png"; opacityFactor: 0.6; driftAxisMs: 128800 }
+    RainMaterialLayer { tileSource: "particles/rain-material-near.png" }
 
     // 批 5｜闪电已并入降水 Canvas（见 PrecipitationLayer.paintLightning）；
     // 原独立 lightningLayer Canvas（批 3）整段移除：不再有第二个 33ms Timer/

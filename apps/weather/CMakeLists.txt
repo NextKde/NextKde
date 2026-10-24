@@ -40,6 +40,8 @@ qt_add_resources(kos-weather "weather_particles"
         qml/particles/rain-mid.png
         qml/particles/rain-far.png
         qml/particles/snow.png
+        qml/particles/rain-material-near.png
+        qml/particles/rain-material-far.png
 )
 endif()
 
