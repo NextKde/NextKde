@@ -857,11 +857,26 @@ KosApplicationWindow {
     // R126（批 12 余项②）：12–20 颗水珠走锯齿函数（粘住 3–6s → 0.3–0.8s 滑落），
     // 直接写回水图：滑过处 clearRect 擦掉水珠/雾（shader 中 A=0 → 不折射、不雾化），
     // 留下一条"擦干净"的亮带；只清该滴的窄条脏矩形，绝不整图重绘。
+    // R129：偏移图精灵改由 Image 项提供。Canvas.loadImage() 在未就绪时返回 undefined
+    // 且 onImageLoaded 不会重新取图 → onPaint 永远早退（R128 根因 A）。
+    // Image 在 status==Ready 后 Canvas.drawImage(Item) 同步可用。
+    Image {
+        id: offsetSpriteImage
+        source: "particles/drop-offset.png"
+        asynchronous: false
+        cache: true
+        visible: false
+        onStatusChanged: if (status === Image.Ready) waterMapCanvas.requestPaint()
+    }
+
     Canvas {
         id: waterMapCanvas
+        // R129：水图只作 ShaderEffect 的折射输入，不上屏。Canvas 不可见时 onPaint 不触发
+        // （R128 根因 B），故保持 visible，但移到窗口外——可见性/绘制照常、像素被裁掉。
+        x: -4096
+        y: -4096
         width: 512
         height: 512
-        property var offsetSprite: null
         property var staticStamps: []
         property var slideDrops: []
         property var slideLastY: []
@@ -869,8 +884,8 @@ KosApplicationWindow {
         property double lastClockMs: 0
         property int updatePhase: 0
         Accessible.ignored: true
-        Component.onCompleted: offsetSprite = loadImage("particles/drop-offset.png")
-        onImageLoaded: requestPaint()
+        // 偏移图就绪后重画一次（Image 项异步加载完成 → 同步重绘水图）。
+        Component.onCompleted: if (offsetSpriteImage.status === Image.Ready) requestPaint()
 
         function buildStamps() {
             const stamps = []
@@ -932,7 +947,7 @@ KosApplicationWindow {
 
         function stampAt(ctx, x, y, size, alpha) {
             ctx.globalAlpha = alpha
-            ctx.drawImage(offsetSprite, x - size / 2, y - size / 2, size, size)
+            ctx.drawImage(offsetSpriteImage, x - size / 2, y - size / 2, size, size)
         }
 
         // 脏矩形内重画静态水珠；skipX/skipY0/skipY1 给出被擦掉的窄带，带内不恢复。
@@ -960,7 +975,8 @@ KosApplicationWindow {
 
         // 只更新下滑水珠的窄条脏矩形；静止（粘住）时该滴不动、不重绘。
         function advanceSlides() {
-            if (!root.rainySky || AppTheme.reduceMotion || !offsetSprite
+            if (!root.rainySky || AppTheme.reduceMotion
+                    || offsetSpriteImage.status !== Image.Ready
                     || staticStamps.length === 0)
                 return
             const now = Date.now()
@@ -1005,7 +1021,7 @@ KosApplicationWindow {
         onPaint: {
             const ctx = getContext("2d")
             ctx.clearRect(0, 0, width, height)
-            if (!offsetSprite)
+            if (offsetSpriteImage.status !== Image.Ready)
                 return
             buildStamps()
             for (let i = 0; i < staticStamps.length; i++) {
@@ -1050,10 +1066,15 @@ KosApplicationWindow {
 
     ShaderEffectSource {
         id: waterMapSource
+        // R129：hideSource:true 会让源 Canvas 不再绘制（onPaint 0 次触发，R128 根因 B）。
+        // 故保留源可见，但把本项移到窗口外——它只是纹理提供者，不上屏；
+        // 此前的“整窗彩虹环”就是本项把水图纹理合成到屏幕造成的。
+        x: -4096
+        y: -4096
         width: 512
         height: 512
         sourceItem: waterMapCanvas
-        hideSource: true
+        hideSource: false
         live: false
         wrapMode: ShaderEffectSource.Repeat
         textureSize: Qt.size(512, 512)
