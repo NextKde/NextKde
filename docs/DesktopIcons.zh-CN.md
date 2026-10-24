@@ -2,6 +2,21 @@
 
 [English](DesktopIcons.md)
 
+## 桌面表面归属
+
+`DeskCenterWindow.qml` 在各输出上承载组件、图标及其右键菜单。它使用
+`desktop` layer-shell namespace，让 KWin 的普通窗口关闭、移动快捷键排除桌面。
+保留 Bottom 层，降到 Background 可能被 Plasma 盖住。平台托管的
+`kwin/window-bridge.js` 中，`installDesktopStack()` 将已有 Below 层表面固定为
+壁纸 < 组件 < 台前调度条，不依赖台前调度开关或映射先后。它不修改可见性、
+虚拟桌面归属，也不重建窗口。
+
+玻璃特效只接受明确声明了非空内容区域的 Quickshell 桌面表面，继续排除壁纸和
+旧协议中表示整窗模糊的空区域。`kos-deskcenter.desktop-stack` 覆盖映射排列和
+重入层序信号，`kos-glass.desktop-blur` 覆盖这一显式声明边界。
+
+## 间距与几何
+
 桌面空白处右键 → **图标间距**，可以独立于图标大小选择：
 
 - **宽松**：保留较大的格子与空隙，适合少量文件。

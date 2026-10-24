@@ -32,7 +32,11 @@ PanelWindow {
     // 2026-10-18 层序：留在 Bottom。降到 Background（KWin DesktopLayer）
     // 会被同在 DesktopLayer 的 Plasma 桌面表面盖住——实测重登后组件全部
     // 消失。与台前调度条带的层内先后由 KWin 脚本重排，见
-    // kwin-stage-stack.js。
+    // kwin/window-bridge.js。
+    // KWin excludes Desktop windows from active-window close/move shortcuts.
+    // Bottom remains the compositor layer; the desktop stack script orders
+    // the separate wallpaper below this keyboard-interactive desktop surface.
+    WlrLayershell.namespace: "desktop"
     WlrLayershell.layer: WlrLayer.Bottom
     // A desktop needs shortcuts only after the user explicitly clicks it.
     // OnDemand keeps active applications' Ctrl+C/V untouched otherwise.

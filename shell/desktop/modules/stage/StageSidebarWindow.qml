@@ -29,13 +29,12 @@ PanelWindow {
     WlrLayershell.namespace: "quickshell-stagebar"
     // 2026-10-18 用户定案：卡片列是"桌面层里的浮层"，允许与窗口相交——
     // 相交时窗口压在卡片上（台前调度在普通窗之下、桌面组件之上）。
-    // Bottom → KWin 的 BelowLayer：正常窗（NormalLayer）恒在其上，
-    // DeskCenter 组件窗同层但先映射（本窗要等 enabled 握手后才 map），
-    // 故本窗在组件之上（KWin constrainedStackingOrder 同层保持映射序）。
+    // Bottom → KWin 的 BelowLayer：正常窗（NormalLayer）恒在其上。
+    // 桌面层序脚本固定壁纸 < DeskCenter < 本窗，不依赖映射先后。
     WlrLayershell.layer: WlrLayer.Bottom
-    // KWin 侧重排脚本用 keyboardFocus 区分本窗与 DeskCenter（后者 OnDemand
-    // → wantsInput=true，本窗 None → false；三者同为全屏 quickshell 表面，
-    // 其余字段不可辨）。改动此处会破坏 kwin-stage-stack.js 的识别。
+    // KWin 桌面层序脚本通过类型与键盘模式识别：本窗 Normal + None，
+    // DeskCenter Desktop + OnDemand，壁纸 Desktop + None。
+    // 改动此处需同步 kwin/window-bridge.js。
     WlrLayershell.keyboardFocus: WlrKeyboardFocus.None
     // 全屏透明浮层（2026-09-30 用户定稿"完完全全不用侧边栏，卡片就是
     // 卡片"）：无保留区、无边框——悬停放大/倾斜投影/扇叠背板/拖拽越界
