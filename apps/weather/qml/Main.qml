@@ -1420,46 +1420,32 @@ KosApplicationWindow {
         Accessible.ignored: true
     }
 
-    // 批 9｜背景雨幕：极淡竖雾条（α 0.06–0.10，#cfe0ff 色系，程序化贴图），
-    // 铺在天空上、水珠层之下。静态纹理平铺，不逐帧重绘；夜间整体 ×0.7。
-    Image {
-        id: rainMistLayer
-        anchors.fill: parent
-        visible: root.rainySky
-        source: "particles/rain-mist.png"
-        fillMode: Image.Tile
-        smooth: true
-        opacity: root.currentIsDay ? 0.08 : 0.08 * 0.7
-        Accessible.ignored: true
-    }
-
-    // 批 9｜水珠材质层（本轮主体）：两张 1024×1024 可平铺贴图（PIL 程序化生成），
-    // 近层约 320 颗（直径 3–14px）、远层约 180 颗（2–7px，轻微模糊）。
+    // 批 9｜水珠材质层（本轮主体）：一张 512×512 可平铺贴图（PIL 程序化生成），
+    // 近 160 颗（直径 3–14px）+ 远 90 颗（2–7px，轻微模糊）+ 雨幕 65 条，
+    // 与批 9 的 1024² / 320+180+260 每单位面积点数相同（密度不变）。
     // 每颗水珠含上缘白高光 / 内部偏左上亮点 / 下缘深蓝暗边三层明暗。
+    // R107 CPU：远层（按 0.35/0.55）与雨幕（按 0.08/0.55）已预乘烘焙进同一张纹理，
+    // 全屏只剩 1 个 Image 层（原近/远/雨幕 3 层），减少逐帧全窗口 alpha 合成。
     // 属于天空材质（§1 L0），不参与玻璃预算；静态平铺，无位移、无逐帧重绘。
-    // opacity 基准 近 0.55 / 远 0.35，随 precipitationIntensity 在 ±0.15 内联动，夜间 ×0.7。
-    component WaterDropLayer: Item {
-        id: waterDrop
+    // opacity 基准 0.55，随 precipitationIntensity 在 ±0.15 内联动，夜间 ×0.7。
+    Image {
+        id: waterDropLayer
         anchors.fill: parent
         clip: true
         visible: root.rainySky
-        Accessible.ignored: true
-        property string tileSource
-        property real baseOpacity: 0.55
+        source: "particles/water-drops.png"
+        fillMode: Image.Tile
+        smooth: true
+        // 静态平铺纹理只需光栅化一次；窗口因云漂移持续重绘时从 layer 纹理搬运，
+        // 不再每帧逐 tile 采样 512² 贴图（opacity 变化只重合成、不重绘 layer 内容）。
+        layer.enabled: true
         readonly property real intensityLink: 0.15 * (2 * root.precipitationIntensity - 1)
         opacity: root.rainySky
-                 ? Math.max(0, Math.min(1, (waterDrop.baseOpacity + waterDrop.intensityLink)
+                 ? Math.max(0, Math.min(1, (0.55 + waterDropLayer.intensityLink)
                               * (root.currentIsDay ? 1.0 : 0.7)))
                  : 0
-        Image {
-            anchors.fill: parent
-            source: waterDrop.tileSource
-            fillMode: Image.Tile
-            smooth: true
-        }
+        Accessible.ignored: true
     }
-    WaterDropLayer { tileSource: "particles/water-drops-far.png"; baseOpacity: 0.35 }
-    WaterDropLayer { tileSource: "particles/water-drops-near.png"; baseOpacity: 0.55 }
 
     // 批 9｜少数水珠缓慢滑落（唯一动态）：12 颗固定种子水珠，速度 8–20 px/s，
     // 每滑 40–60px 留一颗 2–4px 小水珠，头部 1px 渐变尾迹（头亮尾淡）。
