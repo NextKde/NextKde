@@ -1295,7 +1295,11 @@ KosApplicationWindow {
         id: cloudLayer
         property var clouds: []
         property int driftMs: 30000
-        anchors.fill: parent
+        anchors.left: parent.left
+        anchors.right: parent.right
+        // 烘焙纹理只覆盖云带（yMax 0.32 + 云高，实测最低云底 ≈316px@727），
+        // 下方大片天空无云 → 不再合成空白透明区（CPU 轮，观感零变化）。
+        height: parent.height * 0.46
         visible: root.cloudySky
         clip: true
 
@@ -1358,7 +1362,8 @@ KosApplicationWindow {
                         const ch = cw * (cloud.cloudHeight / cloud.cloudWidth)
                         const ox = rep * periodW
                                    + cloud.xRatio * Math.max(periodW - cw, 0)
-                        const oy = (height - ch) * cloud.yRatio
+                        // 用窗口高度而非画布高度定位：画布收窄到云带后云的绝对位置不变。
+                        const oy = (root.height - ch) * cloud.yRatio
                         for (let pass = 0; pass < passes.length; pass++) {
                             const ps = passes[pass]
                             const dx = ps.dxR * cw
