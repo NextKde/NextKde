@@ -16,6 +16,7 @@ kos_add_application(kos-weather
     QML_FILES
         qml/Main.qml
         qml/WeatherIcon.qml
+        qml/WeatherLoadingIndicator.qml
     LINK_LIBRARIES
         Qt6::Network
 )

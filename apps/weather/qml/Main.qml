@@ -354,8 +354,8 @@ KosApplicationWindow {
         const source = backend.locations ?? []
         for (let index = 0; index < source.length; index++) {
             if (String(value(source[index], "id", "")) === pendingLocationId) {
-                backend.selectLocation(source[index])
                 pendingLocationId = ""
+                backend.selectLocation(source[index])
                 return
             }
         }
@@ -1243,6 +1243,14 @@ KosApplicationWindow {
                                         styleColor: Qt.rgba(0, 0, 0, 0.22)
                                     }
 
+                                    WeatherLoadingIndicator {
+                                        objectName: "cityLoading_" + String(root.value(savedLocation.modelData, "id", ""))
+                                        Layout.preferredWidth: 18
+                                        Layout.preferredHeight: 18
+                                        visible: savedLocation.highlighted && backend.loading
+                                        description: qsTr("Loading the forecast")
+                                    }
+
                                     Label {
                                         text: savedLocation.summary
                                             ? Math.round(savedLocation.summary.temperature) + "°" : "—"
@@ -1443,13 +1451,6 @@ KosApplicationWindow {
                         onClicked: backend.refresh()
                     }
 
-                    BusyIndicator {
-                        Layout.preferredWidth: 24
-                        Layout.preferredHeight: 24
-                        running: backend.loading
-                        visible: running
-                    }
-
                     Item { Layout.fillWidth: true }
 
                     KosButton {
@@ -1536,8 +1537,23 @@ KosApplicationWindow {
             Layout.margins: 20
             spacing: 16
 
+            Label {
+                Layout.fillWidth: true
+                objectName: "weatherLoadError"
+                visible: !backend.ready && backend.errorMessage.length > 0
+                text: qsTr("The latest update failed: %1").arg(backend.errorMessage)
+                color: root.skyText
+                wrapMode: Text.WordWrap
+            }
+
             Flickable {
                 id: mainFlick
+                objectName: "weatherForecast"
+                // Keep the layout allocated while the target city's snapshot
+                // loads; neither old-city values nor placeholder zeroes leak.
+                opacity: backend.ready ? 1 : 0
+                enabled: backend.ready
+                onEnabledChanged: if (!enabled) contentY = 0
                 Layout.fillWidth: true
                 Layout.fillHeight: true
                 contentWidth: width
@@ -3351,6 +3367,20 @@ KosApplicationWindow {
                     }
                 }
             }
+        }
+    }
+
+    Item {
+        anchors.fill: parent
+        anchors.leftMargin: sidebar.width
+        visible: !backend.ready && backend.loading
+
+        WeatherLoadingIndicator {
+            objectName: "weatherLoadingIndicator"
+            anchors.centerIn: parent
+            width: 32
+            height: 32
+            description: qsTr("Loading the forecast")
         }
     }
 

@@ -77,6 +77,11 @@ WeatherClient::WeatherClient(QObject *parent)
           "KOS_DATA_SOCKET",
           QDir(runtimeRoot()).filePath(QStringLiteral("kos-data.sock"))))
 {
+    m_locationTimer.setSingleShot(true);
+    m_locationTimer.setInterval(30000);
+    connect(&m_locationTimer, &QTimer::timeout, this, [this] {
+        setTransportError(tr("Weather data service is unavailable"));
+    });
     m_reconnectTimer.setInterval(1000);
     m_reconnectTimer.setSingleShot(true);
     connect(&m_reconnectTimer, &QTimer::timeout, this, &WeatherClient::connectSocket);
@@ -207,6 +212,10 @@ qint64 WeatherClient::staleAt() const
 
 void WeatherClient::refresh()
 {
+    if (!m_requestedLocation.isEmpty()) {
+        selectLocation(m_requestedLocation);
+        return;
+    }
     sendRequest(QStringLiteral("weather.refresh"));
 }
 
@@ -233,8 +242,36 @@ void WeatherClient::selectLocation(const QVariantMap &location)
 {
     if (location.isEmpty())
         return;
+    QVariantMap requested = location;
+    if (requested.value(QStringLiteral("id")).toString().isEmpty()) {
+        requested.insert(QStringLiteral("id"), QStringLiteral("manual:%1,%2")
+            .arg(requested.value(QStringLiteral("latitude")).toDouble(), 0, 'f', 5)
+            .arg(requested.value(QStringLiteral("longitude")).toDouble(), 0, 'f', 5));
+    }
+    if (m_ready && m_requestedLocation.isEmpty()
+        && requested.value(QStringLiteral("id")) == m_location.value(QStringLiteral("id"))) {
+        clearSearch();
+        return;
+    }
+
+    // Hide the previous forecast in the same event as the click. Snapshots
+    // already in flight must not restore a city the user has since left.
+    m_requestedLocation = requested;
+    ++m_locationGeneration;
+    m_location = requested;
+    m_current.clear();
+    m_hourly.clear();
+    m_daily.clear();
+    m_airQuality.clear();
+    m_fetchedAt = m_staleAt = 0;
+    m_ready = false;
+    m_loading = true;
+    m_status = QStringLiteral("loading");
+    m_errorMessage.clear();
+    m_locationTimer.start();
+    emit snapshotChanged();
     sendRequest(QStringLiteral("weather.set-location"), {
-        {QStringLiteral("location"), location},
+        {QStringLiteral("location"), requested},
     });
     clearSearch();
 }
@@ -302,6 +339,8 @@ void WeatherClient::onSocketConnected()
 
 void WeatherClient::onSocketDisconnected()
 {
+    if (!m_requestedLocation.isEmpty())
+        setTransportError(tr("Weather data service is unavailable"));
     emit connectedChanged();
     if (!m_reconnectTimer.isActive())
         m_reconnectTimer.start();
@@ -358,6 +397,11 @@ void WeatherClient::processSocketLine(const QByteArray &line)
 
     const QString requestId = response.value(QStringLiteral("requestId")).toString();
     const QString operation = m_requestOperations.take(requestId);
+    const quint64 generation = m_requestGenerations.take(requestId);
+    if (operation.startsWith(QLatin1String("weather."))
+        && operation != QLatin1String("weather.search")
+        && generation != m_locationGeneration)
+        return;
     const bool ok = response.value(QStringLiteral("ok")).toBool();
     const QJsonObject result = response.value(QStringLiteral("result")).toObject();
     if (operation == QLatin1String("weather.search")) {
@@ -388,6 +432,7 @@ void WeatherClient::sendRequest(const QString &operation, const QVariantMap &pay
     };
     const QByteArray encoded = QJsonDocument(request).toJson(QJsonDocument::Compact) + '\n';
     m_requestOperations.insert(requestId, operation);
+    m_requestGenerations.insert(requestId, m_locationGeneration);
     if (connected()) {
         m_socket.write(encoded);
         return;
@@ -395,6 +440,7 @@ void WeatherClient::sendRequest(const QString &operation, const QVariantMap &pay
     if (m_pendingRequests.size() >= 16) {
         const QJsonObject dropped = QJsonDocument::fromJson(m_pendingRequests.dequeue()).object();
         m_requestOperations.remove(dropped.value(QStringLiteral("requestId")).toString());
+        m_requestGenerations.remove(dropped.value(QStringLiteral("requestId")).toString());
     }
     m_pendingRequests.enqueue(encoded);
     connectSocket();
@@ -426,6 +472,11 @@ void WeatherClient::applyWeather(const QJsonObject &weather)
     if (weather.value(QStringLiteral("schemaVersion")).toInt() != 1)
         return;
 
+    const auto location = weather.value(QStringLiteral("location")).toObject().toVariantMap();
+    if (!m_requestedLocation.isEmpty()
+        && location.value(QStringLiteral("id")) != m_requestedLocation.value(QStringLiteral("id")))
+        return;
+
     m_status = weather.value(QStringLiteral("status")).toString(QStringLiteral("idle"));
     m_units = weather.value(QStringLiteral("units")).toString(QStringLiteral("metric"));
     m_errorMessage = weather.value(QStringLiteral("error")).toString();
@@ -439,6 +490,12 @@ void WeatherClient::applyWeather(const QJsonObject &weather)
     m_staleAt = weather.value(QStringLiteral("staleAt")).toInteger();
     m_loading = m_status == QLatin1String("loading");
     m_ready = !m_current.isEmpty();
+    if (m_ready || m_status == QLatin1String("error")) {
+        m_locationTimer.stop();
+        // Keep the requested city on failure so Refresh can retry it.
+        if (m_ready)
+            m_requestedLocation.clear();
+    }
     emit snapshotChanged();
 }
 
@@ -455,5 +512,10 @@ void WeatherClient::setTransportError(const QString &message)
     if (message.isEmpty() || m_errorMessage == message)
         return;
     m_errorMessage = message;
+    if (!m_requestedLocation.isEmpty()) {
+        m_loading = false;
+        m_status = QStringLiteral("error");
+        m_locationTimer.stop();
+    }
     emit snapshotChanged();
 }

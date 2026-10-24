@@ -2,6 +2,8 @@
 
 #include <QDir>
 #include <QFile>
+#include <QJsonDocument>
+#include <QJsonObject>
 #include <QLocalServer>
 #include <QTemporaryDir>
 #include <QtTest>
@@ -15,7 +17,131 @@ private slots:
     void destroysConnectedClient();
     void rejectsUnsupportedSnapshot();
     void reconnectsWhenServiceAppearsAfterInitialFailure();
+    void citySwitchHidesOldForecastAndRejectsLateReplies();
+    void failedCitySwitchCanBeRetried();
 };
+
+namespace {
+QJsonObject forecast(const QString &id, const QString &status = QStringLiteral("ready"))
+{
+    return {{"schemaVersion", 1}, {"status", status}, {"units", "metric"},
+            {"location", QJsonObject{{"id", id}, {"name", id}}},
+            {"current", status == "ready" ? QJsonObject{{"temperature", 25}} : QJsonObject{}},
+            {"error", status == "error" ? "Network unavailable" : ""}};
+}
+
+void reply(QLocalSocket *peer, const QJsonObject &request, const QJsonObject &weather)
+{
+    const QJsonObject message{{"requestId", request.value("requestId")}, {"ok", true},
+                              {"result", QJsonObject{{"weather", weather}}}};
+    peer->write(QJsonDocument(message).toJson(QJsonDocument::Compact) + '\n');
+    peer->flush();
+}
+
+QJsonObject readRequest(QLocalSocket *peer)
+{
+    return QJsonDocument::fromJson(peer->readLine()).object();
+}
+}
+
+void WeatherClientTest::citySwitchHidesOldForecastAndRejectsLateReplies()
+{
+    QTemporaryDir state, runtime;
+    qputenv("XDG_STATE_HOME", state.path().toUtf8());
+    qputenv("XDG_RUNTIME_DIR", runtime.path().toUtf8());
+    QLocalServer service;
+    QVERIFY(service.listen(runtime.filePath("kos-data.sock")));
+    WeatherClient client;
+    QTRY_VERIFY(service.hasPendingConnections());
+    auto *peer = service.nextPendingConnection();
+    QTRY_VERIFY(peer->canReadLine());
+    reply(peer, readRequest(peer), forecast("A"));
+    QTRY_VERIFY(client.ready());
+
+    // Selecting the displayed city should neither clear it nor refresh it.
+    client.selectLocation({{"id", "A"}});
+    QVERIFY(client.ready());
+    QVERIFY(!client.loading());
+
+    // Leave one A snapshot in flight across both selections.
+    peer->write("{\"event\":\"weather.changed\"}\n");
+    QTRY_VERIFY(peer->canReadLine());
+    const auto oldSnapshot = readRequest(peer);
+    client.selectLocation({{"id", "B"}});
+    QVERIFY(!client.ready()); // Must change before any service reply arrives.
+    QVERIFY(client.loading());
+    QVERIFY(client.current().isEmpty());
+    QVERIFY(client.hourly().isEmpty());
+    QVERIFY(client.daily().isEmpty());
+    QVERIFY(client.airQuality().isEmpty());
+    QCOMPARE(client.location().value("id").toString(), QStringLiteral("B"));
+    QTRY_VERIFY(peer->canReadLine());
+    QCOMPARE(readRequest(peer).value("operation").toString(), QStringLiteral("weather.set-location"));
+
+    client.selectLocation({{"id", "C"}});
+    QTRY_VERIFY(peer->canReadLine());
+    readRequest(peer);
+    peer->write("{\"event\":\"weather.changed\"}\n");
+    QTRY_VERIFY(peer->canReadLine());
+    reply(peer, readRequest(peer), forecast("B"));
+    QTest::qWait(30);
+    QVERIFY(!client.ready());
+    QCOMPARE(client.location().value("id").toString(), QStringLiteral("C"));
+
+    peer->write("{\"event\":\"weather.changed\"}\n");
+    QTRY_VERIFY(peer->canReadLine());
+    reply(peer, readRequest(peer), forecast("C", "loading"));
+    QTest::qWait(30);
+    QVERIFY(!client.ready());
+    peer->write("{\"event\":\"weather.changed\"}\n");
+    QTRY_VERIFY(peer->canReadLine());
+    reply(peer, readRequest(peer), forecast("C"));
+    QTRY_VERIFY(client.ready());
+    QVERIFY(!client.loading());
+    QCOMPARE(client.current().value("temperature").toInt(), 25);
+
+    // An old response must not roll back a successfully displayed city either.
+    reply(peer, oldSnapshot, forecast("A"));
+    QTest::qWait(30);
+    QCOMPARE(client.location().value("id").toString(), QStringLiteral("C"));
+}
+
+void WeatherClientTest::failedCitySwitchCanBeRetried()
+{
+    QTemporaryDir state, runtime;
+    qputenv("XDG_STATE_HOME", state.path().toUtf8());
+    qputenv("XDG_RUNTIME_DIR", runtime.path().toUtf8());
+    QLocalServer service;
+    QVERIFY(service.listen(runtime.filePath("kos-data.sock")));
+    WeatherClient client;
+    QTRY_VERIFY(service.hasPendingConnections());
+    auto *peer = service.nextPendingConnection();
+    QTRY_VERIFY(peer->canReadLine());
+    reply(peer, readRequest(peer), forecast("A"));
+    QTRY_VERIFY(client.ready());
+    client.selectLocation({{"id", "B"}});
+    QTRY_VERIFY(peer->canReadLine());
+    readRequest(peer);
+    peer->write("{\"event\":\"weather.changed\"}\n");
+    QTRY_VERIFY(peer->canReadLine());
+    reply(peer, readRequest(peer), forecast("B", "error"));
+    QTRY_VERIFY(!client.errorMessage().isEmpty());
+    QVERIFY(!client.ready());
+    QVERIFY(!client.loading());
+
+    client.refresh();
+    QVERIFY(client.errorMessage().isEmpty());
+    QVERIFY(client.loading());
+    QTRY_VERIFY(peer->canReadLine());
+    const auto retry = readRequest(peer);
+    QCOMPARE(retry.value("operation").toString(), QStringLiteral("weather.set-location"));
+    QCOMPARE(retry.value("payload").toObject().value("location").toObject().value("id").toString(), QStringLiteral("B"));
+    peer->disconnectFromServer();
+    QTRY_VERIFY(!client.connected());
+    QTRY_VERIFY(!client.errorMessage().isEmpty());
+    QVERIFY(!client.ready());
+    QVERIFY(!client.loading());
+}
 
 void WeatherClientTest::initTestCase()
 {

@@ -90,10 +90,14 @@ private:
     QFileSystemWatcher m_watcher;
     QTimer m_reconnectTimer;
     QTimer m_snapshotFallbackTimer;
+    QTimer m_locationTimer;
     QByteArray m_readBuffer;
     QQueue<QByteArray> m_pendingRequests;
     QHash<QString, QString> m_requestOperations;
+    QHash<QString, quint64> m_requestGenerations;
     quint64 m_requestSerial = 0;
+    quint64 m_locationGeneration = 0;
+    QVariantMap m_requestedLocation;
 
     bool m_ready = false;
     bool m_loading = false;
