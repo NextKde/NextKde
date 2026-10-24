@@ -955,7 +955,10 @@ KosApplicationWindow {
         width: 512
         height: 512
         property var staticStamps: []
+        property var filmBands: []
+        property var filmBlobs: []
         property var slideDrops: []
+        property bool stampsBuilt: false
         // R133：滑痕状态模型（每滴一段 top/bottom，≤48px）。Canvas 2D context 只在
         // onPaint 内有效——旧实现在 advanceSlides 里直接 ctx.clearRect 不生效（探针实测
         // 水图在 8s 时仍无任何滑痕）。改为「状态 + onPaint 重建」，滑动时才 requestPaint。
@@ -969,6 +972,9 @@ KosApplicationWindow {
         Component.onCompleted: if (offsetSpriteImage.status === Image.Ready) requestPaint()
 
         function buildStamps() {
+            // 批 13｜"去气泡化"：真实雨打玻璃 = 微珠为主 + 水膜连片 + 形状不规则。
+            // 尺寸分布 90% 1–3px / 8% 3–8px / 2% 8–14px，总数 ≈1400（512² 水图）。
+            // 铺放：格 28px、抖动 ±60%、逐列错位（禁止横平竖直）。
             const stamps = []
             let seed = 20261024
             function rnd() {
@@ -978,36 +984,101 @@ KosApplicationWindow {
                 t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t
                 return ((t ^ (t >>> 14)) >>> 0) / 4294967296
             }
-            const cell = 40
+            const cell = 28
             const cols = Math.ceil(width / cell)
             const rows = Math.ceil(height / cell)
-            // 主层 ~160 颗（16–26px）：格内抖动 ±40%，每列独立错位破坏整齐感。
+            const target = 1400
             let placed = 0
-            for (let row = 0; row < rows && placed < 160; row++) {
-                for (let col = 0; col < cols && placed < 160; col++) {
-                    if (rnd() < 0.05)
-                        continue
-                    const jx = (rnd() - 0.5) * cell * 0.8
-                    const jy = (rnd() - 0.5) * cell * 0.8
-                    const colShift = ((col * 7) % 5 - 2) * 7
+            for (let row = 0; row < rows && placed < target; row++) {
+                for (let col = 0; col < cols && placed < target; col++) {
+                    const jx = (rnd() - 0.5) * cell * 1.2
+                    const jy = (rnd() - 0.5) * cell * 1.2
+                    const colShift = ((col * 11) % 7 - 3) * 3.5
+                    // 尺寸三档：90% 微珠 / 8% 中珠 / 2% 大珠。
+                    const roll = rnd()
+                    let size
+                    let shape
+                    let stretch
+                    if (roll < 0.90) {
+                        size = 1 + rnd() * 2
+                        shape = 0
+                        stretch = 1.0
+                    } else if (roll < 0.98) {
+                        size = 3 + rnd() * 5
+                        shape = 1
+                        stretch = rnd() < 0.6 ? 1.15 : 1.6
+                    } else {
+                        size = 8 + rnd() * 6
+                        shape = rnd() < 0.25 ? 2 : (rnd() < 0.6 ? 1 : 0)
+                        stretch = shape === 2 ? 1.0 : 1.15
+                    }
+                    // 微珠折射弱（避免整片发亮）：α 随直径缩放。
+                    const alpha = size < 3 ? 0.55 : (size < 8 ? 0.85 : 1.0)
                     stamps.push({
                         x: col * cell + cell / 2 + jx + colShift,
                         y: row * cell + cell / 2 + jy,
-                        size: 16 + rnd() * 10,
-                        alpha: 1.0
+                        size: size,
+                        stretch: stretch,
+                        alpha: alpha,
+                        shape: shape,
+                        lump: shape === 2 ? 3 + Math.floor(rnd() * 3) : 0
                     })
                     placed++
                 }
             }
-            // 远层 ~90 颗（9–13px，UV×1.85 → 视觉上更小更淡）。
-            for (let i = 0; i < 90; i++)
-                stamps.push({ x: rnd() * width, y: rnd() * height,
-                              size: 9 + rnd() * 4, alpha: 0.55 })
-            // 冷凝小点 ~200 颗（1–3px，α 极低）。
-            for (let i = 0; i < 200; i++)
-                stamps.push({ x: rnd() * width, y: rnd() * height,
-                              size: 1 + rnd() * 2, alpha: 0.18 })
             staticStamps = stamps
+
+            // 水膜细带：相互距离 <6px 的水珠用 1–2px、α 0.05–0.12 的细带连起来，
+            // 使水珠成片而非孤立。用格哈希做邻域查询，避免 1400² 全比较。
+            const bands = []
+            const HASH = 8
+            const buckets = {}
+            for (let i = 0; i < stamps.length; i++) {
+                const s = stamps[i]
+                const key = Math.floor(s.x / HASH) + ":" + Math.floor(s.y / HASH)
+                if (!buckets[key])
+                    buckets[key] = []
+                buckets[key].push(i)
+            }
+            for (let i = 0; i < stamps.length; i++) {
+                const a = stamps[i]
+                const gx = Math.floor(a.x / HASH)
+                const gy = Math.floor(a.y / HASH)
+                for (let ox = -1; ox <= 1; ox++) {
+                    for (let oy = -1; oy <= 1; oy++) {
+                        const list = buckets[(gx + ox) + ":" + (gy + oy)]
+                        if (!list)
+                            continue
+                        for (let k = 0; k < list.length; k++) {
+                            const j = list[k]
+                            if (j <= i)
+                                continue
+                            const b = stamps[j]
+                            const d = Math.hypot(a.x - b.x, a.y - b.y)
+                            if (d >= 6)
+                                continue
+                            bands.push({
+                                x1: a.x, y1: a.y, x2: b.x, y2: b.y,
+                                width: 1 + rnd(),
+                                alpha: 0.05 + rnd() * 0.07
+                            })
+                        }
+                    }
+                }
+            }
+            filmBands = bands
+            // 整体水膜底噪：低频、横向略拉长的柔斑（α 0.03–0.05）。
+            const blobs = []
+            for (let i = 0; i < 26; i++) {
+                blobs.push({
+                    x: rnd() * width,
+                    y: rnd() * height,
+                    w: 40 + rnd() * 90,
+                    h: 16 + rnd() * 28,
+                    alpha: 0.03 + rnd() * 0.02
+                })
+            }
+            filmBlobs = blobs
 
             // 下滑水珠 14 颗（裁决 12–20）：粘住 3–6s → 0.3–0.8s 纯垂直滑落，
             // 每次滑 70–180px；y 函数用取模，滑到底自动从顶部附近重新出现。
@@ -1020,15 +1091,39 @@ KosApplicationWindow {
                     stick: 3 + rand2() * 3,
                     slide: 0.3 + rand2() * 0.5,
                     dist: 70 + rand2() * 110,
-                    size: 8 + rand2() * 6
+                    // 批 13：下滑珠也不能是"气泡"——收到 3–5px（屏上 ≈7–12px），
+                    // 与 90% 微珠同量级，只做"少数会滑"的例外。
+                    size: 3 + rand2() * 2
                 })
             }
             slideDrops = drops
+            stampsBuilt = true
         }
 
         function stampAt(ctx, x, y, size, alpha) {
             ctx.globalAlpha = alpha
             ctx.drawImage(offsetSpriteImage, x - size / 2, y - size / 2, size, size)
+        }
+
+        // 批 13 形状：0 = 竖向椭圆 1:1.15，1 = 明显拉长 1:1.6，2 = 不规则轮廓
+        // （用 3–5 个错位小副本叠出非正圆轮廓，仍是 drawImage，不引入逐滴路径）。
+        function stampShape(ctx, s) {
+            const w = s.size
+            const h = s.size * s.stretch
+            ctx.globalAlpha = s.alpha
+            ctx.drawImage(offsetSpriteImage, s.x - w / 2, s.y - h / 2, w, h)
+            if (s.shape === 2) {
+                for (let i = 0; i < s.lump; i++) {
+                    const a = (i / s.lump) * Math.PI * 2 + s.x
+                    const off = s.size * 0.28
+                    const lw = w * 0.55
+                    const lh = h * 0.55
+                    ctx.globalAlpha = s.alpha * 0.55
+                    ctx.drawImage(offsetSpriteImage,
+                                  s.x + Math.cos(a) * off - lw / 2,
+                                  s.y + Math.sin(a) * off - lh / 2, lw, lh)
+                }
+            }
         }
 
         function slideY(drop) {
@@ -1092,19 +1187,46 @@ KosApplicationWindow {
             ctx.fillRect(0, 0, width, height)
             if (offsetSpriteImage.status !== Image.Ready)
                 return
-            buildStamps()
+            // 批 13：1400 颗 + 水膜细带的布局只算一次，滑落重绘直接复用（不每帧重建）。
+            if (!stampsBuilt)
+                buildStamps()
+            // 水膜底噪：横向拉长的低频柔斑（α 0.03–0.05），让水珠之间不是干玻璃。
+            for (let i = 0; i < filmBlobs.length; i++) {
+                const b = filmBlobs[i]
+                ctx.globalAlpha = b.alpha
+                ctx.fillStyle = "#ffffff"
+                ctx.beginPath()
+                ctx.ellipse(b.x, b.y, b.w / 2, b.h / 2, 0, 0, Math.PI * 2)
+                ctx.fill()
+            }
+            ctx.globalAlpha = 1
             if (slideTrail.length !== slideDrops.length)
                 slideTrail = []
             if (!root.probeFilmOnly) {
-                for (let i = 0; i < staticStamps.length; i++) {
-                    const s = staticStamps[i]
-                    stampAt(ctx, s.x, s.y, s.size, s.alpha)
+                // 水膜细带：距离 <6px 的水珠连起来，成片而不是孤立珠子。
+                ctx.strokeStyle = "#ffffff"
+                ctx.lineCap = "round"
+                for (let i = 0; i < filmBands.length; i++) {
+                    const b = filmBands[i]
+                    ctx.globalAlpha = b.alpha
+                    ctx.lineWidth = b.width
+                    ctx.beginPath()
+                    ctx.moveTo(b.x1, b.y1)
+                    ctx.lineTo(b.x2, b.y2)
+                    ctx.stroke()
                 }
+                ctx.globalAlpha = 1
+                for (let i = 0; i < staticStamps.length; i++)
+                    stampShape(ctx, staticStamps[i])
+                ctx.globalAlpha = 1
             }
             // 滑痕：在静态水珠之上擦掉一段窄带（薄膜 + 水珠一起去掉）→ shader 里 film=0/A=0。
-            // 用 destination-out 画圆头胶囊（宽 ≈ 珠径 0.7、两端半圆），避免出现硬边矩形。
+            // 批 13：滑痕 2–4px 宽、≥40px 长，是"擦干净的亮带"而非白线。
             ctx.globalCompositeOperation = "destination-out"
-            ctx.strokeStyle = "rgba(0,0,0,0.92)"
+            // R137：原本 α 0.92 → 擦完残 a≈0.044，而 shader 里 film=B/A 仍为 1.0，
+            // 压暗项 film*(1-cov) 反而最大 → 滑痕被画成**深色直条**（实测 107 vs 背景 130）。
+            // 必须擦到 a=0（cov=0 且 film=0），才是批 12 要的"擦干净的亮带"。
+            ctx.strokeStyle = "rgba(0,0,0,1)"
             ctx.lineCap = "round"
             for (let i = 0; i < slideDrops.length; i++) {
                 const t = slideTrail[i]
@@ -1112,14 +1234,18 @@ KosApplicationWindow {
                     continue
                 const x = slideDrops[i].x
                 const half = slideDrops[i].size / 2 + 1
-                ctx.lineWidth = slideDrops[i].size * 0.7
+                const top = t.top + half
+                const bottom = Math.max(top + 40, t.bottom - half)
+                // 擦带 2–4px：取珠径 0.35 并夹在 [2,4]。
+                ctx.lineWidth = Math.min(4, Math.max(2, slideDrops[i].size * 0.35))
                 ctx.beginPath()
-                ctx.moveTo(x, t.top + half)
-                ctx.lineTo(x, Math.max(t.top + half, t.bottom - half))
+                ctx.moveTo(x, top)
+                ctx.lineTo(x, bottom)
                 ctx.stroke()
             }
             ctx.globalCompositeOperation = "source-over"
             // 头部水珠仍是折射水珠（offset map），不是白色拖尾。
+            // 批 13：擦完的亮带尾部留 1–2 颗小水珠（2–4px），模拟残水。
             slideLastY = []
             if (!root.probeFilmOnly) {
                 for (let i = 0; i < slideDrops.length; i++) {
@@ -1127,6 +1253,14 @@ KosApplicationWindow {
                     const y = slideY(drop)
                     slideLastY[i] = y
                     stampAt(ctx, drop.x, y, drop.size, 1.0)
+                    const t = slideTrail[i]
+                    if (t) {
+                        const bottom = Math.min(y - drop.size, t.bottom - 6)
+                        if (bottom > t.top + 10) {
+                            stampAt(ctx, drop.x + 1.5, bottom - 4, 3.5, 0.7)
+                            stampAt(ctx, drop.x - 1.5, bottom - 14, 2.5, 0.5)
+                        }
+                    }
                 }
             }
             ctx.globalAlpha = 1
