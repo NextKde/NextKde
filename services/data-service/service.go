@@ -21,6 +21,10 @@ type Service struct {
 	desktopDirectory        string
 	weatherProvider         WeatherProvider
 	weatherRequestSerial    uint64
+	// weatherCache keeps the last successful snapshot per location+units so
+	// switching cities shows real content immediately instead of blanking the
+	// window for a network round-trip. Guarded by mu.
+	weatherCache map[string]cachedWeather
 	// weatherFailStreak counts consecutive forecast fetch failures and drives
 	// the exponential retry backoff. Guarded by s.mu.
 	weatherFailStreak int

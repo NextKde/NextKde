@@ -728,3 +728,73 @@ func TestFailedWeatherRefreshBacksOffAndGatesNextTick(t *testing.T) {
 		}
 	})
 }
+
+// Switching back to a city the user already visited must paint from cache
+// instead of wiping the snapshot and waiting on the network again.
+func TestWeatherLocationSwitchServesCachedSnapshot(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		directory := t.TempDir()
+		state := defaultWeatherState()
+		state.Location = WeatherLocation{ID: "city-a", Name: "A"}
+		service := &Service{
+			state:           State{Weather: state},
+			statePath:       filepath.Join(directory, "state.json"),
+			snapshotPath:    filepath.Join(directory, "snapshot.json"),
+			weatherProvider: fixedWeatherProvider{temperature: 21},
+			last:            time.Now(),
+		}
+
+		if !service.startWeatherRefresh(true) {
+			t.Fatal("initial refresh was not accepted")
+		}
+		synctest.Wait()
+		if service.state.Weather.Current == nil {
+			t.Fatal("initial fetch did not populate current conditions")
+		}
+
+		// Visit a second city: nothing is cached yet, so the snapshot is wiped
+		// and marked loading, but the fetch must be accepted even though a
+		// previous request just finished.
+		if err := service.setWeatherLocation(WeatherLocation{ID: "city-b", Name: "B"}); err != nil {
+			t.Fatalf("setWeatherLocation(B): %v", err)
+		}
+		synctest.Wait()
+
+		// Back to the first city: content must be present immediately, without
+		// waiting for synctest.Wait() / the network.
+		if err := service.setWeatherLocation(WeatherLocation{ID: "city-a", Name: "A"}); err != nil {
+			t.Fatalf("setWeatherLocation(A): %v", err)
+		}
+		weather := service.state.Weather
+		if weather.Current == nil {
+			t.Fatal("cached city snapshot was not restored on switch")
+		}
+		// The background refresh may already have flipped the status to loading;
+		// what matters is that content is present without waiting for the network.
+		if weather.Status != weatherStatusReady && weather.Status != weatherStatusLoading {
+			t.Fatalf("status = %q, want ready or loading", weather.Status)
+		}
+		synctest.Wait()
+		if got := service.state.Weather.Status; got != weatherStatusReady {
+			t.Fatalf("status after refresh = %q, want %q", got, weatherStatusReady)
+		}
+	})
+}
+
+type fixedWeatherProvider struct{ temperature float64 }
+
+func (p fixedWeatherProvider) Forecast(context.Context, WeatherLocation, string) (WeatherForecast, error) {
+	return WeatherForecast{
+		Current: &WeatherCurrent{Time: "now", Temperature: p.temperature},
+		Hourly:  []WeatherHourlyPoint{{Time: "now", Temperature: p.temperature}},
+		Daily:   []WeatherDay{{Date: "today", TemperatureMaximum: p.temperature + 3, TemperatureMinimum: p.temperature - 3}},
+	}, nil
+}
+
+func (fixedWeatherProvider) Search(context.Context, string, string, int) ([]WeatherLocation, error) {
+	return nil, nil
+}
+
+func (fixedWeatherProvider) Summaries(context.Context, []WeatherLocation, string) (map[string]WeatherLocationSummary, error) {
+	return map[string]WeatherLocationSummary{}, nil
+}

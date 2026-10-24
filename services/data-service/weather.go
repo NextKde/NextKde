@@ -32,6 +32,8 @@ const (
 	// 30min instead of spawning an HTTP request on every 10s tick.
 	weatherBackoffBase = time.Minute
 	weatherBackoffMax  = 30 * time.Minute
+	// maxCachedWeather bounds the per-location snapshot cache held in memory.
+	maxCachedWeather = 20
 )
 
 type WeatherLocation struct {
@@ -138,6 +140,18 @@ type WeatherState struct {
 	AirQuality    *WeatherAirQuality   `json:"airQuality,omitempty"`
 	Hourly        []WeatherHourlyPoint `json:"hourly"`
 	Daily         []WeatherDay         `json:"daily"`
+}
+
+// cachedWeather is an in-memory snapshot of one location's forecast, used to
+// paint the window instantly when the user switches back to a city.
+type cachedWeather struct {
+	Units      string
+	Current    *WeatherCurrent
+	AirQuality *WeatherAirQuality
+	Hourly     []WeatherHourlyPoint
+	Daily      []WeatherDay
+	FetchedAt  int64
+	StaleAt    int64
 }
 
 type WeatherForecast struct {
@@ -673,6 +687,65 @@ func weatherErrorMessage(err error) string {
 	return message
 }
 
+// weatherCacheKey scopes snapshots by location and units so metric and imperial
+// readings of the same city are never mixed.
+func weatherCacheKey(locationID, units string) string {
+	return locationID + "|" + units
+}
+
+// rememberWeatherLocked stores the current weather snapshot for the active
+// location. Caller holds s.mu.
+func (s *Service) rememberWeatherLocked(locationID, units string) {
+	if locationID == "" {
+		return
+	}
+	weather := &s.state.Weather
+	if weather.Current == nil {
+		return
+	}
+	if s.weatherCache == nil {
+		s.weatherCache = make(map[string]cachedWeather, 8)
+	}
+	key := weatherCacheKey(locationID, units)
+	s.weatherCache[key] = cachedWeather{
+		Units:      units,
+		Current:    weather.Current,
+		AirQuality: weather.AirQuality,
+		Hourly:     weather.Hourly,
+		Daily:      weather.Daily,
+		FetchedAt:  weather.FetchedAt,
+		StaleAt:    weather.StaleAt,
+	}
+	for len(s.weatherCache) > maxCachedWeather {
+		for stale := range s.weatherCache {
+			if stale != key {
+				delete(s.weatherCache, stale)
+				break
+			}
+		}
+	}
+}
+
+// applyCachedWeatherLocked restores the cached snapshot for the location the
+// user just selected. It reports whether content was restored. Caller holds s.mu.
+func (s *Service) applyCachedWeatherLocked() bool {
+	if len(s.weatherCache) == 0 {
+		return false
+	}
+	weather := &s.state.Weather
+	cached, ok := s.weatherCache[weatherCacheKey(weather.Location.ID, weather.Units)]
+	if !ok || cached.Current == nil {
+		return false
+	}
+	weather.Current = cached.Current
+	weather.AirQuality = cached.AirQuality
+	weather.Hourly = cached.Hourly
+	weather.Daily = cached.Daily
+	weather.FetchedAt = cached.FetchedAt
+	weather.StaleAt = cached.StaleAt
+	return true
+}
+
 func (s *Service) setWeatherLocation(location WeatherLocation) error {
 	normalized, err := normalizeWeatherLocation(location)
 	if err != nil {
@@ -696,14 +769,24 @@ func (s *Service) setWeatherLocation(location WeatherLocation) error {
 	if len(s.state.Weather.Locations) > 20 {
 		s.state.Weather.Locations = s.state.Weather.Locations[len(s.state.Weather.Locations)-20:]
 	}
-	s.state.Weather.Status = weatherStatusIdle
-	s.state.Weather.Error = ""
-	s.state.Weather.Current = nil
-	s.state.Weather.Hourly = []WeatherHourlyPoint{}
-	s.state.Weather.Daily = []WeatherDay{}
-	s.state.Weather.FetchedAt = 0
 	s.state.Weather.NextRefreshAt = 0
-	s.state.Weather.StaleAt = 0
+	s.state.Weather.Error = ""
+	if s.applyCachedWeatherLocked() {
+		// The user already visited this city: publish its snapshot right away and
+		// refresh in the background. Content stays on screen while loading.
+		s.state.Weather.Status = weatherStatusReady
+	} else {
+		s.state.Weather.Current = nil
+		s.state.Weather.AirQuality = nil
+		s.state.Weather.Hourly = []WeatherHourlyPoint{}
+		s.state.Weather.Daily = []WeatherDay{}
+		s.state.Weather.FetchedAt = 0
+		s.state.Weather.StaleAt = 0
+		// Announce the fetch before it starts so the UI can show its loading
+		// feedback instead of a blank, wiped snapshot.
+		s.state.Weather.Status = weatherStatusLoading
+		s.state.Weather.LastAttemptAt = time.Now().UnixMilli()
+	}
 	s.mu.Unlock()
 	s.persist()
 	s.publishWeather()
@@ -744,7 +827,11 @@ func (s *Service) startWeatherRefresh(force bool) bool {
 	// Normalize persisted state once at startup. Doing it here clears a live
 	// loading marker and allows every tick to supersede the in-flight request.
 	weather := &s.state.Weather
-	if weather.Status == weatherStatusLoading {
+	// A user-initiated refresh (force) may supersede an in-flight fetch: the
+	// serial bump below invalidates the older response. Without this, switching
+	// cities while a fetch is running was silently dropped and the window sat
+	// blank until the previous city's request finished.
+	if weather.Status == weatherStatusLoading && !force {
 		s.mu.Unlock()
 		return false
 	}
@@ -873,6 +960,9 @@ func (s *Service) fetchWeather(serial uint64, provider WeatherProvider, location
 				weather.Locations[index].Summary = &summary
 			}
 		}
+	}
+	if err == nil && weather.Current != nil {
+		s.rememberWeatherLocked(weather.Location.ID, weather.Units)
 	}
 	s.mu.Unlock()
 	s.persist()
