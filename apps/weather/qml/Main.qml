@@ -245,6 +245,44 @@ KosApplicationWindow {
     }
     readonly property real cloudCoverOpacity: 0.25 + 0.75 * root.cloudCover
 
+    // 批 4｜大气洗层（用户 2026-10-24）：雾/霾/沙尘半透 wash，按 weatherCode 开关，
+    // opacity 0.12–0.30（裁决区间）。Open-Meteo 无霾/沙尘码，WMO 30–35 按沙尘处理；
+    // 45/48 为雾/雾凇。静态层，无动画（reduceMotion 天然满足）。
+    readonly property var atmosphereWash: {
+        const code = root.currentWeatherCode
+        if (code === 45) return { color: "#d8dee6", alpha: 0.30 }       // fog
+        if (code === 48) return { color: "#c9d6e2", alpha: 0.26 }       // depositing rime fog
+        if (code >= 30 && code <= 35) return { color: "#c4a678", alpha: 0.24 } // dust / sand
+        return { color: "#d8dee6", alpha: 0 }
+    }
+    readonly property real atmosphereWashAlpha: root.atmosphereWash.alpha
+    readonly property color atmosphereWashColor: root.atmosphereWash.color
+
+    // 批 4｜夜空月亮：按 moonPhase 相位绘制，位置随时间（月相决定月中天时刻——
+    // 新月≈12:00、满月≈00:00，故 transit = 12:00 + 24h×phase）。天顶/地平弧与
+    // ±6h 可见窗口为天文近似推导值（无星历表，记 LEDGER 外推）。
+    readonly property real moonPhaseNorm: {
+        const v = root.number(backend.current, "moonPhase", Number.NaN)
+        return Number.isFinite(v) ? ((v % 1) + 1) % 1 : 0.5
+    }
+    readonly property int moonClockMinute: {
+        const t = root.clockMinutes(root.value(backend.current, "time", ""))
+        return Number.isNaN(t) ? 720 : t
+    }
+    readonly property int moonTransitMinute: (720 + Math.round(1440 * root.moonPhaseNorm)) % 1440
+    readonly property real moonDeltaMinute: {
+        let d = root.moonClockMinute - root.moonTransitMinute
+        while (d > 720) d -= 1440
+        while (d < -720) d += 1440
+        return d
+    }
+    readonly property bool moonVisible: !root.currentIsDay
+        && Math.abs(root.moonDeltaMinute) < 360
+        && root.cloudCover < 0.9
+    readonly property real moonXRatio: 0.5 + (root.moonDeltaMinute / 720) * 0.72
+    readonly property real moonYRatio:
+        0.09 + 0.40 * (1 - Math.cos(Math.min(Math.abs(root.moonDeltaMinute) / 360, 1) * Math.PI / 2))
+
     // 三层云参数。driftMs = 基准 9000ms / 速度比 → 前 9000 / 中 16364 / 后 30000。
     // maxCount 为 100% 覆盖时的满额朵数，实际朵数 = round(maxCount × cloudCover)。
     readonly property var cloudLayers: [
@@ -878,6 +916,92 @@ KosApplicationWindow {
         }
     }
 
+    // 批 4｜夜空月亮（用户 2026-10-24）：相位取自 backend.moonPhase（与月相卡同源），
+    // 位置由「当前时刻距月中天的小时角」决定——横向扫过 0.14–0.86，纵向沿余弦弧
+    // 从 0.09（中天）落到 0.49（地平）。声明在星空之后、夜云/云层之前 → 云能从前方遮挡。
+    // 静态几何（仅随数据时间变化），reduceMotion 下无任何动画。
+    Item {
+        id: skyMoonLayer
+        visible: root.moonVisible
+        clip: true
+        Accessible.ignored: true
+        readonly property int diameter: Math.max(24, Math.round(64 * AppTheme.densityScale))
+        x: (parent.width - diameter) * root.moonXRatio
+        y: parent.height * root.moonYRatio
+        width: diameter
+        height: diameter
+
+        Canvas {
+            id: skyMoonCanvas
+            anchors.fill: parent
+            property real phase: root.moonPhaseNorm
+            antialiasing: true
+            contextType: "2d"
+            onPhaseChanged: requestPaint()
+            onWidthChanged: requestPaint()
+            onHeightChanged: requestPaint()
+            onPaint: {
+                const ctx = getContext("2d")
+                ctx.reset()
+                const r = width / 2
+                const c = r
+                // 外晕：夜间月亮的柔光（静态渐变）
+                const glow = ctx.createRadialGradient(c, c, r * 0.85, c, c, r * 1.9)
+                glow.addColorStop(0, "rgba(196,216,248,0.30)")
+                glow.addColorStop(1, "rgba(196,216,248,0)")
+                ctx.fillStyle = glow
+                ctx.beginPath()
+                ctx.arc(c, c, r * 1.9, 0, Math.PI * 2)
+                ctx.fill()
+                // 暗面：深蓝灰实影（与月相卡同族）
+                ctx.beginPath()
+                ctx.arc(c, c, r * 0.78, 0, Math.PI * 2)
+                ctx.fillStyle = "rgba(30,48,82,0.55)"
+                ctx.fill()
+                // 亮面：相位剪影（盈月亮在右、亏月亮在左；带符号 cosT 区分蛾眉/凸月）
+                const p = phase
+                const cosT = Math.cos(2 * Math.PI * p)
+                const waxing = p < 0.5
+                const rr = r * 0.78
+                ctx.save()
+                ctx.beginPath()
+                ctx.arc(c, c, rr, 0, Math.PI * 2)
+                ctx.clip()
+                ctx.beginPath()
+                if (waxing)
+                    ctx.arc(c, c, rr, -Math.PI / 2, Math.PI / 2, false)
+                else
+                    ctx.arc(c, c, rr, -Math.PI / 2, Math.PI / 2, true)
+                const steps = 32
+                for (let i = 0; i <= steps; i++) {
+                    const a = Math.PI / 2 - (Math.PI * i / steps)
+                    const ex = waxing ? cosT * rr * Math.cos(a) : -cosT * rr * Math.cos(a)
+                    ctx.lineTo(c + ex, c + rr * Math.sin(a))
+                }
+                ctx.closePath()
+                ctx.fillStyle = "#dbe8fb"
+                ctx.fill()
+                // 确定性环形山（无随机，保证帧差稳定）
+                const craters = [
+                    { x: 0.42, y: 0.40, r: 0.10 },
+                    { x: 0.60, y: 0.52, r: 0.07 },
+                    { x: 0.50, y: 0.64, r: 0.05 },
+                    { x: 0.36, y: 0.58, r: 0.045 },
+                    { x: 0.58, y: 0.32, r: 0.04 }
+                ]
+                ctx.fillStyle = "rgba(150,175,208,0.28)"
+                for (let i = 0; i < craters.length; i++) {
+                    const k = craters[i]
+                    ctx.beginPath()
+                    ctx.arc(c + (k.x - 0.5) * rr * 2, c + (k.y - 0.5) * rr * 2,
+                            k.r * rr, 0, Math.PI * 2)
+                    ctx.fill()
+                }
+                ctx.restore()
+            }
+        }
+    }
+
     // Static procedural faint cloud band for the clear night sky (see
     // nightClearClouds), added per user ruling 2026-10-18. No night reference
     // image exists (refs are day-only), so geometry/opacity is a programmatic
@@ -1158,6 +1282,17 @@ KosApplicationWindow {
     CloudLayer { id: cloudBackLayer; clouds: root.cloudFieldBack }
     CloudLayer { id: cloudMidLayer; clouds: root.cloudFieldMid }
     CloudLayer { id: cloudFrontLayer; clouds: root.cloudFieldFront }
+
+    // 批 4｜大气洗层（雾/雾凇/沙尘）：位于云层之上、闪电之下，蒙住整个天空。
+    // 纯静态半透填充，无动画。
+    Rectangle {
+        id: atmosphereWashLayer
+        anchors.fill: parent
+        visible: root.atmosphereWashAlpha > 0
+        color: root.atmosphereWashColor
+        opacity: root.atmosphereWashAlpha
+        Accessible.ignored: true
+    }
 
     // 批 3｜闪电（用户 2026-10-24）：全屏白闪 → 随机落点折线闪电 + 局部辉光
     // + 极淡全屏洗层；落点/分叉/各段持续时长/间隔全部随机化；
@@ -1757,8 +1892,9 @@ KosApplicationWindow {
                     BusyIndicator {
                         Layout.preferredWidth: 24
                         Layout.preferredHeight: 24
-                        running: backend.loading
-                        visible: running
+                        // 批 4｜Reduce Motion 逐层覆盖：加载指示器也不许旋转（§2.12）
+                        running: backend.loading && !AppTheme.reduceMotion
+                        visible: backend.loading
                     }
 
                     Item { Layout.fillWidth: true }
