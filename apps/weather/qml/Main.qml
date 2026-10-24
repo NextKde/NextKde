@@ -299,11 +299,15 @@ KosApplicationWindow {
     // 批 4｜大气洗层（用户 2026-10-24）：雾/霾/沙尘半透 wash，按 weatherCode 开关，
     // opacity 0.12–0.30（裁决区间）。Open-Meteo 无霾/沙尘码，WMO 30–35 按沙尘处理；
     // 45/48 为雾/雾凇。静态层，无动画（reduceMotion 天然满足）。
+    // R141｜§2.10：wash 把天空整体抬亮，白 α0.14 卡底上的白字被拉到 3.60:1、
+    // muted α0.86 到 3.10:1（雾天实测，见 LEDGER 仍差④）。wash 与卡底亮度是乘法关系，
+    // 单靠压深天空要压到 L≈0.15×（近黑）才够 4.5:1，会把雾天做成夜景。
+    // 故取裁决区间下限 **0.12**（原 0.30/0.26/0.24），配合 day 雾天天空压深一档。
     readonly property var atmosphereWash: {
         const code = root.currentWeatherCode
-        if (code === 45) return { color: "#d8dee6", alpha: 0.30 }       // fog
-        if (code === 48) return { color: "#c9d6e2", alpha: 0.26 }       // depositing rime fog
-        if (code >= 30 && code <= 35) return { color: "#c4a678", alpha: 0.24 } // dust / sand
+        if (code === 45) return { color: "#d8dee6", alpha: 0.12 }       // fog
+        if (code === 48) return { color: "#c9d6e2", alpha: 0.12 }       // depositing rime fog
+        if (code >= 30 && code <= 35) return { color: "#c4a678", alpha: 0.12 } // dust / sand
         return { color: "#d8dee6", alpha: 0 }
     }
     readonly property real atmosphereWashAlpha: root.atmosphereWash.alpha
@@ -581,7 +585,12 @@ KosApplicationWindow {
         // ["#6a7b90","#4a5d75","#8ba0b5"] 是"粗糙感"来源之一（ref 顶部云隙间仍为饱和蓝）。
         // R140｜§2.10：晴/多云档沿用 ref-main 色相，仅按 HLS 明度二分压深到「白 α0.16 卡底上
         // 白字 ≥4.5:1 且 muted α0.86 ≥4.5:1」，故比 ref 饱和蓝暗一档（见 LEDGER 外推）。
-        if (c === 3 || c === 45 || c === 48) return ["#324b69", "#104b8b", "#0a4c8c"]
+        // R141｜§2.10 雾/霾/沙尘：大气洗层（α0.12）把天空整体抬亮，白 α0.14 卡底上的
+        // muted α0.86 实测仅 3.10:1。洗层已取裁决下限 0.12，天空再按 HLS 明度 ×0.85
+        // （雾/雾凇）/ ×0.95（沙尘）压深一档，实测回到 4.51–4.54:1（见 LEDGER 已改 R141）。
+        if (c === 45 || c === 48) return ["#2a4059", "#0e4076", "#084177"]
+        if (c >= 30 && c <= 35) return ["#2e4769", "#0d4982", "#24486e"]
+        if (c === 3) return ["#324b69", "#104b8b", "#0a4c8c"]
         return ["#304b6f", "#0e4d89", "#264c74"]   // clear / mainly clear / partly cloudy day（R140 压深）
     }
 
