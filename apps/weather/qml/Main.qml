@@ -224,41 +224,80 @@ KosApplicationWindow {
         return flakes
     }
 
+    // 批 2｜云层分层与参数化（用户 2026-10-24）：单层 → 前/中/后三层，
+    // 速度比 前:中:后 = 1 : 0.55 : 0.3（前最快），透明度随深度递减（后层更淡）。
+    // 云朵数量与不透明度接 cloudCover（0% 无云、100% 满覆盖），不再写死随机数。
+    // backend WeatherCurrent 无 cloudCover 字段（services/data-service/weather.go:68），
+    // 故按 weatherCode 映射为百分比（映射表见 LEDGER 外推待确认）。
+    readonly property real cloudCover: {
+        const code = root.currentWeatherCode
+        if (code < 0) return 0
+        if (code === 0) return 0.05          // clear
+        if (code === 1) return 0.22          // mainly clear
+        if (code === 2) return 0.55          // partly cloudy
+        if (code === 3) return 0.95          // overcast
+        if (code === 45 || code === 48) return 0.85   // fog
+        if (code >= 51 && code <= 57) return 0.80     // drizzle
+        if (code >= 61 && code <= 67) return 0.90     // rain
+        if (code >= 71 && code <= 77) return 0.92     // snow
+        if (code >= 80 && code <= 82) return 0.75     // showers
+        if (code >= 95) return 0.95          // thunderstorm
+        return 0.60
+    }
+    readonly property real cloudCoverOpacity: 0.25 + 0.75 * root.cloudCover
+
+    // 三层云参数。driftMs = 基准 9000ms / 速度比 → 前 9000 / 中 16364 / 后 30000。
+    // maxCount 为 100% 覆盖时的满额朵数，实际朵数 = round(maxCount × cloudCover)。
+    readonly property var cloudLayers: [
+        { name: "back",  speed: 0.30, driftMs: 30000, depthOpacity: 0.55,
+          maxCount: 5, wMin: 260, wRange: 200, hRatio: 0.24, yMax: 0.10, alphaBase: 0.16, alphaRange: 0.10 },
+        { name: "mid",   speed: 0.55, driftMs: 16364, depthOpacity: 0.78,
+          maxCount: 5, wMin: 220, wRange: 160, hRatio: 0.30, yMax: 0.22, alphaBase: 0.22, alphaRange: 0.12 },
+        { name: "front", speed: 1.00, driftMs: 9000,  depthOpacity: 1.00,
+          maxCount: 4, wMin: 150, wRange: 170, hRatio: 0.38, yMax: 0.32, alphaBase: 0.30, alphaRange: 0.18 }
+    ]
+
     // Cloud puffs: fixed-seed PRNG so the layout is identical on every
-    // launch; each cloud drifts across the full screen (HIG ambient loop
-    // 2-12s: one crossing takes 8-12s). ref-main 观感拟合（用户第二批背景轮）：
-    // 云deck集中在顶部 ~50%（ref 云带在 top 8-45%），分两层——后层大而淡的云堤 +
-    // 前层较实的结构云（paint 时分层出阴影底/受光顶，光源左上 §2.7）。
+    // launch; each cloud drifts across the full screen. ref-main 观感拟合（用户第二批背景轮）：
+    // 云deck集中在顶部 ~50%（ref 云带在 top 8-45%），三层——后层大而淡的云堤、
+    // 中层过渡、前层较实的结构云（paint 时分层出阴影底/受光顶，光源左上 §2.7）。
     readonly property var cloudField: {
         const random = mulberry32(20261019)
         const clouds = []
-        for (let index = 0; index < 7; index++) {
-            const backBank = index < 3
-            const cloudWidth = backBank ? 260 + random() * 200 : 150 + random() * 170
-            const driftMs = 8000 + random() * 4000
-            const puffs = []
-            for (let puff = 0; puff < 5; puff++) {
-                puffs.push({
-                    cxRatio: 0.15 + random() * 0.7,
-                    cyRatio: 0.35 + random() * 0.35,
-                    rRatio: 0.28 + random() * 0.22,
-                    alphaMul: 0.6 + random() * 0.4
+        for (let layerIndex = 0; layerIndex < root.cloudLayers.length; layerIndex++) {
+            const spec = root.cloudLayers[layerIndex]
+            const count = Math.round(spec.maxCount * root.cloudCover)
+            for (let index = 0; index < count; index++) {
+                const cloudWidth = spec.wMin + random() * spec.wRange
+                const puffs = []
+                for (let puff = 0; puff < 5; puff++) {
+                    puffs.push({
+                        cxRatio: 0.15 + random() * 0.7,
+                        cyRatio: 0.35 + random() * 0.35,
+                        rRatio: 0.28 + random() * 0.22,
+                        alphaMul: 0.6 + random() * 0.4
+                    })
+                }
+                puffs.sort(function(a, b) { return a.cxRatio - b.cxRatio })
+                clouds.push({
+                    layer: spec.name,
+                    xRatio: random(),
+                    yRatio: random() * spec.yMax,
+                    cloudWidth: cloudWidth,
+                    cloudHeight: cloudWidth * spec.hRatio,
+                    opacity: (spec.alphaBase + random() * spec.alphaRange)
+                             * spec.depthOpacity * root.cloudCoverOpacity,
+                    driftMs: spec.driftMs,
+                    phaseMs: random() * spec.driftMs,
+                    puffs: puffs
                 })
             }
-            puffs.sort(function(a, b) { return a.cxRatio - b.cxRatio })
-            clouds.push({
-                xRatio: random(),
-                yRatio: random() * 0.32,
-                cloudWidth: cloudWidth,
-                cloudHeight: cloudWidth * (backBank ? 0.24 : 0.38),
-                opacity: backBank ? 0.16 + random() * 0.10 : 0.30 + random() * 0.18,
-                driftMs: driftMs,
-                phaseMs: random() * driftMs,
-                puffs: puffs
-            })
         }
         return clouds
     }
+    readonly property var cloudFieldBack: root.cloudField.filter(function(c) { return c.layer === "back" })
+    readonly property var cloudFieldMid: root.cloudField.filter(function(c) { return c.layer === "mid" })
+    readonly property var cloudFieldFront: root.cloudField.filter(function(c) { return c.layer === "front" })
 
     // Static high cloud band for the clear day sky: a fixed-seed PRNG lays
     // out 5 soft white streaks hugging the top of the window. Streak form
@@ -1001,26 +1040,30 @@ KosApplicationWindow {
         }
     }
 
-    Item {
-        id: cloudFieldLayer
+    // 批 2｜云层三层（后/中/前，z 序由声明顺序决定：先声明者在下）。
+    // 每层独立 Repeater + 独立 driftMs，速度比 1 : 0.55 : 0.3（§3 motion 五档无
+    // 环境漂移档，时长为用户裁决的比例推导值，记 LEDGER 外推）。
+    component CloudLayer: Item {
+        id: cloudLayer
+        property var clouds: []
         anchors.fill: parent
         visible: root.cloudySky
         clip: true
 
         Repeater {
-            model: root.cloudField
+            model: cloudLayer.clouds
 
             delegate: Item {
                 id: cloud
                 required property var modelData
-                readonly property real cloudW: Math.min(modelData.cloudWidth, cloudFieldLayer.width * 0.45)
+                readonly property real cloudW: Math.min(modelData.cloudWidth, cloudLayer.width * 0.45)
 
                 // Clouds start spread across the window per the seeded xRatio so the
                 // sky is populated on the very first frame; reduce-motion leaves them
                 // parked there as static content instead of an empty sky.
-                property real entryX: modelData.xRatio * Math.max(cloudFieldLayer.width - cloudW, 0)
+                property real entryX: modelData.xRatio * Math.max(cloudLayer.width - cloudW, 0)
                 x: cloud.entryX
-                y: (cloudFieldLayer.height - height) * modelData.yRatio
+                y: (cloudLayer.height - height) * modelData.yRatio
                 width: cloudW
                 height: cloudW * (modelData.cloudHeight / modelData.cloudWidth)
                 // 夜间压暗：夜空无参考图（refs 日间 only），白云在暗天上调低存在感。
@@ -1078,7 +1121,7 @@ KosApplicationWindow {
                     // pass re-enters from the left edge after the staggered pause.
                     NumberAnimation {
                         from: cloud.entryX
-                        to: cloudFieldLayer.width + 20
+                        to: cloudLayer.width + 20
                         duration: modelData.driftMs
                         easing.type: Easing.Linear
                     }
@@ -1088,6 +1131,10 @@ KosApplicationWindow {
             }
         }
     }
+
+    CloudLayer { id: cloudBackLayer; clouds: root.cloudFieldBack }
+    CloudLayer { id: cloudMidLayer; clouds: root.cloudFieldMid }
+    CloudLayer { id: cloudFrontLayer; clouds: root.cloudFieldFront }
 
     // Stage 3 motion B.1: thunderstorm lightning flash (weather codes >= 95).
     // A rare, brief double-strobe white wash over the whole window, in the
