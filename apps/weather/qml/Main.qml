@@ -989,8 +989,14 @@ KosApplicationWindow {
             const rows = Math.ceil(height / cell)
             const target = 1400
             let placed = 0
+            // R138：原实现「每格一颗、放够 target 停」——28px 格在 512² 上只有 19×19 = **361 格**，
+            // 所以 1400 颗根本放不出来（实际 ≈361），批 13「总数 ≈1400」从未达成；
+            // 密度差 3.9 倍正是"孤立气泡"的直接来源，改尺寸分布解决不了。
+            // 改为：每格放 PER_CELL 颗（格内再抖动），1400/361 ≈ 3.9 → 取 4。
+            const perCell = Math.max(1, Math.round(target / (rows * cols)))
             for (let row = 0; row < rows && placed < target; row++) {
                 for (let col = 0; col < cols && placed < target; col++) {
+                    for (let k = 0; k < perCell && placed < target; k++) {
                     const jx = (rnd() - 0.5) * cell * 1.2
                     const jy = (rnd() - 0.5) * cell * 1.2
                     const colShift = ((col * 11) % 7 - 3) * 3.5
@@ -1013,7 +1019,10 @@ KosApplicationWindow {
                         stretch = shape === 2 ? 1.0 : 1.15
                     }
                     // 微珠折射弱（避免整片发亮）：α 随直径缩放。
-                    const alpha = size < 3 ? 0.55 : (size < 8 ? 0.85 : 1.0)
+                    // R138：最小档 0.55 → 0.72。批 13 只要求"越小越弱"的相对序（0.72 < 0.85 < 1.0），
+                    // 未定绝对值；0.55 在 1× 下低于可辨阈值，90% 的微珠看不见 → 屏上只剩少数中/大珠，
+                    // 仍读作"孤立泡泡"（LEDGER 仍差③）。上调后微珠连成雾面，而大珠仍最亮。
+                    const alpha = size < 3 ? 0.72 : (size < 8 ? 0.85 : 1.0)
                     stamps.push({
                         x: col * cell + cell / 2 + jx + colShift,
                         y: row * cell + cell / 2 + jy,
@@ -1024,6 +1033,7 @@ KosApplicationWindow {
                         lump: shape === 2 ? 3 + Math.floor(rnd() * 3) : 0
                     })
                     placed++
+                    }
                 }
             }
             staticStamps = stamps
