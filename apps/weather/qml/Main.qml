@@ -1541,6 +1541,11 @@ KosApplicationWindow {
             expanded: root.sidebarExpanded
             expandedWidth: root.compact ? AppTheme.compactSidebarWidth : root.weatherSidebarWidth
             floating: false
+            // CPU 轮（R118）：侧栏子树（玻璃胶囊 + 4 张城市卡的天空缩略 Canvas/文字/软影）
+            // 全是静态内容，只有展开/收起宽度动画与搜索框输字会变；但环境节拍
+            // （云漂移 / hero 呼吸，100ms）每帧触发整窗重合成 → 侧栏被逐帧重新光栅化。
+            // layer.enabled 缓存为纹理后稳态每帧只 blit；内容/尺寸/主题变化时才重建。
+            layer.enabled: true
 
             ColumnLayout {
                 anchors.fill: parent
