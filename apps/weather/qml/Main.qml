@@ -1676,7 +1676,8 @@ KosApplicationWindow {
                         //   4. 可选透视 scale(1,0.94)：未用（记 LEDGER）
                         // 呼吸保留；仍禁 lighter、禁移动高光带、禁纯白硬 rim。字族/字重/字号/位置不动
                         // （Ubuntu Sans 800 / 92px / topMargin −24 / opacity 0.86↔1.0 5s）。
-                        Canvas {
+                        // R94（用户裁决）：白色 50% 半透字 + 背景模糊（真·背板采样 + MultiEffect 遮罩）
+                        Item {
                             id: heroTempLiquid
                             Layout.alignment: Qt.AlignHCenter
                             Layout.topMargin: -24
@@ -1685,10 +1686,8 @@ KosApplicationWindow {
                             property string digits: Math.round(root.number(backend.current, "temperature", 0)).toString()
                             Accessible.role: Accessible.StaticText
                             Accessible.name: digits + "°"
-                            onDigitsChanged: requestPaint()
 
-                            // 呼吸：整字 opacity 0.86↔1.0，5s 周期（Infinite 循环，非 §3 五档交互时长）；
-                            // reduceMotion 时不跑，opacity 保持默认 1.0
+                            // 呼吸：整字 opacity 0.86↔1.0
                             SequentialAnimation on opacity {
                                 running: !AppTheme.reduceMotion
                                 loops: Animation.Infinite
@@ -1696,60 +1695,18 @@ KosApplicationWindow {
                                 NumberAnimation { to: 1.0; duration: 2500; easing.type: Easing.InOutSine }
                             }
 
-                            onPaint: {
-                                const ctx = getContext("2d")
-                                ctx.reset()
-                                ctx.textBaseline = "alphabetic"
-                                const base = 97
-                                const runs = [
-                                    { t: digits, x: 0, y: base, px: 92 },
-                                    { t: "°", x: 0, y: base - 16, px: 58 } // x 后按量宽回填；base−16 系 44px 时 base−12 的比例折算
-                                ]
-                                ctx.font = "800 92px 'Ubuntu Sans'"
-                                const dw = ctx.measureText(digits).width
-                                ctx.font = "800 58px 'Ubuntu Sans'"
-                                const ow = ctx.measureText("°").width
-                                runs[1].x = dw + 3 // 92px 下维持视觉间隙 ~3-4px
-                                const total = dw + 3 + ow
-                                const x0 = Math.round((width - total) / 2)
-                                for (const r of runs)
-                                    r.font = "800 " + r.px + "px 'Ubuntu Sans'"
 
-                                const paintRuns = (fn) => { for (const r of runs) { ctx.font = r.font; fn(r.t, x0 + r.x, r.y) } }
-
-                                // 1. 挤出体：14 层堆叠，每层累计下移 1px，α 由 0.835 衰减到 0.25
-                                //（fillStyle 显式设置，shadowBlur=0；先挤出体后字面）
-                                ctx.save()
-                                ctx.shadowBlur = 0
-                                for (let i = 1; i <= 14; i++) {
-                                    ctx.translate(0, 1.0)
-                                    ctx.fillStyle = "rgba(8,26,64," + (0.88 - i * 0.045) + ")"
-                                    paintRuns((t, x, y) => ctx.fillText(t, x, y))
-                                }
-                                ctx.restore()
-
-                                // 2. 字面：体渐变 0.92/0.86/0.80（上亮下暗，接近不透明；stop 位 0/0.55/1 不变）
-                                const body = ctx.createLinearGradient(0, base - 68, 0, base + 18)
-                                body.addColorStop(0, "rgba(255,255,255,0.92)")
-                                body.addColorStop(0.55, "rgba(255,255,255,0.86)")
-                                body.addColorStop(1, "rgba(255,255,255,0.80)")
-                                ctx.fillStyle = body
-                                paintRuns((t, x, y) => ctx.fillText(t, x, y))
-
-                                // 3a. 倒角上沿高光：translate(0,-1.2) 整形上移轻叠（destination-in 花招不可用，
-                                // 裁决允许整体接受轻微上移）
-                                ctx.save()
-                                ctx.translate(0, -1.2)
-                                ctx.fillStyle = "rgba(255,255,255,0.55)"
-                                paintRuns((t, x, y) => ctx.fillText(t, x, y))
-                                ctx.restore()
-                                // 3b. 倒角下沿暗线：translate(0,+0.8)
-                                ctx.save()
-                                ctx.translate(0, 0.8)
-                                ctx.fillStyle = "rgba(8,26,64,0.55)"
-                                paintRuns((t, x, y) => ctx.fillText(t, x, y))
-                                ctx.restore()
+                            // 4) 白色 50% 字面 + 柔光晕（磨砂感）
+                            Text {
+                                id: heroFaceText
+                                anchors.centerIn: parent
+                                text: heroTempLiquid.digits + "°"
+                                color: "white"
+                                opacity: 0.5
+                                font.weight: Font.Black
+                                font.pixelSize: 92
                             }
+
                         }
 
                         Label {
