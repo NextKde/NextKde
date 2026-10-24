@@ -2,17 +2,13 @@ name: tests
 
 # Pull requests and the default branch share one configuration so that "green"
 # means exactly the same thing in both places.
+# Tray identity/rendering and extensions UI checks run in the regular jobs;
+# no separate manual run is needed to complete their coverage.
 on:
   push:
     branches: [main, 'release/**']
   pull_request:
   workflow_dispatch:
-    inputs:
-      scope:
-        description: Checks to execute
-        type: choice
-        options: [all, tray, extensions]
-        default: all
 
 # A superseded run on the same branch tells us nothing, so cancel it.
 concurrency:
@@ -24,7 +20,6 @@ permissions:
 
 jobs:
   source-release:
-    if: ${{ github.event_name != 'workflow_dispatch' || inputs.scope == 'all' }}
     name: source release selection
     runs-on: ubuntu-24.04
     steps:
@@ -42,7 +37,6 @@ jobs:
           python3 tools/check-docs.py
 
   tests:
-    if: ${{ github.event_name != 'workflow_dispatch' || inputs.scope == 'all' }}
     name: data + platform + logic + headless
     runs-on: ubuntu-24.04
     env:
@@ -181,7 +175,6 @@ jobs:
             .build/tests/CMakeFiles/CMakeConfigureLog.yaml
 
   kwin-plugins:
-    if: ${{ github.event_name != 'workflow_dispatch' || inputs.scope == 'all' }}
     name: KWin ${{ matrix.series }} SDK build and offline checks
     runs-on: ubuntu-24.04
     timeout-minutes: 40
@@ -305,7 +298,6 @@ jobs:
             .build/glass/CMakeFiles/CMakeConfigureLog.yaml
 
   applications:
-    if: ${{ github.event_name != 'workflow_dispatch' || inputs.scope == 'all' }}
     name: Calendar Calculator Weather build and tests
     runs-on: ubuntu-24.04
     timeout-minutes: 30
@@ -341,69 +333,3 @@ jobs:
             .build/applications/Testing/Temporary/
             .build/applications/CMakeFiles/CMakeConfigureLog.yaml
 
-  tray:
-    name: tray identity + rendering
-    if: ${{ github.event_name == 'workflow_dispatch' && inputs.scope == 'tray' }}
-    runs-on: ubuntu-24.04
-    timeout-minutes: 12
-    container:
-      image: archlinux:base-devel
-      options: --device=/dev/udmabuf
-    env:
-      QT_FORCE_STDERR_LOGGING: "1"
-      QT_LOGGING_RULES: "kwin_core.debug=true"
-      KOS_TRAY_COLOR_QA: ${{ github.workspace }}/.build/tray-results
-      QML_IMPORT_PATH: ${{ github.workspace }}/.build/tray-native/qml
-    steps:
-      - name: Install tray runtime and bridge build dependencies
-        run: |
-          pacman -Syu --noconfirm --needed git cmake ninja gcc extra-cmake-modules wayland \
-            qt6-base qt6-declarative qt6-wayland qt6-5compat quickshell kwin mesa \
-            libcap dbus nodejs python-pillow
-      - uses: actions/checkout@v7
-      - name: Prepare the software compositor
-        run: sh tools/ci-prepare-kwin.sh
-      - name: Check tray identity, exact templates and attention matching
-        run: |
-          node shell/desktop/modules/bar/test_tray_identity.mjs
-          node shell/desktop/modules/common/test_tray_attention_match.mjs
-      - name: Build only the native QML bridge used by tray components
-        id: native
-        run: |
-          cmake -S shell/native/surface-shape -B .build/tray-native -G Ninja -DCMAKE_BUILD_TYPE=Release
-          cmake --build .build/tray-native --parallel 2
-      - name: Check tray rendering and appearance settings
-        if: ${{ !cancelled() && steps.native.outcome == 'success' }}
-        run: python tests/tray-color/run.py
-      - name: Upload tray diagnostics
-        if: always()
-        uses: actions/upload-artifact@v7
-        with:
-          name: tray-results
-          path: .build/tray-results/
-          if-no-files-found: warn
-
-  extensions:
-    if: ${{ github.event_name == 'workflow_dispatch' && inputs.scope == 'extensions' }}
-    runs-on: ubuntu-24.04
-    container: archlinux:base
-    steps:
-      - name: Install QML runtime
-        run: pacman -Syu --noconfirm --needed git qt6-declarative qt6-svg ttf-dejavu noto-fonts-cjk
-      - uses: actions/checkout@v7
-      - name: Check catalogue actions and render previews
-        env:
-          QT_QPA_PLATFORM: offscreen
-          QT_QUICK_BACKEND: software
-        run: |
-          /usr/lib/qt6/bin/qmltestrunner \
-            -input apps/settings/tests/services/tst_services.qml \
-            -o extensions-results.txt,txt -o extensions-results.xml,junitxml
-      - name: Upload results and previews
-        if: always()
-        uses: actions/upload-artifact@v7
-        with:
-          name: extensions-preview
-          path: |
-            extensions-results.*
-            extensions-*.png
