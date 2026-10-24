@@ -1075,6 +1075,13 @@ KosApplicationWindow {
         property int activeCount: 0
         property var particles: []
         property real clockMs: 0
+        // 批 5｜闪电并入同一个降水 Canvas（单一 33ms Timer / 一次 clearRect /
+        // 一次纹理上传）。闪电不再自开 Canvas，只在本层同帧末尾补画。
+        property bool thunder: false
+        property real flashAlpha: 0
+        property var bolt: []
+        property var fork: []
+        property real strikeXRatio: 0.5
         anchors.fill: parent
         clip: true
         Accessible.ignored: true
@@ -1084,6 +1091,7 @@ KosApplicationWindow {
         onHeightChanged: precip.seedParticles()
         Component.onCompleted: precip.seedParticles()
         onActiveCountChanged: precip.requestPaint()
+        onFlashAlphaChanged: if (precip.thunder) precip.requestPaint()
 
         // 批 3.5｜三层景深参数（用户 2026-10-24 裁决第 1 条，同一 Canvas 按层 stroke）。
         // 粒子数比 近:中:远 = 1 : 1.4 : 1.8（远处更多更淡）。
@@ -1174,9 +1182,109 @@ KosApplicationWindow {
             onTriggered: precip.advance(interval / 1000)
         }
 
+        // 批 5｜闪电几何与绘制（原独立 lightningLayer 迁入，参数与算法零改动）。
+        function drawPolyline(ctx, points, widthPx, color) {
+            if (!points || points.length < 2) return
+            ctx.strokeStyle = color
+            ctx.lineWidth = widthPx
+            ctx.lineCap = "round"
+            ctx.beginPath()
+            ctx.moveTo(points[0].x, points[0].y)
+            for (let i = 1; i < points.length; i++) ctx.lineTo(points[i].x, points[i].y)
+            ctx.stroke()
+        }
+
+        function buildBolt() {
+            precip.strikeXRatio = 0.12 + Math.random() * 0.76
+            const segments = 9 + Math.floor(Math.random() * 4)
+            // 落雷限制在云层带内（顶缘 3% → 62% 高度），不再贯穿整屏到内容区
+            const boltTop = height * 0.03
+            const boltHeight = height * 0.59
+            const stepY = boltHeight / segments
+            const points = []
+            let x = width * precip.strikeXRatio
+            let y = boltTop
+            for (let i = 0; i <= segments; i++) {
+                points.push({ x: x, y: y })
+                x += (Math.random() - 0.5) * 46
+                y += stepY * (0.8 + Math.random() * 0.4)
+            }
+            precip.bolt = points
+            // 分叉：从中段向侧下方伸出 4 段
+            const anchor = points[Math.floor(segments / 2)]
+            const dir = Math.random() < 0.5 ? -1 : 1
+            const forkPoints = [{ x: anchor.x, y: anchor.y }]
+            let fx = anchor.x
+            let fy = anchor.y
+            for (let i = 0; i < 4; i++) {
+                fx += dir * (14 + Math.random() * 26)
+                fy += stepY * (0.5 + Math.random() * 0.4)
+                forkPoints.push({ x: fx, y: fy })
+            }
+            precip.fork = forkPoints
+        }
+
+        function triggerStrike() {
+            precip.buildBolt()
+            // 持续时间随机化（双闪：第二次为更暗更短的余闪）
+            strikeOn.duration = 50 + Math.random() * 60
+            strikeOff.duration = 70 + Math.random() * 80
+            strikeHold.duration = 90 + Math.random() * 120
+            afterOn.duration = 50 + Math.random() * 70
+            afterOff.duration = 120 + Math.random() * 120
+            flashSeq.restart()
+        }
+
+        // 批 5｜闪电的 Timer 与闪序与降水同层（不再有独立 Canvas / 独立 Timer 链）
+        Timer {
+            id: lightningTimer
+            // 首闪 0.9–1.5s 内随机到来（进入雷暴场景即可感知），其后间隔仍 3.5–8.5s 随机
+            interval: 900 + Math.random() * 600
+            repeat: true
+            running: precip.thunder && !AppTheme.reduceMotion
+            onTriggered: {
+                lightningTimer.interval = 3500 + Math.random() * 5000
+                precip.triggerStrike()
+            }
+        }
+        SequentialAnimation {
+            id: flashSeq
+            NumberAnimation { id: strikeOn; target: precip; property: "flashAlpha"; to: 0.95 }
+            NumberAnimation { id: strikeOff; target: precip; property: "flashAlpha"; to: 0.12 }
+            PauseAnimation { id: strikeHold }
+            NumberAnimation { id: afterOn; target: precip; property: "flashAlpha"; to: 0.45 }
+            NumberAnimation { id: afterOff; target: precip; property: "flashAlpha"; to: 0 }
+        }
+
+        function paintLightning(ctx) {
+            if (!precip.thunder || precip.flashAlpha <= 0) return
+            if (!precip.bolt || precip.bolt.length < 2) return
+            ctx.globalAlpha = precip.flashAlpha
+            // 极淡全屏环境光（不再是唯一主体）
+            ctx.fillStyle = "rgba(255,255,255,0.06)"
+            ctx.fillRect(0, 0, width, height)
+            // 落点局部辉光
+            const mid = precip.bolt[Math.floor(precip.bolt.length / 2)]
+            const glowR = Math.min(width, height) * 0.55
+            const glow = ctx.createRadialGradient(mid.x, mid.y, 0, mid.x, mid.y, glowR)
+            glow.addColorStop(0, "rgba(226,240,255,0.42)")
+            glow.addColorStop(0.35, "rgba(200,225,255,0.16)")
+            glow.addColorStop(1, "rgba(200,225,255,0)")
+            ctx.fillStyle = glow
+            ctx.fillRect(0, 0, width, height)
+            // 三层描边 + 分叉
+            precip.drawPolyline(ctx, precip.bolt, 11, "rgba(190,220,255,0.18)")
+            precip.drawPolyline(ctx, precip.bolt, 4.5, "rgba(235,245,255,0.55)")
+            precip.drawPolyline(ctx, precip.bolt, 1.8, "rgba(255,255,255,0.95)")
+            precip.drawPolyline(ctx, precip.fork, 4, "rgba(220,235,255,0.35)")
+            precip.drawPolyline(ctx, precip.fork, 1.4, "rgba(255,255,255,0.8)")
+        }
+
         onPaint: {
             const ctx = getContext("2d")
             ctx.clearRect(0, 0, width, height)
+            // 批 5｜闪电与降水同 ctx：每帧开头复位 globalAlpha，避免闪光的 α 泄漏到下一帧
+            ctx.globalAlpha = 1
             if (width <= 0 || height <= 0) return
             const count = Math.min(precip.activeCount, precip.particles.length)
             if (precip.snow) {
@@ -1242,6 +1350,8 @@ KosApplicationWindow {
                 }
             }
             ctx.globalAlpha = 1
+            // 批 5｜闪电在本 Canvas 同帧末尾补画（不额外开 Canvas）
+            precip.paintLightning(ctx)
         }
     }
 
@@ -1250,6 +1360,7 @@ KosApplicationWindow {
         snow: false
         poolSize: root.rainParticlePool
         activeCount: root.rainParticleCount
+        thunder: root.thunderSky
         visible: root.rainySky
     }
 
@@ -1368,120 +1479,9 @@ KosApplicationWindow {
         Accessible.ignored: true
     }
 
-    // 批 3｜闪电（用户 2026-10-24）：全屏白闪 → 随机落点折线闪电 + 局部辉光
-    // + 极淡全屏洗层；落点/分叉/各段持续时长/间隔全部随机化；
-    // 二次余闪（afterOn 0.45）保留双闪节奏。reduceMotion 下 Timer 停走（不闪）。
-    Canvas {
-        id: lightningLayer
-        anchors.fill: parent
-        visible: root.thunderSky
-        opacity: 0
-        Accessible.ignored: true
-        renderStrategy: Canvas.Immediate
-        property var bolt: []
-        property var fork: []
-        property real strikeXRatio: 0.5
-
-        onWidthChanged: lightningLayer.requestPaint()
-        onHeightChanged: lightningLayer.requestPaint()
-
-        function drawPolyline(ctx, points, widthPx, color) {
-            if (!points || points.length < 2) return
-            ctx.strokeStyle = color
-            ctx.lineWidth = widthPx
-            ctx.lineCap = "round"
-            ctx.beginPath()
-            ctx.moveTo(points[0].x, points[0].y)
-            for (let i = 1; i < points.length; i++) ctx.lineTo(points[i].x, points[i].y)
-            ctx.stroke()
-        }
-
-        function buildBolt() {
-            lightningLayer.strikeXRatio = 0.12 + Math.random() * 0.76
-            const segments = 9 + Math.floor(Math.random() * 4)
-            // 落雷限制在云层带内（顶缘 3% → 62% 高度），不再贯穿整屏到内容区
-            const boltTop = height * 0.03
-            const boltHeight = height * 0.59
-            const stepY = boltHeight / segments
-            const points = []
-            let x = width * lightningLayer.strikeXRatio
-            let y = boltTop
-            for (let i = 0; i <= segments; i++) {
-                points.push({ x: x, y: y })
-                x += (Math.random() - 0.5) * 46
-                y += stepY * (0.8 + Math.random() * 0.4)
-            }
-            lightningLayer.bolt = points
-            // 分叉：从中段向侧下方伸出 4 段
-            const anchor = points[Math.floor(segments / 2)]
-            const dir = Math.random() < 0.5 ? -1 : 1
-            const forkPoints = [{ x: anchor.x, y: anchor.y }]
-            let fx = anchor.x
-            let fy = anchor.y
-            for (let i = 0; i < 4; i++) {
-                fx += dir * (10 + Math.random() * 26)
-                fy += stepY * (0.35 + Math.random() * 0.35)
-                forkPoints.push({ x: fx, y: fy })
-            }
-            lightningLayer.fork = forkPoints
-            lightningLayer.requestPaint()
-        }
-
-        function triggerStrike() {
-            lightningLayer.buildBolt()
-            // 持续时间随机化（双闪：第二次为更暗更短的余闪）
-            strikeOn.duration = 50 + Math.random() * 60
-            strikeOff.duration = 70 + Math.random() * 80
-            strikeHold.duration = 90 + Math.random() * 120
-            afterOn.duration = 50 + Math.random() * 70
-            afterOff.duration = 120 + Math.random() * 120
-            flashSeq.restart()
-        }
-
-        onPaint: {
-            const ctx = getContext("2d")
-            ctx.clearRect(0, 0, width, height)
-            if (!lightningLayer.bolt || lightningLayer.bolt.length < 2) return
-            // 极淡全屏环境光（不再是唯一主体）
-            ctx.fillStyle = "rgba(255,255,255,0.06)"
-            ctx.fillRect(0, 0, width, height)
-            // 落点局部辉光
-            const mid = lightningLayer.bolt[Math.floor(lightningLayer.bolt.length / 2)]
-            const glowR = Math.min(width, height) * 0.55
-            const glow = ctx.createRadialGradient(mid.x, mid.y, 0, mid.x, mid.y, glowR)
-            glow.addColorStop(0, "rgba(226,240,255,0.42)")
-            glow.addColorStop(0.35, "rgba(200,225,255,0.16)")
-            glow.addColorStop(1, "rgba(200,225,255,0)")
-            ctx.fillStyle = glow
-            ctx.fillRect(0, 0, width, height)
-            // 三层描边 + 分叉
-            lightningLayer.drawPolyline(ctx, lightningLayer.bolt, 11, "rgba(190,220,255,0.18)")
-            lightningLayer.drawPolyline(ctx, lightningLayer.bolt, 4.5, "rgba(235,245,255,0.55)")
-            lightningLayer.drawPolyline(ctx, lightningLayer.bolt, 1.8, "rgba(255,255,255,0.95)")
-            lightningLayer.drawPolyline(ctx, lightningLayer.fork, 4, "rgba(220,235,255,0.35)")
-            lightningLayer.drawPolyline(ctx, lightningLayer.fork, 1.4, "rgba(255,255,255,0.8)")
-        }
-
-        Timer {
-            id: lightningTimer
-            // 首闪 0.9–1.5s 内随机到来（进入雷暴场景即可感知），其后间隔仍 3.5–8.5s 随机
-            interval: 900 + Math.random() * 600
-            repeat: true
-            running: root.thunderSky && !AppTheme.reduceMotion
-            onTriggered: {
-                lightningTimer.interval = 3500 + Math.random() * 5000
-                lightningLayer.triggerStrike()
-            }
-        }
-        SequentialAnimation {
-            id: flashSeq
-            NumberAnimation { id: strikeOn; target: lightningLayer; property: "opacity"; to: 0.95 }
-            NumberAnimation { id: strikeOff; target: lightningLayer; property: "opacity"; to: 0.12 }
-            PauseAnimation { id: strikeHold }
-            NumberAnimation { id: afterOn; target: lightningLayer; property: "opacity"; to: 0.45 }
-            NumberAnimation { id: afterOff; target: lightningLayer; property: "opacity"; to: 0 }
-        }
-    }
+    // 批 5｜闪电已并入降水 Canvas（见 PrecipitationLayer.paintLightning）；
+    // 原独立 lightningLayer Canvas（批 3）整段移除：不再有第二个 33ms Timer/
+    // 第二次全屏 clearRect/第二次纹理上传。
 
     RowLayout {
         anchors.fill: parent
