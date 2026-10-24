@@ -14,6 +14,7 @@
 #include "blurconfig.h"
 #include "settings.h"
 #include "surfaceshapemanager.h"
+#include "desktopblurpolicy.h"
 #ifndef GLASS_X11
 #include "legacyblurregion.h"
 #endif
@@ -1338,15 +1339,21 @@ bool BlurEffect::shouldBlur(const EffectWindow *w, int mask, const WindowPaintDa
     // blurred strip behind (or switching the blur back on in one step).
     // The role is written by kwin/dock-window-animation.
 
-    if (w->isDesktop()) {
-        return false;
-    }
-
     const auto windowClass = w->window()->resourceClass();
     const auto resourceName = w->window()->resourceName();
     const auto blurData = m_windows.find(const_cast<EffectWindow *>(w));
     const bool explicitlyRequestedBlur = blurData != m_windows.end()
         && blurData->second.hasExplicitBlurRequest;
+
+    // DeskCenter is a real Desktop window so KWin cannot move/close it through
+    // ordinary window shortcuts. Its declared card regions still need glass;
+    // wallpapers and forced whole-desktop blur remain excluded.
+    if (w->isDesktop()
+        && (blurData == m_windows.end()
+            || !desktopSurfaceRequestsBlur(isQuickshellWindow(w), explicitlyRequestedBlur,
+                                           blurData->second.content))) {
+        return false;
+    }
 
     // Layer-shell clients may expose either "quickshell" or an application
     // id such as "org.quickshell".  Match both resource fields instead of

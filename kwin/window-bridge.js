@@ -404,6 +404,94 @@ function scheduleInitialPlacement(window) {
     schedulePlacementAttempt(window, 0, 0);
 }
 
+function installDesktopStack(workspace) {
+    // All three KOS surfaces share KWin's Below layer. Their window types and
+    // keyboard modes distinguish wallpaper < desktop widgets < Stage strip:
+    //   Wallpaper: Desktop + keyboardFocus None
+    //   Widgets:   Desktop + keyboardFocus OnDemand
+    //   Strip:     Normal  + keyboardFocus None
+    // Desktop typing keeps widgets/files on every virtual desktop and excludes
+    // them from ordinary close/move shortcuts. It does not impose a same-layer
+    // order: desktop activation or a late wallpaper map can still cover widgets.
+    // This script only orders existing surfaces; it never changes their visibility
+    // or desktop membership and never creates/reopens a window.
+    const BELOW_LAYER = 1
+    const NORMAL_WINDOW = 0
+    const DESKTOP_WINDOW = 1
+    const WALLPAPER = 0
+    const WIDGETS = 1
+    const STRIP = 2
+
+    let reordering = false
+
+    function surfaceRole(window) {
+        if (!window || window.layer !== BELOW_LAYER
+                || (window.resourceClass !== "quickshell" && window.resourceClass !== "org.quickshell"))
+            return -1
+        if (window.windowType === DESKTOP_WINDOW)
+            return window.wantsInput ? WIDGETS : WALLPAPER
+        if (window.windowType === NORMAL_WINDOW && !window.wantsInput)
+            return STRIP
+        return -1
+    }
+
+    function ensureOrder() {
+        if (reordering)
+            return
+
+        // Use list position rather than window.stackingOrder: KWin assigns those
+        // properties one at a time, emitting signals while later values are stale.
+        const windows = workspace.stackingOrder
+        const widgets = []
+        const strips = []
+        let highestRole = -1
+        let needsReorder = false
+        for (let i = 0; i < windows.length; ++i) {
+            const window = windows[i]
+            const role = surfaceRole(window)
+            if (role < 0)
+                continue
+            if (role < highestRole)
+                needsReorder = true
+            highestRole = Math.max(highestRole, role)
+            if (role === WIDGETS)
+                widgets.push(window)
+            else if (role === STRIP)
+                strips.push(window)
+        }
+        if (!needsReorder)
+            return
+
+        reordering = true
+        try {
+            // Keep wallpaper in place, then raise each role in its existing order.
+            // Bottom-layer surfaces stay below ordinary application windows.
+            for (let i = 0; i < widgets.length; ++i)
+                workspace.raiseWindow(widgets[i])
+            for (let i = 0; i < strips.length; ++i)
+                workspace.raiseWindow(strips[i])
+        } finally {
+            reordering = false
+        }
+    }
+
+    function watchWindow(window) {
+        if (surfaceRole(window) < 0)
+            return
+        window.stackingOrderChanged.connect(ensureOrder)
+    }
+
+    workspace.windowAdded.connect(function (window) {
+        watchWindow(window)
+        ensureOrder()
+    })
+
+    const initialWindows = workspace.stackingOrder
+    for (let i = 0; i < initialWindows.length; ++i)
+        watchWindow(initialWindows[i])
+    ensureOrder()
+}
+
 // Runtime-dependent bridge helpers start here. Tests evaluate the pure layout
 // and placement helpers above this marker without a live KWin workspace.
 
@@ -1007,7 +1095,9 @@ function watchWindow(window) {
     });
 }
 
-// Runtime wiring.
+// Runtime wiring. Desktop ordering is owned by this platform-loaded bridge,
+// independently of optional Stage effects or the Shell instance lifecycle.
+installDesktopStack(workspace);
 const initial = workspace.windowList();
 for (let i = 0; i < initial.length; i++)
     watchWindow(initial[i]);

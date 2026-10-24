@@ -472,6 +472,11 @@ if(BUILD_TESTING)
                 ${CMAKE_CURRENT_SOURCE_DIR}/shell/desktop/modules/deskcenter/test_desktop_outputs.mjs
         )
         set_tests_properties(kos-deskcenter.desktop-outputs PROPERTIES TIMEOUT 10)
+        add_test(NAME kos-deskcenter.desktop-stack
+            COMMAND ${KOS_NODE_EXECUTABLE}
+                ${CMAKE_CURRENT_SOURCE_DIR}/platform/tests/test_desktop_stack.mjs
+        )
+        set_tests_properties(kos-deskcenter.desktop-stack PROPERTIES LABELS logic TIMEOUT 10)
         add_test(NAME kos-shell.screen-selection
             COMMAND ${KOS_NODE_EXECUTABLE}
                 ${CMAKE_CURRENT_SOURCE_DIR}/shell/desktop/modules/common/test_screen_selection.mjs
@@ -675,6 +680,11 @@ if(BUILD_TESTING)
     target_link_libraries(kos-legacy-glass-blur-test PRIVATE Qt6::Core Qt6::Gui)
     add_test(NAME kos-glass.legacy-blur-region COMMAND kos-legacy-glass-blur-test)
     set_tests_properties(kos-glass.legacy-blur-region PROPERTIES LABELS platform TIMEOUT 10)
+    qt_add_executable(kos-desktop-glass-blur-test
+        kwin/glass-effect/tests/test_desktop_blur.cpp)
+    target_link_libraries(kos-desktop-glass-blur-test PRIVATE Qt6::Core Qt6::Gui)
+    add_test(NAME kos-glass.desktop-blur COMMAND kos-desktop-glass-blur-test)
+    set_tests_properties(kos-glass.desktop-blur PROPERTIES LABELS platform TIMEOUT 10)
 endif()
 if(KOS_BUILD_CALENDAR OR KOS_BUILD_TODO)
     find_package(KF6CalendarCore 6.0 REQUIRED)

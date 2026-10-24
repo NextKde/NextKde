@@ -21,6 +21,7 @@
     "kos-platform.jsonl-client",
     "kos-platform.contracts",
     "kos-glass.legacy-blur-region",
+    "kos-glass.desktop-blur",
     "kos-platform.status-panel-data",
     "kos-platform.status-panel-operations"
   ],
@@ -32,6 +33,7 @@
     "kos-deskcenter.density-metrics",
     "kos-deskcenter.widget-layout",
     "kos-deskcenter.desktop-outputs",
+    "kos-deskcenter.desktop-stack",
     "kos-shell.date-buckets",
     "kos-shell.date-projection",
     "kos-shell.squircle",
