@@ -2,6 +2,7 @@ set_source_files_properties(
     foundation/AppTheme.qml
     i18n/I18n.qml
     controls/ControlForm.qml
+    controls/LiquidStyle.qml
     PROPERTIES QT_QML_SINGLETON_TYPE TRUE
 )
 
@@ -45,11 +46,16 @@ qt_add_qml_module(kos_ui
         controls/ControlForm.qml
         controls/LiquidTextField.qml
         controls/LiquidSegmentedControl.qml
+        controls/LiquidStyle.qml
+        controls/LiquidBackdrop.qml
+        controls/LiquidSurface.qml
         controls/SelectionHighlight.qml
     RESOURCES
         i18n/qmldir
         i18n/ZhCatalog.mjs
         i18n/SystemLanguage.mjs
+        controls/shaders/liquid_surface.vert.qsb
+        controls/shaders/liquid_surface.frag.qsb
 )
 
 add_library(Kos::Ui ALIAS kos_ui)

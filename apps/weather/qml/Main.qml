@@ -4,6 +4,7 @@ import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
 import QtQuick.Effects
+import QtQuick.Particles
 import Kos.Ui
 
 KosApplicationWindow {
@@ -18,42 +19,170 @@ KosApplicationWindow {
     readonly property string distanceUnit: backend.units === "imperial" ? qsTr("mi") : qsTr("km")
     readonly property int weatherSidebarWidth: Math.round(307 * AppTheme.densityScale) // ref-main 干净行（y=47 无卡无胶囊）Pillow 实测侧栏→主区过渡 x≈211.5@814 ×1.4501≈307；旧 x205 实为卡片右缘（卡右缘与侧栏缘间有 ~6px 侧栏底色带，y=440 带色 (60,91,128) ≈ 侧栏底），2026-10-18 勘误；AppTheme.sidebarWidth(224) 系 shared 值（music 引用）不动
     readonly property var upcomingHours: upcomingForecast()
+    // §3 control.compact：窄窗（root.compact <940，KosApplicationWindow）工具盘圆形钮收为 compact lg=30；
+    // 默认窗宽取 AppTheme.controlHeight（34），窄窗外逐字节等价
+    readonly property int trayControlHeight: root.compact
+        ? Math.round(30 * AppTheme.densityScale)
+        : AppTheme.controlHeight
     property string pendingLocationId: ""
     readonly property int currentWeatherCode: number(backend.current, "weatherCode", -1)
     readonly property bool currentIsDay: Boolean(value(backend.current, "isDay", true))
-    readonly property var skyStops: skyStopsFor(
-        root.currentWeatherCode,
+    // 批 1｜天空系统（用户 2026-10-24）：2 态 → dawn/day/dusk/night 四时段，按本地日出日落判定；
+    // 时段切换 12s 平滑插值，天气条件切换 1.2s crossfade（禁止瞬时换色）。颜色值见 skyStopsFor。
+    readonly property string skyPeriod: skyPeriodFor(
+        String(value(backend.current, "time", "")),
+        backend.daily && backend.daily.length > 0
+            ? String(value(backend.daily[0], "sunrise", "")) : "",
+        backend.daily && backend.daily.length > 0
+            ? String(value(backend.daily[0], "sunset", "")) : "",
         root.currentIsDay)
+    property color skyTop: "#0c1a33"
+    property color skyMid: "#12294d"
+    property color skyBottom: "#274d79"
+    property int skyTransitionMs: 12000
+    property bool skyReady: false
+    property string _lastSkyPeriod: ""
+    property int _lastSkyCode: -2
+    readonly property var skyStops: [skyTop, skyMid, skyBottom]
+    Behavior on skyTop {
+        enabled: root.skyReady && !AppTheme.reduceMotion
+        ColorAnimation { duration: root.skyTransitionMs; easing.type: Easing.InOutSine }
+    }
+    Behavior on skyMid {
+        enabled: root.skyReady && !AppTheme.reduceMotion
+        ColorAnimation { duration: root.skyTransitionMs; easing.type: Easing.InOutSine }
+    }
+    Behavior on skyBottom {
+        enabled: root.skyReady && !AppTheme.reduceMotion
+        ColorAnimation { duration: root.skyTransitionMs; easing.type: Easing.InOutSine }
+    }
+    // 首次数据到达前保持瞬时赋值；1.2s 后开启动画，避免启动阶段从占位色缓慢爬升。
+    Timer {
+        interval: 1200
+        running: true
+        onTriggered: root.skyReady = true
+    }
+    // R113（CPU 轮）：环境动画统一节拍。此前云漂移(50ms) / hero 呼吸(66ms) / 日晕呼吸(100ms) /
+    // 水珠滑落(40ms) 各自独立 Timer，事件并集 ≈45–60 次/秒 → 全窗口每秒被合成 45–60 次。
+    // R108 单独降每条的频率无效（其并集仍是几十次/秒），故合并为单一 66ms(15fps) 时钟：
+    // 所有消费者同一事件循环内响应，一帧只合成一次。端点/周期逐值不变（cos 曲线按 ambientSec 求值）。
+    // R115（CPU 轮）：66ms(15fps) → 100ms(10fps)。R114 逐帧实测稳态帧率被本时钟钉在 15fps，
+    // 单帧 GUI+RT ≈11.4ms → 帧数直接线性决定 CPU。
+    // R116（CPU 轮）：本档曾试降到 133ms(7.5fps)，同会话 A/B 实测 17.7→16.0 / 16.9→17.2
+    // （两对均值 17.3→16.6，落在 loadavg 噪声内）→ **帧率已不是 10fps 以下的瓶颈，试值已回退**，
+    // 保持 100ms(10fps)；本轮真实改动见 sidebarBackdrop.hideSource。
+    property double ambientSec: 0
+    Timer {
+        id: ambientTick
+        interval: 100; repeat: true
+        running: !AppTheme.reduceMotion
+        onRunningChanged: if (!running) root.ambientSec = 0
+        onTriggered: root.ambientSec = root.ambientSec + 0.100
+    }
+    onSkyPeriodChanged: root.refreshSkyStops()
+    // live:false 的采样源：天空色每帧变化（12s 过渡）时补一次捕获；静止时不捕获。
+    onSkyTopChanged: sidebarBackdrop.refresh()
+    onSkyMidChanged: sidebarBackdrop.refresh()
+    onSkyBottomChanged: sidebarBackdrop.refresh()
+    onWidthChanged: sidebarBackdrop.refresh()
+    onHeightChanged: sidebarBackdrop.refresh()
+    onCurrentWeatherCodeChanged: root.refreshSkyStops()
+    Component.onCompleted: root.refreshSkyStops()
     readonly property color skyText: "#ffffff"
-    readonly property color skyTextMuted: Qt.rgba(1, 1, 1, 0.66)
+    // R140｜§2.10 正文对比 ≥4.5:1：原白 α0.66 在压深后的卡面（clear (81,107,141)）上仅 3.48:1。
+    // 反解得 α0.86 = 4.54:1（最低一档 4.50:1），故 0.66 → 0.86。
+    readonly property color skyTextMuted: Qt.rgba(1, 1, 1, 0.86)
     // tile-cards 原生分辨率实测：卡头小 caps 与卡头 glyph 同浅蓝墨（SUNSET/UV 峰值 (146,205,255)/(147,206,255)；
-    // 白@α 反解三通道矛盾 R 0.33/B 0.91，证独立蓝墨非白@α），与 glyph 色 #90cbff 同源
-    readonly property color cardHeaderText: "#90cbff"
+    // 白@α 反解三通道矛盾 R 0.33/B 0.91，证独立蓝墨非白@α），与 glyph 色 #90cbff 同源。
+    // R140｜§2.10：原 #90cbff 在压深卡面上仅 2.09–3.17:1（<4.5:1）。同色相向亮端推到 **#eef7ff**
+    // （本轮实拍卡面实测 4.69–5.31:1），保「浅蓝墨」族感不改色相。
+    readonly property color cardHeaderText: "#eef7ff"
+    // R143｜§2.10 侧栏底部对比收口（「仍差」②）：侧栏底是 `AppTheme.sidebarSurface` 玻璃面
+    // （shared token 不动）叠在压深后的天空上，实测 clear (107,135,163) / rain (126,139,149)
+    // / fog (105,140,172) / dawn (166,126,100) / dusk (173,122,99)。其上原白字仅 3.49–3.74:1
+    // （<4.5:1）。只改这**一列控件的墨色**，侧栏材质与 glass 预算不动。
+    // 侧栏底的实测合成色：`AppTheme.sidebarSurface`(α0.32/0.36) 叠在天空渐变的底端之上。
+    // 夜间天空接近 #0c1a33，同一深墨会掉到 ~1.2:1，故墨色按**底亮度自适应**：亮底用深墨
+    // （黑 α0.92，实测 clear 5.28 / dusk 5.39:1）、暗底回到白墨。切换点取两种墨的等对比交点
+    // **L=0.174**（α0.92 墨在灰底 L=0.174 处深/白同为 4.25:1，是该点两侧最大最小对比的最优解）。
+    // 注意：§2.6 规定「侧栏不随背景翻转」，本轮让侧栏**状态墨**翻转属 §2.10 与 §2.6 的冲突取舍，
+    // 已记入 LEDGER「外推待确认」。
+    readonly property color sidebarFooterBackdrop: {
+        const s = AppTheme.sidebar
+        const a = AppTheme.sidebarSurface.a
+        return Qt.rgba(s.r * a + root.skyBottom.r * (1 - a),
+                       s.g * a + root.skyBottom.g * (1 - a),
+                       s.b * a + root.skyBottom.b * (1 - a), 1)
+    }
+    readonly property bool sidebarFooterOnLight: AppTheme.relativeLuminance(sidebarFooterBackdrop) > 0.174
+    readonly property color sidebarControlInk: sidebarFooterOnLight
+        ? Qt.rgba(0, 0, 0, 0.92) : Qt.rgba(1, 1, 1, 0.92)
+    readonly property color sidebarControlInkDisabled: sidebarFooterOnLight
+        ? Qt.rgba(0, 0, 0, 0.35) : Qt.rgba(1, 1, 1, 0.38)
+    // 状态行（● Open-Meteo / Cached / Offline）：原直接复用 §3 系统色 positive #16875f /
+    // warning #b96800，在侧栏底上仅 1.21 / 1.12:1。亮底用同色相压深（mix 黑 t=0.8）→
+    // positive (5,27,19) / warning (37,21,0)，实测 4.74–5.13:1；暗底沿用系统色本身
+    // （#16875f / #b96800 在夜空底上 3.5–4.5:1，取 dark 变体 #30d58a / #ffb340 可达 8:1+）。
+    readonly property color sidebarStatusPositive: sidebarFooterOnLight
+        ? Qt.rgba(0.0182, 0.1070, 0.0745, 1) : "#30d58a"
+    readonly property color sidebarStatusWarning: sidebarFooterOnLight
+        ? Qt.rgba(0.1445, 0.0808, 0, 1) : "#ffb340"
 
-    // ref-main 白天场景所有内容卡填充暗于周围天空（Pillow 实测：指标卡 (38.5,115.8,196.9)
-    // vs 卡间天空 (54.7,124.3,197.0)；AQ 卡 (9.5,93.7,179.0) vs 缝隙 (38.3,101.7,175.9)），
-    // 可拟合为 α~0.30 的深蓝玻璃 (0,96,210)。夜景无参考：维持白玻璃族不变。
-    readonly property color cardGlassRgb: root.currentIsDay ? Qt.rgba(0, 0.376, 0.824, 1.0) : Qt.rgba(1, 1, 1, 1.0)
-    readonly property real cardGlassAlpha: root.currentIsDay ? 0.30 : 0.16
-    readonly property real cardGlassAlphaHot: root.currentIsDay ? 0.36 : 0.21
+    // R144｜§2.10 侧栏搜索胶囊对比收口：胶囊底 = 白@0.15（LiquidTextField glassColor）叠在
+    // 侧栏背板顶部之上。实测胶囊内底 clear (127,137,152) / rain (148,162,172) / night (141,150,165)
+    // / dusk (149,149,167)，原 `textColor #ffffff` + `mutedTextColor 白@0.66`（占位符）在其上仅
+    // **2.40 / 1.95 / 2.14:1**（<4.5:1）。与 R143 侧栏底部同一取舍：墨色按底亮度自适应，
+    // 亮底用黑@0.92（实测 5.56–7.43:1）、占位符黑@0.78（实测 4.72–5.97:1），暗底回退白墨。
+    // 阈值沿用 R143 的等对比交点 L=0.174（见 sidebarFooterOnLight 注释）。
+    readonly property color sidebarBackdropTop: {
+        const s = AppTheme.sidebar
+        const a = AppTheme.sidebarSurface.a
+        return Qt.rgba(s.r * a + root.skyTop.r * (1 - a),
+                       s.g * a + root.skyTop.g * (1 - a),
+                       s.b * a + root.skyTop.b * (1 - a), 1)
+    }
+    readonly property color searchPillBackdrop: { // 玻璃胶囊白@0.15 叠在背板顶部
+        const b = sidebarBackdropTop
+        return Qt.rgba(0.15 + b.r * 0.85, 0.15 + b.g * 0.85, 0.15 + b.b * 0.85, 1)
+    }
+    readonly property bool searchFieldOnLight: AppTheme.relativeLuminance(searchPillBackdrop) > 0.174
+    readonly property color searchFieldInk: searchFieldOnLight
+        ? Qt.rgba(0, 0, 0, 0.92) : "#ffffff"
+    readonly property color searchFieldMutedInk: searchFieldOnLight
+        ? Qt.rgba(0, 0, 0, 0.78) : Qt.rgba(1, 1, 1, 0.66)
+    readonly property color searchFieldGlyphInk: searchFieldOnLight
+        ? Qt.rgba(0, 0, 0, 0.78) : Qt.rgba(1, 1, 1, 0.72)
+
+    // 用户裁定 2026-10-23：卡片改**中性白玻璃**，禁止蓝色 tint 压在蓝色天空上（旧值
+    // α0.30 的 (0,96,210) 深蓝玻璃在模糊蓝底上糊成一片）。白底 α0.14（夜景 0.16 不变），
+    // 层级仍按 §1：L0 内容不用玻璃，白 α 属标准材质；对比度以 §2.10 正文 ≥4.5:1 复核。
+    readonly property color cardGlassRgb: Qt.rgba(1, 1, 1, 1.0)
+    readonly property real cardGlassAlpha: root.currentIsDay ? 0.14 : 0.16
+    readonly property real cardGlassAlphaHot: root.cardGlassAlpha + 0.02 // §4 卡片（L0）hover 只 +2% 亮度（原 0.36/0.21 系 +0.06 超标）
     readonly property int tileRadius: 16 // ref-main UV 瓦角部拟合 r≈10.5@814 × 1.46 窗比 ≈ 15.3，LEDGER WIND 瓦 r≈11±1 同证；AppTheme.smallRadius(12) 是 shared 基础件不动，weather 内显式覆盖
 
     // Liquid Glass circular button background (stage 3, style A) for the
     // sky top bar. `selected` shows the tinted glass disc, unselected stays
     // transparent until hover; `subtle` is the always-on action-button glass
     // (same family as KosSidebarToggle: fill white@0.14 + border white@0.22).
+    // hover/press 按 §4.1 叠 hoverFill/pressFill（dark 变体白 .08/.12：
+    // 位于天空媒体之上、glyph 恒白，§2.6 随背景翻转与 ref-main 白色控件冲突处按 §9 以参考图为准）。
+    // subtle 底 0.14 与 selected 0.27 系 ref-main 拟合值（§9 参考图优先），不随本轮改。
     component GlassCircleBg: Rectangle {
         property bool selected: false
         property bool pressed: false
         property bool hovered: false
         property bool subtle: false
+        // §5 Focus：失焦或禁用即移除外环（绑定方以 activeFocus && enabled 驱动）
+        property bool focused: false
         readonly property bool filled: selected || pressed || hovered || subtle
         radius: width / 2
         color: subtle ? Qt.rgba(1, 1, 1, 0.14)
             : (selected ? Qt.rgba(1, 1, 1, 0.27)
-               : ((hovered || pressed) ? Qt.rgba(1, 1, 1, 0.14) : "transparent"))
-        border.width: filled ? 1 : 0
-        border.color: subtle ? Qt.rgba(1, 1, 1, 0.22) : Qt.rgba(1, 1, 1, 0.30)
+               : (pressed ? Qt.rgba(1, 1, 1, 0.12)
+                  : (hovered ? Qt.rgba(1, 1, 1, 0.08) : "transparent")))
+        // 用户裁决 2026-10-23（R80 0.5）：内容区白描边一律去掉——盘钮填充层即材质，
+        // 不再叠 1px 白边（spec §2.7 亮边由顶部 specular 高光承担）。
         Rectangle {
             // specular top sheen, clipped to the circle
             visible: parent.filled
@@ -64,6 +193,17 @@ KosApplicationWindow {
                 GradientStop { position: 0; color: Qt.rgba(1, 1, 1, 0.28) }
                 GradientStop { position: 0.22; color: Qt.rgba(1, 1, 1, 0) }
             }
+        }
+        Rectangle {
+            // §5 Focus：2px accent 外环，偏移 2（margins −4 扣描边 2 留白恰 2px，外环计入描边宽度）；
+            // 色走 LiquidStyle.focusColor（accent 无彩/明度越界回退 #3478f6，§3 color.focusFallback）
+            visible: parent.focused
+            anchors.fill: parent
+            anchors.margins: -4
+            radius: parent.radius + 2
+            border.width: 2
+            border.color: LiquidStyle.focusColor(AppTheme.accent)
+            color: "transparent"
         }
     }
     readonly property bool nightClearSky:
@@ -85,6 +225,15 @@ KosApplicationWindow {
         return c === 2 || c === 3 || c === 45 || c === 48
     }
     readonly property bool thunderSky: root.currentWeatherCode >= 95
+    // R134｜批 12 隔离证据探针：只保留雨膜 + 滑痕，隐藏所有水珠折射精灵。
+    // 通过命令行参数 --probe-film-only 启动，用于证明「密度/膜感来自膜层而非水珠白点」。
+    readonly property bool probeFilmOnly: {
+        const args = Qt.application.arguments
+        for (let i = 0; i < args.length; i++)
+            if (args[i] === "--probe-film-only")
+                return true
+        return false
+    }
     readonly property var dailyRange: {
         let lo = Number.POSITIVE_INFINITY
         let hi = Number.NEGATIVE_INFINITY
@@ -126,79 +275,179 @@ KosApplicationWindow {
                 twinkleMs: 2400 + random() * 4800
             })
         }
+        // R115（CPU 轮）：闪烁相位与间歇用**独立** PRNG 生成，绝不扰动上面的位置/尺寸序列
+        // （同一条 random 流继续取数会让后续星位变化）。相位仍每次启动随机。
+        for (let index = 0; index < stars.length; index++) {
+            stars[index].twinklePauseMs = Math.random() * stars[index].twinkleMs
+        }
         return stars
     }
 
-    // Rain streaks: fixed-seed PRNG like the stars so the layout is
-    // identical on every launch; phase offsets stagger the fall start.
-    readonly property var rainField: {
-        const random = mulberry32(20261017)
-        const drops = []
-        for (let index = 0; index < 64; index++) {
-            drops.push({
-                xRatio: random(),
-                length: 10 + random() * 10,
-                opacity: 0.20 + random() * 0.28,
-                fallMs: 1500 + random() * 800,
-                phaseMs: random() * 2300
-            })
-        }
-        return drops
+    // 批 3｜粒子与闪电（用户 2026-10-24）：雨/雪由 64/56 个 QML delegate
+    // 改为 Canvas 粒子池（雨 420 / 雪 320，均 ≥300），粒子数接降水强度、
+    // 下落带风向偏移（windDirection）、雨/雪形态区分（雨=斜线，雪=圆点+摆动）。
+    // backend WeatherCurrent 无降水强度字段（services/data-service/weather.go:68），
+    // 按 weatherCode 映射为 0..1（映射表见 LEDGER 外推待确认）。
+    readonly property real precipitationIntensity: {
+        const code = root.currentWeatherCode
+        if (code >= 51 && code <= 55) return 0.35   // drizzle
+        if (code === 56 || code === 57) return 0.50 // freezing drizzle
+        if (code >= 61 && code <= 63) return 0.65   // rain
+        if (code >= 64 && code <= 67) return 0.90   // heavy/freezing rain
+        if (code >= 71 && code <= 73) return 0.45   // snow
+        if (code >= 74 && code <= 77) return 0.85   // heavy snow
+        if (code === 80) return 0.55
+        if (code === 81) return 0.75
+        if (code === 82) return 0.95
+        if (code === 85) return 0.65
+        if (code === 86) return 0.90
+        if (code >= 95) return 0.95                 // thunderstorm
+        return 0
     }
+    readonly property real windDirectionDeg: root.number(backend.current, "windDirection", 0)
+    readonly property real windSpeedValue: Math.max(0, root.number(backend.current, "windSpeed", 0))
+    // 风向为气象「来向」，粒子运动方向 = 来向 +180°；风偏移映射
+    // windFactor = clamp(windSpeed/40, 0, 1)（40 km/h 及以上按满速），
+    // 雨滴水平速度 = sin(rad(dir+180)) × 260 × windFactor px/s。
+    readonly property real windDriftX: {
+        const rad = (root.windDirectionDeg + 180) * Math.PI / 180
+        return Math.sin(rad) * Math.min(root.windSpeedValue / 40, 1) * 260
+    }
+    // 批 7｜Qt AngleDirection：angle 以 +x 轴为 0°、顺时针（y 向下）。
+    // 水平分量沿用既有 windDriftX（windDirection+180 的来向取反），垂直分量取该层标称下落速度；
+    // ±3° 抖动由 AngleDirection.angleVariation 提供。无风时退化为正下方 90°。
+    function rainAngleFor(vy) {
+        const vx = root.windDriftX
+        if (Math.abs(vx) < 0.001) return 90
+        return Math.atan2(vy, vx) * 180 / Math.PI
+    }
+    function rainMagFor(vy) {
+        return Math.sqrt(root.windDriftX * root.windDriftX + vy * vy)
+    }
+    // 批 11｜雨粒子层已删除（雨＝静止水痕），雨密度池/计数属性随之移除。
+    readonly property int snowParticlePool: 320
+    readonly property int snowParticleCount:
+        Math.round(root.snowParticlePool * root.precipitationIntensity)
 
-    // Snowflakes: fixed-seed PRNG like the stars/rain so the layout is
-    // identical on every launch; slow drift + sideways sway (HIG ambient
-    // loop 2-12s: one flake crossing the screen takes 6-11s).
-    readonly property var snowField: {
-        const random = mulberry32(20261018)
-        const flakes = []
-        for (let index = 0; index < 56; index++) {
-            flakes.push({
-                xRatio: random(),
-                diameter: 2.0 + random() * 3.0,
-                opacity: 0.35 + random() * 0.45,
-                fallMs: 6000 + random() * 5000,
-                swayAmp: 8 + random() * 14,
-                swayMs: 2000 + random() * 2000,
-                phaseMs: random() * 11000,
-                swayPhaseMs: random() * 4000
-            })
-        }
-        return flakes
+    // 批 2｜云层分层与参数化（用户 2026-10-24）：单层 → 前/中/后三层，
+    // 速度比 前:中:后 = 1 : 0.55 : 0.3（前最快），透明度随深度递减（后层更淡）。
+    // 云朵数量与不透明度接 cloudCover（0% 无云、100% 满覆盖），不再写死随机数。
+    // backend WeatherCurrent 无 cloudCover 字段（services/data-service/weather.go:68），
+    // 故按 weatherCode 映射为百分比（映射表见 LEDGER 外推待确认）。
+    readonly property real cloudCover: {
+        const code = root.currentWeatherCode
+        if (code < 0) return 0
+        if (code === 0) return 0.05          // clear
+        if (code === 1) return 0.22          // mainly clear
+        if (code === 2) return 0.55          // partly cloudy
+        if (code === 3) return 0.95          // overcast
+        if (code === 45 || code === 48) return 0.85   // fog
+        if (code >= 51 && code <= 57) return 0.80     // drizzle
+        if (code >= 61 && code <= 67) return 0.90     // rain
+        if (code >= 71 && code <= 77) return 0.92     // snow
+        if (code >= 80 && code <= 82) return 0.75     // showers
+        if (code >= 95) return 0.95          // thunderstorm
+        return 0.60
     }
+    readonly property real cloudCoverOpacity: 0.25 + 0.75 * root.cloudCover
+
+    // 批 4｜大气洗层（用户 2026-10-24）：雾/霾/沙尘半透 wash，按 weatherCode 开关，
+    // opacity 0.12–0.30（裁决区间）。Open-Meteo 无霾/沙尘码，WMO 30–35 按沙尘处理；
+    // 45/48 为雾/雾凇。静态层，无动画（reduceMotion 天然满足）。
+    // R141｜§2.10：wash 把天空整体抬亮，白 α0.14 卡底上的白字被拉到 3.60:1、
+    // muted α0.86 到 3.10:1（雾天实测，见 LEDGER 仍差④）。wash 与卡底亮度是乘法关系，
+    // 单靠压深天空要压到 L≈0.15×（近黑）才够 4.5:1，会把雾天做成夜景。
+    // 故取裁决区间下限 **0.12**（原 0.30/0.26/0.24），配合 day 雾天天空压深一档。
+    readonly property var atmosphereWash: {
+        const code = root.currentWeatherCode
+        if (code === 45) return { color: "#d8dee6", alpha: 0.12 }       // fog
+        if (code === 48) return { color: "#c9d6e2", alpha: 0.12 }       // depositing rime fog
+        if (code >= 30 && code <= 35) return { color: "#c4a678", alpha: 0.12 } // dust / sand
+        return { color: "#d8dee6", alpha: 0 }
+    }
+    readonly property real atmosphereWashAlpha: root.atmosphereWash.alpha
+    readonly property color atmosphereWashColor: root.atmosphereWash.color
+
+    // 批 4｜夜空月亮：按 moonPhase 相位绘制，位置随时间（月相决定月中天时刻——
+    // 新月≈12:00、满月≈00:00，故 transit = 12:00 + 24h×phase）。天顶/地平弧与
+    // ±6h 可见窗口为天文近似推导值（无星历表，记 LEDGER 外推）。
+    readonly property real moonPhaseNorm: {
+        const v = root.number(backend.current, "moonPhase", Number.NaN)
+        return Number.isFinite(v) ? ((v % 1) + 1) % 1 : 0.5
+    }
+    readonly property int moonClockMinute: {
+        const t = root.clockMinutes(root.value(backend.current, "time", ""))
+        return Number.isNaN(t) ? 720 : t
+    }
+    readonly property int moonTransitMinute: (720 + Math.round(1440 * root.moonPhaseNorm)) % 1440
+    readonly property real moonDeltaMinute: {
+        let d = root.moonClockMinute - root.moonTransitMinute
+        while (d > 720) d -= 1440
+        while (d < -720) d += 1440
+        return d
+    }
+    readonly property bool moonVisible: !root.currentIsDay
+        && Math.abs(root.moonDeltaMinute) < 360
+        && root.cloudCover < 0.9
+    readonly property real moonXRatio: 0.5 + (root.moonDeltaMinute / 720) * 0.72
+    readonly property real moonYRatio:
+        0.09 + 0.40 * (1 - Math.cos(Math.min(Math.abs(root.moonDeltaMinute) / 360, 1) * Math.PI / 2))
+
+    // 三层云参数。driftMs = 基准 9000ms / 速度比 → 前 9000 / 中 16364 / 后 30000。
+    // maxCount 为 100% 覆盖时的满额朵数，实际朵数 = round(maxCount × cloudCover)。
+    readonly property var cloudLayers: [
+        { name: "back",  speed: 0.30, driftMs: 30000, depthOpacity: 0.55,
+          maxCount: 5, wMin: 260, wRange: 200, hRatio: 0.24, yMax: 0.20, alphaBase: 0.16, alphaRange: 0.10 },
+        { name: "mid",   speed: 0.55, driftMs: 16364, depthOpacity: 0.78,
+          maxCount: 5, wMin: 220, wRange: 160, hRatio: 0.30, yMax: 0.34, alphaBase: 0.22, alphaRange: 0.12 },
+        { name: "front", speed: 1.00, driftMs: 9000,  depthOpacity: 1.00,
+          maxCount: 4, wMin: 150, wRange: 170, hRatio: 0.38, yMax: 0.46, alphaBase: 0.30, alphaRange: 0.18 }
+    ]
 
     // Cloud puffs: fixed-seed PRNG so the layout is identical on every
-    // launch; each cloud drifts across the full screen (HIG ambient loop
-    // 2-12s: one crossing takes 8-12s).
+    // launch; each cloud drifts across the full screen. ref-main 观感拟合（用户第二批背景轮）：
+    // 云deck集中在顶部 ~50%（ref 云带在 top 8-45%），三层——后层大而淡的云堤、
+    // 中层过渡、前层较实的结构云（paint 时分层出阴影底/受光顶，光源左上 §2.7）。
     readonly property var cloudField: {
         const random = mulberry32(20261019)
         const clouds = []
-        for (let index = 0; index < 7; index++) {
-            const cloudWidth = 160 + random() * 180
-            const driftMs = 8000 + random() * 4000
-            const puffs = []
-            for (let puff = 0; puff < 4; puff++) {
-                puffs.push({
-                    cxRatio: 0.15 + random() * 0.7,
-                    cyRatio: 0.35 + random() * 0.35,
-                    rRatio: 0.28 + random() * 0.22,
-                    alphaMul: 0.6 + random() * 0.4
+        for (let layerIndex = 0; layerIndex < root.cloudLayers.length; layerIndex++) {
+            const spec = root.cloudLayers[layerIndex]
+            const count = Math.round(spec.maxCount * root.cloudCover)
+            for (let index = 0; index < count; index++) {
+                const cloudWidth = spec.wMin + random() * spec.wRange
+                const puffs = []
+                // 结构云细化（ref-main 观感）：旧版每朵只有 5 个大半径径向渐变团，
+                // 上屏读成散景光斑；改为沿云体横向等距铺 14 个小绒团 + 随机抖动，
+                // 形成连续云 deck 的细部。云朵数量/透明度/速度比不变（批 2 裁决）。
+                for (let puff = 0; puff < 14; puff++) {
+                    puffs.push({
+                        cxRatio: 0.04 + (puff / 13) * 0.92 + (random() - 0.5) * 0.07,
+                        cyRatio: 0.32 + random() * 0.36,
+                        rRatio: 0.15 + random() * 0.18,
+                        alphaMul: 0.55 + random() * 0.45
+                    })
+                }
+                puffs.sort(function(a, b) { return a.cxRatio - b.cxRatio })
+                clouds.push({
+                    layer: spec.name,
+                    xRatio: random(),
+                    yRatio: random() * spec.yMax,
+                    cloudWidth: cloudWidth,
+                    cloudHeight: cloudWidth * spec.hRatio,
+                    opacity: (spec.alphaBase + random() * spec.alphaRange)
+                             * spec.depthOpacity * root.cloudCoverOpacity,
+                    driftMs: spec.driftMs,
+                    phaseMs: random() * spec.driftMs,
+                    puffs: puffs
                 })
             }
-            puffs.sort(function(a, b) { return a.cxRatio - b.cxRatio })
-            clouds.push({
-                xRatio: random(),
-                yRatio: random() * 0.55,
-                cloudWidth: cloudWidth,
-                cloudHeight: cloudWidth * 0.38,
-                opacity: 0.10 + random() * 0.14,
-                driftMs: driftMs,
-                phaseMs: random() * driftMs,
-                puffs: puffs
-            })
         }
         return clouds
     }
+    readonly property var cloudFieldBack: root.cloudField.filter(function(c) { return c.layer === "back" })
+    readonly property var cloudFieldMid: root.cloudField.filter(function(c) { return c.layer === "mid" })
+    readonly property var cloudFieldFront: root.cloudField.filter(function(c) { return c.layer === "front" })
 
     // Static high cloud band for the clear day sky: a fixed-seed PRNG lays
     // out 5 soft white streaks hugging the top of the window. Streak form
@@ -284,12 +533,13 @@ KosApplicationWindow {
         for (let i = 0; i < 3; i++) {
             const cloudWidth = 70 + random() * 60
             const puffs = []
-            for (let puff = 0; puff < 4; puff++) {
+            // 与主天空同一细化口径：小绒团铺满云体，避免侧栏卡上读成模糊白斑。
+            for (let puff = 0; puff < 10; puff++) {
                 puffs.push({
-                    cxRatio: 0.1 + random() * 0.8,
-                    cyRatio: 0.3 + random() * 0.4,
-                    rRatio: 0.28 + random() * 0.22,
-                    alphaMul: 0.6 + random() * 0.4
+                    cxRatio: 0.06 + (puff / 9) * 0.88 + (random() - 0.5) * 0.08,
+                    cyRatio: 0.34 + random() * 0.32,
+                    rRatio: 0.18 + random() * 0.16,
+                    alphaMul: 0.5 + random() * 0.5
                 })
             }
             puffs.sort(function(a, b) { return a.cxRatio - b.cxRatio })
@@ -305,21 +555,107 @@ KosApplicationWindow {
         return clouds
     }
 
-    function skyStopsFor(code, isDay) {
+    // 时刻（本地 ISO 无时区后缀）→ 分钟数；无法解析返回 NaN
+    function clockMinutes(isoTime) {
+        const match = String(isoTime ?? "").match(/T(\d{2}):(\d{2})/)
+        if (!match) return Number.NaN
+        return Number(match[1]) * 60 + Number(match[2])
+    }
+
+    // 4 时段判定（用户 2026-10-24 批 1）：以本地日出/日落为锚点。
+    // dawn = 日出前 50min – 日出后 60min；dusk = 日落前 60min – 日落后 50min；
+    // 其余按日升/日落分 day/night。窗口宽度 spec/参考图均未给，记 LEDGER 外推。
+    function skyPeriodFor(currentTime, sunrise, sunset, isDay) {
+        const now = clockMinutes(currentTime)
+        const rise = clockMinutes(sunrise)
+        const set = clockMinutes(sunset)
+        if (!Number.isNaN(now) && !Number.isNaN(rise) && !Number.isNaN(set)) {
+            if (now >= rise - 50 && now < rise + 60) return "dawn"
+            if (now >= set - 60 && now < set + 50) return "dusk"
+            if (now >= rise + 60 && now < set - 60) return "day"
+            return "night"
+        }
+        return Boolean(isDay) ? "day" : "night"
+    }
+
+    // 天空目标色刷新：时段切换走 12s 插值，天气条件切换走 1.2s crossfade。
+    function refreshSkyStops() {
+        const next = skyStopsFor(root.currentWeatherCode, root.skyPeriod)
+        const periodChanged = root._lastSkyPeriod !== ""
+            && root._lastSkyPeriod !== root.skyPeriod
+        const codeChanged = root._lastSkyCode !== -2
+            && root._lastSkyCode !== root.currentWeatherCode
+        root.skyTransitionMs = (codeChanged || !periodChanged) ? 1200 : 12000
+        root.skyTop = next[0]
+        root.skyMid = next[1]
+        root.skyBottom = next[2]
+        root._lastSkyPeriod = root.skyPeriod
+        root._lastSkyCode = root.currentWeatherCode
+    }
+
+    // 4 时段调色板（day/night 沿用既有 ref-main 拟合值；dawn/dusk 按 iOS 天气晨昏观感拟合，
+    // spec §3 无天空色 token，记 LEDGER 外推）。第二参数兼容旧布尔调用（侧栏城市卡：day/night）。
+    function skyStopsFor(code, periodOrIsDay) {
         const c = Number(code)
-        if (!isDay) {
+        const period = typeof periodOrIsDay === "string"
+            ? periodOrIsDay
+            : (Boolean(periodOrIsDay) ? "day" : "night")
+        // R139｜§2.10 正文对比 ≥4.5:1：雨/雪天的天空原本比晴天还亮（rain day 底部 #b9c5ce），
+        // 白 α0.16 的卡叠上去后卡面 (195,205,213) → 白字实测仅 **1.90:1**（LEDGER 仍差①）。
+        // 三条出路里选「天空压深」（另两条会推翻卡片材质/降级验收，均属新裁决）：
+        // 按下式反解每个 stop，使「白 α0.16 卡片底」上的白字达到 ≥4.5:1（实测值见 LEDGER）。
+        // R142｜§2.10 dawn/dusk 全档收口（「仍差」⑤）：晨昏档是白 α0.14 卡底对比最差的一族
+        // （clear bottom #f0b184 仅 1.69:1；雾/沙尘走 fallback 也只有 2.12:1，叠加 wash α0.12 后更低）。
+        // 取法与 R139/R140/R141 同源：**保持色相与饱和度，只按 HLS 明度二分压深**，
+        // 使「白 α0.14 卡底上白字 ≥4.60:1 且 muted α0.86 ≥4.60:1」（含 wash 的雾/沙尘档按叠加后底反解）。
+        // 代价：晨昏的暖金/橙红底被压成深暖褐（观感损失大，见 LEDGER 外推，可整段回退）。
+        if (period === "dawn") {
+            if (c >= 95) return ["#2a2f47", "#5b4a5c", "#5d4b4f"]
+            if (c === 0 || c === 1) return ["#37456e", "#7c4029", "#813f10"]
+            if (c === 2) return ["#3f4a6d", "#724533", "#794220"]
+            if ((c >= 51 && c <= 67) || (c >= 80 && c <= 82))
+                return ["#494f64", "#574d51", "#5c4c4c"]
+            if ((c >= 71 && c <= 77) || c === 85 || c === 86)
+                return ["#485062", "#644950", "#734444"]
+            if (c === 45 || c === 48) return ["#363c4f", "#4a3932", "#50372a"]
+            if (c >= 30 && c <= 35) return ["#3c4359", "#534038", "#593d2e"]
+            return ["#474f69", "#624b42", "#6a4937"]
+        }
+        if (period === "dusk") {
+            if (c >= 95) return ["#262a42", "#664755", "#664754"]
+            if (c === 0 || c === 1) return ["#2f3a62", "#853b28", "#8c380f"]
+            if (c === 2) return ["#394468", "#784236", "#813e27"]
+            if ((c >= 51 && c <= 67) || (c >= 80 && c <= 82))
+                return ["#474d63", "#5d4b50", "#5f4b4a"]
+            if ((c >= 71 && c <= 77) || c === 85 || c === 86)
+                return ["#485063", "#654853", "#73434b"]
+            if (c === 45 || c === 48) return ["#373c4d", "#4f3732", "#563529"]
+            if (c >= 30 && c <= 35) return ["#3e4356", "#583d38", "#5f3b2e"]
+            return ["#444a5f", "#684842", "#714536"]
+        }
+        if (period === "night") {
             if (c >= 95) return ["#141a2c", "#1d2740", "#33415f"]
             if (c === 0 || c === 1) return ["#0c1a33", "#12294d", "#274d79"]
             if (c === 2) return ["#101f38", "#1a3355", "#31507a"]
             return ["#0f1826", "#1b2637", "#2e3c52"]
         }
-        if (c >= 95) return ["#2a3752", "#3c4c6e", "#5a6b8c"]
+        if (c >= 95) return ["#2a3752", "#3c4c6e", "#4c5a76"]
         if ((c >= 51 && c <= 67) || (c >= 80 && c <= 82))
-            return ["#3d5a7d", "#2a4a70", "#5f83a8"]
+            return ["#3d5566", "#3b5564", "#435360"]   // R139：原 ["#9ab5c4","#92aebe","#b9c5ce"] 卡面白字仅 1.90:1（§2.10）；R140 后两档再压一档（0.86 muted 4.53/4.55:1）
         if ((c >= 71 && c <= 77) || c === 85 || c === 86)
-            return ["#7b90a6", "#5d7690", "#a9bccd"]
-        if (c === 3 || c === 45 || c === 48) return ["#6a7b90", "#4a5d75", "#8ba0b5"]
-        return ["#4a74ab", "#1469bc", "#5a90c9"]   // clear / mainly clear / partly cloudy day
+            return ["#4a5c6e", "#495c71", "#435d74"]   // R139：原 ["#7b90a6","#5d7690","#a9bccd"] → 4.66/4.65/4.65:1
+        // ref-main 观感拟合（用户 2026-10-23 第二批判据：以 ref-main 观感为准）：云隙蓝天梯度，
+        // 顶部灰蓝由云deck覆盖，中段 y0.45 实测 ≈#1560b2，底部深蓝 ≈#0c5aa8。原灰调
+        // ["#6a7b90","#4a5d75","#8ba0b5"] 是"粗糙感"来源之一（ref 顶部云隙间仍为饱和蓝）。
+        // R140｜§2.10：晴/多云档沿用 ref-main 色相，仅按 HLS 明度二分压深到「白 α0.16 卡底上
+        // 白字 ≥4.5:1 且 muted α0.86 ≥4.5:1」，故比 ref 饱和蓝暗一档（见 LEDGER 外推）。
+        // R141｜§2.10 雾/霾/沙尘：大气洗层（α0.12）把天空整体抬亮，白 α0.14 卡底上的
+        // muted α0.86 实测仅 3.10:1。洗层已取裁决下限 0.12，天空再按 HLS 明度 ×0.85
+        // （雾/雾凇）/ ×0.95（沙尘）压深一档，实测回到 4.51–4.54:1（见 LEDGER 已改 R141）。
+        if (c === 45 || c === 48) return ["#2a4059", "#0e4076", "#084177"]
+        if (c >= 30 && c <= 35) return ["#2e4769", "#0d4982", "#24486e"]
+        if (c === 3) return ["#324b69", "#104b8b", "#0a4c8c"]
+        return ["#304b6f", "#0e4d89", "#264c74"]   // clear / mainly clear / partly cloudy day（R140 压深）
     }
 
     function tempColor(temperature) {
@@ -455,20 +791,13 @@ KosApplicationWindow {
 
         implicitHeight: 66
         radius: root.tileRadius
-        // 昼夜分材质：ref-main 白天所有卡填充暗于周围天空，拟合为 α~0.30 深蓝玻璃 (0,96,210)；夜间维持白玻璃
+        // 中性白玻璃（用户裁定 2026-10-23）：填充走 cardGlassRgb/cardGlassAlpha（白 α0.14/0.16），
+        // 禁蓝色 tint；白天卡比天空亮、夜里更亮。白描边已按用户裁决 2026-10-23（R80 0.5）去除。
         property bool hot: metricHover.hovered
-        // unified with full-width cards (AQ/10-day): fill 0.16 + stroke 0.22; ref-main shows one shared card material
+        // unified with full-width cards (AQ/10-day): fill 0.16; ref-main shows one shared card material
         property real hoverFill: hot ? root.cardGlassAlphaHot : root.cardGlassAlpha
         Behavior on hoverFill { NumberAnimation { duration: AppTheme.motionNormal; easing.type: Easing.OutCubic } }
-        property real hoverStroke: hot ? 0.32 : 0.22
-        Behavior on hoverStroke { NumberAnimation { duration: AppTheme.motionNormal; easing.type: Easing.OutCubic } }
         color: Qt.rgba(root.cardGlassRgb.r, root.cardGlassRgb.g, root.cardGlassRgb.b, hoverFill)
-        border.width: 1
-        border.color: Qt.rgba(1, 1, 1, hoverStroke)
-        transform: Translate {
-            y: AppTheme.reduceMotion ? 0 : (metric.hot ? -3 : 0)
-            Behavior on y { NumberAnimation { duration: AppTheme.motionNormal; easing.type: Easing.OutCubic } }
-        }
         Accessible.role: Accessible.StaticText
         Accessible.name: metric.labelText + ": " + metric.valueText
 
@@ -546,13 +875,550 @@ KosApplicationWindow {
         onActivated: backend.refresh()
     }
 
+    // 液态玻璃采样源（§2.2：玻璃采样 L0 内容、拒绝自捕获）。声明在不透明天空矩形
+    // 之前 → 被 sky 全覆盖、屏上不可见，仅供 LiquidBackdrop 捕获。内容 = 胶囊背后
+    // 的真实合成（天空副本 + 半透明侧栏面 sidebarSurface@α，侧栏本体系 α0.32/0.36
+    // 玻璃面，星空/云可透）；不含任何玻璃消费方。
     Rectangle {
+        id: sidebarGlassUnderlay
+        width: sidebar.width
+        height: root.height
+        gradient: Gradient {
+            GradientStop { position: 0.0; color: root.skyTop }
+            GradientStop { position: 0.45; color: root.skyMid }
+            GradientStop { position: 1.0; color: root.skyBottom }
+        }
+        Rectangle { anchors.fill: parent; color: AppTheme.sidebarSurface }
+    }
+    // CPU 轮（批 9 后续）：静采源只在天空色/尺寸变化时重捕获，不再 live:true 每帧
+    // 强制重绘（§1 L0 采样源、不参与玻璃预算）。12s 天空过渡期间 onSky*Changed 每帧
+    // 触发 refresh()，观感与 live 等价；静止时 0 次捕获。
+    LiquidBackdrop {
+        id: sidebarBackdrop
+        sourceItem: sidebarGlassUnderlay
+        live: false
+        // R116（CPU 轮）：采样源在场景里被后面的不透明天空矩形整块覆盖，本就不上屏；
+        // 但 ShaderEffectSource 默认 hideSource:false 会让它每帧仍参与合成（整窗高渐变 +
+        // 侧栏面填充，纯过绘制）。置 true 后只留 1 次按需捕获，稳态每帧少两层全窗/全高绘制。
+        hideSource: true
+        onAvailableChanged: refresh()
+        Component.onCompleted: refresh()
+    }
+
+    // 批 12｜天空折射源容器：所有天空层（渐变 / 云 / 日晕 / 星空 / 月亮 / 洗层）
+    // 通过 `parent: skyComposite` 收进来，作为 ShaderEffectSource 的唯一采样源。
+    // 属于 L0 天空材质，不入玻璃预算（§1/§2.2）。
+    Item {
+        id: skyComposite
+        anchors.fill: parent
+    }
+
+    ShaderEffectSource {
+        id: skyRefractionSource
+        anchors.fill: parent
+        sourceItem: skyComposite
+        // 雨天：源不直接上屏，只经水图折射后由下方 ShaderEffect 输出；
+        // 非雨天完全旁路（hideSource=false、live=false），成本为零。
+        hideSource: root.rainySky
+        live: root.rainySky
+        recursive: false
+        wrapMode: ShaderEffectSource.ClampToEdge
+    }
+
+    // 批 12｜雨＝折射（不是画白点）：waterMap 的 RG 是偏移图，A 是覆盖率；
+    // uv' = uv + (RG−0.5)·strength·A → 一次纹理查表完成透镜折射；
+    // 再把偏移向量当法线做单点镜面高光（光源左上 §2.7）+ 极淡雾。
+    //
+    // 批 12 余项①（R131）：折射只覆盖天空区。下方 mask 是"全窗白底 + 卡片/侧栏黑矩形"，
+    // shader 在掩码 0 处输出未偏移的天空 → 半透卡(α≈0.14)与侧栏底下不再透出水珠，
+    // 与「ShaderEffect 区域只覆盖天空区（不含卡片/侧栏）」等价，且不需要把天空拆层。
+    // 掩码用 Canvas 而不是 Item 树：本机软件光栅下 hideSource:true 的源项只捕获首帧、
+    // 之后不再重绘（R128/R129 同族根因），而水图 Canvas（x:-4096 + hideSource:false）
+    // 已被证明可持续绘制。坐标与屏幕一致（x/y 移出窗口只影响合成，不影响 Canvas 坐标系）。
+    Canvas {
+        id: refractionMaskCanvas
+        x: -4096
+        y: -4096
+        width: Math.max(1, root.width)
+        height: Math.max(1, root.height)
+        // 不上屏，只作纹理源；保持 visible 以便 onPaint 正常触发。
+        Component.onCompleted: maskKick.start()
+        onWidthChanged: requestPaint()
+        onHeightChanged: requestPaint()
+        onPaint: {
+            var ctx = getContext("2d")
+            ctx.clearRect(0, 0, width, height)
+            ctx.fillStyle = "#ffffff"
+            ctx.fillRect(0, 0, width, height)
+            ctx.fillStyle = "#000000"
+            var list = [sidebar, airQualityCard, conditionsCard,
+                        hourlyConditionsCard, dailyCard]
+            for (var i = 0; i < list.length; i++) {
+                var it = list[i]
+                var p = it.mapToItem(root.contentItem, 0, 0)
+                ctx.fillRect(p.x, p.y, it.width, it.height)
+            }
+            refractionMaskSource.scheduleUpdate()
+        }
+        // 首帧可能早于布局完成；1.2s 后补一次（一次性）。
+        Timer { id: maskKick; interval: 1200; running: false; repeat: false
+                onTriggered: refractionMaskCanvas.requestPaint() }
+        // 滚动/数据变化会让卡片位置/高度改变，重画掩码。
+        Connections {
+            target: mainFlick
+            function onContentYChanged() { refractionMaskCanvas.requestPaint() }
+            function onContentHeightChanged() { refractionMaskCanvas.requestPaint() }
+        }
+    }
+
+    ShaderEffectSource {
+        id: refractionMaskSource
+        // 同水图源：源项与采样项都移出窗口（不上屏），只用其纹理。若留在窗口内
+        // 且 hideSource:false，本机会把白底掩码直接合成到屏上（R131 实测：晴天整窗变白）。
+        x: -4096
+        y: -4096
+        width: Math.max(1, root.width)
+        height: Math.max(1, root.height)
+        sourceItem: refractionMaskCanvas
+        hideSource: false
+        // 只在掩码矩形变化（布局/滚动）时重捕获。首次捕获可能早于布局完成，
+        // 故 1s 后再补一次（一次性，非每帧）。
+        live: false
+        recursive: false
+        wrapMode: ShaderEffectSource.ClampToEdge
+        textureSize: Qt.size(Math.max(1, width), Math.max(1, height))
+        Component.onCompleted: maskSettle.start()
+        Timer { id: maskSettle; interval: 1000; running: false; repeat: false
+                onTriggered: refractionMaskSource.scheduleUpdate() }
+    }
+
+    ShaderEffect {
+        id: rainRefraction
+        anchors.fill: parent
+        visible: root.rainySky
+        vertexShader: Qt.resolvedUrl("shaders/rain_refract.vert.qsb")
+        fragmentShader: Qt.resolvedUrl("shaders/rain_refract.frag.qsb")
+        property var source: skyRefractionSource
+        property var waterMap: waterMapSource
+        property var maskSource: refractionMaskSource
+        property vector2d surfaceSize: Qt.vector2d(Math.max(1, width), Math.max(1, height))
+        property vector2d mapRepeat: Qt.vector2d(width / 512.0, height / 512.0)
+        property real strength: 0.12
+        property real specular: 0.28
+        property real fog: 0.05
+        // 批 12 第 4 项：雨膜压暗系数。滑落水珠擦过处膜被擦掉 → 亮带。
+        // R133：0.22 → 0.30（外推区间上限），加强雨天玻璃膜层与滑痕亮带的可见度。
+        property real filmDim: 0.30
+    }
+
+    // 批 12｜水图 512×512（静止时不重绘，只有下滑水珠的局部脏矩形会更新）：
+    // 网格 40px + ±40% 抖动 + 按列错位；主层 ~160 颗、远层 ~90 颗、冷凝小点 ~200 颗。
+    // 每颗用 drop-offset.png（R=y 偏移 / G=x 偏移 / B=深度 / A=覆盖率）盖图。
+    // R126（批 12 余项②）：12–20 颗水珠走锯齿函数（粘住 3–6s → 0.3–0.8s 滑落），
+    // 直接写回水图：滑过处 clearRect 擦掉水珠/雾（shader 中 A=0 → 不折射、不雾化），
+    // 留下一条"擦干净"的亮带；只清该滴的窄条脏矩形，绝不整图重绘。
+    // R129：偏移图精灵改由 Image 项提供。Canvas.loadImage() 在未就绪时返回 undefined
+    // 且 onImageLoaded 不会重新取图 → onPaint 永远早退（R128 根因 A）。
+    // Image 在 status==Ready 后 Canvas.drawImage(Item) 同步可用。
+    Image {
+        id: offsetSpriteImage
+        source: "particles/drop-offset.png"
+        asynchronous: false
+        cache: true
+        visible: false
+        onStatusChanged: if (status === Image.Ready) waterMapCanvas.requestPaint()
+    }
+
+    Canvas {
+        id: waterMapCanvas
+        // R129：水图只作 ShaderEffect 的折射输入，不上屏。Canvas 不可见时 onPaint 不触发
+        // （R128 根因 B），故保持 visible，但移到窗口外——可见性/绘制照常、像素被裁掉。
+        x: -4096
+        y: -4096
+        width: 512
+        height: 512
+        property var staticStamps: []
+        property var filmBands: []
+        property var filmBlobs: []
+        property var slideDrops: []
+        property bool stampsBuilt: false
+        // R133：滑痕状态模型（每滴一段 top/bottom，≤48px）。Canvas 2D context 只在
+        // onPaint 内有效——旧实现在 advanceSlides 里直接 ctx.clearRect 不生效（探针实测
+        // 水图在 8s 时仍无任何滑痕）。改为「状态 + onPaint 重建」，滑动时才 requestPaint。
+        property var slideTrail: []
+        property var slideLastY: []
+        property real clock: 0
+        property double lastClockMs: 0
+        property int updatePhase: 0
+        Accessible.ignored: true
+        // 偏移图就绪后重画一次（Image 项异步加载完成 → 同步重绘水图）。
+        Component.onCompleted: if (offsetSpriteImage.status === Image.Ready) requestPaint()
+
+        function buildStamps() {
+            // 批 13｜"去气泡化"：真实雨打玻璃 = 微珠为主 + 水膜连片 + 形状不规则。
+            // 尺寸分布 90% 1–3px / 8% 3–8px / 2% 8–14px，总数 ≈1400（512² 水图）。
+            // 铺放：格 28px、抖动 ±60%、逐列错位（禁止横平竖直）。
+            const stamps = []
+            let seed = 20261024
+            function rnd() {
+                seed |= 0
+                seed = (seed + 0x6D2B79F5) | 0
+                let t = Math.imul(seed ^ (seed >>> 15), 1 | seed)
+                t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t
+                return ((t ^ (t >>> 14)) >>> 0) / 4294967296
+            }
+            const cell = 28
+            const cols = Math.ceil(width / cell)
+            const rows = Math.ceil(height / cell)
+            const target = 1400
+            let placed = 0
+            // R138：原实现「每格一颗、放够 target 停」——28px 格在 512² 上只有 19×19 = **361 格**，
+            // 所以 1400 颗根本放不出来（实际 ≈361），批 13「总数 ≈1400」从未达成；
+            // 密度差 3.9 倍正是"孤立气泡"的直接来源，改尺寸分布解决不了。
+            // 改为：每格放 PER_CELL 颗（格内再抖动），1400/361 ≈ 3.9 → 取 4。
+            const perCell = Math.max(1, Math.round(target / (rows * cols)))
+            for (let row = 0; row < rows && placed < target; row++) {
+                for (let col = 0; col < cols && placed < target; col++) {
+                    for (let k = 0; k < perCell && placed < target; k++) {
+                    const jx = (rnd() - 0.5) * cell * 1.2
+                    const jy = (rnd() - 0.5) * cell * 1.2
+                    const colShift = ((col * 11) % 7 - 3) * 3.5
+                    // 尺寸三档：90% 微珠 / 8% 中珠 / 2% 大珠。
+                    const roll = rnd()
+                    let size
+                    let shape
+                    let stretch
+                    if (roll < 0.90) {
+                        size = 1 + rnd() * 2
+                        shape = 0
+                        stretch = 1.0
+                    } else if (roll < 0.98) {
+                        size = 3 + rnd() * 5
+                        shape = 1
+                        stretch = rnd() < 0.6 ? 1.15 : 1.6
+                    } else {
+                        size = 8 + rnd() * 6
+                        shape = rnd() < 0.25 ? 2 : (rnd() < 0.6 ? 1 : 0)
+                        stretch = shape === 2 ? 1.0 : 1.15
+                    }
+                    // 微珠折射弱（避免整片发亮）：α 随直径缩放。
+                    // R138：最小档 0.55 → 0.72。批 13 只要求"越小越弱"的相对序（0.72 < 0.85 < 1.0），
+                    // 未定绝对值；0.55 在 1× 下低于可辨阈值，90% 的微珠看不见 → 屏上只剩少数中/大珠，
+                    // 仍读作"孤立泡泡"（LEDGER 仍差③）。上调后微珠连成雾面，而大珠仍最亮。
+                    const alpha = size < 3 ? 0.72 : (size < 8 ? 0.85 : 1.0)
+                    stamps.push({
+                        x: col * cell + cell / 2 + jx + colShift,
+                        y: row * cell + cell / 2 + jy,
+                        size: size,
+                        stretch: stretch,
+                        alpha: alpha,
+                        shape: shape,
+                        lump: shape === 2 ? 3 + Math.floor(rnd() * 3) : 0
+                    })
+                    placed++
+                    }
+                }
+            }
+            staticStamps = stamps
+
+            // 水膜细带：相互距离 <6px 的水珠用 1–2px、α 0.05–0.12 的细带连起来，
+            // 使水珠成片而非孤立。用格哈希做邻域查询，避免 1400² 全比较。
+            const bands = []
+            const HASH = 8
+            const buckets = {}
+            for (let i = 0; i < stamps.length; i++) {
+                const s = stamps[i]
+                const key = Math.floor(s.x / HASH) + ":" + Math.floor(s.y / HASH)
+                if (!buckets[key])
+                    buckets[key] = []
+                buckets[key].push(i)
+            }
+            for (let i = 0; i < stamps.length; i++) {
+                const a = stamps[i]
+                const gx = Math.floor(a.x / HASH)
+                const gy = Math.floor(a.y / HASH)
+                for (let ox = -1; ox <= 1; ox++) {
+                    for (let oy = -1; oy <= 1; oy++) {
+                        const list = buckets[(gx + ox) + ":" + (gy + oy)]
+                        if (!list)
+                            continue
+                        for (let k = 0; k < list.length; k++) {
+                            const j = list[k]
+                            if (j <= i)
+                                continue
+                            const b = stamps[j]
+                            const d = Math.hypot(a.x - b.x, a.y - b.y)
+                            if (d >= 6)
+                                continue
+                            bands.push({
+                                x1: a.x, y1: a.y, x2: b.x, y2: b.y,
+                                width: 1 + rnd(),
+                                alpha: 0.05 + rnd() * 0.07
+                            })
+                        }
+                    }
+                }
+            }
+            filmBands = bands
+            // 整体水膜底噪：低频、横向略拉长的柔斑（α 0.03–0.05）。
+            const blobs = []
+            for (let i = 0; i < 26; i++) {
+                blobs.push({
+                    x: rnd() * width,
+                    y: rnd() * height,
+                    w: 40 + rnd() * 90,
+                    h: 16 + rnd() * 28,
+                    alpha: 0.03 + rnd() * 0.02
+                })
+            }
+            filmBlobs = blobs
+
+            // 下滑水珠 14 颗（裁决 12–20）：粘住 3–6s → 0.3–0.8s 纯垂直滑落，
+            // 每次滑 70–180px；y 函数用取模，滑到底自动从顶部附近重新出现。
+            const rand2 = root.mulberry32(20261025)
+            const drops = []
+            for (let i = 0; i < 14; i++) {
+                drops.push({
+                    x: 16 + rand2() * (width - 32),
+                    y0: rand2() * height,
+                    stick: 3 + rand2() * 3,
+                    slide: 0.3 + rand2() * 0.5,
+                    dist: 70 + rand2() * 110,
+                    // 批 13：下滑珠也不能是"气泡"——收到 3–5px（屏上 ≈7–12px），
+                    // 与 90% 微珠同量级，只做"少数会滑"的例外。
+                    size: 3 + rand2() * 2
+                })
+            }
+            slideDrops = drops
+            stampsBuilt = true
+        }
+
+        function stampAt(ctx, x, y, size, alpha) {
+            ctx.globalAlpha = alpha
+            ctx.drawImage(offsetSpriteImage, x - size / 2, y - size / 2, size, size)
+        }
+
+        // 批 13 形状：0 = 竖向椭圆 1:1.15，1 = 明显拉长 1:1.6，2 = 不规则轮廓
+        // （用 3–5 个错位小副本叠出非正圆轮廓，仍是 drawImage，不引入逐滴路径）。
+        function stampShape(ctx, s) {
+            const w = s.size
+            const h = s.size * s.stretch
+            ctx.globalAlpha = s.alpha
+            ctx.drawImage(offsetSpriteImage, s.x - w / 2, s.y - h / 2, w, h)
+            if (s.shape === 2) {
+                for (let i = 0; i < s.lump; i++) {
+                    const a = (i / s.lump) * Math.PI * 2 + s.x
+                    const off = s.size * 0.28
+                    const lw = w * 0.55
+                    const lh = h * 0.55
+                    ctx.globalAlpha = s.alpha * 0.55
+                    ctx.drawImage(offsetSpriteImage,
+                                  s.x + Math.cos(a) * off - lw / 2,
+                                  s.y + Math.sin(a) * off - lh / 2, lw, lh)
+                }
+            }
+        }
+
+        function slideY(drop) {
+            const period = drop.stick + drop.slide
+            const t = clock + drop.y0 / 512 * period
+            const n = Math.floor(t / period)
+            const local = t - n * period
+            const progressed = Math.min(1, Math.max(0, (local - drop.stick) / drop.slide))
+            return (drop.y0 + n * drop.dist + progressed * drop.dist) % height
+        }
+
+        // 只更新滑痕状态；静止（粘住）时该滴不动、不 requestPaint。
+        function advanceSlides() {
+            if (!root.rainySky || AppTheme.reduceMotion
+                    || offsetSpriteImage.status !== Image.Ready
+                    || staticStamps.length === 0)
+                return
+            const now = Date.now()
+            if (lastClockMs > 0)
+                clock += (now - lastClockMs) / 1000
+            lastClockMs = now
+            let changed = false
+            for (let i = 0; i < slideDrops.length; i++) {
+                const drop = slideDrops[i]
+                const y = slideY(drop)
+                const prev = slideLastY[i]
+                const half = drop.size / 2 + 1
+                if (prev === undefined) {
+                    slideLastY[i] = y
+                    continue
+                }
+                if (prev === y)
+                    continue
+                if (Math.abs(y - prev) > 20) {
+                    // 取模/跨周期跳变：新一轮滑落，轨迹从头部重新开始。
+                    slideTrail[i] = { top: y - half, bottom: y + half }
+                } else {
+                    const t = slideTrail[i]
+                    if (!t) {
+                        slideTrail[i] = { top: Math.min(prev, y) - half,
+                                          bottom: Math.max(prev, y) + half }
+                    } else {
+                        t.bottom = Math.max(t.bottom, y + half)
+                        t.top = Math.max(t.bottom - 48, Math.min(t.top, y - half))
+                    }
+                }
+                slideLastY[i] = y
+                changed = true
+            }
+            // 只有真正位移时才整图重建一次水图（≤5fps）；粘住/静止时零重绘。
+            if (changed)
+                requestPaint()
+        }
+
+        onPaint: {
+            const ctx = getContext("2d")
+            ctx.clearRect(0, 0, width, height)
+            // 批 12 第 4 项：整张水图铺一层"雨膜"底色——A=膜覆盖（0.55）、B=1 标记有膜。
+            // shader 按 film 把天空压暗；滑落水珠擦过 → film=0 → 亮带。
+            ctx.fillStyle = "rgba(128,128,255,0.55)"
+            ctx.fillRect(0, 0, width, height)
+            if (offsetSpriteImage.status !== Image.Ready)
+                return
+            // 批 13：1400 颗 + 水膜细带的布局只算一次，滑落重绘直接复用（不每帧重建）。
+            if (!stampsBuilt)
+                buildStamps()
+            // 水膜底噪：横向拉长的低频柔斑（α 0.03–0.05），让水珠之间不是干玻璃。
+            for (let i = 0; i < filmBlobs.length; i++) {
+                const b = filmBlobs[i]
+                ctx.globalAlpha = b.alpha
+                ctx.fillStyle = "#ffffff"
+                ctx.beginPath()
+                ctx.ellipse(b.x, b.y, b.w / 2, b.h / 2, 0, 0, Math.PI * 2)
+                ctx.fill()
+            }
+            ctx.globalAlpha = 1
+            if (slideTrail.length !== slideDrops.length)
+                slideTrail = []
+            if (!root.probeFilmOnly) {
+                // 水膜细带：距离 <6px 的水珠连起来，成片而不是孤立珠子。
+                ctx.strokeStyle = "#ffffff"
+                ctx.lineCap = "round"
+                for (let i = 0; i < filmBands.length; i++) {
+                    const b = filmBands[i]
+                    ctx.globalAlpha = b.alpha
+                    ctx.lineWidth = b.width
+                    ctx.beginPath()
+                    ctx.moveTo(b.x1, b.y1)
+                    ctx.lineTo(b.x2, b.y2)
+                    ctx.stroke()
+                }
+                ctx.globalAlpha = 1
+                for (let i = 0; i < staticStamps.length; i++)
+                    stampShape(ctx, staticStamps[i])
+                ctx.globalAlpha = 1
+            }
+            // 滑痕：在静态水珠之上擦掉一段窄带（薄膜 + 水珠一起去掉）→ shader 里 film=0/A=0。
+            // 批 13：滑痕 2–4px 宽、≥40px 长，是"擦干净的亮带"而非白线。
+            ctx.globalCompositeOperation = "destination-out"
+            // R137：原本 α 0.92 → 擦完残 a≈0.044，而 shader 里 film=B/A 仍为 1.0，
+            // 压暗项 film*(1-cov) 反而最大 → 滑痕被画成**深色直条**（实测 107 vs 背景 130）。
+            // 必须擦到 a=0（cov=0 且 film=0），才是批 12 要的"擦干净的亮带"。
+            ctx.strokeStyle = "rgba(0,0,0,1)"
+            ctx.lineCap = "round"
+            for (let i = 0; i < slideDrops.length; i++) {
+                const t = slideTrail[i]
+                if (!t)
+                    continue
+                const x = slideDrops[i].x
+                const half = slideDrops[i].size / 2 + 1
+                const top = t.top + half
+                const bottom = Math.max(top + 40, t.bottom - half)
+                // 擦带 2–4px：取珠径 0.35 并夹在 [2,4]。
+                ctx.lineWidth = Math.min(4, Math.max(2, slideDrops[i].size * 0.35))
+                ctx.beginPath()
+                ctx.moveTo(x, top)
+                ctx.lineTo(x, bottom)
+                ctx.stroke()
+            }
+            ctx.globalCompositeOperation = "source-over"
+            // 头部水珠仍是折射水珠（offset map），不是白色拖尾。
+            // 批 13：擦完的亮带尾部留 1–2 颗小水珠（2–4px），模拟残水。
+            slideLastY = []
+            if (!root.probeFilmOnly) {
+                for (let i = 0; i < slideDrops.length; i++) {
+                    const drop = slideDrops[i]
+                    const y = slideY(drop)
+                    slideLastY[i] = y
+                    stampAt(ctx, drop.x, y, drop.size, 1.0)
+                    const t = slideTrail[i]
+                    if (t) {
+                        const bottom = Math.min(y - drop.size, t.bottom - 6)
+                        if (bottom > t.top + 10) {
+                            stampAt(ctx, drop.x + 1.5, bottom - 4, 3.5, 0.7)
+                            stampAt(ctx, drop.x - 1.5, bottom - 14, 2.5, 0.5)
+                        }
+                    }
+                }
+            }
+            ctx.globalAlpha = 1
+            waterMapSource.scheduleUpdate()
+        }
+
+        Connections {
+            target: root
+            function onAmbientSecChanged() {
+                if (!root.rainySky || AppTheme.reduceMotion) {
+                    waterMapCanvas.lastClockMs = 0
+                    waterMapCanvas.updatePhase = 0
+                    return
+                }
+                // ≈5fps：与 R114/R115 的滑落节拍一致，单步位移 1.6–3.0px。
+                waterMapCanvas.updatePhase = (waterMapCanvas.updatePhase + 1) % 2
+                if (waterMapCanvas.updatePhase !== 0)
+                    return
+                waterMapCanvas.advanceSlides()
+            }
+            function onRainySkyChanged() {
+                if (!root.rainySky)
+                    return
+                waterMapCanvas.clock = 0
+                waterMapCanvas.lastClockMs = 0
+                waterMapCanvas.slideLastY = []
+                waterMapCanvas.requestPaint()
+            }
+        }
+    }
+
+    ShaderEffectSource {
+        id: waterMapSource
+        // R129：hideSource:true 会让源 Canvas 不再绘制（onPaint 0 次触发，R128 根因 B）。
+        // 故保留源可见，但把本项移到窗口外——它只是纹理提供者，不上屏；
+        // 此前的“整窗彩虹环”就是本项把水图纹理合成到屏幕造成的。
+        x: -4096
+        y: -4096
+        width: 512
+        height: 512
+        sourceItem: waterMapCanvas
+        hideSource: false
+        live: false
+        wrapMode: ShaderEffectSource.Repeat
+        textureSize: Qt.size(512, 512)
+    }
+
+    Rectangle {
+        id: skyGradientRect
+        parent: skyComposite
+        // 显式压到天空容器最底层：`layer.enabled` 使该渐变走独立纹理 pass，
+        // 在 SVGA3D 软件光栅下与后声明的云层出现绘制顺序倒置（R130 诊断：
+        // 云层 visible/opacity/parent/烘焙全部正常，屏上却不可见）。
+        z: -1
         anchors.fill: parent
         gradient: Gradient {
-            GradientStop { position: 0.0; color: root.skyStops[0] }
-            GradientStop { position: 0.45; color: root.skyStops[1] }
-            GradientStop { position: 1.0; color: root.skyStops[2] }
+            GradientStop { position: 0.0; color: root.skyTop }
+            GradientStop { position: 0.45; color: root.skyMid }
+            GradientStop { position: 1.0; color: root.skyBottom }
         }
+        // R119（CPU 轮）：整窗渐变是每帧重绘面积最大的一层（1180×727）。衬成层纹理后
+        // 稳态每帧只做一次不透明 blit，渐变求值只在天空色/尺寸真正变化时发生
+        // （12s 天空过渡期间逐帧重建，与原来等价；静止时 0 次）。
+        // 视觉零改动：覆盖整窗的不透明 L0 天空（§1 L0，非玻璃，§2.2 预算未变）。
+        layer.enabled: true
     }
 
     // Static procedural cirrus band for the clear day sky (see
@@ -561,6 +1427,7 @@ KosApplicationWindow {
     // band is wasted behind it.
     Item {
         id: clearSkyCloudLayer
+        parent: skyComposite
         anchors.fill: parent
         visible: root.dayClearSky
         clip: true
@@ -627,10 +1494,17 @@ KosApplicationWindow {
 
     Item {
         id: sunGlowLayer
+        parent: skyComposite
         anchors.fill: parent
         visible: root.dayClearSky
         clip: true
-        opacity: 0.17
+        // CPU 轮（批 8）：原 SequentialAnimation 以 60Hz 推进 opacity（晴空场景的全窗口
+        // 重绘驱动源之一）。改为定时器驱动同一余弦呼吸曲线，端点 0.10↔0.24、
+        // 周期 7s 不变；reduceMotion 时钉在 0.17（原实现 reduceMotion 下停在动画初值）。
+        // R108：33ms(30fps)→100ms(10fps)；R113：改由根级统一节拍驱动（不再单独占一条 Timer，
+        // 7s 周期/0.10↔0.24 端点逐值不变，按 root.ambientSec 求同一余弦曲线）。
+        opacity: AppTheme.reduceMotion ? 0.17
+                 : 0.10 + 0.14 * (0.5 + 0.5 * Math.cos(2 * Math.PI * root.ambientSec / 7.0))
 
         Canvas {
             anchors.fill: parent
@@ -651,16 +1525,11 @@ KosApplicationWindow {
             }
         }
 
-        SequentialAnimation on opacity {
-            running: root.dayClearSky && !AppTheme.reduceMotion
-            loops: Animation.Infinite
-            NumberAnimation { from: 0.10; to: 0.24; duration: 3500; easing.type: Easing.InOutSine }
-            NumberAnimation { from: 0.24; to: 0.10; duration: 3500; easing.type: Easing.InOutSine }
-        }
     }
 
     Item {
         id: starFieldLayer
+        parent: skyComposite
         anchors.fill: parent
         visible: root.nightClearSky
         clip: true
@@ -677,29 +1546,108 @@ KosApplicationWindow {
                 height: width
                 radius: width / 2
                 color: "white"
-                opacity: modelData.baseOpacity
                 Accessible.ignored: true
 
-                SequentialAnimation on opacity {
-                    running: root.nightClearSky && !AppTheme.reduceMotion
-                    loops: Animation.Infinite
+                // R115（CPU 轮）：原为每颗星一条 `SequentialAnimation on opacity`
+                // （PauseAnimation + 两个 InOutSine NumberAnimation，循环）——动画在**显示
+                // 刷新率**（60Hz）推进，48 颗星 = 夜晴场景的全窗口 60Hz 重绘驱动源。
+                // 改为按根级节拍（root.ambientSec）求同一条余弦曲线：同一端点
+                // baseOpacity ↔ baseOpacity×0.35、同一周期（twinklePauseMs + twinkleMs）、
+                // cos 与 InOutSine 在两端导数为 0 的缓动等价；reduceMotion / 非夜晴钉在 baseOpacity
+                // （与原 `running` 门控停在初值等价，§2.12）。
+                property real twinklePeriodSec: (modelData.twinklePauseMs + modelData.twinkleMs) / 1000.0
+                opacity: (AppTheme.reduceMotion || !root.nightClearSky)
+                         ? modelData.baseOpacity
+                         : modelData.baseOpacity * (0.675 + 0.325 * Math.cos(
+                             2 * Math.PI * (((root.ambientSec * 1000.0 + modelData.twinklePauseMs)
+                                             / 1000.0) % twinklePeriodSec) / twinklePeriodSec))
+            }
+        }
+    }
 
-                    PauseAnimation {
-                        duration: Math.random() * modelData.twinkleMs
-                    }
-                    NumberAnimation {
-                        from: modelData.baseOpacity
-                        to: modelData.baseOpacity * 0.35
-                        duration: modelData.twinkleMs / 2
-                        easing.type: Easing.InOutSine
-                    }
-                    NumberAnimation {
-                        from: modelData.baseOpacity * 0.35
-                        to: modelData.baseOpacity
-                        duration: modelData.twinkleMs / 2
-                        easing.type: Easing.InOutSine
-                    }
+    // 批 4｜夜空月亮（用户 2026-10-24）：相位取自 backend.moonPhase（与月相卡同源），
+    // 位置由「当前时刻距月中天的小时角」决定——横向扫过 0.14–0.86，纵向沿余弦弧
+    // 从 0.09（中天）落到 0.49（地平）。声明在星空之后、夜云/云层之前 → 云能从前方遮挡。
+    // 静态几何（仅随数据时间变化），reduceMotion 下无任何动画。
+    Item {
+        id: skyMoonLayer
+        parent: skyComposite
+        visible: root.moonVisible
+        clip: true
+        Accessible.ignored: true
+        readonly property int diameter: Math.max(24, Math.round(64 * AppTheme.densityScale))
+        x: (parent.width - diameter) * root.moonXRatio
+        y: parent.height * root.moonYRatio
+        width: diameter
+        height: diameter
+
+        Canvas {
+            id: skyMoonCanvas
+            anchors.fill: parent
+            property real phase: root.moonPhaseNorm
+            antialiasing: true
+            contextType: "2d"
+            onPhaseChanged: requestPaint()
+            onWidthChanged: requestPaint()
+            onHeightChanged: requestPaint()
+            onPaint: {
+                const ctx = getContext("2d")
+                ctx.reset()
+                const r = width / 2
+                const c = r
+                // 外晕：夜间月亮的柔光（静态渐变）
+                const glow = ctx.createRadialGradient(c, c, r * 0.85, c, c, r * 1.9)
+                glow.addColorStop(0, "rgba(196,216,248,0.30)")
+                glow.addColorStop(1, "rgba(196,216,248,0)")
+                ctx.fillStyle = glow
+                ctx.beginPath()
+                ctx.arc(c, c, r * 1.9, 0, Math.PI * 2)
+                ctx.fill()
+                // 暗面：深蓝灰实影（与月相卡同族）
+                ctx.beginPath()
+                ctx.arc(c, c, r * 0.78, 0, Math.PI * 2)
+                ctx.fillStyle = "rgba(30,48,82,0.55)"
+                ctx.fill()
+                // 亮面：相位剪影（盈月亮在右、亏月亮在左；带符号 cosT 区分蛾眉/凸月）
+                const p = phase
+                const cosT = Math.cos(2 * Math.PI * p)
+                const waxing = p < 0.5
+                const rr = r * 0.78
+                ctx.save()
+                ctx.beginPath()
+                ctx.arc(c, c, rr, 0, Math.PI * 2)
+                ctx.clip()
+                ctx.beginPath()
+                if (waxing)
+                    ctx.arc(c, c, rr, -Math.PI / 2, Math.PI / 2, false)
+                else
+                    ctx.arc(c, c, rr, -Math.PI / 2, Math.PI / 2, true)
+                const steps = 32
+                for (let i = 0; i <= steps; i++) {
+                    const a = Math.PI / 2 - (Math.PI * i / steps)
+                    const ex = waxing ? cosT * rr * Math.cos(a) : -cosT * rr * Math.cos(a)
+                    ctx.lineTo(c + ex, c + rr * Math.sin(a))
                 }
+                ctx.closePath()
+                ctx.fillStyle = "#dbe8fb"
+                ctx.fill()
+                // 确定性环形山（无随机，保证帧差稳定）
+                const craters = [
+                    { x: 0.42, y: 0.40, r: 0.10 },
+                    { x: 0.60, y: 0.52, r: 0.07 },
+                    { x: 0.50, y: 0.64, r: 0.05 },
+                    { x: 0.36, y: 0.58, r: 0.045 },
+                    { x: 0.58, y: 0.32, r: 0.04 }
+                ]
+                ctx.fillStyle = "rgba(150,175,208,0.28)"
+                for (let i = 0; i < craters.length; i++) {
+                    const k = craters[i]
+                    ctx.beginPath()
+                    ctx.arc(c + (k.x - 0.5) * rr * 2, c + (k.y - 0.5) * rr * 2,
+                            k.r * rr, 0, Math.PI * 2)
+                    ctx.fill()
+                }
+                ctx.restore()
             }
         }
     }
@@ -713,6 +1661,7 @@ KosApplicationWindow {
     // obligation).
     Item {
         id: nightClearCloudLayer
+        parent: skyComposite
         anchors.fill: parent
         visible: root.nightClearSky
         clip: true
@@ -766,207 +1715,321 @@ KosApplicationWindow {
         }
     }
 
-    Item {
-        id: rainFieldLayer
+    // 批 7｜雨/雪迁移到 Qt Quick Particles；闪电仍留 Canvas（瞬态、开销可忽略）。
+    // 原 PrecipitationLayer 的雨/雪绘制路径与 33ms 循环 Timer 已整段删除（不留两套并存）。
+    component LightningLayer: Canvas {
+        id: lightning
         anchors.fill: parent
-        visible: root.rainySky
         clip: true
-
-        Repeater {
-            model: root.rainField
-
-            delegate: Rectangle {
-                required property var modelData
-
-                x: rainFieldLayer.width * modelData.xRatio
-                y: -modelData.length - 10
-                width: 1.4
-                height: modelData.length
-                color: "#dbe9ff"
-                opacity: modelData.opacity
-                Accessible.ignored: true
-
-                SequentialAnimation on y {
-                    running: root.rainySky && !AppTheme.reduceMotion
-                    loops: Animation.Infinite
-
-                    PauseAnimation {
-                        duration: modelData.phaseMs
-                    }
-                    NumberAnimation {
-                        from: -modelData.length - 10
-                        to: rainFieldLayer.height + 10
-                        duration: modelData.fallMs
-                        easing.type: Easing.Linear
-                    }
-                }
-            }
-        }
-    }
-
-    Item {
-        id: snowFieldLayer
-        anchors.fill: parent
-        visible: root.snowySky
-        clip: true
-
-        Repeater {
-            model: root.snowField
-
-            delegate: Rectangle {
-                id: flake
-                required property var modelData
-                readonly property real xBase: snowFieldLayer.width * modelData.xRatio
-
-                x: xBase
-                y: -modelData.diameter - 10
-                width: modelData.diameter
-                height: width
-                radius: width / 2
-                color: "#ffffff"
-                opacity: modelData.opacity
-                Accessible.ignored: true
-
-                SequentialAnimation on y {
-                    running: root.snowySky && !AppTheme.reduceMotion
-                    loops: Animation.Infinite
-
-                    PauseAnimation {
-                        duration: modelData.phaseMs
-                    }
-                    NumberAnimation {
-                        from: -modelData.diameter - 10
-                        to: snowFieldLayer.height + 10
-                        duration: modelData.fallMs
-                        easing.type: Easing.Linear
-                    }
-                }
-                SequentialAnimation on x {
-                    running: root.snowySky && !AppTheme.reduceMotion
-                    loops: Animation.Infinite
-
-                    PauseAnimation {
-                        duration: modelData.swayPhaseMs
-                    }
-                    NumberAnimation {
-                        from: flake.xBase - modelData.swayAmp
-                        to: flake.xBase + modelData.swayAmp
-                        duration: modelData.swayMs
-                        easing.type: Easing.InOutSine
-                    }
-                    NumberAnimation {
-                        from: flake.xBase + modelData.swayAmp
-                        to: flake.xBase - modelData.swayAmp
-                        duration: modelData.swayMs
-                        easing.type: Easing.InOutSine
-                    }
-                }
-            }
-        }
-    }
-
-    Item {
-        id: cloudFieldLayer
-        anchors.fill: parent
-        visible: root.cloudySky
-        clip: true
-
-        Repeater {
-            model: root.cloudField
-
-            delegate: Item {
-                id: cloud
-                required property var modelData
-                readonly property real cloudW: Math.min(modelData.cloudWidth, cloudFieldLayer.width * 0.45)
-
-                // Clouds start spread across the window per the seeded xRatio so the
-                // sky is populated on the very first frame; reduce-motion leaves them
-                // parked there as static content instead of an empty sky.
-                property real entryX: modelData.xRatio * Math.max(cloudFieldLayer.width - cloudW, 0)
-                x: cloud.entryX
-                y: (cloudFieldLayer.height - height) * modelData.yRatio
-                width: cloudW
-                height: cloudW * 0.38
-                opacity: modelData.opacity
-                Accessible.ignored: true
-
-                Canvas {
-                    anchors.fill: parent
-                    onWidthChanged: requestPaint()
-                    onPaint: {
-                        const ctx = getContext("2d")
-                        ctx.clearRect(0, 0, width, height)
-                        for (let i = 0; i < modelData.puffs.length; i++) {
-                            const p = modelData.puffs[i]
-                            const cx = p.cxRatio * width
-                            const cy = p.cyRatio * height
-                            // Keep the gradient inside the canvas: alpha must
-                            // reach 0 before any clipped edge, otherwise puffs
-                            // show hard rectangular borders.
-                            const r = Math.max(Math.min(p.rRatio * height * 1.2,
-                                                        cy, height - cy,
-                                                        cx, width - cx), 8)
-                            const grad = ctx.createRadialGradient(cx, cy, 0, cx, cy, r)
-                            grad.addColorStop(0, "rgba(255,255,255," + p.alphaMul.toFixed(3) + ")")
-                            grad.addColorStop(1, "rgba(255,255,255,0)")
-                            ctx.fillStyle = grad
-                            ctx.beginPath()
-                            ctx.arc(cx, cy, r, 0, Math.PI * 2)
-                            ctx.fill()
-                        }
-                    }
-                }
-
-                SequentialAnimation on x {
-                    running: root.cloudySky && !AppTheme.reduceMotion
-                    loops: Animation.Infinite
-
-                    // First pass runs from the seeded on-screen position; every later
-                    // pass re-enters from the left edge after the staggered pause.
-                    NumberAnimation {
-                        from: cloud.entryX
-                        to: cloudFieldLayer.width + 20
-                        duration: modelData.driftMs
-                        easing.type: Easing.Linear
-                    }
-                    ScriptAction { script: cloud.entryX = -cloud.cloudW - 20 }
-                    PauseAnimation { duration: modelData.phaseMs }
-                }
-            }
-        }
-    }
-
-    // Stage 3 motion B.1: thunderstorm lightning flash (weather codes >= 95).
-    // A rare, brief double-strobe white wash over the whole window, in the
-    // spirit of the Apple Weather instantaneous flash. Randomized idle pause
-    // keeps the ambient cadence inside the HIG 2-12s loop range.
-    Rectangle {
-        id: flashLayer
-        anchors.fill: parent
-        visible: root.thunderSky
-        color: "#ffffff"
-        opacity: 0
+        // R119（CPU 轮）：非闪光时不再把这块「全窗透明 Canvas」留在场景里。
+        // 原先 visible 只绑 thunderSky，雷暴场景下即使 flashAlpha=0（绝大多数时间）仍会
+        // 每帧参与一次 1180×727 的 alpha 合成（透明但照样全窗光栅化）。改为仅在闪光期间可见。
+        visible: root.thunderSky && lightning.flashAlpha > 0
         Accessible.ignored: true
 
+        property real flashAlpha: 0
+        property var bolt: []
+        property var fork: []
+        property real strikeXRatio: 0.5
+
+        // 可见性打开时补一次重绘（flashAlpha 与 visible 同一拍变化，信号顺序不保证）；
+        // flashAlpha 回 0 时元素立即隐藏，无需再清空。
+        onFlashAlphaChanged: if (lightning.flashAlpha > 0) lightning.requestPaint()
+        onVisibleChanged: if (visible) lightning.requestPaint()
+
+        function drawPolyline(ctx, points, widthPx, color) {
+            if (!points || points.length < 2) return
+            ctx.strokeStyle = color
+            ctx.lineWidth = widthPx
+            ctx.lineCap = "round"
+            ctx.beginPath()
+            ctx.moveTo(points[0].x, points[0].y)
+            for (let i = 1; i < points.length; i++) ctx.lineTo(points[i].x, points[i].y)
+            ctx.stroke()
+        }
+
+        function buildBolt() {
+            lightning.strikeXRatio = 0.12 + Math.random() * 0.76
+            const segments = 9 + Math.floor(Math.random() * 4)
+            // 落雷限制在云层带内（顶缘 3% → 62% 高度）
+            const boltTop = height * 0.03
+            const boltHeight = height * 0.59
+            const stepY = boltHeight / segments
+            const points = []
+            let x = width * lightning.strikeXRatio
+            let y = boltTop
+            for (let i = 0; i <= segments; i++) {
+                points.push({ x: x, y: y })
+                x += (Math.random() - 0.5) * 46
+                y += stepY * (0.8 + Math.random() * 0.4)
+            }
+            lightning.bolt = points
+            const anchor = points[Math.floor(segments / 2)]
+            const dir = Math.random() < 0.5 ? -1 : 1
+            const forkPoints = [{ x: anchor.x, y: anchor.y }]
+            let fx = anchor.x
+            let fy = anchor.y
+            for (let i = 0; i < 4; i++) {
+                fx += dir * (14 + Math.random() * 26)
+                fy += stepY * (0.5 + Math.random() * 0.4)
+                forkPoints.push({ x: fx, y: fy })
+            }
+            lightning.fork = forkPoints
+        }
+
+        function triggerStrike() {
+            lightning.buildBolt()
+            strikeOn.duration = 50 + Math.random() * 60
+            strikeOff.duration = 70 + Math.random() * 80
+            strikeHold.duration = 90 + Math.random() * 120
+            afterOn.duration = 50 + Math.random() * 70
+            afterOff.duration = 120 + Math.random() * 120
+            flashSeq.restart()
+        }
+
         Timer {
-            id: flashTimer
-            interval: 4200
+            id: lightningTimer
+            interval: 900 + Math.random() * 600
             repeat: true
-            running: root.thunderSky && !AppTheme.reduceMotion
+            running: lightning.visible && !AppTheme.reduceMotion
             onTriggered: {
-                flashTimer.interval = 3500 + Math.random() * 5000
-                flashSeq.restart()
+                lightningTimer.interval = 3500 + Math.random() * 5000
+                lightning.triggerStrike()
             }
         }
         SequentialAnimation {
             id: flashSeq
-            NumberAnimation { target: flashLayer; property: "opacity"; to: 0.32; duration: 70 }
-            NumberAnimation { target: flashLayer; property: "opacity"; to: 0; duration: 90 }
-            PauseAnimation { duration: 110 }
-            NumberAnimation { target: flashLayer; property: "opacity"; to: 0.20; duration: 60 }
-            NumberAnimation { target: flashLayer; property: "opacity"; to: 0; duration: 140 }
+            NumberAnimation { id: strikeOn; target: lightning; property: "flashAlpha"; to: 0.95 }
+            NumberAnimation { id: strikeOff; target: lightning; property: "flashAlpha"; to: 0.12 }
+            PauseAnimation { id: strikeHold }
+            NumberAnimation { id: afterOn; target: lightning; property: "flashAlpha"; to: 0.45 }
+            NumberAnimation { id: afterOff; target: lightning; property: "flashAlpha"; to: 0 }
+        }
+
+        function paintLightning(ctx) {
+            if (!lightning.visible || lightning.flashAlpha <= 0) return
+            if (!lightning.bolt || lightning.bolt.length < 2) return
+            ctx.globalAlpha = lightning.flashAlpha
+            ctx.fillStyle = "rgba(255,255,255,0.06)"
+            ctx.fillRect(0, 0, width, height)
+            const mid = lightning.bolt[Math.floor(lightning.bolt.length / 2)]
+            const glowR = Math.min(width, height) * 0.55
+            const glow = ctx.createRadialGradient(mid.x, mid.y, 0, mid.x, mid.y, glowR)
+            glow.addColorStop(0, "rgba(226,240,255,0.42)")
+            glow.addColorStop(0.35, "rgba(200,225,255,0.16)")
+            glow.addColorStop(1, "rgba(200,225,255,0)")
+            ctx.fillStyle = glow
+            ctx.fillRect(0, 0, width, height)
+            lightning.drawPolyline(ctx, lightning.bolt, 11, "rgba(190,220,255,0.18)")
+            lightning.drawPolyline(ctx, lightning.bolt, 4.5, "rgba(235,245,255,0.55)")
+            lightning.drawPolyline(ctx, lightning.bolt, 1.8, "rgba(255,255,255,0.95)")
+            lightning.drawPolyline(ctx, lightning.fork, 4, "rgba(220,235,255,0.35)")
+            lightning.drawPolyline(ctx, lightning.fork, 1.4, "rgba(255,255,255,0.8)")
+        }
+
+        onPaint: {
+            const ctx = getContext("2d")
+            ctx.clearRect(0, 0, width, height)
+            ctx.globalAlpha = 1
+            if (width <= 0 || height <= 0) return
+            lightning.paintLightning(ctx)
         }
     }
+
+    LightningLayer {
+        id: lightningLayer
+    }
+
+    // 批 11｜雨＝静止水痕：删除下落雨粒子层（原三层共 30 颗，批 9 定值）。
+    // 裁决：雨点贴在玻璃上不动，只允许 12–20 颗沿纯垂直方向缓慢下滑（见 waterMapCanvas.advanceSlides），
+    // 天上下落的雨丝不再作为视觉主体，全部关闭。雪与闪电保留（雪不是雨）。
+    // 批 7｜雪 = ParticleSystem + Emitter + Wander + ImageParticle（8×8 柔边圆 sprite）。
+    ParticleSystem {
+        id: snowSystem
+        anchors.fill: parent
+        visible: root.snowySky
+        running: root.snowySky && !AppTheme.reduceMotion
+
+        Emitter {
+            system: snowSystem
+            anchors.fill: parent
+            emitRate: root.snowParticleCount / 2
+            lifeSpan: 2000
+            lifeSpanVariation: 0
+            size: 3.5
+            sizeVariation: 1.5
+            velocity: AngleDirection {
+                angle: root.rainAngleFor(99)
+                angleVariation: 3
+                magnitude: root.rainMagFor(99) * 0.5
+            }
+        }
+        Wander {
+            system: snowSystem
+            anchors.fill: parent
+            xVariance: 22
+            yVariance: 0
+            pace: 0.6
+        }
+        ImageParticle {
+            system: snowSystem
+            source: "particles/snow.png"
+            color: root.currentIsDay ? "#ffffff" : "#cfe0ff"
+            alpha: root.currentIsDay ? 0.6 : 0.42
+            alphaVariation: 0.25
+            smooth: true
+            entryEffect: ImageParticle.None
+        }
+    }
+
+    // 批 2｜云层三层（后/中/前，z 序由声明顺序决定：先声明者在下）。
+    // 批 5｜预烘焙改法：每层把所有云**一次**画进单张 2×宽 Canvas 纹理（左右各一份，
+    // 周期 = 窗口宽，循环无缝），之后只平移纹理 x，禁止每帧重绘。烘焙只在
+    // 尺寸 / clouds（cloudCover / weatherCode）变化时发生，计数见 [cloud-bake] 日志。
+    // 速度比仍为 1 : 0.55 : 0.3（批 2 裁决，driftMs 由 cloudLayers 下发）。
+    component CloudLayer: Item {
+        id: cloudLayer
+        property var clouds: []
+        property int driftMs: 30000
+        anchors.left: parent.left
+        anchors.right: parent.right
+        // 烘焙纹理只覆盖云带（yMax 0.46 + 云高；ref-main 云 deck 覆盖窗口上部
+        // ~50%，旧的 0.46 视口高度只留出顶部窄条 → 上移到 0.62 容纳三层云带），
+        // 下方大片天空无云 → 不再合成空白透明区（CPU 轮，观感零变化）。
+        height: parent.height * 0.62
+        // 批 12 余项①（R130）：雨天也要有云——裁决要求水珠的折射必须能在
+        // 「云带/亮边」上被看出来；而雨天 `cloudySky=false` 时三层云全部隐藏，
+        // 天空是平滑渐变，水珠折射无可辨认的背景结构（R126/R128/R129 同一阻塞）。
+        // 云层本身属 L0 天空材质（非玻璃，§1/§2.2 预算不变），雨天显示不改变层级。
+        visible: root.cloudySky || root.rainySky
+        clip: true
+        onVisibleChanged: cloudTexture.requestPaint()
+
+        Canvas {
+            id: cloudTexture
+            width: cloudLayer.width * 2
+            height: cloudLayer.height
+            // 夜间压暗：夜空无参考图（refs 日间 only），白云在暗天上调低存在感。
+            opacity: root.currentIsDay ? 1 : 0.55
+            Accessible.ignored: true
+            // 烘焙计数：初始化 1 次，尺寸/天气变化各 1 次；稳定运行期间不再增长。
+            property int bakeCount: 0
+            // 纹理平移量（px）：由下方 33ms Timer 推进，x 绑定到它。
+            property real panX: 0
+            x: -panX
+
+            onWidthChanged: requestPaint()
+            onHeightChanged: requestPaint()
+            // 纹理平移驱动：Timer 只改 panX（合成器搬运已烘焙纹理），
+            // 不触发 requestPaint / Canvas JS。reduceMotion 下停走（§2.12）。
+            // R108：33ms(30fps)→50ms(20fps)。R113：不再单独占一条 Timer，改由根级统一节拍
+            // （66ms）驱动；位移仍按真实 elapsed 计算，driftMs 9000/16364/30000 逐值不变。
+            property double lastPanMs: 0
+            Connections {
+                target: root
+                function onAmbientSecChanged() {
+                    // R130：雨天云层同样可见（折射需要结构），故漂移门控与 visible 一致。
+                    if ((!root.cloudySky && !root.rainySky) || AppTheme.reduceMotion) {
+                        cloudTexture.lastPanMs = 0
+                        return
+                    }
+                    const now = Date.now()
+                    if (cloudTexture.lastPanMs > 0) {
+                        cloudTexture.panX += (now - cloudTexture.lastPanMs)
+                                             * cloudLayer.width / cloudLayer.driftMs
+                        if (cloudTexture.panX >= cloudLayer.width)
+                            cloudTexture.panX -= cloudLayer.width
+                    }
+                    cloudTexture.lastPanMs = now
+                }
+            }
+            onPaint: {
+                bakeCount += 1
+                console.log("[cloud-bake]", (cloudLayer.clouds.length > 0
+                                             ? cloudLayer.clouds[0].layer : "empty"),
+                            "n=" + cloudLayer.clouds.length,
+                            "bake#" + bakeCount, "w=" + width, "h=" + height,
+                            "t=" + Date.now())
+                const ctx = getContext("2d")
+                ctx.clearRect(0, 0, width, height)
+                // Structured cloud per ref-main 观感（用户第二批背景轮）：三遍
+                // 叠加出明暗结构——阴影底（右下偏移，深蓝 rgba(24,67,127) 系
+                // ref 云影实测）、白色云体、受光顶（左上偏移，纯白高光，光源
+                // 左上 §2.7）。偏移量按云体尺寸缩放，clamp 同步平移。
+                const passes = [
+                    { dxR: 0.06, dyR: 0.20, rgb: "24,67,127", mul: 0.85 },
+                    { dxR: 0.0,  dyR: 0.0,  rgb: "255,255,255", mul: 0.85 },
+                    { dxR: -0.03, dyR: -0.12, rgb: "255,255,255", mul: 1.0 }
+                ]
+                const periodW = width / 2
+                for (let rep = 0; rep < 2; rep++) {
+                    for (let c = 0; c < cloudLayer.clouds.length; c++) {
+                        const cloud = cloudLayer.clouds[c]
+                        const cw = Math.min(cloud.cloudWidth, periodW * 0.45)
+                        const ch = cw * (cloud.cloudHeight / cloud.cloudWidth)
+                        const ox = rep * periodW
+                                   + cloud.xRatio * Math.max(periodW - cw, 0)
+                        // 用窗口高度而非画布高度定位：画布收窄到云带后云的绝对位置不变。
+                        const oy = (root.height - ch) * cloud.yRatio
+                        for (let pass = 0; pass < passes.length; pass++) {
+                            const ps = passes[pass]
+                            const dx = ps.dxR * cw
+                            const dy = ps.dyR * ch
+                            for (let i = 0; i < cloud.puffs.length; i++) {
+                                const p = cloud.puffs[i]
+                                const cx = ox + p.cxRatio * cw + dx
+                                const cy = oy + p.cyRatio * ch + dy
+                                // Keep the gradient inside the canvas: alpha must
+                                // reach 0 before any clipped edge, otherwise puffs
+                                // show hard rectangular borders.
+                                const r = Math.max(Math.min(p.rRatio * ch * 1.2,
+                                                            cy, height - cy,
+                                                            cx, width - cx), 8)
+                                const grad = ctx.createRadialGradient(cx, cy, 0, cx, cy, r)
+                                grad.addColorStop(0, "rgba(" + ps.rgb + ","
+                                                  + (cloud.opacity * p.alphaMul * ps.mul).toFixed(3) + ")")
+                                grad.addColorStop(1, "rgba(" + ps.rgb + ",0)")
+                                ctx.fillStyle = grad
+                                ctx.beginPath()
+                                ctx.arc(cx, cy, r, 0, Math.PI * 2)
+                                ctx.fill()
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // clouds 绑定在 cloudCover / weatherCode 变化后重算 → 唯一的重烘焙触发点。
+        onCloudsChanged: cloudTexture.requestPaint()
+    }
+
+    CloudLayer { id: cloudBackLayer; parent: skyComposite; clouds: root.cloudFieldBack; driftMs: root.cloudLayers[0].driftMs }
+    CloudLayer { id: cloudMidLayer; parent: skyComposite; clouds: root.cloudFieldMid; driftMs: root.cloudLayers[1].driftMs }
+    CloudLayer { id: cloudFrontLayer; parent: skyComposite; clouds: root.cloudFieldFront; driftMs: root.cloudLayers[2].driftMs }
+
+    // 批 4｜大气洗层（雾/雾凇/沙尘）：位于云层之上、闪电之下，蒙住整个天空。
+    // 纯静态半透填充，无动画。
+    Rectangle {
+        id: atmosphereWashLayer
+        parent: skyComposite
+        anchors.fill: parent
+        visible: root.atmosphereWashAlpha > 0
+        color: root.atmosphereWashColor
+        opacity: root.atmosphereWashAlpha
+        Accessible.ignored: true
+    }
+
+    // 批 12｜旧「白点贴图」水珠层（water-drops.png + Image.Tile）已删除：
+    // 水珠不再画高光白点，而是由天空折射 ShaderEffect（见上方 rainRefraction +
+    // waterMapCanvas / drop-offset.png）按偏移图采样背景生成。不留两套并存。
+
+    // R126（批 12 余项②）：原 256×256 滑落水珠白点 Canvas 已删除——下滑水珠改为
+    // 直接写回上方 512×512 水图（窄条脏矩形 + 擦雾亮带），不再另叠一层白色圆点。
+
+    // 批 5｜闪电已并入降水 Canvas（见 PrecipitationLayer.paintLightning）；
+    // 原独立 lightningLayer Canvas（批 3）整段移除：不再有第二个 33ms Timer/
+    // 第二次全屏 clearRect/第二次纹理上传。
 
     RowLayout {
         anchors.fill: parent
@@ -980,6 +2043,11 @@ KosApplicationWindow {
             expanded: root.sidebarExpanded
             expandedWidth: root.compact ? AppTheme.compactSidebarWidth : root.weatherSidebarWidth
             floating: false
+            // CPU 轮（R118）：侧栏子树（玻璃胶囊 + 4 张城市卡的天空缩略 Canvas/文字/软影）
+            // 全是静态内容，只有展开/收起宽度动画与搜索框输字会变；但环境节拍
+            // （云漂移 / hero 呼吸，100ms）每帧触发整窗重合成 → 侧栏被逐帧重新光栅化。
+            // layer.enabled 缓存为纹理后稳态每帧只 blit；内容/尺寸/主题变化时才重建。
+            layer.enabled: true
 
             ColumnLayout {
                 anchors.fill: parent
@@ -994,23 +2062,26 @@ KosApplicationWindow {
                     Layout.minimumWidth: 0
                     Layout.preferredHeight: 30
 
-                    KosTextField {
+                    LiquidTextField {
                         id: locationField
                         anchors.fill: parent
                         leftPadding: 34
                         cornerRadius: 15
-                        // 阶段三功能层 Liquid Glass：specular 高光与细描边。
-                        // 按参考图量得高光强度温和，用 liquidStrength 0.2 缩放。
-                        // 实测：ref-main 搜索胶囊填充 vs 侧栏底 Δ(+24,+29,+38)≈白@0.13-0.15，
-                        // 我方 0.22 时 Δ(+38,+36,+32) 对比 1.5 倍偏强；并与功能层
-                        // 同层玻璃（⚙/↻ 盘、分段胶囊 白@0.14）统一。
-                        materialForm: false
+                        // 用户裁决 2026-10-23（R80 #0）：直用 shared 新液态玻璃组件
+                        // LiquidTextField（不再经 KosTextField 包装），darkAppearance 走
+                        // 组件默认绑定 AppTheme.dark（§2.6 小控件随主题翻转，dark 探针取证）。
+                        // 真采样：backdrop 指向侧栏背板注册的 LiquidBackdrop，LiquidSurface
+                        // 走 shader（折射/放大/反射渐变/rim）而非 fallback 平涂。
+                        // 填充/描边沿用 ref-main 实测拟合值：填充白@0.15、rim 白@0.30。
+                        backdrop: sidebarBackdrop
                         liquidFinish: true
                         liquidStrength: 0.2
                         glassColor: Qt.rgba(1, 1, 1, 0.15)
                         outlineColor: Qt.rgba(1, 1, 1, 0.30)
-                        textColor: "#ffffff"
-                        mutedTextColor: Qt.rgba(1, 1, 1, 0.66)
+                        // R144｜§2.10：原 textColor #ffffff / mutedTextColor 白@0.66 在胶囊底上
+                        // 仅 2.40 / 1.95:1。改为按底亮度自适应的 label 墨（亮底黑@0.92 / 黑@0.78）。
+                        textColor: root.searchFieldInk
+                        mutedTextColor: root.searchFieldMutedInk
                         placeholderText: qsTr("Search")
                         Accessible.name: qsTr("Location search")
                         onAccepted: backend.searchLocations(text)
@@ -1039,7 +2110,9 @@ KosApplicationWindow {
                             height: 10
                             radius: 5
                             color: "transparent"
-                            border.color: Qt.rgba(1, 1, 1, 0.72)
+                            // R144｜§2.6 小控件随背景翻转 + §2.10：胶囊底变亮后白描边笔画
+                            // 仅 2.4:1，改随底亮度自适应墨色（亮底黑@0.78 = 4.72:1）。
+                            border.color: root.searchFieldGlyphInk
                             border.width: 1.4
                         }
                         Rectangle { // 手柄，45° 朝右下
@@ -1048,7 +2121,7 @@ KosApplicationWindow {
                             width: 1.4
                             height: 5.2
                             radius: 0.7
-                            color: Qt.rgba(1, 1, 1, 0.72)
+                            color: root.searchFieldGlyphInk
                             rotation: -45
                             transformOrigin: Item.TopLeft
                         }
@@ -1243,14 +2316,6 @@ KosApplicationWindow {
                                         styleColor: Qt.rgba(0, 0, 0, 0.22)
                                     }
 
-                                    WeatherLoadingIndicator {
-                                        objectName: "cityLoading_" + String(root.value(savedLocation.modelData, "id", ""))
-                                        Layout.preferredWidth: 18
-                                        Layout.preferredHeight: 18
-                                        visible: savedLocation.highlighted && backend.loading
-                                        description: qsTr("Loading the forecast")
-                                    }
-
                                     Label {
                                         text: savedLocation.summary
                                             ? Math.round(savedLocation.summary.temperature) + "°" : "—"
@@ -1294,6 +2359,14 @@ KosApplicationWindow {
                                         bottom: parent.bottom
                                     }
                                     spacing: 8
+
+                                    WeatherLoadingIndicator {
+                                        objectName: "cityLoading_" + String(root.value(savedLocation.modelData, "id", ""))
+                                        Layout.preferredWidth: 18
+                                        Layout.preferredHeight: 18
+                                        visible: savedLocation.highlighted && backend.loading
+                                        description: qsTr("Loading the forecast")
+                                    }
 
                                     Label {
                                         Layout.fillWidth: true
@@ -1404,14 +2477,19 @@ KosApplicationWindow {
                         id: settingsButton
                         text: "⚙"
                         font.pixelSize: 16
-                        Layout.preferredWidth: 34
+                        Layout.preferredWidth: root.trayControlHeight
+                        Layout.preferredHeight: root.trayControlHeight // §3 control.compact.lg=30（窄窗）
                         Layout.alignment: Qt.AlignVCenter
-                        background: GlassCircleBg { subtle: true }
+                        background: GlassCircleBg {
+                            subtle: true
+                            focused: settingsButton.activeFocus && settingsButton.enabled
+                        }
                         contentItem: Label {
                             text: settingsButton.text
                             font: settingsButton.font
                             color: settingsButton.enabled
-                                ? "white" : Qt.rgba(1, 1, 1, 0.38)
+                                ? root.sidebarControlInk
+                                : root.sidebarControlInkDisabled
                             horizontalAlignment: Text.AlignHCenter
                             verticalAlignment: Text.AlignVCenter
                         }
@@ -1425,15 +2503,20 @@ KosApplicationWindow {
                         id: refreshButton
                         text: "↻"
                         font.pixelSize: 18
-                        Layout.preferredWidth: 34
+                        Layout.preferredWidth: root.trayControlHeight
+                        Layout.preferredHeight: root.trayControlHeight // §3 control.compact.lg=30（窄窗）
                         enabled: backend.connected && !backend.loading
-                        background: GlassCircleBg { subtle: true }
+                        background: GlassCircleBg {
+                            subtle: true
+                            focused: refreshButton.activeFocus && refreshButton.enabled
+                        }
                         contentItem: Label {
                             id: refreshGlyph
                             text: refreshButton.text
                             font: refreshButton.font
                             color: refreshButton.enabled
-                                ? "white" : Qt.rgba(1, 1, 1, 0.38)
+                                ? root.sidebarControlInk
+                                : root.sidebarControlInkDisabled
                             horizontalAlignment: Text.AlignHCenter
                             verticalAlignment: Text.AlignVCenter
                             RotationAnimation on rotation {
@@ -1451,6 +2534,7 @@ KosApplicationWindow {
                         onClicked: backend.refresh()
                     }
 
+
                     Item { Layout.fillWidth: true }
 
                     KosButton {
@@ -1459,8 +2543,10 @@ KosApplicationWindow {
                         checkable: true
                         leftPadding: 0
                         rightPadding: 0
-                        Layout.preferredWidth: AppTheme.controlHeight
+                        Layout.preferredWidth: root.trayControlHeight
+                        Layout.preferredHeight: root.trayControlHeight // §3 control.compact.lg=30（窄窗）
                         background: GlassCircleBg {
+                            focused: metricButton.activeFocus && metricButton.enabled
                             selected: metricButton.checked
                             pressed: metricButton.down
                             hovered: metricButton.hovered
@@ -1468,7 +2554,7 @@ KosApplicationWindow {
                         contentItem: Label {
                             text: metricButton.text
                             font: metricButton.font
-                            color: "white"
+                            color: root.sidebarControlInk
                             horizontalAlignment: Text.AlignHCenter
                             verticalAlignment: Text.AlignVCenter
                             elide: Text.ElideRight
@@ -1487,8 +2573,10 @@ KosApplicationWindow {
                         checkable: true
                         leftPadding: 0
                         rightPadding: 0
-                        Layout.preferredWidth: AppTheme.controlHeight
+                        Layout.preferredWidth: root.trayControlHeight
+                        Layout.preferredHeight: root.trayControlHeight // §3 control.compact.lg=30（窄窗）
                         background: GlassCircleBg {
+                            focused: imperialButton.activeFocus && imperialButton.enabled
                             selected: imperialButton.checked
                             pressed: imperialButton.down
                             hovered: imperialButton.hovered
@@ -1496,7 +2584,7 @@ KosApplicationWindow {
                         contentItem: Label {
                             text: imperialButton.text
                             font: imperialButton.font
-                            color: "white"
+                            color: root.sidebarControlInk
                             horizontalAlignment: Text.AlignHCenter
                             verticalAlignment: Text.AlignVCenter
                             elide: Text.ElideRight
@@ -1519,7 +2607,7 @@ KosApplicationWindow {
                             ? "●  Open-Meteo"
                             : "○  " + qsTr("Offline cache"))
                     color: backend.connected && !backend.stale
-                        ? AppTheme.positive : AppTheme.warning
+                        ? root.sidebarStatusPositive : root.sidebarStatusWarning
                     wrapMode: Text.WordWrap
                     font.pixelSize: 11
                     Accessible.name: backend.stale
@@ -1529,6 +2617,14 @@ KosApplicationWindow {
                             : qsTr("Weather service disconnected; showing offline cache"))
                 }
             }
+        }
+
+        // §2.7 光源左上 + §3 color.separator(0.10)：侧栏(左)的右缘属"下/右"暗侧，
+        // 补 1px 暗分隔让侧栏与主区的玻璃边界可读（§2.2 边界），不新增第二层玻璃。
+        Rectangle {
+            Layout.fillHeight: true
+            Layout.preferredWidth: 1
+            color: Qt.rgba(0, 0, 0, 0.10)
         }
 
         ColumnLayout {
@@ -1606,33 +2702,50 @@ KosApplicationWindow {
                             font.weight: Font.DemiBold
                         }
 
-                        Row {
+                        // R93（用户裁决 #0.7 第五轮「立体感仍然不够」）：根因 = 字面太透（深色厚度层
+                        // 从字面里透出变"脏"）+ 仅 2 层厚度不足以形成可辨立体块。本轮改法（照数字实现）：
+                        //   1. 挤出体：14 层堆叠（累计 translate(0,1)），fillStyle rgba(8,26,64, 0.88−i·0.045)，
+                        //      shadowBlur=0；绘制顺序先挤出体后字面
+                        //   2. 字面：体渐变 rgba(255,255,255,0.92/0.86/0.80)（上亮下暗，接近不透明）
+                        //   3. 倒角两笔（字面之上）：上沿高光 translate(0,−1.2) rgba(255,255,255,0.55)；
+                        //      下沿暗线 translate(0,+0.8) rgba(8,26,64,0.55)
+                        //   4. 可选透视 scale(1,0.94)：未用（记 LEDGER）
+                        // 呼吸保留；仍禁 lighter、禁移动高光带、禁纯白硬 rim。字族/字重/字号/位置不动
+                        // （Ubuntu Sans 800 / 92px / topMargin −24 / opacity 0.86↔1.0 5s）。
+                        // R94（用户裁决）：白色 50% 半透字 + 背景模糊（真·背板采样 + MultiEffect 遮罩）
+                        Item {
+                            id: heroTempLiquid
                             Layout.alignment: Qt.AlignHCenter
-                            Layout.topMargin: -14 // ref 城市底→数字顶 gap 11px×1.46≈16px；默认行高 padding 多出 ~14px，负 topMargin 收紧（实测偏差下轮微调）
-                            // 第 52 轮：按参考图实测缩放。ref-main（814x498 整窗）hero 数字字高 33px = 窗高 6.6%；
-                            // tile-hero 切片数字 66px，按其比例折算 iPad 窗高亦 ≈6-6.6%。旧 160px 出自
-                            // 80px/498 的单位错配测量，导致实测字高 115px = 窗高 15.8%（超标 2.4 倍）。
-                            // 70px × 0.72（Plex Thin 字高/pixelSize 实测比）≈ 50px = 727 窗高的 6.9%，落入参考邻域。
-                            spacing: -11 // 随字号按 70/160 缩放（旧 -25），目标 ° 与数字间隙 ~3-4px
-                            Label {
-                                id: heroTempDigits
-                                text: Math.round(root.number(backend.current, "temperature", 0))
-                                Accessible.name: text + "°"
-                                color: root.skyText
-                                font.family: "IBM Plex Sans"
-                                font.pixelSize: 70
-                                font.weight: Font.Thin
+                            Layout.topMargin: -24
+                            width: 340
+                            height: 124
+                            property string digits: Math.round(root.number(backend.current, "temperature", 0)).toString()
+                            Accessible.role: Accessible.StaticText
+                            Accessible.name: digits + "°"
+
+                            // 呼吸：整字 opacity 0.86↔1.0，周期 5s，InOutSine。
+                            // CPU 轮（批 8）：原 SequentialAnimation 每个显示帧（60Hz）推进一次，
+                            // 是晴/多云场景全窗口重绘的唯一 60fps 驱动源（实测基线 20.5–20.9%）。
+                            // 改为 33ms 定时器驱动同一余弦曲线（cos 在两端导数为 0 = InOutSine 等价），
+                            // 端点 0.86/1.0 与 5s 周期不变，仅时间分辨率降到 30fps（5s 慢渐变不可辨）。
+                            // R108：33ms(30fps)→66ms(15fps)，opacity 单步 Δ≤0.006（5s 正弦），肉眼不可辨。
+                            // R113：改由根级统一节拍驱动（不再单独占一条 Timer），
+                            // 端点 0.86/1.0 与 5s 周期逐值不变。
+                            opacity: AppTheme.reduceMotion ? 1.0
+                                     : 0.86 + 0.14 * (0.5 + 0.5 * Math.cos(2 * Math.PI * root.ambientSec / 5.0))
+
+
+                            // 4) 白色 50% 字面 + 柔光晕（磨砂感）
+                            Text {
+                                id: heroFaceText
+                                anchors.centerIn: parent
+                                text: heroTempLiquid.digits + "°"
+                                color: "white"
+                                opacity: 0.5
+                                font.weight: Font.Black
+                                font.pixelSize: 92
                             }
-                            Label {
-                                text: "°"
-                                color: root.skyText
-                                font.family: "IBM Plex Sans"
-                                font.pixelSize: 44 // 保持旧 100/160=0.625 比例：70×0.625≈44
-                                font.weight: Font.Thin
-                                // 下移 8px（旧 19 按 70/160 缩放）使 ° 顶部与数字顶部对齐（Plex 字形度量）
-                                y: 8
-                                Accessible.ignored: true
-                            }
+
                         }
 
                         Label {
@@ -1682,7 +2795,14 @@ KosApplicationWindow {
                     // 双列 masonry（ref-main 步骤 a+b+c）：GridLayout 内两个独立列容器 = 真 masonry——
                     // 行式布局曾把左列瓦片压到右列 Conditions 底下产生 86px 天窗；左列 AQ→指标瓦片、右列 Conditions→10 天卡各自独立堆叠；compact 窄窗回落单列
                     GridLayout {
+                        id: cardGrid
                         Layout.fillWidth: true
+                        // CPU 轮（R117）：卡片区是纯静态内容（圆角 AA 填充 + 双层软影 + 文字），
+                        // 但随环境节拍（云漂移/hero 呼吸）每 100ms 被整窗重合成一次 →
+                        // 每帧都把整片卡片重新光栅化。layer.enabled 让它只光栅化一次并缓存为
+                        // 纹理，此后逐帧只做一次 blit；卡片内容/尺寸/主题变化时才重建。
+                        // 视觉零改动（§1 L0 内容区，非玻璃）。
+                        layer.enabled: true
                         columns: root.compact ? 1 : 2
                         // ref-main(814x498) y260 行实测 AQ 卡右缘 x505 → Conditions 卡左缘 x519 ≈13px 间隙 × 1.4598 窗高比 ≈ 19px
                         columnSpacing: 19
@@ -1709,8 +2829,11 @@ KosApplicationWindow {
                                     // ref-main Pillow 实测 Conditions 卡圆角 r≈14px@814 × 1.4598 窗高比 ≈ 20.4 → 20（同心圆角锚点，阶段三 A）
                                     radius: 20
                                     fillColor: Qt.rgba(root.cardGlassRgb.r, root.cardGlassRgb.g, root.cardGlassRgb.b, root.cardGlassAlpha)
-                                    strokeWidth: 1
-                                    strokeColor: Qt.rgba(1, 1, 1, 0.22)
+                                    // 用户裁决 2026-10-23（R80 0.5）：内容区白描边一律去掉，
+                                    // 此为最后一处卡片 rim（R25 每卡一条 rim 的判定被本轮推翻）。
+                                    strokeWidth: 0
+                                    // innerHighlight（AppTheme 白@0.58 内侧 1px 高光线）同属白描边，一并去除
+                                    showInnerHighlight: false
                                     elevation: 0
                                 }
 
@@ -1895,15 +3018,7 @@ KosApplicationWindow {
                                                     property bool hot: windHover.hovered
                                                     property real hoverFill: hot ? root.cardGlassAlphaHot : root.cardGlassAlpha
                                                     Behavior on hoverFill { NumberAnimation { duration: AppTheme.motionNormal; easing.type: Easing.OutCubic } }
-                                                    property real hoverStroke: hot ? 0.32 : 0.22
-                                                    Behavior on hoverStroke { NumberAnimation { duration: AppTheme.motionNormal; easing.type: Easing.OutCubic } }
                                                     color: Qt.rgba(root.cardGlassRgb.r, root.cardGlassRgb.g, root.cardGlassRgb.b, hoverFill)
-                                                    border.width: 1
-                                                    border.color: Qt.rgba(1, 1, 1, hoverStroke)
-                                                    transform: Translate {
-                                                        y: AppTheme.reduceMotion ? 0 : (windCard.hot ? -3 : 0)
-                                                        Behavior on y { NumberAnimation { duration: AppTheme.motionNormal; easing.type: Easing.OutCubic } }
-                                                    }
 
                                                     property real windDir: root.number(backend.current, "windDirection", 0)
                                                     // arrow points where the wind blows TO (Open-Meteo direction is where it comes FROM)
@@ -2086,15 +3201,7 @@ KosApplicationWindow {
                                                     property bool hot: moonHover.hovered
                                                     property real hoverFill: hot ? root.cardGlassAlphaHot : root.cardGlassAlpha
                                                     Behavior on hoverFill { NumberAnimation { duration: AppTheme.motionNormal; easing.type: Easing.OutCubic } }
-                                                    property real hoverStroke: hot ? 0.32 : 0.22
-                                                    Behavior on hoverStroke { NumberAnimation { duration: AppTheme.motionNormal; easing.type: Easing.OutCubic } }
                                                     color: Qt.rgba(root.cardGlassRgb.r, root.cardGlassRgb.g, root.cardGlassRgb.b, hoverFill)
-                                                    border.width: 1
-                                                    border.color: Qt.rgba(1, 1, 1, hoverStroke)
-                                                    transform: Translate {
-                                                        y: AppTheme.reduceMotion ? 0 : (moonCard.hot ? -3 : 0)
-                                                        Behavior on y { NumberAnimation { duration: AppTheme.motionNormal; easing.type: Easing.OutCubic } }
-                                                    }
 
                                                     property real phaseVal: root.number(backend.current, "moonPhase", Number.NaN)
                                                     property bool hasPhase: Number.isFinite(phaseVal)
@@ -2192,17 +3299,28 @@ KosApplicationWindow {
                                                             ctx.reset()
                                                             var c = 52
                                                             var r = 52
-                                                            // 暗面：整盘剪影（月亮相位剪影，同族白 0.14）
-                                                            ctx.beginPath()
-                                                            ctx.arc(c, c, r, 0, 2 * Math.PI)
-                                                            ctx.fillStyle = "rgba(255,255,255,0.14)"
-                                                            ctx.fill()
-                                                            if (!moonCard.hasPhase)
+                                                            if (!moonCard.hasPhase) {
+                                                                // 无数据：整盘剪影（同族白 0.14）
+                                                                ctx.beginPath()
+                                                                ctx.arc(c, c, r, 0, 2 * Math.PI)
+                                                                ctx.fillStyle = "rgba(255,255,255,0.14)"
+                                                                ctx.fill()
                                                                 return
-                                                            // 亮面：外弧（盈月亮在右，亏月亮在左）+ 终止线半椭圆折线，一次成形
+                                                            }
                                                             var p = ((moonCard.phaseVal % 1) + 1) % 1
                                                             var cosT = Math.cos(2 * Math.PI * p)
                                                             var waxing = p < 0.5
+                                                            // 暗面：ref tile-cards 月相卡暗侧明显暗于卡底（非白 0.14 剪影）→ 深蓝灰实影
+                                                            ctx.beginPath()
+                                                            ctx.arc(c, c, r, 0, 2 * Math.PI)
+                                                            ctx.fillStyle = "rgba(43,60,94,0.55)"
+                                                            ctx.fill()
+                                                            // 裁到盘内：终止线 shadow 不越月盘外缘
+                                                            ctx.save()
+                                                            ctx.beginPath()
+                                                            ctx.arc(c, c, r, 0, 2 * Math.PI)
+                                                            ctx.clip()
+                                                            // 亮面：外弧（盈月亮在右，亏月亮在左）+ 终止线半椭圆折线，一次成形
                                                             ctx.beginPath()
                                                             if (waxing)
                                                                 ctx.arc(c, c, r, -Math.PI / 2, Math.PI / 2, false)   // 顶极→底极经右侧
@@ -2217,8 +3335,13 @@ KosApplicationWindow {
                                                             }
                                                             ctx.closePath()
                                                             // 亮面冷蓝白：ref tile-cards 月亮相照片亮面实测均值 (161,192,228)；峰值 (228,236,247) 系纹理不可平面复刻
+                                                            // 填充带暗影（shadow 落在暗侧）→ ref 的软终止线：界线由亮面实缘渐入暗面
+                                                            ctx.save()
+                                                            ctx.shadowColor = "rgba(43,60,94,0.55)"
+                                                            ctx.shadowBlur = 6
                                                             ctx.fillStyle = "#a1c0e4"
                                                             ctx.fill()
+                                                            ctx.restore()
                                                             // 亮面程序化斑驳纹理：ref tile-cards 月亮相照片分布校准（中位 159,189,228 / p90 184,208,234 / 峰值 228,236,247）；
                                                             // 全部确定性坐标（无随机），保证逐帧稳定可做帧差回归
                                                             ctx.save()
@@ -2259,6 +3382,25 @@ KosApplicationWindow {
                                                             glow.addColorStop(1, "rgba(228,236,247,0)")
                                                             ctx.fillStyle = glow
                                                             ctx.fillRect(0, 0, 2 * r, 2 * r)
+                                                            // 环形山：ref tile-cards 月相照可见的小坑细节——暗底 + 右下亮缘（左上光源），确定性坐标
+                                                            var craters = [[0.42, 0.30, 0.07], [0.62, 0.48, 0.05], [0.34, 0.62, 0.06],
+                                                                           [0.72, 0.68, 0.05], [0.50, 0.18, 0.045], [0.25, 0.48, 0.05],
+                                                                           [0.58, 0.78, 0.045]]
+                                                            for (var cr = 0; cr < craters.length; cr++) {
+                                                                var cx = c + craters[cr][0] * r
+                                                                var cy = c + craters[cr][1] * r
+                                                                var crx = craters[cr][2] * r
+                                                                ctx.beginPath()
+                                                                ctx.arc(cx, cy, crx, 0, 2 * Math.PI)
+                                                                ctx.fillStyle = "rgba(126,155,201,0.30)"
+                                                                ctx.fill()
+                                                                ctx.beginPath()
+                                                                ctx.arc(cx, cy, crx, Math.PI * 0.15, Math.PI * 0.85, false)   // 右下弧 = 受光缘
+                                                                ctx.strokeStyle = "rgba(222,232,246,0.45)"
+                                                                ctx.lineWidth = 1
+                                                                ctx.stroke()
+                                                            }
+                                                            ctx.restore()
                                                             ctx.restore()
                                                         }
                                                     }
@@ -2283,15 +3425,7 @@ KosApplicationWindow {
                                                     property bool hot: sunsetHover.hovered
                                                     property real hoverFill: hot ? root.cardGlassAlphaHot : root.cardGlassAlpha
                                                     Behavior on hoverFill { NumberAnimation { duration: AppTheme.motionNormal; easing.type: Easing.OutCubic } }
-                                                    property real hoverStroke: hot ? 0.32 : 0.22
-                                                    Behavior on hoverStroke { NumberAnimation { duration: AppTheme.motionNormal; easing.type: Easing.OutCubic } }
                                                     color: Qt.rgba(root.cardGlassRgb.r, root.cardGlassRgb.g, root.cardGlassRgb.b, hoverFill)
-                                                    border.width: 1
-                                                    border.color: Qt.rgba(1, 1, 1, hoverStroke)
-                                                    transform: Translate {
-                                                        y: AppTheme.reduceMotion ? 0 : (sunsetCard.hot ? -3 : 0)
-                                                        Behavior on y { NumberAnimation { duration: AppTheme.motionNormal; easing.type: Easing.OutCubic } }
-                                                    }
 
                                                     // daily[0].sunset 形如 "2026-10-17T17:57"（Open-Meteo 本地 ISO，无时区后缀）——自旧 66px 日落瓦片原样迁入
                                                     readonly property string sunsetRaw:
@@ -2397,15 +3531,7 @@ KosApplicationWindow {
                                                     property bool hot: uvHover.hovered
                                                     property real hoverFill: hot ? root.cardGlassAlphaHot : root.cardGlassAlpha
                                                     Behavior on hoverFill { NumberAnimation { duration: AppTheme.motionNormal; easing.type: Easing.OutCubic } }
-                                                    property real hoverStroke: hot ? 0.32 : 0.22
-                                                    Behavior on hoverStroke { NumberAnimation { duration: AppTheme.motionNormal; easing.type: Easing.OutCubic } }
                                                     color: Qt.rgba(root.cardGlassRgb.r, root.cardGlassRgb.g, root.cardGlassRgb.b, hoverFill)
-                                                    border.width: 1
-                                                    border.color: Qt.rgba(1, 1, 1, hoverStroke)
-                                                    transform: Translate {
-                                                        y: AppTheme.reduceMotion ? 0 : (uvCard.hot ? -3 : 0)
-                                                        Behavior on y { NumberAnimation { duration: AppTheme.motionNormal; easing.type: Easing.OutCubic } }
-                                                    }
 
                                                     readonly property real uvVal: root.number(backend.current, "uvIndex", NaN)
                                                     readonly property string uvText: Number.isFinite(uvVal) ? String(Math.round(uvVal)) : "—"
@@ -2548,8 +3674,9 @@ KosApplicationWindow {
                                 background: KosSurface {
                                     radius: 20
                                     fillColor: Qt.rgba(root.cardGlassRgb.r, root.cardGlassRgb.g, root.cardGlassRgb.b, root.currentIsDay ? root.cardGlassAlpha : 0.16)
-                                    strokeWidth: 1
-                                    strokeColor: Qt.rgba(1, 1, 1, 0.22)
+                                    strokeWidth: 0 // 用户裁决 2026-10-23（R80 0.5）：内容区白描边去除
+                                    // innerHighlight（AppTheme 白@0.58 内侧 1px 高光线）同属白描边，一并去除
+                                    showInnerHighlight: false
                                     elevation: 0
                                 }
 
@@ -2589,18 +3716,17 @@ KosApplicationWindow {
                                         Item {
                                             id: hourlySegmented
                                             implicitWidth: 132
-                                            implicitHeight: 36
+                                            // §4 分段控件「高 28/34」（原 36 超标）：默认 34、窄窗（compact）取 28
+                                            implicitHeight: root.compact ? 28 : 34
                                             Layout.alignment: Qt.AlignTop | Qt.AlignRight
                                             property int segment: 0
 
                                             Rectangle {
                                                 anchors.fill: parent
-                                                radius: 18
+                                                radius: hourlySegmented.height / 2 // 胶囊 = h/2（高 34；窄窗 28）
                                                 // 参考实测（ref-main 814×498 Pillow 采样）：胶囊内 (28,90,168) vs 卡面 (0,83,180)
                                                 // ——相对卡面 R+28/G+7/B−12，解出脱饱和中性灰 ≈#767676 @ α0.22-0.26（压暗蓝通道）；白@0.14 方向相反（整体提亮），故按参考改灰。
                                                 color: Qt.rgba(0.46, 0.46, 0.46, 0.24)
-                                                border.width: 1
-                                                border.color: Qt.rgba(1, 1, 1, 0.22)
                                             }
 
                                             // 选中段胶囊（当前段背后）——ref-main 814×498 Pillow 实测：选中胶囊 26×22@814（段宽 28、胶囊高 24，
@@ -2609,16 +3735,26 @@ KosApplicationWindow {
                                                 x: 2 + 44 * hourlySegmented.segment
                                                 y: 2
                                                 width: 40
-                                                height: 32
-                                                radius: 16
+                                                height: hourlySegmented.height - 4 // 滑块内缩 2（§4 分段控件「滑块内缩 2」）
+                                                radius: height / 2 // 胶囊随高（34→30、28→24）
                                                 color: Qt.rgba(1, 1, 1, 0.27)
                                             }
 
                                             AbstractButton {
                                                 x: 0
                                                 width: 44
-                                                height: 36
-                                                background: null
+                                                height: hourlySegmented.height
+                                                background: Rectangle {
+                                                    // §5 Focus：2px accent 外环，偏移 2（margins −4 扣描边 2 留白恰 2px）；
+                                                    // 圆角 = 胶囊 17+2（R10/LiquidSelect 先例）；失焦或禁用即移除
+                                                    visible: parent.activeFocus && parent.enabled
+                                                    anchors.fill: parent
+                                                    anchors.margins: -4
+                                                    radius: hourlySegmented.height / 2 + 2 // 胶囊 r+2（§5 Focus「圆角 +2」）
+                                                    border.width: 2
+                                                    border.color: LiquidStyle.focusColor(AppTheme.accent)
+                                                    color: "transparent"
+                                                }
                                                 // ref tile-conditions：实心云体 + 右上探出小日盘，云与日之间有缺口（SF cloud.sun.fill 构图）
                                                 // Control 会覆写 contentItem 几何，Canvas 需包 Item 再居中；segment 属于外层 hourlySegmented
                                                 contentItem: Item {
@@ -2669,8 +3805,17 @@ KosApplicationWindow {
                                             AbstractButton {
                                                 x: 44
                                                 width: 44
-                                                height: 36
-                                                background: null
+                                                height: hourlySegmented.height
+                                                background: Rectangle {
+                                                    // §5 Focus：同段 0（2px accent 外环偏移 2，胶囊 17+2）
+                                                    visible: parent.activeFocus && parent.enabled
+                                                    anchors.fill: parent
+                                                    anchors.margins: -4
+                                                    radius: hourlySegmented.height / 2 + 2 // 胶囊 r+2（§5 Focus「圆角 +2」）
+                                                    border.width: 2
+                                                    border.color: LiquidStyle.focusColor(AppTheme.accent)
+                                                    color: "transparent"
+                                                }
                                                 // ref-main 实测降水段为实心水滴 6×9px@814（胶囊高 25px），我方胶囊 36px 按 1.44 折算 ≈ 9×13
                                                 // Control 会覆写 contentItem 几何，Canvas 需包 Item 再居中（ref 胶囊中心 225 vs 水滴中心 225.5 居中）
                                                 // LEDGER 仍差 15：ref 水滴墨/胶囊高比 0.386，canvas 12×16→15×20（×1.25），墨迹 8×11→~10×14
@@ -2710,8 +3855,17 @@ KosApplicationWindow {
                                             AbstractButton {
                                                 x: 88
                                                 width: 44
-                                                height: 36
-                                                background: null
+                                                height: hourlySegmented.height
+                                                background: Rectangle {
+                                                    // §5 Focus：同段 0（2px accent 外环偏移 2，胶囊 17+2）
+                                                    visible: parent.activeFocus && parent.enabled
+                                                    anchors.fill: parent
+                                                    anchors.margins: -4
+                                                    radius: hourlySegmented.height / 2 + 2 // 胶囊 r+2（§5 Focus「圆角 +2」）
+                                                    border.width: 2
+                                                    border.color: LiquidStyle.focusColor(AppTheme.accent)
+                                                    color: "transparent"
+                                                }
                                                 // ref SF wind：三道横向流线，右端卷成小螺旋，整体重心居中
                                                 contentItem: Item {
                                                     anchors.fill: parent
@@ -3116,18 +4270,13 @@ KosApplicationWindow {
                                 property bool cardHot: dailyHover.hovered
                                 property real hoverFill: cardHot ? root.cardGlassAlphaHot : root.cardGlassAlpha
                                 Behavior on hoverFill { NumberAnimation { duration: AppTheme.motionNormal; easing.type: Easing.OutCubic } }
-                                property real hoverStroke: cardHot ? 0.32 : 0.22
-                                Behavior on hoverStroke { NumberAnimation { duration: AppTheme.motionNormal; easing.type: Easing.OutCubic } }
-                                transform: Translate {
-                                    y: AppTheme.reduceMotion ? 0 : (dailyCard.cardHot ? -3 : 0)
-                                    Behavior on y { NumberAnimation { duration: AppTheme.motionNormal; easing.type: Easing.OutCubic } }
-                                }
 
                                 background: KosSurface {
                                     radius: 20
                                     fillColor: Qt.rgba(root.cardGlassRgb.r, root.cardGlassRgb.g, root.cardGlassRgb.b, dailyCard.hoverFill)
-                                    strokeWidth: 1
-                                    strokeColor: Qt.rgba(1, 1, 1, dailyCard.hoverStroke)
+                                    strokeWidth: 0 // 用户裁决 2026-10-23（R80 0.5）：内容区白描边去除
+                                    // innerHighlight（AppTheme 白@0.58 内侧 1px 高光线）同属白描边，一并去除
+                                    showInnerHighlight: false
                                     elevation: 0
                                 }
 
@@ -3400,6 +4549,7 @@ KosApplicationWindow {
         height: root.sidebarExpanded ? 46 : 44
         z: 10
         KosSidebarToggle {
+            id: sidebarToggle
             targetWindow: root
             anchors.right: parent.right
             anchors.rightMargin: root.sidebarExpanded ? 5 : 0
@@ -3411,9 +4561,15 @@ KosApplicationWindow {
             glyphPaneColor: Qt.rgba(1, 1, 1, 0.95)
             background: Rectangle {
                 radius: width / 2
-                color: Qt.rgba(1, 1, 1, 0.14)
-                border.width: 1
-                border.color: Qt.rgba(1, 1, 1, 0.22)
+                // 底 0.14 系 ref-main 拟合玻璃（§9 参考图优先）；hover 按 §4.1 玻璃项
+                // 「叠 hoverFill」：0.14 上叠 dark hoverFill 白 .08 → 合成 α≈0.21。
+                color: sidebarToggle.hovered
+                    ? Qt.rgba(1, 1, 1, 1 - (1 - 0.14) * (1 - 0.08))
+                    : Qt.rgba(1, 1, 1, 0.14)
+                Behavior on color { ColorAnimation { duration: 150 } } // §4.1 过渡 150ms
+                // 用户裁决 2026-10-23（R80 0.5）：白描边去掉，与 GlassCircleBg 同轮收口
+                //（盘钮填充层即材质，spec §2.7 亮边由顶部 specular 高光承担）。
+                border.width: 0
                 Rectangle {
                     // specular top sheen, clipped to the circle
                     anchors.fill: parent

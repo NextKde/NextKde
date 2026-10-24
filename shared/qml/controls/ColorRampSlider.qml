@@ -24,7 +24,8 @@ Item {
     readonly property real travel: Math.max(1, width - trackInset * 2)
     readonly property real thumbCenterX: trackInset + clampedValue * travel
 
-    opacity: enabled ? 1 : 0.45
+    // §5 Disabled / §4.1：整体 α .38（原 demo 0.45 偏离）。
+    opacity: enabled ? 1 : 0.38
 
     // ── Ctrl+滚轮：精细步进（与 LiquidSlider 同一条规约）──────────────────
     // 光滚轮不接，留给滑块所在的面板滚动；按住 Ctrl 才一档一档地走。
@@ -124,8 +125,9 @@ Item {
         border.color: Qt.rgba(0, 0, 0, 0.18)
         scale: pointerArea.pressed ? 1.12 : 1
 
+        // §2.11 / §3 motion.duration.instant=100（原 demo 120 不在五档）。
         Behavior on scale {
-            NumberAnimation { duration: 120; easing.type: Easing.OutCubic }
+            NumberAnimation { duration: 100; easing.type: Easing.OutCubic }
         }
 
         Rectangle {
@@ -140,7 +142,11 @@ Item {
 
     MouseArea {
         id: pointerArea
-        anchors.fill: parent
+        // §4.6 滑块「热区 44」：视觉高 26，命中区下探到 ≥44×44 并保持居中。
+        // 只扩纵向（x 仍取 mouse.x）；相邻行若间距 <10px 会叠到邻居条带，见 LEDGER 外推。
+        anchors.centerIn: parent
+        width: parent.width
+        height: Math.max(root.height, 44)
         enabled: root.enabled
         cursorShape: Qt.PointingHandCursor
 
