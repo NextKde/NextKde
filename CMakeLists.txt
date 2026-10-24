@@ -557,11 +557,22 @@ if(BUILD_TESTING)
         set_tests_properties(kos-ui.interaction-controls PROPERTIES
             ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_QUICK_BACKEND=software"
             LABELS "ui;headless" TIMEOUT 20)
+        # The shipping motion components only need QtQuick. Importing their
+        # entire launcher directory also loads Quickshell-only singletons,
+        # whose embedded plugins are unavailable to plain qmltestrunner.
+        set(kos_motion_test_module "${CMAKE_BINARY_DIR}/tests/qml/Kos/Test/LauncherMotion")
+        foreach(component LauncherMotion LauncherIconMotion)
+            configure_file(
+                "${CMAKE_CURRENT_SOURCE_DIR}/shell/desktop/modules/applauncher/${component}.qml"
+                "${kos_motion_test_module}/${component}.qml" COPYONLY)
+        endforeach()
+        file(WRITE "${kos_motion_test_module}/qmldir"
+            "module Kos.Test.LauncherMotion\nLauncherMotion 1.0 LauncherMotion.qml\nLauncherIconMotion 1.0 LauncherIconMotion.qml\n")
         add_test(NAME kos-ui.shared-motion
             COMMAND ${KOS_INTERACTION_QMLTEST}
                 -input ${CMAKE_CURRENT_SOURCE_DIR}/tests/interaction-controls/tst_motion.qml)
         set_tests_properties(kos-ui.shared-motion PROPERTIES
-            ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_QUICK_BACKEND=software"
+            ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_QUICK_BACKEND=software;QML_IMPORT_PATH=${CMAKE_BINARY_DIR}/tests/qml;QML2_IMPORT_PATH=${CMAKE_BINARY_DIR}/tests/qml"
             LABELS "ui;headless" TIMEOUT 20)
         add_test(NAME kos-ui.lyric-transition
             COMMAND ${KOS_INTERACTION_QMLTEST}

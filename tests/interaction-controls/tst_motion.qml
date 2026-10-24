@@ -2,7 +2,7 @@ import QtQuick
 import QtQuick.Controls
 import QtTest
 import "../../shared/qml/foundation" as Foundation
-import "../../shell/desktop/modules/applauncher" as Launcher
+import Kos.Test.LauncherMotion 1.0 as Launcher
 
 Item {
     id: root
