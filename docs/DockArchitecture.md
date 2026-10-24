@@ -430,6 +430,10 @@ mode fills the selected output. Each mode owns a semantic icon-size, density,
 and font-weight profile. Do not put application search, shortcut registration,
 or grid state back into `DockContainer.qml`.
 
+Card presentations keep the search header outside the scrolling app grid: the
+grid viewport starts below the header, so a scrolled row is clipped at that
+boundary instead of painting over the search field.
+
 Launcher persistence is separate at
 `Quickshell.stateDir + "/applauncher/config.json"`. Schema version 3 owns
 `displayMode`, per-mode `layoutProfiles`, `rootItems` (`app` or `folder`),

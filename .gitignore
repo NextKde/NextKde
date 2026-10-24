@@ -3,7 +3,9 @@
 .claude/
 .agents/
 CLAUDE.md
+AGENTS.md
 .zcode/
+.opencode/
 .loop/
 .idea/
 
