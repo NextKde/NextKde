@@ -89,10 +89,14 @@ KosApplicationWindow {
     onCurrentWeatherCodeChanged: root.refreshSkyStops()
     Component.onCompleted: root.refreshSkyStops()
     readonly property color skyText: "#ffffff"
-    readonly property color skyTextMuted: Qt.rgba(1, 1, 1, 0.66)
+    // R140｜§2.10 正文对比 ≥4.5:1：原白 α0.66 在压深后的卡面（clear (81,107,141)）上仅 3.48:1。
+    // 反解得 α0.86 = 4.54:1（最低一档 4.50:1），故 0.66 → 0.86。
+    readonly property color skyTextMuted: Qt.rgba(1, 1, 1, 0.86)
     // tile-cards 原生分辨率实测：卡头小 caps 与卡头 glyph 同浅蓝墨（SUNSET/UV 峰值 (146,205,255)/(147,206,255)；
-    // 白@α 反解三通道矛盾 R 0.33/B 0.91，证独立蓝墨非白@α），与 glyph 色 #90cbff 同源
-    readonly property color cardHeaderText: "#90cbff"
+    // 白@α 反解三通道矛盾 R 0.33/B 0.91，证独立蓝墨非白@α），与 glyph 色 #90cbff 同源。
+    // R140｜§2.10：原 #90cbff 在压深卡面上仅 2.09–3.17:1（<4.5:1）。同色相向亮端推到 **#eef7ff**
+    // （本轮实拍卡面实测 4.69–5.31:1），保「浅蓝墨」族感不改色相。
+    readonly property color cardHeaderText: "#eef7ff"
 
     // 用户裁定 2026-10-23：卡片改**中性白玻璃**，禁止蓝色 tint 压在蓝色天空上（旧值
     // α0.30 的 (0,96,210) 深蓝玻璃在模糊蓝底上糊成一片）。白底 α0.14（夜景 0.16 不变），
@@ -569,14 +573,16 @@ KosApplicationWindow {
         }
         if (c >= 95) return ["#2a3752", "#3c4c6e", "#4c5a76"]
         if ((c >= 51 && c <= 67) || (c >= 80 && c <= 82))
-            return ["#3d5566", "#415e6e", "#4a5c6a"]   // R139：原 ["#9ab5c4","#92aebe","#b9c5ce"] 卡面白字仅 1.90:1（§2.10）；压深后 5.15/4.65/4.68:1
+            return ["#3d5566", "#3b5564", "#435360"]   // R139：原 ["#9ab5c4","#92aebe","#b9c5ce"] 卡面白字仅 1.90:1（§2.10）；R140 后两档再压一档（0.86 muted 4.53/4.55:1）
         if ((c >= 71 && c <= 77) || c === 85 || c === 86)
             return ["#4a5c6e", "#495c71", "#435d74"]   // R139：原 ["#7b90a6","#5d7690","#a9bccd"] → 4.66/4.65/4.65:1
         // ref-main 观感拟合（用户 2026-10-23 第二批判据：以 ref-main 观感为准）：云隙蓝天梯度，
         // 顶部灰蓝由云deck覆盖，中段 y0.45 实测 ≈#1560b2，底部深蓝 ≈#0c5aa8。原灰调
         // ["#6a7b90","#4a5d75","#8ba0b5"] 是"粗糙感"来源之一（ref 顶部云隙间仍为饱和蓝）。
-        if (c === 3 || c === 45 || c === 48) return ["#6288b5", "#1560b2", "#0c5aa8"]
-        return ["#4a74ab", "#1469bc", "#5a90c9"]   // clear / mainly clear / partly cloudy day
+        // R140｜§2.10：晴/多云档沿用 ref-main 色相，仅按 HLS 明度二分压深到「白 α0.16 卡底上
+        // 白字 ≥4.5:1 且 muted α0.86 ≥4.5:1」，故比 ref 饱和蓝暗一档（见 LEDGER 外推）。
+        if (c === 3 || c === 45 || c === 48) return ["#324b69", "#104b8b", "#0a4c8c"]
+        return ["#304b6f", "#0e4d89", "#264c74"]   // clear / mainly clear / partly cloudy day（R140 压深）
     }
 
     function tempColor(temperature) {
