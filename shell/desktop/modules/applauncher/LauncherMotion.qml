@@ -1,6 +1,6 @@
 import QtQuick
 
-// Tile Animator jobs keep the original spread effect. The stationary glass
+// Tile progress animations keep the original spread effect. The stationary glass
 // fades independently and reaches full opacity before the tiles settle.
 Item {
     id: motion
