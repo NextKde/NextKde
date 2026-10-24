@@ -50,6 +50,8 @@ Item {
     // coordinates. Hosts that scale the whole surface forward that scale here.
     property real backdropScale: 1
     property real backdropRadius: radius
+    // Inset content can draw directly into the window. The QML body still
+    // needs its own corner mask when the whole-subtree mask is disabled.
     property bool maskContent: true
 
     // Corner continuity, not corner size. 2.0 is the circular arc the shell has
@@ -291,6 +293,13 @@ Item {
         // rounding the fill as well would round it twice -- near the corner the
         // two arcs disagree and the fill pokes out of its own silhouette.
         radius: root.continuousCorners ? 0 : root.radius
+        layer.enabled: root.continuousCorners && !root.maskContent
+        layer.effect: SquircleMask {
+            cornerRadius: root.radius
+            cornerExponent: root.cornerExponent
+            maskWidth: root.width
+            maskHeight: root.height
+        }
         // Those two inset lines still need the visual radius, which radius no
         // longer carries once the mask is on.
         cornerInset: root.radius

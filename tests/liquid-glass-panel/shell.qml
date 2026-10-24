@@ -109,6 +109,102 @@ Item {
 
     property var failures: []
 
+    // Text stays outside the background's corner texture when the content is
+    // inset. Exercise both masks so disabling the content mask cannot leave
+    // a square Material/fallback background behind sharp text.
+    LiquidGlassPanel {
+        id: insetPanel
+        width: 200
+        height: 60
+        radius: 18
+        cornerExponent: 4
+        maskContent: false
+        useKwinEffect: false
+        ShellText { text: "应用程序 Applications"; x: 24; y: 20 }
+    }
+
+    ShellText { id: stationaryLabel; text: "菜单 Menu" }
+    Item {
+        id: textFrame
+        Item {
+            id: textHost
+            ShellText { id: movingLabel; text: "启动器 Launcher" }
+            GlassText { id: movingGlassLabel; text: "通知 Notification" }
+        }
+    }
+    Item { id: scaledHost; scale: 0.8 }
+
+    property int renderingStage: 0
+    Timer {
+        interval: 20
+        running: true
+        repeat: true
+        onTriggered: {
+            switch (root.renderingStage++) {
+            case 0:
+                root.check("stationary text uses platform rasterization",
+                    stationaryLabel.renderType === Text.NativeRendering
+                    && movingLabel.renderType === Text.NativeRendering
+                    && movingGlassLabel.renderType === Text.NativeRendering)
+                root.check("inset content bypasses the offscreen mask",
+                    !insetPanel.layer.enabled && insetPanel.glass.layer.enabled)
+                textFrame.scale = 0.9
+                break
+            case 1:
+                root.check("ancestor scaling keeps text scalable",
+                    movingLabel.renderType === Text.QtRendering
+                    && movingGlassLabel.renderType === Text.QtRendering
+                    && stationaryLabel.renderType === Text.NativeRendering)
+                textFrame.scale = 1
+                textFrame.rotation = 8
+                break
+            case 2:
+                root.check("ancestor rotation keeps text scalable",
+                    movingLabel.renderType === Text.QtRendering)
+                textFrame.rotation = 0
+                break
+            case 3:
+                root.check("settled text returns to native rendering",
+                    movingLabel.renderType === Text.NativeRendering
+                    && movingGlassLabel.renderType === Text.NativeRendering)
+                movingLabel.parent = scaledHost
+                break
+            case 4:
+                root.check("reparenting observes the new ancestor transform",
+                    movingLabel.renderType === Text.QtRendering)
+                movingLabel.parent = textHost
+                break
+            case 5:
+                root.check("reparenting back restores native rendering",
+                    movingLabel.renderType === Text.NativeRendering)
+                movingLabel.scalableRendering = true
+                break
+            case 6:
+                root.check("explicit transform-list opt-in stays scalable",
+                    movingLabel.renderType === Text.QtRendering)
+                movingLabel.scalableRendering = false
+                stationaryLabel.x = 10.5
+                insetPanel.maskContent = true
+                break
+            case 7:
+                root.check("fractional placement alone stays native",
+                    stationaryLabel.renderType === Text.NativeRendering
+                    && movingLabel.renderType === Text.NativeRendering)
+                root.check("whole-content masking avoids a duplicate body layer",
+                    insetPanel.layer.enabled && !insetPanel.glass.layer.enabled)
+                insetPanel.maskContent = false
+                insetPanel.cornerExponent = 2
+                break
+            case 8:
+                root.check("circular fallback needs neither offscreen mask",
+                    !insetPanel.layer.enabled && !insetPanel.glass.layer.enabled
+                    && insetPanel.glass.radius === 18)
+                stop()
+                break
+            }
+        }
+    }
+
     function check(name, condition) {
         if (!condition)
             failures.push(name)
@@ -196,7 +292,12 @@ Item {
     Timer {
         interval: 400
         running: true
+        repeat: true
         onTriggered: {
+            // Slow CI render loops may need more than 400ms for the staged
+            // binding checks. The independent watchdog still bounds the run.
+            if (root.renderingStage < 9)
+                return
             if (root.failures.length > 0)
                 console.error("LIQUID_GLASS_PANEL_FAIL: "
                     + root.failures.join("; "))

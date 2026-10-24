@@ -309,8 +309,12 @@ PopupWindow {
         anchors.fill: parent
         blurAnchor: revealFrame.morphing ? revealFrame : glass
         captureAnchor: revealFrame.morphing ? captureFrame : null
-        // The content corner mask still needs a client layer. Reuse its final
-        // texture allocation instead of resizing the FBO on every animation frame.
+        // The growing capsule and partially scrolled rows need corner clipping.
+        // A settled menu that fits draws text without the extra texture pass.
+        maskContent: view.overflowing
+            || (revealFrame.morphing && revealFrame.progress < 1)
+        // During the reveal, reuse the final texture allocation instead of
+        // resizing the FBO on every animation frame.
         // Explicit texture sizes are physical pixels; Qt only applies the window's
         // device pixel ratio automatically when textureSize is left empty.
         layer.textureSize: revealFrame.morphing

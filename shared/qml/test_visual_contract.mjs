@@ -92,12 +92,14 @@ for (const mode of ["dark", "light"]) {
         `${mode} dock indicator reaches AA contrast against dock background`);
 }
 const glassTextSource = read("../../shell/desktop/modules/common/GlassText.qml");
-// GlassText keeps the root type Text so every Text property passes through
+// GlassText inherits Text through ShellText so every Text property passes through
 // natively. Readability is now a two-way contract driven by the appearance
 // token: dark appearance keeps white type over a soft area backdrop; light
 // appearance uses clean dark type. Neither branch adds a glyph outline.
-assert.match(glassTextSource, /^Text \{/m,
-    "glass text stays a Text so callers keep native Text properties");
+assert.match(glassTextSource, /^ShellText \{/m,
+    "glass text shares Shell text rendering while retaining Text properties");
+assert.match(read("../../shell/desktop/modules/common/ShellText.qml"), /^Text \{/m,
+    "shared Shell text retains Text layout and elision properties");
 assert.match(glassTextSource,
     /color:[\s\S]*AppearanceTokens\.isDarkTheme[\s\S]*"#ffffff"[\s\S]*"#000000"/,
     "glass text picks black-or-white ink from the appearance token");
