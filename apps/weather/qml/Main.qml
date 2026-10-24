@@ -914,6 +914,8 @@ KosApplicationWindow {
         property real strength: 0.12
         property real specular: 0.28
         property real fog: 0.05
+        // 批 12 第 4 项：雨膜压暗系数。滑落水珠擦过处膜被擦掉 → 亮带。
+        property real filmDim: 0.22
     }
 
     // 批 12｜水图 512×512（静止时不重绘，只有下滑水珠的局部脏矩形会更新）：
@@ -1077,6 +1079,17 @@ KosApplicationWindow {
                              drop.x, y0, y1)
                 // 头部水珠仍是折射水珠（offset map），不是白色拖尾。
                 stampAt(ctx, drop.x, y, drop.size, 1.0)
+                // 雨膜只保留最近 48px：更早的滑痕补回膜 + 静态水珠，避免长跑把整图擦空。
+                const trailPx = 48
+                const dySeg = y1 - y0
+                const r1 = y0 - trailPx
+                if (r1 > 2) {
+                    const r0 = Math.max(0, r1 - dySeg)
+                    ctx.fillStyle = "rgba(128,128,255,0.55)"
+                    ctx.fillRect(drop.x - half, r0, half * 2, r1 - r0)
+                    redrawStamps(ctx, drop.x - half, r0, drop.x + half, r1,
+                                 drop.x, y0, y1)
+                }
                 slideLastY[i] = y
             }
             ctx.globalAlpha = 1
@@ -1086,6 +1099,10 @@ KosApplicationWindow {
         onPaint: {
             const ctx = getContext("2d")
             ctx.clearRect(0, 0, width, height)
+            // 批 12 第 4 项：整张水图铺一层"雨膜"底色——A=膜覆盖（0.55）、B=1 标记有膜。
+            // shader 按 film 把天空压暗；滑落水珠 clearRect 擦过 → film=0 → 亮带。
+            ctx.fillStyle = "rgba(128,128,255,0.55)"
+            ctx.fillRect(0, 0, width, height)
             if (offsetSpriteImage.status !== Image.Ready)
                 return
             buildStamps()
