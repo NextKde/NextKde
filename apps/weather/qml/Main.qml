@@ -855,7 +855,18 @@ KosApplicationWindow {
         anchors.fill: parent
         visible: root.dayClearSky
         clip: true
-        opacity: 0.17
+        // CPU 轮（批 8）：原 SequentialAnimation 以 60Hz 推进 opacity（晴空场景的全窗口
+        // 重绘驱动源之一）。改为 33ms 定时器驱动同一余弦呼吸曲线，端点 0.10↔0.24、
+        // 周期 7s 不变；reduceMotion 时钉在 0.17（原实现 reduceMotion 下停在动画初值）。
+        property real breatheT: 0
+        opacity: AppTheme.reduceMotion ? 0.17
+                 : 0.10 + 0.14 * (0.5 + 0.5 * Math.cos(2 * Math.PI * breatheT / 7.0))
+        Timer {
+            interval: 33; repeat: true
+            running: root.dayClearSky && !AppTheme.reduceMotion
+            onRunningChanged: if (!running) sunGlowLayer.breatheT = 0
+            onTriggered: sunGlowLayer.breatheT = (sunGlowLayer.breatheT + 0.033) % 7.0
+        }
 
         Canvas {
             anchors.fill: parent
@@ -876,12 +887,6 @@ KosApplicationWindow {
             }
         }
 
-        SequentialAnimation on opacity {
-            running: root.dayClearSky && !AppTheme.reduceMotion
-            loops: Animation.Infinite
-            NumberAnimation { from: 0.10; to: 0.24; duration: 3500; easing.type: Easing.InOutSine }
-            NumberAnimation { from: 0.24; to: 0.10; duration: 3500; easing.type: Easing.InOutSine }
-        }
     }
 
     Item {
@@ -2081,12 +2086,19 @@ KosApplicationWindow {
                             Accessible.role: Accessible.StaticText
                             Accessible.name: digits + "°"
 
-                            // 呼吸：整字 opacity 0.86↔1.0
-                            SequentialAnimation on opacity {
+                            // 呼吸：整字 opacity 0.86↔1.0，周期 5s，InOutSine。
+                            // CPU 轮（批 8）：原 SequentialAnimation 每个显示帧（60Hz）推进一次，
+                            // 是晴/多云场景全窗口重绘的唯一 60fps 驱动源（实测基线 20.5–20.9%）。
+                            // 改为 33ms 定时器驱动同一余弦曲线（cos 在两端导数为 0 = InOutSine 等价），
+                            // 端点 0.86/1.0 与 5s 周期不变，仅时间分辨率降到 30fps（5s 慢渐变不可辨）。
+                            property real breatheT: 0
+                            opacity: AppTheme.reduceMotion ? 1.0
+                                     : 0.86 + 0.14 * (0.5 + 0.5 * Math.cos(2 * Math.PI * breatheT / 5.0))
+                            Timer {
+                                interval: 33; repeat: true
                                 running: !AppTheme.reduceMotion
-                                loops: Animation.Infinite
-                                NumberAnimation { to: 0.86; duration: 2500; easing.type: Easing.InOutSine }
-                                NumberAnimation { to: 1.0; duration: 2500; easing.type: Easing.InOutSine }
+                                onRunningChanged: if (!running) heroTempLiquid.breatheT = 0
+                                onTriggered: heroTempLiquid.breatheT = (heroTempLiquid.breatheT + 0.033) % 5.0
                             }
 
 
