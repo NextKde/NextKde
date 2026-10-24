@@ -1083,6 +1083,10 @@ KosApplicationWindow {
     Rectangle {
         id: skyGradientRect
         parent: skyComposite
+        // 显式压到天空容器最底层：`layer.enabled` 使该渐变走独立纹理 pass，
+        // 在 SVGA3D 软件光栅下与后声明的云层出现绘制顺序倒置（R130 诊断：
+        // 云层 visible/opacity/parent/烘焙全部正常，屏上却不可见）。
+        z: -1
         anchors.fill: parent
         gradient: Gradient {
             GradientStop { position: 0.0; color: root.skyTop }
@@ -1572,8 +1576,13 @@ KosApplicationWindow {
         // ~50%，旧的 0.46 视口高度只留出顶部窄条 → 上移到 0.62 容纳三层云带），
         // 下方大片天空无云 → 不再合成空白透明区（CPU 轮，观感零变化）。
         height: parent.height * 0.62
-        visible: root.cloudySky
+        // 批 12 余项①（R130）：雨天也要有云——裁决要求水珠的折射必须能在
+        // 「云带/亮边」上被看出来；而雨天 `cloudySky=false` 时三层云全部隐藏，
+        // 天空是平滑渐变，水珠折射无可辨认的背景结构（R126/R128/R129 同一阻塞）。
+        // 云层本身属 L0 天空材质（非玻璃，§1/§2.2 预算不变），雨天显示不改变层级。
+        visible: root.cloudySky || root.rainySky
         clip: true
+        onVisibleChanged: cloudTexture.requestPaint()
 
         Canvas {
             id: cloudTexture
@@ -1598,7 +1607,8 @@ KosApplicationWindow {
             Connections {
                 target: root
                 function onAmbientSecChanged() {
-                    if (!root.cloudySky || AppTheme.reduceMotion) {
+                    // R130：雨天云层同样可见（折射需要结构），故漂移门控与 visible 一致。
+                    if ((!root.cloudySky && !root.rainySky) || AppTheme.reduceMotion) {
                         cloudTexture.lastPanMs = 0
                         return
                     }
