@@ -17,15 +17,18 @@ Item {
     property bool _pressed: false
     property bool _hovered: false
 
-    // Size
-    implicitWidth: primary ? 52 : 40
+    // Size（§4.2 Icon-only：视觉 28/34，「同组同尺寸」——主次只靠变体区分不靠尺寸；
+    // 取 lg=34，§3 control.lg。原 demo 52/40 不在 24/28/34/44 档且按变体分尺寸。）
+    implicitWidth: 34
     implicitHeight: implicitWidth
 
     // Expansion animation (0 = rest, 1 = fully expanded glass)
     property real _expansion: _pressed ? 1.0 : (_hovered ? 0.3 : 0.0)
     Behavior on _expansion {
         NumberAnimation {
-            duration: _pressed ? 200 : 350
+            // §3 motion.duration：按下 instant=100 / 其余过渡 fast=150（原 demo 200/350
+            // 均不在 §3 五档内；§4.1「过渡 150ms；按下 100ms」）
+            duration: _pressed ? 100 : 150
             easing.type: _pressed ? Easing.OutBack : Easing.OutQuint
             easing.overshoot: _pressed ? 1.4 : 1.0
         }
@@ -42,9 +45,12 @@ Item {
         NumberAnimation { to: 0.0; duration: 80; easing.type: Easing.OutQuad }
     }
 
-    opacity: enabled ? 1.0 : 0.5
-    scale: _pressed ? 0.92 : (_hovered ? 1.05 : 1.0)
-    Behavior on scale { NumberAnimation { duration: 150; easing.type: Easing.OutCubic } }
+    // §5 Disabled：整体 α .38（原 demo 0.5）；§4.2「禁用：α .38，无高光/阴影/hover」
+    opacity: enabled ? 1.0 : 0.38
+    // §5 Pressed：scale .96（§3 motion.pressScale）；Hover 只改背景，不加缩放
+    // （原 demo 按压 .92 / hover 1.05）
+    scale: _pressed ? 0.96 : 1.0
+    Behavior on scale { NumberAnimation { duration: _pressed ? 100 : 150; easing.type: Easing.OutCubic } }
 
     // Drop shadow (fades out as glass expands)
     Rectangle {
@@ -162,7 +168,8 @@ Item {
         style: (root.iconColor === "#ffffff" || root.iconColor === "white" || String(root.iconColor).toLowerCase() === "#ffffffff")
             ? Text.Outline : Text.Normal
         styleColor: Qt.rgba(0, 0, 0, 0.45)
-        font.pixelSize: root.primary ? 16 : 12
+        // §4.2 lg 档「图标 18」+ §4.3「按钮内 14–20」；原 demo 16/12（12 越下限）
+        font.pixelSize: 18
         font.weight: Font.Medium
     }
 
