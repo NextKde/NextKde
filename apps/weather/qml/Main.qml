@@ -1248,11 +1248,12 @@ KosApplicationWindow {
         }
     }
 
-    // 批 8｜雨＝装饰（用户 2026-10-24）：落雨粒子 665 → 150（40/50/60），
-    // 观感主体改由下方"雨点材质层"承担；速度/α/拖尾尺寸仍沿用批 7 定值。
-    RainLayerSystem { fallSpeed: 690; lifespanMs: 1060; particleCount: 40; baseAlpha: 0.42; alphaVar: 0.13; spriteWidth: 40; spriteSource: "particles/rain-near.png" }
-    RainLayerSystem { fallSpeed: 520; lifespanMs: 1400; particleCount: 50; baseAlpha: 0.32; alphaVar: 0.10; spriteWidth: 26; spriteSource: "particles/rain-mid.png" }
-    RainLayerSystem { fallSpeed: 340; lifespanMs: 2140; particleCount: 60; baseAlpha: 0.16; alphaVar: 0.06; spriteWidth: 14; spriteSource: "particles/rain-far.png" }
+    // 批 9｜雨＝玻璃上挂水珠（用户 2026-10-24）：落雨粒子 150 → 30（10/10/10），
+    // 仅作氛围，观感主体改由下方水珠材质层 + 少数滑落水珠承担；
+    // 速度/α/拖尾尺寸仍沿用批 7 定值（数量固定在上限内，不随强度暴涨）。
+    RainLayerSystem { fallSpeed: 690; lifespanMs: 1060; particleCount: 10; baseAlpha: 0.42; alphaVar: 0.13; spriteWidth: 40; spriteSource: "particles/rain-near.png" }
+    RainLayerSystem { fallSpeed: 520; lifespanMs: 1400; particleCount: 10; baseAlpha: 0.32; alphaVar: 0.10; spriteWidth: 26; spriteSource: "particles/rain-mid.png" }
+    RainLayerSystem { fallSpeed: 340; lifespanMs: 2140; particleCount: 10; baseAlpha: 0.16; alphaVar: 0.06; spriteWidth: 14; spriteSource: "particles/rain-far.png" }
 
     // 批 7｜雪 = ParticleSystem + Emitter + Wander + ImageParticle（8×8 柔边圆 sprite）。
     ParticleSystem {
@@ -1419,53 +1420,128 @@ KosApplicationWindow {
         Accessible.ignored: true
     }
 
-    // 批 8｜雨点材质层（用户 2026-10-24：雨是装饰，重点是"玻璃表面的雨点材质"）。
-    // 两张程序化生成的可平铺贴图（PIL，脚本随代码提交），fillMode: Image.Tile 铺满；
-    // 属于天空材质（§1 L0），不参与玻璃预算。位移只动 x/y 变换（不重绘/不重烘），
-    // 近层对角 9 px/s、远层 9/1.6 ≈ 5.6 px/s；opacity 8s 呼吸 0.42↔0.52，
-    // 再乘降水强度因子（0.55 + 0.45×intensity）与夜间 0.7 压暗。
-    component RainMaterialLayer: Item {
-        id: material
+    // 批 9｜背景雨幕：极淡竖雾条（α 0.06–0.10，#cfe0ff 色系，程序化贴图），
+    // 铺在天空上、水珠层之下。静态纹理平铺，不逐帧重绘；夜间整体 ×0.7。
+    Image {
+        id: rainMistLayer
+        anchors.fill: parent
+        visible: root.rainySky
+        source: "particles/rain-mist.png"
+        fillMode: Image.Tile
+        smooth: true
+        opacity: root.currentIsDay ? 0.08 : 0.08 * 0.7
+        Accessible.ignored: true
+    }
+
+    // 批 9｜水珠材质层（本轮主体）：两张 1024×1024 可平铺贴图（PIL 程序化生成），
+    // 近层约 320 颗（直径 3–14px）、远层约 180 颗（2–7px，轻微模糊）。
+    // 每颗水珠含上缘白高光 / 内部偏左上亮点 / 下缘深蓝暗边三层明暗。
+    // 属于天空材质（§1 L0），不参与玻璃预算；静态平铺，无位移、无逐帧重绘。
+    // opacity 基准 近 0.55 / 远 0.35，随 precipitationIntensity 在 ±0.15 内联动，夜间 ×0.7。
+    component WaterDropLayer: Item {
+        id: waterDrop
         anchors.fill: parent
         clip: true
         visible: root.rainySky
         Accessible.ignored: true
         property string tileSource
-        property real opacityFactor: 1.0
-        property real driftAxisMs: 80500
-        property real breathe: 0.42
-        property real intensityScale: 0.55 + 0.45 * root.precipitationIntensity
+        property real baseOpacity: 0.55
+        readonly property real intensityLink: 0.15 * (2 * root.precipitationIntensity - 1)
         opacity: root.rainySky
-                 ? material.breathe * material.intensityScale * material.opacityFactor
-                   * (root.currentIsDay ? 1.0 : 0.7)
+                 ? Math.max(0, Math.min(1, (waterDrop.baseOpacity + waterDrop.intensityLink)
+                              * (root.currentIsDay ? 1.0 : 0.7)))
                  : 0
-        SequentialAnimation on breathe {
-            running: root.rainySky && !AppTheme.reduceMotion
-            loops: Animation.Infinite
-            NumberAnimation { from: 0.42; to: 0.52; duration: 4000; easing.type: Easing.InOutSine }
-            NumberAnimation { from: 0.52; to: 0.42; duration: 4000; easing.type: Easing.InOutSine }
-        }
         Image {
-            id: materialTile
-            width: material.width + 512
-            height: material.height + 512
-            source: material.tileSource
+            anchors.fill: parent
+            source: waterDrop.tileSource
             fillMode: Image.Tile
             smooth: true
-            NumberAnimation on x {
-                from: 0; to: -512; duration: material.driftAxisMs
-                loops: Animation.Infinite; easing.type: Easing.Linear
-                running: root.rainySky && !AppTheme.reduceMotion
+        }
+    }
+    WaterDropLayer { tileSource: "particles/water-drops-far.png"; baseOpacity: 0.35 }
+    WaterDropLayer { tileSource: "particles/water-drops-near.png"; baseOpacity: 0.55 }
+
+    // 批 9｜少数水珠缓慢滑落（唯一动态）：12 颗固定种子水珠，速度 8–20 px/s，
+    // 每滑 40–60px 留一颗 2–4px 小水珠，头部 1px 渐变尾迹（头亮尾淡）。
+    // 只重绘 256×256 局部 Canvas（禁止全屏 clearRect / 全屏重绘 / 每帧重建贴图）；
+    // reduceMotion 时 Timer 停走 → 水珠静止。
+    Item {
+        id: slidingDrops
+        anchors.top: parent.top
+        anchors.horizontalCenter: parent.horizontalCenter
+        anchors.topMargin: 6
+        width: 256
+        height: 256
+        visible: root.rainySky
+        Accessible.ignored: true
+        property real clock: 0
+        readonly property var drops: {
+            const random = root.mulberry32(20261024)
+            const rows = []
+            for (let index = 0; index < 12; index++) {
+                rows.push({
+                    x: 12 + random() * (256 - 24),
+                    y0: random() * 256,
+                    speed: 8 + random() * 12,         // 8–20 px/s
+                    spacing: 40 + random() * 20,      // 每 40–60px 留一颗
+                    bead: 2 + random() * 2            // 2–4px
+                })
             }
-            NumberAnimation on y {
-                from: 0; to: -512; duration: material.driftAxisMs
-                loops: Animation.Infinite; easing.type: Easing.Linear
-                running: root.rainySky && !AppTheme.reduceMotion
+            return rows
+        }
+        Timer {
+            interval: 40
+            repeat: true
+            running: root.rainySky && !AppTheme.reduceMotion
+            onTriggered: {
+                slidingDrops.clock += 0.04
+                slidingCanvas.requestPaint()
+            }
+        }
+        Canvas {
+            id: slidingCanvas
+            anchors.fill: parent
+            onPaint: {
+                const ctx = getContext("2d")
+                ctx.clearRect(0, 0, width, height)
+                if (!slidingDrops.visible || width <= 0)
+                    return
+                const rows = slidingDrops.drops
+                for (let index = 0; index < rows.length; index++) {
+                    const drop = rows[index]
+                    const headY = (drop.y0 + drop.speed * slidingDrops.clock) % (height + 20)
+                    // 尾迹：1px、头亮尾淡的竖向渐变
+                    const tail = 18
+                    const trail = ctx.createLinearGradient(0, headY - tail, 0, headY)
+                    trail.addColorStop(0, "rgba(219,233,255,0)")
+                    trail.addColorStop(1, "rgba(219,233,255,0.55)")
+                    ctx.fillStyle = trail
+                    ctx.fillRect(drop.x - 0.5, headY - tail, 1, tail)
+                    // 已滑过路径上每 40–60px 留下的静态小水珠
+                    const travelled = drop.speed * slidingDrops.clock + drop.spacing
+                    const beads = Math.min(10, Math.floor(travelled / drop.spacing))
+                    for (let bead = 1; bead <= beads; bead++) {
+                        const beadY = headY - bead * drop.spacing
+                        if (beadY < -4)
+                            break
+                        ctx.beginPath()
+                        ctx.fillStyle = "rgba(235,245,255,0.34)"
+                        ctx.arc(drop.x, beadY, drop.bead * 0.5, 0, Math.PI * 2)
+                        ctx.fill()
+                    }
+                    // 头部水珠：亮面 + 下缘暗边
+                    ctx.beginPath()
+                    ctx.fillStyle = "rgba(255,255,255,0.72)"
+                    ctx.arc(drop.x, headY, 2, 0, Math.PI * 2)
+                    ctx.fill()
+                    ctx.beginPath()
+                    ctx.fillStyle = "rgba(10,30,72,0.32)"
+                    ctx.arc(drop.x + 0.4, headY + 1.2, 1.6, 0, Math.PI)
+                    ctx.fill()
+                }
             }
         }
     }
-    RainMaterialLayer { tileSource: "particles/rain-material-far.png"; opacityFactor: 0.6; driftAxisMs: 128800 }
-    RainMaterialLayer { tileSource: "particles/rain-material-near.png" }
 
     // 批 5｜闪电已并入降水 Canvas（见 PrecipitationLayer.paintLightning）；
     // 原独立 lightningLayer Canvas（批 3）整段移除：不再有第二个 33ms Timer/
