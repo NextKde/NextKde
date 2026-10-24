@@ -955,6 +955,9 @@ KosApplicationWindow {
         property real clock: 0
         property double lastClockMs: 0
         property int updatePhase: 0
+        // 探针：只留雨膜，不画任何水珠（静态+滑动头）。用于 R134 批 12 第 4 项
+        // 「擦雾亮带」的隔离证据；probeFilmOnly 为 true 时仍保留滑痕擦除。
+        property bool probeFilmOnly: true
         Accessible.ignored: true
         // 偏移图就绪后重画一次（Image 项异步加载完成 → 同步重绘水图）。
         Component.onCompleted: if (offsetSpriteImage.status === Image.Ready) requestPaint()
@@ -1086,9 +1089,11 @@ KosApplicationWindow {
             buildStamps()
             if (slideTrail.length !== slideDrops.length)
                 slideTrail = []
-            for (let i = 0; i < staticStamps.length; i++) {
-                const s = staticStamps[i]
-                stampAt(ctx, s.x, s.y, s.size, s.alpha)
+            if (!waterMapCanvas.probeFilmOnly) {
+                for (let i = 0; i < staticStamps.length; i++) {
+                    const s = staticStamps[i]
+                    stampAt(ctx, s.x, s.y, s.size, s.alpha)
+                }
             }
             // 滑痕：在静态水珠之上擦掉一段窄带（薄膜 + 水珠一起去掉）→ shader 里 film=0/A=0。
             // 用 destination-out 画圆头胶囊（宽 ≈ 珠径 0.7、两端半圆），避免出现硬边矩形。
@@ -1110,11 +1115,13 @@ KosApplicationWindow {
             ctx.globalCompositeOperation = "source-over"
             // 头部水珠仍是折射水珠（offset map），不是白色拖尾。
             slideLastY = []
-            for (let i = 0; i < slideDrops.length; i++) {
-                const drop = slideDrops[i]
-                const y = slideY(drop)
-                slideLastY[i] = y
-                stampAt(ctx, drop.x, y, drop.size, 1.0)
+            if (!waterMapCanvas.probeFilmOnly) {
+                for (let i = 0; i < slideDrops.length; i++) {
+                    const drop = slideDrops[i]
+                    const y = slideY(drop)
+                    slideLastY[i] = y
+                    stampAt(ctx, drop.x, y, drop.size, 1.0)
+                }
             }
             ctx.globalAlpha = 1
             waterMapSource.scheduleUpdate()
