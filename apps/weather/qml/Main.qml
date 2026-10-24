@@ -26,9 +26,44 @@ KosApplicationWindow {
     property string pendingLocationId: ""
     readonly property int currentWeatherCode: number(backend.current, "weatherCode", -1)
     readonly property bool currentIsDay: Boolean(value(backend.current, "isDay", true))
-    readonly property var skyStops: skyStopsFor(
-        root.currentWeatherCode,
+    // 批 1｜天空系统（用户 2026-10-24）：2 态 → dawn/day/dusk/night 四时段，按本地日出日落判定；
+    // 时段切换 12s 平滑插值，天气条件切换 1.2s crossfade（禁止瞬时换色）。颜色值见 skyStopsFor。
+    readonly property string skyPeriod: skyPeriodFor(
+        String(value(backend.current, "time", "")),
+        backend.daily && backend.daily.length > 0
+            ? String(value(backend.daily[0], "sunrise", "")) : "",
+        backend.daily && backend.daily.length > 0
+            ? String(value(backend.daily[0], "sunset", "")) : "",
         root.currentIsDay)
+    property color skyTop: "#0c1a33"
+    property color skyMid: "#12294d"
+    property color skyBottom: "#274d79"
+    property int skyTransitionMs: 12000
+    property bool skyReady: false
+    property string _lastSkyPeriod: ""
+    property int _lastSkyCode: -2
+    readonly property var skyStops: [skyTop, skyMid, skyBottom]
+    Behavior on skyTop {
+        enabled: root.skyReady && !AppTheme.reduceMotion
+        ColorAnimation { duration: root.skyTransitionMs; easing.type: Easing.InOutSine }
+    }
+    Behavior on skyMid {
+        enabled: root.skyReady && !AppTheme.reduceMotion
+        ColorAnimation { duration: root.skyTransitionMs; easing.type: Easing.InOutSine }
+    }
+    Behavior on skyBottom {
+        enabled: root.skyReady && !AppTheme.reduceMotion
+        ColorAnimation { duration: root.skyTransitionMs; easing.type: Easing.InOutSine }
+    }
+    // 首次数据到达前保持瞬时赋值；1.2s 后开启动画，避免启动阶段从占位色缓慢爬升。
+    Timer {
+        interval: 1200
+        running: true
+        onTriggered: root.skyReady = true
+    }
+    onSkyPeriodChanged: root.refreshSkyStops()
+    onCurrentWeatherCodeChanged: root.refreshSkyStops()
+    Component.onCompleted: root.refreshSkyStops()
     readonly property color skyText: "#ffffff"
     readonly property color skyTextMuted: Qt.rgba(1, 1, 1, 0.66)
     // tile-cards 原生分辨率实测：卡头小 caps 与卡头 glyph 同浅蓝墨（SUNSET/UV 峰值 (146,205,255)/(147,206,255)；
@@ -330,9 +365,72 @@ KosApplicationWindow {
         return clouds
     }
 
-    function skyStopsFor(code, isDay) {
+    // 时刻（本地 ISO 无时区后缀）→ 分钟数；无法解析返回 NaN
+    function clockMinutes(isoTime) {
+        const match = String(isoTime ?? "").match(/T(\d{2}):(\d{2})/)
+        if (!match) return Number.NaN
+        return Number(match[1]) * 60 + Number(match[2])
+    }
+
+    // 4 时段判定（用户 2026-10-24 批 1）：以本地日出/日落为锚点。
+    // dawn = 日出前 50min – 日出后 60min；dusk = 日落前 60min – 日落后 50min；
+    // 其余按日升/日落分 day/night。窗口宽度 spec/参考图均未给，记 LEDGER 外推。
+    function skyPeriodFor(currentTime, sunrise, sunset, isDay) {
+        const now = clockMinutes(currentTime)
+        const rise = clockMinutes(sunrise)
+        const set = clockMinutes(sunset)
+        if (!Number.isNaN(now) && !Number.isNaN(rise) && !Number.isNaN(set)) {
+            if (now >= rise - 50 && now < rise + 60) return "dawn"
+            if (now >= set - 60 && now < set + 50) return "dusk"
+            if (now >= rise + 60 && now < set - 60) return "day"
+            return "night"
+        }
+        return Boolean(isDay) ? "day" : "night"
+    }
+
+    // 天空目标色刷新：时段切换走 12s 插值，天气条件切换走 1.2s crossfade。
+    function refreshSkyStops() {
+        const next = skyStopsFor(root.currentWeatherCode, root.skyPeriod)
+        const periodChanged = root._lastSkyPeriod !== ""
+            && root._lastSkyPeriod !== root.skyPeriod
+        const codeChanged = root._lastSkyCode !== -2
+            && root._lastSkyCode !== root.currentWeatherCode
+        root.skyTransitionMs = (codeChanged || !periodChanged) ? 1200 : 12000
+        root.skyTop = next[0]
+        root.skyMid = next[1]
+        root.skyBottom = next[2]
+        root._lastSkyPeriod = root.skyPeriod
+        root._lastSkyCode = root.currentWeatherCode
+    }
+
+    // 4 时段调色板（day/night 沿用既有 ref-main 拟合值；dawn/dusk 按 iOS 天气晨昏观感拟合，
+    // spec §3 无天空色 token，记 LEDGER 外推）。第二参数兼容旧布尔调用（侧栏城市卡：day/night）。
+    function skyStopsFor(code, periodOrIsDay) {
         const c = Number(code)
-        if (!isDay) {
+        const period = typeof periodOrIsDay === "string"
+            ? periodOrIsDay
+            : (Boolean(periodOrIsDay) ? "day" : "night")
+        if (period === "dawn") {
+            if (c >= 95) return ["#2a2f47", "#5b4a5c", "#8a6f74"]
+            if (c === 0 || c === 1) return ["#37456e", "#c97a5c", "#f0b184"]
+            if (c === 2) return ["#3f4a6d", "#b8795f", "#dfa886"]
+            if ((c >= 51 && c <= 67) || (c >= 80 && c <= 82))
+                return ["#4c5369", "#7d6f74", "#a08c8c"]
+            if ((c >= 71 && c <= 77) || c === 85 || c === 86)
+                return ["#5f6a82", "#a98a92", "#d3b4b4"]
+            return ["#48506a", "#9c7a6d", "#c39f8b"]
+        }
+        if (period === "dusk") {
+            if (c >= 95) return ["#262a42", "#6a4a58", "#95687a"]
+            if (c === 0 || c === 1) return ["#2f3a62", "#c9644a", "#ee8f60"]
+            if (c === 2) return ["#394468", "#ad5f4e", "#d08064"]
+            if ((c >= 51 && c <= 67) || (c >= 80 && c <= 82))
+                return ["#474d63", "#7a6368", "#997f7e"]
+            if ((c >= 71 && c <= 77) || c === 85 || c === 86)
+                return ["#59637b", "#a78591", "#cba6ac"]
+            return ["#444a5f", "#96685f", "#bd8875"]
+        }
+        if (period === "night") {
             if (c >= 95) return ["#141a2c", "#1d2740", "#33415f"]
             if (c === 0 || c === 1) return ["#0c1a33", "#12294d", "#274d79"]
             if (c === 2) return ["#101f38", "#1a3355", "#31507a"]
@@ -576,9 +674,9 @@ KosApplicationWindow {
         width: sidebar.width
         height: root.height
         gradient: Gradient {
-            GradientStop { position: 0.0; color: root.skyStops[0] }
-            GradientStop { position: 0.45; color: root.skyStops[1] }
-            GradientStop { position: 1.0; color: root.skyStops[2] }
+            GradientStop { position: 0.0; color: root.skyTop }
+            GradientStop { position: 0.45; color: root.skyMid }
+            GradientStop { position: 1.0; color: root.skyBottom }
         }
         Rectangle { anchors.fill: parent; color: AppTheme.sidebarSurface }
     }
@@ -587,9 +685,9 @@ KosApplicationWindow {
     Rectangle {
         anchors.fill: parent
         gradient: Gradient {
-            GradientStop { position: 0.0; color: root.skyStops[0] }
-            GradientStop { position: 0.45; color: root.skyStops[1] }
-            GradientStop { position: 1.0; color: root.skyStops[2] }
+            GradientStop { position: 0.0; color: root.skyTop }
+            GradientStop { position: 0.45; color: root.skyMid }
+            GradientStop { position: 1.0; color: root.skyBottom }
         }
     }
 
