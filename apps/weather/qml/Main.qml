@@ -851,22 +851,29 @@ KosApplicationWindow {
         property real fog: 0.05
     }
 
-    // 批 12｜水图 512×512（运行时 Canvas 绘制一次，静止时不重绘）：
+    // 批 12｜水图 512×512（静止时不重绘，只有下滑水珠的局部脏矩形会更新）：
     // 网格 40px + ±40% 抖动 + 按列错位；主层 ~160 颗、远层 ~90 颗、冷凝小点 ~200 颗。
     // 每颗用 drop-offset.png（R=y 偏移 / G=x 偏移 / B=深度 / A=覆盖率）盖图。
+    // R126（批 12 余项②）：12–20 颗水珠走锯齿函数（粘住 3–6s → 0.3–0.8s 滑落），
+    // 直接写回水图：滑过处 clearRect 擦掉水珠/雾（shader 中 A=0 → 不折射、不雾化），
+    // 留下一条"擦干净"的亮带；只清该滴的窄条脏矩形，绝不整图重绘。
     Canvas {
         id: waterMapCanvas
         width: 512
         height: 512
         property var offsetSprite: null
+        property var staticStamps: []
+        property var slideDrops: []
+        property var slideLastY: []
+        property real clock: 0
+        property double lastClockMs: 0
+        property int updatePhase: 0
         Accessible.ignored: true
         Component.onCompleted: offsetSprite = loadImage("particles/drop-offset.png")
         onImageLoaded: requestPaint()
-        onPaint: {
-            const ctx = getContext("2d")
-            ctx.clearRect(0, 0, width, height)
-            if (!offsetSprite)
-                return
+
+        function buildStamps() {
+            const stamps = []
             let seed = 20261024
             function rnd() {
                 seed |= 0
@@ -875,14 +882,10 @@ KosApplicationWindow {
                 t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t
                 return ((t ^ (t >>> 14)) >>> 0) / 4294967296
             }
-            function stamp(x, y, size, alpha) {
-                ctx.globalAlpha = alpha
-                ctx.drawImage(offsetSprite, x - size / 2, y - size / 2, size, size)
-            }
             const cell = 40
             const cols = Math.ceil(width / cell)
             const rows = Math.ceil(height / cell)
-            // 主层 ~160 颗（12–20px）：格内抖动 ±40%，每列独立错位破坏整齐感。
+            // 主层 ~160 颗（16–26px）：格内抖动 ±40%，每列独立错位破坏整齐感。
             let placed = 0
             for (let row = 0; row < rows && placed < 160; row++) {
                 for (let col = 0; col < cols && placed < 160; col++) {
@@ -891,24 +894,157 @@ KosApplicationWindow {
                     const jx = (rnd() - 0.5) * cell * 0.8
                     const jy = (rnd() - 0.5) * cell * 0.8
                     const colShift = ((col * 7) % 5 - 2) * 7
-                    stamp(col * cell + cell / 2 + jx + colShift,
-                          row * cell + cell / 2 + jy,
-                          16 + rnd() * 10, 1.0)
+                    stamps.push({
+                        x: col * cell + cell / 2 + jx + colShift,
+                        y: row * cell + cell / 2 + jy,
+                        size: 16 + rnd() * 10,
+                        alpha: 1.0
+                    })
                     placed++
                 }
             }
-            // 远层 ~90 颗（6–10px，UV×1.85 → 视觉上更小更淡）。
-            for (let i = 0; i < 90; i++) {
-                stamp(rnd() * width, rnd() * height,
-                      9 + rnd() * 4, 0.55)
-            }
+            // 远层 ~90 颗（9–13px，UV×1.85 → 视觉上更小更淡）。
+            for (let i = 0; i < 90; i++)
+                stamps.push({ x: rnd() * width, y: rnd() * height,
+                              size: 9 + rnd() * 4, alpha: 0.55 })
             // 冷凝小点 ~200 颗（1–3px，α 极低）。
-            for (let i = 0; i < 200; i++) {
-                stamp(rnd() * width, rnd() * height,
-                      1 + rnd() * 2, 0.18)
+            for (let i = 0; i < 200; i++)
+                stamps.push({ x: rnd() * width, y: rnd() * height,
+                              size: 1 + rnd() * 2, alpha: 0.18 })
+            staticStamps = stamps
+
+            // 下滑水珠 14 颗（裁决 12–20）：粘住 3–6s → 0.3–0.8s 纯垂直滑落，
+            // 每次滑 70–180px；y 函数用取模，滑到底自动从顶部附近重新出现。
+            const rand2 = root.mulberry32(20261025)
+            const drops = []
+            for (let i = 0; i < 14; i++) {
+                drops.push({
+                    x: 16 + rand2() * (width - 32),
+                    y0: rand2() * height,
+                    stick: 3 + rand2() * 3,
+                    slide: 0.3 + rand2() * 0.5,
+                    dist: 70 + rand2() * 110,
+                    size: 8 + rand2() * 6
+                })
+            }
+            slideDrops = drops
+        }
+
+        function stampAt(ctx, x, y, size, alpha) {
+            ctx.globalAlpha = alpha
+            ctx.drawImage(offsetSprite, x - size / 2, y - size / 2, size, size)
+        }
+
+        // 脏矩形内重画静态水珠；skipX/skipY0/skipY1 给出被擦掉的窄带，带内不恢复。
+        function redrawStamps(ctx, x0, y0, x1, y1, skipX, skipY0, skipY1) {
+            for (let i = 0; i < staticStamps.length; i++) {
+                const s = staticStamps[i]
+                const h = s.size / 2
+                if (s.x + h < x0 || s.x - h > x1 || s.y + h < y0 || s.y - h > y1)
+                    continue
+                if (skipX !== undefined && Math.abs(s.x - skipX) < h + 2
+                        && s.y > skipY0 - h && s.y < skipY1 + h)
+                    continue
+                stampAt(ctx, s.x, s.y, s.size, s.alpha)
+            }
+        }
+
+        function slideY(drop) {
+            const period = drop.stick + drop.slide
+            const t = clock + drop.y0 / 512 * period
+            const n = Math.floor(t / period)
+            const local = t - n * period
+            const progressed = Math.min(1, Math.max(0, (local - drop.stick) / drop.slide))
+            return (drop.y0 + n * drop.dist + progressed * drop.dist) % height
+        }
+
+        // 只更新下滑水珠的窄条脏矩形；静止（粘住）时该滴不动、不重绘。
+        function advanceSlides() {
+            if (!root.rainySky || AppTheme.reduceMotion || !offsetSprite
+                    || staticStamps.length === 0)
+                return
+            const now = Date.now()
+            if (lastClockMs > 0)
+                clock += (now - lastClockMs) / 1000
+            lastClockMs = now
+            const ctx = getContext("2d")
+            for (let i = 0; i < slideDrops.length; i++) {
+                const drop = slideDrops[i]
+                const y = slideY(drop)
+                const prev = slideLastY[i]
+                const half = drop.size / 2 + 1
+                if (prev === undefined) {
+                    slideLastY[i] = y
+                    continue
+                }
+                if (prev === y)
+                    continue
+                if (Math.abs(y - prev) > 20) {
+                    // 取模回绕：只处理新头部，不把整列当成轨迹擦掉。
+                    ctx.clearRect(drop.x - half, y - half, half * 2, half * 2)
+                    redrawStamps(ctx, drop.x - half, y - half,
+                                 drop.x + half, y + half, drop.x, y, y)
+                    stampAt(ctx, drop.x, y, drop.size, 1.0)
+                    slideLastY[i] = y
+                    continue
+                }
+                const y0 = Math.min(prev, y) - half
+                const y1 = Math.max(prev, y) + half
+                // 擦掉这条窄带 = 去掉水图覆盖率 → shader 不折射也不加雾 → 亮带轨迹。
+                ctx.clearRect(drop.x - half, y0, half * 2, y1 - y0)
+                redrawStamps(ctx, drop.x - half, y0, drop.x + half, y1,
+                             drop.x, y0, y1)
+                // 头部水珠仍是折射水珠（offset map），不是白色拖尾。
+                stampAt(ctx, drop.x, y, drop.size, 1.0)
+                slideLastY[i] = y
             }
             ctx.globalAlpha = 1
             waterMapSource.scheduleUpdate()
+        }
+
+        onPaint: {
+            const ctx = getContext("2d")
+            ctx.clearRect(0, 0, width, height)
+            if (!offsetSprite)
+                return
+            buildStamps()
+            for (let i = 0; i < staticStamps.length; i++) {
+                const s = staticStamps[i]
+                stampAt(ctx, s.x, s.y, s.size, s.alpha)
+            }
+            slideLastY = []
+            for (let i = 0; i < slideDrops.length; i++) {
+                const drop = slideDrops[i]
+                const y = slideY(drop)
+                slideLastY[i] = y
+                stampAt(ctx, drop.x, y, drop.size, 1.0)
+            }
+            ctx.globalAlpha = 1
+            waterMapSource.scheduleUpdate()
+        }
+
+        Connections {
+            target: root
+            function onAmbientSecChanged() {
+                if (!root.rainySky || AppTheme.reduceMotion) {
+                    waterMapCanvas.lastClockMs = 0
+                    waterMapCanvas.updatePhase = 0
+                    return
+                }
+                // ≈5fps：与 R114/R115 的滑落节拍一致，单步位移 1.6–3.0px。
+                waterMapCanvas.updatePhase = (waterMapCanvas.updatePhase + 1) % 2
+                if (waterMapCanvas.updatePhase !== 0)
+                    return
+                waterMapCanvas.advanceSlides()
+            }
+            function onRainySkyChanged() {
+                if (!root.rainySky)
+                    return
+                waterMapCanvas.clock = 0
+                waterMapCanvas.lastClockMs = 0
+                waterMapCanvas.slideLastY = []
+                waterMapCanvas.requestPaint()
+            }
         }
     }
 
@@ -1359,7 +1495,7 @@ KosApplicationWindow {
     }
 
     // 批 11｜雨＝静止水痕：删除下落雨粒子层（原三层共 30 颗，批 9 定值）。
-    // 裁决：雨点贴在玻璃上不动，只允许 8–15 颗沿纯垂直方向缓慢下滑（见 slidingDrops），
+    // 裁决：雨点贴在玻璃上不动，只允许 12–20 颗沿纯垂直方向缓慢下滑（见 waterMapCanvas.advanceSlides），
     // 天上下落的雨丝不再作为视觉主体，全部关闭。雪与闪电保留（雪不是雨）。
     // 批 7｜雪 = ParticleSystem + Emitter + Wander + ImageParticle（8×8 柔边圆 sprite）。
     ParticleSystem {
@@ -1536,103 +1672,8 @@ KosApplicationWindow {
     // 水珠不再画高光白点，而是由天空折射 ShaderEffect（见上方 rainRefraction +
     // waterMapCanvas / drop-offset.png）按偏移图采样背景生成。不留两套并存。
 
-    // 批 11｜少数水珠缓慢滑落（唯一动态）：12 颗固定种子水珠，**纯垂直** 8–15 px/s，
-    // 每滑 40–60px 留一颗 2–4px 小水珠；头部最多 1px 渐隐，**无长尾迹**
-    // （原 18px 渐变拖尾是"流星雨"观感来源，已删）。
-    // 只重绘 256×256 局部 Canvas（禁止全屏 clearRect / 全屏重绘 / 每帧重建贴图）；
-    // reduceMotion 时 Timer 停走 → 水珠静止。
-    Item {
-        id: slidingDrops
-        anchors.top: parent.top
-        anchors.horizontalCenter: parent.horizontalCenter
-        anchors.topMargin: 6
-        width: 256
-        height: 256
-        visible: root.rainySky
-        Accessible.ignored: true
-        property real clock: 0
-        readonly property var drops: {
-            const random = root.mulberry32(20261024)
-            const rows = []
-            for (let index = 0; index < 12; index++) {
-                rows.push({
-                    x: 12 + random() * (256 - 24),
-                    y0: random() * 256,
-                    speed: 8 + random() * 7,          // 8–15 px/s（批 11）
-                    spacing: 40 + random() * 20,      // 每 40–60px 留一颗
-                    bead: 2 + random() * 2            // 2–4px
-                })
-            }
-            return rows
-        }
-        // R113：滑落水珠不再独占 40ms Timer，由根级统一节拍（66ms）驱动；clock 按真实
-        // elapsed 推进，速度 8–15 px/s 逐值不变。仅重绘本 256×256 局部 Canvas。
-        // R114（CPU 轮）：水珠只以 8–15 px/s 缓慢下滑，无需跟随环境节拍重绘局部
-        // Canvas——每 3 个节拍重绘一次（≈5fps，单步位移 1.6–3.0px），姿态/速度/轨迹由
-        // 真实 elapsed 累计，逐值不变；GUI 线程上的 Canvas 光栅与 JS 调用降至 1/3。
-        // R115：根级节拍 66→100ms 后，为保持同一 ≈5fps 与同一步长，divisor 3 → 2。
-        // R116：133ms(7.5fps) 试值同会话 A/B 无可测收益（见 ambientTick 注释）已回退，故本项
-        // divisor 仍 2 → ≈5fps、单步 1.6–3.0px，逐值不变。
-        property double lastClockMs: 0
-        property int repaintPhase: 0
-        Connections {
-            target: root
-            function onAmbientSecChanged() {
-                if (!root.rainySky || AppTheme.reduceMotion) {
-                    slidingDrops.lastClockMs = 0
-                    slidingDrops.repaintPhase = 0
-                    return
-                }
-                slidingDrops.repaintPhase = (slidingDrops.repaintPhase + 1) % 2
-                if (slidingDrops.repaintPhase !== 0)
-                    return
-                const now = Date.now()
-                if (slidingDrops.lastClockMs > 0)
-                    slidingDrops.clock += (now - slidingDrops.lastClockMs) / 1000
-                slidingDrops.lastClockMs = now
-                slidingCanvas.requestPaint()
-            }
-        }
-        Canvas {
-            id: slidingCanvas
-            anchors.fill: parent
-            onPaint: {
-                const ctx = getContext("2d")
-                ctx.clearRect(0, 0, width, height)
-                if (!slidingDrops.visible || width <= 0)
-                    return
-                const rows = slidingDrops.drops
-                for (let index = 0; index < rows.length; index++) {
-                    const drop = rows[index]
-                    const headY = (drop.y0 + drop.speed * slidingDrops.clock) % (height + 20)
-                    // 批 11：无长尾迹，最多 1px 渐隐（原 18px 拖尾已删）
-                    ctx.fillStyle = "rgba(219,233,255,0.35)"
-                    ctx.fillRect(drop.x - 0.5, headY - 1, 1, 1)
-                    // 已滑过路径上每 40–60px 留下的静态小水珠
-                    const travelled = drop.speed * slidingDrops.clock + drop.spacing
-                    const beads = Math.min(10, Math.floor(travelled / drop.spacing))
-                    for (let bead = 1; bead <= beads; bead++) {
-                        const beadY = headY - bead * drop.spacing
-                        if (beadY < -4)
-                            break
-                        ctx.beginPath()
-                        ctx.fillStyle = "rgba(235,245,255,0.34)"
-                        ctx.arc(drop.x, beadY, drop.bead * 0.5, 0, Math.PI * 2)
-                        ctx.fill()
-                    }
-                    // 头部水珠：亮面 + 下缘暗边
-                    ctx.beginPath()
-                    ctx.fillStyle = "rgba(255,255,255,0.72)"
-                    ctx.arc(drop.x, headY, 2, 0, Math.PI * 2)
-                    ctx.fill()
-                    ctx.beginPath()
-                    ctx.fillStyle = "rgba(10,30,72,0.32)"
-                    ctx.arc(drop.x + 0.4, headY + 1.2, 1.6, 0, Math.PI)
-                    ctx.fill()
-                }
-            }
-        }
-    }
+    // R126（批 12 余项②）：原 256×256 滑落水珠白点 Canvas 已删除——下滑水珠改为
+    // 直接写回上方 512×512 水图（窄条脏矩形 + 擦雾亮带），不再另叠一层白色圆点。
 
     // 批 5｜闪电已并入降水 Canvas（见 PrecipitationLayer.paintLightning）；
     // 原独立 lightningLayer Canvas（批 3）整段移除：不再有第二个 33ms Timer/
