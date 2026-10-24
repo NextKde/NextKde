@@ -166,6 +166,15 @@ KosApplicationWindow {
         return c === 2 || c === 3 || c === 45 || c === 48
     }
     readonly property bool thunderSky: root.currentWeatherCode >= 95
+    // R134｜批 12 隔离证据探针：只保留雨膜 + 滑痕，隐藏所有水珠折射精灵。
+    // 通过命令行参数 --probe-film-only 启动，用于证明「密度/膜感来自膜层而非水珠白点」。
+    readonly property bool probeFilmOnly: {
+        const args = Qt.application.arguments
+        for (let i = 0; i < args.length; i++)
+            if (args[i] === "--probe-film-only")
+                return true
+        return false
+    }
     readonly property var dailyRange: {
         let lo = Number.POSITIVE_INFINITY
         let hi = Number.NEGATIVE_INFINITY
@@ -1086,7 +1095,7 @@ KosApplicationWindow {
             buildStamps()
             if (slideTrail.length !== slideDrops.length)
                 slideTrail = []
-            if (!waterMapCanvas.probeFilmOnly) {
+            if (!root.probeFilmOnly) {
                 for (let i = 0; i < staticStamps.length; i++) {
                     const s = staticStamps[i]
                     stampAt(ctx, s.x, s.y, s.size, s.alpha)
@@ -1112,7 +1121,7 @@ KosApplicationWindow {
             ctx.globalCompositeOperation = "source-over"
             // 头部水珠仍是折射水珠（offset map），不是白色拖尾。
             slideLastY = []
-            if (!waterMapCanvas.probeFilmOnly) {
+            if (!root.probeFilmOnly) {
                 for (let i = 0; i < slideDrops.length; i++) {
                     const drop = slideDrops[i]
                     const y = slideY(drop)
