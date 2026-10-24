@@ -4,6 +4,7 @@ import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
 import QtQuick.Effects
+import QtQuick.Particles
 import Kos.Ui
 
 KosApplicationWindow {
@@ -215,6 +216,17 @@ KosApplicationWindow {
     readonly property real windDriftX: {
         const rad = (root.windDirectionDeg + 180) * Math.PI / 180
         return Math.sin(rad) * Math.min(root.windSpeedValue / 40, 1) * 260
+    }
+    // 批 7｜Qt AngleDirection：angle 以 +x 轴为 0°、顺时针（y 向下）。
+    // 水平分量沿用既有 windDriftX（windDirection+180 的来向取反），垂直分量取该层标称下落速度；
+    // ±3° 抖动由 AngleDirection.angleVariation 提供。无风时退化为正下方 90°。
+    function rainAngleFor(vy) {
+        const vx = root.windDriftX
+        if (Math.abs(vx) < 0.001) return 90
+        return Math.atan2(vy, vx) * 180 / Math.PI
+    }
+    function rainMagFor(vy) {
+        return Math.sqrt(root.windDriftX * root.windDriftX + vy * vy)
     }
     // 批 3.5｜雨效重做（用户 2026-10-24）：密度池 420 → 700（裁决第 7 条）。
     readonly property int rainParticlePool: 700
@@ -1065,275 +1077,22 @@ KosApplicationWindow {
         }
     }
 
-    // 批 3｜Canvas 粒子池（雨/雪共用；snow 切换形态）。
-    // 固定种子 PRNG 保证每次启动首帧分布一致；activeCount 接降水强度，
-    // reduceMotion 时 Timer 停走、粒子保持静态铺满（§2.12 / 批 4 覆盖项）。
-    component PrecipitationLayer: Canvas {
-        id: precip
-        property bool snow: false
-        property int poolSize: 420
-        property int activeCount: 0
-        property var particles: []
-        property real clockMs: 0
-        // 批 5｜闪电并入同一个降水 Canvas（单一 33ms Timer / 一次 clearRect /
-        // 一次纹理上传）。闪电不再自开 Canvas，只在本层同帧末尾补画。
-        property bool thunder: false
+    // 批 7｜雨/雪迁移到 Qt Quick Particles；闪电仍留 Canvas（瞬态、开销可忽略）。
+    // 原 PrecipitationLayer 的雨/雪绘制路径与 33ms 循环 Timer 已整段删除（不留两套并存）。
+    component LightningLayer: Canvas {
+        id: lightning
+        anchors.fill: parent
+        clip: true
+        visible: root.thunderSky
+        Accessible.ignored: true
+
         property real flashAlpha: 0
         property var bolt: []
         property var fork: []
         property real strikeXRatio: 0.5
-        anchors.fill: parent
-        clip: true
-        Accessible.ignored: true
-        renderStrategy: Canvas.Immediate
 
-        onWidthChanged: precip.seedParticles()
-        onHeightChanged: precip.seedParticles()
-        Component.onCompleted: {
-            precip.seedParticles()
-            precip.bakeSprites()
-        }
-        // 批 6｜sprite 纹理 holder（不参与绘制，只供 ctx.drawImage 取像素）。
-        Image { id: rainSpriteDayNear; visible: false; asynchronous: false; smooth: true; source: precip.spriteUrls.length > 0 ? precip.spriteUrls[0] : ""; onStatusChanged: if (status === Image.Ready) precip.requestPaint() }
-        Image { id: rainSpriteDayMid; visible: false; asynchronous: false; smooth: true; source: precip.spriteUrls.length > 1 ? precip.spriteUrls[1] : ""; onStatusChanged: if (status === Image.Ready) precip.requestPaint() }
-        Image { id: rainSpriteDayFar; visible: false; asynchronous: false; smooth: true; source: precip.spriteUrls.length > 2 ? precip.spriteUrls[2] : ""; onStatusChanged: if (status === Image.Ready) precip.requestPaint() }
-        Image { id: rainSpriteNightNear; visible: false; asynchronous: false; smooth: true; source: precip.spriteUrls.length > 3 ? precip.spriteUrls[3] : ""; onStatusChanged: if (status === Image.Ready) precip.requestPaint() }
-        Image { id: rainSpriteNightMid; visible: false; asynchronous: false; smooth: true; source: precip.spriteUrls.length > 4 ? precip.spriteUrls[4] : ""; onStatusChanged: if (status === Image.Ready) precip.requestPaint() }
-        Image { id: rainSpriteNightFar; visible: false; asynchronous: false; smooth: true; source: precip.spriteUrls.length > 5 ? precip.spriteUrls[5] : ""; onStatusChanged: if (status === Image.Ready) precip.requestPaint() }
-        Image { id: snowSprite; visible: false; asynchronous: false; smooth: true; source: precip.spriteUrls.length > 6 ? precip.spriteUrls[6] : ""; onStatusChanged: if (status === Image.Ready) precip.requestPaint() }
-        onActiveCountChanged: precip.requestPaint()
-        onFlashAlphaChanged: if (precip.thunder) precip.requestPaint()
+        onFlashAlphaChanged: if (lightning.visible) lightning.requestPaint()
 
-        // 批 3.5｜三层景深参数（用户 2026-10-24 裁决第 1 条，同一 Canvas 按层 stroke）。
-        // 粒子数比 近:中:远 = 1 : 1.4 : 1.8（远处更多更淡）。
-        // 批 6｜spriteW = 预烘焙雨丝纹理宽度（近 3 / 中 2 / 远 1，对应 lw 2.2/1.5/0.9）。
-        readonly property var rainLayerConfigs: [
-            { lw: 2.2, spriteW: 3, trailMin: 26, trailMax: 40, vyMin: 620, vyMax: 760, aMin: 0.30, aMax: 0.55 },
-            { lw: 1.5, spriteW: 2, trailMin: 16, trailMax: 26, vyMin: 460, vyMax: 580, aMin: 0.22, aMax: 0.42 },
-            { lw: 0.9, spriteW: 1, trailMin:  8, trailMax: 14, vyMin: 300, vyMax: 380, aMin: 0.10, aMax: 0.22 }
-        ]
-        // 42 槽循环内 10/14/18 → 1 : 1.4 : 1.8；取前 N 个活跃粒子时比例不变。
-        function rainLayerForIndex(index) {
-            const slot = index % 42
-            return slot < 10 ? 0 : (slot < 24 ? 1 : 2)
-        }
-
-        // 批 6｜雨/雪 sprite：启动时程序化烘焙一次（离屏 RGBA 像素 → PNG data URL → Image），
-        // 之后每帧只做 save/translate/rotate/globalAlpha/drawImage，不再逐滴 createLinearGradient
-        // 或 stroke（原 665 滴/帧的渐变+描边是主线程 CPU 主耗）。
-        // 烘焙计数与时间戳打印到 stdout，用于证明稳定运行期间无重复烘焙。
-        property var spriteUrls: []
-        property int spriteBakeCount: 0
-        property var _crcTable: null
-
-        function _b64(bytes) {
-            const tbl = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/"
-            let out = ""
-            for (let i = 0; i < bytes.length; i += 3) {
-                const b0 = bytes[i]
-                const b1 = i + 1 < bytes.length ? bytes[i + 1] : 0
-                const b2 = i + 2 < bytes.length ? bytes[i + 2] : 0
-                out += tbl.charAt(b0 >> 2)
-                out += tbl.charAt(((b0 & 3) << 4) | (b1 >> 4))
-                out += i + 1 < bytes.length ? tbl.charAt(((b1 & 15) << 2) | (b2 >> 6)) : "="
-                out += i + 2 < bytes.length ? tbl.charAt(b2 & 63) : "="
-            }
-            return out
-        }
-
-        function _crc32(bytes) {
-            if (!precip._crcTable) {
-                const t = []
-                for (let n = 0; n < 256; n++) {
-                    let c = n
-                    for (let k = 0; k < 8; k++) c = (c & 1) ? (0xEDB88320 ^ (c >>> 1)) : (c >>> 1)
-                    t.push(c >>> 0)
-                }
-                precip._crcTable = t
-            }
-            let c = 0xFFFFFFFF
-            for (let i = 0; i < bytes.length; i++)
-                c = precip._crcTable[(c ^ bytes[i]) & 0xff] ^ (c >>> 8)
-            return (c ^ 0xFFFFFFFF) >>> 0
-        }
-
-        function _adler32(bytes) {
-            let a = 1
-            let b = 0
-            for (let i = 0; i < bytes.length; i++) {
-                a = (a + bytes[i]) % 65521
-                b = (b + a) % 65521
-            }
-            return ((b << 16) | a) >>> 0
-        }
-
-        function _be32(v) {
-            return [(v >>> 24) & 255, (v >>> 16) & 255, (v >>> 8) & 255, v & 255]
-        }
-
-        function _chunk(type, data) {
-            const name = []
-            for (let i = 0; i < 4; i++) name.push(type.charCodeAt(i))
-            const body = name.concat(data)
-            return precip._be32(data.length).concat(body, precip._be32(precip._crc32(body)))
-        }
-
-        // 最小 PNG 编码器（RGBA/8bit，zlib 存储块不压缩——sprite 只有几百字节）。
-        function pngDataUrl(w, h, rgba) {
-            const raw = []
-            for (let y = 0; y < h; y++) {
-                raw.push(0)                                    // filter: none
-                for (let x = 0; x < w; x++) {
-                    const i = (y * w + x) * 4
-                    raw.push(rgba[i], rgba[i + 1], rgba[i + 2], rgba[i + 3])
-                }
-            }
-            const z = [0x78, 0x01]                             // zlib header（无压缩）
-            let off = 0
-            while (off < raw.length) {
-                const n = Math.min(65535, raw.length - off)
-                z.push(off + n >= raw.length ? 0x01 : 0x00)    // BFINAL + BTYPE 00
-                z.push(n & 255, (n >>> 8) & 255)
-                const nn = (~n) & 0xffff
-                z.push(nn & 255, (nn >>> 8) & 255)
-                for (let i = 0; i < n; i++) z.push(raw[off + i])
-                off += n
-            }
-            const ad = precip._adler32(raw)
-            z.push((ad >>> 24) & 255, (ad >>> 16) & 255, (ad >>> 8) & 255, ad & 255)
-            const ihdr = precip._be32(w).concat(precip._be32(h), [8, 6, 0, 0, 0])
-            const png = [137, 80, 78, 71, 13, 10, 26, 10]
-                .concat(precip._chunk("IHDR", ihdr))
-                .concat(precip._chunk("IDAT", z))
-                .concat(precip._chunk("IEND", []))
-            return "data:image/png;base64," + precip._b64(png)
-        }
-
-        // 雨丝：竖向 alpha 渐变（底=head α=1，顶=tail α=0），边缘 1px 抗锯齿。
-        function _rainPixels(w, h, r, g, b) {
-            const px = []
-            for (let y = 0; y < h; y++) {
-                const t = y / (h - 1)
-                const aHead = Math.round(255 * Math.pow(t, 0.9))
-                for (let x = 0; x < w; x++) {
-                    let edge = 1
-                    if (w === 3 && (x === 0 || x === 2)) edge = 0.55
-                    else if (w === 2) edge = 0.85
-                    px.push(r, g, b, Math.round(aHead * edge))
-                }
-            }
-            return px
-        }
-
-        // 雪：8×8 圆形柔边。
-        function _snowPixels(n) {
-            const px = []
-            const c = (n - 1) / 2
-            for (let y = 0; y < n; y++) {
-                for (let x = 0; x < n; x++) {
-                    const d = Math.sqrt((x - c) * (x - c) + (y - c) * (y - c)) / (c + 0.5)
-                    const a = Math.max(0, 1 - d)
-                    px.push(255, 255, 255, Math.round(255 * Math.pow(a, 1.4)))
-                }
-            }
-            return px
-        }
-
-        function bakeSprites() {
-            if (precip.spriteUrls.length > 0) return
-            const day = [255, 255, 255]
-            const night = [207, 224, 255]                      // #cfe0ff（夜间色相）
-            precip.spriteUrls = [
-                precip.pngDataUrl(3, 40, precip._rainPixels(3, 40, day[0], day[1], day[2])),
-                precip.pngDataUrl(2, 26, precip._rainPixels(2, 26, day[0], day[1], day[2])),
-                precip.pngDataUrl(1, 14, precip._rainPixels(1, 14, day[0], day[1], day[2])),
-                precip.pngDataUrl(3, 40, precip._rainPixels(3, 40, night[0], night[1], night[2])),
-                precip.pngDataUrl(2, 26, precip._rainPixels(2, 26, night[0], night[1], night[2])),
-                precip.pngDataUrl(1, 14, precip._rainPixels(1, 14, night[0], night[1], night[2])),
-                precip.pngDataUrl(8, 8, precip._snowPixels(8))
-            ]
-            precip.spriteBakeCount++
-            console.log("[rain-bake] n=7 count=" + precip.spriteBakeCount
-                        + " t=" + Date.now())
-        }
-
-        function seedParticles() {
-            if (width <= 0 || height <= 0) return
-            const random = root.mulberry32(precip.snow ? 20261018 : 20261017)
-            const list = []
-            const cfg = precip.rainLayerConfigs
-            for (let i = 0; i < precip.poolSize; i++) {
-                if (precip.snow) {
-                    list.push({
-                        x: random() * width,
-                        y: random() * height,
-                        size: 2.0 + random() * 3.0,          // 雪：直径
-                        vy: 78 + random() * 42,              // 78–120 px/s
-                        opacity: 0.35 + random() * 0.45,
-                        swayAmp: 8 + random() * 14,
-                        swayMs: 2000 + random() * 2000,
-                        phaseMs: random() * 2000,
-                        layer: -1
-                    })
-                    continue
-                }
-                const layer = precip.rainLayerForIndex(i)
-                const c = cfg[layer]
-                list.push({
-                    x: random() * width,
-                    y: random() * height,
-                    layer: layer,
-                    trail: c.trailMin + random() * (c.trailMax - c.trailMin),
-                    vy: c.vyMin + random() * (c.vyMax - c.vyMin),
-                    // 亮度长尾：α = lo + pow(random,3)×(hi−lo)
-                    // （即裁决 0.12 + pow(r,3)×0.5 归一化到各层 α 区间）
-                    alpha: c.aMin + Math.pow(random(), 3) * (c.aMax - c.aMin),
-                    // 角度抖动：风矢量方向 ±3°
-                    jitter: (random() * 2 - 1) * 3 * Math.PI / 180,
-                    // 落地反馈：随机 20/700 滴在生命周期内各触发一次
-                    splash: random() < 0.03,
-                    splashed: false
-                })
-            }
-            precip.particles = list
-            precip.requestPaint()
-        }
-
-        function advance(dt) {
-            const count = Math.min(precip.activeCount, precip.particles.length)
-            precip.clockMs += dt * 1000
-            // 雪受风影响减半（质量小、下落慢），雨全量偏移
-            const vx = root.windDriftX * (precip.snow ? 0.5 : 1.0)
-            for (let i = 0; i < count; i++) {
-                const p = precip.particles[i]
-                p.y += p.vy * dt
-                if (precip.snow) {
-                    p.x += vx * dt
-                } else {
-                    // 单滴速度矢量 = 风矢量绕 ±3° 抖动后叠加下落
-                    const cj = Math.cos(p.jitter)
-                    const sj = Math.sin(p.jitter)
-                    p.x += (vx * cj - p.vy * sj) * dt
-                }
-                if (p.y > height + 30) {
-                    p.y = -30
-                    p.x = Math.random() * width
-                    p.splashed = false
-                }
-                if (p.x > width + 30) p.x -= width + 60
-                if (p.x < -30) p.x += width + 60
-            }
-            precip.requestPaint()
-        }
-
-        Timer {
-            interval: 33
-            repeat: true
-            running: precip.visible && !AppTheme.reduceMotion
-            onTriggered: precip.advance(interval / 1000)
-        }
-
-        // 批 5｜闪电几何与绘制（原独立 lightningLayer 迁入，参数与算法零改动）。
         function drawPolyline(ctx, points, widthPx, color) {
             if (!points || points.length < 2) return
             ctx.strokeStyle = color
@@ -1346,22 +1105,21 @@ KosApplicationWindow {
         }
 
         function buildBolt() {
-            precip.strikeXRatio = 0.12 + Math.random() * 0.76
+            lightning.strikeXRatio = 0.12 + Math.random() * 0.76
             const segments = 9 + Math.floor(Math.random() * 4)
-            // 落雷限制在云层带内（顶缘 3% → 62% 高度），不再贯穿整屏到内容区
+            // 落雷限制在云层带内（顶缘 3% → 62% 高度）
             const boltTop = height * 0.03
             const boltHeight = height * 0.59
             const stepY = boltHeight / segments
             const points = []
-            let x = width * precip.strikeXRatio
+            let x = width * lightning.strikeXRatio
             let y = boltTop
             for (let i = 0; i <= segments; i++) {
                 points.push({ x: x, y: y })
                 x += (Math.random() - 0.5) * 46
                 y += stepY * (0.8 + Math.random() * 0.4)
             }
-            precip.bolt = points
-            // 分叉：从中段向侧下方伸出 4 段
+            lightning.bolt = points
             const anchor = points[Math.floor(segments / 2)]
             const dir = Math.random() < 0.5 ? -1 : 1
             const forkPoints = [{ x: anchor.x, y: anchor.y }]
@@ -1372,12 +1130,11 @@ KosApplicationWindow {
                 fy += stepY * (0.5 + Math.random() * 0.4)
                 forkPoints.push({ x: fx, y: fy })
             }
-            precip.fork = forkPoints
+            lightning.fork = forkPoints
         }
 
         function triggerStrike() {
-            precip.buildBolt()
-            // 持续时间随机化（双闪：第二次为更暗更短的余闪）
+            lightning.buildBolt()
             strikeOn.duration = 50 + Math.random() * 60
             strikeOff.duration = 70 + Math.random() * 80
             strikeHold.duration = 90 + Math.random() * 120
@@ -1386,36 +1143,32 @@ KosApplicationWindow {
             flashSeq.restart()
         }
 
-        // 批 5｜闪电的 Timer 与闪序与降水同层（不再有独立 Canvas / 独立 Timer 链）
         Timer {
             id: lightningTimer
-            // 首闪 0.9–1.5s 内随机到来（进入雷暴场景即可感知），其后间隔仍 3.5–8.5s 随机
             interval: 900 + Math.random() * 600
             repeat: true
-            running: precip.thunder && !AppTheme.reduceMotion
+            running: lightning.visible && !AppTheme.reduceMotion
             onTriggered: {
                 lightningTimer.interval = 3500 + Math.random() * 5000
-                precip.triggerStrike()
+                lightning.triggerStrike()
             }
         }
         SequentialAnimation {
             id: flashSeq
-            NumberAnimation { id: strikeOn; target: precip; property: "flashAlpha"; to: 0.95 }
-            NumberAnimation { id: strikeOff; target: precip; property: "flashAlpha"; to: 0.12 }
+            NumberAnimation { id: strikeOn; target: lightning; property: "flashAlpha"; to: 0.95 }
+            NumberAnimation { id: strikeOff; target: lightning; property: "flashAlpha"; to: 0.12 }
             PauseAnimation { id: strikeHold }
-            NumberAnimation { id: afterOn; target: precip; property: "flashAlpha"; to: 0.45 }
-            NumberAnimation { id: afterOff; target: precip; property: "flashAlpha"; to: 0 }
+            NumberAnimation { id: afterOn; target: lightning; property: "flashAlpha"; to: 0.45 }
+            NumberAnimation { id: afterOff; target: lightning; property: "flashAlpha"; to: 0 }
         }
 
         function paintLightning(ctx) {
-            if (!precip.thunder || precip.flashAlpha <= 0) return
-            if (!precip.bolt || precip.bolt.length < 2) return
-            ctx.globalAlpha = precip.flashAlpha
-            // 极淡全屏环境光（不再是唯一主体）
+            if (!lightning.visible || lightning.flashAlpha <= 0) return
+            if (!lightning.bolt || lightning.bolt.length < 2) return
+            ctx.globalAlpha = lightning.flashAlpha
             ctx.fillStyle = "rgba(255,255,255,0.06)"
             ctx.fillRect(0, 0, width, height)
-            // 落点局部辉光
-            const mid = precip.bolt[Math.floor(precip.bolt.length / 2)]
+            const mid = lightning.bolt[Math.floor(lightning.bolt.length / 2)]
             const glowR = Math.min(width, height) * 0.55
             const glow = ctx.createRadialGradient(mid.x, mid.y, 0, mid.x, mid.y, glowR)
             glow.addColorStop(0, "rgba(226,240,255,0.42)")
@@ -1423,109 +1176,114 @@ KosApplicationWindow {
             glow.addColorStop(1, "rgba(200,225,255,0)")
             ctx.fillStyle = glow
             ctx.fillRect(0, 0, width, height)
-            // 三层描边 + 分叉
-            precip.drawPolyline(ctx, precip.bolt, 11, "rgba(190,220,255,0.18)")
-            precip.drawPolyline(ctx, precip.bolt, 4.5, "rgba(235,245,255,0.55)")
-            precip.drawPolyline(ctx, precip.bolt, 1.8, "rgba(255,255,255,0.95)")
-            precip.drawPolyline(ctx, precip.fork, 4, "rgba(220,235,255,0.35)")
-            precip.drawPolyline(ctx, precip.fork, 1.4, "rgba(255,255,255,0.8)")
+            lightning.drawPolyline(ctx, lightning.bolt, 11, "rgba(190,220,255,0.18)")
+            lightning.drawPolyline(ctx, lightning.bolt, 4.5, "rgba(235,245,255,0.55)")
+            lightning.drawPolyline(ctx, lightning.bolt, 1.8, "rgba(255,255,255,0.95)")
+            lightning.drawPolyline(ctx, lightning.fork, 4, "rgba(220,235,255,0.35)")
+            lightning.drawPolyline(ctx, lightning.fork, 1.4, "rgba(255,255,255,0.8)")
         }
 
         onPaint: {
             const ctx = getContext("2d")
             ctx.clearRect(0, 0, width, height)
-            // 批 5｜闪电与降水同 ctx：每帧开头复位 globalAlpha，避免闪光的 α 泄漏到下一帧
             ctx.globalAlpha = 1
             if (width <= 0 || height <= 0) return
-            const count = Math.min(precip.activeCount, precip.particles.length)
-            if (precip.snow) {
-                // 批 6｜雪：8×8 柔边 sprite，drawImage 绘制（不再逐粒 arc+fill）。
-                if (snowSprite.status === Image.Ready) {
-                    for (let i = 0; i < count; i++) {
-                        const p = precip.particles[i]
-                        const sway = Math.sin((precip.clockMs + p.phaseMs)
-                                              * 2 * Math.PI / p.swayMs) * p.swayAmp
-                        ctx.globalAlpha = p.opacity
-                        ctx.drawImage(snowSprite, p.x + sway - p.size / 2,
-                                      p.y - p.size / 2, p.size, p.size)
-                    }
-                }
-            } else {
-                // 批 3.5｜三层景深雨：远层先画、近层后画（远→中→近）。
-                // 每滴 = 沿自身速度矢量方向的线性渐变（头 α、尾 0），禁止实色线。
-                const night = !root.currentIsDay
-                const rgb = night ? "207,224,255" : "219,233,255"   // 夜间 #cfe0ff / 白天 #dbe9ff
-                const dim = night ? 0.7 : 1.0                        // 夜间整体 α ×0.7
-                const vx = root.windDriftX
-                // 落地溅射雾带：底部 20px
-                ctx.fillStyle = "rgba(219,233,255,0.05)"
-                ctx.fillRect(0, height - 20, width, 20)
-                // 批 6｜每滴 = 预烘焙 sprite 的 drawImage（save→translate→rotate→globalAlpha）。
-                // 远→中→近顺序不变；旋转角使 sprite 的 -Y（上）对齐尾迹方向。
-                const sprites = night
-                    ? [rainSpriteNightNear, rainSpriteNightMid, rainSpriteNightFar]
-                    : [rainSpriteDayNear, rainSpriteDayMid, rainSpriteDayFar]
-                for (let layer = 2; layer >= 0; layer--) {
-                    const cfg = precip.rainLayerConfigs[layer]
-                    const sprite = sprites[layer]
-                    if (sprite.status !== Image.Ready) continue
-                    for (let i = 0; i < count; i++) {
-                        const p = precip.particles[i]
-                        if (p.layer !== layer) continue
-                        const cj = Math.cos(p.jitter)
-                        const sj = Math.sin(p.jitter)
-                        const rvx = vx * cj - p.vy * sj
-                        const rvy = vx * sj + p.vy * cj
-                        const mag = Math.sqrt(rvx * rvx + rvy * rvy) || 1
-                        const ux = rvx / mag
-                        const uy = rvy / mag
-                        const a = Math.min(1, p.alpha * dim)
-                        // 落地反馈：进入底部 30px 的前 20 滴改画 3px 扩散椭圆，一次/生命周期
-                        if (p.splash && !p.splashed && p.y > height - 30) {
-                            p.splashed = true
-                            ctx.save()
-                            ctx.translate(p.x, height - 3)
-                            ctx.scale(1, 0.4)
-                            ctx.fillStyle = "rgba(" + rgb + "," + a.toFixed(3) + ")"
-                            ctx.beginPath()
-                            ctx.arc(0, 0, 3, 0, Math.PI * 2)
-                            ctx.fill()
-                            ctx.restore()
-                            continue
-                        }
-                        // 角度：局部 -Y 需对齐尾迹方向 (-ux,-uy)
-                        const angle = Math.atan2(-ux, uy)
-                        ctx.save()
-                        ctx.translate(p.x, p.y)
-                        ctx.rotate(angle)
-                        ctx.globalAlpha = a
-                        ctx.drawImage(sprite, -cfg.spriteW / 2, -p.trail,
-                                      cfg.spriteW, p.trail)
-                        ctx.restore()
-                    }
-                }
-            }
-            ctx.globalAlpha = 1
-            // 批 5｜闪电在本 Canvas 同帧末尾补画（不额外开 Canvas）
-            precip.paintLightning(ctx)
+            lightning.paintLightning(ctx)
         }
     }
 
-    PrecipitationLayer {
-        id: rainFieldLayer
-        snow: false
-        poolSize: root.rainParticlePool
-        activeCount: root.rainParticleCount
-        thunder: root.thunderSky
-        visible: root.rainySky
+    LightningLayer {
+        id: lightningLayer
     }
 
-    PrecipitationLayer {
-        id: snowFieldLayer
-        snow: true
-        poolSize: root.snowParticlePool
-        activeCount: root.snowParticleCount
+    // 批 7｜雨 = 三层各自独立 ParticleSystem（同一 ParticleSystem 里多个 ImageParticle
+    // 会把同一颗粒子用三种 sprite 各画一遍，所以近/中/远各自成一个系统）。
+    // 粒子数 160/224/281 由 emitRate × lifeSpan 控制；层速度/亮度沿用批 3.5/批 6 定值。
+    component RainLayerSystem: ParticleSystem {
+        id: rainSys
+        anchors.fill: parent
+        visible: root.rainySky
+        running: root.rainySky && !AppTheme.reduceMotion
+
+        property real fallSpeed: 340
+        property real lifespanMs: 2140
+        property real particleCount: 281
+        property real baseAlpha: 0.16
+        property real alphaVar: 0.06
+        property real spriteWidth: 1
+        property string spriteSource: "particles/rain-far.png"
+
+        Emitter {
+            system: rainSys
+            anchors.fill: parent
+            emitRate: rainSys.particleCount / (rainSys.lifespanMs / 1000)
+            lifeSpan: rainSys.lifespanMs
+            lifeSpanVariation: 0
+            size: rainSys.spriteWidth
+            sizeVariation: 0
+            velocity: AngleDirection {
+                angle: root.rainAngleFor(rainSys.fallSpeed)
+                angleVariation: 3
+                magnitude: root.rainMagFor(rainSys.fallSpeed)
+            }
+        }
+        ImageParticle {
+            system: rainSys
+            source: rainSys.spriteSource
+            color: root.currentIsDay ? "#dbe9ff" : "#cfe0ff"
+            alpha: root.currentIsDay ? rainSys.baseAlpha : rainSys.baseAlpha * 0.7
+            alphaVariation: root.currentIsDay ? rainSys.alphaVar : rainSys.alphaVar * 0.7
+            // ImageParticle 的 autoRotation 把纹理 x 轴对齐速度方向 → 竖直雨丝会躺平；
+            // 显式把竖直纹理旋转 (90° − 速度方位角) 对齐下落方向，并叠加 ±3° 抖动。
+            autoRotation: false
+            rotation: 90 - root.rainAngleFor(rainSys.fallSpeed)
+            rotationVariation: 3
+            smooth: true
+            entryEffect: ImageParticle.None
+        }
+    }
+
+    RainLayerSystem { fallSpeed: 690; lifespanMs: 1060; particleCount: 160; baseAlpha: 0.42; alphaVar: 0.13; spriteWidth: 40; spriteSource: "particles/rain-near.png" }
+    RainLayerSystem { fallSpeed: 520; lifespanMs: 1400; particleCount: 224; baseAlpha: 0.32; alphaVar: 0.10; spriteWidth: 26; spriteSource: "particles/rain-mid.png" }
+    RainLayerSystem { fallSpeed: 340; lifespanMs: 2140; particleCount: 281; baseAlpha: 0.16; alphaVar: 0.06; spriteWidth: 14; spriteSource: "particles/rain-far.png" }
+
+    // 批 7｜雪 = ParticleSystem + Emitter + Wander + ImageParticle（8×8 柔边圆 sprite）。
+    ParticleSystem {
+        id: snowSystem
+        anchors.fill: parent
         visible: root.snowySky
+        running: root.snowySky && !AppTheme.reduceMotion
+
+        Emitter {
+            system: snowSystem
+            anchors.fill: parent
+            emitRate: root.snowParticleCount / 2
+            lifeSpan: 2000
+            lifeSpanVariation: 0
+            size: 3.5
+            sizeVariation: 1.5
+            velocity: AngleDirection {
+                angle: root.rainAngleFor(99)
+                angleVariation: 3
+                magnitude: root.rainMagFor(99) * 0.5
+            }
+        }
+        Wander {
+            system: snowSystem
+            anchors.fill: parent
+            xVariance: 22
+            yVariance: 0
+            pace: 0.6
+        }
+        ImageParticle {
+            system: snowSystem
+            source: "particles/snow.png"
+            color: root.currentIsDay ? "#ffffff" : "#cfe0ff"
+            alpha: root.currentIsDay ? 0.6 : 0.42
+            alphaVariation: 0.25
+            smooth: true
+            entryEffect: ImageParticle.None
+        }
     }
 
     // 批 2｜云层三层（后/中/前，z 序由声明顺序决定：先声明者在下）。

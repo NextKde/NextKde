@@ -29,6 +29,18 @@ add_dependencies(kos-weather kos-data-service-build)
 target_compile_definitions(kos-weather PRIVATE
     KOS_DATA_SERVICE_BUILD_PATH="${KOS_DATA_SERVICE_EXECUTABLE}"
 )
+
+# 批 7｜雨/雪粒子 sprite（由 /tmp/make-rain-sprites.py 程序化生成，无外部美术资源）。
+# 与 QML 模块同前缀打包，Main.qml 中以 "particles/xxx.png" 相对路径引用。
+qt_add_resources(kos-weather "weather_particles"
+    PREFIX "/qt/qml/Kos/Apps/Weather"
+    BASE ${CMAKE_CURRENT_SOURCE_DIR}
+    FILES
+        qml/particles/rain-near.png
+        qml/particles/rain-mid.png
+        qml/particles/rain-far.png
+        qml/particles/snow.png
+)
 endif()
 
 if(BUILD_TESTING)
