@@ -2804,7 +2804,7 @@ KosApplicationWindow {
             spacing: 0
 
             // L06: 48px date heading band. Single 27px localised title on the
-            // left (20 inset, strictly limited to the space before the
+            // left (12 inset, strictly limited to the space before the
             // navigation group — long week/day titles elide, never squeeze
             // the nav); L07 subdued nav group on the right. No subtitle line.
             Item {
