@@ -1218,59 +1218,106 @@ KosApplicationWindow {
         id: lightningLayer
     }
 
-    // 批 7｜雨 = 三层各自独立 ParticleSystem（同一 ParticleSystem 里多个 ImageParticle
-    // 会把同一颗粒子用三种 sprite 各画一遍，所以近/中/远各自成一个系统）。
-    // 粒子数 160/224/281 由 emitRate × lifeSpan 控制；层速度/亮度沿用批 3.5/批 6 定值。
-    component RainLayerSystem: ParticleSystem {
-        id: rainSys
+    // 批 11｜CPU：雨三层合并为**同一个 ParticleSystem**（原为 3 个独立系统 = 3 次
+    // 系统更新/渲染 pass）。每个 Emitter 用独立 group，ImageParticle 用 groups 只绑定
+    // 自己那一组 —— 三层各自的尺寸/速度/α/拖尾/夜间压暗逐值保持不变，观感不变；
+    // 系统更新与纹理状态切换由 3 次降为 1 次。
+    ParticleSystem {
+        id: rainSystem
         anchors.fill: parent
         visible: root.rainySky
         running: root.rainySky && !AppTheme.reduceMotion
 
-        property real fallSpeed: 340
-        property real lifespanMs: 2140
-        property real particleCount: 281
-        property real baseAlpha: 0.16
-        property real alphaVar: 0.06
-        property real spriteWidth: 1
-        property string spriteSource: "particles/rain-far.png"
-
+        // 近层：10 颗 / lifeSpan 1060ms → emitRate 9.43 颗/s；速度 690 px/s、α 0.42±0.13
         Emitter {
-            system: rainSys
+            system: rainSystem
+            group: "rainNear"
             anchors.fill: parent
-            emitRate: rainSys.particleCount / (rainSys.lifespanMs / 1000)
-            lifeSpan: rainSys.lifespanMs
+            emitRate: 10 / (1060 / 1000)
+            lifeSpan: 1060
             lifeSpanVariation: 0
-            size: rainSys.spriteWidth
+            size: 40
             sizeVariation: 0
             velocity: AngleDirection {
-                angle: root.rainAngleFor(rainSys.fallSpeed)
+                angle: root.rainAngleFor(690)
                 angleVariation: 3
-                magnitude: root.rainMagFor(rainSys.fallSpeed)
+                magnitude: root.rainMagFor(690)
             }
         }
         ImageParticle {
-            system: rainSys
-            source: rainSys.spriteSource
+            system: rainSystem
+            groups: ["rainNear"]
+            source: "particles/rain-near.png"
             color: root.currentIsDay ? "#dbe9ff" : "#cfe0ff"
-            alpha: root.currentIsDay ? rainSys.baseAlpha : rainSys.baseAlpha * 0.7
-            alphaVariation: root.currentIsDay ? rainSys.alphaVar : rainSys.alphaVar * 0.7
-            // ImageParticle 的 autoRotation 把纹理 x 轴对齐速度方向 → 竖直雨丝会躺平；
-            // 显式把竖直纹理旋转 (90° − 速度方位角) 对齐下落方向，并叠加 ±3° 抖动。
+            alpha: root.currentIsDay ? 0.42 : 0.42 * 0.7
+            alphaVariation: root.currentIsDay ? 0.13 : 0.13 * 0.7
             autoRotation: false
-            rotation: 90 - root.rainAngleFor(rainSys.fallSpeed)
+            rotation: 90 - root.rainAngleFor(690)
+            rotationVariation: 3
+            smooth: true
+            entryEffect: ImageParticle.None
+        }
+
+        // 中层：10 颗 / 1400ms → 7.14 颗/s；520 px/s、α 0.32±0.10
+        Emitter {
+            system: rainSystem
+            group: "rainMid"
+            anchors.fill: parent
+            emitRate: 10 / (1400 / 1000)
+            lifeSpan: 1400
+            lifeSpanVariation: 0
+            size: 26
+            sizeVariation: 0
+            velocity: AngleDirection {
+                angle: root.rainAngleFor(520)
+                angleVariation: 3
+                magnitude: root.rainMagFor(520)
+            }
+        }
+        ImageParticle {
+            system: rainSystem
+            groups: ["rainMid"]
+            source: "particles/rain-mid.png"
+            color: root.currentIsDay ? "#dbe9ff" : "#cfe0ff"
+            alpha: root.currentIsDay ? 0.32 : 0.32 * 0.7
+            alphaVariation: root.currentIsDay ? 0.10 : 0.10 * 0.7
+            autoRotation: false
+            rotation: 90 - root.rainAngleFor(520)
+            rotationVariation: 3
+            smooth: true
+            entryEffect: ImageParticle.None
+        }
+
+        // 远层：10 颗 / 2140ms → 4.67 颗/s；340 px/s、α 0.16±0.06
+        Emitter {
+            system: rainSystem
+            group: "rainFar"
+            anchors.fill: parent
+            emitRate: 10 / (2140 / 1000)
+            lifeSpan: 2140
+            lifeSpanVariation: 0
+            size: 14
+            sizeVariation: 0
+            velocity: AngleDirection {
+                angle: root.rainAngleFor(340)
+                angleVariation: 3
+                magnitude: root.rainMagFor(340)
+            }
+        }
+        ImageParticle {
+            system: rainSystem
+            groups: ["rainFar"]
+            source: "particles/rain-far.png"
+            color: root.currentIsDay ? "#dbe9ff" : "#cfe0ff"
+            alpha: root.currentIsDay ? 0.16 : 0.16 * 0.7
+            alphaVariation: root.currentIsDay ? 0.06 : 0.06 * 0.7
+            autoRotation: false
+            rotation: 90 - root.rainAngleFor(340)
             rotationVariation: 3
             smooth: true
             entryEffect: ImageParticle.None
         }
     }
-
-    // 批 9｜雨＝玻璃上挂水珠（用户 2026-10-24）：落雨粒子 150 → 30（10/10/10），
-    // 仅作氛围，观感主体改由下方水珠材质层 + 少数滑落水珠承担；
-    // 速度/α/拖尾尺寸仍沿用批 7 定值（数量固定在上限内，不随强度暴涨）。
-    RainLayerSystem { fallSpeed: 690; lifespanMs: 1060; particleCount: 10; baseAlpha: 0.42; alphaVar: 0.13; spriteWidth: 40; spriteSource: "particles/rain-near.png" }
-    RainLayerSystem { fallSpeed: 520; lifespanMs: 1400; particleCount: 10; baseAlpha: 0.32; alphaVar: 0.10; spriteWidth: 26; spriteSource: "particles/rain-mid.png" }
-    RainLayerSystem { fallSpeed: 340; lifespanMs: 2140; particleCount: 10; baseAlpha: 0.16; alphaVar: 0.06; spriteWidth: 14; spriteSource: "particles/rain-far.png" }
 
     // 批 7｜雪 = ParticleSystem + Emitter + Wander + ImageParticle（8×8 柔边圆 sprite）。
     ParticleSystem {
