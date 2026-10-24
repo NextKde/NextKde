@@ -186,43 +186,42 @@ KosApplicationWindow {
         return stars
     }
 
-    // Rain streaks: fixed-seed PRNG like the stars so the layout is
-    // identical on every launch; phase offsets stagger the fall start.
-    readonly property var rainField: {
-        const random = mulberry32(20261017)
-        const drops = []
-        for (let index = 0; index < 64; index++) {
-            drops.push({
-                xRatio: random(),
-                length: 10 + random() * 10,
-                opacity: 0.20 + random() * 0.28,
-                fallMs: 1500 + random() * 800,
-                phaseMs: random() * 2300
-            })
-        }
-        return drops
+    // 批 3｜粒子与闪电（用户 2026-10-24）：雨/雪由 64/56 个 QML delegate
+    // 改为 Canvas 粒子池（雨 420 / 雪 320，均 ≥300），粒子数接降水强度、
+    // 下落带风向偏移（windDirection）、雨/雪形态区分（雨=斜线，雪=圆点+摆动）。
+    // backend WeatherCurrent 无降水强度字段（services/data-service/weather.go:68），
+    // 按 weatherCode 映射为 0..1（映射表见 LEDGER 外推待确认）。
+    readonly property real precipitationIntensity: {
+        const code = root.currentWeatherCode
+        if (code >= 51 && code <= 55) return 0.35   // drizzle
+        if (code === 56 || code === 57) return 0.50 // freezing drizzle
+        if (code >= 61 && code <= 63) return 0.65   // rain
+        if (code >= 64 && code <= 67) return 0.90   // heavy/freezing rain
+        if (code >= 71 && code <= 73) return 0.45   // snow
+        if (code >= 74 && code <= 77) return 0.85   // heavy snow
+        if (code === 80) return 0.55
+        if (code === 81) return 0.75
+        if (code === 82) return 0.95
+        if (code === 85) return 0.65
+        if (code === 86) return 0.90
+        if (code >= 95) return 0.95                 // thunderstorm
+        return 0
     }
-
-    // Snowflakes: fixed-seed PRNG like the stars/rain so the layout is
-    // identical on every launch; slow drift + sideways sway (HIG ambient
-    // loop 2-12s: one flake crossing the screen takes 6-11s).
-    readonly property var snowField: {
-        const random = mulberry32(20261018)
-        const flakes = []
-        for (let index = 0; index < 56; index++) {
-            flakes.push({
-                xRatio: random(),
-                diameter: 2.0 + random() * 3.0,
-                opacity: 0.35 + random() * 0.45,
-                fallMs: 6000 + random() * 5000,
-                swayAmp: 8 + random() * 14,
-                swayMs: 2000 + random() * 2000,
-                phaseMs: random() * 11000,
-                swayPhaseMs: random() * 4000
-            })
-        }
-        return flakes
+    readonly property real windDirectionDeg: root.number(backend.current, "windDirection", 0)
+    readonly property real windSpeedValue: Math.max(0, root.number(backend.current, "windSpeed", 0))
+    // 风向为气象「来向」，粒子运动方向 = 来向 +180°；风偏移映射
+    // windFactor = clamp(windSpeed/40, 0, 1)（40 km/h 及以上按满速），
+    // 雨滴水平速度 = sin(rad(dir+180)) × 260 × windFactor px/s。
+    readonly property real windDriftX: {
+        const rad = (root.windDirectionDeg + 180) * Math.PI / 180
+        return Math.sin(rad) * Math.min(root.windSpeedValue / 40, 1) * 260
     }
+    readonly property int rainParticlePool: 420
+    readonly property int snowParticlePool: 320
+    readonly property int rainParticleCount:
+        Math.round(root.rainParticlePool * root.precipitationIntensity)
+    readonly property int snowParticleCount:
+        Math.round(root.snowParticlePool * root.precipitationIntensity)
 
     // 批 2｜云层分层与参数化（用户 2026-10-24）：单层 → 前/中/后三层，
     // 速度比 前:中:后 = 1 : 0.55 : 0.3（前最快），透明度随深度递减（后层更淡）。
@@ -941,103 +940,127 @@ KosApplicationWindow {
         }
     }
 
-    Item {
-        id: rainFieldLayer
+    // 批 3｜Canvas 粒子池（雨/雪共用；snow 切换形态）。
+    // 固定种子 PRNG 保证每次启动首帧分布一致；activeCount 接降水强度，
+    // reduceMotion 时 Timer 停走、粒子保持静态铺满（§2.12 / 批 4 覆盖项）。
+    component PrecipitationLayer: Canvas {
+        id: precip
+        property bool snow: false
+        property int poolSize: 420
+        property int activeCount: 0
+        property var particles: []
+        property real clockMs: 0
         anchors.fill: parent
-        visible: root.rainySky
         clip: true
+        Accessible.ignored: true
+        renderStrategy: Canvas.Immediate
 
-        Repeater {
-            model: root.rainField
+        onWidthChanged: precip.seedParticles()
+        onHeightChanged: precip.seedParticles()
+        Component.onCompleted: precip.seedParticles()
+        onActiveCountChanged: precip.requestPaint()
 
-            delegate: Rectangle {
-                required property var modelData
+        function seedParticles() {
+            if (width <= 0 || height <= 0) return
+            const random = root.mulberry32(precip.snow ? 20261018 : 20261017)
+            const list = []
+            for (let i = 0; i < precip.poolSize; i++) {
+                list.push({
+                    x: random() * width,
+                    y: random() * height,
+                    // 雨：size=拖尾长度；雪：size=直径
+                    size: precip.snow ? (2.0 + random() * 3.0) : (10 + random() * 10),
+                    // 雨 420–580 px/s；雪 78–120 px/s
+                    vy: precip.snow ? (78 + random() * 42) : (420 + random() * 160),
+                    opacity: precip.snow ? (0.35 + random() * 0.45)
+                                         : (0.20 + random() * 0.28),
+                    swayAmp: precip.snow ? (8 + random() * 14) : 0,
+                    swayMs: precip.snow ? (2000 + random() * 2000) : 1,
+                    phaseMs: random() * 2000
+                })
+            }
+            precip.particles = list
+            precip.requestPaint()
+        }
 
-                x: rainFieldLayer.width * modelData.xRatio
-                y: -modelData.length - 10
-                width: 1.4
-                height: modelData.length
-                color: "#dbe9ff"
-                opacity: modelData.opacity
-                Accessible.ignored: true
+        function advance(dt) {
+            const count = Math.min(precip.activeCount, precip.particles.length)
+            precip.clockMs += dt * 1000
+            // 雪受风影响减半（质量小、下落慢），雨全量偏移
+            const vx = root.windDriftX * (precip.snow ? 0.5 : 1.0)
+            for (let i = 0; i < count; i++) {
+                const p = precip.particles[i]
+                p.y += p.vy * dt
+                p.x += vx * dt
+                if (p.y > height + 30) {
+                    p.y = -30
+                    p.x = Math.random() * width
+                }
+                if (p.x > width + 30) p.x -= width + 60
+                if (p.x < -30) p.x += width + 60
+            }
+            precip.requestPaint()
+        }
 
-                SequentialAnimation on y {
-                    running: root.rainySky && !AppTheme.reduceMotion
-                    loops: Animation.Infinite
+        Timer {
+            interval: 33
+            repeat: true
+            running: precip.visible && !AppTheme.reduceMotion
+            onTriggered: precip.advance(interval / 1000)
+        }
 
-                    PauseAnimation {
-                        duration: modelData.phaseMs
-                    }
-                    NumberAnimation {
-                        from: -modelData.length - 10
-                        to: rainFieldLayer.height + 10
-                        duration: modelData.fallMs
-                        easing.type: Easing.Linear
-                    }
+        onPaint: {
+            const ctx = getContext("2d")
+            ctx.clearRect(0, 0, width, height)
+            if (width <= 0 || height <= 0) return
+            const count = Math.min(precip.activeCount, precip.particles.length)
+            if (precip.snow) {
+                ctx.fillStyle = "#ffffff"
+                for (let i = 0; i < count; i++) {
+                    const p = precip.particles[i]
+                    const sway = Math.sin((precip.clockMs + p.phaseMs)
+                                          * 2 * Math.PI / p.swayMs) * p.swayAmp
+                    ctx.globalAlpha = p.opacity
+                    ctx.beginPath()
+                    ctx.arc(p.x + sway, p.y, p.size / 2, 0, Math.PI * 2)
+                    ctx.fill()
+                }
+            } else {
+                // 雨：沿速度矢量反向画拖尾 → 风向直接决定斜角（非单一竖直方向）
+                const vx = root.windDriftX
+                ctx.strokeStyle = "#dbe9ff"
+                ctx.lineWidth = 1.4
+                ctx.lineCap = "round"
+                for (let i = 0; i < count; i++) {
+                    const p = precip.particles[i]
+                    const mag = Math.sqrt(vx * vx + p.vy * p.vy) || 1
+                    const ux = vx / mag
+                    const uy = p.vy / mag
+                    ctx.globalAlpha = p.opacity
+                    ctx.beginPath()
+                    ctx.moveTo(p.x, p.y)
+                    ctx.lineTo(p.x - ux * p.size, p.y - uy * p.size)
+                    ctx.stroke()
                 }
             }
+            ctx.globalAlpha = 1
         }
     }
 
-    Item {
+    PrecipitationLayer {
+        id: rainFieldLayer
+        snow: false
+        poolSize: root.rainParticlePool
+        activeCount: root.rainParticleCount
+        visible: root.rainySky
+    }
+
+    PrecipitationLayer {
         id: snowFieldLayer
-        anchors.fill: parent
+        snow: true
+        poolSize: root.snowParticlePool
+        activeCount: root.snowParticleCount
         visible: root.snowySky
-        clip: true
-
-        Repeater {
-            model: root.snowField
-
-            delegate: Rectangle {
-                id: flake
-                required property var modelData
-                readonly property real xBase: snowFieldLayer.width * modelData.xRatio
-
-                x: xBase
-                y: -modelData.diameter - 10
-                width: modelData.diameter
-                height: width
-                radius: width / 2
-                color: "#ffffff"
-                opacity: modelData.opacity
-                Accessible.ignored: true
-
-                SequentialAnimation on y {
-                    running: root.snowySky && !AppTheme.reduceMotion
-                    loops: Animation.Infinite
-
-                    PauseAnimation {
-                        duration: modelData.phaseMs
-                    }
-                    NumberAnimation {
-                        from: -modelData.diameter - 10
-                        to: snowFieldLayer.height + 10
-                        duration: modelData.fallMs
-                        easing.type: Easing.Linear
-                    }
-                }
-                SequentialAnimation on x {
-                    running: root.snowySky && !AppTheme.reduceMotion
-                    loops: Animation.Infinite
-
-                    PauseAnimation {
-                        duration: modelData.swayPhaseMs
-                    }
-                    NumberAnimation {
-                        from: flake.xBase - modelData.swayAmp
-                        to: flake.xBase + modelData.swayAmp
-                        duration: modelData.swayMs
-                        easing.type: Easing.InOutSine
-                    }
-                    NumberAnimation {
-                        from: flake.xBase + modelData.swayAmp
-                        to: flake.xBase - modelData.swayAmp
-                        duration: modelData.swayMs
-                        easing.type: Easing.InOutSine
-                    }
-                }
-            }
-        }
     }
 
     // 批 2｜云层三层（后/中/前，z 序由声明顺序决定：先声明者在下）。
@@ -1136,35 +1159,114 @@ KosApplicationWindow {
     CloudLayer { id: cloudMidLayer; clouds: root.cloudFieldMid }
     CloudLayer { id: cloudFrontLayer; clouds: root.cloudFieldFront }
 
-    // Stage 3 motion B.1: thunderstorm lightning flash (weather codes >= 95).
-    // A rare, brief double-strobe white wash over the whole window, in the
-    // spirit of the Apple Weather instantaneous flash. Randomized idle pause
-    // keeps the ambient cadence inside the HIG 2-12s loop range.
-    Rectangle {
-        id: flashLayer
+    // 批 3｜闪电（用户 2026-10-24）：全屏白闪 → 随机落点折线闪电 + 局部辉光
+    // + 极淡全屏洗层；落点/分叉/各段持续时长/间隔全部随机化；
+    // 二次余闪（afterOn 0.45）保留双闪节奏。reduceMotion 下 Timer 停走（不闪）。
+    Canvas {
+        id: lightningLayer
         anchors.fill: parent
         visible: root.thunderSky
-        color: "#ffffff"
         opacity: 0
         Accessible.ignored: true
+        renderStrategy: Canvas.Immediate
+        property var bolt: []
+        property var fork: []
+        property real strikeXRatio: 0.5
+
+        onWidthChanged: lightningLayer.requestPaint()
+        onHeightChanged: lightningLayer.requestPaint()
+
+        function drawPolyline(ctx, points, widthPx, color) {
+            if (!points || points.length < 2) return
+            ctx.strokeStyle = color
+            ctx.lineWidth = widthPx
+            ctx.lineCap = "round"
+            ctx.beginPath()
+            ctx.moveTo(points[0].x, points[0].y)
+            for (let i = 1; i < points.length; i++) ctx.lineTo(points[i].x, points[i].y)
+            ctx.stroke()
+        }
+
+        function buildBolt() {
+            lightningLayer.strikeXRatio = 0.12 + Math.random() * 0.76
+            const segments = 9 + Math.floor(Math.random() * 4)
+            const stepY = height / segments
+            const points = []
+            let x = width * lightningLayer.strikeXRatio
+            let y = 0
+            for (let i = 0; i <= segments; i++) {
+                points.push({ x: x, y: y })
+                x += (Math.random() - 0.5) * 46
+                y += stepY * (0.8 + Math.random() * 0.4)
+            }
+            lightningLayer.bolt = points
+            // 分叉：从中段向侧下方伸出 4 段
+            const anchor = points[Math.floor(segments / 2)]
+            const dir = Math.random() < 0.5 ? -1 : 1
+            const forkPoints = [{ x: anchor.x, y: anchor.y }]
+            let fx = anchor.x
+            let fy = anchor.y
+            for (let i = 0; i < 4; i++) {
+                fx += dir * (10 + Math.random() * 26)
+                fy += stepY * (0.35 + Math.random() * 0.35)
+                forkPoints.push({ x: fx, y: fy })
+            }
+            lightningLayer.fork = forkPoints
+            lightningLayer.requestPaint()
+        }
+
+        function triggerStrike() {
+            lightningLayer.buildBolt()
+            // 持续时间随机化（双闪：第二次为更暗更短的余闪）
+            strikeOn.duration = 50 + Math.random() * 60
+            strikeOff.duration = 70 + Math.random() * 80
+            strikeHold.duration = 90 + Math.random() * 120
+            afterOn.duration = 50 + Math.random() * 70
+            afterOff.duration = 120 + Math.random() * 120
+            flashSeq.restart()
+        }
+
+        onPaint: {
+            const ctx = getContext("2d")
+            ctx.clearRect(0, 0, width, height)
+            if (!lightningLayer.bolt || lightningLayer.bolt.length < 2) return
+            // 极淡全屏环境光（不再是唯一主体）
+            ctx.fillStyle = "rgba(255,255,255,0.06)"
+            ctx.fillRect(0, 0, width, height)
+            // 落点局部辉光
+            const mid = lightningLayer.bolt[Math.floor(lightningLayer.bolt.length / 2)]
+            const glowR = Math.min(width, height) * 0.55
+            const glow = ctx.createRadialGradient(mid.x, mid.y, 0, mid.x, mid.y, glowR)
+            glow.addColorStop(0, "rgba(226,240,255,0.42)")
+            glow.addColorStop(0.35, "rgba(200,225,255,0.16)")
+            glow.addColorStop(1, "rgba(200,225,255,0)")
+            ctx.fillStyle = glow
+            ctx.fillRect(0, 0, width, height)
+            // 三层描边 + 分叉
+            lightningLayer.drawPolyline(ctx, lightningLayer.bolt, 11, "rgba(190,220,255,0.18)")
+            lightningLayer.drawPolyline(ctx, lightningLayer.bolt, 4.5, "rgba(235,245,255,0.55)")
+            lightningLayer.drawPolyline(ctx, lightningLayer.bolt, 1.8, "rgba(255,255,255,0.95)")
+            lightningLayer.drawPolyline(ctx, lightningLayer.fork, 4, "rgba(220,235,255,0.35)")
+            lightningLayer.drawPolyline(ctx, lightningLayer.fork, 1.4, "rgba(255,255,255,0.8)")
+        }
 
         Timer {
-            id: flashTimer
+            id: lightningTimer
             interval: 4200
             repeat: true
             running: root.thunderSky && !AppTheme.reduceMotion
             onTriggered: {
-                flashTimer.interval = 3500 + Math.random() * 5000
-                flashSeq.restart()
+                lightningTimer.interval = 3500 + Math.random() * 5000
+                lightningLayer.triggerStrike()
             }
         }
         SequentialAnimation {
             id: flashSeq
-            NumberAnimation { target: flashLayer; property: "opacity"; to: 0.32; duration: 70 }
-            NumberAnimation { target: flashLayer; property: "opacity"; to: 0; duration: 90 }
-            PauseAnimation { duration: 110 }
-            NumberAnimation { target: flashLayer; property: "opacity"; to: 0.20; duration: 60 }
-            NumberAnimation { target: flashLayer; property: "opacity"; to: 0; duration: 140 }
+            NumberAnimation { id: strikeOn; target: lightningLayer; property: "opacity"; to: 0.95 }
+            NumberAnimation { id: strikeOff; target: lightningLayer; property: "opacity"; to: 0.12 }
+            PauseAnimation { id: strikeHold }
+            NumberAnimation { id: afterOn; target: lightningLayer; property: "opacity"; to: 0.45 }
+            NumberAnimation { id: afterOff; target: lightningLayer; property: "opacity"; to: 0 }
         }
     }
 
