@@ -86,19 +86,8 @@ PlatformSettings::PlatformSettings(QQuickWindow *window, QObject *shell,
             applyTheme();
             updateTray();
           });
-  connect(&devices_, &QMediaDevices::audioOutputsChanged, this, [this] {
-    const auto selected = player_.outputDevice();
-    player_.refreshDevices();
-    bool exists = selected == "default";
-    for (const auto &v : player_.outputDevices())
-      if (v.toMap().value("value") == selected)
-        exists = true;
-    if (!exists) {
-      if (settings_.value("audio.pauseOnDeviceRemoval", true).toBool() && player_.state()=="Playing")
-        player_.pause();
-      settings_.setValue("audio.outputDeviceId", "default");
-    }
-  });
+  // Linux exposes Qmmp's default output; PulseAudio/PipeWire owns routing and
+  // device hotplug. A Qt Multimedia device monitor cannot select that output.
   const auto selected =
       settings_.value("audio.outputDeviceId", "default").toString();
   if (!player_.selectOutput(selected))
