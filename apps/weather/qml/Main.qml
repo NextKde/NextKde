@@ -234,11 +234,8 @@ KosApplicationWindow {
     function rainMagFor(vy) {
         return Math.sqrt(root.windDriftX * root.windDriftX + vy * vy)
     }
-    // 批 3.5｜雨效重做（用户 2026-10-24）：密度池 420 → 700（裁决第 7 条）。
-    readonly property int rainParticlePool: 700
+    // 批 11｜雨粒子层已删除（雨＝静止水痕），雨密度池/计数属性随之移除。
     readonly property int snowParticlePool: 320
-    readonly property int rainParticleCount:
-        Math.round(root.rainParticlePool * root.precipitationIntensity)
     readonly property int snowParticleCount:
         Math.round(root.snowParticlePool * root.precipitationIntensity)
 
@@ -1218,107 +1215,9 @@ KosApplicationWindow {
         id: lightningLayer
     }
 
-    // 批 11｜CPU：雨三层合并为**同一个 ParticleSystem**（原为 3 个独立系统 = 3 次
-    // 系统更新/渲染 pass）。每个 Emitter 用独立 group，ImageParticle 用 groups 只绑定
-    // 自己那一组 —— 三层各自的尺寸/速度/α/拖尾/夜间压暗逐值保持不变，观感不变；
-    // 系统更新与纹理状态切换由 3 次降为 1 次。
-    ParticleSystem {
-        id: rainSystem
-        anchors.fill: parent
-        visible: root.rainySky
-        running: root.rainySky && !AppTheme.reduceMotion
-
-        // 近层：10 颗 / lifeSpan 1060ms → emitRate 9.43 颗/s；速度 690 px/s、α 0.42±0.13
-        Emitter {
-            system: rainSystem
-            group: "rainNear"
-            anchors.fill: parent
-            emitRate: 10 / (1060 / 1000)
-            lifeSpan: 1060
-            lifeSpanVariation: 0
-            size: 40
-            sizeVariation: 0
-            velocity: AngleDirection {
-                angle: root.rainAngleFor(690)
-                angleVariation: 3
-                magnitude: root.rainMagFor(690)
-            }
-        }
-        ImageParticle {
-            system: rainSystem
-            groups: ["rainNear"]
-            source: "particles/rain-near.png"
-            color: root.currentIsDay ? "#dbe9ff" : "#cfe0ff"
-            alpha: root.currentIsDay ? 0.42 : 0.42 * 0.7
-            alphaVariation: root.currentIsDay ? 0.13 : 0.13 * 0.7
-            autoRotation: false
-            rotation: 90 - root.rainAngleFor(690)
-            rotationVariation: 3
-            smooth: true
-            entryEffect: ImageParticle.None
-        }
-
-        // 中层：10 颗 / 1400ms → 7.14 颗/s；520 px/s、α 0.32±0.10
-        Emitter {
-            system: rainSystem
-            group: "rainMid"
-            anchors.fill: parent
-            emitRate: 10 / (1400 / 1000)
-            lifeSpan: 1400
-            lifeSpanVariation: 0
-            size: 26
-            sizeVariation: 0
-            velocity: AngleDirection {
-                angle: root.rainAngleFor(520)
-                angleVariation: 3
-                magnitude: root.rainMagFor(520)
-            }
-        }
-        ImageParticle {
-            system: rainSystem
-            groups: ["rainMid"]
-            source: "particles/rain-mid.png"
-            color: root.currentIsDay ? "#dbe9ff" : "#cfe0ff"
-            alpha: root.currentIsDay ? 0.32 : 0.32 * 0.7
-            alphaVariation: root.currentIsDay ? 0.10 : 0.10 * 0.7
-            autoRotation: false
-            rotation: 90 - root.rainAngleFor(520)
-            rotationVariation: 3
-            smooth: true
-            entryEffect: ImageParticle.None
-        }
-
-        // 远层：10 颗 / 2140ms → 4.67 颗/s；340 px/s、α 0.16±0.06
-        Emitter {
-            system: rainSystem
-            group: "rainFar"
-            anchors.fill: parent
-            emitRate: 10 / (2140 / 1000)
-            lifeSpan: 2140
-            lifeSpanVariation: 0
-            size: 14
-            sizeVariation: 0
-            velocity: AngleDirection {
-                angle: root.rainAngleFor(340)
-                angleVariation: 3
-                magnitude: root.rainMagFor(340)
-            }
-        }
-        ImageParticle {
-            system: rainSystem
-            groups: ["rainFar"]
-            source: "particles/rain-far.png"
-            color: root.currentIsDay ? "#dbe9ff" : "#cfe0ff"
-            alpha: root.currentIsDay ? 0.16 : 0.16 * 0.7
-            alphaVariation: root.currentIsDay ? 0.06 : 0.06 * 0.7
-            autoRotation: false
-            rotation: 90 - root.rainAngleFor(340)
-            rotationVariation: 3
-            smooth: true
-            entryEffect: ImageParticle.None
-        }
-    }
-
+    // 批 11｜雨＝静止水痕：删除下落雨粒子层（原三层共 30 颗，批 9 定值）。
+    // 裁决：雨点贴在玻璃上不动，只允许 8–15 颗沿纯垂直方向缓慢下滑（见 slidingDrops），
+    // 天上下落的雨丝不再作为视觉主体，全部关闭。雪与闪电保留（雪不是雨）。
     // 批 7｜雪 = ParticleSystem + Emitter + Wander + ImageParticle（8×8 柔边圆 sprite）。
     ParticleSystem {
         id: snowSystem
@@ -1515,8 +1414,9 @@ KosApplicationWindow {
         Accessible.ignored: true
     }
 
-    // 批 9｜少数水珠缓慢滑落（唯一动态）：12 颗固定种子水珠，速度 8–20 px/s，
-    // 每滑 40–60px 留一颗 2–4px 小水珠，头部 1px 渐变尾迹（头亮尾淡）。
+    // 批 11｜少数水珠缓慢滑落（唯一动态）：12 颗固定种子水珠，**纯垂直** 8–15 px/s，
+    // 每滑 40–60px 留一颗 2–4px 小水珠；头部最多 1px 渐隐，**无长尾迹**
+    // （原 18px 渐变拖尾是"流星雨"观感来源，已删）。
     // 只重绘 256×256 局部 Canvas（禁止全屏 clearRect / 全屏重绘 / 每帧重建贴图）；
     // reduceMotion 时 Timer 停走 → 水珠静止。
     Item {
@@ -1536,7 +1436,7 @@ KosApplicationWindow {
                 rows.push({
                     x: 12 + random() * (256 - 24),
                     y0: random() * 256,
-                    speed: 8 + random() * 12,         // 8–20 px/s
+                    speed: 8 + random() * 7,          // 8–15 px/s（批 11）
                     spacing: 40 + random() * 20,      // 每 40–60px 留一颗
                     bead: 2 + random() * 2            // 2–4px
                 })
@@ -1564,13 +1464,9 @@ KosApplicationWindow {
                 for (let index = 0; index < rows.length; index++) {
                     const drop = rows[index]
                     const headY = (drop.y0 + drop.speed * slidingDrops.clock) % (height + 20)
-                    // 尾迹：1px、头亮尾淡的竖向渐变
-                    const tail = 18
-                    const trail = ctx.createLinearGradient(0, headY - tail, 0, headY)
-                    trail.addColorStop(0, "rgba(219,233,255,0)")
-                    trail.addColorStop(1, "rgba(219,233,255,0.55)")
-                    ctx.fillStyle = trail
-                    ctx.fillRect(drop.x - 0.5, headY - tail, 1, tail)
+                    // 批 11：无长尾迹，最多 1px 渐隐（原 18px 拖尾已删）
+                    ctx.fillStyle = "rgba(219,233,255,0.35)"
+                    ctx.fillRect(drop.x - 0.5, headY - 1, 1, 1)
                     // 已滑过路径上每 40–60px 留下的静态小水珠
                     const travelled = drop.speed * slidingDrops.clock + drop.spacing
                     const beads = Math.min(10, Math.floor(travelled / drop.spacing))
