@@ -325,11 +325,11 @@ KosApplicationWindow {
     // maxCount 为 100% 覆盖时的满额朵数，实际朵数 = round(maxCount × cloudCover)。
     readonly property var cloudLayers: [
         { name: "back",  speed: 0.30, driftMs: 30000, depthOpacity: 0.55,
-          maxCount: 5, wMin: 260, wRange: 200, hRatio: 0.24, yMax: 0.10, alphaBase: 0.16, alphaRange: 0.10 },
+          maxCount: 5, wMin: 260, wRange: 200, hRatio: 0.24, yMax: 0.20, alphaBase: 0.16, alphaRange: 0.10 },
         { name: "mid",   speed: 0.55, driftMs: 16364, depthOpacity: 0.78,
-          maxCount: 5, wMin: 220, wRange: 160, hRatio: 0.30, yMax: 0.22, alphaBase: 0.22, alphaRange: 0.12 },
+          maxCount: 5, wMin: 220, wRange: 160, hRatio: 0.30, yMax: 0.34, alphaBase: 0.22, alphaRange: 0.12 },
         { name: "front", speed: 1.00, driftMs: 9000,  depthOpacity: 1.00,
-          maxCount: 4, wMin: 150, wRange: 170, hRatio: 0.38, yMax: 0.32, alphaBase: 0.30, alphaRange: 0.18 }
+          maxCount: 4, wMin: 150, wRange: 170, hRatio: 0.38, yMax: 0.46, alphaBase: 0.30, alphaRange: 0.18 }
     ]
 
     // Cloud puffs: fixed-seed PRNG so the layout is identical on every
@@ -345,12 +345,15 @@ KosApplicationWindow {
             for (let index = 0; index < count; index++) {
                 const cloudWidth = spec.wMin + random() * spec.wRange
                 const puffs = []
-                for (let puff = 0; puff < 5; puff++) {
+                // 结构云细化（ref-main 观感）：旧版每朵只有 5 个大半径径向渐变团，
+                // 上屏读成散景光斑；改为沿云体横向等距铺 14 个小绒团 + 随机抖动，
+                // 形成连续云 deck 的细部。云朵数量/透明度/速度比不变（批 2 裁决）。
+                for (let puff = 0; puff < 14; puff++) {
                     puffs.push({
-                        cxRatio: 0.15 + random() * 0.7,
-                        cyRatio: 0.35 + random() * 0.35,
-                        rRatio: 0.28 + random() * 0.22,
-                        alphaMul: 0.6 + random() * 0.4
+                        cxRatio: 0.04 + (puff / 13) * 0.92 + (random() - 0.5) * 0.07,
+                        cyRatio: 0.32 + random() * 0.36,
+                        rRatio: 0.15 + random() * 0.18,
+                        alphaMul: 0.55 + random() * 0.45
                     })
                 }
                 puffs.sort(function(a, b) { return a.cxRatio - b.cxRatio })
@@ -458,12 +461,13 @@ KosApplicationWindow {
         for (let i = 0; i < 3; i++) {
             const cloudWidth = 70 + random() * 60
             const puffs = []
-            for (let puff = 0; puff < 4; puff++) {
+            // 与主天空同一细化口径：小绒团铺满云体，避免侧栏卡上读成模糊白斑。
+            for (let puff = 0; puff < 10; puff++) {
                 puffs.push({
-                    cxRatio: 0.1 + random() * 0.8,
-                    cyRatio: 0.3 + random() * 0.4,
-                    rRatio: 0.28 + random() * 0.22,
-                    alphaMul: 0.6 + random() * 0.4
+                    cxRatio: 0.06 + (puff / 9) * 0.88 + (random() - 0.5) * 0.08,
+                    cyRatio: 0.34 + random() * 0.32,
+                    rRatio: 0.18 + random() * 0.16,
+                    alphaMul: 0.5 + random() * 0.5
                 })
             }
             puffs.sort(function(a, b) { return a.cxRatio - b.cxRatio })
@@ -1290,9 +1294,10 @@ KosApplicationWindow {
         property int driftMs: 30000
         anchors.left: parent.left
         anchors.right: parent.right
-        // 烘焙纹理只覆盖云带（yMax 0.32 + 云高，实测最低云底 ≈316px@727），
+        // 烘焙纹理只覆盖云带（yMax 0.46 + 云高；ref-main 云 deck 覆盖窗口上部
+        // ~50%，旧的 0.46 视口高度只留出顶部窄条 → 上移到 0.62 容纳三层云带），
         // 下方大片天空无云 → 不再合成空白透明区（CPU 轮，观感零变化）。
-        height: parent.height * 0.46
+        height: parent.height * 0.62
         visible: root.cloudySky
         clip: true
 
