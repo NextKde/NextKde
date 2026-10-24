@@ -816,6 +816,11 @@ KosApplicationWindow {
             GradientStop { position: 0.45; color: root.skyMid }
             GradientStop { position: 1.0; color: root.skyBottom }
         }
+        // R119（CPU 轮）：整窗渐变是每帧重绘面积最大的一层（1180×727）。衬成层纹理后
+        // 稳态每帧只做一次不透明 blit，渐变求值只在天空色/尺寸真正变化时发生
+        // （12s 天空过渡期间逐帧重建，与原来等价；静止时 0 次）。
+        // 视觉零改动：覆盖整窗的不透明 L0 天空（§1 L0，非玻璃，§2.2 预算未变）。
+        layer.enabled: true
     }
 
     // Static procedural cirrus band for the clear day sky (see
@@ -1113,7 +1118,10 @@ KosApplicationWindow {
         id: lightning
         anchors.fill: parent
         clip: true
-        visible: root.thunderSky
+        // R119（CPU 轮）：非闪光时不再把这块「全窗透明 Canvas」留在场景里。
+        // 原先 visible 只绑 thunderSky，雷暴场景下即使 flashAlpha=0（绝大多数时间）仍会
+        // 每帧参与一次 1180×727 的 alpha 合成（透明但照样全窗光栅化）。改为仅在闪光期间可见。
+        visible: root.thunderSky && lightning.flashAlpha > 0
         Accessible.ignored: true
 
         property real flashAlpha: 0
@@ -1121,7 +1129,10 @@ KosApplicationWindow {
         property var fork: []
         property real strikeXRatio: 0.5
 
-        onFlashAlphaChanged: if (lightning.visible) lightning.requestPaint()
+        // 可见性打开时补一次重绘（flashAlpha 与 visible 同一拍变化，信号顺序不保证）；
+        // flashAlpha 回 0 时元素立即隐藏，无需再清空。
+        onFlashAlphaChanged: if (lightning.flashAlpha > 0) lightning.requestPaint()
+        onVisibleChanged: if (visible) lightning.requestPaint()
 
         function drawPolyline(ctx, points, widthPx, color) {
             if (!points || points.length < 2) return
