@@ -11,7 +11,8 @@ TextField {
     verticalAlignment: TextInput.AlignVCenter
     selectByMouse: true
 
-    property color glassColor: Qt.rgba(1, 1, 1, 0.10)
+    // §4 输入/搜索：Default = plainFill α .06（原参考值 .10 偏离）。
+    property color glassColor: Qt.rgba(1, 1, 1, 0.06)
     property real cornerRadius: height
     property color outlineColor: Qt.rgba(1, 1, 1, 0.08)
     property color focusedOutlineColor: Qt.rgba(1, 1, 1, 0.24)

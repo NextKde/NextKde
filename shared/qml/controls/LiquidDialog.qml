@@ -16,6 +16,8 @@ Foundation.KosDialog {
     background: LiquidSurface { radius: 24; readability: 0.60 }
     footer: DialogButtonBox {
         standardButtons: root.standardButtons
+        // §4.4：按钮间距 8。
+        spacing: 8
         delegate: LiquidActionButton {}
         background: Item {}
         onAccepted: root.accept()
