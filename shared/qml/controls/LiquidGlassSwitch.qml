@@ -11,7 +11,8 @@ Item {
     property bool checked: false
     property bool enabled: true
     property color accentColor: "#0a84ff"
-    property color trackColor: Qt.rgba(0.5, 0.5, 0.55, 0.35)
+    // 关态轨道 α .18（spec §4.6「关 α .18」；原 demo 值 .35）
+    property color trackColor: Qt.rgba(0.5, 0.5, 0.55, 0.18)
     // ── Form ──────────────────────────────────────────────────────────────
     // A tonal host draws the Material 3 switch: a pill track that takes the
     // accent when on, and a handle that is 16dp off / 24dp on. The iOS track,
@@ -25,9 +26,9 @@ Item {
     property color handleOffColor: Qt.rgba(0.47, 0.47, 0.47, 1)
     signal toggled(bool checked)
 
-    // Geometry
-    implicitWidth: 74
-    implicitHeight: 32
+    // Geometry — spec §4.6：开关 40×24，knob 20（原 demo 74×32 / thumb 44×26）
+    implicitWidth: 40
+    implicitHeight: 24
 
     // Internal state
     property bool _pressed: false
@@ -53,8 +54,8 @@ Item {
     property real _stretch: 0.0    // squash-stretch wobble
 
     // Computed geometry
-    readonly property real thumbWidth: 44
-    readonly property real thumbHeight: 26
+    readonly property real thumbWidth: 20
+    readonly property real thumbHeight: 20
     readonly property real travel: width - thumbWidth - 6
     readonly property real thumbRadius: thumbHeight / 2
 
@@ -93,7 +94,8 @@ Item {
         NumberAnimation { to: 0.0; duration: 50; easing.type: Easing.OutQuad }
     }
 
-    opacity: enabled ? 1.0 : 0.5
+    // §4.6 / §4.1 disabled：整体 α .38（原 demo 0.5）
+    opacity: enabled ? 1.0 : 0.38
 
     function toggle() {
         if (!enabled) return
@@ -359,9 +361,12 @@ Item {
         }
     }
 
-    // Interaction
+    // Interaction — spec §4.6「热区 44」：视觉 40×24，命中区外扩到 ≥44×44
+    // （Item 默认不裁剪，外扩部分在行内仍属本控件；行高 <44 时与相邻行无重叠）
     MouseArea {
-        anchors.fill: parent
+        anchors.centerIn: parent
+        width: Math.max(root.width, 44)
+        height: Math.max(root.height, 44)
         enabled: root.enabled
         hoverEnabled: true
         cursorShape: enabled ? Qt.PointingHandCursor : Qt.ArrowCursor
