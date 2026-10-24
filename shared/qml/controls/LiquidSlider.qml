@@ -66,7 +66,8 @@ Item {
     property real _expansion: 0.0
     Behavior on _expansion {
         NumberAnimation {
-            duration: root.reduceMotion ? 0 : root._pressed ? 270 : 460
+            // §2.11 / §3：按下 base=220、松开 sheet=400（原 demo 270/460 不在五档）。
+            duration: root.reduceMotion ? 0 : root._pressed ? 220 : 400
             easing.type: root._pressed ? Easing.OutBack : Easing.OutQuint
             easing.overshoot: root._pressed ? 1.36 : 1.0
         }
@@ -79,7 +80,7 @@ Item {
         running: false
         NumberAnimation { to: 0.175; duration: 100; easing.type: Easing.OutQuad }
         NumberAnimation { to: -0.08; duration: 150; easing.type: Easing.InOutQuad }
-        NumberAnimation { to: 0.04; duration: 120; easing.type: Easing.InOutQuad }
+        NumberAnimation { to: 0.04; duration: 100; easing.type: Easing.InOutQuad }
         NumberAnimation { to: 0.0; duration: 100; easing.type: Easing.OutQuad }
     }
 
@@ -394,7 +395,8 @@ Item {
             radius: height / 2
             color: root.accentColor
             opacity: root._pressed ? 0.16 : (root._hovered ? 0.10 : 0.0)
-            Behavior on opacity { NumberAnimation { duration: 120 } }
+            // §2.11 / §3 motion.duration.instant=100（原 demo 120 不在五档）。
+            Behavior on opacity { NumberAnimation { duration: 100 } }
         }
 
         // Handle: a vertical capsule, not the iOS lens.

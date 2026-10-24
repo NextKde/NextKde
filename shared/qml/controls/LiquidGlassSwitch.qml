@@ -79,19 +79,19 @@ Item {
     // Expansion animation (dissolve into glass)
     Behavior on _expansion {
         NumberAnimation {
-            duration: _pressed ? 120 : 200
+            duration: _pressed ? 100 : 200
             easing.type: _pressed ? Easing.OutCubic : Easing.OutQuint
         }
     }
 
-    // Squash-stretch wobble
+    // Squash-stretch wobble（§2.11：各段取 §3 motion.duration.instant=100，原 50/70/60/50 不在五档）
     SequentialAnimation on _stretch {
         id: wobbleAnim
         running: false
-        NumberAnimation { to: 0.175; duration: 50; easing.type: Easing.OutQuad }
-        NumberAnimation { to: -0.08; duration: 70; easing.type: Easing.InOutQuad }
-        NumberAnimation { to: 0.04; duration: 60; easing.type: Easing.InOutQuad }
-        NumberAnimation { to: 0.0; duration: 50; easing.type: Easing.OutQuad }
+        NumberAnimation { to: 0.175; duration: 100; easing.type: Easing.OutQuad }
+        NumberAnimation { to: -0.08; duration: 100; easing.type: Easing.InOutQuad }
+        NumberAnimation { to: 0.04; duration: 100; easing.type: Easing.InOutQuad }
+        NumberAnimation { to: 0.0; duration: 100; easing.type: Easing.OutQuad }
     }
 
     // §4.6 / §4.1 disabled：整体 α .38（原 demo 0.5）
@@ -345,7 +345,8 @@ Item {
             radius: width / 2
             color: root.accentColor
             opacity: root._pressed ? 0.16 : (root._hovered ? 0.10 : 0.0)
-            Behavior on opacity { NumberAnimation { duration: 120 } }
+            // §2.11 / §3 motion.duration.instant=100（原 demo 120 不在五档）。
+            Behavior on opacity { NumberAnimation { duration: 100 } }
         }
 
         // Handle: a circle that grows into the "on" size, not the iOS lens.
