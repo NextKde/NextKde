@@ -78,6 +78,27 @@ hover magnification must not move a minimize target. Keep desktop file spacing i
 [DesktopIcons](DesktopIcons.md). Material surfaces and continuous compositor corners have different
 rendering owners; a visual style change must not duplicate clipping or shadows.
 
+## Shell text rendering
+
+`common/ShellText.qml` uses platform-native rendering for stationary small text,
+matching the bar's native labels. `GlassText`, context-menu rows, launcher labels
+and Dock name tooltips share this policy. Notification/history, Control Center,
+Quick Search, desktop widgets and Dock information popups inherit it through
+`GlassText`. Font families, sizes, weights and system hinting preferences remain
+owned by their existing callers/platform settings.
+
+`ShellText` tracks its own and ancestor Item scale/rotation and uses distance-field
+rendering while transformed; it returns to native rendering at rest. A host using
+an explicit Scale/Rotation transform list must set `scalableRendering` while that
+transform is active. Launcher search/rename inputs follow their motion wrappers
+and use native rendering at rest too.
+
+Context menus mask the full content during capsule reveal and for overflowing
+lists, whose partially scrolled rows can cross the corners. Settled menus that
+fit draw their inset rows directly into the window. `LiquidGlassPanel.maskContent: false`
+keeps the QML body independently masked, so Material/fallback corners remain
+shaped without rasterizing text into the same offscreen texture.
+
 ## Verification and review
 
 Run tests only in VM/CI per [Development](Development.md). Cover migrations, snapshot/IPC values,
@@ -85,3 +106,7 @@ light/dark/system themes, dark glass on a light desktop, all glass/material/colo
 bar/Dock integration, source/installed module paths, icon fallback and reduced motion.
 Review fullscreen/maximized/mixed-scale window behavior separately in [WindowAppearance](WindowAppearance.md).
 A passed offscreen token test is not proof of live blur, GPU cost or multi-display behavior.
+For text changes, compare Chinese/Latin labels and inputs at 100%, 125%, 150%
+and 200% output scales, including moving between outputs. Exercise menu reveal,
+submenus/scrolling, launcher search/folders/edit/drag and open/close reversal;
+check both settled text and moving text in glass and Material themes.

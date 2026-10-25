@@ -1421,6 +1421,8 @@ PanelWindow {
 
                                     LiquidControls.LiquidTextField {
                                         id: searchBar
+                                        renderType: searchEntrance.scale === 1
+                                            ? TextInput.NativeRendering : TextInput.QtRendering
                                         anchors.fill: parent
                                         // Entrance motion belongs to the wrapper; focus
                                         // must not start a second scale animation.
@@ -1563,7 +1565,7 @@ PanelWindow {
                                 }
                                 color: Qt.rgba(0.027, 0.753, 0.376, 1.0)
 
-                                Text {
+                                ShellText {
                                     anchors.centerIn: parent
                                     text: I18n.tr("Done")
                                     color: "white"
@@ -2318,7 +2320,7 @@ PanelWindow {
                                     }
                                 }
 
-                                Text {
+                                ShellText {
                                     id: folderTitle
                                     anchors.centerIn: parent
                                     visible: !root.folderRenameActive
@@ -2341,6 +2343,8 @@ PanelWindow {
 
                                 TextInput {
                                     id: folderNameInput
+                                    renderType: folderDialog.scale === 1
+                                        ? TextInput.NativeRendering : TextInput.QtRendering
                                     anchors.centerIn: parent
                                     visible: root.folderRenameActive
                                     width: Math.min(180, parent.width - 100)
@@ -2381,7 +2385,7 @@ PanelWindow {
                                         ThemeService.foregroundColor.b, 0.68)
                                 }
 
-                                Text {
+                                ShellText {
                                     anchors {
                                         right: parent.right
                                         verticalCenter: parent.verticalCenter
@@ -2612,7 +2616,7 @@ PanelWindow {
                                                 rightMargin: -5
                                             }
                                             color: Qt.rgba(0.95, 0.27, 0.25, 0.96)
-                                            Text {
+                                            ShellText {
                                                 anchors.centerIn: parent
                                                 text: "−"
                                                 color: "white"
@@ -2747,7 +2751,7 @@ PanelWindow {
                                 Item {
                                     width: parent.width
                                     height: 30
-                                    Text {
+                                    ShellText {
                                         anchors {
                                             left: parent.left
                                             verticalCenter: parent.verticalCenter
@@ -2886,6 +2890,7 @@ PanelWindow {
                                     clip: true
                                     TextInput {
                                         id: appEditorNameInput
+                                        renderType: TextInput.NativeRendering
                                         anchors.fill: parent
                                         anchors.leftMargin: 10
                                         anchors.rightMargin: 10
@@ -2929,6 +2934,7 @@ PanelWindow {
                                         selectedTextColor: AppLauncherService.dockForegroundColor
                                         selectByMouse: true
                                         text: root.editorIcon
+                                        renderType: TextInput.NativeRendering
                                         onTextEdited: root.editorIcon = text
 
                                         HoverHandler {
