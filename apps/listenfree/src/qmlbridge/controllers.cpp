@@ -6,7 +6,11 @@
 #if defined(LISTENFREE_HAS_MPV)
 #include "media/mpv_audio_player.h"
 #endif
+#if LISTENFREE_BUILD_VIDEO
 #include "media/qt_audio_player.h"
+#else
+#include "media/qmmp_audio_player.h"
+#endif
 
 #include <QPointer>
 #include <QDir>
@@ -381,7 +385,11 @@ std::unique_ptr<application::IAudioPlayer> makeDefaultAudioPlayer() {
     auto mpv = std::make_unique<media::MpvAudioPlayer>();
     if (mpv->available()) return mpv;
 #endif
+#if LISTENFREE_BUILD_VIDEO
     return std::make_unique<media::QtAudioPlayer>();
+#else
+    return std::make_unique<media::QmmpAudioPlayer>();
+#endif
 }
 
 QString playbackStateName(domain::PlaybackState state) {

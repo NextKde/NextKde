@@ -30,9 +30,7 @@ LIBRARIES = [
 AUDIO_LIBRARIES = [
     ('Qt6Core >= 6.10', 'qt6-base', 'qt6-base-dev'),
     ('Qt6Widgets', 'qt6-base', 'qt6-base-dev'),
-    ('Qt6Multimedia', 'qt6-multimedia', 'qt6-multimedia-dev'),
     ('Qt6ShaderTools', 'qt6-shadertools', 'qt6-shadertools-dev'),
-    ('Qt6WebEngineWidgets', 'qt6-webengine', 'qt6-webengine-dev'),
     ('libavformat', 'ffmpeg', 'libavformat-dev'), ('libavcodec', 'ffmpeg', 'libavcodec-dev'),
     ('libavutil', 'ffmpeg', 'libavutil-dev'), ('libswresample', 'ffmpeg', 'libswresample-dev'),
     ('libcurl', 'curl', 'libcurl4-openssl-dev'), ('libpulse', 'libpulse', 'libpulse-dev'),
@@ -86,8 +84,15 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--sdk-only', action='store_true')
     parser.add_argument('--with-listenfree', action='store_true')
+    parser.add_argument('--with-listenfree-video', action='store_true')
+    parser.add_argument('--with-listenfree-web-login', action='store_true')
     args = parser.parse_args()
-    with_listenfree = args.with_listenfree or args.sdk_only
+    with_listenfree = args.with_listenfree or args.sdk_only or args.with_listenfree_video or args.with_listenfree_web_login
+    selected_libraries = LIBRARIES + (AUDIO_LIBRARIES if with_listenfree else [])
+    if args.with_listenfree_video and not args.sdk_only:
+        selected_libraries += [('Qt6Multimedia', 'qt6-multimedia', 'qt6-multimedia-dev')]
+    if args.with_listenfree_web_login and not args.sdk_only:
+        selected_libraries += [('Qt6WebEngineWidgets', 'qt6-webengine', 'qt6-webengine-dev')]
     family = distribution()
     missing = []
     tools = TOOLS + (AUDIO_TOOLS if with_listenfree else []) + ([] if args.sdk_only else [
@@ -107,7 +112,7 @@ def main():
         if match and tuple(map(int, match.groups())) < (1, 26):
             missing.append(('Go >= 1.26 (installed ' + match.group(0) + ')', 'go', 'golang-go'))
     if shutil.which('pkg-config'):
-        for probe, arch, ubuntu in LIBRARIES + (AUDIO_LIBRARIES if with_listenfree else []):
+        for probe, arch, ubuntu in selected_libraries:
             if run(['pkg-config', '--exists', probe]).returncode:
                 missing.append((probe, arch, ubuntu))
     qt_version = run(['pkg-config', '--modversion', 'Qt6Core']).stdout.strip() if shutil.which('pkg-config') else ''
@@ -119,6 +124,7 @@ def main():
         with tempfile.TemporaryDirectory(prefix='kos-deps-') as build:
             result = run(['cmake', '-S', str(Path(__file__).parent / 'app-dependencies'),
                 '-B', build, '-G', 'Ninja', '-DKOS_SDK_ONLY=' + ('ON' if args.sdk_only else 'OFF'),
+                '-DLISTENFREE_BUILD_VIDEO=' + ('ON' if args.with_listenfree_video and not args.sdk_only else 'OFF'),
                 '-DKOS_WITH_LISTENFREE=' + ('ON' if with_listenfree else 'OFF'),
                 '-DKOS_BUILD_TAGLIB=' + ('ON' if with_listenfree and run(['pkg-config', '--exists', 'taglib >= 2.3.1']).returncode else 'OFF')])
             for package in re.findall(r'KOS_MISSING:(\w+)', result.stdout):

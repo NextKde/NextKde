@@ -6,7 +6,9 @@
 #include <QTest>
 #include <QElapsedTimer>
 #include <QSignalSpy>
+#if LISTENFREE_BUILD_VIDEO
 #include <QVideoFrame>
+#endif
 #include <QTcpServer>
 #include <QTcpSocket>
 #include <QTemporaryDir>
@@ -37,6 +39,7 @@ class ImmersiveTests : public QObject {
     }
 private slots:
     void nativeMvKeepsFramesBoundedAndSeeksInBothDirections() {
+#if LISTENFREE_BUILD_VIDEO
         const auto fixture=qEnvironmentVariable("LISTENFREE_TEST_NATIVE_MV");
         if(fixture.isEmpty())QSKIP("Set LISTENFREE_TEST_NATIVE_MV to the red-blue 2-second fixture");
         listenfree::media::MvFrameStream stream;QVideoFrame frame;
@@ -53,24 +56,39 @@ private slots:
         QVERIFY(frame.toImage().pixelColor(64,64).red()>200);
         stream.synchronize(500,true,true);QTRY_VERIFY(stream.presentedFrames()>count+6);
         QVERIFY(stream.queuedFrames()<=3);QCOMPARE(fallback.count(),0);
+
+#else
+        QSKIP("Video support is disabled");
+#endif
     }
     void nativeMvCanBeDestroyedByItsFrameReceiver() {
+#if LISTENFREE_BUILD_VIDEO
         const auto fixture=qEnvironmentVariable("LISTENFREE_TEST_NATIVE_MV");
         if(fixture.isEmpty())QSKIP("Set LISTENFREE_TEST_NATIVE_MV to a local AVC fixture");
         auto stream=std::make_unique<listenfree::media::MvFrameStream>();
         connect(stream.get(),&listenfree::media::MvFrameStream::frameReady,this,[&]{stream.reset();});
         stream->open(QUrl::fromLocalFile(fixture));stream->synchronize(0,true,true);
         QTRY_VERIFY_WITH_TIMEOUT(!stream,5000);
+
+#else
+        QSKIP("Video support is disabled");
+#endif
     }
     void nativeMvCancelsBlockedNetworkWithoutWaitingForTimeout() {
+#if LISTENFREE_BUILD_VIDEO
         QTcpServer server;QVERIFY(server.listen(QHostAddress::LocalHost));
         auto stream=std::make_unique<listenfree::media::MvFrameStream>();
         stream->open(QUrl(QString("http://127.0.0.1:%1/stall").arg(server.serverPort())));
         QTRY_VERIFY_WITH_TIMEOUT(server.hasPendingConnections(),3000);
         auto* socket=server.nextPendingConnection();QVERIFY(socket);
         QElapsedTimer clock;clock.start();stream.reset();QVERIFY(clock.elapsed()<1500);
+
+#else
+        QSKIP("Video support is disabled");
+#endif
     }
     void nativeMvRequestsFallbackForOtherCodecs() {
+#if LISTENFREE_BUILD_VIDEO
         QTemporaryDir dir;QImage image(32,32,QImage::Format_RGB32);image.fill(Qt::red);
         const auto file=dir.filePath("image.png");QVERIFY(image.save(file));
         listenfree::media::MvFrameStream stream;
@@ -78,6 +96,10 @@ private slots:
         QSignalSpy frames(&stream,&listenfree::media::MvFrameStream::frameReady);
         stream.open(QUrl::fromLocalFile(file));
         QTRY_COMPARE_WITH_TIMEOUT(fallback.count(),1,5000);QCOMPARE(frames.count(),0);
+
+#else
+        QSKIP("Video support is disabled");
+#endif
     }
     void orbitArtworkAccentIgnoresMarginsAndResets() {
         QImage artwork(64,64,QImage::Format_ARGB32);artwork.fill(Qt::black);
@@ -329,6 +351,7 @@ private slots:
         scene->setProperty("cameraScale",std::min(1160/world.width(),700/world.height()));QVERIFY(capture("overview"));
     }
     void biliSearchResolveAndVideoFrame() {
+#if LISTENFREE_BUILD_VIDEO
         if(!qEnvironmentVariableIsSet("LISTENFREE_TEST_ONLINE_MV"))QSKIP("Opt-in live Bilibili check");
         ImmersiveController service;QVideoSink sink;service.attachVideoSink(&sink);
         service.setPlayback(2000,true,"bili");service.setActive(true);
@@ -344,8 +367,13 @@ private slots:
         QTRY_VERIFY_WITH_TIMEOUT(sink.videoFrame().isValid(),12000);
         if(service.videoPlayer())QVERIFY(!service.videoPlayer()->audioOutput());
         service.setActive(false);QVERIFY(!service.videoPlayer());QVERIFY(!service.nativeVideoPlayer());
+
+#else
+        QSKIP("Video support is disabled");
+#endif
     }
     void automaticMvFindsPlayableMatch() {
+#if LISTENFREE_BUILD_VIDEO
         if(!qEnvironmentVariableIsSet("LISTENFREE_TEST_ONLINE_MV"))QSKIP("Opt-in live auto-match check");
         ImmersiveController service;QVideoSink sink;service.attachVideoSink(&sink);
         service.setPlayback(1000,true,"auto");service.setActive(true);
@@ -353,6 +381,10 @@ private slots:
         QTRY_VERIFY_WITH_TIMEOUT(service.videoReady()||(!service.busy()&&!service.error().isEmpty()),65000);
         QVERIFY2(service.videoReady(),qPrintable(service.error()));
         QTRY_VERIFY_WITH_TIMEOUT(sink.videoFrame().isValid(),12000);
+
+#else
+        QSKIP("Video support is disabled");
+#endif
     }
     void inactiveAndPausedDoNotSample() {
         ImmersiveController service;
@@ -387,14 +419,20 @@ private slots:
         Visual::clearBuffer();
     }
     void cancellationAndTrackChangeClearMvState() {
+#if LISTENFREE_BUILD_VIDEO
         ImmersiveController service; service.setActive(true);
         service.searchMv("test"); QVERIFY(service.busy());
         service.setPlayback(0,false,"new-track"); QVERIFY(!service.busy());
         QVERIFY(service.candidates().isEmpty()); QVERIFY(!service.videoPlayer());
         service.searchMv("test"); service.setActive(false); QVERIFY(!service.busy());
         QTest::qWait(20); QVERIFY(service.candidates().isEmpty());
+
+#else
+        QSKIP("Video support is disabled");
+#endif
     }
     void invalidLocalVideoFallsBackAndOffsetIsBounded() {
+#if LISTENFREE_BUILD_VIDEO
         ImmersiveController service; service.setActive(true);
         service.autoMatchMv("Blank Space","Taylor Swift",231000);
         service.openLocalVideo(QUrl::fromLocalFile("Z:/missing/mv.mp4"));
@@ -402,8 +440,13 @@ private slots:
         QVERIFY(!service.error().isEmpty()); QVERIFY(!service.videoReady()); QVERIFY(!service.videoPlayer());
         service.setOffsetMs(999999); QCOMPARE(service.offsetMs(),300000);
         service.clearVideo(); QVERIFY(service.error().isEmpty());
+
+#else
+        QSKIP("Video support is disabled");
+#endif
     }
     void onlineMvSearchResolveAndVideoFrame() {
+#if LISTENFREE_BUILD_VIDEO
         if(!qEnvironmentVariableIsSet("LISTENFREE_TEST_ONLINE_MV")) QSKIP("Opt-in live MV network check");
         ImmersiveController service; QVideoSink sink; service.attachVideoSink(&sink);
         service.setPlayback(2000,true,"a"); service.setActive(true);
@@ -416,8 +459,13 @@ private slots:
         QTRY_VERIFY_WITH_TIMEOUT(sink.videoFrame().isValid(),12000);
         if(service.videoPlayer())QVERIFY(!service.videoPlayer()->audioOutput());
         service.setActive(false); QVERIFY(!service.videoPlayer()); QVERIFY(!service.nativeVideoPlayer()); QVERIFY(!sink.videoFrame().isValid());
+
+#else
+        QSKIP("Video support is disabled");
+#endif
     }
     void localVideoFollowsPauseSeekAndReleasesDecoder() {
+#if LISTENFREE_BUILD_VIDEO
         const QString fixture=qEnvironmentVariable("LISTENFREE_TEST_MV");
         if(fixture.isEmpty())QSKIP("Set LISTENFREE_TEST_MV to a local video fixture");
         ImmersiveController service; QVideoSink sink; service.attachVideoSink(&sink);
@@ -435,6 +483,10 @@ private slots:
         QTRY_VERIFY(std::abs(service.videoPlayer()->position()-target)<200);
         service.setOffsetMs(500); QTRY_VERIFY(std::abs(service.videoPlayer()->position()-target-500)<200);
         service.setActive(false); QVERIFY(!service.videoPlayer()); QVERIFY(!service.videoReady());
+
+#else
+        QSKIP("Video support is disabled");
+#endif
     }
 };
 int main(int argc,char** argv) {
