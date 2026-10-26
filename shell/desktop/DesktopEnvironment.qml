@@ -27,6 +27,7 @@ Item {
                 sources: NotificationPolicyService.sources, blockedKeys: NotificationPolicyService.blockedKeys,
                 doNotDisturbEnabled: NotificationPolicyService.doNotDisturbEnabled,
                 bannersEnabled: NotificationPolicyService.bannersEnabled,
+                soundEnabled: NotificationPolicyService.soundEnabled,
                 historyEnabled: NotificationPolicyService.historyEnabled,
                 showPreview: NotificationPolicyService.showPreview,
                 showNotificationBadges: ConfigService.showNotificationBadges,
