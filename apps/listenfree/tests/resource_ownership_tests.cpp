@@ -23,11 +23,51 @@
 #include "qmlbridge/wallpaper_library.h"
 #include <QJsonDocument>
 #include <QJsonObject>
+#if LISTENFREE_BUILD_VIDEO
 #include "media/artwork_video.h"
+#endif
 
 class ResourceOwnershipTests : public QObject {
     Q_OBJECT
 private Q_SLOTS:
+    void lightweightArtworkIgnoresSavedVideoPreferences() {
+        QTemporaryDir temporary;
+        QVERIFY(temporary.isValid());
+        const auto fixture = temporary.filePath("components");
+        QVERIFY(QDir().mkpath(fixture));
+        // Deliberately omit every video QML file from this runtime fixture.
+        for (const auto* name : {"CoverArt", "IconGlyph", "GlobalBackground", "ArtworkBackground", "AppTheme"})
+            QVERIFY(QFile::copy(QStringLiteral(LISTENFREE_TEST_SOURCE_DIR "/music_player_desktop/components/")
+                + name + ".qml", fixture + "/" + name + ".qml"));
+        const auto assets = temporary.filePath("assets");
+        QVERIFY(QDir().mkpath(assets + "/icons"));
+        for (const auto* asset : {"background-grain.svg", "background-pastel.svg", "album_Cover_2.png", "icons/music.svg"})
+            QVERIFY(QFile::copy(QStringLiteral(LISTENFREE_TEST_SOURCE_DIR "/music_player_desktop/assets/") + asset,
+                               assets + "/" + asset));
+        QFile module(fixture + "/qmldir");
+        QVERIFY(module.open(QIODevice::WriteOnly));
+        module.write("singleton AppTheme 1.0 AppTheme.qml\n");
+        module.close();
+        listenfree::qmlbridge::SettingsController settings;
+        settings.setValue("background.type", "Video");
+        settings.setValue("background.video", "file:///unused.mp4");
+        QQmlEngine engine;
+        engine.rootContext()->setContextProperty("backendVideoAvailable", false);
+        QQmlComponent background(&engine, QUrl::fromLocalFile(fixture + "/GlobalBackground.qml"));
+        std::unique_ptr<QObject> root(background.createWithInitialProperties({{"settingsStore", QVariant::fromValue(&settings)}}));
+        QVERIFY2(root, qPrintable(background.errorString()));
+        QCOMPARE(root->property("backgroundType").toString(), QString("AutoCover"));
+        QVERIFY(!root->property("videoBackground").toBool());
+        QCOMPARE(settings.value("background.type").toString(), QString("Video"));
+        settings.setValue("background.type", "Wallpaper");
+        QCOMPARE(root->property("backgroundType").toString(), QString("AutoCover"));
+        settings.setValue("background.type", "Color");
+        QCOMPARE(root->property("backgroundType").toString(), QString("Color"));
+        QQmlComponent cover(&engine, QUrl::fromLocalFile(fixture + "/CoverArt.qml"));
+        std::unique_ptr<QObject> artwork(cover.createWithInitialProperties({{"motionSource", QUrl("file:///unused.mp4")}}));
+        QVERIFY2(artwork, qPrintable(cover.errorString()));
+        QVERIFY(!artwork->property("dynamicTexture").value<QQuickItem*>());
+    }
     void wallpaperLibraryDiscoveryAndPicker() {
         using listenfree::qmlbridge::WallpaperLibrary;
         QTemporaryDir temporary;QVERIFY(temporary.isValid());
@@ -117,9 +157,10 @@ private Q_SLOTS:
         QVERIFY(settings.resolveBackground({},true).isEmpty());
     }
     void localVideoBackgroundLifecycle() {
+#if LISTENFREE_BUILD_VIDEO
         QTemporaryDir temporary;QVERIFY(temporary.isValid());
         const auto fixture=temporary.filePath("components");QVERIFY(QDir().mkpath(fixture));
-        for(const auto* name:{"GlobalBackground","ArtworkBackground","AppTheme"})
+        for(const auto* name:{"GlobalBackground","BackgroundVideo","ArtworkBackground","AppTheme"})
             QVERIFY(QFile::copy(QStringLiteral(LISTENFREE_TEST_SOURCE_DIR "/music_player_desktop/components/")+name+".qml",fixture+"/"+name+".qml"));
         QFile module(fixture+"/qmldir");QVERIFY(module.open(QIODevice::WriteOnly));
         module.write("singleton AppTheme 1.0 AppTheme.qml\nGlobalBackground 1.0 GlobalBackground.qml\nArtworkBackground 1.0 ArtworkBackground.qml\n");module.close();
@@ -157,6 +198,9 @@ private Q_SLOTS:
         QTRY_VERIFY_WITH_TIMEOUT(movie->ready(),8000);
         settings.setValue("background.type","Color");QTRY_VERIFY(movie.isNull());
         QVERIFY(item->findChildren<listenfree::media::ArtworkVideo*>().isEmpty());
+#else
+        QSKIP("Video support is disabled");
+#endif
     }
     void textureRecreatesExactPixels() {
         QImage original(512,384,QImage::Format_ARGB32_Premultiplied);
@@ -205,7 +249,8 @@ private Q_SLOTS:
         QCOMPARE(snapshot,rows);
         snapshot[0]=QVariantMap{{"trackId","other"},{"title","snapshot changed"}};
         QCOMPARE(model.get(0).value("trackId").toString(),QString("a"));
-        QCOMPARE(model.get(0),queue.get(0)); QCOMPARE(model.get(0).value("duration").toLongLong(),123456);
+        QCOMPARE(model.get(0),queue.get(0)); QCOMPARE(model.get(0).value("durationMs").toLongLong(),123456);
+        QCOMPARE(model.get(0).value("duration").toString(),QString("2:03"));
         auto changed=rows[0].toMap();changed["title"]="更改";rows[0]=changed;
         QCOMPARE(model.get(0).value("title").toString(),QString("曲目"));
         model.setRows(rows);QCOMPARE(model.get(0).value("title").toString(),QString("更改"));
@@ -231,7 +276,7 @@ private Q_SLOTS:
         const auto roles=model.roleNames();
         const auto row=model.index(0,0);
         for(auto it=roles.cbegin();it!=roles.cend();++it)
-            QCOMPARE(model.get(0).value(QString::fromUtf8(it.value())),model.data(row,it.key()));
+            QCOMPARE(model.get(0).value(it.key() == TrackListModel::DurationRole ? QString("durationMs") : QString::fromUtf8(it.value())),model.data(row,it.key()));
         QCOMPARE(model.data(row,TrackListModel::DurationRole).toLongLong(),qint64(123456));
         QCOMPARE(model.snapshotRows().at(0).toMap(),first);
         auto snapshot=model.snapshotRows();
@@ -355,6 +400,7 @@ private Q_SLOTS:
         QVERIFY(!responses.back()->errorString().isEmpty());
     }
     void artworkVideoLoopPauseAndRelease() {
+#if LISTENFREE_BUILD_VIDEO
         const QString path=qEnvironmentVariable("LISTENFREE_TEST_COVER_VIDEO",QStringLiteral(LISTENFREE_TEST_SOURCE_DIR "/tests/fixtures/artwork-red-blue.mp4"));
         QVERIFY2(!path.isEmpty(),"Set LISTENFREE_TEST_COVER_VIDEO to a short H.264 fixture");
         listenfree::media::ArtworkVideo player;QVideoSink sink;
@@ -370,8 +416,12 @@ private Q_SLOTS:
         QTest::qWait(60);const auto count=frames.size();QTest::qWait(200);QCOMPARE(frames.size(),count);
         player.setSource({});QVERIFY(!player.ready());QVERIFY(!sink.videoFrame().isValid());QCOMPARE(player.queuedFrames(),0);
         player.setSource(QUrl::fromLocalFile(path));QTRY_VERIFY_WITH_TIMEOUT(player.ready(),8000);
+#else
+        QSKIP("Video support is disabled");
+#endif
     }
     void artworkVideoQtFallbackAndPoster() {
+#if LISTENFREE_BUILD_VIDEO
         const auto path=qEnvironmentVariable("LISTENFREE_TEST_FALLBACK_VIDEO",QStringLiteral(LISTENFREE_TEST_SOURCE_DIR "/tests/fixtures/artwork-mpeg4.mp4"));
         QVERIFY(!path.isEmpty());
         listenfree::media::ArtworkVideo player; QVideoSink sink;player.setVideoSink(&sink);
@@ -384,11 +434,15 @@ private Q_SLOTS:
         player.setSource(QUrl::fromLocalFile(path+".missing"));
         QTRY_VERIFY_WITH_TIMEOUT(!player.bounded(),5000);QVERIFY(!player.ready());
         player.setSource({});QVERIFY(!sink.videoFrame().isValid());
+#else
+        QSKIP("Video support is disabled");
+#endif
     }
     void qmlCoverUsesNativeMovieAndFreezesBackground() {
+#if LISTENFREE_BUILD_VIDEO
         QTemporaryDir temporary;QVERIFY(temporary.isValid());
         const auto fixture=temporary.filePath("components");QVERIFY(QDir().mkpath(fixture));
-        for(const auto* name:{"CoverArt","AppTheme","IconGlyph"})
+        for(const auto* name:{"CoverArt","CoverVideo","AppTheme","IconGlyph"})
             QVERIFY(QFile::copy(QStringLiteral(LISTENFREE_TEST_SOURCE_DIR "/music_player_desktop/components/")+name+".qml",fixture+"/"+name+".qml"));
         QFile module(fixture+"/qmldir");QVERIFY(module.open(QIODevice::WriteOnly));
         module.write("singleton AppTheme 1.0 AppTheme.qml\nCoverArt 1.0 CoverArt.qml\nIconGlyph 1.0 IconGlyph.qml\n");module.close();
@@ -421,6 +475,9 @@ private Q_SLOTS:
         item->setProperty("motionPlaying",false);QTest::qWait(150);QCOMPARE(grab(),first);
         item->setProperty("motionSource",QUrl());
         QTRY_VERIFY(item->findChildren<listenfree::media::ArtworkVideo*>().isEmpty());
+#else
+        QSKIP("Video support is disabled");
+#endif
     }
 };
 QTEST_MAIN(ResourceOwnershipTests)

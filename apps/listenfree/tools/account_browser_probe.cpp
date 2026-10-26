@@ -1,4 +1,4 @@
-#include "app/account_browser.h"
+#include "app/web_login_dialog.h"
 #include "qmlbridge/account_service.h"
 #include <QApplication>
 #include <QDialog>
@@ -18,7 +18,7 @@ int main(int argc,char** argv) {
     const auto provider=app.arguments()[1], output=app.arguments()[2];
     QTemporaryDir data;
     listenfree::qmlbridge::AccountService accounts(data.path());
-    listenfree::AccountBrowser browser(accounts);
+    listenfree::WebLoginDialog browser(accounts);
     browser.open(provider);
     QTimer::singleShot(12000,&app,[&] {
         for(auto* widget:app.topLevelWidgets()) {

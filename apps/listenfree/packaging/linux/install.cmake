@@ -8,6 +8,10 @@ file(GLOB _listenfree_private_libraries
     "${_listenfree_library_dir}/libtag.so*" "${_listenfree_library_dir}/libopusfile.so*")
 install(FILES ${_listenfree_private_libraries} DESTINATION ${_listenfree_install_dir}/lib)
 install(DIRECTORY "${LISTENFREE_QMMP_PLUGIN_ROOT}/" DESTINATION ${_listenfree_install_dir}/qmmp)
+# install(FILES/DIRECTORY) does not honor --strip; handle copied SDK libraries
+# after staging, leaving the developer's SDK and build artifacts untouched.
+configure_file(packaging/linux/strip-runtime.cmake.in "${CMAKE_CURRENT_BINARY_DIR}/strip-runtime.cmake" @ONLY)
+install(SCRIPT "${CMAKE_CURRENT_BINARY_DIR}/strip-runtime.cmake")
 install(DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/licenses/" DESTINATION ${_listenfree_install_dir}/licenses)
 foreach(_license
     "${LISTENFREE_QMMP_SOURCE_ROOT}/COPYING"
@@ -28,3 +32,5 @@ install(FILES music_player_desktop/assets/icons/nextkde-music.svg
 
 install(FILES "${KOS_LISTENFREE_SDK}/deps/usr/share/doc/libopusfile0/copyright"
     DESTINATION ${_listenfree_install_dir}/licenses RENAME Opusfile-copyright.txt OPTIONAL)
+
+install(FILES packaging/web-login/install.txt DESTINATION ${_listenfree_install_dir} RENAME web-login-install.txt)

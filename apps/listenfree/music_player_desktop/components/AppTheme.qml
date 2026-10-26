@@ -3,6 +3,8 @@ pragma Singleton
 import QtQuick
 
 QtObject {
+    readonly property bool videoAvailable: typeof backendVideoAvailable !== "undefined" ? backendVideoAvailable : true
+
     id: theme
 
     function musicLocation(track) {

@@ -1,3 +1,4 @@
+#include "SystemLanguage.h"
 #include "qmlbridge/account_service.h"
 #include "qmlbridge/duplicate_service.h"
 #include "qmlbridge/settings_transfer.h"
@@ -144,8 +145,8 @@ private slots:
         const auto file=QUrl::fromLocalFile(dir.filePath("settings.json"));QVERIFY(transfer.exportFile(file,{"general","download","appearance","playback"}));
         QFile exported(file.toLocalFile());QVERIFY(exported.open(QIODevice::ReadOnly));const auto bytes=exported.readAll();exported.close();
         QVERIFY(!bytes.contains("SECRET"));QVERIFY(!bytes.contains("DO NOT EXPORT"));QVERIFY(!bytes.contains("private"));
-        settings.setValue("ui.language","ZhCn");QVERIFY(transfer.inspectFile(file));QCOMPARE(settings.value("ui.language").toString(),QString("ZhCn"));
-        QVERIFY(transfer.applyImport({"general"}));QCOMPARE(settings.value("ui.language").toString(),QString("EnUs"));
+        settings.setValue("ui.language","ZhCn");QVERIFY(transfer.inspectFile(file));QCOMPARE(settings.value("ui.language").toString(),Kos::I18n::settingsValue());
+        QVERIFY(transfer.applyImport({"general"}));QCOMPARE(settings.value("ui.language").toString(),Kos::I18n::settingsValue());
         QVERIFY(!transfer.applyImport({"general"}));
         QVERIFY(transfer.resetDefaults({"general"}));QCOMPARE(settings.value("ui.motionStyle").toString(),QString("Elegant"));
         QCOMPARE(settings.value("ui.refreshRateLimit",60).toInt(),60);QVERIFY(settings.value("lyrics.showRomanization",false).toBool());

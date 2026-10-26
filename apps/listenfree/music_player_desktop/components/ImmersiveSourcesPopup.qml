@@ -9,7 +9,7 @@ Basic.Popup {
     required property var stage
     property var controller:null
     property var track:({})
-    property int tab:0
+    property int tab:AppTheme.videoAvailable ? 0 : 1
     property string provider:"wy"
     property int selectedLyric:-1
     function plays(value){const n=Number(value||0);return (n>=10000?(n/10000).toFixed(1)+qsTr("万"):String(n))+qsTr("次播放")}
@@ -42,7 +42,7 @@ Basic.Popup {
     Basic.Overlay.modal:Rectangle{color:"#70000000"}
     contentItem:Item {
         Text{text:qsTr("换源");color:"white";font.pixelSize:23;font.weight:Font.DemiBold}
-        Text{y:34;text:qsTr("选择 MV 与歌词来源");color:"#a9b1bd";font.pixelSize:13}
+        Text{y:34;text:AppTheme.videoAvailable ? qsTr("选择 MV 与歌词来源") : qsTr("选择歌词来源");color:"#a9b1bd";font.pixelSize:13}
         RoundIconButton{anchors.right:parent.right;diameter:32;kind:"close";transparentSurface:true;glyphColor:"white";onClicked:popup.close()}
         Column{
             objectName:"immersiveSourceTabs";y:85;width:100;spacing:8
@@ -51,7 +51,7 @@ Basic.Popup {
                 Rectangle{
                     required property string modelData
                     required property int index
-                    width:100;height:50;radius:12;color:popup.tab===index?"#3a4558":"#222a36"
+                    width:100;height:visible ? 50 : 0;visible: index !== 0 || AppTheme.videoAvailable;radius:12;color:popup.tab===index?"#3a4558":"#222a36"
                     Text{anchors.centerIn:parent;text:parent.modelData;color:"white";font.pixelSize:15}
                     TapHandler{onTapped:popup.tab=parent.index}
                 }

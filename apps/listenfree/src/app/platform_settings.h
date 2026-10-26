@@ -2,7 +2,9 @@
 #include "qmlbridge/collection_service.h"
 #include "qmlbridge/controllers.h"
 #include "qmlbridge/portable_session.h"
+#ifdef Q_OS_WIN
 #include <QMediaDevices>
+#endif
 #include <QMenu>
 #include <QQuickWindow>
 #include <QSystemTrayIcon>
@@ -41,7 +43,9 @@ private:
   qmlbridge::LibraryController &library_;
   QSystemTrayIcon tray_;
   QMenu menu_;
+#ifdef Q_OS_WIN
   QMediaDevices devices_;
+#endif
   QTimer status_;
   QTimer mediaUpdate_;
   QTimer windowShapeUpdate_;
