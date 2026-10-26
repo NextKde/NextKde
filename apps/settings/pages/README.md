@@ -48,19 +48,6 @@ ctest --test-dir <vm-build-directory> -R '^kos-settings\.' --output-on-failure
 ```
 
 Installation must include both `pages/` and `components/`. The existing recursive
-QML watcher discovers these directories for development reloads. Runtime tests
-default to the VM unless the user explicitly authorizes a host run.
-
-### 2026-10-15 authorized host run
-
-Built kos-settings and kos-window-settings-test from current sources in
-`tmp/settings-modules/build`. All 15 settings CTest groups passed (16.55 seconds),
-including 19 passing checks in page-contracts. The first contract run exposed an
-incorrect test assumption: resource controls intentionally have zero height when
-the scheduler is unavailable. The test now covers both unavailable and available
-states. No production fix was needed for that failure.
-
-A CMake install into `tmp/settings-modules/stage` included all extracted QML
-modules, and the staged binary passed `--smoke-test-windows`. Tests used the
-offscreen software backend and isolated configuration/cache/state directories;
-these results do not establish visual correctness in a live compositor session.
+QML watcher discovers these directories for development reloads. Run verification only in a VM or hosted CI, as required by
+[Development](../../../docs/Development.md). Store run-specific logs and screenshots
+outside the source tree; this contract is not an acceptance report.
