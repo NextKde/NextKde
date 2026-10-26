@@ -4,13 +4,18 @@
 #include <QTimer>
 #include <QPointer>
 #include <QNetworkAccessManager>
+#include <QSize>
+#if LISTENFREE_BUILD_VIDEO
 #include <QMediaPlayer>
 #include <QVideoSink>
+#endif
 #include <memory>
 #include <functional>
 #include <QJsonObject>
 #include "media/media_stream_proxy.h"
+#if LISTENFREE_BUILD_VIDEO
 #include "media/mv_frame_stream.h"
+#endif
 
 namespace listenfree::qmlbridge {
 class SpectrumSampler;
@@ -56,9 +61,11 @@ public:
     // Pure reduction, also used by the synthetic PCM regression.
     static QVariantList reduceSpectrum(const float* left, const float* right);
     bool sampling() const { return timer_.isActive(); }
+#if LISTENFREE_BUILD_VIDEO
     QMediaPlayer* videoPlayer() const { return video_.get(); }
     media::MvFrameStream* nativeVideoPlayer() const { return nativeVideo_.get(); }
     QVideoSink* videoSink() const { return sink_; }
+#endif
 Q_SIGNALS:
     void activeChanged();
     void spectrumChanged();
@@ -90,9 +97,11 @@ private:
     QVariantList spectrum_, candidates_;
     QTimer timer_, loadTimeout_;
     std::unique_ptr<SpectrumSampler> sampler_;
+#if LISTENFREE_BUILD_VIDEO
     std::unique_ptr<QMediaPlayer> video_;
     std::unique_ptr<media::MvFrameStream> nativeVideo_;
     QPointer<QVideoSink> sink_;
+#endif
     QSize videoSize_;
     QMetaObject::Connection videoSizeConnection_;
     QNetworkAccessManager network_;

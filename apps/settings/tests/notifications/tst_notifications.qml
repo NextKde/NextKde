@@ -31,6 +31,13 @@ Item {
                 sources: [{key: "desktop:mail", appName: "邮件"}], blockedKeys: []})
             verify(page.ready)
             compare(page.applications.length, 1)
+            const soundToggle = findChild(page, "notification-soundEnabled-switch")
+            verify(soundToggle !== null)
+            verify(!soundToggle.checked) // Older snapshots have no sound preference.
+            page.setPreference("soundEnabled", true)
+            compare(fakeBridge.request, "soundEnabled:true")
+            fakeBridge.notificationSnapshotChanged({ready: true, soundEnabled: true, sources: [], blockedKeys: []})
+            verify(soundToggle.checked)
             page.setPreference("showNotificationBadges", false)
             compare(fakeBridge.request, "showNotificationBadges:false")
             verify(page.pending)

@@ -1169,5 +1169,14 @@
   "未知来源": "Unknown Source",
   "在线音乐": "Online Music",
   "寻找可用音源超时，可点击播放重试": "Source lookup timed out. Press play to retry.",
-  "没有找到可用音源": "No playable source found"
+  "没有找到可用音源": "No playable source found",
+  "网页登录已超时，请重试。": "Web login timed out. Please try again.",
+  "网页登录组件无法启动，请检查安装或使用 Cookie 登录。": "The web login component could not start. Check its installation or sign in with cookies.",
+  "网页登录组件异常退出，请重试或使用 Cookie 登录。": "The web login component exited unexpectedly. Try again or sign in with cookies.",
+  "请先完成或关闭已有的网页登录窗口。": "Complete or close the current web login window first.",
+  "安装网页登录组件": "Install web login component",
+  "扫码登录需要可选组件 listenfree-web-login。安装后即可使用，无需重装播放器。也可以直接使用 Cookie 登录。": "QR sign-in requires the optional listenfree-web-login component. Install it to continue without reinstalling the player, or sign in with cookies.",
+  "查看安装说明": "View installation instructions",
+  "选择歌词来源": "Choose a lyrics source",
+  "歌词换源": "Change lyrics source"
 }

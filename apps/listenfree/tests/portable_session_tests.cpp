@@ -1,3 +1,4 @@
+#include "test_taglib_path.h"
 #include <QtEndian>
 #include "media/media_stream_proxy.h"
 #include <cmath>
@@ -682,7 +683,7 @@ lx.on(lx.EVENT_NAMES.request,()=>new Promise(resolve=>setTimeout(()=>resolve('ht
         for(int i=0;i<2;++i) {
             const auto path=mediaDir.filePath(QString::number(i)+".mp3");QVERIFY(QFile::copy(mp3_,path));
             {
-                TagLib::MPEG::File file(path.toStdWString().c_str(),false);QVERIFY(file.isValid());
+                TagLib::MPEG::File file(testTagLibPath(path).c_str(),false);QVERIFY(file.isValid());
                 auto* tag=file.ID3v2Tag(true);tag->removeFrames("APIC");
                 if(i==validIndex){
                     auto* frame=new TagLib::ID3v2::AttachedPictureFrame;
@@ -736,7 +737,7 @@ lx.on(lx.EVENT_NAMES.request,()=>new Promise(resolve=>setTimeout(()=>resolve('ht
         const auto writeCover=[&](const QString& path,const QColor& color,int width) {
             QImage image(width,32,QImage::Format_RGB32);image.fill(color);
             QByteArray picture;QBuffer buffer(&picture);if(!buffer.open(QIODevice::WriteOnly) || !image.save(&buffer,"PNG"))return false;
-            TagLib::MPEG::File file(path.toStdWString().c_str(),false);if(!file.isValid())return false;
+            TagLib::MPEG::File file(testTagLibPath(path).c_str(),false);if(!file.isValid())return false;
             auto* tag=file.ID3v2Tag(true);tag->removeFrames("APIC");
             auto* frame=new TagLib::ID3v2::AttachedPictureFrame;
             frame->setType(TagLib::ID3v2::AttachedPictureFrame::FrontCover);frame->setMimeType("image/png");
@@ -748,7 +749,7 @@ lx.on(lx.EVENT_NAMES.request,()=>new Promise(resolve=>setTimeout(()=>resolve('ht
             if(!QFile::copy(mp3_,path))return false;
             if(cover) { if(!writeCover(path,color,64))return false; }
             else {
-                TagLib::MPEG::File file(path.toStdWString().c_str(),false);if(!file.isValid())return false;
+                TagLib::MPEG::File file(testTagLibPath(path).c_str(),false);if(!file.isValid())return false;
                 file.ID3v2Tag(true)->removeFrames("APIC");if(!file.save())return false;
             }
             domain::Track track;track.id=domain::TrackId(path.toStdString());track.localPath=path.toStdString();
@@ -826,7 +827,7 @@ lx.on(lx.EVENT_NAMES.request,()=>new Promise(resolve=>setTimeout(()=>resolve('ht
         const auto media=temporary_.filePath(reported?QFileInfo(original).fileName():QString("large-id3.flac"));
         if(reported)QVERIFY(QFile::copy(original,media));
         else {
-            TagLib::MPEG::File tags(mp3_.toStdWString().c_str(),false);
+            TagLib::MPEG::File tags(testTagLibPath(mp3_).c_str(),false);
             const auto offset=tags.firstFrameOffset();QVERIFY(offset>=0);
             QFile sourceFile(mp3_);QVERIFY(sourceFile.open(QIODevice::ReadOnly));QVERIFY(sourceFile.seek(offset));
             QFile sample(media);QVERIFY(sample.open(QIODevice::WriteOnly));
@@ -1216,7 +1217,7 @@ lx.on(lx.EVENT_NAMES.request,()=>new Promise(resolve=>setTimeout(()=>resolve('ht
         QImage backImage(24,24,QImage::Format_RGB32);backImage.fill(Qt::blue);
         QByteArray back;QBuffer buffer(&back);buffer.open(QIODevice::WriteOnly);QVERIFY(backImage.save(&buffer,"PNG"));
         {
-            TagLib::FileRef file(media.toStdWString().c_str(),false);
+            TagLib::FileRef file(testTagLibPath(media).c_str(),false);
             auto pictures=file.complexProperties("PICTURE");
             pictures.append({{"data",TagLib::ByteVector(back.constData(),unsigned(back.size()))},{"pictureType","Back Cover"},{"mimeType","image/png"}});
             QVERIFY(file.setComplexProperties("PICTURE",pictures));QVERIFY(file.save());
@@ -1244,7 +1245,7 @@ lx.on(lx.EVENT_NAMES.request,()=>new Promise(resolve=>setTimeout(()=>resolve('ht
         for(const auto& key:QStringList{"title","artist","album","year","lyrics","durationMs"})QCOMPARE(after.value(key),before.value(key));
         QVERIFY(after.value("artwork")!=before.value("artwork"));
         QVERIFY(player.saveTrackTags(track,{{"comment","unchanged cover"}}));
-        TagLib::FileRef file(media.toStdWString().c_str(),false);
+        TagLib::FileRef file(testTagLibPath(media).c_str(),false);
         int fronts=0;bool hasBack=false;
         for(const auto& picture:file.complexProperties("PICTURE")) {
             const auto bytes=picture["data"].toByteVector();const QByteArray actual(bytes.data(),int(bytes.size()));
@@ -1311,7 +1312,7 @@ lx.on(lx.EVENT_NAMES.request,()=>new Promise(resolve=>setTimeout(()=>resolve('ht
         const auto media=temporary_.filePath(flac?"repair.flac":"repair.mp3");
         QVERIFY(QFile::copy(flac?flac_:mp3_,media));
         {
-            TagLib::FileRef file(media.toStdWString().c_str(),false);QVERIFY(!file.isNull());
+            TagLib::FileRef file(testTagLibPath(media).c_str(),false);QVERIFY(!file.isNull());
             auto properties=file.file()->properties();
             properties.replace("ARTIST",TagLib::StringList("Repair Artist"));
             properties.replace("ALBUM",TagLib::StringList("Repair Album"));
@@ -1486,7 +1487,7 @@ lx.on(lx.EVENT_NAMES.request,()=>new Promise(resolve=>setTimeout(()=>resolve('ht
         // handle: FileRef also requests write access on Windows.
         QTRY_COMPARE_WITH_TIMEOUT(db.getSetting("lyrics.pendingEmbedded").value_or("{}"),std::string("{}"),10000);
         const auto embedded=[&] {
-            TagLib::FileRef file(media.toStdWString().c_str(),false);
+            TagLib::FileRef file(testTagLibPath(media).c_str(),false);
             return file.isNull()?QString{}:QString::fromStdString(file.file()->properties()["LYRICS"].toString("\n").to8Bit(true));
         };
         QVERIFY(embedded().contains("Match 1"));
@@ -1525,7 +1526,7 @@ lx.on(lx.EVENT_NAMES.request,()=>new Promise(resolve=>setTimeout(()=>resolve('ht
         qmlbridge::PortableSession player(db,path,source);
         QCOMPARE(player.readTrackTags(local(media)).value("lyrics").toString(),lyric);
         QTRY_COMPARE_WITH_TIMEOUT(db.getSetting("lyrics.pendingEmbedded").value_or("{}"),std::string("{}"),10000);
-        TagLib::FileRef file(media.toStdWString().c_str(),false);QVERIFY(!file.isNull());
+        TagLib::FileRef file(testTagLibPath(media).c_str(),false);QVERIFY(!file.isNull());
         QCOMPARE(QString::fromStdString(file.file()->properties()["LYRICS"].toString().to8Bit(true)),lyric);
         QVERIFY(!QFileInfo::exists(temporary_.filePath("lyric-persisted.lrc")));
     }
@@ -1545,7 +1546,7 @@ lx.on(lx.EVENT_NAMES.request,()=>new Promise(resolve=>setTimeout(()=>resolve('ht
                 QTRY_COMPARE_WITH_TIMEOUT(db.getSetting("lyrics.pendingEmbedded").value_or("{}"),std::string("{}"),10000);
             }
         }
-        TagLib::FileRef file(media.toStdWString().c_str(),false);QVERIFY(!file.isNull());
+        TagLib::FileRef file(testTagLibPath(media).c_str(),false);QVERIFY(!file.isNull());
         QVERIFY(QString::fromStdString(file.file()->properties()["LYRICS"].toString().to8Bit(true)).contains("Embedded after release"));
         QCOMPARE(db.getSetting("lyrics.pendingEmbedded").value_or("{}"),std::string("{}"));
         QVERIFY(!QFileInfo::exists(temporary_.filePath(stem+".lrc")));
@@ -1592,7 +1593,7 @@ lx.on(lx.EVENT_NAMES.request,()=>new Promise(resolve=>setTimeout(()=>resolve('ht
         QCOMPARE(player.readTrackTags(track).value("lyrics").toString(),QString("[00:01.00]重新匹配的歌词"));
         QTRY_COMPARE_WITH_TIMEOUT(db.getSetting("lyrics.pendingEmbedded").value_or("{}"),std::string("{}"),10000);
         { QFile file(sidecar);QVERIFY(file.open(QIODevice::ReadOnly));QCOMPARE(QString::fromUtf8(file.readAll()),QString("[00:01.00]重新匹配的歌词")); }
-        TagLib::FileRef reopened(media.toStdWString().c_str(),false);QVERIFY(!reopened.isNull());
+        TagLib::FileRef reopened(testTagLibPath(media).c_str(),false);QVERIFY(!reopened.isNull());
         QCOMPARE(QString::fromStdString(reopened.file()->properties()["TITLE"].front().to8Bit(true)),QString("标签保存测试"));
         QCOMPARE(online::lyricCandidateScore(tags,tags),90); // Duration is deliberately unknown.
         tags["durationMs"]=180000;
@@ -1707,7 +1708,7 @@ lx.on(lx.EVENT_NAMES.request,()=>new Promise(resolve=>setTimeout(()=>resolve('ht
     void embeddedAizoWords() {
         const QString path="E:/Music/new/AIZO - King Gnu.flac";
         if(!QFileInfo::exists(path))QSKIP("User verification media unavailable");
-        TagLib::FileRef file(path.toStdWString().c_str(),false);QVERIFY(!file.isNull());
+        TagLib::FileRef file(testTagLibPath(path).c_str(),false);QVERIFY(!file.isNull());
         const auto raw=file.file()->properties()["LYRICS"].front();
         const auto rows=online::parseTimedLyrics(QString::fromStdString(raw.to8Bit(true)));
         int words=0,translations=0;bool luv=false;
@@ -2541,7 +2542,7 @@ lx.on(lx.EVENT_NAMES.request,()=>new Promise(resolve=>setTimeout(()=>resolve('ht
             downloads.resume(id);QTRY_VERIFY_WITH_TIMEOUT(downloads.tasks().first().toMap().value("state")=="completed",25000);
             QVERIFY(ranges.contains(pausedSize));QCOMPARE(source.activeId(),original);
             const auto path=downloads.tasks().first().toMap().value("path").toString();
-            TagLib::MPEG::File before(reinterpret_cast<const wchar_t*>(mp3_.utf16())),after(reinterpret_cast<const wchar_t*>(path.utf16()));
+            TagLib::MPEG::File before(testTagLibPath(mp3_).c_str()),after(testTagLibPath(path).c_str());
             QVERIFY(before.audioProperties());QVERIFY(after.audioProperties());
             QCOMPARE(before.audioProperties()->lengthInMilliseconds(),after.audioProperties()->lengthInMilliseconds());
             QFile saved(path);QVERIFY(saved.open(QIODevice::ReadOnly));const auto actual=saved.readAll();

@@ -1,4 +1,5 @@
 import QtQuick
+import qs.desktop.modules.common
 
 // A single node in the Dock's render tree. One dwell timer gates the first
 // appearance; subsequent icon changes keep the visible label continuous.
@@ -59,7 +60,7 @@ Rectangle {
     }
     onPointerPositionChanged: updateGeometry()
     onWidthChanged: updateGeometry()
-    Text {
+    ShellText {
         id: labelText
         anchors.centerIn: parent
         width: Math.min(implicitWidth, label.width - 16)

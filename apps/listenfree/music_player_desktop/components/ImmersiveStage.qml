@@ -1,7 +1,6 @@
 pragma ComponentBehavior: Bound
 import QtQuick
 import QtQuick.Window
-import QtMultimedia
 import ListenFree.Native 1.0
 
 Item {
@@ -25,7 +24,7 @@ Item {
     property string artist: ""
     property bool showTranslation: true
     property bool wordTimingEnabled: true
-    property string backgroundMode: preference("background", "aura")
+    property string backgroundMode: !AppTheme.videoAvailable && preference("background", "aura") === "mv" ? "aura" : preference("background", "aura")
     property string pvStyle: preference("lyricStyle", "fume")
     property string visualization: preference("visualization", "none")
     property real visualHeight: Math.max(40, Math.min(240, Number(preference("visualHeight", 112))))
@@ -48,7 +47,8 @@ Item {
     signal seekRequested(real timeMs, int index)
     signal fullScreenRequested()
     function preference(key, fallback) { return settingsStore ? settingsStore.value("immersive."+key, fallback) : fallback }
-    function save(key, value) { if(settingsStore)settingsStore.setValue("immersive."+key, value) }
+    property bool preferencesReady: false
+    function save(key, value) { if(preferencesReady && settingsStore)settingsStore.setValue("immersive."+key, value) }
     function cancelAutoMatch() { matchTimer.stop() }
     function matchVideo() { if(backgroundMode === "mv" && service && title.length) service.autoMatchMv(title, artist, playerPage.durationMs) }
     onBackgroundModeChanged: { save("background",backgroundMode); if(backgroundMode!=="mv" && service)service.clearVideo();else matchTimer.restart() }
@@ -59,7 +59,7 @@ Item {
     onSongIdentityChanged: if(backgroundMode === "mv")matchTimer.restart()
     function syncActive() { if(service){service.suspended=!exposed;service.spectrumEnabled=visualization!=="none";service.active=true} }
     onExposedChanged: syncActive()
-    Component.onCompleted: { syncActive();hideTimer.restart();if(backgroundMode==="mv")matchTimer.restart() }
+    Component.onCompleted: { preferencesReady=true;syncActive();hideTimer.restart();if(backgroundMode==="mv")matchTimer.restart() }
     Component.onDestruction: if(service){service.active=false;service.attachVideoSink(null)}
     Timer { id: matchTimer; interval:150; onTriggered:stage.matchVideo() }
     Timer { id: hideTimer; interval: stage.hideDelay*1000; onTriggered: if(!progress.pressed)stage.controlsOpen=false }
@@ -75,11 +75,8 @@ Item {
     }
     Loader {
         anchors.fill:parent; active:stage.backgroundMode === "mv" && stage.exposed
-        sourceComponent: VideoOutput {
-            objectName:"immersiveVideo";fillMode:VideoOutput.PreserveAspectCrop;visible:stage.videoVisible
-            Component.onCompleted:if(stage.service)stage.service.attachVideoSink(videoSink)
-            Component.onDestruction:if(stage.service)stage.service.attachVideoSink(null)
-        }
+        source: AppTheme.videoAvailable ? "ImmersiveVideo.qml" : ""
+        onLoaded: item.host = stage
     }
     Rectangle { anchors.fill:parent;color:stage.videoVisible ? "#60000000" : stage.backgroundMode === "blur" ? "#85000000" : "#50000000" }
     MouseArea { anchors.fill:parent;acceptedButtons:Qt.AllButtons;onPressed:mouse=>{mouse.accepted=true;AppTheme.closePopup()};onWheel:wheel=>wheel.accepted=true }
@@ -173,7 +170,7 @@ Item {
         }
         Row {
             objectName:"immersiveRightControls";anchors.right:parent.right;anchors.rightMargin:28;anchors.verticalCenter:parent.verticalCenter;spacing:12
-            RoundIconButton { objectName:"immersiveSourceButton";diameter:34;kind:"sourceSwap";transparentSurface:true;glyphColor:"white";tooltip:qsTr("MV 与歌词换源");onClicked:sourcesPopup.open() }
+            RoundIconButton { objectName:"immersiveSourceButton";diameter:34;kind:"sourceSwap";transparentSurface:true;glyphColor:"white";tooltip:AppTheme.videoAvailable ? qsTr("MV 与歌词换源") : qsTr("歌词换源");onClicked:sourcesPopup.open() }
             RoundIconButton { objectName:"immersiveSettingsButton";diameter:34;kind:"adjustments";transparentSurface:true;glyphColor:"white";tooltip:qsTr("沉浸设置");onClicked:settingsPopup.open() }
             Item {
                 width:Math.min(Math.max(songInfoTitle.implicitWidth,songInfoArtist.implicitWidth),Math.max(80,Math.min(180,stage.width*.18)));height:40

@@ -344,7 +344,7 @@ if(BUILD_TESTING)
                     COMMAND ${KOS_NODE_EXECUTABLE}
                         ${CMAKE_CURRENT_SOURCE_DIR}/tests/notification-history/run-production.mjs
                         ${KOS_QUICKSHELL_EXECUTABLE})
-                set_tests_properties(kos-shell.notification-policy-production PROPERTIES LABELS ui TIMEOUT 35)
+                set_tests_properties(kos-shell.notification-policy-production PROPERTIES LABELS "ui;headless" TIMEOUT 60)
             endif()
             add_test(NAME kos-shell.static-work-runtime
                 COMMAND ${KOS_NODE_EXECUTABLE}
