@@ -119,13 +119,12 @@ Item {
             opacity: row.itemEnabled ? 0.9 : 0.5
         }
 
-        Text {
+        ShellText {
             text: row.label
             elide: Text.ElideRight
             font.family: "SF Pro Display, Noto Sans CJK SC, sans-serif"
             font.pixelSize: 13
             font.weight: Font.DemiBold
-            // 使用默认距离场渲染，减少原生字形在菜单缩放时的像素化。
             color: row.foregroundColor
             opacity: row.itemEnabled ? 1.0 : 0.6
             anchors.verticalCenter: parent.verticalCenter

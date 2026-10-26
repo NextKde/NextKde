@@ -4,7 +4,9 @@
 #include "infrastructure/database/repositories.h"
 #include "infrastructure/library/library_scanner.h"
 #include "media/playback_state_machine.h"
+#if LISTENFREE_BUILD_VIDEO
 #include "media/qt_audio_player.h"
+#endif
 #include "online/mock_online_provider.h"
 #include "qmlbridge/controllers.h"
 #include "qmlbridge/list_models.h"
@@ -233,6 +235,7 @@ void BackendTests::playbackStateTransitions() {
 }
 
 void BackendTests::audioPlayerDomainAdapter() {
+#if LISTENFREE_BUILD_VIDEO
     listenfree::media::QtAudioPlayer player;
     const auto capabilities = player.capabilities();
     QVERIFY(capabilities & listenfree::application::capabilityMask(
@@ -248,9 +251,14 @@ void BackendTests::audioPlayerDomainAdapter() {
     item.track.title = "Missing source";
     player.open(item);
     QCOMPARE(player.state(), listenfree::domain::PlaybackState::Idle);
+
+#else
+    QSKIP("Qt audio backend is disabled in the audio-only build");
+#endif
 }
 
 void BackendTests::audioPlayerMuteVolumeAndDynamicCapabilities() {
+#if LISTENFREE_BUILD_VIDEO
     listenfree::media::QtAudioPlayer player;
     listenfree::application::IAudioPlayer& audioPlayer = player;
 
@@ -269,6 +277,10 @@ void BackendTests::audioPlayerMuteVolumeAndDynamicCapabilities() {
         (player.capabilities() & listenfree::application::capabilityMask(
                                      listenfree::application::PlaybackCapability::DeviceSelection)) != 0;
     QCOMPARE(reportsDeviceSelection, hasDevices);
+
+#else
+    QSKIP("Qt audio backend is disabled");
+#endif
 }
 
 void BackendTests::playerControllerAdapter() {
@@ -1417,13 +1429,13 @@ void BackendTests::settingsControllerPersistsValues() {
     listenfree::infrastructure::database::SettingsRepository repository(database);
     listenfree::qmlbridge::SettingsController controller(repository);
 
-    QCOMPARE(controller.value(QStringLiteral("ui.language"), QStringLiteral("zh-CN")).toString(),
-             QStringLiteral("zh-CN"));
-    controller.setValue(QStringLiteral("ui.language"), QStringLiteral("en-US"));
-    QCOMPARE(controller.value(QStringLiteral("ui.language")).toString(), QStringLiteral("en-US"));
+    QCOMPARE(controller.value(QStringLiteral("ui.fontFamily"), QStringLiteral("SystemDefault")).toString(),
+             QStringLiteral("SystemDefault"));
+    controller.setValue(QStringLiteral("ui.fontFamily"), QStringLiteral("Test Font"));
+    QCOMPARE(controller.value(QStringLiteral("ui.fontFamily")).toString(), QStringLiteral("Test Font"));
 
     listenfree::qmlbridge::SettingsController restored(repository);
-    QCOMPARE(restored.value(QStringLiteral("ui.language")).toString(), QStringLiteral("en-US"));
+    QCOMPARE(restored.value(QStringLiteral("ui.fontFamily")).toString(), QStringLiteral("Test Font"));
     controller.setValue(QStringLiteral("ui.motionEnabled"), false);
     const auto flag = restored.value(QStringLiteral("ui.motionEnabled"), true);
     QCOMPARE(flag.metaType(), QMetaType::fromType<bool>());

@@ -1,8 +1,8 @@
 import QtQuick
 
 // Light glass text sits over a soft continuous backdrop behind its text area.
-// Keep Text as the root so layout, elision and caller colours stay unchanged.
-Text {
+// ShellText inherits Text's layout, elision and caller colours.
+ShellText {
     id: root
     // Compatibility with hosts that disable the old readability outline.
     // The switch now controls the area backdrop; no glyph outline is painted.
