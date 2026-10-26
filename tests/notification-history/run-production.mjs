@@ -67,7 +67,21 @@ if (!process.argv.includes("--session")) {
         fixture("bar", [["ControlCenterService", 'pragma Singleton\nimport QtQuick\nQtObject { property bool doNotDisturbEnabled: false }', true]]);
         const notificationDir = fixture("notifications", [
             ...["NotificationCenter", "NotificationGroupService", "NotificationHistoryObserver", "NotificationHistoryService", "NotificationPolicyService", "NotificationSoundService"].map(name => [name, `@../../shell/desktop/modules/notifications/${name}.qml`, name.endsWith("Service") && name !== "NotificationGroupService"]),
-            ["NotificationAudioPlayer", 'import QtQuick\nimport qs.desktop.modules.common\nQtObject { id: audio; property bool busy: false; property Timer end: Timer { interval: 1500; onTriggered: audio.cancel() }; function play() { if (busy) return false; busy = true; ScreenLifecycle.testSoundCount++; end.restart(); return true }; function cancel() { busy = false; end.stop() } }', false],
+            ["NotificationAudioPlayer", `import QtQuick
+import qs.desktop.modules.common
+QtObject {
+    id: audio
+    property bool busy: false
+    property Timer end: Timer { interval: 1500; onTriggered: audio.cancel() }
+    function play() {
+        if (busy) return false
+        busy = true
+        ScreenLifecycle.testSoundCount++
+        end.restart()
+        return true
+    }
+    function cancel() { busy = false; end.stop() }
+}`, false],
             ["NotificationWindow", 'import QtQuick\nimport qs.desktop.modules.common\nQtObject { property var screen; property bool visible; property var groupService; property Timer timer: Timer { running: true; repeat: true; interval: 30; onTriggered: ScreenLifecycle.testBannerCount = groupService.groupsModel.count } }', false]]);
         copyFileSync(new URL("../../shell/desktop/modules/notifications/NotificationIdentity.mjs", import.meta.url),
             join(notificationDir, "NotificationIdentity.mjs"));
