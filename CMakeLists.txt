@@ -110,6 +110,9 @@ if(BUILD_TESTING)
         add_test(NAME kos-shell.application-traffic
             COMMAND ${KOS_NODE_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/status-area/test_application_traffic.mjs)
         set_tests_properties(kos-shell.application-traffic PROPERTIES LABELS logic TIMEOUT 10)
+        add_test(NAME kos-shell.battery-data
+            COMMAND ${KOS_NODE_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/status-area/test_battery_data.mjs)
+        set_tests_properties(kos-shell.battery-data PROPERTIES LABELS logic TIMEOUT 10)
         add_test(NAME kos-shell.language
             COMMAND ${KOS_NODE_EXECUTABLE}
                 ${CMAKE_CURRENT_SOURCE_DIR}/tests/localization/widget-language.mjs)

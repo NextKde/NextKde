@@ -40,6 +40,7 @@ set(kos_platform_sources
     src/daemon/PlatformServerDesktop.cpp
     src/daemon/PlatformServerDisplay.cpp
     src/daemon/PlatformServerFiles.cpp
+    src/daemon/BatteryData.h
     src/daemon/PlatformServerPower.cpp
     src/daemon/PlatformServerNetwork.cpp
     src/daemon/PlatformServerState.cpp

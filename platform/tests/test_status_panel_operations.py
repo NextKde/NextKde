@@ -51,6 +51,9 @@ printf '%s\\n' 'ESTAB 0 0 a b users:(("browser",pid=111,fd=2)) ino:222 bytes_sen
         apps=call('network.applications')
         assert apps['ok'], apps
         assert apps['result']['sockets'][0]['rxBytes']==5000, apps
+        battery=call('power.battery')
+        assert battery['ok'] and isinstance(battery['result']['batteries'],list), battery
+        assert isinstance(battery['result']['adapters'],list), battery
         modes=call('power.profiles')
         assert modes['ok'] and modes['result']['activeProfile']=='balanced', modes
         assert call('power.profile.set',{'profile':'power-saver'})['ok']

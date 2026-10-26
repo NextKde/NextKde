@@ -207,6 +207,26 @@ reported through the common response envelope.
 
 - `network.applications` (read): returns `{scope: "user-tcp", sockets: [{id, name, pid, rxBytes, txBytes}]}` from `ss -tinpeOH`. Visible-owner TCP counters are sampled per socket before grouping by process name. Local proxy connections may count the same traffic twice. UDP/QUIC, inaccessible owners, and connections closed between samples are excluded. These totals are independent of interface totals.
 - `power.profiles` (read): returns `{profiles, activeProfile, degraded}` from `powerprofilesctl list`.
+- `power.battery` (read): takes `{}` and returns `{available, batteries, adapters}`
+  from bounded reads of `/sys/class/power_supply/*/uevent` (at most 64 devices,
+  16 KiB each). No helper, system mutation, or caller-supplied path. `batteries`
+  contains present system packs with `name`, `model` and optional `energyFullWh`,
+  `energyDesignWh`, `chargeFullMah`, `chargeDesignMah`, `powerWatts`, `currentMa`,
+  `voltage`, `cycles`, `temperature` (°C). Charge-based energy conversion uses
+  design voltage. `adapters` contains online Mains/USB supplies with `name` and
+  optional `powerWatts`, `ratedPowerWatts`, `currentMa`, `voltage`. Missing or
+  invalid attributes are omitted; zero is a valid measured value. Adapter power
+  is never inferred from battery power. The Shell reads on open and every ten
+  seconds while open, drops stale replies after close/disconnect, and otherwise
+  continues using UPower's event-driven charge/state/time/health data. Multiple
+  battery capacities are combined in Wh only; pack-specific voltage, current,
+  cycle and temperature fields are unavailable for a combined display.
 - `power.profile.set` (write): accepts `{profile: "power-saver" | "balanced" | "performance"}`. System authorization is retained; success is followed by a readback before confirming the selected profile.
 
-The optional `ss` and `powerprofilesctl` helpers must be installed for these operations. Missing helpers report unavailable states. The independent Power settings page also uses `powerprofilesctl` and observes system D-Bus profile changes; it is available without a battery or running shell.
+The optional `ss` and `powerprofilesctl` helpers must be installed for application
+traffic and power-profile operations respectively. Missing helpers report
+unavailable states. Battery telemetry needs neither helper; an unavailable or
+older platform daemon leaves extra metrics as `—` while UPower charge/state,
+available capacity, time and health continue to update. The independent Power
+settings page also uses `powerprofilesctl` and observes system D-Bus profile
+changes; it is available without a battery or running shell.
