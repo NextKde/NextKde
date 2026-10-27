@@ -22,6 +22,30 @@ a nonempty content region. Wallpapers and legacy empty-region whole-window blur
 remain excluded. `kos-deskcenter.desktop-stack` covers mapping permutations and
 reentrant stacking signals; `kos-glass.desktop-blur` covers this opt-in boundary.
 
+## Widget placement and resizing
+
+In desktop edit mode, drag a widget to a free grid rectangle or use its bottom-right
+handle to resize it to 1×1, 1×2, 2×2 or 2×1. The drop preview distinguishes occupied
+cells from available cells. Moving a widget fixes the other visible cards in place.
+Widget spans and per-output positions are stored alongside the existing size/order
+preferences by `DeskCenterConfigService`; existing small/medium/large values remain valid.
+Packing reserves saved positions first, expands into available desktop columns, and
+projects conflicting or out-of-bounds positions onto the current output without
+rewriting the original coordinates. On short outputs it temporarily compacts cards.
+The desktop file area starts after the occupied widget columns. Widget expansion
+reserves at least one file/drop column, and more for current files up to the original
+four-widget-column layout capacity. Resize previews reject occupied/out-of-bounds
+rectangles instead of repacking neighbours. Moving a card only persists that card
+and previously unpositioned neighbours; other projected positions remain in memory
+for the current grid geometry and their original saved positions are retained.
+
+`WidgetLayout.mjs` owns packing, snapping and collision checks. `WidgetResizeHandle.qml`
+previews spans and commits only on release; resizing and moving are mutually exclusive.
+`kos-deskcenter.widget-layout` covers geometry and migration-compatible sizes;
+`kos-ui.widget-resize` exercises pointer input and persistence across a Shell restart.
+Run both in a VM/CI with the required graphical environment; live screenshots remain
+part of VM review.
+
 ## Spacing geometry
 
 For AI contributors: `DesktopGridMetrics.mjs` owns cell, gap and content geometry. Selection,

@@ -72,7 +72,8 @@
     "kos-settings.power-config"
   ],
   "widgets": [
-    "kos-ui.widget-experience"
+    "kos-ui.widget-experience",
+    "kos-ui.widget-resize"
   ],
   "headless": [
     "kos-calculator.engine",
