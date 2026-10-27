@@ -60,5 +60,8 @@ GPU sampling uses opaque fallback surfaces. No KWin liquid plugin is involved.
 The Day/Week/Month/Year selector samples the same chrome backdrop through the
 shared liquid optics. Its track and sliding selection use neutral glass with no
 accent focus overlay; keyboard selection and an opaque fallback remain available.
+Pressing expands the sampled lens to 1.12 scale with stronger refraction; selection
+slides and rebounds using OutBack easing. A short pulse also covers quick clicks
+and keyboard changes. Labels/hit targets stay fixed; reduced motion settles directly.
 Typography, toolbar search, selector geometry, field geometry and editor footer
 sizes retain the previous compact design.
