@@ -1376,7 +1376,7 @@ KosApplicationWindow {
                 onClicked: eventEditor.openForDate(root.selectedDate)
             }
 
-            LiquidSegmentedControl {
+            CalendarViewSelector {
                 id: viewSegment
                 objectName: "toolbarViewSegment"
                 anchors.verticalCenter: parent.verticalCenter
@@ -1402,7 +1402,7 @@ KosApplicationWindow {
                 // and the 4th segment (i == 3) maps to the year view. Weeks
                 // still land on segment 1, so the pill's measured geometry
                 // (R097/R098) is untouched.
-                materialForm: true
+                backdrop: chromeBackdrop
                 labels: [qsTr("Day"), qsTr("Week"), qsTr("Month"), qsTr("Year")]
                 currentIndex: root.viewIndex <= 2 ? 2 - root.viewIndex : 3
                 backgroundColor: root.design.segmentTrack

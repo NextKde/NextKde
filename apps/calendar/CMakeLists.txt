@@ -11,6 +11,7 @@ kos_add_application(kos-calendar
     QML_FILES
         qml/Main.qml
         qml/CalendarGlassSurface.qml
+        qml/CalendarViewSelector.qml
         qml/CalendarPopupSurface.qml
         qml/CalendarStyle.qml
         qml/CalendarButton.qml

@@ -57,5 +57,8 @@ Menus, detail popovers and combo-box option popups use one liquid panel and ordi
 interior rows. Popups stay in the same window and exclude themselves from their
 capture; editor dropdowns sample the editor panel. Reduced transparency or missing
 GPU sampling uses opaque fallback surfaces. No KWin liquid plugin is involved.
-Typography, toolbar search/view selector, field geometry and editor footer sizes
-retain the previous compact design.
+The Day/Week/Month/Year selector samples the same chrome backdrop through the
+shared liquid optics. Its track and sliding selection use neutral glass with no
+accent focus overlay; keyboard selection and an opaque fallback remain available.
+Typography, toolbar search, selector geometry, field geometry and editor footer
+sizes retain the previous compact design.
