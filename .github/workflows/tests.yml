@@ -71,7 +71,7 @@ jobs:
             extra-cmake-modules wayland plasma-workspace libplasma kpackage \
             kwindowsystem kiconthemes kglobalaccel kio kconfig \
             go dbus nodejs python opencv onnxruntime-cpu \
-            quickshell kwin python-pillow mesa libcap
+            quickshell kwin python-pillow mesa vulkan-swrast libcap
 
       # Arch gives KWin CAP_SYS_NICE, which Docker's default capability
       # bounding set excludes. execve then fails with EPERM before KWin starts.
