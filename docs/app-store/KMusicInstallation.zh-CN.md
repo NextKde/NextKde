@@ -1,6 +1,6 @@
 # KMusic App Store 安装协议 v1
 
-此文档位于 kos-shell/NextKde 仓库，供尚未实现的 kos-settings App Store 下载安装功能接入使用。
+本文说明 kos-settings 应用商店接入 KMusic 独立源码安装器时使用的协议。商店端的目录固定、下载校验和进程控制见[应用商店实现说明](../../apps/settings/app-store/README.md)。
 
 安装入口在 **KMusic 仓库**根目录 `install.sh`，实现：`packaging/installer.py`。商店必须一起分发这两个文件并保持目录结构，不能只下载一个入口文件。脚本不调用 sudo、apt、pacman，不安装依赖、不启动 KMusic、不操作桌面 Shell。
 
@@ -94,64 +94,26 @@ Python >=3.9；CMake >=3.21；Node >=22.19；Git、pkg-config、Make、C++20 编
 
 没有自动安装依赖选项；也不提供隐藏的忽略依赖参数。
 
-## 验证状态
+## 验证与证据
 
-已在 GitHub 托管虚拟机中的 Arch、Ubuntu 26.04、Debian 13 容器完成安装成功及失败场景验证；Ubuntu 24.04 验证依赖过旧时拒绝安装。未在开发宿主机运行测试。测试文件位于 `tests/app-store/`，实际结果见下方记录。
-
-## 本机交接路径
-
-- kos-shell 仓库：`/home/amao/OneDrive/quickshell`
-- 安装器仓库：`/home/amao/OneDrive/KMusic`
-- 安装入口：`/home/amao/OneDrive/KMusic/install.sh`
-- 当前测试是 KMusic 安装器契约单元测试，不是尚未实现的商店下载/安装端到端测试。
-
-在虚拟机上，进入 kos-shell 仓库后运行：
+仅在虚拟机或托管 CI 中运行测试。安装器契约测试位于本仓库 `tests/app-store/`；
+它需要独立的 KMusic 源码，不自动下载，也不等同于商店的下载/安装端到端验收。
+在 NextKDE 源码根目录运行：
 
 ```sh
 KMUSIC_SOURCE_DIR=/path/to/KMusic python3 -m unittest discover -s tests/app-store -p test_kmusic_installer.py
 ```
 
-默认查找与 kos-shell 仓库并列的 KMusic 文件夹；也可用 KMUSIC_SOURCE_DIR 指定实际路径。测试不自动下载 KMusic。
+默认查找与 NextKDE 仓库并列的 KMusic 文件夹；也可显式指定实际路径。
+`run_kmusic_installation.py` 驱动安装生命周期和故障场景，`run-kmusic-container.sh`
+负责容器内执行。`provision-kmusic-ci.sh` 仅为临时 CI 环境安装依赖，不属于分发给用户的安装器。
 
-## 持续集成安装测试矩阵
+KMusic 的 `installer-matrix.yml` 工作流在托管 VM 内运行发行版容器，并固定测试套件提交。
+检查实际工作流、镜像 digest 和上传的 JSONL/日志制品；不要把旧记录或启动工作流当成当前提交验收。
+历史记录可查 [2026-10-22 工作流](https://github.com/NextKde/KMusic/actions/runs/39783294345)
+及其[固定提交中的结果记录](https://github.com/NextKde/NextKde/blob/45d45dc63684125b84a773acb81ba982a75f65c3/docs/app-store/KMusicInstallerTestResults.json)。
+机器生成的测试结果和本机交接信息不再复制到当前源码文档中。
 
-KMusic 仓库 `.github/workflows/installer-matrix.yml` 在 GitHub 托管虚拟机内运行发行版容器，测试源码位于本仓库 `tests/app-store/`，由工作流固定完整提交引用。它不是宿主机验证，也不是三种发行版的完整桌面视觉验收。
-
-| 环境 | 预期验证 |
-|---|---|
-| Arch Linux / x86_64 | 缺依赖失败 + 完整依赖后的真实下载/编译/安装/覆盖升级/卸载 |
-| Ubuntu 26.04 / x86_64 | 同上 |
-| Debian 13 / x86_64 | 同上；成功夹具显式预装官方 Node 22.19，不能把发行版默认 Node 20 当成满足条件 |
-| Ubuntu 24.04 / x86_64 | 缺依赖及系统 Qt 版本过低时统一拒绝安装 |
-
-`provision-kmusic-ci.sh` **仅用于临时测试环境**，由 CI 的 root 安装成功场景所需依赖；实际被测 `install.sh` 以普通用户运行，仍然绝不自动安装依赖。它们不是同一个脚本，也不应把测试环境准备脚本分发为商店安装器。
-
-- 契约单元测试覆盖：支持/不支持平台、缺依赖/旧版本、参数/root/权限/锁错误、首次安装、重复安装、升级、下载/校验/构建/暂存失败、发布阶段回滚、取消、卸载与用户数据保留。
-- 真实安装测试覆盖：实际 Git 固定提交和子模块下载、实际 CMake 编译、安装文件及桌面入口、动态库解析、无界面启动冒烟检查、两不同提交的覆盖升级、重复安装、下载/编译故障注入、锁冲突、目录权限、卸载幂等及非托管桌面入口保护。
-- `results/unit.log` 是模拟契约测试；`missing/summary.json`、`old/summary.json`、`full/summary.json` 是实际调用脚本的结果，不能混为一类。每个调用都有 JSONL、stderr 和安装日志。
-- `container-image.json` 记录实际镜像 ID/digest，便于追溯 Arch 滚动版本和可更新镜像标签。
-- 尚不覆盖 ARM64 实机、断电/SIGKILL 恢复、桌面菜单自动刷新、真实音频输出或登录凭据库；不要依据安装成功推断这些能力通过。
-
-当前结果以工作流及上传的证据为准；增加测试文件或启动工作流不等于通过。
-
-## 2026-10-22 实际验证结果
-
-[最终工作流：四项全部通过](https://github.com/NextKde/KMusic/actions/runs/39783294345)。
-详细机器可读结果及镜像 digest：[KMusicInstallerTestResults.json](KMusicInstallerTestResults.json)。
-
-- 被测 KMusic：`49264b0d45a6f8958e8d8b6eb4e5da1ee3e655d0`。
-- 固定测试套件：`0a7edebf3991a7cf8326eb125b7bf88374a5298c`。
-- 覆盖升级起始版本：`ab37baf98ec76f88b6204ac86ddb8d5d9f0fd03f`。
-
-| 真实环境 | 契约单元测试 | 实际脚本测试 | 结果 |
-|---|---:|---|---|
-| Arch Linux | 19 项 | 缺依赖 3 项；安装生命周期及启动 17 项 | 通过 |
-| Ubuntu 26.04 | 19 项 | 缺依赖 3 项；安装生命周期及启动 17 项 | 通过 |
-| Debian 13 | 19 项 | 缺依赖 3 项；安装生命周期及启动 17 项 | 通过 |
-| Ubuntu 24.04 | 19 项 | 缺依赖 3 项；旧依赖拒绝 3 项 | 通过（预期安装失败） |
-
-Ubuntu 24.04 实测 Qt 6.4.2，正确返回 DEPENDENCY_UNSATISFIED，Qt6Core 的 installed 为 6.4.2、required 为 >=6.8、reason 为 version_too_old，未创建应用目录。这不是 Ubuntu 24.04 成功安装认证。
-
-失败用例涵盖无效版本、缺 Python/依赖、旧依赖、下载/编译错误、锁冲突、权限拒绝、非托管桌面入口冲突；契约测试还注入校验、暂存/发布、取消和卸载失败，验证最终结果与退出码和旧版本保护。首次测试发现 Ubuntu/Debian 成功夹具缺 SVG 独立插件，补齐后通过；同时修正安装器对旧 Qt 错报 missing 的诊断。
-
-启动冒烟测试仅在隔离环境运行 offscreen/software Qt，检查存活和 QML 启动错误，不模拟交互、不截图，不替代桌面、GPU、声音和视觉验收。
+容器中的安装成功或 offscreen 启动不能证明真实音频、凭据库、桌面交互或 GPU 视觉表现。
+ARM64 实机、断电/SIGKILL 恢复、商店端完整安装/卸载流程需要各自的实际验收；
+协议测试和历史工作流不能替代这些验证。

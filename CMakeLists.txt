@@ -328,7 +328,7 @@ if(BUILD_TESTING)
                     ${CMAKE_CURRENT_SOURCE_DIR}/tests/notification-history/run-pane.mjs
                     ${KOS_QUICKSHELL_EXECUTABLE})
             set_tests_properties(kos-shell.notification-pane PROPERTIES
-                LABELS ui TIMEOUT 15
+                LABELS "ui;headless" TIMEOUT 25
                 ENVIRONMENT "QML2_IMPORT_PATH=${CMAKE_BINARY_DIR}/qml;QML_IMPORT_PATH=${CMAKE_BINARY_DIR}/qml")
             add_test(NAME kos-shell.notification-source-icons
                 COMMAND ${KOS_NODE_EXECUTABLE}
@@ -347,7 +347,7 @@ if(BUILD_TESTING)
                     COMMAND ${KOS_NODE_EXECUTABLE}
                         ${CMAKE_CURRENT_SOURCE_DIR}/tests/notification-history/run-production.mjs
                         ${KOS_QUICKSHELL_EXECUTABLE})
-                set_tests_properties(kos-shell.notification-policy-production PROPERTIES LABELS ui TIMEOUT 35)
+                set_tests_properties(kos-shell.notification-policy-production PROPERTIES LABELS "ui;headless" TIMEOUT 60)
             endif()
             add_test(NAME kos-shell.static-work-runtime
                 COMMAND ${KOS_NODE_EXECUTABLE}

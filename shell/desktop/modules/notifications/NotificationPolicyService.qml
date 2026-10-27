@@ -15,11 +15,13 @@ QtObject {
     property string saveError: ""
     property bool doNotDisturbEnabled: false
     property bool bannersEnabled: true
+    // Missing/invalid values in existing profiles stay silent after an upgrade.
+    property bool soundEnabled: false
     property bool historyEnabled: true
     property bool showPreview: true
 
     function setPreference(key, value) {
-        if (!ready || ["doNotDisturbEnabled", "bannersEnabled", "historyEnabled", "showPreview"].indexOf(key) < 0
+        if (!ready || ["doNotDisturbEnabled", "bannersEnabled", "soundEnabled", "historyEnabled", "showPreview"].indexOf(key) < 0
                 || typeof value !== "boolean") return false
         service[key] = value
         saveTimer.restart()
@@ -57,7 +59,7 @@ QtObject {
         if (!ready) return
         JsonConfigStore.writePath(configPath, JSON.stringify({version: 1, sources: sources,
             blockedKeys: blockedKeys, doNotDisturbEnabled: doNotDisturbEnabled,
-            bannersEnabled: bannersEnabled, historyEnabled: historyEnabled,
+            bannersEnabled: bannersEnabled, soundEnabled: soundEnabled, historyEnabled: historyEnabled,
             showPreview: showPreview}, null, 2), function(ok) {
                 service.saveError = ok ? "" : I18n.tr("Failed to save notification settings")
             })
@@ -66,7 +68,7 @@ QtObject {
         if (exists && data) {
             try {
                 const parsed = JSON.parse(data)
-                for (const key of ["doNotDisturbEnabled", "bannersEnabled", "historyEnabled", "showPreview"])
+                for (const key of ["doNotDisturbEnabled", "bannersEnabled", "soundEnabled", "historyEnabled", "showPreview"])
                     if (typeof parsed[key] === "boolean") service[key] = parsed[key]
                 if (Array.isArray(parsed.sources)) {
                     const seen = new Set()

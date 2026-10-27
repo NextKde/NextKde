@@ -1,6 +1,6 @@
 # KOS ListenFree for NextKDE
 
-此分支维护 NextKDE 原生 Linux 版本，在正式安装中替换原 KOS Music。桌面 ID 为 `listenfree`；应用和用户资料保持独立。旧 KOS Music 源码及用户数据暂时保留。ListenFree 原界面、播放逻辑与 Qmmp 引擎保留，更新由 NextKDE 提供。
+此目录维护 NextKDE 的可选 Linux 音乐播放器。默认安装及 `./install apps` 均不包含 ListenFree；只有显式选择安装时才执行旧 KOS Music 迁移。旧播放器源码已移除，标准升级保留已安装文件、用户数据和音频关联。桌面 ID 为 `listenfree`；应用和用户资料保持独立。安装边界见 [应用说明](../README.zh-CN.md)。
 
 构建、安装及依赖说明见 [Linux 构建说明](packaging/linux/README.md)。下方保留 ListenFree 上游说明及原有归属信息。
 
@@ -58,17 +58,6 @@ Windows 10/11 x64 原生音乐播放器，使用 Qt Quick、Qmmp、QuickJS-ng �
 
 发行脚本只收集程序、运行库、使用说明和许可，排除个人数据与用户音源；输出目录必须是尚未生成过的版本目录，也可指定 OutputDirectory。
 
-## 页面样式
-<img width="1599" height="1064" alt="屏幕截图 2026-09-14 223758" src="https://github.com/user-attachments/assets/43368130-ad05-42b8-bece-bd64ffb560d3" />
-<img width="1599" height="1064" alt="屏幕截图 2026-09-14 223742" src="https://github.com/user-attachments/assets/13e8b7aa-8c05-4bf8-8363-b178deaf20e4" />
-
-<img width="1599" height="1064" alt="屏幕截图 2026-09-14 223737" src="https://github.com/user-attachments/assets/b216891c-4633-48a8-be52-014b6e3437f9" />
-
-<img width="1599" height="1064" alt="屏幕截图 2026-09-14 223728" src="https://github.com/user-attachments/assets/f378a956-d530-4ef4-8daf-dcb61616f5d8" />
-<img width="1599" height="1064" alt="屏幕截图 2026-09-14 223717" src="https://github.com/user-attachments/assets/2125e502-2304-4652-b453-5d31210e7b36" />
-<img width="1599" height="1064" alt="屏幕截图 2026-09-14 223642" src="https://github.com/user-attachments/assets/1ed30d86-36f5-4fa5-90b0-905e4089a490" />
-
-
 src/、music_player_desktop/、ui/ 是应用与资源；tests/ 和 tools/ 保留构建引用的验证代码；patches/、scripts/、packaging/ 和 licenses/ 为依赖修改及打包输入。个人文档、开发规划、生成物和测试结果不进入仓库。组件归属与许可见 licenses/THIRD-PARTY-NOTICES.txt。
 
 ## 软件更新与发布
@@ -81,7 +70,7 @@ CMake 从官方 Release 获取已固定 SHA-256 的 WinSparkle x64 包，也可�
 
 发布时把 Setup.exe 和 appcast.xml 上传同一个 GitHub Release，全部校验完成后再标记为最新正式版。预发布不要设为 latest；无需额外上传 SHA 文件。可单独调用 `scripts/windows/new-update-appcast.ps1` 对安装包签名并生成更新信息。
 
-0.3.8 初次发布遗漏 appcast.xml，已于 2026-10-07 补齐并验证线上更新地址返回 HTTP 200。安装程序未改变。`-InstallerOnly` 表示只生成安装程序分发形式；appcast.xml 是应用内更新接口的必需元数据，必须随安装包发布。发布验收还须从 `releases/latest/download/appcast.xml` 实际下载清单，核对版本、安装包地址、大小与签名，不能只检查安装包资产。
+`-InstallerOnly` 表示只生成安装程序分发形式；appcast.xml 是应用内更新接口的必需元数据，必须随安装包发布。发布验收还须从 `releases/latest/download/appcast.xml` 实际下载清单，核对版本、安装包地址、大小与签名，不能只检查安装包资产。
 
 ## 自定义音源兼容验证
 
@@ -92,3 +81,5 @@ python tools/test_sourcehost_contract.py --standalone --host dist/ListenFree-Por
 ```
 
 该契约回归使用本机 HTTP 测试服务，覆盖字节与加密、URL、HTTP 错误正文、异步初始化、取消及脚本异常。真实音源可用性还依赖其服务、曲目与权限。
+
+旧版发布记录及上游界面截图见 [ListenFree 上游](https://github.com/Tabris-Ayanami/ListenFree-desktop)。本目录只保留当前 0.3.8 打包所用的更新说明；历史版本应从对应 Git 修订构建。

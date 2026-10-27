@@ -41,8 +41,8 @@ remain unported; no claim of pixel-identical output to the original demo is made
 
 ## Verification
 
-After user authorization to override the repository's manual-only restriction,
-real Quickshell windows rendered screenshots and timing logs. The GPU state
-advances; animated frames differ in RGB and paused frames are identical. Logs
-contained no new QML/shader errors. Timings are Qt render-thread wall times, not
-a standalone GPU benchmark. Results: `.build/wallpaper-review/`.
+Run rendering checks only in a VM graphical session. Compare animated and paused
+frames and inspect QML/shader logs; retain captures and timings outside the source
+tree. Qt render-thread wall times are not standalone GPU benchmarks. Follow the
+[current wallpaper guide](../../../../docs/WallpaperArchitecture.md) and
+[development policy](../../../../docs/Development.md).

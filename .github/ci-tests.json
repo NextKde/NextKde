@@ -78,6 +78,8 @@
     "kos-calculator.engine",
     "kos-shell.dock-selection-highlight",
     "kos-shell.desktop-lyrics",
+    "kos-shell.notification-policy-production",
+    "kos-shell.notification-pane",
     "kos-ui.interaction-controls",
     "kos-ui.shared-motion",
     "kos-ui.kinetic-scroll",

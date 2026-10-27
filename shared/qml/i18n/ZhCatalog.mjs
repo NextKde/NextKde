@@ -1247,6 +1247,8 @@ export const catalog = {
     "The notification center shows the latest three message cards; expand it to browse everything. Long messages expand on click.": "通知中心默认显示最近三张消息卡片，展开后可浏览全部。长消息可点击展开。",
     "Pauses notification banners; messages still land in history": "暂停通知横幅，仍按历史设置保存消息",
     "Show notification banners": "显示通知横幅",
+    "Play notification sounds": "播放通知提示音",
+    "Play the built-in tone for new notifications. Off by default; Do Not Disturb silences it.": "新通知到达时播放内置提示音。默认关闭，勿扰模式下保持静音。",
     "Show a popup banner when a new message arrives": "新消息到达时显示弹出通知",
     "Keep notification history": "保留通知历史",
     "Keeps the latest 50 messages of this session; turning it off stops saving new ones": "保存本次会话最近 50 条；关闭后停止保存新消息",

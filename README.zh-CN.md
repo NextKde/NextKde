@@ -7,6 +7,11 @@
 
 ![NextKDE 桌面](docs/images/desktop.png)
 
+NextKDE 的桌面体验也延伸到一套持续完善的配套应用：日历、天气、计算器和待办可按需安装，
+[KMusic](https://github.com/NextKde/KMusic) 则带来音乐体验。邮件和文件管理器也在后续规划中。
+
+![NextKDE 的全家桶：细边框展示的日历、KMusic 与天气](docs/images/apps-showcase.zh-CN.webp)
+
 ## 开始使用
 
 使用 Plasma 6 Wayland、KWin 6.6+、Quickshell 0.3.x、Qt 6.6+ 和匹配开发依赖。

@@ -23,6 +23,13 @@ Liquid glass, a floating dock, and a workspace you can make your own.</p>
 
 <p align="center"><sub>The NextKDE desktop · macOS appearance · Theme settings</sub></p>
 
+NextKDE's desktop experience extends to a growing family of companion apps:
+Calendar, Weather, Calculator, and Todo are available as optional apps, while
+[KMusic](https://github.com/NextKde/KMusic) brings music into the mix. Mail and
+File Manager are planned for the future.
+
+![The NextKDE App Suite: Calendar, KMusic, and Weather in slim tablet frames](docs/images/apps-showcase.webp)
+
 ---
 
 ## The desktop

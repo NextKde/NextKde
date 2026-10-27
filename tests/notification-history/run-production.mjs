@@ -1,11 +1,11 @@
 import assert from "node:assert/strict";
-import { copyFileSync, mkdtempSync, rmSync, writeFileSync, mkdirSync } from "node:fs";
+import { copyFileSync, mkdtempSync, rmSync, writeFileSync, mkdirSync, readdirSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { spawn, spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 if (!process.argv.includes("--session")) {
-    const result = spawnSync("dbus-run-session", [process.execPath, fileURLToPath(import.meta.url), "--session", process.argv[2] || "quickshell"], {encoding: "utf8", timeout: 30000});
+    const result = spawnSync("dbus-run-session", [process.execPath, fileURLToPath(import.meta.url), "--session", process.argv[2] || "quickshell"], {encoding: "utf8", timeout: 55000});
     assert.equal(result.status, 0, (result.stdout || "") + (result.stderr || ""));
     console.log(result.stdout.trim());
 } else {
@@ -36,8 +36,9 @@ if (!process.argv.includes("--session")) {
         return result.stdout.trim();
     }
     function stats() { return JSON.parse(ipc("stats")); }
-    function notify(app, id, summary, body, desktop = "") {
-        const result = spawnSync("gdbus", ["call", "--session", "--dest", "org.freedesktop.Notifications", "--object-path", "/org/freedesktop/Notifications", "--method", "org.freedesktop.Notifications.Notify", "--", app, String(id), "", summary, body, "[]", desktop ? `{'desktop-entry': <'${desktop}'>}` : "{}", "-1"], {encoding: "utf8"});
+    function notify(app, id, summary, body, desktop = "", extraHints = "") {
+        const hints = [desktop ? `'desktop-entry': <'${desktop}'>` : "", extraHints].filter(Boolean).join(", ");
+        const result = spawnSync("gdbus", ["call", "--session", "--dest", "org.freedesktop.Notifications", "--object-path", "/org/freedesktop/Notifications", "--method", "org.freedesktop.Notifications.Notify", "--", app, String(id), "", summary, body, "[]", `{${hints}}`, "-1"], {encoding: "utf8"});
         assert.equal(result.status, 0, result.stderr + output);
         return Number(result.stdout.match(/uint32 (\d+)/)[1]);
     }
@@ -61,15 +62,32 @@ if (!process.argv.includes("--session")) {
         const common = fixture("common", [
             ["AppNotificationService", "@../../shell/desktop/modules/common/AppNotificationService.qml", true],
             ["AppPresentationService", 'pragma Singleton\nimport QtQuick\nQtObject { function normalize(value) { return String(value || "").toLowerCase() } }', true],
-            ["ScreenLifecycle", 'pragma Singleton\nimport QtQuick\nQtObject { property var activeScreen: null; property bool outputAvailable: false; property int testBannerCount: 0 }', true]]);
+            ["ScreenLifecycle", 'pragma Singleton\nimport QtQuick\nQtObject { property var activeScreen: null; property bool outputAvailable: false; property int testBannerCount: 0; property int testSoundCount: 0 }', true]]);
         copyFileSync(new URL("../../shell/desktop/modules/common/NotificationCountMatch.mjs", import.meta.url), join(common, "NotificationCountMatch.mjs"));
         fixture("bar", [["ControlCenterService", 'pragma Singleton\nimport QtQuick\nQtObject { property bool doNotDisturbEnabled: false }', true]]);
         const notificationDir = fixture("notifications", [
-            ...["NotificationCenter", "NotificationGroupService", "NotificationHistoryObserver", "NotificationHistoryService", "NotificationPolicyService"].map(name => [name, `@../../shell/desktop/modules/notifications/${name}.qml`, name.endsWith("Service") && name !== "NotificationGroupService"]),
+            ...["NotificationCenter", "NotificationGroupService", "NotificationHistoryObserver", "NotificationHistoryService", "NotificationPolicyService", "NotificationSoundService"].map(name => [name, `@../../shell/desktop/modules/notifications/${name}.qml`, name.endsWith("Service") && name !== "NotificationGroupService"]),
+            ["NotificationAudioPlayer", `import QtQuick
+import qs.desktop.modules.common
+QtObject {
+    id: audio
+    property bool busy: false
+    property Timer end: Timer { interval: 1500; onTriggered: audio.cancel() }
+    function play() {
+        if (busy) return false
+        busy = true
+        ScreenLifecycle.testSoundCount++
+        end.restart()
+        return true
+    }
+    function cancel() { busy = false; end.stop() }
+}`, false],
             ["NotificationWindow", 'import QtQuick\nimport qs.desktop.modules.common\nQtObject { property var screen; property bool visible; property var groupService; property Timer timer: Timer { running: true; repeat: true; interval: 30; onTriggered: ScreenLifecycle.testBannerCount = groupService.groupsModel.count } }', false]]);
         copyFileSync(new URL("../../shell/desktop/modules/notifications/NotificationIdentity.mjs", import.meta.url),
             join(notificationDir, "NotificationIdentity.mjs"));
         await start();
+        assert.equal(stats().soundEnabled, false, "new profiles default to silent");
+        assert.equal(stats().soundBackendLoaded, false, "disabled profiles do not load multimedia");
         const id = notify("Same Name", 0, "first", "old", "org.test.one");
         await waitFor(() => stats().rows.length === 1 && stats().banners === 1);
         const key = stats().rows[0].key;
@@ -77,6 +95,7 @@ if (!process.argv.includes("--session")) {
         await waitFor(() => stats().rows[0].body === "new");
         assert.equal(stats().rows.length, 1);
         assert.equal(stats().rows[0].key, key);
+        assert.equal(stats().soundPlays, 0);
         ipc("dnd", true);
         const silentId = notify("DND", 0, "silent", "history", "org.test.dnd");
         await waitFor(() => stats().rows.length === 2 && stats().banners === 0);
@@ -121,10 +140,14 @@ if (!process.argv.includes("--session")) {
         assert.equal(stats().rows.length, historyCount);
         ipc("preference", "showPreview", false);
         ipc("preference", "doNotDisturbEnabled", true);
+        // Explicit opt-in is retained for the restart below; startup replay stays silent.
+        ipc("preference", "soundEnabled", true);
         ipc("preference", "unknown", false);
         await sleep(350);
         await stop();
         await start();
+        assert.equal(stats().soundEnabled, true, "explicit sound opt-in persists across restart");
+        ipc("preference", "soundEnabled", false);
         assert.equal(stats().prefs.bannersEnabled, false);
         assert.equal(stats().prefs.historyEnabled, false);
         assert.equal(stats().prefs.showPreview, false);
@@ -151,8 +174,61 @@ if (!process.argv.includes("--session")) {
         assert.deepEqual(stats().unread, beforeFallback.unread);
         notify("Fallback", 0, "desktop source", "allowed", "org.test.fallback");
         await waitFor(() => stats().rows.length === beforeFallback.rows.length + 1);
+        // Exercise sound on real D-Bus arrivals with a counted backend, without
+        // requiring an audio device or QtMultimedia on the CI worker.
+        await sleep(2200);
+        ipc("preference", "soundEnabled", true);
+        await waitFor(() => stats().soundBackendLoaded);
+        notify("Silent", 0, "client plays sound", "", "org.test.silent", "'suppress-sound': <true>");
+        await sleep(100);
+        assert.equal(stats().soundPlays, 0, "respect the client's suppress-sound hint");
+        const soundId = notify("Tone", 0, "arrival", "", "org.test.tone");
+        await waitFor(() => stats().soundPlays === 1);
+        assert(stats().soundPlaying);
+        ipc("preference", "doNotDisturbEnabled", true);
+        await waitFor(() => !stats().soundPlaying);
+        notify("Tone", 0, "muted", "", "org.test.tone");
+        await sleep(650);
+        assert.equal(stats().soundPlays, 1);
+        ipc("preference", "doNotDisturbEnabled", false);
+        notify("Tone", soundId, "replacement", "changed", "org.test.tone");
+        await sleep(100);
+        assert.equal(stats().soundPlays, 1, "replacement updates do not replay a tone");
+        notify("Tone", 0, "arrival", "", "org.test.tone");
+        await waitFor(() => stats().soundPlays === 2);
+        notify("Tone", 0, "burst", "", "org.test.tone");
+        await sleep(100);
+        assert.equal(stats().soundPlays, 2, "coalesce bursts without queuing stale sounds");
+        ipc("preference", "soundEnabled", false);
+        await waitFor(() => !stats().soundBackendLoaded);
         assert.doesNotMatch(output, /TypeError|ReferenceError|Failed to load/);
-        console.log("Production NotificationCenter: normal, DND, identity isolation, block/replacement, unblock and persisted sources/policy passed");
+        await sleep(350);
+        await stop();
+        const stateRoot = join(directory, "state");
+        const relative = readdirSync(stateRoot, {recursive: true}).find(path => path.endsWith("notifications/config.json"));
+        assert(relative, "notification policy was persisted");
+        const policyFile = join(stateRoot, relative);
+        const legacyPolicy = JSON.parse(readFileSync(policyFile, "utf8"));
+        delete legacyPolicy.soundEnabled;
+        writeFileSync(policyFile, JSON.stringify(legacyPolicy));
+        await start();
+        assert.equal(stats().soundEnabled, false, "upgrading a profile without the new key stays silent");
+        assert.equal(stats().soundBackendLoaded, false);
+        await stop();
+        legacyPolicy.soundEnabled = "true";
+        writeFileSync(policyFile, JSON.stringify(legacyPolicy));
+        // A missing optional multimedia module must not break the notification
+        // server, either while sound is off or after an explicit opt-in.
+        writeFileSync(join(notificationDir, "NotificationAudioPlayer.qml"), "import QtQuick\nimport MissingOptionalAudioBackend 1.0\nQtObject {}\n");
+        await start();
+        assert.equal(stats().soundEnabled, false, "invalid stored values cannot enable sound");
+        assert.equal(stats().soundBackendLoaded, false);
+        ipc("preference", "soundEnabled", true);
+        await waitFor(() => stats().soundBackendStatus === 3);
+        notify("Missing audio", 0, "still delivered", "", "org.test.missing");
+        await waitFor(() => stats().rows.some(row => row.summary === "still delivered"));
+        assert(stats().ready, "multimedia failure does not break notifications");
+        console.log("Production NotificationCenter: normal, DND, identity isolation, block/replacement, unblock, persisted policy and global notification sound controls passed");
     } finally {
         shell?.kill("SIGTERM");
         rmSync(directory, {recursive: true, force: true});
