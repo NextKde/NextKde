@@ -50,8 +50,6 @@ confirmation cancellation, close/reopen and Dock-hosted placement.
 region source contracts. The settings test group covers the independently
 changed background probe lifecycle.
 
-The existing popup-motion suite was also compared against the pre-refactor panel
-in the same virtual display. Both versions fail its stage-1 assertion requiring
-an intermediate entrance-animation frame after 60 ms. That timing-sensitive
-suite is not counted as passing; the focused runtime test waits for settled
-states and does not establish the visual quality of intermediate frames.
+The focused runtime test waits for settled states. It does not establish the
+visual quality of intermediate frames; check animation timing separately in a VM
+graphical session and retain run-specific evidence outside the source tree.

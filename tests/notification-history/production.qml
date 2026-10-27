@@ -21,6 +21,11 @@ Scope {
             return JSON.stringify({ready: NotificationPolicyService.ready, rows: rows,
                 sources: NotificationPolicyService.sources, blocked: NotificationPolicyService.blockedKeys,
                 prefs: {bannersEnabled: NotificationPolicyService.bannersEnabled, historyEnabled: NotificationPolicyService.historyEnabled, showPreview: NotificationPolicyService.showPreview, doNotDisturbEnabled: NotificationPolicyService.doNotDisturbEnabled},
+                soundEnabled: NotificationPolicyService.soundEnabled,
+                soundBackendLoaded: NotificationSoundService.backend.item !== null,
+                soundBackendStatus: NotificationSoundService.backend.status,
+                soundPlaying: NotificationSoundService.backend.item ? NotificationSoundService.backend.item.busy : false,
+                soundPlays: ScreenLifecycle.testSoundCount,
                 unread: AppNotificationService.unreadGroups,
                 banners: ScreenLifecycle.testBannerCount, dnd: ControlCenterService.doNotDisturbEnabled})
         }

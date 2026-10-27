@@ -57,6 +57,7 @@ ColumnLayout {
                 model: [
                     {key: "doNotDisturbEnabled", title: I18n.tr("Do Not Disturb"), detail: I18n.tr("Pauses notification banners; messages still land in history")},
                     {key: "bannersEnabled", title: I18n.tr("Show notification banners"), detail: I18n.tr("Show a popup banner when a new message arrives")},
+                    {key: "soundEnabled", title: I18n.tr("Play notification sounds"), detail: I18n.tr("Play the built-in tone for new notifications. Off by default; Do Not Disturb silences it.")},
                     {key: "historyEnabled", title: I18n.tr("Keep notification history"), detail: I18n.tr("Keeps the latest 50 messages of this session; turning it off stops saving new ones")},
                     {key: "showPreview", title: I18n.tr("Show message previews"), detail: I18n.tr("Hides titles and bodies in the notification center and banners when off")},
                     {key: "showNotificationBadges", title: I18n.tr("Show notification badges"), detail: I18n.tr("Shows counts and alert dots on Dock app icons")}
@@ -84,7 +85,7 @@ ColumnLayout {
                         Accessible.name: modelData.title
                         onToggled: checked => page.setPreference(modelData.key, checked)
                     }
-                    Rectangle { visible: index < 4; anchors { left: parent.left; right: parent.right; bottom: parent.bottom; leftMargin: 18 }
+                    Rectangle { visible: index < 5; anchors { left: parent.left; right: parent.right; bottom: parent.bottom; leftMargin: 18 }
                     height: 1; color: page.theme.separator }
                 }
             }
