@@ -1266,19 +1266,32 @@ KosApplicationWindow {
             resolutionScale: 1
         }
 
-        // Navigation action stays reachable when the sidebar is collapsed.
-        // Match Weather's expanded top inset, at the requested left corner.
-        ToolbarButton {
-            id: sidebarToggleButton
-            objectName: "toolbarSidebarToggle"
+        // Match Weather's sidebar toggle placement in both states.
+        Item {
+            id: sidebarToggleHost
             anchors.left: parent.left
-            anchors.leftMargin: root.design.toolbarInsetLeft
             anchors.top: parent.top
-            anchors.topMargin: 10
+            anchors.margins: root.sidebarExpanded ? 0 : 10
+            width: root.sidebarExpanded ? root.design.sidebarWidth : AppTheme.controlHeight
+            height: root.sidebarExpanded ? 46 : 44
             z: 10
-            iconName: "panel"
-            hint: root.sidebarExpanded ? qsTr("Hide sidebar") : qsTr("Show sidebar")
-            onClicked: root.sidebarExpanded = !root.sidebarExpanded
+
+            ToolbarButton {
+                id: sidebarToggleButton
+                objectName: "toolbarSidebarToggle"
+                anchors.right: parent.right
+                anchors.rightMargin: root.sidebarExpanded ? 12 : 0
+                anchors.top: parent.top
+                anchors.topMargin: root.sidebarExpanded ? 10 : (44 - AppTheme.controlHeight) / 2
+                implicitWidth: root.sidebarExpanded ? root.design.toolbarButtonSize : AppTheme.controlHeight
+                implicitHeight: implicitWidth
+                contentItem: KosSidebarGlyph {
+                    glyphColor: sidebarToggleButton.iconColor
+                    paneColor: sidebarToggleButton.iconColor
+                }
+                hint: root.sidebarExpanded ? qsTr("Hide sidebar") : qsTr("Show sidebar")
+                onClicked: root.sidebarExpanded = !root.sidebarExpanded
+            }
         }
 
         // Main-pane actions: add at the leading edge, view selector centred,
@@ -1302,7 +1315,7 @@ KosApplicationWindow {
                 id: addButton
                 objectName: "toolbarAdd"
                 x: Math.max(toolbar.mainLeft + root.design.toolbarInsetLeft,
-                            sidebarToggleButton.x + sidebarToggleButton.width + root.design.toolbarGap)
+                            sidebarToggleHost.x + sidebarToggleButton.x + sidebarToggleButton.width + root.design.toolbarGap)
                 anchors.verticalCenter: parent.verticalCenter
                 iconName: "plus"
                 hint: qsTr("Add event")

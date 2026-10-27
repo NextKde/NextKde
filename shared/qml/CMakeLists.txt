@@ -17,6 +17,7 @@ qt_add_qml_module(kos_ui
         foundation/AppTheme.qml
         foundation/KosSidebar.qml
         foundation/KosSidebarToggle.qml
+        foundation/KosSidebarGlyph.qml
         foundation/KosCheckBox.qml
         foundation/KosComboBox.qml
         foundation/KosTextArea.qml
