@@ -156,6 +156,16 @@ expanded settings and applications, and better keyboard navigation and accessibi
 
 ---
 
+## Contributors
+
+Thank you to everyone who contributes to NextKDE!
+
+<a href="https://github.com/NextKde/NextKde/graphs/contributors">
+  <img src="https://contrib.rocks/image?repo=NextKde/NextKde&amp;max=1000" alt="NextKDE contributor avatars" />
+</a>
+
+Automatically generated from GitHub contributions with [contrib.rocks](https://contrib.rocks).
+
 ## License
 
 See [LICENSE](LICENSE) for the project license. The bundled Glass effect has

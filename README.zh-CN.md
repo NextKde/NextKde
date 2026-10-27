@@ -65,6 +65,16 @@ Shell 负责呈现，C++ `kos-platform` 负责桌面接入，Go `kos-data-servic
 
 后续方向包括分屏布局、多屏组件、设置和应用扩展、键盘导航及无障碍改进；不代表当前已实现。
 
+## 贡献者
+
+感谢每一位为 NextKDE 作出贡献的朋友！
+
+<a href="https://github.com/NextKde/NextKde/graphs/contributors">
+  <img src="https://contrib.rocks/image?repo=NextKde/NextKde&amp;max=1000" alt="NextKDE 贡献者头像墙" />
+</a>
+
+由 [contrib.rocks](https://contrib.rocks) 根据 GitHub 提交贡献记录自动生成。
+
 ## 许可
 
 见 [LICENSE](LICENSE)，Glass 特效另有[许可](kwin/glass-effect/LICENSE)。
