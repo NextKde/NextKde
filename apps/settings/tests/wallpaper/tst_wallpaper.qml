@@ -60,14 +60,18 @@ TestCase {
         property var gradientRequested: []
         property var optionsRequested: ({})
         property string lastError: ""
+        property var importedImages: []
+        property int folderResult: 0
         signal wallpaperSnapshotChanged(var state)
         signal wallpaperModelsChecked(bool depthReady, bool foregroundReady)
+        signal galleryImportProgress(int imported)
+        signal galleryImportFinished(int imported)
         function wallpaperCatalog() { return [] }
         function chooseWallpaperTheme(id) { themeRequested = id }
         function updateWallpaperThemeEconomical(value) { themeEconomicalRequested = value }
-        function galleryImages() { return [] }
+        function galleryImages() { return importedImages }
         function importGalleryImage(path) {}
-        function importGalleryFolder(path) {}
+        function importGalleryFolder(path) { return folderResult }
         function deleteGalleryImage(path) { return true }
         function wallpaperSnapshot() {}
         function inspectWallpaperModels() {}
@@ -96,6 +100,38 @@ TestCase {
         function updateWallpaperFitMode(mode) { fitRequested = mode }
         function updateWallpaperTransition(style) { transitionRequested = style }
         function updateWallpaperTakeoverEnabled(enabled) {}
+    }
+
+    function test_folderImportRefreshesAfterCompletion() {
+        const page = createTemporaryObject(pageComponent, this)
+        verify(page !== null)
+        page.bridge = bridgeMock
+        tryCompare(page, "bridgeCompatible", true)
+        try {
+            page.errorText = "previous import failed"
+            page.importGalleryFromFolder("file:///tmp/wallpapers")
+            compare(page.importingFolder, true)
+            compare(page.errorText, "")
+            compare(page.galleryImages.length, 0)
+            bridgeMock.importedImages = ["/tmp/gallery/first.png", "/tmp/gallery/second.png"]
+            bridgeMock.galleryImportFinished(2)
+            compare(page.importingFolder, false)
+            compare(page.galleryImages.length, 2)
+
+            bridgeMock.folderResult = -2
+            page.importGalleryFromFolder("file:///tmp/other")
+            compare(page.importingFolder, true)
+            bridgeMock.galleryImportFinished(0)
+            compare(page.importingFolder, false)
+            compare(page.errorText, I18n.tr("No supported images in that folder."))
+
+            bridgeMock.folderResult = -1
+            page.importGalleryFromFolder("file:///tmp/missing")
+            compare(page.importingFolder, false)
+        } finally {
+            bridgeMock.importedImages = []
+            bridgeMock.folderResult = 0
+        }
     }
 
     function test_previewActionUsesCompatibleBridge() {

@@ -15,6 +15,7 @@
 #include <QThread>
 #include <QTimer>
 #include <QUrl>
+#include <array>
 #include <atomic>
 
 namespace {
@@ -289,6 +290,103 @@ private slots:
         QVERIFY(!library.deleteGalleryImage(source));
         QVERIFY(QFile::exists(source));
         QCOMPARE(errors.count(), 1);
+    }
+
+    void folderImportCompletesOnWorkerAndCanBeRepeated()
+    {
+        QTemporaryDir directory;
+        const QString folder = directory.filePath(QString::fromUtf8("壁纸 collection"));
+        QVERIFY(QDir().mkpath(folder));
+        QImage image(24, 24, QImage::Format_RGB32);
+        image.fill(Qt::yellow);
+        QVERIFY(image.save(folder + "/first.PNG"));
+        image.fill(Qt::cyan);
+        QVERIFY(image.save(folder + "/second.png"));
+        WallpaperLibrary library;
+        const qsizetype previousCount = library.galleryImages().size();
+        QSignalSpy finished(&library, &WallpaperLibrary::galleryImportFinished);
+        QSignalSpy progress(&library, &WallpaperLibrary::galleryImportProgress);
+        QThread* owner = QThread::currentThread();
+        std::atomic_bool usedWorker = false;
+        connect(&library, &WallpaperLibrary::galleryImportProgress, &library,
+            [&] { usedWorker = QThread::currentThread() != owner; }, Qt::DirectConnection);
+        const QString url = QUrl::fromLocalFile(folder).toString();
+        QCOMPARE(library.importGalleryFolder(url), 0);
+        QCOMPARE(library.importGalleryFolder(url), -2);
+        QTRY_COMPARE_WITH_TIMEOUT(finished.count(), 1, 1000);
+        QCOMPARE(finished.at(0).at(0).toInt(), 2);
+        QCOMPARE(progress.count(), 2);
+        QVERIFY(usedWorker);
+        QCOMPARE(library.galleryImages().size(), previousCount + 2);
+
+        // Completion must release the busy state before callers request another import.
+        QCOMPARE(library.importGalleryFolder(url), 0);
+        QTRY_COMPARE_WITH_TIMEOUT(finished.count(), 2, 1000);
+        QCOMPARE(finished.at(1).at(0).toInt(), 2);
+        QCOMPARE(library.galleryImages().size(), previousCount + 2);
+        QVERIFY(QDir(directory.path()).mkdir("empty"));
+        QCOMPARE(library.importGalleryFolder(directory.filePath("empty")), 0);
+        QTRY_COMPARE_WITH_TIMEOUT(finished.count(), 3, 1000);
+        QCOMPARE(finished.at(2).at(0).toInt(), 0);
+    }
+
+    void concurrentImportsPreserveDeduplicationAndNameCollisions_data()
+    {
+        QTest::addColumn<bool>("sameContent");
+        QTest::newRow("same-content") << true;
+        QTest::newRow("same-name-jpeg") << false;
+    }
+
+    void concurrentImportsPreserveDeduplicationAndNameCollisions()
+    {
+        QFETCH(bool, sameContent);
+        QTemporaryDir directory;
+        constexpr int count = 8;
+        std::array<QString, count> sources;
+        std::array<QString, count> imported;
+        std::array<QThread*, count - 1> workers;
+        for (int i = 0; i < count; ++i) {
+            const QString folder = directory.filePath(QString::number(i));
+            QVERIFY(QDir().mkpath(folder));
+            sources[i] = folder + (sameContent ? QString("/concurrent-%1.png").arg(i)
+                                              : QString("/concurrent.jpg"));
+            QImage image(512, 512, QImage::Format_RGB32);
+            image.fill(sameContent ? QColor(Qt::magenta) : QColor(30 + i * 20, 60, 150));
+            QVERIFY(image.save(sources[i]));
+        }
+        WallpaperLibrary library;
+        const qsizetype previousCount = library.galleryImages().size();
+        QSemaphore ready;
+        QSemaphore start;
+        for (int i = 0; i < count - 1; ++i) {
+            workers[i] = QThread::create([&, i] {
+                ready.release();
+                start.acquire();
+                imported[i] = library.importGalleryImage(sources[i]);
+            });
+            workers[i]->start();
+        }
+        const bool synchronized = ready.tryAcquire(count - 1, 2000);
+        start.release(count - 1);
+        // The UI-thread call shares the backend with the folder workers.
+        imported[count - 1] = library.importGalleryImage(sources[count - 1]);
+        for (QThread* worker : workers) {
+            worker->wait();
+            delete worker;
+        }
+        QVERIFY(synchronized);
+        QSet<QString> paths;
+        for (int i = 0; i < count; ++i) {
+            QVERIFY(!imported[i].isEmpty());
+            paths.insert(imported[i]);
+            const QColor actual = QImage(imported[i]).pixelColor(256, 256);
+            const QColor expected = QImage(sources[i]).pixelColor(256, 256);
+            QVERIFY(qAbs(actual.red() - expected.red()) < 8);
+            QVERIFY(qAbs(actual.green() - expected.green()) < 8);
+            QVERIFY(qAbs(actual.blue() - expected.blue()) < 8);
+        }
+        QCOMPARE(paths.size(), sameContent ? 1 : count);
+        QCOMPARE(library.galleryImages().size(), previousCount + paths.size());
     }
 
     void thumbnailCacheIsAsynchronousAndBakesRoundedAlpha()

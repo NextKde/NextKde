@@ -156,6 +156,8 @@ signals:
     void systemAppearanceApplied(bool accepted);
     // 后台缩略图生成完毕;页面收到后重新求值瓦片缩略图绑定,下次直接命中缓存。
     void wallpaperThumbnailChanged();
+    void galleryImportProgress(int imported);
+    void galleryImportFinished(int imported);
     void fgSchedSnapshotChanged(const QVariantMap& snapshot);
     void fgSchedRunningAppsChanged(const QVariantList& apps);
     void fgSchedMemStatusChanged(const QVariantMap& status);

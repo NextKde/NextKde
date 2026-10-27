@@ -359,10 +359,12 @@ ColumnLayout {
         // -2 = an import is already running (its completion refreshes too);
         // -1 = the folder does not exist (errorOccurred already reported).
         const started = bridge.importGalleryFolder(folder)
-        if (started === 0)
+        if (started === 0 || started === -2) {
             importingFolder = true
-        else
+            errorText = ""
+        } else {
             refreshGallery()
+        }
     }
 
     // Folder copies hash, decode and write off the GUI thread; refresh on
