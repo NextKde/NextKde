@@ -48,19 +48,30 @@ installs these four. ListenFree and its audio SDK require an explicit
 `./tools/kosctl install apps --with-listenfree`;
 see the [application installation guide](docs/GettingStarted.md#optional-standalone-applications).
 
-Source selection requires Git and Python 3.9+. Only the latest official release is maintained; see [release policy](docs/Releasing.md).
-Default `update` selects the [latest official Release](https://github.com/SuceV587/NextKde/releases/latest)
-and stops if none is available. To explicitly try development, use `./tools/kosctl update main`
-(or `--version main` for the Debian installer). `./tools/kosctl version` reports
-installed files and source separately. Source selection does not install or restart the desktop.
-
 ## Get started
 
 Use a **KDE Plasma 6 Wayland** session with **KWin 6.6+**, **Quickshell 0.3.x**,
 and **Qt 6.6+**. Installation builds the platform service, Settings, KWin effects,
 and window decoration.
 
-After preparing the dependencies for your distribution:
+### 1. Prepare dependencies
+
+Source selection also requires **Git** and **Python 3.9+**. Follow the guide for
+your distribution before running the installation commands:
+
+| Distribution | Installation guide |
+| :--- | :--- |
+| Arch Linux | [Dependencies and setup](docs/GettingStarted.md#1-install-requirements) |
+| Debian 13 | [Installer and manual setup](docs/GettingStarted.md#debian-13-trixie) |
+| Ubuntu 26.04 | [Packages and setup](docs/GettingStarted.md#ubuntu-2604-resolute) |
+| Fedora 44 | [Packages and setup](docs/GettingStarted.md#fedora-44-community-contributed) |
+| openSUSE Tumbleweed | [zypper packages and setup](docs/GettingStarted.md#opensuse-tumbleweed-community-contributed) |
+| NixOS | [Flake quick start](docs/nixos-quickstart.md) |
+
+### 2. Select a release and install
+
+For NixOS, follow the flake guide above. For the other distributions, once the
+dependencies are ready:
 
 ```sh
 git clone --depth 1 https://github.com/SuceV587/NextKde.git
@@ -71,14 +82,19 @@ cd NextKde
 ./tools/kosctl start
 ```
 
-| Distribution | Installation guide |
-| :--- | :--- |
-| Arch Linux | [Dependencies and setup](docs/GettingStarted.md#1-install-requirements) |
-| Debian 13 | [Installer and manual setup](docs/GettingStarted.md#debian-13-trixie) |
-| Ubuntu 26.04 | [Packages and setup](docs/GettingStarted.md#ubuntu-2604-resolute) |
-| Fedora 44 | [Packages and setup](docs/GettingStarted.md#fedora-44-community-contributed) |
-| openSUSE Tumbleweed | [zypper packages and setup](docs/GettingStarted.md#opensuse-tumbleweed-community-contributed) |
-| NixOS | [Flake quick start](docs/nixos-quickstart.md) |
+`update` selects source, `doctor` checks dependencies, `install` deploys the
+desktop, and `start` starts or restarts its services. Selecting source alone
+does not install or restart the desktop.
+
+### Version selection
+
+By default, `update` selects the [latest official release](https://github.com/SuceV587/NextKde/releases/latest)
+and stops if none is available. Only the latest official release is maintained;
+see the [release policy](docs/Releasing.md).
+
+To try the development branch, use `./tools/kosctl update main`
+(or `--version main` for the Debian installer). `./tools/kosctl version` reports
+installed files and source separately.
 
 Read the [installation guide](docs/GettingStarted.md) for desktop takeover,
 optional lock screen setup, first-login notes, updating, and uninstalling.
