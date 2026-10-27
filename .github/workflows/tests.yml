@@ -137,6 +137,15 @@ jobs:
             --output-log "$GITHUB_WORKSPACE/.build/tests/test-results/tray-color.log" \
             --output-junit "$GITHUB_WORKSPACE/.build/tests/test-results/tray-color.xml"
 
+      - name: Render battery and traffic panels on a private compositor
+        if: ${{ !cancelled() && steps.prepare.outcome == 'success' }}
+        run: |
+          mkdir -p .build/tests/test-results
+          ctest --test-dir .build/tests --output-on-failure --no-tests=error \
+            -R '^kos-ui.status-panels(-opengl)?$' \
+            --output-log "$GITHUB_WORKSPACE/.build/tests/test-results/status-panels.log" \
+            --output-junit "$GITHUB_WORKSPACE/.build/tests/test-results/status-panels.xml"
+
       - name: Run offscreen UI regressions
         if: ${{ !cancelled() && steps.prepare.outcome == 'success' }}
         run: |

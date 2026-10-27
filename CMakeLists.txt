@@ -534,7 +534,7 @@ if(BUILD_TESTING)
         add_test(NAME kos-ui.status-panels
             COMMAND ${KOS_PYTHON_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/status-area/run-panels.py --vulkan)
         add_test(NAME kos-ui.status-panels-opengl
-            COMMAND ${KOS_PYTHON_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/status-area/run-panels.py --opengl)
+            COMMAND ${KOS_PYTHON_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/status-area/run-panels.py --opengl --scale-2)
         set_tests_properties(kos-ui.status-panels kos-ui.status-panels-opengl PROPERTIES
             ENVIRONMENT "QML_IMPORT_PATH=${CMAKE_BINARY_DIR}/qml;QML2_IMPORT_PATH=${CMAKE_BINARY_DIR}/qml"
             LABELS "ui;compositor" TIMEOUT 45 RUN_SERIAL TRUE)
