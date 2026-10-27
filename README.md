@@ -19,9 +19,16 @@ Liquid glass, a floating dock, and a workspace you can make your own.</p>
 
 <p align="center"><code>Plasma 6 / Wayland</code> &nbsp; <code>Quickshell 0.3.x</code> &nbsp; <code>Qt 6</code></p>
 
-![NextKDE Calendar, KMusic, and Weather windows in a layered showcase](docs/images/apps-showcase.webp)
+![NextKDE desktop with the top bar, floating dock, desktop widgets, and appearance settings](docs/images/desktop.png)
 
-<p align="center"><sub>Calendar · <a href="https://github.com/NextKde/KMusic">KMusic</a> · Weather</sub></p>
+<p align="center"><sub>The NextKDE desktop · macOS appearance · Theme settings</sub></p>
+
+NextKDE's desktop experience extends to a growing family of companion apps:
+Calendar, Weather, Calculator, and Todo are available as optional apps, while
+[KMusic](https://github.com/NextKde/KMusic) brings music into the mix. Mail and
+File Manager are planned for the future.
+
+![The NextKDE App Suite: Calendar, KMusic, and Weather in slim tablet frames](docs/images/apps-showcase.webp)
 
 ---
 
@@ -30,8 +37,6 @@ Liquid glass, a floating dock, and a workspace you can make your own.</p>
 NextKDE's **KOS Desktop Shell** brings the bar, dock, launcher, search,
 notifications, and settings together on KDE Plasma 6 Wayland. It works with
 KWin, NetworkManager, PipeWire, BlueZ, and systemd.
-
-![NextKDE desktop with the top bar, floating dock, desktop widgets, and appearance settings](docs/images/desktop.png)
 
 | A workspace at a glance | A desktop in motion | Your choice of appearance |
 | :--- | :--- | :--- |

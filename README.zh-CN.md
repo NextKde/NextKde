@@ -5,11 +5,12 @@
 基于 Quickshell 的 KDE Plasma 桌面，包含顶栏、浮动 Dock、启动器、搜索、通知、设置、桌面文件及组件。
 支持液态玻璃、柔光/磨砂、Material 外观，接入 KWin、NetworkManager、PipeWire、BlueZ、systemd。
 
-![NextKDE 日历、KMusic 与天气窗口叠放展示](docs/images/apps-showcase.webp)
-
-日历 · [KMusic](https://github.com/NextKde/KMusic) · 天气
-
 ![NextKDE 桌面](docs/images/desktop.png)
+
+NextKDE 的桌面体验也延伸到一套持续完善的配套应用：日历、天气、计算器和待办可按需安装，
+[KMusic](https://github.com/NextKde/KMusic) 则带来音乐体验。邮件和文件管理器也在后续规划中。
+
+![NextKDE 的全家桶：细边框展示的日历、KMusic 与天气](docs/images/apps-showcase.zh-CN.webp)
 
 ## 开始使用
 
