@@ -22,6 +22,8 @@ endif()
 qt_standard_project_setup()
 
 set(kos_platform_sources
+    src/daemon/NotificationOrigins.cpp
+    src/daemon/NotificationOrigins.h
     src/daemon/main.cpp
     src/daemon/KWinShortcutConflicts.cpp
     src/daemon/KWinShortcutConflicts.h
@@ -77,6 +79,8 @@ if(BUILD_TESTING)
 endif()
 
 qt_add_executable(kos-platform ${kos_platform_sources})
+qt_add_resources(kos-platform notification-origin
+    PREFIX /kos FILES src/daemon/notification-origin.py)
 set_target_properties(kos-platform PROPERTIES
     INSTALL_RPATH "$ORIGIN/../lib")
 
@@ -154,6 +158,19 @@ if(BUILD_TESTING)
     endif()
     find_program(DBUS_RUN_SESSION_EXECUTABLE dbus-run-session)
     if(DBUS_RUN_SESSION_EXECUTABLE)
+        find_program(KOS_DBUS_PYTHON NAMES python3 PATHS /usr/bin NO_DEFAULT_PATH)
+        if(KOS_DBUS_PYTHON)
+            execute_process(COMMAND ${KOS_DBUS_PYTHON} -c "import dbus, gi"
+                RESULT_VARIABLE KOS_DBUS_PYTHON_RESULT OUTPUT_QUIET ERROR_QUIET)
+            if(KOS_DBUS_PYTHON_RESULT EQUAL 0)
+                add_test(NAME kos-platform.notification-origins
+                    COMMAND ${DBUS_RUN_SESSION_EXECUTABLE} -- ${KOS_DBUS_PYTHON}
+                        ${CMAKE_CURRENT_SOURCE_DIR}/tests/test_notification_origins.py
+                        $<TARGET_FILE:kos-platform>)
+                set_tests_properties(kos-platform.notification-origins PROPERTIES
+                    LABELS platform TIMEOUT 15)
+            endif()
+        endif()
         qt_add_executable(kos-keep-awake-test tests/test_keep_awake.cpp)
         target_link_libraries(kos-keep-awake-test PRIVATE Qt6::Core Qt6::DBus Qt6::Network)
         add_test(NAME kos-platform.keep-awake

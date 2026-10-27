@@ -4,6 +4,7 @@ import Quickshell
 import Quickshell.Io
 QtObject {
     id: client
+    function supports(operation) { return false }
     function request(operation, payload, callback) {
         worker.createObject(client, {operation: operation, payload: payload, callback: callback})
     }

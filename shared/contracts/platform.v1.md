@@ -92,6 +92,19 @@ Current operation groups are:
   escapes are rejected); payloads are capped at 1 MiB. `state.write` commits
   rename. `state.read` returns `{data, exists}` and reports `exists:false`
   with an empty `data` for a missing file)
+- `notification.resolve` (read-only, advertised capability): payload
+  `{appName, summary, body}` contains the exact three strings from a received
+  notification (each at most 16 KiB UTF-8). Returns `{pid}` for the matching
+  sender, or `0` when unavailable. A narrowly filtered D-Bus observer reads
+  only `Notify` calls; it does not own or acknowledge notifications. Metadata
+  uses a bounded, consumable cache; entries expire for lookup after three seconds
+  and periodic cleanup removes expired entries. Lookup
+  tolerates either observer/UI arrival order for up to 200 ms. The optional
+  observer requires Python 3 with dbus-python and PyGObject; without it the
+  Shell retains unscoped application counts and compositor window urgency.
+  A PID identifies a window only when that application has exactly one live
+  window in that process; multiple windows in one process require a window
+  ID hint. No ambiguous source is copied onto every window.
 - `notify` (freedesktop notification; payload `{summary, body?, icon?,
   appName?, urgency?}` with `urgency` one of `low`/`normal`/`critical` and
   `appName` (<=128 chars) the notification's grouping/app label, defaulting

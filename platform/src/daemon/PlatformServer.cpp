@@ -3,6 +3,7 @@
 #include "KeepAwakeLease.h"
 #include "PlatformProcess.h"
 #include "PlatformDbus.h"
+#include "NotificationOrigins.h"
 
 #include <QByteArray>
 #include <QClipboard>
@@ -70,6 +71,7 @@ PlatformServer::PlatformServer(QObject *parent)
     : QObject(parent), m_socketPath(runtimeSocketPath())
 {
     qDBusRegisterMetaType<NmSettings>();
+    m_notificationOrigins = new NotificationOrigins(this);
     // KDED starts the AppMenu registrar only while a menu view exists. Plasma's
     // applet normally owns this queueable marker service; own it here so the
     // Bar can receive menus without running a separate Plasma panel applet.
@@ -508,6 +510,22 @@ void PlatformServer::handleRequest(QLocalSocket *socket, const QJsonObject &requ
         return;
     }
     const QString op = operation(request);
+    if (op == QStringLiteral("notification.resolve")) {
+        const QJsonObject payload = request.value(QStringLiteral("payload")).toObject();
+        for (const auto &key : {QStringLiteral("appName"), QStringLiteral("summary"), QStringLiteral("body")}) {
+            if (!payload.value(key).isString() || payload.value(key).toString().toUtf8().size() > 16384) {
+                respond(socket, request, false, {}, QStringLiteral("invalid-notification"),
+                        QStringLiteral("通知身份字段无效"));
+                return;
+            }
+        }
+        const QPointer<QLocalSocket> peer(socket);
+        m_notificationOrigins->resolve(payload, [this, peer, request](int pid) {
+            if (peer)
+                respond(peer, request, true, {{QStringLiteral("pid"), pid}});
+        });
+        return;
+    }
     if (op.isEmpty()) {
         respond(socket, request, false, {}, QStringLiteral("missing-operation"),
                 QStringLiteral("缺少 operation"), false);
@@ -517,6 +535,7 @@ void PlatformServer::handleRequest(QLocalSocket *socket, const QJsonObject &requ
         respond(socket, request, true, QJsonObject{
             {QStringLiteral("ready"), true},
             {QStringLiteral("capabilities"), QJsonArray{
+                QStringLiteral("notification.resolve"),
                 QStringLiteral("input.clipboard-anchor"),
                 QStringLiteral("wallpaper.plasma.proxy"),
                 QStringLiteral("wallpaper.plasma.restore"),

@@ -206,6 +206,11 @@ QtObject {
             }
         } else {
             // Separate mode (legacy flat list)
+            const appWindowCounts = Object.create(null);
+            for (const record of records) {
+                const appId = record.identity.desktopId;
+                appWindowCounts[appId] = (appWindowCounts[appId] || 0) + 1;
+            }
             for (let i = 0; i < records.length; i++) {
                 const record = records[i];
                 if (!!record.isUrgent && !record.toplevel.fullscreen)
@@ -224,8 +229,9 @@ QtObject {
                     isActivated: !!record.toplevel.activated,
                     isMinimized: !!record.toplevel.minimized,
                     isUrgent: !!record.isUrgent
-                        || TrayAttentionService.needsAttention(
-                            record.identity.desktopId, record.identity.name),
+                        || (appWindowCounts[record.identity.desktopId] === 1
+                            && TrayAttentionService.needsAttention(
+                                record.identity.desktopId, record.identity.name)),
                     isFullscreen: !!record.toplevel.fullscreen,
                     pid: Number(record.pid || 0),
                     isWindowItem: true,
@@ -321,7 +327,9 @@ QtObject {
             const record = WindowService.windowById(WindowService.activeWindowId)
             if (record)
                 AppNotificationService.clearForApp(record.identity.desktopId,
-                    record.identity.name)
+                    record.identity.name,
+                    ConfigService.windowGrouping === "grouped" ? "" : record.windowId,
+                    WindowService.windowsForApp(record.identity.desktopId).length)
         }
     }
 
@@ -429,7 +437,9 @@ QtObject {
         const record = WindowService.windowById(windowId);
         if (record)
             AppNotificationService.clearForApp(record.identity.desktopId,
-                record.identity.name);
+                record.identity.name,
+                ConfigService.windowGrouping === "grouped" ? "" : record.windowId,
+                WindowService.windowsForApp(record.identity.desktopId).length);
         // macOS 语义：dock 点应用 = 整组一起出来（原子 activate-group，
         // 连续单窗 activate 会在 WindowService 的合并槽里互相覆盖）。
         // 兜底：身份解析不出 desktopId 的应用 windowsForApp 会返回空组，

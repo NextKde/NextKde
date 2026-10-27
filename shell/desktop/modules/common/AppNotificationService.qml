@@ -30,9 +30,17 @@ QtObject {
             appId, appName, AppPresentationService.normalize)
     }
 
-    function clearForApp(appId, appName) {
-        return _replace(NotificationCountMatch.clearForApp(unreadGroups,
-            appId, appName, AppPresentationService.normalize))
+    function clearForApp(appId, appName, windowId, appWindowCount) {
+        return _replace(NotificationCountMatch.clearForTask(unreadGroups,
+            appId, appName, windowId || "", appWindowCount || 0,
+            AppPresentationService.normalize))
+    }
+
+    function countForTask(appId, appName, windowId, appWindowCount) {
+        const observedRevision = revision
+        return NotificationCountMatch.countForTask(unreadGroups,
+            appId, appName, windowId, appWindowCount,
+            AppPresentationService.normalize)
     }
 
     function clearGroup(groupKey) {

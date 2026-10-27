@@ -70,7 +70,7 @@ jobs:
             qt6-base qt6-declarative qt6-wayland qt6-tools qt6-translations qt6-5compat \
             extra-cmake-modules wayland plasma-workspace libplasma kpackage \
             kwindowsystem kiconthemes kglobalaccel kio kconfig \
-            go dbus nodejs python opencv onnxruntime-cpu \
+            go dbus nodejs python python-dbus python-gobject opencv onnxruntime-cpu \
             quickshell kwin python-pillow mesa libcap
 
       # Arch gives KWin CAP_SYS_NICE, which Docker's default capability

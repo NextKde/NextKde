@@ -5,6 +5,8 @@
     kdePackages,
     opencv,
     onnxruntime,
+    python3,
+    makeWrapper,
     src,
 }:
 
@@ -23,6 +25,7 @@ stdenv.mkDerivation {
     nativeBuildInputs = [
         cmake
         kdePackages.extra-cmake-modules
+        makeWrapper
     ];
 
     buildInputs = [
@@ -42,6 +45,11 @@ stdenv.mkDerivation {
         "-DBUILD_TESTING=OFF"
     ];
     dontWrapQtApps = true;
+
+    postInstall = ''
+      wrapProgram $out/libexec/kos-platform \
+        --set KOS_NOTIFICATION_PYTHON ${python3.withPackages (ps: [ ps.dbus-python ps.pygobject3 ])}/bin/python3
+    '';
 
     meta = with lib; {
         description = "KOS platform integration daemon (D-Bus bridge for KWin, network, audio, etc.)";

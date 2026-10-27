@@ -89,8 +89,11 @@ Item {
     // icons intentionally leave it false.
     property bool   editMode: false
     property bool   isDragging: false
+    readonly property string notificationWindowId: icon.isWindowItem ? icon.windowId : ""
     readonly property int notificationCount:
-        AppNotificationService.countForApp(icon.appId, icon.displayName)
+        AppNotificationService.countForTask(icon.appId, icon.displayName,
+            icon.notificationWindowId,
+            icon.notificationWindowId ? WindowService.windowsForApp(icon.appId).length : 0)
     // A small neutral marker for persistent shell-control state, currently
     // used by the Trash icon while it contains recoverable items.
     property bool   statusBadge: false

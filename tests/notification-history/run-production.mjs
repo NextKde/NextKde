@@ -59,6 +59,7 @@ if (!process.argv.includes("--session")) {
         fixture("platform", [
             ["PlatformClient", "@PlatformClientFixture.qml", true],
             ["JsonConfigStore", "@../../shell/desktop/modules/platform/JsonConfigStore.qml", true]]);
+        fixture("dock", [["WindowService", 'pragma Singleton\nimport QtQuick\nQtObject { property var records: []; function lastActivatedAtOf(id) { return 0 } }', true]]);
         const common = fixture("common", [
             ["AppNotificationService", "@../../shell/desktop/modules/common/AppNotificationService.qml", true],
             ["AppPresentationService", 'pragma Singleton\nimport QtQuick\nQtObject { function normalize(value) { return String(value || "").toLowerCase() } }', true],

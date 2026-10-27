@@ -716,6 +716,28 @@ Item {
         }
     }
 
+    // Read-only diagnostics for checking notification-to-window routing on the
+    // running desktop, without exposing notification bodies or terminal text.
+    IpcHandler {
+        target: "dock-attention"
+        function snapshot(): string {
+            return JSON.stringify({
+                windows: WindowService.records.map(function(record) {
+                    return {
+                        windowId: record.windowId,
+                        appId: record.identity.desktopId,
+                        pid: record.pid,
+                        urgent: !!record.isUrgent,
+                        count: AppNotificationService.countForTask(
+                            record.identity.desktopId, record.identity.name,
+                            record.windowId,
+                            WindowService.windowsForApp(record.identity.desktopId).length),
+                    }
+                }),
+            })
+        }
+    }
+
     // Language preference endpoint for the standalone Settings app. I18nService
     // owns persistence and applies the value to the shared I18n singleton;
     // every I18n.tr() binding re-evaluates when it changes.

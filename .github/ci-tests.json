@@ -13,6 +13,7 @@
     "kos-weather.client-snapshot",
     "kos-platform.ai-worker-client",
     "kos-platform.keep-awake",
+    "kos-platform.notification-origins",
     "kos-platform.kwin-shortcut-conflict",
     "kos-platform.startup",
     "kos-platform.media-feedback",

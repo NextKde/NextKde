@@ -4,6 +4,9 @@ import Quickshell.Services.Notifications
 import qs.desktop.modules.bar
 import qs.desktop.modules.common
 import qs.desktop.modules.notifications
+import qs.desktop.modules.dock
+import qs.desktop.modules.platform
+import "../common/NotificationCountMatch.mjs" as NotificationCountMatch
 
 // The session D-Bus permits only one org.freedesktop.Notifications owner.
 // When Plasma's daemon owns it, this server stays inactive, so notifications
@@ -24,13 +27,30 @@ Scope {
         notification.tracked = !ControlCenterService.doNotDisturbEnabled && NotificationPolicyService.bannersEnabled
         // Metadata/replacement updates still refresh history, but do not chime.
         if (firstArrival && soundService) soundService.play(notification)
-        AppNotificationService.recordNotification({
+        const snapshot = {
             desktopEntry: notification.desktopEntry || "",
             appName: notification.appName || "",
             summary: notification.summary || "",
             body: notification.body || "",
             hints: notification.hints || ({})
-        })
+        }
+        const receivedAt = Date.now()
+        function recordCount(pid) {
+            snapshot.senderPid = pid
+            snapshot.windowId = NotificationCountMatch.windowForNotification(
+                snapshot, WindowService.records, AppPresentationService.normalize)
+            // An activation while origin lookup was in flight already read it.
+            if (snapshot.windowId && WindowService.lastActivatedAtOf(snapshot.windowId) >= receivedAt)
+                return
+            AppNotificationService.recordNotification(snapshot)
+        }
+        if (PlatformClient.supports("notification.resolve")) {
+            PlatformClient.request("notification.resolve", {
+                appName: snapshot.appName, summary: snapshot.summary, body: snapshot.body
+            }, function(response) { recordCount(response?.ok ? Number(response.result?.pid || 0) : 0) })
+        } else {
+            recordCount(0)
+        }
         if (NotificationPolicyService.historyEnabled) notifGroupService.pushHistory(notification)
     }
     Component {

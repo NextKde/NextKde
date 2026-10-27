@@ -18,6 +18,19 @@ before adding Dock, Alt+Tab, preview, workspace, or app-menu behavior.
 6. Hyprland metadata may be added as an adapter, but must not replace the
    provider-neutral `desktopId` contract.
 
+## Notification badges
+
+Notification badges follow task scope: grouped application icons show the
+application's unread total. `notification.resolve` associates incoming
+notifications with their sender process. An explicit window hint, or a
+unique application window with that PID, scopes its unread count to that
+window. Reading one window clears only its scoped count in separate mode.
+Unscoped application counts are inherited only by a sole window; ambiguous
+sources are never duplicated across siblings. Compositor urgency remains
+an independent attention dot. Application-level tray attention is likewise
+limited to grouped icons or a sole window. `qs ipc -c kos call
+dock-attention snapshot` reports live per-window counts without message text.
+
 ## Pointer magnification
 
 `DockContainer` measures pointer distance from untransformed layout slots in

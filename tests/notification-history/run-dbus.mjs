@@ -19,13 +19,21 @@ if (!process.argv.includes("--session")) {
         const notifications = join(directory, "desktop/modules/notifications");
         const common = join(directory, "desktop/modules/common");
         const bar = join(directory, "desktop/modules/bar");
-        for (const path of [notifications, common, bar]) mkdirSync(path, {recursive: true});
+        const dock = join(directory, "desktop/modules/dock");
+        const platform = join(directory, "desktop/modules/platform");
+        for (const path of [notifications, common, bar, dock, platform]) mkdirSync(path, {recursive: true});
+        writeFileSync(join(dock, "qmldir"), "module qs.desktop.modules.dock\nsingleton WindowService 1.0 WindowService.qml\n");
+        writeFileSync(join(dock, "WindowService.qml"), 'pragma Singleton\nimport QtQuick\nQtObject { property var records: []; function lastActivatedAtOf(id) { return 0 } }');
+        writeFileSync(join(platform, "qmldir"), "module qs.desktop.modules.platform\nsingleton PlatformClient 1.0 PlatformClient.qml\n");
+        writeFileSync(join(platform, "PlatformClient.qml"), 'pragma Singleton\nimport QtQuick\nQtObject { function supports(operation) { return false } }');
+        copyFileSync(new URL("../../shell/desktop/modules/common/NotificationCountMatch.mjs", import.meta.url), join(common, "NotificationCountMatch.mjs"));
         for (const file of ["NotificationCenter.qml", "NotificationHistoryService.qml", "NotificationHistoryObserver.qml"])
             copyFileSync(new URL(`../../shell/desktop/modules/notifications/${file}`, import.meta.url), join(notifications, file));
         copyFileSync(new URL("../../shell/desktop/modules/notifications/NotificationIdentity.mjs", import.meta.url),
             join(notifications, "NotificationIdentity.mjs"));
         writeFileSync(join(notifications, "qmldir"), "module qs.desktop.modules.notifications\nNotificationCenter 1.0 NotificationCenter.qml\nsingleton NotificationHistoryService 1.0 NotificationHistoryService.qml\nNotificationHistoryObserver 1.0 NotificationHistoryObserver.qml\nNotificationGroupService 1.0 NotificationGroupService.qml\nNotificationWindow 1.0 NotificationWindow.qml\nsingleton NotificationPolicyService 1.0 NotificationPolicyService.qml\n");
-        writeFileSync(join(common, "qmldir"), "module qs.desktop.modules.common\nsingleton ScreenLifecycle 1.0 ScreenLifecycle.qml\nsingleton AppNotificationService 1.0 AppNotificationService.qml\n");
+        writeFileSync(join(common, "qmldir"), "module qs.desktop.modules.common\nsingleton ScreenLifecycle 1.0 ScreenLifecycle.qml\nsingleton AppNotificationService 1.0 AppNotificationService.qml\nsingleton AppPresentationService 1.0 AppPresentationService.qml\n");
+        writeFileSync(join(common, "AppPresentationService.qml"), 'pragma Singleton\nimport QtQuick\nQtObject { function normalize(value) { return String(value || "").toLowerCase() } }');
         writeFileSync(join(common, "ScreenLifecycle.qml"), `pragma Singleton
 import QtQuick
 QtObject { property var activeScreen: null; property bool outputAvailable: false }

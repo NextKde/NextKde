@@ -25,6 +25,7 @@
 namespace KosPlatform {
 
 class KeepAwakeLease;
+class NotificationOrigins;
 struct NmConnectRequest;
 
 class PlatformServer final : public QObject {
@@ -58,6 +59,7 @@ private slots:
                                      const QStringList &invalidated);
 
 private:
+    NotificationOrigins *m_notificationOrigins = nullptr;
     void handleRequest(QLocalSocket *socket, const QJsonObject &request);
     void respond(QLocalSocket *socket, const QJsonObject &request,
                  bool ok, const QJsonObject &result = {},
