@@ -206,7 +206,17 @@ reported through the common response envelope.
 ### Status panel operations
 
 - `network.applications` (read): returns `{scope: "user-tcp", sockets: [{id, name, pid, rxBytes, txBytes}]}` from `ss -tinpeOH`. Visible-owner TCP counters are sampled per socket before grouping by process name. Local proxy connections may count the same traffic twice. UDP/QUIC, inaccessible owners, and connections closed between samples are excluded. These totals are independent of interface totals.
-- `power.profiles` (read): returns `{profiles, activeProfile, degraded}` from `powerprofilesctl list`.
+- `power.profiles` (read): returns `{profiles, activeProfile, degraded}`.
+  When `powerprofilesctl` is on `PATH`, the daemon runs `powerprofilesctl list`
+  and parses its text. Otherwise it reads the system D-Bus PowerProfiles
+  service, trying `org.freedesktop.UPower.PowerProfiles` at
+  `/org/freedesktop/UPower/PowerProfiles` and then `net.hadess.PowerProfiles`
+  at `/net/hadess/PowerProfiles`. `Profiles`, `ActiveProfile` and
+  `PerformanceDegraded` are read with `org.freedesktop.DBus.Properties.Get`.
+  Only `power-saver`, `balanced` and `performance` are returned.
+  `PerformanceDegraded` of `no` or an empty string becomes an empty
+  `degraded`. If the helper is missing and neither name answers, the
+  operation fails with `command-unavailable`.
 - `power.battery` (read): takes `{}` and returns `{available, complete, batteries, adapters}`
   from bounded reads of `/sys/class/power_supply/*/uevent` (at most 64 devices,
   16 KiB each). `complete` is false if enumeration is unavailable, exceeds the
@@ -226,12 +236,20 @@ reported through the common response envelope.
   continues using UPower's event-driven charge/state/time/health data. Multiple
   battery capacities are combined in Wh only; pack-specific voltage, current,
   cycle and temperature fields are unavailable for a combined display.
-- `power.profile.set` (write): accepts `{profile: "power-saver" | "balanced" | "performance"}`. System authorization is retained; success is followed by a readback before confirming the selected profile.
+- `power.profile.set` (write): accepts `{profile: "power-saver" | "balanced" | "performance"}`.
+  The same helper-or-D-Bus choice applies. A D-Bus write sets `ActiveProfile`
+  with `org.freedesktop.DBus.Properties.Set` on the service that answered the
+  read. System authorization is retained. A helper or D-Bus failure is
+  `command-failed`. Success is followed by a readback before the client
+  confirms the selected profile.
 
-The optional `ss` and `powerprofilesctl` helpers must be installed for application
-traffic and power-profile operations respectively. Missing helpers report
-unavailable states. Battery telemetry needs neither helper; an unavailable or
-older platform daemon leaves extra metrics as `—` while UPower charge/state,
-available capacity, time and health continue to update. The independent Power
-settings page also uses `powerprofilesctl` and observes system D-Bus profile
-changes; it is available without a battery or running shell.
+The optional `ss` helper must be installed for application traffic. Power
+profiles use `powerprofilesctl` when it is on `PATH`, and the PowerProfiles
+D-Bus API otherwise. Fedora's `tuned-ppd` owns both bus names and does not
+ship the helper, so that installation takes the D-Bus path. Missing both the
+helper and the service reports an unavailable state. Battery telemetry needs
+neither helper; an unavailable or older platform daemon leaves extra metrics
+as `—` while UPower charge/state, available capacity, time and health continue
+to update. The independent Power settings page uses the same helper-or-D-Bus
+choice and observes system D-Bus profile changes on both names; it is
+available without a battery or running shell.

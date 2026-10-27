@@ -29,6 +29,8 @@ qt_add_executable(kos-settings
     src/PowerSettings.cpp
     src/PowerSettings.h
     src/WindowSettings.cpp
+    ../../platform/src/daemon/PlatformDbus.cpp
+    ../../platform/src/daemon/PowerProfilesBus.cpp
 )
 target_include_directories(kos-settings PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/../../services/ai/include)
@@ -86,11 +88,32 @@ if(BUILD_TESTING)
     add_test(NAME kos-settings.backend-modules COMMAND kos-settings-backend-test)
     set_tests_properties(kos-settings.backend-modules PROPERTIES LABELS logic TIMEOUT 20)
 
-    add_executable(kos-power-settings-test tests/power/backend.cpp src/PowerSettings.cpp src/PowerSettings.h)
+    add_executable(kos-power-settings-test
+        tests/power/backend.cpp
+        src/PowerSettings.cpp
+        src/PowerSettings.h
+        ../../platform/src/daemon/PlatformDbus.cpp
+        ../../platform/src/daemon/PowerProfilesBus.cpp)
     target_include_directories(kos-power-settings-test PRIVATE src)
     target_link_libraries(kos-power-settings-test PRIVATE Qt6::Core Qt6::DBus)
     add_test(NAME kos-settings.power-config COMMAND kos-power-settings-test)
     set_tests_properties(kos-settings.power-config PROPERTIES LABELS logic TIMEOUT 20)
+
+    add_executable(kos-power-settings-bus-test
+        tests/power/bus.cpp
+        src/PowerSettings.cpp
+        src/PowerSettings.h
+        ../../platform/src/daemon/PlatformDbus.cpp
+        ../../platform/src/daemon/PowerProfilesBus.cpp)
+    target_include_directories(kos-power-settings-bus-test PRIVATE src)
+    target_link_libraries(kos-power-settings-bus-test PRIVATE Qt6::Core Qt6::DBus)
+    if(NOT DBUS_DAEMON_EXECUTABLE)
+        find_program(DBUS_DAEMON_EXECUTABLE dbus-daemon)
+    endif()
+    if(DBUS_DAEMON_EXECUTABLE)
+        add_test(NAME kos-settings.power-bus COMMAND kos-power-settings-bus-test)
+        set_tests_properties(kos-settings.power-bus PROPERTIES LABELS logic TIMEOUT 20)
+    endif()
 
     add_executable(kos-window-settings-test tests/windows/config.cpp src/WindowSettings.cpp)
     target_include_directories(kos-window-settings-test PRIVATE src)

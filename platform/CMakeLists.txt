@@ -27,6 +27,8 @@ set(kos_platform_sources
     src/daemon/KWinShortcutConflicts.h
     src/daemon/PlatformServer.cpp
     src/daemon/PlatformDbus.cpp
+    src/daemon/PowerProfilesBus.cpp
+    src/daemon/PowerProfilesBus.h
     src/daemon/PlatformNetworkConnect.cpp
     src/daemon/PlatformNetworkRead.cpp
     src/daemon/PlatformPaths.cpp
@@ -75,6 +77,17 @@ if(BUILD_TESTING)
     target_link_libraries(kos-status-panel-data-test PRIVATE Qt6::Core)
     add_test(NAME kos-platform.status-panel-data COMMAND kos-status-panel-data-test)
     set_tests_properties(kos-platform.status-panel-data PROPERTIES LABELS "platform;data")
+
+    qt_add_executable(kos-power-profiles-bus-test
+        tests/test_power_profiles_bus.cpp
+        src/daemon/PlatformDbus.cpp
+        src/daemon/PowerProfilesBus.cpp)
+    target_link_libraries(kos-power-profiles-bus-test PRIVATE Qt6::Core Qt6::DBus)
+    find_program(DBUS_DAEMON_EXECUTABLE dbus-daemon)
+    if(DBUS_DAEMON_EXECUTABLE)
+        add_test(NAME kos-platform.power-profiles-bus COMMAND kos-power-profiles-bus-test)
+        set_tests_properties(kos-platform.power-profiles-bus PROPERTIES LABELS platform TIMEOUT 20)
+    endif()
 endif()
 
 qt_add_executable(kos-platform ${kos_platform_sources})
