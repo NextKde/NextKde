@@ -122,6 +122,31 @@ public:
     Q_INVOKABLE void updateDockWindowAnimationStyle(const QString& style);
     Q_INVOKABLE void resetAppearanceStrengths();
     Q_INVOKABLE void launcherSnapshot();
+    // Dynamic island. The page is one master switch plus the settings that
+    // only apply while the island is on; every call below is a thin IPC
+    // request to the shell's island-settings target.
+    Q_INVOKABLE void islandSnapshot();
+    Q_INVOKABLE void setIslandEnabled(bool enabled);
+    Q_INVOKABLE void setIslandGlassStrength(double strength);
+    Q_INVOKABLE void setIslandLayoutMode(const QString& mode);
+    Q_INVOKABLE void setIslandTheme(const QString& theme);
+    Q_INVOKABLE void setIslandShapeMode(const QString& mode);
+    Q_INVOKABLE void setIslandBackgroundMode(const QString& mode);
+    Q_INVOKABLE void setIslandExpandMode(const QString& mode);
+    Q_INVOKABLE void setIslandGeometry(double width, double height);
+    Q_INVOKABLE void setIslandExpandedScale(double scale);
+    Q_INVOKABLE void setIslandTopMargin(double margin);
+    Q_INVOKABLE void setIslandExpandDuration(int milliseconds);
+    Q_INVOKABLE void setIslandCollapseDuration(int milliseconds);
+    Q_INVOKABLE void setIslandWidgetEnabled(const QString& id, bool enabled);
+    Q_INVOKABLE void setIslandQuickLaunchEnabled(bool enabled);
+    Q_INVOKABLE void setIslandQuickLaunchLabels(bool enabled);
+    Q_INVOKABLE void setIslandQuickLaunchPageSize(int size);
+    Q_INVOKABLE void setIslandDropFilesEnabled(bool enabled);
+    Q_INVOKABLE void setIslandDropAction(const QString& action);
+    Q_INVOKABLE void setIslandAppPinned(const QString& id, bool pinned);
+    Q_INVOKABLE void setIslandPomodoro(int workMinutes, int shortBreakMinutes,
+        int longBreakMinutes, int longBreakTriggerCount);
     Q_INVOKABLE void shortcutsSnapshot();
     Q_INVOKABLE void updateShortcut(const QString& id, const QString& combo);
     Q_INVOKABLE void resetShortcut(const QString& id);
@@ -151,6 +176,7 @@ signals:
     void dockRevealIndicatorVisibilityChanged(const QVariantMap& snapshot);
     void appearanceSnapshotChanged(const QVariantMap& snapshot);
     void launcherSnapshotChanged(const QVariantMap& snapshot);
+    void islandSnapshotChanged(const QVariantMap& snapshot);
     void shortcutsSnapshotChanged(const QVariantMap& snapshot);
     void glassDebugSnapshotChanged(const QVariantList& controls, const QString& presetStyle);
     void integrationSnapshotChanged(const QVariantMap& snapshot);
@@ -173,6 +199,7 @@ private:
         DockRevealIndicatorVisibility,
         Appearance,
         Launcher,
+        Island,
         Shortcuts,
         Integration,
         GlassDebug,
@@ -201,6 +228,7 @@ private:
     QVariantMap i18nSnapshotFromReply(const QString& payload);
     QVariantMap appearanceSnapshotFromReply(const QString& payload);
     QVariantMap launcherSnapshotFromReply(const QString& payload);
+    QVariantMap islandSnapshotFromReply(const QString& payload);
     QVariantMap integrationSnapshotFromReply(const QString& payload);
     QVariantMap shortcutsSnapshotFromReply(const QString& payload);
     QVariantList glassDebugSpecs() const;
@@ -215,6 +243,7 @@ private:
     void pumpWallpaperRequests();
     void callAppearance(const QStringList& arguments);
     void callLauncher(const QStringList& arguments);
+    void callIsland(const QStringList& arguments);
     void callShortcuts(const QStringList& arguments);
     void callI18n(const QStringList& arguments);
     void setSessionShell(const QString& shellPath);

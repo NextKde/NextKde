@@ -14,6 +14,12 @@ layout(std140, binding = 0) uniform buf {
     float maskHeight;
     float borderWidth;
     vec4 borderColor;
+    // Per-corner radii. Negative means "same as cornerRadius", so every
+    // existing host keeps the exact outline it had: the top/bottom split is
+    // only used by the island's notch shape, where the top edge is a straight
+    // cut into the screen and only the bottom is rounded.
+    float radiusTop;
+    float radiusBottom;
 };
 
 // GPU mirror of squircleDistance() / squircleGradient() in
@@ -43,6 +49,22 @@ float squircleDistance(vec2 p, vec2 halfSize, float radius, float n)
     return squircleNorm(max(q, vec2(0.0)), n) + min(max(q.x, q.y), 0.0) - radius;
 }
 
+// The same field with a different radius per corner. The corner is chosen
+// from the quadrant the point is in, so the distance stays a proper distance
+// field: the shape is a rounded box whose top and bottom corners can differ,
+// which is what a notch cut into the top of a screen looks like.
+//
+// radii = (top-left, top-right, bottom-right, bottom-left). The texture's y
+// grows downwards, so p.y > 0 is the bottom half.
+float squircleDistanceSplit(vec2 p, vec2 halfSize, vec4 radii, float n)
+{
+    float r = (p.x > 0.0)
+        ? ((p.y > 0.0) ? radii.z : radii.y)
+        : ((p.y > 0.0) ? radii.w : radii.x);
+    vec2 q = abs(p) - halfSize + vec2(r);
+    return squircleNorm(max(q, vec2(0.0)), n) + min(max(q.x, q.y), 0.0) - r;
+}
+
 void main()
 {
     vec2 halfSize = vec2(maskWidth, maskHeight) * 0.5;
@@ -51,7 +73,15 @@ void main()
     float n = clamp(cornerExponent, 2.0, 8.0);
     float radius = min(cornerRadius, min(halfSize.x, halfSize.y));
 
-    float dist = squircleDistance(centered, halfSize, radius, n);
+    // The split radii are optional: a negative one means "use the single
+    // radius", so the common case is bit-for-bit the old outline.
+    float dist;
+    if (radiusTop >= 0.0 && radiusBottom >= 0.0) {
+        vec4 radii = vec4(radiusTop, radiusTop, radiusBottom, radiusBottom);
+        dist = squircleDistanceSplit(centered, halfSize, radii, n);
+    } else {
+        dist = squircleDistance(centered, halfSize, radius, n);
+    }
 
     // First-order pixel distance, the same expression the compositor already
     // uses for its own mask (onscreen_rounded.glsl). f / fwidth(f) is a ratio,

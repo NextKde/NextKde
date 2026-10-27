@@ -100,6 +100,27 @@ func (s *Service) handleRequest(request DataRequest) DataResponse {
 		}
 		return DataResponse{Version: 1, RequestID: request.RequestID, OK: true,
 			Result: map[string]interface{}{"locations": locations}}
+	case "files.search":
+		query, _ := request.Payload["query"].(string)
+		limit := 20
+		if value, ok := request.Payload["limit"].(float64); ok {
+			limit = int(value)
+		}
+		results, indexed, ready := s.searchFiles(query, limit)
+		return DataResponse{Version: 1, RequestID: request.RequestID, OK: true,
+			Result: map[string]interface{}{
+				"results": results, "indexed": indexed, "ready": ready}}
+	case "files.resolve":
+		path, _ := request.Payload["path"].(string)
+		name, _ := request.Payload["name"].(string)
+		resolved, found := s.resolveFile(path, name)
+		return DataResponse{Version: 1, RequestID: request.RequestID, OK: true,
+			Result: map[string]interface{}{
+				"path": resolved, "found": found, "moved": found && resolved != path}}
+	case "files.refresh":
+		go s.refreshFileIndex()
+		return DataResponse{Version: 1, RequestID: request.RequestID, OK: true,
+			Result: map[string]interface{}{"accepted": true}}
 	case "weather.refresh":
 		accepted := s.startWeatherRefresh(true)
 		return DataResponse{Version: 1, RequestID: request.RequestID, OK: true,

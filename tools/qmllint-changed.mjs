@@ -37,7 +37,13 @@ const LOOKBACK = 12;
 const LOOKAHEAD = 2;
 
 function changedFiles() {
-    return execFileSync("git", ["status", "--porcelain"], { encoding: "utf8" })
+    // -uall is not optional: the default collapses a wholly untracked
+    // directory into one entry ("?? shell/.../island/"), which is not a .qml
+    // file and gets filtered out -- so the files most likely to be broken,
+    // the ones just written, were the only ones never linted. Measured on
+    // 2026-10-21: a fresh island module with a missing import in one of its
+    // files reported "4 files checked" and passed.
+    return execFileSync("git", ["status", "--porcelain", "-uall"], { encoding: "utf8" })
         .split("\n")
         .map(line => line.slice(3).trim())
         .filter(f => f.endsWith(".qml"));
@@ -91,8 +97,33 @@ for (const file of files) {
         continue; // Deleted or moved file in the porcelain listing.
     }
 
+    // qmllint's diagnostic format is `file:line:col: Message [category]`,
+    // optionally prefixed with a severity. It used to be
+    // `file:line : col : Message`, and the parser here was still matching
+    // that older shape -- which no longer appears in any line, so `flagged`
+    // stayed empty and this whole gate reported success on every file,
+    // broken or not. Two real defects (an arithmetic expression assigned to
+    // `anchors.right`, and a property read off the wrong singleton) went
+    // through it untouched.
+    //
+    // `[import]` and `[unqualified]` are ignored because this sandbox cannot
+    // resolve the shell's `qs.desktop.modules.*` import tree (Quickshell maps
+    // it at run time); every file then reports "was not found" for every
+    // shell type, which is noise. Syntax diagnostics are what this tool
+    // exists to catch, and they do not depend on those imports.
     const flagged = new Set();
-    for (const m of out.matchAll(/:(\d+) : /g)) flagged.add(parseInt(m[1], 10));
+    for (const raw of out.split("\n")) {
+        const m = /^(?:(Warning|Error|Info): )?(\S+?):(\d+):(\d+): (.*)$/.exec(raw.trim());
+        if (!m) continue;
+        const [, severity, , line, , message] = m;
+        if (severity === "Info") continue;
+        const category = (/\[([a-z-]+)\]\s*$/.exec(message) || [, ""])[1];
+        if (category === "import" || category === "unqualified")
+            continue;
+        if (severity !== "Error" && category !== "syntax")
+            continue;
+        flagged.add(parseInt(line, 10));
+    }
 
     const suspicious = [];
     for (const line of flagged) {

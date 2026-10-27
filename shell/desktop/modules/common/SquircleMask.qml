@@ -63,5 +63,12 @@ ShaderEffect {
     property real borderWidth: 0
     property color borderColor: "transparent"
 
+    // Per-corner radii, for the island's notch shape: the top edge is a
+    // straight cut and only the bottom is rounded. Negative means "same as
+    // cornerRadius", which is what every other host wants, so the outline
+    // they get is exactly the one they had.
+    property real radiusTop: -1
+    property real radiusBottom: -1
+
     fragmentShader: Qt.resolvedUrl("../../shaders/squircle.frag.qsb")
 }

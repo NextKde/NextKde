@@ -1,0 +1,29 @@
+module qs.desktop.modules.island
+
+Island 1.0 Island.qml
+IslandWindow 1.0 IslandWindow.qml
+IslandContent 1.0 IslandContent.qml
+IslandCard 1.0 IslandCard.qml
+IslandAppTile 1.0 IslandAppTile.qml
+IslandPointerTarget 1.0 IslandPointerTarget.qml
+IslandWidgetSlot 1.0 IslandWidgetSlot.qml
+singleton IslandNotesService 1.0 IslandNotesService.qml
+singleton IslandService 1.0 IslandService.qml
+singleton IslandConfigService 1.0 IslandConfigService.qml
+singleton IslandQuickLaunchModel 1.0 IslandQuickLaunchModel.qml
+singleton IslandPomodoroService 1.0 IslandPomodoroService.qml
+IslandTodoWidget 1.0 IslandTodoWidget.qml
+IslandWeatherWidget 1.0 IslandWeatherWidget.qml
+IslandClockWidget 1.0 IslandClockWidget.qml
+IslandPomodoroWidget 1.0 IslandPomodoroWidget.qml
+IslandNotesWidget 1.0 IslandNotesWidget.qml
+IslandBatteryWidget 1.0 IslandBatteryWidget.qml
+IslandSystemWidget 1.0 IslandSystemWidget.qml
+IslandLyricsWidget 1.0 IslandLyricsWidget.qml
+IslandUsageWidget 1.0 IslandUsageWidget.qml
+IslandDisplaysWidget 1.0 IslandDisplaysWidget.qml
+IslandActionsWidget 1.0 IslandActionsWidget.qml
+IslandClipboardWidget 1.0 IslandClipboardWidget.qml
+IslandIdleRings 1.0 IslandIdleRings.qml
+singleton IslandFinderService 1.0 IslandFinderService.qml
+IslandCalendarWidget 1.0 IslandCalendarWidget.qml

@@ -26,6 +26,16 @@ Item {
     property var uploadHistory: []
     property var connectivityHistory: []
     property bool detailsExpanded: false
+
+    // The collapsible sections. The process list is never collapsed any more:
+    // it is the one thing in this panel that is worth reading, and it used to
+    // be the last thing in a long scroll. Everything else folds away, and a
+    // folded section takes no space at all -- the wrapper's height is zero, so
+    // there is no gap left under the header.
+    property bool connectivityOpen: false
+    property bool interfaceOpen: false
+    property bool interface2Open: false
+    property bool addressOpen: false
     property var applications: []
     property string applicationsError: ""
 
@@ -237,164 +247,6 @@ Item {
                 separator: body.dark ? Qt.rgba(1, 1, 1, 0.12) : Qt.rgba(0, 0, 0, 0.1)
             }
 
-            // ---- connectivity history -----------------------------------
-            TrafficSection {
-                x: 8
-                width: content.width - 16
-                title: I18n.tr("Connectivity history")
-                ink: body.ink
-                dark: body.dark
-            }
-            ConnectivityGrid {
-                x: 8
-                width: content.width - 16
-                height: 30
-                samples: body.connectivityHistory
-                ink: body.ink
-            }
-
-            // ---- interface ----------------------------------------------
-            TrafficSection {
-                x: 8
-                width: content.width - 16
-                title: I18n.tr("Interface")
-                ink: body.ink
-                dark: body.dark
-                actionKind: "reset"
-                onActionTriggered: body.resetTotalsRequested()
-            }
-            TrafficFieldRow {
-                x: 8
-                width: content.width - 16
-                title: I18n.tr("Total upload:")
-                value: RateFormat.bytes(body.totalUpload)
-                ink: body.ink
-                mutedInk: body.mutedInk
-                showSwatch: true
-                swatchColor: "#ff3b40"
-            }
-            TrafficFieldRow {
-                x: 8
-                width: content.width - 16
-                title: I18n.tr("Total download:")
-                value: RateFormat.bytes(body.totalDownload)
-                ink: body.ink
-                mutedInk: body.mutedInk
-                showSwatch: true
-                swatchColor: "#0099ff"
-            }
-            TrafficStatusRow {
-                x: 8
-                width: content.width - 16
-                title: I18n.tr("Status:")
-                state: body.statusState
-                upText: I18n.tr("UP")
-                downText: I18n.tr("DOWN")
-                ink: body.ink
-                mutedInk: body.mutedInk
-                pillObjectName: "traffic-status-pill"
-            }
-            TrafficStatusRow {
-                x: 8
-                width: content.width - 16
-                title: I18n.tr("Internet connection:")
-                state: body.internetState
-                upText: I18n.tr("UP")
-                downText: I18n.tr("DOWN")
-                ink: body.ink
-                mutedInk: body.mutedInk
-                pillObjectName: "traffic-internet-pill"
-            }
-            TrafficFieldRow {
-                x: 8
-                width: content.width - 16
-                title: I18n.tr("Latency:")
-                value: "—"
-                ink: body.ink
-                mutedInk: body.mutedInk
-            }
-            TrafficFieldRow {
-                x: 8
-                width: content.width - 16
-                title: I18n.tr("Jitter:")
-                value: "—"
-                ink: body.ink
-                mutedInk: body.mutedInk
-            }
-
-            // ---- second interface block ---------------------------------
-            TrafficSection {
-                x: 8
-                width: content.width - 16
-                title: I18n.tr("Interface")
-                ink: body.ink
-                dark: body.dark
-                actionKind: "reset"
-                onActionTriggered: body.refreshRequested()
-            }
-            TrafficFieldRow {
-                x: 8
-                width: content.width - 16
-                title: I18n.tr("Interface:")
-                value: body.interfaceName || "—"
-                ink: body.ink
-                mutedInk: body.mutedInk
-            }
-            TrafficStatusRow {
-                x: 8
-                width: content.width - 16
-                title: I18n.tr("Status:")
-                state: body.statusState
-                upText: I18n.tr("UP")
-                downText: I18n.tr("DOWN")
-                ink: body.ink
-                mutedInk: body.mutedInk
-                pillObjectName: "traffic-interface-pill"
-            }
-            TrafficFieldRow {
-                x: 8
-                width: content.width - 16
-                title: I18n.tr("Physical address:")
-                value: body.macAddress || "—"
-                ink: body.ink
-                mutedInk: body.mutedInk
-            }
-            TrafficFieldRow {
-                x: 8
-                width: content.width - 16
-                title: I18n.tr("Network:")
-                value: body.networkName || "—"
-                ink: body.ink
-                mutedInk: body.mutedInk
-            }
-
-            // ---- address ------------------------------------------------
-            TrafficSection {
-                x: 8
-                width: content.width - 16
-                title: I18n.tr("Address")
-                ink: body.ink
-                dark: body.dark
-                actionKind: "reset"
-                onActionTriggered: body.refreshRequested()
-            }
-            TrafficFieldRow {
-                x: 8
-                width: content.width - 16
-                title: I18n.tr("Local IP:")
-                value: body.localIp || "—"
-                ink: body.ink
-                mutedInk: body.mutedInk
-            }
-            TrafficFieldRow {
-                x: 8
-                width: content.width - 16
-                title: I18n.tr("Public IP:")
-                value: body.publicIp || "—"
-                ink: body.ink
-                mutedInk: body.mutedInk
-            }
-
             // ---- top processes ------------------------------------------
             TrafficSection {
                 x: 8
@@ -408,8 +260,8 @@ Item {
             }
             Item {
                 width: content.width
-                height: body.detailsExpanded ? 22 : 0
-                visible: body.detailsExpanded
+                height: 22
+                visible: true
                 Text {
                     x: 8
                     anchors.verticalCenter: parent.verticalCenter
@@ -452,7 +304,7 @@ Item {
                 x: 8
                 width: content.width - 16
                 height: body.detailsExpanded ? processList.contentHeight : 0
-                visible: body.detailsExpanded
+                visible: true
                 ink: body.ink
                 mutedInk: body.mutedInk
             }
@@ -460,7 +312,7 @@ Item {
                 x: 8
                 width: content.width - 16
                 topPadding: 8
-                visible: body.detailsExpanded && body.applications.length === 0
+                visible: body.applications.length === 0
                 text: body.applicationsError.length > 0 ? body.applicationsError
                     : I18n.tr("Sampling application traffic…")
                 color: body.mutedInk
@@ -474,7 +326,7 @@ Item {
                 x: 8
                 width: content.width - 16
                 topPadding: 8
-                visible: body.detailsExpanded && processList.count > 0
+                visible: processList.count > 0
                 text: I18n.tr("Visible TCP connections only. Proxy traffic may be counted twice; UDP/QUIC is excluded.")
                 color: body.mutedInk
                 font.pixelSize: 10
@@ -483,6 +335,192 @@ Item {
                 elide: Text.ElideRight
                 textFormat: Text.PlainText
             }
+            // ---- connectivity history (collapsible) -------------------------------
+            Column {
+                width: parent.width
+                height: body.connectivityOpen ? implicitHeight : 0
+                visible: body.connectivityOpen
+
+            TrafficSection {
+                x: 8
+                width: content.width - 16
+                title: I18n.tr("Connectivity history")
+                ink: body.ink
+                dark: body.dark
+            }
+
+                ConnectivityGrid {
+                    x: 8
+                    width: content.width - 16
+                    height: 30
+                    samples: body.connectivityHistory
+                    ink: body.ink
+                }
+            }
+
+            // ---- interface (collapsible) -------------------------------
+            Column {
+                width: parent.width
+                height: body.interfaceOpen ? implicitHeight : 0
+                visible: body.interfaceOpen
+
+            TrafficSection {
+                x: 8
+                width: content.width - 16
+                title: I18n.tr("Interface")
+                ink: body.ink
+                dark: body.dark
+                actionKind: "reset"
+                onActionTriggered: body.resetTotalsRequested()
+            }
+
+                TrafficFieldRow {
+                    x: 8
+                    width: content.width - 16
+                    title: I18n.tr("Total upload:")
+                    value: RateFormat.bytes(body.totalUpload)
+                    ink: body.ink
+                    mutedInk: body.mutedInk
+                    showSwatch: true
+                    swatchColor: "#ff3b40"
+                }
+                TrafficFieldRow {
+                    x: 8
+                    width: content.width - 16
+                    title: I18n.tr("Total download:")
+                    value: RateFormat.bytes(body.totalDownload)
+                    ink: body.ink
+                    mutedInk: body.mutedInk
+                    showSwatch: true
+                    swatchColor: "#0099ff"
+                }
+                TrafficStatusRow {
+                    x: 8
+                    width: content.width - 16
+                    title: I18n.tr("Status:")
+                    state: body.statusState
+                    upText: I18n.tr("UP")
+                    downText: I18n.tr("DOWN")
+                    ink: body.ink
+                    mutedInk: body.mutedInk
+                    pillObjectName: "traffic-status-pill"
+                }
+                TrafficStatusRow {
+                    x: 8
+                    width: content.width - 16
+                    title: I18n.tr("Internet connection:")
+                    state: body.internetState
+                    upText: I18n.tr("UP")
+                    downText: I18n.tr("DOWN")
+                    ink: body.ink
+                    mutedInk: body.mutedInk
+                    pillObjectName: "traffic-internet-pill"
+                }
+                TrafficFieldRow {
+                    x: 8
+                    width: content.width - 16
+                    title: I18n.tr("Latency:")
+                    value: "—"
+                    ink: body.ink
+                    mutedInk: body.mutedInk
+                }
+                TrafficFieldRow {
+                    x: 8
+                    width: content.width - 16
+                    title: I18n.tr("Jitter:")
+                    value: "—"
+                    ink: body.ink
+                    mutedInk: body.mutedInk
+                }
+            }
+
+            // ---- second interface block (collapsible) -------------------------------
+            Column {
+                width: parent.width
+                height: body.interface2Open ? implicitHeight : 0
+                visible: body.interface2Open
+
+            TrafficSection {
+                x: 8
+                width: content.width - 16
+                title: I18n.tr("Interface")
+                ink: body.ink
+                dark: body.dark
+                actionKind: "reset"
+                onActionTriggered: body.refreshRequested()
+            }
+
+                TrafficFieldRow {
+                    x: 8
+                    width: content.width - 16
+                    title: I18n.tr("Interface:")
+                    value: body.interfaceName || "—"
+                    ink: body.ink
+                    mutedInk: body.mutedInk
+                }
+                TrafficStatusRow {
+                    x: 8
+                    width: content.width - 16
+                    title: I18n.tr("Status:")
+                    state: body.statusState
+                    upText: I18n.tr("UP")
+                    downText: I18n.tr("DOWN")
+                    ink: body.ink
+                    mutedInk: body.mutedInk
+                    pillObjectName: "traffic-interface-pill"
+                }
+                TrafficFieldRow {
+                    x: 8
+                    width: content.width - 16
+                    title: I18n.tr("Physical address:")
+                    value: body.macAddress || "—"
+                    ink: body.ink
+                    mutedInk: body.mutedInk
+                }
+                TrafficFieldRow {
+                    x: 8
+                    width: content.width - 16
+                    title: I18n.tr("Network:")
+                    value: body.networkName || "—"
+                    ink: body.ink
+                    mutedInk: body.mutedInk
+                }
+            }
+
+            // ---- address (collapsible) -------------------------------
+            Column {
+                width: parent.width
+                height: body.addressOpen ? implicitHeight : 0
+                visible: body.addressOpen
+
+            TrafficSection {
+                x: 8
+                width: content.width - 16
+                title: I18n.tr("Address")
+                ink: body.ink
+                dark: body.dark
+                actionKind: "reset"
+                onActionTriggered: body.refreshRequested()
+            }
+
+                TrafficFieldRow {
+                    x: 8
+                    width: content.width - 16
+                    title: I18n.tr("Local IP:")
+                    value: body.localIp || "—"
+                    ink: body.ink
+                    mutedInk: body.mutedInk
+                }
+                TrafficFieldRow {
+                    x: 8
+                    width: content.width - 16
+                    title: I18n.tr("Public IP:")
+                    value: body.publicIp || "—"
+                    ink: body.ink
+                    mutedInk: body.mutedInk
+                }
+            }
+
             Item {
                 width: parent.width
                 height: 8

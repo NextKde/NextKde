@@ -1716,6 +1716,48 @@ migrate_plasma_appletsrc() {  # $1: previous shell id
         "$1" "$kos_shell_id"
 }
 
+# Validate that every QML file in the staged shell tree can resolve the
+# types it uses.
+#
+# A file that uses a type without importing the module that provides it is
+# fatal for the whole shell, not just for that file: Quickshell refuses to
+# load the configuration, the shell never starts, and plasmashell — which
+# has already been pointed at the KOS shell package — leaves the user with
+# nothing but a wallpaper and no way to click anything. This has happened
+# for real (a calendar widget used RowLayout without importing
+# QtQuick.Layouts).
+#
+# The check runs against the tree that was just staged into
+# ~/.config/quickshell/kos, because that is the tree that will be started —
+# not the checkout, which can differ after the Kos.Ui alias is
+# materialized.
+validate_staged_shell_qml() {
+    local shell_config="$1"
+    local audit="$project_dir/tests/qml-imports/audit_imports.py"
+    command -v python3 >/dev/null 2>&1 || return 0
+    [[ -f "$audit" ]] || return 0
+    [[ -d "$shell_config" ]] || return 0
+    local output status
+    set +e
+    output=$(python3 "$audit" "$shell_config" 2>&1)
+    status=$?
+    set -e
+    # 0 = clean, 1 = unresolved types found, anything else = the audit itself
+    # failed. A broken audit must not block the installation; only a real
+    # finding may.
+    [[ "$status" == 0 ]] && return 0
+    if [[ "$status" != 1 ]]; then
+        printf '  ⚠️  Shell QML 校验工具自身出错，已跳过校验 / the QML audit itself failed; skipping the check\n'
+        printf '%s\n' "$output" | sed 's/^/       /'
+        return 0
+    fi
+    printf '  ✗  Shell QML 校验未通过，已放弃接管桌面（你当前的桌面保持不变）\n'
+    printf '     Shell QML validation failed; the desktop shell was NOT switched.\n'
+    printf '%s\n' "$output" | sed 's/^/       /'
+    printf '  ℹ️  修复上面列出的 import 后重新安装即可 / fix the listed imports and reinstall\n'
+    return 1
+}
+
 # Point plasmashell (and the lock screen greeter) at the org.kos shell: back
 # up the previous choice once, migrate the wallpaper config, write the key.
 # A no-op when the shell is already selected.
@@ -1723,6 +1765,9 @@ switch_plasma_shell() {
     local previous
     previous=$(previous_plasma_shell)
     [[ "$previous" == "$kos_shell_id" ]] && return 0
+    # A broken shell tree must never reach the desktop: the takeover is
+    # what makes a failed shell look like an empty desktop.
+    validate_staged_shell_qml "$config_dir/quickshell/kos" || return 1
     if [[ -n "$previous" && ! -s "$plasma_shell_state" ]]; then
         mkdir -p "$(dirname "$plasma_shell_state")"
         printf '%s\n' "$previous" > "$plasma_shell_state"

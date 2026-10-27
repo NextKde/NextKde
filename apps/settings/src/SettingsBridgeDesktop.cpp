@@ -162,6 +162,124 @@ void SettingsBridge::resetLauncherLayoutProfile(const QString& mode)
     callLauncher({ QStringLiteral("resetProfile"), mode });
 }
 
+// --- Dynamic island -------------------------------------------------------
+// Every island request is a shell IPC call. The shell owns the island's
+// state; this side only mirrors what the snapshot reports and forwards
+// edits. The shell answers each request with a fresh snapshot, so the page
+// never has to guess what the new state is.
+
+void SettingsBridge::islandSnapshot() { callIsland({ QStringLiteral("snapshot") }); }
+
+void SettingsBridge::setIslandEnabled(bool enabled)
+{
+    callIsland({ QStringLiteral("setEnabled"), enabled ? QStringLiteral("true")
+                                                        : QStringLiteral("false") });
+}
+
+void SettingsBridge::setIslandGlassStrength(double strength)
+{
+    callIsland({ QStringLiteral("setGlassStrength"), QString::number(strength) });
+}
+
+void SettingsBridge::setIslandLayoutMode(const QString& mode)
+{
+    callIsland({ QStringLiteral("setLayoutMode"), mode });
+}
+
+void SettingsBridge::setIslandTheme(const QString& theme)
+{
+    callIsland({ QStringLiteral("setTheme"), theme });
+}
+
+void SettingsBridge::setIslandShapeMode(const QString& mode)
+{
+    callIsland({ QStringLiteral("setShapeMode"), mode });
+}
+
+void SettingsBridge::setIslandBackgroundMode(const QString& mode)
+{
+    callIsland({ QStringLiteral("setBackgroundMode"), mode });
+}
+
+void SettingsBridge::setIslandExpandMode(const QString& mode)
+{
+    callIsland({ QStringLiteral("setExpandMode"), mode });
+}
+
+void SettingsBridge::setIslandGeometry(double width, double height)
+{
+    callIsland({ QStringLiteral("setGeometry"), QString::number(width),
+        QString::number(height) });
+}
+
+void SettingsBridge::setIslandExpandedScale(double scale)
+{
+    callIsland({ QStringLiteral("setExpandedScale"), QString::number(scale) });
+}
+
+void SettingsBridge::setIslandTopMargin(double margin)
+{
+    callIsland({ QStringLiteral("setTopMargin"), QString::number(margin) });
+}
+
+void SettingsBridge::setIslandExpandDuration(int milliseconds)
+{
+    callIsland({ QStringLiteral("setExpandDuration"), QString::number(milliseconds) });
+}
+
+void SettingsBridge::setIslandCollapseDuration(int milliseconds)
+{
+    callIsland({ QStringLiteral("setCollapseDuration"), QString::number(milliseconds) });
+}
+
+void SettingsBridge::setIslandWidgetEnabled(const QString& id, bool enabled)
+{
+    callIsland({ QStringLiteral("setWidgetEnabled"), id,
+        enabled ? QStringLiteral("true") : QStringLiteral("false") });
+}
+
+void SettingsBridge::setIslandQuickLaunchEnabled(bool enabled)
+{
+    callIsland({ QStringLiteral("setQuickLaunchEnabled"),
+        enabled ? QStringLiteral("true") : QStringLiteral("false") });
+}
+
+void SettingsBridge::setIslandQuickLaunchLabels(bool enabled)
+{
+    callIsland({ QStringLiteral("setQuickLaunchShowLabels"),
+        enabled ? QStringLiteral("true") : QStringLiteral("false") });
+}
+
+void SettingsBridge::setIslandQuickLaunchPageSize(int size)
+{
+    callIsland({ QStringLiteral("setQuickLaunchPageSize"), QString::number(size) });
+}
+
+void SettingsBridge::setIslandDropFilesEnabled(bool enabled)
+{
+    callIsland({ QStringLiteral("setDropFilesEnabled"),
+        enabled ? QStringLiteral("true") : QStringLiteral("false") });
+}
+
+void SettingsBridge::setIslandDropAction(const QString& action)
+{
+    callIsland({ QStringLiteral("setDropAction"), action });
+}
+
+void SettingsBridge::setIslandAppPinned(const QString& id, bool pinned)
+{
+    callIsland({ QStringLiteral("setAppPinned"), id,
+        pinned ? QStringLiteral("true") : QStringLiteral("false") });
+}
+
+void SettingsBridge::setIslandPomodoro(int workMinutes, int shortBreakMinutes,
+    int longBreakMinutes, int longBreakTriggerCount)
+{
+    callIsland({ QStringLiteral("setPomodoroConfig"),
+        QString::number(workMinutes), QString::number(shortBreakMinutes),
+        QString::number(longBreakMinutes), QString::number(longBreakTriggerCount) });
+}
+
 void SettingsBridge::integrationSnapshot()
 {
     if (m_integrationPending)
@@ -293,6 +411,34 @@ QVariantMap SettingsBridge::launcherSnapshotFromReply(const QString& payload)
         { QStringLiteral("layoutProfiles"),
             object.value(QStringLiteral("layoutProfiles")).toObject().toVariantMap() },
     };
+}
+
+QVariantMap SettingsBridge::islandSnapshotFromReply(const QString& payload)
+{
+    if (payload.isEmpty())
+        return { };
+
+    QJsonParseError parseError;
+    const QJsonDocument document = QJsonDocument::fromJson(payload.toUtf8(), &parseError);
+    if (parseError.error != QJsonParseError::NoError || !document.isObject()) {
+        setLastError(QStringLiteral(
+            "The desktop environment returned an invalid dynamic island configuration"));
+        return { };
+    }
+
+    const QJsonObject object = document.object();
+    if (!object.contains(QStringLiteral("enabled"))) {
+        setLastError(QStringLiteral(
+            "The dynamic island configuration from the desktop environment is incomplete"));
+        return { };
+    }
+
+    setLastError({ });
+    // The whole object is forwarded rather than a hand-picked subset: the
+    // page reads the catalogue, the enabled-widget order and the pinned
+    // application list out of the same payload, and a new field then needs
+    // no change on this side.
+    return object.toVariantMap();
 }
 
 QVariantMap SettingsBridge::integrationSnapshotFromReply(const QString& payload)
@@ -511,6 +657,12 @@ void SettingsBridge::callLauncher(const QStringList& arguments)
 {
     callShell(QStringLiteral("applauncher-settings"), arguments,
         QStringLiteral("Launcher settings request failed"), RequestKind::Launcher);
+}
+
+void SettingsBridge::callIsland(const QStringList& arguments)
+{
+    callShell(QStringLiteral("island-settings"), arguments,
+        QStringLiteral("Dynamic island settings request failed"), RequestKind::Island);
 }
 
 void SettingsBridge::callShortcuts(const QStringList& arguments)

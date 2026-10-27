@@ -27,6 +27,10 @@ func acquireInstanceLock(socketPath string) (*os.File, error) {
 
 func main() {
 	s := newService()
+	// The island's Finder answers from an index of the home directory. It is
+	// built in the background so the first search does not have to walk the
+	// whole tree while the user is typing.
+	s.startFileIndexRefresh()
 	// KOS_DATA_SOCKET lets a development service listen beside the installed
 	// one (see kosctl dev); the installed layout never sets it.
 	socket := os.Getenv("KOS_DATA_SOCKET")

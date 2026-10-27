@@ -238,7 +238,8 @@ ApplicationWindow {
         },
         { subtitle: I18n.tr("Windows and animations") },
         { subtitle: I18n.tr("Notifications") },
-        { subtitle: I18n.tr("Power") }
+        { subtitle: I18n.tr("Power") },
+        { subtitle: I18n.tr("Dynamic island") }
     ]
 
     // Shown only while a development session drives this window. Every value on
@@ -557,6 +558,14 @@ ApplicationWindow {
                             navSymbol: "❖"
                             navTint: "#ff9500"
                         }
+
+                        SidebarEntry {
+                            Layout.fillWidth: true
+                            pageIndex: 14
+                            label: I18n.tr("Dynamic island")
+                            navSymbol: "◗"
+                            navTint: "#5e5ce6"
+                        }
                     }
                 }
 
@@ -726,6 +735,18 @@ ApplicationWindow {
                             colors: window.notificationTheme
                             materialForm: window.materialForm
                             backend: typeof powerSettings !== "undefined" ? powerSettings : null
+                        }
+                    }
+
+                    Loader {
+                        objectName: "IslandSettingsPageLoader"
+                        Layout.fillWidth: true
+                        active: window.displayedPage === 14
+                        visible: active
+                        sourceComponent: Pages.IslandSettingsPage {
+                            colors: window.notificationTheme
+                            materialForm: window.materialForm
+                            bridge: typeof settingsBridge !== "undefined" ? settingsBridge : null
                         }
                     }
 

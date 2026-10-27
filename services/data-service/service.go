@@ -20,7 +20,11 @@ type Service struct {
 	statePath, snapshotPath string
 	desktopDirectory        string
 	weatherProvider         WeatherProvider
-	weatherRequestSerial    uint64
+	// The file index behind the island's Finder. Islet shells out to `fd`
+	// for this; the shell may not run external commands from its UI, so the
+	// walk lives in the service.
+	files                *fileIndex
+	weatherRequestSerial uint64
 	// weatherFailStreak counts consecutive forecast fetch failures and drives
 	// the exponential retry backoff. Guarded by s.mu.
 	weatherFailStreak int
@@ -53,6 +57,7 @@ func newService() *Service {
 		desktopDirectory:   desktopDirectory(),
 		desktopSubscribers: map[*subscriberConn]struct{}{},
 		weatherProvider:    newOpenMeteoProvider(),
+		files:              newFileIndex(),
 		last:               time.Now(),
 	}
 	s.state.Activity.TodayApps = map[string]AppUsage{}

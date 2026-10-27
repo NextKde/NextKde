@@ -114,6 +114,28 @@ if(BUILD_TESTING)
             COMMAND ${KOS_NODE_EXECUTABLE}
                 ${CMAKE_CURRENT_SOURCE_DIR}/tests/localization/widget-language.mjs)
         set_tests_properties(kos-shell.language PROPERTIES LABELS logic TIMEOUT 10)
+        # A QML file that uses a type without importing the module that
+        # provides it takes the whole shell down with it: Quickshell refuses
+        # to load the configuration and the user is left with a bare
+        # wallpaper. This test is the guard for that failure mode.
+        add_test(NAME kos-shell.qml-imports
+            COMMAND ${KOS_PYTHON_EXECUTABLE}
+                ${CMAKE_CURRENT_SOURCE_DIR}/tests/qml-imports/audit_imports.py
+                shell apps shared)
+        set_tests_properties(kos-shell.qml-imports PROPERTIES LABELS logic TIMEOUT 60)
+        # A call on an identifier that nothing in scope defines does not stop
+        # the shell from loading: it throws a ReferenceError the first time
+        # the line runs. The island's spring animation had exactly that --
+        # `timer.stop()` with no such id -- and the timer then kept firing at
+        # 125 Hz, throwing on every tick and flooding the log. The scope is
+        # the island module: the check reports the enclosing object's own
+        # built-in methods as unresolved elsewhere, and the island is where
+        # this class of defect was found.
+        add_test(NAME kos-shell.island-references
+            COMMAND ${KOS_PYTHON_EXECUTABLE}
+                ${CMAKE_CURRENT_SOURCE_DIR}/tests/qml-imports/audit_references.py
+                shell/desktop/modules/island)
+        set_tests_properties(kos-shell.island-references PROPERTIES LABELS logic TIMEOUT 30)
         add_test(NAME kos-shell.clipboard-placement
             COMMAND ${KOS_NODE_EXECUTABLE}
                 ${CMAKE_CURRENT_SOURCE_DIR}/tests/clipboard-placement/test_geometry.mjs)

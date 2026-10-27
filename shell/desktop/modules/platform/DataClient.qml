@@ -25,6 +25,9 @@ JsonlClient {
         "activity.snapshot": true,
         "desktop.refresh": true,
         "desktop.snapshot": true,
+        "files.refresh": true,
+        "files.resolve": true,
+        "files.search": true,
         "metrics.snapshot": true,
         "weather.refresh": true,
         "weather.snapshot": true

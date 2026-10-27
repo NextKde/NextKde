@@ -16,6 +16,7 @@ import qs.desktop.modules.common
 import qs.desktop.modules.platform
 import qs.desktop.modules.shortcuts
 import qs.desktop.modules.weather
+import qs.desktop.modules.island
 
 Item {
     id: shell
@@ -683,6 +684,129 @@ Item {
         }
     }
 
+    // The island's show/hide/toggle endpoint. It lives here rather than in
+    // the island module so that the control surface survives even if the
+    // island's own surfaces fail to load.
+    IpcHandler {
+        target: "island"
+        function show(): void { IslandService.expand(null) }
+        function hide(): void { IslandService.collapse() }
+        function toggle(): void { IslandService.toggle(null) }
+    }
+
+    // Dynamic island settings endpoint for the standalone Settings app.
+    // The island owns its state; this handler is the only write path the
+    // Settings app gets, matching the other targets. Every mutator answers
+    // with a fresh snapshot so the page never has to predict the result.
+    IpcHandler {
+        target: "island-settings"
+
+        function snapshot(): string {
+            return JSON.stringify(IslandConfigService.snapshot())
+        }
+
+        function setEnabled(value: string): string {
+            IslandConfigService.setEnabled(value === "true")
+            return snapshot()
+        }
+
+        function setGlassStrength(value: string): string {
+            IslandConfigService.setGlassStrength(parseFloat(value))
+            return JSON.stringify(IslandConfigService.snapshot())
+        }
+        function setLayoutMode(value: string): string {
+            IslandConfigService.setLayoutMode(value)
+            return JSON.stringify(IslandConfigService.snapshot())
+        }
+        function setTheme(value: string): string {
+            IslandConfigService.setTheme(value)
+            return JSON.stringify(IslandConfigService.snapshot())
+        }
+        function setShapeMode(mode: string): string {
+            IslandConfigService.setShapeMode(mode)
+            return snapshot()
+        }
+
+        function setBackgroundMode(mode: string): string {
+            IslandConfigService.setBackgroundMode(mode)
+            return snapshot()
+        }
+
+        function setExpandMode(mode: string): string {
+            IslandConfigService.setExpandMode(mode)
+            return snapshot()
+        }
+
+        function setExpandedScale(scale: string): string {
+            IslandConfigService.setExpandedScale(parseFloat(scale))
+            return JSON.stringify(IslandConfigService.snapshot())
+        }
+        function setGeometry(width: string, height: string): string {
+            IslandConfigService.setGeometry(parseFloat(width), parseFloat(height))
+            return snapshot()
+        }
+
+        function setTopMargin(margin: string): string {
+            IslandConfigService.setTopMargin(parseFloat(margin))
+            return snapshot()
+        }
+
+        function setExpandDuration(milliseconds: string): string {
+            IslandConfigService.setExpandDuration(parseInt(milliseconds))
+            return snapshot()
+        }
+
+        function setCollapseDuration(milliseconds: string): string {
+            IslandConfigService.setCollapseDuration(parseInt(milliseconds))
+            return snapshot()
+        }
+
+        function setWidgetEnabled(id: string, value: string): string {
+            IslandConfigService.toggleWidget(id, value === "true")
+            return snapshot()
+        }
+
+        function setQuickLaunchEnabled(value: string): string {
+            IslandConfigService.setQuickLaunchEnabled(value === "true")
+            return snapshot()
+        }
+
+        function setQuickLaunchShowLabels(value: string): string {
+            IslandConfigService.setQuickLaunchShowLabels(value === "true")
+            return snapshot()
+        }
+
+        function setQuickLaunchPageSize(size: string): string {
+            IslandConfigService.setQuickLaunchPageSize(parseInt(size))
+            return snapshot()
+        }
+
+        function setDropFilesEnabled(value: string): string {
+            IslandConfigService.setDropFilesEnabled(value === "true")
+            return snapshot()
+        }
+
+        function setDropAction(action: string): string {
+            IslandConfigService.setDropAction(action)
+            return snapshot()
+        }
+
+        function setAppPinned(id: string, value: string): string {
+            if (value === "true")
+                IslandConfigService.pinApp(id)
+            else
+                IslandConfigService.unpinApp(id)
+            return snapshot()
+        }
+
+        function setPomodoroConfig(work: string, shortBreak: string,
+                longBreak: string, trigger: string): string {
+            IslandConfigService.setPomodoroConfig(parseInt(work), parseInt(shortBreak),
+                parseInt(longBreak), parseInt(trigger))
+            return snapshot()
+        }
+    }
+
     // Global-shortcut endpoint for the standalone Settings app. ShortcutsService
     // owns defaults, overrides, and the kglobalaccel handoff; this handler is
     // the only write path the Settings app gets, matching the other targets.
@@ -752,6 +876,25 @@ Item {
         id: quickSearch
     }
     AppLauncher {}
+    // The island lives behind a Loader on purpose. A QML compile error in
+    // any island file used to abort the whole DesktopEnvironment, and with
+    // it the entire shell — the user was left with a bare wallpaper and no
+    // way back. Inside a Loader the fault is contained: the island stays
+    // absent, the error is reported, and the rest of the desktop keeps
+    // running.
+    Loader {
+        id: islandLoader
+        active: true
+        sourceComponent: Component {
+            Island {}
+        }
+        onStatusChanged: function() {
+            if (status === Loader.Error)
+                console.error("[DesktopEnvironment] dynamic island failed to load, "
+                    + "the rest of the desktop is unaffected: "
+                    + islandLoader.errorString())
+        }
+    }
     Overview {}
     StageSidebar {}
     IpcHandler {

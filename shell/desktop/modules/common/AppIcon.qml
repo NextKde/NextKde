@@ -7,7 +7,11 @@ import Quickshell.Widgets
 // Supports grayscale, transparency, tonal tint and flat tray ink via ShaderEffect.
 Item {
     id: root
-    property string source: ""
+    // The source may be a path, a URL or a QIcon. It has to be `var`:
+    // Quickshell's DesktopEntry exposes its artwork as a QIcon, and a
+    // `string` property converts that to text, the image provider then has
+    // nothing to load, and the icon renders as an empty box.
+    property var source: ""
     readonly property int imageStatus: renderer.item?.imageStatus ?? Image.Null
 
     // Icon appearance controls

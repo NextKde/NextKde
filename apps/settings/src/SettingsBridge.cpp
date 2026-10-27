@@ -116,6 +116,9 @@ void SettingsBridge::handleReply(RequestKind kind, const QString& payload)
     case RequestKind::Launcher:
         emit launcherSnapshotChanged(launcherSnapshotFromReply(payload));
         break;
+    case RequestKind::Island:
+        emit islandSnapshotChanged(islandSnapshotFromReply(payload));
+        break;
     case RequestKind::Shortcuts:
         emit shortcutsSnapshotChanged(shortcutsSnapshotFromReply(payload));
         break;
@@ -206,6 +209,9 @@ void SettingsBridge::failKind(RequestKind kind)
         break;
     case RequestKind::Launcher:
         emit launcherSnapshotChanged({ });
+        break;
+    case RequestKind::Island:
+        emit islandSnapshotChanged({ });
         break;
     case RequestKind::Shortcuts:
         emit shortcutsSnapshotChanged({ });

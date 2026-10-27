@@ -200,6 +200,92 @@ bool PlatformServer::handleFileOperation(QLocalSocket *socket, const QJsonObject
 {
     const QString op = operation(request);
     const QJsonObject payload = request.value(QStringLiteral("payload")).toObject();
+
+    // --- small text documents -------------------------------------------
+    // The island's notes and anything else that is a document rather than a
+    // file to hand to another application. Reading is capped so a client
+    // cannot pull a multi-gigabyte log through the socket, and the write path
+    // reports the committed byte count so a caller can tell a truncation from
+    // a success. Both stay inside the same path cleaning as the copy paths:
+    // an absolute path, no NUL, no symlinked parent.
+    if (op == QStringLiteral("file.read-text")) {
+        const QString path = cleanPath(payload.value(QStringLiteral("path")).toString());
+        if (path.isEmpty()) {
+            respond(socket, request, false, {}, QStringLiteral("invalid-path"),
+                    QStringLiteral("文件路径无效"), false);
+            return true;
+        }
+        const QFileInfo info(path);
+        if (!info.exists() || !info.isFile()) {
+            respond(socket, request, false, {}, QStringLiteral("missing"),
+                    QStringLiteral("文件不存在"), false);
+            return true;
+        }
+        const qint64 limit = qBound<qint64>(qint64(4096),
+            static_cast<qint64>(payload.value(QStringLiteral("limit")).toDouble(4 * 1024 * 1024)),
+            qint64(32 * 1024 * 1024));
+        if (info.size() > limit) {
+            respond(socket, request, false, {}, QStringLiteral("too-large"),
+                    QStringLiteral("文件超过读取上限"), false);
+            return true;
+        }
+        QFile file(path);
+        if (!file.open(QIODevice::ReadOnly)) {
+            respond(socket, request, false, {}, QStringLiteral("open-failed"),
+                    QStringLiteral("无法读取文件"), false);
+            return true;
+        }
+        const QByteArray data = file.readAll();
+        QJsonObject result;
+        result.insert(QStringLiteral("text"), QString::fromUtf8(data));
+        result.insert(QStringLiteral("bytes"), static_cast<double>(data.size()));
+        respond(socket, request, true, result, {}, {}, false);
+        return true;
+    }
+
+    if (op == QStringLiteral("file.write-text")) {
+        const QString requested = payload.value(QStringLiteral("path")).toString();
+        // cleanCreatePath refuses a path whose parent does not exist, which is
+        // the right rule for a copy target the caller was supposed to have
+        // prepared. A document store cannot pre-create anything through this
+        // protocol, so an explicit mkdir flag is honoured first, and the path
+        // is re-cleaned afterwards -- the security check still runs, it just
+        // runs on a directory this daemon created.
+        QString path = cleanCreatePath(requested);
+        if (path.isEmpty() && payload.value(QStringLiteral("mkdir")).toBool(false)
+                && QFileInfo(requested).isAbsolute()) {
+            QDir().mkpath(QFileInfo(requested).absolutePath());
+            path = cleanCreatePath(requested);
+        }
+        if (path.isEmpty()) {
+            respond(socket, request, false, {}, QStringLiteral("invalid-path"),
+                    QStringLiteral("文件路径无效"), false);
+            return true;
+        }
+        const QByteArray data = payload.value(QStringLiteral("text")).toString().toUtf8();
+        QSaveFile file(path);
+        if (!file.open(QIODevice::WriteOnly)) {
+            respond(socket, request, false, {}, QStringLiteral("open-failed"),
+                    QStringLiteral("无法写入文件"), false);
+            return true;
+        }
+        if (file.write(data) != data.size()) {
+            file.cancelWriting();
+            respond(socket, request, false, {}, QStringLiteral("write-failed"),
+                    QStringLiteral("写入失败"), false);
+            return true;
+        }
+        if (!file.commit()) {
+            respond(socket, request, false, {}, QStringLiteral("commit-failed"),
+                    QStringLiteral("写入未落盘"), false);
+            return true;
+        }
+        QJsonObject result;
+        result.insert(QStringLiteral("bytes"), static_cast<double>(data.size()));
+        respond(socket, request, true, result, {}, {}, false);
+        return true;
+    }
+
     if (op == QStringLiteral("file.open")) {
         const QString path = cleanPath(payload.value(QStringLiteral("path")).toString());
         if (path.isEmpty()) {
