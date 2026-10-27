@@ -53,6 +53,7 @@ qt_add_qml_module(kos_ui
     RESOURCES
         i18n/qmldir
         i18n/ZhCatalog.mjs
+        i18n/PtBrCatalog.mjs
         i18n/SystemLanguage.mjs
         controls/shaders/liquid_surface.vert.qsb
         controls/shaders/liquid_surface.frag.qsb

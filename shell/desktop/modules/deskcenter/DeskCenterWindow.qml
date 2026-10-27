@@ -215,7 +215,8 @@ PanelWindow {
     function lunarDate(date) {
         try {
             // 农历数字部分两种语言都读得懂，但月份名要跟语言走。
-            return new Intl.DateTimeFormat(I18n.language === "en" ? "en-US-u-ca-chinese" : "zh-CN-u-ca-chinese", {
+            return new Intl.DateTimeFormat(I18n.language === "en" ? "en-US-u-ca-chinese"
+                : I18n.language === "pt-BR" ? "pt-BR-u-ca-chinese" : "zh-CN-u-ca-chinese", {
                 month: "long",
                 day: "numeric"
             }).format(date)

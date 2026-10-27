@@ -35,9 +35,8 @@ int run(int argc, char *argv[], const Metadata &metadata)
     QLocale::setDefault(Kos::I18n::locale());
     Kos::I18n::QtCatalogs qtTranslations;
     QTranslator translator;
-    const QString catalog = Kos::I18n::isChinese()
-        ? QStringLiteral(":/kos/i18n/kos_apps_zh_CN.qm")
-        : QStringLiteral(":/kos/i18n/kos_apps_en_US.qm");
+    const QString catalog = QStringLiteral(":/kos/i18n/kos_apps_%1.qm")
+        .arg(Kos::I18n::localeName());
     if (translator.load(catalog))
         application.installTranslator(&translator);
     else

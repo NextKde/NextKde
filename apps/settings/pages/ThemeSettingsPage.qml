@@ -31,7 +31,7 @@ ColumnLayout {
     // {id, colors: [#rrggbb, ...]}; empty until a wallpaper seed exists.
     property var colorSchemes: []
     property string errorText: ""
-    // 界面语言持久值（auto / zh-CN / en），经 i18n-settings IPC 由 Shell
+    // 界面语言持久值（auto / zh-CN / pt-BR / en），经 i18n-settings IPC 由 Shell
     // 持有与落盘；"auto" 的本地解析在 onI18nSnapshotChanged 里做。
     property string language: "auto"
     readonly property var styles: [
@@ -133,7 +133,7 @@ ColumnLayout {
     }
 
     function isValidLanguage(lang) {
-        return lang === "zh-CN" || lang === "en" || lang === "auto"
+        return lang === "zh-CN" || lang === "pt-BR" || lang === "en" || lang === "auto"
     }
 
     function setLanguage(lang) {
@@ -743,13 +743,14 @@ ColumnLayout {
                 model: [
                     { id: "auto", label: I18n.tr("Follow system") },
                     { id: "zh-CN", label: "简体中文" },
-                    { id: "en", label: "English" }
+                    { id: "en", label: "English" },
+                    { id: "pt-BR", label: "Português" }
                 ]
-                currentIndex: themePage.language === "auto" ? 0
-                    : themePage.language === "en" ? 2 : 1
+                currentIndex: Math.max(0, model.findIndex(function(option) {
+                    return option.id === themePage.language
+                }))
                 onSelectionChanged: function(index) {
-                    themePage.setLanguage(index === 0 ? "auto"
-                        : index === 2 ? "en" : "zh-CN")
+                    themePage.setLanguage(model[index].id)
                 }
             }
         }
