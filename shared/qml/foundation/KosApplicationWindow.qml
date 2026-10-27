@@ -16,6 +16,8 @@ ApplicationWindow {
     color: modernDesign || AppTheme.glassActive ? "transparent" : AppTheme.window
     property var applicationSettings: null
     property bool modernDesign: false
+    property bool neutralTypography: false
+    Binding { target: AppTheme; property: "neutralTypography"; value: root.neutralTypography }
     flags: modernDesign ? Qt.Window | Qt.FramelessWindowHint : Qt.Window
     readonly property real windowCornerRadius: modernDesign && visibility !== Window.FullScreen && visibility !== Window.Maximized ? 8 : 0
     property int beforeFullScreen: Window.Windowed

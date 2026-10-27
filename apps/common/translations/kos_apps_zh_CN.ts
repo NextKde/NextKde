@@ -1546,6 +1546,118 @@
       <source>10-day forecast</source>
       <translation>10 日预报</translation>
     </message>
+    <message>
+      <source>Remove city</source>
+      <translation>删除城市</translation>
+    </message>
+    <message>
+      <source>Clear search</source>
+      <translation>清空搜索</translation>
+    </message>
+    <message>
+      <source>Unable to search</source>
+      <translation>暂时无法搜索</translation>
+    </message>
+    <message>
+      <source>No matching cities</source>
+      <translation>没有找到城市</translation>
+    </message>
+    <message>
+      <source>Search for a city</source>
+      <translation>搜索城市</translation>
+    </message>
+    <message>
+      <source>Try a different name or spelling.</source>
+      <translation>试试其他名称或拼写。</translation>
+    </message>
+    <message>
+      <source>Enter at least 2 characters.</source>
+      <translation>输入至少 2 个字符。</translation>
+    </message>
+    <message>
+      <source>Search cities</source>
+      <translation>搜索城市</translation>
+    </message>
+    <message>
+      <source>Searching…</source>
+      <translation>正在搜索…</translation>
+    </message>
+    <message>
+      <source>Enter at least 2 characters to search for a city.</source>
+      <translation>请输入至少 2 个字符搜索城市。</translation>
+    </message>
+    <message>
+      <source>No cities found. Try another name or spelling.</source>
+      <translation>没有找到城市，请换个名称或检查拼写。</translation>
+    </message>
+    <message>
+      <source>Type a city name to see suggestions.</source>
+      <translation>输入城市名称查看候选结果。</translation>
+    </message>
+    <message>
+      <source>Retry search</source>
+      <translation>重试搜索</translation>
+    </message>
+    <message>
+      <source>Added</source>
+      <translation>已添加</translation>
+    </message>
+    <message>
+      <source>City options for %1</source>
+      <translation>%1 的城市选项</translation>
+    </message>
+    <message>
+      <source>No saved cities</source>
+      <translation>还没有添加城市</translation>
+    </message>
+    <message>
+      <source>Search for a city in the sidebar to add its forecast.</source>
+      <translation>在侧栏搜索城市，即可添加并查看天气。</translation>
+    </message>
+    <message>
+      <source>Add a city</source>
+      <translation>添加城市</translation>
+    </message>
+    <message>
+      <source>Selected City</source>
+      <translation>所选城市</translation>
+    </message>
+    <message>
+      <source>%1-Day Forecast</source>
+      <translation>%1 日预报</translation>
+    </message>
+    <message>
+      <source>Daily Forecast</source>
+      <translation>逐日预报</translation>
+    </message>
+    <message>
+      <source>Air quality data unavailable</source>
+      <translation>暂无空气质量数据</translation>
+    </message>
+    <message>
+      <source>Good</source>
+      <translation>优</translation>
+    </message>
+    <message>
+      <source>Moderate</source>
+      <translation>良</translation>
+    </message>
+    <message>
+      <source>Unhealthy for Sensitive Groups</source>
+      <translation>对敏感人群不健康</translation>
+    </message>
+    <message>
+      <source>Unhealthy</source>
+      <translation>不健康</translation>
+    </message>
+    <message>
+      <source>Very Unhealthy</source>
+      <translation>非常不健康</translation>
+    </message>
+    <message>
+      <source>Hazardous</source>
+      <translation>危险</translation>
+    </message>
   </context>
   <context>
     <name>PimClient</name>
@@ -1785,6 +1897,26 @@
       <location line="+63" />
       <source>Weather request failed</source>
       <translation>天气请求失败</translation>
+    </message>
+    <message>
+      <source>Search timed out. Try again.</source>
+      <translation>搜索超时，请重试。</translation>
+    </message>
+    <message>
+      <source>Could not confirm removal. Please try again.</source>
+      <translation>未能确认删除结果，请重试。</translation>
+    </message>
+    <message>
+      <source>Connect to the weather service to remove a city.</source>
+      <translation>连接天气服务后才能删除城市。</translation>
+    </message>
+    <message>
+      <source>Search is unavailable. Check your connection and retry.</source>
+      <translation>搜索暂时不可用，请检查网络后重试。</translation>
+    </message>
+    <message>
+      <source>Could not remove the city. Please try again.</source>
+      <translation>删除城市失败，请重试。</translation>
     </message>
   </context>
   <context>
