@@ -1266,12 +1266,23 @@ KosApplicationWindow {
             resolutionScale: 1
         }
 
-        // L02: the unified toolbar. One 40px row directly under the 30px dot
-        // band, floating above both planes (the planes still cover the whole
-        // window from y=0). Left: sidebar toggle, add. Right: search toggle,
-        // more. The segmented control is centred over the *current main
-        // region* (L03): sidebar expanded → x sidebarWidth..width, collapsed
-        // → x 0..width, with a binding-animated x so it follows the collapse.
+        // Navigation action stays reachable when the sidebar is collapsed.
+        // Match Weather's expanded top inset, at the requested left corner.
+        ToolbarButton {
+            id: sidebarToggleButton
+            objectName: "toolbarSidebarToggle"
+            anchors.left: parent.left
+            anchors.leftMargin: root.design.toolbarInsetLeft
+            anchors.top: parent.top
+            anchors.topMargin: 10
+            z: 10
+            iconName: "panel"
+            hint: root.sidebarExpanded ? qsTr("Hide sidebar") : qsTr("Show sidebar")
+            onClicked: root.sidebarExpanded = !root.sidebarExpanded
+        }
+
+        // Main-pane actions: add at the leading edge, view selector centred,
+        // search and more at the trailing edge. Follow the sidebar animation.
         Item {
             id: toolbar
             objectName: "calendarToolbar"
@@ -1288,23 +1299,10 @@ KosApplicationWindow {
             readonly property real mainWidth: width - mainLeft
 
             ToolbarButton {
-                id: sidebarToggleButton
-                objectName: "toolbarSidebarToggle"
-                anchors.left: parent.left
-                anchors.leftMargin: root.design.toolbarInsetLeft
-                anchors.verticalCenter: parent.verticalCenter
-                iconName: "panel"
-                hint: root.sidebarExpanded ? qsTr("Hide sidebar")
-                                           : qsTr("Show sidebar")
-
-                onClicked: root.sidebarExpanded = !root.sidebarExpanded
-            }
-
-            ToolbarButton {
                 id: addButton
                 objectName: "toolbarAdd"
-                anchors.left: sidebarToggleButton.right
-                anchors.leftMargin: root.design.toolbarGap
+                x: Math.max(toolbar.mainLeft + root.design.toolbarInsetLeft,
+                            sidebarToggleButton.x + sidebarToggleButton.width + root.design.toolbarGap)
                 anchors.verticalCenter: parent.verticalCenter
                 iconName: "plus"
                 hint: qsTr("Add event")
