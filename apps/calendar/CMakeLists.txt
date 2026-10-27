@@ -1,3 +1,5 @@
+add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/../../shared/demo-ui ${CMAKE_CURRENT_BINARY_DIR}/demo-ui)
+
 find_package(Qt6 6.5 REQUIRED COMPONENTS QuickDialogs2)
 
 kos_add_application(kos-calendar
@@ -11,9 +13,7 @@ kos_add_application(kos-calendar
     QML_FILES
         qml/Main.qml
         qml/CalendarGlassSurface.qml
-        qml/CalendarActionSurface.qml
         qml/CalendarToolTip.qml
-        qml/CalendarViewSelector.qml
         qml/CalendarPopupSurface.qml
         qml/CalendarStyle.qml
         qml/CalendarButton.qml
@@ -27,6 +27,8 @@ kos_add_application(kos-calendar
         qml/EventEditorDialog.qml
         qml/EventDetailsPopover.qml
     LINK_LIBRARIES
+        kos_demo_ui
+        kos_demo_ui_plugin
         Kos::PimClient
         Kos::PimClientPlugin
         Qt6::QuickDialogs2

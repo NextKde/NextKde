@@ -8,6 +8,7 @@ import QtQuick.Window
 import QtQuick.Effects
 import Kos.Pim
 import Kos.Ui
+import Kos.Demo as Demo
 
 KosApplicationWindow {
     id: root
@@ -16,6 +17,16 @@ KosApplicationWindow {
 
     modernDesign: true
     visible: true
+    // Sidebar alpha must reach the window compositor, not an opaque host plane.
+    background: Item {}
+    readonly property bool liquidControls: AppTheme.materialMode !== "solid"
+        && !AppTheme.reduceTransparency && GraphicsInfo.api !== GraphicsInfo.Software
+    Binding { target: Demo.AppTheme; property: "appearanceMode"; value: AppTheme.dark ? "dark" : "light" }
+    Binding { target: Demo.AppTheme; property: "compactDesign"; value: true }
+    Binding { target: Demo.AppTheme; property: "accentName"; value: AppTheme.accentName }
+    Binding { target: Demo.AppTheme; property: "reduceMotion"; value: AppTheme.reduceMotion }
+    Binding { target: Demo.AppTheme; property: "reduceTransparency"; value: AppTheme.reduceTransparency }
+    Binding { target: Demo.LiquidStyle; property: "controlFillOpacity"; value: 0.35 * AppTheme.materialOpacity / 0.86 }
     title: qsTr("Calendar")
     width: 1100
     height: 720
@@ -413,18 +424,18 @@ KosApplicationWindow {
         }
     }
 
-    // One shared in-window underlay; no per-button shadows or displaced
-    // copies of schedule content. The Demo optics supply the liquid rim.
-    component GlassSurface: CalendarActionSurface {
-        backdrop: chromeBackdrop
-    }
-
     // Compact 26px liquid toolbar action with a 16px vector icon.
-    component ToolbarButton: AbstractButton {
+    component ToolbarButton: Demo.LiquidActionButton {
         id: control
 
-        property string iconName: ""
         property string hint: ""
+        property bool showHint: true
+        materialForm: !root.liquidControls
+        liquidIntensity: "light"
+        iconOnly: true
+        backdrop: chromeBackdrop
+        // Upstream's legacy ring is disabled only for real liquid material.
+        focusRingColor: materialForm ? AppTheme.focusRing : "transparent"
 
         implicitWidth: root.design.toolbarButtonSize
         implicitHeight: root.design.toolbarButtonSize
@@ -437,55 +448,10 @@ KosApplicationWindow {
         Accessible.name: hint
         CalendarToolTip {
             objectName: control.objectName + "Tip"
-            visible: control.hovered && !control.pressed && control.enabled && control.hint.length > 0
+            visible: control.showHint && control.hovered && !control.pressed && control.enabled && control.hint.length > 0
             text: control.hint
         }
 
-        // Control stretches contentItem to the button box, so the icon is a
-        // fixed-size child centred inside a plain filler Item.
-        contentItem: Item {
-            CalendarToolbarIcon {
-                anchors.centerIn: parent
-                name: control.iconName
-                size: root.design.toolbarIconSize
-                color: control.enabled ? root.design.liquidLabel : root.design.labelSecondary
-            }
-        }
-
-        background: GlassSurface {
-            hovered: control.hovered
-            pressed: control.pressed
-            focused: control.activeFocus && control.enabled
-        }
-    }
-
-    // Calendar-local copy of the three toolbar glyph paths from the shared
-    // VectorIcon (panel/plus/search). Same data-SVG technique and 2px round
-    // stroke styling; kept inside this file because the shared Kos.Ui module
-    // list does not export VectorIcon to applications.
-    component CalendarToolbarIcon: Item {
-        id: icon
-
-        property string name: "check"
-        property color color: "white"
-        property real size: 16
-        implicitWidth: size
-        implicitHeight: size
-        readonly property var paths: ({
-            panel: "M3 5h18v14H3zM3 9h18M7 9v10",
-            plus: "M12 4v16M4 12h16",
-            search: "M10 3a7 7 0 1 0 0 14 7 7 0 0 0 0-14M15 15l6 6"
-        })
-        Image {
-            anchors.fill: parent
-            sourceSize: Qt.size(icon.size * 2, icon.size * 2)
-            source: "data:image/svg+xml;utf8," + encodeURIComponent(
-                '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path fill="none" stroke="rgb('
-                + Math.round(icon.color.r * 255) + ',' + Math.round(icon.color.g * 255) + ','
-                + Math.round(icon.color.b * 255) + ')" stroke-opacity="' + icon.color.a
-                + '" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="'
-                + (icon.paths[icon.name] || icon.paths.search) + '"/></svg>')
-        }
     }
 
     // L07: subdued date-navigation button for the heading band — 26 high,
@@ -1262,44 +1228,16 @@ KosApplicationWindow {
             id: chromePlanes
             anchors.fill: parent
             Rectangle {
-                id: windowPlane
-                anchors.fill: parent
-                color: root.design.contentPlane
-            }
-            Item {
                 id: sidebarPlane
                 objectName: "calendarSidebarBackground"
                 anchors.left: parent.left
                 anchors.top: parent.top
                 anchors.bottom: parent.bottom
                 width: sidebar.width
-                readonly property bool sampling: root.visible && width > 0
-                    && AppTheme.materialMode !== "solid" && !AppTheme.reduceTransparency && GraphicsInfo.api !== GraphicsInfo.Software
-                opacity: sampling ? 0.95 : 1
-                layer.enabled: sampling
-                clip: true
-                ShaderEffectSource {
-                    id: sidebarSource
-                    anchors.fill: parent
-                    sourceItem: sidebarPlane.sampling ? windowPlane : null
-                    sourceRect: Qt.rect(0, 0, sidebarPlane.width, sidebarPlane.height)
-                    visible: false
-                    live: sidebarPlane.sampling
-                }
-                MultiEffect {
-                    anchors.fill: parent
-                    source: sidebarSource
-                    visible: sidebarPlane.sampling
-                    blurEnabled: true
-                    blur: 0.35
-                    blurMax: 32
-                    autoPaddingEnabled: false
-                }
-                Rectangle {
-                    anchors.fill: parent
-                    color: root.design.sidebarPlane
-                    opacity: sidebarPlane.sampling ? 0.95 : 1
-                }
+                color: root.design.sidebarPlane
+                // Single ordinary background, matching Demo desktop-alpha mode.
+                // No in-window scene exists here to blur; never fake desktop blur.
+                opacity: root.liquidControls ? 0.95 : 1
             }
 
             Rectangle {
@@ -1320,12 +1258,12 @@ KosApplicationWindow {
                 }
             }
         }
-        LiquidBackdrop {
+        Demo.LiquidBackdrop {
             id: chromeBackdrop
             sourceItem: chromePlanes
             registerAsDefault: false
             active: AppTheme.materialMode !== "solid" && !AppTheme.reduceTransparency
-            resolutionScale: 0.5
+            resolutionScale: 1
         }
 
         // L02: the unified toolbar. One 40px row directly under the 30px dot
@@ -1375,7 +1313,7 @@ KosApplicationWindow {
                 onClicked: eventEditor.openForDate(root.selectedDate)
             }
 
-            CalendarViewSelector {
+            Demo.LiquidSegmentedControl {
                 id: viewSegment
                 objectName: "toolbarViewSegment"
                 anchors.verticalCenter: parent.verticalCenter
@@ -1402,6 +1340,7 @@ KosApplicationWindow {
                 // still land on segment 1, so the pill's measured geometry
                 // (R097/R098) is untouched.
                 backdrop: chromeBackdrop
+                materialForm: !root.liquidControls
                 labels: [qsTr("Day"), qsTr("Week"), qsTr("Month"), qsTr("Year")]
                 currentIndex: root.viewIndex <= 2 ? 2 - root.viewIndex : 3
                 backgroundColor: root.design.segmentTrack
@@ -1511,72 +1450,30 @@ KosApplicationWindow {
                 Behavior on width { NumberAnimation {
                     duration: AppTheme.motionFast; easing.type: Easing.OutCubic } }
 
-                // The field is clipped by its own width, so the text/input
-                // never leaks outside during the width animation.
-                Item {
+                Demo.LiquidTextField {
+                    id: input
+                    objectName: "toolbarSearchInput"
                     anchors.fill: parent
                     clip: true
-                    HoverHandler { id: searchHover }
-                    CalendarGlassSurface {
-                        id: searchGlass
-                        objectName: "toolbarSearchGlass"
-                        anchors.fill: parent
-                        backdrop: chromeBackdrop
-                        focused: input.activeFocus
-                        hovered: searchHover.hovered
-                        refractionStrength: hovered || focused ? 3 : 1.5
-                        magnification: hovered || focused ? 1.025 : 1.012
-                        Behavior on refractionStrength { NumberAnimation { duration: AppTheme.motionFast } }
-                        Behavior on magnification { NumberAnimation { duration: AppTheme.motionFast } }
-                        Behavior on reflectionStrength { NumberAnimation { duration: AppTheme.motionFast } }
-                    }
-
-                    TextInput {
-                        id: input
-                        objectName: "toolbarSearchInput"
-                        Accessible.name: qsTr("Search")
-                        anchors.fill: parent
-                        anchors.leftMargin: 12
-                        anchors.rightMargin: 12
-                        verticalAlignment: TextInput.AlignVCenter
-                        clip: true
-                        color: root.design.labelPrimary
-                        font.pixelSize: root.design.controlFontSize
-                        selectionColor: searchGlass.sampling
-                            ? (AppTheme.dark ? Qt.rgba(1, 1, 1, 0.24) : Qt.rgba(0, 0, 0, 0.16))
-                            : AppTheme.accent
-                        selectedTextColor: searchGlass.sampling ? color : AppTheme.accentText
-                        text: root.searchQuery
-                        onTextEdited: root.searchQuery = text
-                        onActiveFocusChanged: {
-                            // Blur from clicking elsewhere: defer one event-
-                            // loop turn so the click target (e.g. the search
-                            // toggle) acts first and the deferred close
-                            // no-ops. Blurs while the field is still opening
-                            // (geometry settling before the delayed focus)
-                            // are ignored; blur caused by close() itself runs
-                            // after active went false and is also ignored.
-                            if (!activeFocus && toolbarSearch.active
-                                    && !toolbarSearch.opening
-                                    && !toolbarSearch.blurPending)
-                                toolbarSearch.requestBlurClose()
-                        }
-                    }
-
-                    Label {
-                        anchors.verticalCenter: parent.verticalCenter
-                        anchors.left: parent.left
-                        anchors.leftMargin: 12
-                        visible: input.text.length === 0
-                        text: qsTr("Search")
-                        color: root.design.labelSecondary
-                        font.pixelSize: root.design.controlFontSize
+                    materialForm: !root.liquidControls
+                    liquidFinish: true
+                    liquidIntensity: "light"
+                    backdrop: chromeBackdrop
+                    placeholderText: qsTr("Search")
+                    Accessible.name: placeholderText
+                    text: root.searchQuery
+                    onTextEdited: root.searchQuery = text
+                    onActiveFocusChanged: {
+                        if (!activeFocus && toolbarSearch.active && !toolbarSearch.opening
+                                && !toolbarSearch.blurPending)
+                            toolbarSearch.requestBlurClose()
                     }
                 }
+
             }
 
             // More: three small solid dots, no glyph font involved.
-            AbstractButton {
+            ToolbarButton {
                 id: moreButton
                 objectName: "toolbarMore"
                 anchors.right: parent.right
@@ -1585,37 +1482,11 @@ KosApplicationWindow {
                 width: root.design.toolbarButtonSize
                 height: root.design.toolbarButtonSize
                 hoverEnabled: true
-                Accessible.name: qsTr("Calendar actions")
-                CalendarToolTip {
-                    objectName: "toolbarMoreTip"
-                    visible: moreButton.hovered && !moreButton.pressed && !actionsMenu.visible
-                    text: moreButton.Accessible.name
-                }
+                iconName: "more"
+                hint: qsTr("Calendar actions")
+                showHint: !actionsMenu.visible
                 onClicked: actionsMenu.popup(this, 0, height + 2)
 
-                contentItem: Item {
-                    // Three small solid dots in a fixed-size centred Row, so
-                    // Control stretching the contentItem cannot shove the
-                    // dots into a corner.
-                    Row {
-                        anchors.centerIn: parent
-                        spacing: 3
-                        Repeater {
-                            model: 3
-                            delegate: Rectangle {
-                                required property int index
-                                width: 3.5; height: 3.5; radius: 1.75
-                                color: root.design.labelPrimary
-                            }
-                        }
-                    }
-                }
-
-                background: GlassSurface {
-                    hovered: moreButton.hovered
-                    pressed: moreButton.pressed
-                    focused: moreButton.activeFocus && moreButton.enabled
-                }
             }
 
             // L05: Escape always reaches the open search, whichever item in

@@ -48,27 +48,30 @@ The optical material is opt-in at the shared UI boundary. Application source
 previews therefore need a freshly built calendar binary containing
 `LiquidCompactSurface`; an older installed binary cannot load this source tree.
 
-## Material alignment (GalleryDesign 2.10)
+## Material alignment (nextkdeAppDemo)
 
-Liquid toolbar buttons retain their glass edges without an added accent focus ring.
-The continuous ordinary sidebar composites only its background at 0.95 opacity,
-with QML blur of the actual in-window base plane. Text remains opaque.
-Menus, detail popovers and combo-box option popups use one liquid panel and ordinary
-interior rows. Popups stay in the same window and exclude themselves from their
-capture; editor dropdowns sample the editor panel. Reduced transparency or missing
-GPU sampling uses opaque fallback surfaces. No KWin liquid plugin is involved.
-The Day/Week/Month/Year selector samples the same chrome backdrop through the
-shared liquid optics. Its track and sliding selection use neutral glass with no
-accent focus overlay; keyboard selection and an opaque fallback remain available.
-Pressing expands the sampled lens to 1.12 scale with stronger refraction; selection
-slides and rebounds using OutBack easing. A short pulse also covers quick clicks
-and keyboard changes. Labels/hit targets stay fixed; reduced motion settles directly.
-Toolbar search also samples glass, with neutral text selection and no added liquid
-focus ring. Action backgrounds animate press/release and optical transitions while
-icons stay fixed. Tooltips use same-window liquid panels, including settings tips.
-The settings dialog uses an opaque ordinary panel and ordinary segmented controls. Its in-window material host
-is opt-in: Auto/Glass use available QML sampling, Solid and Reduce Transparency
-stop it without relying on KWin. The shared opacity preference scales each role's
-coverage relative to its 0.86 default, preserving lighter controls and denser panels;
-it never fades foreground text. Typography, selector/field geometry and editor
-footer sizes retain the previous compact design.
+Calendar uses the canonical Demo `LiquidActionButton`, `LiquidTextField`,
+`LiquidSegmentedControl` and `LiquidSurface` implementations packaged as `Kos.Demo`.
+The source and shaders in `shared/demo-ui` are byte-for-byte snapshots of the Demo
+working tree, with a SHA-256 manifest. The separate module preserves legacy Kos.Ui
+consumers in other apps. Toolbar buttons/search use Gallery's light intensity and
+compact dimensions. Calendar owns placement, state and capture sources only; it
+adds no optical rims, tint/blur layers, press pulses or rebound animations. Liquid
+focus retains the material edge; the original button's legacy ring is hidden via
+its supported focusRingColor property. Ordinary fallback keeps semantic focus.
+
+The sidebar follows the standalone Demo's desktop-alpha mode: one ordinary,
+continuous background at opacity 0.95, with fully opaque text. The window has no
+opaque backing under it; the right content plane remains opaque. There is no real
+in-window scene underneath the sidebar to blur, so no dummy blur pass or duplicated
+page is supplied. Normal desktop alpha composition does not sample or blur desktop
+pixels and does not request KWin liquid effects. Collapsing the sidebar removes its
+background coverage. Solid/reduced-transparency/software modes use opaque material.
+
+Menus, details, option popups and tooltips use one canonical liquid surface with
+same-window QML underlay blur; their rows/text remain ordinary and opaque. Editor
+popups sample the editor, excluding themselves. Settings use an opaque ordinary
+panel and ordinary selectors. Auto/Glass use QML sampling; Solid and Reduce
+Transparency stop it. The opacity preference scales the canonical fill token
+relative to its 0.86 default (the default preserves Demo's 0.35 control fill), and
+scales floating-panel coverage separately without fading foreground content.
