@@ -10,6 +10,14 @@ kos_add_application(kos-calendar
         src/main.cpp
     QML_FILES
         qml/Main.qml
+        qml/CalendarGlassSurface.qml
+        qml/CalendarPopupSurface.qml
+        qml/CalendarStyle.qml
+        qml/CalendarButton.qml
+        qml/CalendarCheckBox.qml
+        qml/CalendarTextField.qml
+        qml/CalendarComboBox.qml
+        qml/CalendarEditorFooter.qml
         qml/CalendarMonthView.qml
         qml/CalendarScheduleView.qml
         qml/CalendarTaskEditorDialog.qml

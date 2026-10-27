@@ -7,6 +7,7 @@ import Kos.Ui
 
 KosWorkspaceDialog {
     id: root
+    CalendarStyle { id: design }
 
     property string editingId: ""
     property string linkedEventId: ""
@@ -17,142 +18,39 @@ KosWorkspaceDialog {
 
     title: editingId.length > 0 ? qsTr("Edit task") : qsTr("New task")
     modal: true
+    popupType: Popup.Item
     // P02/P03: compact neutral editor, matching the event editor treatment.
-    width: Math.min(380, parent ? parent.width - 48 : 380)
-    height: Math.min(560, parent ? parent.height - 64 : 560)
+    width: Math.min(420, parent ? parent.width - 32 : 420)
+    height: Math.min(480, parent ? parent.height - 32 : 480)
     anchors.centerIn: parent
     standardButtons: Dialog.Save | Dialog.Cancel
-    readonly property int fieldHeight: 30
-
-    // D05: the dialog's actions are stacked, not a row — one full-width bar
-    // per action, all the same width and height with a hairline gap, primary
-    // (Save) on top, secondary (Cancel) under it, destructive (Delete) last,
-    // per the macOS 26 alert reference. KosButton supplies the 34px control
-    // height and the pill radius; nothing here restyles surface or shape.
-    // The footer stays fixed (only the form above it scrolls), so Delete can
-    // never scroll out of reach; the 16px insets match the shared footer.
-    //
-    // Labels are not hardcoded: standardButtons is still declared on the
-    // dialog, and the never-rendered DialogButtonBox below instantiates Qt's
-    // platform-localized Save/Cancel buttons, so the bars read exactly as the
-    // standard buttons did. The labels are bound, not copied once: reading
-    // `count` re-evaluates the binding as soon as the box finishes creating
-    // its standard buttons (no onCompleted creation-order fragility), and the
-    // button `text` dependency keeps the labels live if the platform strings
-    // change (locale hot-switch). The qsTr strings are only the
-    // pre-instantiation fallback.
-    readonly property string saveLabel: {
-        const b = labelSource.count > 0 ? labelSource.standardButton(Dialog.Save) : null
-        return b ? b.text : qsTr("Save")
+    background: Rectangle { radius: 12; color: design.dialogPlane }
+    padding: 16
+    header: Label {
+        text: root.title
+        color: design.labelPrimary
+        font.pixelSize: 17
+        font.weight: Font.DemiBold
+        padding: 16
+        bottomPadding: 8
+        elide: Text.ElideRight
     }
-    readonly property string cancelLabel: {
-        const b = labelSource.count > 0 ? labelSource.standardButton(Dialog.Cancel) : null
-        return b ? b.text : qsTr("Cancel")
-    }
+    readonly property int fieldHeight: design.fieldHeight
 
-    background: KosSurface {
-        radius: AppTheme.smallRadius + 4
-        fillColor: AppTheme.dark ? "#262626" : "#F7F7F7"
-        elevation: 0.5
-    }
-
-    footer: Item {
-        implicitHeight: 16
-            + (root.confirmingDelete ? confirmCol.implicitHeight : footerCol.implicitHeight) + 16
-
-        // Label source only. Invisible and disabled so it neither paints over
-        // the stack nor joins the focus chain — Esc stays with the dialog.
-        DialogButtonBox {
-            id: labelSource
-            visible: false
-            enabled: false
-            padding: 0
-            standardButtons: root.standardButtons
-        }
-
-        ColumnLayout {
-            id: footerCol
-            anchors.fill: parent
-            anchors.margins: 16
-            spacing: 6
-            visible: !root.confirmingDelete
-
-            // Primary: the AcceptRole standard button of the shared footer.
-            KosButton {
-                Layout.fillWidth: true
-                text: root.saveLabel
-                highlighted: true
-                flatPrimary: true
-                lightLabel: true
-                onClicked: root.accept()
-            }
-
-            // Secondary: the RejectRole standard button of the shared footer.
-            KosButton {
-                Layout.fillWidth: true
-                text: root.cancelLabel
-                secondary: true
-                onClicked: root.reject()
-            }
-
-            KosButton {
-                Layout.fillWidth: true
-                text: qsTr("Delete task")
-                visible: root.editingId.length > 0
-                destructive: true
-                secondary: true
-                onClicked: {
-                    root.confirmingDelete = true
-                    confirmCancelButton.forceActiveFocus()
-                }
-            }
-        }
-
-        // P1-6: delete confirmation, macOS alert form (bold title, one-line
-        // description, stacked buttons) per the alert-macos reference. Cancel
-        // is the default (highlighted, focused); Delete fires only from here.
-        ColumnLayout {
-            id: confirmCol
-            anchors.fill: parent
-            anchors.margins: 16
-            spacing: 6
-            visible: root.confirmingDelete
-
-            Label {
-                Layout.fillWidth: true
-                text: qsTr("Delete this task?")
-                font.bold: true
-                wrapMode: Text.WordWrap
-            }
-
-            Label {
-                Layout.fillWidth: true
-                text: qsTr("The task is removed from every view. This cannot be undone.")
-                color: AppTheme.mutedText
-                font.pixelSize: 11
-                wrapMode: Text.WordWrap
-            }
-
-            KosButton {
-                id: confirmCancelButton
-                Layout.fillWidth: true
-                text: root.cancelLabel
-                highlighted: true
-                flatPrimary: true
-                lightLabel: true
-                onClicked: root.confirmingDelete = false
-            }
-
-            KosButton {
-                Layout.fillWidth: true
-                text: qsTr("Delete task")
-                destructive: true
-                secondary: true
-                onClicked: {
-                    root.deleteRequested(root.editingId)
-                    root.close()
-                }
-            }
+    // Fixed compact action row; the form scrolls independently.
+    footer: CalendarEditorFooter {
+        editing: root.editingId.length > 0
+        confirmingDelete: root.confirmingDelete
+        deleteLabel: qsTr("Delete task")
+        deleteTitle: qsTr("Delete this task?")
+        deleteMessage: qsTr("The task is removed from every view. This cannot be undone.")
+        onAccepted: root.accept()
+        onRejected: root.reject()
+        onDeleteArmed: root.confirmingDelete = true
+        onDeleteCanceled: root.confirmingDelete = false
+        onDeleteConfirmed: {
+            root.deleteRequested(root.editingId)
+            root.close()
         }
     }
 
@@ -463,8 +361,8 @@ KosWorkspaceDialog {
 
         ColumnLayout {
             id: formLayout
-            width: editorScroll.width
-            spacing: 10
+            width: editorScroll.width - 8
+            spacing: 8
 
             // P1-5: inline validation error — pinned to the top of the form so
             // it is visible without scrolling; offending fields also get a
@@ -492,18 +390,19 @@ KosWorkspaceDialog {
                 Layout.fillWidth: true
                 spacing: 8
 
-                KosTextField {
+                CalendarTextField {
                     id: titleField
                     Layout.fillWidth: true
                     Layout.preferredHeight: root.fieldHeight
                     placeholderText: qsTr("Task title")
                     Accessible.name: qsTr("Task title")
+                    invalid: root.hasError("title")
                     outlineColor: root.hasError("title")
                         ? AppTheme.destructive : AppTheme.border
                     onTextChanged: root.clearError("title")
                 }
 
-                KosCheckBox {
+                CalendarCheckBox {
                     id: completedCheck
                     text: qsTr("Completed")
                 }
@@ -514,7 +413,8 @@ KosWorkspaceDialog {
                 spacing: 8
 
                 Label { text: qsTr("List"); color: AppTheme.mutedText; font.pixelSize: 11 }
-                KosComboBox {
+                CalendarComboBox {
+                    popupScene: root.contentItem.parent
                     id: listBox
                     Accessible.name: qsTr("Task list")
                     Layout.fillWidth: true
@@ -523,7 +423,8 @@ KosWorkspaceDialog {
                     textRole: "name"
                 }
                 Label { text: qsTr("Priority"); color: AppTheme.mutedText; font.pixelSize: 11 }
-                KosComboBox {
+                CalendarComboBox {
+                    popupScene: root.contentItem.parent
                     id: priorityBox
                     Accessible.name: qsTr("Task priority")
                     Layout.preferredWidth: 110
@@ -537,30 +438,32 @@ KosWorkspaceDialog {
                 spacing: 8
 
                 Label { text: qsTr("Due date"); color: AppTheme.mutedText; font.pixelSize: 11 }
-                KosTextField {
+                CalendarTextField {
                     id: dueDateField
                     Layout.fillWidth: true
                     Layout.preferredHeight: root.fieldHeight
                     placeholderText: root.datePattern
                     Accessible.name: qsTr("Task due date")
+                    invalid: root.hasError("dueDate")
                     outlineColor: root.hasError("dueDate")
                         ? AppTheme.destructive : AppTheme.border
                     onTextChanged: root.clearError("dueDate")
                 }
 
-                KosTextField {
+                CalendarTextField {
                     id: dueTimeField
                     Layout.preferredWidth: 92
                     Layout.preferredHeight: root.fieldHeight
                     placeholderText: root.timePattern
                     enabled: !allDayCheck.checked
                     Accessible.name: qsTr("Task due time")
+                    invalid: root.hasError("dueTime")
                     outlineColor: root.hasError("dueTime")
                         ? AppTheme.destructive : AppTheme.border
                     onTextChanged: root.clearError("dueTime")
                 }
 
-                KosCheckBox {
+                CalendarCheckBox {
                     id: allDayCheck
                     text: qsTr("All day")
                 }
@@ -595,8 +498,8 @@ KosWorkspaceDialog {
 
                 KosSurface {
                     anchors.fill: parent
-                    radius: AppTheme.smallRadius
-                    fillColor: AppTheme.fieldSurface
+                    radius: 8
+                    fillColor: design.controlFill
                     elevation: 0
                     focused: notesField.activeFocus
                 }

@@ -33,3 +33,29 @@ The executable is written below `.build/calendar-dev/apps/calendar/`.
 - Deferred: drag-to-reschedule, timezone selection UI, attendee scheduling, advanced recurrence editing, cloud accounts, CalDAV, and Akonadi integration.
 
 Calendar and Todo share only the `Kos.Pim` contract and service. Neither application imports the other's code. See `docs/PimArchitecture.md` for data ownership, compatibility rules, and safety limits.
+
+## Compact interface
+
+Calendar follows nextkdeAppDemo's GalleryDesign 2.9: 224px ordinary sidebar,
+26px liquid toolbar actions, 28px solid form fields and compact dialog footers.
+The month grid and selected-day agenda use flat content surfaces. The agenda
+height follows its item count; long lists scroll within a bounded viewport.
+Week/day positioning is clamped to the timeline's scroll extent, including late
+hours and window resizing. Event/task validation and deletion confirmation stay
+in their editors; the shared footer only emits action requests.
+
+The optical material is opt-in at the shared UI boundary. Application source
+previews therefore need a freshly built calendar binary containing
+`LiquidCompactSurface`; an older installed binary cannot load this source tree.
+
+## Material alignment (GalleryDesign 2.10)
+
+Liquid toolbar buttons retain their glass edges without an added accent focus ring.
+The continuous ordinary sidebar composites only its background at 0.95 opacity,
+with QML blur of the actual in-window base plane. Text remains opaque.
+Menus, detail popovers and combo-box option popups use one liquid panel and ordinary
+interior rows. Popups stay in the same window and exclude themselves from their
+capture; editor dropdowns sample the editor panel. Reduced transparency or missing
+GPU sampling uses opaque fallback surfaces. No KWin liquid plugin is involved.
+Typography, toolbar search/view selector, field geometry and editor footer sizes
+retain the previous compact design.
