@@ -44,6 +44,7 @@ int main(int argc, char **argv) {
         "POWER_SUPPLY_VOLTAGE_MAX=20000000\nPOWER_SUPPLY_CURRENT_MAX=3250000\n");
     const auto details = KosPlatform::readBatteryDetails(supplies.path());
     assert(details.value("available").toBool());
+    assert(details.value("complete").toBool());
     assert(details.value("batteries").toArray().size() == 1);
     const auto pack = details.value("batteries").toArray().first().toObject();
     assert(pack.value("chargeFullMah").toDouble() == 4500);
@@ -66,7 +67,16 @@ int main(int argc, char **argv) {
     assert(!sparse.contains("energyDesignWh") && !sparse.contains("cycles"));
     assert(sparse.contains("powerWatts") && sparse.value("powerWatts").toDouble() == 0);
     assert(sparse.value("temperature").toDouble() == -5);
+    supply("BAT1", "POWER_SUPPLY_TYPE=Battery\nPOWER_SUPPLY_ENERGY_FULL=20000000\n");
+    assert(KosPlatform::readBatteryDetails(supplies.path()).value("complete").toBool());
+    assert(QFile::remove(supplies.path() + "/BAT1/uevent"));
+    const auto partial = KosPlatform::readBatteryDetails(supplies.path());
+    assert(partial.value("batteries").toArray().size() == 1);
+    assert(!partial.value("complete").toBool());
+    assert(QDir(supplies.path() + "/BAT1").removeRecursively());
     supply("BAT0", QByteArray(17000, 'x'));
+    assert(!KosPlatform::readBatteryDetails(supplies.path()).value("complete").toBool());
     assert(!KosPlatform::readBatteryDetails(supplies.path()).value("available").toBool());
     assert(!KosPlatform::readBatteryDetails(supplies.path() + "/missing").value("available").toBool());
+    assert(!KosPlatform::readBatteryDetails(supplies.path() + "/missing").value("complete").toBool());
 }

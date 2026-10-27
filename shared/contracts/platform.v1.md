@@ -207,9 +207,14 @@ reported through the common response envelope.
 
 - `network.applications` (read): returns `{scope: "user-tcp", sockets: [{id, name, pid, rxBytes, txBytes}]}` from `ss -tinpeOH`. Visible-owner TCP counters are sampled per socket before grouping by process name. Local proxy connections may count the same traffic twice. UDP/QUIC, inaccessible owners, and connections closed between samples are excluded. These totals are independent of interface totals.
 - `power.profiles` (read): returns `{profiles, activeProfile, degraded}` from `powerprofilesctl list`.
-- `power.battery` (read): takes `{}` and returns `{available, batteries, adapters}`
+- `power.battery` (read): takes `{}` and returns `{available, complete, batteries, adapters}`
   from bounded reads of `/sys/class/power_supply/*/uevent` (at most 64 devices,
-  16 KiB each). No helper, system mutation, or caller-supplied path. `batteries`
+  16 KiB each). `complete` is false if enumeration is unavailable, exceeds the
+  device limit, or any device read fails, is empty/oversized, or lacks a type.
+  Incomplete samples must not be used for whole-system battery aggregation or
+  pack-specific fields; the Shell falls back to UPower capacity/health instead.
+  All online adapter nodes are displayed separately, including nodes without
+  telemetry. No helper, system mutation, or caller-supplied path. `batteries`
   contains present system packs with `name`, `model` and optional `energyFullWh`,
   `energyDesignWh`, `chargeFullMah`, `chargeDesignMah`, `powerWatts`, `currentMa`,
   `voltage`, `cycles`, `temperature` (°C). Charge-based energy conversion uses

@@ -15,12 +15,17 @@ namespace KosPlatform {
 inline QJsonObject readBatteryDetails(const QString &root = QStringLiteral("/sys/class/power_supply"))
 {
     QJsonArray batteries, adapters;
+    bool complete = QDir(root).exists() && QDir(root).isReadable();
     const auto entries = QDir(root).entryList(QDir::Dirs | QDir::NoDotAndDotDot, QDir::Name);
+    if (entries.size() > 64) complete = false;
     for (const auto &name : entries.mid(0, 64)) {
         QFile file(root + '/' + name + QStringLiteral("/uevent"));
-        if (!file.open(QIODevice::ReadOnly)) continue;
+        if (!file.open(QIODevice::ReadOnly)) { complete = false; continue; }
         const auto data = file.read(16385);
-        if (data.size() > 16384) continue;
+        if (file.error() != QFileDevice::NoError || data.isEmpty() || data.size() > 16384) {
+            complete = false;
+            continue;
+        }
         QHash<QByteArray, QByteArray> fields;
         for (const auto &line : data.split('\n')) {
             const auto split = line.indexOf('=');
@@ -38,6 +43,7 @@ inline QJsonObject readBatteryDetails(const QString &root = QStringLiteral("/sys
             if (value && (signedValue || *value >= 0)) object.insert(QString::fromLatin1(key), *value);
         };
         const auto type = fields.value("POWER_SUPPLY_TYPE");
+        if (type.isEmpty()) { complete = false; continue; }
         if (type == "Battery") {
             if (fields.value("POWER_SUPPLY_SCOPE") == "Device" || number("PRESENT") == 0) continue;
             QJsonObject battery{{QStringLiteral("name"), name},
@@ -83,6 +89,7 @@ inline QJsonObject readBatteryDetails(const QString &root = QStringLiteral("/sys
         }
     }
     return {{QStringLiteral("available"), !batteries.isEmpty()},
+        {QStringLiteral("complete"), complete},
         {QStringLiteral("batteries"), batteries}, {QStringLiteral("adapters"), adapters}};
 }
 

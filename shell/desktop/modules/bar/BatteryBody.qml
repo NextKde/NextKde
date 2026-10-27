@@ -21,10 +21,9 @@ Item {
     readonly property bool charging: hasBattery && battery.state === UPowerDeviceState.Charging
     readonly property bool pluggedIn: hasBattery && !batteryPowered
     readonly property real level: hasBattery ? Math.max(0, Math.min(1, battery.percentage)) : 0
-    readonly property var detail: BatteryData.summary(hardware.batteries)
+    readonly property var detail: BatteryData.summary(hardware.batteries, hardware.complete !== false)
     readonly property real fullCapacity: Number.isFinite(detail.full) ? detail.full
         : hasBattery && detail.unit === "Wh" && battery.energyCapacity > 0 ? battery.energyCapacity : NaN
-    readonly property var adapter: hardware.adapters?.length === 1 ? hardware.adapters[0] : ({})
     readonly property real health: Number.isFinite(detail.health) ? detail.health
         : hasBattery && battery.healthSupported ? battery.healthPercentage : -1
     readonly property color statusColor: !hasBattery ? mutedInk : level <= 0.15 && batteryPowered ? "#ff453a"
@@ -64,7 +63,7 @@ Item {
         return I18n.tr("%1 h %2 min").arg(Math.floor(minutes / 60)).arg(minutes % 60)
     }
     function measured(value, unit, decimals) { return BatteryData.measurement(value, unit, decimals) }
-    function adapterPower() {
+    function adapterPower(adapter) {
         const actual = adapter.powerWatts, rated = adapter.ratedPowerWatts
         if (Number.isFinite(actual) && Number.isFinite(rated))
             return measured(Math.abs(actual), "W", 2) + " / " + measured(rated, "W", 0)
@@ -286,9 +285,25 @@ Item {
                         }
                     }
                 }
-                Field { title: I18n.tr("Power:"); value: body.adapterPower(); valueObjectName: "battery-adapter-power" }
-                Field { title: I18n.tr("Current:"); value: body.measured(body.adapter.currentMa, "mA", 0) }
-                Field { title: I18n.tr("Voltage:"); value: body.measured(body.adapter.voltage, "V", 2) }
+                Repeater {
+                    model: body.hardware.adapters?.length ? body.hardware.adapters : [{}]
+                    delegate: Column {
+                        required property var modelData
+                        required property int index
+                        width: parent.width
+                        Section {
+                            visible: body.hardware.adapters?.length > 1
+                            title: modelData.name || "—"
+                        }
+                        Field {
+                            title: I18n.tr("Power:")
+                            value: body.adapterPower(modelData)
+                            valueObjectName: index === 0 ? "battery-adapter-power" : "battery-adapter-power-" + index
+                        }
+                        Field { title: I18n.tr("Current:"); value: body.measured(modelData.currentMa, "mA", 0) }
+                        Field { title: I18n.tr("Voltage:"); value: body.measured(modelData.voltage, "V", 2) }
+                    }
+                }
             }
             Item { width: 1; height: 10 }
         }

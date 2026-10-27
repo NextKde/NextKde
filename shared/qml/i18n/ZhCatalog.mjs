@@ -103,7 +103,6 @@ export const catalog = {
     "Plugged in": "已接通电源",
     "Calculating…": "正在估算…",
     "Source:": "供电来源：",
-    "Time to discharge:": "预计续航：",
     "Estimated runtime:": "预计可用时间：",
     "Unplug to estimate": "使用电池后估算",
     "Less than 1 min": "不足 1 分钟",

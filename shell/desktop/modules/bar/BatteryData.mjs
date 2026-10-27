@@ -5,8 +5,9 @@ export function sum(rows, key) {
     return rows.reduce((total, row) => total + row[key], 0);
 }
 
-export function summary(rows) {
-    rows = Array.isArray(rows) ? rows : [];
+export function summary(rows, complete = true) {
+    // A missing device must not turn a partial sample into a whole-system total.
+    rows = complete && Array.isArray(rows) ? rows : [];
     const chargeFull = sum(rows, "chargeFullMah"), chargeDesign = sum(rows, "chargeDesignMah");
     const energyFull = sum(rows, "energyFullWh"), energyDesign = sum(rows, "energyDesignWh");
     // mAh values can only be added at the same nominal voltage. Multi-pack

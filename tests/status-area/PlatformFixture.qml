@@ -21,10 +21,10 @@ QtObject {
         case "network.applications": applicationRequests++; result={sockets:[{id:"1",name:"browser",pid:1,rxBytes:100*applicationRequests,txBytes:20*applicationRequests}]}; break
         case "power.profiles": result={profiles:["power-saver","balanced","performance"],activeProfile:powerMode,degraded:""}; break
         case "power.profile.set": powerMode=payload.profile; result={}; break
-        case "power.battery": batteryRequests++; result={available:true,
+        case "power.battery": batteryRequests++; result={available:true,complete:true,
             batteries:[{name:"BAT0",chargeFullMah:4500,chargeDesignMah:5000,
                 voltage:12,currentMa:0,powerWatts:0,cycles:193,temperature:32}],
-            adapters:[{name:"USB",powerWatts:12.29,ratedPowerWatts:65,currentMa:614.5,voltage:20}]}; break
+            adapters:[{name:"AC"},{name:"USB",powerWatts:12.29,ratedPowerWatts:65,currentMa:614.5,voltage:20}]}; break
         case "state.read": result={exists:false,data:""}; break
         case "state.write": result={}; break
         case "audio.get": result={available:true,percent:45,muted:false}; break

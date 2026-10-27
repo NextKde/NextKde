@@ -16,6 +16,7 @@ ShellRoot {
     property bool summaryRendered: false
     property bool detailsRendered: false
     property bool collapsedRendered: false
+    property var completeBatteryHardware: ({})
     property bool batteryRendered: false
     property real batteryOpeningHeight: 0
     property int batteryReadsOnClose: 0
@@ -72,6 +73,7 @@ ShellRoot {
         screen: Quickshell.screens.length > 1 ? Quickshell.screens[1] : Quickshell.screens[0]
         implicitWidth: 500; implicitHeight: 700
         Item { id: entry; x: 80; y: 20; width: 40; height: 30 }
+        BarStatusArea { id: statusArea; x: 40; y: 100; dockHosted: true }
     }
     BatteryPanel { id: battery; battery: sampleBattery; batteryPowered: false }
     NetworkTrafficPanel { id: traffic }
@@ -170,7 +172,7 @@ ShellRoot {
                 const body = fixture.find(battery.contentItem, "battery-panel-body")
                 fixture.check(body !== null && body.hasBattery && !body.charging, "fully charged is not actively charging")
                 fixture.check(fixture.find(battery.contentItem, "battery-full-capacity").text === "4500 mAh", "native full capacity reaches the card")
-                fixture.check(fixture.find(battery.contentItem, "battery-adapter-power").text === "12.29 W / 65 W", "adapter actual and rated power are distinct")
+                fixture.check(fixture.find(battery.contentItem, "battery-adapter-power-1").text === "12.29 W / 65 W", "adapter actual and rated power are distinct")
                 fixture.check(fixture.find(battery.contentItem, "battery-power").text === "0.00 W", "zero battery power is a valid measurement")
                 fixture.check(body.runtimeText === "Unplug to estimate", "AC power does not use a stale discharge estimate")
                 const footer = fixture.find(battery.contentItem, "battery-power-modes")
@@ -183,11 +185,19 @@ ShellRoot {
             } else if (fixture.stage === 8) {
                 I18n.language = "en"
                 fixture.check(PowerProfileService.activeProfile === "power-saver", "readback confirms power profile")
+                fixture.check(fixture.find(battery.contentItem, "battery-adapter-power").text === "—", "AC node does not hide USB telemetry")
+                fixture.completeBatteryHardware = battery.hardware
+                battery.hardware = Object.assign({}, battery.hardware, {complete: false})
                 sampleBattery.state = UPowerDeviceState.PendingCharge
             } else if (fixture.stage === 9) {
                 const body = fixture.find(battery.contentItem, "battery-panel-body")
                 fixture.check(body.statusText === "On hold" && !body.charging, "pending charge is paused, not charging")
                 fixture.check(body.timeText === "On hold", "paused charging has no invented countdown")
+                fixture.check(body.detail.health === null && body.detail.cycles === undefined,
+                    "incomplete samples suppress pack health and pack-specific metrics")
+                fixture.check(fixture.find(battery.contentItem, "battery-full-capacity").text === "49.50 Wh",
+                    "incomplete samples fall back to UPower whole-system capacity")
+                battery.hardware = fixture.completeBatteryHardware
                 sampleBattery.state = UPowerDeviceState.Charging
             } else if (fixture.stage === 10) {
                 const body = fixture.find(battery.contentItem, "battery-panel-body")
