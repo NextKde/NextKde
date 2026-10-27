@@ -634,6 +634,18 @@
       <source>Done</source>
       <translation>完成</translation>
     </message>
+    <message>
+      <source>Liquid material</source>
+      <translation>液态材质</translation>
+    </message>
+    <message>
+      <source>Applies to controls and floating panels</source>
+      <translation>应用于控件和悬浮面板</translation>
+    </message>
+    <message>
+      <source>Higher values make liquid surfaces more opaque</source>
+      <translation>数值越高，液态材质越不透明</translation>
+    </message>
   </context>
   <context>
     <name>KosSidebarToggle</name>

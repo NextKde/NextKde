@@ -16,17 +16,6 @@ KosApplicationWindow {
 
     modernDesign: true
     visible: true
-    // The bare attached ToolTip renders the installed Basic style verbatim,
-    // whose panel is `palette.toolTipBase` + `palette.toolTipText` (R134). The
-    // app sets no palette, so on the dark leg that leaks a pure-white panel
-    // with near-black ink onto a (30,30,30) window. Theme the two tooltip
-    // slots per leg on the window palette: dark panel #3C3C3C (the tahoe
-    // elevated lift over #1E1E1E) with #F2F2F2 ink; light panel #F2F2F2 (one
-    // step below the white plane) with black ink. Radius stays Basic's 0
-    // (square) — the reference has no tooltip at all (R063), so the choice is
-    // ours and is recorded here for both legs.
-    palette.toolTipBase: root.tahoeDark ? "#3C3C3C" : "#F2F2F2"
-    palette.toolTipText: root.design.labelPrimary
     title: qsTr("Calendar")
     width: 1100
     height: 720
@@ -426,7 +415,7 @@ KosApplicationWindow {
 
     // One shared in-window underlay; no per-button shadows or displaced
     // copies of schedule content. The Demo optics supply the liquid rim.
-    component GlassSurface: CalendarGlassSurface {
+    component GlassSurface: CalendarActionSurface {
         backdrop: chromeBackdrop
     }
 
@@ -446,8 +435,11 @@ KosApplicationWindow {
         // blur just closed. Tab keeps keyboard accessibility.
         focusPolicy: Qt.TabFocus
         Accessible.name: hint
-        ToolTip.visible: hovered && hint.length > 0
-        ToolTip.text: hint
+        CalendarToolTip {
+            objectName: control.objectName + "Tip"
+            visible: control.hovered && !control.pressed && control.enabled && control.hint.length > 0
+            text: control.hint
+        }
 
         // Control stretches contentItem to the button box, so the icon is a
         // fixed-size child centred inside a plain filler Item.
@@ -461,7 +453,6 @@ KosApplicationWindow {
         }
 
         background: GlassSurface {
-            opacity: control.enabled ? 1 : 0.5
             hovered: control.hovered
             pressed: control.pressed
             focused: control.activeFocus && control.enabled
@@ -514,8 +505,11 @@ KosApplicationWindow {
             ? textLabel.implicitWidth + 20 : root.design.dateNavHeight
         hoverEnabled: true
         Accessible.name: hint
-        ToolTip.visible: hovered && hint.length > 0
-        ToolTip.text: hint
+        CalendarToolTip {
+            objectName: control.objectName + "Tip"
+            visible: control.hovered && !control.pressed && control.enabled && control.hint.length > 0
+            text: control.hint
+        }
 
         background: Rectangle {
             radius: 6
@@ -1161,6 +1155,11 @@ KosApplicationWindow {
         id: settingsDialog
         settings: root.applicationSettings
         applicationName: qsTr("Calendar")
+        inWindowMaterials: true
+        inWindowSamplingAvailable: GraphicsInfo.api !== GraphicsInfo.Software
+        toolTipBackground: Component {
+            CalendarPopupSurface { scene: settingsDialog.contentItem.parent; radius: 8 }
+        }
     }
 
     Shortcut { sequences: [StandardKey.New]; onActivated: eventEditor.openForDate(root.selectedDate) }
@@ -1275,7 +1274,7 @@ KosApplicationWindow {
                 anchors.bottom: parent.bottom
                 width: sidebar.width
                 readonly property bool sampling: root.visible && width > 0
-                    && !AppTheme.reduceTransparency && GraphicsInfo.api !== GraphicsInfo.Software
+                    && AppTheme.materialMode !== "solid" && !AppTheme.reduceTransparency && GraphicsInfo.api !== GraphicsInfo.Software
                 opacity: sampling ? 0.95 : 1
                 layer.enabled: sampling
                 clip: true
@@ -1325,7 +1324,7 @@ KosApplicationWindow {
             id: chromeBackdrop
             sourceItem: chromePlanes
             registerAsDefault: false
-            active: !AppTheme.reduceTransparency
+            active: AppTheme.materialMode !== "solid" && !AppTheme.reduceTransparency
             resolutionScale: 0.5
         }
 
@@ -1514,13 +1513,23 @@ KosApplicationWindow {
 
                 // The field is clipped by its own width, so the text/input
                 // never leaks outside during the width animation.
-                Rectangle {
+                Item {
                     anchors.fill: parent
-                    radius: height / 2
-                    color: root.design.searchFill
-                    border.width: input.activeFocus ? 1 : 0
-                    border.color: root.design.accent
                     clip: true
+                    HoverHandler { id: searchHover }
+                    CalendarGlassSurface {
+                        id: searchGlass
+                        objectName: "toolbarSearchGlass"
+                        anchors.fill: parent
+                        backdrop: chromeBackdrop
+                        focused: input.activeFocus
+                        hovered: searchHover.hovered
+                        refractionStrength: hovered || focused ? 3 : 1.5
+                        magnification: hovered || focused ? 1.025 : 1.012
+                        Behavior on refractionStrength { NumberAnimation { duration: AppTheme.motionFast } }
+                        Behavior on magnification { NumberAnimation { duration: AppTheme.motionFast } }
+                        Behavior on reflectionStrength { NumberAnimation { duration: AppTheme.motionFast } }
+                    }
 
                     TextInput {
                         id: input
@@ -1533,7 +1542,10 @@ KosApplicationWindow {
                         clip: true
                         color: root.design.labelPrimary
                         font.pixelSize: root.design.controlFontSize
-                        selectionColor: root.design.accent
+                        selectionColor: searchGlass.sampling
+                            ? (AppTheme.dark ? Qt.rgba(1, 1, 1, 0.24) : Qt.rgba(0, 0, 0, 0.16))
+                            : AppTheme.accent
+                        selectedTextColor: searchGlass.sampling ? color : AppTheme.accentText
                         text: root.searchQuery
                         onTextEdited: root.searchQuery = text
                         onActiveFocusChanged: {
@@ -1574,8 +1586,11 @@ KosApplicationWindow {
                 height: root.design.toolbarButtonSize
                 hoverEnabled: true
                 Accessible.name: qsTr("Calendar actions")
-                ToolTip.visible: hovered
-                ToolTip.text: Accessible.name
+                CalendarToolTip {
+                    objectName: "toolbarMoreTip"
+                    visible: moreButton.hovered && !moreButton.pressed && !actionsMenu.visible
+                    text: moreButton.Accessible.name
+                }
                 onClicked: actionsMenu.popup(this, 0, height + 2)
 
                 contentItem: Item {
@@ -1597,10 +1612,9 @@ KosApplicationWindow {
                 }
 
                 background: GlassSurface {
-                    opacity: moreButton.enabled ? 1 : 0.5
-
                     hovered: moreButton.hovered
                     pressed: moreButton.pressed
+                    focused: moreButton.activeFocus && moreButton.enabled
                 }
             }
 

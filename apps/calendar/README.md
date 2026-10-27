@@ -63,5 +63,12 @@ accent focus overlay; keyboard selection and an opaque fallback remain available
 Pressing expands the sampled lens to 1.12 scale with stronger refraction; selection
 slides and rebounds using OutBack easing. A short pulse also covers quick clicks
 and keyboard changes. Labels/hit targets stay fixed; reduced motion settles directly.
-Typography, toolbar search, selector geometry, field geometry and editor footer
-sizes retain the previous compact design.
+Toolbar search also samples glass, with neutral text selection and no added liquid
+focus ring. Action backgrounds animate press/release and optical transitions while
+icons stay fixed. Tooltips use same-window liquid panels, including settings tips.
+The settings dialog uses an opaque ordinary panel and ordinary segmented controls. Its in-window material host
+is opt-in: Auto/Glass use available QML sampling, Solid and Reduce Transparency
+stop it without relying on KWin. The shared opacity preference scales each role's
+coverage relative to its 0.86 default, preserving lighter controls and denser panels;
+it never fades foreground text. Typography, selector/field geometry and editor
+footer sizes retain the previous compact design.
