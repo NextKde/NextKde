@@ -67,6 +67,7 @@
     "kos-dock.policy",
     "kos-dock.motion",
     "kos-shell.application-traffic",
+    "kos-shell.battery-data",
     "kos-shell.traffic-history",
     "kos-settings.power-config"
   ],

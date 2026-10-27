@@ -110,6 +110,9 @@ if(BUILD_TESTING)
         add_test(NAME kos-shell.application-traffic
             COMMAND ${KOS_NODE_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/status-area/test_application_traffic.mjs)
         set_tests_properties(kos-shell.application-traffic PROPERTIES LABELS logic TIMEOUT 10)
+        add_test(NAME kos-shell.battery-data
+            COMMAND ${KOS_NODE_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/status-area/test_battery_data.mjs)
+        set_tests_properties(kos-shell.battery-data PROPERTIES LABELS logic TIMEOUT 10)
         add_test(NAME kos-shell.language
             COMMAND ${KOS_NODE_EXECUTABLE}
                 ${CMAKE_CURRENT_SOURCE_DIR}/tests/localization/widget-language.mjs)
@@ -531,7 +534,7 @@ if(BUILD_TESTING)
         add_test(NAME kos-ui.status-panels
             COMMAND ${KOS_PYTHON_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/status-area/run-panels.py --vulkan)
         add_test(NAME kos-ui.status-panels-opengl
-            COMMAND ${KOS_PYTHON_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/status-area/run-panels.py --opengl)
+            COMMAND ${KOS_PYTHON_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/status-area/run-panels.py --opengl --scale-2)
         set_tests_properties(kos-ui.status-panels kos-ui.status-panels-opengl PROPERTIES
             ENVIRONMENT "QML_IMPORT_PATH=${CMAKE_BINARY_DIR}/qml;QML2_IMPORT_PATH=${CMAKE_BINARY_DIR}/qml"
             LABELS "ui;compositor" TIMEOUT 45 RUN_SERIAL TRUE)
