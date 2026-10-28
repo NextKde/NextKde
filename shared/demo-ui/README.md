@@ -1,7 +1,7 @@
 # Canonical Demo controls
 
 This module packages the required controls from `nextkdeAppDemo/shared/qml` under
-`Kos.Demo` so Calendar uses the actual Demo implementations without changing other
+`Kos.Demo` so Calendar and Settings use the actual Demo implementations without changing other
 apps' legacy `Kos.Ui` module. QML, GLSL and QSB files are byte-for-byte copies of the
 maintainer's Demo working tree on 2026-10-27; upstream-sha256.json records each file.
 The namespace/build metadata are the only packaging additions. Preserve the GPL-3.0

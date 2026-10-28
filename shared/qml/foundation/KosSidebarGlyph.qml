@@ -8,12 +8,12 @@ Item {
 
     Rectangle {
         anchors.centerIn: parent
-        width: 18; height: 15; radius: 4
+        width: 16; height: 13; radius: 3.5
         color: "transparent"
-        border.width: 1.4
+        border.width: 1.25
         border.color: root.glyphColor
         Rectangle {
-            x: 4; y: 3; width: 3; height: 9; radius: 1.5
+            x: 3.5; y: 2.5; width: 2.5; height: 8; radius: 1.25
             color: root.paneColor
         }
     }

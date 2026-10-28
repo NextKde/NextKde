@@ -1,3 +1,4 @@
+import Kos.Demo as Demo
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
@@ -181,7 +182,7 @@ ColumnLayout {
                             Layout.preferredWidth: 48
                             horizontalAlignment: Text.AlignRight
                         }
-                        LiquidControls.LiquidSlider {
+                        Demo.LiquidSlider {
                             // The shared controls carry the host's palette, so the
                             // Material form has to hand them the Material accent: their own
                             // default is the iPadOS blue this window was designed with.

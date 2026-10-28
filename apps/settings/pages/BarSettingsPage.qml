@@ -1,3 +1,4 @@
+import Kos.Demo as Demo
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
@@ -132,14 +133,14 @@ ColumnLayout {
         text: I18n.tr("Display and layout").toUpperCase()
         color: colors.secondaryText
         font.pixelSize: 12
-        font.weight: Font.DemiBold
+        font.weight: Font.Medium
         Layout.leftMargin: 13
     }
 
     Rectangle {
         Layout.fillWidth: true
         implicitHeight: barLayoutCol.implicitHeight
-        radius: 18
+        radius: 10
         color: colors.card
 
         Column {
@@ -149,7 +150,7 @@ ColumnLayout {
 
             Item {
                 width: parent.width
-                height: 54
+                height: 40
                 RowLayout {
                     anchors.fill: parent
                     anchors.leftMargin: 16
@@ -164,7 +165,7 @@ ColumnLayout {
                     Text {
                         text: I18n.tr("Top bar shape")
                         color: colors.primaryText
-                        font.pixelSize: 15
+                        font.pixelSize: 13
                         font.weight: Font.DemiBold
                     }
                     Item { Layout.fillWidth: true }
@@ -197,7 +198,7 @@ ColumnLayout {
 
             Item {
                 width: parent.width
-                height: 54
+                height: 40
                 RowLayout {
                     anchors.fill: parent
                     anchors.leftMargin: 16
@@ -212,7 +213,7 @@ ColumnLayout {
                     Text {
                         text: I18n.tr("Bar display")
                         color: colors.primaryText
-                        font.pixelSize: 15
+                        font.pixelSize: 13
                         font.weight: Font.DemiBold
                     }
                     Item { Layout.fillWidth: true }
@@ -245,8 +246,9 @@ ColumnLayout {
 
             Item {
                 width: parent.width
-                height: 64
+                height: Math.max(48, mergeRow.implicitHeight + 16)
                 RowLayout {
+                    id: mergeRow
                     anchors.fill: parent
                     anchors.leftMargin: 16
                     anchors.rightMargin: 16
@@ -263,16 +265,20 @@ ColumnLayout {
                         Text {
                             text: I18n.tr("Bar merges into Dock")
                             color: colors.primaryText
-                            font.pixelSize: 14
+                            font.pixelSize: 13
                             font.weight: Font.DemiBold
                         }
                         Text {
                             text: I18n.tr("Only applies when the Dock sits at the bottom; side Docks keep the top Bar automatically")
+                            Layout.fillWidth: true
+                            wrapMode: Text.Wrap
                             color: colors.secondaryText
                             font.pixelSize: 11
                         }
                     }
-                    LiquidControls.LiquidGlassSwitch {
+                    Demo.LiquidGlassSwitch {
+                        implicitWidth: 60
+                        implicitHeight: 26
                         checked: barPage.barIntegratedWithDock
                         accentColor: colors.role("primary", "#0a84ff")
                         trackColor: colors.divider
@@ -289,7 +295,7 @@ ColumnLayout {
         text: I18n.tr("Bar style").toUpperCase()
         color: colors.secondaryText
         font.pixelSize: 12
-        font.weight: Font.DemiBold
+        font.weight: Font.Medium
         Layout.leftMargin: 13
         Layout.topMargin: 8
     }
@@ -297,7 +303,7 @@ ColumnLayout {
     Rectangle {
         Layout.fillWidth: true
         implicitHeight: macStyleCol.implicitHeight
-        radius: 18
+        radius: 10
         color: colors.card
 
         Column {
@@ -307,8 +313,9 @@ ColumnLayout {
 
             Item {
                 width: parent.width
-                height: 64
+                height: Math.max(48, styleRow.implicitHeight + 16)
                 RowLayout {
+                    id: styleRow
                     anchors.fill: parent
                     anchors.leftMargin: 16
                     anchors.rightMargin: 16
@@ -325,7 +332,7 @@ ColumnLayout {
                         Text {
                             text: I18n.tr("mac style")
                             color: colors.primaryText
-                            font.pixelSize: 14
+                            font.pixelSize: 13
                             font.weight: Font.DemiBold
                         }
                         Text {
@@ -368,8 +375,9 @@ ColumnLayout {
 
             Item {
                 width: parent.width
-                height: 62
+                height: Math.max(48, tintRow.implicitHeight + 16)
                 RowLayout {
+                    id: tintRow
                     anchors.fill: parent
                     anchors.leftMargin: 16
                     anchors.rightMargin: 16
@@ -387,7 +395,7 @@ ColumnLayout {
                             text: I18n.tr("Tint strength")
                             color: barPage.barMacStyle
                                 ? colors.primaryText : colors.secondaryText
-                            font.pixelSize: 14
+                            font.pixelSize: 13
                             font.weight: Font.DemiBold
                         }
                         Text {
@@ -413,7 +421,8 @@ ColumnLayout {
                             ? colors.secondaryText : colors.tertiaryText
                         font.pixelSize: 12
                     }
-                    LiquidControls.LiquidSlider {
+                    Demo.LiquidSlider {
+                        implicitHeight: 28
                         id: barMacTintSlider
                         accentColor: colors.accent
                         trackColor: colors.divider

@@ -17,10 +17,12 @@ Item {
     property LiquidBackdrop backdrop: LiquidStyle.backdropForItem(root, root.Window.window)
     property var labels: []
     property int currentIndex: 0
-    property color backgroundColor: Foundation.AppTheme.button
-    property color selectionColor: Foundation.AppTheme.cardHover
+    property color backgroundColor: Foundation.AppTheme.controlBackground
+    property color selectionColor: Foundation.AppTheme.dark ? "#636363" : "#D1D1D1"
     property color textColor: Foundation.AppTheme.text
     property color mutedTextColor: Foundation.AppTheme.mutedText
+    property int fontWeight: Font.Normal
+    property int selectedFontWeight: Font.DemiBold
     // A tonal host draws the Material 3 segmented button: a full-radius outline
     // container with a filled, shadowless selection. The liquid lens below
     // reflection and sampling are hidden rather than blended in that form.
@@ -31,6 +33,30 @@ Item {
     property int _pressedIndex: -1
     property int _visualIndex: 0
     property int _pendingIndex: -1
+    property bool _ready: false
+    property real _deformation: 0
+    readonly property bool _motionEnabled: !materialForm && !Foundation.AppTheme.reduceMotion
+
+    function animateSelection() {
+        if (_ready && _motionEnabled) selectionMotion.restart()
+    }
+    function settleMotion() {
+        selectionMotion.stop()
+        _deformation = 0
+    }
+    onMaterialFormChanged: { if (materialForm) settleMotion() }
+    Connections {
+        target: Foundation.AppTheme
+        function onReduceMotionChanged() {
+            if (Foundation.AppTheme.reduceMotion) root.settleMotion()
+        }
+    }
+    SequentialAnimation {
+        id: selectionMotion
+        NumberAnimation { target: root; property: "_deformation"; to: 1; duration: 85; easing.type: Easing.OutCubic }
+        NumberAnimation { target: root; property: "_deformation"; to: -.18; duration: 155; easing.type: Easing.InOutSine }
+        NumberAnimation { target: root; property: "_deformation"; to: 0; duration: 150; easing.type: Easing.OutCubic }
+    }
 
     readonly property real _lensPosition: lens.x
     readonly property bool sampling: !materialForm && lensSurface.sampling
@@ -50,6 +76,7 @@ Item {
         // Draw the result first. The owner may update its persistent state
         // through IPC, but that round trip must not consume the first click.
         _pendingIndex = index
+        if (_visualIndex !== index) animateSelection()
         _visualIndex = index
         selectionRequested(index)
         confirmationTimer.restart()
@@ -76,15 +103,17 @@ Item {
         // Read the changed source property directly. A binding that depends on
         // currentIndex (such as safeIndex) may not have been re-evaluated yet
         // when this change handler runs.
+        if (_visualIndex !== clampedIndex(currentIndex)) animateSelection()
         _visualIndex = clampedIndex(currentIndex)
         _pendingIndex = -1
         confirmationTimer.stop()
     }
     onLabelsChanged: {
+        settleMotion()
         _visualIndex = clampedIndex(currentIndex)
         _pendingIndex = -1
     }
-    Component.onCompleted: _visualIndex = safeIndex
+    Component.onCompleted: { _visualIndex = safeIndex; _ready = true }
 
     Timer {
         id: confirmationTimer
@@ -93,6 +122,7 @@ Item {
         // Roll the lens back only if the externally-owned state did not
         // acknowledge this optimistic selection.
         onTriggered: {
+            if (root._visualIndex !== root.safeIndex) root.animateSelection()
             root._visualIndex = root.safeIndex
             root._pendingIndex = -1
         }
@@ -111,7 +141,7 @@ Item {
         LiquidSurface {
             anchors.fill: parent
             visible: !root.materialForm
-            radius: height * .48
+            radius: height / 2
             backdrop: root.backdrop
             convexLens: true
             edgeShadeStrength: .08
@@ -121,8 +151,8 @@ Item {
             refractionStrength: materialHover.hovered ? 4.5 : 3
             magnification: materialHover.hovered ? 1.045 : 1.025
             reflectionStrength: materialHover.hovered ? .72 : .50
-            tintColor: Foundation.AppTheme.dark ? "#20252f" : "#ffffff"
-            tintStrength: .30
+            tintColor: root.backgroundColor
+            tintStrength: .65
             Behavior on refractionStrength { NumberAnimation { duration: Foundation.AppTheme.reduceMotion ? 0 : Foundation.AppTheme.motionFast } }
             Behavior on magnification { NumberAnimation { duration: Foundation.AppTheme.reduceMotion ? 0 : Foundation.AppTheme.motionFast } }
             Behavior on reflectionStrength { NumberAnimation { duration: Foundation.AppTheme.reduceMotion ? 0 : Foundation.AppTheme.motionFast } }
@@ -131,16 +161,26 @@ Item {
     }
     Item {
         id: lens
-        x: 4 + root._visualIndex * root.segmentWidth
+        x: 2 + root._visualIndex * root.segmentWidth
         y: 2
-        width: root.segmentWidth - 4
+        width: root.segmentWidth
         height: root.height - 4
-        readonly property real radius: root.materialForm ? height / 2 : height * .48
-        scale: !root.materialForm && root._pressedIndex >= 0 ? 1.12 : 1
-        Behavior on scale {
-            NumberAnimation { duration: Foundation.AppTheme.reduceMotion ? 0 : Foundation.AppTheme.motionFast; easing.type: Easing.OutBack }
+        // Uniform 2px inset: inner and outer endcaps share their centres.
+        readonly property real radius: height / 2
+        readonly property real deformation: root._motionEnabled ? root._deformation : 0
+        readonly property real pressExpansion: root._motionEnabled && root._pressedIndex >= 0 ? .06 : 0
+        transform: Scale {
+            origin.x: lens.width / 2
+            origin.y: lens.height / 2
+            xScale: 1 + lens.deformation * .12 + lens.pressExpansion
+            yScale: 1 - lens.deformation * .08 + lens.pressExpansion
+            Behavior on xScale { enabled: root._motionEnabled && !selectionMotion.running; NumberAnimation { duration: Foundation.AppTheme.motionFast } }
+            Behavior on yScale { enabled: root._motionEnabled && !selectionMotion.running; NumberAnimation { duration: Foundation.AppTheme.motionFast } }
         }
-        Behavior on x { NumberAnimation { duration: Foundation.AppTheme.motionNormal; easing.type: Easing.OutQuint } }
+        Behavior on x {
+            enabled: root._motionEnabled
+            NumberAnimation { duration: 300; easing.type: Easing.OutCubic }
+        }
         Rectangle {
             anchors.fill: parent
             visible: root.materialForm
@@ -161,8 +201,9 @@ Item {
             refractionStrength: materialHover.hovered ? 4.5 : 3
             magnification: materialHover.hovered ? 1.045 : 1.025
             reflectionStrength: materialHover.hovered ? .72 : .50
-            tintColor: root._pressedIndex >= 0 ? "#ffffff" : (Foundation.AppTheme.dark ? "#20252f" : "#ffffff")
-            tintStrength: root._pressedIndex >= 0 ? .06 : .80
+            // Preserve a readable selected state after release, including on flat scenes.
+            tintColor: root.selectionColor
+            tintStrength: root._pressedIndex >= 0 ? .50 : .85
             Behavior on refractionStrength { NumberAnimation { duration: Foundation.AppTheme.reduceMotion ? 0 : Foundation.AppTheme.motionFast } }
             Behavior on magnification { NumberAnimation { duration: Foundation.AppTheme.reduceMotion ? 0 : Foundation.AppTheme.motionFast } }
             Behavior on reflectionStrength { NumberAnimation { duration: Foundation.AppTheme.reduceMotion ? 0 : Foundation.AppTheme.motionFast } }
@@ -218,9 +259,9 @@ Item {
                 text: segmentDelegate.modelData
                 color: segmentDelegate.index === root._visualIndex
                     ? root.textColor : root.mutedTextColor
-                font.pixelSize: 12
+                font.pixelSize: Foundation.AppTheme.compactDesign ? Foundation.AppTheme.compactControlFontSize : 12
                 font.weight: segmentDelegate.index === root._visualIndex
-                    ? Font.DemiBold : Font.Normal
+                    ? root.selectedFontWeight : root.fontWeight
                 scale: root._pressedIndex === segmentDelegate.index ? 0.96 : 1.0
                 Behavior on color {
                     ColorAnimation { duration: Foundation.AppTheme.motionFast }

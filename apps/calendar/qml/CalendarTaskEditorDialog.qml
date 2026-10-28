@@ -10,13 +10,21 @@ KosWorkspaceDialog {
     CalendarStyle { id: design }
 
     property string editingId: ""
+    property bool saving: false
+    closePolicy: saving ? Popup.NoAutoClose : Popup.CloseOnEscape
     property string linkedEventId: ""
     property var availableLists: []
+    property var availableCategories: []
+    property string calendarId: "personal"
+    property string listId: "personal"
+    property int savedReminderMinutes: -1
+    property int originalReminderIndex: 0
+    readonly property bool customReminder: ![-1, 0, 5, 15, 30, 60, 1440].includes(savedReminderMinutes)
 
     signal saveRequested(string uid, var todo)
     signal deleteRequested(string uid)
 
-    title: editingId.length > 0 ? qsTr("Edit task") : qsTr("New task")
+    title: editingId.length > 0 ? qsTr("Edit reminder") : qsTr("New reminder")
     modal: true
     popupType: Popup.Item
     // P02/P03: compact neutral editor, matching the event editor treatment.
@@ -39,6 +47,7 @@ KosWorkspaceDialog {
 
     // Fixed compact action row; the form scrolls independently.
     footer: CalendarEditorFooter {
+        enabled: !root.saving
         editing: root.editingId.length > 0
         confirmingDelete: root.confirmingDelete
         deleteLabel: qsTr("Delete task")
@@ -235,7 +244,12 @@ KosWorkspaceDialog {
         titleField.text = String(value(todo, "title", ""))
         notesField.text = String(value(todo, "description", ""))
         completedCheck.checked = Boolean(value(todo, "completed", false))
-        listBox.currentIndex = listIndex(value(todo, "listId", "inbox"))
+        listId = String(value(todo, "listId", "personal"))
+        calendarId = String(value(todo, "calendarId", "personal"))
+        categoryBox.currentIndex = Math.max(0, availableCategories.findIndex(item => item.id === calendarId) < 0 ? 1 : availableCategories.findIndex(item => item.id === calendarId))
+        savedReminderMinutes = Number(value(todo, "reminderMinutes", -1))
+        reminderBox.currentIndex = (customReminder ? 7 : [-1, 0, 5, 15, 30, 60, 1440].indexOf(savedReminderMinutes))
+        originalReminderIndex = reminderBox.currentIndex
         const due = String(value(todo, "due", ""))
         dueDateField.text = formatDateInput(datePart(due))
         const timeMatch = due.match(/T(\d{2}:\d{2})/)
@@ -251,13 +265,15 @@ KosWorkspaceDialog {
 
     function payload() {
         const priorityValues = [0, 9, 5, 1]
-        const list = availableLists.length > 0
-            ? availableLists[Math.max(0, listBox.currentIndex)] : ({ id: "inbox" })
         const dueDate = dueDateField.text.trim()
         return {
             title: titleField.text.trim(),
             description: notesField.text.trim(),
-            listId: String(value(list, "id", "inbox")),
+            listId: listId,
+            calendarId: calendarId,
+            reminderMinutes: linkedEventId.length > 0 || dueDate.length === 0 ? -1
+                : reminderBox.currentIndex === originalReminderIndex ? savedReminderMinutes
+                : [-1, 0, 5, 15, 30, 60, 1440][reminderBox.currentIndex],
             due: dueDate.length > 0 ? isoFromDateText(dueDate) + "T"
                 + (allDayCheck.checked ? "00:00" : isoFromTimeText(dueTimeField.text)) + ":00" : "",
             allDay: allDayCheck.checked,
@@ -277,7 +293,6 @@ KosWorkspaceDialog {
         }
         errorText = ""
         errorFields = []
-        close()
         accepted()
     }
 
@@ -285,6 +300,7 @@ KosWorkspaceDialog {
 
     contentItem: Flickable {
         id: editorScroll
+        enabled: !root.saving
         // P1-18/A7: the custom footer hides the standard DialogButtonBox
         // that would normally wire a default button, so Return used to do
         // nothing in the form. Return bubbles up here from every field, so
@@ -392,6 +408,7 @@ KosWorkspaceDialog {
 
                 CalendarTextField {
                     id: titleField
+                    objectName: "reminderTitle"
                     Layout.fillWidth: true
                     Layout.preferredHeight: root.fieldHeight
                     placeholderText: qsTr("Task title")
@@ -412,14 +429,16 @@ KosWorkspaceDialog {
                 Layout.fillWidth: true
                 spacing: 8
 
-                Label { text: qsTr("List"); color: AppTheme.mutedText; font.pixelSize: 11 }
+                Label { text: qsTr("Category"); color: AppTheme.mutedText; font.pixelSize: 11 }
                 CalendarComboBox {
                     popupScene: root.contentItem.parent
-                    id: listBox
-                    Accessible.name: qsTr("Task list")
+                    id: categoryBox
+                    objectName: "reminderCategory"
+                    Accessible.name: qsTr("Category")
                     Layout.fillWidth: true
                     Layout.preferredHeight: root.fieldHeight
-                    model: root.availableLists
+                    model: root.availableCategories
+                    onActivated: root.calendarId = root.availableCategories[currentIndex].id
                     textRole: "name"
                 }
                 Label { text: qsTr("Priority"); color: AppTheme.mutedText; font.pixelSize: 11 }
@@ -477,6 +496,22 @@ KosWorkspaceDialog {
                 color: AppTheme.mutedText
                 font.pixelSize: 10
                 wrapMode: Text.WordWrap
+            }
+
+            RowLayout {
+                Layout.fillWidth: true
+                visible: root.linkedEventId.length === 0
+                Label { text: qsTr("Notification"); color: AppTheme.mutedText; font.pixelSize: 11 }
+                CalendarComboBox {
+                    id: reminderBox
+                    objectName: "reminderAlarm"
+                    popupScene: root.contentItem.parent
+                    Layout.fillWidth: true
+                    Layout.preferredHeight: root.fieldHeight
+                    enabled: dueDateField.text.trim().length > 0
+                    model: [qsTr("None"), qsTr("At the scheduled time"), qsTr("5 minutes before"),
+                        qsTr("15 minutes before"), qsTr("30 minutes before"), qsTr("1 hour before"), qsTr("1 day before")].concat(root.customReminder ? [qsTr("%1 minutes before").arg(root.savedReminderMinutes)] : [])
+                }
             }
 
             Label { text: qsTr("Notes"); color: AppTheme.mutedText; font.pixelSize: 11 }

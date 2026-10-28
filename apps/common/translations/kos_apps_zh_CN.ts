@@ -36,6 +36,10 @@
       <source>Close</source>
       <translation>关闭</translation>
     </message>
+      <message>
+      <source>Completed</source>
+      <translation>已完成</translation>
+    </message>
   </context>
   <context>
     <name>CalendarTaskEditorDialog</name>
@@ -55,10 +59,8 @@
       <translation>标题</translation>
     </message>
     <message>
-      <location line="+4" />
-      <location line="+1" />
       <source>Task title</source>
-      <translation>任务标题</translation>
+      <translation>提醒事项标题</translation>
     </message>
     <message>
       <location line="+6" />
@@ -121,9 +123,8 @@
       <translation>关联任务必须保留截止日期，以确定日程时间。</translation>
     </message>
     <message>
-      <location line="+1" />
       <source>Tasks without a due date do not appear in Calendar.</source>
-      <translation>未设置截止日期的任务不会显示在日历中。</translation>
+      <translation>不设置日期的提醒事项仅在待办应用中显示。</translation>
     </message>
     <message>
       <location line="+6" />
@@ -136,9 +137,8 @@
       <translation>备注（可选）</translation>
     </message>
     <message>
-      <location line="+6" />
       <source>Delete task</source>
-      <translation>删除任务</translation>
+      <translation>删除提醒事项</translation>
     </message>
     <message>
       <source>New task</source>
@@ -154,7 +154,7 @@
     </message>
     <message>
       <source>Delete this task?</source>
-      <translation>删除此任务？</translation>
+      <translation>删除此提醒事项？</translation>
     </message>
     <message>
       <source>The task is removed from every view. This cannot be undone.</source>
@@ -186,7 +186,51 @@
     </message>
     <message>
       <source>Task notes</source>
-      <translation>任务备注</translation>
+      <translation>备注</translation>
+    </message>
+      <message>
+      <source>Category</source>
+      <translation>分类</translation>
+    </message>
+      <message>
+      <source>Edit reminder</source>
+      <translation>编辑提醒事项</translation>
+    </message>
+      <message>
+      <source>New reminder</source>
+      <translation>新建提醒事项</translation>
+    </message>
+      <message>
+      <source>Notification</source>
+      <translation>通知</translation>
+    </message>
+      <message>
+      <source>At the scheduled time</source>
+      <translation>在设定时间</translation>
+    </message>
+      <message>
+      <source>5 minutes before</source>
+      <translation>提前 5 分钟</translation>
+    </message>
+      <message>
+      <source>15 minutes before</source>
+      <translation>提前 15 分钟</translation>
+    </message>
+      <message>
+      <source>30 minutes before</source>
+      <translation>提前 30 分钟</translation>
+    </message>
+      <message>
+      <source>1 hour before</source>
+      <translation>提前 1 小时</translation>
+    </message>
+      <message>
+      <source>1 day before</source>
+      <translation>提前 1 天</translation>
+    </message>
+      <message>
+      <source>%1 minutes before</source>
+      <translation>提前 %1 分钟</translation>
     </message>
   </context>
   <context>
@@ -466,6 +510,18 @@
     <message>
       <source>The event is removed from every view. This cannot be undone.</source>
       <translation>此日程将从所有视图中删除，且无法撤销。</translation>
+    </message>
+      <message>
+      <source>Category</source>
+      <translation>分类</translation>
+    </message>
+      <message>
+      <source>Custom (keep existing rule)</source>
+      <translation>自定义（保留现有规则）</translation>
+    </message>
+      <message>
+      <source>%1 minutes before</source>
+      <translation>提前 %1 分钟</translation>
     </message>
   </context>
   <context>
@@ -786,8 +842,6 @@
       <translation>导出 iCalendar</translation>
     </message>
     <message>
-      <location line="+76" />
-      <location line="+461" />
       <source>New event</source>
       <translation>新建日程</translation>
     </message>
@@ -1670,6 +1724,82 @@
       <source>Hazardous</source>
       <translation>危险</translation>
     </message>
+      <message>
+      <source>Work</source>
+      <translation>工作</translation>
+    </message>
+      <message>
+      <source>Personal</source>
+      <translation>个人</translation>
+    </message>
+      <message>
+      <source>Sport</source>
+      <translation>运动</translation>
+    </message>
+      <message>
+      <source>Reminder</source>
+      <translation>提醒事项</translation>
+    </message>
+      <message>
+      <source>Event</source>
+      <translation>日程</translation>
+    </message>
+      <message>
+      <source>New reminder</source>
+      <translation>新建提醒事项</translation>
+    </message>
+      <message>
+      <source>Add event or reminder</source>
+      <translation>添加日程或提醒事项</translation>
+    </message>
+      <message>
+      <source>Show completed reminders</source>
+      <translation>显示已完成的提醒事项</translation>
+    </message>
+      <message>
+      <source>Reminder created</source>
+      <translation>提醒事项已创建</translation>
+    </message>
+      <message>
+      <source>This item no longer exists.</source>
+      <translation>此事项已被删除或已不存在。</translation>
+    </message>
+      <message>
+      <source>Daily</source>
+      <translation>每天</translation>
+    </message>
+      <message>
+      <source>Weekly</source>
+      <translation>每周</translation>
+    </message>
+      <message>
+      <source>Monthly</source>
+      <translation>每月</translation>
+    </message>
+      <message>
+      <source>Yearly</source>
+      <translation>每年</translation>
+    </message>
+      <message>
+      <source>Custom repeat</source>
+      <translation>自定义重复</translation>
+    </message>
+      <message>
+      <source>No notification</source>
+      <translation>不通知</translation>
+    </message>
+      <message>
+      <source>Notify at the scheduled time</source>
+      <translation>在设定时间通知</translation>
+    </message>
+      <message>
+      <source>Notify %1 minutes before</source>
+      <translation>提前 %1 分钟通知</translation>
+    </message>
+      <message>
+      <source>No events or reminders for this day</source>
+      <translation>当天没有日程或提醒事项</translation>
+    </message>
   </context>
   <context>
     <name>PimClient</name>
@@ -1992,6 +2122,17 @@
     <message>
       <source>搜索所有单位</source>
       <translation>搜索所有单位</translation>
+    </message>
+  </context>
+<context>
+    <name>CalendarEditorFooter</name>
+      <message>
+      <source>Save</source>
+      <translation>保存</translation>
+    </message>
+      <message>
+      <source>Cancel</source>
+      <translation>取消</translation>
     </message>
   </context>
 </TS>

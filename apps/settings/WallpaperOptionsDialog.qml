@@ -1,3 +1,4 @@
+import Kos.Demo as Demo
 import "../../shared/qml/i18n"
 import QtQuick
 import "../../shared/qml/foundation/WallpaperCatalog.js" as WallpaperCatalog
@@ -62,7 +63,7 @@ Dialog {
                     colors: dialog.colors
                     label: I18n.tr("Fill mode")
                     separator: true
-                    LiquidControls.LiquidSelect {
+                    Demo.LiquidSelect {
                         objectName: "wallpaperFitMenu"
                         accentColor: dialog.colors.accent
                         model: [I18n.tr("Fill the screen"), I18n.tr("Show in full"), I18n.tr("Stretch"), I18n.tr("Centered")]
@@ -77,7 +78,7 @@ Dialog {
                     colors: dialog.colors
                     label: I18n.tr("Switch effect")
                     separator: true
-                    LiquidControls.LiquidSelect {
+                    Demo.LiquidSelect {
                         objectName: "wallpaperTransitionMenu"
                         accentColor: dialog.colors.accent
                         model: WallpaperCatalog.transitions.map(item =>
@@ -93,7 +94,9 @@ Dialog {
                     width: parent.width
                     colors: dialog.colors
                     label: I18n.tr("KOS draws the wallpaper")
-                    LiquidControls.LiquidGlassSwitch {
+                    Demo.LiquidGlassSwitch {
+                        implicitWidth: 60
+                        implicitHeight: 26
                         id: toggle
                         enabled: dialog.takeoverAvailable && !dialog.takeoverPending
                         checked: dialog.takeoverEnabled

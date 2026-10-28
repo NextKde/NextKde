@@ -14,7 +14,12 @@ Item {
     property string placeholder: ""
     signal activated(int index)
     implicitWidth: 150
-    implicitHeight: 40
+    implicitHeight: 28
+    activeFocusOnTab: true
+    Keys.onSpacePressed: openMenu()
+    Keys.onReturnPressed: openMenu()
+    Accessible.role: Accessible.ComboBox
+    Accessible.name: placeholder || labelAt(currentIndex)
 
     function labelAt(index) {
         if (index < 0 || index >= model.length) return ""
@@ -62,6 +67,7 @@ Item {
 
     Popup {
         id: menu
+        popupType: Popup.Item
         width: Math.max(188, control.width + 34)
         implicitHeight: Math.min(360, choices.implicitHeight + 12)
         padding: 6
@@ -77,53 +83,7 @@ Item {
         exit: Transition {
             NumberAnimation { property: "opacity"; to: 0; duration: 100 }
         }
-        background: Rectangle {
-            radius: 19
-            // 不透明底。之前是"模糊捕获 backdrop + 半透明着色"两层玻璃,底下
-            // 透什么全看运气;现在底色定死,玻璃感全部交给描边。
-            color: control.colors.dark ? "#262b31" : "#f6f8fb"
-            border.width: 1
-            // Edge glow - soft rim light(LiquidNavBar 的边光做法)
-            border.color: Qt.rgba(1, 1, 1, control.colors.dark ? 0.30 : 0.72)
-            // Inner rim light:再往里 1px 一道更细的亮线(LiquidGlassButton 层1)
-            Rectangle {
-                anchors.fill: parent
-                anchors.margins: 1
-                radius: 18
-                color: "transparent"
-                border.width: 1
-                border.color: Qt.rgba(1, 1, 1, control.colors.dark ? 0.16 : 0.45)
-            }
-            // Chromatic aberration:红/青描边各偏 0.5px(LiquidGlassButton 层2)
-            Rectangle {
-                width: parent.width
-                height: parent.height
-                x: -0.5
-                radius: 19
-                color: "transparent"
-                border.width: 1
-                border.color: Qt.rgba(1, 0.25, 0.25, control.colors.dark ? 0.14 : 0.20)
-            }
-            Rectangle {
-                width: parent.width
-                height: parent.height
-                x: 0.5
-                radius: 19
-                color: "transparent"
-                border.width: 1
-                border.color: Qt.rgba(0.25, 0.85, 1, control.colors.dark ? 0.14 : 0.20)
-            }
-            Rectangle {
-                anchors.fill: parent
-                anchors.margins: 2
-                radius: 17
-                gradient: Gradient {
-                    GradientStop { position: 0; color: control.colors.dark ? "#20ffffff" : "#aaffffff" }
-                    GradientStop { position: 0.4; color: "#00ffffff" }
-                    GradientStop { position: 1; color: control.colors.dark ? "#10000000" : "#08000000" }
-                }
-            }
-        }
+        background: SettingsPopupSurface {}
         contentItem: Flickable {
             clip: true
             contentHeight: choices.implicitHeight
@@ -137,10 +97,10 @@ Item {
                     required property var modelData
                     required property int index
                     width: menu.width - 12
-                    height: 39
+                    height: 28
                     Rectangle {
                         anchors.fill: parent
-                        radius: 11
+                        radius: 6
                         color: parent.index === control.currentIndex
                             ? Qt.rgba(control.colors.accent.r, control.colors.accent.g,
                                       control.colors.accent.b, control.colors.dark ? 0.22 : 0.13)

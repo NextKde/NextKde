@@ -1,3 +1,4 @@
+import Kos.Demo as Demo
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
@@ -56,7 +57,9 @@ ColumnLayout {
                 }
             }
 
-            LiquidControls.LiquidGlassSwitch {
+            Demo.LiquidGlassSwitch {
+                        implicitWidth: 60
+                        implicitHeight: 26
                 Layout.alignment: Qt.AlignVCenter
                 accentColor: colors.accent
                 checked: section.snapshot.freezeEnabled === true

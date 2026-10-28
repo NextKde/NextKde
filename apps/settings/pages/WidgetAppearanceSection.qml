@@ -38,7 +38,7 @@ ColumnLayout {
         text: I18n.tr("Widget appearance")
         color: colors.secondaryText
         font.pixelSize: 12
-        font.weight: Font.DemiBold
+        font.weight: Font.Medium
         Layout.leftMargin: 13
     }
     Rectangle {

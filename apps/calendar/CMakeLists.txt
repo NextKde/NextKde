@@ -1,4 +1,6 @@
-add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/../../shared/demo-ui ${CMAKE_CURRENT_BINARY_DIR}/demo-ui)
+if(NOT TARGET kos_demo_ui)
+    add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/../../shared/demo-ui ${CMAKE_CURRENT_BINARY_DIR}/demo-ui)
+endif()
 
 find_package(Qt6 6.5 REQUIRED COMPONENTS QuickDialogs2)
 

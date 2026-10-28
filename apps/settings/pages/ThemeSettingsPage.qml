@@ -181,7 +181,7 @@ ColumnLayout {
         text: I18n.tr("Interface shape").toUpperCase()
         color: colors.secondaryText
         font.pixelSize: 12
-        font.weight: Font.DemiBold
+        font.weight: Font.Medium
         Layout.leftMargin: 13
     }
 
@@ -197,8 +197,8 @@ ColumnLayout {
                 ? themeColorSchemeCard.implicitHeight + 10 : 0)
             + themeMaterialSettings.implicitHeight + 16
         Layout.preferredHeight: implicitHeight
-        radius: 26
-        color: colors.dark ? "#000000" : "#ffffff"
+        radius: 12
+        color: colors.card
         border.width: 1
         border.color: colors.floatingBorder
         clip: true
@@ -209,7 +209,7 @@ ColumnLayout {
             anchors.right: parent.right
             anchors.top: parent.top
             anchors.margins: 16
-            height: 310
+            height: 206
             contentWidth: styleGalleryRow.width
             contentHeight: styleGalleryRow.height
             flickableDirection: Flickable.HorizontalFlick
@@ -219,7 +219,7 @@ ColumnLayout {
             Row {
                 id: styleGalleryRow
                 width: childrenRect.width
-                height: 310
+                height: 206
                 spacing: 14
 
                 Repeater {
@@ -232,10 +232,10 @@ ColumnLayout {
                         // Only implemented styles are shown for now, so
                         // both cards should be complete rather than look
                         // accidentally clipped.
-                        width: Math.max(300,
+                        width: Math.max(250,
                             (styleGallery.width - styleGalleryRow.spacing) / 2)
                         height: styleGalleryRow.height
-                        radius: 22
+                        radius: 10
                         color: colors.dark
                             ? (themePage.shellStyle === modelData.id
                                 ? "#34343a" : "#262629")
@@ -252,7 +252,7 @@ ColumnLayout {
                             Rectangle {
                                 id: stylePreview
                                 Layout.fillWidth: true
-                                Layout.preferredHeight: 166
+                                Layout.preferredHeight: 96
                                 radius: 16
                                 clip: true
                                 gradient: Gradient {
@@ -270,9 +270,9 @@ ColumnLayout {
                                 }
 
                                 Rectangle {
-                                    x: 18; y: 32
+                                    x: 12; y: 26
                                     width: parent.width * 0.46
-                                    height: 76
+                                    height: 50
                                     radius: styleCard.modelData.id === "material" ? 22 : 10
                                     color: styleCard.modelData.id === "material"
                                         ? Qt.rgba(0.96, 0.91, 1, 0.70) : Qt.rgba(1, 1, 1, 0.44)
@@ -382,14 +382,14 @@ ColumnLayout {
                                         text: styleCard.modelData.feature
                                         color: styleCard.modelData.accent
                                         font.pixelSize: 10
-                                        font.weight: Font.Bold
-                                        font.letterSpacing: 0.8
+                                        font.weight: Font.Medium
+                                        font.letterSpacing: 0.4
                                     }
                                     Text {
                                         text: styleCard.modelData.name
                                         color: colors.primaryText
-                                        font.pixelSize: 18
-                                        font.weight: Font.Bold
+                                        font.pixelSize: 15
+                                        font.weight: Font.Medium
                                     }
                                 }
 
@@ -700,8 +700,8 @@ ColumnLayout {
         Layout.fillWidth: true
         implicitHeight: 64
         Layout.preferredHeight: implicitHeight
-        radius: 26
-        color: colors.dark ? "#000000" : "#ffffff"
+        radius: 12
+        color: colors.card
         border.width: 1
         border.color: colors.floatingBorder
 
@@ -734,9 +734,9 @@ ColumnLayout {
             Controls.SettingsNavBar {
                 colors: themePage.colors
                 materialForm: themePage.materialForm
-                Layout.preferredHeight: 30
+                Layout.preferredHeight: 26
                 size: "tiny"
-                barHeight: 30
+                barHeight: 26
                 itemWidthOverride: 72
                 // 语言选项固定显示各自语言的写法，不参与翻译；
                 // 「跟随系统」是模式名，随界面语言翻译。

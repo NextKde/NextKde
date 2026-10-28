@@ -16,6 +16,9 @@ qt_add_qml_module(kos_demo_ui URI Kos.Demo VERSION 1.0 STATIC
         controls/LiquidActionButton.qml
         controls/LiquidTextField.qml
         controls/LiquidSegmentedControl.qml
+        controls/LiquidGlassSwitch.qml
+        controls/LiquidSlider.qml
+        controls/LiquidSelect.qml
     RESOURCES
         i18n/ZhCatalog.mjs
         i18n/SystemLanguage.mjs

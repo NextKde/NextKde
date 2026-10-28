@@ -12,7 +12,7 @@
   "controls/VectorIcon.qml": "825d2b19981ed38cd9043057de0dc3c3c9b840735c2d3918329246d4797ad39f",
   "controls/LiquidActionButton.qml": "4c88c245b3b91e5741903f185ea766060d649ef40de09baa279834d09b247d19",
   "controls/LiquidTextField.qml": "8ed1fb86997818a28b64cc215e0722f0297ee7b3a5ee95535455b5df10d59a42",
-  "controls/LiquidSegmentedControl.qml": "ade5aceac52e80a010febde226309b48ea9e26e4bdd66b694603a5ec7f25abd3",
+  "controls/LiquidSegmentedControl.qml": "59dff93609d811640b65f16a379bde930a61af46da4b788c1f33361c9ca9d063",
   "controls/shaders/liquid_convex.frag.qsb": "5940aae82d40e96b147ac183207fd4d1b410247c4dfe0fc0b53e8ba3b21babb6",
   "controls/shaders/liquid_convex.frag": "ca8552ed26473ff440e7e34610deeaf0d4893bdd82f446212af78d9208a8696a",
   "controls/shaders/liquid_convex.vert.qsb": "a8ca4def9c26bbdaee27ce724071e25b68a7cab244279cf7b8679717e8503cd1",
@@ -38,5 +38,8 @@
   "controls/shaders/liquid_surface.frag.qsb": "13a6deccbdc4762094f4cdb96a0ec5bff1c5feb00215669d0fa4bb3aa420ed25",
   "controls/shaders/liquid_surface.frag": "23781ff477574ca26da63a82c6b39c6d28312c97182e1358a3f99f2be5112441",
   "controls/shaders/liquid_surface.vert.qsb": "a8ca4def9c26bbdaee27ce724071e25b68a7cab244279cf7b8679717e8503cd1",
-  "controls/shaders/liquid_surface.vert": "a211ec0232b1d49a2b1197f6019a55f36e18b4248ef2520ec50532abc46586b0"
+  "controls/shaders/liquid_surface.vert": "a211ec0232b1d49a2b1197f6019a55f36e18b4248ef2520ec50532abc46586b0",
+  "controls/LiquidGlassSwitch.qml": "e7d74b6fdc763d80813914ec081f3dad06716a0ca8eb1ee064a511ca4e9a7f44",
+  "controls/LiquidSlider.qml": "d2fbc62f14530d701b98622894495090ac6b9db8b2dd6430f333dbddac05ade8",
+  "controls/LiquidSelect.qml": "30427a37c896eeb1d875cdbb1e921685abe34df2f7233c7c8eaca6821270d715"
 }

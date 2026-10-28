@@ -105,15 +105,15 @@ ColumnLayout {
         text: I18n.tr("Display shape").toUpperCase()
         color: colors.secondaryText
         font.pixelSize: 12
-        font.weight: Font.DemiBold
+        font.weight: Font.Medium
         Layout.leftMargin: 13
     }
 
     Rectangle {
         Layout.fillWidth: true
         color: colors.card
-        radius: 18
-        implicitHeight: 54
+        radius: 10
+        implicitHeight: 40
 
         Item {
             anchors.fill: parent
@@ -131,7 +131,7 @@ ColumnLayout {
                 Text {
                     text: I18n.tr("Launcher shape")
                     color: colors.primaryText
-                    font.pixelSize: 14
+                    font.pixelSize: 13
                 }
                 Item { Layout.fillWidth: true }
                 Controls.SettingsNavBar {
@@ -158,7 +158,7 @@ ColumnLayout {
         text: I18n.tr("Grid, icons and text").toUpperCase()
         color: colors.secondaryText
         font.pixelSize: 12
-        font.weight: Font.DemiBold
+        font.weight: Font.Medium
         Layout.leftMargin: 13
         Layout.topMargin: 14
     }
@@ -166,15 +166,15 @@ ColumnLayout {
     Rectangle {
         Layout.fillWidth: true
         color: colors.card
-        radius: 18
-        implicitHeight: 221
+        radius: 10
+        implicitHeight: 163
 
         Column {
             anchors.fill: parent
 
             Item {
                 width: parent.width
-                height: 54
+                height: 40
                 RowLayout {
                     anchors.fill: parent
                     anchors.leftMargin: 16
@@ -189,7 +189,7 @@ ColumnLayout {
                     Text {
                         text: I18n.tr("Icon Size")
                         color: colors.primaryText
-                        font.pixelSize: 14
+                        font.pixelSize: 13
                     }
                     Item { Layout.fillWidth: true }
                     Controls.SettingsNavBar {
@@ -219,7 +219,7 @@ ColumnLayout {
 
             Item {
                 width: parent.width
-                height: 54
+                height: 40
                 RowLayout {
                     anchors.fill: parent
                     anchors.leftMargin: 16
@@ -234,7 +234,7 @@ ColumnLayout {
                     Text {
                         text: I18n.tr("Grid density")
                         color: colors.primaryText
-                        font.pixelSize: 14
+                        font.pixelSize: 13
                     }
                     Item { Layout.fillWidth: true }
                     Controls.SettingsNavBar {
@@ -264,7 +264,7 @@ ColumnLayout {
 
             Item {
                 width: parent.width
-                height: 54
+                height: 40
                 RowLayout {
                     anchors.fill: parent
                     anchors.leftMargin: 16
@@ -279,7 +279,7 @@ ColumnLayout {
                     Text {
                         text: I18n.tr("Font weight")
                         color: colors.primaryText
-                        font.pixelSize: 14
+                        font.pixelSize: 13
                     }
                     Item { Layout.fillWidth: true }
                     Controls.SettingsNavBar {
@@ -310,7 +310,7 @@ ColumnLayout {
 
             Item {
                 width: parent.width
-                height: 54
+                height: 40
                 RowLayout {
                     anchors.fill: parent
                     anchors.leftMargin: 16
@@ -325,7 +325,7 @@ ColumnLayout {
                     Text {
                         text: I18n.tr("Restore recommended layout")
                         color: colors.primaryText
-                        font.pixelSize: 14
+                        font.pixelSize: 13
                     }
                     Item { Layout.fillWidth: true }
                     Text {

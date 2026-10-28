@@ -27,6 +27,10 @@ Popup {
 
     property string itemTitle: ""
     property string itemTime: ""
+    property string itemCategory: ""
+    property string itemSchedule: ""
+    property bool canComplete: false
+    signal completionRequested()
     property string itemLocation: ""
     property string itemNotes: ""
     property color kindColor: AppTheme.accent
@@ -70,12 +74,12 @@ Popup {
             width: parent.width - 2 * root.shadowInset + 4
             height: parent.height - 2 * root.shadowInset + 6
             radius: 14
-            color: AppTheme.dark ? "#99000000" : "#40000000"
+            color: AppTheme.dark ? "#66000000" : "#22000000"
             layer.enabled: true
             layer.effect: MultiEffect {
                 blurEnabled: true
-                blurMax: 24
-                blur: 0.4
+                blurMax: 32
+                blur: 0.5
                 autoPaddingEnabled: true
             }
         }
@@ -149,6 +153,20 @@ Popup {
         }
 
         Label {
+            Layout.fillWidth: true
+            text: root.itemCategory
+            color: root.secondaryColor
+            font.pixelSize: 11
+        }
+        Label {
+            Layout.fillWidth: true
+            text: root.itemSchedule
+            color: root.secondaryColor
+            font.pixelSize: 11
+            wrapMode: Text.Wrap
+        }
+
+        Label {
             objectName: "detailsTime"
             Layout.fillWidth: true
             text: root.itemTime
@@ -195,6 +213,13 @@ Popup {
             Layout.topMargin: 4
             spacing: 8
 
+            CalendarCheckBox {
+                objectName: "detailsComplete"
+                visible: root.canComplete
+                checked: root.kindCompleted
+                text: qsTr("Completed")
+                onClicked: root.completionRequested()
+            }
             Item { Layout.fillWidth: true }
 
             AbstractButton {

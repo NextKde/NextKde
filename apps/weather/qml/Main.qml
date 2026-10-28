@@ -4979,7 +4979,7 @@ KosApplicationWindow {
         anchors.top: parent.top
         anchors.left: parent.left
         anchors.margins: root.sidebarExpanded ? 0 : 10
-        width: root.sidebarExpanded ? sidebar.expandedWidth : AppTheme.controlHeight
+        width: root.sidebarExpanded ? sidebar.expandedWidth : sidebarToggle.width
         height: root.sidebarExpanded ? 46 : 44
         z: 10
         KosSidebarToggle {
@@ -4988,8 +4988,8 @@ KosApplicationWindow {
             anchors.right: parent.right
             anchors.rightMargin: root.sidebarExpanded ? 12 : 0
             anchors.top: parent.top
-            anchors.topMargin: root.sidebarExpanded ? 10 : (44 - AppTheme.controlHeight) / 2
-            implicitWidth: root.sidebarExpanded ? 26 : AppTheme.controlHeight
+            anchors.topMargin: root.sidebarExpanded ? 10 : (44 - height) / 2
+            implicitWidth: 26
             implicitHeight: implicitWidth
             glyphColor: root.sidebarControlInk
             glyphPaneColor: root.sidebarControlInk

@@ -42,6 +42,50 @@ KosApplicationWindow {
     property bool showTasks: true
     property bool showCompletedTasks: false
     property string statusMessage: ""
+    readonly property var calendarCategories: [
+        { id: "work", name: qsTr("Work"), color: "#DA8A3A" },
+        { id: "personal", name: qsTr("Personal"), color: "#508BD6" },
+        { id: "sport", name: qsTr("Sport"), color: "#57A878" }
+    ]
+    property var hiddenCategories: []
+    property string pendingActivationItem: ""
+
+    function categoryFor(record) {
+        const id = String(value(record, "calendarId", "personal"))
+        return calendarCategories.find(category => category.id === id)
+            ?? calendarCategories[1]
+    }
+    function categoryVisible(record) {
+        return !hiddenCategories.includes(categoryFor(record).id)
+    }
+    function openNewReminder() {
+        taskEditor.openForTodo({ due: dateKey(selectedDate) + "T18:00:00",
+            calendarId: "personal", listId: "personal", reminderMinutes: 0 })
+    }
+    function revealActivatedItem() {
+        if (!pendingActivationItem || !pim.ready) return
+        const encoded = pendingActivationItem
+        pendingActivationItem = ""
+        const isTodo = encoded.startsWith("todo:")
+        const id = encoded.replace(/^(event|todo):/, "")
+        const record = (isTodo ? pim.todos : pim.events).find(item => String(item.id) === id)
+        if (!record) {
+            showStatus(qsTr("This item no longer exists."))
+            return
+        }
+        hiddenCategories = hiddenCategories.filter(key => key !== categoryFor(record).id)
+        if (isTodo) {
+            showTasks = true
+            if (record.completed) showCompletedTasks = true
+        } else showEvents = true
+        const stamp = String(isTodo ? record.due : record.start)
+        if (stamp.length >= 10) {
+            selectedDate = new Date(stamp.slice(0, 10) + "T12:00:00")
+            visibleMonth = new Date(selectedDate.getFullYear(), selectedDate.getMonth(), 1)
+        }
+        searchQuery = ""
+        Qt.callLater(function() { itemDetails.showItem({ kind: isTodo ? "todo" : "event", record: record }) })
+    }
 
     readonly property bool tahoeDark: AppTheme.dark
     readonly property CalendarStyle design: CalendarStyle {}
@@ -431,7 +475,7 @@ KosApplicationWindow {
         property string hint: ""
         property bool showHint: true
         materialForm: !root.liquidControls
-        liquidIntensity: "light"
+        liquidIntensity: "strong"
         iconOnly: true
         backdrop: chromeBackdrop
         // Upstream's legacy ring is disabled only for real liquid material.
@@ -448,78 +492,30 @@ KosApplicationWindow {
         Accessible.name: hint
         CalendarToolTip {
             objectName: control.objectName + "Tip"
-            visible: control.showHint && control.hovered && !control.pressed && control.enabled && control.hint.length > 0
+            visible: !addMenu.visible && !actionsMenu.visible && !eventEditor.visible && !taskEditor.visible && !itemDetails.visible && control.showHint && control.hovered && !control.pressed && control.enabled && control.hint.length > 0
             text: control.hint
         }
 
     }
 
-    // L07: subdued date-navigation button for the heading band — 26 high,
-    // 13px text, low-contrast neutral edge/fill (macOS light-grey nav look,
-    // dark variant equally quiet). No lens, no thick glass. Arrows are a
-    // local chevron vector, not a glyph font.
-    component DateNavButton: AbstractButton {
+    // Ordinary compact date navigation, using Demo typography and vector icons.
+    component DateNavButton: Demo.LiquidActionButton {
         id: control
-
-        // "" → chevron arrow (rotation from arrowRotation), otherwise text.
-        property string text_: ""
-        property real arrowRotation: 0
         property string hint: ""
-
+        materialForm: true
+        flat: false
+        cornerRadius: 6
+        iconOnly: iconName.length > 0
+        iconSize: 16
         implicitHeight: root.design.dateNavHeight
-        implicitWidth: text_.length > 0
-            ? textLabel.implicitWidth + 20 : root.design.dateNavHeight
-        hoverEnabled: true
+        implicitWidth: iconOnly ? root.design.dateNavHeight : Math.max(48, implicitContentWidth + 20)
+        focusRingColor: AppTheme.focusRing
+        focusPolicy: Qt.TabFocus
         Accessible.name: hint
         CalendarToolTip {
             objectName: control.objectName + "Tip"
             visible: control.hovered && !control.pressed && control.enabled && control.hint.length > 0
             text: control.hint
-        }
-
-        background: Rectangle {
-            radius: 6
-            color: control.pressed
-                ? root.design.selectionFill
-                : (control.hovered ? root.design.rowHoverFill : root.design.controlFill)
-            border.width: control.activeFocus ? 2 : 0
-            border.color: root.design.accent
-            opacity: control.enabled ? 1 : 0.5
-        }
-
-        contentItem: Item {
-            Label {
-                id: textLabel
-                anchors.centerIn: parent
-                visible: control.text_.length > 0
-                text: control.text_
-                color: root.design.labelPrimary
-                font.pixelSize: root.design.dateNavTextSize
-            }
-            Item {
-                anchors.centerIn: parent
-                width: 14; height: 14
-                visible: control.text_.length === 0
-                // The two bars meet at a bottom point (caret ^); rotating the
-                // holder +90° points it left (‹), -90° points it right (›)
-                // — verified against the actual screenshot evidence.
-                rotation: control.arrowRotation
-
-                // Local chevron: two short bars meeting at a point, same
-                // technique as the checkbox check.
-                Rectangle {
-                    width: 2; height: 5.4; radius: 1
-                    color: root.design.labelSecondary
-                    rotation: -45
-                    x: 3.0; y: 2.4
-                }
-                Rectangle {
-                    width: 2; height: 5.4; radius: 1
-                    color: root.design.labelSecondary
-                    rotation: 45
-                    x: 7.2; y: 2.4
-                }
-            }
         }
     }
 
@@ -528,8 +524,7 @@ KosApplicationWindow {
     // ours is 28.0 (x1.155), so the scaled target is 5.8x10.4 and the 1:1
     // target is 5x9; the shape below lands between them by construction, so
     // the scale choice is not load-bearing at this size. Drawn as a local
-    // vector for the same reason DateNavButton is: the "‹" glyph this
-    // replaced rendered only 4x5 of ink at 13px.
+    // vector because the "‹" glyph this replaced rendered only 4x5 of ink at 13px.
     component MiniMonthChevron: Item {
         id: chevron
 
@@ -575,6 +570,11 @@ KosApplicationWindow {
     }
 
     function handleActivation(activationArgs, workingDirectory) {
+        const requestedItem = activationOption(activationArgs, "--item")
+        if (requestedItem) {
+            pendingActivationItem = requestedItem
+            Qt.callLater(revealActivatedItem)
+        }
         const requestedView = activationOption(activationArgs, "--view")
         // P2-9: "year" was silently dropped even though viewIndex 3 exists;
         // the fourth view now has a CLI activation path to match Ctrl+4.
@@ -664,7 +664,7 @@ KosApplicationWindow {
         if (showEvents) {
             for (let index = 0; index < events.length; index++) {
                 const event = events[index]
-                if (!matchesSearch(event))
+                if (!categoryVisible(event) || !matchesSearch(event))
                     continue
                 const item = { kind: "event", record: event }
                 const start = String(value(event, "start", "")).slice(0, 10)
@@ -688,7 +688,7 @@ KosApplicationWindow {
         if (showTasks) {
             for (let index = 0; index < todos.length; index++) {
                 const todo = todos[index]
-                if (!matchesSearch(todo))
+                if (!categoryVisible(todo) || !matchesSearch(todo))
                     continue
                 const due = String(value(todo, "due", "")).slice(0, 10)
                 const id = String(value(todo, "seriesId",
@@ -872,49 +872,13 @@ KosApplicationWindow {
         return String(value(record, "linkedTodoId", ""))
     }
 
-    // P2-9: Qt.darker(color, 1.0) is an identity transform — dropped. The
-    // accent fallback also gave every unknown list the accent color, so
-    // unknown ids now land in a small stable palette, hashed from the id.
-    readonly property var listPalette: ["#0A84FF", "#34C759", "#FF9F0A",
-        "#BF5AF2", "#FF375F", "#64D2FF"]
-
-    function listColor(id) {
-        for (let index = 0; index < pim.lists.length; index++) {
-            const list = pim.lists[index]
-            if (String(value(list, "id", "")) === String(id))
-                return String(value(list, "color", AppTheme.accent))
-        }
-        let hash = 0
-        const key = String(id)
-        for (let index = 0; index < key.length; index++)
-            hash = (hash * 31 + key.charCodeAt(index)) & 0x7fffffff
-        return root.listPalette[hash % root.listPalette.length]
-    }
-
-    function listName(id) {
-        for (let index = 0; index < pim.lists.length; index++) {
-            const list = pim.lists[index]
-            if (String(value(list, "id", "")) === String(id))
-                return String(value(list, "name", qsTr("List")))
-        }
-        return qsTr("List")
-    }
-
     function itemColor(item) {
-        const record = itemRecord(item)
-        if (item.kind === "todo")
-            return listColor(value(record, "listId", "inbox"))
-        return AppTheme.accent
+        return categoryFor(itemRecord(item)).color
     }
 
     function itemSubtitle(item) {
-        const record = itemRecord(item)
-        if (item.kind === "todo")
-            return listName(value(record, "listId", "inbox"))
-        const location = String(value(record, "location", ""))
-        return location.length > 0 ? location
-            : (String(value(record, "linkedTodoId", "")).length > 0
-                ? qsTr("Linked with Todo") : qsTr("Calendar event"))
+        return categoryFor(itemRecord(item)).name + " · "
+            + (item.kind === "todo" ? qsTr("Reminder") : qsTr("Event"))
     }
 
     function openItem(item) {
@@ -1018,11 +982,24 @@ KosApplicationWindow {
     Connections {
         target: pim
 
+        function onSnapshotChanged() { Qt.callLater(root.revealActivatedItem) }
+        function onOperationFailed(operation, message) {
+            root.showStatus(message)
+            const editor = operation.endsWith("Event") ? eventEditor : taskEditor
+            if (editor.saving) { editor.saving = false; editor.errorText = message }
+        }
         function onOperationSucceeded(operation, itemId) {
+            const editor = operation.endsWith("Event") ? eventEditor : taskEditor
+            if (editor.saving && (operation.startsWith("create") || operation.startsWith("update"))) {
+                editor.saving = false
+                editor.close()
+            }
             if (operation === "createEvent")
                 root.showStatus(qsTr("Event created"))
             else if (operation === "updateEvent")
                 root.showStatus(qsTr("Event updated"))
+            else if (operation === "createTodo")
+                root.showStatus(qsTr("Reminder created"))
             else if (operation === "updateTodo")
                 root.showStatus(qsTr("Task updated in Calendar and Todo"))
             else if (operation === "removeEvent")
@@ -1071,6 +1048,11 @@ KosApplicationWindow {
         id: itemDetails
         parent: root.contentItem
         z: 50
+        onCompletionRequested: {
+            root.toggleItem({ kind: root.pendingDetailsIsTodo ? "todo" : "event",
+                record: root.pendingDetailsRecord }, !kindCompleted)
+            close()
+        }
         onEditRequested: {
             if (root.pendingDetailsIsTodo)
                 taskEditor.openForTodo(root.pendingDetailsRecord)
@@ -1084,6 +1066,16 @@ KosApplicationWindow {
             root.pendingDetailsIsTodo = item.kind === "todo"
             // root-qualified: the popover's own string properties would
             // otherwise shadow the window helper functions here.
+            canComplete = root.itemTodoId(item).length > 0
+            itemCategory = root.itemSubtitle(item)
+            const recurrence = String(root.value(record, "recurrence", "none"))
+            const repeats = { daily: qsTr("Daily"), weekly: qsTr("Weekly"),
+                monthly: qsTr("Monthly"), yearly: qsTr("Yearly"), custom: qsTr("Custom repeat") }
+            const minutes = Number(root.value(record, "reminderMinutes", -1))
+            itemSchedule = (repeats[recurrence] ?? "")
+                + (recurrence !== "none" ? " · " : "")
+                + (minutes < 0 ? qsTr("No notification") : minutes === 0
+                    ? qsTr("Notify at the scheduled time") : qsTr("Notify %1 minutes before").arg(minutes))
             itemTitle = root.itemTitle(item)
             kindColor = root.itemColor(item)
             kindCompleted = root.itemCompleted(item)
@@ -1099,7 +1091,9 @@ KosApplicationWindow {
         objectName: "calendarEventEditor"
         parent: root.contentItem
         availableLists: pim.lists
+        availableCategories: root.calendarCategories
         onSaveRequested: function(uid, event) {
+            eventEditor.saving = true
             if (uid.length > 0)
                 pim.updateEvent(uid, event)
             else
@@ -1113,7 +1107,12 @@ KosApplicationWindow {
         objectName: "taskEditorDialog"
         parent: root.contentItem
         availableLists: pim.lists
-        onSaveRequested: function(uid, todo) { pim.updateTodo(uid, todo) }
+        availableCategories: root.calendarCategories
+        onSaveRequested: function(uid, todo) {
+            taskEditor.saving = true
+            if (uid.length > 0) pim.updateTodo(uid, todo)
+            else pim.createTodo(todo)
+        }
         onDeleteRequested: uid => pim.removeTodo(uid)
     }
 
@@ -1128,7 +1127,7 @@ KosApplicationWindow {
         }
     }
 
-    Shortcut { sequences: [StandardKey.New]; onActivated: eventEditor.openForDate(root.selectedDate) }
+    Shortcut { sequences: [StandardKey.New]; onActivated: addMenu.popup(addButton, 0, addButton.height + 6) }
     Shortcut { sequence: "Ctrl+T"; onActivated: root.showToday() }
     Shortcut { sequence: "Ctrl+1"; onActivated: root.viewIndex = 0 }
     Shortcut { sequence: "Ctrl+2"; onActivated: root.viewIndex = 1 }
@@ -1165,19 +1164,19 @@ KosApplicationWindow {
             maskSpreadAtMin: 1.0
         }
 
-        // 窗口顶部 30px 安全区承载窗口圆点,侧栏面与内容面从它下面开始,
-        // 工具栏内容与三圆点完整分开。
-        readonly property int topSafeInset: 30
+        // One header row: liquid controls share the window dots' centre line.
+        readonly property real toolbarCenterY: windowControls.y + windowControls.height / 2
 
-        // 自绘窗口圆点:几何照抄 apps/settings/main.qml(14px 圆点、间距 14、
-        // 右缘距窗口右 14.5、上缘距窗口顶 10.5),锚定窗口边缘,不嵌在带
-        // margin 的工具栏里。
+        // 自绘窗口圆点：14px 圆点、间距 14、右缘距窗口右 14.5。
+        // 顶部留白 12.5px，工具栏跟随其中心线，整行比原位置下移 2px。
         Row {
+            id: windowControls
+            objectName: "calendarWindowControls"
             anchors {
                 right: parent.right
                 rightMargin: 14.5
                 top: parent.top
-                topMargin: 10.5
+                topMargin: 12.5
             }
             spacing: 14
             z: 10
@@ -1266,14 +1265,14 @@ KosApplicationWindow {
             resolutionScale: 1
         }
 
-        // Match Weather's sidebar toggle placement in both states.
+        // Keep the sidebar action on the same header centre line in both states.
         Item {
             id: sidebarToggleHost
             anchors.left: parent.left
             anchors.top: parent.top
-            anchors.margins: root.sidebarExpanded ? 0 : 10
-            width: root.sidebarExpanded ? root.design.sidebarWidth : AppTheme.controlHeight
-            height: root.sidebarExpanded ? 46 : 44
+            anchors.leftMargin: root.sidebarExpanded ? 0 : 10
+            width: root.sidebarExpanded ? root.design.sidebarWidth : sidebarToggleButton.width
+            height: 2 * windowChrome.toolbarCenterY
             z: 10
 
             ToolbarButton {
@@ -1281,9 +1280,8 @@ KosApplicationWindow {
                 objectName: "toolbarSidebarToggle"
                 anchors.right: parent.right
                 anchors.rightMargin: root.sidebarExpanded ? 12 : 0
-                anchors.top: parent.top
-                anchors.topMargin: root.sidebarExpanded ? 10 : (44 - AppTheme.controlHeight) / 2
-                implicitWidth: root.sidebarExpanded ? root.design.toolbarButtonSize : AppTheme.controlHeight
+                anchors.verticalCenter: parent.verticalCenter
+                implicitWidth: root.design.toolbarButtonSize
                 implicitHeight: implicitWidth
                 contentItem: KosSidebarGlyph {
                     glyphColor: sidebarToggleButton.iconColor
@@ -1300,10 +1298,10 @@ KosApplicationWindow {
             id: toolbar
             objectName: "calendarToolbar"
             anchors.left: parent.left
-            anchors.right: parent.right
+            anchors.right: windowControls.left
+            anchors.rightMargin: 12
             anchors.top: parent.top
-            anchors.topMargin: parent.topSafeInset
-            height: root.design.toolbarHeight
+            height: 2 * windowChrome.toolbarCenterY
             z: 5
 
             // Dynamic main-region centre: sidebar width animates, so the
@@ -1318,10 +1316,10 @@ KosApplicationWindow {
                             sidebarToggleHost.x + sidebarToggleButton.x + sidebarToggleButton.width + root.design.toolbarGap)
                 anchors.verticalCenter: parent.verticalCenter
                 iconName: "plus"
-                hint: qsTr("Add event")
+                hint: qsTr("Add event or reminder")
                 enabled: pim.connected && pim.writable
 
-                onClicked: eventEditor.openForDate(root.selectedDate)
+                onClicked: addMenu.popup(addButton, 0, addButton.height + 6)
             }
 
             Demo.LiquidSegmentedControl {
@@ -1356,12 +1354,11 @@ KosApplicationWindow {
                 currentIndex: root.viewIndex <= 2 ? 2 - root.viewIndex : 3
                 backgroundColor: root.design.segmentTrack
                 selectionColor: root.design.segmentPill
-                textColor: root.design.labelPrimary
-                // R099/C05: the reference has NO muted label state here — all
-                // four segment labels carry the same pure-black ink (peak 0,
-                // top-5% mean 15–23) and the pill alone marks the selection.
-                // `labelSecondary` (≈147 at 1:1) was 130 levels too light.
-                mutedTextColor: root.design.labelPrimary
+                // Requested calendar typography: uniform black, slightly heavier labels.
+                textColor: "#000000"
+                mutedTextColor: "#000000"
+                fontWeight: Font.Medium
+                selectedFontWeight: Font.Medium
                 onSelectionRequested: index =>
                     root.viewIndex = index <= 2 ? 2 - index : 3
             }
@@ -1378,10 +1375,10 @@ KosApplicationWindow {
                 onClicked: toolbarSearch.toggle()
             }
 
-            // L05: inline search, strictly inside the 40px toolbar. Opening
+            // Inline search shares the header centre line. Opening
             // hides the segment (fade above) and grows the field leftward
-            // from the search button; no second row, no overlap with the dots
-            // band or the left button group. Idempotent open/close; Escape
+            // from the search button, within the space between add and search.
+            // Window controls are outside the toolbar. Idempotent open/close; Escape
             // closes and clears from anywhere in the window. z above the
             // segment so the width transition cross-fades cleanly instead of
             // compositing into it.
@@ -1392,9 +1389,9 @@ KosApplicationWindow {
                 anchors.verticalCenter: parent.verticalCenter
                 anchors.right: searchToggleButton.left
                 anchors.rightMargin: 6
-                readonly property int maxWidth: Math.min(280, Math.max(0,
-                    toolbar.mainWidth - 2 * root.design.toolbarButtonSize
-                        - 3 * root.design.toolbarGap - 24))
+                readonly property real maxWidth: Math.min(280, Math.max(0,
+                    searchToggleButton.x - anchors.rightMargin
+                        - (addButton.x + addButton.width + root.design.toolbarGap)))
                 width: active ? maxWidth : 0
                 height: root.design.toolbarButtonSize
                 visible: width > 0
@@ -1488,7 +1485,7 @@ KosApplicationWindow {
                 id: moreButton
                 objectName: "toolbarMore"
                 anchors.right: parent.right
-                anchors.rightMargin: root.design.toolbarInsetRight
+                anchors.rightMargin: 0
                 anchors.verticalCenter: parent.verticalCenter
                 width: root.design.toolbarButtonSize
                 height: root.design.toolbarButtonSize
@@ -1508,6 +1505,29 @@ KosApplicationWindow {
                 sequence: "Escape"
                 enabled: toolbarSearch.active
                 onActivated: toolbarSearch.close()
+            }
+
+            Menu {
+                id: addMenu
+                objectName: "calendarAddMenu"
+                popupType: Popup.Item
+                padding: 5
+                implicitWidth: 188
+                background: CalendarPopupSurface { scene: windowChrome }
+                MenuItem {
+                    objectName: "addEventAction"
+                    text: qsTr("New event")
+                    implicitHeight: 30
+                    font.pixelSize: 13
+                    onTriggered: eventEditor.openForDate(root.selectedDate)
+                }
+                MenuItem {
+                    objectName: "addReminderAction"
+                    text: qsTr("New reminder")
+                    implicitHeight: 30
+                    font.pixelSize: 13
+                    onTriggered: root.openNewReminder()
+                }
             }
 
             Menu {
@@ -1535,9 +1555,15 @@ KosApplicationWindow {
                 MenuItem {
                     implicitHeight: 24
                     font.pixelSize: 13
-                    text: qsTr("New task…")
+                    text: qsTr("New reminder")
                     enabled: pim.connected && pim.writable
-                    onTriggered: taskEditor.openForTodo(null)
+                    onTriggered: root.openNewReminder()
+                }
+                MenuItem {
+                    text: qsTr("Show completed reminders")
+                    checkable: true
+                    checked: root.showCompletedTasks
+                    onToggled: root.showCompletedTasks = checked
                 }
                 MenuSeparator {}
                 MenuItem {
@@ -1572,7 +1598,7 @@ KosApplicationWindow {
             objectName: "applicationSidebar"
             anchors.left: parent.left
             anchors.top: parent.top
-            anchors.topMargin: parent.topSafeInset + root.design.toolbarHeight
+            anchors.topMargin: root.design.toolbarHeight
             anchors.bottom: parent.bottom
             width: root.sidebarExpanded ? root.design.sidebarWidth : 0
             // Clip only while collapsing/expanding so the animated width never
@@ -1654,62 +1680,21 @@ KosApplicationWindow {
                             verticalAlignment: Text.AlignVCenter
                         }
 
-                        CategoryRow {
-                            Layout.fillWidth: true
-                            text: qsTr("Events")
-                            checkable: true
-                            boxColor: root.design.accent
-                            checked: root.showEvents
-                            onToggled: root.showEvents = checked
-                        }
-
-                        CategoryRow {
-                            Layout.fillWidth: true
-                            text: qsTr("Scheduled tasks")
-                            checkable: true
-                            boxColor: root.design.positive
-                            checked: root.showTasks
-                            onToggled: root.showTasks = checked
-                        }
-
-                        CategoryRow {
-                            Layout.fillWidth: true
-                            text: qsTr("Show completed")
-                            checkable: true
-                            nested: true
-                            boxColor: root.design.warning
-                            checked: root.showCompletedTasks
-                            enabled: root.showTasks
-                            Accessible.name: qsTr("Show completed tasks")
-                            onToggled: root.showCompletedTasks = checked
-                        }
-
-                        Label {
-                            Layout.fillWidth: true
-                            Layout.leftMargin: root.design.categoryInset
-                            Layout.topMargin: root.design.categoryHeadingTop
-                            Layout.bottomMargin: root.design.categoryHeadingBottom
-                            Layout.preferredHeight: 16
-                            text: qsTr("Task lists")
-                            color: root.design.labelSecondary
-                            font.pixelSize: 11
-                            verticalAlignment: Text.AlignVCenter
-                        }
-
                         Repeater {
-                            model: pim.lists
-
+                            model: root.calendarCategories
                             delegate: CategoryRow {
-                                id: listLegend
-
                                 required property var modelData
-
+                                objectName: "category_" + modelData.id
                                 Layout.fillWidth: true
-                                swatchOnly: true
-                                text: String(root.value(listLegend.modelData,
-                                                        "name", qsTr("List")))
-                                boxColor: String(root.value(listLegend.modelData,
-                                    "color", root.design.accent))
+                                text: modelData.name
+                                boxColor: modelData.color
+                                checkable: true
+                                checked: !root.hiddenCategories.includes(modelData.id)
+                                onToggled: {
+                                    const next = root.hiddenCategories.filter(id => id !== modelData.id)
+                                    if (!checked) next.push(modelData.id)
+                                    root.hiddenCategories = next
+                                }
                             }
                         }
                     }
@@ -1911,14 +1896,12 @@ KosApplicationWindow {
             anchors.left: sidebar.right
             anchors.right: parent.right
             anchors.top: parent.top
-            anchors.topMargin: parent.topSafeInset + root.design.toolbarHeight
+            anchors.topMargin: root.design.toolbarHeight
             anchors.bottom: parent.bottom
             spacing: 0
 
-            // L06: 48px date heading band. Single 27px localised title on the
-            // left (20 inset, strictly limited to the space before the
-            // navigation group — long week/day titles elide, never squeeze
-            // the nav); L07 subdued nav group on the right. No subtitle line.
+            // Compact date heading with a semibold title and separate navigation buttons.
+            // Long week/day titles elide before the navigation controls.
             Item {
                 Layout.fillWidth: true
                 Layout.preferredHeight: root.design.dateBandHeight
@@ -1934,7 +1917,7 @@ KosApplicationWindow {
                     text: root.headerTitle()
                     color: root.design.labelPrimary
                     font.pixelSize: root.design.dateTitleSize
-                    font.weight: Font.Normal
+                    font.weight: Font.DemiBold
                     elide: Text.ElideRight
                 }
 
@@ -1958,19 +1941,19 @@ KosApplicationWindow {
                     DateNavButton {
                         objectName: "dateNavPrevious"
                         hint: qsTr("Previous period")
-                        arrowRotation: 90
+                        iconName: "back"
                         onClicked: root.shiftView(-1)
                     }
                     DateNavButton {
                         objectName: "dateNavToday"
                         hint: qsTr("Show today")
-                        text_: qsTr("Today")
+                        text: qsTr("Today")
                         onClicked: root.showToday()
                     }
                     DateNavButton {
                         objectName: "dateNavNext"
                         hint: qsTr("Next period")
-                        arrowRotation: -90
+                        iconName: "forward"
                         onClicked: root.shiftView(1)
                     }
                 }
@@ -1991,6 +1974,10 @@ KosApplicationWindow {
             RowLayout {
                 Layout.fillWidth: true
                 visible: root.statusMessage.length > 0 || (pim.errorMessage.length > 0 && pim.ready)
+                Layout.leftMargin: 12
+                Layout.rightMargin: 12
+                Layout.topMargin: visible ? 4 : 0
+                Layout.bottomMargin: visible ? 4 : 0
 
                 // A5: the row clears itself after 3.5s, which a screen reader
                 // can neither announce on appearance nor re-read afterwards.
@@ -2089,7 +2076,7 @@ KosApplicationWindow {
                             Label {
                                 Layout.fillWidth: true
                                 Layout.fillHeight: true
-                                text: qsTr("No events or scheduled tasks for this day")
+                                text: qsTr("No events or reminders for this day")
                                 color: AppTheme.mutedText
                                 horizontalAlignment: Text.AlignHCenter
                                 verticalAlignment: Text.AlignVCenter
@@ -2199,9 +2186,9 @@ KosApplicationWindow {
                                         }
                                         Label {
                                             text: agendaItem.modelData.kind === "todo"
-                                                ? qsTr("TASK")
+                                                ? qsTr("Reminder")
                                                 : (root.itemTodoId(agendaItem.modelData).length > 0
-                                                    ? qsTr("EVENT + TASK") : qsTr("EVENT"))
+                                                    ? qsTr("EVENT + TASK") : qsTr("Event"))
                                             color: root.design.labelSecondary
                                             font.pixelSize: 10
                                             font.weight: Font.DemiBold

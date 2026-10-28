@@ -10,9 +10,17 @@ KosWorkspaceDialog {
     CalendarStyle { id: design }
 
     property string editingId: ""
+    property bool saving: false
+    closePolicy: saving ? Popup.NoAutoClose : Popup.CloseOnEscape
     property string calendarId: "personal"
     property string linkedTodoId: ""
     property var availableLists: []
+    property var availableCategories: []
+    property int originalRecurrenceIndex: 0
+    property int originalReminderIndex: 0
+    property bool customRecurrence: false
+    property int savedReminderMinutes: -1
+    readonly property bool customReminder: ![-1, 0, 5, 15, 30, 60, 1440].includes(savedReminderMinutes)
     readonly property bool editing: editingId.length > 0
 
     signal saveRequested(string uid, var event)
@@ -230,13 +238,13 @@ KosWorkspaceDialog {
     function recurrenceIndex(preset) {
         const values = ["none", "daily", "weekly", "monthly", "yearly"]
         const index = values.indexOf(String(preset ?? "none"))
-        return index >= 0 ? index : 0
+        return index >= 0 ? index : 5
     }
 
     function reminderIndex(minutes) {
         const values = [-1, 0, 5, 15, 30, 60, 1440]
         const index = values.indexOf(Number(minutes))
-        return index >= 0 ? index : 0
+        return index >= 0 ? index : 7
     }
 
     function value(record, key, fallback) {
@@ -266,6 +274,7 @@ KosWorkspaceDialog {
         const startHour = hour === undefined ? 9 : Math.max(0, Math.min(22, Number(hour)))
         editingId = ""
         calendarId = "personal"
+        categoryBox.currentIndex = 1
         linkedTodoId = ""
         errorText = ""
         errorFields = []
@@ -278,8 +287,12 @@ KosWorkspaceDialog {
         startTimeField.text = formatTimeInput(twoDigits(startHour) + ":00")
         endTimeField.text = formatTimeInput(twoDigits(startHour + 1) + ":00")
         allDayCheck.checked = false
+        customRecurrence = false
+        savedReminderMinutes = -1
         recurrenceBox.currentIndex = 0
         reminderBox.currentIndex = 0
+        originalRecurrenceIndex = 0
+        originalReminderIndex = 0
         linkTodoCheck.checked = false
         todoListBox.currentIndex = listIndex("personal")
         todoPriorityBox.currentIndex = 0
@@ -292,6 +305,8 @@ KosWorkspaceDialog {
         const fallbackDate = dateText(now)
         editingId = String(event?.seriesId ?? event?.id ?? "")
         calendarId = String(event?.calendarId ?? "personal")
+        categoryBox.currentIndex = Math.max(0, availableCategories.findIndex(item => item.id === calendarId) < 0 ? 1 : availableCategories.findIndex(item => item.id === calendarId))
+        confirmingDelete = false
         linkedTodoId = String(event?.linkedTodoId ?? "")
         errorText = ""
         errorFields = []
@@ -303,8 +318,12 @@ KosWorkspaceDialog {
         startTimeField.text = formatTimeInput(isoTimePart(event?.start, "09:00"))
         endTimeField.text = formatTimeInput(isoTimePart(event?.end, "10:00"))
         allDayCheck.checked = Boolean(event?.allDay)
+        customRecurrence = String(event?.recurrence ?? "none") === "custom"
+        savedReminderMinutes = Number(event?.reminderMinutes ?? -1)
         recurrenceBox.currentIndex = recurrenceIndex(event?.recurrence)
         reminderBox.currentIndex = reminderIndex(event?.reminderMinutes)
+        originalRecurrenceIndex = recurrenceBox.currentIndex
+        originalReminderIndex = reminderBox.currentIndex
         linkTodoCheck.checked = linkedTodoId.length > 0
         todoListBox.currentIndex = listIndex(event?.linkedTodoListId ?? "personal")
         todoPriorityBox.currentIndex = priorityIndex(event?.linkedTodoPriority ?? 0)
@@ -318,7 +337,7 @@ KosWorkspaceDialog {
         const priorityValues = [0, 9, 5, 1]
         const list = availableLists.length > 0
             ? availableLists[Math.max(0, todoListBox.currentIndex)] : ({ id: "inbox" })
-        return {
+        const payload = {
             title: titleField.text.trim(),
             description: descriptionField.text.trim(),
             location: locationField.text.trim(),
@@ -334,6 +353,13 @@ KosWorkspaceDialog {
             todoListId: String(value(list, "id", "inbox")),
             todoPriority: priorityValues[todoPriorityBox.currentIndex]
         }
+        // Preserve imported custom rules, repeat limits and alarm offsets when
+        // editing an unrelated field. The backend supports partial updates.
+        if (editing && recurrenceBox.currentIndex === originalRecurrenceIndex)
+            delete payload.recurrence
+        if (editing && reminderBox.currentIndex === originalReminderIndex)
+            delete payload.reminderMinutes
+        return payload
     }
 
     // I4: every accept path runs validation first — invalid input keeps the
@@ -347,7 +373,6 @@ KosWorkspaceDialog {
         }
         errorText = ""
         errorFields = []
-        close()
         accepted()
     }
 
@@ -355,6 +380,7 @@ KosWorkspaceDialog {
 
     // Fixed compact action row; the form scrolls independently.
     footer: CalendarEditorFooter {
+        enabled: !root.saving
         editing: root.editingId.length > 0
         confirmingDelete: root.confirmingDelete
         deleteLabel: qsTr("Delete event")
@@ -372,6 +398,7 @@ KosWorkspaceDialog {
 
     contentItem: Flickable {
         id: editorScroll
+        enabled: !root.saving
         objectName: "calendarEventEditorScroll"
         clip: true
         // P1-18/A7: the custom footer hides the standard DialogButtonBox
@@ -455,6 +482,23 @@ KosWorkspaceDialog {
             RowLayout {
                 Layout.fillWidth: true
                 spacing: 8
+                Label { text: qsTr("Category"); Layout.preferredWidth: root.labelColumnWidth; color: AppTheme.mutedText; font.pixelSize: 11 }
+                CalendarComboBox {
+                    id: categoryBox
+                    objectName: "eventCategory"
+                    Layout.fillWidth: true
+                    Layout.preferredHeight: root.fieldHeight
+                    model: root.availableCategories
+                    textRole: "name"
+                    popupScene: root.contentItem.parent
+                    Accessible.name: qsTr("Category")
+                    onActivated: root.calendarId = root.availableCategories[currentIndex].id
+                }
+            }
+
+            RowLayout {
+                Layout.fillWidth: true
+                spacing: 8
 
                 Label {
                     text: qsTr("Title")
@@ -466,6 +510,7 @@ KosWorkspaceDialog {
 
                 CalendarTextField {
                     id: titleField
+                    objectName: "eventTitle"
                     Layout.fillWidth: true
                     Layout.preferredHeight: fieldHeight
                     placeholderText: qsTr("Event title")
@@ -594,6 +639,9 @@ KosWorkspaceDialog {
             ColumnLayout {
                 Layout.fillWidth: true
                 spacing: 8
+                // Keep legacy linked pairs editable; new entries use the two
+                // explicit event/reminder flows instead of a third hybrid type.
+                visible: root.linkedTodoId.length > 0
 
                 CalendarCheckBox {
                     id: linkTodoCheck
@@ -665,7 +713,7 @@ KosWorkspaceDialog {
                     Layout.fillWidth: true
                     Layout.preferredHeight: fieldHeight
                     model: [qsTr("Does not repeat"), qsTr("Daily"), qsTr("Weekly"),
-                        qsTr("Monthly"), qsTr("Yearly")]
+                        qsTr("Monthly"), qsTr("Yearly")].concat(root.customRecurrence ? [qsTr("Custom (keep existing rule)")] : [])
                     Accessible.name: qsTr("Event recurrence")
                 }
             }
@@ -688,7 +736,7 @@ KosWorkspaceDialog {
                     Layout.preferredHeight: fieldHeight
                     model: [qsTr("None"), qsTr("At start"), qsTr("5 minutes before"),
                         qsTr("15 minutes before"), qsTr("30 minutes before"),
-                        qsTr("1 hour before"), qsTr("1 day before")]
+                        qsTr("1 hour before"), qsTr("1 day before")].concat(root.customReminder ? [qsTr("%1 minutes before").arg(root.savedReminderMinutes)] : [])
                     Accessible.name: qsTr("Event reminder")
                 }
             }

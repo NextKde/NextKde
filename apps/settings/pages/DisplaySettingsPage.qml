@@ -1,3 +1,4 @@
+import Kos.Demo as Demo
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
@@ -177,7 +178,7 @@ ColumnLayout {
         text: I18n.tr("System appearance").toUpperCase()
         color: colors.secondaryText
         font.pixelSize: 12
-        font.weight: Font.DemiBold
+        font.weight: Font.Medium
         Layout.leftMargin: 13
     }
 
@@ -187,8 +188,8 @@ ColumnLayout {
         // The glass-follows-appearance row is a liquid-glass control and is
         // absent under Material, so the card collapses to just the
         // appearance-mode row instead of leaving a gap behind it.
-        implicitHeight: displayPage.isMaterialDesign ? 54 : 109
-        radius: 18
+        implicitHeight: displayPage.isMaterialDesign ? 40 : 81
+        radius: 10
         color: colors.card
 
         Column {
@@ -196,7 +197,7 @@ ColumnLayout {
 
             Item {
                 width: parent.width
-                height: 54
+                height: 40
 
                 RowLayout {
                     anchors.fill: parent
@@ -213,7 +214,7 @@ ColumnLayout {
                     Text {
                         text: I18n.tr("Appearance mode")
                         color: colors.primaryText
-                        font.pixelSize: 15
+                        font.pixelSize: 13
                         font.weight: Font.DemiBold
                     }
                     Item { Layout.fillWidth: true }
@@ -236,7 +237,7 @@ ColumnLayout {
             Rectangle {
                 anchors.left: parent.left
                 anchors.right: parent.right
-                anchors.leftMargin: 53
+                anchors.leftMargin: 50
                 height: 1
                 // Hidden together with the row below it: a separator with
                 // no second row would draw a stray line under the mode
@@ -247,7 +248,7 @@ ColumnLayout {
 
             Item {
                 width: parent.width
-                height: 54
+                height: 40
                 // Liquid glass only. Material has no liquid blur to follow
                 // the appearance mode with, so the row is dropped rather
                 // than shown disabled.
@@ -268,13 +269,15 @@ ColumnLayout {
                     Text {
                         text: I18n.tr("Liquid glass follows the appearance mode")
                         color: colors.primaryText
-                        font.pixelSize: 14
+                        font.pixelSize: 13
                     }
                     Item { Layout.fillWidth: true }
-                    LiquidControls.LiquidGlassSwitch {
+                    Demo.LiquidGlassSwitch {
+                        implicitWidth: 60
+                        implicitHeight: 26
                         id: glassFollowsAppearanceModeSwitch
-                        width: 64
-                        height: 25
+                        width: 40
+                        height: 24
                         checked: displayPage.glassFollowsAppearanceMode
                         // The shared controls carry the host's palette, so the
                         // Material form hands them the Material accent: their
@@ -296,7 +299,7 @@ ColumnLayout {
         text: I18n.tr("Spatial wallpaper")
         color: colors.secondaryText
         font.pixelSize: 12
-        font.weight: Font.DemiBold
+        font.weight: Font.Medium
         Layout.leftMargin: 13
         Layout.topMargin: 10
     }
@@ -305,7 +308,7 @@ ColumnLayout {
         visible: displayPage.showSpatialWallpaper
         Layout.fillWidth: true
         implicitHeight: spatialWallpaperRow.implicitHeight + 20
-        radius: 18
+        radius: 10
         color: colors.card
 
         RowLayout {
@@ -327,7 +330,7 @@ ColumnLayout {
                 Text {
                     text: I18n.tr("Enable spatial wallpaper parallax")
                     color: colors.primaryText
-                    font.pixelSize: 14
+                    font.pixelSize: 13
                     font.weight: Font.DemiBold
                 }
                 Text {
@@ -339,10 +342,12 @@ ColumnLayout {
                 }
             }
 
-            LiquidControls.LiquidGlassSwitch {
+            Demo.LiquidGlassSwitch {
+                        implicitWidth: 60
+                        implicitHeight: 26
                 id: spatialWallpaperSwitch
-                width: 64
-                height: 25
+                width: 40
+                height: 24
                 checked: displayPage.spatialWallpaperEnabled
                 accentColor: colors.accent
                 trackColor: colors.divider
@@ -361,15 +366,15 @@ ColumnLayout {
         text: (displayPage.isMaterialDesign ? I18n.tr("Background blur") : I18n.tr("Glass material")).toUpperCase()
         color: colors.secondaryText
         font.pixelSize: 12
-        font.weight: Font.DemiBold
+        font.weight: Font.Medium
         Layout.leftMargin: 13
     }
 
     Rectangle {
         visible: displayPage.showGlassMaterial
         Layout.fillWidth: true
-        implicitHeight: displayPage.isMaterialDesign ? 48 : 145
-        radius: 18
+        implicitHeight: displayPage.isMaterialDesign ? 40 : 121
+        radius: 10
         color: colors.card
 
         Column {
@@ -377,7 +382,7 @@ ColumnLayout {
 
             Item {
                 width: parent.width
-                height: 48
+                height: 40
                 visible: !displayPage.isMaterialDesign
 
                 RowLayout {
@@ -394,14 +399,14 @@ ColumnLayout {
                     Text {
                         text: I18n.tr("Material style")
                         color: colors.primaryText
-                        font.pixelSize: 14
+                        font.pixelSize: 13
                     }
                     Item { Layout.fillWidth: true }
                     Controls.SettingsNavBar {
                         colors: displayPage.colors
                         materialForm: displayPage.materialForm
-                        Layout.preferredWidth: 264
-                        itemWidthOverride: 88
+                        Layout.preferredWidth: 360
+                        itemWidthOverride: 118
                         model: glassStyles.options
                         currentIndex: Math.max(0,
                             glassStyles.indexOf(displayPage.glassStyle))
@@ -415,7 +420,7 @@ ColumnLayout {
             Rectangle {
                 anchors.left: parent.left
                 anchors.right: parent.right
-                anchors.leftMargin: 53
+                anchors.leftMargin: 50
                 height: 1
                 visible: !displayPage.isMaterialDesign
                 color: colors.separator
@@ -423,7 +428,7 @@ ColumnLayout {
 
             Item {
                 width: parent.width
-                height: 48
+                height: 40
 
                 RowLayout {
                     anchors.fill: parent
@@ -440,7 +445,7 @@ ColumnLayout {
                     Text {
                         text: I18n.tr("Blur strength")
                         color: colors.primaryText
-                        font.pixelSize: 14
+                        font.pixelSize: 13
                     }
                     Item { Layout.fillWidth: true }
                     Text {
@@ -450,7 +455,8 @@ ColumnLayout {
                         Layout.preferredWidth: 38
                         horizontalAlignment: Text.AlignRight
                     }
-                    LiquidControls.LiquidSlider {
+                    Demo.LiquidSlider {
+                        implicitHeight: 28
                         // The shared controls carry the host's palette, so the
                         // Material form has to hand them the Material accent: their own
                         // default is the iPadOS blue this window was designed with.
@@ -470,7 +476,7 @@ ColumnLayout {
             Rectangle {
                 anchors.left: parent.left
                 anchors.right: parent.right
-                anchors.leftMargin: 53
+                anchors.leftMargin: 50
                 height: 1
                 visible: !displayPage.isMaterialDesign
                 color: colors.separator
@@ -478,7 +484,7 @@ ColumnLayout {
 
             Item {
                 width: parent.width
-                height: 48
+                height: 40
                 visible: !displayPage.isMaterialDesign
 
                 RowLayout {
@@ -496,7 +502,7 @@ ColumnLayout {
                     Text {
                         text: I18n.tr("Liquid strength")
                         color: colors.primaryText
-                        font.pixelSize: 14
+                        font.pixelSize: 13
                     }
                     Item { Layout.fillWidth: true }
                     Text {
@@ -506,7 +512,8 @@ ColumnLayout {
                         Layout.preferredWidth: 38
                         horizontalAlignment: Text.AlignRight
                     }
-                    LiquidControls.LiquidSlider {
+                    Demo.LiquidSlider {
+                        implicitHeight: 28
                         // The shared controls carry the host's palette, so the
                         // Material form has to hand them the Material accent: their own
                         // default is the iPadOS blue this window was designed with.
