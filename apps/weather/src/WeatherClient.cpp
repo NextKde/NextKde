@@ -77,6 +77,20 @@ WeatherClient::WeatherClient(QObject *parent)
           "KOS_DATA_SOCKET",
           QDir(runtimeRoot()).filePath(QStringLiteral("kos-data.sock"))))
 {
+    m_searchTimer.setSingleShot(true);
+    m_searchTimer.setInterval(15000);
+    connect(&m_searchTimer, &QTimer::timeout, this, [this] {
+        ++m_searchGeneration;
+        setSearchState(QStringLiteral("error"), tr("Search timed out. Try again."));
+    });
+    m_removeTimer.setSingleShot(true);
+    m_removeTimer.setInterval(15000);
+    connect(&m_removeTimer, &QTimer::timeout, this, [this] {
+        m_removingLocationId.clear();
+        m_removeRequestId.clear();
+        m_locationError = tr("Could not confirm removal. Please try again.");
+        emit locationActionChanged();
+    });
     m_locationTimer.setSingleShot(true);
     m_locationTimer.setInterval(30000);
     connect(&m_locationTimer, &QTimer::timeout, this, [this] {
@@ -226,10 +240,9 @@ void WeatherClient::searchLocations(const QString &query)
         clearSearch();
         return;
     }
-    if (!m_searching) {
-        m_searching = true;
-        emit searchingChanged();
-    }
+    clearSearch(); // Also invalidates every earlier query, including late replies.
+    setSearchState(QStringLiteral("loading"));
+    m_searchTimer.start();
     const QString language = QLocale().name().section(QLatin1Char('_'), 0, 0);
     sendRequest(QStringLiteral("weather.search"), {
         {QStringLiteral("query"), normalized},
@@ -285,16 +298,46 @@ void WeatherClient::setUnits(const QString &units)
     });
 }
 
-void WeatherClient::clearSearch()
+void WeatherClient::setSearchState(const QString &status, const QString &error)
 {
-    const bool hadResults = !m_searchResults.isEmpty();
-    m_searchResults.clear();
-    if (hadResults)
-        emit searchResultsChanged();
-    if (m_searching) {
-        m_searching = false;
+    const bool searching = status == QLatin1String("loading");
+    if (m_searching != searching) {
+        m_searching = searching;
         emit searchingChanged();
     }
+    m_searchStatus = status;
+    m_searchError = error;
+    emit searchStateChanged();
+}
+
+void WeatherClient::clearSearch()
+{
+    ++m_searchGeneration;
+    m_searchTimer.stop();
+    if (!m_searchResults.isEmpty()) {
+        m_searchResults.clear();
+        emit searchResultsChanged();
+    }
+    setSearchState(QStringLiteral("idle"));
+}
+
+void WeatherClient::removeLocation(const QString &id)
+{
+    if (id.isEmpty() || !m_removingLocationId.isEmpty()) return;
+    m_locationError.clear();
+    if (!connected()) {
+        m_locationError = tr("Connect to the weather service to remove a city.");
+        emit locationActionChanged();
+        return;
+    }
+    // A deletion replaces any pending selection; old snapshots cannot resurrect it.
+    ++m_locationGeneration;
+    m_requestedLocation.clear();
+    m_locationTimer.stop();
+    m_removingLocationId = id;
+    m_removeTimer.start();
+    emit locationActionChanged();
+    sendRequest(QStringLiteral("weather.remove-location"), {{QStringLiteral("id"), id}});
 }
 
 void WeatherClient::ensureServiceStarted()
@@ -339,6 +382,18 @@ void WeatherClient::onSocketConnected()
 
 void WeatherClient::onSocketDisconnected()
 {
+    if (m_searching) {
+        ++m_searchGeneration;
+        m_searchTimer.stop();
+        setSearchState(QStringLiteral("error"), tr("Search is unavailable. Check your connection and retry."));
+    }
+    if (!m_removingLocationId.isEmpty()) {
+        m_removeTimer.stop();
+        m_removingLocationId.clear();
+        m_removeRequestId.clear();
+        m_locationError = tr("Could not confirm removal. Please try again.");
+        emit locationActionChanged();
+    }
     if (!m_requestedLocation.isEmpty())
         setTransportError(tr("Weather data service is unavailable"));
     emit connectedChanged();
@@ -400,17 +455,30 @@ void WeatherClient::processSocketLine(const QByteArray &line)
     const quint64 generation = m_requestGenerations.take(requestId);
     if (operation.startsWith(QLatin1String("weather."))
         && operation != QLatin1String("weather.search")
+        && operation != QLatin1String("weather.remove-location")
         && generation != m_locationGeneration)
         return;
     const bool ok = response.value(QStringLiteral("ok")).toBool();
     const QJsonObject result = response.value(QStringLiteral("result")).toObject();
     if (operation == QLatin1String("weather.search")) {
-        m_searching = false;
-        emit searchingChanged();
-        m_searchResults = ok
-            ? result.value(QStringLiteral("locations")).toArray().toVariantList()
-            : QVariantList{};
+        if (generation != m_searchGeneration) return;
+        m_searchTimer.stop();
+        m_searchResults = ok ? result.value(QStringLiteral("locations")).toArray().toVariantList() : QVariantList{};
         emit searchResultsChanged();
+        setSearchState(ok ? (m_searchResults.isEmpty() ? QStringLiteral("empty") : QStringLiteral("ready"))
+                          : QStringLiteral("error"),
+                       ok ? QString{} : tr("Search is unavailable. Check your connection and retry."));
+        return; // Search failures must never replace the forecast error/status.
+    }
+    if (operation == QLatin1String("weather.remove-location")) {
+        if (requestId != m_removeRequestId) return;
+        m_removeRequestId.clear();
+        m_removeTimer.stop();
+        m_removingLocationId.clear();
+        m_locationError = ok ? QString{} : tr("Could not remove the city. Please try again.");
+        emit locationActionChanged();
+        sendRequest(QStringLiteral("weather.snapshot"));
+        return;
     }
     if (ok && operation == QLatin1String("weather.snapshot"))
         applyWeather(result.value(QStringLiteral("weather")).toObject());
@@ -424,6 +492,7 @@ void WeatherClient::processSocketLine(const QByteArray &line)
 void WeatherClient::sendRequest(const QString &operation, const QVariantMap &payload)
 {
     const QString requestId = QStringLiteral("weather-%1").arg(++m_requestSerial);
+    if (operation == QLatin1String("weather.remove-location")) m_removeRequestId = requestId;
     const QJsonObject request{
         {QStringLiteral("version"), 1},
         {QStringLiteral("requestId"), requestId},
@@ -432,7 +501,7 @@ void WeatherClient::sendRequest(const QString &operation, const QVariantMap &pay
     };
     const QByteArray encoded = QJsonDocument(request).toJson(QJsonDocument::Compact) + '\n';
     m_requestOperations.insert(requestId, operation);
-    m_requestGenerations.insert(requestId, m_locationGeneration);
+    m_requestGenerations.insert(requestId, operation == QLatin1String("weather.search") ? m_searchGeneration : m_locationGeneration);
     if (connected()) {
         m_socket.write(encoded);
         return;
@@ -448,8 +517,18 @@ void WeatherClient::sendRequest(const QString &operation, const QVariantMap &pay
 
 void WeatherClient::flushRequests()
 {
-    while (connected() && !m_pendingRequests.isEmpty())
-        m_socket.write(m_pendingRequests.dequeue());
+    while (connected() && !m_pendingRequests.isEmpty()) {
+        const auto encoded = m_pendingRequests.dequeue();
+        const auto request = QJsonDocument::fromJson(encoded).object();
+        const auto id = request.value(QStringLiteral("requestId")).toString();
+        if (m_requestOperations.value(id) == QLatin1String("weather.search")
+            && m_requestGenerations.value(id) != m_searchGeneration) {
+            m_requestOperations.remove(id);
+            m_requestGenerations.remove(id);
+            continue;
+        }
+        m_socket.write(encoded);
+    }
 }
 
 void WeatherClient::reloadSnapshot()

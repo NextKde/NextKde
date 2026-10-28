@@ -9,5 +9,7 @@ int main(int argc, char *argv[])
         QStringLiteral("org.nextkde.Kos.Weather"),
         QStringLiteral("Kos.Apps.Weather"),
         QStringLiteral(KOS_APP_VERSION),
+        {},
+        true,
     });
 }

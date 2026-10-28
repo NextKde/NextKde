@@ -109,7 +109,7 @@ ColumnLayout {
                 text: I18n.tr("Refresh")
                 color: colors.primaryText
                 font.pixelSize: 12
-                font.weight: Font.DemiBold
+                font.weight: Font.Medium
             }
             MouseArea {
                 id: refreshPointer

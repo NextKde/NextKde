@@ -7,35 +7,51 @@ import Kos.Ui
 
 KosWorkspaceDialog {
     id: root
+    CalendarStyle { id: design }
 
     property string editingId: ""
+    property bool saving: false
+    closePolicy: saving ? Popup.NoAutoClose : Popup.CloseOnEscape
     property string calendarId: "personal"
     property string linkedTodoId: ""
     property var availableLists: []
+    property var availableCategories: []
+    property int originalRecurrenceIndex: 0
+    property int originalReminderIndex: 0
+    property bool customRecurrence: false
+    property int savedReminderMinutes: -1
+    readonly property bool customReminder: ![-1, 0, 5, 15, 30, 60, 1440].includes(savedReminderMinutes)
     readonly property bool editing: editingId.length > 0
 
     signal saveRequested(string uid, var event)
     signal deleteRequested(string uid)
 
     // P02: one consistent field height for every editor control.
-    readonly property int fieldHeight: 30
+    readonly property int fieldHeight: design.fieldHeight
     readonly property int labelColumnWidth: 56
 
     title: editing ? qsTr("Edit event") : qsTr("New event")
     modal: true
-    // P02/P03: compact editor — 380 wide, and never taller than the client
+    popupType: Popup.Item
+    // P02/P03: compact editor — 420 wide, and never taller than the client
     // viewport minus margins so the footer stays reachable at 760x540.
-    width: Math.min(380, parent ? parent.width - 48 : 380)
-    height: Math.min(620, parent ? parent.height - 32 : 620)
+    width: Math.min(420, parent ? parent.width - 32 : 420)
+    height: Math.min(560, parent ? parent.height - 32 : 560)
     anchors.centerIn: parent
     standardButtons: Dialog.Save | Dialog.Cancel
+    background: Rectangle { radius: 12; color: design.dialogPlane }
+    padding: 16
+    header: Label {
+        text: root.title
+        color: design.labelPrimary
+        font.pixelSize: 17
+        font.weight: Font.DemiBold
+        padding: 16
+        bottomPadding: 8
+        elide: Text.ElideRight
+    }
     // P02: calendar-local neutral surface — the shared blue-gray windowRaised
     // tint is replaced with a flat neutral panel; same elevation language.
-    background: KosSurface {
-        radius: AppTheme.smallRadius + 4
-        fillColor: AppTheme.dark ? "#262626" : "#F7F7F7"
-        elevation: 0.5
-    }
 
     function twoDigits(value) {
         return value < 10 ? "0" + value : String(value)
@@ -222,13 +238,13 @@ KosWorkspaceDialog {
     function recurrenceIndex(preset) {
         const values = ["none", "daily", "weekly", "monthly", "yearly"]
         const index = values.indexOf(String(preset ?? "none"))
-        return index >= 0 ? index : 0
+        return index >= 0 ? index : 5
     }
 
     function reminderIndex(minutes) {
         const values = [-1, 0, 5, 15, 30, 60, 1440]
         const index = values.indexOf(Number(minutes))
-        return index >= 0 ? index : 0
+        return index >= 0 ? index : 7
     }
 
     function value(record, key, fallback) {
@@ -258,6 +274,7 @@ KosWorkspaceDialog {
         const startHour = hour === undefined ? 9 : Math.max(0, Math.min(22, Number(hour)))
         editingId = ""
         calendarId = "personal"
+        categoryBox.currentIndex = 1
         linkedTodoId = ""
         errorText = ""
         errorFields = []
@@ -270,8 +287,12 @@ KosWorkspaceDialog {
         startTimeField.text = formatTimeInput(twoDigits(startHour) + ":00")
         endTimeField.text = formatTimeInput(twoDigits(startHour + 1) + ":00")
         allDayCheck.checked = false
+        customRecurrence = false
+        savedReminderMinutes = -1
         recurrenceBox.currentIndex = 0
         reminderBox.currentIndex = 0
+        originalRecurrenceIndex = 0
+        originalReminderIndex = 0
         linkTodoCheck.checked = false
         todoListBox.currentIndex = listIndex("personal")
         todoPriorityBox.currentIndex = 0
@@ -284,6 +305,8 @@ KosWorkspaceDialog {
         const fallbackDate = dateText(now)
         editingId = String(event?.seriesId ?? event?.id ?? "")
         calendarId = String(event?.calendarId ?? "personal")
+        categoryBox.currentIndex = Math.max(0, availableCategories.findIndex(item => item.id === calendarId) < 0 ? 1 : availableCategories.findIndex(item => item.id === calendarId))
+        confirmingDelete = false
         linkedTodoId = String(event?.linkedTodoId ?? "")
         errorText = ""
         errorFields = []
@@ -295,8 +318,12 @@ KosWorkspaceDialog {
         startTimeField.text = formatTimeInput(isoTimePart(event?.start, "09:00"))
         endTimeField.text = formatTimeInput(isoTimePart(event?.end, "10:00"))
         allDayCheck.checked = Boolean(event?.allDay)
+        customRecurrence = String(event?.recurrence ?? "none") === "custom"
+        savedReminderMinutes = Number(event?.reminderMinutes ?? -1)
         recurrenceBox.currentIndex = recurrenceIndex(event?.recurrence)
         reminderBox.currentIndex = reminderIndex(event?.reminderMinutes)
+        originalRecurrenceIndex = recurrenceBox.currentIndex
+        originalReminderIndex = reminderBox.currentIndex
         linkTodoCheck.checked = linkedTodoId.length > 0
         todoListBox.currentIndex = listIndex(event?.linkedTodoListId ?? "personal")
         todoPriorityBox.currentIndex = priorityIndex(event?.linkedTodoPriority ?? 0)
@@ -310,7 +337,7 @@ KosWorkspaceDialog {
         const priorityValues = [0, 9, 5, 1]
         const list = availableLists.length > 0
             ? availableLists[Math.max(0, todoListBox.currentIndex)] : ({ id: "inbox" })
-        return {
+        const payload = {
             title: titleField.text.trim(),
             description: descriptionField.text.trim(),
             location: locationField.text.trim(),
@@ -326,6 +353,13 @@ KosWorkspaceDialog {
             todoListId: String(value(list, "id", "inbox")),
             todoPriority: priorityValues[todoPriorityBox.currentIndex]
         }
+        // Preserve imported custom rules, repeat limits and alarm offsets when
+        // editing an unrelated field. The backend supports partial updates.
+        if (editing && recurrenceBox.currentIndex === originalRecurrenceIndex)
+            delete payload.recurrence
+        if (editing && reminderBox.currentIndex === originalReminderIndex)
+            delete payload.reminderMinutes
+        return payload
     }
 
     // I4: every accept path runs validation first — invalid input keeps the
@@ -339,140 +373,33 @@ KosWorkspaceDialog {
         }
         errorText = ""
         errorFields = []
-        close()
         accepted()
     }
 
     onAccepted: saveRequested(editingId, eventPayload())
 
-    // D05: the dialog's actions are stacked, not a row — one full-width bar
-    // per action, all the same width and height with a hairline gap, primary
-    // (Save) on top, secondary (Cancel) under it, destructive (Delete) last,
-    // per the macOS 26 alert reference. KosButton supplies the 34px control
-    // height and the pill radius; nothing here restyles surface or shape.
-    // The footer stays fixed (only the form above it scrolls), so Delete can
-    // never scroll out of reach; the 16px insets match the shared footer.
-    //
-    // Labels are not hardcoded: standardButtons is still declared on the
-    // dialog, and the never-rendered DialogButtonBox below instantiates Qt's
-    // platform-localized Save/Cancel buttons, so the bars read exactly as the
-    // standard buttons did. The labels are bound, not copied once: reading
-    // `count` re-evaluates the binding as soon as the box finishes creating
-    // its standard buttons (no onCompleted creation-order fragility), and the
-    // button `text` dependency keeps the labels live if the platform strings
-    // change (locale hot-switch). The qsTr strings are only the
-    // pre-instantiation fallback.
-    readonly property string saveLabel: {
-        const b = labelSource.count > 0 ? labelSource.standardButton(Dialog.Save) : null
-        return b ? b.text : qsTr("Save")
-    }
-    readonly property string cancelLabel: {
-        const b = labelSource.count > 0 ? labelSource.standardButton(Dialog.Cancel) : null
-        return b ? b.text : qsTr("Cancel")
-    }
-
-    footer: Item {
-        implicitHeight: 16
-            + (root.confirmingDelete ? confirmCol.implicitHeight : footerCol.implicitHeight) + 16
-
-        // Label source only. Invisible and disabled so it neither paints over
-        // the stack nor joins the focus chain — Esc stays with the dialog.
-        DialogButtonBox {
-            id: labelSource
-            visible: false
-            enabled: false
-            padding: 0
-            standardButtons: root.standardButtons
-        }
-
-        ColumnLayout {
-            id: footerCol
-            anchors.fill: parent
-            anchors.margins: 16
-            spacing: 6
-            visible: !root.confirmingDelete
-
-            // Primary: the AcceptRole standard button of the shared footer.
-            KosButton {
-                Layout.fillWidth: true
-                text: root.saveLabel
-                highlighted: true
-                flatPrimary: true
-                lightLabel: true
-                onClicked: root.accept()
-            }
-
-            // Secondary: the RejectRole standard button of the shared footer.
-            KosButton {
-                Layout.fillWidth: true
-                text: root.cancelLabel
-                secondary: true
-                onClicked: root.reject()
-            }
-
-            KosButton {
-                Layout.fillWidth: true
-                text: qsTr("Delete event")
-                visible: root.editing
-                destructive: true
-                secondary: true
-                onClicked: {
-                    root.confirmingDelete = true
-                    confirmCancelButton.forceActiveFocus()
-                }
-            }
-        }
-
-        // P1-6: delete confirmation, macOS alert form (bold title, one-line
-        // description, stacked buttons) per the alert-macos reference. Cancel
-        // is the default (highlighted, focused); Delete fires only from here.
-        ColumnLayout {
-            id: confirmCol
-            anchors.fill: parent
-            anchors.margins: 16
-            spacing: 6
-            visible: root.confirmingDelete
-
-            Label {
-                Layout.fillWidth: true
-                text: qsTr("Delete this event?")
-                font.bold: true
-                wrapMode: Text.WordWrap
-            }
-
-            Label {
-                Layout.fillWidth: true
-                text: qsTr("The event is removed from every view. This cannot be undone.")
-                color: AppTheme.mutedText
-                font.pixelSize: 11
-                wrapMode: Text.WordWrap
-            }
-
-            KosButton {
-                id: confirmCancelButton
-                Layout.fillWidth: true
-                text: root.cancelLabel
-                highlighted: true
-                flatPrimary: true
-                lightLabel: true
-                onClicked: root.confirmingDelete = false
-            }
-
-            KosButton {
-                Layout.fillWidth: true
-                text: qsTr("Delete event")
-                destructive: true
-                secondary: true
-                onClicked: {
-                    root.deleteRequested(root.editingId)
-                    root.close()
-                }
-            }
+    // Fixed compact action row; the form scrolls independently.
+    footer: CalendarEditorFooter {
+        enabled: !root.saving
+        editing: root.editingId.length > 0
+        confirmingDelete: root.confirmingDelete
+        deleteLabel: qsTr("Delete event")
+        deleteTitle: qsTr("Delete this event?")
+        deleteMessage: qsTr("The event is removed from every view. This cannot be undone.")
+        onAccepted: root.accept()
+        onRejected: root.reject()
+        onDeleteArmed: root.confirmingDelete = true
+        onDeleteCanceled: root.confirmingDelete = false
+        onDeleteConfirmed: {
+            root.deleteRequested(root.editingId)
+            root.close()
         }
     }
 
     contentItem: Flickable {
         id: editorScroll
+        enabled: !root.saving
+        objectName: "calendarEventEditorScroll"
         clip: true
         // P1-18/A7: the custom footer hides the standard DialogButtonBox
         // that would normally wire a default button, so Return used to do
@@ -533,12 +460,12 @@ KosWorkspaceDialog {
             }
         }
 
-        // P02: aligned label-left rows with one field height; compact 380
+        // P02: aligned label-left rows with one field height; compact 420
         // editor keeps every existing field, just visually tamed.
         ColumnLayout {
             id: formLayout
-            width: editorScroll.width
-            spacing: 10
+            width: editorScroll.width - 8
+            spacing: 8
 
             // I4: inline validation error — pinned to the top of the form so
             // it is visible without scrolling; offending fields also get a
@@ -555,6 +482,23 @@ KosWorkspaceDialog {
             RowLayout {
                 Layout.fillWidth: true
                 spacing: 8
+                Label { text: qsTr("Category"); Layout.preferredWidth: root.labelColumnWidth; color: AppTheme.mutedText; font.pixelSize: 11 }
+                CalendarComboBox {
+                    id: categoryBox
+                    objectName: "eventCategory"
+                    Layout.fillWidth: true
+                    Layout.preferredHeight: root.fieldHeight
+                    model: root.availableCategories
+                    textRole: "name"
+                    popupScene: root.contentItem.parent
+                    Accessible.name: qsTr("Category")
+                    onActivated: root.calendarId = root.availableCategories[currentIndex].id
+                }
+            }
+
+            RowLayout {
+                Layout.fillWidth: true
+                spacing: 8
 
                 Label {
                     text: qsTr("Title")
@@ -564,12 +508,14 @@ KosWorkspaceDialog {
                     font.pixelSize: 11
                 }
 
-                KosTextField {
+                CalendarTextField {
                     id: titleField
+                    objectName: "eventTitle"
                     Layout.fillWidth: true
                     Layout.preferredHeight: fieldHeight
                     placeholderText: qsTr("Event title")
                     Accessible.name: qsTr("Event title")
+                    invalid: root.hasError("title")
                     outlineColor: root.hasError("title")
                         ? AppTheme.destructive : AppTheme.border
                     onTextChanged: root.clearError("title")
@@ -580,7 +526,7 @@ KosWorkspaceDialog {
                 Layout.fillWidth: true
                 spacing: 10
 
-                KosCheckBox {
+                CalendarCheckBox {
                     id: allDayCheck
                     text: qsTr("All day")
                     onToggled: {
@@ -606,23 +552,25 @@ KosWorkspaceDialog {
                     color: AppTheme.mutedText
                     font.pixelSize: 11
                 }
-                KosTextField {
+                CalendarTextField {
                     id: startDateField
                     Layout.fillWidth: true
                     Layout.preferredHeight: fieldHeight
                     placeholderText: root.datePattern
                     Accessible.name: qsTr("Start date")
+                    invalid: root.hasError("startDate")
                     outlineColor: root.hasError("startDate")
                         ? AppTheme.destructive : AppTheme.border
                     onTextChanged: root.clearError("startDate")
                 }
-                KosTextField {
+                CalendarTextField {
                     id: startTimeField
                     Layout.preferredWidth: 92
                     Layout.preferredHeight: fieldHeight
                     placeholderText: root.timePattern
                     enabled: !allDayCheck.checked
                     Accessible.name: qsTr("Start time")
+                    invalid: root.hasError("startTime")
                     outlineColor: root.hasError("startTime")
                         ? AppTheme.destructive : AppTheme.border
                     onTextChanged: root.clearError("startTime")
@@ -640,23 +588,25 @@ KosWorkspaceDialog {
                     color: AppTheme.mutedText
                     font.pixelSize: 11
                 }
-                KosTextField {
+                CalendarTextField {
                     id: endDateField
                     Layout.fillWidth: true
                     Layout.preferredHeight: fieldHeight
                     placeholderText: root.datePattern
                     Accessible.name: qsTr("End date")
+                    invalid: root.hasError("endDate")
                     outlineColor: root.hasError("endDate")
                         ? AppTheme.destructive : AppTheme.border
                     onTextChanged: root.clearError("endDate")
                 }
-                KosTextField {
+                CalendarTextField {
                     id: endTimeField
                     Layout.preferredWidth: 92
                     Layout.preferredHeight: fieldHeight
                     placeholderText: root.timePattern
                     enabled: !allDayCheck.checked
                     Accessible.name: qsTr("End time")
+                    invalid: root.hasError("endTime")
                     outlineColor: root.hasError("endTime")
                         ? AppTheme.destructive : AppTheme.border
                     onTextChanged: root.clearError("endTime")
@@ -674,7 +624,7 @@ KosWorkspaceDialog {
                     color: AppTheme.mutedText
                     font.pixelSize: 11
                 }
-                KosTextField {
+                CalendarTextField {
                     id: locationField
                     Layout.fillWidth: true
                     Layout.preferredHeight: fieldHeight
@@ -689,8 +639,11 @@ KosWorkspaceDialog {
             ColumnLayout {
                 Layout.fillWidth: true
                 spacing: 8
+                // Keep legacy linked pairs editable; new entries use the two
+                // explicit event/reminder flows instead of a third hybrid type.
+                visible: root.linkedTodoId.length > 0
 
-                KosCheckBox {
+                CalendarCheckBox {
                     id: linkTodoCheck
                     text: qsTr("Also show this event as a task in Todo")
                     Accessible.description: qsTr("The title and schedule stay synchronized")
@@ -720,7 +673,8 @@ KosWorkspaceDialog {
                     spacing: 8
 
                     Label { text: qsTr("Todo list"); color: AppTheme.mutedText; font.pixelSize: 11 }
-                    KosComboBox {
+                    CalendarComboBox {
+                    popupScene: root.contentItem.parent
                         id: todoListBox
                         Layout.fillWidth: true
                         Layout.preferredHeight: fieldHeight
@@ -729,7 +683,8 @@ KosWorkspaceDialog {
                         Accessible.name: qsTr("Linked todo list")
                     }
                     Label { text: qsTr("Priority"); color: AppTheme.mutedText; font.pixelSize: 11 }
-                    KosComboBox {
+                    CalendarComboBox {
+                    popupScene: root.contentItem.parent
                         id: todoPriorityBox
                         Layout.preferredWidth: 110
                         Layout.preferredHeight: fieldHeight
@@ -751,12 +706,14 @@ KosWorkspaceDialog {
                     color: AppTheme.mutedText
                     font.pixelSize: 11
                 }
-                KosComboBox {
+                CalendarComboBox {
+                    popupScene: root.contentItem.parent
                     id: recurrenceBox
+                    objectName: "eventRecurrenceSelect"
                     Layout.fillWidth: true
                     Layout.preferredHeight: fieldHeight
                     model: [qsTr("Does not repeat"), qsTr("Daily"), qsTr("Weekly"),
-                        qsTr("Monthly"), qsTr("Yearly")]
+                        qsTr("Monthly"), qsTr("Yearly")].concat(root.customRecurrence ? [qsTr("Custom (keep existing rule)")] : [])
                     Accessible.name: qsTr("Event recurrence")
                 }
             }
@@ -772,13 +729,14 @@ KosWorkspaceDialog {
                     color: AppTheme.mutedText
                     font.pixelSize: 11
                 }
-                KosComboBox {
+                CalendarComboBox {
+                    popupScene: root.contentItem.parent
                     id: reminderBox
                     Layout.fillWidth: true
                     Layout.preferredHeight: fieldHeight
                     model: [qsTr("None"), qsTr("At start"), qsTr("5 minutes before"),
                         qsTr("15 minutes before"), qsTr("30 minutes before"),
-                        qsTr("1 hour before"), qsTr("1 day before")]
+                        qsTr("1 hour before"), qsTr("1 day before")].concat(root.customReminder ? [qsTr("%1 minutes before").arg(root.savedReminderMinutes)] : [])
                     Accessible.name: qsTr("Event reminder")
                 }
             }
@@ -805,8 +763,8 @@ KosWorkspaceDialog {
 
                     KosSurface {
                         anchors.fill: parent
-                        radius: AppTheme.smallRadius
-                        fillColor: AppTheme.fieldSurface
+                        radius: 8
+                        fillColor: design.controlFill
                         elevation: 0
                         focused: descriptionField.activeFocus
                     }

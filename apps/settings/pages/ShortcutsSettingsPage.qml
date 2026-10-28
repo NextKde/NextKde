@@ -229,7 +229,7 @@ ColumnLayout {
                                 ? (colors.dark ? "#64b5ff" : "#0066cc")
                                 : colors.primaryText
                             font.pixelSize: 12
-                            font.weight: Font.DemiBold
+                            font.weight: Font.Medium
                         }
 
                         MouseArea {

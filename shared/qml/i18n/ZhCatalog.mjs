@@ -3,6 +3,7 @@
 // 规则：值必须与改造前界面上的中文逐字一致（含空格、间隔符与省略号），
 // 改动文案时同步更新对应键，不要只改一边。
 export const catalog = {
+    "No results": "未找到结果",
     "Elapsed: %1": "已用时间：%1",
     "Compiling from source. This may take several minutes; the download has finished.": "下载已完成，正在从源码编译，可能需要几分钟。",
     "Downloading installer… Attempt %1/%2": "正在下载安装器… 第 %1/%2 次尝试",

@@ -1,3 +1,4 @@
+import Kos.Demo as Demo
 import "../../shared/qml/i18n"
 import QtQuick
 import QtQuick.Controls
@@ -682,7 +683,7 @@ ColumnLayout {
                 colors: page.colors
                 label: I18n.tr("Fill mode")
                 separator: true
-                LiquidControls.LiquidSelect {
+                Demo.LiquidSelect {
                     objectName: "wallpaperFitMenu"
                     accentColor: page.colors.accent
                     model: [I18n.tr("Fill the screen"), I18n.tr("Show in full"), I18n.tr("Stretch"), I18n.tr("Centered")]
@@ -699,7 +700,7 @@ ColumnLayout {
                 colors: page.colors
                 label: I18n.tr("Switch effect")
                 separator: true
-                LiquidControls.LiquidSelect {
+                Demo.LiquidSelect {
                     objectName: "wallpaperTransitionMenu"
                     accentColor: page.colors.accent
                     model: WallpaperCatalog.transitions.map(item =>
@@ -719,7 +720,9 @@ ColumnLayout {
                 label: I18n.tr("KOS draws the wallpaper")
                 // 底下还有一行小字注释，这行收矮一点，注释就不显得悬空。
                 height: 46
-                LiquidControls.LiquidGlassSwitch {
+                Demo.LiquidGlassSwitch {
+                        implicitWidth: 60
+                        implicitHeight: 26
                     id: takeoverToggle
                     enabled: page.takeoverAvailable && !page.takeoverPending
                     checked: page.takeoverEnabled
@@ -782,7 +785,7 @@ ColumnLayout {
                 colors: page.colors
                 label: I18n.tr("Wallpaper type")
                 separator: true
-                LiquidControls.LiquidSelect {
+                Demo.LiquidSelect {
                     objectName: "wallpaperTypeMenu"
                     accentColor: page.colors.accent
                     model: [I18n.tr("Image"), I18n.tr("Colors"), I18n.tr("Slideshow"), I18n.tr("Theme wallpaper")]
@@ -802,7 +805,7 @@ ColumnLayout {
                 colors: page.colors
                 label: I18n.tr("Switch interval")
                 separator: true
-                LiquidControls.LiquidSelect {
+                Demo.LiquidSelect {
                     objectName: "frequencyMenu"
                     accentColor: page.colors.accent
                     model: page.intervals

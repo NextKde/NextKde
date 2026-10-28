@@ -1,3 +1,4 @@
+import Kos.Demo as Demo
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
@@ -122,7 +123,7 @@ ColumnLayout {
         text: I18n.tr("Icon appearance").toUpperCase()
         color: colors.secondaryText
         font.pixelSize: 12
-        font.weight: Font.DemiBold
+        font.weight: Font.Medium
         Layout.leftMargin: 13
         Layout.topMargin: 10
     }
@@ -170,7 +171,7 @@ ColumnLayout {
                     Text { text: I18n.tr("Opacity"); color: colors.primaryText; font.pixelSize: 14 }
                     Item { Layout.fillWidth: true }
                     Text { text: Math.round(iconAppearance.iconOpacity * 100) + "%"; color: colors.secondaryText; font.pixelSize: 12 }
-                    LiquidControls.LiquidSlider {
+                    Demo.LiquidSlider {
                         // The shared controls carry the host's palette, so the
                         // Material form has to hand them the Material accent: their own
                         // default is the iPadOS blue this window was designed with.

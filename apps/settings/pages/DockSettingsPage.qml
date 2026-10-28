@@ -1,3 +1,4 @@
+import Kos.Demo as Demo
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
@@ -215,22 +216,22 @@ ColumnLayout {
         text: I18n.tr("Size and position").toUpperCase()
         color: colors.secondaryText
         font.pixelSize: 12
-        font.weight: Font.DemiBold
+        font.weight: Font.Medium
         Layout.leftMargin: 13
     }
 
     Rectangle {
         Layout.fillWidth: true
         color: colors.card
-        radius: 18
-        implicitHeight: 97
+        radius: 10
+        implicitHeight: 40
 
         Column {
             anchors.fill: parent
 
             Item {
                 width: parent.width
-                height: 48
+                height: 40
                 RowLayout {
                     anchors.fill: parent
                     anchors.leftMargin: 16
@@ -245,7 +246,7 @@ ColumnLayout {
                     Text {
                         text: I18n.tr("Dock height")
                         color: colors.primaryText
-                        font.pixelSize: 14
+                        font.pixelSize: 13
                     }
                     Item { Layout.fillWidth: true }
                     Text {
@@ -253,7 +254,8 @@ ColumnLayout {
                         color: colors.secondaryText
                         font.pixelSize: 12
                     }
-                    LiquidControls.LiquidSlider {
+                    Demo.LiquidSlider {
+                        implicitHeight: 28
                         id: dockHeightSlider
                         // The shared controls carry the host's palette, so the
                         // Material form has to hand them the Material accent: their own
@@ -279,7 +281,7 @@ ColumnLayout {
         text: I18n.tr("Hover effects").toUpperCase()
         color: colors.secondaryText
         font.pixelSize: 12
-        font.weight: Font.DemiBold
+        font.weight: Font.Medium
         Layout.leftMargin: 13
         Layout.topMargin: 14
     }
@@ -287,7 +289,7 @@ ColumnLayout {
     Rectangle {
         Layout.fillWidth: true
         color: colors.card
-        radius: 18
+        radius: 10
         implicitHeight: hoverColumn.implicitHeight
 
         Column {
@@ -296,7 +298,7 @@ ColumnLayout {
 
             Item {
                 width: parent.width
-                height: 62
+                height: 48
                 RowLayout {
                     anchors.fill: parent
                     anchors.leftMargin: 16
@@ -310,7 +312,7 @@ ColumnLayout {
                     }
                     ColumnLayout {
                         spacing: 1
-                        Text { text: I18n.tr("Hover to zoom"); color: colors.primaryText; font.pixelSize: 14 }
+                        Text { text: I18n.tr("Hover to zoom"); color: colors.primaryText; font.pixelSize: 13 }
                         Text {
                             text: I18n.tr("Scales up and lifts together; 100% disables, up to 300%")
                             color: colors.secondaryText
@@ -323,7 +325,8 @@ ColumnLayout {
                         color: colors.secondaryText
                         font.pixelSize: 12
                     }
-                    LiquidControls.LiquidSlider {
+                    Demo.LiquidSlider {
+                        implicitHeight: 28
                         id: hoverScaleSlider
                         accentColor: colors.accent
                         Layout.preferredWidth: 156
@@ -350,7 +353,7 @@ ColumnLayout {
         text: I18n.tr("Built-in icons")
         color: colors.secondaryText
         font.pixelSize: 12
-        font.weight: Font.DemiBold
+        font.weight: Font.Medium
         Layout.leftMargin: 13
         Layout.topMargin: 14
     }
@@ -358,7 +361,7 @@ ColumnLayout {
     Rectangle {
         Layout.fillWidth: true
         color: colors.card
-        radius: 18
+        radius: 10
         implicitHeight: builtinRows.implicitHeight
 
         Column {
@@ -378,7 +381,7 @@ ColumnLayout {
                     required property int index
                     readonly property bool confirmedVisible: dockPage[modelData.stateKey]
                     width: builtinRows.width
-                    height: 54
+                    height: 40
 
                     RowLayout {
                         anchors.fill: parent
@@ -394,7 +397,7 @@ ColumnLayout {
                         Text {
                             text: builtinRow.modelData.label
                             color: colors.primaryText
-                            font.pixelSize: 14
+                            font.pixelSize: 13
                         }
                         Item { Layout.fillWidth: true }
                         CheckBox {
@@ -459,7 +462,7 @@ ColumnLayout {
         text: I18n.tr("Window").toUpperCase()
         color: colors.secondaryText
         font.pixelSize: 12
-        font.weight: Font.DemiBold
+        font.weight: Font.Medium
         Layout.leftMargin: 13
         Layout.topMargin: 14
     }
@@ -467,8 +470,8 @@ ColumnLayout {
     Rectangle {
         Layout.fillWidth: true
         color: colors.card
-        radius: 18
-        implicitHeight: 54
+        radius: 10
+        implicitHeight: 40
 
         RowLayout {
             anchors.fill: parent
@@ -484,11 +487,13 @@ ColumnLayout {
             Text {
                 text: I18n.tr("Merge windows by app")
                 color: colors.primaryText
-                font.pixelSize: 14
+                font.pixelSize: 13
                 font.weight: Font.DemiBold
             }
             Item { Layout.fillWidth: true }
-            LiquidControls.LiquidGlassSwitch {
+            Demo.LiquidGlassSwitch {
+                        implicitWidth: 60
+                        implicitHeight: 26
                 id: windowGroupingSwitch
                 objectName: "window-grouping-switch"
                 checked: dockPage.windowGroupingIndex === 0
@@ -508,7 +513,7 @@ ColumnLayout {
         text: I18n.tr("DOCK APP BAR").toUpperCase()
         color: colors.secondaryText
         font.pixelSize: 12
-        font.weight: Font.DemiBold
+        font.weight: Font.Medium
         Layout.leftMargin: 13
         Layout.topMargin: 14
     }
@@ -516,7 +521,7 @@ ColumnLayout {
     Rectangle {
         Layout.fillWidth: true
         color: colors.card
-        radius: dockPage.materialForm ? 24 : 18
+        radius: dockPage.materialForm ? 24 : 10
         implicitHeight: dockLayoutColumn.implicitHeight
 
         Column {
@@ -525,7 +530,7 @@ ColumnLayout {
 
             Item {
                 width: parent.width
-                height: 54
+                height: 40
                 RowLayout {
                     anchors.fill: parent
                     anchors.leftMargin: 16
@@ -540,7 +545,7 @@ ColumnLayout {
                     Text {
                         text: I18n.tr("Dock position")
                         color: colors.primaryText
-                        font.pixelSize: 14
+                        font.pixelSize: 13
                     }
                     Item { Layout.fillWidth: true }
                     Controls.SettingsNavBar {
@@ -564,7 +569,7 @@ ColumnLayout {
 
             Item {
                 width: parent.width
-                height: 62
+                height: 48
                 RowLayout {
                     anchors.fill: parent
                     anchors.leftMargin: 16
@@ -578,7 +583,7 @@ ColumnLayout {
                     }
                     ColumnLayout {
                         spacing: 1
-                        Text { text: I18n.tr("Content style"); color: colors.primaryText; font.pixelSize: 14 }
+                        Text { text: I18n.tr("Content style"); color: colors.primaryText; font.pixelSize: 13 }
                         Text {
                             text: dockPage.dockContentStyleIndex === 0
                                 ? I18n.tr("Apps, windows and widgets laid out compactly")
@@ -607,7 +612,7 @@ ColumnLayout {
 
             Item {
                 width: parent.width
-                height: 62
+                height: 48
                 RowLayout {
                     anchors.fill: parent
                     anchors.leftMargin: 16
@@ -621,7 +626,7 @@ ColumnLayout {
                     }
                     ColumnLayout {
                         spacing: 1
-                        Text { text: I18n.tr("Dock style"); color: colors.primaryText; font.pixelSize: 14 }
+                        Text { text: I18n.tr("Dock style"); color: colors.primaryText; font.pixelSize: 13 }
                         Text {
                             text: dockPage.dockStyleIndex === 0
                                 ? I18n.tr("Adapt to content and keep theme spacing")
@@ -653,7 +658,7 @@ ColumnLayout {
 
             Item {
                 width: parent.width
-                height: 54
+                height: 40
                 RowLayout {
                     anchors.fill: parent
                     anchors.leftMargin: 16
@@ -668,7 +673,7 @@ ColumnLayout {
                     Text {
                         text: I18n.tr("Dock display")
                         color: colors.primaryText
-                        font.pixelSize: 14
+                        font.pixelSize: 13
                         font.weight: Font.DemiBold
                     }
                     Item { Layout.fillWidth: true }
@@ -694,7 +699,7 @@ ColumnLayout {
 
             Item {
                 width: parent.width
-                height: 64
+                height: 48
                 RowLayout {
                     anchors.fill: parent
                     anchors.leftMargin: 16
@@ -708,7 +713,7 @@ ColumnLayout {
                     }
                     ColumnLayout {
                         spacing: 1
-                        Text { text: I18n.tr("Show the hide hint bar"); color: colors.primaryText; font.pixelSize: 14 }
+                        Text { text: I18n.tr("Show the hide hint bar"); color: colors.primaryText; font.pixelSize: 13 }
                         Text {
                             text: I18n.tr("After turning it off, moving to the screen edge still summons the Dock")
                             color: colors.secondaryText
@@ -716,7 +721,9 @@ ColumnLayout {
                         }
                     }
                     Item { Layout.fillWidth: true }
-                    LiquidControls.LiquidGlassSwitch {
+                    Demo.LiquidGlassSwitch {
+                        implicitWidth: 60
+                        implicitHeight: 26
                         objectName: "dock-reveal-indicator-switch"
                         checked: dockPage.showRevealIndicator
                         enabled: dockPage.stateReady && !dockPage.revealIndicatorUpdatePending

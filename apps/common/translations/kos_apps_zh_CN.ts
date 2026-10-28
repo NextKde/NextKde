@@ -36,6 +36,10 @@
       <source>Close</source>
       <translation>关闭</translation>
     </message>
+      <message>
+      <source>Completed</source>
+      <translation>已完成</translation>
+    </message>
   </context>
   <context>
     <name>CalendarTaskEditorDialog</name>
@@ -55,10 +59,8 @@
       <translation>标题</translation>
     </message>
     <message>
-      <location line="+4" />
-      <location line="+1" />
       <source>Task title</source>
-      <translation>任务标题</translation>
+      <translation>提醒事项标题</translation>
     </message>
     <message>
       <location line="+6" />
@@ -121,9 +123,8 @@
       <translation>关联任务必须保留截止日期，以确定日程时间。</translation>
     </message>
     <message>
-      <location line="+1" />
       <source>Tasks without a due date do not appear in Calendar.</source>
-      <translation>未设置截止日期的任务不会显示在日历中。</translation>
+      <translation>不设置日期的提醒事项仅在待办应用中显示。</translation>
     </message>
     <message>
       <location line="+6" />
@@ -136,9 +137,8 @@
       <translation>备注（可选）</translation>
     </message>
     <message>
-      <location line="+6" />
       <source>Delete task</source>
-      <translation>删除任务</translation>
+      <translation>删除提醒事项</translation>
     </message>
     <message>
       <source>New task</source>
@@ -154,7 +154,7 @@
     </message>
     <message>
       <source>Delete this task?</source>
-      <translation>删除此任务？</translation>
+      <translation>删除此提醒事项？</translation>
     </message>
     <message>
       <source>The task is removed from every view. This cannot be undone.</source>
@@ -186,7 +186,51 @@
     </message>
     <message>
       <source>Task notes</source>
-      <translation>任务备注</translation>
+      <translation>备注</translation>
+    </message>
+      <message>
+      <source>Category</source>
+      <translation>分类</translation>
+    </message>
+      <message>
+      <source>Edit reminder</source>
+      <translation>编辑提醒事项</translation>
+    </message>
+      <message>
+      <source>New reminder</source>
+      <translation>新建提醒事项</translation>
+    </message>
+      <message>
+      <source>Notification</source>
+      <translation>通知</translation>
+    </message>
+      <message>
+      <source>At the scheduled time</source>
+      <translation>在设定时间</translation>
+    </message>
+      <message>
+      <source>5 minutes before</source>
+      <translation>提前 5 分钟</translation>
+    </message>
+      <message>
+      <source>15 minutes before</source>
+      <translation>提前 15 分钟</translation>
+    </message>
+      <message>
+      <source>30 minutes before</source>
+      <translation>提前 30 分钟</translation>
+    </message>
+      <message>
+      <source>1 hour before</source>
+      <translation>提前 1 小时</translation>
+    </message>
+      <message>
+      <source>1 day before</source>
+      <translation>提前 1 天</translation>
+    </message>
+      <message>
+      <source>%1 minutes before</source>
+      <translation>提前 %1 分钟</translation>
     </message>
   </context>
   <context>
@@ -467,6 +511,18 @@
       <source>The event is removed from every view. This cannot be undone.</source>
       <translation>此日程将从所有视图中删除，且无法撤销。</translation>
     </message>
+      <message>
+      <source>Category</source>
+      <translation>分类</translation>
+    </message>
+      <message>
+      <source>Custom (keep existing rule)</source>
+      <translation>自定义（保留现有规则）</translation>
+    </message>
+      <message>
+      <source>%1 minutes before</source>
+      <translation>提前 %1 分钟</translation>
+    </message>
   </context>
   <context>
     <name>KosSettingsDialog</name>
@@ -634,6 +690,18 @@
       <source>Done</source>
       <translation>完成</translation>
     </message>
+    <message>
+      <source>Liquid material</source>
+      <translation>液态材质</translation>
+    </message>
+    <message>
+      <source>Applies to controls and floating panels</source>
+      <translation>应用于控件和悬浮面板</translation>
+    </message>
+    <message>
+      <source>Higher values make liquid surfaces more opaque</source>
+      <translation>数值越高，液态材质越不透明</translation>
+    </message>
   </context>
   <context>
     <name>KosSidebarToggle</name>
@@ -774,8 +842,6 @@
       <translation>导出 iCalendar</translation>
     </message>
     <message>
-      <location line="+76" />
-      <location line="+461" />
       <source>New event</source>
       <translation>新建日程</translation>
     </message>
@@ -1546,6 +1612,194 @@
       <source>10-day forecast</source>
       <translation>10 日预报</translation>
     </message>
+    <message>
+      <source>Remove city</source>
+      <translation>删除城市</translation>
+    </message>
+    <message>
+      <source>Clear search</source>
+      <translation>清空搜索</translation>
+    </message>
+    <message>
+      <source>Unable to search</source>
+      <translation>暂时无法搜索</translation>
+    </message>
+    <message>
+      <source>No matching cities</source>
+      <translation>没有找到城市</translation>
+    </message>
+    <message>
+      <source>Search for a city</source>
+      <translation>搜索城市</translation>
+    </message>
+    <message>
+      <source>Try a different name or spelling.</source>
+      <translation>试试其他名称或拼写。</translation>
+    </message>
+    <message>
+      <source>Enter at least 2 characters.</source>
+      <translation>输入至少 2 个字符。</translation>
+    </message>
+    <message>
+      <source>Search cities</source>
+      <translation>搜索城市</translation>
+    </message>
+    <message>
+      <source>Searching…</source>
+      <translation>正在搜索…</translation>
+    </message>
+    <message>
+      <source>Enter at least 2 characters to search for a city.</source>
+      <translation>请输入至少 2 个字符搜索城市。</translation>
+    </message>
+    <message>
+      <source>No cities found. Try another name or spelling.</source>
+      <translation>没有找到城市，请换个名称或检查拼写。</translation>
+    </message>
+    <message>
+      <source>Type a city name to see suggestions.</source>
+      <translation>输入城市名称查看候选结果。</translation>
+    </message>
+    <message>
+      <source>Retry search</source>
+      <translation>重试搜索</translation>
+    </message>
+    <message>
+      <source>Added</source>
+      <translation>已添加</translation>
+    </message>
+    <message>
+      <source>City options for %1</source>
+      <translation>%1 的城市选项</translation>
+    </message>
+    <message>
+      <source>No saved cities</source>
+      <translation>还没有添加城市</translation>
+    </message>
+    <message>
+      <source>Search for a city in the sidebar to add its forecast.</source>
+      <translation>在侧栏搜索城市，即可添加并查看天气。</translation>
+    </message>
+    <message>
+      <source>Add a city</source>
+      <translation>添加城市</translation>
+    </message>
+    <message>
+      <source>Selected City</source>
+      <translation>所选城市</translation>
+    </message>
+    <message>
+      <source>%1-Day Forecast</source>
+      <translation>%1 日预报</translation>
+    </message>
+    <message>
+      <source>Daily Forecast</source>
+      <translation>逐日预报</translation>
+    </message>
+    <message>
+      <source>Air quality data unavailable</source>
+      <translation>暂无空气质量数据</translation>
+    </message>
+    <message>
+      <source>Good</source>
+      <translation>优</translation>
+    </message>
+    <message>
+      <source>Moderate</source>
+      <translation>良</translation>
+    </message>
+    <message>
+      <source>Unhealthy for Sensitive Groups</source>
+      <translation>对敏感人群不健康</translation>
+    </message>
+    <message>
+      <source>Unhealthy</source>
+      <translation>不健康</translation>
+    </message>
+    <message>
+      <source>Very Unhealthy</source>
+      <translation>非常不健康</translation>
+    </message>
+    <message>
+      <source>Hazardous</source>
+      <translation>危险</translation>
+    </message>
+      <message>
+      <source>Work</source>
+      <translation>工作</translation>
+    </message>
+      <message>
+      <source>Personal</source>
+      <translation>个人</translation>
+    </message>
+      <message>
+      <source>Sport</source>
+      <translation>运动</translation>
+    </message>
+      <message>
+      <source>Reminder</source>
+      <translation>提醒事项</translation>
+    </message>
+      <message>
+      <source>Event</source>
+      <translation>日程</translation>
+    </message>
+      <message>
+      <source>New reminder</source>
+      <translation>新建提醒事项</translation>
+    </message>
+      <message>
+      <source>Add event or reminder</source>
+      <translation>添加日程或提醒事项</translation>
+    </message>
+      <message>
+      <source>Show completed reminders</source>
+      <translation>显示已完成的提醒事项</translation>
+    </message>
+      <message>
+      <source>Reminder created</source>
+      <translation>提醒事项已创建</translation>
+    </message>
+      <message>
+      <source>This item no longer exists.</source>
+      <translation>此事项已被删除或已不存在。</translation>
+    </message>
+      <message>
+      <source>Daily</source>
+      <translation>每天</translation>
+    </message>
+      <message>
+      <source>Weekly</source>
+      <translation>每周</translation>
+    </message>
+      <message>
+      <source>Monthly</source>
+      <translation>每月</translation>
+    </message>
+      <message>
+      <source>Yearly</source>
+      <translation>每年</translation>
+    </message>
+      <message>
+      <source>Custom repeat</source>
+      <translation>自定义重复</translation>
+    </message>
+      <message>
+      <source>No notification</source>
+      <translation>不通知</translation>
+    </message>
+      <message>
+      <source>Notify at the scheduled time</source>
+      <translation>在设定时间通知</translation>
+    </message>
+      <message>
+      <source>Notify %1 minutes before</source>
+      <translation>提前 %1 分钟通知</translation>
+    </message>
+      <message>
+      <source>No events or reminders for this day</source>
+      <translation>当天没有日程或提醒事项</translation>
+    </message>
   </context>
   <context>
     <name>PimClient</name>
@@ -1786,6 +2040,26 @@
       <source>Weather request failed</source>
       <translation>天气请求失败</translation>
     </message>
+    <message>
+      <source>Search timed out. Try again.</source>
+      <translation>搜索超时，请重试。</translation>
+    </message>
+    <message>
+      <source>Could not confirm removal. Please try again.</source>
+      <translation>未能确认删除结果，请重试。</translation>
+    </message>
+    <message>
+      <source>Connect to the weather service to remove a city.</source>
+      <translation>连接天气服务后才能删除城市。</translation>
+    </message>
+    <message>
+      <source>Search is unavailable. Check your connection and retry.</source>
+      <translation>搜索暂时不可用，请检查网络后重试。</translation>
+    </message>
+    <message>
+      <source>Could not remove the city. Please try again.</source>
+      <translation>删除城市失败，请重试。</translation>
+    </message>
   </context>
   <context>
     <name>CalculatorEngine</name>
@@ -1848,6 +2122,17 @@
     <message>
       <source>搜索所有单位</source>
       <translation>搜索所有单位</translation>
+    </message>
+  </context>
+<context>
+    <name>CalendarEditorFooter</name>
+      <message>
+      <source>Save</source>
+      <translation>保存</translation>
+    </message>
+      <message>
+      <source>Cancel</source>
+      <translation>取消</translation>
     </message>
   </context>
 </TS>

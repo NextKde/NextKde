@@ -1,3 +1,4 @@
+import Kos.Demo as Demo
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
@@ -214,7 +215,9 @@ ColumnLayout {
                     }
                 }
 
-                LiquidControls.LiquidGlassSwitch {
+                Demo.LiquidGlassSwitch {
+                        implicitWidth: 60
+                        implicitHeight: 26
                     checked: fgSchedPage.snapshot.stageEnabled === true
                     accentColor: colors.accent
                     trackColor: colors.divider

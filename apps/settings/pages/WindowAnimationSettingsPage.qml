@@ -1,3 +1,4 @@
+import Kos.Demo as Demo
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
@@ -35,12 +36,12 @@ ColumnLayout {
     Rectangle {
         Layout.fillWidth: true
         implicitHeight: windowRows.implicitHeight
-        radius: 18; color: colors.card
+        radius: 10; color: colors.card
         Column {
             id: windowRows
             anchors.left: parent.left; anchors.right: parent.right
             Item {
-                width: parent.width; height: 54
+                width: parent.width; height: 40
                 RowLayout {
                     anchors.fill: parent; anchors.leftMargin: 16; anchors.rightMargin: 16; spacing: 12
                     Controls.SettingIcon {
@@ -49,10 +50,12 @@ ColumnLayout {
                         symbol: "▣"
                         tint: "#5856d6"
                     }
-                    Text { text: I18n.tr("KOS window appearance"); color: colors.primaryText; font.pixelSize: 15; font.weight: Font.DemiBold }
+                    Text { text: I18n.tr("KOS window appearance"); color: colors.primaryText; font.pixelSize: 13; font.weight: Font.DemiBold }
                     Item { Layout.fillWidth: true }
-                    LiquidControls.LiquidGlassSwitch {
-                        width: 64; height: 25
+                    Demo.LiquidGlassSwitch {
+                        implicitWidth: 60
+                        implicitHeight: 26
+                        width: 40; height: 24
                         enabled: windowPage.backend !== null
                         objectName: "windowTakeoverSwitch"
                         checked: windowPage.snapshot.enabled !== false
@@ -61,9 +64,9 @@ ColumnLayout {
                     }
                 }
             }
-            Rectangle { width: parent.width - 53; x: 53; height: 1; color: colors.separator }
+            Rectangle { width: parent.width - 50; x: 50; height: 1; color: colors.separator }
             Item {
-                width: parent.width; height: 64
+                width: parent.width; height: 48
                 enabled: windowPage.backend !== null && windowPage.snapshot.enabled !== false
                 opacity: enabled ? 1 : 0.4
                 RowLayout {
@@ -74,14 +77,15 @@ ColumnLayout {
                         symbol: "▢"
                         tint: "#5ac8fa"
                     }
-                    Text { text: I18n.tr("Corner radius"); color: colors.primaryText; font.pixelSize: 14 }
+                    Text { text: I18n.tr("Corner radius"); color: colors.primaryText; font.pixelSize: 13 }
                     Item { Layout.fillWidth: true }
                     Text {
                         text: windowPage.radiusLabels[windowPage.previewRadius >= 0 ? windowPage.previewRadius : windowPage.radiusIndex]
                             + " · " + (windowPage.previewRadius >= 0 ? windowPage.radiusStops[windowPage.previewRadius] : Number(windowPage.snapshot.radius ?? 20)) + " px"
                         color: colors.secondaryText; font.pixelSize: 12
                     }
-                    LiquidControls.LiquidSlider {
+                    Demo.LiquidSlider {
+                        implicitHeight: 28
                         objectName: "windowRadiusSlider"
                         enabled: windowPage.backend !== null && windowPage.snapshot.enabled !== false
                         Layout.preferredWidth: 190
@@ -97,9 +101,9 @@ ColumnLayout {
                     }
                 }
             }
-            Rectangle { width: parent.width - 53; x: 53; height: 1; color: colors.separator }
+            Rectangle { width: parent.width - 50; x: 50; height: 1; color: colors.separator }
             Item {
-                width: parent.width; height: 54
+                width: parent.width; height: 40
                 enabled: windowPage.backend !== null && windowPage.snapshot.enabled !== false
                 opacity: enabled ? 1 : 0.4
                 RowLayout {
@@ -110,10 +114,12 @@ ColumnLayout {
                         symbol: "◧"
                         tint: "#8e8e93"
                     }
-                    Text { text: I18n.tr("Window shadow"); color: colors.primaryText; font.pixelSize: 14 }
+                    Text { text: I18n.tr("Window shadow"); color: colors.primaryText; font.pixelSize: 13 }
                     Item { Layout.fillWidth: true }
-                    LiquidControls.LiquidGlassSwitch {
-                        width: 64; height: 25
+                    Demo.LiquidGlassSwitch {
+                        implicitWidth: 60
+                        implicitHeight: 26
+                        width: 40; height: 24
                         objectName: "windowShadowSwitch"
                         checked: windowPage.snapshot.shadow !== false
                         accentColor: colors.accent; trackColor: colors.divider
@@ -121,9 +127,9 @@ ColumnLayout {
                     }
                 }
             }
-            Rectangle { width: parent.width - 53; x: 53; height: 1; color: colors.separator }
+            Rectangle { width: parent.width - 50; x: 50; height: 1; color: colors.separator }
             Item {
-                width: parent.width; height: 54
+                width: parent.width; height: 40
                 enabled: windowPage.backend !== null && windowPage.snapshot.enabled !== false
                 opacity: enabled ? 1 : 0.4
                 RowLayout {
@@ -134,7 +140,7 @@ ColumnLayout {
                         symbol: "●"
                         tint: "#34c759"
                     }
-                    Text { text: I18n.tr("Window button icons"); color: colors.primaryText; font.pixelSize: 14 }
+                    Text { text: I18n.tr("Window button icons"); color: colors.primaryText; font.pixelSize: 13 }
                     Item { Layout.fillWidth: true }
                     Controls.SettingsNavBar {
                         colors: windowPage.colors
@@ -162,12 +168,12 @@ ColumnLayout {
     Rectangle {
         Layout.fillWidth: true
         implicitHeight: animationRows.implicitHeight
-        radius: 18; color: colors.card
+        radius: 10; color: colors.card
         Column {
             id: animationRows
             anchors.left: parent.left; anchors.right: parent.right
             Item {
-                width: parent.width; height: 54
+                width: parent.width; height: 40
                 RowLayout {
                     anchors.fill: parent; anchors.leftMargin: 16; anchors.rightMargin: 16; spacing: 12
                     Controls.SettingIcon {
@@ -176,7 +182,7 @@ ColumnLayout {
                         symbol: "↓"
                         tint: "#ff9500"
                     }
-                    Text { text: I18n.tr("Hide and restore"); color: colors.primaryText; font.pixelSize: 14 }
+                    Text { text: I18n.tr("Hide and restore"); color: colors.primaryText; font.pixelSize: 13 }
                     Item { Layout.fillWidth: true }
                     Controls.SettingsNavBar {
                         colors: windowPage.colors
@@ -189,9 +195,9 @@ ColumnLayout {
                     }
                 }
             }
-            Rectangle { width: parent.width - 53; x: 53; height: 1; color: colors.separator }
+            Rectangle { width: parent.width - 50; x: 50; height: 1; color: colors.separator }
             Item {
-                width: parent.width; height: 54
+                width: parent.width; height: 40
                 RowLayout {
                     anchors.fill: parent; anchors.leftMargin: 16; anchors.rightMargin: 16; spacing: 12
                     Controls.SettingIcon {
@@ -200,7 +206,7 @@ ColumnLayout {
                         symbol: "×"
                         tint: "#ff3b30"
                     }
-                    Text { text: I18n.tr("Close window"); color: colors.primaryText; font.pixelSize: 14 }
+                    Text { text: I18n.tr("Close window"); color: colors.primaryText; font.pixelSize: 13 }
                     Item { Layout.fillWidth: true }
                     Controls.SettingsNavBar {
                         colors: windowPage.colors

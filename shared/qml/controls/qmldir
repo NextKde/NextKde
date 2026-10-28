@@ -2,6 +2,8 @@ module kos.shared.controls
 singleton LiquidStyle 1.0 LiquidStyle.qml
 LiquidBackdrop 1.0 LiquidBackdrop.qml
 LiquidSurface 1.0 LiquidSurface.qml
+LiquidGlassNumber 1.0 LiquidGlassNumber.qml
+LiquidCompactSurface 1.0 LiquidCompactSurface.qml
 LiquidCard 1.0 LiquidCard.qml
 LiquidActionButton 1.0 LiquidActionButton.qml
 LiquidNavigationButton 1.0 LiquidNavigationButton.qml

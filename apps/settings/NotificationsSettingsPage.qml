@@ -1,3 +1,4 @@
+import Kos.Demo as Demo
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
@@ -74,7 +75,9 @@ ColumnLayout {
                         Text { width: parent.width; text: modelData.title; color: page.theme.primaryText; font.pixelSize: 14; wrapMode: Text.Wrap }
                         Text { width: parent.width; text: modelData.detail; color: page.theme.secondaryText; font.pixelSize: 11; wrapMode: Text.Wrap }
                     }
-                    LiquidControls.LiquidGlassSwitch {
+                    Demo.LiquidGlassSwitch {
+                        implicitWidth: 60
+                        implicitHeight: 26
                         id: toggle
                         objectName: "notification-" + modelData.key + "-switch"
                         anchors { right: parent.right; verticalCenter: parent.verticalCenter; rightMargin: 18 }
@@ -123,7 +126,9 @@ ColumnLayout {
                         Text { width: parent.width; text: modelData.appName; textFormat: Text.PlainText; elide: Text.ElideRight; color: page.theme.primaryText; font.pixelSize: 14 }
                         Text { width: parent.width; text: parent.parent.blocked ? I18n.tr("New notifications blocked") : I18n.tr("Notifications allowed"); color: page.theme.secondaryText; font.pixelSize: 11 }
                     }
-                    LiquidControls.LiquidGlassSwitch {
+                    Demo.LiquidGlassSwitch {
+                        implicitWidth: 60
+                        implicitHeight: 26
                         id: allowToggle
                         anchors { right: parent.right; verticalCenter: parent.verticalCenter; rightMargin: 18 }
                         checked: !parent.blocked
