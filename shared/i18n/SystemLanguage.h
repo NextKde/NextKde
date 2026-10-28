@@ -41,13 +41,11 @@ inline QLocale locale()
     return QLocale(localeName());
 }
 
-inline QString settingsValue()
+// ListenFree's existing two-language settings enum. New common-app catalogs
+// must not select an unsupported value (its QML treats unknown values as Chinese).
+inline QString settingsValue(const QStringList &languages = QLocale::system().uiLanguages())
 {
-    if (isChinese())
-        return QStringLiteral("ZhCn");
-    if (isPortuguese())
-        return QStringLiteral("PtBr");
-    return QStringLiteral("EnUs");
+    return isChinese(languages) ? QStringLiteral("ZhCn") : QStringLiteral("EnUs");
 }
 
 // Keep these alive for the application's lifetime, including native dialogs

@@ -17,6 +17,7 @@ kos_add_application(kos-weather
         qml/Main.qml
         qml/WeatherIcon.qml
         qml/WeatherLoadingIndicator.qml
+        qml/SnowGlass.qml
     LINK_LIBRARIES
         Qt6::Network
 )
@@ -42,6 +43,8 @@ qt_add_resources(kos-weather "weather_particles"
         qml/particles/drop-offset.png
         qml/shaders/rain_refract.vert.qsb
         qml/shaders/rain_refract.frag.qsb
+        qml/shaders/snow_glass.vert.qsb
+        qml/shaders/snow_glass.frag.qsb
 )
 endif()
 

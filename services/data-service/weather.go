@@ -199,6 +199,18 @@ func defaultWeatherState() WeatherState {
 }
 
 func normalizeWeatherState(state *WeatherState) {
+	// An explicit empty list is a saved user choice, unlike a legacy missing list.
+	if state.SchemaVersion == weatherSchemaVersion && state.Locations != nil &&
+		len(state.Locations) == 0 && state.Location.ID == "" {
+		units := state.Units
+		if units != weatherUnitsMetric && units != weatherUnitsImperial {
+			units = weatherUnitsMetric
+		}
+		*state = WeatherState{SchemaVersion: weatherSchemaVersion, Provider: weatherProviderName,
+			Units: units, Status: weatherStatusIdle, Locations: []WeatherLocation{},
+			Hourly: []WeatherHourlyPoint{}, Daily: []WeatherDay{}}
+		return
+	}
 	if state.SchemaVersion == 0 {
 		state.SchemaVersion = weatherSchemaVersion
 	}
@@ -794,6 +806,55 @@ func (s *Service) setWeatherLocation(location WeatherLocation) error {
 	return nil
 }
 
+// removeWeatherLocation persists the list and invalidates a deleted city's in-flight forecast.
+func (s *Service) removeWeatherLocation(id string) error {
+	if strings.TrimSpace(id) == "" {
+		return errors.New("city id is required")
+	}
+	s.mu.Lock()
+	weather := &s.state.Weather
+	index := -1
+	for i, location := range weather.Locations {
+		if location.ID == id {
+			index = i
+			break
+		}
+	}
+	if index < 0 {
+		s.mu.Unlock()
+		return nil
+	} // Repeating an acknowledged deletion is safe.
+	remaining := make([]WeatherLocation, 0, len(weather.Locations)-1)
+	remaining = append(remaining, weather.Locations[:index]...)
+	remaining = append(remaining, weather.Locations[index+1:]...)
+	weather.Locations = remaining
+	delete(s.weatherCache, weatherCacheKey(id, weatherUnitsMetric))
+	delete(s.weatherCache, weatherCacheKey(id, weatherUnitsImperial))
+	selected := weather.Location.ID == id
+	if selected {
+		s.weatherRequestSerial++
+		s.weatherFailStreak = 0
+		units := weather.Units
+		*weather = WeatherState{SchemaVersion: weatherSchemaVersion, Provider: weatherProviderName,
+			Units: units, Status: weatherStatusIdle, Locations: remaining,
+			Hourly: []WeatherHourlyPoint{}, Daily: []WeatherDay{}}
+		if len(remaining) > 0 {
+			weather.Location = remaining[min(index, len(remaining)-1)]
+			if s.applyCachedWeatherLocked() {
+				weather.Status = weatherStatusReady
+			}
+		}
+	}
+	refresh := selected && len(remaining) > 0
+	s.mu.Unlock()
+	s.persist()
+	s.publishWeather()
+	if refresh {
+		s.startWeatherRefresh(true)
+	}
+	return nil
+}
+
 func (s *Service) setWeatherUnits(units string) error {
 	if units != weatherUnitsMetric && units != weatherUnitsImperial {
 		return errors.New("weather units must be metric or imperial")
@@ -827,6 +888,10 @@ func (s *Service) startWeatherRefresh(force bool) bool {
 	// Normalize persisted state once at startup. Doing it here clears a live
 	// loading marker and allows every tick to supersede the in-flight request.
 	weather := &s.state.Weather
+	if !validWeatherLocation(weather.Location) {
+		s.mu.Unlock()
+		return false
+	}
 	// A user-initiated refresh (force) may supersede an in-flight fetch: the
 	// serial bump below invalidates the older response. Without this, switching
 	// cities while a fetch is running was silently dropped and the window sat

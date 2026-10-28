@@ -1,3 +1,4 @@
+import Kos.Demo as Demo
 import QtQuick
 import "pages" as Pages
 import "components" as SettingsControls
@@ -18,15 +19,24 @@ ApplicationWindow {
         }
     }
 
-    width: 1100
-    height: 720
-    // 最小宽 = 侧栏 260 + 滚动区边距 30×2 + 内容列 700:
-    // 内容列已锁死 700 固定宽,窗口再窄只会截切,这里保证永远放得下。
-    minimumWidth: 1020
-    minimumHeight: 560
+    width: 850
+    height: 650
+    minimumWidth: 600
+    minimumHeight: 540
+    font.pixelSize: 13
     visible: true
     title: I18n.tr("KOS settings")
-    color: theme.background
+    color: "transparent"
+    background: Item {}
+    readonly property alias settingsScene: settingsScene
+    readonly property bool liquidEnabled: !materialForm && !Foundation.AppTheme.reduceTransparency
+        && GraphicsInfo.api !== GraphicsInfo.Software
+    Binding { target: Demo.AppTheme; property: "appearanceMode"; value: theme.dark ? "dark" : "light" }
+    Binding { target: Demo.AppTheme; property: "compactDesign"; value: true }
+    Binding { target: Demo.AppTheme; property: "reduceMotion"; value: Foundation.AppTheme.reduceMotion }
+    Binding { target: Demo.AppTheme; property: "reduceTransparency"; value: Foundation.AppTheme.reduceTransparency }
+    Binding { target: Demo.ControlForm; property: "materialForm"; value: !window.liquidEnabled }
+
     // 永远无边框(CSD):顶部 30px 保留带承载拖拽/双击最大化/窗口按钮。
     // 按钮有两层:右上的自绘简单按钮(常驻、永远可点),以及 kos-bridge
     // 在 KOS 装饰器选中时盖印在完全相同位置上的不透明面板(其 KWin 输入
@@ -36,9 +46,46 @@ ApplicationWindow {
     flags: Qt.Window | Qt.FramelessWindowHint
 
     property int currentPage: 1
+    property var pageHistory: [1]
+    property int historyIndex: 0
+    property bool navigationReady: false
+    property bool restoringHistory: false
+    readonly property bool canGoBack: historyIndex > 0
+    readonly property bool canGoForward: historyIndex < pageHistory.length - 1
+    Component.onCompleted: {
+        pageHistory = [currentPage]
+        historyIndex = 0
+        navigationReady = true
+    }
+    onCurrentPageChanged: {
+        if (!navigationReady || restoringHistory)
+            return
+        const next = pageHistory.slice(0, historyIndex + 1)
+        next.push(currentPage)
+        pageHistory = next
+        historyIndex = next.length - 1
+    }
+    function navigateHistory(offset) {
+        const index = historyIndex + offset
+        if (index < 0 || index >= pageHistory.length)
+            return
+        restoringHistory = true
+        historyIndex = index
+        currentPage = pageHistory[index]
+        restoringHistory = false
+    }
+    Shortcut { sequence: "Alt+Left"; enabled: window.canGoBack; onActivated: window.navigateHistory(-1) }
+    Shortcut { sequence: "Alt+Right"; enabled: window.canGoForward; onActivated: window.navigateHistory(1) }
     readonly property int displayedPage: pageMotion.displayedPage === ""
         ? currentPage : pageMotion.displayedPage
     property string searchText: ""
+    function matchingNavigationCount(item) {
+        if (item.label !== undefined)
+            return String(item.label).toLowerCase().includes(searchText.toLowerCase()) ? 1 : 0
+        let count = 0
+        for (const child of item.children ?? []) count += matchingNavigationCount(child)
+        return count
+    }
 
     Foundation.KosPageMotion {
         id: pageMotion
@@ -104,32 +151,18 @@ ApplicationWindow {
             const value = window.materialPalette[name]
             return value === undefined ? iPadOSValue : value
         }
-        // 窗口底色 + 左侧栏 = 同一块平面，右侧内容区是它上面一块圆角面板。
-        // 底色沿用 #eff0f1（BreezeLight 的 Window/BackgroundNormal），历史原因:
-        // 旧 SSD 形态下 kos-decoration 标题栏直接读 client palette 的这个颜色
-        // （kwin/kos-decoration/kosdecoration.cpp:157）。窗口现已永远无边框
-        // （见根窗口 flags 注释），没有标题栏衔接问题，但底色保持不变——
-        // kos-bridge 的红绿灯面板从顶带像素取色着色，同色才融合。
-        // **仍然不要随手改这个值**（2026-09-28 改过一次，裂出色差）。
-        //   右侧面板 = #e3e5e7，即 Breeze 同组的 Window/BackgroundAlternate(227,229,231)
-        // 圆角要看得见只能靠面板比底色深：ΔRGB (12,11,10)、对比度约 1.11:1。
-        // （试过 #f2f2f7：ΔRGB 只有 (3,2,6)/1.023:1，肉眼分不出边界。加阴影已被否，
-        //  因为读起来是"浮起"不是"分栏"。）
-        // 深色沿用同一套结构：底色 #202326，右侧面板 #2a2d31（比底色浅一档，
-        // 圆角才看得见），分组卡片 #1c1c1e 沉在面板里（面板 < 卡片的亮度，
-        // 卡片才是"深黑"的那一层）。
-        readonly property color background: role("surface", dark ? "#202326" : "#eff0f1")
-        readonly property color sidebar: role("surface", dark ? "#202326" : "#eff0f1")
-        readonly property color contentSurface: role("surface_container_low", dark
-            ? "#2a2d31" : "#e3e5e7")
-        readonly property color primaryText: role("on_surface", dark ? "#f5f5f7" : "#1c1c1e")
-        readonly property color secondaryText: role("on_surface_variant", dark ? "#98989d" : "#6d6d72")
-        readonly property color tertiaryText: role("outline", dark ? "#8e8e93" : "#8e8e93")
-        readonly property color card: role("surface_container", dark ? "#1c1c1e" : "#ffffff")
+        // Opaque neutral planes; optical material belongs to floating controls.
+        readonly property color background: role("surface", dark ? "#242426" : "#f7f7f7")
+        readonly property color sidebar: role("surface_container_low", dark ? "#242426" : "#ececeb")
+        readonly property color contentSurface: role("surface_container_low", dark ? "#1C1C1E" : "#FFFFFF")
+        readonly property color primaryText: role("on_surface", dark ? "#F2F2F2" : "#262626")
+        readonly property color secondaryText: role("on_surface_variant", dark ? "#ABABAB" : "#737373")
+        readonly property color tertiaryText: role("outline", dark ? "#858585" : "#858585")
+        readonly property color card: role("surface_container", dark ? "#242426" : "#f7f7f7")
         readonly property color separator: role("outline_variant", dark ? "#38383a" : "#e5e5ea")
         readonly property color divider: role("outline_variant", dark ? "#2c2c2e" : "#d1d1d6")
-        readonly property color searchField: role("surface_container_high", dark ? "#2c2c2e" : "#e3e3e8")
-        readonly property color selected: role("primary", dark ? "#0a84ff" : "#d9e9ff")
+        readonly property color searchField: role("surface_container_high", dark ? "#3A3A3C" : "#EDEDF0")
+        readonly property color selected: role("primary", "#007AFF")
         // The container a selected item sits in. M3 carries selection with
         // secondaryContainer; the iPadOS form keeps the translucent wash.
         readonly property color selectedContainer: role("secondary_container", dark
@@ -143,7 +176,7 @@ ApplicationWindow {
         // monochrome -- the coloured chip under each icon is the iPadOS form's
         // own furniture, so it only exists there.
         readonly property color iconMuted: role("on_surface_variant", dark ? "#98989d" : "#6d6d72")
-        readonly property color selectedForeground: role("on_secondary_container", dark ? "#ffffff" : "#00325b")
+        readonly property color selectedForeground: role("on_secondary_container", "#FFFFFF")
         // Controls that take a single accent (sliders, switches) read this.
         readonly property color accent: role("primary", "#0a84ff")
         readonly property color floatingBorder: role("outline", dark
@@ -343,8 +376,10 @@ ApplicationWindow {
     }
 
     component SidebarEntry: ItemDelegate {
+        id: sidebarEntry
         required property int pageIndex
         required property string label
+        required property string navIcon
         required property string navSymbol
         required property color navTint
         // Launch-only rows are plain links: no hover wash, no selection
@@ -352,9 +387,17 @@ ApplicationWindow {
         property bool launchOnly: false
         signal launch()
         width: parent ? parent.width : 0
-        // Compact rows: 28 (user-picked) pulls the titles tight; the icon (18)
-        // sits level with the 14px label.
-        height: 28
+        Layout.minimumHeight: 30
+        Layout.preferredHeight: 30
+        Layout.maximumHeight: 30
+        height: 30
+        Accessible.name: label
+        Demo.KosToolTip {
+            target: sidebarEntry
+            text: sidebarEntry.label
+            onlyWhenTruncated: true
+            truncated: sidebarLabel.truncated
+        }
         leftPadding: 10
         rightPadding: 10
         highlighted: !launchOnly && window.currentPage === pageIndex
@@ -363,9 +406,11 @@ ApplicationWindow {
             || label.toLowerCase().indexOf(window.searchText.toLowerCase()) >= 0
         background: Rectangle {
             // M3's drawer items are full-round pills that carry selection in
-            // secondaryContainer; the iPadOS form keeps its squircle of tinted
-            // wash. Launch-only rows stay completely inert.
-            radius: height / 2
+            // secondaryContainer; the macOS form uses a blue rounded row.
+            // Launch-only rows stay completely inert.
+            radius: window.materialForm ? height / 2 : 6
+            border.width: parent.activeFocus ? 2 : 0
+            border.color: theme.accent
             color: parent.launchOnly ? "transparent"
                 : (parent.highlighted
                     ? (window.materialForm ? theme.selectedContainer : theme.selected)
@@ -373,29 +418,29 @@ ApplicationWindow {
         }
         contentItem: Item {
             implicitHeight: 28
-            SettingsControls.SettingIcon {
+            SettingsControls.NavigationIcon {
                 colors: window.notificationTheme
                 materialForm: window.materialForm
                 id: sidebarIcon
                 anchors.left: parent.left
                 anchors.verticalCenter: parent.verticalCenter
                 size: 18
+                iconName: navIcon
                 symbol: navSymbol
                 tint: navTint
                 highlighted: window.currentPage === pageIndex
             }
             Text {
+                id: sidebarLabel
                 anchors.left: sidebarIcon.right
                 anchors.leftMargin: 10
                 anchors.right: parent.right
                 anchors.verticalCenter: parent.verticalCenter
                 text: label
                 color: window.currentPage === pageIndex
-                    && window.materialForm ? theme.selectedForeground : theme.primaryText
-                font.pixelSize: 14
-                font.weight: window.materialForm
-                    ? (window.currentPage === pageIndex ? Font.DemiBold : Font.Medium)
-                    : (window.currentPage === pageIndex ? Font.Bold : Font.Medium)
+                    ? theme.selectedForeground : theme.primaryText
+                font.pixelSize: 13
+                font.weight: Font.Normal
                 elide: Text.ElideRight
             }
         }
@@ -408,6 +453,13 @@ ApplicationWindow {
         }
     }
 
+    Demo.LiquidBackdrop {
+        id: helpBackdrop
+        sourceItem: settingsScene
+        registerAsDefault: false
+        active: !Foundation.AppTheme.reduceTransparency
+    }
+
     // ── 台前调度（fg-sched）页 ──────────────────────────────────────
     // 冻结默认全面停用：后台只做资源限制（nice/效率核/IO，异构才限核）。本页管理：
     // ① 冻结开关（重开时最小化窗口 180s 后 SIGSTOP）
@@ -418,242 +470,265 @@ ApplicationWindow {
     // 生效；动画/侧栏参数走 shell 的 stage-config IPC，即时生效。
 
     Item {
+        id: settingsScene
+        readonly property alias toolTipBackdrop: helpBackdrop
         anchors.fill: parent
+
+        Item {
+            id: planes
+            anchors.fill: parent
+        Rectangle {
+            id: sidebarPlane
+            objectName: "settingsSidebarPlane"
+            width: sidebar.width
+            height: parent.height
+            color: theme.sidebar
+            opacity: window.liquidEnabled ? 0.98 : 1
+        }
+        Rectangle {
+            x: sidebar.width
+            width: parent.width - x
+            height: parent.height
+            color: theme.contentSurface
+        }
+        }
+        Demo.LiquidBackdrop {
+            id: sidebarBackdrop
+            sourceItem: planes
+            active: window.liquidEnabled
+        }
 
         Rectangle {
             id: sidebar
             x: 0
             y: 0
-            // 302 → 211（缩到 70%，用户要求窄 30%）→ 230（用户要求加宽一点点）
-            // → 260（对齐 macOS 系统设置的侧栏比例，两栏分割下更从容）。
-            // 条目最长的标签是 4 个汉字（"接入状态"／"玻璃调试"），14px 字号约
-            // 56px；一条 ItemDelegate 占 10(左内) + 18(图标) + 10(间隔) + 文本 +
-            // 10(右内)，再加 ColumnLayout 两侧各 24 的边距 ⇒ 260 下文本仍有约
-            // 160px 可用，不会触发 ElideRight。
-            width: 260
+            width: 214
             height: parent.height
-            radius: 0
-            color: theme.sidebar
+            color: "transparent"
 
             ColumnLayout {
                 anchors.fill: parent
                 // 两侧对称 24:内容区已顶天立地(无 inset),卡片不再需要
                 // 叠加内容面板的 inset 来凑视觉居中。
-                anchors.leftMargin: 24
-                anchors.rightMargin: 24
-                anchors.topMargin: 22
+                anchors.leftMargin: 12
+                anchors.rightMargin: 12
+                anchors.topMargin: 38
                 anchors.bottomMargin: 16
                 spacing: 0
 
-                Text {
-                    text: I18n.tr("Settings")
-                    color: theme.primaryText
-                    font.pixelSize: 26
-                    font.weight: Font.Bold
-                    Layout.leftMargin: 6
-                    Layout.bottomMargin: 8
-                }
-
                 Item {
                     Layout.fillWidth: true
-                    Layout.preferredHeight: 36
+                    Layout.preferredHeight: 28
                     Layout.bottomMargin: 10
 
-                    LiquidControls.LiquidTextField {
+                    Demo.LiquidTextField {
+                        id: sidebarSearch
+                        objectName: "settingsSearch"
                         anchors.fill: parent
-                        leftPadding: 36
+                        leftPadding: 30
                         rightPadding: 10
                         placeholderText: I18n.tr("Search")
-                        glassColor: theme.searchField
-                        textColor: theme.primaryText
-                        mutedTextColor: theme.secondaryText
-                        font.pixelSize: 13
+                        Accessible.name: placeholderText
+                        font.pixelSize: 11
+                        liquidFinish: true
+                        liquidIntensity: "strong"
+                        materialForm: !window.liquidEnabled
+                        backdrop: sidebarBackdrop
+                        focusedOutlineColor: materialForm ? Foundation.AppTheme.focusRing : "transparent"
                         onTextChanged: window.searchText = text
                     }
 
-                    Text {
+                    LiquidControls.VectorIcon {
                         anchors.left: parent.left
-                        anchors.leftMargin: 12
+                        anchors.leftMargin: 10
                         anchors.verticalCenter: parent.verticalCenter
-                        text: "⌕"
+                        name: "search"
                         color: theme.secondaryText
-                        font.pixelSize: 16
+                        size: 14
                         z: 1
                     }
                 }
 
-                // 侧栏条目也按 session 分组卡片呈现：背景和圆角对齐右侧内容区
-                // 的卡片（theme.card / radius 18），组间 15px。搜索过滤掉条目时
-                // ColumnLayout 只按可见项撑高，卡片会跟着收缩。
-                Rectangle {
+                Text {
                     Layout.fillWidth: true
-                    Layout.bottomMargin: 15
-                    color: theme.card
-                    radius: 18
-                    implicitHeight: navGroup1.implicitHeight + 8
-
-                    ColumnLayout {
-                        id: navGroup1
-                        anchors.left: parent.left
-                        anchors.right: parent.right
-                        anchors.top: parent.top
-                        anchors.margins: 4
-                        spacing: 0
-
-                        SidebarEntry {
-                            Layout.fillWidth: true
-                            pageIndex: 1
-                            label: I18n.tr("Theme")
-                            navSymbol: "◈"
-                            navTint: "#af52de"
-                        }
-
-                        SidebarEntry {
-                            Layout.fillWidth: true
-                            pageIndex: 11
-                            label: I18n.tr("Windows and animations")
-                            navSymbol: "▣"
-                            navTint: "#af52de"
-                        }
-
-                        SidebarEntry {
-                            Layout.fillWidth: true
-                            pageIndex: 8
-                            label: I18n.tr("Wallpaper")
-                            navSymbol: "▧"
-                            navTint: "#64d2ff"
-                        }
-
-                        SidebarEntry {
-                            Layout.fillWidth: true
-                            pageIndex: 2
-                            label: I18n.tr("Top bar")
-                            navSymbol: "⎍"
-                            navTint: "#5ac8fa"
-                        }
-
-                        SidebarEntry {
-                            Layout.fillWidth: true
-                            pageIndex: 3
-                            label: I18n.tr("Dock")
-                            navSymbol: "▰"
-                            navTint: "#0a84ff"
-                        }
-
-                        SidebarEntry {
-                            Layout.fillWidth: true
-                            pageIndex: 13
-                            label: I18n.tr("Power")
-                            navSymbol: "ϟ"
-                            navTint: "#34c759"
-                        }
-
-                        SidebarEntry {
-                            Layout.fillWidth: true
-                            pageIndex: 12
-                            label: I18n.tr("Notifications")
-                            navSymbol: "●"
-                            navTint: "#ff3b30"
-                        }
-
-                        SidebarEntry {
-                            Layout.fillWidth: true
-                            pageIndex: 4
-                            label: I18n.tr("Launcher")
-                            navSymbol: "❖"
-                            navTint: "#ff9500"
-                        }
-                    }
+                    Layout.leftMargin: 6
+                    Layout.bottomMargin: visible ? 8 : 0
+                    visible: window.searchText.length > 0 && window.matchingNavigationCount(navigation) === 0
+                    text: I18n.tr("No results")
+                    color: theme.secondaryText
+                    font.pixelSize: 11
+                    wrapMode: Text.Wrap
                 }
 
-                Rectangle {
+                Flickable {
+                    id: navigationScroll
                     Layout.fillWidth: true
-                    Layout.bottomMargin: 15
-                    color: theme.card
-                    radius: 18
-                    implicitHeight: navGroup2.implicitHeight + 8
-
-                    ColumnLayout {
-                        id: navGroup2
-                        anchors.left: parent.left
-                        anchors.right: parent.right
-                        anchors.top: parent.top
-                        anchors.margins: 4
-                        spacing: 0
-
-                        SidebarEntry {
-                            Layout.fillWidth: true
-                            pageIndex: 5
-                            label: I18n.tr("Shortcuts")
-                            navSymbol: "⌘"
-                            navTint: "#5856d6"
-                        }
-
-                        SidebarEntry {
-                            Layout.fillWidth: true
-                            pageIndex: 6
-                            label: I18n.tr("Integration status")
-                            navSymbol: "✓"
-                            navTint: "#30d158"
-                        }
-
-                        SidebarEntry {
-                            Layout.fillWidth: true
-                            pageIndex: 9
-                            label: I18n.tr("Extensions and services")
-                            navSymbol: "◇"
-                            navTint: "#5ac8fa"
-                        }
-
-                        SidebarEntry {
-                            Layout.fillWidth: true
-                            pageIndex: 7
-                            label: I18n.tr("Glass debugging")
-                            navSymbol: "⚙"
-                            navTint: "#64d2ff"
-                        }
-
-                        SidebarEntry {
-                            Layout.fillWidth: true
-                            pageIndex: 10
-                            label: I18n.tr("Stage scheduling")
-                            navSymbol: "⏵"
-                            navTint: "#ff9f0a"
-                        }
-                    }
-                }
-
-                // A separate card holding one launch-only link: not a page,
-                // no hover or selection state, the click only opens KDE's
-                // own settings.
-                Rectangle {
-                    Layout.fillWidth: true
-                    color: theme.card
-                    radius: 18
-                    implicitHeight: navGroup3.implicitHeight + 8
-
-                    ColumnLayout {
-                        id: navGroup3
-                        anchors.left: parent.left
-                        anchors.right: parent.right
-                        anchors.top: parent.top
-                        anchors.margins: 4
-                        spacing: 0
-
-                        SidebarEntry {
-                            Layout.fillWidth: true
-                            launchOnly: true
-                            pageIndex: -1
-                            label: I18n.tr("KDE System Settings")
-                            navSymbol: "✦"
-                            navTint: "#8e8e93"
-                            onLaunch: settingsBridge.launchSystemSettings()
-                        }
-                    }
-                }
-
-                Item {
                     Layout.fillHeight: true
+                    contentWidth: width
+                    contentHeight: navigation.implicitHeight
+                    boundsBehavior: Flickable.StopAtBounds
+                    clip: true
+                    ScrollBar.vertical: ScrollBar { policy: ScrollBar.AsNeeded }
+                    ColumnLayout {
+                        id: navigation
+                        width: navigationScroll.width
+                        spacing: 8
+
+                        Rectangle {
+                            Layout.fillWidth: true
+                            Layout.bottomMargin: 0
+                            color: "transparent"
+                            radius: 0
+                            implicitHeight: navGroup1.implicitHeight
+
+                            ColumnLayout {
+                                id: navGroup1
+                                anchors.left: parent.left
+                                anchors.right: parent.right
+                                anchors.top: parent.top
+                                anchors.margins: 0
+                                spacing: 0
+
+                                SidebarEntry {
+                                    Layout.fillWidth: true
+                                    pageIndex: 1
+                                    label: I18n.tr("Theme")
+                                    navIcon: "appearance"
+                                    navSymbol: "◈"
+                                    navTint: "#af52de"
+                                }
+
+                                SidebarEntry {
+                                    Layout.fillWidth: true
+                                    pageIndex: 11
+                                    label: I18n.tr("Windows and animations")
+                                    navIcon: "desktop-dock"
+                                    navSymbol: "▣"
+                                    navTint: "#af52de"
+                                }
+
+                                SidebarEntry {
+                                    Layout.fillWidth: true
+                                    pageIndex: 8
+                                    label: I18n.tr("Wallpaper")
+                                    navIcon: "wallpaper"
+                                    navSymbol: "▧"
+                                    navTint: "#64d2ff"
+                                }
+
+                                SidebarEntry {
+                                    Layout.fillWidth: true
+                                    pageIndex: 2
+                                    label: I18n.tr("Top bar")
+                                    navIcon: "menu-bar"
+                                    navSymbol: "⎍"
+                                    navTint: "#5ac8fa"
+                                }
+
+                                SidebarEntry {
+                                    Layout.fillWidth: true
+                                    pageIndex: 3
+                                    label: I18n.tr("Dock")
+                                    navIcon: "desktop-dock"
+                                    navSymbol: "▰"
+                                    navTint: "#0a84ff"
+                                }
+
+                                SidebarEntry {
+                                    Layout.fillWidth: true
+                                    pageIndex: 13
+                                    label: I18n.tr("Power")
+                                    navIcon: "battery"
+                                    navSymbol: "ϟ"
+                                    navTint: "#34c759"
+                                }
+
+                                SidebarEntry {
+                                    Layout.fillWidth: true
+                                    pageIndex: 12
+                                    label: I18n.tr("Notifications")
+                                    navIcon: "notifications"
+                                    navSymbol: "●"
+                                    navTint: "#ff3b30"
+                                }
+
+                                SidebarEntry {
+                                    Layout.fillWidth: true
+                                    pageIndex: 4
+                                    label: I18n.tr("Launcher")
+                                    navIcon: "spotlight"
+                                    navSymbol: "❖"
+                                    navTint: "#ff9500"
+                                }
+                            }
+                        }
+
+                        Rectangle {
+                            Layout.fillWidth: true
+                            Layout.bottomMargin: 0
+                            color: "transparent"
+                            radius: 0
+                            implicitHeight: navGroup2.implicitHeight
+
+                            ColumnLayout {
+                                id: navGroup2
+                                anchors.left: parent.left
+                                anchors.right: parent.right
+                                anchors.top: parent.top
+                                anchors.margins: 0
+                                spacing: 0
+
+                                SidebarEntry {
+                                    Layout.fillWidth: true
+                                    pageIndex: 5
+                                    label: I18n.tr("Shortcuts")
+                                    navIcon: "keyboard"
+                                    navSymbol: "⌘"
+                                    navTint: "#5856d6"
+                                }
+
+                                SidebarEntry {
+                                    Layout.fillWidth: true
+                                    pageIndex: 6
+                                    label: I18n.tr("Integration status")
+                                    navIcon: "network"
+                                    navSymbol: "✓"
+                                    navTint: "#30d158"
+                                }
+
+                                SidebarEntry {
+                                    Layout.fillWidth: true
+                                    pageIndex: 9
+                                    label: I18n.tr("Extensions and services")
+                                    navIcon: "general"
+                                    navSymbol: "◇"
+                                    navTint: "#5ac8fa"
+                                }
+
+                                SidebarEntry {
+                                    Layout.fillWidth: true
+                                    pageIndex: 7
+                                    label: I18n.tr("Glass debugging")
+                                    navIcon: "appearance"
+                                    navSymbol: "⚙"
+                                    navTint: "#64d2ff"
+                                }
+
+                                SidebarEntry {
+                                    Layout.fillWidth: true
+                                    pageIndex: 10
+                                    label: I18n.tr("Stage scheduling")
+                                    navIcon: "desktop-dock"
+                                    navSymbol: "⏵"
+                                    navTint: "#ff9f0a"
+                                }
+                            }
+                        }
+
+
+
+                    }
+                    Foundation.KosKineticScroll { flickable: navigationScroll }
                 }
             }
         }
@@ -667,7 +742,7 @@ ApplicationWindow {
             y: 0
             width: parent.width - x
             height: parent.height
-            color: theme.contentSurface
+            color: "transparent"
 
             Flickable {
                 id: pageScroll
@@ -676,11 +751,11 @@ ApplicationWindow {
                 transform: Translate { x: Foundation.AppTheme.reduceMotion ? 0 : 12 * (1 - pageMotion.progress) }
                 objectName: "settings-page-scroll"
                 anchors.fill: parent
-                anchors.leftMargin: 30
-                anchors.rightMargin: 30
-                // 顶部让出 chromeStrip(拖拽带 + 红绿灯),页面标题落在带下缘。
-                anchors.topMargin: 24 + window.chromeStrip
-                anchors.bottomMargin: 24
+                anchors.leftMargin: 20
+                anchors.rightMargin: 20
+                // Leave a compact gap below the fixed title and navigation row.
+                anchors.topMargin: window.chromeStrip + 18
+                anchors.bottomMargin: 16
                 contentWidth: Math.max(width, pageContent.width)
                 contentHeight: pageContent.implicitHeight
                 clip: true
@@ -688,10 +763,8 @@ ApplicationWindow {
 
                 ColumnLayout {
                     id: pageContent
-                    // 固定宽度:窗口缩放只改变两侧留白,内容列(含图片网格)
-                    // 尺寸恒定,不触发网格重排/缩略图重生成。窗口窄于 700 时
-                    // 由外层 Flickable 的横向滚动兜底(contentWidth 已取 max)。
-                    width: 700
+                    // Grow up to the comfortable reading width; narrow windows reflow.
+                    width: Math.min(740, pageScroll.width)
                     x: Math.max(0, Math.round((pageScroll.width - width) / 2))
                     spacing: 0
 
@@ -700,14 +773,6 @@ ApplicationWindow {
                     // development one once the banner has been closed.
                     DevelopmentBanner {
                         visible: window.developmentBannerVisible
-                    }
-
-                    Text {
-                        text: window.contentByPage[window.displayedPage].subtitle
-                        color: theme.primaryText
-                        font.pixelSize: 24
-                        font.weight: Font.Bold
-                        Layout.bottomMargin: 18
                     }
 
                     // Every page used to be instantiated at startup, so its
@@ -931,11 +996,13 @@ ApplicationWindow {
         // KOS 装饰器选中时被面板完整盖住(输入走面板),面板不在时它们就是
         // 窗口控件。
         Row {
+            id: windowControls
+            objectName: "settingsWindowControls"
             anchors {
                 right: parent.right
                 rightMargin: 14.5   // 面板 offset.x 10 + panelPaddingX 4.5
                 top: parent.top
-                topMargin: 10.5     // offset.y 6 + panelPadding 4.5
+                topMargin: 12.5     // offset.y 6 + panelPadding 4.5
             }
             spacing: 14
             Repeater {
@@ -959,6 +1026,78 @@ ApplicationWindow {
                             : window.close()
                     }
                 }
+            }
+        }
+
+        Demo.LiquidActionButton {
+            id: kdeSettingsButton
+            objectName: "settingsOpenKdeSettings"
+            anchors.right: windowControls.left
+            anchors.rightMargin: 22
+            anchors.verticalCenter: windowControls.verticalCenter
+            width: 26
+            height: 26
+            z: 2
+            iconOnly: true
+            contentItem: Item {
+                implicitWidth: 16
+                implicitHeight: 16
+                Image {
+                    objectName: "settingsKdeLogo"
+                    anchors.centerIn: parent
+                    width: 16
+                    height: 16
+                    source: theme.dark ? Qt.resolvedUrl("icons/kde-symbolic-dark.svg")
+                        : Qt.resolvedUrl("icons/kde-symbolic.svg")
+                    sourceSize: Qt.size(64, 64)
+                    fillMode: Image.PreserveAspectFit
+                    opacity: kdeSettingsButton.enabled ? 1 : 0.38
+                }
+            }
+            materialForm: !window.liquidEnabled
+            backdrop: sidebarBackdrop
+            focusRingColor: materialForm ? Foundation.AppTheme.focusRing : "transparent"
+            enabled: typeof settingsBridge !== "undefined"
+                && typeof settingsBridge.launchSystemSettings === "function"
+            Accessible.name: I18n.tr("KDE System Settings")
+            Demo.KosToolTip {
+                target: kdeSettingsButton
+                text: I18n.tr("Open KDE System Settings")
+            }
+            onClicked: settingsBridge.launchSystemSettings()
+        }
+
+        RowLayout {
+            id: pageToolbar
+            objectName: "settingsPageToolbar"
+            x: contentSurface.x + 20
+            y: windowControls.y + (windowControls.height - height) / 2
+            width: Math.max(0, kdeSettingsButton.x - x - 12)
+            height: 26
+            spacing: 10
+            z: 2
+
+            Demo.LiquidActionButtonGroup {
+                objectName: "settingsHistoryNavigation"
+                Layout.preferredWidth: implicitWidth
+                Layout.preferredHeight: 26
+                buttonSize: 26
+                icons: ["back", "forward"]
+                labels: [I18n.tr("Previous page"), I18n.tr("Next page")]
+                enabledActions: [window.canGoBack, window.canGoForward]
+                materialForm: !window.liquidEnabled
+                backdrop: sidebarBackdrop
+                onTriggered: index => window.navigateHistory(index === 0 ? -1 : 1)
+            }
+
+            Text {
+                objectName: "settingsPageTitle"
+                Layout.fillWidth: true
+                text: window.contentByPage[window.displayedPage].subtitle
+                color: theme.primaryText
+                font.pixelSize: 16
+                font.weight: Font.DemiBold
+                elide: Text.ElideRight
             }
         }
 

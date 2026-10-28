@@ -17,6 +17,9 @@ private slots:
         for (const auto &lang : {"en-US", "es-ES", "zh-CN", "C", "", "por"})
             QVERIFY(!Kos::I18n::isPortuguese({QString::fromLatin1(lang), "pt-BR"}));
         QVERIFY(!Kos::I18n::isPortuguese({}));
+        QCOMPARE(Kos::I18n::settingsValue({"pt-BR"}), QString("EnUs"));
+        QCOMPARE(Kos::I18n::settingsValue({"pt-PT"}), QString("EnUs"));
+        QCOMPARE(Kos::I18n::settingsValue({"zh-CN"}), QString("ZhCn"));
     }
     void systemEnvironment() {
         const QString expected = qEnvironmentVariable("EXPECTED_LANGUAGE");

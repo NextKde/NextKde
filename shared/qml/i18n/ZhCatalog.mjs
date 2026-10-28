@@ -3,6 +3,12 @@
 // 规则：值必须与改造前界面上的中文逐字一致（含空格、间隔符与省略号），
 // 改动文案时同步更新对应键，不要只改一边。
 export const catalog = {
+    "Open KDE System Settings": "打开 KDE 系统设置",
+    "Appearance": "外观",
+    "Bottom": "底部",
+    "Left": "左侧",
+    "Right": "右侧",
+    "No results": "未找到结果",
     "Elapsed: %1": "已用时间：%1",
     "Compiling from source. This may take several minutes; the download has finished.": "下载已完成，正在从源码编译，可能需要几分钟。",
     "Downloading installer… Attempt %1/%2": "正在下载安装器… 第 %1/%2 次尝试",
@@ -293,7 +299,6 @@ export const catalog = {
     "Play": "播放",
     "Next": "下一首",
     "On": "已开启",
-    "Off": "已关闭",
     "Stage scheduling": "台前调度",
     "Stage": "台前调度",
     "Windows and animations": "窗口和动画",
@@ -308,11 +313,6 @@ export const catalog = {
     "Sound": "声音",
     "Notification History": "通知历史",
     "Clear": "清空",
-
-    // settings · Dock 悬停效果区（main 合入）
-    "Hover effects": "悬停效果",
-    "Hover to zoom": "悬停放大",
-    "Scales up and lifts together; 100% disables, up to 300%": "放大时同步上移；100% 关闭，最高 300%",
     "Notification": "通知",
     "No notification history": "暂无历史通知",
     "Lock Screen": "锁定屏幕",
@@ -415,6 +415,8 @@ export const catalog = {
 
     // common · 通用组件
     "Back": "返回",
+    "Previous page": "上一页",
+    "Next page": "下一页",
     "Empty the Trash?": "确定要清空回收站吗？",
     "All items will be permanently deleted.\nThis action cannot be undone.": "所有项目都将被永久删除。\n此操作无法撤销。",
     "Working…": "正在处理…",
@@ -604,7 +606,6 @@ export const catalog = {
     "Importing icon…": "正在导入图标…",
     "Search apps": "搜索应用",
     "Loading applications…": "正在加载应用程序…",
-    "No matching apps": "未找到匹配的应用",
     "Choose image file": "选择图片文件",
     "Paste image from clipboard": "粘贴剪贴板图片",
     "Display name": "显示名称",
@@ -924,7 +925,6 @@ export const catalog = {
     "Always show": "始终显示",
     "Smart hide": "智能隐藏",
     "Keep hidden": "持续隐藏",
-    "Show notification badges": "显示通知角标",
     "Show notification counts and badges on app icons": "在应用图标上显示通知数字和提醒红点",
     "Show the hide hint bar": "显示隐藏提示条",
     "After turning it off, moving to the screen edge still summons the Dock": "关闭后仍可移到屏幕边缘唤出 Dock",
@@ -1227,7 +1227,6 @@ export const catalog = {
     "Weather": "天气",
     "Allow": "允许",
     "Blocked": "已屏蔽",
-    "Apps appear here once they send notifications": "收到通知后可在这里管理应用",
     "No notifications": "暂无通知",
     "Just now": "刚刚",
     "minutes ago": "分钟前",

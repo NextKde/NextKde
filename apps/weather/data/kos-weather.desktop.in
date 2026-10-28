@@ -27,12 +27,3 @@ Keywords[pt_BR]=clima;tempo;previsão;temperatura;
 StartupNotify=true
 StartupWMClass=kos-weather
 X-GNOME-SingleWindow=true
-Actions=Settings;
-
-[Desktop Action Settings]
-Name=Settings
-Name[zh]=设置
-Name[zh_CN]=设置
-Name[pt]=Configurações
-Name[pt_BR]=Configurações
-Exec=@KOS_APP_EXECUTABLE@ --settings

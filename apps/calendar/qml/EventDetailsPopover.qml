@@ -6,23 +6,20 @@ import QtQuick.Layouts
 import QtQuick.Effects
 import Kos.Ui
 
-// P01: compact app-owned neutral detail popover for a calendar item.
-// Title, then time/date, then optional location/notes, a subdued Edit
-// action and a close affordance. Local neutral palette (no blue-gray tint),
-// hairline border and an app-painted soft shadow. The popover never edits
-// anything itself: closing it never saves, and Edit hands the record to the
-// existing editor dialogs.
+// One sampled liquid detail panel with ordinary interior actions. Closing it
+// never saves; Edit hands the existing record to the application editor.
 Popup {
     id: root
+    CalendarStyle { id: design }
 
     // Local neutral tokens (dark branches off AppTheme.dark only for the
     // light/dark choice; the greys themselves stay neutral). The values now
     // live in AppTheme (M05) so the popover and the Tahoe content plane are
     // themed from one place.
-    readonly property color surfaceColor: AppTheme.popoverSurface
-    readonly property color borderColor: AppTheme.popoverBorder
-    readonly property color titleColor: AppTheme.popoverInk
-    readonly property color secondaryColor: AppTheme.popoverInkSecondary
+    readonly property color surfaceColor: design.dialogPlane
+    readonly property color borderColor: design.separator
+    readonly property color titleColor: design.labelPrimary
+    readonly property color secondaryColor: design.labelSecondary
     // Interior margin reserved for the app-painted shadow: the visible
     // surface is inset by this much on every side while the popup itself
     // grows by 2 * shadowInset, so the surface box keeps its size/position.
@@ -30,6 +27,10 @@ Popup {
 
     property string itemTitle: ""
     property string itemTime: ""
+    property string itemCategory: ""
+    property string itemSchedule: ""
+    property bool canComplete: false
+    signal completionRequested()
     property string itemLocation: ""
     property string itemNotes: ""
     property color kindColor: AppTheme.accent
@@ -54,9 +55,11 @@ Popup {
 
     // The popup grows by 2 * shadowInset; contentItem is inset by
     // padding, so the content width stays 340 - 2 * 14 = 312.
-    width: 340 + 2 * shadowInset
+    width: 320 + 2 * shadowInset
     padding: 14 + shadowInset
     modal: false
+    popupType: Popup.Item
+    objectName: "calendarEventDetails"
     closePolicy: Popup.CloseOnPressOutside | Popup.CloseOnEscape
     onClosed: root.dismissed()
 
@@ -71,22 +74,19 @@ Popup {
             width: parent.width - 2 * root.shadowInset + 4
             height: parent.height - 2 * root.shadowInset + 6
             radius: 14
-            color: AppTheme.dark ? "#99000000" : "#40000000"
+            color: AppTheme.dark ? "#66000000" : "#22000000"
             layer.enabled: true
             layer.effect: MultiEffect {
                 blurEnabled: true
-                blurMax: 24
-                blur: 0.4
+                blurMax: 32
+                blur: 0.5
                 autoPaddingEnabled: true
             }
         }
-        Rectangle {
+        CalendarPopupSurface {
             anchors.fill: parent
             anchors.margins: root.shadowInset
             radius: 12
-            color: root.surfaceColor
-            border.width: 1
-            border.color: root.borderColor
         }
     }
 
@@ -153,11 +153,25 @@ Popup {
         }
 
         Label {
+            Layout.fillWidth: true
+            text: root.itemCategory
+            color: root.secondaryColor
+            font.pixelSize: 11
+        }
+        Label {
+            Layout.fillWidth: true
+            text: root.itemSchedule
+            color: root.secondaryColor
+            font.pixelSize: 11
+            wrapMode: Text.Wrap
+        }
+
+        Label {
             objectName: "detailsTime"
             Layout.fillWidth: true
             text: root.itemTime
             color: root.secondaryColor
-            font.pixelSize: 12
+            font.pixelSize: 13
             wrapMode: Text.WordWrap
             visible: root.itemTime.length > 0
         }
@@ -167,7 +181,7 @@ Popup {
             Layout.fillWidth: true
             text: root.itemLocation
             color: root.secondaryColor
-            font.pixelSize: 12
+            font.pixelSize: 13
             wrapMode: Text.Wrap
             visible: root.itemLocation.length > 0
         }
@@ -189,7 +203,7 @@ Popup {
                 width: root.availableWidth - 2 * 14
                 text: root.itemNotes
                 color: root.secondaryColor
-                font.pixelSize: 12
+                font.pixelSize: 13
                 wrapMode: Text.Wrap
             }
         }
@@ -199,6 +213,13 @@ Popup {
             Layout.topMargin: 4
             spacing: 8
 
+            CalendarCheckBox {
+                objectName: "detailsComplete"
+                visible: root.canComplete
+                checked: root.kindCompleted
+                text: qsTr("Completed")
+                onClicked: root.completionRequested()
+            }
             Item { Layout.fillWidth: true }
 
             AbstractButton {
@@ -214,7 +235,7 @@ Popup {
                     anchors.centerIn: parent
                     text: qsTr("Edit")
                     color: root.titleColor
-                    font.pixelSize: 12
+                    font.pixelSize: 11
                     font.weight: Font.Medium
                 }
                 background: Rectangle {

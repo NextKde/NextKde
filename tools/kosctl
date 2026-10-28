@@ -260,7 +260,7 @@ usage() {
 Usage: ./tools/kosctl <update [stable|main|vX.Y.Z[-rc.N]]|version|doctor|build|install [lockscreen|apps]|start|dev [shell|settings]|run|uninstall [lockscreen]|glass-settings|nix [build|install|start|shell]|nix-status|shortcuts install|shortcuts uninstall>
 
 NixOS remote install:
-  git clone <repo> && cd Nextkde
+  git clone <repo> && cd NextKde
   ./tools/kosctl nix install      # build + deploy systemd services
   ./tools/kosctl start            # apply now
 
