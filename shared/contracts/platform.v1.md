@@ -208,7 +208,7 @@ reported through the common response envelope.
 - `network.applications` (read): returns `{scope: "user-tcp", sockets: [{id, name, pid, rxBytes, txBytes}]}` from `ss -tinpeOH`. Visible-owner TCP counters are sampled per socket before grouping by process name. Local proxy connections may count the same traffic twice. UDP/QUIC, inaccessible owners, and connections closed between samples are excluded. These totals are independent of interface totals.
 - `power.profiles` (read): returns `{profiles, activeProfile, degraded}`.
   When `powerprofilesctl` is on `PATH`, the daemon runs `powerprofilesctl list`
-  and parses its text. Otherwise it reads the system D-Bus PowerProfiles
+  and parses its text. If absent or unable to start (not a nonzero exit), it reads the system D-Bus PowerProfiles
   service, trying `org.freedesktop.UPower.PowerProfiles` at
   `/org/freedesktop/UPower/PowerProfiles` and then `net.hadess.PowerProfiles`
   at `/net/hadess/PowerProfiles`. `Profiles`, `ActiveProfile` and
@@ -239,7 +239,9 @@ reported through the common response envelope.
 - `power.profile.set` (write): accepts `{profile: "power-saver" | "balanced" | "performance"}`.
   The same helper-or-D-Bus choice applies. A D-Bus write sets `ActiveProfile`
   with `org.freedesktop.DBus.Properties.Set` on the service that answered the
-  read. System authorization is retained. A helper or D-Bus failure is
+  read. Reads and writes are asynchronous on both clients, with whole-operation
+  deadlines of 2s for reads and 12s for writes (including discovery). No second
+  endpoint lookup occurs before Set. System authorization is retained. A helper or D-Bus failure is
   `command-failed`. Success is followed by a readback before the client
   confirms the selected profile.
 

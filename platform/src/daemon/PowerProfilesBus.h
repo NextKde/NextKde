@@ -5,6 +5,8 @@
 #include <QString>
 #include <QStringList>
 #include <QVariant>
+#include <QObject>
+#include <functional>
 
 namespace KosPlatform {
 
@@ -15,6 +17,7 @@ bool powerProfilesCommandAvailable();
 
 struct PowerProfileSnapshot {
     bool ok = false;
+    bool timedOut = false;
     QString service;
     QString path;
     QString interface;
@@ -33,7 +36,10 @@ QString normalizePowerDegradation(const QString &value);
 
 QJsonObject powerProfileObject(const PowerProfileSnapshot &snapshot);
 
-PowerProfileSnapshot readPowerProfiles(const QDBusConnection &bus);
-bool writePowerProfile(const QDBusConnection &bus, const QString &profile);
+// Completion is delivered on context's thread. Destroying context cancels delivery.
+// The deadline bounds the whole operation, including endpoint fallback and Set.
+using PowerProfileCompletion = std::function<void(PowerProfileSnapshot)>;
+void requestPowerProfiles(const QDBusConnection &bus, QObject *context,
+                          PowerProfileCompletion completion, const QString &profile = {});
 
 } // namespace KosPlatform

@@ -196,7 +196,7 @@ if(BUILD_TESTING)
     endif()
     if(KOS_PYTHON_EXECUTABLE AND DBUS_RUN_SESSION_EXECUTABLE)
         add_test(NAME kos-platform.status-panel-operations
-            COMMAND ${KOS_PYTHON_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/test_status_panel_operations.py $<TARGET_FILE:kos-platform>)
+            COMMAND ${KOS_PYTHON_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/test_status_panel_operations.py $<TARGET_FILE:kos-platform> $<TARGET_FILE:kos-power-profiles-bus-test>)
         set_tests_properties(kos-platform.status-panel-operations PROPERTIES LABELS platform TIMEOUT 30)
         add_test(NAME kos-platform.startup
             COMMAND ${KOS_PYTHON_EXECUTABLE}

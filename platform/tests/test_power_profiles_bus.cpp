@@ -142,6 +142,42 @@ int main(int argc, char **argv)
     fallbackService->kill();
     fallbackService->waitForFinished(1000);
     delete fallbackService;
+    // A service owning its name but never replying must not stall the caller,
+    // and the deadline is for the whole lookup, not each property/name.
+    environment.insert(QStringLiteral("KOS_FAKE_HANG"), QStringLiteral("1"));
+    QProcess hung;
+    hung.setProgram(QCoreApplication::applicationFilePath());
+    hung.setArguments({QStringLiteral("--serve"), QStringLiteral("freedesktop")});
+    hung.setProcessEnvironment(environment);
+    hung.start();
+    assert(hung.waitForStarted(3000));
+    QThread::msleep(100);
+    QEventLoop loop;
+    QTimer heartbeat;
+    int ticks = 0;
+    heartbeat.setInterval(10);
+    QObject::connect(&heartbeat, &QTimer::timeout, [&] { ++ticks; });
+    heartbeat.start();
+    QElapsedTimer elapsed;
+    elapsed.start();
+    bool timedOut = false;
+    KosPlatform::requestPowerProfiles(bus, &loop, [&](auto result) {
+        timedOut = result.timedOut;
+        loop.quit();
+    });
+    assert(elapsed.elapsed() < 100);
+    loop.exec();
+    assert(timedOut && elapsed.elapsed() < 3500 && ticks > 20);
+    // Destroying a caller while the service is still busy cancels delivery.
+    bool delivered = false;
+    auto *context = new QObject;
+    KosPlatform::requestPowerProfiles(bus, context, [&](auto) { delivered = true; });
+    delete context;
+    QTimer::singleShot(2200, &loop, &QEventLoop::quit);
+    loop.exec();
+    assert(!delivered);
+    hung.kill();
+    hung.waitForFinished(1000);
     daemon.kill();
     daemon.waitForFinished(1000);
     qInfo("power profiles bus: decode, helper detection, read/set, rejection and hadess fallback passed");

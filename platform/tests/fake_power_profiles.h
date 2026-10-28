@@ -8,9 +8,38 @@
 #include <QDBusVariant>
 #include <QDBusVirtualObject>
 #include <QCoreApplication>
+#include <QEventLoop>
+#include <QTimer>
+#include "../src/daemon/PowerProfilesBus.h"
 #include <QMetaType>
 #include <QStringList>
 #include <QVariant>
+
+// Synchronous adapters are test-only: production callers never spin an event loop.
+namespace KosPlatform {
+inline PowerProfileSnapshot readPowerProfiles(const QDBusConnection &bus)
+{
+    QEventLoop loop;
+    PowerProfileSnapshot result;
+    requestPowerProfiles(bus, &loop, [&](PowerProfileSnapshot snapshot) {
+        result = snapshot;
+        loop.quit();
+    });
+    loop.exec();
+    return result;
+}
+inline bool writePowerProfile(const QDBusConnection &bus, const QString &profile)
+{
+    QEventLoop loop;
+    bool ok = false;
+    requestPowerProfiles(bus, &loop, [&](PowerProfileSnapshot snapshot) {
+        ok = snapshot.ok;
+        loop.quit();
+    }, profile);
+    loop.exec();
+    return ok;
+}
+} // namespace KosPlatform
 
 // One Profiles entry. Nesting a hand-built QDBusArgument in the
 // Properties.Get variant crashes Qt 6.11's marshaller. A registered list
@@ -69,6 +98,20 @@ public:
     QString introspect(const QString &) const override { return {}; }
 
     bool handleMessage(const QDBusMessage &message, const QDBusConnection &connection) override
+    {
+        if (qEnvironmentVariableIsSet("KOS_FAKE_HANG"))
+            return true;
+        const int delay = qEnvironmentVariableIntValue("KOS_FAKE_DELAY");
+        if (delay > 0) {
+            QTimer::singleShot(delay, this, [this, message, connection] {
+                replyTo(message, connection);
+            });
+            return true;
+        }
+        return replyTo(message, connection);
+    }
+
+    bool replyTo(const QDBusMessage &message, const QDBusConnection &connection)
     {
         const QString member = message.member();
         const QList<QVariant> arguments = message.arguments();

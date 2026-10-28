@@ -3,7 +3,10 @@
 #include "PlatformDbus.h"
 
 #include <QDBusConnection>
-#include <QDBusInterface>
+#include <QDBusPendingCallWatcher>
+#include <QTimer>
+#include <utility>
+#include <iterator>
 #include <QDBusMessage>
 #include <QDBusVariant>
 #include <QJsonArray>
@@ -100,55 +103,139 @@ QJsonObject powerProfileObject(const PowerProfileSnapshot &snapshot)
             {QStringLiteral("degraded"), snapshot.degraded}};
 }
 
-PowerProfileSnapshot readPowerProfiles(const QDBusConnection &bus)
-{
-    PowerProfileSnapshot snapshot;
-    for (const Endpoint &endpoint : kEndpoints) {
-        if (!Detail::dbusServiceRegistered(bus, QString::fromUtf8(endpoint.service)))
-            continue;
-        const QVariant profilesValue = Detail::dbusGetProperty(
-            bus, QString::fromUtf8(endpoint.service), QString::fromUtf8(endpoint.path),
-            QString::fromUtf8(endpoint.interface), QStringLiteral("Profiles"));
-        const QVariant activeValue = Detail::dbusGetProperty(
-            bus, QString::fromUtf8(endpoint.service), QString::fromUtf8(endpoint.path),
-            QString::fromUtf8(endpoint.interface), QStringLiteral("ActiveProfile"));
-        QStringList profiles;
-        if (!profilesValue.isValid() || !activeValue.isValid()
-            || !decodePowerProfileList(profilesValue, &profiles))
-            continue;
-        const QVariant degraded = Detail::dbusGetProperty(
-            bus, QString::fromUtf8(endpoint.service), QString::fromUtf8(endpoint.path),
-            QString::fromUtf8(endpoint.interface), QStringLiteral("PerformanceDegraded"));
-        snapshot.ok = true;
-        snapshot.service = QString::fromUtf8(endpoint.service);
-        snapshot.path = QString::fromUtf8(endpoint.path);
-        snapshot.interface = QString::fromUtf8(endpoint.interface);
-        snapshot.profiles = profiles;
-        snapshot.activeProfile = activeValue.toString();
-        snapshot.degraded = degraded.isValid()
-            ? normalizePowerDegradation(degraded.toString()) : QString();
-        return snapshot;
-    }
-    return snapshot;
-}
+namespace {
 
-bool writePowerProfile(const QDBusConnection &bus, const QString &profile)
+class PowerProfileRequest final : public QObject {
+public:
+    PowerProfileRequest(const QDBusConnection &bus, QObject *context,
+                        PowerProfileCompletion completion, const QString &profile)
+        : QObject(context), m_bus(bus), m_completion(std::move(completion)), m_profile(profile)
+    {
+        m_deadline.setSingleShot(true);
+        m_deadline.setTimerType(Qt::PreciseTimer);
+        connect(&m_deadline, &QTimer::timeout, this, [this] {
+            m_snapshot.ok = false;
+            m_snapshot.timedOut = true;
+            finish();
+        });
+    }
+
+    void start()
+    {
+        m_deadline.start(m_profile.isEmpty() ? 2000 : 12000);
+        // Always complete asynchronously, including invalid input.
+        QTimer::singleShot(0, this, [this] {
+            if (!m_profile.isEmpty() && !knownPowerProfile(m_profile))
+                finish();
+            else
+                nextEndpoint();
+        });
+    }
+
+private:
+    void finish()
+    {
+        if (m_done)
+            return;
+        m_done = true;
+        m_deadline.stop();
+        auto completion = std::move(m_completion);
+        const auto snapshot = m_snapshot;
+        deleteLater();
+        completion(snapshot);
+    }
+
+    void call(const QString &method, const QList<QVariant> &arguments,
+              std::function<void(const QDBusMessage &)> done)
+    {
+        auto message = QDBusMessage::createMethodCall(m_snapshot.service, m_snapshot.path,
+            QStringLiteral("org.freedesktop.DBus.Properties"), method);
+        message.setArguments(arguments);
+        auto *watcher = new QDBusPendingCallWatcher(
+            m_bus.asyncCall(message, qMax(1, m_deadline.remainingTime())), this);
+        connect(watcher, &QDBusPendingCallWatcher::finished, this,
+                [this, done = std::move(done)](QDBusPendingCallWatcher *watcher) {
+            const auto reply = watcher->reply();
+            watcher->deleteLater();
+            if (!m_done) {
+                if (reply.type() == QDBusMessage::ErrorMessage
+                    && reply.errorName() == QLatin1String("org.freedesktop.DBus.Error.NoReply")) {
+                    m_snapshot.timedOut = true;
+                    finish();
+                } else {
+                    done(reply);
+                }
+            }
+        });
+    }
+
+    void get(const QString &property, std::function<void(QVariant)> done)
+    {
+        call(QStringLiteral("Get"), {m_snapshot.interface, property},
+             [done = std::move(done)](const QDBusMessage &reply) {
+            done(reply.type() == QDBusMessage::ReplyMessage && reply.arguments().size() == 1
+                ? Detail::unwrapDbusValue(reply.arguments().constFirst()) : QVariant());
+        });
+    }
+
+    void nextEndpoint()
+    {
+        if (++m_endpoint >= int(std::size(kEndpoints))) {
+            finish();
+            return;
+        }
+        const auto &endpoint = kEndpoints[m_endpoint];
+        m_snapshot = {};
+        m_snapshot.service = QString::fromUtf8(endpoint.service);
+        m_snapshot.path = QString::fromUtf8(endpoint.path);
+        m_snapshot.interface = QString::fromUtf8(endpoint.interface);
+        get(QStringLiteral("Profiles"), [this](const QVariant &value) {
+            if (!decodePowerProfileList(value, &m_snapshot.profiles)) {
+                nextEndpoint();
+                return;
+            }
+            get(QStringLiteral("ActiveProfile"), [this](const QVariant &value) {
+                if (!value.isValid()) {
+                    nextEndpoint();
+                    return;
+                }
+                m_snapshot.activeProfile = value.toString();
+                get(QStringLiteral("PerformanceDegraded"), [this](const QVariant &value) {
+                    m_snapshot.degraded = normalizePowerDegradation(value.toString());
+                    if (m_profile.isEmpty()) {
+                        m_snapshot.ok = true;
+                        finish();
+                        return;
+                    }
+                    // Reuse the endpoint selected above. A denied Set never
+                    // falls back to another name or another transport.
+                    call(QStringLiteral("Set"), {m_snapshot.interface,
+                         QStringLiteral("ActiveProfile"),
+                         QVariant::fromValue(QDBusVariant(m_profile))},
+                         [this](const QDBusMessage &reply) {
+                        m_snapshot.ok = reply.type() == QDBusMessage::ReplyMessage;
+                        finish();
+                    });
+                });
+            });
+        });
+    }
+
+    QDBusConnection m_bus;
+    PowerProfileCompletion m_completion;
+    QString m_profile;
+    QTimer m_deadline;
+    PowerProfileSnapshot m_snapshot;
+    int m_endpoint = -1;
+    bool m_done = false;
+};
+
+} // namespace
+
+void requestPowerProfiles(const QDBusConnection &bus, QObject *context,
+                          PowerProfileCompletion completion, const QString &profile)
 {
-    if (!knownPowerProfile(profile))
-        return false;
-    const PowerProfileSnapshot snapshot = readPowerProfiles(bus);
-    if (!snapshot.ok)
-        return false;
-    // The list watchdog is two seconds. Setting waits longer because a
-    // policy agent may prompt before ActiveProfile changes; this matches
-    // the powerprofilesctl set timeout in the daemon.
-    QDBusInterface properties(snapshot.service, snapshot.path,
-                              QStringLiteral("org.freedesktop.DBus.Properties"), bus);
-    properties.setTimeout(10000);
-    const QDBusMessage reply = properties.call(
-        QStringLiteral("Set"), snapshot.interface, QStringLiteral("ActiveProfile"),
-        QVariant::fromValue(QDBusVariant(profile)));
-    return reply.type() == QDBusMessage::ReplyMessage;
+    (new PowerProfileRequest(bus, context, std::move(completion), profile))->start();
 }
 
 } // namespace KosPlatform

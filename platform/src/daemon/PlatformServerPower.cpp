@@ -4,9 +4,6 @@
 #include "BatteryData.h"
 
 #include <QDBusConnection>
-#include <QDBusMessage>
-#include <QDBusPendingCallWatcher>
-#include <QDBusVariant>
 
 namespace KosPlatform {
 namespace {
@@ -40,55 +37,32 @@ bool PlatformServer::handlePowerOperation(QLocalSocket *socket, const QJsonObjec
                 QStringLiteral("Unsupported power profile"), false);
         return true;
     }
-    // Keep the helper wherever it is installed. Distributions that ship only
-    // the PowerProfiles bus service (Fedora tuned-ppd) never have it on PATH.
-    if (powerProfilesCommandAvailable()) {
-        if (reading) {
-            runCommand(socket, request, QStringLiteral("powerprofilesctl"), {QStringLiteral("list")},
-                [](const QByteArray &output, int) { return parsePowerProfiles(output); }, 3000);
-        } else {
-            runCommand(socket, request, QStringLiteral("powerprofilesctl"),
-                {QStringLiteral("set"), profile}, {}, 10000);
-        }
-        return true;
-    }
-    const QDBusConnection bus = QDBusConnection::systemBus();
-    if (reading) {
-        const PowerProfileSnapshot snapshot = readPowerProfiles(bus);
-        if (!snapshot.ok) {
-            respond(socket, request, false, {}, QStringLiteral("command-unavailable"),
-                    QStringLiteral("平台命令不可用"), true);
-        } else {
-            respond(socket, request, true, powerProfileObject(snapshot));
-        }
-        return true;
-    }
-    // Property reads are short. Set can wait on a policy agent, so it must
-    // not block the daemon thread. Ten seconds stays inside the shell
-    // client's 15s budget for power.profile.set and matches the helper.
-    const PowerProfileSnapshot snapshot = readPowerProfiles(bus);
-    if (!snapshot.ok) {
-        respond(socket, request, false, {}, QStringLiteral("command-failed"),
-                QStringLiteral("平台命令执行失败"), true);
-        return true;
-    }
-    QDBusMessage call = QDBusMessage::createMethodCall(
-        snapshot.service, snapshot.path, QStringLiteral("org.freedesktop.DBus.Properties"),
-        QStringLiteral("Set"));
-    call.setArguments({snapshot.interface, QStringLiteral("ActiveProfile"),
-                       QVariant::fromValue(QDBusVariant(profile))});
-    auto *watcher = new QDBusPendingCallWatcher(bus.asyncCall(call, 10000), this);
     const QPointer<QLocalSocket> guarded(socket);
-    connect(watcher, &QDBusPendingCallWatcher::finished, this,
-            [this, guarded, request](QDBusPendingCallWatcher *completed) {
-        const bool ok = completed->reply().type() == QDBusMessage::ReplyMessage;
-        if (ok)
-            respond(guarded.data(), request, true, {});
-        else
-            respond(guarded.data(), request, false, {}, QStringLiteral("command-failed"),
-                    QStringLiteral("平台命令执行失败"), true);
-        completed->deleteLater();
-    });
+    const auto fallback = [this, guarded, request, writing, profile] {
+        requestPowerProfiles(QDBusConnection::systemBus(), this,
+            [this, guarded, request, writing](const PowerProfileSnapshot &snapshot) {
+                if (snapshot.ok) {
+                    respond(guarded.data(), request, true,
+                            writing ? QJsonObject() : powerProfileObject(snapshot));
+                } else {
+                    const QString code = snapshot.timedOut ? QStringLiteral("command-timeout")
+                        : writing ? QStringLiteral("command-failed")
+                                  : QStringLiteral("command-unavailable");
+                    respond(guarded.data(), request, false, {}, code,
+                            QStringLiteral("Power profile request failed"), true);
+                }
+            }, writing ? profile : QString());
+    };
+    if (!powerProfilesCommandAvailable()) {
+        fallback();
+    } else if (reading) {
+        runCommand(socket, request, QStringLiteral("powerprofilesctl"), {QStringLiteral("list")},
+            [](const QByteArray &output, int) { return parsePowerProfiles(output); },
+            3000, {}, 0, fallback);
+    } else {
+        runCommand(socket, request, QStringLiteral("powerprofilesctl"),
+                   {QStringLiteral("set"), profile}, {}, 10000, {}, 0, fallback);
+    }
     return true;
 }
 }

@@ -6,6 +6,8 @@
 #include <QDBusConnection>
 #include <QDebug>
 #include <QElapsedTimer>
+#include <QFile>
+#include <QTimer>
 #include <QProcess>
 #include <QProcessEnvironment>
 #include <QStandardPaths>
@@ -94,7 +96,13 @@ int main(int argc, char **argv)
 
     QProcessEnvironment environment = QProcessEnvironment::systemEnvironment();
     environment.insert(QStringLiteral("DBUS_SYSTEM_BUS_ADDRESS"), address);
+    environment.insert(QStringLiteral("KOS_FAKE_DELAY"), QStringLiteral("80"));
     QProcess *service = startService(environment);
+    int heartbeats = 0;
+    QTimer heartbeat;
+    heartbeat.setInterval(10);
+    QObject::connect(&heartbeat, &QTimer::timeout, [&] { ++heartbeats; });
+    heartbeat.start();
 
     PowerSettings settings;
     auto wait = [&] {
@@ -106,16 +114,32 @@ int main(int argc, char **argv)
         }
         assert(!settings.state().value(QStringLiteral("busy")).toBool());
     };
+    QElapsedTimer returned;
+    returned.start();
     settings.refresh();
+    assert(returned.elapsed() < 150);
+    assert(settings.state().value(QStringLiteral("busy")).toBool());
     wait();
+    assert(heartbeats >= 5);
+    // A present executable with a missing interpreter exercises FailedToStart.
+    QFile helper(empty.filePath(QStringLiteral("powerprofilesctl")));
+    assert(helper.open(QIODevice::WriteOnly));
+    helper.write("#!/nonexistent/kos-test-interpreter\n");
+    helper.close();
+    helper.setPermissions(QFile::ReadOwner | QFile::WriteOwner | QFile::ExeOwner);
+    assert(KosPlatform::powerProfilesCommandAvailable());
     assert(settings.state().value(QStringLiteral("activeProfile")).toString()
            == QLatin1String("balanced"));
     assert(settings.state().value(QStringLiteral("profiles")).toStringList().size() == 3);
     assert(settings.state().value(QStringLiteral("degraded")).toString().isEmpty());
     assert(settings.state().value(QStringLiteral("error")).toString().isEmpty());
 
+    heartbeats = 0;
+    returned.restart();
     settings.setProfile(QStringLiteral("power-saver"));
+    assert(returned.elapsed() < 150);
     wait();
+    assert(heartbeats >= 5);
     assert(settings.state().value(QStringLiteral("activeProfile")).toString()
            == QLatin1String("power-saver"));
     assert(KosPlatform::readPowerProfiles(QDBusConnection::systemBus()).activeProfile

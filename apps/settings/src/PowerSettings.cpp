@@ -105,25 +105,17 @@ void PowerSettings::finishFromBus()
         return;
     m_busAttempted = true;
     m_timeout.stop();
-    const KosPlatform::PowerProfileSnapshot snapshot =
-        KosPlatform::readPowerProfiles(QDBusConnection::systemBus());
-    if (!snapshot.ok) {
-        complete(false);
-        return;
-    }
-    if (m_writing) {
-        if (!KosPlatform::writePowerProfile(QDBusConnection::systemBus(), m_arguments.value(1))) {
-            complete(false);
-            return;
-        }
-        // Exit from Set is not the retained mode. The same readback used for
-        // the helper covers a policy agent that accepts the call and then
-        // puts the previous profile back.
-        complete(true);
-        return;
-    }
-    m_busy = false;
-    applyParsed(KosPlatform::powerProfileObject(snapshot));
+    const bool writing = m_writing;
+    KosPlatform::requestPowerProfiles(QDBusConnection::systemBus(), this,
+        [this, writing](const KosPlatform::PowerProfileSnapshot &snapshot) {
+            if (!snapshot.ok || writing) {
+                // Successful writes use the existing readback before confirming.
+                complete(snapshot.ok);
+                return;
+            }
+            m_busy = false;
+            applyParsed(KosPlatform::powerProfileObject(snapshot));
+        }, writing ? m_arguments.value(1) : QString());
 }
 
 void PowerSettings::applyParsed(const QJsonObject &parsed)
