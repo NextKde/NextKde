@@ -73,7 +73,8 @@ private:
                     const QString &program, const QStringList &arguments,
                     std::function<QJsonObject(const QByteArray &, int)> parser = {},
                     int timeoutMs = -1,
-                    const QString &cacheKey = QString(), int cacheTtlMs = 0);
+                    const QString &cacheKey = QString(), int cacheTtlMs = 0,
+                    std::function<void()> failedToStart = {});
     void launchDesktopService(QLocalSocket *socket, const QJsonObject &request,
                               const KService::Ptr &service, const QList<QUrl> &urls);
     void runAudioOutputs(QLocalSocket *socket, const QJsonObject &request);
