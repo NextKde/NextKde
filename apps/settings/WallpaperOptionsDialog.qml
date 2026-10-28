@@ -1,3 +1,5 @@
+import "components" as SettingsControls
+import Kos.Demo as Demo
 import "../../shared/qml/i18n"
 import QtQuick
 import "../../shared/qml/foundation/WallpaperCatalog.js" as WallpaperCatalog
@@ -49,72 +51,64 @@ Dialog {
     }
     contentItem: ColumnLayout {
         spacing: 8
-        Rectangle {
-            Layout.fillWidth: true
-            implicitHeight: rows.implicitHeight
-            radius: 18
-            color: dialog.colors.card
-            Column {
-                id: rows
-                width: parent.width
-                WallpaperSettingsRow {
-                    width: parent.width
+        Demo.SettingsGroup {
+            backgroundColor: dialog.colors.card
+            WallpaperSettingsRow {
+
+                colors: dialog.colors
+                label: I18n.tr("Fill mode")
+                separator: true
+                SettingsControls.SettingsSelect {
                     colors: dialog.colors
-                    label: I18n.tr("Fill mode")
-                    separator: true
-                    LiquidControls.LiquidSelect {
-                        objectName: "wallpaperFitMenu"
-                        accentColor: dialog.colors.accent
-                        model: [I18n.tr("Fill the screen"), I18n.tr("Show in full"), I18n.tr("Stretch"), I18n.tr("Centered")]
-                        currentIndex: Math.max(0, ["crop", "fit", "stretch", "center"].indexOf(dialog.fitMode))
-                        onActivated: function(index) {
-                            dialog.fitChosen(["crop", "fit", "stretch", "center"][index])
-                        }
-                    }
-                }
-                WallpaperSettingsRow {
-                    width: parent.width
-                    colors: dialog.colors
-                    label: I18n.tr("Switch effect")
-                    separator: true
-                    LiquidControls.LiquidSelect {
-                        objectName: "wallpaperTransitionMenu"
-                        accentColor: dialog.colors.accent
-                        model: WallpaperCatalog.transitions.map(item =>
-                            Object.assign({}, item, { label: I18n.tr(item.label) }))
-                        textRole: "label"
-                        currentIndex: Math.max(0, WallpaperCatalog.transitions.map(item => item.id).indexOf(dialog.transition))
-                        onActivated: function(index) {
-                            dialog.transitionChosen(WallpaperCatalog.transitions[index].id)
-                        }
-                    }
-                }
-                WallpaperSettingsRow {
-                    width: parent.width
-                    colors: dialog.colors
-                    label: I18n.tr("KOS draws the wallpaper")
-                    LiquidControls.LiquidGlassSwitch {
-                        id: toggle
-                        enabled: dialog.takeoverAvailable && !dialog.takeoverPending
-                        checked: dialog.takeoverEnabled
-                        accentColor: dialog.colors.accent
-                        trackColor: dialog.colors.divider
-                        onToggled: function(checked) {
-                            dialog.takeoverChosen(checked)
-                            toggle.checked = Qt.binding(() => dialog.takeoverEnabled)
-                        }
+                    implicitHeight: 24
+                    Layout.preferredHeight: 24
+                    objectName: "wallpaperFitMenu"
+                    accentColor: dialog.colors.accent
+                    model: [I18n.tr("Fill the screen"), I18n.tr("Show in full"), I18n.tr("Stretch"), I18n.tr("Centered")]
+                    currentIndex: Math.max(0, ["crop", "fit", "stretch", "center"].indexOf(dialog.fitMode))
+                    onActivated: function (index) {
+                        dialog.fitChosen(["crop", "fit", "stretch", "center"][index]);
                     }
                 }
             }
-        }
-        Text {
-            Layout.fillWidth: true
-            text: dialog.takeoverAvailable
-                ? I18n.tr("Restores the Plasma wallpaper when KOS wallpaper is turned off. Enabling spatial wallpaper pauses auto-switching.")
-                : I18n.tr("The current platform service version does not support wallpaper takeover; please update first.")
-            color: dialog.colors.secondaryText
-            font.pixelSize: 12
-            wrapMode: Text.Wrap
+            WallpaperSettingsRow {
+
+                colors: dialog.colors
+                label: I18n.tr("Switch effect")
+                separator: true
+                SettingsControls.SettingsSelect {
+                    colors: dialog.colors
+                    implicitHeight: 24
+                    Layout.preferredHeight: 24
+                    objectName: "wallpaperTransitionMenu"
+                    accentColor: dialog.colors.accent
+                    model: WallpaperCatalog.transitions.map(item => Object.assign({}, item, {
+                            label: I18n.tr(item.label)
+                        }))
+                    textRole: "label"
+                    currentIndex: Math.max(0, WallpaperCatalog.transitions.map(item => item.id).indexOf(dialog.transition))
+                    onActivated: function (index) {
+                        dialog.transitionChosen(WallpaperCatalog.transitions[index].id);
+                    }
+                }
+            }
+            WallpaperSettingsRow {
+                description: dialog.takeoverAvailable ? I18n.tr("Restores the Plasma wallpaper when KOS wallpaper is turned off. Enabling spatial wallpaper pauses auto-switching.") : I18n.tr("The current platform service version does not support wallpaper takeover; please update first.")
+
+                colors: dialog.colors
+                label: I18n.tr("KOS draws the wallpaper")
+                SettingsControls.SettingsSwitch {
+                    id: toggle
+                    enabled: dialog.takeoverAvailable && !dialog.takeoverPending
+                    checked: dialog.takeoverEnabled
+                    accentColor: dialog.colors.accent
+                    trackColor: dialog.colors.divider
+                    onToggled: function (checked) {
+                        dialog.takeoverChosen(checked);
+                        toggle.checked = Qt.binding(() => dialog.takeoverEnabled);
+                    }
+                }
+            }
         }
     }
 }
