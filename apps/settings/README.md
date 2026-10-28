@@ -63,7 +63,7 @@ button with the KDE mark, 22 px left of the traffic lights, aligned to their cen
 It uses the existing launch command and is no longer a sidebar entry.
 
 All settings forms use the canonical `Kos.Demo.SettingsGroup` and `SettingsItem`
-from [nextkdeAppDemo's settings contract](../../../nextkdeAppDemo/docs/Settings.md).
+from [nextkdeAppDemo's settings contract](https://github.com/NextKde/nextkdeAppDemo/blob/main/docs/Settings.md).
 The Theme **Interface shape** group is the reference composition. Do not add
 page-specific card, heading, row, outline, shadow or leading setting-icon variants.
 Application and wallpaper artwork remains content rather than a setting icon.
