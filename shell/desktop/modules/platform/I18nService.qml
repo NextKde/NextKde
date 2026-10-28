@@ -11,7 +11,7 @@ import "../../../shared/qml/i18n"
 QtObject {
     id: service
 
-    // 持久值："auto"（默认，跟随系统）| "zh-CN" | "en"
+    // 持久值："auto"（默认，跟随系统）| "zh-CN" | "pt-BR" | "en"
     property string language: "auto"
     // 应用到 I18n 单例的生效值（auto 已解析）。
     readonly property string effectiveLanguage:
@@ -26,7 +26,7 @@ QtObject {
                 try {
                     const parsed = JSON.parse(data)
                     const lang = String(parsed.language || "")
-                    if (lang === "en" || lang === "zh-CN" || lang === "auto")
+                    if (service.isSupported(lang))
                         service.language = lang
                 } catch (error) {
                     console.warn("[I18nService] unreadable language state: " + error)
@@ -41,12 +41,16 @@ QtObject {
 
     function setLanguage(lang) {
         // 非法输入回落到默认档（跟随系统），与"无持久文件"时的行为一致。
-        const next = lang === "en" ? "en" : lang === "zh-CN" ? "zh-CN" : "auto"
+        const next = service.isSupported(lang) ? lang : "auto"
         if (service.loaded && next === service.language)
             return
         service.language = next
         JsonConfigStore.write(_stateDir, "language.json",
             JSON.stringify({ language: next }))
+    }
+
+    function isSupported(lang) {
+        return lang === "auto" || lang === "en" || lang === "zh-CN" || lang === "pt-BR"
     }
 
     function snapshot() {

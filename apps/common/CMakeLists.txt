@@ -23,7 +23,8 @@ qt_add_translations(kos_app_core
     SOURCES
         ../calendar/qml ../calculator/qml ../todo/qml ../weather/qml
         ../../shared/qml/foundation ../../shared/pim
-    TS_FILES translations/kos_apps_zh_CN.ts translations/kos_apps_en_US.ts
+    TS_FILES translations/kos_apps_zh_CN.ts translations/kos_apps_pt_BR.ts
+        translations/kos_apps_en_US.ts
     RESOURCE_PREFIX /kos/i18n
 )
 
@@ -68,9 +69,11 @@ if(BUILD_TESTING)
 
     add_executable(kos-language-test ../../tests/localization/LanguageTest.cpp)
     target_link_libraries(kos-language-test PRIVATE Kos::AppCore Qt6::Test)
-    foreach(language zh_CN zh_TW zh_HK en_US fr_FR ja_JP)
+    foreach(language zh_CN zh_TW zh_HK pt_BR pt_PT en_US fr_FR ja_JP)
         if(language MATCHES "^zh")
             set(expected zh)
+        elseif(language MATCHES "^pt")
+            set(expected pt)
         else()
             set(expected en)
         endif()
