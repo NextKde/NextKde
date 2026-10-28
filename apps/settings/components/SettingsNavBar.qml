@@ -1,25 +1,31 @@
 import QtQuick
-import QtQuick.Controls
 import QtQuick.Layouts
-import QtQuick.Window
-import "../../../shared/qml/controls" as LiquidControls
-import "../../../shared/qml/foundation" as Foundation
-import "../../../shared/qml/i18n"
+import Kos.Demo as Demo
 
-LiquidControls.LiquidNavBar {
-    required property var colors
+// Model/signal adapter only: geometry, optics and jelly motion stay in Demo.
+Demo.LiquidSegmentedControl {
     id: root
-    size: "tiny"
-    sizeToLabels: true
+    required property var colors
+    property var model: []
+    property bool disabled: false
+    enabled: !disabled
+    property string size: "tiny"
+    property real barHeight: 24
+    property real itemWidthOverride: 0
+    signal selectionChanged(int index)
+    labels: model.map(item => String(item.label ?? item.id ?? ""))
+    onSelectionRequested: index => selectionChanged(index)
+    implicitHeight: barHeight
+    implicitWidth: Math.ceil(Math.max(1, labels.length) * Math.max(44, itemWidthOverride,
+        ...labels.map(label => metrics.advanceWidth(label) + 24)) + 4)
     Layout.minimumWidth: 0
     Layout.preferredWidth: implicitWidth
-    Layout.maximumWidth: parent ? parent.width * 0.65 : implicitWidth
-    accentColor: colors.role("primary", colors.dark ? "#64b5ff" : "#0066cc")
-    selectedItemColor: root.materialForm
-        ? colors.role("on_primary", "#ffffff") : accentColor
-    itemColor: colors.dark ? "#ffffff" : "#1c1c1e"
-    trackColor: colors.dark
-        ? Qt.rgba(1, 1, 1, 0.10) : "#d1d1d6"
-    labelFontPixelSize: 10
-    labelFontWeight: Font.DemiBold
+    Layout.preferredHeight: barHeight
+    selectionColor: colors.dark ? "#636363" : "#D1D1D1"
+    backgroundColor: colors.dark ? "#3A3A3C" : "#EDEDF0"
+    textColor: colors.dark ? colors.primaryText : "#000000"
+    mutedTextColor: textColor
+    fontWeight: Font.Medium
+    selectedFontWeight: Font.Medium
+    FontMetrics { id: metrics; font.pixelSize: 11; font.weight: Font.Medium }
 }

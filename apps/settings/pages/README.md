@@ -35,6 +35,16 @@ coherent responsibility, not to satisfy an arbitrary line count. New controls
 must receive their palette explicitly; do not pass the whole application window
 or introduce dependencies on sibling page ids.
 
+## Form composition
+
+Use `Kos.Demo.SettingsGroup` and `SettingsItem` for every settings form. The shared
+components own the title/name/description hierarchy, borderless ordinary surface,
+compact spacing, separators and the right-aligned trailing slot. Never reconstruct
+those visuals in a feature page. `SettingsNavBar`, `SettingsSwitch` and
+`SettingsSlider` only adapt the canonical 24 px settings-control geometry and the
+existing application state/signals. Narrow rows stack their controls with the same
+16 px right inset. Catalogue artwork and wallpaper previews remain content.
+
 ## Regression coverage
 
 `kos-settings.page-contracts` creates every extracted page without main.qml or

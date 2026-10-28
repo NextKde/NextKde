@@ -9,5 +9,7 @@ int main(int argc, char *argv[])
         QStringLiteral("org.nextkde.Kos.Calendar"),
         QStringLiteral("Kos.Apps.Calendar"),
         QStringLiteral(KOS_APP_VERSION),
+        {},
+        true,
     });
 }

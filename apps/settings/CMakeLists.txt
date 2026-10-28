@@ -1,11 +1,16 @@
 cmake_minimum_required(VERSION 3.21)
 project(kos-settings LANGUAGES CXX)
+include(CTest)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_AUTOMOC ON)
 
-find_package(Qt6 6.5 REQUIRED COMPONENTS Core DBus Gui Qml Quick Network)
+find_package(Qt6 6.5 REQUIRED COMPONENTS Core DBus Gui Qml Quick QuickControls2 Network)
+if(NOT TARGET kos_demo_ui)
+    add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/../../shared/demo-ui ${CMAKE_CURRENT_BINARY_DIR}/demo-ui)
+endif()
+
 find_package(KF6Config REQUIRED)
 find_package(KF6KIO REQUIRED)
 find_package(KF6Service REQUIRED)
@@ -36,6 +41,8 @@ target_include_directories(kos-settings PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/../../services/ai/include)
 
 target_link_libraries(kos-settings PRIVATE
+    kos_demo_ui
+    kos_demo_ui_plugin
     Qt6::Core
     Qt6::DBus
     Qt6::Gui
@@ -68,6 +75,7 @@ install(DIRECTORY pages components DESTINATION share/kos/settings
 
 if(BUILD_TESTING)
     find_package(Qt6 6.5 REQUIRED COMPONENTS Test)
+    find_package(Qt6 6.5 QUIET COMPONENTS QuickTest)
     add_executable(kos-app-store-test tests/store/backend.cpp src/AppStore.cpp)
     target_include_directories(kos-app-store-test PRIVATE src)
     target_link_libraries(kos-app-store-test PRIVATE Qt6::Core Qt6::Gui Qt6::Network
@@ -137,8 +145,15 @@ if(BUILD_TESTING)
         TIMEOUT 15
     )
 
-    find_program(KOS_QMLTESTRUNNER_EXECUTABLE NAMES qmltestrunner6 qmltestrunner
-        HINTS "${QT6_INSTALL_PREFIX}/${QT6_INSTALL_BINS}" /usr/lib/qt6/bin)
+    # The settings QML imports the same static Demo module as the application.
+    # A dedicated QuickTest host registers that module without installing it.
+    set(KOS_QMLTESTRUNNER_EXECUTABLE "")
+    if(TARGET Qt6::QuickTest)
+        qt_add_executable(kos-settings-qml-tests tests/QmlTestMain.cpp)
+        target_link_libraries(kos-settings-qml-tests PRIVATE Qt6::QuickTest
+            kos_demo_ui kos_demo_ui_plugin)
+        set(KOS_QMLTESTRUNNER_EXECUTABLE "$<TARGET_FILE:kos-settings-qml-tests>")
+    endif()
     if(KOS_QMLTESTRUNNER_EXECUTABLE)
         add_test(NAME kos-settings.page-contracts
             COMMAND ${KOS_QMLTESTRUNNER_EXECUTABLE}
