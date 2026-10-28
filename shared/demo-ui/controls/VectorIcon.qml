@@ -12,6 +12,7 @@ Item {
         check: "M5 12l5 5L20 7",
         close: "M6 6l12 12M18 6L6 18",
         chevron: "M6 9l6 6 6-6",
+        chevronsUpDown: "M8 8l4-4 4 4M8 16l4 4 4-4",
         preview: "M7 17L17 7M8 7h9v9",
         theme: "M12 3l9 9-9 9-9-9zM8 12l4-4 4 4-4 4z",
         wallpaper: "M3 4h18v16H3zM3 16l5-5 4 4 3-3 6 5M16 8h.01",

@@ -12,7 +12,8 @@ Item {
 
     // Width follows the content: left pad + label + gap + glyph + right pad.
     // The floor keeps a placeholder-only field from collapsing.
-    implicitWidth: Math.max(72, 13 + label.implicitWidth + 9 + chevron.implicitWidth + 12)
+    implicitWidth: Math.ceil(Math.max(plainTrigger ? 0 : 72,
+        (plainTrigger ? 0 : 25) + label.implicitWidth + 9 + chevron.implicitWidth))
     implicitHeight: Foundation.AppTheme.compactDesign ? 28 : 36
     activeFocusOnTab: true
     opacity: enabled ? 1 : .38
@@ -23,6 +24,22 @@ Item {
     property string textRole: ""
     property int currentIndex: 0
     property string placeholder: ""
+    // Settings pop-up buttons use paired up/down chevrons; other selects retain their indicator.
+    property string indicatorStyle: "chevron"
+    // Value-only settings trigger: no surface, border, shadow or button hover fill.
+    // The popup keeps its independently chosen material.
+    property bool plainTrigger: false
+    property bool indicatorBackground: false
+    property color indicatorBackgroundColor: darkAppearance ? "#48484a" : "#e1e1e3"
+    property bool popupMaterialForm: materialForm
+    property color popupTextColor: textColor
+    property bool highlightSelectedOption: false
+    property bool neutralOptionHighlight: false
+    property bool compactPopup: false
+    property real popupBorderWidth: 1
+    property bool popupShadowEnabled: false
+    property int popupFontWeight: Font.Medium
+    readonly property bool popupOpened: menu.opened
     property string appearanceMode: "system"
     // App accent for the selection highlight; bind it at the call site, like
     // LiquidGlassSwitch. SystemPalette.highlight would follow the desktop
@@ -30,7 +47,7 @@ Item {
     property color accentColor: "#0a84ff"
     property color focusRingColor: accentColor
     property color selectedTextColor: accentColor
-    property color textColor: materialForm
+    property color textColor: plainTrigger || materialForm
         ? (darkAppearance ? "#f5f5f7" : "#000000")
         : (darkAppearance ? "#D6D6DA" : "#55555A")
     property color mutedTextColor: darkAppearance ? "#98989d" : "#6e6e73"
@@ -104,9 +121,10 @@ Item {
         const overlay = Overlay.overlay
         if (!overlay) return
         const origin = root.mapToItem(overlay, 0, 0)
+        const margin = root.popupShadowEnabled ? 20 : 12
         const openUp = origin.y + root.height + menu.implicitHeight + 5
-            > overlay.height - 12
-        menu.x = Math.max(12, Math.min(overlay.width - menu.width - 12,
+            > overlay.height - margin
+        menu.x = Math.max(margin, Math.min(overlay.width - menu.width - margin,
             origin.x + root.width - menu.width)) - origin.x
         menu.y = openUp ? -menu.implicitHeight - 5 : root.height + 5
         menu.open()
@@ -153,7 +171,7 @@ Item {
         focusPolicy: Qt.NoFocus
         Accessible.ignored: true
         opacity: 1 // Disabled opacity is applied once by root.
-        materialForm: root.materialForm
+        materialForm: root.plainTrigger || root.materialForm
         cornerRadius: root.cornerRadius
         backdrop: root.backdrop
         liquidIntensity: root.liquidIntensity
@@ -167,8 +185,8 @@ Item {
         surfaceColor: root.darkAppearance
             ? (Foundation.AppTheme.compactDesign ? Foundation.AppTheme.controlBackground : "#303640")
             : "#f6f6f6"
-        leftPadding: 13
-        rightPadding: 12
+        leftPadding: root.plainTrigger ? 0 : 13
+        rightPadding: root.plainTrigger ? 0 : 12
         topPadding: 0
         bottomPadding: 0
         onPressed: root.forceActiveFocus(Qt.MouseFocusReason)
@@ -183,41 +201,76 @@ Item {
                 anchors.verticalCenter: parent.verticalCenter
                 text: root.labelAt(root._visualIndex) || root.placeholder
                 color: root.labelAt(root._visualIndex).length > 0 ? root.textColor : root.mutedTextColor
-                font.pixelSize: Foundation.AppTheme.compactDesign ? Foundation.AppTheme.compactControlFontSize : 13
-                font.weight: Font.Medium
+                font.pixelSize: root.plainTrigger ? 13 : Foundation.AppTheme.compactDesign ? Foundation.AppTheme.compactControlFontSize : 13
+                font.weight: root.plainTrigger ? Font.Normal : Font.Medium
                 elide: Text.ElideRight
             }
-            VectorIcon {
+            Item {
                 id: chevron
                 anchors.right: parent.right
                 anchors.verticalCenter: parent.verticalCenter
-                name: "chevron"
-                size: 14
-                color: root.mutedTextColor
-                rotation: menu.opened ? 180 : 0
-                Behavior on rotation {
-                    NumberAnimation { duration: root.reduceMotion ? 0 : 150; easing.type: Easing.OutCubic }
+                implicitWidth: root.indicatorBackground ? 18 : 14
+                implicitHeight: root.indicatorBackground ? 20 : 14
+                Rectangle {
+                    anchors.fill: parent
+                    visible: root.indicatorBackground
+                    radius: 5
+                    color: root.indicatorBackgroundColor
+                }
+                VectorIcon {
+                    anchors.centerIn: parent
+                    name: root.indicatorStyle === "upDown" ? "chevronsUpDown" : "chevron"
+                    size: root.indicatorBackground ? 12 : 14
+                    color: root.mutedTextColor
+                    rotation: root.indicatorStyle !== "upDown" && menu.opened ? 180 : 0
+                    Behavior on rotation {
+                        NumberAnimation { duration: root.reduceMotion ? 0 : 150; easing.type: Easing.OutCubic }
+                    }
                 }
             }
         }
 
     }
 
-    // Keyboard focus belongs to root; only the solid field draws a focus ring.
+    Binding {
+        target: field.background
+        property: "visible"
+        value: false
+        when: root.plainTrigger
+        restoreMode: Binding.RestoreBindingOrValue
+    }
+
+    // Keyboard focus belongs to root; only the solid button field draws a focus ring.
     Rectangle {
         anchors.fill: parent
         radius: root.fieldRadius
         color: "transparent"
         border.width: 2
         border.color: root.focusRingColor
-        visible: root.materialForm && root.enabled && (root.activeFocus || menu.opened)
+        visible: !root.plainTrigger && root.materialForm && root.enabled && (root.activeFocus || menu.opened)
+    }
+
+    FontMetrics {
+        id: optionMetrics
+        font.pixelSize: Foundation.AppTheme.compactDesign ? Foundation.AppTheme.compactControlFontSize : 13
+        font.weight: root.popupFontWeight
     }
 
     // ── Choice sheet ─────────────────────────────────────────────────────
 
     Popup {
         id: menu
-        width: Math.max(160, root.width)
+        objectName: root.objectName + "Popup"
+        readonly property real longestLabelWidth: {
+            let longest = 0
+            for (let i = 0; i < root.model.length; ++i)
+                longest = Math.max(longest, optionMetrics.advanceWidth(root.labelAt(i)))
+            return longest
+        }
+        width: root.compactPopup
+            ? Math.min(Math.max(0, root.Window.window ? root.Window.window.width - (root.popupShadowEnabled ? 40 : 24) : 480),
+                Math.ceil(Math.max(root.width, longestLabelWidth + 28 + 12 + padding * 2)))
+            : Math.max(160, root.width)
         implicitHeight: Math.min(360, choices.implicitHeight + 2 * padding)
         readonly property real panelRadius: 8
         readonly property int optionHeight: 24
@@ -232,25 +285,36 @@ Item {
         onClosed: { if (root.enabled) root.forceActiveFocus(Qt.PopupFocusReason) }
         enter: Transition {
             ParallelAnimation {
-                NumberAnimation { property: "opacity"; from: 0; to: 1; duration: root.reduceMotion ? 0 : 140; easing.type: Easing.OutCubic }
+                NumberAnimation { property: "opacity"; from: root.popupMaterialForm ? 1 : 0; to: 1; duration: root.reduceMotion || root.popupMaterialForm ? 0 : 140; easing.type: Easing.OutCubic }
                 NumberAnimation { property: "scale"; from: 0.97; to: 1; duration: root.reduceMotion ? 0 : 150; easing.type: Easing.OutCubic }
             }
         }
         exit: Transition {
-            NumberAnimation { property: "opacity"; to: 0; duration: root.reduceMotion ? 0 : 100 }
+            NumberAnimation { property: "opacity"; to: root.popupMaterialForm ? 1 : 0; duration: root.reduceMotion || root.popupMaterialForm ? 0 : 100 }
         }
         background: Item {
-            Rectangle {
+            LiquidOuterShadow {
+                objectName: root.objectName + "PopupShadow"
                 anchors.fill: parent
-                visible: root.materialForm
+                visible: root.popupShadowEnabled
+                radius: menu.panelRadius
+                shadowOpacity: 0.14
+                softness: 7
+                spread: 18
+                offset: Qt.vector2d(0, 0)
+            }
+            Rectangle {
+                objectName: root.objectName + "PopupPanel"
+                anchors.fill: parent
+                visible: root.popupMaterialForm
                 radius: menu.panelRadius
                 color: root.sheetColor
-                border.width: 1
+                border.width: root.popupBorderWidth
                 border.color: root.outlineColor
             }
             LiquidSurface {
                 anchors.fill: parent
-                visible: !root.materialForm
+                visible: !root.popupMaterialForm
                 radius: menu.panelRadius
                 backdrop: root.backdrop
                 darkAppearance: root.darkAppearance
@@ -284,6 +348,10 @@ Item {
                     model: root.model
                     delegate: Item {
                         id: choiceDelegate
+                        objectName: root.objectName + "Option" + index
+                        readonly property bool selected: index === root._visualIndex
+                        readonly property bool blueActive: !root.neutralOptionHighlight
+                            && (root.highlightSelectedOption ? selected : hit.containsMouse && root.popupMaterialForm)
 
                         required property var modelData
                         required property int index
@@ -337,11 +405,11 @@ Item {
                         Rectangle {
                             anchors.fill: parent
                             radius: Math.max(0, menu.panelRadius - menu.padding)
-                            color: !hit.containsMouse ? "transparent"
-                                : root.materialForm
-                                    ? (root.darkAppearance ? "#0a84ff" : "#007aff")
-                                    : (root.darkAppearance ? Qt.rgba(1, 1, 1, 0.12)
-                                                           : Qt.rgba(0, 0, 0, 0.07))
+                            color: choiceDelegate.blueActive ? root.accentColor
+                                : !hit.containsMouse && !(choiceDelegate.activeFocus
+                                    && !(root.neutralOptionHighlight && choiceDelegate.selected)) ? "transparent"
+                                : root.darkAppearance && !root.highlightSelectedOption && !root.neutralOptionHighlight
+                                    ? Qt.rgba(1, 1, 1, 0.12) : Qt.rgba(0, 0, 0, 0.07)
                         }
                         Text {
                             anchors.left: parent.left
@@ -351,17 +419,17 @@ Item {
                             anchors.verticalCenter: parent.verticalCenter
                             text: root.labelAt(parent.index)
                             elide: Text.ElideRight
-                            color: hit.containsMouse && root.materialForm ? "#ffffff" : root.textColor
+                            color: choiceDelegate.blueActive ? "#ffffff" : root.popupTextColor
                             font.pixelSize: Foundation.AppTheme.compactDesign ? Foundation.AppTheme.compactControlFontSize : 13
-                            font.weight: Font.Medium
+                            font.weight: root.popupFontWeight
                         }
                         VectorIcon {
                             anchors.left: parent.left
                             anchors.leftMargin: 8
                             anchors.verticalCenter: parent.verticalCenter
-                            visible: choiceDelegate.index === root._visualIndex
+                            visible: choiceDelegate.selected
                             name: "check"
-                            color: hit.containsMouse && root.materialForm ? "#ffffff" : root.textColor
+                            color: choiceDelegate.blueActive ? "#ffffff" : root.popupTextColor
                             size: 13
                         }
                         MouseArea {

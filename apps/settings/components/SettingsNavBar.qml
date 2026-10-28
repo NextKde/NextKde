@@ -10,18 +10,17 @@ Demo.LiquidSegmentedControl {
     property bool disabled: false
     enabled: !disabled
     property string size: "tiny"
-    property real barHeight: 26
+    property real barHeight: 24
     property real itemWidthOverride: 0
     signal selectionChanged(int index)
     labels: model.map(item => String(item.label ?? item.id ?? ""))
     onSelectionRequested: index => selectionChanged(index)
     implicitHeight: barHeight
-    implicitWidth: Math.max(1, labels.length) * Math.max(44, itemWidthOverride,
-        ...labels.map(label => metrics.advanceWidth(label) + 24)) + 4
+    implicitWidth: Math.ceil(Math.max(1, labels.length) * Math.max(44, itemWidthOverride,
+        ...labels.map(label => metrics.advanceWidth(label) + 24)) + 4)
     Layout.minimumWidth: 0
     Layout.preferredWidth: implicitWidth
     Layout.preferredHeight: barHeight
-    Layout.maximumWidth: parent ? parent.width * 0.65 : implicitWidth
     selectionColor: colors.dark ? "#636363" : "#D1D1D1"
     backgroundColor: colors.dark ? "#3A3A3C" : "#EDEDF0"
     textColor: colors.dark ? colors.primaryText : "#000000"

@@ -291,7 +291,7 @@ Item {
         color: "transparent"
         border.width: 2
         border.color: Foundation.AppTheme.focusRing
-        visible: root.activeFocus && root.enabled
+        visible: root.materialForm && root.activeFocus && root.enabled
     }
 
     // Interaction

@@ -1,52 +1,25 @@
 import QtQuick
-import QtQuick.Layouts
+import Kos.Demo as Demo
 
-Item {
+// Compatibility adapter: all label, spacing and trailing-slot geometry is canonical.
+Demo.SettingsItem {
     id: row
     property var colors
-    property string label: ""
-    property bool separator: false
+    property alias label: row.title
     property bool actionable: false
-    default property alias controls: trailing.data
-    signal activated()
-    implicitHeight: 54
+    signal activated
     height: implicitHeight
-    MouseArea {
-        id: hit
+    property Item activationArea: MouseArea {
+        parent: row
         anchors.fill: parent
         enabled: row.actionable
         cursorShape: Qt.PointingHandCursor
         onClicked: row.activated()
     }
-    RowLayout {
-        anchors.fill: parent
-        anchors.leftMargin: 16
-        anchors.rightMargin: 16
-        Text {
-            Layout.fillWidth: true
-            text: row.label
-            color: row.colors.primaryText
-            font.pixelSize: 14
-            elide: Text.ElideRight
-        }
-        Row {
-            id: trailing
-            spacing: 8
-        }
-        Text {
-            visible: row.actionable
-            text: "›"
-            color: row.colors.secondaryText
-            font.pixelSize: 24
-        }
-    }
-    Rectangle {
-        anchors.left: parent.left
-        anchors.right: parent.right
-        anchors.bottom: parent.bottom
-        anchors.leftMargin: 16
-        height: 1
-        color: row.colors.separator
-        visible: row.separator
+    Text {
+        visible: row.actionable
+        text: "›"
+        color: row.colors ? row.colors.secondaryText : row.titleColor
+        font.pixelSize: 18
     }
 }

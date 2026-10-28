@@ -66,7 +66,12 @@ Item {
                 const picker=control(kind === "hide" ? "windowHideAnimation" : "windowCloseAnimation")
                 const styles=kind === "hide" ? ["none","scale","genie"] : ["none","fade","scale"]
                 for (let i=0;i<3;++i) {
-                    mouseClick(picker, picker.width * (i+0.5)/3, picker.height/2)
+                    mouseClick(picker, picker.width / 2, picker.height / 2)
+                    tryVerify(() => picker.popupOpened)
+                    keyClick(Qt.Key_Home)
+                    for (let next = 0; next < i; ++next) keyClick(Qt.Key_Down)
+                    keyClick(Qt.Key_Return)
+                    tryVerify(() => !picker.popupOpened)
                     compare(backend.state[kind+"Animation"], styles[i])
                 }
             }

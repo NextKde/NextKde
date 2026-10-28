@@ -191,7 +191,7 @@ Button {
             color: "transparent"
             border.width: 2
             border.color: root.focusRingColor
-            visible: root.visualFocus
+            visible: root.materialForm && root.visualFocus
         }
     }
 }

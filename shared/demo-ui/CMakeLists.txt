@@ -6,6 +6,10 @@ qt_add_qml_module(kos_demo_ui URI Kos.Demo VERSION 1.0 STATIC
     OUTPUT_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/Kos/Demo
     QML_FILES
         foundation/AppTheme.qml
+        foundation/SettingsGroup.qml
+        foundation/SettingsItem.qml
+        foundation/KosToolTip.qml
+        foundation/SettingsAppearancePreview.qml
         i18n/I18n.qml
         controls/ControlForm.qml
         controls/LiquidStyle.qml
@@ -14,6 +18,7 @@ qt_add_qml_module(kos_demo_ui URI Kos.Demo VERSION 1.0 STATIC
         controls/LiquidOuterShadow.qml
         controls/VectorIcon.qml
         controls/LiquidActionButton.qml
+        controls/LiquidActionButtonGroup.qml
         controls/LiquidTextField.qml
         controls/LiquidSegmentedControl.qml
         controls/LiquidGlassSwitch.qml

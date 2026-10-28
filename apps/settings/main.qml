@@ -19,9 +19,9 @@ ApplicationWindow {
         }
     }
 
-    width: 1100
-    height: 720
-    minimumWidth: 860
+    width: 850
+    height: 650
+    minimumWidth: 600
     minimumHeight: 540
     font.pixelSize: 13
     visible: true
@@ -46,6 +46,36 @@ ApplicationWindow {
     flags: Qt.Window | Qt.FramelessWindowHint
 
     property int currentPage: 1
+    property var pageHistory: [1]
+    property int historyIndex: 0
+    property bool navigationReady: false
+    property bool restoringHistory: false
+    readonly property bool canGoBack: historyIndex > 0
+    readonly property bool canGoForward: historyIndex < pageHistory.length - 1
+    Component.onCompleted: {
+        pageHistory = [currentPage]
+        historyIndex = 0
+        navigationReady = true
+    }
+    onCurrentPageChanged: {
+        if (!navigationReady || restoringHistory)
+            return
+        const next = pageHistory.slice(0, historyIndex + 1)
+        next.push(currentPage)
+        pageHistory = next
+        historyIndex = next.length - 1
+    }
+    function navigateHistory(offset) {
+        const index = historyIndex + offset
+        if (index < 0 || index >= pageHistory.length)
+            return
+        restoringHistory = true
+        historyIndex = index
+        currentPage = pageHistory[index]
+        restoringHistory = false
+    }
+    Shortcut { sequence: "Alt+Left"; enabled: window.canGoBack; onActivated: window.navigateHistory(-1) }
+    Shortcut { sequence: "Alt+Right"; enabled: window.canGoForward; onActivated: window.navigateHistory(1) }
     readonly property int displayedPage: pageMotion.displayedPage === ""
         ? currentPage : pageMotion.displayedPage
     property string searchText: ""
@@ -122,17 +152,17 @@ ApplicationWindow {
             return value === undefined ? iPadOSValue : value
         }
         // Opaque neutral planes; optical material belongs to floating controls.
-        readonly property color background: role("surface", dark ? "#242426" : "#F5F5F7")
-        readonly property color sidebar: background
+        readonly property color background: role("surface", dark ? "#242426" : "#f7f7f7")
+        readonly property color sidebar: role("surface_container_low", dark ? "#242426" : "#ececeb")
         readonly property color contentSurface: role("surface_container_low", dark ? "#1C1C1E" : "#FFFFFF")
         readonly property color primaryText: role("on_surface", dark ? "#F2F2F2" : "#262626")
         readonly property color secondaryText: role("on_surface_variant", dark ? "#ABABAB" : "#737373")
         readonly property color tertiaryText: role("outline", dark ? "#858585" : "#858585")
-        readonly property color card: role("surface_container", dark ? "#242426" : "#F5F5F7")
+        readonly property color card: role("surface_container", dark ? "#242426" : "#f7f7f7")
         readonly property color separator: role("outline_variant", dark ? "#38383a" : "#e5e5ea")
         readonly property color divider: role("outline_variant", dark ? "#2c2c2e" : "#d1d1d6")
         readonly property color searchField: role("surface_container_high", dark ? "#3A3A3C" : "#EDEDF0")
-        readonly property color selected: role("primary", dark ? "#3A3A3C" : "#DEDEE3")
+        readonly property color selected: role("primary", "#007AFF")
         // The container a selected item sits in. M3 carries selection with
         // secondaryContainer; the iPadOS form keeps the translucent wash.
         readonly property color selectedContainer: role("secondary_container", dark
@@ -146,7 +176,7 @@ ApplicationWindow {
         // monochrome -- the coloured chip under each icon is the iPadOS form's
         // own furniture, so it only exists there.
         readonly property color iconMuted: role("on_surface_variant", dark ? "#98989d" : "#6d6d72")
-        readonly property color selectedForeground: role("on_secondary_container", dark ? "#ffffff" : "#00325b")
+        readonly property color selectedForeground: role("on_secondary_container", "#FFFFFF")
         // Controls that take a single accent (sliders, switches) read this.
         readonly property color accent: role("primary", "#0a84ff")
         readonly property color floatingBorder: role("outline", dark
@@ -346,6 +376,7 @@ ApplicationWindow {
     }
 
     component SidebarEntry: ItemDelegate {
+        id: sidebarEntry
         required property int pageIndex
         required property string label
         required property string navIcon
@@ -361,9 +392,12 @@ ApplicationWindow {
         Layout.maximumHeight: 30
         height: 30
         Accessible.name: label
-        ToolTip.visible: hovered
-        ToolTip.text: label
-        ToolTip.delay: 900
+        Demo.KosToolTip {
+            target: sidebarEntry
+            text: sidebarEntry.label
+            onlyWhenTruncated: true
+            truncated: sidebarLabel.truncated
+        }
         leftPadding: 10
         rightPadding: 10
         highlighted: !launchOnly && window.currentPage === pageIndex
@@ -372,8 +406,8 @@ ApplicationWindow {
             || label.toLowerCase().indexOf(window.searchText.toLowerCase()) >= 0
         background: Rectangle {
             // M3's drawer items are full-round pills that carry selection in
-            // secondaryContainer; the iPadOS form keeps its squircle of tinted
-            // wash. Launch-only rows stay completely inert.
+            // secondaryContainer; the macOS form uses a blue rounded row.
+            // Launch-only rows stay completely inert.
             radius: window.materialForm ? height / 2 : 6
             border.width: parent.activeFocus ? 2 : 0
             border.color: theme.accent
@@ -397,13 +431,14 @@ ApplicationWindow {
                 highlighted: window.currentPage === pageIndex
             }
             Text {
+                id: sidebarLabel
                 anchors.left: sidebarIcon.right
                 anchors.leftMargin: 10
                 anchors.right: parent.right
                 anchors.verticalCenter: parent.verticalCenter
                 text: label
                 color: window.currentPage === pageIndex
-                    && window.materialForm ? theme.selectedForeground : theme.primaryText
+                    ? theme.selectedForeground : theme.primaryText
                 font.pixelSize: 13
                 font.weight: Font.Normal
                 elide: Text.ElideRight
@@ -418,6 +453,13 @@ ApplicationWindow {
         }
     }
 
+    Demo.LiquidBackdrop {
+        id: helpBackdrop
+        sourceItem: settingsScene
+        registerAsDefault: false
+        active: !Foundation.AppTheme.reduceTransparency
+    }
+
     // ── 台前调度（fg-sched）页 ──────────────────────────────────────
     // 冻结默认全面停用：后台只做资源限制（nice/效率核/IO，异构才限核）。本页管理：
     // ① 冻结开关（重开时最小化窗口 180s 后 SIGSTOP）
@@ -429,6 +471,7 @@ ApplicationWindow {
 
     Item {
         id: settingsScene
+        readonly property alias toolTipBackdrop: helpBackdrop
         anchors.fill: parent
 
         Item {
@@ -440,7 +483,7 @@ ApplicationWindow {
             width: sidebar.width
             height: parent.height
             color: theme.sidebar
-            opacity: window.liquidEnabled ? 0.95 : 1
+            opacity: window.liquidEnabled ? 0.98 : 1
         }
         Rectangle {
             x: sidebar.width
@@ -459,7 +502,7 @@ ApplicationWindow {
             id: sidebar
             x: 0
             y: 0
-            width: 224
+            width: 214
             height: parent.height
             color: "transparent"
 
@@ -472,15 +515,6 @@ ApplicationWindow {
                 anchors.topMargin: 38
                 anchors.bottomMargin: 16
                 spacing: 0
-
-                Text {
-                    text: I18n.tr("Settings")
-                    color: theme.primaryText
-                    font.pixelSize: 15
-                    font.weight: Font.DemiBold
-                    Layout.leftMargin: 6
-                    Layout.bottomMargin: 8
-                }
 
                 Item {
                     Layout.fillWidth: true
@@ -691,35 +725,7 @@ ApplicationWindow {
                             }
                         }
 
-                        // A separate group holding one launch-only link: not a page,
-                        // no hover or selection state, the click only opens KDE's
-                        // own settings.
-                        Rectangle {
-                            Layout.fillWidth: true
-                            color: "transparent"
-                            radius: 0
-                            implicitHeight: navGroup3.implicitHeight
 
-                            ColumnLayout {
-                                id: navGroup3
-                                anchors.left: parent.left
-                                anchors.right: parent.right
-                                anchors.top: parent.top
-                                anchors.margins: 0
-                                spacing: 0
-
-                                SidebarEntry {
-                                    Layout.fillWidth: true
-                                    launchOnly: true
-                                    pageIndex: -1
-                                    label: I18n.tr("KDE System Settings")
-                                    navIcon: "system-settings"
-                                    navSymbol: "✦"
-                                    navTint: "#8e8e93"
-                                    onLaunch: settingsBridge.launchSystemSettings()
-                                }
-                            }
-                        }
 
                     }
                     Foundation.KosKineticScroll { flickable: navigationScroll }
@@ -747,8 +753,8 @@ ApplicationWindow {
                 anchors.fill: parent
                 anchors.leftMargin: 20
                 anchors.rightMargin: 20
-                // 顶部让出 chromeStrip(拖拽带 + 红绿灯),页面标题落在带下缘。
-                anchors.topMargin: 16 + window.chromeStrip
+                // Leave a compact gap below the fixed title and navigation row.
+                anchors.topMargin: window.chromeStrip + 18
                 anchors.bottomMargin: 16
                 contentWidth: Math.max(width, pageContent.width)
                 contentHeight: pageContent.implicitHeight
@@ -767,14 +773,6 @@ ApplicationWindow {
                     // development one once the banner has been closed.
                     DevelopmentBanner {
                         visible: window.developmentBannerVisible
-                    }
-
-                    Text {
-                        text: window.contentByPage[window.displayedPage].subtitle
-                        color: theme.primaryText
-                        font.pixelSize: 20
-                        font.weight: Font.DemiBold
-                        Layout.bottomMargin: 12
                     }
 
                     // Every page used to be instantiated at startup, so its
@@ -998,6 +996,8 @@ ApplicationWindow {
         // KOS 装饰器选中时被面板完整盖住(输入走面板),面板不在时它们就是
         // 窗口控件。
         Row {
+            id: windowControls
+            objectName: "settingsWindowControls"
             anchors {
                 right: parent.right
                 rightMargin: 14.5   // 面板 offset.x 10 + panelPaddingX 4.5
@@ -1026,6 +1026,78 @@ ApplicationWindow {
                             : window.close()
                     }
                 }
+            }
+        }
+
+        Demo.LiquidActionButton {
+            id: kdeSettingsButton
+            objectName: "settingsOpenKdeSettings"
+            anchors.right: windowControls.left
+            anchors.rightMargin: 22
+            anchors.verticalCenter: windowControls.verticalCenter
+            width: 26
+            height: 26
+            z: 2
+            iconOnly: true
+            contentItem: Item {
+                implicitWidth: 16
+                implicitHeight: 16
+                Image {
+                    objectName: "settingsKdeLogo"
+                    anchors.centerIn: parent
+                    width: 16
+                    height: 16
+                    source: theme.dark ? Qt.resolvedUrl("icons/kde-symbolic-dark.svg")
+                        : Qt.resolvedUrl("icons/kde-symbolic.svg")
+                    sourceSize: Qt.size(64, 64)
+                    fillMode: Image.PreserveAspectFit
+                    opacity: kdeSettingsButton.enabled ? 1 : 0.38
+                }
+            }
+            materialForm: !window.liquidEnabled
+            backdrop: sidebarBackdrop
+            focusRingColor: materialForm ? Foundation.AppTheme.focusRing : "transparent"
+            enabled: typeof settingsBridge !== "undefined"
+                && typeof settingsBridge.launchSystemSettings === "function"
+            Accessible.name: I18n.tr("KDE System Settings")
+            Demo.KosToolTip {
+                target: kdeSettingsButton
+                text: I18n.tr("Open KDE System Settings")
+            }
+            onClicked: settingsBridge.launchSystemSettings()
+        }
+
+        RowLayout {
+            id: pageToolbar
+            objectName: "settingsPageToolbar"
+            x: contentSurface.x + 20
+            y: windowControls.y + (windowControls.height - height) / 2
+            width: Math.max(0, kdeSettingsButton.x - x - 12)
+            height: 26
+            spacing: 10
+            z: 2
+
+            Demo.LiquidActionButtonGroup {
+                objectName: "settingsHistoryNavigation"
+                Layout.preferredWidth: implicitWidth
+                Layout.preferredHeight: 26
+                buttonSize: 26
+                icons: ["back", "forward"]
+                labels: [I18n.tr("Previous page"), I18n.tr("Next page")]
+                enabledActions: [window.canGoBack, window.canGoForward]
+                materialForm: !window.liquidEnabled
+                backdrop: sidebarBackdrop
+                onTriggered: index => window.navigateHistory(index === 0 ? -1 : 1)
+            }
+
+            Text {
+                objectName: "settingsPageTitle"
+                Layout.fillWidth: true
+                text: window.contentByPage[window.displayedPage].subtitle
+                color: theme.primaryText
+                font.pixelSize: 16
+                font.weight: Font.DemiBold
+                elide: Text.ElideRight
             }
         }
 
