@@ -64,6 +64,7 @@ QtObject {
     // KosApplicationWindow binds these values to the shared C++ preferences
     // object. Controls can stay application-agnostic and still update live.
     property bool modernDesign: false
+    property bool neutralTypography: false
     property string appearanceMode: "system"
     property string materialMode: "auto"
     property real materialOpacity: 0.86
@@ -210,8 +211,11 @@ QtObject {
     readonly property color shadowKey: dark
         ? Qt.rgba(0, 0, 0, 0.34)
         : Qt.rgba(0.08, 0.13, 0.22, 0.13)
-    readonly property color text: paletteText
-    readonly property color mutedText: mix(paletteText, window, dark ? 0.46 : 0.36)
+    readonly property color text: neutralTypography
+        ? (dark ? "#F2F2F2" : "#262626") : paletteText
+    readonly property color mutedText: neutralTypography
+        ? (dark ? "#ABABAB" : "#737373")
+        : mix(paletteText, window, dark ? 0.46 : 0.36)
     readonly property bool accentUsesDarkText:
         contrastRatio(accent, blackSeed) >= contrastRatio(accent, whiteSeed)
     readonly property color accentText: accentUsesDarkText

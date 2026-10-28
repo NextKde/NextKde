@@ -11,6 +11,7 @@ import Kos.Ui
 Pane {
     id: root
 
+    CalendarStyle { id: design }
     padding: 0
     background: null
 
@@ -53,15 +54,16 @@ Pane {
         // height, the 24px date disc and the 18px chip (each +2 spacing).
         // Naming them keeps a change in one place from silently misaligning
         // the other two.
-        readonly property int headerHeight: 30
-        readonly property int dayDiscSize: 24
+        readonly property int headerHeight: 28
+        readonly property int dayDiscSize: 20
+        readonly property int dayHeaderHeight: 24
         readonly property int chipHeight: 18
         readonly property real dayHeight: Math.max(0, (height - headerHeight - 6 * rowSpacing) / 6)
         columns: 7
         uniformCellWidths: true
         uniformCellHeights: false
-        columnSpacing: 3
-        rowSpacing: 3
+        columnSpacing: 1
+        rowSpacing: 1
 
         Repeater {
             model: 7
@@ -77,7 +79,7 @@ Pane {
                 horizontalAlignment: Text.AlignHCenter
                 verticalAlignment: Text.AlignVCenter
                 font.pixelSize: 11
-                font.weight: Font.DemiBold
+                font.weight: Font.Normal
             }
         }
 
@@ -102,9 +104,9 @@ Pane {
                 Layout.maximumHeight: monthGrid.dayHeight
                 Layout.minimumWidth: 0
                 clip: true
-                readonly property int visibleItemCount: Math.max(0, Math.min(3,
+                readonly property int visibleItemCount: Math.max(0, Math.min(5,
                     Math.floor((height - topPadding - bottomPadding
-                        - (monthGrid.dayDiscSize + 2)) / (monthGrid.chipHeight + 2))))
+                        - (monthGrid.dayHeaderHeight + 2)) / (monthGrid.chipHeight + 2))))
                 leftPadding: 6
                 rightPadding: 6
                 topPadding: 5
@@ -123,7 +125,7 @@ Pane {
                         Rectangle {
                             Layout.preferredWidth: monthGrid.dayDiscSize
                             Layout.preferredHeight: monthGrid.dayDiscSize
-                            radius: 12
+                            radius: monthGrid.dayDiscSize / 2
                             // C8: unified with the week header, now-pill and
                             // mini month's today disc — one M04 literal.
                             color: dayButton.today ? AppTheme.todayRed : "transparent"
@@ -236,13 +238,25 @@ Pane {
                 }
 
                 background: Rectangle {
-                    radius: AppTheme.smallRadius
+                    radius: 0
                     color: dayButton.selected
-                        ? AppTheme.withAlpha(AppTheme.accent, AppTheme.dark ? 0.19 : 0.10)
-                        : (dayButton.hovered ? AppTheme.cardHover : "transparent")
-                    border.width: dayButton.selected || dayButton.activeFocus ? 1 : 0
-                    border.color: AppTheme.withAlpha(AppTheme.accent,
-                        dayButton.selected ? 0.62 : 0.38)
+                        ? AppTheme.withAlpha(design.accent, AppTheme.dark ? 0.12 : 0.06)
+                        : dayButton.hovered ? design.sidebarPlane : "transparent"
+                    border.width: dayButton.activeFocus ? 1 : 0
+                    border.color: design.accent
+                    Rectangle {
+                        anchors.top: parent.top
+                        width: parent.width
+                        height: 1
+                        color: design.separator
+                    }
+                    Rectangle {
+                        anchors.right: parent.right
+                        height: parent.height
+                        width: 1
+                        color: design.separator
+                        visible: dayButton.index % 7 !== 6
+                    }
                 }
             }
         }

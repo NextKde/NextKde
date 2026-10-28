@@ -67,6 +67,7 @@ JsonlClient {
         "network.traffic": true,
         "network.applications": true,
         "power.profiles": true,
+        "power.battery": true,
         "nightlight.get": true,
         "keepawake.get": true,
         "platform.ping": true,

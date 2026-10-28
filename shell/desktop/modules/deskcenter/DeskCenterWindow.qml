@@ -19,6 +19,7 @@ import qs.desktop.modules.stage
 import qs.desktop.modules.weather
 import "../../../Kos/Ui"
 import "WidgetLayout.mjs" as WidgetLayout
+import "DesktopGridMetrics.mjs" as DesktopGridMetrics
 
 // iPadOS-inspired desktop widgets. Stays on the Bottom layer: Plasma's desktop
 // surface shares the Desktop/Background layer and would cover it if moved down.
@@ -109,7 +110,7 @@ PanelWindow {
     // widget uses integer spans, giving desktop cards the intentional, large
     // iPadOS scale rather than a collection of small floating macOS tiles.
     readonly property int columns: 10
-    readonly property int widgetColumns: Math.min(4, columns)
+    readonly property int widgetColumns: widgetLayout.columns
     readonly property real sideMargin: 20
     // Keep card sizing tied to the original grid metrics. The larger visual
     // insets should consume the flexible desktop-file field on the right,
@@ -150,6 +151,7 @@ PanelWindow {
     property bool timerView: false
     property bool editMode: false
     property bool widgetLibraryOpen: false
+    property var activeDragCard: null
 
     function enterWidgetEditMode(openLibrary) {
         desktopFileGrid.clearDesktopSelection()
@@ -296,11 +298,12 @@ PanelWindow {
         })
     }
 
-    // Higher priority widgets win when a short display cannot accommodate all
-    // rows. The desktop never scrolls and cards never shrink their type.
+    // Saved grid positions are per output; unpositioned cards fill free cells.
     function configuredWidget(id, priority, startColor, endColor) {
         const span = DeskCenterConfigService.spanFor(id)
+        const position = DeskCenterConfigService.displayPositionsForOutput(desktopOutput, widgetGeometry)[id]
         return { id: id, title: "", columns: span[0], rows: span[1],
+            column: position?.column, row: position?.row,
             priority: priority, startColor: startColor, endColor: endColor,
             surface: false }
     }
@@ -336,7 +339,33 @@ PanelWindow {
         return WidgetLayout.packWidgets(definitions, columnCount, rowCount)
     }
 
-    readonly property var placements: packWidgets(widgetDefinitions, widgetColumns, usableRows)
+    FontMetrics { id: desktopFileFontMetrics }
+    readonly property var reservedFileMetrics: DesktopGridMetrics.metrics(
+        desktopFiles.layout.iconSize + 72, desktopFiles.layout.iconSize + 58,
+        desktopFiles.layout.iconSize + 12, desktopFiles.layout.iconSpacing, desktopFileFontMetrics.height)
+    readonly property int maximumWidgetColumns: WidgetLayout.widgetColumnLimit(
+        width - leftInset - rightInset, cellSize, gap,
+        reservedFileMetrics.cellWidth + reservedFileMetrics.gap,
+        desktopFiles.entriesForOutput(desktopOutput).length,
+        Math.floor((height - topInset - bottomInset + reservedFileMetrics.gap)
+            / (reservedFileMetrics.cellHeight + reservedFileMetrics.gap)))
+    readonly property string widgetGeometry: maximumWidgetColumns + ":" + usableRows
+
+    readonly property var widgetLayout: WidgetLayout.fitWidgets(
+        widgetDefinitions, 4, maximumWidgetColumns, usableRows)
+    readonly property var placements: widgetLayout.placements
+    function resizeWidget(widgetId, columns, rows) {
+        const placement = placementFor(widgetId)
+        if (![1, 2].includes(columns) || ![1, 2].includes(rows)
+                || !placement || !WidgetLayout.canPlace(placements, widgetId,
+                placement.column, placement.row, columns, rows,
+                maximumWidgetColumns, usableRows)) return false
+        DeskCenterConfigService.savePosition(desktopOutput, placements,
+            widgetId, placement.column, placement.row, widgetGeometry)
+        DeskCenterConfigService.setSpan(widgetId, columns, rows)
+        return true
+    }
+
     function placementFor(widgetId) {
         for (let i = 0; i < placements.length; i++)
             if (placements[i].id === widgetId)
@@ -555,6 +584,23 @@ PanelWindow {
         }
     }
 
+    Rectangle {
+        id: widgetDropPreview
+        objectName: "widget-drop-preview"
+        z: 110
+        visible: root.activeDragCard !== null
+        readonly property var dragged: root.activeDragCard
+        readonly property bool allowed: dragged?.dropAllowed ?? false
+        x: root.leftInset + (dragged?.dropPosition.column ?? 0) * (root.cellSize + root.gap)
+        y: root.topInset + (dragged?.dropPosition.row ?? 0) * (root.cellSize + root.gap)
+        width: root.spanSize(dragged?.displayColumns ?? 1)
+        height: root.spanSize(dragged?.displayRows ?? 1)
+        radius: AppearanceTokens.widget.radius
+        color: allowed ? "#2434c759" : "#30ff453a"
+        border.width: 2
+        border.color: allowed ? "#34c759" : "#ff453a"
+    }
+
     Repeater {
         id: widgetRepeater
         objectName: "desktop-widget-repeater"
@@ -562,14 +608,23 @@ PanelWindow {
 
         delegate: DeskWidgetCard {
             id: card
+            objectName: "desktop-widget-" + modelData.id
             required property var modelData
             property real dragOffsetX: 0
             property real dragOffsetY: 0
             readonly property var placement: root.placementFor(modelData.id)
             // 2026-10-18 用户改判：台前调度与桌面组件共存（台前调度在
             // 组件之上），组件不再随台前调度开启而隐藏
+            readonly property bool moving: widgetDrag.active
+            readonly property var dropPosition: WidgetLayout.snappedPosition(
+                x + dragOffsetX - root.leftInset, y + dragOffsetY - root.topInset,
+                displayColumns, displayRows, root.cellSize, root.gap,
+                root.maximumWidgetColumns, root.usableRows)
+            readonly property bool dropAllowed: WidgetLayout.canPlace(root.placements,
+                modelData.id, dropPosition.column, dropPosition.row,
+                displayColumns, displayRows, root.maximumWidgetColumns, root.usableRows)
             visible: placement !== null
-            z: widgetDrag.active ? 120 : (root.editMode ? 20 : 1)
+            z: widgetDrag.active || resizeHandle.resizing ? 120 : (root.editMode ? 20 : 1)
             transform: Translate { x: card.dragOffsetX; y: card.dragOffsetY }
             scale: widgetDrag.active ? 1.035 : 1
             // The clock is the one card whose glass outline is a shape rather
@@ -584,12 +639,22 @@ PanelWindow {
             showSurface: modelData.surface
             x: root.leftInset + (placement?.column ?? 0) * (root.cellSize + root.gap)
             y: root.topInset + (placement?.row ?? 0) * (root.cellSize + root.gap)
-            width: root.spanSize(placement?.columns ?? 1)
-            height: root.spanSize(placement?.rows ?? 1)
+            readonly property int displayColumns: resizeHandle.resizing
+                ? resizeHandle.previewColumns : (placement?.columns ?? 1)
+            readonly property int displayRows: resizeHandle.resizing
+                ? resizeHandle.previewRows : (placement?.rows ?? 1)
+            width: root.spanSize(displayColumns)
+            height: root.spanSize(displayRows)
             Behavior on x { NumberAnimation { duration: AppearanceTokens.motion.normalDuration; easing.type: AppearanceTokens.motion.standardEasing } }
             Behavior on y { NumberAnimation { duration: AppearanceTokens.motion.normalDuration; easing.type: AppearanceTokens.motion.standardEasing } }
-            Behavior on width { NumberAnimation { duration: AppearanceTokens.motion.normalDuration; easing.type: AppearanceTokens.motion.standardEasing } }
-            Behavior on height { NumberAnimation { duration: AppearanceTokens.motion.normalDuration; easing.type: AppearanceTokens.motion.standardEasing } }
+            Behavior on width {
+                enabled: !resizeHandle.resizing
+                NumberAnimation { duration: AppearanceTokens.motion.normalDuration; easing.type: AppearanceTokens.motion.standardEasing }
+            }
+            Behavior on height {
+                enabled: !resizeHandle.resizing
+                NumberAnimation { duration: AppearanceTokens.motion.normalDuration; easing.type: AppearanceTokens.motion.standardEasing }
+            }
             Behavior on scale { NumberAnimation { duration: 120; easing.type: Easing.OutCubic } }
 
             TapHandler {
@@ -601,37 +666,29 @@ PanelWindow {
             DragHandler {
                 id: widgetDrag
                 target: null
-                enabled: root.editMode
+                enabled: root.editMode && !resizeHandle.resizing
                 acceptedButtons: Qt.LeftButton
-                onTranslationChanged: {
+                onActiveTranslationChanged: {
                     if (!active)
                         return
-                    card.dragOffsetX = translation.x
-                    card.dragOffsetY = translation.y
+                    card.dragOffsetX = activeTranslation.x
+                    card.dragOffsetY = activeTranslation.y
                 }
                 onActiveChanged: {
-                    if (active)
+                    if (active) {
+                        root.activeDragCard = card
                         return
-                    const centerX = card.x + card.width / 2 + card.dragOffsetX
-                    const centerY = card.y + card.height / 2 + card.dragOffsetY
-                    let nearestId = card.modelData.id
-                    let nearestDistance = Number.POSITIVE_INFINITY
-                    for (let i = 0; i < widgetRepeater.count; ++i) {
-                        const candidate = widgetRepeater.itemAt(i)
-                        if (!candidate)
-                            continue
-                        const dx = centerX - (candidate.x + candidate.width / 2)
-                        const dy = centerY - (candidate.y + candidate.height / 2)
-                        const distance = dx * dx + dy * dy
-                        if (distance < nearestDistance) {
-                            nearestDistance = distance
-                            nearestId = candidate.modelData.id
-                        }
                     }
-                    const targetIndex = DeskCenterConfigService.orderedIds().indexOf(nearestId)
-                    DeskCenterConfigService.moveWidget(card.modelData.id, targetIndex)
+                    const allowed = root.editMode && card.dropAllowed
+                    const destination = card.dropPosition
+                    const id = card.modelData.id
+                    const placements = root.placements
+                    root.activeDragCard = null
                     card.dragOffsetX = 0
                     card.dragOffsetY = 0
+                    if (allowed)
+                        DeskCenterConfigService.savePosition(root.desktopOutput, placements,
+                            id, destination.column, destination.row, root.widgetGeometry)
                 }
             }
 
@@ -650,8 +707,7 @@ PanelWindow {
                 Text {
                     id: sizeLabel
                     anchors.centerIn: parent
-                    text: ({ small: I18n.tr("Small"), medium: I18n.tr("Medium"), large: I18n.tr("Large") })[
-                        DeskCenterConfigService.sizeFor(card.modelData.id)]
+                    text: card.displayColumns + "×" + card.displayRows
                         + " · " + I18n.tr("Right-click to edit")
                     color: AppearanceTokens.surface.pick(AppearanceTokens.colors.surfaceForeground, "white")
                     font { pixelSize: 9; weight: Font.DemiBold }
@@ -676,27 +732,35 @@ PanelWindow {
                 }
             }
 
-            Rectangle {
+            WidgetResizeHandle {
+                id: resizeHandle
                 z: 80
                 visible: root.editMode
-                anchors { right: parent.right; bottom: parent.bottom; margins: 8 }
-                width: editSizeText.implicitWidth + 16
-                height: 26
-                radius: AppearanceTokens.isMaterial ? 13 : 9
-                color: AppearanceTokens.surface.pick(
-                    AppearanceTokens.colors.primaryContainer,
-                    Qt.rgba(0, 0, 0, 0.56))
-                Text {
-                    id: editSizeText
-                    anchors.centerIn: parent
-                    text: ({ small: I18n.tr("Small"), medium: I18n.tr("Medium"), large: I18n.tr("Large") })[
-                        DeskCenterConfigService.sizeFor(card.modelData.id)]
-                    color: AppearanceTokens.surface.pick(
-                        AppearanceTokens.colors.primaryContainerForeground, "white")
-                    font { pixelSize: 10; weight: Font.DemiBold }
+                anchors { right: parent.right; bottom: parent.bottom; margins: 5 }
+                cellSize: root.cellSize
+                gap: root.gap
+                previewAllowed: card.placement !== null && WidgetLayout.canPlace(
+                    root.placements, card.modelData.id, card.placement.column, card.placement.row,
+                    previewColumns, previewRows, root.maximumWidgetColumns, root.usableRows)
+                onCommitted: function(columns, rows) {
+                    root.resizeWidget(card.modelData.id, columns, rows)
                 }
-                TapHandler {
-                    onTapped: DeskCenterConfigService.cycleSize(card.modelData.id)
+            }
+
+            Rectangle {
+                z: 81
+                visible: resizeHandle.resizing
+                anchors.centerIn: parent
+                width: resizePreview.implicitWidth + 24
+                height: 32
+                radius: 12
+                color: resizeHandle.previewAllowed ? "#b0000000" : "#c0a02020"
+                Text {
+                    id: resizePreview
+                    anchors.centerIn: parent
+                    text: card.displayColumns + " × " + card.displayRows
+                    color: "white"
+                    font { pixelSize: 13; weight: Font.DemiBold }
                 }
             }
 
@@ -1195,13 +1259,14 @@ PanelWindow {
                     id: weeklyForecast
                     anchors { left: parent.left; right: parent.right; bottom: parent.bottom; leftMargin: 10; rightMargin: 10; bottomMargin: 8 }
                     height: Math.min(62, parent.height * 0.46)
+                    readonly property int dayCount: card.displayColumns === 1 ? 3 : 7
                     Repeater {
-                        model: WeatherService.forecastDays
+                        model: WeatherService.forecastDays.slice(0, weeklyForecast.dayCount)
                         delegate: Item {
                             required property var modelData
                             required property int index
-                            x: index * weeklyForecast.width / 7
-                            width: weeklyForecast.width / 7
+                            x: index * weeklyForecast.width / weeklyForecast.dayCount
+                            width: weeklyForecast.width / weeklyForecast.dayCount
                             height: weeklyForecast.height
                             Text {
                                 anchors { horizontalCenter: parent.horizontalCenter; top: parent.top }
@@ -1890,6 +1955,8 @@ PanelWindow {
                 Item {
                     id: musicBody
                     anchors { fill: parent; margins: 16 }
+                    readonly property bool narrow: card.displayColumns === 1
+                    readonly property bool compact: narrow && card.displayRows === 1
                     readonly property real splitGap: 20
                     z: 1
 
@@ -1897,8 +1964,10 @@ PanelWindow {
                         id: musicCoverPane
                         x: 0
                         y: 0
-                        width: (musicBody.width - musicBody.splitGap) * 0.3
-                        height: musicBody.height
+                        width: musicBody.narrow ? musicBody.width
+                            : (musicBody.width - musicBody.splitGap) * 0.3
+                        height: musicBody.narrow ? Math.min(musicBody.width * 0.72,
+                            musicBody.height * 0.4) : musicBody.height
                         Rectangle {
                             id: musicArtwork
                             anchors.centerIn: parent
@@ -1948,10 +2017,10 @@ PanelWindow {
 
                     Item {
                         id: musicDetailsPane
-                        x: musicCoverPane.width + musicBody.splitGap
-                        y: 0
+                        x: musicBody.narrow ? 0 : musicCoverPane.width + musicBody.splitGap
+                        y: musicBody.narrow ? musicCoverPane.height + 8 : 0
                         width: musicBody.width - x
-                        height: musicBody.height
+                        height: musicBody.height - y
                         Text {
                             id: musicTitle
                             anchors { left: parent.left; right: parent.right; verticalCenter: parent.verticalCenter; verticalCenterOffset: -22 }
@@ -1963,6 +2032,7 @@ PanelWindow {
                         }
                         Text {
                             id: musicArtist
+                            visible: !musicBody.compact
                             anchors { left: parent.left; right: parent.right; top: musicTitle.bottom; topMargin: 3 }
                             text: musicContent.player?.trackArtist || ""
                             elide: Text.ElideRight
@@ -1974,7 +2044,7 @@ PanelWindow {
                             id: musicLyric
                             anchors { left: parent.left; right: parent.right; top: musicArtist.bottom; topMargin: 5 }
                             text: DockMprisService.loading ? DockMprisService.playbackStatus : DockMprisService.currentLyric
-                            visible: text.length > 0
+                            visible: !musicBody.compact && text.length > 0
                             elide: Text.ElideRight
                             horizontalAlignment: Text.AlignHCenter
                             color: AppearanceTokens.content.ink(Qt.rgba(1, 1, 1, 0.86), 0.86)
@@ -1989,7 +2059,7 @@ PanelWindow {
                                 topMargin: musicLyric.visible ? 7 : 12
                             }
                             height: 5
-                            visible: musicContent.safeLength > 0
+                            visible: !musicBody.compact && musicContent.safeLength > 0
                             WavyProgress {
                                 anchors.fill: parent
                                 anchors.topMargin: -3
@@ -2043,7 +2113,7 @@ PanelWindow {
                                 bottomMargin: 2
                             }
                             height: 36
-                            spacing: 10
+                            spacing: musicBody.narrow ? 4 : 10
                             Repeater {
                                 // Keep delegates alive when play/pause changes.
                                 model: 4
@@ -2139,8 +2209,8 @@ PanelWindow {
                     Item {
                         id: todoContent
                         anchors.fill: parent
-                        readonly property string widgetSize:
-                            DeskCenterConfigService.sizeFor("todo")
+                        readonly property string widgetSize: card.displayRows > 1 ? "large"
+                            : card.displayColumns > 1 ? "medium" : "small"
                         readonly property int itemLimit: widgetSize === "large" ? 6
                             : widgetSize === "medium" ? 3 : 0
                         readonly property var tasks:
@@ -2294,8 +2364,9 @@ PanelWindow {
                 // the whole panel height instead of ending with a blank band.
                 readonly property int weekCount: Math.ceil((firstWeekday + daysInMonth) / 7)
                 readonly property int headerHeight: 38
-                readonly property string widgetSize:
-                    DeskCenterConfigService.sizeFor("calendar")
+                readonly property bool narrow: card.displayColumns === 1
+                readonly property string widgetSize: card.displayRows > 1 ? "large"
+                    : card.displayColumns > 1 ? "medium" : "small"
                 readonly property var todayEvents: PimWidgetService.eventsForToday(
                     widgetSize === "large" ? 3 : 1)
 
@@ -2344,6 +2415,7 @@ PanelWindow {
                 }
                 Rectangle {
                     anchors { left: parent.left; top: parent.top; bottom: parent.bottom; leftMargin: parent.width * 0.42; topMargin: calendarContent.headerHeight; bottomMargin: 8 }
+                    visible: !calendarContent.narrow
                     width: 1
 	                    color: AppearanceTokens.content.accent(AppearanceTokens.colors.outlineVariant, Qt.rgba(0, 0, 0, 0.10), 0.28)
                 }
@@ -2369,6 +2441,7 @@ PanelWindow {
                 }
                 Column {
                     visible: calendarContent.widgetSize !== "small"
+                        && !calendarContent.narrow
                         && calendarContent.todayEvents.length > 0
                     anchors { left: parent.left; right: monthGrid.left; bottom: parent.bottom; leftMargin: 16; rightMargin: 8; bottomMargin: 10 }
                     spacing: 3
@@ -2395,7 +2468,8 @@ PanelWindow {
                 }
                 Item {
                     id: monthGrid
-                    anchors { left: parent.left; right: parent.right; top: parent.top; bottom: parent.bottom; leftMargin: parent.width * 0.42 + 10; rightMargin: 10; topMargin: calendarContent.headerHeight + 6; bottomMargin: 7 }
+                    visible: !calendarContent.narrow || card.displayRows > 1
+                    anchors { left: parent.left; right: parent.right; top: parent.top; bottom: parent.bottom; leftMargin: calendarContent.narrow ? 10 : parent.width * 0.42 + 10; rightMargin: 10; topMargin: calendarContent.narrow ? 130 : calendarContent.headerHeight + 6; bottomMargin: 7 }
                     Row {
                         width: parent.width
                         height: 15
@@ -2468,9 +2542,9 @@ PanelWindow {
         // Files and their labels always stay above wallpaper subjects, even
         // while a widget or file is being rearranged near the shared boundary.
         z: 3
-        x: root.leftInset + (root.screen?.name === ScreenLifecycle.activeScreen?.name && root.placements.length > 0 ? 4 * (root.cellSize + root.gap) : 0)
+        x: root.leftInset + (root.screen?.name === ScreenLifecycle.activeScreen?.name && root.placements.length > 0 ? root.widgetColumns * (root.cellSize + root.gap) : 0)
         y: root.topInset
-        width: root.width - x - root.rightInset
+        width: Math.max(0, root.width - x - root.rightInset)
         height: root.height - y - root.bottomInset
         clip: false
         readonly property int iconSize: desktopLayout.iconSize
@@ -4049,7 +4123,7 @@ PanelWindow {
             validY: desktopFileGrid.y
             validWidth: desktopFileGrid.width
             validHeight: desktopFileGrid.height
-            baseCellWidth: desktopFileGrid.itemWidth
+            baseCellWidth: desktopFileGrid.preferredItemWidth
             baseCellHeight: desktopFileGrid.itemHeight
             density: desktopFileGrid.desktopLayout.iconSpacing
             iconVisualSize: desktopFileGrid.iconSize + 12

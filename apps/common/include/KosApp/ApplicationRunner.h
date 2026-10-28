@@ -22,6 +22,7 @@ struct Metadata {
     // --watch-qml reload rebuilds the window without tearing down playback,
     // connections, or service registrations. May be empty.
     std::function<void(QQmlEngine &, QVariantMap &)> prepareEngine;
+    bool desktopTypography = false;
 };
 
 int run(int argc, char *argv[], const Metadata &metadata);

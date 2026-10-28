@@ -109,3 +109,19 @@ tests exercise service mutations, client synchronization, change signals, and
 an actual `org.freedesktop.Notifications.Notify` call. QML smoke tests load both
 application roots with a software renderer; KWin virtual-Wayland checks cover
 Calendar month/week/day layouts and Calendar-linked Todo presentation.
+
+## Calendar category and notification activation contract
+
+`calendarId` is optional on both event and todo JSON records and stored in
+`X-KOS-CALENDAR-ID`. Calendar's built-in IDs are `work`, `personal`, `sport`.
+They do not replace `listId` or migrate existing Todo lists. Linked pairs copy
+calendar category metadata along with their synchronized fields.
+
+Notifications follow the [freedesktop notification protocol](https://specifications.freedesktop.org/notification/latest/protocol.html):
+`default` opens Calendar details; `complete` updates a todo through the store.
+The service maps returned notification IDs to item IDs, forwards optional
+`ActivationToken`, and drops mappings on close or notification-server restart.
+Calendar activation uses its existing Application1 D-Bus interface, with a direct
+executable fallback for cold starts. This mapping is session-local: restarting
+PIM loses action targets for previously issued notifications. There is no new
+Akonadi or external account dependency.

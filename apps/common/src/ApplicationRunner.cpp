@@ -1,4 +1,5 @@
 #include "KosApp/ApplicationRunner.h"
+#include "KosApp/DesktopTypography.h"
 #include "KosApp/ApplicationQmlReloader.h"
 #include "ApplicationActivation.h"
 #include "ApplicationPreferences.h"
@@ -32,6 +33,8 @@ namespace Kos::App {
 int run(int argc, char *argv[], const Metadata &metadata)
 {
     QGuiApplication application(argc, argv);
+    if (metadata.desktopTypography)
+        applyDesktopTypography(application);
     QLocale::setDefault(Kos::I18n::locale());
     Kos::I18n::QtCatalogs qtTranslations;
     QTranslator translator;

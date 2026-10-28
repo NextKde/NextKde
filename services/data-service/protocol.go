@@ -117,6 +117,12 @@ func (s *Service) handleRequest(request DataRequest) DataResponse {
 			return dataError(request, "invalid-location", weatherErrorMessage(err), false)
 		}
 		return DataResponse{Version: 1, RequestID: request.RequestID, OK: true}
+	case "weather.remove-location":
+		id, _ := request.Payload["id"].(string)
+		if err := s.removeWeatherLocation(id); err != nil {
+			return dataError(request, "invalid-location", weatherErrorMessage(err), false)
+		}
+		return DataResponse{Version: 1, RequestID: request.RequestID, OK: true}
 	case "weather.set-units":
 		units, _ := request.Payload["units"].(string)
 		if err := s.setWeatherUnits(units); err != nil {

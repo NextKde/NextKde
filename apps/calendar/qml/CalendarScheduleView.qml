@@ -60,7 +60,7 @@ Pane {
     // Our vertical factor against the reference is 1.33 (40px hour pitch vs
     // 27), so row 18 -> 24, gap 1 -> 1, and the 60px band -> 80px. The band
     // height is DERIVED from the row height so the two can never drift.
-    readonly property int allDayRowHeight: 24
+    readonly property int allDayRowHeight: 20
     readonly property int allDayRowGap: 1
     // A04's cap: the tallest band this view will draw before a column spends its
     // last slot on a `+N` remainder row.
@@ -131,7 +131,7 @@ Pane {
     // pre-blended to OPAQUE rather than laid down translucent. Must stay equal
     // to Root's `tahoe.contentPlane` (Main.qml:59) — both now read the same
     // AppTheme.neutralPlane token (M05), so they cannot drift.
-    readonly property color scheduleField: AppTheme.neutralPlane
+    readonly property color scheduleField: AppTheme.dark ? "#1C1C1E" : "#FFFFFF"
     // The backdrop is the field, or the field with the weekend tint already
     // composited into it. `weekendField` cannot be used directly: it is a
     // translucent white on the dark leg, and its alpha would be dropped.
@@ -186,11 +186,7 @@ Pane {
     // label rather than letting the two overlap.
     readonly property real nowLabelClearance: 14
 
-    // The scrolling schedule viewport, exposed read-only for the header's
-    // liquid-glass lens: the glass buttons sample a live, blurred strip of
-    // this item (G01/G05). Sampling the viewport rather than the contentItem
-    // means the strip is always the content currently visible under the
-    // header, and follows real scrolling without any contentY binding.
+    // Expose the scroll surface for application navigation and diagnostics.
     readonly property alias contentViewport: timelineScroll
 
     function dateForColumn(column) {
@@ -312,8 +308,10 @@ Pane {
     }
 
     function positionTimeline() {
-        if (timelineScroll.contentItem)
-            timelineScroll.contentItem.contentY = usefulStartHour() * root.hourHeight
+        const viewport = timelineScroll.contentItem
+        if (!viewport) return
+        const maximum = Math.max(0, viewport.contentHeight - viewport.height)
+        viewport.contentY = Math.min(maximum, usefulStartHour() * root.hourHeight)
     }
 
     // R091: the 450 ms delay used to be the ONLY path to a correct scroll, so
@@ -718,6 +716,11 @@ Pane {
 
         ScrollView {
             id: timelineScroll
+            onHeightChanged: Qt.callLater(function() {
+                const viewport = timelineScroll.contentItem
+                if (viewport) viewport.contentY = Math.max(0, Math.min(viewport.contentY,
+                    viewport.contentHeight - viewport.height))
+            })
             Layout.fillWidth: true
             Layout.fillHeight: true
             clip: true

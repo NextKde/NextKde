@@ -3,6 +3,7 @@
 #include <QDir>
 #include <QFile>
 #include <QJsonDocument>
+#include <QJsonArray>
 #include <QJsonObject>
 #include <QLocalServer>
 #include <QTemporaryDir>
@@ -13,6 +14,8 @@ class WeatherClientTest : public QObject {
 
 private slots:
     void initTestCase();
+    void searchDiscardsStaleRepliesAndSeparatesErrors();
+    void removalAcknowledgesServiceAndAcceptsEmptyState();
     void readsVersionedSnapshot();
     void destroysConnectedClient();
     void rejectsUnsupportedSnapshot();
@@ -296,6 +299,104 @@ void WeatherClientTest::destroysConnectedClient()
     QVERIFY(peer);
     delete client; // Must not restart a destroyed timer or corrupt the allocator.
     QTRY_COMPARE(peer->state(), QLocalSocket::UnconnectedState);
+}
+
+void WeatherClientTest::searchDiscardsStaleRepliesAndSeparatesErrors()
+{
+    QTemporaryDir state, runtime;
+    qputenv("XDG_STATE_HOME", state.path().toUtf8());
+    qputenv("XDG_RUNTIME_DIR", runtime.path().toUtf8());
+    QLocalServer service;
+    QVERIFY(service.listen(runtime.filePath("kos-data.sock")));
+    WeatherClient client;
+    QTRY_VERIFY(service.hasPendingConnections());
+    auto *peer = service.nextPendingConnection();
+    QTRY_VERIFY(peer->canReadLine());
+    reply(peer, readRequest(peer), forecast("A"));
+    QTRY_VERIFY(client.ready());
+    const auto answer = [peer](const QJsonObject &request, bool ok, const QJsonArray &cities) {
+        const QJsonObject response{{"requestId", request.value("requestId")}, {"ok", ok},
+            {"result", QJsonObject{{"locations", cities}}}, {"error", QJsonObject{{"message", "network failed"}}}};
+        peer->write(QJsonDocument(response).toJson(QJsonDocument::Compact) + '\n');
+        peer->flush();
+    };
+    client.searchLocations("old");
+    QTRY_VERIFY(peer->canReadLine());
+    const auto old = readRequest(peer);
+    client.searchLocations("new");
+    QVERIFY(client.searching());
+    QTRY_VERIFY(peer->canReadLine());
+    const auto current = readRequest(peer);
+    answer(current, true, QJsonArray{QJsonObject{{"id", "new"}, {"name", "New"}}});
+    QTRY_COMPARE(client.searchStatus(), QStringLiteral("ready"));
+    answer(old, false, {});
+    QTest::qWait(30);
+    QCOMPARE(client.searchResults().first().toMap().value("id").toString(), QStringLiteral("new"));
+    QVERIFY(client.searchError().isEmpty());
+    QVERIFY(client.errorMessage().isEmpty());
+
+    client.searchLocations("clear");
+    QTRY_VERIFY(peer->canReadLine());
+    const auto cleared = readRequest(peer);
+    client.clearSearch();
+    answer(cleared, true, QJsonArray{QJsonObject{{"id", "late"}}});
+    QTest::qWait(30);
+    QCOMPARE(client.searchStatus(), QStringLiteral("idle"));
+    QVERIFY(client.searchResults().isEmpty());
+    QVERIFY(!client.searching());
+
+    client.searchLocations("retry");
+    QTRY_VERIFY(peer->canReadLine());
+    answer(readRequest(peer), false, {});
+    QTRY_COMPARE(client.searchStatus(), QStringLiteral("error"));
+    QVERIFY(!client.searchError().isEmpty());
+    QVERIFY(client.errorMessage().isEmpty());
+    QVERIFY(client.ready());
+    client.searchLocations("retry");
+    QTRY_VERIFY(peer->canReadLine());
+    answer(readRequest(peer), true, {});
+    QTRY_COMPARE(client.searchStatus(), QStringLiteral("empty"));
+    QVERIFY(client.searchError().isEmpty());
+    peer->disconnectFromServer();
+}
+
+void WeatherClientTest::removalAcknowledgesServiceAndAcceptsEmptyState()
+{
+    QTemporaryDir state, runtime;
+    qputenv("XDG_STATE_HOME", state.path().toUtf8());
+    qputenv("XDG_RUNTIME_DIR", runtime.path().toUtf8());
+    QLocalServer service;
+    QVERIFY(service.listen(runtime.filePath("kos-data.sock")));
+    WeatherClient client;
+    QTRY_VERIFY(service.hasPendingConnections());
+    auto *peer = service.nextPendingConnection();
+    QTRY_VERIFY(peer->canReadLine());
+    reply(peer, readRequest(peer), forecast("A"));
+    QTRY_VERIFY(client.ready());
+    peer->write("{\"event\":\"weather.changed\"}\n");
+    QTRY_VERIFY(peer->canReadLine());
+    const auto stale = readRequest(peer);
+    client.removeLocation("A");
+    QCOMPARE(client.removingLocationId(), QStringLiteral("A"));
+    QTRY_VERIFY(peer->canReadLine());
+    auto removal = readRequest(peer);
+    QCOMPARE(removal.value("operation").toString(), QStringLiteral("weather.remove-location"));
+    QCOMPARE(removal.value("payload").toObject().value("id").toString(), QStringLiteral("A"));
+    reply(peer, removal, {});
+    QTRY_VERIFY(client.removingLocationId().isEmpty());
+    QTRY_VERIFY(peer->canReadLine());
+    auto empty = forecast("", "idle");
+    empty.insert("location", QJsonObject{});
+    empty.insert("locations", QJsonArray{});
+    reply(peer, readRequest(peer), empty);
+    QTRY_VERIFY(client.location().isEmpty());
+    QVERIFY(!client.ready());
+    QVERIFY(!client.loading());
+    reply(peer, stale, forecast("A"));
+    QTest::qWait(30);
+    QVERIFY(client.location().isEmpty());
+    QVERIFY(client.locationError().isEmpty());
+    peer->disconnectFromServer();
 }
 
 QTEST_GUILESS_MAIN(WeatherClientTest)

@@ -110,6 +110,9 @@ if(BUILD_TESTING)
         add_test(NAME kos-shell.application-traffic
             COMMAND ${KOS_NODE_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/status-area/test_application_traffic.mjs)
         set_tests_properties(kos-shell.application-traffic PROPERTIES LABELS logic TIMEOUT 10)
+        add_test(NAME kos-shell.battery-data
+            COMMAND ${KOS_NODE_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/status-area/test_battery_data.mjs)
+        set_tests_properties(kos-shell.battery-data PROPERTIES LABELS logic TIMEOUT 10)
         add_test(NAME kos-shell.language
             COMMAND ${KOS_NODE_EXECUTABLE}
                 ${CMAKE_CURRENT_SOURCE_DIR}/tests/localization/widget-language.mjs)
@@ -531,7 +534,7 @@ if(BUILD_TESTING)
         add_test(NAME kos-ui.status-panels
             COMMAND ${KOS_PYTHON_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/status-area/run-panels.py --vulkan)
         add_test(NAME kos-ui.status-panels-opengl
-            COMMAND ${KOS_PYTHON_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/status-area/run-panels.py --opengl)
+            COMMAND ${KOS_PYTHON_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/status-area/run-panels.py --opengl --scale-2)
         set_tests_properties(kos-ui.status-panels kos-ui.status-panels-opengl PROPERTIES
             ENVIRONMENT "QML_IMPORT_PATH=${CMAKE_BINARY_DIR}/qml;QML2_IMPORT_PATH=${CMAKE_BINARY_DIR}/qml"
             LABELS "ui;compositor" TIMEOUT 45 RUN_SERIAL TRUE)
@@ -598,6 +601,8 @@ if(BUILD_TESTING)
             COMMAND ${KOS_PYTHON_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/interaction-runtime/run.py)
         add_test(NAME kos-ui.widget-experience
             COMMAND ${KOS_PYTHON_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/widget-experience/run.py --private-compositor)
+        add_test(NAME kos-ui.widget-resize
+            COMMAND ${KOS_PYTHON_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/widget-resize/run.py --private-compositor)
         add_test(NAME kos-ui.popup-motion
             COMMAND ${KOS_PYTHON_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/popup-motion/run.py)
         if(KOS_BUILD_KWIN_PLUGINS)
@@ -607,8 +612,11 @@ if(BUILD_TESTING)
                 ENVIRONMENT "QML_IMPORT_PATH=${CMAKE_BINARY_DIR}/qml;QML2_IMPORT_PATH=${CMAKE_BINARY_DIR}/qml"
                 LABELS "ui;kwin" TIMEOUT 60 RUN_SERIAL TRUE)
         endif()
-        set_tests_properties(kos-ui.interaction-runtime kos-ui.widget-experience kos-ui.popup-motion PROPERTIES
+        set_tests_properties(kos-ui.interaction-runtime kos-ui.widget-experience kos-ui.widget-resize kos-ui.popup-motion PROPERTIES
             LABELS ui TIMEOUT 60 RUN_SERIAL TRUE)
+        set_tests_properties(kos-ui.widget-resize PROPERTIES
+            LABELS "ui;widgets" TIMEOUT 120
+            ENVIRONMENT "QML_IMPORT_PATH=${CMAKE_BINARY_DIR}/qml;QML2_IMPORT_PATH=${CMAKE_BINARY_DIR}/qml")
         set_tests_properties(kos-ui.widget-experience PROPERTIES
             LABELS "ui;widgets" TIMEOUT 90
             ENVIRONMENT "QML_IMPORT_PATH=${CMAKE_BINARY_DIR}/qml;QML2_IMPORT_PATH=${CMAKE_BINARY_DIR}/qml")

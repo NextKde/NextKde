@@ -43,6 +43,9 @@ private slots:
     void scheduleNextReminder();
     void deliverDueReminders();
     void writeWidgetSnapshot();
+    void notificationAction(uint id, const QString &action);
+    void notificationClosed(uint id, uint reason);
+    void notificationToken(uint id, const QString &token);
 
 private:
     class Private;

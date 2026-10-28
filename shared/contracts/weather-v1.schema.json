@@ -18,7 +18,10 @@
     "provider": { "const": "open-meteo" },
     "status": { "enum": ["idle", "loading", "ready", "error"] },
     "units": { "enum": ["metric", "imperial"] },
-    "location": { "$ref": "#/$defs/location" },
+    "location": { "oneOf": [
+      { "$ref": "#/$defs/location" },
+      { "$ref": "#/$defs/emptyLocation" }
+    ] },
     "locations": {
       "type": "array",
       "maxItems": 20,
@@ -43,7 +46,29 @@
     }
   },
   "additionalProperties": true,
+  "allOf": [{
+    "if": { "properties": { "locations": { "maxItems": 0 } } },
+    "then": {
+      "properties": {
+        "location": { "$ref": "#/$defs/emptyLocation" },
+        "status": { "const": "idle" },
+        "hourly": { "maxItems": 0 },
+        "daily": { "maxItems": 0 }
+      },
+      "not": { "required": ["current"] }
+    },
+    "else": { "properties": { "location": { "$ref": "#/$defs/location" } } }
+  }],
   "$defs": {
+    "emptyLocation": {
+      "type": "object",
+      "required": ["id", "name", "latitude", "longitude"],
+      "properties": {
+        "id": { "const": "" }, "name": { "const": "" },
+        "latitude": { "const": 0 }, "longitude": { "const": 0 }
+      },
+      "additionalProperties": false
+    },
     "location": {
       "type": "object",
       "required": ["id", "name", "latitude", "longitude"],

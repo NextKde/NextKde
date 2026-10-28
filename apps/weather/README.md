@@ -32,7 +32,8 @@ to Qt 6.
 ## Included scope
 
 - Localized location search and multiple saved locations.
-- Current, hourly, and seven-day forecasts.
+- Current conditions, all remaining hourly points, and up to seven daily forecasts; the heading reflects the actual day count.
+- City removal, search loading/empty/retry states, and localized air quality categories with an explicit unavailable state.
 - Metric/imperial units and explicit refresh.
 - Atomic offline cache with generated/stale timestamps.
 - Shared state with the desktop widget through `kos-data-service`.
@@ -47,3 +48,7 @@ Weather reuses an already-running core service and can start the installed
 binary on demand for a Weather-only development install. The complete app
 installer enables `kos-data.service`. A previously cached forecast remains
 visible if the service or network is temporarily unavailable.
+
+## Compact interface
+
+The interface follows the NextKde App Demo compact desktop specification: a 224 px sidebar, 28 px search/actions, 80 px city rows, and denser forecast cards. Light liquid material is limited to search and floating actions; weather scenes and charts retain their own visual treatment. Narrow windows show hourly and daily forecasts before secondary metrics. Reduced transparency uses solid controls.

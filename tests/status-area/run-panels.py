@@ -81,7 +81,7 @@ def main():
             r'Cannot assign|Unable to assign|Binding loop|is not a type|is not a function', output), output
         count = re.search(r'STATUS_PANELS_PASS (\d+) checks', output).group(1)
         backend = 'Vulkan' if vulkan else 'OpenGL'
-        print(f'PASS ({backend}): {count} checks: rendered summary/details/collapse, stable surface size, secondary-screen placement and confirmed power changes')
+        print(f'PASS ({backend}): {count} checks: traffic summary/details/collapse, battery dashboard/states/telemetry, stable surfaces, secondary-screen placement and all three power modes')
 
 
 if __name__ == '__main__':

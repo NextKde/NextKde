@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -797,4 +798,63 @@ func (fixedWeatherProvider) Search(context.Context, string, string, int) ([]Weat
 
 func (fixedWeatherProvider) Summaries(context.Context, []WeatherLocation, string) (map[string]WeatherLocationSummary, error) {
 	return map[string]WeatherLocationSummary{}, nil
+}
+
+func TestRemoveWeatherLocationPersistsEmptyAndRejectsLateForecast(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		directory := t.TempDir()
+		state := defaultWeatherState()
+		a := state.Location
+		b := WeatherLocation{ID: "city-b", Name: "B", Latitude: 30, Longitude: 120}
+		c := WeatherLocation{ID: "city-c", Name: "C", Latitude: 31, Longitude: 121}
+		state.Locations = []WeatherLocation{a, b, c}
+		state.Current = &WeatherCurrent{Temperature: 24}
+		service := &Service{state: State{Weather: state}, last: time.Now(),
+			statePath: filepath.Join(directory, "state.json"), snapshotPath: filepath.Join(directory, "snapshot.json"),
+			weatherProvider: fixedWeatherProvider{temperature: 30}}
+		original := service.state.Weather.Current
+		// Deleting a background city must preserve the current forecast.
+		response := service.handleRequest(DataRequest{Version: 1, RequestID: "delete-b",
+			Operation: "weather.remove-location", Payload: map[string]interface{}{"id": b.ID}})
+		if !response.OK || len(service.state.Weather.Locations) != 2 || service.state.Weather.Current != original {
+			t.Fatalf("background removal changed forecast: %#v", service.state.Weather)
+		}
+		if err := service.removeWeatherLocation(a.ID); err != nil {
+			t.Fatal(err)
+		}
+		synctest.Wait()
+		if service.state.Weather.Location.ID != c.ID || len(service.state.Weather.Locations) != 1 {
+			t.Fatalf("selected deletion did not select remaining city: %#v", service.state.Weather)
+		}
+		oldSerial := service.weatherRequestSerial
+		if err := service.removeWeatherLocation(c.ID); err != nil {
+			t.Fatal(err)
+		}
+		service.fetchWeather(oldSerial, fixedWeatherProvider{temperature: 99}, c, weatherUnitsMetric)
+		if service.state.Weather.Current != nil || service.state.Weather.Location.ID != "" || service.startWeatherRefresh(true) {
+			t.Fatal("deleted city's late forecast or refresh resurrected empty state")
+		}
+		raw, err := os.ReadFile(service.statePath)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var restored State
+		if err := json.Unmarshal(raw, &restored); err != nil {
+			t.Fatal(err)
+		}
+		normalizeWeatherState(&restored.Weather)
+		if restored.Weather.Locations == nil || len(restored.Weather.Locations) != 0 || restored.Weather.Location.ID != "" {
+			t.Fatalf("empty selection did not survive restart: %#v", restored.Weather)
+		}
+		if err := service.removeWeatherLocation(c.ID); err != nil {
+			t.Fatal("repeat removal must be idempotent")
+		}
+		if err := service.setWeatherLocation(b); err != nil {
+			t.Fatal(err)
+		}
+		synctest.Wait()
+		if service.state.Weather.Location.ID != b.ID || len(service.state.Weather.Locations) != 1 {
+			t.Fatal("cannot add a city after deleting the last one")
+		}
+	})
 }

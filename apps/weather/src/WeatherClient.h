@@ -20,6 +20,10 @@ class WeatherClient : public QObject {
     Q_PROPERTY(bool connected READ connected NOTIFY connectedChanged)
     Q_PROPERTY(bool loading READ loading NOTIFY snapshotChanged)
     Q_PROPERTY(bool stale READ stale NOTIFY snapshotChanged)
+    Q_PROPERTY(QString searchStatus READ searchStatus NOTIFY searchStateChanged)
+    Q_PROPERTY(QString searchError READ searchError NOTIFY searchStateChanged)
+    Q_PROPERTY(QString removingLocationId READ removingLocationId NOTIFY locationActionChanged)
+    Q_PROPERTY(QString locationError READ locationError NOTIFY locationActionChanged)
     Q_PROPERTY(bool searching READ searching NOTIFY searchingChanged)
     Q_PROPERTY(QString status READ status NOTIFY snapshotChanged)
     Q_PROPERTY(QString units READ units NOTIFY snapshotChanged)
@@ -43,6 +47,10 @@ public:
     bool loading() const;
     bool stale() const;
     bool searching() const;
+    QString searchStatus() const { return m_searchStatus; }
+    QString searchError() const { return m_searchError; }
+    QString removingLocationId() const { return m_removingLocationId; }
+    QString locationError() const { return m_locationError; }
     QString status() const;
     QString units() const;
     QString errorMessage() const;
@@ -59,6 +67,7 @@ public:
     Q_INVOKABLE void refresh();
     Q_INVOKABLE void searchLocations(const QString &query);
     Q_INVOKABLE void selectLocation(const QVariantMap &location);
+    Q_INVOKABLE void removeLocation(const QString &id);
     Q_INVOKABLE void setUnits(const QString &units);
     Q_INVOKABLE void clearSearch();
 
@@ -66,9 +75,12 @@ signals:
     void snapshotChanged();
     void connectedChanged();
     void searchingChanged();
+    void searchStateChanged();
+    void locationActionChanged();
     void searchResultsChanged();
 
 private:
+    void setSearchState(const QString &status, const QString &error = {});
     void ensureServiceStarted();
     void connectSocket();
     void onSocketConnected();
@@ -91,12 +103,15 @@ private:
     QTimer m_reconnectTimer;
     QTimer m_snapshotFallbackTimer;
     QTimer m_locationTimer;
+    QTimer m_searchTimer;
+    QTimer m_removeTimer;
     QByteArray m_readBuffer;
     QQueue<QByteArray> m_pendingRequests;
     QHash<QString, QString> m_requestOperations;
     QHash<QString, quint64> m_requestGenerations;
     quint64 m_requestSerial = 0;
     quint64 m_locationGeneration = 0;
+    quint64 m_searchGeneration = 0;
     QVariantMap m_requestedLocation;
 
     bool m_ready = false;
@@ -106,6 +121,11 @@ private:
     QString m_status = QStringLiteral("idle");
     QString m_units = QStringLiteral("metric");
     QString m_errorMessage;
+    QString m_searchStatus = QStringLiteral("idle");
+    QString m_searchError;
+    QString m_removingLocationId;
+    QString m_removeRequestId;
+    QString m_locationError;
     QVariantMap m_location;
     QVariantList m_locations;
     QVariantMap m_current;

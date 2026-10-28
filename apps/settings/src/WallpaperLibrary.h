@@ -25,8 +25,7 @@ public:
     QStringList galleryImages() const;
     QString importGalleryImage(const QString& urlOrPath);
     // Returns -1 when the folder is unreadable (reported synchronously via
-    // errorOccurred), otherwise the number of images already in the gallery
-    // when this folder was last imported (0 for a fresh import). The copy
+    // errorOccurred), -2 while another import is running, or 0 when accepted. The copy
     // work itself runs in the background; galleryImportFinished reports the
     // final count and galleryImportProgress ticks per accepted image.
     int importGalleryFolder(const QString& urlOrPath);
@@ -48,14 +47,12 @@ private:
     QByteArray galleryFileMd5(const QString& path);
     static QByteArray transcodeJpegBaseline(const QString& path);
     QHash<QString, GalleryFingerprint> m_galleryFingerprints;
+    QMutex m_galleryMutex;
     QMutex m_thumbnailMutex;
     QSet<QString> m_thumbnailInFlight;
     QSet<QString> m_thumbnailFailed;
     QThreadPool m_thumbnailPool;
     bool m_galleryMigrated = false;
-    // One worker at a time keeps m_galleryFingerprints single-threaded without
-    // a lock; a second request while one runs is answered immediately with the
-    // running import's folder rather than queued.
+    // Only one folder import runs at a time; additional requests return -2.
     QThread* m_galleryImportThread = nullptr;
-    QString m_galleryImportFolder;
 };

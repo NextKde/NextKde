@@ -68,7 +68,7 @@ Supported operations are:
 - `activity.snapshot` and `activity.active-app`;
 - `desktop.snapshot`, `desktop.refresh`, `desktop.outputs` and `desktop.place`;
 - `weather.snapshot`, `weather.search`, `weather.refresh`,
-  `weather.set-location`, and `weather.set-units`.
+  `weather.set-location`, `weather.remove-location`, and `weather.set-units`.
 
 Desktop changes are pushed as `desktop.changed` events after a complete
 directory scan has been persisted. A completed weather state transition is

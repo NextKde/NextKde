@@ -24,6 +24,10 @@ SettingsBridge::SettingsBridge(QObject* parent)
         &m_wallpaperLibrary, &WallpaperLibrary::errorOccurred, this, &SettingsBridge::setLastError);
     connect(&m_wallpaperLibrary, &WallpaperLibrary::thumbnailReady, this,
         &SettingsBridge::wallpaperThumbnailChanged);
+    connect(&m_wallpaperLibrary, &WallpaperLibrary::galleryImportProgress, this,
+        &SettingsBridge::galleryImportProgress);
+    connect(&m_wallpaperLibrary, &WallpaperLibrary::galleryImportFinished, this,
+        &SettingsBridge::galleryImportFinished);
 }
 
 SettingsBridge::~SettingsBridge() = default;

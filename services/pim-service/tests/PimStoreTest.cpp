@@ -32,6 +32,7 @@ class PimStoreTest : public QObject {
 
 private slots:
     void eventPersistsAcrossRestart();
+    void calendarCategoriesPreserveTodoLists();
     void recurringEventExpandsForRange();
     void todoListsAndCompletionPersist();
     void recurringTodoCanUseDueDate();
@@ -42,6 +43,35 @@ private slots:
     void exportsAndImportsIcalendar();
     void widgetSnapshotRefreshesAfterMutation();
 };
+
+void PimStoreTest::calendarCategoriesPreserveTodoLists()
+{
+    QTemporaryDir directory;
+    QString uid;
+    {
+        PimStore store(directory.path());
+        const auto created = parseObject(store.createTodo(encode({
+            {QStringLiteral("title"), QStringLiteral("Run")},
+            {QStringLiteral("listId"), QStringLiteral("inbox")},
+            {QStringLiteral("calendarId"), QStringLiteral("sport")},
+            {QStringLiteral("due"), QStringLiteral("2026-10-28T18:00:00")},
+            {QStringLiteral("reminderMinutes"), 15},
+        })));
+        QVERIFY(created.value(QStringLiteral("ok")).toBool());
+        uid = created.value(QStringLiteral("item")).toObject().value(QStringLiteral("id")).toString();
+        auto item = parseObject(store.updateTodo(uid, encode({
+            {QStringLiteral("calendarId"), QStringLiteral("work")},
+        }))).value(QStringLiteral("item")).toObject();
+        QCOMPARE(item.value(QStringLiteral("calendarId")).toString(), QStringLiteral("work"));
+        QCOMPARE(item.value(QStringLiteral("listId")).toString(), QStringLiteral("inbox"));
+        QCOMPARE(item.value(QStringLiteral("reminderMinutes")).toInt(), 15);
+    }
+    PimStore store(directory.path());
+    const auto item = parseObject(store.snapshot()).value(QStringLiteral("todos")).toArray().first().toObject();
+    QCOMPARE(item.value(QStringLiteral("id")).toString(), uid);
+    QCOMPARE(item.value(QStringLiteral("calendarId")).toString(), QStringLiteral("work"));
+    QCOMPARE(item.value(QStringLiteral("listId")).toString(), QStringLiteral("inbox"));
+}
 
 void PimStoreTest::eventPersistsAcrossRestart()
 {
