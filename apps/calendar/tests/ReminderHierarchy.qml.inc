@@ -1,0 +1,136 @@
+    TestCase {
+        id: hierarchyTest
+        name: "ReminderHierarchy"
+        windowShown: true
+        when: pim.ready
+        function verify(value, message) { if (!value) { console.error("HIERARCHY_VERIFY_FAILED", message || "", new Error().stack); fail(message || "Verification failed") } }
+        function compare(actual, expected, message) { if (actual !== expected) { console.error("HIERARCHY_COMPARE_FAILED", actual, expected, new Error().stack); fail(message || "Comparison failed") } }
+        function tryCompare(object, property, value, timeout) { const end = Date.now() + (timeout || 5000); while (object[property] !== value && Date.now() < end) wait(50); compare(object[property], value, property) }
+        function tryVerify(callback, timeout) { const end = Date.now() + (timeout || 5000); while (!callback() && Date.now() < end) wait(50); verify(callback()) }
+        function test_hierarchy() { try { runHierarchy() } catch (error) { console.error("HIERARCHY_ERROR", error, error.stack); throw error } }
+        function runHierarchy() {
+            console.log("HIERARCHY_START")
+            root.switchWorkspace(true)
+            wait(200)
+            mouseClick(findChild(root.contentItem, "addReminderListOrGroup"))
+            wait(100)
+            mouseClick(findChild(root, "newReminderGroup"))
+            tryCompare(organizationDialog, "visible", true)
+            findChild(organizationDialog.contentItem, "organizationName").text = "活动筹备"
+            mouseClick(findChild(organizationDialog.footer, "organizationAccept"))
+            tryVerify(() => pim.groups.length === 1)
+            const group = pim.groups[0]
+            pim.createList({name: "读书会", color: "#BF57DA", group: group.name})
+            tryVerify(() => pim.lists.some(list => list.name === "读书会"))
+            const listId = pim.lists.find(list => list.name === "读书会").id
+            remindersView.select("list", listId)
+            wait(100)
+            const listView = findChild(remindersView, "remindersList")
+            mouseClick(listView, listView.width / 2, listView.height - 30, Qt.RightButton)
+            wait(100)
+            mouseClick(findChild(root, "contextAddSection"))
+            tryCompare(remindersView, "addingSection", true)
+            const sectionInput = findChild(remindersView, "newSectionName")
+            sectionInput.text = "会前准备"
+            sectionInput.forceActiveFocus(); keyClick(Qt.Key_Return)
+            tryVerify(() => pim.lists.find(list => list.id === listId).sections.length === 1)
+            wait(100)
+            mouseClick(findChild(remindersView, "addReminderSection"))
+            sectionInput.text = "讨论议题"
+            sectionInput.forceActiveFocus(); keyClick(Qt.Key_Return)
+            tryVerify(() => pim.lists.find(list => list.id === listId).sections.length === 2)
+            wait(200)
+            const add = findChild(remindersView, "inlineAdd_" + listId + "_会前准备")
+            verify(add !== null)
+            const input = findChild(add, "inlineReminderTitle")
+            mouseClick(input)
+            input.text = "准备会议资料"
+            input.textEdited()
+            keyClick(Qt.Key_Return)
+            tryVerify(() => pim.todos.length === 1)
+            compare(pim.todos[0].section, "会前准备")
+            tryCompare(remindersView, "inlineSavingKey", "")
+            wait(150)
+            console.log("HIERARCHY_FIRST_SAVED")
+            const nextInput = findChild(findChild(remindersView, "inlineAdd_" + listId + "_会前准备"), "inlineReminderTitle")
+            compare(nextInput.text, "")
+            verify(nextInput.activeFocus)
+            nextInput.text = "安排座位"; nextInput.textEdited(); keyClick(Qt.Key_Return)
+            tryVerify(() => pim.todos.length === 2)
+            wait(150)
+            console.log("HIERARCHY_SECOND_SAVED")
+            const firstId = pim.todos.find(todo => todo.title === "准备会议资料").id
+            const title = findChild(remindersView, "reminderTitle_" + firstId)
+            mouseClick(title)
+            title.text = "整理会议资料"; keyClick(Qt.Key_Return)
+            tryVerify(() => pim.todos.some(todo => todo.title === "整理会议资料"))
+            wait(100)
+            mouseClick(findChild(remindersView, "reminderDetails_" + firstId))
+            tryCompare(taskEditor, "visible", true)
+            compare(taskEditor.header.visible, false)
+            compare(taskEditor.payload().section, "会前准备")
+            wait(250)
+            grabImage(root.contentItem).save("/tmp/calendar-hierarchy-details.png")
+            taskEditor.close()
+            mouseClick(findChild(root.contentItem, "groupSelect_" + group.id))
+            compare(remindersView.filter, "group")
+            compare(remindersView.visibleTodos.length, 2)
+            compare(remindersView.heading, group.name)
+            const before = remindersView.filter
+            mouseClick(findChild(root.contentItem, "groupFold_" + group.id))
+            compare(remindersView.filter, before)
+            wait(200)
+            grabImage(root.contentItem).save("/tmp/calendar-hierarchy-group.png")
+            remindersView.select("list", listId)
+            wait(150)
+            mouseClick(findChild(remindersView, "reminderViewMode"))
+            tryCompare(remindersView, "columnsMode", true)
+            wait(200)
+            grabImage(root.contentItem).save("/tmp/calendar-hierarchy-columns.png")
+            const section = JSON.parse(JSON.stringify(pim.lists.find(list => list.id === listId).sections[0]))
+            mouseClick(findChild(remindersView, "sectionMenu_" + section.id))
+            wait(100)
+            mouseClick(findChild(remindersView, "sectionMenu_" + section.id).actionMenu.itemAt(0))
+            const renameInput = findChild(remindersView, "sectionName_" + section.id)
+            renameInput.text = "筹备"; renameInput.forceActiveFocus(); keyClick(Qt.Key_Return)
+            tryVerify(() => pim.todos.every(todo => todo.section === "筹备"))
+            wait(200)
+            mouseClick(findChild(remindersView, "sectionFold_" + section.id))
+            verify(remindersView.collapsedSections.includes(listId + "/" + section.id))
+            mouseClick(findChild(remindersView, "sectionFold_" + section.id))
+            AppTheme.appearanceMode = "dark"; Demo.AppTheme.appearanceMode = "dark"
+            wait(250)
+            grabImage(root.contentItem).save("/tmp/calendar-hierarchy-dark.png")
+            mouseClick(findChild(remindersView, "sectionMenu_" + section.id))
+            wait(100)
+            mouseClick(findChild(remindersView, "sectionMenu_" + section.id).actionMenu.itemAt(3))
+            tryCompare(organizationDialog, "visible", true)
+            wait(200)
+            grabImage(root.contentItem).save("/tmp/calendar-section-remove.png")
+            mouseClick(findChild(organizationDialog.footer, "organizationAccept"))
+            wait(300)
+            tryVerify(() => pim.todos.every(todo => !todo.section))
+            compare(pim.todos.length, 2)
+            pim.createList({name: "场地安排", color: "#FB8208", group: group.name})
+            tryVerify(() => pim.lists.some(list => list.name === "场地安排"))
+            const secondList = pim.lists.find(list => list.name === "场地安排").id
+            pim.createTodo({title: "确认活动地点", listId: secondList})
+            tryVerify(() => pim.todos.length === 3)
+            remindersView.select("group", group.id)
+            compare(remindersView.visibleTodos.length, 3)
+            root.width = 760; root.height = 600
+            wait(200)
+            grabImage(root.contentItem).save("/tmp/calendar-hierarchy-narrow.png")
+            root.width = 960; root.height = 660
+            wait(150)
+            mouseClick(findChild(root.contentItem, "manageGroup_" + group.id))
+            wait(100)
+            mouseClick(findChild(root.contentItem, "manageGroup_" + group.id).actionMenu.itemAt(1))
+            tryCompare(organizationDialog, "visible", true)
+            mouseClick(findChild(organizationDialog.footer, "organizationAccept"))
+            tryVerify(() => pim.groups.length === 0)
+            compare(pim.todos.length, 3)
+            console.log("REMINDER_ORGANIZATION_TESTS_PASSED")
+        }
+    }
+    Timer { interval: 1200; running: true; onTriggered: hierarchyTest.qtest_run() }

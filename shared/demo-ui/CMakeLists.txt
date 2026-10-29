@@ -9,12 +9,21 @@ qt_add_qml_module(kos_demo_ui URI Kos.Demo VERSION 1.0 STATIC
         foundation/SettingsGroup.qml
         foundation/SettingsItem.qml
         foundation/KosToolTip.qml
+        foundation/KosDialog.qml
         foundation/SettingsAppearancePreview.qml
         i18n/I18n.qml
         controls/ControlForm.qml
         controls/LiquidStyle.qml
         controls/LiquidBackdrop.qml
         controls/LiquidSurface.qml
+        controls/LiquidContentPopover.qml
+        controls/LiquidPopover.qml
+        controls/LiquidPopoverItem.qml
+        controls/LiquidPopoverSurface.qml
+        controls/LiquidDialog.qml
+        controls/LiquidDialogButton.qml
+        controls/LiquidDialogSurface.qml
+        controls/LiquidPanelSurface.qml
         controls/LiquidOuterShadow.qml
         controls/VectorIcon.qml
         controls/LiquidActionButton.qml
@@ -25,6 +34,14 @@ qt_add_qml_module(kos_demo_ui URI Kos.Demo VERSION 1.0 STATIC
         controls/LiquidSlider.qml
         controls/LiquidSelect.qml
     RESOURCES
+        controls/shaders/liquid_popover.vert
+        controls/shaders/liquid_popover.frag
+        controls/shaders/liquid_popover.vert.qsb
+        controls/shaders/liquid_popover.frag.qsb
+        controls/shaders/liquid_dialog.vert
+        controls/shaders/liquid_dialog.frag
+        controls/shaders/liquid_dialog.vert.qsb
+        controls/shaders/liquid_dialog.frag.qsb
         i18n/ZhCatalog.mjs
         i18n/SystemLanguage.mjs
         i18n/qmldir

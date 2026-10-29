@@ -17,12 +17,20 @@ QtObject {
     readonly property color selectionFill: AppTheme.dark ? "#48484C" : "#DCDCE0"
     readonly property color rowHoverFill: AppTheme.dark ? "#363639" : "#DBDBDD"
     readonly property color searchFill: controlFill
+    readonly property color workspaceActive: "#e4453f"
     readonly property color segmentTrack: controlFill
     readonly property color segmentPill: AppTheme.dark ? "#636363" : "#D1D1D1"
     readonly property color positive: "#34C759"
     readonly property color warning: "#FF9F0A"
     readonly property color statusPositive: AppTheme.dark ? "#34C759" : "#24883D"
     readonly property color statusWarning: AppTheme.dark ? "#FF9F0A" : "#A85C00"
+    // Shape roles stay fixed across hover, press, focus and disabled states.
+    readonly property int navigationRadius: 6
+    readonly property int contentRowRadius: 8
+    readonly property int formGroupRadius: 14
+    readonly property int menuItemRadius: 6
+    readonly property int popupRadius: 12
+    readonly property color formGroupFill: AppTheme.dark ? "#22FFFFFF" : "#F0F0F1"
     readonly property int sidebarWidth: 224
     readonly property int rowHeight: 30
     readonly property int rowInsetLeading: 8
@@ -34,7 +42,7 @@ QtObject {
     readonly property int rowDetailInset: 8
     readonly property int categoryRowHeight: 28
     readonly property int categoryInset: 16
-    readonly property int categoryBoxSize: 12
+    readonly property int categoryBoxSize: 14
     readonly property int categoryBoxRadius: 3
     readonly property int categoryTextGap: 8
     readonly property int categoryFontSize: 13
@@ -56,6 +64,7 @@ QtObject {
     readonly property int dateNavTextSize: 11
     readonly property int controlHeight: 28
     readonly property int controlFontSize: 11
+    readonly property int editorInputFontSize: 13
     readonly property int fieldHeight: 28
     readonly property int searchHeight: 28
     readonly property int searchInsetLeading: 10
