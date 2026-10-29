@@ -650,9 +650,13 @@ ColumnLayout {
                         elide: Text.ElideRight
                     }
                     Text {
+                        Layout.fillWidth: true
                         text: !page.bridgeCompatible ? I18n.tr("Settings app version mismatch") : !page.previewAvailable ? I18n.tr("Desktop preview is not supported in this environment yet") : I18n.tr("Enters a fullscreen simulated desktop; the wallpaper changes only after Apply")
                         color: page.colors.secondaryText
                         font.pixelSize: 10
+                        wrapMode: Text.WordWrap
+                        maximumLineCount: 2
+                        elide: Text.ElideRight
                     }
                 }
                 Text {
