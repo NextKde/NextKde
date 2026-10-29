@@ -11,6 +11,8 @@ Demo.LiquidContentPopover {
     borderWidth: 0.5
     borderColor: AppTheme.dark ? Qt.rgba(1, 1, 1, 0.18) : Qt.rgba(0, 0, 0, 0.12)
     materialOpacity: 0.99
+    // Tall editors keep the floating material without a misleading pointer.
+    arrowEnabled: false
     // Suppress background lettering while retaining sampled colour and refraction.
     backdropBlur: 1.0
     blurStrength: 1.0
