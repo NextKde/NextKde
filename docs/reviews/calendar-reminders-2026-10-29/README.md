@@ -1,5 +1,40 @@
 # 日历／提醒事项远程验收 · 2026-10-29
 
+## 最新截图：Popover 箭头修正后
+
+以下 5 张为本次更新后重新编译的日历截图，取代下方旧图作为 Popover 箭头验收依据。
+采集环境：Kubuntu 虚拟机、Qt 6.11.2、独立 KWin Wayland 虚拟输出，
+OpenGL／Mesa llvmpipe 渲染；窗口为 960 × 660，使用隔离的空白 PIM 数据。
+截图来自实际应用窗口内容，未使用设计稿或后期合成。虚拟机的字体和图形驱动
+可能与日常桌面不同，因此本页主要验收面板轮廓、箭头位置和布局。
+
+### 日程表单：无箭头
+
+![新建日程，无箭头](arrow-event-light.png)
+
+### 待办表单：浅色与深色，无箭头
+
+![新建待办，浅色](arrow-reminder-light.png)
+
+![新建待办，深色](arrow-reminder-dark.png)
+
+### 侧栏小菜单：保留对准按钮的箭头
+
+![新建清单与群组菜单](arrow-sidebar-menu.png)
+
+### 靠右窗口边缘的菜单：位置受限后仍准确指向按钮
+
+![右上角菜单](arrow-edge-menu.png)
+
+采集脚本：`apps/calendar/tests/PopoverScreenshots.qml.inc`，配合
+`run-popover-review.py` 的 `KOS_CALENDAR_REVIEW_FIXTURE` 参数运行。
+本次编译成功，截图流程退出码 0，输出 `REMINDER_ORGANIZATION_TESTS_PASSED`；
+已逐张查看。高表单无箭头、两种菜单箭头对准触发按钮。
+
+---
+
+## 之前的功能验收记录
+
 本分支将提醒事项整合进日历，并补齐群组、清单、分区和行内编辑。界面沿用 nextkdeAppDemo 通用组件。截图来自实际运行窗口，使用隔离的临时样例数据，不包含用户日历数据；不是设计稿。
 
 ## 验收路径
@@ -61,5 +96,5 @@
 虚拟机 Qt 6.11.2 的独立定位回归通过（5 passed，0 failed，含初始化／清理）：
 四个方向、角落／移出窗口、大表单无箭头及其 padding。
 复现：在虚拟机运行 `python3 apps/calendar/tests/run-popover-arrows.py`。
-这轮为 offscreen 定位验证，尚未完成液态高光／阴影的桌面视觉验收；
-上面的截图为箭头调整前的验收记录，不代表本次更新后的视觉效果。
+该轮为 offscreen 定位验证；后续已补充本页顶部的虚拟机 Wayland 实际应用截图。
+历史功能截图保留用于对照，箭头效果以顶部最新截图为准。
