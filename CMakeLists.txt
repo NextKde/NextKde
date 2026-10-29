@@ -574,7 +574,7 @@ if(BUILD_TESTING)
         # tst_motion.qml loads apps/settings/main.qml, which imports the static
         # Kos.Demo module that plain qmltestrunner cannot load. Run the suite
         # through a QuickTest host that registers the plugin instead.
-        find_package(Qt6 6.5 QUIET COMPONENTS QuickTest)
+        find_package(Qt6 6.5 QUIET COMPONENTS QuickTest QuickControls2)
         set(kos_motion_test_runner ${KOS_INTERACTION_QMLTEST})
         if(TARGET Qt6::QuickTest)
             if(NOT TARGET kos_demo_ui)

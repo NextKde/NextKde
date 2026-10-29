@@ -180,7 +180,7 @@ for (const app of ["calendar", "todo", "weather"]) {
             `${app} uses the adaptive collapsible sidebar`);
         assert.match(source, /KosSidebarToggle\s*\{[\s\S]*targetWindow:\s*root/,
             `${app} provides a way to restore collapsed navigation`);
-        assert.match(source, /KosWindowControls\s*\{\s*targetWindow:\s*root/,
+        assert.match(source, /KosWindowControls\s*\{[\s\S]{0,200}?targetWindow:\s*root/,
             `${app} exposes its frameless window controls`);
     }
     assert.doesNotMatch(source, /withAlpha\(AppTheme\.sidebar/,
