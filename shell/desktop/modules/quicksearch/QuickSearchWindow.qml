@@ -765,6 +765,19 @@ PanelWindow {
                 rightMargin: 12
             }
 
+            // The popover floats over the result list inside the same window.
+            // On glass themes KWin only blurs what lies behind the window, so
+            // without this backing the rows read straight through the text.
+            Rectangle {
+                anchors.fill: parent
+                radius: settingsPopover.radius
+                color: ThemeService.isDark
+                    ? Qt.rgba(0.12, 0.13, 0.16, 0.94)
+                    : Qt.rgba(0.96, 0.96, 0.98, 0.94)
+                border.width: 1
+                border.color: ThemeService.isDark ? Qt.rgba(1, 1, 1, 0.10) : Qt.rgba(0, 0, 0, 0.08)
+            }
+
             LiquidGlassPanel {
                 anchors.fill: parent
                 radius: settingsPopover.radius
@@ -790,6 +803,7 @@ PanelWindow {
                     width: parent.width
                     GlassText {
                         width: parent.width - 24
+                        elide: Text.ElideRight
                         text: I18n.tr("Clipboard Preferences")
                         font { pixelSize: 13; bold: true; family: "Noto Sans CJK SC" }
                         color: ThemeService.foregroundColor
@@ -823,10 +837,13 @@ PanelWindow {
                 // Watch Images row
                 Row {
                     width: parent.width
+                    spacing: 6
                     Column {
                         width: parent.width - 46
                         spacing: 2
                         GlassText {
+                            width: parent.width
+                            elide: Text.ElideRight
                             text: I18n.tr("Monitor image content")
                             font { pixelSize: 12; weight: Font.Medium; family: "Noto Sans CJK SC" }
                             color: ThemeService.foregroundColor
@@ -834,6 +851,8 @@ PanelWindow {
                             styleColor: dialog.textOutlineColor
                         }
                         GlassText {
+                            width: parent.width
+                            wrapMode: Text.WordWrap
                             text: I18n.tr("Automatically record screenshots and copied images")
                             font.pixelSize: 10
                             color: AppearanceTokens.content.glassInk(0.55)
@@ -947,6 +966,7 @@ PanelWindow {
                         GlassText {
                             width: parent.width - 20
                             anchors.verticalCenter: parent.verticalCenter
+                            elide: Text.ElideRight
                             text: I18n.tr("⌨ Configure global shortcut (Meta+V)")
                             font { pixelSize: 11; family: "Noto Sans CJK SC" }
                             color: ThemeService.foregroundColor
