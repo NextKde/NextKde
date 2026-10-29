@@ -729,6 +729,16 @@
       <translation>全屏</translation>
     </message>
     <message>
+      <location line="+0" />
+      <source>Restore</source>
+      <translation>还原</translation>
+    </message>
+    <message>
+      <location line="+0" />
+      <source>Maximize</source>
+      <translation>最大化</translation>
+    </message>
+    <message>
       <location line="+1" />
       <source>Minimize</source>
       <translation>最小化</translation>

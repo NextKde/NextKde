@@ -571,8 +571,24 @@ if(BUILD_TESTING)
         endforeach()
         file(WRITE "${kos_motion_test_module}/qmldir"
             "module Kos.Test.LauncherMotion\nLauncherMotion 1.0 LauncherMotion.qml\nLauncherIconMotion 1.0 LauncherIconMotion.qml\n")
+        # tst_motion.qml loads apps/settings/main.qml, which imports the static
+        # Kos.Demo module that plain qmltestrunner cannot load. Run the suite
+        # through a QuickTest host that registers the plugin instead.
+        find_package(Qt6 6.5 QUIET COMPONENTS QuickTest)
+        set(kos_motion_test_runner ${KOS_INTERACTION_QMLTEST})
+        if(TARGET Qt6::QuickTest)
+            if(NOT TARGET kos_demo_ui)
+                add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/shared/demo-ui
+                    ${CMAKE_CURRENT_BINARY_DIR}/demo-ui)
+            endif()
+            qt_add_executable(kos-shared-motion-tests
+                tests/interaction-controls/QmlTestMain.cpp)
+            target_link_libraries(kos-shared-motion-tests PRIVATE Qt6::QuickTest
+                kos_demo_ui kos_demo_ui_plugin)
+            set(kos_motion_test_runner "$<TARGET_FILE:kos-shared-motion-tests>")
+        endif()
         add_test(NAME kos-ui.shared-motion
-            COMMAND ${KOS_INTERACTION_QMLTEST}
+            COMMAND ${kos_motion_test_runner}
                 -input ${CMAKE_CURRENT_SOURCE_DIR}/tests/interaction-controls/tst_motion.qml)
         set_tests_properties(kos-ui.shared-motion PROPERTIES
             ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_QUICK_BACKEND=software;QML_IMPORT_PATH=${CMAKE_BINARY_DIR}/tests/qml;QML2_IMPORT_PATH=${CMAKE_BINARY_DIR}/tests/qml"

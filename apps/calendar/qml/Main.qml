@@ -1201,7 +1201,7 @@ KosApplicationWindow {
                             root.showMinimized()
                         else if (modelData.act === "max")
                             root.visibility === Window.Maximized
-                                ? root.showNormal() : root.showMaximized()
+                                ? root.showNormal() : root.toggleFullScreen()
                         else
                             root.close()
                     }
