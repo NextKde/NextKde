@@ -21,7 +21,12 @@ Dialog {
     property string preferredSide: "right"
     property string resolvedSide: "right"
     property real arrowPosition: 30
-    readonly property real arrowHeight: 8
+    // Hosts may suppress the pointer for large forms. Auto placement also hides
+    // it if clamping would make it point away from the originating item.
+    property bool arrowEnabled: true
+    property bool arrowFits: false
+    readonly property bool arrowVisible: arrowEnabled && arrowFits
+    readonly property real arrowHeight: arrowVisible ? 8 : 0
     readonly property real arrowWidth: 18
     parent: Overlay.overlay
     popupType: Popup.Item
@@ -35,25 +40,33 @@ Dialog {
     topPadding: padding + (resolvedSide === "bottom" ? arrowHeight : 0)
     bottomPadding: padding + (resolvedSide === "top" ? arrowHeight : 0)
     function updatePosition() {
-        if (!anchorItem || !parent) return
+        if (!anchorItem || !parent) { arrowFits = false; return }
         const rect = anchorRect.width >= 0 ? anchorRect : Qt.rect(0, 0, anchorItem.width, anchorItem.height)
         const a = anchorItem.mapToItem(parent, rect.x, rect.y)
         const cx = a.x + rect.width/2, cy = a.y + rect.height/2
         const gap = 4, margin = 8
-        if (preferredSide === "bottom")
-            resolvedSide = a.y + rect.height + gap + height <= parent.height-margin ? "bottom" : "top"
-        else if (a.x + rect.width + gap + width <= parent.width-margin)
-            resolvedSide = "right"
-        else if (a.x-gap-width >= margin)
-            resolvedSide = "left"
-        else
-            resolvedSide = cy < parent.height/2 ? "bottom" : "top"
+        const fits = {
+            right: a.x + rect.width + gap + width <= parent.width-margin,
+            left: a.x-gap-width >= margin,
+            bottom: a.y+rect.height+gap+height <= parent.height-margin,
+            top: a.y-gap-height >= margin
+        }
+        const order = preferredSide === "bottom" ? ["bottom", "top", "right", "left"]
+            : preferredSide === "top" ? ["top", "bottom", "right", "left"]
+            : preferredSide === "left" ? ["left", "right", "bottom", "top"]
+            : ["right", "left", "bottom", "top"]
+        resolvedSide = order.find(side => fits[side]) || order[0]
         const side = resolvedSide
         x = side === "right" ? a.x+rect.width+gap : side === "left" ? a.x-gap-width : cx-width/2
         y = side === "bottom" ? a.y+rect.height+gap : side === "top" ? a.y-gap-height : cy-height/2
         x = Math.max(margin, Math.min(parent.width-width-margin, x))
         y = Math.max(margin, Math.min(parent.height-height-margin, y))
         arrowPosition = side === "right" ? height-(cy-y) : side === "left" ? cy-y : cx-x
+        const edgeLength = side === "right" || side === "left" ? height : width
+        const inset = cornerRadius + arrowWidth/2
+        arrowFits = !!fits[side] && arrowPosition >= inset && arrowPosition <= edgeLength-inset
+            && cx >= 0 && cx <= parent.width && cy >= 0 && cy <= parent.height
+
     }
     onAnchorItemChanged: if (visible) { if (!anchorItem) close(); else updatePosition() }
     onAboutToShow: updatePosition()

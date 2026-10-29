@@ -13,7 +13,11 @@ Menu {
     property color borderColor: "transparent"
     property real materialOpacity: LiquidStyle.panelMaterialOpacity
     property real cornerRadius: 12
+    property bool arrowEnabled: true
+    property bool arrowFits: false
+    readonly property bool arrowVisible: arrowEnabled && arrowFits
     property real arrowHeight: 8
+    readonly property real effectiveArrowHeight: arrowVisible ? arrowHeight : 0
     property real arrowWidth: 18
     property real anchorGap: 4
     property bool arrowOnBottom: false
@@ -28,8 +32,8 @@ Menu {
         + leftPadding + rightPadding)
     margins: 8
     padding: 6
-    topPadding: padding + (arrowOnBottom ? 0 : arrowHeight)
-    bottomPadding: padding + (arrowOnBottom ? arrowHeight : 0)
+    topPadding: padding + (arrowOnBottom ? 0 : effectiveArrowHeight)
+    bottomPadding: padding + (arrowOnBottom ? effectiveArrowHeight : 0)
     function updatePosition() {
         if (!anchorItem || !parent) return
         const point = anchorItem.mapToItem(parent, anchorItem.width/2, 0)
@@ -39,6 +43,11 @@ Menu {
         y = arrowOnBottom ? point.y-anchorGap-height : below
         y = Math.max(margins, Math.min(parent.height-height-margins, y))
         arrowX = point.x-x
+        const inset = cornerRadius + arrowWidth/2
+        const clearAnchor = arrowOnBottom ? y+height <= point.y : y >= point.y+anchorItem.height
+        arrowFits = clearAnchor && arrowX >= inset && arrowX <= width-inset
+            && point.x >= 0 && point.x <= parent.width && point.y >= 0
+            && point.y+anchorItem.height <= parent.height
     }
     function openAtAnchor() {
         if (!anchorItem || !parent) return
@@ -61,7 +70,7 @@ Menu {
         borderColor: root.borderColor
         materialOpacity: root.materialOpacity
         cornerRadius: root.cornerRadius
-        arrowHeight: root.arrowHeight
+        arrowHeight: root.effectiveArrowHeight
         arrowWidth: root.arrowWidth
         arrowX: root.arrowX
         arrowOnBottom: root.arrowOnBottom
