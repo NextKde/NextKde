@@ -12,7 +12,7 @@ Run as the logged-in desktop user, not `sudo ./tools/kosctl`; commands are from 
 
 Source selection needs Git and Python 3.9+. Core builds require CMake, Ninja, C++20, Go, Qt/KF6,
 Wayland and KWin development dependencies. `kosctl doctor` reports missing prerequisites;
-`install` can install build packages on Arch/Debian-family systems. Fedora packages are manual.
+`install` can install build packages on Arch/Debian-family and Fedora systems.
 Install Quickshell 0.3.x from an appropriate distribution source or its
 [upstream instructions](https://quickshell.org/docs/); package availability varies.
 
@@ -64,15 +64,16 @@ Quickshell availability before installing.
 
 ### Fedora 44 (community-contributed)
 
-There is no automatic dnf dependency branch in kosctl; install prerequisites manually.
-This community recipe is not official Fedora runtime acceptance:
+`kosctl doctor` and `kosctl install` check and install these packages through dnf; the list
+below is the same set for a manual install. This community recipe is not official Fedora runtime
+acceptance:
 
 ```sh
 sudo dnf install \
-  git cmake ninja-build gcc-c++ golang curl patchelf pkgconf-pkg-config gettext \
-  extra-cmake-modules \
+  git python3 cmake ninja-build gcc-c++ golang curl patchelf pkgconf-pkg-config gettext \
+  quickshell extra-cmake-modules \
   wayland-devel wayland-protocols-devel libxkbcommon-devel \
-  qt6-qtbase-devel qt6-qtdeclarative-devel qt6-qttools-devel qt6-qtquick3d-devel \
+  qt6-qtbase-devel qt6-qtdeclarative-devel qt6-qttools-devel qt6-qttranslations qt6-qtquick3d-devel \
   qt6-qtsvg-devel qt6-qtwayland-devel qt6-qtimageformats qt6-qt5compat-devel \
   qt6-qtbase-private-devel \
   kf6-kwindowsystem-devel kf6-kiconthemes-devel kf6-kglobalaccel-devel \
@@ -83,8 +84,10 @@ sudo dnf install \
   vulkan-headers vulkan-loader-devel zlib-devel libxcb-devel
 ```
 
-Qt private headers are separate packages; add `qt6-qtdeclarative-private-devel` if QuickPrivate
-is missing. Fedora uses a single `libxcb-devel`, unlike Debian's split extension packages.
+Qt private headers, including QuickPrivate, ship in `qt6-qtbase-private-devel`. Fedora uses a
+single `libxcb-devel`, unlike Debian's split extension packages. Clipboard history also needs
+`wl-clipboard` and `cliphist` (`sudo dnf install wl-clipboard cliphist`); `doctor` warns when they
+are missing.
 
 ### openSUSE Tumbleweed (community-contributed)
 
@@ -141,7 +144,7 @@ Spectacle supply per-feature integration. Package names differ by distro.
 `KOS_BUILD_KWIN_PLUGINS=OFF` omits native effects/decoration for limited development builds.
 
 `KOS_BUILD_SPATIAL=AUTO` is default. Direct CMake builds when OpenCV/ONNX are available; kosctl
-on Arch/Debian installs OpenCV and prepares a pinned ONNX SDK when possible. AUTO can skip on
+on Arch/Debian/Fedora installs OpenCV and prepares a pinned ONNX SDK when possible. AUTO can skip on
 SDK preparation failure; ON requires success. OFF skips discovery/preparation:
 
 ```sh

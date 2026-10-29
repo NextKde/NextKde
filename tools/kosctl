@@ -138,6 +138,39 @@ debian_optional_runtime_packages=(
     libqt6sql6-sqlite
 )
 
+# Fedora names for the same default build, checked against Fedora 44. Qt keeps
+# the QPA/Quick private headers in qt6-qtbase-private-devel; the old separate
+# qt6-qtdeclarative-private-devel no longer exists. zlib-devel is a virtual
+# name provided by zlib-ng-compat-devel, which is why checks go through
+# `rpm -q --whatprovides` instead of plain `rpm -q`.
+fedora_core_build_packages=(
+    git python3 cmake ninja-build gcc-c++ golang curl patchelf pkgconf-pkg-config
+    quickshell
+    extra-cmake-modules wayland-devel wayland-protocols-devel libxkbcommon-devel
+    qt6-qtbase-devel qt6-qtbase-private-devel qt6-qtdeclarative-devel qt6-qttools-devel
+    qt6-qttranslations qt6-qtquick3d-devel qt6-qtsvg-devel qt6-qtwayland-devel
+    qt6-qtimageformats qt6-qt5compat-devel
+    kf6-kwindowsystem-devel kf6-kiconthemes-devel kf6-kglobalaccel-devel
+    kf6-kio-devel kf6-kcalendarcore-devel
+)
+fedora_spatial_build_packages=(
+    opencv-devel
+)
+fedora_kwin_build_packages=(
+    kwin-devel libdrm-devel mesa-libgbm-devel libepoxy-devel
+    kf6-kconfig-devel kf6-ki18n-devel kf6-kguiaddons-devel kf6-kcmutils-devel
+    kf6-kcoreaddons-devel kdecoration-devel libplasma-devel
+    gettext vulkan-headers vulkan-loader-devel zlib-devel libxcb-devel
+)
+fedora_optional_runtime_packages=(
+    NetworkManager wireplumber bluez brightnessctl
+    wl-clipboard cliphist glib2 xdg-utils spectacle
+)
+
+fedora_package_installed() {
+    rpm -q --whatprovides "$1" >/dev/null 2>&1
+}
+
 # Prints the first name apt actually knows about. Pass the array element
 # unquoted so a multi-name element expands into its alternatives.
 debian_resolve_package() {
@@ -411,8 +444,30 @@ doctor() {
                 debian_quickshell_hint
             fi
         fi
+    elif command -v dnf >/dev/null 2>&1; then
+        local package
+        local -a required_packages=("${fedora_core_build_packages[@]}")
+        if kwin_plugins_enabled; then
+            required_packages+=("${fedora_kwin_build_packages[@]}")
+        fi
+        if spatial_requested; then
+            required_packages+=("${fedora_spatial_build_packages[@]}")
+        fi
+        for package in "${required_packages[@]}"; do
+            if fedora_package_installed "$package"; then
+                printf 'ok   pkg:%-8s installed\n' "$package"
+            else
+                printf 'miss pkg:%-8s required to build the default configuration\n' "$package"
+                failed=1
+            fi
+        done
+        for package in "${fedora_optional_runtime_packages[@]}"; do
+            if ! fedora_package_installed "$package"; then
+                printf 'warn pkg:%-8s optional runtime integration unavailable\n' "$package"
+            fi
+        done
     else
-        printf 'info %-12s library/package checks are currently available on Arch, Debian and NixOS only\n' packages
+        printf 'info %-12s library/package checks are currently available on Arch, Debian, Fedora and NixOS only\n' packages
     fi
     if [[ -n "${WAYLAND_DISPLAY:-}" || -n "${DISPLAY:-}" ]]; then
         printf 'ok   %-12s graphical session detected\n' session
@@ -685,6 +740,26 @@ ensure_build_dependencies() {
                 printf '  %s\n' "${missing_packages[*]}"
                 sudo env DEBIAN_FRONTEND=noninteractive apt-get install -y "${missing_packages[@]}"
             fi
+        fi
+    elif command -v dnf >/dev/null 2>&1; then
+        local package
+        local -a missing_packages=()
+        local -a required_packages=("${fedora_core_build_packages[@]}")
+        if kwin_plugins_enabled; then
+            required_packages+=("${fedora_kwin_build_packages[@]}")
+        fi
+        if spatial_requested; then
+            required_packages+=("${fedora_spatial_build_packages[@]}")
+        fi
+        for package in "${required_packages[@]}"; do
+            if ! fedora_package_installed "$package"; then
+                missing_packages+=("$package")
+            fi
+        done
+        if (( ${#missing_packages[@]} > 0 )); then
+            printf 'KOS build dependencies require administrator permission:\n'
+            printf '  %s\n' "${missing_packages[*]}"
+            sudo dnf install -y "${missing_packages[@]}"
         fi
     fi
 }

@@ -9,7 +9,7 @@
 ## 1. 安装依赖
 
 选源码需要 Git、Python 3.9+，核心构建需要 CMake、Ninja、C++20、Go、Qt/KF6、Wayland、KWin 开发依赖。
-`doctor` 报告缺项，Arch/Debian 系 `install` 可装构建包；Fedora 手工安装。
+`doctor` 报告缺项，Arch/Debian 系与 Fedora 上 `install` 可装构建包。
 Quickshell 0.3.x 从合适发行源或[上游说明](https://quickshell.org/docs/)安装，包可用性随发行版变化。
 
 ### Arch Linux
@@ -57,14 +57,14 @@ sudo apt install \
 
 ### Fedora 44（社区提供）
 
-kosctl 没有自动 dnf 分支，手工装依赖。此社区配方不代表官方 Fedora 运行验收：
+`kosctl doctor`/`install` 通过 dnf 检查并安装这些包；下列清单同样适用于手工安装。此社区配方不代表官方 Fedora 运行验收：
 
 ```sh
 sudo dnf install \
-  git cmake ninja-build gcc-c++ golang curl patchelf pkgconf-pkg-config gettext \
-  extra-cmake-modules \
+  git python3 cmake ninja-build gcc-c++ golang curl patchelf pkgconf-pkg-config gettext \
+  quickshell extra-cmake-modules \
   wayland-devel wayland-protocols-devel libxkbcommon-devel \
-  qt6-qtbase-devel qt6-qtdeclarative-devel qt6-qttools-devel qt6-qtquick3d-devel \
+  qt6-qtbase-devel qt6-qtdeclarative-devel qt6-qttools-devel qt6-qttranslations qt6-qtquick3d-devel \
   qt6-qtsvg-devel qt6-qtwayland-devel qt6-qtimageformats qt6-qt5compat-devel \
   qt6-qtbase-private-devel \
   kf6-kwindowsystem-devel kf6-kiconthemes-devel kf6-kglobalaccel-devel \
@@ -75,7 +75,7 @@ sudo dnf install \
   vulkan-headers vulkan-loader-devel zlib-devel libxcb-devel
 ```
 
-Qt 私有头独立打包，缺 QuickPrivate 时补 `qt6-qtdeclarative-private-devel`；Fedora 的 `libxcb-devel` 不同于 Debian 拆分包。
+Qt 私有头（含 QuickPrivate）在 `qt6-qtbase-private-devel` 中；Fedora 的 `libxcb-devel` 不同于 Debian 拆分包。剪贴板历史另需 `wl-clipboard` 与 `cliphist`（`sudo dnf install wl-clipboard cliphist`），缺失时 `doctor` 会警告。
 
 ### openSUSE Tumbleweed（社区提供）
 
@@ -129,7 +129,7 @@ cd NextKde
 NetworkManager、WirePlumber/PipeWire、BlueZ、brightnessctl、wl-clipboard/cliphist、xdg-utils、Spectacle 提供各功能接入，包名依系统而异。
 `KOS_BUILD_KWIN_PLUGINS=OFF` 供有限开发构建跳过特效/装饰器。
 
-空间默认 `AUTO`：直接 CMake 在已有 OpenCV/ONNX 时构建；Arch/Debian 的 kosctl 会装 OpenCV 并尽可能准备固定 ONNX SDK。
+空间默认 `AUTO`：直接 CMake 在已有 OpenCV/ONNX 时构建；Arch/Debian/Fedora 的 kosctl 会装 OpenCV 并尽可能准备固定 ONNX SDK。
 AUTO 准备失败可跳过；ON 要求成功；OFF 跳过发现及准备：
 
 ```sh
