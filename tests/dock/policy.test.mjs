@@ -510,3 +510,14 @@ test("wallpaper color source", async () => {
     assert.doesNotMatch(wallpaper, /wallpaper-palette-read|_refreshProcess/);
     console.log("wallpaper contracts: passed");
 });
+
+test("launcher presentation", async () => {
+    // The launcher re-solves its whole icon grid from this width. Publishing
+    // the live hover spread made every tile reflow while the pointer slid
+    // along the Dock, so only the resting length may cross the boundary.
+    const container = readFileSync(
+        new URL("../../shell/desktop/modules/dock/DockContainer.qml", import.meta.url), "utf8");
+    assert.match(container, /setDockPresentation\(\s*restingComputedWidth,/,
+        "the launcher must follow the resting Dock length, not the hover spread");
+    console.log("launcher presentation contracts: passed");
+});
