@@ -3,7 +3,8 @@
 [简体中文](README.zh-CN.md)
 
 English is the default. Chinese companions are linked from each bilingual guide.
-The root [README](../README.md) introduces the desktop; guides below own detailed instructions.
+The root README introduces the desktop in [English](../README.md), [简体中文](../README.zh-CN.md),
+[日本語](../README.ja.md), and [Español](../README.es.md); guides below own detailed instructions.
 
 ## Users and releases
 

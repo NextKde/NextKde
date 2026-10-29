@@ -13,9 +13,14 @@
 <p align="center">
   <a href="#はじめに">はじめに</a> ·
   <a href="#デスクトップ">見どころ</a> ·
-  <a href="docs/Development.md">開発</a> ·
+  <a href="docs/Development.md">開発</a>
+</p>
+
+<p align="center">
   <a href="README.md">English</a> ·
-  <a href="README.zh-CN.md">简体中文</a>
+  <a href="README.zh-CN.md">简体中文</a> ·
+  <strong>日本語</strong> ·
+  <a href="README.es.md">Español</a>
 </p>
 
 <p align="center"><code>Plasma 6 / Wayland</code> &nbsp; <code>Quickshell 0.3.x</code> &nbsp; <code>Qt 6</code></p>
