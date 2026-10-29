@@ -13,9 +13,14 @@ Vidrio líquido, un dock flotante y un espacio de trabajo a tu medida.</p>
 <p align="center">
   <a href="#primeros-pasos">Primeros pasos</a> ·
   <a href="#el-escritorio">Explorar</a> ·
-  <a href="docs/Development.md">Desarrollo</a> ·
+  <a href="docs/Development.md">Desarrollo</a>
+</p>
+
+<p align="center">
   <a href="README.md">English</a> ·
-  <a href="README.zh-CN.md">简体中文</a>
+  <a href="README.zh-CN.md">简体中文</a> ·
+  <a href="README.ja.md">日本語</a> ·
+  <strong>Español</strong>
 </p>
 
 <p align="center"><code>Plasma 6 / Wayland</code> &nbsp; <code>Quickshell 0.3.x</code> &nbsp; <code>Qt 6</code></p>
