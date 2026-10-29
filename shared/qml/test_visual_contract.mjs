@@ -418,7 +418,7 @@ assert.doesNotMatch(deskCenter, /#101010|#17151c|#170f14/,
 for (const [widget, desktopId] of [
     ["Weather", "kos-weather"],
     ["Calendar", "kos-calendar"],
-    ["Todo", "kos-todo"],
+    ["Reminders", "kos-calendar"],
     ["Music", "listenfree"]
 ]) {
     assert.match(deskCenter, new RegExp(`launchById\\("${desktopId}"`),

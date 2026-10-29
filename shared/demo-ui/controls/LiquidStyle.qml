@@ -2,6 +2,8 @@ pragma Singleton
 import QtQuick
 
 QtObject {
+    // Glass-layer opacity over a blurred underlay; tint coverage is independent.
+    readonly property real panelMaterialOpacity: 0.95
     // Material intensity only: never changes layout, typography or fill alpha.
     property string intensityLevel: "medium"
     // Independent from liquid intensity: 1=dark/tight, 3=light/broad.

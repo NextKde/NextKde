@@ -83,6 +83,40 @@ class RegistrationTests(unittest.TestCase):
             subprocess.run(command, check=True, stdout=subprocess.PIPE)
             for path, content in chosen.items(): self.assertEqual(path.read_bytes(), content)
 
+    def test_unified_calendar_retires_only_old_todo_metadata(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            prefix = root / 'prefix'
+            (prefix / 'bin').mkdir(parents=True)
+            (prefix / 'share/applications').mkdir(parents=True)
+            for name in ('calendar', 'todo', 'weather', 'calculator'):
+                executable = prefix / 'bin' / ('kos-' + name)
+                executable.write_text('#!/bin/sh\nexit 0\n')
+                executable.chmod(0o755)
+                entry = '[Desktop Entry]\nName=App\n'
+                if name == 'todo':
+                    entry += 'NoDisplay=true\nX-NextKDE-UnifiedCalendar=true\n'
+                (prefix / 'share/applications' / ('kos-' + name + '.desktop')).write_text(entry)
+            metadata = prefix / 'share/metainfo/org.nextkde.Kos.Todo.metainfo.xml'
+            metadata.parent.mkdir(parents=True)
+            metadata.write_text('old metadata')
+            data = root / 'data/calendar.ics'
+            data.parent.mkdir()
+            data.write_text('user task data')
+            command = [sys.executable, str(ROOT / 'tools/register-default-apps.py'),
+                       '--prefix', str(prefix), '--config-home', str(root / 'config'),
+                       '--state-home', str(root / 'state'), '--no-cache']
+            subprocess.run(command + ['--dry-run'], check=True, stdout=subprocess.PIPE)
+            self.assertTrue(metadata.exists())
+            subprocess.run(command, check=True, stdout=subprocess.PIPE)
+            self.assertFalse(metadata.exists())
+            self.assertTrue((prefix / 'bin/kos-todo').exists())
+            self.assertTrue((prefix / 'share/applications/kos-todo.desktop').exists())
+            self.assertEqual(data.read_text(), 'user task data')
+            manifests = list((root / 'state/kos/application-registration').glob('*/manifest.json'))
+            self.assertTrue(any(any(item['path'] == str(metadata) and Path(item['backup']).exists()
+                                   for item in json.loads(manifest.read_text())['files']) for manifest in manifests))
+
     def test_standard_bundle_registers_without_any_music_player(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory); prefix = root / 'prefix'

@@ -18,7 +18,11 @@ class PimClient : public QObject {
     Q_PROPERTY(bool writable READ writable NOTIFY snapshotChanged)
     Q_PROPERTY(QString errorMessage READ errorMessage NOTIFY errorMessageChanged)
     Q_PROPERTY(qulonglong revision READ revision NOTIFY snapshotChanged)
+    Q_PROPERTY(QVariantList calendars READ calendars NOTIFY snapshotChanged)
+    Q_PROPERTY(QVariantList groups READ groups NOTIFY snapshotChanged)
     Q_PROPERTY(QVariantList lists READ lists NOTIFY snapshotChanged)
+    Q_PROPERTY(QVariantList holidayCalendars READ holidayCalendars NOTIFY snapshotChanged)
+    Q_PROPERTY(QVariantList holidaySources READ holidaySources NOTIFY snapshotChanged)
     Q_PROPERTY(QVariantList events READ events NOTIFY snapshotChanged)
     Q_PROPERTY(QVariantList occurrences READ occurrences NOTIFY occurrencesChanged)
     Q_PROPERTY(QVariantList todoOccurrences READ todoOccurrences NOTIFY occurrencesChanged)
@@ -33,7 +37,11 @@ public:
     bool writable() const;
     QString errorMessage() const;
     qulonglong revision() const;
+    QVariantList calendars() const;
+    QVariantList groups() const;
     QVariantList lists() const;
+    QVariantList holidayCalendars() const;
+    QVariantList holidaySources() const;
     QVariantList events() const;
     QVariantList occurrences() const;
     QVariantList todoOccurrences() const;
@@ -50,11 +58,24 @@ public:
     Q_INVOKABLE void updateTodo(const QString &uid, const QVariantMap &todo);
     Q_INVOKABLE void removeTodo(const QString &uid);
 
+    Q_INVOKABLE void createCalendar(const QVariantMap &calendar);
+    Q_INVOKABLE void updateCalendar(const QString &id, const QVariantMap &calendar);
+    Q_INVOKABLE void removeCalendar(const QString &id);
+
+    Q_INVOKABLE void saveGroup(const QString &id, const QVariantMap &values);
+    Q_INVOKABLE void removeGroup(const QString &id);
+    Q_INVOKABLE void saveSection(const QString &listId, const QString &id, const QVariantMap &values);
+    Q_INVOKABLE void removeSection(const QString &listId, const QString &id);
     Q_INVOKABLE void createList(const QVariantMap &list);
     Q_INVOKABLE void updateList(const QString &id, const QVariantMap &list);
     Q_INVOKABLE void removeList(const QString &id);
 
     Q_INVOKABLE void importIcalendar(const QString &path, bool replaceExisting = false);
+    Q_INVOKABLE void importHolidays(const QString &path);
+    Q_INVOKABLE void addHolidayCalendar(const QVariantMap &calendar);
+    Q_INVOKABLE void refreshHolidayCalendar(const QString &id);
+    Q_INVOKABLE void setHolidayCalendarEnabled(const QString &id, bool enabled);
+    Q_INVOKABLE void removeHolidayCalendar(const QString &id);
     Q_INVOKABLE void exportIcalendar(const QString &path);
 
 signals:
@@ -99,7 +120,11 @@ private:
     quint64 m_serviceGeneration = 0;
     quint64 m_snapshotSerial = 0;
     quint64 m_rangeSerial = 0;
+    QVariantList m_groups;
     QVariantList m_lists;
+    QVariantList m_calendars;
+    QVariantList m_holidayCalendars;
+    QVariantList m_holidaySources;
     QVariantList m_events;
     QVariantList m_occurrences;
     QVariantList m_todoOccurrences;

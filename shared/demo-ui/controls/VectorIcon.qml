@@ -6,9 +6,13 @@ Item {
     property string name: "check"
     property color color: "white"
     property real size: 16
+    property real strokeWidth: 2
     implicitWidth: size
     implicitHeight: size
     readonly property var paths: ({
+        calendar: "M4 5h16v16H4zM4 9h16M8 3v4M16 3v4",
+        flag: "M5 21V4c4-3 9 3 14 0v10c-5 3-10-3-14 0",
+        reminder: "M9 5h12M9 12h12M9 19h12M3 4l1 1 2-2M3 11l1 1 2-2M3 18l1 1 2-2",
         check: "M5 12l5 5L20 7",
         close: "M6 6l12 12M18 6L6 18",
         chevron: "M6 9l6 6 6-6",
@@ -21,6 +25,9 @@ Item {
         grid: "M3 3h6v6H3zM15 3h6v6h-6zM3 15h6v6H3zM15 15h6v6h-6z",
         keyboard: "M3 6h18v12H3zM7 10h.01M12 10h.01M17 10h.01M7 14h10",
         settings: "M12 8a4 4 0 1 0 0 8 4 4 0 0 0 0-8M12 3v2M12 19v2M3 12h2M19 12h2M5.6 5.6L7 7M17 17l1.4 1.4M5.6 18.4L7 17M17 7l1.4-1.4",
+        editRounded: "M12.5 5H6.8A2.3 2.3 0 0 0 4.5 7.3v10A2.3 2.3 0 0 0 6.8 19.6h10a2.3 2.3 0 0 0 2.3-2.3v-5.7M10 14l.7-3.2 8-8a1.65 1.65 0 0 1 2.3 2.3l-8 8L10 14zM17.3 4.2l2.4 2.4",
+        trashRounded: "M5 6.8h14M9 6.8V4.9a1.4 1.4 0 0 1 1.4-1.4h3.2A1.4 1.4 0 0 1 15 4.9v1.9M6.5 6.8l.6 12a1.7 1.7 0 0 0 1.7 1.7h6.4a1.7 1.7 0 0 0 1.7-1.7l.6-12M10.2 10v7M13.8 10v7",
+        refreshRounded: "M18.8 7.5A7.5 7.5 0 1 0 19.4 15M19 3.8v4.5h-4.5",
         trash: "M3 6h18M8 6V3h8v3M6 6l1 15h10l1-15M10 10v7M14 10v7",
         arrows: "M3 12h18M7 8l-4 4 4 4M17 8l4 4-4 4",
         circle: "M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18M12 8a4 4 0 1 0 0 8 4 4 0 0 0 0-8",
@@ -68,7 +75,7 @@ Item {
         source: "data:image/svg+xml;utf8," + encodeURIComponent(
             '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path fill="' + (root.filled ? ink : 'none')
             + '" fill-opacity="' + root.color.a + '" stroke="' + (root.filled ? 'none' : ink) + '" stroke-opacity="' + root.color.a
-            + '" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="'
+            + '" stroke-width="' + root.strokeWidth + '" stroke-linecap="round" stroke-linejoin="round" d="'
             + (root.paths[root.name] || root.paths.check) + '"/></svg>')
     }
 }

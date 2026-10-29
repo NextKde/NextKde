@@ -2,8 +2,7 @@
 
 **[English](README.md) | [中文](README.zh-CN.md)**
 
-Every direct child is a standalone Qt Quick application and a separate
-process. Applications may import `shared/`, communicate with `services/`
+Each application has its own Qt Quick window and process. `todo/` is now only a compatibility launcher for Calendar reminders. Applications may import `shared/`, communicate with `services/`
 through documented contracts, and must never import `shell/desktop/`.
 
 The application workspace is configured from the repository root. Build
@@ -14,11 +13,11 @@ manageable:
 | --- | --- | --- |
 | Calendar | `kos-calendar` | `calendar-dev` |
 | Calculator | `kos-calculator` | `apps-dev` |
-| Todo | `kos-todo` | `todo-dev` |
+| Reminders compatibility launcher (also builds Calendar) | `kos-todo` | `todo-dev` |
 | Weather | `kos-weather` | `weather-dev` |
 | KOS ListenFree (opt-in music player) | `listenfree` | `listenfree-dev` |
 
-`apps-dev` builds Calendar, Calculator, Todo and Weather. Each application owns its executable, QML
+`apps-dev` builds Calendar (including Reminders), Calculator, Weather and the legacy Todo launcher. Each application owns its executable, QML
 module, desktop entry, tests, and bilingual documentation. `apps/common/` is a
 small application runtime rather than a feature layer; applications do not
 import one another. The Weather preset additionally builds and installs its Go

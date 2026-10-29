@@ -1,6 +1,8 @@
 [Desktop Entry]
 Version=1.0
 Type=Application
+NoDisplay=true
+X-NextKDE-UnifiedCalendar=true
 Name=KOS Todo
 Name[zh]=KOS 待办事项
 Name[zh_CN]=KOS 待办事项
@@ -12,12 +14,12 @@ Comment[zh]=管理任务、清单、截止时间与日历联动
 Comment[zh_CN]=管理任务、清单、截止时间与日历联动
 TryExec=@KOS_APP_EXECUTABLE@
 Exec=@KOS_APP_EXECUTABLE@
-Icon=kos-todo
+Icon=kos-calendar
 Terminal=false
 Categories=Office;ProjectManagement;Qt;
 Keywords=todo;task;reminder;list;
 StartupNotify=true
-StartupWMClass=kos-todo
+StartupWMClass=kos-calendar
 X-GNOME-SingleWindow=true
 Actions=Today;Planned;Settings;
 

@@ -97,6 +97,13 @@ qulonglong PimClient::revision() const
     return m_revision;
 }
 
+QVariantList PimClient::calendars() const
+{
+    return m_calendars;
+}
+
+QVariantList PimClient::groups() const { return m_groups; }
+
 QVariantList PimClient::lists() const
 {
     return m_lists;
@@ -120,6 +127,33 @@ QVariantList PimClient::todoOccurrences() const
 QVariantList PimClient::todos() const
 {
     return m_todos;
+}
+
+QVariantList PimClient::holidayCalendars() const { return m_holidayCalendars; }
+QVariantList PimClient::holidaySources() const { return m_holidaySources; }
+
+void PimClient::addHolidayCalendar(const QVariantMap &calendar)
+{
+    invoke(QStringLiteral("addHolidayCalendar"), {payload(calendar)}, ReplyKind::Mutation,
+           QStringLiteral("addHolidayCalendar"));
+}
+
+void PimClient::refreshHolidayCalendar(const QString &id)
+{
+    invoke(QStringLiteral("refreshHolidayCalendar"), {id}, ReplyKind::Mutation,
+           QStringLiteral("refreshHolidayCalendar"), id);
+}
+
+void PimClient::setHolidayCalendarEnabled(const QString &id, bool enabled)
+{
+    invoke(QStringLiteral("setHolidayCalendarEnabled"), {id, enabled}, ReplyKind::Mutation,
+           QStringLiteral("setHolidayCalendarEnabled"), id);
+}
+
+void PimClient::removeHolidayCalendar(const QString &id)
+{
+    invoke(QStringLiteral("removeHolidayCalendar"), {id}, ReplyKind::Mutation,
+           QStringLiteral("removeHolidayCalendar"), id);
 }
 
 void PimClient::refresh()
@@ -172,6 +206,44 @@ void PimClient::removeTodo(const QString &uid)
            QStringLiteral("removeTodo"), uid);
 }
 
+void PimClient::createCalendar(const QVariantMap &list)
+{
+    invoke(QStringLiteral("createCalendar"), {payload(list)}, ReplyKind::Mutation,
+           QStringLiteral("createCalendar"));
+}
+
+void PimClient::updateCalendar(const QString &id, const QVariantMap &list)
+{
+    invoke(QStringLiteral("updateCalendar"), {id, payload(list)}, ReplyKind::Mutation,
+           QStringLiteral("updateCalendar"), id);
+}
+
+void PimClient::removeCalendar(const QString &id)
+{
+    invoke(QStringLiteral("removeCalendar"), {id}, ReplyKind::Mutation,
+           QStringLiteral("removeCalendar"), id);
+}
+
+void PimClient::saveGroup(const QString &id, const QVariantMap &values)
+{
+    invoke(QStringLiteral("saveGroup"), {id, payload(values)}, ReplyKind::Mutation, QStringLiteral("saveGroup"), id);
+}
+
+void PimClient::removeGroup(const QString &id)
+{
+    invoke(QStringLiteral("removeGroup"), {id}, ReplyKind::Mutation, QStringLiteral("removeGroup"), id);
+}
+
+void PimClient::saveSection(const QString &listId, const QString &id, const QVariantMap &values)
+{
+    invoke(QStringLiteral("saveSection"), {listId, id, payload(values)}, ReplyKind::Mutation, QStringLiteral("saveSection"), id);
+}
+
+void PimClient::removeSection(const QString &listId, const QString &id)
+{
+    invoke(QStringLiteral("removeSection"), {listId, id}, ReplyKind::Mutation, QStringLiteral("removeSection"), id);
+}
+
 void PimClient::createList(const QVariantMap &list)
 {
     invoke(QStringLiteral("createList"), {payload(list)}, ReplyKind::Mutation,
@@ -200,6 +272,12 @@ void PimClient::exportIcalendar(const QString &path)
 {
     invoke(QStringLiteral("exportIcalendar"), {localPath(path)}, ReplyKind::Mutation,
            QStringLiteral("exportIcalendar"));
+}
+
+void PimClient::importHolidays(const QString &path)
+{
+    invoke(QStringLiteral("importHolidays"), {localPath(path)}, ReplyKind::Mutation,
+           QStringLiteral("importHolidays"));
 }
 
 void PimClient::onServiceChanged(const QString &, const QString &, const QString &newOwner)
@@ -287,7 +365,11 @@ void PimClient::handleReply(QDBusPendingCallWatcher *watcher, ReplyKind kind,
         m_revision = static_cast<qulonglong>(
             object.value(QStringLiteral("revision")).toDouble());
         m_writable = object.value(QStringLiteral("writable")).toBool();
+        m_calendars = object.value(QStringLiteral("calendars")).toArray().toVariantList();
+        m_groups = object.value("groups").toArray().toVariantList();
         m_lists = object.value(QStringLiteral("lists")).toArray().toVariantList();
+        m_holidayCalendars = object.value(QStringLiteral("holidayCalendars")).toArray().toVariantList();
+        m_holidaySources = object.value(QStringLiteral("holidaySources")).toArray().toVariantList();
         m_events = object.value(QStringLiteral("events")).toArray().toVariantList();
         m_todos = object.value(QStringLiteral("todos")).toArray().toVariantList();
         m_ready = true;

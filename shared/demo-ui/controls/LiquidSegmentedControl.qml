@@ -28,6 +28,8 @@ Item {
     // reflection and sampling are hidden rather than blended in that form.
     // Follows the
     // application-wide form by default.
+    property string liquidIntensity: LiquidStyle.intensityLevel
+    readonly property var _intensity: LiquidStyle.intensityProfile(liquidIntensity)
     property bool materialForm: ControlForm.materialForm
     HoverHandler { id: materialHover }
     property int _pressedIndex: -1
@@ -144,13 +146,13 @@ Item {
             radius: height / 2
             backdrop: root.backdrop
             convexLens: true
-            edgeShadeStrength: .08
-            blurStrength: 0
+            edgeShadeStrength: root.liquidIntensity === "medium" ? .08 : root._intensity.edgeShade
+            blurStrength: root._intensity.blur
             readability: 0
             edgeWidth: Math.min(10, height * .28)
-            refractionStrength: materialHover.hovered ? 4.5 : 3
-            magnification: materialHover.hovered ? 1.045 : 1.025
-            reflectionStrength: materialHover.hovered ? .72 : .50
+            refractionStrength: materialHover.hovered ? root._intensity.hoverRefraction : root._intensity.refraction
+            magnification: materialHover.hovered ? root._intensity.hoverMagnification : root._intensity.magnification
+            reflectionStrength: materialHover.hovered ? root._intensity.hoverReflection : root._intensity.reflection
             tintColor: root.backgroundColor
             tintStrength: .65
             Behavior on refractionStrength { NumberAnimation { duration: Foundation.AppTheme.reduceMotion ? 0 : Foundation.AppTheme.motionFast } }
@@ -194,13 +196,13 @@ Item {
             radius: lens.radius
             backdrop: root.backdrop
             convexLens: true
-            edgeShadeStrength: .08
-            blurStrength: 0
+            edgeShadeStrength: root.liquidIntensity === "medium" ? .08 : root._intensity.edgeShade
+            blurStrength: root._intensity.blur
             readability: 0
             edgeWidth: Math.min(10, height * .28)
-            refractionStrength: materialHover.hovered ? 4.5 : 3
-            magnification: materialHover.hovered ? 1.045 : 1.025
-            reflectionStrength: materialHover.hovered ? .72 : .50
+            refractionStrength: materialHover.hovered ? root._intensity.hoverRefraction : root._intensity.refraction
+            magnification: materialHover.hovered ? root._intensity.hoverMagnification : root._intensity.magnification
+            reflectionStrength: materialHover.hovered ? root._intensity.hoverReflection : root._intensity.reflection
             // Preserve a readable selected state after release, including on flat scenes.
             tintColor: root.selectionColor
             tintStrength: root._pressedIndex >= 0 ? .50 : .85

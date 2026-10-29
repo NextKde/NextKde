@@ -3,17 +3,35 @@ pragma ComponentBehavior: Bound
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
+import QtQuick.Dialogs as NativeDialogs
 import Kos.Ui
+import Kos.Demo as Demo
 
-KosWorkspaceDialog {
+Demo.LiquidContentPopover {
     id: root
+    borderWidth: 0.5
+    borderColor: AppTheme.dark ? Qt.rgba(1, 1, 1, 0.18) : Qt.rgba(0, 0, 0, 0.12)
+    materialOpacity: 0.99
+    // Suppress background lettering while retaining sampled colour and refraction.
+    backdropBlur: 1.0
+    blurStrength: 1.0
+    tintStrength: 0.42
     CalendarStyle { id: design }
 
     property string editingId: ""
+    property bool allowTypeSwitch: true
+    property string savedRecurrence: "none"
+    property int initialRecurrenceIndex: 0
+    readonly property bool customRecurrence: !["none", "daily", "weekly", "monthly", "yearly"].includes(savedRecurrence)
+    function setQuickTitle(text) { titleField.text = text }
     property bool saving: false
-    closePolicy: saving ? Popup.NoAutoClose : Popup.CloseOnEscape
+    closePolicy: saving ? Popup.NoAutoClose : Popup.CloseOnEscape | Popup.CloseOnPressOutside
     property string linkedEventId: ""
+    property string parentId: ""
+    property string parentTitle: ""
     property var availableLists: []
+    property var availableTags: []
+    property var imageFiles: []
     property var availableCategories: []
     property string calendarId: "personal"
     property string listId: "personal"
@@ -25,28 +43,31 @@ KosWorkspaceDialog {
     signal deleteRequested(string uid)
 
     title: editingId.length > 0 ? qsTr("Edit reminder") : qsTr("New reminder")
-    modal: true
+    modal: false
     popupType: Popup.Item
     // P02/P03: compact neutral editor, matching the event editor treatment.
-    width: Math.min(420, parent ? parent.width - 32 : 420)
-    height: Math.min(480, parent ? parent.height - 32 : 480)
-    anchors.centerIn: parent
+    width: Math.min(360, parent ? parent.width - 16 : 360)
+    height: Math.min((header ? header.implicitHeight : 0) + (footer ? footer.implicitHeight : 0)
+        + formLayout.implicitHeight + topPadding + bottomPadding, parent ? parent.height - 16 : 560)
     standardButtons: Dialog.Save | Dialog.Cancel
-    background: Rectangle { radius: 12; color: design.dialogPlane }
     padding: 16
-    header: Label {
-        text: root.title
-        color: design.labelPrimary
-        font.pixelSize: 17
-        font.weight: Font.DemiBold
-        padding: 16
-        bottomPadding: 8
-        elide: Text.ElideRight
+    signal switchTypeRequested()
+    header: CalendarEditorTabs {
+        visible: root.allowTypeSwitch && root.editingId.length === 0
+        implicitHeight: visible ? 82 : 0
+        leftInset: root.leftPadding
+        // Match the form width, including its 8px scrollbar gutter.
+        rightInset: root.rightPadding + 8
+        currentIndex: 1
+        switchingEnabled: root.allowTypeSwitch && root.editingId.length === 0 && !root.saving
+        onSwitchRequested: root.switchTypeRequested()
     }
+    readonly property int labelColumnWidth: 56
     readonly property int fieldHeight: design.fieldHeight
 
     // Fixed compact action row; the form scrolls independently.
     footer: CalendarEditorFooter {
+        sourceItem: root.sourceItem
         enabled: !root.saving
         editing: root.editingId.length > 0
         confirmingDelete: root.confirmingDelete
@@ -221,10 +242,14 @@ KosWorkspaceDialog {
     function validationProblem() {
         if (titleField.text.trim().length === 0)
             return { message: qsTr("Title is required."), fields: ["title"] }
+        if (urlField.text.trim() && !/^https?:\/\/[^\s/]+(?:\/[^\s]*)?$/.test(urlField.text.trim()))
+            return { message: qsTr("Enter a link starting with https:// or http://."), fields: ["url"] }
         // An empty due date is allowed (the task simply stays off Calendar),
         // but a linked task must keep one — it defines the event time.
         const dueDate = dueDateField.text.trim()
         if (dueDate.length === 0) {
+            if (recurrenceBox.currentIndex > 0)
+                return { message: qsTr("A repeating reminder needs a due date."), fields: ["dueDate"] }
             if (linkedEventId.length > 0)
                 return { message: qsTr("A linked task needs a due date."),
                     fields: ["dueDate"] }
@@ -232,21 +257,49 @@ KosWorkspaceDialog {
             return { message: qsTr("Due date must be %1.").arg(datePattern),
                 fields: ["dueDate"] }
         }
-        if (!allDayCheck.checked && parseTimeText(dueTimeField.text) === null)
+        if (dueDate.length > 0 && !allDayCheck.checked && parseTimeText(dueTimeField.text) === null)
             return { message: qsTr("Due time must be %1.").arg(timePattern),
                 fields: ["dueTime"] }
         return null
     }
 
+    function enableTime() {
+        if (!dueDateField.text.trim()) dueDateField.text = formatDateInput(Qt.formatDate(new Date(), "yyyy-MM-dd"))
+        allDayCheck.checked = false
+        Qt.callLater(() => dueTimeField.showPicker())
+    }
+    function addImages(files) {
+        const next = imageFiles.slice()
+        for (const file of files) if (!next.includes(String(file))) next.push(String(file))
+        if (next.length > 8) { errorText = qsTr("You can attach up to 8 images."); return }
+        imageFiles = next
+    }
+    NativeDialogs.FileDialog {
+        id: imagePicker
+        title: qsTr("Add images")
+        fileMode: NativeDialogs.FileDialog.OpenFiles
+        nameFilters: [qsTr("Images (*.png *.jpg *.jpeg *.webp *.gif *.bmp)")]
+        onAccepted: root.addImages(selectedFiles)
+    }
     function openForTodo(todo) {
         editingId = String(value(todo, "seriesId", value(todo, "id", "")))
         linkedEventId = String(value(todo, "linkedEventId", ""))
+        parentId = String(value(todo, "parentId", ""))
+        flaggedCheck.checked = Boolean(value(todo, "flagged", false))
         titleField.text = String(value(todo, "title", ""))
         notesField.text = String(value(todo, "description", ""))
+        urlField.text = String(value(todo, "url", ""))
+        imageFiles = Array.from(value(todo, "images", []) || [])
+        tagsField.text = (value(todo, "tags", []) || []).map(tag => "#" + tag).join(" ")
         completedCheck.checked = Boolean(value(todo, "completed", false))
-        listId = String(value(todo, "listId", "personal"))
+        listId = String(value(todo, "listId", "inbox"))
+        listBox.currentIndex = listIndex(listId)
+        sectionField.text = String(value(todo, "section", ""))
+        tagsPane.visible = false
+        savedRecurrence = String(value(todo, "recurrence", "none"))
+        recurrenceBox.currentIndex = customRecurrence ? 5 : ["none", "daily", "weekly", "monthly", "yearly"].indexOf(savedRecurrence)
+        initialRecurrenceIndex = recurrenceBox.currentIndex
         calendarId = String(value(todo, "calendarId", "personal"))
-        categoryBox.currentIndex = Math.max(0, availableCategories.findIndex(item => item.id === calendarId) < 0 ? 1 : availableCategories.findIndex(item => item.id === calendarId))
         savedReminderMinutes = Number(value(todo, "reminderMinutes", -1))
         reminderBox.currentIndex = (customReminder ? 7 : [-1, 0, 5, 15, 30, 60, 1440].indexOf(savedReminderMinutes))
         originalReminderIndex = reminderBox.currentIndex
@@ -254,7 +307,7 @@ KosWorkspaceDialog {
         dueDateField.text = formatDateInput(datePart(due))
         const timeMatch = due.match(/T(\d{2}:\d{2})/)
         dueTimeField.text = formatTimeInput(timeMatch ? timeMatch[1] : "18:00")
-        allDayCheck.checked = Boolean(value(todo, "allDay", false))
+        allDayCheck.checked = Boolean(value(todo, "allDay", true))
         priorityBox.currentIndex = priorityIndex(value(todo, "priority", 0))
         errorText = ""
         errorFields = []
@@ -266,9 +319,13 @@ KosWorkspaceDialog {
     function payload() {
         const priorityValues = [0, 9, 5, 1]
         const dueDate = dueDateField.text.trim()
-        return {
+        const result = {
             title: titleField.text.trim(),
             description: notesField.text.trim(),
+            url: urlField.text.trim(),
+            images: imageFiles,
+            tags: tagsField.text.split(/[\s,，]+/).map(tag => tag.replace(/^#+/, "")).filter(Boolean),
+            section: sectionField.text.trim(),
             listId: listId,
             calendarId: calendarId,
             reminderMinutes: linkedEventId.length > 0 || dueDate.length === 0 ? -1
@@ -278,8 +335,14 @@ KosWorkspaceDialog {
                 + (allDayCheck.checked ? "00:00" : isoFromTimeText(dueTimeField.text)) + ":00" : "",
             allDay: allDayCheck.checked,
             priority: priorityValues[priorityBox.currentIndex],
+            flagged: flaggedCheck.checked,
             completed: completedCheck.checked
         }
+        if (editingId.length === 0 && parentId.length > 0) result.parentId = parentId
+        // Imported custom recurrence rules stay untouched unless explicitly changed.
+        if (recurrenceBox.currentIndex !== initialRecurrenceIndex || editingId.length === 0)
+            result.recurrence = ["none", "daily", "weekly", "monthly", "yearly"][recurrenceBox.currentIndex] || "none"
+        return result
     }
 
     // P1-5: every accept path runs validation first — invalid input keeps
@@ -378,227 +441,173 @@ KosWorkspaceDialog {
         ColumnLayout {
             id: formLayout
             width: editorScroll.width - 8
-            spacing: 8
-
-            // P1-5: inline validation error — pinned to the top of the form so
-            // it is visible without scrolling; offending fields also get a
-            // destructive outline until they are edited.
-            Label {
-                Layout.fillWidth: true
-                visible: root.errorText.length > 0
-                text: root.errorText
-                color: root.errorColor
-                font.pixelSize: 11
-                wrapMode: Text.WordWrap
-            }
-
-            Label {
-                Layout.fillWidth: true
-                visible: root.linkedEventId.length > 0
-                text: qsTr("Linked to this Calendar event. Editing the title or date updates the matching task in Todo.")
-                color: AppTheme.mutedText
-                font.pixelSize: 11
-                wrapMode: Text.WordWrap
-            }
-
-            Label { text: qsTr("Title"); color: AppTheme.mutedText; font.pixelSize: 11 }
-            RowLayout {
-                Layout.fillWidth: true
-                spacing: 8
-
-                CalendarTextField {
-                    id: titleField
-                    objectName: "reminderTitle"
+            spacing: 12
+            enabled: !root.saving
+            Label { visible: root.errorText.length > 0; text: root.errorText; Layout.fillWidth: true; color: root.errorColor; font.pixelSize: 11; wrapMode: Text.WordWrap }
+            Label { visible: root.parentId.length > 0; text: qsTr("Subtask of %1").arg(root.parentTitle); Layout.fillWidth: true; elide: Text.ElideRight; font.pixelSize: 11; color: AppTheme.mutedText }
+            Demo.SettingsGroup {
+                backgroundColor: design.controlFill
+                verticalPadding: 8
+                ColumnLayout {
                     Layout.fillWidth: true
-                    Layout.preferredHeight: root.fieldHeight
-                    placeholderText: qsTr("Task title")
-                    Accessible.name: qsTr("Task title")
-                    invalid: root.hasError("title")
-                    outlineColor: root.hasError("title")
-                        ? AppTheme.destructive : AppTheme.border
-                    onTextChanged: root.clearError("title")
-                }
-
-                CalendarCheckBox {
-                    id: completedCheck
-                    text: qsTr("Completed")
-                }
-            }
-
-            RowLayout {
-                Layout.fillWidth: true
-                spacing: 8
-
-                Label { text: qsTr("Category"); color: AppTheme.mutedText; font.pixelSize: 11 }
-                CalendarComboBox {
-                    popupScene: root.contentItem.parent
-                    id: categoryBox
-                    objectName: "reminderCategory"
-                    Accessible.name: qsTr("Category")
-                    Layout.fillWidth: true
-                    Layout.preferredHeight: root.fieldHeight
-                    model: root.availableCategories
-                    onActivated: root.calendarId = root.availableCategories[currentIndex].id
-                    textRole: "name"
-                }
-                Label { text: qsTr("Priority"); color: AppTheme.mutedText; font.pixelSize: 11 }
-                CalendarComboBox {
-                    popupScene: root.contentItem.parent
-                    id: priorityBox
-                    Accessible.name: qsTr("Task priority")
-                    Layout.preferredWidth: 110
-                    Layout.preferredHeight: root.fieldHeight
-                    model: [qsTr("None"), qsTr("Low"), qsTr("Medium"), qsTr("High")]
-                }
-            }
-
-            RowLayout {
-                Layout.fillWidth: true
-                spacing: 8
-
-                Label { text: qsTr("Due date"); color: AppTheme.mutedText; font.pixelSize: 11 }
-                CalendarTextField {
-                    id: dueDateField
-                    Layout.fillWidth: true
-                    Layout.preferredHeight: root.fieldHeight
-                    placeholderText: root.datePattern
-                    Accessible.name: qsTr("Task due date")
-                    invalid: root.hasError("dueDate")
-                    outlineColor: root.hasError("dueDate")
-                        ? AppTheme.destructive : AppTheme.border
-                    onTextChanged: root.clearError("dueDate")
-                }
-
-                CalendarTextField {
-                    id: dueTimeField
-                    Layout.preferredWidth: 92
-                    Layout.preferredHeight: root.fieldHeight
-                    placeholderText: root.timePattern
-                    enabled: !allDayCheck.checked
-                    Accessible.name: qsTr("Task due time")
-                    invalid: root.hasError("dueTime")
-                    outlineColor: root.hasError("dueTime")
-                        ? AppTheme.destructive : AppTheme.border
-                    onTextChanged: root.clearError("dueTime")
-                }
-
-                CalendarCheckBox {
-                    id: allDayCheck
-                    text: qsTr("All day")
-                }
-            }
-
-            Label {
-                Layout.fillWidth: true
-                text: root.linkedEventId.length > 0
-                    ? qsTr("A linked task must keep a due date because it defines the event time.")
-                    : qsTr("Tasks without a due date do not appear in Calendar.")
-                color: AppTheme.mutedText
-                font.pixelSize: 10
-                wrapMode: Text.WordWrap
-            }
-
-            RowLayout {
-                Layout.fillWidth: true
-                visible: root.linkedEventId.length === 0
-                Label { text: qsTr("Notification"); color: AppTheme.mutedText; font.pixelSize: 11 }
-                CalendarComboBox {
-                    id: reminderBox
-                    objectName: "reminderAlarm"
-                    popupScene: root.contentItem.parent
-                    Layout.fillWidth: true
-                    Layout.preferredHeight: root.fieldHeight
-                    enabled: dueDateField.text.trim().length > 0
-                    model: [qsTr("None"), qsTr("At the scheduled time"), qsTr("5 minutes before"),
-                        qsTr("15 minutes before"), qsTr("30 minutes before"), qsTr("1 hour before"), qsTr("1 day before")].concat(root.customReminder ? [qsTr("%1 minutes before").arg(root.savedReminderMinutes)] : [])
-                }
-            }
-
-            Label { text: qsTr("Notes"); color: AppTheme.mutedText; font.pixelSize: 11 }
-            // Canonical editable-notes scroller: an explicit Flickable owns
-            // the TextArea. The editor's height follows its wrapped content,
-            // so the flickable gets real vertical extent and the rendered
-            // glyphs move with contentY (no implicit-ScrollView adoption
-            // ambiguity). Bounded 96 viewport, wrapping, cursor and editing
-            // all preserved; the outer form scroll is unaffected because the
-            // flickable consumes wheel events over the notes area.
-            // P02: the neutral field surface is a FIXED frame around the 96px
-            // viewport (KosTextArea's own scrolling background would travel
-            // with the text), so the outline/corners/focus stay put while
-            // only text and thumb move.
-            Item {
-                id: notesFrame
-                Layout.fillWidth: true
-                Layout.preferredHeight: 96
-
-                KosSurface {
-                    anchors.fill: parent
-                    radius: 8
-                    fillColor: design.controlFill
-                    elevation: 0
-                    focused: notesField.activeFocus
-                }
-
-                Flickable {
-                    id: notesScroll
-                    anchors.fill: parent
-                    clip: true
-                    boundsBehavior: Flickable.StopAtBounds
-                    // Non-interactive: the notes view scrolls by wheel and
-                    // scrollbar only. A Flickable that can drag would let
-                    // its press filter compete with the TextArea for every
-                    // press once the view is scrolled, which is exactly the
-                    // hit-testing failure seen at lines 17/18 — clicks and
-                    // drags then never reach the native text control. With
-                    // interactive off, presses pass straight through to the
-                    // editor (native cursor placement and drag selection),
-                    // while wheel and the visible scrollbar still scroll.
-                    interactive: false
-                    // Native Qt integration (TextArea.flickable attached
-                    // property, per Qt docs): the attached property lives on
-                    // the Flickable and its value IS the TextArea. The
-                    // native text control then owns pointer handling — every
-                    // click moves the cursor, drag selects, and the view
-                    // keeps the cursor visible — while the Flickable only
-                    // provides scrolling. The attached integration derives
-                    // the content geometry from the TextArea itself, so no
-                    // manual height/content/cursor bindings are needed.
-                    TextArea.flickable: KosTextArea {
-                        id: notesField
-                        Accessible.name: qsTr("Task notes")
-                        width: notesScroll.width
-                        placeholderText: qsTr("Optional notes")
-                        wrapMode: TextEdit.Wrap
-                        background: null
-                        activeFocusOnPress: true
-                        selectByMouse: true
+                    Layout.leftMargin: 12; Layout.rightMargin: 12
+                    spacing: 6
+                    CalendarTextField {
+                        id: titleField
+                        objectName: "reminderTitle"
+                        Layout.fillWidth: true
+                        implicitHeight: 32
+                        padding: 0
+                        font.pixelSize: 20; font.weight: Font.DemiBold
+                        placeholderText: qsTr("Task title")
+                        background: Item {}
+                        invalid: root.hasError("title")
+                        onTextChanged: root.clearError("title")
                     }
-
-                    ScrollBar.vertical: ScrollBar {}
-
-                    // Wheel scrolling for the non-interactive flickable.
-                    // MouseArea.onWheel (not a WheelHandler — measured in
-                    // this repo that an independent WheelHandler at this
-                    // layer never receives the wheel). NoButton means the
-                    // area handles ONLY the wheel: clicks and drag-selection
-                    // pass straight through to the native text control, and
-                    // accepting the wheel keeps the outer form from moving.
-                    MouseArea {
-                        anchors.fill: parent
-                        acceptedButtons: Qt.NoButton
-                        onWheel: function(wheel) {
-                            const max = Math.max(0, notesScroll.contentHeight
-                                                     - notesScroll.height)
-                            const step = wheel.pixelDelta.y !== 0
-                                ? wheel.pixelDelta.y
-                                : wheel.angleDelta.y / 2
-                            notesScroll.contentY = Math.max(0, Math.min(
-                                max, notesScroll.contentY - step))
-                            wheel.accepted = true
+                    Flickable {
+                        id: notesScroll
+                        Layout.fillWidth: true; Layout.preferredHeight: 52
+                        clip: true; interactive: false
+                        TextArea.flickable: KosTextArea {
+                            id: notesField
+                            objectName: "reminderNotes"
+                            width: notesScroll.width
+                            font.pixelSize: 12; font.weight: Font.Normal
+                            padding: 0
+                            placeholderText: qsTr("Optional notes")
+                            wrapMode: TextEdit.Wrap
+                            background: null
+                            selectByMouse: true
+                        }
+                        ScrollBar.vertical: ScrollBar {}
+                        MouseArea {
+                            anchors.fill: parent; acceptedButtons: Qt.NoButton
+                            onWheel: wheel => { const step = wheel.pixelDelta.y || wheel.angleDelta.y / 2; notesScroll.contentY = Math.max(0, Math.min(Math.max(0, notesScroll.contentHeight - notesScroll.height), notesScroll.contentY - step)); wheel.accepted = true }
+                        }
+                    }
+                    Rectangle { Layout.fillWidth: true; implicitHeight: 1; color: design.separator }
+                    CalendarTextField { id: urlField; objectName: "reminderUrl"; Layout.fillWidth: true; padding: 0; placeholderText: qsTr("URL"); maximumLength: 4096; background: Item {}
+                        invalid: root.hasError("url"); onTextChanged: root.clearError("url") }
+                }
+            }
+            Demo.SettingsGroup {
+                title: qsTr("Date & time")
+                titleFont.pixelSize: 12; titleFont.weight: Font.Medium
+                titleColor: AppTheme.mutedText
+                backgroundColor: design.controlFill
+                Demo.SettingsItem {
+                    title: qsTr("Date")
+                    minimumLabelWidth: 70; controlSpacing: 6; horizontalPadding: 12
+                    CalendarDateField {
+                        id: dueDateField
+                        objectName: "reminderDueDate"
+                        visible: text.length > 0
+                        implicitWidth: 130
+                        parseDate: root.parseDateText
+                        formatDate: date => Qt.formatDate(date, root.inputDateFormat)
+                        calendarLocale: root.inputLocale
+                        placeholderText: root.datePattern
+                        invalid: root.hasError("dueDate")
+                        onTextChanged: root.clearError("dueDate")
+                    }
+                    KosSwitch {
+                        implicitWidth: 34; implicitHeight: 20
+                        checked: dueDateField.text.length > 0
+                        enabled: root.linkedEventId.length === 0
+                        accessibleName: qsTr("Date")
+                        onToggled: checked => { dueDateField.text = checked ? root.formatDateInput(Qt.formatDate(new Date(), "yyyy-MM-dd")) : ""; if (!checked) allDayCheck.checked = true }
+                    }
+                }
+                Demo.SettingsItem {
+                    title: qsTr("Time")
+                    minimumLabelWidth: 70; controlSpacing: 6; horizontalPadding: 12
+                    CalendarTimeField {
+                        id: dueTimeField
+                        objectName: "reminderDueTime"
+                        visible: !allDayCheck.checked
+                        implicitWidth: 130
+                        parseTime: root.parseTimeText
+                        formatTime: date => Qt.formatTime(date, root.inputTimeFormat)
+                        placeholderText: root.timePattern
+                        invalid: root.hasError("dueTime")
+                        onTextChanged: root.clearError("dueTime")
+                        onTimeSelected: if (!dueDateField.text.trim()) dueDateField.text = root.formatDateInput(Qt.formatDate(new Date(), "yyyy-MM-dd"))
+                    }
+                    KosSwitch { objectName: "reminderTimeToggle"; implicitWidth: 34; implicitHeight: 20; checked: !allDayCheck.checked; accessibleName: qsTr("Time"); onToggled: checked => { if (checked) root.enableTime(); else allDayCheck.checked = true } }
+                }
+                Demo.SettingsItem {
+                    title: qsTr("Repeat"); visible: dueDateField.text.length > 0
+                    minimumLabelWidth: 70; horizontalPadding: 12
+                    CalendarComboBox { id: recurrenceBox; objectName: "reminderRecurrence"; implicitWidth: 150; enabled: root.linkedEventId.length === 0; model: [qsTr("Never"), qsTr("Daily"), qsTr("Weekly"), qsTr("Monthly"), qsTr("Yearly")].concat(root.customRecurrence ? [qsTr("Custom repeat")] : []) }
+                }
+                Demo.SettingsItem {
+                    title: qsTr("Notification"); visible: dueDateField.text.length > 0 && root.linkedEventId.length === 0
+                    minimumLabelWidth: 70; horizontalPadding: 12
+                    CalendarComboBox { id: reminderBox; objectName: "reminderAlarm"; implicitWidth: 150; model: [qsTr("None"), qsTr("At the scheduled time"), qsTr("5 minutes before"), qsTr("15 minutes before"), qsTr("30 minutes before"), qsTr("1 hour before"), qsTr("1 day before")].concat(root.customReminder ? [qsTr("%1 minutes before").arg(root.savedReminderMinutes)] : []) }
+                }
+            }
+            CalendarCheckBox { id: allDayCheck; visible: false }
+            Demo.SettingsGroup {
+                title: qsTr("Organization")
+                titleFont.pixelSize: 12; titleFont.weight: Font.Medium
+                titleColor: AppTheme.mutedText
+                backgroundColor: design.controlFill
+                Demo.SettingsItem {
+                    title: qsTr("List"); minimumLabelWidth: 70; horizontalPadding: 12
+                    CalendarComboBox {
+                        id: listBox; objectName: "reminderList"; implicitWidth: 180; colorRole: "color"; textRole: "name"
+                        model: root.availableLists.map(list => ({id: list.id, color: list.color, name: list.id === "inbox" && list.name === "Inbox" ? qsTr("Inbox") : list.id === "personal" && list.name === "Personal" ? qsTr("Personal") : list.name}))
+                        onActivated: { root.listId = model[currentIndex].id; sectionField.text = "" }
+                    }
+                }
+                Demo.SettingsItem {
+                    title: qsTr("Section"); minimumLabelWidth: 70; horizontalPadding: 12
+                    CalendarComboBox {
+                        id: sectionField; objectName: "reminderSection"; implicitWidth: 180; textRole: "label"
+                        property string text: ""
+                        enabled: root.parentId.length === 0
+                        model: [{name: "", label: qsTr("None")}].concat(((root.availableLists.find(list => list.id === root.listId) || {}).sections || []).map(section => ({name: section.name, label: section.name})))
+                        onTextChanged: currentIndex = Math.max(0, model.findIndex(item => item.name === text))
+                        onModelChanged: currentIndex = Math.max(0, model.findIndex(item => item.name === text))
+                        onActivated: text = model[currentIndex].name
+                    }
+                }
+                Demo.SettingsItem {
+                    title: qsTr("Tags"); minimumLabelWidth: 70; horizontalPadding: 12
+                    CalendarButton { text: tagsField.text || qsTr("Add tags…"); implicitWidth: 180; flat: true; onClicked: tagsPane.visible = !tagsPane.visible }
+                }
+                ColumnLayout {
+                    id: tagsPane
+                    visible: false
+                    Layout.fillWidth: true; Layout.leftMargin: 12; Layout.rightMargin: 12; Layout.bottomMargin: 6
+                    spacing: 4
+                    CalendarTextField { id: tagsField; objectName: "reminderTags"; Layout.fillWidth: true; placeholderText: qsTr("#work #errands"); maximumLength: 2048 }
+                    Flow {
+                        Layout.fillWidth: true; spacing: 4
+                        Repeater {
+                            model: root.availableTags
+                            delegate: Button {
+                                id: tag
+                                required property string modelData
+                                readonly property var selectedTags: tagsField.text.split(/[\s,，]+/).map(value => value.replace(/^#+/, "")).filter(Boolean)
+                                readonly property bool selected: selectedTags.some(value => value.toLocaleLowerCase() === modelData.toLocaleLowerCase())
+                                implicitWidth: contentItem.implicitWidth + 12; implicitHeight: 22; padding: 2; leftPadding: 6; rightPadding: 6
+                                contentItem: Label { text: "#" + tag.modelData; color: tag.selected ? "white" : design.labelPrimary; font.pixelSize: 11; verticalAlignment: Text.AlignVCenter }
+                                background: Rectangle { radius: 11; color: tag.selected ? design.accent : tag.hovered ? design.selectionFill : design.controlFill }
+                                onClicked: tagsField.text = (selected ? selectedTags.filter(value => value.toLocaleLowerCase() !== modelData.toLocaleLowerCase()) : selectedTags.concat([modelData])).map(value => "#" + value).join(" ")
+                            }
                         }
                     }
                 }
             }
+            Demo.SettingsGroup {
+                backgroundColor: design.controlFill
+                Demo.SettingsItem { title: qsTr("Flagged"); horizontalPadding: 12; KosSwitch { id: flaggedCheck; implicitWidth: 34; implicitHeight: 20; accessibleName: qsTr("Flagged"); onToggled: value => checked = value } }
+                Demo.SettingsItem { title: qsTr("Priority"); minimumLabelWidth: 70; horizontalPadding: 12; CalendarComboBox { id: priorityBox; implicitWidth: 180; model: [qsTr("None"), qsTr("Low"), qsTr("Medium"), qsTr("High")] } }
+                Demo.SettingsItem { title: qsTr("Completed"); visible: root.editingId.length > 0; horizontalPadding: 12; KosSwitch { id: completedCheck; implicitWidth: 34; implicitHeight: 20; accessibleName: qsTr("Completed"); onToggled: value => checked = value } }
+            }
+            CalendarButton { text: qsTr("Add images…"); Layout.fillWidth: true; enabled: root.imageFiles.length < 8; onClicked: imagePicker.open() }
+            CalendarReminderImages { visible: root.imageFiles.length > 0; images: root.imageFiles; editable: true; onRemoveRequested: index => root.imageFiles = root.imageFiles.filter((file, i) => i !== index) }
         }
     }
 }

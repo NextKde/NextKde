@@ -7,19 +7,20 @@ Name[zh_CN]=KOS 日历
 GenericName=Calendar
 GenericName[zh]=日历
 GenericName[zh_CN]=日历
-Comment=Plan events and keep calendar-linked tasks in sync
-Comment[zh]=安排日程并同步日历关联任务
-Comment[zh_CN]=安排日程并同步日历关联任务
+Comment=Plan events and manage reminders in one window
+Comment[zh]=在同一窗口安排日程与管理提醒事项
+Comment[zh_CN]=在同一窗口安排日程与管理提醒事项
 TryExec=@KOS_APP_EXECUTABLE@
 Exec=@KOS_APP_EXECUTABLE@
 Icon=kos-calendar
 Terminal=false
 Categories=Office;Calendar;Qt;
-Keywords=calendar;event;schedule;todo;
+Keywords=calendar;event;schedule;todo;reminder;task;
+Keywords[zh_CN]=日历;提醒事项;待办;任务;日程;
 StartupNotify=true
 StartupWMClass=kos-calendar
 X-GNOME-SingleWindow=true
-Actions=Today;Settings;
+Actions=Today;Reminders;Settings;
 
 [Desktop Action Today]
 Name=Today
@@ -32,3 +33,9 @@ Name=Settings
 Name[zh]=设置
 Name[zh_CN]=设置
 Exec=@KOS_APP_EXECUTABLE@ --settings
+
+[Desktop Action Reminders]
+Name=Reminders
+Name[zh]=提醒事项
+Name[zh_CN]=提醒事项
+Exec=@KOS_APP_EXECUTABLE@ --view reminders
