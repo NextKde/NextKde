@@ -399,6 +399,14 @@ to `DockModelService`.
 
 ## Native minimize targets
 
+KWin restricts `org_kde_plasma_window_management`. Installation renders
+`packaging/desktop/org.kos.Shell.desktop.in` with the canonical Quickshell
+executable in `Exec` and that interface in `X-KDE-Wayland-Interfaces`, then
+refreshes the desktop service cache. After changing this declaration, restart
+the Shell connection: KWin caches requested interfaces per Wayland client.
+Without it, libtaskmanager reports that PlasmaWindowManagement did not activate
+and cannot publish targets. Do not disable KWin's permission checks.
+
 `DockWindowAnimationTargetService` publishes the stable icon slot to both the
 private KOS animation effect and Plasma's taskbar protocol. Its ungrouped
 `org.kde.taskmanager.TasksModel` is a protocol adapter only; `WindowService`
