@@ -631,7 +631,19 @@ Demo.LiquidContentPopover {
                 Demo.SettingsItem {
                 allowStacking: false; title: qsTr("Completed"); visible: root.editingId.length > 0; horizontalPadding: 12; Demo.SettingsSwitch { id: completedCheck; implicitWidth: 44; implicitHeight: 20; Layout.minimumWidth: 44; Layout.maximumWidth: 44; accessibleName: qsTr("Completed"); onToggled: value => checked = value } }
             }
-            CalendarButton { text: qsTr("Add images…"); Layout.fillWidth: true; enabled: root.imageFiles.length < 8; onClicked: imagePicker.open() }
+            CalendarButton {
+                id: addImagesButton
+                text: qsTr("Add images…")
+                Layout.fillWidth: true
+                enabled: root.imageFiles.length < 8
+                background: Rectangle {
+                    radius: 8
+                    color: addImagesButton.down ? design.selectionFill
+                        : addImagesButton.hovered ? design.rowHoverFill
+                        : AppTheme.dark ? "#363638" : "#EDEDEF"
+                }
+                onClicked: imagePicker.open()
+            }
             CalendarReminderImages { visible: root.imageFiles.length > 0; images: root.imageFiles; editable: true; onRemoveRequested: index => root.imageFiles = root.imageFiles.filter((file, i) => i !== index) }
             Demo.SettingsGroup {
                 cornerRadius: 8
