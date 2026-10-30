@@ -3,9 +3,12 @@ pragma Singleton
 import QtQuick
 import qs.desktop.modules.common
 import qs.desktop.modules.platform
+import org.kde.taskmanager as TaskManager
+import "NativeMinimizeTarget.mjs" as NativeTarget
 
 // Publishes the current compositor-global Dock icon rectangles to the private
-// KOS KWin effect. Geometry uses the layout slot centre and static iconSize,
+// KOS KWin effect and Plasma's native taskbar geometry protocol. Geometry uses
+// the layout slot centre and static iconSize,
 // so hover magnification does not move the window animation endpoint.
 QtObject {
     id: service
@@ -33,8 +36,8 @@ QtObject {
         publishTimer.restart()
     }
 
-    function _payload() {
-        const targets = []
+    function _targetEntries() {
+        const entries = []
         const live = []
         for (let index = 0; index < _icons.length; index++) {
             const icon = _icons[index]
@@ -43,10 +46,15 @@ QtObject {
             live.push(icon)
             const target = icon.windowAnimationTarget()
             if (target)
-                targets.push(target)
+                entries.push({ icon, target })
         }
         if (live.length !== _icons.length)
             _icons = live
+        return entries
+    }
+
+    function _payload(entries) {
+        const targets = entries.map(entry => entry.target)
         targets.sort((left, right) => String(left.appId).localeCompare(String(right.appId))
             || String(left.windowId).localeCompare(String(right.windowId)))
         return JSON.stringify({ targets })
@@ -62,12 +70,109 @@ QtObject {
         })
     }
 
-    function publishNow() {
-        const payload = _payload()
+    function publishNow(forceNative) {
+        const entries = _targetEntries()
+        // Native publication must run even when our private effect is missing,
+        // its payload is unchanged, or HideAnimation=None delegates to KWin.
+        for (let index = 0; index < nativeDelegates.count; index++)
+            nativeDelegates.objectAt(index)?.publish(entries, forceNative === true)
+        const payload = _payload(entries)
         if (payload === _lastPayload || Date.now() < _retryAfter)
             return
         _lastPayload = payload
         _send(payload)
+    }
+
+    // This model is only the protocol adapter. WindowService remains the
+    // authoritative model for identity, Dock presentation and actions.
+    property TaskManager.TasksModel nativeTasks: TaskManager.TasksModel {
+        groupMode: TaskManager.TasksModel.GroupDisabled
+        sortMode: TaskManager.TasksModel.SortDisabled
+    }
+
+    property Component nativeRectComponent: Component {
+        Item { visible: false }
+    }
+
+    property Instantiator nativeDelegates: Instantiator {
+        model: service.nativeTasks
+        delegate: QtObject {
+            id: nativeDelegate
+            required property int index
+            required property var model
+            property var rectItem: null
+            property string lastRect: ""
+
+            function publishRect() {
+                // On Wayland the explicit QRect parameter is ignored by
+                // libtaskmanager. It reads this actual QQuickItem and uses its
+                // window's wl_surface, exactly as Plasma's taskbar does.
+                service.nativeTasks.requestPublishDelegateGeometry(
+                    service.nativeTasks.makeModelIndex(index),
+                    Qt.rect(0, 0, 0, 0), rectItem)
+            }
+
+            function invalidate() {
+                if (!rectItem || lastRect === "")
+                    return
+                rectItem.width = 0
+                rectItem.height = 0
+                publishRect()
+                lastRect = ""
+            }
+
+            function publish(entries, force) {
+                const ids = model.WinIdList || []
+                const windowId = ids.length ? String(ids[0]) : ""
+                const apps = [model.AppId]
+                for (const record of WindowService.records) {
+                    if (windowId && NativeTarget.windowKey(record.handleId)
+                            === NativeTarget.windowKey(windowId)) {
+                        apps.push(record.identity?.desktopId || "",
+                                  record.identity?.rawAppId || "")
+                        break
+                    }
+                }
+                const entry = NativeTarget.selectTarget(entries, windowId, apps)
+                const root = entry?.icon.windowAnimationSurface
+                const rect = entry && root ? NativeTarget.surfaceRect(entry.target,
+                    entry.icon.surfaceOriginX, entry.icon.surfaceOriginY) : null
+                if (!rect) {
+                    invalidate()
+                    return
+                }
+                if (rectItem && rectItem.parent !== root) {
+                    invalidate()
+                    rectItem.destroy()
+                    rectItem = null
+                }
+                if (!rectItem) {
+                    rectItem = service.nativeRectComponent.createObject(root)
+                    lastRect = ""
+                }
+                if (!rectItem)
+                    return
+                const key = JSON.stringify(rect)
+                if (key === lastRect && !force)
+                    return
+                rectItem.x = rect.x
+                rectItem.y = rect.y
+                rectItem.width = rect.width
+                rectItem.height = rect.height
+                publishRect()
+                lastRect = key
+            }
+
+            Component.onDestruction: {
+                // A removed task's row may already refer to another window;
+                // never issue a request using that stale model index. Its
+                // protocol resource disappears with the task. Surface removal
+                // also lets KWin discard all geometries associated with it.
+                if (rectItem)
+                    rectItem.destroy()
+            }
+        }
+        onObjectAdded: service.schedulePublish()
     }
 
     function _normalizedAppId(value) {
@@ -172,7 +277,9 @@ QtObject {
         running: service._icons.length > 0
         onTriggered: {
             service._lastPayload = ""
-            service.publishNow()
+            // The Qt Wayland surface can appear after the first attempt.
+            // libtaskmanager offers no acknowledgement for publication.
+            service.publishNow(true)
         }
     }
 

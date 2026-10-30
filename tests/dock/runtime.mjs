@@ -9,6 +9,64 @@ import { fileURLToPath } from "node:url";
 // Usage: node tests/dock/runtime.mjs <case> [quickshell-or-qmltestrunner]
 // Each selected case retains its own scratch configuration and cleanup.
 const cases = {
+    "native-target": async () => {
+        // Load the production service and native delegates. Only the external
+        // task protocol and daemon are mocked; no desktop session is touched.
+        const directory = mkdtempSync(join(tmpdir(), "kos-native-target-"));
+        try {
+            const source = new URL("../../shell/desktop/modules/dock/", import.meta.url);
+            const service = readFileSync(new URL("DockWindowAnimationTargetService.qml", source), "utf8")
+                .replace("import qs.desktop.modules.common", 'import "."')
+                .replace("import qs.desktop.modules.platform", 'import "."')
+                .replace("import org.kde.taskmanager as TaskManager", 'import "." as TaskManager');
+            writeFileSync(join(directory, "DockWindowAnimationTargetService.qml"), service);
+            copyFileSync(new URL("NativeMinimizeTarget.mjs", source), join(directory, "NativeMinimizeTarget.mjs"));
+            copyFileSync(new URL("native-target.qml", import.meta.url), join(directory, "tst_native_target.qml"));
+            writeFileSync(join(directory, "qmldir"), `singleton DockWindowAnimationTargetService 1.0 DockWindowAnimationTargetService.qml
+singleton WindowService 1.0 WindowService.qml
+singleton PlatformClient 1.0 PlatformClient.qml
+TasksModel 1.0 TasksModel.qml
+`);
+            writeFileSync(join(directory, "WindowService.qml"), `pragma Singleton
+import QtQuick
+QtObject { property var records: [] }
+`);
+            writeFileSync(join(directory, "PlatformClient.qml"), `pragma Singleton
+import QtQuick
+QtObject {
+    property int calls: 0
+    signal eventReceived(string eventName, var payload)
+    function request(op, payload, callback) { calls++; callback({ ok: false }) }
+}
+`);
+            writeFileSync(join(directory, "TasksModel.qml"), `import QtQuick
+ListModel {
+    enum GroupMode { GroupDisabled }
+    enum SortMode { SortDisabled }
+    property int groupMode: 0
+    property int sortMode: 0
+    property var requests: []
+    function makeModelIndex(row) { return row }
+    function requestPublishDelegateGeometry(row, geometry, item) {
+        requests = requests.concat([{ row, parent: item.parent,
+            x: item.x, y: item.y, width: item.width, height: item.height }])
+    }
+}
+`);
+            const result = spawnSync(process.argv[3] || "qmltestrunner", ["-input", directory], {
+                encoding: "utf8", timeout: 15000,
+                env: { ...process.env, QT_QPA_PLATFORM: "offscreen", QT_QUICK_BACKEND: "software",
+                    WAYLAND_DISPLAY: "", DISPLAY: "" },
+            });
+            const output = (result.stdout || "") + (result.stderr || "");
+            assert.equal(result.error, undefined, String(result.error) + "\n" + output);
+            assert.equal(result.status, 0, output);
+            assert.doesNotMatch(output, /FAIL!|ReferenceError|TypeError|Binding loop|Cannot assign|Unable to assign/);
+            console.log(output.trim());
+        } finally {
+            rmSync(directory, { recursive: true, force: true });
+        }
+    },
     "builtins": async () => {
         // Run the real configuration service and JSON transport across three starts. Only the
         // platform's state storage is replaced, so this never writes user settings.

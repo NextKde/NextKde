@@ -397,6 +397,34 @@ New UI components should prefer `AppIdentityService`, `WindowService`, and
 `AppGroupService` directly. Do not add new identity or window tracking logic
 to `DockModelService`.
 
+## Native minimize targets
+
+`DockWindowAnimationTargetService` publishes the stable icon slot to both the
+private KOS animation effect and Plasma's taskbar protocol. Its ungrouped
+`org.kde.taskmanager.TasksModel` is a protocol adapter only; `WindowService`
+retains ownership of application identity and window actions. Match the exact
+KWin UUID first, then the canonical/raw app ID of a grouped launcher. Never use
+the synthetic `window-N` handle or another window's separate icon as a fallback.
+
+Plasma's Wayland backend ignores the explicit rectangle passed to
+`requestPublishDelegateGeometry`: it reads a real `QQuickItem` and that item's
+window surface. The adapter therefore creates a non-rendering rectangle directly
+under the Dock surface's content item, subtracts the surface origin from the
+global target and publishes integer logical pixels. This avoids hover transforms,
+side-Dock rotation and double-counting secondary-output offsets or pixel scale.
+Missing/unrepresentable slots invalidate their published rectangle; destroying
+the Dock surface removes its geometries in KWin. Native publication is independent
+of the private effect's availability, payload cache and retry delay.
+
+With KOS **Hide and restore → None**, the enabled KWin minimize effect (for
+example Magic Lamp) reads `Window::iconGeometry()` from that protocol target for
+titlebar, shortcut and Dock actions. KOS does not claim those animations or change
+the user's enabled native effects. The separate KOS Scale/Genie styles still use
+their existing private targets and deformation. `tests/dock/native-target.test.mjs`
+covers identity precedence and coordinate conversion; real VM acceptance must
+also exercise titlebar minimize and Dock restore, grouped/separate windows,
+hidden/side Docks and secondary outputs at fractional scale.
+
 ## Application launcher module boundary
 
 Files: `shell/desktop/modules/applauncher/AppLauncher.qml`,
