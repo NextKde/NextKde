@@ -8,6 +8,11 @@ qt_add_qml_module(kos_demo_ui URI Kos.Demo VERSION 1.0 STATIC
         foundation/AppTheme.qml
         foundation/SettingsGroup.qml
         foundation/SettingsItem.qml
+        foundation/SettingsTextField.qml
+        foundation/SettingsTextArea.qml
+        foundation/SettingsSwitch.qml
+        foundation/SettingsDateField.qml
+        foundation/SettingsTimeField.qml
         foundation/KosToolTip.qml
         foundation/KosDialog.qml
         foundation/SettingsAppearancePreview.qml

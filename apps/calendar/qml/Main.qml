@@ -29,8 +29,8 @@ KosApplicationWindow {
     Binding { target: Demo.AppTheme; property: "reduceTransparency"; value: AppTheme.reduceTransparency }
     Binding { target: Demo.LiquidStyle; property: "controlFillOpacity"; value: 0.35 * AppTheme.materialOpacity / 0.86 }
     title: qsTr("Calendar")
-    width: 960
-    height: 660
+    width: 900
+    height: 630
     minimumWidth: 760
     minimumHeight: 500
 

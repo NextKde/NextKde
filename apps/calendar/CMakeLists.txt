@@ -34,6 +34,7 @@ kos_add_application(kos-calendar
         qml/CalendarCategoryDialog.qml
         qml/CalendarEditorTabs.qml
         qml/CalendarOrganizationDialog.qml
+        qml/CalendarReminderInlineFields.qml
         qml/CalendarReminderRow.qml
         qml/CalendarReminderInlineAdd.qml
         qml/CalendarReminderSection.qml

@@ -2828,4 +2828,24 @@
     <message><source>Save</source><translation>保存</translation></message>
     <message><source>Remove</source><translation>移除</translation></message>
 </context>
+<context><name>SettingsDateField</name>
+<message><source>Choose date</source><translation>选择日期</translation></message>
+<message><source>Previous month</source><translation>上个月</translation></message>
+<message><source>Next month</source><translation>下个月</translation></message>
+<message><source>Selected date</source><translation>已选日期</translation></message>
+<message><source>Today</source><translation>今天</translation></message>
+</context>
+<context><name>SettingsTimeField</name>
+<message><source>Choose time</source><translation>选择时间</translation></message>
+<message><source>Hour</source><translation>小时</translation></message>
+<message><source>Minute</source><translation>分钟</translation></message>
+<message><source>Done</source><translation>完成</translation></message>
+</context>
+
+<context>
+    <name>CalendarReminderInlineFields</name>
+    <message><source>Notes</source><translation>备注</translation></message>
+    <message><source>Add tags</source><translation>添加标签</translation></message>
+    <message><source>Flag reminder</source><translation>旗标</translation></message>
+</context>
 </TS>
