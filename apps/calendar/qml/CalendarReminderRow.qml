@@ -1,5 +1,6 @@
 pragma ComponentBehavior: Bound
 import QtQuick
+import QtQuick.Window
 import QtQuick.Controls
 import QtQuick.Layouts
 import Kos.Ui
@@ -12,20 +13,38 @@ ItemDelegate {
     property bool card: false
     property bool editing: false
     property bool saving: false
+    readonly property bool showSupportingDetails: card || editing
     readonly property var pim: workspace.pim
     objectName: "reminderRow_" + todo.id
     CalendarStyle { id: design }
-    implicitHeight: Math.max(34, body.implicitHeight + (card ? 14 : 6))
-    padding: card ? 7 : 3
+    implicitHeight: Math.max(card ? 32 : 28, body.implicitHeight + topPadding + bottomPadding)
+    padding: card ? 5 : 3
+    topPadding: card ? 4 : 2
+    bottomPadding: topPadding
     leftPadding: padding + Math.min(Number(todo.displayDepth || 0), 5) * 16
     Accessible.name: todo.title
     onClicked: { editing = true; titleInput.text = todo.title; titleInput.forceActiveFocus() }
     function saveTitle() {
         if (!editing || saving) return
         const value = titleInput.text.trim()
-        if (!value || value === todo.title) { editing = false; return }
+        if (!value) { editing = false; return }
+        const patch = {title: value, description: inlineFields.notes, tags: inlineFields.tags, flagged: inlineFields.flagged}
+        if (value === todo.title && patch.description === String(todo.description || "")
+            && JSON.stringify(patch.tags) === JSON.stringify(todo.tags || []) && patch.flagged === Boolean(todo.flagged)) { editing = false; return }
         saving = true
-        pim.updateTodo(todo.id, {title: value})
+        pim.updateTodo(todo.id, patch)
+    }
+    function containsFocus() {
+        let item = row.Window.window ? row.Window.window.activeFocusItem : null
+        while (item) { if (item === row) return true; item = item.parent }
+        return false
+    }
+    Timer {
+        id: finishEditing
+        interval: 100
+        repeat: true
+        running: row.editing && !row.saving
+        onTriggered: if (!row.containsFocus()) row.saveTitle()
     }
     Connections {
         target: row.pim
@@ -50,7 +69,7 @@ ItemDelegate {
     }
     contentItem: ColumnLayout {
         id: body
-        spacing: 5
+        spacing: 3
         RowLayout {
             Layout.fillWidth: true
             spacing: 6
@@ -66,7 +85,7 @@ ItemDelegate {
             ColumnLayout {
                 Layout.fillWidth: true
                 Layout.minimumWidth: 0
-                spacing: 2
+                spacing: 1
                 TextField {
                     id: titleInput
                     objectName: "reminderTitle_" + row.todo.id
@@ -83,23 +102,23 @@ ItemDelegate {
                     selectByMouse: true
                     onActiveFocusChanged: {
                         if (activeFocus) { row.workspace.inlineFocusKey = ""; row.editing = true }
-                        else row.saveTitle()
+                        else finishEditing.restart()
                     }
                     onAccepted: { row.saveTitle(); row.forceActiveFocus() }
                     Keys.onEscapePressed: { text = row.todo.title; row.editing = false; row.forceActiveFocus() }
                 }
                 Label {
                     Layout.fillWidth: true
-                    visible: text.length > 0
+                    visible: row.card && !row.editing && text.length > 0
                     text: [row.workspace.dueText(row.todo), row.workspace.canOrganize ? "" : row.workspace.listName(row.todo.listId), (row.todo.tags || []).map(tag => "#" + tag).join(" ")].filter(Boolean).join(" · ")
                     color: !row.todo.completed && row.todo.due && String(row.todo.due).slice(0,10) < row.workspace.today ? design.statusWarning : design.labelSecondary
                     font.pixelSize: 11; elide: Text.ElideRight
                 }
-                Label { visible: Boolean(row.todo.description); text: String(row.todo.description || "").replace(/\n/g, " "); Layout.fillWidth: true; elide: Text.ElideRight; font.pixelSize: 11; color: design.labelSecondary }
+                Label { visible: row.card && !row.editing && Boolean(row.todo.description); text: String(row.todo.description || "").replace(/\n/g, " "); Layout.fillWidth: true; elide: Text.ElideRight; font.pixelSize: 11; color: design.labelSecondary }
             }
-            Label { visible: text.length > 0; text: row.workspace.priorityText(row.todo); color: design.statusWarning; font.pixelSize: 11 }
+            Label { visible: row.showSupportingDetails && text.length > 0; text: row.workspace.priorityText(row.todo); color: design.statusWarning; font.pixelSize: 11 }
             ToolButton {
-                visible: Boolean(row.todo.flagged)
+                visible: row.showSupportingDetails && Boolean(row.todo.flagged)
                 implicitWidth: 22; implicitHeight: 24; padding: 4
                 contentItem: Demo.VectorIcon { name: "flag"; size: 14; color: "#FB8208"; filled: true }
                 background: Item {}
@@ -150,6 +169,17 @@ ItemDelegate {
                 background: Rectangle { radius: 12; color: details.hovered ? design.controlFill : "transparent" }
                 onClicked: { row.workspace.inlineFocusKey = ""; row.saveTitle(); row.workspace.editRequested(row.todo, details) }
             }
+        }
+        CalendarReminderInlineFields {
+            id: inlineFields
+            visible: row.editing
+            Layout.fillWidth: true
+            Layout.leftMargin: 30
+            Layout.rightMargin: 30
+            notes: String(row.todo.description || "")
+            tagsText: (row.todo.tags || []).map(tag => "#" + tag).join(" ")
+            flagged: Boolean(row.todo.flagged)
+            onDetailsRequested: { row.saveTitle(); row.workspace.editRequested(row.todo, details) }
         }
         Image {
             visible: row.card && (row.todo.images || []).length > 0

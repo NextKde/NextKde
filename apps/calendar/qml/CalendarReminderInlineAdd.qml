@@ -1,5 +1,6 @@
 pragma ComponentBehavior: Bound
 import QtQuick
+import QtQuick.Window
 import QtQuick.Controls
 import QtQuick.Layouts
 import Kos.Ui
@@ -17,11 +18,27 @@ ItemDelegate {
     readonly property string errorText: editing ? workspace.inlineError : ""
     objectName: "inlineAdd_" + listId + "_" + section
     CalendarStyle { id: design }
-    implicitHeight: errorText ? 58 : 34
-    padding: card ? 7 : 3
+    implicitHeight: Math.max(card ? 32 : 28, contentItem.implicitHeight + topPadding + bottomPadding)
+    padding: card ? 5 : 3
+    topPadding: card ? 4 : 2
+    bottomPadding: topPadding
     enabled: workspace.pim.connected && workspace.pim.writable
     function begin() { workspace.inlineFocusKey = draftKey; editing = true; input.forceActiveFocus() }
-    function submit() { workspace.submitInline(listId, section) }
+    function submit() { workspace.submitInline(listId, section, {description: inlineFields.notes, tags: inlineFields.tags, flagged: inlineFields.flagged}) }
+    function containsFocus() {
+        let item = root.Window.window ? root.Window.window.activeFocusItem : null
+        while (item) { if (item === root) return true; item = item.parent }
+        return false
+    }
+    Timer {
+        interval: 100; repeat: true; running: root.editing && !root.saving
+        onTriggered: if (!root.containsFocus()) { root.editing = false; if (input.text.trim()) root.submit() }
+    }
+    onSavingChanged: {
+        if (!saving && !workspace.inlineError && !String(workspace.inlineDrafts[draftKey] || "").trim()) {
+            inlineFields.notes = ""; inlineFields.tagsText = ""; inlineFields.flagged = false
+        }
+    }
     Component.onCompleted: if (workspace.inlineFocusKey === draftKey) Qt.callLater(begin)
     onClicked: begin()
     background: Rectangle { radius: design.contentRowRadius; color: root.hovered || root.editing ? design.rowHoverFill : root.card ? design.controlFill : "transparent" }
@@ -54,11 +71,18 @@ ItemDelegate {
                 background: Item {}
                 onActiveFocusChanged: {
                     if (activeFocus) { root.editing = true; root.workspace.inlineFocusKey = root.draftKey }
-                    else if (!root.saving && text.trim()) { root.editing = false; root.submit() }
+
                 }
                 onAccepted: root.submit()
                 Keys.onEscapePressed: { const drafts = Object.assign({}, root.workspace.inlineDrafts); delete drafts[root.draftKey]; root.workspace.inlineDrafts = drafts; root.workspace.inlineFocusKey = ""; root.editing = false; root.forceActiveFocus() }
             }
+        }
+        CalendarReminderInlineFields {
+            id: inlineFields
+            visible: root.editing
+            Layout.fillWidth: true
+            Layout.leftMargin: 30
+            Layout.rightMargin: 30
         }
         Label { visible: root.errorText.length > 0; text: root.errorText; color: design.statusWarning; font.pixelSize: 11; Layout.fillWidth: true; wrapMode: Text.WordWrap }
     }

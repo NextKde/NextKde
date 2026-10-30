@@ -1,2 +1,7 @@
 singleton AppTheme 1.0 AppTheme.qml
 KosDialog 1.0 KosDialog.qml
+SettingsTextField 1.0 SettingsTextField.qml
+SettingsTextArea 1.0 SettingsTextArea.qml
+SettingsSwitch 1.0 SettingsSwitch.qml
+SettingsDateField 1.0 SettingsDateField.qml
+SettingsTimeField 1.0 SettingsTimeField.qml

@@ -48,15 +48,18 @@ Demo.LiquidContentPopover {
     modal: false
     popupType: Popup.Item
     // P02/P03: compact neutral editor, matching the event editor treatment.
-    width: Math.min(360, parent ? parent.width - 16 : 360)
+    width: Math.min(288, parent ? parent.width - 16 : 288)
     height: Math.min((header ? header.implicitHeight : 0) + (footer ? footer.implicitHeight : 0)
         + formLayout.implicitHeight + topPadding + bottomPadding, parent ? parent.height - 16 : 560)
     standardButtons: Dialog.Save | Dialog.Cancel
     padding: 16
+    topPadding: header && header.visible ? 4 : 10
+    bottomPadding: 4
+    spacing: 0
     signal switchTypeRequested()
     header: CalendarEditorTabs {
         visible: root.allowTypeSwitch && root.editingId.length === 0
-        implicitHeight: visible ? 82 : 0
+        implicitHeight: visible ? 55 : 0
         leftInset: root.leftPadding
         // Match the form width, including its 8px scrollbar gutter.
         rightInset: root.rightPadding + 8
@@ -443,42 +446,49 @@ Demo.LiquidContentPopover {
         ColumnLayout {
             id: formLayout
             width: editorScroll.width - 8
-            spacing: 12
+            spacing: 6
             enabled: !root.saving
             Label { visible: root.errorText.length > 0; text: root.errorText; Layout.fillWidth: true; color: root.errorColor; font.pixelSize: 11; wrapMode: Text.WordWrap }
             Label { visible: root.parentId.length > 0; text: qsTr("Subtask of %1").arg(root.parentTitle); Layout.fillWidth: true; elide: Text.ElideRight; font.pixelSize: 11; color: AppTheme.mutedText }
             Demo.SettingsGroup {
-                backgroundColor: design.controlFill
-                verticalPadding: 8
-                ColumnLayout {
+                cornerRadius: 8
+                backgroundColor: AppTheme.dark ? "#363638" : "#EDEDEF"
+                Layout.fillWidth: true
+                CalendarTextField {
+                    blockInput: true
+                    id: titleField
+                    objectName: "reminderTitle"
                     Layout.fillWidth: true
-                    Layout.leftMargin: 12; Layout.rightMargin: 12
-                    spacing: 6
-                    CalendarTextField {
-                        id: titleField
-                        objectName: "reminderTitle"
-                        Layout.fillWidth: true
-                        implicitHeight: 32
-                        padding: 0
-                        font.pixelSize: 20; font.weight: Font.DemiBold
-                        placeholderText: qsTr("Task title")
-                        background: Item {}
-                        invalid: root.hasError("title")
-                        onTextChanged: root.clearError("title")
-                    }
+                    implicitHeight: 28
+                    filled: false
+
+
+                    placeholderText: qsTr("Task title")
+                    invalid: root.hasError("title")
+                    onTextChanged: root.clearError("title")
+                }
+            }
+            Demo.SettingsGroup {
+                cornerRadius: 8
+                backgroundColor: AppTheme.dark ? "#363638" : "#EDEDEF"
+                Layout.fillWidth: true
                     Flickable {
                         id: notesScroll
-                        Layout.fillWidth: true; Layout.preferredHeight: 52
+                        Layout.fillWidth: true; Layout.preferredHeight: 64
                         clip: true; interactive: false
-                        TextArea.flickable: KosTextArea {
+                        TextArea.flickable: Demo.SettingsTextArea {
+                    blockInput: true
+                            filled: false
+
+
+
+
                             id: notesField
                             objectName: "reminderNotes"
                             width: notesScroll.width
-                            font.pixelSize: 12; font.weight: Font.Normal
-                            padding: 0
+
                             placeholderText: qsTr("Optional notes")
                             wrapMode: TextEdit.Wrap
-                            background: null
                             selectByMouse: true
                         }
                         ScrollBar.vertical: ScrollBar {}
@@ -487,23 +497,23 @@ Demo.LiquidContentPopover {
                             onWheel: wheel => { const step = wheel.pixelDelta.y || wheel.angleDelta.y / 2; notesScroll.contentY = Math.max(0, Math.min(Math.max(0, notesScroll.contentHeight - notesScroll.height), notesScroll.contentY - step)); wheel.accepted = true }
                         }
                     }
-                    Rectangle { Layout.fillWidth: true; implicitHeight: 1; color: design.separator }
-                    CalendarTextField { id: urlField; objectName: "reminderUrl"; Layout.fillWidth: true; padding: 0; placeholderText: qsTr("URL"); maximumLength: 4096; background: Item {}
-                        invalid: root.hasError("url"); onTextChanged: root.clearError("url") }
-                }
             }
             Demo.SettingsGroup {
+                cornerRadius: 8
+                backgroundColor: AppTheme.dark ? "#363638" : "#EDEDEF"
                 title: qsTr("Date & time")
                 titleFont.pixelSize: 12; titleFont.weight: Font.Medium
                 titleColor: AppTheme.mutedText
-                backgroundColor: design.controlFill
                 Demo.SettingsItem {
+                allowStacking: false
                     title: qsTr("Date")
-                    minimumLabelWidth: 70; controlSpacing: 6; horizontalPadding: 12
+                    minimumLabelWidth: 44; controlSpacing: 6; horizontalPadding: 12
                     CalendarDateField {
                         id: dueDateField
                         objectName: "reminderDueDate"
                         visible: text.length > 0
+                        Layout.fillWidth: true
+                        Layout.minimumWidth: 0
                         implicitWidth: 130
                         parseDate: root.parseDateText
                         formatDate: date => Qt.formatDate(date, root.inputDateFormat)
@@ -512,8 +522,8 @@ Demo.LiquidContentPopover {
                         invalid: root.hasError("dueDate")
                         onTextChanged: root.clearError("dueDate")
                     }
-                    KosSwitch {
-                        implicitWidth: 34; implicitHeight: 20
+                    Demo.SettingsSwitch {
+                        implicitWidth: 44; implicitHeight: 20; Layout.minimumWidth: 44; Layout.maximumWidth: 44
                         checked: dueDateField.text.length > 0
                         enabled: root.linkedEventId.length === 0
                         accessibleName: qsTr("Date")
@@ -521,12 +531,15 @@ Demo.LiquidContentPopover {
                     }
                 }
                 Demo.SettingsItem {
+                allowStacking: false
                     title: qsTr("Time")
-                    minimumLabelWidth: 70; controlSpacing: 6; horizontalPadding: 12
+                    minimumLabelWidth: 44; controlSpacing: 6; horizontalPadding: 12
                     CalendarTimeField {
                         id: dueTimeField
                         objectName: "reminderDueTime"
                         visible: !allDayCheck.checked
+                        Layout.fillWidth: true
+                        Layout.minimumWidth: 0
                         implicitWidth: 130
                         parseTime: root.parseTimeText
                         formatTime: date => Qt.formatTime(date, root.inputTimeFormat)
@@ -535,37 +548,42 @@ Demo.LiquidContentPopover {
                         onTextChanged: root.clearError("dueTime")
                         onTimeSelected: if (!dueDateField.text.trim()) dueDateField.text = root.formatDateInput(Qt.formatDate(new Date(), "yyyy-MM-dd"))
                     }
-                    KosSwitch { objectName: "reminderTimeToggle"; implicitWidth: 34; implicitHeight: 20; checked: !allDayCheck.checked; accessibleName: qsTr("Time"); onToggled: checked => { if (checked) root.enableTime(); else allDayCheck.checked = true } }
+                    Demo.SettingsSwitch { objectName: "reminderTimeToggle"; implicitWidth: 44; implicitHeight: 20; Layout.minimumWidth: 44; Layout.maximumWidth: 44; checked: !allDayCheck.checked; accessibleName: qsTr("Time"); onToggled: checked => { if (checked) root.enableTime(); else allDayCheck.checked = true } }
                 }
                 Demo.SettingsItem {
+                allowStacking: false
                     title: qsTr("Repeat"); visible: dueDateField.text.length > 0
-                    minimumLabelWidth: 70; horizontalPadding: 12
-                    CalendarComboBox { id: recurrenceBox; objectName: "reminderRecurrence"; implicitWidth: 150; enabled: root.linkedEventId.length === 0; model: [qsTr("Never"), qsTr("Daily"), qsTr("Weekly"), qsTr("Monthly"), qsTr("Yearly")].concat(root.customRecurrence ? [qsTr("Custom repeat")] : []) }
+                    minimumLabelWidth: 44; horizontalPadding: 12
+                    CalendarComboBox { id: recurrenceBox; objectName: "reminderRecurrence"; Layout.fillWidth: true; Layout.minimumWidth: 0; enabled: root.linkedEventId.length === 0; model: [qsTr("Never"), qsTr("Daily"), qsTr("Weekly"), qsTr("Monthly"), qsTr("Yearly")].concat(root.customRecurrence ? [qsTr("Custom repeat")] : []) }
                 }
                 Demo.SettingsItem {
+                allowStacking: false
                     title: qsTr("Notification"); visible: dueDateField.text.length > 0 && root.linkedEventId.length === 0
-                    minimumLabelWidth: 70; horizontalPadding: 12
-                    CalendarComboBox { id: reminderBox; objectName: "reminderAlarm"; implicitWidth: 150; model: [qsTr("None"), qsTr("At the scheduled time"), qsTr("5 minutes before"), qsTr("15 minutes before"), qsTr("30 minutes before"), qsTr("1 hour before"), qsTr("1 day before")].concat(root.customReminder ? [qsTr("%1 minutes before").arg(root.savedReminderMinutes)] : []) }
+                    minimumLabelWidth: 44; horizontalPadding: 12
+                    CalendarComboBox { id: reminderBox; objectName: "reminderAlarm"; Layout.fillWidth: true; Layout.minimumWidth: 0; model: [qsTr("None"), qsTr("At the scheduled time"), qsTr("5 minutes before"), qsTr("15 minutes before"), qsTr("30 minutes before"), qsTr("1 hour before"), qsTr("1 day before")].concat(root.customReminder ? [qsTr("%1 minutes before").arg(root.savedReminderMinutes)] : []) }
                 }
             }
             CalendarCheckBox { id: allDayCheck; visible: false }
             Demo.SettingsGroup {
+                cornerRadius: 8
+                backgroundColor: AppTheme.dark ? "#363638" : "#EDEDEF"
                 title: qsTr("Organization")
                 titleFont.pixelSize: 12; titleFont.weight: Font.Medium
                 titleColor: AppTheme.mutedText
-                backgroundColor: design.controlFill
                 Demo.SettingsItem {
-                    title: qsTr("List"); minimumLabelWidth: 70; horizontalPadding: 12
+                allowStacking: false
+                    title: qsTr("List"); minimumLabelWidth: 44; horizontalPadding: 12
                     CalendarComboBox {
-                        id: listBox; objectName: "reminderList"; implicitWidth: 180; colorRole: "color"; textRole: "name"
+                        id: listBox; objectName: "reminderList"; Layout.fillWidth: true; Layout.minimumWidth: 0; colorRole: "color"; textRole: "name"
                         model: root.availableLists.map(list => ({id: list.id, color: list.color, name: list.id === "inbox" && list.name === "Inbox" ? qsTr("Inbox") : list.id === "personal" && list.name === "Personal" ? qsTr("Personal") : list.name}))
                         onActivated: { root.listId = model[currentIndex].id; sectionField.text = "" }
                     }
                 }
                 Demo.SettingsItem {
-                    title: qsTr("Section"); minimumLabelWidth: 70; horizontalPadding: 12
+                allowStacking: false
+                    title: qsTr("Section"); minimumLabelWidth: 44; horizontalPadding: 12
                     CalendarComboBox {
-                        id: sectionField; objectName: "reminderSection"; implicitWidth: 180; textRole: "label"
+                        id: sectionField; objectName: "reminderSection"; Layout.fillWidth: true; Layout.minimumWidth: 0; textRole: "label"
                         property string text: ""
                         enabled: root.parentId.length === 0
                         model: [{name: "", label: qsTr("None")}].concat(((root.availableLists.find(list => list.id === root.listId) || {}).sections || []).map(section => ({name: section.name, label: section.name})))
@@ -575,8 +593,9 @@ Demo.LiquidContentPopover {
                     }
                 }
                 Demo.SettingsItem {
-                    title: qsTr("Tags"); minimumLabelWidth: 70; horizontalPadding: 12
-                    CalendarButton { text: tagsField.text || qsTr("Add tags…"); implicitWidth: 180; flat: true; onClicked: tagsPane.visible = !tagsPane.visible }
+                allowStacking: false
+                    title: qsTr("Tags"); minimumLabelWidth: 44; horizontalPadding: 12
+                    CalendarButton { text: tagsField.text || qsTr("Add tags…"); Layout.fillWidth: true; Layout.minimumWidth: 0; flat: true; onClicked: tagsPane.visible = !tagsPane.visible }
                 }
                 ColumnLayout {
                     id: tagsPane
@@ -603,13 +622,38 @@ Demo.LiquidContentPopover {
                 }
             }
             Demo.SettingsGroup {
-                backgroundColor: design.controlFill
-                Demo.SettingsItem { title: qsTr("Flagged"); horizontalPadding: 12; KosSwitch { id: flaggedCheck; implicitWidth: 34; implicitHeight: 20; accessibleName: qsTr("Flagged"); onToggled: value => checked = value } }
-                Demo.SettingsItem { title: qsTr("Priority"); minimumLabelWidth: 70; horizontalPadding: 12; CalendarComboBox { id: priorityBox; implicitWidth: 180; model: [qsTr("None"), qsTr("Low"), qsTr("Medium"), qsTr("High")] } }
-                Demo.SettingsItem { title: qsTr("Completed"); visible: root.editingId.length > 0; horizontalPadding: 12; KosSwitch { id: completedCheck; implicitWidth: 34; implicitHeight: 20; accessibleName: qsTr("Completed"); onToggled: value => checked = value } }
+                cornerRadius: 8
+                backgroundColor: AppTheme.dark ? "#363638" : "#EDEDEF"
+                Demo.SettingsItem {
+                allowStacking: false; title: qsTr("Flagged"); horizontalPadding: 12; Demo.SettingsSwitch { id: flaggedCheck; implicitWidth: 44; implicitHeight: 20; Layout.minimumWidth: 44; Layout.maximumWidth: 44; accessibleName: qsTr("Flagged"); onToggled: value => checked = value } }
+                Demo.SettingsItem {
+                allowStacking: false; title: qsTr("Priority"); minimumLabelWidth: 44; horizontalPadding: 12; CalendarComboBox { id: priorityBox; Layout.fillWidth: true; Layout.minimumWidth: 0; model: [qsTr("None"), qsTr("Low"), qsTr("Medium"), qsTr("High")] } }
+                Demo.SettingsItem {
+                allowStacking: false; title: qsTr("Completed"); visible: root.editingId.length > 0; horizontalPadding: 12; Demo.SettingsSwitch { id: completedCheck; implicitWidth: 44; implicitHeight: 20; Layout.minimumWidth: 44; Layout.maximumWidth: 44; accessibleName: qsTr("Completed"); onToggled: value => checked = value } }
             }
             CalendarButton { text: qsTr("Add images…"); Layout.fillWidth: true; enabled: root.imageFiles.length < 8; onClicked: imagePicker.open() }
             CalendarReminderImages { visible: root.imageFiles.length > 0; images: root.imageFiles; editable: true; onRemoveRequested: index => root.imageFiles = root.imageFiles.filter((file, i) => i !== index) }
+            Demo.SettingsGroup {
+                cornerRadius: 8
+                backgroundColor: AppTheme.dark ? "#363638" : "#EDEDEF"
+                Layout.fillWidth: true
+                CalendarTextField {
+                    blockInput: true
+                    id: urlField
+                    objectName: "reminderUrl"
+                    Layout.fillWidth: true
+                    implicitHeight: 28
+                    filled: false
+
+
+                    placeholderText: qsTr("URL")
+                    Accessible.name: qsTr("URL")
+                    maximumLength: 4096
+                    invalid: root.hasError("url")
+                    onTextChanged: root.clearError("url")
+                }
+            }
+
         }
     }
 }

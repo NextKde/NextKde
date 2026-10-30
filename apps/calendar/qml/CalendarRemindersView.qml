@@ -191,12 +191,12 @@ Item {
         filter = requestedFilter
         if (requestedList) listId = requestedList
     }
-    function submitInline(targetList, section) {
+    function submitInline(targetList, section, fields = {}) {
         const key = targetList + "/" + section
         const title = String(inlineDrafts[key] || "").trim()
         if (!title || inlineSavingKey || pim.busy || !pim.writable) return
         inlineSavingKey = key; inlineError = ""
-        pim.createTodo(Object.assign({}, creationDefaults(), {title: title, listId: targetList, section: section, allDay: true, reminderMinutes: -1}))
+        pim.createTodo(Object.assign({}, creationDefaults(), fields, {title: title, listId: targetList, section: section, allDay: true, reminderMinutes: -1}))
     }
     function reveal(todo) { Qt.callLater(() => root.openRequested(todo, root)) }
     function toggleSection(key) { collapsedSections = collapsedSections.includes(key) ? collapsedSections.filter(item => item !== key) : collapsedSections.concat([key]) }

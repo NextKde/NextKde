@@ -12,11 +12,12 @@ Item {
     property int currentIndex: 0
     property bool switchingEnabled: true
     signal switchRequested(int index)
-    implicitHeight: 82
+    // 28px selector, 8px above and 19px below (15px extra breathing room).
+    implicitHeight: 55
     Rectangle {
         anchors.fill: parent
-        anchors.topMargin: 25
-        anchors.bottomMargin: 25
+        anchors.topMargin: 8
+        anchors.bottomMargin: 19
         anchors.leftMargin: root.leftInset
         anchors.rightMargin: root.rightInset
         radius: height/2

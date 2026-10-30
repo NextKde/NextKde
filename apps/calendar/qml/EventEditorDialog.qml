@@ -48,15 +48,18 @@ Demo.LiquidContentPopover {
     popupType: Popup.Item
     // P02/P03: compact editor — 420 wide, and never taller than the client
     // viewport minus margins so the footer stays reachable at 760x540.
-    width: Math.min(360, parent ? parent.width - 16 : 360)
+    width: Math.min(288, parent ? parent.width - 16 : 288)
     height: Math.min((header ? header.implicitHeight : 0) + (footer ? footer.implicitHeight : 0)
         + formLayout.implicitHeight + topPadding + bottomPadding, parent ? parent.height - 16 : 560)
     standardButtons: Dialog.Save | Dialog.Cancel
     padding: 16
+    topPadding: header && header.visible ? 4 : 10
+    bottomPadding: 4
+    spacing: 0
     signal switchTypeRequested()
     header: CalendarEditorTabs {
         visible: root.editingId.length === 0
-        implicitHeight: visible ? 82 : 0
+        implicitHeight: visible ? 55 : 0
         leftInset: root.leftPadding
         // Match the form width, including its 8px scrollbar gutter.
         rightInset: root.rightPadding + 8
@@ -495,7 +498,7 @@ Demo.LiquidContentPopover {
         ColumnLayout {
             id: formLayout
             width: editorScroll.width - 8
-            spacing: 8
+            spacing: 6
 
             // I4: inline validation error — pinned to the top of the form so
             // it is visible without scrolling; offending fields also get a
@@ -509,19 +512,21 @@ Demo.LiquidContentPopover {
                 wrapMode: Text.WordWrap
             }
 
-            Pane {
+            Demo.SettingsGroup {
+                cornerRadius: 8
+                backgroundColor: AppTheme.dark ? "#363638" : "#EDEDEF"
                 Layout.fillWidth: true
-                padding: 0
-                background: Item {}
-                contentItem: RowLayout {
+                Demo.SettingsItem {
+                allowStacking: false
                 Layout.fillWidth: true
-                spacing: 8
-                Label { text: qsTr("Category") + ":"; Layout.preferredWidth: root.labelColumnWidth; color: AppTheme.mutedText; font.pixelSize: 13; font.weight: Font.Bold }
-                            CalendarComboBox {
+                title: qsTr("Category")
+                minimumLabelWidth: root.labelColumnWidth
+                horizontalPadding: 12
+                CalendarComboBox {
+                    Layout.preferredWidth: Math.max(0, parent.parent.availableWidth - parent.parent.minimumLabelWidth - parent.parent.controlSpacing)
                     id: categoryBox
                     objectName: "eventCategory"
                     Layout.fillWidth: true
-                    Layout.preferredHeight: root.fieldHeight
                     model: root.availableCategories
                     textRole: "name"
                     colorRole: "color"
@@ -531,55 +536,47 @@ Demo.LiquidContentPopover {
             }
             }
 
-            Pane {
+            Demo.SettingsGroup {
+                cornerRadius: 8
+                backgroundColor: AppTheme.dark ? "#363638" : "#EDEDEF"
                 Layout.fillWidth: true
-                padding: 0
-                background: Item {}
-                contentItem: ColumnLayout { spacing: 8
-            RowLayout {
-                Layout.fillWidth: true
-                spacing: 8
-
-
-
-                Label { text: qsTr("Title") + ":"; Layout.preferredWidth: root.labelColumnWidth; color: AppTheme.mutedText; font.pixelSize: 13; font.weight: Font.Bold }
                 CalendarTextField {
-                    font.pixelSize: design.editorInputFontSize
-                    font.weight: Font.Normal
+                    blockInput: true
                     id: titleField
                     objectName: "eventTitle"
                     Layout.fillWidth: true
-                    Layout.preferredHeight: fieldHeight
+                    implicitHeight: 28
+                    filled: false
+
+
                     placeholderText: qsTr("Event title")
                     Accessible.name: qsTr("Event title")
                     invalid: root.hasError("title")
-                    outlineColor: root.hasError("title")
-                        ? AppTheme.destructive : "transparent"
                     onTextChanged: root.clearError("title")
                 }
             }
 
-
-                }
-            }
-            Pane {
+            Demo.SettingsGroup {
+                cornerRadius: 8
+                backgroundColor: AppTheme.dark ? "#363638" : "#EDEDEF"
                 Layout.fillWidth: true
-                padding: 0
-                background: Item {}
-                contentItem: ColumnLayout { spacing: 8
-                RowLayout {
-                    Layout.fillWidth: true
-                    spacing: 8
-                    Label { text: qsTr("Time") + ":"; Layout.preferredWidth: root.labelColumnWidth; color: AppTheme.mutedText; font.pixelSize: 13; font.weight: Font.Bold }
+                ColumnLayout { Layout.fillWidth: true; spacing: 0
+                Demo.SettingsItem {
+                allowStacking: false
+                Layout.fillWidth: true
+                title: qsTr("Time")
+                minimumLabelWidth: root.labelColumnWidth
+                horizontalPadding: 12
                 Button {
+                    Layout.preferredWidth: Math.max(0, parent.parent.availableWidth - parent.parent.minimumLabelWidth - parent.parent.controlSpacing)
                     Layout.fillWidth: true
-                    implicitHeight: 48
-                    background: Rectangle { radius: design.formGroupRadius; color: design.controlFill }
-                    leftPadding: 12
-                    rightPadding: 12
+                    implicitHeight: 36
+                    background: Item {}
+                    leftPadding: 0
+                    rightPadding: 0
                     contentItem: ColumnLayout {
-                        Label { text: startDateField.text + "  " + startTimeField.text + " – " + endTimeField.text; color: design.labelPrimary; font.pixelSize: 11 }
-                        Label { text: root.scheduleExpanded ? qsTr("Hide date and notification options") : qsTr("Date, repeat and notification options"); color: design.labelSecondary; font.pixelSize: 11 }
+                        Label { Layout.fillWidth: true; elide: Text.ElideRight; text: startDateField.text + "  " + startTimeField.text + " – " + endTimeField.text; color: design.labelPrimary; font.pixelSize: 11 }
+                        Label { Layout.fillWidth: true; elide: Text.ElideRight; text: root.scheduleExpanded ? qsTr("Hide date and notification options") : qsTr("Date, repeat and notification options"); color: design.labelSecondary; font.pixelSize: 11 }
                     }
                     onClicked: root.scheduleExpanded = !root.scheduleExpanded
                 }
@@ -587,15 +584,15 @@ Demo.LiquidContentPopover {
                 ColumnLayout {
                     Layout.fillWidth: true
                     visible: root.scheduleExpanded
-                    spacing: 8
-            RowLayout {
-                Layout.fillWidth: true
-                spacing: 10
-
-                CalendarCheckBox {
+                    spacing: 0
+            Demo.SettingsItem {
+                allowStacking: false
+                title: qsTr("All day")
+                horizontalPadding: 12
+                Demo.SettingsSwitch {
                     id: allDayCheck
-                    text: qsTr("All day")
-                    onToggled: {
+                    onToggled: value => {
+                        checked = value
                         const next = root.nextDateFromText(startDateField.text.trim())
                         if (checked && endDateField.text.trim() === startDateField.text.trim())
                             endDateField.text = next
@@ -603,21 +600,15 @@ Demo.LiquidContentPopover {
                             endDateField.text = startDateField.text.trim()
                     }
                 }
-
-                Item { Layout.fillWidth: true }
             }
-            RowLayout {
+            Demo.SettingsItem {
+                allowStacking: false
                 Layout.fillWidth: true
-                spacing: 8
-
-                Label {
-                    text: qsTr("Start") + ":"
-                    Layout.preferredWidth: root.labelColumnWidth
-                    Layout.alignment: Qt.AlignVCenter
-                    color: AppTheme.mutedText
-                    font.pixelSize: 13; font.weight: Font.Bold
-                }
+                title: qsTr("Start")
+                minimumLabelWidth: root.labelColumnWidth
+                horizontalPadding: 12
                 CalendarDateField {
+                    Layout.preferredWidth: Math.max(0, parent.parent.availableWidth - parent.parent.minimumLabelWidth - parent.parent.controlSpacing)
                     parseDate: root.parseDateText
                     formatDate: date => Qt.formatDate(date, root.inputDateFormat)
                     calendarLocale: root.inputLocale
@@ -625,7 +616,6 @@ Demo.LiquidContentPopover {
                     font.weight: Font.Normal
                     id: startDateField
                     Layout.fillWidth: true
-                    Layout.preferredHeight: fieldHeight
                     placeholderText: root.datePattern
                     Accessible.name: qsTr("Start date")
                     invalid: root.hasError("startDate")
@@ -634,24 +624,20 @@ Demo.LiquidContentPopover {
                     onTextChanged: root.clearError("startDate")
                 }
             }
-            RowLayout {
+            Demo.SettingsItem {
+                allowStacking: false
                 Layout.fillWidth: true
-                spacing: 8
-                Label {
-                    text: qsTr("Start time") + ":"
-                    Layout.preferredWidth: root.labelColumnWidth
-                    color: AppTheme.mutedText
-                    font.pixelSize: 13
-                    font.weight: Font.Bold
-                }
+                title: qsTr("Start time")
+                minimumLabelWidth: root.labelColumnWidth
+                horizontalPadding: 12
                 CalendarTimeField {
+                    Layout.preferredWidth: Math.max(0, parent.parent.availableWidth - parent.parent.minimumLabelWidth - parent.parent.controlSpacing)
                     parseTime: root.parseTimeText
                     formatTime: date => Qt.formatTime(date, root.inputTimeFormat)
                     font.pixelSize: design.editorInputFontSize
                     font.weight: Font.Normal
                     id: startTimeField
                     Layout.fillWidth: true
-                    Layout.preferredHeight: fieldHeight
                     placeholderText: root.timePattern
                     enabled: !allDayCheck.checked
                     Accessible.name: qsTr("Start time")
@@ -661,18 +647,14 @@ Demo.LiquidContentPopover {
                     onTextChanged: root.clearError("startTime")
                 }
             }
-            RowLayout {
+            Demo.SettingsItem {
+                allowStacking: false
                 Layout.fillWidth: true
-                spacing: 8
-
-                Label {
-                    text: qsTr("End") + ":"
-                    Layout.preferredWidth: root.labelColumnWidth
-                    Layout.alignment: Qt.AlignVCenter
-                    color: AppTheme.mutedText
-                    font.pixelSize: 13; font.weight: Font.Bold
-                }
+                title: qsTr("End")
+                minimumLabelWidth: root.labelColumnWidth
+                horizontalPadding: 12
                 CalendarDateField {
+                    Layout.preferredWidth: Math.max(0, parent.parent.availableWidth - parent.parent.minimumLabelWidth - parent.parent.controlSpacing)
                     parseDate: root.parseDateText
                     formatDate: date => Qt.formatDate(date, root.inputDateFormat)
                     calendarLocale: root.inputLocale
@@ -680,7 +662,6 @@ Demo.LiquidContentPopover {
                     font.weight: Font.Normal
                     id: endDateField
                     Layout.fillWidth: true
-                    Layout.preferredHeight: fieldHeight
                     placeholderText: root.datePattern
                     Accessible.name: qsTr("End date")
                     invalid: root.hasError("endDate")
@@ -689,24 +670,20 @@ Demo.LiquidContentPopover {
                     onTextChanged: root.clearError("endDate")
                 }
             }
-            RowLayout {
+            Demo.SettingsItem {
+                allowStacking: false
                 Layout.fillWidth: true
-                spacing: 8
-                Label {
-                    text: qsTr("End time") + ":"
-                    Layout.preferredWidth: root.labelColumnWidth
-                    color: AppTheme.mutedText
-                    font.pixelSize: 13
-                    font.weight: Font.Bold
-                }
+                title: qsTr("End time")
+                minimumLabelWidth: root.labelColumnWidth
+                horizontalPadding: 12
                 CalendarTimeField {
+                    Layout.preferredWidth: Math.max(0, parent.parent.availableWidth - parent.parent.minimumLabelWidth - parent.parent.controlSpacing)
                     parseTime: root.parseTimeText
                     formatTime: date => Qt.formatTime(date, root.inputTimeFormat)
                     font.pixelSize: design.editorInputFontSize
                     font.weight: Font.Normal
                     id: endTimeField
                     Layout.fillWidth: true
-                    Layout.preferredHeight: fieldHeight
                     placeholderText: root.timePattern
                     enabled: !allDayCheck.checked
                     Accessible.name: qsTr("End time")
@@ -716,42 +693,32 @@ Demo.LiquidContentPopover {
                     onTextChanged: root.clearError("endTime")
                 }
             }
-            RowLayout {
+            Demo.SettingsItem {
+                allowStacking: false
                 Layout.fillWidth: true
-                spacing: 8
-
-                Label {
-                    text: qsTr("Repeat") + ":"
-                    Layout.preferredWidth: root.labelColumnWidth
-                    Layout.alignment: Qt.AlignVCenter
-                    color: AppTheme.mutedText
-                    font.pixelSize: 13; font.weight: Font.Bold
-                }
+                title: qsTr("Repeat")
+                minimumLabelWidth: root.labelColumnWidth
+                horizontalPadding: 12
                 CalendarComboBox {
+                    Layout.preferredWidth: Math.max(0, parent.parent.availableWidth - parent.parent.minimumLabelWidth - parent.parent.controlSpacing)
                     id: recurrenceBox
                     objectName: "eventRecurrenceSelect"
                     Layout.fillWidth: true
-                    Layout.preferredHeight: fieldHeight
                     model: [qsTr("Does not repeat"), qsTr("Daily"), qsTr("Weekly"),
                         qsTr("Monthly"), qsTr("Yearly")].concat(root.customRecurrence ? [qsTr("Custom (keep existing rule)")] : [])
                     Accessible.name: qsTr("Event recurrence")
                 }
             }
-            RowLayout {
+            Demo.SettingsItem {
+                allowStacking: false
                 Layout.fillWidth: true
-                spacing: 8
-
-                Label {
-                    text: qsTr("Reminder") + ":"
-                    Layout.preferredWidth: root.labelColumnWidth
-                    Layout.alignment: Qt.AlignVCenter
-                    color: AppTheme.mutedText
-                    font.pixelSize: 13; font.weight: Font.Bold
-                }
+                title: qsTr("Reminder")
+                minimumLabelWidth: root.labelColumnWidth
+                horizontalPadding: 12
                 CalendarComboBox {
+                    Layout.preferredWidth: Math.max(0, parent.parent.availableWidth - parent.parent.minimumLabelWidth - parent.parent.controlSpacing)
                     id: reminderBox
                     Layout.fillWidth: true
-                    Layout.preferredHeight: fieldHeight
                     model: [qsTr("None"), qsTr("At start"), qsTr("5 minutes before"),
                         qsTr("15 minutes before"), qsTr("30 minutes before"),
                         qsTr("1 hour before"), qsTr("1 day before")].concat(root.customReminder ? [qsTr("%1 minutes before").arg(root.savedReminderMinutes)] : [])
@@ -761,32 +728,14 @@ Demo.LiquidContentPopover {
                 }
                 }
             }
-            Pane {
+            Demo.SettingsGroup {
+                cornerRadius: 8
+                backgroundColor: AppTheme.dark ? "#363638" : "#EDEDEF"
                 Layout.fillWidth: true
-                padding: 0
-                background: Item {}
-                contentItem: ColumnLayout { spacing: 8
-            RowLayout {
-                Layout.fillWidth: true
-                spacing: 8
-
-
-
-                // Canonical editable-notes scroller, same as the task editor.
-                // P02: fixed neutral frame around the notes viewport — same
-                // treatment as the task editor.
-                Label { text: qsTr("Notes") + ":"; Layout.preferredWidth: root.labelColumnWidth; Layout.alignment: Qt.AlignTop; topPadding: 6; color: AppTheme.mutedText; font.pixelSize: 13; font.weight: Font.Bold }
-                Item {
-                    id: notesFrame
-                    Rectangle { anchors.fill: parent; radius: design.formGroupRadius; color: design.controlFill }
-                    Layout.fillWidth: true
-                    Layout.preferredHeight: 68
-
-
-
                     Flickable {
                         id: notesScroll
-                        anchors.fill: parent
+                        Layout.fillWidth: true
+                        Layout.preferredHeight: 64
                         clip: true
                         boundsBehavior: Flickable.StopAtBounds
                         // Non-interactive (see task editor): wheel + scrollbar
@@ -795,15 +744,20 @@ Demo.LiquidContentPopover {
                         // Native TextArea.flickable attached integration — the
                         // attached property is on the Flickable, its value is
                         // the TextArea; native pointer/cursor/selection ownership.
-                        TextArea.flickable: KosTextArea {
-                            font.pixelSize: design.editorInputFontSize
-                            font.weight: Font.Normal
+                        TextArea.flickable: Demo.SettingsTextArea {
+                    blockInput: true
+                            filled: false
+
+
+
+
+
+
                             id: descriptionField
                             width: notesScroll.width
                             placeholderText: qsTr("Optional notes")
                             wrapMode: TextEdit.Wrap
                             Accessible.name: qsTr("Event notes")
-                            background: null
                             activeFocusOnPress: true
                             selectByMouse: true
                         }
@@ -829,9 +783,6 @@ Demo.LiquidContentPopover {
                             }
                         }
                     }
-                }
-            }
-                }
             }
 
             ColumnLayout {
@@ -874,7 +825,6 @@ Demo.LiquidContentPopover {
                     CalendarComboBox {
                         id: todoListBox
                         Layout.fillWidth: true
-                        Layout.preferredHeight: fieldHeight
                         model: root.availableLists
                         textRole: "name"
                         Accessible.name: qsTr("Linked todo list")
@@ -883,7 +833,6 @@ Demo.LiquidContentPopover {
                     CalendarComboBox {
                         id: todoPriorityBox
                         Layout.preferredWidth: 110
-                        Layout.preferredHeight: fieldHeight
                         model: [qsTr("None"), qsTr("Low"), qsTr("Medium"),
                             qsTr("High")]
                         Accessible.name: qsTr("Linked todo priority")

@@ -18,7 +18,7 @@ Item {
     signal deleteCanceled()
     signal deleteConfirmed()
     CalendarStyle { id: design }
-    implicitHeight: actions.implicitHeight + 32
+    implicitHeight: actions.implicitHeight + 14
     onConfirmingDeleteChanged: {
         if (confirmingDelete) confirmation.open()
         else confirmation.close()
@@ -31,7 +31,9 @@ Item {
         anchors.left: parent.left
         anchors.right: parent.right
         anchors.bottom: parent.bottom
-        anchors.margins: 16
+        anchors.leftMargin: 16
+        anchors.rightMargin: 16
+        anchors.bottomMargin: 10
         spacing: 8
         Demo.LiquidDialogButton {
             visible: footer.editing

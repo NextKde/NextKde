@@ -878,4 +878,24 @@
     <name>CalendarReminderInlineAdd</name>
     <message><source>New reminder</source><translation>New reminder</translation></message>
 </context>
+<context><name>SettingsDateField</name>
+<message><source>Choose date</source><translation>Choose date</translation></message>
+<message><source>Previous month</source><translation>Previous month</translation></message>
+<message><source>Next month</source><translation>Next month</translation></message>
+<message><source>Selected date</source><translation>Selected date</translation></message>
+<message><source>Today</source><translation>Today</translation></message>
+</context>
+<context><name>SettingsTimeField</name>
+<message><source>Choose time</source><translation>Choose time</translation></message>
+<message><source>Hour</source><translation>Hour</translation></message>
+<message><source>Minute</source><translation>Minute</translation></message>
+<message><source>Done</source><translation>Done</translation></message>
+</context>
+
+<context>
+    <name>CalendarReminderInlineFields</name>
+    <message><source>Notes</source><translation>Notes</translation></message>
+    <message><source>Add tags</source><translation>Add tags</translation></message>
+    <message><source>Flag reminder</source><translation>Flag reminder</translation></message>
+</context>
 </TS>

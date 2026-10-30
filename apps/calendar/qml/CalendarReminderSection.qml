@@ -62,7 +62,7 @@ ColumnLayout {
     }
     ColumnLayout {
         Layout.fillWidth: true
-        spacing: root.card ? 7 : 0
+        spacing: root.card ? 4 : 0
         visible: !root.collapsed
         Repeater {
             model: root.sectionData.todos
