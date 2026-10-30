@@ -41,6 +41,7 @@ QtObject {
 `);
             writeFileSync(join(directory, "TasksModel.qml"), `import QtQuick
 ListModel {
+    dynamicRoles: true
     enum GroupMode { GroupDisabled }
     enum SortMode { SortDisabled }
     property int groupMode: 0

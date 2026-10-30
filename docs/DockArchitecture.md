@@ -421,7 +421,9 @@ example Magic Lamp) reads `Window::iconGeometry()` from that protocol target for
 titlebar, shortcut and Dock actions. KOS does not claim those animations or change
 the user's enabled native effects. The separate KOS Scale/Genie styles still use
 their existing private targets and deformation. `tests/dock/native-target.test.mjs`
-covers identity precedence and coordinate conversion; real VM acceptance must
+covers identity precedence and coordinate conversion, while the offscreen
+`native-target` runtime case loads the production service to exercise publication,
+effect failure, heartbeat retries, surface replacement and icon removal. Real VM acceptance must
 also exercise titlebar minimize and Dock restore, grouped/separate windows,
 hidden/side Docks and secondary outputs at fractional scale.
 
