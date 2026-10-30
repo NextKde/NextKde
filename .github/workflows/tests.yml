@@ -26,7 +26,7 @@ jobs:
       image: archlinux:base-devel
     steps:
       - name: Install fixture dependencies
-        run: pacman -Sy --noconfirm --needed git nodejs qt6-base qt6-declarative cmake ninja kconfig
+        run: pacman -Sy --noconfirm --needed git nodejs qt6-base qt6-declarative cmake ninja kconfig kio kservice
       - uses: actions/checkout@v7
       - name: Run native target identity and publication regressions
         env:
