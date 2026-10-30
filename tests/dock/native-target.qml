@@ -27,6 +27,13 @@ Item {
             service.registerIcon(icon)
             wait(120)
             service.publishNow()
+            compare(service.nativeTasks.count, 1)
+            compare(service.nativeDelegates.count, 1)
+            verify(service._targetEntries().length > 0, "icon target exists")
+            const delegate = service.nativeDelegates.objectAt(0)
+            verify(delegate !== null, "native delegate exists")
+            compare(String(delegate.model.AppId), "org.kde.kate")
+            compare(String(delegate.model.WinIdList[0]), "{aaaa-bbbb}")
             let calls = service.nativeTasks.requests
             verify(calls.length > 0)
             compare(calls[calls.length - 1].parent, surface)
