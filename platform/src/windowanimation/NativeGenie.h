@@ -88,6 +88,19 @@ inline bool apply(const QString &style, QString &error)
     QDBusInterface kwin(QStringLiteral("org.kde.KWin"), QStringLiteral("/KWin"), QStringLiteral("org.kde.KWin"));
     kwin.setTimeout(1000);
     if (kwin.isValid()) kwin.call(QStringLiteral("reconfigure"));
+    // KWin versions differ in whether /KWin.reconfigure updates the loaded
+    // effect set. Use the normal built-in effect switch API as the KCM does;
+    // no plugin binary is replaced or reloaded here.
+    if (effects.isValid()) {
+        const auto activate = [&](const QString &name, bool enabled) {
+            const QDBusReply<bool> loaded = effects.call(QStringLiteral("isEffectLoaded"), name);
+            if (!loaded.isValid() || loaded.value() == enabled) return;
+            if (enabled) effects.call(QStringLiteral("loadEffect"), name);
+            else effects.call(QStringLiteral("unloadEffect"), name);
+        };
+        activate(QStringLiteral("squash"), plugins.readEntry("squashEnabled", true));
+        activate(QStringLiteral("magiclamp"), plugins.readEntry("magiclampEnabled", false));
+    }
     if (style == QLatin1String("genie")) {
         const QDBusReply<bool> loaded = effects.call(QStringLiteral("isEffectLoaded"), QStringLiteral("magiclamp"));
         if (!loaded.isValid() || !loaded.value()) {
