@@ -927,6 +927,12 @@ KosApplicationWindow {
         onActivated: backend.refresh()
     }
 
+    KosSettingsDialog {
+        id: settingsDialog
+        settings: root.applicationSettings
+        applicationName: qsTr("Weather")
+    }
+
     function positionCitySearch() {
         if (!citySearchPopup.parent) return
         const point = locationField.mapToItem(citySearchPopup.parent, 0, locationField.height)
@@ -1008,7 +1014,7 @@ KosApplicationWindow {
                     font.pixelSize: 11
                     wrapMode: Text.WordWrap
                 }
-                Button {
+                KosButton {
                     id: retrySearch
                     objectName: "retryCitySearch"
                     Layout.topMargin: 3
@@ -2447,10 +2453,11 @@ KosApplicationWindow {
                         Keys.onEscapePressed: citySearchPopup.close()
                         TapHandler { onTapped: root.showCitySearch() }
                     }
-                    ToolButton {
+                    KosToolButton {
                         anchors.right: parent.right
                         anchors.verticalCenter: parent.verticalCenter
                         width: 26; height: 26
+                        padding: 0
                         visible: locationField.text.length > 0
                         text: "×"
                         focusPolicy: Qt.NoFocus
@@ -2669,13 +2676,14 @@ KosApplicationWindow {
                                     }
                                 }
 
-                                ToolButton {
+                                KosToolButton {
                                     id: cityOptions
                                     objectName: "cityOptions_" + String(savedLocation.modelData.id)
                                     anchors.right: parent.right
                                     anchors.top: cardTop.bottom
                                     anchors.topMargin: 1
                                     width: 24; height: 24
+                                    padding: 0
                                     opacity: savedLocation.hovered || savedLocation.activeFocus
                                         || hovered || activeFocus
                                         || (cityMenu.visible && root.cityMenuId === String(savedLocation.modelData.id)) ? 1 : 0
@@ -2848,6 +2856,34 @@ KosApplicationWindow {
                     Accessible.name: qsTr("Units")
 
                     ButtonGroup { id: unitsGroup }
+
+                    KosToolButton {
+                        id: settingsButton
+                        text: "⚙"
+                        font.pixelSize: 16
+                        Layout.preferredWidth: root.trayControlHeight
+                        Layout.preferredHeight: root.trayControlHeight
+                        Layout.alignment: Qt.AlignVCenter
+                        background: GlassCircleBg {
+                            subtle: true
+                            focused: settingsButton.activeFocus && settingsButton.enabled
+                            hovered: settingsButton.hovered
+                            pressed: settingsButton.down
+                        }
+                        contentItem: Label {
+                            text: settingsButton.text
+                            font: settingsButton.font
+                            color: settingsButton.enabled
+                                ? root.sidebarControlInk
+                                : root.sidebarControlInkDisabled
+                            horizontalAlignment: Text.AlignHCenter
+                            verticalAlignment: Text.AlignVCenter
+                        }
+                        Accessible.name: qsTr("Weather settings")
+                        ToolTip.visible: hovered
+                        ToolTip.text: Accessible.name
+                        onClicked: settingsDialog.open()
+                    }
 
                     KosToolButton {
                         id: refreshButton
