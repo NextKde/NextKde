@@ -58,6 +58,7 @@ qt_add_qml_module(kos_ui
         controls/shaders/liquid_number.frag.qsb
         i18n/qmldir
         i18n/ZhCatalog.mjs
+        i18n/PtBrCatalog.mjs
         i18n/SystemLanguage.mjs
         controls/shaders/liquid_compact_surface.frag.qsb
         controls/shaders/liquid_compact_surface.vert.qsb

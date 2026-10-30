@@ -5,25 +5,40 @@ system UI language (`QLocale::system().uiLanguages()`, or `Qt.locale().uiLanguag
 in the shell). On Linux, Qt derives this from the process environment, including
 `LANGUAGE`, `LC_ALL`, `LC_MESSAGES`, and `LANG`; no saved user profile is required.
 A `zh` language, including regional/script variants, selects
-Chinese; every other primary language selects English. A secondary Chinese
-fallback does not override a non-Chinese primary language. ListenFree ignores
-old saved language selections and excludes language from settings imports.
+Chinese; a `pt` language, including `pt_PT`, selects Brazilian Portuguese;
+every other primary language selects English. A secondary fallback does not
+override the primary language. The Shell and Settings can also pin the
+interface language (`auto`, `zh-CN`, `pt-BR` or `en`) in Settings → Theme.
+ListenFree has no Portuguese catalog yet, ignores old saved language selections
+and excludes language from settings imports.
 
 Applications choose the language at startup. Relaunch them after changing the
 system UI language; restart the shell or sign in again for desktop widgets.
 User content, song metadata, and provider API identifiers keep their original
-language. Dates and weekdays use the same selected Chinese/English UI locale.
+language. Dates and weekdays use the same selected UI locale.
 
 The common apps embed their Qt Linguist catalogs. Building needs Qt LinguistTools;
-Chinese standard dialog buttons additionally use the system Qt translations
-package (`qt6-translations` or `qt6-translations-l10n`). ListenFree's English
+translated standard dialog buttons additionally use the system Qt translations
+package (`qt6-translations` or `qt6-translations-l10n`).
+
+## Catalogs
+
+| Surface | Chinese | Brazilian Portuguese |
+|---|---|---|
+| Shell and Settings (`I18n.tr`) | `shared/qml/i18n/ZhCatalog.mjs` | `shared/qml/i18n/PtBrCatalog.mjs` |
+| Calendar, Todo, Weather, Calculator | `apps/common/translations/kos_apps_zh_CN.ts` | `apps/common/translations/kos_apps_pt_BR.ts` |
+| KWin glass effect | `kwin/glass-effect/po/zh_CN/` | `kwin/glass-effect/po/pt_BR/` |
+
+The Chinese catalogs must cover every source string. The Portuguese catalogs may
+lag behind: a missing entry falls back to English, but every entry present must
+match a current source string and keep its placeholders. ListenFree's English
 catalog is generated from `en_US.tsv` by
 `apps/listenfree/tools/compile_translations.py`.
 
 ## Checks
 
-- `python tests/localization/check_catalogs.py`: extracted UI messages and placeholders.
-- `node tests/localization/widget-language.mjs`: the shared QML primary-language policy and literal Shell/Settings translation calls, including dictionary coverage and placeholders.
+- `python tests/localization/check_catalogs.py`: extracted UI messages and placeholders; reports untranslated pt_BR app messages.
+- `node tests/localization/widget-language.mjs`: the shared QML primary-language policy and literal Shell/Settings translation calls, including dictionary coverage and placeholders; reports untranslated pt-BR Shell strings.
 - `ctest --test-dir BUILD -R language --output-on-failure`: app and shell language tests.
 - ListenFree's standalone build with `LISTENFREE_BUILD_TESTS=ON` adds
   `listenfree.language.*`, including saved-language override regression tests.

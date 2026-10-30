@@ -316,7 +316,8 @@ void PlatformServer::broadcastKWinEvent(const QJsonObject &event)
 void PlatformServer::runCommand(QLocalSocket *socket, const QJsonObject &request,
                                 const QString &program, const QStringList &arguments,
                                 std::function<QJsonObject(const QByteArray &, int)> parser,
-                                int timeoutMs, const QString &cacheKey, int cacheTtlMs)
+                                int timeoutMs, const QString &cacheKey, int cacheTtlMs,
+                                std::function<void()> failedToStart)
 {
     // With a cacheKey the response is shared: a poll that lands while the
     // same operation is still running queues onto it instead of spawning a
@@ -379,10 +380,15 @@ void PlatformServer::runCommand(QLocalSocket *socket, const QJsonObject &request
     });
     connect(process, &QProcess::errorOccurred, this,
             [this, guardedSocket, request, process, replied, timedOut,
-             cacheKey, cacheTtlMs](QProcess::ProcessError) {
+             cacheKey, cacheTtlMs, failedToStart](QProcess::ProcessError error) {
         if (*replied)
             return;
         *replied = true;
+        if (error == QProcess::FailedToStart && failedToStart && cacheKey.isEmpty()) {
+            process->deleteLater();
+            failedToStart();
+            return;
+        }
         // A watchdog kill arrives here as Crashed, ahead of finished() --
         // surface the timeout instead of a generic failure.
         const QString code = *timedOut ? QStringLiteral("command-timeout")
