@@ -4,8 +4,8 @@ import "."
 
 Item {
     id: root
-    Item { id: surface }
-    Item { id: replacementSurface }
+    Item { id: surface; width: 1920; height: 180 }
+    Item { id: replacementSurface; width: 1920; height: 180 }
     QtObject {
         id: icon
         property var windowAnimationSurface: surface

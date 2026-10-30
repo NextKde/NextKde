@@ -412,7 +412,9 @@ window surface. The adapter therefore creates a non-rendering rectangle directly
 under the Dock surface's content item, subtracts the surface origin from the
 global target and publishes integer logical pixels. This avoids hover transforms,
 side-Dock rotation and double-counting secondary-output offsets or pixel scale.
-Missing/unrepresentable slots invalidate their published rectangle; destroying
+Auto-hidden slots retain their along-edge position and clip to the permanently
+mapped surface edge, including negative outward offsets on a left Dock.
+Missing/invalid slots invalidate their published rectangle; destroying
 the Dock surface removes its geometries in KWin. Native publication is independent
 of the private effect's availability, payload cache and retry delay.
 

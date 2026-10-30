@@ -136,7 +136,8 @@ QtObject {
                 const entry = NativeTarget.selectTarget(entries, windowId, apps)
                 const root = entry?.icon.windowAnimationSurface
                 const rect = entry && root ? NativeTarget.surfaceRect(entry.target,
-                    entry.icon.surfaceOriginX, entry.icon.surfaceOriginY) : null
+                    entry.icon.surfaceOriginX, entry.icon.surfaceOriginY,
+                    root.width, root.height) : null
                 if (!rect) {
                     invalidate()
                     return

@@ -36,3 +36,12 @@ test("removed, invalid and off-surface targets cannot wrap unsigned Wayland coor
     assert.equal(surfaceRect({ x: NaN, y: 0, width: 44, height: 44 }, 0, 0), null);
     assert.equal(surfaceRect({ x: -1, y: 0, width: 44, height: 44 }, 0, 0), null);
 });
+
+test("auto-hidden Docks keep the icon's slot at each mapped surface edge", () => {
+    assert.deepEqual(surfaceRect({ x: -48, y: 200, width: 44, height: 44 }, 0, 0, 180, 1080),
+        { x: 0, y: 200, width: 44, height: 44 });
+    assert.deepEqual(surfaceRect({ x: 2100, y: 1100, width: 44, height: 44 }, 1920, 900, 1920, 180),
+        { x: 180, y: 179, width: 44, height: 1 });
+    assert.deepEqual(surfaceRect({ x: 184, y: 200, width: 44, height: 44 }, 0, 0, 180, 1080),
+        { x: 179, y: 200, width: 1, height: 44 });
+});
