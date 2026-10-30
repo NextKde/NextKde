@@ -10,6 +10,7 @@
 | --- | --- |
 | 依赖、安装、更新、卸载 | [开始使用](GettingStarted.zh-CN.md) |
 | NixOS 声明式安装 | [NixOS](nixos-quickstart.zh-CN.md) |
+| 窗口动画选择、原生神灯及回退 | [窗口动画](WindowAnimations.zh-CN.md) |
 | 维护、验收、发布 | [发布流程](Releasing.zh-CN.md) |
 | 各版改动与实际证据 | [v0.1.1](releases/v0.1.1.zh-CN.md)、[v0.1.0](releases/v0.1.0.zh-CN.md) |
 | 发布说明格式 | [模板](releases/TEMPLATE.zh-CN.md) |

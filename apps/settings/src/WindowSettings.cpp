@@ -70,6 +70,7 @@ QVariantMap WindowSettings::state() const {
             {"shadow", defaults.value("shadow").toObject().value("enabled").toBool(true)},
             {"hideAnimation", hide},
             {"nativeGenieSupported", KOS::WindowAnimation::nativeSupported()},
+            {"nativeGenieFallback", animation.readEntry("NativeGenieFallback", QString())},
             {"closeAnimation", animation.readEntry("CloseAnimation", QStringLiteral("scale"))},
             {"decoration", decoration.readEntry("library", QStringLiteral("org.kde.breeze"))},
             {"buttonGlyphMode", buttonGlyphMode}};

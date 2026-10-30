@@ -37,8 +37,8 @@ jobs:
       - name: Build Settings and check native animation transitions
         run: |
           cmake -S apps/settings -B .build/native-genie-settings -G Ninja -DBUILD_TESTING=ON
-          cmake --build .build/native-genie-settings --target kos-window-settings-test kos-settings --parallel 2
-          ctest --test-dir .build/native-genie-settings -R '^kos-settings.window-config$' --output-on-failure
+          cmake --build .build/native-genie-settings --target kos-window-settings-test kos-native-genie-test kos-settings --parallel 2
+          ctest --test-dir .build/native-genie-settings -R '^kos-settings.(window-config|native-genie-upgrade)$' --output-on-failure
 
   source-release:
     name: source release selection

@@ -191,8 +191,12 @@ appearance preference. It preserves an explicit window-page choice. A legacy
 `HideAnimationSelection=genie` and `HideAnimation=none`. The shared
 `platform/src/windowanimation/NativeGenie.h` adapter checks support, manages
 Magic Lamp/Squash exclusivity, and preserves previous plugin-key values and
-presence for restoration when the user chooses None. Unsupported Genie returns
-a failure without changing the user's selection.
+presence for restoration when the user chooses None. Missing/unsupported or
+load-failed Genie retains the selected `genie` preference and configures
+`HideAnimation=scale` with a `NativeGenieFallback` reason. Saved Genie is
+rechecked on startup, so support returning recovers the native backend. Explicit
+None is not migrated. Failed exclusivity/project-effect changes restore both
+configuration and runtime state; rollback failure is reported explicitly.
 
 ### Audio output selection
 

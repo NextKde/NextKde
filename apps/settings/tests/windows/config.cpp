@@ -58,10 +58,15 @@ int main(int argc, char **argv) {
     CHECK(settings.setAnimation("hide", "none"));
     CHECK(settings.state()["closeAnimation"]=="fade");
     CHECK(settings.state()["hideAnimation"]=="none");
-    // Without a compositor, Genie fails explicitly and preserves the choice.
-    CHECK(!settings.setAnimation("hide", "genie"));
-    CHECK(settings.state()["hideAnimation"]=="none");
+    // An offline upgrade must retain a usable animation, not silently turn off
+    // the removed water-drop path. Genie intent is retained for later recovery.
+    CHECK(settings.setAnimation("hide", "genie"));
+    CHECK(settings.state()["hideAnimation"]=="genie");
     CHECK(!settings.state()["nativeGenieSupported"].toBool());
+    CHECK(!settings.state()["nativeGenieFallback"].toString().isEmpty());
+    KConfigGroup offlineAnimation(config, "Effect-kos_dock_window_animation");
+    CHECK(offlineAnimation.readEntry("HideAnimation", QString())=="scale");
+    CHECK(settings.setAnimation("hide", "none"));
 
     KConfigGroup plugins(config, "Plugins");
     plugins.writeEntry("magiclampEnabled", false);

@@ -63,6 +63,7 @@
     "kos-ui.settings-material",
     "kos-ui.traditional-color",
     "kos-settings.window-config",
+    "kos-settings.native-genie-upgrade",
     "kos-settings.backend-modules",
     "kos-settings.app-store",
     "kos-dock.model",
