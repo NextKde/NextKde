@@ -154,7 +154,8 @@ ColumnLayout {
                     },
                     {
                         id: "genie",
-                        label: I18n.tr("Genie")
+                        label: windowPage.snapshot.nativeGenieSupported === false
+                            ? I18n.tr("Genie (unavailable)") : I18n.tr("Genie")
                     }
                 ]
                 currentIndex: ["none", "scale", "genie"].indexOf(windowPage.snapshot.hideAnimation ?? "scale")
@@ -199,7 +200,7 @@ ColumnLayout {
         Layout.fillWidth: true
         Layout.leftMargin: 13
         Layout.rightMargin: 13
-        text: I18n.tr("Hide means minimizing to the Dock. Choosing “None” makes KOS drop the animation and leave it to other enabled KWin effects.")
+        text: I18n.tr("Genie uses KWin Magic Lamp and follows the Dock icon. None restores your previous KWin minimize effects.")
         color: colors.secondaryText
         font.pixelSize: 11
         wrapMode: Text.Wrap

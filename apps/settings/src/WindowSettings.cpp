@@ -1,4 +1,5 @@
 #include "WindowSettings.h"
+#include "../../../platform/src/windowanimation/NativeGenie.h"
 #include <KConfigGroup>
 #include <KSharedConfig>
 #include <QDBusInterface>
@@ -49,6 +50,10 @@ void reconfigure(const QString &effect) {
 }
 }
 
+WindowSettings::WindowSettings(QObject *parent) : QObject(parent) {
+    KOS::WindowAnimation::migrate(m_error);
+}
+
 QVariantMap WindowSettings::state() const {
     const auto doc = read(path(QStringLiteral("window-appearance.json")));
     const auto defaults = doc.value(QStringLiteral("defaults")).toObject();
@@ -56,8 +61,7 @@ QVariantMap WindowSettings::state() const {
     config->reparseConfiguration();
     const KConfigGroup animation(config, QStringLiteral("Effect-kos_dock_window_animation"));
     const KConfigGroup decoration(config, QStringLiteral("org.kde.kdecoration2"));
-    const QString hide = animation.readEntry("HideAnimation",
-        animation.readEntry("AnimationStyle", QStringLiteral("scale")));
+    const QString hide = KOS::WindowAnimation::selection(config);
     const auto buttonsDoc = read(path(QStringLiteral("window-buttons.json")));
     const auto buttonsDefault = buttonsDoc.value(QStringLiteral("default")).toObject();
     const QString buttonGlyphMode = buttonsDefault.value(QStringLiteral("glyphMode")).toString(QStringLiteral("always"));
@@ -65,6 +69,7 @@ QVariantMap WindowSettings::state() const {
             {"radius", defaults.value("corners").toObject().value("radius").toInt(20)},
             {"shadow", defaults.value("shadow").toObject().value("enabled").toBool(true)},
             {"hideAnimation", hide},
+            {"nativeGenieSupported", KOS::WindowAnimation::nativeSupported()},
             {"closeAnimation", animation.readEntry("CloseAnimation", QStringLiteral("scale"))},
             {"decoration", decoration.readEntry("library", QStringLiteral("org.kde.breeze"))},
             {"buttonGlyphMode", buttonGlyphMode}};
@@ -146,6 +151,11 @@ bool WindowSettings::setAnimation(const QString &kind, const QString &style) {
         ? style != "none" && style != "fade" && style != "scale"
         : style != "none" && style != "scale" && style != "genie")) return false;
     m_error.clear();
+    if (!close) {
+        const bool saved = KOS::WindowAnimation::apply(style, m_error);
+        emit changed();
+        return saved;
+    }
     auto config = KSharedConfig::openConfig(QStringLiteral("kwinrc"));
     config->reparseConfiguration();
     KConfigGroup animation(config, QStringLiteral("Effect-kos_dock_window_animation"));
@@ -178,10 +188,18 @@ bool WindowSettings::setButtonGlyphMode(const QString &mode) {
     return saved;
 }
 bool WindowSettings::installDefaults() {
+    if (!KOS::WindowAnimation::migrate(m_error)) return false;
     QString error;
     const auto integration = read(path(QStringLiteral("window-integration.json")), &error);
     if (!error.isEmpty()) { m_error = error; return false; }
     // Never undo a saved opt-out on an upgrade or `kosctl start`.
     if (integration.contains("originalDecoration")) return true;
     return setTakeover(state().value("enabled").toBool());
+}
+bool WindowSettings::restoreAnimationDefaults() {
+    const auto config = KSharedConfig::openConfig(QStringLiteral("kwinrc"));
+    config->reparseConfiguration();
+    const KConfigGroup animation(config, QStringLiteral("Effect-kos_dock_window_animation"));
+    if (!animation.readEntry("NativeEffectsManaged", false)) return true;
+    return KOS::WindowAnimation::apply(QStringLiteral("none"), m_error);
 }

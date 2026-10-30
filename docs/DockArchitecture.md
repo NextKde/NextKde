@@ -429,8 +429,16 @@ of the private effect's availability, payload cache and retry delay.
 With KOS **Hide and restore → None**, the enabled KWin minimize effect (for
 example Magic Lamp) reads `Window::iconGeometry()` from that protocol target for
 titlebar, shortcut and Dock actions. KOS does not claim those animations or change
-the user's enabled native effects. The separate KOS Scale/Genie styles still use
-their existing private targets and deformation. `tests/dock/native-target.test.mjs`
+the user's enabled native effects. The Scale style uses the private KOS target. Genie now selects KWin's native
+Magic Lamp; the old water-drop mesh has been removed. `HideAnimationSelection`
+stores the user's choice while `HideAnimation=none` prevents even an older
+resident KOS effect from running its deformation. Settings and the legacy theme
+adapter share `platform/src/windowanimation/NativeGenie.h` for this transition.
+Legacy `genie` migrates at daemon/Settings startup only when no explicit selection
+exists. Explicit None is preserved. The adapter saves/restores the presence and
+values of Magic Lamp and Squash plugin keys while it owns minimize effects.
+Missing/unsupported Magic Lamp rejects selection without modifying settings.
+Close/open animation settings remain independent. `tests/dock/native-target.test.mjs`
 covers identity precedence and coordinate conversion, while the offscreen
 `native-target` runtime case loads the production service to exercise publication,
 effect failure, heartbeat retries, surface replacement and icon removal. Real VM acceptance must

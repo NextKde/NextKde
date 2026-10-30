@@ -9,7 +9,7 @@ class WindowSettings : public QObject
     Q_PROPERTY(QVariantMap state READ state NOTIFY changed)
     Q_PROPERTY(QString error READ error NOTIFY changed)
 public:
-    explicit WindowSettings(QObject *parent = nullptr) : QObject(parent) {}
+    explicit WindowSettings(QObject *parent = nullptr);
     QVariantMap state() const;
     QString error() const { return m_error; }
     Q_INVOKABLE void refresh() { emit changed(); }
@@ -19,6 +19,7 @@ public:
     Q_INVOKABLE bool setAnimation(const QString &kind, const QString &style);
     Q_INVOKABLE bool setButtonGlyphMode(const QString &mode);
     bool installDefaults();
+    bool restoreAnimationDefaults();
 signals:
     void changed();
 private:

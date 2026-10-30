@@ -23,7 +23,6 @@
 #include <algorithm>
 #include <chrono>
 #include <cmath>
-#include <numbers>
 
 Q_LOGGING_CATEGORY(KWIN_KOS_DOCK_ANIMATION, "kwin_effect_kos_dock_animation")
 
@@ -66,38 +65,6 @@ qreal smootherStep(qreal value)
         * (clamped * (clamped * 6.0 - 15.0) + 10.0);
 }
 
-// Maps each horizontal mesh row between the two circular sides of an
-// asymmetric rounded rectangle. Keeping every row horizontal and its X
-// coordinates monotonic prevents the corner geometry from twisting quads.
-QPointF roundedRectCoordinate(qreal u, qreal v, const QSizeF &size,
-                              qreal topRadiusRatio,
-                              qreal bottomRadiusRatio)
-{
-    const qreal width = std::max(1.0, size.width());
-    const qreal height = std::max(1.0, size.height());
-    const qreal shortSide = std::min(width, height);
-    const qreal topRadius = shortSide
-        * std::clamp(topRadiusRatio, 0.0, 0.5);
-    const qreal bottomRadius = shortSide
-        * std::clamp(bottomRadiusRatio, 0.0, 0.5);
-    const qreal normalizedU = std::clamp(u, 0.0, 1.0);
-    const qreal normalizedV = std::clamp(v, 0.0, 1.0);
-    const qreal y = normalizedV * height;
-
-    qreal inset = 0.0;
-    if (topRadius > 0.0 && y < topRadius) {
-        const qreal dy = topRadius - y;
-        inset = topRadius - std::sqrt(std::max(
-            0.0, topRadius * topRadius - dy * dy));
-    } else if (bottomRadius > 0.0 && y > height - bottomRadius) {
-        const qreal dy = y - (height - bottomRadius);
-        inset = bottomRadius - std::sqrt(std::max(
-            0.0, bottomRadius * bottomRadius - dy * dy));
-    }
-
-    const qreal rowWidth = std::max(0.0, width - inset * 2.0);
-    return QPointF((inset + normalizedU * rowWidth) / width, normalizedV);
-}
 
 }
 
@@ -188,9 +155,11 @@ void DockWindowAnimationEffect::reconfigure(ReconfigureFlags flags)
     // Keep the Dock animation independent from KWin's legacy scale duration.
     m_minimizeDuration = std::clamp(group.readEntry("GenieDuration", 300), 160, 1200);
     m_restoreDuration = std::clamp(group.readEntry("RestoreDuration", 200), 80, 1200);
-    m_morphStyle = group.readEntry("AnimationStyle", QStringLiteral("scale"))
-        == QLatin1String("genie") ? MorphStyle::Genie : MorphStyle::Scale;
     m_hideAnimation = group.readEntry("HideAnimation", group.readEntry("AnimationStyle", QStringLiteral("scale")));
+    // Genie is KWin's built-in Magic Lamp. The platform/settings adapter
+    // enables it; this plugin retains opening/closing and Scale only.
+    if (m_hideAnimation == QLatin1String("genie"))
+        m_hideAnimation = QStringLiteral("none");
     m_closeAnimation = group.readEntry("CloseAnimation", QStringLiteral("scale"));
     m_closeDuration = std::clamp(group.readEntry("CloseDuration", 180), 80, 1200);
 }
@@ -312,9 +281,7 @@ QString DockWindowAnimationEffect::status() const
         {QStringLiteral("openDuration"), m_openDuration},
         {QStringLiteral("minimizeDuration"), m_minimizeDuration},
         {QStringLiteral("restoreDuration"), m_restoreDuration},
-        {QStringLiteral("deformation"), m_morphStyle == MorphStyle::Genie
-            ? QStringLiteral("water-drop-mesh-and-fade")
-            : QStringLiteral("direct-scale-and-fade")},
+        {QStringLiteral("deformation"), QStringLiteral("direct-scale-and-fade")},
         {QStringLiteral("hideAnimation"), m_hideAnimation},
         {QStringLiteral("closeAnimation"), m_closeAnimation},
         {QStringLiteral("closeAnimationCount"), static_cast<qint64>(m_closeAnimationCount)},
@@ -519,7 +486,6 @@ void DockWindowAnimationEffect::startAnimation(EffectWindow *window,
     animation.target = target;
     animation.transition = transition;
     animation.closeScale = m_closeAnimation != QLatin1String("fade");
-    animation.useGenie = m_hideAnimation == QLatin1String("genie");
     // 固化记录 CSD 阴影缓冲区相对偏移量（用于 Wayland 客户端最小化几何补偿）
     if (m_csdOffsets.contains(window)) {
         animation.csdOffset = m_csdOffsets.value(window);
@@ -744,117 +710,6 @@ void DockWindowAnimationEffect::applyDockMorph(
     }
 }
 
-void DockWindowAnimationEffect::applyBottomGenie(
-    EffectWindow *window, WindowAnimation &animation,
-    WindowQuadList &quads) const
-{
-    const QRectF geometry = window->frameGeometry();
-    const QRectF icon = animation.target.geometry;
-    const qreal timelineProgress = std::clamp(
-        animation.timeLine.value(), 0.0, 1.0);
-    const qreal motionProgress = std::pow(timelineProgress, 1.65);
-
-    // KWin's redirected window texture can include client decoration or
-    // shadow margins. Measure the actual quad bounds before making the grid,
-    // so position normalization is identical for CSD Electron windows and
-    // standard KDE-decorated windows. The quad list is stable for a
-    // redirected window, so the makeGrid(40) subdivision, the source bounds
-    // and every progress-independent per-vertex constant are cached on the
-    // animation and only rebuilt when the quad count, the edge quad bounds
-    // or the icon rect change (e.g. a resize mid-animation or a moved dock).
-    const QRectF firstBounds = quads.isEmpty()
-        ? QRectF() : QRectF(quads.constFirst().bounds());
-    const QRectF lastBounds = quads.isEmpty()
-        ? QRectF() : QRectF(quads.constLast().bounds());
-    if (animation.cachedQuadCount != quads.count()
-            || animation.cachedFirstQuadBounds != firstBounds
-            || animation.cachedLastQuadBounds != lastBounds
-            || animation.cachedIcon != icon) {
-        animation.cachedQuadCount = quads.count();
-        animation.cachedFirstQuadBounds = firstBounds;
-        animation.cachedLastQuadBounds = lastBounds;
-        animation.cachedIcon = icon;
-        animation.cachedSourceBounds = QRectF();
-        for (const WindowQuad &quad : std::as_const(quads))
-            animation.cachedSourceBounds = animation.cachedSourceBounds.isNull()
-                ? QRectF(quad.bounds())
-                : animation.cachedSourceBounds.united(QRectF(quad.bounds()));
-        animation.cachedGrid = quads.makeGrid(40);
-        animation.cachedVertices.clear();
-        animation.cachedVertices.reserve(
-            animation.cachedGrid.count() * 4);
-        const QRectF &sourceBounds = animation.cachedSourceBounds;
-        if (sourceBounds.width() > 0.0 && sourceBounds.height() > 0.0) {
-            for (const WindowQuad &quad : std::as_const(animation.cachedGrid)) {
-                for (int index = 0; index < 4; ++index) {
-                    WindowAnimation::VertexConstants constants;
-                    constants.originalX = quad[index].x();
-                    constants.originalY = quad[index].y();
-                    // WindowVertex::u/v are texture coordinates, not a reliable
-                    // normalized location in the window. Derive mesh coordinates
-                    // from positions so shadow/CSD quads and high-DPI textures
-                    // cannot clamp whole rows or columns to one edge.
-                    const qreal u = std::clamp(
-                        (constants.originalX - sourceBounds.left())
-                            / sourceBounds.width(), 0.0, 1.0);
-                    const qreal v = std::clamp(
-                        (constants.originalY - sourceBounds.top())
-                            / sourceBounds.height(), 0.0, 1.0);
-                    constants.delay = (1.0 - v) * 0.36;
-                    constants.phaseDenom = std::max(0.001, 1.0 - constants.delay);
-                    const QPointF rounded = roundedRectCoordinate(
-                        u, v, icon.size(), 0.30, 0.20);
-                    constants.roundedX = rounded.x();
-                    constants.roundedY = rounded.y();
-                    constants.sinPiV = std::sin(
-                        std::numbers::pi_v<qreal> * v);
-                    animation.cachedVertices.append(constants);
-                }
-            }
-        }
-    }
-    const QRectF sourceBounds = animation.cachedSourceBounds;
-    if (sourceBounds.width() <= 0.0 || sourceBounds.height() <= 0.0)
-        return;
-
-    // Lower rows arrive first while upper rows lag. The endpoint uses a 30%
-    // top radius and a 20% bottom radius, both measured from the shorter side.
-    quads = animation.cachedGrid;
-    qsizetype vertexIndex = 0;
-    for (WindowQuad &quad : quads) {
-        for (int index = 0; index < 4; ++index, ++vertexIndex) {
-            const WindowAnimation::VertexConstants &constants
-                = animation.cachedVertices.at(vertexIndex);
-            const qreal phase = std::clamp(
-                (motionProgress - constants.delay) / constants.phaseDenom,
-                0.0, 1.0);
-            const qreal verticalProgress = smoothStep(phase);
-            const qreal horizontalProgress = 1.0
-                - std::pow(1.0 - verticalProgress, 2.05);
-            const qreal targetX = icon.x() - geometry.x()
-                + icon.width() * constants.roundedX;
-            const qreal targetY = icon.y() - geometry.y()
-                + icon.height() * constants.roundedY;
-            qreal currentX = std::lerp(constants.originalX, targetX,
-                                       horizontalProgress);
-
-            // Give the middle of the drop a small outward belly. Scaling each
-            // complete row around its moving centre preserves vertex ordering
-            // and cannot flip the mesh triangles.
-            const qreal rowCenterX = std::lerp(sourceBounds.center().x(),
-                icon.center().x() - geometry.x(), horizontalProgress);
-            const qreal outwardBulge = 0.12 * std::sin(
-                std::numbers::pi_v<qreal> * verticalProgress)
-                * constants.sinPiV;
-            currentX = rowCenterX
-                + (currentX - rowCenterX) * (1.0 + outwardBulge);
-            quad[index].setX(currentX);
-            quad[index].setY(std::lerp(constants.originalY, targetY,
-                                       verticalProgress));
-        }
-    }
-}
-
 void DockWindowAnimationEffect::apply(EffectWindow *window, int mask,
                                        WindowPaintData &data,
                                        WindowQuadList &quads)
@@ -919,11 +774,7 @@ void DockWindowAnimationEffect::apply(EffectWindow *window, int mask,
         : smoothStep((arrived - (1.0 - kGlassFadeSpan)) / kGlassFadeSpan);
     window->setData(KosDockAnimationGlassFadeRole, glassFade);
 
-    if (it->useGenie
-            && it->transition != Transition::Open)
-        applyBottomGenie(window, *it, quads);
-    else
-        applyDockMorph(window, *it, quads);
+    applyDockMorph(window, *it, quads);
 }
 
 #ifdef KOS_KWIN_PAINT_TIME_API
