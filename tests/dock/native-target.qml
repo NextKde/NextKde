@@ -23,7 +23,7 @@ Item {
 
         function test_publication_and_cleanup() {
             const service = DockWindowAnimationTargetService
-            service.nativeTasks.append({ AppId: "org.kde.kate", WinIdList: ["{aaaa-bbbb}"] })
+            service.nativeTasks.append({ AppId: "org.kde.kate", windowUuid: "{aaaa-bbbb}" })
             service.registerIcon(icon)
             wait(120)
             service.publishNow()
@@ -33,7 +33,7 @@ Item {
             const delegate = service.nativeDelegates.objectAt(0)
             verify(delegate !== null, "native delegate exists")
             compare(String(delegate.model.AppId), "org.kde.kate")
-            compare(String(delegate.model.WinIdList[0]), "{aaaa-bbbb}")
+            compare(String(delegate.model.windowUuid), "{aaaa-bbbb}")
             let calls = service.nativeTasks.requests
             verify(calls.length > 0)
             compare(calls[calls.length - 1].parent, surface)

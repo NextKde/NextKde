@@ -19,6 +19,22 @@ permissions:
   contents: read
 
 jobs:
+  dock-native-target:
+    name: Dock native minimize targets
+    runs-on: ubuntu-24.04
+    container:
+      image: archlinux:base-devel
+    steps:
+      - name: Install fixture dependencies
+        run: pacman -Sy --noconfirm --needed git nodejs qt6-base qt6-declarative
+      - uses: actions/checkout@v7
+      - name: Run native target identity and publication regressions
+        env:
+          QT_FORCE_STDERR_LOGGING: "1"
+        run: |
+          node tests/dock/native-target.test.mjs
+          node tests/dock/runtime.mjs native-target /usr/lib/qt6/bin/qmltestrunner
+
   source-release:
     name: source release selection
     runs-on: ubuntu-24.04
@@ -341,4 +357,3 @@ jobs:
             .build/applications/results.xml
             .build/applications/Testing/Temporary/
             .build/applications/CMakeFiles/CMakeConfigureLog.yaml
-

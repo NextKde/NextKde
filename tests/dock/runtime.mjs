@@ -18,7 +18,11 @@ const cases = {
             const service = readFileSync(new URL("DockWindowAnimationTargetService.qml", source), "utf8")
                 .replace("import qs.desktop.modules.common", 'import "."')
                 .replace("import qs.desktop.modules.platform", 'import "."')
-                .replace("import org.kde.taskmanager as TaskManager", 'import "." as TaskManager');
+                .replace("import org.kde.taskmanager as TaskManager", 'import "." as TaskManager')
+                // QML ListModel turns list roles into nested ListModels even
+                // with dynamicRoles. The real C++ task model returns a flat
+                // QVariantList of UUIDs; expand the fixture's scalar here.
+                .replace("const ids = model.WinIdList || []", "const ids = [model.windowUuid]");
             writeFileSync(join(directory, "DockWindowAnimationTargetService.qml"), service);
             copyFileSync(new URL("NativeMinimizeTarget.mjs", source), join(directory, "NativeMinimizeTarget.mjs"));
             copyFileSync(new URL("native-target.qml", import.meta.url), join(directory, "tst_native_target.qml"));
