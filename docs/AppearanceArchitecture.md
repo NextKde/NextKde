@@ -82,7 +82,7 @@ rendering owners; a visual style change must not duplicate clipping or shadows.
 
 `modules/applauncher/AppLauncherWindow.qml` blurs the root application page while a
 folder is open, rather than painting a black dimming overlay. The folder page is
-a sibling of the filtered root page, keeping its icons, labels and input sharp.
+outside the filtered root-page subtree, keeping its icons, labels and input sharp.
 A 220 ms transition drives the root-page `MultiEffect` (maximum blur radius 32)
 and raises the glass backdrop sigma to at least 20. Stronger configured blur is
 preserved; closing restores the ordinary blur binding without changing settings.

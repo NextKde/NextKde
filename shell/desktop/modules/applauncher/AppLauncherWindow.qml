@@ -1374,7 +1374,7 @@ PanelWindow {
                     Item {
                         id: launcherContentArea
                         objectName: "launcher-root-content"
-                        // Filter only the root page; folder contents are siblings
+                        // Filter only the root page; folder contents are outside this subtree
                         // and retain their sharp icons and labels.
                         layer.enabled: root.displayedFolder !== null || root.folderBlurProgress > 0
                         layer.effect: MultiEffect {

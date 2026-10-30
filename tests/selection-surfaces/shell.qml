@@ -25,6 +25,12 @@ ShellRoot {
             result = result.concat(namedItems(children[i], name))
         return result
     }
+    function isDescendantOf(item, ancestor) {
+        for (let current = item; current; current = current.parent) {
+            if (current === ancestor) return true
+        }
+        return false
+    }
     Timer {
         interval: 200
         repeat: true
@@ -74,7 +80,7 @@ ShellRoot {
                     const rootPage = namedItems(launcher.contentItem, "launcher-root-content")[0]
                     const folderPage = namedItems(launcher.contentItem, "launcher-folder-page")[0]
                     check(rootPage.layer.enabled, "opening a folder filters the root page")
-                    check(folderPage && folderPage.parent === rootPage.parent && !folderPage.layer.enabled,
+                    check(folderPage && !isDescendantOf(folderPage, rootPage) && !folderPage.layer.enabled,
                         "folder contents remain outside the blurred root-page layer")
                     check(JSON.parse(launcher.inspectGlass()).blurSigma === Math.max(closedBlurSigma, 20),
                         "open folder increases backdrop blur without reducing stronger user settings")
