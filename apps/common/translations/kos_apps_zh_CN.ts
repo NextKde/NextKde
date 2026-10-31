@@ -40,9 +40,14 @@
       <source>Completed</source>
       <translation>已完成</translation>
     </message>
-  </context>
+      <message>
+        <source>Open link</source>
+        <translation>打开链接</translation>
+    </message>
+</context>
   <context>
     <name>CalendarTaskEditorDialog</name>
+<message><source>Time</source><translation>时间</translation></message>
     <message>
       <location filename="../../calendar/qml/CalendarTaskEditorDialog.qml" line="+18" />
       <source>Edit task</source>
@@ -232,9 +237,93 @@
       <source>%1 minutes before</source>
       <translation>提前 %1 分钟</translation>
     </message>
-  </context>
+      <message><source>A repeating reminder needs a due date.</source><translation>重复提醒事项需要设置日期。</translation></message>
+    <message><source>Custom repeat</source><translation>自定义重复</translation></message>
+    <message><source>Daily</source><translation>每天</translation></message>
+    <message><source>Inbox</source><translation>收件箱</translation></message>
+    <message><source>Linked to a calendar event. Changes to the title or date update both views.</source><translation>已关联日程。修改标题或日期会同步到两个视图。</translation></message>
+    <message><source>Monthly</source><translation>每月</translation></message>
+    <message><source>Never</source><translation>永不</translation></message>
+    <message><source>Personal</source><translation>个人</translation></message>
+    <message><source>Repeat</source><translation>重复</translation></message>
+    <message><source>Weekly</source><translation>每周</translation></message>
+    <message><source>Yearly</source><translation>每年</translation></message>
+    <message><source>Reminders without a date stay in the reminders view.</source><translation>不设置日期的提醒事项仅显示在提醒事项视图。</translation></message>
+    <message>
+        <source>Date only</source>
+        <translation>仅日期</translation>
+    </message>
+    <message>
+        <source>Subtask of %1</source>
+        <translation>上级待办：%1</translation>
+    </message>
+    <message>
+        <source>Flagged</source>
+        <translation>标旗</translation>
+    </message>
+    <message>
+        <source>Section</source>
+        <translation>分区</translation>
+    </message>
+    <message>
+        <source>None, or enter a section</source>
+        <translation>无，或输入分区名称</translation>
+    </message>
+    <message>
+        <source>Tags</source>
+        <translation>标签</translation>
+    </message>
+    <message>
+        <source>#work #errands</source>
+        <translation>#工作 #外出</translation>
+    </message>
+    <message>
+        <source>Enter a link starting with https:// or http://.</source>
+        <translation>请输入以 https:// 或 http:// 开头的链接。</translation>
+    </message>
+    <message>
+        <source>You can attach up to 8 images.</source>
+        <translation>最多可以添加 8 张图片。</translation>
+    </message>
+    <message>
+        <source>Add images</source>
+        <translation>添加图片</translation>
+    </message>
+    <message>
+        <source>Images (*.png *.jpg *.jpeg *.webp *.gif *.bmp)</source>
+        <translation>图片 (*.png *.jpg *.jpeg *.webp *.gif *.bmp)</translation>
+    </message>
+    <message>
+        <source>Add time</source>
+        <translation>添加时间</translation>
+    </message>
+    <message>
+        <source>Clear</source>
+        <translation>清除</translation>
+    </message>
+    <message>
+        <source>URL</source>
+        <translation>链接</translation>
+    </message>
+    <message>
+        <source>Images</source>
+        <translation>图片</translation>
+    </message>
+    <message>
+        <source>Add images…</source>
+        <translation>添加图片…</translation>
+    </message>
+    <message><source>Clear time</source><translation>清除时间</translation></message>
+    <message><source>Add tags…</source><translation>添加标签…</translation></message>
+    <message><source>Date</source><translation>日期</translation></message>
+    <message><source>Date &amp; time</source><translation>日期与时间</translation></message>
+    <message><source>Organization</source><translation>归属与标签</translation></message>
+</context>
   <context>
     <name>EventEditorDialog</name>
+<message><source>Hide date and notification options</source><translation>收起日期和提醒选项</translation></message>
+<message><source>Date, repeat and notification options</source><translation>日期、重复和提醒选项</translation></message>
+
     <message>
       <location filename="../../calendar/qml/EventEditorDialog.qml" line="+20" />
       <source>Edit event</source>
@@ -523,7 +612,8 @@
       <source>%1 minutes before</source>
       <translation>提前 %1 分钟</translation>
     </message>
-  </context>
+  <message><source>Time</source><translation>时间</translation></message>
+</context>
   <context>
     <name>KosSettingsDialog</name>
     <message>
@@ -741,6 +831,50 @@
   </context>
   <context>
     <name>Main</name>
+<message><source>Add calendar</source><translation>添加日历</translation></message>
+<message><source>Edit calendar</source><translation>编辑日历</translation></message>
+<message><source>Delete calendar</source><translation>删除日历</translation></message>
+
+    <message>
+      <source>Other</source>
+      <translation>其他</translation>
+    </message>
+    <message>
+      <source>Scheduled reminders</source>
+      <translation>已安排的提醒事项</translation>
+    </message>
+    <message>
+      <source>Holidays</source>
+      <translation>节假日</translation>
+    </message>
+    <message>
+      <source>Import holiday calendar</source>
+      <translation>导入节假日日历</translation>
+    </message>
+    <message>
+      <source>Import holiday calendar (.ics)</source>
+      <translation>导入节假日日历（.ics）</translation>
+    </message>
+    <message>
+      <source>Holiday calendar imported</source>
+      <translation>节假日日历已导入</translation>
+    </message>
+    <message>
+      <source>Default</source>
+      <translation>默认</translation>
+    </message>
+    <message>
+      <source>Family</source>
+      <translation>家庭</translation>
+    </message>
+    <message>
+      <source>My calendars</source>
+      <translation>我的日历</translation>
+    </message>
+    <message>
+      <source>Reminders</source>
+      <translation>提醒事项</translation>
+    </message>
     <message>
       <location filename="../../calendar/qml/Main.qml" line="+15" />
       <location line="+521" />
@@ -1800,7 +1934,44 @@
       <source>No events or reminders for this day</source>
       <translation>当天没有日程或提醒事项</translation>
     </message>
-  </context>
+      <message>
+        <source>Could not add the calendar. Check the source and try again.</source>
+        <translation>无法添加日历，请检查来源后重试。</translation>
+    </message>
+    <message>
+        <source>Holiday calendar added</source>
+        <translation>已添加节假日日历</translation>
+    </message>
+    <message>
+        <source>Holiday calendar updated</source>
+        <translation>已更新节假日日历</translation>
+    </message>
+    <message>
+        <source>Holiday calendar removed</source>
+        <translation>已移除节假日日历</translation>
+    </message>
+    <message>
+        <source>Imported holidays</source>
+        <translation>已导入的节假日</translation>
+    </message>
+    <message>
+        <source>Manage holiday calendar</source>
+        <translation>管理节假日日历</translation>
+    </message>
+    <message>
+        <source>Update failed. Previously saved holidays are still available.</source>
+        <translation>更新失败，仍可查看上次保存的节假日。</translation>
+    </message>
+    <message>
+        <source>Remove calendar</source>
+        <translation>移除日历</translation>
+    </message>
+    <message>
+        <source>Add holiday calendar…</source>
+        <translation>添加节假日日历…</translation>
+    </message>
+    <message><source>Reminder updated</source><translation>提醒事项已更新</translation></message>
+</context>
   <context>
     <name>PimClient</name>
     <message>
@@ -2135,4 +2306,546 @@
       <translation>取消</translation>
     </message>
   </context>
+<context>
+    <name>HolidayCalendarDialog</name>
+    <message>
+        <source>Choose a country or region</source>
+        <translation>选择国家或地区</translation>
+    </message>
+    <message>
+        <source>Add holiday calendar</source>
+        <translation>添加节假日日历</translation>
+    </message>
+    <message>
+        <source>Source</source>
+        <translation>来源</translation>
+    </message>
+    <message>
+        <source>Country or region</source>
+        <translation>国家或地区</translation>
+    </message>
+    <message>
+        <source>Custom</source>
+        <translation>自定义</translation>
+    </message>
+    <message>
+        <source>Region</source>
+        <translation>地区</translation>
+    </message>
+    <message>
+        <source>%1 holidays</source>
+        <translation>%1节假日</translation>
+    </message>
+    <message>
+        <source>Add using</source>
+        <translation>添加方式</translation>
+    </message>
+    <message>
+        <source>Subscription address</source>
+        <translation>订阅地址</translation>
+    </message>
+    <message>
+        <source>Local file</source>
+        <translation>本地文件</translation>
+    </message>
+    <message>
+        <source>Name</source>
+        <translation>名称</translation>
+    </message>
+    <message>
+        <source>Calendar name</source>
+        <translation>日历名称</translation>
+    </message>
+    <message>
+        <source>Address</source>
+        <translation>地址</translation>
+    </message>
+    <message>
+        <source>No file selected</source>
+        <translation>尚未选择文件</translation>
+    </message>
+    <message>
+        <source>Choose file…</source>
+        <translation>选择文件…</translation>
+    </message>
+    <message>
+        <source>Import holidays from an .ics file.</source>
+        <translation>从 .ics 文件导入节假日。</translation>
+    </message>
+    <message>
+        <source>Updates automatically each day. Saved holidays remain available offline.</source>
+        <translation>每日自动更新，已保存的节假日可离线查看。</translation>
+    </message>
+    <message>
+        <source>Source: Apple public holiday calendars</source>
+        <translation>来源：Apple 公共节假日日历</translation>
+    </message>
+    <message>
+        <source>Cancel</source>
+        <translation>取消</translation>
+    </message>
+    <message>
+        <source>Adding…</source>
+        <translation>正在添加…</translation>
+    </message>
+    <message>
+        <source>Add</source>
+        <translation>添加</translation>
+    </message>
+    <message>
+        <source>Import holiday calendar</source>
+        <translation>导入节假日日历</translation>
+    </message>
+    <message>
+        <source>iCalendar files (*.ics)</source>
+        <translation>iCalendar 文件 (*.ics)</translation>
+    </message>
+    <message>
+        <source>China</source>
+        <translation>中国</translation>
+    </message>
+    <message>
+        <source>United States</source>
+        <translation>美国</translation>
+    </message>
+    <message>
+        <source>United Kingdom</source>
+        <translation>英国</translation>
+    </message>
+    <message>
+        <source>Japan</source>
+        <translation>日本</translation>
+    </message>
+    <message>
+        <source>Germany</source>
+        <translation>德国</translation>
+    </message>
+    <message>
+        <source>France</source>
+        <translation>法国</translation>
+    </message>
+    <message>
+        <source>Australia</source>
+        <translation>澳大利亚</translation>
+    </message>
+    <message>
+        <source>Canada</source>
+        <translation>加拿大</translation>
+    </message>
+</context>
+<context><name>CalendarCategoryDialog</name>
+<message><source>Custom color…</source><translation>自定义颜色…</translation></message>
+<message><source>Custom color</source><translation>自定义颜色</translation></message>
+<message><source>HEX color</source><translation>HEX 色值</translation></message>
+<message><source>Enter a color as #RRGGBB.</source><translation>请输入 #RRGGBB 格式的色值。</translation></message>
+
+<message><source>Add calendar</source><translation>添加日历</translation></message>
+<message><source>Edit calendar</source><translation>编辑日历</translation></message>
+<message><source>Delete calendar</source><translation>删除日历</translation></message>
+<message><source>Name</source><translation>名称</translation></message>
+<message><source>Color</source><translation>颜色</translation></message>
+<message><source>Color %1</source><translation>颜色 %1</translation></message>
+<message><source>Cancel</source><translation>取消</translation></message>
+<message><source>Save</source><translation>保存</translation></message>
+<message><source>Add</source><translation>添加</translation></message>
+<message><source>Delete</source><translation>删除</translation></message>
+<message><source>Delete “%1”? Its events and reminders will move to the default calendar.</source><translation>删除“%1”？其中的日程和提醒事项将移到默认日历。</translation></message>
+</context>
+<context><name>CalendarCreatePopover</name>
+<message><source>New event</source><translation>新建日程</translation></message>
+<message><source>New reminder</source><translation>新建提醒事项</translation></message>
+<message><source>Create quick event</source><translation>创建快速日程</translation></message>
+<message><source>Tomorrow at 19:00, dinner</source><translation>明天晚上7点聚餐</translation></message>
+</context>
+<context><name>CalendarEditorTabs</name>
+<message><source>Event</source><translation>日程</translation></message>
+<message><source>Reminder</source><translation>待办</translation></message>
+</context>
+<context>
+    <name>CalendarReminderListPopover</name>
+    <message><source>Edit list</source><translation>编辑清单</translation></message>
+    <message><source>Enter a list name.</source><translation>请输入清单名称。</translation></message>
+    <message><source>Its reminders will move to Inbox and will not be deleted.</source><translation>清单中的提醒事项将移入收件箱，不会被删除。</translation></message>
+    <message><source>List name</source><translation>清单名称</translation></message>
+    <message><source>New list</source><translation>新建清单</translation></message>
+    <message><source>Remove list</source><translation>移除清单</translation></message>
+    <message><source>Remove this list?</source><translation>移除这个清单？</translation></message>
+    <message>
+        <source>Color</source>
+        <translation>颜色</translation>
+    </message>
+    <message>
+        <source>Color %1</source>
+        <translation>颜色 %1</translation>
+    </message>
+    <message>
+        <source>HEX color</source>
+        <translation>HEX 颜色</translation>
+    </message>
+    <message>
+        <source>Enter a color as #RRGGBB.</source>
+        <translation>请输入 #RRGGBB 格式的颜色。</translation>
+    </message>
+    <message>
+        <source>Type</source>
+        <translation>类型</translation>
+    </message>
+    <message>
+        <source>List</source>
+        <translation>清单</translation>
+    </message>
+    <message>
+        <source>Smart list</source>
+        <translation>智能清单</translation>
+    </message>
+    <message>
+        <source>Group</source>
+        <translation>群组</translation>
+    </message>
+    <message>
+        <source>None, or enter a group name</source>
+        <translation>无，或输入分组名称</translation>
+    </message>
+    <message>
+        <source>Match all conditions. Reminders stay in their original lists.</source>
+        <translation>同时满足以下条件，待办仍保留在原清单中。</translation>
+    </message>
+    <message>
+        <source>Source</source>
+        <translation>来源</translation>
+    </message>
+    <message>
+        <source>All lists</source>
+        <translation>所有清单</translation>
+    </message>
+    <message>
+        <source>Inbox</source>
+        <translation>收件箱</translation>
+    </message>
+    <message>
+        <source>Personal</source>
+        <translation>个人</translation>
+    </message>
+    <message>
+        <source>Tag</source>
+        <translation>标签</translation>
+    </message>
+    <message>
+        <source>Any tag</source>
+        <translation>不限标签</translation>
+    </message>
+    <message>
+        <source>Date</source>
+        <translation>日期</translation>
+    </message>
+    <message>
+        <source>Any date</source>
+        <translation>不限日期</translation>
+    </message>
+    <message>
+        <source>Today and overdue</source>
+        <translation>今天及逾期</translation>
+    </message>
+    <message>
+        <source>Scheduled</source>
+        <translation>已安排</translation>
+    </message>
+    <message>
+        <source>No date</source>
+        <translation>无日期</translation>
+    </message>
+    <message>
+        <source>Overdue</source>
+        <translation>已逾期</translation>
+    </message>
+    <message>
+        <source>Flag</source>
+        <translation>标旗</translation>
+    </message>
+    <message>
+        <source>Any</source>
+        <translation>不限</translation>
+    </message>
+    <message>
+        <source>Flagged</source>
+        <translation>已标旗</translation>
+    </message>
+    <message>
+        <source>Not flagged</source>
+        <translation>未标旗</translation>
+    </message>
+    <message>
+        <source>Priority</source>
+        <translation>优先级</translation>
+    </message>
+    <message>
+        <source>High</source>
+        <translation>高</translation>
+    </message>
+    <message>
+        <source>Medium</source>
+        <translation>中</translation>
+    </message>
+    <message>
+        <source>Low</source>
+        <translation>低</translation>
+    </message>
+    <message>
+        <source>None</source>
+        <translation>无</translation>
+    </message>
+    <message>
+        <source>Only this saved view will be removed. Your reminders will be kept.</source>
+        <translation>只移除这个筛选视图，所有待办都会保留。</translation>
+    </message>
+    <message>
+        <source>Icon</source>
+        <translation>图标</translation>
+    </message>
+    <message>
+        <source>Checklist</source>
+        <translation>清单</translation>
+    </message>
+    <message>
+        <source>Calendar</source>
+        <translation>日历</translation>
+    </message>
+    <message>
+        <source>Home</source>
+        <translation>家庭</translation>
+    </message>
+    <message>
+        <source>Folder</source>
+        <translation>文件夹</translation>
+    </message>
+    <message>
+        <source>Music</source>
+        <translation>音乐</translation>
+    </message>
+    <message>
+        <source>Album</source>
+        <translation>专辑</translation>
+    </message>
+    <message>
+        <source>Person</source>
+        <translation>个人</translation>
+    </message>
+    <message>
+        <source>Keyboard</source>
+        <translation>键盘</translation>
+    </message>
+    <message>
+        <source>Settings</source>
+        <translation>设置</translation>
+    </message>
+    <message>
+        <source>Picture</source>
+        <translation>图片</translation>
+    </message>
+    <message>
+        <source>Heart</source>
+        <translation>喜爱</translation>
+    </message>
+    <message>
+        <source>Sparkle</source>
+        <translation>星光</translation>
+    </message>
+    <message>
+        <source>Tasks</source>
+        <translation>任务</translation>
+    </message>
+    <message>
+        <source>Download</source>
+        <translation>下载</translation>
+    </message>
+    <message>
+        <source>Radio</source>
+        <translation>广播</translation>
+    </message>
+    <message>
+        <source>Grid</source>
+        <translation>分类</translation>
+    </message>
+    <message>
+        <source>Circle</source>
+        <translation>圆环</translation>
+    </message>
+</context>
+<context>
+    <name>CalendarRemindersView</name>
+    <message><source>Add a reminder…</source><translation>添加提醒事项…</translation></message>
+    <message><source>All reminders</source><translation>全部提醒事项</translation></message>
+    <message><source>Completed</source><translation>已完成</translation></message>
+    <message><source>Inbox</source><translation>收件箱</translation></message>
+    <message><source>Linked event</source><translation>关联日程</translation></message>
+    <message><source>Linked events</source><translation>关联日程</translation></message>
+    <message><source>Loading reminders…</source><translation>正在载入提醒事项…</translation></message>
+    <message><source>Mark complete</source><translation>标为已完成</translation></message>
+    <message><source>Mark incomplete</source><translation>标为未完成</translation></message>
+    <message><source>No completed reminders</source><translation>还没有已完成的提醒事项</translation></message>
+    <message><source>No matching reminders</source><translation>没有匹配的提醒事项</translation></message>
+    <message><source>No reminders here. Add one above.</source><translation>这里还没有提醒事项，可在上方添加。</translation></message>
+    <message><source>Personal</source><translation>个人</translation></message>
+    <message><source>Reminders</source><translation>提醒事项</translation></message>
+    <message><source>Scheduled</source><translation>已安排</translation></message>
+    <message><source>Today</source><translation>今天</translation></message>
+    <message>
+        <source>Overdue</source>
+        <translation>已逾期</translation>
+    </message>
+    <message>
+        <source>Tomorrow</source>
+        <translation>明天</translation>
+    </message>
+    <message>
+        <source>Flagged</source>
+        <translation>已标旗</translation>
+    </message>
+    <message>
+        <source>Show subtasks</source>
+        <translation>展开子任务</translation>
+    </message>
+    <message>
+        <source>Hide subtasks</source>
+        <translation>收起子任务</translation>
+    </message>
+    <message>
+        <source>Remove flag</source>
+        <translation>取消标旗</translation>
+    </message>
+    <message>
+        <source>Flag reminder</source>
+        <translation>标旗</translation>
+    </message>
+    <message>
+        <source>Add subtask</source>
+        <translation>添加子任务</translation>
+    </message>
+    <message>
+        <source>Other</source>
+        <translation>其他</translation>
+    </message>
+    <message>
+        <source>These positions are too close. Move the task to another position first.</source>
+        <translation>这两个位置过于接近，请先将任务移到其他位置。</translation>
+    </message>
+    <message>
+        <source>Drag to reorder or move to a list</source>
+        <translation>拖动排序，或拖到左侧清单以移动</translation>
+    </message>
+    <message><source>Add tags…</source><translation>添加标签…</translation></message>
+    <message><source>Date</source><translation>日期</translation></message>
+    <message><source>Details…</source><translation>详情…</translation></message>
+    <message><source>Choose a valid date.</source><translation>请选择有效日期。</translation></message>
+    <message><source>%1 completed</source><translation>已完成 %1 项</translation></message>
+    <message><source>Add</source><translation>添加</translation></message>
+    <message><source>Add section</source><translation>添加分区</translation></message>
+    <message><source>Column view</source><translation>分栏视图</translation></message>
+    <message><source>Group</source><translation>群组</translation></message>
+    <message><source>List view</source><translation>列表视图</translation></message>
+    <message><source>Move a list into this group to get started.</source><translation>将清单移入此群组，即可在这里查看汇总。</translation></message>
+    <message><source>No reminders</source><translation>暂无提醒事项</translation></message>
+    <message><source>Section name</source><translation>分区名称</translation></message>
+</context>
+<context>
+    <name>CalendarReminderSidebar</name>
+    <message><source>All reminders</source><translation>全部提醒事项</translation></message>
+    <message><source>Completed</source><translation>已完成</translation></message>
+    <message><source>Edit list</source><translation>编辑清单</translation></message>
+    <message><source>My lists</source><translation>我的清单</translation></message>
+    <message><source>New list</source><translation>新建清单</translation></message>
+    <message><source>Scheduled</source><translation>已安排</translation></message>
+    <message><source>Today</source><translation>今天</translation></message>
+    <message>
+        <source>Flagged</source>
+        <translation>已标旗</translation>
+    </message>
+    <message>
+        <source>Tags</source>
+        <translation>标签</translation>
+    </message>
+    <message><source>Manage group</source><translation>管理群组</translation></message>
+    <message><source>New group</source><translation>新建群组</translation></message>
+    <message><source>Remove group…</source><translation>移除群组…</translation></message>
+    <message><source>Rename group</source><translation>重命名群组</translation></message>
+    <message><source>Show or hide group</source><translation>展开或收起群组</translation></message>
+</context>
+<context><name>CalendarDateField</name>
+<message><source>Choose date</source><translation>选择日期</translation></message>
+<message><source>Previous month</source><translation>上个月</translation></message>
+<message><source>Next month</source><translation>下个月</translation></message>
+<message><source>Selected date</source><translation>已选日期</translation></message>
+<message><source>Today</source><translation>今天</translation></message>
+</context>
+<context><name>CalendarTimeField</name>
+<message><source>Choose time</source><translation>选择时间</translation></message>
+<message><source>Hour</source><translation>小时</translation></message>
+<message><source>Minute</source><translation>分钟</translation></message>
+<message><source>Done</source><translation>完成</translation></message>
+</context>
+<context>
+    <name>CalendarReminderImages</name>
+    <message>
+        <source>Remove image</source>
+        <translation>移除图片</translation>
+    </message>
+    <message><source>Unavailable</source><translation>不可用</translation></message>
+</context>
+<context>
+    <name>CalendarReminderRow</name>
+    <message><source>Add subtask</source><translation>添加子任务</translation></message>
+    <message><source>Flag reminder</source><translation>标旗</translation></message>
+    <message><source>Mark complete</source><translation>标为已完成</translation></message>
+    <message><source>Mark incomplete</source><translation>标为未完成</translation></message>
+    <message><source>Reminder details</source><translation>提醒事项详情</translation></message>
+    <message><source>Remove flag</source><translation>取消标旗</translation></message>
+    <message><source>Show or hide subtasks</source><translation>展开或收起子任务</translation></message>
+</context>
+<context>
+    <name>CalendarReminderInlineAdd</name>
+    <message><source>New reminder</source><translation>新建提醒事项</translation></message>
+</context>
+<context>
+    <name>CalendarReminderSection</name>
+    <message><source>Manage section</source><translation>管理分区</translation></message>
+    <message><source>Move down</source><translation>下移</translation></message>
+    <message><source>Move up</source><translation>上移</translation></message>
+    <message><source>Remove section…</source><translation>移除分区…</translation></message>
+    <message><source>Rename section</source><translation>重命名分区</translation></message>
+    <message><source>Show or hide section</source><translation>展开或收起分区</translation></message>
+</context>
+<context>
+    <name>CalendarOrganizationDialog</name>
+    <message><source>Add</source><translation>添加</translation></message>
+    <message><source>Cancel</source><translation>取消</translation></message>
+    <message><source>Group name</source><translation>群组名称</translation></message>
+    <message><source>New group</source><translation>新建群组</translation></message>
+    <message><source>Remove group</source><translation>移除群组</translation></message>
+    <message><source>Remove section</source><translation>移除分区</translation></message>
+    <message><source>Remove “%1”? Its lists and reminders will be kept.</source><translation>移除“%1”？其中的清单和提醒事项都会保留。</translation></message>
+    <message><source>Remove “%1”? Its reminders will stay in this list without a section.</source><translation>移除“%1”？其中的提醒事项将保留在当前清单的“其他”分区。</translation></message>
+    <message><source>Rename group</source><translation>重命名群组</translation></message>
+    <message><source>Save</source><translation>保存</translation></message>
+    <message><source>Remove</source><translation>移除</translation></message>
+</context>
+<context><name>SettingsDateField</name>
+<message><source>Choose date</source><translation>选择日期</translation></message>
+<message><source>Previous month</source><translation>上个月</translation></message>
+<message><source>Next month</source><translation>下个月</translation></message>
+<message><source>Selected date</source><translation>已选日期</translation></message>
+<message><source>Today</source><translation>今天</translation></message>
+</context>
+<context><name>SettingsTimeField</name>
+<message><source>Choose time</source><translation>选择时间</translation></message>
+<message><source>Hour</source><translation>小时</translation></message>
+<message><source>Minute</source><translation>分钟</translation></message>
+<message><source>Done</source><translation>完成</translation></message>
+</context>
+
+<context>
+    <name>CalendarReminderInlineFields</name>
+    <message><source>Notes</source><translation>备注</translation></message>
+    <message><source>Add tags</source><translation>添加标签</translation></message>
+    <message><source>Flag reminder</source><translation>旗标</translation></message>
+</context>
 </TS>

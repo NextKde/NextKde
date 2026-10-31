@@ -14,6 +14,7 @@ KosApplicationWindow {
     id: root
     neutralTypography: true
     readonly property alias calendarScene: windowChrome
+    readonly property alias pimStore: pim
 
     modernDesign: true
     visible: true
@@ -23,44 +24,92 @@ KosApplicationWindow {
         && !AppTheme.reduceTransparency && GraphicsInfo.api !== GraphicsInfo.Software
     Binding { target: Demo.AppTheme; property: "appearanceMode"; value: AppTheme.dark ? "dark" : "light" }
     Binding { target: Demo.AppTheme; property: "compactDesign"; value: true }
-    Binding { target: Demo.AppTheme; property: "accentName"; value: AppTheme.accentName }
+    Binding { target: Demo.AppTheme; property: "accentName"; value: "blue" }
     Binding { target: Demo.AppTheme; property: "reduceMotion"; value: AppTheme.reduceMotion }
     Binding { target: Demo.AppTheme; property: "reduceTransparency"; value: AppTheme.reduceTransparency }
     Binding { target: Demo.LiquidStyle; property: "controlFillOpacity"; value: 0.35 * AppTheme.materialOpacity / 0.86 }
     title: qsTr("Calendar")
-    width: 1100
-    height: 720
+    width: 900
+    height: 630
     minimumWidth: 760
-    minimumHeight: 540
+    minimumHeight: 500
 
     property date now: new Date()
     property date visibleMonth: new Date(new Date().getFullYear(), new Date().getMonth(), 1)
     property date selectedDate: new Date()
+    property string calendarSearchQuery: ""
+    property string reminderSearchQuery: ""
+    property bool remindersMode: false
+    function switchWorkspace(reminders) {
+        if (eventEditor.saving || taskEditor.saving || reminderListEditor.saving) return
+        itemDetails.close()
+        eventEditor.close()
+        taskEditor.close()
+        reminderListEditor.close()
+        if (remindersMode !== reminders) {
+            if (remindersMode) reminderSearchQuery = searchQuery
+            else calendarSearchQuery = searchQuery
+            toolbarSearch.close()
+            remindersMode = reminders
+            searchQuery = reminders ? reminderSearchQuery : calendarSearchQuery
+            if (searchQuery.length > 0) toolbarSearch.open()
+        }
+    }
     property int viewIndex: 0
     property string searchQuery: ""
     property bool showEvents: true
     property bool showTasks: true
     property bool showCompletedTasks: false
     property string statusMessage: ""
-    readonly property var calendarCategories: [
-        { id: "work", name: qsTr("Work"), color: "#DA8A3A" },
-        { id: "personal", name: qsTr("Personal"), color: "#508BD6" },
-        { id: "sport", name: qsTr("Sport"), color: "#57A878" }
-    ]
+    readonly property var calendarCategories: pim.calendars.map(category => ({
+        id: category.id,
+        name: category.builtinName ? qsTranslate("Main", category.name) : category.name,
+        color: category.color
+    }))
     property var hiddenCategories: []
     property string pendingActivationItem: ""
 
     function categoryFor(record) {
+        if (record.listId) {
+            const list = pim.lists.find(entry => entry.id === record.listId)
+            if (list) return { id: list.id, name: remindersView.listName(list.id), color: list.color }
+        }
         const id = String(value(record, "calendarId", "personal"))
+        const holiday = pim.holidayCalendars.find(calendar => calendar.id === id)
+        if (holiday) return holiday
         return calendarCategories.find(category => category.id === id)
-            ?? calendarCategories[1]
+            ?? calendarCategories[0] ?? { id: "default", name: qsTr("Default"), color: "#BF57DA" }
     }
     function categoryVisible(record) {
-        return !hiddenCategories.includes(categoryFor(record).id)
+        const category = categoryFor(record)
+        const holiday = pim.holidayCalendars.find(calendar => calendar.id === category.id)
+        return holiday ? holiday.enabled : !hiddenCategories.includes(category.id)
     }
-    function openNewReminder() {
-        taskEditor.openForTodo({ due: dateKey(selectedDate) + "T18:00:00",
-            calendarId: "personal", listId: "personal", reminderMinutes: 0 })
+    property bool eventDraftReady: false
+    property bool reminderDraftReady: false
+    function beginEvent(date, hour, anchor, rect) {
+        eventDraftReady = true
+        reminderDraftReady = false
+        itemDetails.close()
+        taskEditor.close()
+        eventEditor.anchorItem = anchor || addButton
+        eventEditor.anchorRect = rect || Qt.rect(0, 0, -1, -1)
+        eventEditor.openForDate(date, hour)
+    }
+    function openNewReminder(anchor) {
+        remindersView.inlineFocusKey = ""
+        eventDraftReady = false
+        reminderDraftReady = true
+        itemDetails.close()
+        eventEditor.close()
+        taskEditor.anchorItem = anchor || addButton
+        taskEditor.anchorRect = Qt.rect(0, 0, -1, -1)
+        const scheduled = !remindersMode || ["today", "planned"].includes(remindersView.filter)
+        const dueDate = remindersMode && remindersView.filter === "today" ? now : selectedDate
+        if (remindersMode && remindersView.filter === "completed") remindersView.select("all")
+        taskEditor.openForTodo(Object.assign({ due: scheduled ? dateKey(dueDate) + "T00:00:00" : "", allDay: true,
+            flagged: remindersMode && remindersView.filter === "flagged", calendarId: "default", listId: remindersMode && remindersView.filter === "list" ? remindersView.listId : "inbox",
+            reminderMinutes: -1 }, remindersMode ? remindersView.creationDefaults() : {}))
     }
     function revealActivatedItem() {
         if (!pendingActivationItem || !pim.ready) return
@@ -73,18 +122,30 @@ KosApplicationWindow {
             showStatus(qsTr("This item no longer exists."))
             return
         }
-        hiddenCategories = hiddenCategories.filter(key => key !== categoryFor(record).id)
         if (isTodo) {
+            if (!record.due) switchWorkspace(true)
             showTasks = true
             if (record.completed) showCompletedTasks = true
-        } else showEvents = true
+        } else {
+            if (remindersMode) switchWorkspace(false)
+            const holiday = pim.holidayCalendars.find(calendar => calendar.id === categoryFor(record).id)
+            if (holiday && !holiday.enabled) pim.setHolidayCalendarEnabled(holiday.id, true)
+            hiddenCategories = hiddenCategories.filter(key => key !== categoryFor(record).id)
+            showEvents = true
+        }
         const stamp = String(isTodo ? record.due : record.start)
         if (stamp.length >= 10) {
             selectedDate = new Date(stamp.slice(0, 10) + "T12:00:00")
             visibleMonth = new Date(selectedDate.getFullYear(), selectedDate.getMonth(), 1)
         }
+        toolbarSearch.close()
         searchQuery = ""
-        Qt.callLater(function() { itemDetails.showItem({ kind: isTodo ? "todo" : "event", record: record }) })
+        if (isTodo && remindersMode) {
+            remindersView.select(record.completed ? "completed" : "list", record.listId || "inbox")
+            Qt.callLater(function() { remindersView.reveal(record) })
+        } else {
+            Qt.callLater(function() { itemDetails.showItem({ kind: isTodo ? "todo" : "event", record: record }) })
+        }
     }
 
     readonly property bool tahoeDark: AppTheme.dark
@@ -236,7 +297,7 @@ KosApplicationWindow {
     }
 
     // S03: compact category row for the 220px sidebar. In checkbox mode the
-    // 12px rounded box is the only state carrier: filled with the category
+    // 14px rounded box is the only state carrier: filled with the category
     // colour and a white check when checked, a hollow 1px coloured border
     // when not. Legend mode (checkboxless) draws a plain filled swatch. No
     // colour dot, no switch. 30 tall, inset 12, label 8 after the box at
@@ -283,32 +344,12 @@ KosApplicationWindow {
                 border.color: row.boxColor
                 opacity: row.enabled ? 1 : 0.48
 
-                // White check drawn as two rounded bars in a V: the short
-                // stroke falls from upper-left down to the vertex at the
-                // lower left, the long stroke rises from the vertex to the
-                // upper right. Inside an 8x8 guide in the 12px box.
-                Item {
+                Demo.VectorIcon {
                     anchors.centerIn: parent
-                    width: 8; height: 8
+                    size: 12
+                    name: "check"
+                    color: "white"
                     visible: row.checked && !row.swatchOnly
-                    opacity: row.enabled ? 1 : 0.9
-
-                    // Short stroke: upper-left (1.5,4.2) falling to the
-                    // shared vertex (2.9,5.6) in the 8x8 guide.
-                    Rectangle {
-                        width: 2; height: 1.98; radius: 1
-                        color: "#FFFFFF"
-                        rotation: -45
-                        x: 1.2; y: 3.91
-                    }
-                    // Long stroke: shared vertex (2.9,5.6) rising to
-                    // upper-right (6.3,2.2).
-                    Rectangle {
-                        width: 2; height: 4.81; radius: 1
-                        color: "#FFFFFF"
-                        rotation: 45
-                        x: 3.6; y: 1.495
-                    }
                 }
             }
 
@@ -491,8 +532,9 @@ KosApplicationWindow {
         focusPolicy: Qt.TabFocus
         Accessible.name: hint
         CalendarToolTip {
+            target: control
             objectName: control.objectName + "Tip"
-            visible: !addMenu.visible && !actionsMenu.visible && !eventEditor.visible && !taskEditor.visible && !itemDetails.visible && control.showHint && control.hovered && !control.pressed && control.enabled && control.hint.length > 0
+            when: !actionsMenu.visible && !eventEditor.visible && !taskEditor.visible && !itemDetails.visible && control.showHint && !control.pressed && control.enabled && control.hint.length > 0
             text: control.hint
         }
 
@@ -504,7 +546,7 @@ KosApplicationWindow {
         property string hint: ""
         materialForm: true
         flat: false
-        cornerRadius: 6
+        cornerRadius: height / 2
         iconOnly: iconName.length > 0
         iconSize: 16
         implicitHeight: root.design.dateNavHeight
@@ -513,8 +555,9 @@ KosApplicationWindow {
         focusPolicy: Qt.TabFocus
         Accessible.name: hint
         CalendarToolTip {
+            target: control
             objectName: control.objectName + "Tip"
-            visible: control.hovered && !control.pressed && control.enabled && control.hint.length > 0
+            when: !control.pressed && control.enabled && control.hint.length > 0
             text: control.hint
         }
     }
@@ -579,8 +622,16 @@ KosApplicationWindow {
         // P2-9: "year" was silently dropped even though viewIndex 3 exists;
         // the fourth view now has a CLI activation path to match Ctrl+4.
         const requestedViewIndex = ["month", "week", "day", "year"].indexOf(requestedView)
-        if (requestedViewIndex >= 0)
+        if (requestedViewIndex >= 0) {
+            switchWorkspace(false)
             viewIndex = requestedViewIndex
+        }
+        if (["reminders", "all", "inbox", "today", "planned", "completed", "calendar"].includes(requestedView)) {
+            switchWorkspace(true)
+            remindersView.select(requestedView === "reminders" ? "all" : requestedView)
+            if (requestedItem && !requestedItem.startsWith("todo:"))
+                pendingActivationItem = "todo:" + requestedItem
+        }
 
         const requested = activationOption(activationArgs, "--date")
         if (requested === "today") {
@@ -688,7 +739,7 @@ KosApplicationWindow {
         if (showTasks) {
             for (let index = 0; index < todos.length; index++) {
                 const todo = todos[index]
-                if (!categoryVisible(todo) || !matchesSearch(todo))
+                if (!matchesSearch(todo))
                     continue
                 const due = String(value(todo, "due", "")).slice(0, 10)
                 const id = String(value(todo, "seriesId",
@@ -873,7 +924,9 @@ KosApplicationWindow {
     }
 
     function itemColor(item) {
-        return categoryFor(itemRecord(item)).color
+        // Persisted category colors are strings. Convert once at the model/UI
+        // boundary so channel-based mix/withAlpha/ink calculations receive QColor.
+        return Qt.tint(categoryFor(itemRecord(item)).color, "transparent")
     }
 
     function itemSubtitle(item) {
@@ -881,12 +934,12 @@ KosApplicationWindow {
             + (item.kind === "todo" ? qsTr("Reminder") : qsTr("Event"))
     }
 
-    function openItem(item) {
+    function openItem(item, anchor) {
         // P01: single/double click on an existing item first opens the
         // compact detail popover; the editors are reached through its Edit
         // action. Double-click on empty grid time still opens the editor
         // directly (create flow untouched).
-        itemDetails.showItem(item)
+        itemDetails.showItem(item, anchor)
     }
 
     function toggleItem(item, completed) {
@@ -985,10 +1038,38 @@ KosApplicationWindow {
         function onSnapshotChanged() { Qt.callLater(root.revealActivatedItem) }
         function onOperationFailed(operation, message) {
             root.showStatus(message)
+            if (["createList", "updateList", "removeList"].includes(operation)) {
+                reminderListEditor.saving = false
+                reminderListEditor.errorText = message
+                return
+            }
+            if (["createCalendar", "updateCalendar", "removeCalendar"].includes(operation)) {
+                categoryDialog.saving = false
+                categoryDialog.errorText = message
+                return
+            }
+            if (operation === "addHolidayCalendar") {
+                holidayDialog.saving = false
+                holidayDialog.errorText = qsTr("Could not add the calendar. Check the source and try again.") + "\n" + message
+                return
+            }
             const editor = operation.endsWith("Event") ? eventEditor : taskEditor
             if (editor.saving) { editor.saving = false; editor.errorText = message }
         }
         function onOperationSucceeded(operation, itemId) {
+            if (["createList", "updateList", "removeList"].includes(operation)) {
+                reminderListEditor.saving = false
+                reminderListEditor.close()
+                return
+            }
+            if (["createCalendar", "updateCalendar", "removeCalendar"].includes(operation)) {
+                categoryDialog.saving = false
+                categoryDialog.close()
+                if (operation === "removeCalendar")
+                    root.hiddenCategories = root.hiddenCategories.filter(id => id !== itemId)
+                Qt.callLater(root.updateEventRange)
+                return
+            }
             const editor = operation.endsWith("Event") ? eventEditor : taskEditor
             if (editor.saving && (operation.startsWith("create") || operation.startsWith("update"))) {
                 editor.saving = false
@@ -1001,13 +1082,22 @@ KosApplicationWindow {
             else if (operation === "createTodo")
                 root.showStatus(qsTr("Reminder created"))
             else if (operation === "updateTodo")
-                root.showStatus(qsTr("Task updated in Calendar and Todo"))
+                root.showStatus(qsTr("Reminder updated"))
             else if (operation === "removeEvent")
                 root.showStatus(qsTr("Event removed"))
             else if (operation === "removeTodo")
                 root.showStatus(qsTr("Task removed"))
             else if (operation === "importIcalendar")
                 root.showStatus(qsTr("Calendar imported"))
+            else if (operation === "addHolidayCalendar") {
+                holidayDialog.saving = false
+                holidayDialog.close()
+                root.showEvents = true
+                root.showStatus(qsTr("Holiday calendar added"))
+            } else if (operation === "refreshHolidayCalendar")
+                root.showStatus(qsTr("Holiday calendar updated"))
+            else if (operation === "removeHolidayCalendar")
+                root.showStatus(qsTr("Holiday calendar removed"))
             else if (operation === "exportIcalendar")
                 root.showStatus(qsTr("Calendar exported"))
             Qt.callLater(root.updateEventRange)
@@ -1037,6 +1127,38 @@ KosApplicationWindow {
         onAccepted: pim.exportIcalendar(selectedFile.toString())
     }
 
+    CalendarOrganizationDialog { id: organizationDialog; pim: root.pimStore; parent: root.contentItem; sourceItem: root.calendarScene }
+
+    CalendarReminderListPopover {
+        id: reminderListEditor
+        availableGroups: pim.groups
+        availableLists: pim.lists
+        sourceItem: root.calendarScene
+        onSaveRequested: (id, values) => id ? pim.updateList(id, values) : pim.createList(values)
+        onRemoveRequested: id => pim.removeList(id)
+    }
+
+    CalendarCategoryDialog {
+        id: categoryDialog
+        parent: root.contentItem
+        sourceItem: root.calendarScene
+        writable: pim.connected && pim.writable && !pim.busy
+        onSaveRequested: (categoryId, values) => {
+            if (categoryId) pim.updateCalendar(categoryId, values)
+            else pim.createCalendar(values)
+        }
+        onRemoveRequested: categoryId => pim.removeCalendar(categoryId)
+    }
+
+    HolidayCalendarDialog {
+        id: holidayDialog
+        objectName: "holidayCalendarDialog"
+        sourceItem: root.calendarScene
+        parent: root.contentItem
+        sources: pim.holidaySources
+        onAddRequested: source => pim.addHolidayCalendar(source)
+    }
+
     // P01: compact neutral detail popover. Opens on item activation, clamps
     // into the content viewport, and hands the record to the existing
     // editors only through its Edit action. One connection, made once; the
@@ -1046,6 +1168,7 @@ KosApplicationWindow {
 
     EventDetailsPopover {
         id: itemDetails
+        sourceItem: root.calendarScene
         parent: root.contentItem
         z: 50
         onCompletionRequested: {
@@ -1054,19 +1177,28 @@ KosApplicationWindow {
             close()
         }
         onEditRequested: {
+            taskEditor.anchorItem = itemDetails.anchorItem
+            taskEditor.anchorRect = itemDetails.anchorRect
+            eventEditor.anchorItem = itemDetails.anchorItem
+            eventEditor.anchorRect = itemDetails.anchorRect
             if (root.pendingDetailsIsTodo)
                 taskEditor.openForTodo(root.pendingDetailsRecord)
             else
                 eventEditor.openForEvent(root.pendingDetailsRecord)
         }
 
-        function showItem(item) {
+        function showItem(item, anchor) {
+            eventEditor.close()
+            taskEditor.close()
+            anchorItem = anchor || addButton
+            anchorRect = Qt.rect(0, 0, -1, -1)
             const record = root.itemRecord(item)
             root.pendingDetailsRecord = record
             root.pendingDetailsIsTodo = item.kind === "todo"
             // root-qualified: the popover's own string properties would
             // otherwise shadow the window helper functions here.
             canComplete = root.itemTodoId(item).length > 0
+            canEdit = !pim.holidayCalendars.some(calendar => calendar.id === record.calendarId)
             itemCategory = root.itemSubtitle(item)
             const recurrence = String(root.value(record, "recurrence", "none"))
             const repeats = { daily: qsTr("Daily"), weekly: qsTr("Weekly"),
@@ -1082,15 +1214,31 @@ KosApplicationWindow {
             itemTime = root.itemDetailsRange(item)
             itemLocation = String(root.value(record, "location", ""))
             itemNotes = String(root.value(record, "description", ""))
+            itemUrl = String(root.value(record, "url", ""))
+            itemImages = root.value(record, "images", [])
+            itemTags = root.value(record, "tags", [])
             openAt(null)
         }
     }
 
     EventEditorDialog {
         id: eventEditor
+        onSwitchTypeRequested: {
+            taskEditor.anchorItem = eventEditor.anchorItem
+            taskEditor.anchorRect = eventEditor.anchorRect
+            if (!root.reminderDraftReady) {
+                const draft = eventEditor.eventPayload()
+                taskEditor.openForTodo({title: draft.title, description: draft.description,
+                    due: draft.start, allDay: draft.allDay, calendarId: draft.calendarId,
+                    listId: "personal", reminderMinutes: draft.reminderMinutes})
+                root.reminderDraftReady = true
+            } else taskEditor.open()
+            eventEditor.close()
+        }
         objectName: "calendarEventEditor"
+        sourceItem: root.calendarScene
         parent: root.contentItem
-        availableLists: pim.lists
+        availableLists: pim.lists.filter(list => list.kind !== "smart")
         availableCategories: root.calendarCategories
         onSaveRequested: function(uid, event) {
             eventEditor.saving = true
@@ -1104,9 +1252,28 @@ KosApplicationWindow {
 
     CalendarTaskEditorDialog {
         id: taskEditor
+        allowTypeSwitch: !root.remindersMode
+        onSwitchTypeRequested: {
+            if (!taskEditor.allowTypeSwitch) return
+            eventEditor.anchorItem = taskEditor.anchorItem
+            eventEditor.anchorRect = taskEditor.anchorRect
+            if (!root.eventDraftReady) {
+                const draft = taskEditor.payload()
+                const parsed = new Date(draft.due)
+                const start = isNaN(parsed.getTime()) ? root.selectedDate : parsed
+                eventEditor.openForDate(start, start.getHours())
+                eventEditor.setTimeRange(start, new Date(start.getTime()+3600000))
+                eventEditor.applyReminderDraft(draft)
+                root.eventDraftReady = true
+            } else eventEditor.open()
+            taskEditor.close()
+        }
         objectName: "taskEditorDialog"
+        sourceItem: root.calendarScene
         parent: root.contentItem
-        availableLists: pim.lists
+        availableTags: remindersView.allTags
+        parentTitle: (pim.todos.find(todo => todo.id === taskEditor.parentId) || {}).title || ""
+        availableLists: pim.lists.filter(list => list.kind !== "smart")
         availableCategories: root.calendarCategories
         onSaveRequested: function(uid, todo) {
             taskEditor.saving = true
@@ -1123,12 +1290,13 @@ KosApplicationWindow {
         inWindowMaterials: true
         inWindowSamplingAvailable: GraphicsInfo.api !== GraphicsInfo.Software
         toolTipBackground: Component {
-            CalendarPopupSurface { scene: settingsDialog.contentItem.parent; radius: 8 }
+            CalendarPopupSurface { scene: root.calendarScene; radius: 14; materialOpacity: 0.7 }
         }
     }
 
-    Shortcut { sequences: [StandardKey.New]; onActivated: addMenu.popup(addButton, 0, addButton.height + 6) }
-    Shortcut { sequence: "Ctrl+T"; onActivated: root.showToday() }
+    Shortcut { sequences: [StandardKey.New]; onActivated: root.remindersMode ? root.openNewReminder(addButton) : root.beginEvent(root.selectedDate, undefined, addButton) }
+    Shortcut { sequence: "Ctrl+Tab"; onActivated: root.switchWorkspace(!root.remindersMode) }
+    Shortcut { sequence: "Ctrl+T"; onActivated: root.remindersMode ? remindersView.select("today") : root.showToday() }
     Shortcut { sequence: "Ctrl+1"; onActivated: root.viewIndex = 0 }
     Shortcut { sequence: "Ctrl+2"; onActivated: root.viewIndex = 1 }
     Shortcut { sequence: "Ctrl+3"; onActivated: root.viewIndex = 2 }
@@ -1316,10 +1484,28 @@ KosApplicationWindow {
                             sidebarToggleHost.x + sidebarToggleButton.x + sidebarToggleButton.width + root.design.toolbarGap)
                 anchors.verticalCenter: parent.verticalCenter
                 iconName: "plus"
-                hint: qsTr("Add event or reminder")
+                hint: root.remindersMode ? qsTr("New reminder") : qsTr("Add event or reminder")
                 enabled: pim.connected && pim.writable
 
-                onClicked: addMenu.popup(addButton, 0, addButton.height + 6)
+                onClicked: root.remindersMode ? root.openNewReminder(addButton) : root.beginEvent(root.selectedDate, undefined, addButton)
+            }
+
+            Demo.LiquidSegmentedControl {
+                objectName: "collapsedWorkspaceSwitch"
+                visible: !root.sidebarExpanded && !toolbarSearch.active && toolbarSearch.width === 0
+                x: addButton.x + addButton.width + root.design.toolbarGap
+                anchors.verticalCenter: parent.verticalCenter
+                width: 128
+                height: root.design.segmentHeight
+                labels: [qsTr("Calendar"), qsTr("Reminders")]
+                currentIndex: root.remindersMode ? 1 : 0
+                backdrop: chromeBackdrop
+                materialForm: !root.liquidControls
+                backgroundColor: root.design.segmentTrack
+                selectionColor: root.design.segmentPill
+                textColor: root.design.labelPrimary
+                mutedTextColor: textColor
+                onSelectionRequested: index => root.switchWorkspace(index === 1)
             }
 
             Demo.LiquidSegmentedControl {
@@ -1336,7 +1522,7 @@ KosApplicationWindow {
                 // sequential transition, no cross-fade, so no frame ever
                 // shows both text areas.
                 opacity: toolbarSearch.active || toolbarSearch.width > 0 ? 0 : 1
-                visible: opacity > 0
+                visible: opacity > 0 && !root.remindersMode
                 // R100/C05+L03: the reference's segment reads Day · Week ·
                 // Month · Year — granularity ascending, left to right — and
                 // L03 words it "Day/week/month segment". Ours was the exact
@@ -1354,9 +1540,9 @@ KosApplicationWindow {
                 currentIndex: root.viewIndex <= 2 ? 2 - root.viewIndex : 3
                 backgroundColor: root.design.segmentTrack
                 selectionColor: root.design.segmentPill
-                // Requested calendar typography: uniform black, slightly heavier labels.
-                textColor: "#000000"
-                mutedTextColor: "#000000"
+                // Keep uniform black labels in light mode; honor theme contrast in dark mode.
+                textColor: Demo.AppTheme.dark ? Demo.AppTheme.text : "#000000"
+                mutedTextColor: textColor
                 fontWeight: Font.Medium
                 selectedFontWeight: Font.Medium
                 onSelectionRequested: index =>
@@ -1426,7 +1612,6 @@ KosApplicationWindow {
                     focusTimer.stop()
                     if (!active) return
                     active = false
-                    input.text = ""
                     root.searchQuery = ""
                     input.focus = false
                 }
@@ -1438,6 +1623,12 @@ KosApplicationWindow {
                     blurPending = true
                     Qt.callLater(function() {
                         if (!blurPending || !toolbarSearch.active) return
+                        // Keep the visible search/filter while an anchored editor
+                        // owns focus; clearing it would destroy its result-row anchor.
+                        if (itemDetails.visible || eventEditor.visible || taskEditor.visible) {
+                            blurPending = false
+                            return
+                        }
                         close()
                     })
                 }
@@ -1493,7 +1684,7 @@ KosApplicationWindow {
                 iconName: "more"
                 hint: qsTr("Calendar actions")
                 showHint: !actionsMenu.visible
-                onClicked: actionsMenu.popup(this, 0, height + 2)
+                onClicked: actionsMenu.openAtAnchor()
 
             }
 
@@ -1507,83 +1698,36 @@ KosApplicationWindow {
                 onActivated: toolbarSearch.close()
             }
 
-            Menu {
-                id: addMenu
-                objectName: "calendarAddMenu"
-                popupType: Popup.Item
-                padding: 5
-                implicitWidth: 188
-                background: CalendarPopupSurface { scene: windowChrome }
-                MenuItem {
-                    objectName: "addEventAction"
-                    text: qsTr("New event")
-                    implicitHeight: 30
-                    font.pixelSize: 13
-                    onTriggered: eventEditor.openForDate(root.selectedDate)
-                }
-                MenuItem {
-                    objectName: "addReminderAction"
-                    text: qsTr("New reminder")
-                    implicitHeight: 30
-                    font.pixelSize: 13
-                    onTriggered: root.openNewReminder()
-                }
-            }
-
-            Menu {
+            Demo.LiquidPopover {
                 id: actionsMenu
                 objectName: "calendarActionsMenu"
-                popupType: Popup.Item
-                y: moreButton.height
-                padding: 4
-                implicitWidth: 210
-                background: CalendarPopupSurface { scene: windowChrome }
-                delegate: MenuItem {
-                    id: menuAction
-                    implicitHeight: 24
-                    font.pixelSize: 13
-                    contentItem: Label {
-                        text: menuAction.text
-                        color: !menuAction.enabled ? root.design.labelSecondary
-                            : menuAction.highlighted ? "white" : root.design.labelPrimary
-                        font: menuAction.font
-                        verticalAlignment: Text.AlignVCenter
-                        elide: Text.ElideRight
-                    }
-                    background: Rectangle { radius: 4; color: menuAction.highlighted ? root.design.accent : "transparent" }
-                }
-                MenuItem {
-                    implicitHeight: 24
-                    font.pixelSize: 13
+                anchorItem: moreButton
+                sourceItem: windowChrome
+                Demo.LiquidPopoverItem {
                     text: qsTr("New reminder")
                     enabled: pim.connected && pim.writable
-                    onTriggered: root.openNewReminder()
+                    onTriggered: root.openNewReminder(moreButton)
                 }
-                MenuItem {
+                Demo.LiquidPopoverItem {
                     text: qsTr("Show completed reminders")
                     checkable: true
                     checked: root.showCompletedTasks
+                    iconName: checked ? "check" : ""
                     onToggled: root.showCompletedTasks = checked
                 }
                 MenuSeparator {}
-                MenuItem {
-                    implicitHeight: 24
-                    font.pixelSize: 13
+                Demo.LiquidPopoverItem {
                     text: qsTr("Import iCalendar…")
                     enabled: pim.connected && pim.writable
                     onTriggered: importDialog.open()
                 }
-                MenuItem {
-                    implicitHeight: 24
-                    font.pixelSize: 13
+                Demo.LiquidPopoverItem {
                     text: qsTr("Export iCalendar…")
                     enabled: pim.connected && pim.ready
                     onTriggered: exportDialog.open()
                 }
                 MenuSeparator {}
-                MenuItem {
-                    implicitHeight: 24
-                    font.pixelSize: 13
+                Demo.LiquidPopoverItem {
                     text: qsTr("Calendar settings")
                     onTriggered: settingsDialog.open()
                 }
@@ -1619,84 +1763,233 @@ KosApplicationWindow {
                 height: sidebar.height
                 spacing: 0
 
-                // L04: the sidebar no longer carries its own toolbar row or a
-                // standing search field — those live in the unified toolbar.
-                // The body starts with the Today row.
-
-                SidebarRow {
-                    id: todayNavigation
-
+                Demo.LiquidSegmentedControl {
+                    objectName: "workspaceSwitch"
+                    liquidIntensity: "strong"
                     Layout.fillWidth: true
-                    Layout.preferredHeight: root.design.rowHeight
-                    text: qsTr("Today")
-                    detail: AppTheme.formatDate(root.now, "ddd")
-                    markerColor: root.design.accent
-                    markerFilled: true
-                    onClicked: root.showToday()
+                    Layout.leftMargin: 12
+                    Layout.rightMargin: 12
+                    Layout.topMargin: 8
+                    Layout.bottomMargin: 8
+                    Layout.preferredHeight: 30
+                    labels: [qsTr("Calendar"), qsTr("Reminders")]
+                    currentIndex: root.remindersMode ? 1 : 0
+                    backdrop: chromeBackdrop
+                    materialForm: !root.liquidControls
+                    backgroundColor: root.design.segmentTrack
+                    selectionColor: root.design.workspaceActive
+                    textColor: "#FFFFFF"
+                    mutedTextColor: root.design.labelPrimary
+                    onSelectionRequested: index => root.switchWorkspace(index === 1)
                 }
-
-                Rectangle {
+                CalendarReminderSidebar {
                     Layout.fillWidth: true
-                    Layout.preferredHeight: 1
-                    Layout.topMargin: 3
-                    Layout.bottomMargin: 3
-                    color: root.design.separator
+                    Layout.fillHeight: true
+                    visible: root.remindersMode
+                    workspace: remindersView
+                    pim: root.pimStore
+                    onEditGroupRequested: (group, remove) => organizationDialog.editGroup(group, remove)
+                    onEditListRequested: (list, anchor) => reminderListEditor.edit(list, anchor, list ? remindersView.listName(list.id) : "")
                 }
-
-                // S02/S03: categories and task lists directly under the
-                // Today row; the mini calendar anchors the sidebar bottom
-                // (M01). The mid section is one real scrolling viewport
-                // (Flickable over a naturally-sized Column): fillHeight with
-                // minimumHeight 0, so in a short window it is this area that
-                // scrolls — every group heading, category row and task list
-                // stays reachable — while the fixed mini-calendar block
-                // below can never be pushed off-window.
-                Flickable {
-                    id: categoriesViewport
-                    objectName: "calendarCategoriesViewport"
-
+                // Only personal calendar rows scroll; other sources stay visible.
+                ColumnLayout {
+                    visible: !root.remindersMode
                     Layout.fillWidth: true
                     Layout.fillHeight: true
                     Layout.minimumHeight: 0
-                    clip: true
-                    contentWidth: width
-                    contentHeight: categoriesColumn.implicitHeight
-                    boundsBehavior: Flickable.StopAtBounds
-
-                    ColumnLayout {
-                        id: categoriesColumn
-                        width: categoriesViewport.width
-                        spacing: 0
-
+                    spacing: 0
+                    RowLayout {
+                        Layout.fillWidth: true
+                        Layout.leftMargin: root.design.categoryInset
+                        Layout.topMargin: root.design.categoryHeadingTop
+                        spacing: 4
                         Label {
                             Layout.fillWidth: true
-                            Layout.leftMargin: root.design.categoryInset
-                            Layout.topMargin: root.design.categoryHeadingTop
-                            Layout.bottomMargin: root.design.categoryHeadingBottom
-                            Layout.preferredHeight: 16
-                            text: qsTr("Calendars")
+                            text: qsTr("My calendars")
                             color: root.design.labelSecondary
                             font.pixelSize: 11
-                            verticalAlignment: Text.AlignVCenter
                         }
+                        ToolButton {
+                            id: addCalendarButton
+                            objectName: "addCalendarCategory"
+                            implicitWidth: 26
+                            implicitHeight: 26
+                            enabled: pim.connected && pim.writable && !pim.busy
+                            Accessible.name: qsTr("Add calendar")
+                            contentItem: Demo.VectorIcon { name: "plus"; color: root.design.labelSecondary }
+                            padding: 6
+                            background: Rectangle { radius: 6; color: addCalendarButton.hovered ? root.design.rowHoverFill : "transparent" }
+                            onClicked: categoryDialog.edit(null, false)
+                        }
+                    }
+                    Flickable {
+                        id: categoriesViewport
+                        objectName: "calendarCategoriesViewport"
+                        Layout.fillWidth: true
+                        Layout.fillHeight: true
+                        Layout.minimumHeight: 0
+                        clip: true
+                        contentWidth: width
+                        contentHeight: categoriesColumn.implicitHeight
+                        boundsBehavior: Flickable.StopAtBounds
+                        ScrollBar.vertical: ScrollBar { policy: ScrollBar.AsNeeded }
+                        ColumnLayout {
+                            id: categoriesColumn
+                            width: categoriesViewport.width
+                            spacing: 0
+                                Repeater {
+                                    model: root.calendarCategories
+                                    delegate: RowLayout {
+                                        id: categoryRow
+                                        required property var modelData
+                                        Layout.fillWidth: true
+                                        spacing: 0
+                                        CategoryRow {
+                                            objectName: "category_" + categoryRow.modelData.id
+                                            Layout.fillWidth: true
+                                            text: categoryRow.modelData.name
+                                            boxColor: categoryRow.modelData.color
+                                            checkable: true
+                                            checked: !root.hiddenCategories.includes(categoryRow.modelData.id)
+                                            onToggled: {
+                                                const next = root.hiddenCategories.filter(id => id !== categoryRow.modelData.id)
+                                                if (!checked) next.push(categoryRow.modelData.id)
+                                                root.hiddenCategories = next
+                                            }
+                                            TapHandler { acceptedButtons: Qt.RightButton; onTapped: categoryMenu.openAtAnchor() }
+                                        }
+                                        ToolButton {
+                                            id: categoryMoreButton
+                                            implicitWidth: 24
+                                            implicitHeight: 26
+                                            Layout.rightMargin: 12
+                                            padding: 5
+                                            contentItem: Demo.VectorIcon { name: "more"; size: 14; color: root.design.labelSecondary }
+                                            Accessible.name: qsTr("Edit calendar")
+                                            background: Rectangle { radius: 6; color: categoryMoreButton.hovered ? root.design.rowHoverFill : "transparent" }
+                                            onClicked: categoryMenu.openAtAnchor()
+                                        }
+                                        Demo.LiquidPopover {
+                                            id: categoryMenu
+                                            anchorItem: categoryMoreButton
+                                            sourceItem: windowChrome
+                                            Demo.LiquidPopoverItem {
+                                                text: qsTr("Edit calendar")
+                                                iconName: "editRounded"
+                                                enabled: pim.connected && pim.writable && !pim.busy
+                                                onTriggered: categoryDialog.edit(categoryRow.modelData, false)
+                                            }
+                                            Demo.LiquidPopoverItem {
+                                                text: qsTr("Delete calendar")
+                                                iconName: "trashRounded"
+                                                enabled: categoryRow.modelData.id !== "default" && pim.connected && pim.writable && !pim.busy
+                                                onTriggered: categoryDialog.edit(categoryRow.modelData, true)
+                                            }
+                                        }
+                        }
+                    }
 
-                        Repeater {
-                            model: root.calendarCategories
-                            delegate: CategoryRow {
-                                required property var modelData
-                                objectName: "category_" + modelData.id
+                        }
+                    }
+
+                    Label {
+                        Layout.fillWidth: true
+                        Layout.leftMargin: root.design.categoryInset
+                        Layout.topMargin: root.design.categoryHeadingTop
+                        Layout.bottomMargin: root.design.categoryHeadingBottom
+                        Layout.preferredHeight: 16
+                        text: qsTr("Other")
+                        color: root.design.labelSecondary
+                        font.pixelSize: 11
+                        verticalAlignment: Text.AlignVCenter
+                    }
+
+                    CategoryRow {
+                        objectName: "remindersVisibility"
+                        Layout.fillWidth: true
+                        text: qsTr("Scheduled reminders")
+                        boxColor: root.design.accent
+                        checkable: true
+                        checked: root.showTasks
+                        onToggled: root.showTasks = checked
+                    }
+
+                    Repeater {
+                        model: pim.holidayCalendars
+                        delegate: RowLayout {
+                            id: holidayRow
+                            required property var modelData
+                            Layout.fillWidth: true
+                            spacing: 0
+                            CategoryRow {
+                                objectName: "holiday_" + holidayRow.modelData.id
                                 Layout.fillWidth: true
-                                text: modelData.name
-                                boxColor: modelData.color
+                                text: holidayRow.modelData.name === "Imported holidays" ? qsTr("Imported holidays") : holidayRow.modelData.name
+                                boxColor: holidayRow.modelData.color || "#D95658"
+                                detail: holidayRow.modelData.lastError ? "!" : ""
                                 checkable: true
-                                checked: !root.hiddenCategories.includes(modelData.id)
-                                onToggled: {
-                                    const next = root.hiddenCategories.filter(id => id !== modelData.id)
-                                    if (!checked) next.push(modelData.id)
-                                    root.hiddenCategories = next
+                                checked: holidayRow.modelData.enabled
+                                onToggled: pim.setHolidayCalendarEnabled(holidayRow.modelData.id, checked)
+                                TapHandler { acceptedButtons: Qt.RightButton; onTapped: holidayMenu.openAtAnchor() }
+                            }
+                            ToolButton {
+                                id: holidayMoreButton
+                                Layout.preferredWidth: 24
+                                Layout.preferredHeight: 24
+                                Layout.rightMargin: 12
+                                padding: 5
+                                hoverEnabled: true
+                                Accessible.name: qsTr("Manage holiday calendar")
+                                contentItem: Demo.VectorIcon { name: "more"; size: 14; color: root.design.labelSecondary }
+                                background: Rectangle { radius: root.design.navigationRadius; color: holidayMoreButton.hovered ? root.design.rowHoverFill : "transparent" }
+                                onClicked: holidayMenu.openAtAnchor()
+                                CalendarToolTip {
+                                    target: holidayMoreButton
+                                    when: !holidayMoreButton.pressed && !holidayMenu.visible
+                                    text: holidayRow.modelData.lastError
+                                        ? qsTr("Update failed. Previously saved holidays are still available.")
+                                        : qsTr("Manage holiday calendar")
+                                }
+                            }
+                            Demo.LiquidPopover {
+                                id: holidayMenu
+                                anchorItem: holidayMoreButton
+                                sourceItem: windowChrome
+                                Demo.LiquidPopoverItem {
+                                    text: qsTr("Refresh")
+                                    iconName: "refreshRounded"
+                                    enabled: pim.connected && pim.writable && !pim.busy
+                                        && !!(holidayRow.modelData.url || holidayRow.modelData.path)
+                                    onTriggered: pim.refreshHolidayCalendar(holidayRow.modelData.id)
+                                }
+                                Demo.LiquidPopoverItem {
+                                    text: qsTr("Remove calendar")
+                                    iconName: "trashRounded"
+                                    enabled: pim.connected && pim.writable && !pim.busy
+                                    onTriggered: pim.removeHolidayCalendar(holidayRow.modelData.id)
                                 }
                             }
                         }
+                    }
+                    ToolButton {
+                        id: addHolidayButton
+                        objectName: "addHolidayCalendar"
+                        Layout.fillWidth: true
+                        Layout.leftMargin: root.design.categoryInset
+                        Layout.rightMargin: root.design.categoryInset
+                        Layout.topMargin: 4
+                        Layout.preferredHeight: 28
+                        padding: 0
+                        hoverEnabled: true
+                        enabled: pim.connected && pim.writable && !pim.busy
+                        Accessible.name: qsTr("Add holiday calendar…")
+                        contentItem: RowLayout {
+                            spacing: 8
+                            Demo.VectorIcon { name: "plus"; size: 14; color: root.design.labelSecondary }
+                            Label { Layout.fillWidth: true; text: qsTr("Add holiday calendar…"); color: root.design.labelSecondary; font.pixelSize: 12; elide: Text.ElideRight }
+                        }
+                        background: Rectangle { radius: 6; color: addHolidayButton.hovered || addHolidayButton.visualFocus ? root.design.rowHoverFill : "transparent" }
+                        onClicked: holidayDialog.startAdding()
                     }
                 }
 
@@ -1707,6 +2000,7 @@ KosApplicationWindow {
                 // stretch it.
                 Item {
                     id: miniCalendar
+                    visible: !root.remindersMode
 
                     readonly property real fixedHeight:
                         headingRow.height + 18 + 6 * cellHeight
@@ -1889,10 +2183,37 @@ KosApplicationWindow {
             }
         }
 
+        CalendarRemindersView {
+            id: remindersView
+            objectName: "remindersWorkspace"
+            anchors.left: sidebar.right
+            anchors.right: parent.right
+            anchors.top: parent.top
+            anchors.topMargin: root.design.toolbarHeight
+            anchors.bottom: parent.bottom
+            visible: root.remindersMode
+            pim: root.pimStore
+            searchQuery: root.searchQuery
+            statusMessage: root.statusMessage
+            sourceItem: root.calendarScene
+            onEditRequested: (todo, anchor) => {
+                taskEditor.anchorItem = anchor
+                taskEditor.anchorRect = Qt.rect(0, 0, -1, -1)
+                taskEditor.openForTodo(todo)
+            }
+            onRemoveSectionRequested: (section, anchor) => organizationDialog.editSection(section, anchor)
+            onOpenRequested: (todo, anchor) => root.openItem({kind: "todo", record: todo}, anchor)
+            onSubtaskRequested: (todo, anchor) => {
+                root.openNewReminder(anchor)
+                taskEditor.openForTodo({parentId: todo.id, listId: todo.listId, section: todo.section || "", allDay: true, due: ""})
+            }
+
+        }
         // Content plane: the unified toolbar sits above; below it a title row
         // (date heading + prev/Today/next, L06/L07 review later) and then the
         // view.
         ColumnLayout {
+            visible: !root.remindersMode
             anchors.left: sidebar.right
             anchors.right: parent.right
             anchors.top: parent.top
@@ -2029,8 +2350,8 @@ KosApplicationWindow {
                             itemColor: root.itemColor
                             itemCompleted: root.itemCompleted
                             onDateSelected: function(date) { root.selectedDate = date }
-                            onItemActivated: function(item) { root.openItem(item) }
-                            onCreateRequested: function(date) { eventEditor.openForDate(date) }
+                            onItemActivated: function(item, anchor) { root.openItem(item, anchor) }
+                            onCreateRequested: function(date, anchor) { root.beginEvent(date, undefined, anchor) }
                         }
 
                         Pane {
@@ -2069,7 +2390,7 @@ KosApplicationWindow {
                                     text: qsTr("Add")
                                     flat: true
                                     enabled: pim.connected && pim.writable
-                                    onClicked: eventEditor.openForDate(root.selectedDate)
+                                    onClicked: root.beginEvent(root.selectedDate, undefined, addButton)
                                 }
                             }
 
@@ -2105,7 +2426,7 @@ KosApplicationWindow {
                                         border.width: agendaItem.activeFocus ? 1 : 0
                                         border.color: root.design.accent
                                     }
-                                    onClicked: root.openItem(modelData)
+                                    onClicked: root.openItem(modelData, agendaItem)
 
                                     contentItem: RowLayout {
                                         spacing: 9
@@ -2205,6 +2526,7 @@ KosApplicationWindow {
                     id: weekPage
                     CalendarScheduleView {
                         id: weekSchedule
+                        selectionEditorOpen: eventEditor.visible
                         firstDate: root.weekStart
                         currentTime: root.now
                         dayCount: 7
@@ -2218,9 +2540,13 @@ KosApplicationWindow {
                         itemRecord: root.itemRecord
                         itemHour: root.itemHour
                         onDateSelected: function(date) { root.selectedDate = date }
-                        onItemActivated: function(item) { root.openItem(item) }
-                        onCreateRequested: function(date, hour) {
-                            eventEditor.openForDate(date, hour)
+                        onItemActivated: function(item, anchor) { root.openItem(item, anchor) }
+                        onCreateRequested: function(date, hour, anchor) {
+                            root.beginEvent(date, hour, anchor)
+                        }
+                        onRangeCreateRequested: function(start, end, anchor, rect) {
+                            root.beginEvent(start, start.getHours(), anchor, rect)
+                            eventEditor.setTimeRange(start, end)
                         }
                     }
                 }
@@ -2229,6 +2555,7 @@ KosApplicationWindow {
                     id: dayPage
                     CalendarScheduleView {
                         id: daySchedule
+                        selectionEditorOpen: eventEditor.visible
                         firstDate: root.selectedDate
                         currentTime: root.now
                         dayCount: 1
@@ -2242,9 +2569,13 @@ KosApplicationWindow {
                         itemRecord: root.itemRecord
                         itemHour: root.itemHour
                         onDateSelected: function(date) { root.selectedDate = date }
-                        onItemActivated: function(item) { root.openItem(item) }
-                        onCreateRequested: function(date, hour) {
-                            eventEditor.openForDate(date, hour)
+                        onItemActivated: function(item, anchor) { root.openItem(item, anchor) }
+                        onCreateRequested: function(date, hour, anchor) {
+                            root.beginEvent(date, hour, anchor)
+                        }
+                        onRangeCreateRequested: function(start, end, anchor, rect) {
+                            root.beginEvent(start, start.getHours(), anchor, rect)
+                            eventEditor.setTimeRange(start, end)
                         }
                     }
                 }
@@ -2252,11 +2583,7 @@ KosApplicationWindow {
                 Component {
                     id: yearPage
 
-                    // R-YEAR step 1: 12-month skeleton from the mini-month
-                    // idiom. Step 2: day-cell click selects (stays in year
-                    // view; today red disc / selected gray disc, mini-month
-                    // idiom), event dots per day, month-label click still
-                    // routes to month view.
+                    // Annual overview: dates open day view, months open month view.
                     Item {
                         GridLayout {
                             anchors.fill: parent
@@ -2277,6 +2604,7 @@ KosApplicationWindow {
                                         (monthStart.getDay() - root.localeFirstDayOfWeek + 7) % 7
                                     Layout.fillWidth: true
                                     Layout.fillHeight: true
+                                    background: Item {}
 
                                     onClicked: {
                                         root.selectedDate = monthStart
@@ -2317,7 +2645,7 @@ KosApplicationWindow {
                                                         cellDate.getMonth()
                                                             === yearMonthCell.monthStart.getMonth()
                                                     readonly property bool isToday:
-                                                        cellDate.getFullYear() === root.now.getFullYear()
+                                                        yearDayCell.inMonth && cellDate.getFullYear() === root.now.getFullYear()
                                                             && cellDate.getMonth() === root.now.getMonth()
                                                             && cellDate.getDate() === root.now.getDate()
                                                     readonly property bool isSelected:
@@ -2337,8 +2665,10 @@ KosApplicationWindow {
                                                     Keys.onReturnPressed: yearDayCell.activate()
                                                     Keys.onSpacePressed: yearDayCell.activate()
                                                     function activate() {
-                                                        if (yearDayCell.inMonth)
-                                                            root.selectedDate = yearDayCell.cellDate
+                                                        if (!yearDayCell.inMonth) return
+                                                        root.selectedDate = yearDayCell.cellDate
+                                                        root.visibleMonth = yearMonthCell.monthStart
+                                                        root.viewIndex = 2
                                                     }
                                                     Accessible.role: yearDayCell.inMonth
                                                         ? Accessible.ListItem : Accessible.NoRole
@@ -2346,18 +2676,8 @@ KosApplicationWindow {
                                                         ? qsTr("%1; %2 items").arg(
                                                               AppTheme.formatDate(cellDate, Locale.LongFormat)).arg(eventCount)
                                                         : ""
-                                                    Accessible.focusable: true
+                                                    Accessible.focusable: yearDayCell.inMonth
                                                     Accessible.onPressAction: yearDayCell.activate()
-
-                                                    // Focus ring only: resting
-                                                    // cell keeps its plain look.
-                                                    Rectangle {
-                                                        anchors.fill: parent
-                                                        color: "transparent"
-                                                        border.color: root.design.accent
-                                                        border.width: 1
-                                                        visible: yearDayCell.activeFocus
-                                                    }
 
                                                     Rectangle {
                                                         anchors.centerIn: parent
@@ -2369,6 +2689,21 @@ KosApplicationWindow {
                                                             : (yearDayCell.isSelected
                                                                 ? root.design.selectionDisc
                                                                 : "transparent")
+                                                        TextMetrics {
+                                                            id: yearDateMetrics
+                                                            font: yearDateText.font
+                                                            text: yearDateText.text
+                                                        }
+                                                        Text {
+                                                            id: yearDateText
+                                                            // Center visible numeral ink, not the font's asymmetric line box.
+                                                            x: (parent.width - yearDateMetrics.tightBoundingRect.width) / 2 - yearDateMetrics.tightBoundingRect.x
+                                                            y: (parent.height - yearDateMetrics.tightBoundingRect.height) / 2 - yearDateMetrics.tightBoundingRect.y - baselineOffset
+                                                            text: yearDayCell.inMonth ? String(yearDayCell.cellDate.getDate()) : ""
+                                                            color: yearDayCell.isToday || yearDayCell.isSelected ? "#FFFFFF" : root.design.labelPrimary
+                                                            font.pixelSize: 10
+                                                            font.weight: yearDayCell.isToday || yearDayCell.isSelected ? Font.DemiBold : Font.Normal
+                                                        }
                                                     }
 
                                                     Rectangle {
@@ -2382,24 +2717,12 @@ KosApplicationWindow {
                                                         color: root.design.accent
                                                     }
 
-                                                    Label {
-                                                        anchors.centerIn: parent
-                                                        text: yearDayCell.inMonth
-                                                            ? String(yearDayCell.cellDate.getDate())
-                                                            : ""
-                                                        color: yearDayCell.isToday || yearDayCell.isSelected
-                                                            ? "#FFFFFF"
-                                                            : root.design.labelPrimary
-                                                        font.pixelSize: 10
-                                                        font.weight: yearDayCell.isToday || yearDayCell.isSelected
-                                                            ? Font.DemiBold : Font.Normal
-                                                    }
 
                                                     MouseArea {
                                                         anchors.fill: parent
                                                         enabled: yearDayCell.inMonth
                                                         cursorShape: Qt.PointingHandCursor
-                                                        onClicked: root.selectedDate = yearDayCell.cellDate
+                                                        onClicked: yearDayCell.activate()
                                                     }
                                                 }
                                             }
