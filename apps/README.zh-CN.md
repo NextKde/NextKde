@@ -2,7 +2,7 @@
 
 **[English](README.md) | [中文](README.zh-CN.md)**
 
-每个直接子目录都是独立的 Qt Quick 应用和进程。应用可以导入 `shared/`，
+每个应用有独立的 Qt Quick 窗口与进程；`todo/` 是日历提醒事项的兼容启动入口，不再提供独立应用。应用可以导入 `shared/`，
 通过已记录的契约与 `services/` 通信，但绝不能导入 `shell/desktop/`。
 
 应用工作区从仓库根目录配置。构建开关和对应 CMake preset 使各应用可
@@ -12,11 +12,11 @@
 | --- | --- | --- |
 | 日历 | `kos-calendar` | `calendar-dev` |
 | 计算器 | `kos-calculator` | `apps-dev` |
-| 待办 | `kos-todo` | `todo-dev` |
+| 提醒事项兼容入口（自动构建日历） | `kos-todo` | `todo-dev` |
 | 天气 | `kos-weather` | `weather-dev` |
 | KOS ListenFree（显式安装的音乐应用） | `listenfree` | `listenfree-dev` |
 
-使用 `apps-dev` 可构建日历、计算器、待办和天气。每个应用拥有自己的可执行文件、QML
+使用 `apps-dev` 可构建日历（含提醒事项）、计算器、天气及待办兼容入口。每个应用拥有自己的可执行文件、QML
 模块、桌面入口、测试和中英文文档。`apps/common/` 只是很小的应用运行时，
 不是功能层；应用之间不会互相导入。天气 preset 还会构建并安装 Go 数据服务，
 应用会在需要时自动启动它。

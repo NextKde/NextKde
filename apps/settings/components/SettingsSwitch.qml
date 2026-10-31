@@ -7,6 +7,4 @@ Demo.LiquidGlassSwitch {
     implicitHeight: 20
     Layout.preferredWidth: 44
     Layout.preferredHeight: 20
-    Layout.topMargin: 2
-    Layout.bottomMargin: 2
 }

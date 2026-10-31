@@ -17,9 +17,9 @@ and the vendored Glass effect, then uses `sudo` to copy
 only the staged manifest into KWin's system plugin paths. The same manifest is
 used for exact removal by `kosctl uninstall`.
 
-Calendar, Calculator, Todo, Weather and the optional music apps keep their desktop entries, icons, AppStream
+Calendar (including Reminders), Calculator, Weather and the optional music apps keep their desktop entries, icons, AppStream
 metadata, and service templates beside their owning module. CMake therefore
 installs a one-application preset without pulling files from another app.
-`tools/install-apps.sh` installs Calendar, Calculator, Todo and Weather for the current user, enables the core
-`kos-data.service`, and leaves the Calendar/Todo PIM service to D-Bus activation.
+`tools/install-apps.sh` installs Calendar (including Reminders), Calculator, Weather and a hidden Todo compatibility launcher for the current user, enables the core
+`kos-data.service`, and leaves the Calendar PIM service to D-Bus activation.
 ListenFree and its private audio SDK are included only with `--with-listenfree`.

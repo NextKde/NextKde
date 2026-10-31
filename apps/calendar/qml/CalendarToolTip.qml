@@ -1,22 +1,13 @@
 import QtQuick
-import QtQuick.Controls
-import Kos.Ui
+import QtQuick.Window
+import Kos.Demo as Demo
 
-ToolTip {
-    id: root
-    popupType: Popup.Item
-    delay: 500
-    timeout: 5000
-    margins: 8
-    padding: 8
-    x: parent ? (parent.width - width) / 2 : 0
-    y: parent ? parent.height + 6 : 0
-    font.pixelSize: 12
-    contentItem: Label {
-        text: root.text
-        font: root.font
-        color: AppTheme.text
-        wrapMode: Text.Wrap
+Demo.KosToolTip {
+    id: tip
+    backdrop: Demo.LiquidBackdrop {
+        registerAsDefault: false
+        sourceItem: tip.hostWindow ? tip.hostWindow.calendarScene : null
+        active: tip.visible && !tip.reduceTransparency
+        blur: 0.85
     }
-    background: CalendarPopupSurface { radius: 8 }
 }

@@ -7,7 +7,9 @@ target_include_directories(kos_pim_service_core PUBLIC
 )
 target_link_libraries(kos_pim_service_core PUBLIC
     Qt6::Core
+    Qt6::Gui
     Qt6::DBus
+    Qt6::Network
     KF6::CalendarCore
 )
 
@@ -80,6 +82,7 @@ if(BUILD_TESTING)
         )
         target_link_libraries(kos-pim-client-dbus-test PRIVATE
             Kos::PimClient
+            Qt6::Network
             Qt6::DBus
             Qt6::Test
         )

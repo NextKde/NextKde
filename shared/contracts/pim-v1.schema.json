@@ -19,6 +19,53 @@
     "generatedAt": { "type": "integer", "minimum": 0 },
     "writable": { "type": "boolean" },
     "error": { "type": "string" },
+    "calendars": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "name", "color"],
+        "properties": {
+          "id": { "type": "string" },
+          "name": { "type": "string", "minLength": 1, "maxLength": 128 },
+          "color": { "type": "string", "pattern": "^#[0-9a-fA-F]{6}$" },
+          "builtinName": { "type": "boolean" },
+          "customColor": { "type": "boolean" }
+        }
+      }
+    },
+    "holidaySources": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "name", "url", "provider"],
+        "properties": {
+          "id": { "type": "string" },
+          "name": { "type": "string" },
+          "url": { "type": "string" },
+          "provider": { "type": "string" }
+        }
+      }
+    },
+    "holidayCalendars": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "name", "type", "enabled", "color"],
+        "properties": {
+          "id": { "type": "string", "minLength": 1 },
+          "name": { "type": "string", "minLength": 1, "maxLength": 128 },
+          "type": { "enum": ["country", "url", "file"] },
+          "enabled": { "type": "boolean" },
+          "color": { "type": "string" },
+          "lastUpdated": { "type": "number", "minimum": 0 },
+          "lastAttempt": { "type": "number", "minimum": 0 },
+          "lastError": { "type": "string" },
+          "eventCount": { "type": "integer", "minimum": 0 }
+        },
+        "additionalProperties": true
+      }
+    },
+    "groups": { "type": "array", "items": { "$ref": "#/$defs/namedOrganization" } },
     "lists": {
       "type": "array",
       "items": { "$ref": "#/$defs/list" }
@@ -34,6 +81,13 @@
   },
   "additionalProperties": true,
   "$defs": {
+    "namedOrganization": {
+      "type": "object", "required": ["id", "name"],
+      "properties": {
+        "id": { "type": "string", "minLength": 1 },
+        "name": { "type": "string", "minLength": 1, "maxLength": 128 }
+      }
+    },
     "recurrence": {
       "enum": ["none", "daily", "weekly", "monthly", "yearly", "custom"]
     },
@@ -44,7 +98,23 @@
         "id": { "type": "string", "minLength": 1 },
         "name": { "type": "string", "minLength": 1, "maxLength": 128 },
         "color": { "type": "string" },
-        "position": { "type": "integer", "minimum": 0 }
+        "position": { "type": "integer", "minimum": 0 },
+        "group": { "type": "string", "maxLength": 128 },
+        "sections": { "type": "array", "items": { "$ref": "#/$defs/namedOrganization" } },
+        "viewMode": { "enum": ["list", "columns"], "default": "list" },
+        "icon": { "type": "string" },
+        "kind": { "enum": ["list", "smart"], "default": "list" },
+        "rules": {
+          "type": "object",
+          "properties": {
+            "listId": { "type": "string", "maxLength": 128 },
+            "tag": { "type": "string", "maxLength": 128 },
+            "date": { "enum": ["any", "today", "scheduled", "undated", "overdue"] },
+            "flag": { "enum": ["any", "yes", "no"] },
+            "priority": { "enum": ["any", "high", "medium", "low", "none"] }
+          },
+          "additionalProperties": false
+        }
       },
       "additionalProperties": true
     },
@@ -113,6 +183,11 @@
         "description": { "type": "string", "maxLength": 32768 },
         "listId": { "type": "string", "minLength": 1 },
         "parentId": { "type": "string" },
+        "flagged": { "type": "boolean", "default": false },
+        "url": { "type": "string", "maxLength": 4096 },
+        "images": { "type": "array", "maxItems": 8, "items": { "type": "string" } },
+        "section": { "type": "string", "maxLength": 128 },
+        "tags": { "type": "array", "maxItems": 32, "items": { "type": "string", "minLength": 1, "maxLength": 64 } },
         "order": { "type": "number" },
         "start": { "type": "string" },
         "due": { "type": "string" },

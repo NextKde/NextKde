@@ -1,6 +1,8 @@
 [Desktop Entry]
 Version=1.0
 Type=Application
+NoDisplay=true
+X-NextKDE-UnifiedCalendar=true
 Name=KOS Todo
 Name[zh]=KOS 待办事项
 Name[zh_CN]=KOS 待办事项
@@ -18,14 +20,14 @@ Comment[pt]=Organize tarefas, listas, prazos e vínculos com o calendário
 Comment[pt_BR]=Organize tarefas, listas, prazos e vínculos com o calendário
 TryExec=@KOS_APP_EXECUTABLE@
 Exec=@KOS_APP_EXECUTABLE@
-Icon=kos-todo
+Icon=kos-calendar
 Terminal=false
 Categories=Office;ProjectManagement;Qt;
 Keywords=todo;task;reminder;list;
 Keywords[pt]=tarefa;afazer;lembrete;lista;
 Keywords[pt_BR]=tarefa;afazer;lembrete;lista;
 StartupNotify=true
-StartupWMClass=kos-todo
+StartupWMClass=kos-calendar
 X-GNOME-SingleWindow=true
 Actions=Today;Planned;Settings;
 

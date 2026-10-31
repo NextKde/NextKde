@@ -1,4 +1,5 @@
 import QtQuick
+import QtQuick.Window
 import Qt5Compat.GraphicalEffects
 import Quickshell.Widgets
 
@@ -27,6 +28,13 @@ Item {
     // and segfaults inside KIconEngine::createPixmap. Only enable this for
     // sources that never reach the icon provider (plain files, bundled assets).
     property bool   asynchronous:      false
+
+    // The icon provider handles display scaling itself. Raw artwork (including
+    // bundled SVG data URLs) needs an explicit size in physical pixels;
+    // IconImage otherwise rasterizes it at the smaller logical display size.
+    readonly property int rasterSize: Math.max(1, Math.ceil(
+        Math.min(width, height)
+        * (source.startsWith("image://") ? 1 : Math.max(1, Screen.devicePixelRatio))))
 
     // The shader pass only earns its FBO when it actually rewrites pixels:
     // desaturation, tonal tint, or the dimmed monochrome opacity. In the
@@ -64,6 +72,7 @@ Item {
             source: root.source
             smooth: root.smooth
             asynchronous: root.asynchronous
+            backer.sourceSize: Qt.size(root.rasterSize, root.rasterSize)
             // Direct rendering can safely reuse Qt Quick's decoded pixmap.
             backer.cache: IconThemeReloadService.pixmapCacheAllowed
         }
@@ -82,6 +91,7 @@ Item {
                 source: root.source
                 smooth: root.smooth
                 asynchronous: root.asynchronous
+                backer.sourceSize: Qt.size(root.rasterSize, root.rasterSize)
                 // The effect path owns a live layer texture and cannot share
                 // Qt Quick's decoded pixmap with anyone.
                 backer.cache: false

@@ -44,13 +44,13 @@
     },
     {
       "name": "apps-dev",
-      "displayName": "Calendar, Calculator, Todo and Weather (development)",
+      "displayName": "Calendar with Reminders, Calculator and Weather (development)",
       "inherits": "apps-base",
       "binaryDir": "${sourceDir}/.build/apps-dev"
     },
     {
       "name": "apps-release",
-      "displayName": "Calendar, Calculator, Todo and Weather (release install)",
+      "displayName": "Calendar with Reminders, Calculator and Weather (release install)",
       "inherits": "apps-base",
       "binaryDir": "${sourceDir}/.build/apps-release",
       "cacheVariables": {
@@ -73,7 +73,7 @@
     },
     {
       "name": "todo-dev",
-      "displayName": "Todo only",
+      "displayName": "Calendar with legacy Todo launcher",
       "inherits": "apps-base",
       "binaryDir": "${sourceDir}/.build/todo-dev",
       "cacheVariables": {

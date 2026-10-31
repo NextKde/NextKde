@@ -10,7 +10,7 @@ Item {
     property color titleColor: AppTheme.text
     property real cornerRadius: 12
     property real titleSpacing: 6
-    property real verticalPadding: 4
+    property real verticalPadding: 2
     property alias titleFont: heading.font
     readonly property alias background: panel
     readonly property alias contentItem: items
