@@ -25,8 +25,8 @@ Pane {
     property var itemCompleted: function(item) { return false }
 
     signal dateSelected(date date)
-    signal itemActivated(var item)
-    signal createRequested(date date)
+    signal itemActivated(var item, Item anchor)
+    signal createRequested(date date, Item anchor)
 
     function dateForCell(index) {
         const first = new Date(visibleDate.getFullYear(), visibleDate.getMonth(), 1)
@@ -114,6 +114,11 @@ Pane {
                 opacity: inVisibleMonth ? 1 : 0.5
                 Accessible.name: AppTheme.formatDate(cellDate, Locale.LongFormat)
                 onClicked: root.dateSelected(cellDate)
+                onDoubleClicked: {
+                    root.dateSelected(cellDate)
+                    root.createRequested(cellDate, dayButton)
+                }
+                Keys.onReturnPressed: root.createRequested(cellDate, dayButton)
 
                 contentItem: ColumnLayout {
                     spacing: 2
@@ -151,20 +156,7 @@ Pane {
                         }
 
 
-                        KosToolButton {
-                            text: "+"
-                            flat: true
-                            visible: (dayButton.hovered || dayButton.activeFocus)
-                                && dayButton.inVisibleMonth
-                            implicitWidth: 24
-                            implicitHeight: 24
-                            Accessible.name: qsTr("Add event on %1").arg(
-                                AppTheme.formatDate(dayButton.cellDate, Locale.LongFormat))
-                            onClicked: {
-                                root.dateSelected(dayButton.cellDate)
-                                root.createRequested(dayButton.cellDate)
-                            }
-                        }
+
                     }
 
                     Repeater {
@@ -208,17 +200,17 @@ Pane {
                             activeFocusOnTab: true
                             Keys.onReturnPressed: {
                                 root.dateSelected(dayButton.cellDate)
-                                root.itemActivated(itemChip.modelData)
+                                root.itemActivated(itemChip.modelData, itemChip)
                             }
                             Keys.onSpacePressed: {
                                 root.dateSelected(dayButton.cellDate)
-                                root.itemActivated(itemChip.modelData)
+                                root.itemActivated(itemChip.modelData, itemChip)
                             }
                             Accessible.role: Accessible.ListItem
                             Accessible.name: root.itemTitle(itemChip.modelData)
                             Accessible.onPressAction: {
                                 root.dateSelected(dayButton.cellDate)
-                                root.itemActivated(itemChip.modelData)
+                                root.itemActivated(itemChip.modelData, itemChip)
                             }
                             // Focus ring only: the resting chip is fill-only,
                             // so the border appears on focus alone.
@@ -228,7 +220,7 @@ Pane {
                             TapHandler {
                                 onTapped: {
                                     root.dateSelected(dayButton.cellDate)
-                                    root.itemActivated(itemChip.modelData)
+                                    root.itemActivated(itemChip.modelData, itemChip)
                                 }
                             }
                         }
@@ -240,10 +232,8 @@ Pane {
                 background: Rectangle {
                     radius: 0
                     color: dayButton.selected
-                        ? AppTheme.withAlpha(design.accent, AppTheme.dark ? 0.12 : 0.06)
+                        ? design.selectionFill
                         : dayButton.hovered ? design.sidebarPlane : "transparent"
-                    border.width: dayButton.activeFocus ? 1 : 0
-                    border.color: design.accent
                     Rectangle {
                         anchors.top: parent.top
                         width: parent.width
