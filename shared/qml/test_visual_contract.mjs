@@ -185,8 +185,22 @@ for (const app of ["calendar", "todo", "weather"]) {
     }
     assert.doesNotMatch(source, /withAlpha\(AppTheme\.sidebar/,
         `${app} sidebar does not expose desktop content`);
-    assert.doesNotMatch(source, /\b(?:Button|ToolButton|RoundButton)\s*\{/,
-        `${app} uses the shared rounded button controls`);
+    if (app === "calendar") {
+        // Ordinary sidebar actions are intentionally not liquid controls. Keep
+        // their explicit rounded geometry and accessibility, rather than forcing
+        // them back to the legacy shared surface merely to satisfy a type-name check.
+        const ordinaryActions = new Set(["addCalendarButton", "categoryMoreButton", "holidayMoreButton", "addHolidayButton"]);
+        for (const match of source.matchAll(/\b(?:Button|ToolButton|RoundButton)\s*\{\s*id:\s*(\w+)/g)) {
+            assert.ok(ordinaryActions.has(match[1]), `review ordinary calendar control ${match[1]}`);
+            const block = source.slice(match.index, source.indexOf("onClicked:", match.index));
+            assert.match(block, /background:\s*Rectangle\s*\{\s*radius:\s*6\b/,
+                `${match[1]} keeps ordinary rounded geometry`);
+            assert.match(block, /Accessible\.name:/, `${match[1]} retains an accessible name`);
+        }
+    } else {
+        assert.doesNotMatch(source, /\b(?:Button|ToolButton|RoundButton)\s*\{/,
+            `${app} uses the shared rounded button controls`);
+    }
     if (app === "weather") {
         // Weather deliberately exposes units inline, without a separate settings dialog.
         assert.match(source, /ButtonGroup\s*\{\s*id:\s*unitsGroup/,
