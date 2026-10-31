@@ -5,6 +5,7 @@ Item {
     QtObject {
         id: backend
         property var state: ({enabled:true, radius:20, shadow:true, hideAnimation:"scale", closeAnimation:"scale", buttonGlyphMode:"always"})
+        property bool animationBusy: false
         property string error: ""
         property var calls: []
         function refresh() {}
@@ -15,7 +16,7 @@ Item {
         function setRadius(value) { change("radius", value); return true }
         function setShadow(value) { change("shadow", value); return true }
         function setTakeover(value) { change("enabled", value); return true }
-        function setAnimation(kind, value) { change(kind + "Animation", value); return true }
+        function requestAnimation(kind, value) { change(kind + "Animation", value); return true }
         function setButtonGlyphMode(value) { change("buttonGlyphMode", value); return true }
     }
     TestCase {

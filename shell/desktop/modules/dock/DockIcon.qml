@@ -1,4 +1,5 @@
 import QtQuick
+import QtQuick.Window
 import Quickshell
 import Quickshell.Wayland
 import Quickshell.Widgets
@@ -56,6 +57,8 @@ Item {
     property var targetScreen: null
     property real surfaceOriginX: 0
     property real surfaceOriginY: 0
+    readonly property var windowAnimationSurface: icon.Window.window
+        ? icon.Window.window.contentItem : null
     // `isRunning` is visual runtime state. `isWindowItem` identifies which
     // context-menu actions are valid, because a pinned running app has no
     // single windowId even though it displays a running indicator.

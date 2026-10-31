@@ -157,9 +157,10 @@ ColumnLayout {
                         label: I18n.tr("Genie")
                     }
                 ]
+                enabled: windowPage.backend && !windowPage.backend.animationBusy
                 currentIndex: ["none", "scale", "genie"].indexOf(windowPage.snapshot.hideAnimation ?? "scale")
                 onSelectionChanged: function (index) {
-                    windowPage.backend.setAnimation("hide", model[index].id);
+                    windowPage.backend.requestAnimation("hide", model[index].id);
                 }
             }
         }
@@ -188,9 +189,10 @@ ColumnLayout {
                         label: I18n.tr("Shrink and fade")
                     }
                 ]
+                enabled: windowPage.backend && !windowPage.backend.animationBusy
                 currentIndex: ["none", "fade", "scale"].indexOf(windowPage.snapshot.closeAnimation ?? "scale")
                 onSelectionChanged: function (index) {
-                    windowPage.backend.setAnimation("close", model[index].id);
+                    windowPage.backend.requestAnimation("close", model[index].id);
                 }
             }
         }
@@ -199,7 +201,8 @@ ColumnLayout {
         Layout.fillWidth: true
         Layout.leftMargin: 13
         Layout.rightMargin: 13
-        text: I18n.tr("Hide means minimizing to the Dock. Choosing “None” makes KOS drop the animation and leave it to other enabled KWin effects.")
+        visible: (windowPage.snapshot.nativeGenieFallback ?? "").length > 0
+        text: I18n.tr("Temporarily using Scale. Your Genie preference is saved.")
         color: colors.secondaryText
         font.pixelSize: 11
         wrapMode: Text.Wrap

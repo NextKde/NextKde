@@ -1,5 +1,7 @@
 #include "PlatformServer.h"
 #include "PlatformProcess.h"
+#include "../windowanimation/NativeGenie.h"
+#include "../windowanimation/AnimationTask.h"
 
 #include <QByteArray>
 #include <QDBusInterface>
@@ -193,27 +195,26 @@ bool PlatformServer::handleThemeOperation(QLocalSocket *socket, const QJsonObjec
                     QStringLiteral("窗口动画样式无效"), false);
             return true;
         }
-        const QString kwriteconfig = QStandardPaths::findExecutable(
-            QStringLiteral("kwriteconfig6"));
-        if (kwriteconfig.isEmpty()) {
-            respond(socket, request, false, {}, QStringLiteral("theme-write-failed"),
-                    QStringLiteral("无法保存窗口动画配置"), true);
+        if (m_animationSyncPending) {
+            respond(socket, request, false, {}, QStringLiteral("busy"),
+                    QStringLiteral("Animation configuration is being updated"), true);
             return true;
         }
-        runCommand(socket, request, kwriteconfig,
-                   {QStringLiteral("--file"), QStringLiteral("kwinrc"), QStringLiteral("--group"),
-                    QStringLiteral("Effect-kos_dock_window_animation"), QStringLiteral("--key"),
-                    QStringLiteral("AnimationStyle"), style},
-                   [](const QByteArray &, int) {
-            QDBusInterface effects(QStringLiteral("org.kde.KWin"), QStringLiteral("/Effects"),
-                                   QStringLiteral("org.kde.kwin.Effects"));
-            if (effects.isValid())
-                // Fire-and-forget reload notification; the reply is unused.
-                effects.asyncCall(QStringLiteral("reconfigureEffect"),
-                                  QStringLiteral("kos_dock_window_animation"));
-            return QJsonObject{{QStringLiteral("configured"), true},
-                               {QStringLiteral("kwinAvailable"), effects.isValid()}};
-        }, 10000);
+        m_animationSyncPending = true;
+        const QPointer<QLocalSocket> guardedSocket(socket);
+        new KOS::WindowAnimation::AnimationTask(this, [style] {
+            QString error;
+            // Preserve the separate animation page selection when syncing the
+            // legacy appearance preference at Shell startup.
+            const bool saved = KOS::WindowAnimation::migrate(error, style);
+            return KOS::WindowAnimation::AnimationTask::Result{saved, error};
+        }, [this, guardedSocket, request](const auto &result) {
+            m_animationSyncPending = false;
+            respond(guardedSocket.data(), request, result.first,
+                    QJsonObject{{QStringLiteral("configured"), result.first}},
+                    result.first ? QString() : QStringLiteral("theme-write-failed"),
+                    result.second, !result.first);
+        });
         return true;
     }
     if (op == QStringLiteral("theme.toggle")) {

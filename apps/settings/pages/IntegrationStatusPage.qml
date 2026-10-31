@@ -87,7 +87,7 @@ ColumnLayout {
             color: notification.color,
             detail: notification.detail
         },
-        statusRow("G", "#64d2ff", I18n.tr("Glass effects"), !!snapshot.glassLoaded, I18n.tr("Loaded"), I18n.tr("KWin blur and liquid glass effects")), statusRow("A", "#ff375f", I18n.tr("Dock window animation"), !!snapshot.dockAnimationLoaded, I18n.tr("Loaded"), I18n.tr("KWin Dock zoom / genie animation")), statusRow("I", "#bf5af2", I18n.tr("Desktop input bridge"), !!snapshot.contextMenuInputLoaded, I18n.tr("Loaded"), I18n.tr("Global clicks and menu dismiss events"))]
+        statusRow("G", "#64d2ff", I18n.tr("Glass effects"), !!snapshot.glassLoaded, I18n.tr("Loaded"), I18n.tr("KWin blur and liquid glass effects")), statusRow("A", "#ff375f", I18n.tr("Dock window animation"), !!snapshot.dockAnimationLoaded, I18n.tr("Loaded"), I18n.tr("KWin Dock opening / scaling animation")), statusRow("I", "#bf5af2", I18n.tr("Desktop input bridge"), !!snapshot.contextMenuInputLoaded, I18n.tr("Loaded"), I18n.tr("Global clicks and menu dismiss events"))]
 
     Demo.SettingsGroup {
         backgroundColor: colors.card

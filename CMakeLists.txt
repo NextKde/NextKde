@@ -75,7 +75,7 @@ if(BUILD_TESTING)
     if(KOS_NODE_EXECUTABLE)
         # Group Dock logic by module responsibility; node:test retains named
         # scenarios inside each suite and continues after an individual failure.
-        foreach(suite model policy motion)
+        foreach(suite model policy motion native-target)
             add_test(NAME kos-dock.${suite}
                 COMMAND ${KOS_NODE_EXECUTABLE}
                     ${CMAKE_CURRENT_SOURCE_DIR}/tests/dock/${suite}.test.mjs)
@@ -205,6 +205,11 @@ if(BUILD_TESTING)
         find_program(KOS_QMLTESTRUNNER_EXECUTABLE NAMES qmltestrunner
             HINTS /usr/lib/qt6/bin /usr/lib64/qt6/bin)
         if(KOS_QMLTESTRUNNER_EXECUTABLE)
+            add_test(NAME kos-shell.dock-native-target
+                COMMAND ${KOS_NODE_EXECUTABLE}
+                    ${CMAKE_CURRENT_SOURCE_DIR}/tests/dock/runtime.mjs native-target
+                    ${KOS_QMLTESTRUNNER_EXECUTABLE})
+            set_tests_properties(kos-shell.dock-native-target PROPERTIES LABELS "ui;headless" TIMEOUT 20)
             add_test(NAME kos-shell.dock-selection-highlight
                 COMMAND ${KOS_NODE_EXECUTABLE}
                     ${CMAKE_CURRENT_SOURCE_DIR}/tests/dock/runtime.mjs highlight

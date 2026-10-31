@@ -31,6 +31,7 @@ stdenv.mkDerivation {
         kdePackages.kiconthemes
         kdePackages.kglobalaccel
         kdePackages.kio
+        kdePackages.kconfig
         opencv
         onnxruntime
     ];

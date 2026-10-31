@@ -397,6 +397,63 @@ New UI components should prefer `AppIdentityService`, `WindowService`, and
 `AppGroupService` directly. Do not add new identity or window tracking logic
 to `DockModelService`.
 
+## Native minimize targets
+
+KWin restricts `org_kde_plasma_window_management`. Installation renders
+`packaging/desktop/org.kos.Shell.desktop.in` with the canonical Quickshell
+executable in `Exec` and that interface in `X-KDE-Wayland-Interfaces`, then
+refreshes the desktop service cache. After changing this declaration, restart
+the Shell connection: KWin caches requested interfaces per Wayland client.
+Without it, libtaskmanager reports that PlasmaWindowManagement did not activate
+and cannot publish targets. Do not disable KWin's permission checks.
+
+`DockWindowAnimationTargetService` publishes the stable icon slot to both the
+private KOS animation effect and Plasma's taskbar protocol. Its ungrouped
+`org.kde.taskmanager.TasksModel` is a protocol adapter only; `WindowService`
+retains ownership of application identity and window actions. Match the exact
+KWin UUID first, then the canonical/raw app ID of a grouped launcher. Never use
+the synthetic `window-N` handle or another window's separate icon as a fallback.
+
+Plasma's Wayland backend ignores the explicit rectangle passed to
+`requestPublishDelegateGeometry`: it reads a real `QQuickItem` and that item's
+window surface. The adapter therefore creates a non-rendering rectangle directly
+under the Dock surface's content item, subtracts the surface origin from the
+global target and publishes integer logical pixels. This avoids hover transforms,
+side-Dock rotation and double-counting secondary-output offsets or pixel scale.
+Auto-hidden slots retain their along-edge position and clip to the permanently
+mapped surface edge, including negative outward offsets on a left Dock.
+Missing/invalid slots invalidate their published rectangle; destroying
+the Dock surface removes its geometries in KWin. Native publication is independent
+of the private effect's availability, payload cache and retry delay.
+
+With KOS **Hide and restore → None**, the enabled KWin minimize effect (for
+example Magic Lamp) reads `Window::iconGeometry()` from that protocol target for
+titlebar, shortcut and Dock actions. KOS does not claim those animations or change
+the user's enabled native effects. The Scale style uses the private KOS target. Genie now selects KWin's native
+Magic Lamp; the old water-drop mesh has been removed. `HideAnimationSelection`
+stores the user's choice while `HideAnimation=none` prevents even an older
+resident KOS effect from running its deformation. Settings and the legacy theme
+adapter share `platform/src/windowanimation/NativeGenie.h` for this transition.
+Legacy and saved `genie` are reconciled at daemon/Settings startup. Explicit
+None and Scale are preserved. The adapter saves/restores the presence and values
+of Magic Lamp and Squash plugin keys while it owns minimize effects.
+Missing/unsupported Magic Lamp, a disconnected compositor, or a failed native
+load configures the project-provided Scale fallback and persists a visible reason
+under `NativeGenieFallback`. `HideAnimationSelection=genie` retains intent;
+`HideAnimation=scale` selects the fallback. A later startup can recover native
+Genie automatically. The adapter checks actual loaded effects after switching;
+if exclusivity or the project effect fails, it restores config and runtime state
+and reports any remaining need to restart the session. Never report fallback as
+the native effect running. `kos-settings.native-genie-upgrade` covers these
+upgrade/failure branches through an injectable runtime, without depending on
+the test host's enabled effects.
+Close/open animation settings remain independent. `tests/dock/native-target.test.mjs`
+covers identity precedence and coordinate conversion, while the offscreen
+`native-target` runtime case loads the production service to exercise publication,
+effect failure, heartbeat retries, surface replacement and icon removal. Real VM acceptance must
+also exercise titlebar minimize and Dock restore, grouped/separate windows,
+hidden/side Docks and secondary outputs at fractional scale.
+
 ## Application launcher module boundary
 
 Files: `shell/desktop/modules/applauncher/AppLauncher.qml`,

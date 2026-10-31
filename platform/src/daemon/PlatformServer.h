@@ -58,6 +58,7 @@ private slots:
                                      const QStringList &invalidated);
 
 private:
+    bool m_animationSyncPending = false;
     void handleRequest(QLocalSocket *socket, const QJsonObject &request);
     void respond(QLocalSocket *socket, const QJsonObject &request,
                  bool ok, const QJsonObject &result = {},

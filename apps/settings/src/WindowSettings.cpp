@@ -1,4 +1,6 @@
 #include "WindowSettings.h"
+#include "../../../platform/src/windowanimation/AnimationTask.h"
+#include "../../../platform/src/windowanimation/NativeGenie.h"
 #include <KConfigGroup>
 #include <KSharedConfig>
 #include <QDBusInterface>
@@ -43,10 +45,16 @@ bool write(const QString &filename, const QJsonObject &value, QString &error) {
     return true;
 }
 void reconfigure(const QString &effect) {
-    QDBusInterface effects(QStringLiteral("org.kde.KWin"), QStringLiteral("/Effects"),
-                           QStringLiteral("org.kde.kwin.Effects"));
-    effects.asyncCall(QStringLiteral("reconfigureEffect"), effect);
+    auto message = QDBusMessage::createMethodCall(QStringLiteral("org.kde.KWin"),
+        QStringLiteral("/Effects"), QStringLiteral("org.kde.kwin.Effects"),
+        QStringLiteral("reconfigureEffect"));
+    message.setArguments({effect});
+    QDBusConnection::sessionBus().asyncCall(message, 1000);
 }
+}
+
+WindowSettings::WindowSettings(QObject *parent) : QObject(parent) {
+    // Startup reconciliation belongs to the platform service, not page creation.
 }
 
 QVariantMap WindowSettings::state() const {
@@ -56,8 +64,7 @@ QVariantMap WindowSettings::state() const {
     config->reparseConfiguration();
     const KConfigGroup animation(config, QStringLiteral("Effect-kos_dock_window_animation"));
     const KConfigGroup decoration(config, QStringLiteral("org.kde.kdecoration2"));
-    const QString hide = animation.readEntry("HideAnimation",
-        animation.readEntry("AnimationStyle", QStringLiteral("scale")));
+    const QString hide = KOS::WindowAnimation::selection(config);
     const auto buttonsDoc = read(path(QStringLiteral("window-buttons.json")));
     const auto buttonsDefault = buttonsDoc.value(QStringLiteral("default")).toObject();
     const QString buttonGlyphMode = buttonsDefault.value(QStringLiteral("glyphMode")).toString(QStringLiteral("always"));
@@ -65,6 +72,7 @@ QVariantMap WindowSettings::state() const {
             {"radius", defaults.value("corners").toObject().value("radius").toInt(20)},
             {"shadow", defaults.value("shadow").toObject().value("enabled").toBool(true)},
             {"hideAnimation", hide},
+            {"nativeGenieFallback", animation.readEntry("NativeGenieFallback", QString())},
             {"closeAnimation", animation.readEntry("CloseAnimation", QStringLiteral("scale"))},
             {"decoration", decoration.readEntry("library", QStringLiteral("org.kde.breeze"))},
             {"buttonGlyphMode", buttonGlyphMode}};
@@ -140,12 +148,41 @@ bool WindowSettings::setTakeover(bool enabled) {
     emit changed();
     return true;
 }
+bool WindowSettings::requestAnimation(const QString &kind, const QString &style) {
+    if (m_animationBusy) return false;
+    if ((kind != "hide" && kind != "close") || (kind == "hide"
+        ? style != "none" && style != "scale" && style != "genie"
+        : style != "none" && style != "scale" && style != "fade")) return false;
+    m_animationBusy = true;
+    m_error.clear();
+    emit changed();
+    new KOS::WindowAnimation::AnimationTask(this, [kind, style] {
+        // The synchronous entry point is also used by the CLI; keep all of its
+        // configuration and D-Bus objects on this worker's thread.
+        WindowSettings worker;
+        const bool saved = worker.setAnimation(kind, style);
+        return KOS::WindowAnimation::AnimationTask::Result{saved, worker.error()};
+    }, [this](const auto &result) {
+        m_animationBusy = false;
+        m_error = result.second;
+        emit changed();
+    });
+    return true;
+}
+
 bool WindowSettings::setAnimation(const QString &kind, const QString &style) {
     const bool close = kind == "close";
     if ((!close && kind != "hide") || (close
         ? style != "none" && style != "fade" && style != "scale"
         : style != "none" && style != "scale" && style != "genie")) return false;
     m_error.clear();
+    if (!close) {
+        const bool saved = KOS::WindowAnimation::apply(style, m_error);
+        emit changed();
+        return saved;
+    }
+    QLockFile lock(KOS::WindowAnimation::lockPath());
+    if (!lock.tryLock(3000)) { m_error = QStringLiteral("The configuration is being updated; please retry"); emit changed(); return false; }
     auto config = KSharedConfig::openConfig(QStringLiteral("kwinrc"));
     config->reparseConfiguration();
     KConfigGroup animation(config, QStringLiteral("Effect-kos_dock_window_animation"));
@@ -178,10 +215,18 @@ bool WindowSettings::setButtonGlyphMode(const QString &mode) {
     return saved;
 }
 bool WindowSettings::installDefaults() {
+    if (!KOS::WindowAnimation::migrate(m_error)) return false;
     QString error;
     const auto integration = read(path(QStringLiteral("window-integration.json")), &error);
     if (!error.isEmpty()) { m_error = error; return false; }
     // Never undo a saved opt-out on an upgrade or `kosctl start`.
     if (integration.contains("originalDecoration")) return true;
     return setTakeover(state().value("enabled").toBool());
+}
+bool WindowSettings::restoreAnimationDefaults() {
+    const auto config = KSharedConfig::openConfig(QStringLiteral("kwinrc"));
+    config->reparseConfiguration();
+    const KConfigGroup animation(config, QStringLiteral("Effect-kos_dock_window_animation"));
+    if (!animation.readEntry("NativeEffectsManaged", false)) return true;
+    return KOS::WindowAnimation::apply(QStringLiteral("none"), m_error);
 }

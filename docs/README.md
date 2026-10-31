@@ -12,6 +12,7 @@ The root README introduces the desktop in [English](../README.md), [简体中文
 | --- | --- |
 | Dependencies, install, update, uninstall | [Getting started](GettingStarted.md) |
 | NixOS declarative installation | [NixOS](nixos-quickstart.md) |
+| Window animation choices, native Genie and fallback | [Window animations](WindowAnimations.md) |
 | Maintenance, acceptance and publication | [Releasing](Releasing.md) |
 | Version-specific changes and actual evidence | [v0.1.1](releases/v0.1.1.md), [v0.1.0](releases/v0.1.0.md) |
 | Release-note format | [Template](releases/TEMPLATE.md) |

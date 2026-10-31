@@ -3,6 +3,8 @@
 #include "KeepAwakeLease.h"
 #include "PlatformProcess.h"
 #include "PlatformDbus.h"
+#include "../windowanimation/NativeGenie.h"
+#include "../windowanimation/AnimationTask.h"
 
 #include <QByteArray>
 #include <QClipboard>
@@ -70,6 +72,13 @@ PlatformServer::PlatformServer(QObject *parent)
     : QObject(parent), m_socketPath(runtimeSocketPath())
 {
     qDBusRegisterMetaType<NmSettings>();
+    new KOS::WindowAnimation::AnimationTask(this, [] {
+        QString error;
+        const bool saved = KOS::WindowAnimation::migrate(error);
+        return KOS::WindowAnimation::AnimationTask::Result{saved, error};
+    }, [](const auto &result) {
+        if (!result.first) qWarning().noquote() << "Dock animation migration:" << result.second;
+    });
     // KDED starts the AppMenu registrar only while a menu view exists. Plasma's
     // applet normally owns this queueable marker service; own it here so the
     // Bar can receive menus without running a separate Plasma panel applet.

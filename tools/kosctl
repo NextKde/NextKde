@@ -1127,6 +1127,7 @@ deploy_artifacts() {
     if [[ "$nix_artifact" == true ]]; then
         install -m 0644 "$artifact_root/share/applications/kos-settings.desktop"   "$prefix/share/applications/"
         install -m 0644 "$artifact_root/share/applications/org.kos.Platform.desktop" "$prefix/share/applications/"
+        install -m 0644 "$artifact_root/share/applications/org.kos.Shell.desktop" "$prefix/share/applications/"
     else
         sed "s|^Exec=.*|Exec=$prefix/bin/kos-settings|" \
             "$project_dir/packaging/desktop/kos-settings.desktop.in" \
@@ -1135,6 +1136,13 @@ deploy_artifacts() {
         sed "s|@KOS_PLATFORM_EXEC@|$prefix/libexec/kos-platform|g" \
             "$project_dir/packaging/desktop/org.kos.Platform.desktop.in" \
             > "$prefix/share/applications/org.kos.Platform.desktop"
+        # KWin matches the canonical /proc/<pid>/exe to desktop Exec. A
+        # distro's generic Quickshell entry may have no Exec or declaration.
+        local qs_real_exec
+        qs_real_exec=$(readlink -f "$qs_bin_now")
+        sed "s|@KOS_SHELL_EXEC@|$qs_real_exec|g" \
+            "$project_dir/packaging/desktop/org.kos.Shell.desktop.in" \
+            > "$prefix/share/applications/org.kos.Shell.desktop"
     fi
     if command -v kbuildsycoca6 >/dev/null 2>&1; then
         kbuildsycoca6 --noincremental >/dev/null
@@ -2084,6 +2092,7 @@ uninstall() {
         "$prefix/share/kos/settings/main.qml" \
         "$prefix/share/applications/kos-settings.desktop" \
         "$prefix/share/applications/org.kos.Platform.desktop" \
+        "$prefix/share/applications/org.kos.Shell.desktop" \
         "$prefix/share/applications/kos-platform.desktop"
     rm -rf "$prefix/share/kos/settings" "$prefix/share/shared/qml"
     rm -rf "$config_dir/quickshell/kos"

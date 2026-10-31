@@ -22,12 +22,20 @@ int main(int argc, char* argv[])
 {
     for (int i = 1; i < argc; ++i) {
         const QByteArray argument(argv[i]);
+        if (argument == "--set-window-animation" && i + 2 < argc) {
+            QCoreApplication application(argc, argv);
+            WindowSettings settings;
+            const bool accepted = settings.setAnimation(QString::fromLocal8Bit(argv[i + 1]),
+                                                        QString::fromLocal8Bit(argv[i + 2]));
+            if (!accepted) qWarning().noquote() << settings.error();
+            return accepted ? 0 : 1;
+        }
         if (argument == "--install-window-defaults" || argument == "--restore-window-defaults") {
             QCoreApplication application(argc, argv);
             WindowSettings settings;
             const bool accepted = argument == "--install-window-defaults"
                 ? settings.installDefaults()
-                : settings.setTakeover(false);
+                : settings.restoreAnimationDefaults() && settings.setTakeover(false);
             if (!accepted)
                 qWarning().noquote() << settings.error();
             return accepted ? 0 : 1;
