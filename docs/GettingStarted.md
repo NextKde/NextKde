@@ -64,8 +64,9 @@ Quickshell availability before installing.
 
 ### Fedora 44 (community-contributed)
 
-`kosctl doctor` and `kosctl install` check and install these packages through dnf; the list
-below is the same set for a manual install. This community recipe is not official Fedora runtime
+`kosctl doctor` checks these packages; `kosctl install` installs missing build packages through dnf; the list
+below covers the core and KWin packages for a manual install; the default spatial AUTO mode
+also requests `opencv-devel` (set `KOS_BUILD_SPATIAL=OFF` to omit it). This community recipe is not official Fedora runtime
 acceptance:
 
 ```sh
@@ -84,10 +85,16 @@ sudo dnf install \
   vulkan-headers vulkan-loader-devel zlib-devel libxcb-devel
 ```
 
-Qt private headers, including QuickPrivate, ship in `qt6-qtbase-private-devel`. Fedora uses a
+Qt base/QPA private headers ship in `qt6-qtbase-private-devel`; QuickPrivate ships in
+`qt6-qtdeclarative-devel`. Fedora uses a
 single `libxcb-devel`, unlike Debian's split extension packages. Clipboard history also needs
 `wl-clipboard` and `cliphist` (`sudo dnf install wl-clipboard cliphist`); `doctor` warns when they
 are missing.
+
+Fedora package availability does not guarantee Quickshell 0.3.x. Check the version reported
+by `kosctl doctor`; if the repository package is older, use a compatible 0.3.x build from
+an appropriate source as described above. This dependency helper does not upgrade a
+source-installed Quickshell or certify desktop runtime compatibility.
 
 ### openSUSE Tumbleweed (community-contributed)
 

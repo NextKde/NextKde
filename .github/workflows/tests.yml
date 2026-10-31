@@ -19,6 +19,29 @@ permissions:
   contents: read
 
 jobs:
+  fedora-dependencies:
+    name: Fedora 44 dependency packages
+    runs-on: ubuntu-24.04
+    container: fedora:44
+    steps:
+      - name: Install package query tools
+        run: dnf install -y git python3 zlib-ng-compat-devel
+      - uses: actions/checkout@v7
+      - name: Check Fedora package providers and installer selection
+        shell: bash
+        run: |
+          python3 tools/tests/test_kosctl_fedora.py
+          python3 tools/tests/test_kosctl_fedora.py --packages > /tmp/kos-fedora-packages
+          while IFS= read -r package; do
+            provider=$(dnf -q repoquery --available --whatprovides "$package")
+            if [ -z "$provider" ]; then
+              echo "Missing Fedora package provider: $package" >&2
+              exit 1
+            fi
+            printf '%s: %s\n' "$package" "$provider"
+          done < /tmp/kos-fedora-packages
+          rpm -q --whatprovides zlib-devel
+
   qml-lint:
     name: QML changed-file checks
     runs-on: ubuntu-24.04

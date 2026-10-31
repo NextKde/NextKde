@@ -139,8 +139,8 @@ debian_optional_runtime_packages=(
 )
 
 # Fedora names for the same default build, checked against Fedora 44. Qt keeps
-# the QPA/Quick private headers in qt6-qtbase-private-devel; the old separate
-# qt6-qtdeclarative-private-devel no longer exists. zlib-devel is a virtual
+# QPA private headers in qt6-qtbase-private-devel and QuickPrivate in
+# qt6-qtdeclarative-devel. zlib-devel is a virtual
 # name provided by zlib-ng-compat-devel, which is why checks go through
 # `rpm -q --whatprovides` instead of plain `rpm -q`.
 fedora_core_build_packages=(

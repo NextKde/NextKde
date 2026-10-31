@@ -57,7 +57,7 @@ sudo apt install \
 
 ### Fedora 44（社区提供）
 
-`kosctl doctor`/`install` 通过 dnf 检查并安装这些包；下列清单同样适用于手工安装。此社区配方不代表官方 Fedora 运行验收：
+`kosctl doctor` 检查依赖，`install` 通过 dnf 安装缺失的构建包；下列清单适用于手工安装核心及 KWin 依赖。默认空间 AUTO 模式还会安装 `opencv-devel`，可用 `KOS_BUILD_SPATIAL=OFF` 跳过。此社区配方不代表官方 Fedora 运行验收：
 
 ```sh
 sudo dnf install \
@@ -75,7 +75,9 @@ sudo dnf install \
   vulkan-headers vulkan-loader-devel zlib-devel libxcb-devel
 ```
 
-Qt 私有头（含 QuickPrivate）在 `qt6-qtbase-private-devel` 中；Fedora 的 `libxcb-devel` 不同于 Debian 拆分包。剪贴板历史另需 `wl-clipboard` 与 `cliphist`（`sudo dnf install wl-clipboard cliphist`），缺失时 `doctor` 会警告。
+Qt base/QPA 私有头在 `qt6-qtbase-private-devel` 中，QuickPrivate 在 `qt6-qtdeclarative-devel` 中；Fedora 的 `libxcb-devel` 不同于 Debian 拆分包。剪贴板历史另需 `wl-clipboard` 与 `cliphist`（`sudo dnf install wl-clipboard cliphist`），缺失时 `doctor` 会警告。
+
+Fedora 包可用不代表 Quickshell 已达到 0.3.x。请检查 `kosctl doctor` 报告的版本；仓库版本较旧时，按上文从合适来源安装兼容的 0.3.x。此依赖助手不会升级源码安装的 Quickshell，也不代表桌面运行兼容性验收。
 
 ### openSUSE Tumbleweed（社区提供）
 
