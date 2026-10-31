@@ -7,12 +7,13 @@ Item {
     default property alias controls: actions.data
     property string title: ""
     property string description: ""
-    property real minimumRowHeight: 36
+    property real minimumRowHeight: 28
     property real horizontalPadding: 16
-    property real verticalPadding: 5
+    property real verticalPadding: 2
     property real controlSpacing: 12
     property real minimumLabelWidth: 120
     property bool separator: true
+    property bool allowStacking: true
     property color titleColor: AppTheme.text
     property color descriptionColor: AppTheme.dark ? "#98989D" : "#8E8E93"
     property color separatorColor: AppTheme.dark ? "#38383a" : "#E5E5E5"
@@ -21,8 +22,9 @@ Item {
     readonly property bool isSettingsItem: true
     readonly property real availableWidth: Math.max(0, width - horizontalPadding * 2)
     readonly property bool hasControls: actions.implicitWidth > 0
-    readonly property real controlsWidth: Math.min(availableWidth, actions.implicitWidth)
-    readonly property bool stacked: hasControls
+    readonly property real controlsWidth: Math.min(allowStacking ? availableWidth
+        : Math.max(0, availableWidth - minimumLabelWidth - controlSpacing), actions.implicitWidth)
+    readonly property bool stacked: allowStacking && hasControls
         && availableWidth < minimumLabelWidth + controlSpacing + actions.implicitWidth
     readonly property bool followedByItem: {
         const siblings = parent ? parent.children : []
@@ -62,7 +64,8 @@ Item {
             color: root.enabled ? root.titleColor : AppTheme.disabledText
             font.pixelSize: 12
             font.weight: Font.Normal
-            wrapMode: Text.Wrap
+            wrapMode: root.allowStacking ? Text.Wrap : Text.NoWrap
+            elide: Text.ElideRight
             Accessible.ignored: true
         }
         Text {

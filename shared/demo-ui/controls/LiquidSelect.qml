@@ -13,7 +13,7 @@ Item {
     // Width follows the content: left pad + label + gap + glyph + right pad.
     // The floor keeps a placeholder-only field from collapsing.
     implicitWidth: Math.ceil(Math.max(plainTrigger ? 0 : 72,
-        (plainTrigger ? 0 : 25) + label.implicitWidth + 9 + chevron.implicitWidth))
+        (plainTrigger ? 0 : 25) + label.implicitWidth + root.colorMarkerSpace + root.indicatorSpacing + chevron.implicitWidth))
     implicitHeight: Foundation.AppTheme.compactDesign ? 28 : 36
     activeFocusOnTab: true
     opacity: enabled ? 1 : .38
@@ -22,6 +22,13 @@ Item {
     property bool reduceMotion: Foundation.AppTheme.reduceMotion
     property var model: []
     property string textRole: ""
+    // Optional category/list colour, shared by the trigger and option rows.
+    property string colorRole: ""
+    function colorAt(index) {
+        const entry = model && index >= 0 && index < model.length ? model[index] : null
+        return colorRole && entry && entry[colorRole] ? entry[colorRole] : "transparent"
+    }
+    readonly property real colorMarkerSpace: colorRole.length > 0 ? 14 : 0
     property int currentIndex: 0
     property string placeholder: ""
     // Settings pop-up buttons use paired up/down chevrons; other selects retain their indicator.
@@ -29,10 +36,12 @@ Item {
     // Value-only settings trigger: no surface, border, shadow or button hover fill.
     // The popup keeps its independently chosen material.
     property bool plainTrigger: false
+    property real indicatorSpacing: plainTrigger ? 6 : 9
     property bool indicatorBackground: false
     property color indicatorBackgroundColor: darkAppearance ? "#48484a" : "#e1e1e3"
     property bool popupMaterialForm: materialForm
-    property color popupTextColor: textColor
+    property color popupTextColor: plainTrigger && popupMaterialForm
+        ? (darkAppearance ? "#f5f5f7" : "#1c1c1e") : textColor
     property bool highlightSelectedOption: false
     property bool neutralOptionHighlight: false
     property bool compactPopup: false
@@ -51,7 +60,8 @@ Item {
         ? (darkAppearance ? "#f5f5f7" : "#000000")
         : (darkAppearance ? "#D6D6DA" : "#55555A")
     property color mutedTextColor: darkAppearance ? "#98989d" : "#6e6e73"
-    property color sheetColor: darkAppearance
+    property color sheetColor: plainTrigger && popupMaterialForm
+        ? (darkAppearance ? "#2c2c2e" : "#f0f0f1") : darkAppearance
         ? (materialForm && Foundation.AppTheme.compactDesign ? Foundation.AppTheme.contentBackground : "#262b31")
         : "#f6f6f6"
     property color outlineColor: darkAppearance ? Qt.rgba(1, 1, 1, 0.16) : Qt.rgba(0, 0, 0, 0.12)
@@ -193,11 +203,22 @@ Item {
         onClicked: root.toggleMenu()
 
         contentItem: Item {
-            implicitWidth: label.implicitWidth + 9 + chevron.implicitWidth
+            implicitWidth: label.implicitWidth + root.colorMarkerSpace + root.indicatorSpacing + chevron.implicitWidth
             implicitHeight: Math.max(label.implicitHeight, chevron.implicitHeight)
+            Rectangle {
+                x: label.x - root.colorMarkerSpace
+                width: 8; height: 8; radius: 4
+                anchors.verticalCenter: parent.verticalCenter
+                color: root.colorAt(root._visualIndex)
+                visible: color.a > 0
+            }
             Text {
                 id: label
-                width: Math.max(0, parent.width - chevron.width - 9)
+                readonly property real availableLabelWidth: Math.max(0,
+                    parent.width - chevron.width - root.indicatorSpacing - root.colorMarkerSpace)
+                width: root.plainTrigger ? Math.min(implicitWidth, availableLabelWidth) : availableLabelWidth
+                x: root.plainTrigger ? parent.width - chevron.width - root.indicatorSpacing - width : root.colorMarkerSpace
+                horizontalAlignment: root.plainTrigger ? Text.AlignRight : Text.AlignLeft
                 anchors.verticalCenter: parent.verticalCenter
                 text: root.labelAt(root._visualIndex) || root.placeholder
                 color: root.labelAt(root._visualIndex).length > 0 ? root.textColor : root.mutedTextColor
@@ -269,7 +290,7 @@ Item {
         }
         width: root.compactPopup
             ? Math.min(Math.max(0, root.Window.window ? root.Window.window.width - (root.popupShadowEnabled ? 40 : 24) : 480),
-                Math.ceil(Math.max(root.width, longestLabelWidth + 28 + 12 + padding * 2)))
+                Math.ceil(Math.max(root.width, longestLabelWidth + root.colorMarkerSpace + 28 + 12 + padding * 2)))
             : Math.max(160, root.width)
         implicitHeight: Math.min(360, choices.implicitHeight + 2 * padding)
         readonly property real panelRadius: 8
@@ -408,12 +429,20 @@ Item {
                             color: choiceDelegate.blueActive ? root.accentColor
                                 : !hit.containsMouse && !(choiceDelegate.activeFocus
                                     && !(root.neutralOptionHighlight && choiceDelegate.selected)) ? "transparent"
-                                : root.darkAppearance && !root.highlightSelectedOption && !root.neutralOptionHighlight
+                                : root.darkAppearance
                                     ? Qt.rgba(1, 1, 1, 0.12) : Qt.rgba(0, 0, 0, 0.07)
+                        }
+                        Rectangle {
+                            width: 8; height: 8; radius: 4
+                            anchors.left: parent.left
+                            anchors.leftMargin: 28
+                            anchors.verticalCenter: parent.verticalCenter
+                            color: root.colorAt(choiceDelegate.index)
+                            visible: color.a > 0
                         }
                         Text {
                             anchors.left: parent.left
-                            anchors.leftMargin: 28
+                            anchors.leftMargin: 28 + root.colorMarkerSpace
                             anchors.right: parent.right
                             anchors.rightMargin: 12
                             anchors.verticalCenter: parent.verticalCenter

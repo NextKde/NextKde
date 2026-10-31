@@ -16,6 +16,18 @@ UI 改动还需 `--all` 及真实 VM 图形会话。CI 覆盖数据/平台/逻�
 KWin 6.6/6.7/6.8 完整 SDK。SDK 编译和离线检查不能证明真实合成器运行正常。
 报告精确提交、环境、命令、结果、跳过项和剩余限制。
 
+## main 分支合入
+
+通过 PR 提交改动，等待最新提交的全部必需检查通过，再使用 squash 合并。
+main 要求分支跟上最新基线，禁止强推与删除，不强制要求他人审批。
+管理员绕过仅用于紧急情况，不用于日常合入；已合并的 PR 分支自动删除。
+
+必需检查：`source release selection`、`data + platform + logic + headless`、
+`Calendar Calculator Weather build and tests`、KWin 6.6/6.7/6.8 三个独立 SDK 检查、
+`QML changed-file checks`、`block-ai-coauthor`。
+QML 检查按 PR 基线比较提交差异，不依赖未提交文件；无变更时明确报告零个文件。
+它检查语法与重复声明，不能替代完整的导入、编译和运行测试。不能为了全绿而禁用有效检查。
+
 ## 改动卫生
 
 - 暂存前检查 `git status --porcelain`，包括未跟踪文件。新增 QML、着色器、图标、原生源码及打包文件不能漏交。

@@ -1,26 +1,18 @@
-# KOS Todo
+# Reminders compatibility launcher
 
 **[English](README.md) | [中文](README.zh-CN.md)**
 
-KOS Todo is a standalone Qt Quick task manager. It shares a versioned local PIM contract with KOS Calendar but does not import Calendar or Shell code.
+Reminders now lives inside KOS Calendar. Switch between Calendar and Reminders in the sidebar, or in the toolbar when the sidebar is collapsed. `Ctrl+Tab` also switches workspaces.
 
-## Current status
+`kos-todo` only forwards old shortcuts, pinned launchers and scripts. It replaces its process with `kos-calendar --view reminders`; there is no separate window, QML module or storage. Its desktop entry has `NoDisplay=true`, leaving Calendar as the visible application. Legacy QML sources remain for migration reference and are not built or installed.
 
-The application is independently buildable and installable. Tasks and lists are durably stored by the shared local PIM service. The UI provides Inbox, Today, Planned, Completed, and custom-list views; quick add; task editing; completion; due dates; priorities; recurrence presets; reminders; and notes. The Calendar smart view lists tasks created from Calendar events. Linked tasks carry a visible badge, and edits to their title or due date are reflected in both applications. Any task with a due date also appears in Calendar even when it is not linked to an event.
-
-## Build
+Existing lists, tasks, dates, completion, priorities, recurrence, notifications and notes remain in the same PIM service, without copying or migrating storage. Dated reminders also appear in calendar views. The unified workspace supports All, Today, Scheduled, Completed, list filters and search. Create, details and edit use the shared Calendar popovers. Removing a list moves its tasks to Inbox.
 
 ```bash
 cmake --preset todo-dev
 cmake --build --preset todo-dev
 ```
 
-The executable is written below `.build/todo-dev/apps/todo/`.
+`KOS_BUILD_TODO=ON` also builds Calendar. Legacy `--view today|planned|completed|inbox|calendar` and `--item ID` work; the old `calendar` filter means tasks linked to calendar events.
 
-## Version 1 boundary
-
-- Included: persistent lists and tasks, filtered views, a Calendar-linked smart view, due dates, completion, iCalendar priorities, recurrence, reminders, notes, and keyboard shortcuts.
-- The service contract already preserves parent IDs and manual order so later subtask/reordering UI does not require a storage migration.
-- Deferred: search, subtask creation controls, drag reordering, list edit/delete controls, completion history UI, collaboration, and third-party task accounts.
-
-Calendar and Todo are separate applications and share only the versioned `Kos.Pim` service contract. See `docs/PimArchitecture.md`.
+Subtask editing, drag reordering and cloud sync remain outside this iteration. See [Calendar](../calendar/README.md).

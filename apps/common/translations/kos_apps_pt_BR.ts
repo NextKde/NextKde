@@ -661,6 +661,16 @@
       <translation>Tela cheia</translation>
     </message>
     <message>
+      <location line="+0" />
+      <source>Restore</source>
+      <translation>Restaurar</translation>
+    </message>
+    <message>
+      <location line="+0" />
+      <source>Maximize</source>
+      <translation>Maximizar</translation>
+    </message>
+    <message>
       <location line="+1" />
       <source>Minimize</source>
       <translation>Minimizar</translation>

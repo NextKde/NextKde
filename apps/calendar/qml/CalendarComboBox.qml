@@ -1,62 +1,39 @@
 import QtQuick
-import QtQuick.Controls
+import QtQuick.Layouts
 import Kos.Ui
+import Kos.Demo as Demo
 
-KosComboBox {
+// Calendar data adapter; selection visuals and keyboard handling belong to Demo.
+Item {
     id: control
-    CalendarStyle { id: design }
-    property Item popupScene: null
-    implicitHeight: design.fieldHeight
-    font.pixelSize: design.controlFontSize
-    font.weight: Font.Medium
-    leftPadding: 12
-    topPadding: 4
-    bottomPadding: 4
-    background: Rectangle {
-        color: control.down ? design.selectionFill
-            : control.hovered ? design.rowHoverFill : design.controlFill
-        radius: height / 2
-        border.width: control.activeFocus ? 2 : 0
-        border.color: design.accent
-    }
-    delegate: ItemDelegate {
-        id: option
-        required property int index
-        required property var modelData
-        width: control.popup.availableWidth
-        height: 24
-        topPadding: 4
-        bottomPadding: 4
-        leftPadding: 8
-        rightPadding: 8
-        text: control.textRole ? modelData[control.textRole] : modelData
-        highlighted: control.highlightedIndex === index
-        font.pixelSize: 11
-        contentItem: Label {
-            text: option.text
-            font: option.font
-            color: option.highlighted ? "white" : design.labelPrimary
-            verticalAlignment: Text.AlignVCenter
-            elide: Text.ElideRight
+    property alias model: picker.model
+    property alias textRole: picker.textRole
+    property alias colorRole: picker.colorRole
+    property alias currentIndex: picker.currentIndex
+    readonly property string displayText: picker.labelAt(picker.currentIndex)
+    signal activated(int index)
+    implicitWidth: picker.implicitWidth
+    implicitHeight: 24
+    activeFocusOnTab: true
+    onActiveFocusChanged: if (activeFocus) picker.forceActiveFocus()
+    Demo.LiquidSelect {
+        id: picker
+        anchors.fill: parent
+        objectName: control.objectName + "Select"
+        appearanceMode: AppTheme.dark ? "dark" : "light"
+        indicatorStyle: "upDown"
+        plainTrigger: true
+        indicatorBackground: true
+        popupMaterialForm: true
+        neutralOptionHighlight: true
+        compactPopup: true
+        popupBorderWidth: 0
+        popupShadowEnabled: true
+        popupFontWeight: Font.Normal
+        implicitHeight: 24
+        onActivated: index => {
+            currentIndex = index
+            control.activated(index)
         }
-        background: Rectangle {
-            radius: 4
-            color: option.highlighted ? design.accent : "transparent"
-        }
-    }
-    popup: Popup {
-        popupType: Popup.Item
-        y: control.height + 4
-        width: control.width
-        padding: 4
-        implicitHeight: Math.min(contentItem.implicitHeight + 8, 248)
-        contentItem: ListView {
-            clip: true
-            implicitHeight: contentHeight
-            model: control.popup.visible ? control.delegateModel : null
-            currentIndex: control.highlightedIndex
-            ScrollIndicator.vertical: ScrollIndicator {}
-        }
-        background: CalendarPopupSurface { scene: control.popupScene; radius: 12 }
     }
 }
