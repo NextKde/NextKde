@@ -418,6 +418,9 @@ AppLauncherService.toggle()
 Dock has one strictly presentation-only responsibility: it calls
 `setDockPresentation(width, height, position, background, primary, secondary,
 foreground, barHeight)` whenever its adaptive layout or material changes. The
+width it publishes is the resting Dock length: the live hover spread must never
+reach the launcher, because the launcher re-solves its icon grid from that
+width and would reflow every tile while the pointer slides along the Dock. The
 launcher independently selects the same preferred output policy as Dock.
 Passing geometry and material values through this API is intentional:
 `shell/desktop/modules/applauncher` must not import `qs.desktop.modules.dock`,

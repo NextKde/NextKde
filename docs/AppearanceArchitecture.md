@@ -78,6 +78,18 @@ hover magnification must not move a minimize target. Keep desktop file spacing i
 [DesktopIcons](DesktopIcons.md). Material surfaces and continuous compositor corners have different
 rendering owners; a visual style change must not duplicate clipping or shadows.
 
+## Launcher folder focus
+
+`modules/applauncher/AppLauncherWindow.qml` blurs the root application page while a
+folder is open, rather than painting a black dimming overlay. The folder page is
+outside the filtered root-page subtree, keeping its icons, labels and input sharp.
+A 220 ms transition drives the root-page `MultiEffect` (maximum blur radius 32)
+and raises the glass backdrop sigma to at least 20. Stronger configured blur is
+preserved; closing restores the ordinary blur binding without changing settings.
+Material retains its existing compositor blur policy. The root-page layer is
+released after the folder teardown and blur transition finish. The input-only
+outside-click dismiss area and existing folder interactions remain in place.
+
 ## Shell text rendering
 
 `common/ShellText.qml` uses platform-native rendering for stationary small text,
