@@ -2,6 +2,9 @@
 # for the tests below: kos-weather links Kos::Ui, which is gated behind the app
 # flags, so building the application from a test-only descent would fail.
 if(NOT KOS_WEATHER_TESTS_ONLY)
+if(NOT TARGET kos_demo_ui)
+    add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/../../shared/demo-ui ${CMAKE_CURRENT_BINARY_DIR}/demo-ui)
+endif()
 kos_add_application(kos-weather
     URI Kos.Apps.Weather
     DISPLAY_NAME "KOS Weather"
@@ -19,6 +22,8 @@ kos_add_application(kos-weather
         qml/WeatherLoadingIndicator.qml
         qml/SnowGlass.qml
     LINK_LIBRARIES
+        kos_demo_ui
+        kos_demo_ui_plugin
         Qt6::Network
 )
 
