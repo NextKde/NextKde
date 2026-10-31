@@ -58,7 +58,7 @@ versions, error codes, and default shortcut definitions.
 | `kos-ai-worker` | lazily started child process | isolated local model download, CPU inference, and depth cache; exits after 15 idle seconds |
 | `kos-data-service` | systemd `--user` resident | telemetry, activity ledger, desktop snapshots, weather cache |
 | `kos-settings` | on demand | settings UI; communicates with Shell IPC only |
-| `kos-calendar`, `kos-calculator`, `kos-todo`, `kos-weather`, opt-in `listenfree` | on demand | optional independent Qt Quick applications; ListenFree is explicitly selected |
+| `kos-calendar`, `kos-calculator`, `kos-todo`, `kos-weather`, opt-in `listenfree` | on demand | optional Qt Quick applications; Calendar includes Reminders, kos-todo is a compatibility launcher; ListenFree is explicitly selected |
 | `kos-pim-service` | D-Bus activated | shared Calendar/Todo storage and reminders |
 | KWin effect `.so` files | KWin managed | compositor effects, independent plugin IDs |
 

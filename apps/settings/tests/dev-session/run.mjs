@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { spawn, spawnSync } from "node:child_process";
 import {
-    chmodSync, copyFileSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync,
+    chmodSync, copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -159,6 +159,47 @@ try {
         "the banner must not be driven by the session it happens to reach");
     check(/settingsBridge\.developmentBannerDismissed = true/.test(pages),
         "the close control has to dismiss the banner on the bridge, so a reload cannot resurrect it");
+
+    // Exercise the real bridge, keeping the launch request on the same session.
+    // The desktop ID must match KWin's systemsettings window identity; a made-up
+    // namespaced ID can resolve to a hidden alias and leave that window minimized.
+    const commands = join(scratch, "commands");
+    const launchArgs = join(scratch, "launch-args");
+    mkdirSync(commands);
+    const quickshell = join(commands, "quickshell");
+    writeFileSync(quickshell,
+        '#!/bin/sh\nprintf "%s\\n" "$@" > "$KOS_TEST_LAUNCH_ARGS.tmp"\n'
+        + 'mv "$KOS_TEST_LAUNCH_ARGS.tmp" "$KOS_TEST_LAUNCH_ARGS"\nprintf "ok\\n"\n');
+    chmodSync(quickshell, 0o755);
+    writeFileSync(pagePath, `import QtQuick
+import QtQuick.Controls
+ApplicationWindow {
+    Component.onCompleted: settingsBridge.launchSystemSettings()
+}
+`);
+    const child = spawn(binary, [], { env: {
+        ...environmental(join(checkout, "shell")),
+        PATH: `${commands}:${process.env.PATH}`,
+        KOS_TEST_LAUNCH_ARGS: launchArgs,
+    } });
+    const exited = new Promise((resolve) => child.once("close", resolve));
+    let launchLog = "";
+    for (const stream of [child.stdout, child.stderr])
+        stream.on("data", (chunk) => { launchLog += chunk; });
+    try {
+        for (let attempt = 0; attempt < 200 && !existsSync(launchArgs); ++attempt)
+            await sleep(25);
+        check(existsSync(launchArgs), `the bridge must send a launch request:\n${launchLog}`);
+        assert.deepEqual(readFileSync(launchArgs, "utf8").trim().split("\n"),
+            ["--path", join(checkout, "shell"), "ipc", "call", "app-launch",
+                "open", "systemsettings.desktop"],
+            "KDE System Settings must use its real desktop ID through the session's app-launch handler");
+        checks += 1;
+    } finally {
+        if (child.exitCode === null && child.signalCode === null)
+            child.kill("SIGKILL");
+        await exited;
+    }
 
     console.log(`settings dev-session entry point: ${checks} checks passed`);
 } finally {
