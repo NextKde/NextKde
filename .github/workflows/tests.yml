@@ -40,6 +40,56 @@ jobs:
           cmake --build .build/native-genie-settings --target kos-window-settings-test kos-native-genie-test kos-settings --parallel 2
           ctest --test-dir .build/native-genie-settings -R '^kos-settings.(window-config|native-genie-upgrade)$' --output-on-failure
 
+  fedora-dependencies:
+    name: Fedora 44 dependency packages
+    runs-on: ubuntu-24.04
+    container: fedora:44
+    steps:
+      - name: Install package query tools
+        run: dnf install -y git python3 zlib-ng-compat-devel
+      - uses: actions/checkout@v7
+      - name: Check Fedora package providers and installer selection
+        shell: bash
+        run: |
+          python3 tools/tests/test_kosctl_fedora.py
+          python3 tools/tests/test_kosctl_fedora.py --packages > /tmp/kos-fedora-packages
+          while IFS= read -r package; do
+            provider=$(dnf -q repoquery --available --whatprovides "$package")
+            if [ -z "$provider" ]; then
+              echo "Missing Fedora package provider: $package" >&2
+              exit 1
+            fi
+            printf '%s: %s\n' "$package" "$provider"
+          done < /tmp/kos-fedora-packages
+          rpm -q --whatprovides zlib-devel
+
+  qml-lint:
+    name: QML changed-file checks
+    runs-on: ubuntu-24.04
+    container: archlinux:base-devel
+    steps:
+      - name: Install Qt lint tools
+        run: pacman -Syu --noconfirm --needed git nodejs qt6-declarative
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - name: Check lint gate regressions
+        env:
+          QMLLINT: /usr/lib/qt6/bin/qmllint
+        run: node --test tools/tests/qml-lint.test.mjs
+      - name: Check changed QML
+        env:
+          QMLLINT: /usr/lib/qt6/bin/qmllint
+          BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
+        run: |
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
+          base="$BASE_SHA"
+          if [ -z "$base" ] || ! git cat-file -e "$base^{commit}" 2>/dev/null; then
+            base=$(git rev-parse HEAD^)
+          fi
+          node tools/qmllint-changed.mjs --base "$base"
+          node tools/qml-duplicate-handlers.mjs --base "$base"
+
   source-release:
     name: source release selection
     runs-on: ubuntu-24.04
