@@ -52,3 +52,8 @@ visible if the service or network is temporarily unavailable.
 ## Compact interface
 
 The interface follows the NextKde App Demo compact desktop specification: a 224 px sidebar, 28 px search/actions, 80 px city rows, and denser forecast cards. Light liquid material is limited to search and floating actions; weather scenes and charts retain their own visual treatment. Narrow windows show hourly and daily forecasts before secondary metrics. Reduced transparency uses solid controls.
+
+Search suggestions and city context menus share the Demo `LiquidPanelSurface`
+with Calendar dialogs: 0.95 material coverage, QML blur/refraction and a single
+composition pass. Rows remain ordinary; reduced transparency uses an opaque
+fallback. The application links the same portable `Kos.Demo` component module.
