@@ -57,7 +57,12 @@ ShellRoot {
         }), "traffic frame capture can be scheduled")
     }
     function check(ok, message) {
-        if (!ok) throw new Error("STATUS_PANELS_FAIL: " + message)
+        if (!ok) {
+            stepTimer.stop()
+            console.error("STATUS_PANELS_FAIL: " + message)
+            Qt.quit()
+            throw new Error("STATUS_PANELS_FAIL: " + message)
+        }
         checks++
     }
     function find(node, name) {
@@ -78,6 +83,7 @@ ShellRoot {
     BatteryPanel { id: battery; battery: sampleBattery; batteryPowered: false }
     NetworkTrafficPanel { id: traffic }
     Timer {
+        id: stepTimer
         running: true; repeat: true; interval: 150
         onTriggered: {
             fixture.ticks++
@@ -91,6 +97,11 @@ ShellRoot {
                 || (fixture.stage === 4 && !fixture.detailsRendered)
                 || (fixture.stage === 5 && !fixture.collapsedRendered)
                 || (fixture.stage === 7 && !fixture.batteryRendered)) return
+            // grabToImage and power-profile writes complete asynchronously.
+            // A render tick can arrive between the write callback and readback;
+            // wait for completion, then still assert the returned profile below.
+            if ([6, 7, 11, 12].includes(fixture.stage)
+                && (PowerProfileService.changing || PowerProfileService.loading)) return
             fixture.stage++
             if (fixture.stage === 1) {
                 const previewStyle = Quickshell.env("KOS_STATUS_TEST_STYLE")
@@ -98,6 +109,9 @@ ShellRoot {
                 if (previewStyle) AppearanceConfigService.shellStyle = previewStyle
                 if (previewTheme) AppearanceConfigService.themeMode = previewTheme
                 I18n.language = "zh-CN"
+                // The fixture owns profile data; unrelated native D-Bus signals
+                // must not overwrite it during the private compositor run.
+                PowerProfileService.systemProfiles = null
                 PowerProfileService.platform = PlatformClient
                 NetworkService.available = true
                 NetworkService.deviceState = "connected"
