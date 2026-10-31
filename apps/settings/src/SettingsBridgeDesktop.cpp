@@ -18,8 +18,10 @@
 
 void SettingsBridge::launchSystemSettings()
 {
+    // Match the desktop entry and KWin window identity so app-launch can
+    // restore an existing window instead of resolving a hidden alias.
     callShell(QStringLiteral("app-launch"),
-        { QStringLiteral("open"), QStringLiteral("org.kde.systemsettings.desktop") },
+        { QStringLiteral("open"), QStringLiteral("systemsettings.desktop") },
         QStringLiteral("Unable to open KDE system settings"), RequestKind::OpenApp);
 }
 

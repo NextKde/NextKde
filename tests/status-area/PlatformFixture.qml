@@ -15,6 +15,17 @@ QtObject {
     property int applicationRequests: 0
     property int batteryRequests: 0
     property string powerMode: "balanced"
+    // Deliberately exceed a panel-test tick: profile assertions must wait for
+    // write/readback completion instead of depending on one fast event loop.
+    property Timer profileReply: Timer {
+        interval: 220
+        property var replies: []
+        onTriggered: {
+            const pending = replies
+            replies = []
+            for (const reply of pending) reply()
+        }
+    }
     function request(operation, payload, callback) {
         let result = {available:false}
         switch (operation) {
@@ -39,7 +50,13 @@ QtObject {
         case "keepawake.get": result={available:true,enabled:false}; break
         case "kwin.subscribe": case "kwin.command": result={}; break
         }
-        if (callback) Qt.callLater(function() { callback({ok:true,result:result}) })
+        if (callback) {
+            const reply = function() { callback({ok:true,result:result}) }
+            if (operation === "power.profiles" || operation === "power.profile.set") {
+                profileReply.replies = profileReply.replies.concat([reply])
+                profileReply.start()
+            } else Qt.callLater(reply)
+        }
         return "fixture"
     }
 }

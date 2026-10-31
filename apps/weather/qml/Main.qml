@@ -5,6 +5,7 @@ import QtQuick.Controls
 import QtQuick.Layouts
 import QtQuick.Effects
 import Kos.Ui
+import Kos.Demo as Demo
 
 KosApplicationWindow {
     id: root
@@ -834,36 +835,12 @@ KosApplicationWindow {
     }
 
     // Floating menus use one liquid panel; their rows retain ordinary hover fills.
-    component CityPopupSurface: LiquidCompactSurface {
-        id: popupPanel
+    component CityPopupSurface: Demo.LiquidPanelSurface {
         backdrop: cityPopupBackdrop
-        radius: 10
+        cornerRadius: 10
         darkAppearance: true
         tintColor: "#141416"
-        tintStrength: 0.7
-        readability: 0.65
-        blurStrength: 0.35
-        convexLens: true
-        fullHighlight: true
-        refractionStrength: 1.5
-        magnification: 1.012
-        edgeWidth: 8
-        reflectionStrength: 0.28
-        layer.enabled: true
-        layer.effect: MultiEffect {
-            shadowEnabled: true
-            shadowColor: Qt.rgba(0, 0, 0, 0.28)
-            shadowBlur: 0.35
-            shadowVerticalOffset: 4
-        }
-        Rectangle {
-            anchors.fill: parent
-            visible: !popupPanel.sampling
-            color: "#29292C"
-            radius: popupPanel.radius
-            border.width: 1
-            border.color: Qt.rgba(1, 1, 1, 0.10)
-        }
+        reduceTransparency: AppTheme.reduceTransparency
     }
 
     Menu {
@@ -1008,7 +985,7 @@ KosApplicationWindow {
                     font.pixelSize: 11
                     wrapMode: Text.WordWrap
                 }
-                Button {
+                KosButton {
                     id: retrySearch
                     objectName: "retryCitySearch"
                     Layout.topMargin: 3
@@ -1118,30 +1095,14 @@ KosApplicationWindow {
         id: weatherContent
         anchors.fill: parent
     }
-    Item {
-        id: cityPopupUnderlay
-        anchors.fill: parent
-        visible: false
-        Loader {
-            anchors.fill: parent
-            active: cityPopupBackdrop.active
-            sourceComponent: MultiEffect {
-                source: weatherContent
-                blurEnabled: true
-                blur: 0.65
-                blurMax: 32
-                autoPaddingEnabled: false
-            }
-        }
-    }
-    LiquidBackdrop {
+    Demo.LiquidBackdrop {
         id: cityPopupBackdrop
         objectName: "cityPopupBackdrop"
         registerAsDefault: false
-        sourceItem: cityPopupUnderlay
+        sourceItem: weatherContent
+        blur: 0.85
         active: root.visible && (citySearchPopup.visible || cityMenu.visible)
             && !AppTheme.reduceTransparency && GraphicsInfo.api !== GraphicsInfo.Software
-        live: true
     }
 
     // Capture only the real in-window sky beneath the rectangular sidebar.
@@ -2447,10 +2408,11 @@ KosApplicationWindow {
                         Keys.onEscapePressed: citySearchPopup.close()
                         TapHandler { onTapped: root.showCitySearch() }
                     }
-                    ToolButton {
+                    KosToolButton {
                         anchors.right: parent.right
                         anchors.verticalCenter: parent.verticalCenter
                         width: 26; height: 26
+                        padding: 0
                         visible: locationField.text.length > 0
                         text: "×"
                         focusPolicy: Qt.NoFocus
@@ -2669,13 +2631,14 @@ KosApplicationWindow {
                                     }
                                 }
 
-                                ToolButton {
+                                KosToolButton {
                                     id: cityOptions
                                     objectName: "cityOptions_" + String(savedLocation.modelData.id)
                                     anchors.right: parent.right
                                     anchors.top: cardTop.bottom
                                     anchors.topMargin: 1
                                     width: 24; height: 24
+                                    padding: 0
                                     opacity: savedLocation.hovered || savedLocation.activeFocus
                                         || hovered || activeFocus
                                         || (cityMenu.visible && root.cityMenuId === String(savedLocation.modelData.id)) ? 1 : 0

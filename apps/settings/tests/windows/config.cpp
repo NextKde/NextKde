@@ -1,4 +1,5 @@
 #include "WindowSettings.h"
+#include "../../../../platform/src/windowanimation/NativeGenie.h"
 #include <QCoreApplication>
 #include <QTemporaryDir>
 #include <QDir>
@@ -57,6 +58,42 @@ int main(int argc, char **argv) {
     CHECK(settings.setAnimation("hide", "none"));
     CHECK(settings.state()["closeAnimation"]=="fade");
     CHECK(settings.state()["hideAnimation"]=="none");
+    // An offline upgrade must retain a usable animation, not silently turn off
+    // the removed water-drop path. Genie intent is retained for later recovery.
+    CHECK(settings.setAnimation("hide", "genie"));
+    CHECK(settings.state()["hideAnimation"]=="genie");
+    CHECK(!settings.state()["nativeGenieFallback"].toString().isEmpty());
+    KConfigGroup offlineAnimation(config, "Effect-kos_dock_window_animation");
+    CHECK(offlineAnimation.readEntry("HideAnimation", QString())=="scale");
+    CHECK(settings.setAnimation("hide", "none"));
+
+    KConfigGroup plugins(config, "Plugins");
+    plugins.writeEntry("magiclampEnabled", false);
+    plugins.writeEntry("squashEnabled", true);
+    plugins.writeEntry("blurEnabled", true);
+    CHECK(config->sync());
+    CHECK(KOS::WindowAnimation::configure(config, "genie"));
+    KConfigGroup animation(config, "Effect-kos_dock_window_animation");
+    CHECK(KOS::WindowAnimation::selection(config)=="genie");
+    CHECK(animation.readEntry("HideAnimation", QString())=="none");
+    CHECK(plugins.readEntry("magiclampEnabled", false));
+    CHECK(!plugins.readEntry("squashEnabled", true));
+    CHECK(plugins.readEntry("blurEnabled", false));
+    CHECK(KOS::WindowAnimation::configure(config, "scale"));
+    CHECK(!plugins.readEntry("magiclampEnabled", true));
+    CHECK(animation.readEntry("HideAnimation", QString())=="scale");
+    CHECK(KOS::WindowAnimation::configure(config, "none"));
+    CHECK(!plugins.readEntry("magiclampEnabled", true));
+    CHECK(plugins.readEntry("squashEnabled", false));
+    CHECK(!animation.hasKey("NativeEffectsManaged"));
+    // Missing keys must restore the compositor's default, not a guessed false.
+    plugins.deleteEntry("magiclampEnabled");
+    plugins.deleteEntry("squashEnabled");
+    CHECK(config->sync());
+    CHECK(KOS::WindowAnimation::configure(config, "genie"));
+    CHECK(KOS::WindowAnimation::configure(config, "none"));
+    CHECK(!plugins.hasKey("magiclampEnabled"));
+    CHECK(!plugins.hasKey("squashEnabled"));
     CHECK(settings.state()["buttonGlyphMode"]=="always");
     CHECK(settings.setButtonGlyphMode("hover"));
     CHECK(settings.state()["buttonGlyphMode"]=="hover");

@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=KOS Shell
+Comment=KOS desktop shell and Dock window integration
+Exec=@KOS_SHELL_EXEC@ --no-duplicate -c kos
+Icon=preferences-desktop
+NoDisplay=true
+Terminal=false
+X-KDE-Wayland-Interfaces=org_kde_plasma_window_management

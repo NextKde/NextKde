@@ -185,6 +185,19 @@ color scheme when that tool is available; applying a complete Look-and-Feel
 package is a compatibility fallback, because replacing icons and workspace
 defaults is outside the light/dark toggle contract.
 
+`theme.sync-dock-animation` accepts `{style:"scale"|"genie"}` as a legacy
+appearance preference. It preserves an explicit window-page choice. A legacy
+`genie` without a saved choice migrates to KWin Magic Lamp, with
+`HideAnimationSelection=genie` and `HideAnimation=none`. The shared
+`platform/src/windowanimation/NativeGenie.h` adapter checks support, manages
+Magic Lamp/Squash exclusivity, and preserves previous plugin-key values and
+presence for restoration when the user chooses None. Missing/unsupported or
+load-failed Genie retains the selected `genie` preference and configures
+`HideAnimation=scale` with a `NativeGenieFallback` reason. Saved Genie is
+rechecked on startup, so support returning recovers the native backend. Explicit
+None is not migrated. Failed exclusivity/project-effect changes restore both
+configuration and runtime state; rollback failure is reported explicitly.
+
 ### Audio output selection
 
 - `audio.outputs` takes `{}` and returns `{available: true, outputs: [{name,

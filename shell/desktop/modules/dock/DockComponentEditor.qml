@@ -33,7 +33,9 @@ AnimatedPopupWindow {
 
     motionOrigin: Item.Bottom
     implicitWidth: 456
-    implicitHeight: 204
+    // Height follows the content: translated hints wrap instead of pushing
+    // the cards and the Done button out of the fixed width.
+    implicitHeight: editorContent.implicitHeight + 28
     color: "transparent"
     grabFocus: interactive
 
@@ -67,29 +69,42 @@ AnimatedPopupWindow {
         }
 
         ColumnLayout {
-            anchors { fill: parent; margins: 14 }
+            id: editorContent
+            anchors { left: parent.left; right: parent.right; top: parent.top; margins: 14 }
             spacing: 10
 
             RowLayout {
                 Layout.fillWidth: true
-                Text {
-                    text: I18n.tr("Dock Widgets")
-                    color: ThemeService.foregroundColor
-                    font { pixelSize: 14; weight: Font.DemiBold }
+                spacing: 8
+                ColumnLayout {
+                    Layout.fillWidth: true
+                    spacing: 1
+                    Text {
+                        Layout.fillWidth: true
+                        text: I18n.tr("Dock Widgets")
+                        color: ThemeService.foregroundColor
+                        elide: Text.ElideRight
+                        font { pixelSize: 14; weight: Font.DemiBold }
+                    }
+                    Text {
+                        Layout.fillWidth: true
+                        text: I18n.tr("Drag to reorder, tap to add or remove")
+                        color: ThemeService.foregroundColor
+                        opacity: 0.58
+                        wrapMode: Text.WordWrap
+                        font.pixelSize: 11
+                    }
                 }
-                Text {
-                    text: I18n.tr("Drag to reorder, tap to add or remove")
-                    color: ThemeService.foregroundColor
-                    opacity: 0.58
-                    font.pixelSize: 11
-                }
-                Item { Layout.fillWidth: true; height: 1 }
                 Rectangle {
-                    width: 48; height: 26; radius: AppearanceTokens.isMaterial ? 13 : 9
+                    Layout.alignment: Qt.AlignTop
+                    Layout.preferredWidth: Math.max(48, doneLabel.implicitWidth + 20)
+                    Layout.preferredHeight: 26
+                    radius: AppearanceTokens.isMaterial ? 13 : 9
                     color: AppearanceTokens.surface.pick(
                         AppearanceTokens.colors.primaryContainer,
                         Qt.rgba(1, 1, 1, ThemeService.isDark ? 0.13 : 0.72))
                     Text {
+                        id: doneLabel
                         anchors.centerIn: parent
                         text: I18n.tr("Done")
                         color: AppearanceTokens.surface.pick(
@@ -222,20 +237,24 @@ AnimatedPopupWindow {
                 Layout.rightMargin: 4
 
                 ColumnLayout {
+                    Layout.fillWidth: true
                     spacing: 1
                     Text {
+                        Layout.fillWidth: true
                         text: I18n.tr("Auto rotate")
                         color: ThemeService.foregroundColor
+                        elide: Text.ElideRight
                         font { pixelSize: 13; weight: Font.DemiBold }
                     }
                     Text {
+                        Layout.fillWidth: true
                         text: I18n.tr("When off, hover and scroll wheel still switch pages")
                         color: ThemeService.foregroundColor
                         opacity: 0.58
+                        wrapMode: Text.WordWrap
                         font.pixelSize: 10
                     }
                 }
-                Item { Layout.fillWidth: true; height: 1 }
                 LiquidControls.LiquidGlassSwitch {
                     id: autoRotateSwitch
                     implicitWidth: 58

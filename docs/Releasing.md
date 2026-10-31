@@ -39,8 +39,8 @@ It may install dependencies first but must select the requested source before bu
    and version changes there. A patch to 0.1 uses `release/0.1`.
 2. Update the [English-first bilingual release notes](releases/TEMPLATE.md), dependencies,
    upgrade/rollback limits, known issues and affected PRs. Review current docs and translations.
-3. Set VERSION to the target version. Push the exact candidate to run all **six** tests jobs:
-   source release selection; data/platform/logic/headless; apps; KWin 6.6, 6.7 and 6.8 SDKs.
+3. Set VERSION to the target version. Push the exact candidate to run all **seven** tests jobs:
+   source release selection; data/platform/logic/headless; apps; changed-file QML checks; KWin 6.6, 6.7 and 6.8 SDKs.
    Each SDK must use its complete matching dependency snapshot, build/link plugins and Glass,
    run offline regressions and inspect official headers. A different commit's green CI is insufficient.
 4. Save a VM snapshot, then complete the acceptance below on that exact commit. Fix issues and

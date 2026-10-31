@@ -121,6 +121,11 @@ stdenv.mkDerivation {
     substitute packaging/desktop/org.kos.Platform.desktop.in \
       $out/share/applications/org.kos.Platform.desktop \
       --replace-fail '@KOS_PLATFORM_EXEC@' "${kos-platform}/libexec/kos-platform"
+    # KWin compares Exec's canonical path to the running executable.
+    kos_shell_exec=$(readlink -f ${qs_bin})
+    substitute packaging/desktop/org.kos.Shell.desktop.in \
+      $out/share/applications/org.kos.Shell.desktop \
+      --replace-fail '@KOS_SHELL_EXEC@' "$kos_shell_exec"
 
     # --- Systemd user services ---
     mkdir -p $out/lib/systemd/user

@@ -508,8 +508,11 @@ Item {
     }
 
     function publishLauncherPresentation() {
+        // Publish the resting length, never the live hover spread: the launcher
+        // re-solves its icon grid from this width, so a per-frame spread would
+        // reflow every tile while the pointer slides along the Dock.
         AppLauncherService.setDockPresentation(
-            computedDockWidth,
+            restingComputedWidth,
             computedDockHeight,
             ConfigService.position,
             ThemeService.backgroundColor,

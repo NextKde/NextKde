@@ -128,6 +128,16 @@ if(BUILD_TESTING)
     target_link_libraries(kos-window-settings-test PRIVATE Qt6::Core Qt6::DBus KF6::ConfigCore)
     add_test(NAME kos-settings.window-config COMMAND kos-window-settings-test)
     set_tests_properties(kos-settings.window-config PROPERTIES LABELS logic TIMEOUT 15)
+    add_executable(kos-animation-async-test tests/windows/async.cpp src/WindowSettings.cpp)
+    target_include_directories(kos-animation-async-test PRIVATE src)
+    target_link_libraries(kos-animation-async-test PRIVATE Qt6::Core Qt6::DBus KF6::ConfigCore)
+    add_test(NAME kos-settings.animation-async COMMAND dbus-run-session -- $<TARGET_FILE:kos-animation-async-test>)
+    set_tests_properties(kos-settings.animation-async PROPERTIES LABELS logic TIMEOUT 20)
+
+    add_executable(kos-native-genie-test tests/windows/native-genie.cpp)
+    target_link_libraries(kos-native-genie-test PRIVATE Qt6::Core Qt6::DBus KF6::ConfigCore)
+    add_test(NAME kos-settings.native-genie-upgrade COMMAND kos-native-genie-test)
+    set_tests_properties(kos-settings.native-genie-upgrade PROPERTIES LABELS logic TIMEOUT 15)
     add_test(NAME kos-settings.window-page COMMAND kos-settings --smoke-test-windows)
     set_tests_properties(kos-settings.window-page PROPERTIES
         ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_QUICK_BACKEND=software"

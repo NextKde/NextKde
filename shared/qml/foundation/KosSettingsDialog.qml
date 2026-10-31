@@ -22,11 +22,13 @@ KosDialog {
         popupType: Popup.Item
         delay: 500
         timeout: 5000
-        padding: 8
+        padding: 5
+        leftPadding: 10
+        rightPadding: 10
         margins: 8
         x: parent ? (parent.width - width) / 2 : 0
         y: parent ? parent.height + 6 : 0
-        contentItem: Label { text: tip.text; color: AppTheme.text; font.pixelSize: 12 }
+        contentItem: Label { text: tip.text; color: AppTheme.mutedText; font.pixelSize: 11 }
         background: Loader { sourceComponent: root.toolTipBackground }
     }
 
