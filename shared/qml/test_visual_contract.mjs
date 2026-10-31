@@ -170,7 +170,7 @@ for (const app of ["calendar", "todo", "weather"]) {
             "calendar navigation can be restored");
         assert.match(source, /Accessible\.role:\s*Accessible\.Button/,
             "calendar window actions remain accessible buttons");
-        for (const action of ["showMinimized", "toggleFullScreen", "close"])
+        for (const action of ["showMinimized", "showMaximized", "showNormal", "close"])
             assert.ok(source.includes(`root.${action}()`), `calendar exposes ${action}`);
         for (const key of ["Return", "Enter", "Space"])
             assert.ok(source.includes(`Keys.on${key}Pressed: windowDot.activate()`),
@@ -180,19 +180,44 @@ for (const app of ["calendar", "todo", "weather"]) {
             `${app} uses the adaptive collapsible sidebar`);
         assert.match(source, /KosSidebarToggle\s*\{[\s\S]*targetWindow:\s*root/,
             `${app} provides a way to restore collapsed navigation`);
-        assert.match(source, /KosWindowControls\s*\{\s*targetWindow:\s*root/,
+        assert.match(source, /KosWindowControls\s*\{[\s\S]{0,200}?targetWindow:\s*root/,
             `${app} exposes its frameless window controls`);
     }
     assert.doesNotMatch(source, /withAlpha\(AppTheme\.sidebar/,
         `${app} sidebar does not expose desktop content`);
-    assert.doesNotMatch(source, /\b(?:Button|ToolButton|RoundButton)\s*\{/,
-        `${app} uses the shared rounded button controls`);
-    assert.match(source, /KosSettingsDialog\s*\{/,
-        `${app} exposes the shared settings panel`);
-    assert.match(source, app === "calendar"
-        ? /text:\s*qsTr\("Calendar settings"\)/
-        : /Accessible\.name:\s*qsTr\(".*settings"\)/,
-        `${app} settings entry has an accessible label`);
+    if (app === "calendar") {
+        // Ordinary sidebar actions are intentionally not liquid controls. Keep
+        // their explicit rounded geometry and accessibility, rather than forcing
+        // them back to the legacy shared surface merely to satisfy a type-name check.
+        assert.match(read("../../apps/calendar/qml/CalendarStyle.qml"),
+            /readonly property int navigationRadius:\s*6\b/,
+            "calendar navigation shares the six-pixel rounded geometry");
+        const ordinaryActions = new Set(["addCalendarButton", "categoryMoreButton", "holidayMoreButton", "addHolidayButton"]);
+        for (const match of source.matchAll(/\b(?:Button|ToolButton|RoundButton)\s*\{\s*id:\s*(\w+)/g)) {
+            assert.ok(ordinaryActions.has(match[1]), `review ordinary calendar control ${match[1]}`);
+            const block = source.slice(match.index, source.indexOf("onClicked:", match.index));
+            assert.match(block, /background:\s*Rectangle\s*\{\s*radius:\s*(?:6\b|root\.design\.navigationRadius\b)/,
+                `${match[1]} keeps ordinary rounded geometry`);
+            assert.match(block, /Accessible\.name:/, `${match[1]} retains an accessible name`);
+        }
+    } else {
+        assert.doesNotMatch(source, /\b(?:Button|ToolButton|RoundButton)\s*\{/,
+            `${app} uses the shared rounded button controls`);
+    }
+    if (app === "weather") {
+        // Weather deliberately exposes units inline, without a separate settings dialog.
+        assert.match(source, /ButtonGroup\s*\{\s*id:\s*unitsGroup/,
+            "weather retains its inline units controls");
+        assert.doesNotMatch(source, /KosSettingsDialog\s*\{/,
+            "weather does not restore the removed settings dialog");
+    } else {
+        assert.match(source, /KosSettingsDialog\s*\{/,
+            `${app} exposes the shared settings panel`);
+        assert.match(source, app === "calendar"
+            ? /text:\s*qsTr\("Calendar settings"\)/
+            : /Accessible\.name:\s*qsTr\(".*settings"\)/,
+            `${app} settings entry has an accessible label`);
+    }
     assert.match(source, /function handleActivation\(activationArgs, workingDirectory\)/,
         `${app} accepts normalized reuse context from the shared runner`);
     assert.doesNotMatch(source,
@@ -218,45 +243,26 @@ assert.match(settingsDialog, /Accessible\.RadioButton[\s\S]*Accessible\.checked/
 // style. Under Material the liquid-only controls are absent, and each card's
 // height has to shrink by exactly the rows it drops -- a height that ignores
 // the hidden rows leaves a blank band where they used to be.
+// The settings app is built from the shared compact form: Demo.SettingsGroup
+// and Demo.SettingsItem size themselves from their rows, so hiding a row
+// shrinks the card. The tripwire is therefore that the glass-follows row stays
+// a conditional item inside such a group, and that no page reintroduces a
+// hardcoded Material-conditional card height -- the old way to leave a blank
+// band where the hidden rows used to be.
 const settingsApp = read("../../apps/settings/main.qml");
 const displaySettingsPage = read("../../apps/settings/pages/DisplaySettingsPage.qml");
 const themeSettingsPage = read("../../apps/settings/pages/ThemeSettingsPage.qml");
 assert.match(displaySettingsPage,
-    /implicitHeight:\s*displayPage\.isMaterialDesign\s*\?\s*54\s*:\s*109/,
-    "the appearance card drops the glass-follows-mode row under Material");
-assert.match(displaySettingsPage,
-    /implicitHeight:\s*displayPage\.isMaterialDesign\s*\?\s*48\s*:\s*145/,
-    "the glass card keeps only the blur row under Material");
-// Both glass-follows-mode rows (the row and its separator) must hide together:
-// hiding only the row leaves a stray rule under the appearance-mode switch.
-const glassFollowsLabel = displaySettingsPage.indexOf(
-    'text: I18n.tr("Liquid glass follows the appearance mode")');
-assert.ok(glassFollowsLabel > 0, "the translated glass-follows-mode row exists");
-const appearanceCardStart = displaySettingsPage.indexOf(
-    "implicitHeight: displayPage.isMaterialDesign ? 54 : 109");
-assert.ok(appearanceCardStart > 0 && appearanceCardStart < glassFollowsLabel,
-    "the glass-follows-mode row belongs to the appearance card");
-const glassFollowsSlice = displaySettingsPage.slice(appearanceCardStart, glassFollowsLabel);
-assert.ok((glassFollowsSlice.match(/visible:\s*!displayPage\.isMaterialDesign/g)
-    || []).length >= 2,
-    "the glass-follows-mode row hides with its separator under Material");
+    /Demo\.SettingsGroup\s*\{[\s\S]{0,3000}?Demo\.SettingsItem\s*\{[\s\S]{0,400}?visible:\s*!displayPage\.isMaterialDesign/,
+    "the glass-follows-mode row is a conditional item in a content-sized group");
 assert.match(displaySettingsPage, /function saveGlassFollowsAppearanceMode/,
     "the glass-follows-mode preference stays wired for non-Material styles");
-// The card that hosts the gallery and those controls must measure itself from
-// its contents. A literal height sized for the macOS layout leaves a dead band
-// under Material, where the embedded page is ~150px shorter.
-//
-// The gap between the gallery term and the Material term is left generous on
-// purpose: the sum legitimately grows as the card gains conditionally-visible
-// rows (the Material colour-source control is one), and a tight bound turned
-// that into a false failure. What the assertion actually guards is that both
-// terms are *present in the same expression* — the hardcoded height is caught
-// by the `doesNotMatch` below.
+assert.doesNotMatch(displaySettingsPage,
+    /implicitHeight:\s*[\w.]*[Pp]age\.isMaterialDesign\s*\?/,
+    "the appearance cards no longer hardcode a Material-conditional height");
 assert.match(themeSettingsPage,
-    /implicitHeight:\s*16\s*\+\s*styleGallery\.height[\s\S]{0,400}?themeMaterialSettings\.implicitHeight/,
-    "the theme card derives its height from the gallery and the embedded page");
-assert.match(themeSettingsPage, /Layout\.preferredHeight:\s*implicitHeight/,
-    "the theme card feeds that derived height into the layout");
+    /Demo\.SettingsGroup\s*\{[\s\S]{0,4000}?Demo\.SettingsAppearancePreview/,
+    "the theme shape gallery lives in a content-sized settings group");
 assert.doesNotMatch(themeSettingsPage, /Layout\.preferredHeight:\s*550\b/,
     "the theme card no longer hardcodes the macOS-only height");
 

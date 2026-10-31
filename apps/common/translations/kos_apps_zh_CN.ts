@@ -16,6 +16,7 @@
   </context>
   <context>
     <name>CalendarScheduleView</name>
+    <message><source>New event</source><translation>新建日程</translation></message>
     <message>
       <location filename="../../calendar/qml/CalendarScheduleView.qml" line="+159" />
       <source>all-day</source>
@@ -817,6 +818,16 @@
       <location line="+0" />
       <source>Full screen</source>
       <translation>全屏</translation>
+    </message>
+    <message>
+      <location line="+0" />
+      <source>Restore</source>
+      <translation>还原</translation>
+    </message>
+    <message>
+      <location line="+0" />
+      <source>Maximize</source>
+      <translation>最大化</translation>
     </message>
     <message>
       <location line="+1" />

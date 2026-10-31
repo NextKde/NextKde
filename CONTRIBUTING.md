@@ -18,6 +18,20 @@ CI runs data/platform/logic/headless tests, the standard apps, and full KWin 6.6
 SDK compilation and offline checks do not prove live compositor behavior.
 Report the exact commit, environment, commands, results, skipped coverage and remaining limits.
 
+## Main branch integration
+
+Submit changes through a pull request and wait for every required check on the latest
+commit before squash-merging. Main requires an up-to-date branch, forbids force pushes
+and deletion, and does not require another person's approval. Administrator bypass is
+reserved for emergencies, not ordinary integration. Merged PR branches are deleted automatically.
+
+Required checks: `source release selection`, `data + platform + logic + headless`,
+`Calendar Calculator Weather build and tests`, all three `KWin 6.6 / 6.7 / 6.8 SDK build and offline checks`
+(matrix names are separate checks), `QML changed-file checks`, and `block-ai-coauthor`.
+The QML job uses the PR base rather than working-tree status; an empty diff is reported
+explicitly. It checks syntax and duplicate declarations, not full runtime/import correctness.
+Compiled and runtime tests remain mandatory. Do not disable a valid check to obtain green CI.
+
 ## Change hygiene
 
 - Inspect `git status --porcelain`, including untracked files, before staging. New QML, shaders,

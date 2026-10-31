@@ -1008,7 +1008,7 @@ KosApplicationWindow {
                     font.pixelSize: 11
                     wrapMode: Text.WordWrap
                 }
-                Button {
+                KosButton {
                     id: retrySearch
                     objectName: "retryCitySearch"
                     Layout.topMargin: 3
@@ -2447,10 +2447,11 @@ KosApplicationWindow {
                         Keys.onEscapePressed: citySearchPopup.close()
                         TapHandler { onTapped: root.showCitySearch() }
                     }
-                    ToolButton {
+                    KosToolButton {
                         anchors.right: parent.right
                         anchors.verticalCenter: parent.verticalCenter
                         width: 26; height: 26
+                        padding: 0
                         visible: locationField.text.length > 0
                         text: "×"
                         focusPolicy: Qt.NoFocus
@@ -2669,13 +2670,14 @@ KosApplicationWindow {
                                     }
                                 }
 
-                                ToolButton {
+                                KosToolButton {
                                     id: cityOptions
                                     objectName: "cityOptions_" + String(savedLocation.modelData.id)
                                     anchors.right: parent.right
                                     anchors.top: cardTop.bottom
                                     anchors.topMargin: 1
                                     width: 24; height: 24
+                                    padding: 0
                                     opacity: savedLocation.hovered || savedLocation.activeFocus
                                         || hovered || activeFocus
                                         || (cityMenu.visible && root.cityMenuId === String(savedLocation.modelData.id)) ? 1 : 0

@@ -70,10 +70,22 @@ for (const name of new Set(asked)) {
 // The controls carry the host's palette by design (the module cannot import the
 // shell), and their own defaults are the iPadOS originals. A slider or switch
 // left without an accent is a piece of the other form sitting in the middle of
-// this one.
-const ACCENT_CONTROLS = ["LiquidSlider", "LiquidGlassSwitch"];
+// this one. Pages now reach them through the Settings adapters, so the accent
+// travels from the call site and each adapter must still wrap the real control.
+const ADAPTERS = [
+    ["components/SettingsSlider.qml", "Demo.LiquidSlider {"],
+    ["components/SettingsSwitch.qml", "Demo.LiquidGlassSwitch {"],
+];
+for (const [path, root] of ADAPTERS) {
+    const text = readFileSync(new URL(path, settingsDirectory), "utf8");
+    check(text.split("\n").some(line => line.trim() === root),
+        path + " no longer wraps " + root + "; the page would draw a "
+        + "different control than the module's own");
+}
+
+const ACCENT_CONTROLS = ["SettingsSlider", "SettingsSwitch"];
 for (const control of ACCENT_CONTROLS) {
-    const opener = "LiquidControls." + control + " {";
+    const opener = "Controls." + control + " {";
     let found = 0;
     for (const { path, text: source } of sources) {
         const lines = source.split("\n");
@@ -89,15 +101,16 @@ for (const control of ACCENT_CONTROLS) {
                     accents += 1;
                 depth += (text.match(/\{/g) || []).length
                     - (text.match(/\}/g) || []).length;
-                if (depth === 0 && j >= i) {
-                    check(accents === 1,
-                        control + " in " + path + ":" + (i + 1) + " carries exactly one "
-                        + "accentColor, found " + accents + (accents === 0
-                            ? " -- it would keep the iPadOS blue default"
-                            : " -- QML refuses a property set twice"));
+                if (depth === 0 && j >= i)
                     break;
-                }
             }
+            // GlassDebugPage's debug toggles are deliberately neutral.
+            const allowed = path === "pages/GlassDebugPage.qml" ? [0, 1] : [1];
+            check(allowed.includes(accents),
+                control + " in " + path + ":" + (i + 1) + " carries exactly one "
+                + "accentColor, found " + accents + (accents === 0
+                    ? " -- it would keep the iPadOS blue default"
+                    : " -- QML refuses a property set twice"));
         }
     }
     check(found > 0, "the window uses " + control);
