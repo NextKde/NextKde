@@ -700,19 +700,27 @@ PanelWindow {
                 z: 50
                 visible: widgetHover.hovered && !root.editMode
                 anchors { right: parent.right; bottom: parent.bottom; margins: 8 }
-                width: sizeLabel.implicitWidth + 14
-                height: 24
+                width: Math.min(sizeLabelMetrics.advanceWidth + 14, parent.width - 16)
+                height: Math.max(24, sizeLabel.implicitHeight + 10)
                 radius: 12
                 color: AppearanceTokens.surface.pick(AppearanceTokens.colors.layer4, Qt.rgba(0, 0, 0, 0.52))
                 border.width: 1
                 border.color: AppearanceTokens.surface.pick(AppearanceTokens.colors.outlineVariant, Qt.rgba(1, 1, 1, 0.18))
+                TextMetrics {
+                    id: sizeLabelMetrics
+                    font: sizeLabel.font
+                    text: sizeLabel.text
+                }
                 Text {
                     id: sizeLabel
                     anchors.centerIn: parent
+                    width: parent.width - 14
                     text: card.displayColumns + "×" + card.displayRows
                         + " · " + I18n.tr("Right-click to edit")
                     color: AppearanceTokens.surface.pick(AppearanceTokens.colors.surfaceForeground, "white")
                     font { pixelSize: 9; weight: Font.DemiBold }
+                    horizontalAlignment: Text.AlignHCenter
+                    wrapMode: Text.WordWrap
                 }
             }
 
