@@ -135,7 +135,7 @@ PanelWindow {
                 matches.push({
                     kind: "clipboard",
                     title: entry.isImage ? I18n.tr("Image") : entry.preview,
-                    subtitle: entry.isImage ? I18n.tr("Image clipboard · %1").arg(entry.preview.slice(2, -2)) : I18n.tr("Text clipboard · Enter to copy"),
+                    subtitle: entry.isImage ? I18n.tr("Image clipboard · %1").arg(entry.preview.slice(2, -2).trim()) : I18n.tr("Text clipboard · Enter to copy"),
                     icon: BundledIcons.source(entry.isImage
                         ? "image-x-generic" : "edit-paste"),
                     isImage: entry.isImage,
@@ -489,8 +489,10 @@ PanelWindow {
                 anchors {
                     left: fieldPill.left
                     leftMargin: 44
-                    right: fieldPill.right
-                    rightMargin: root.mode === "clipboard" ? 180 : 130
+                    // Follow the hint and action row instead of a fixed margin:
+                    // translated labels are wider than the English ones.
+                    right: modeHint.visible ? modeHint.left : headerActions.left
+                    rightMargin: 10
                     verticalCenter: fieldPill.verticalCenter
                 }
                 color: ThemeService.foregroundColor
@@ -537,35 +539,62 @@ PanelWindow {
                 }
 
                 GlassText {
+                    id: searchPlaceholder
                     anchors.fill: parent
                     visible: !searchInput.text && !searchInput.inputMethodComposing
                     text: root.placeholder
                     color: AppearanceTokens.content.glassInk(0.54)
                     font: searchInput.font
+                    elide: Text.ElideRight
                     verticalAlignment: Text.AlignVCenter
                     style: ThemeService.isDark ? Text.Outline : Text.Normal
                     styleColor: dialog.textOutlineColor
                 }
             }
 
+            // Mode hint. It sits outside the action row and only takes the
+            // width the search field can spare, so the placeholder is never cut
+            // first: long translations drop the sort note, then the hint itself.
+            GlassText {
+                id: modeHint
+                readonly property string shortText: root.modeTitle + I18n.tr(" · Tab")
+                readonly property string fullText: root.modeTitle + (root.mode === "clipboard"
+                    ? (root.clipboardPinnedOnly ? I18n.tr(" · Pinned") : I18n.tr(" · Newest first")) : "")
+                    + I18n.tr(" · Tab")
+                readonly property real budget: headerActions.x - fieldPill.x - 44 - 10
+                    - modeHint.anchors.rightMargin
+                    - Math.min(searchPlaceholder.implicitWidth, fieldPill.width * 0.45)
+                TextMetrics {
+                    id: modeHintFull
+                    font: modeHint.font
+                    text: modeHint.fullText
+                }
+                TextMetrics {
+                    id: modeHintShort
+                    font: modeHint.font
+                    text: modeHint.shortText
+                }
+                anchors {
+                    right: headerActions.left
+                    rightMargin: 8
+                    verticalCenter: fieldPill.verticalCenter
+                }
+                visible: modeHintShort.advanceWidth <= budget
+                text: modeHintFull.advanceWidth <= budget ? fullText : shortText
+                color: AppearanceTokens.content.glassInk(0.46)
+                font.pixelSize: 11
+                style: ThemeService.isDark ? Text.Outline : Text.Normal
+                styleColor: dialog.textOutlineColor
+            }
+
             Row {
+                id: headerActions
                 anchors {
                     right: fieldPill.right
                     rightMargin: 10
                     verticalCenter: fieldPill.verticalCenter
                 }
                 spacing: 6
-
-                GlassText {
-                    text: root.modeTitle + (root.mode === "clipboard"
-                        ? (root.clipboardPinnedOnly ? I18n.tr(" · Pinned") : I18n.tr(" · Newest first")) : "")
-                        + I18n.tr(" · Tab")
-                    color: AppearanceTokens.content.glassInk(0.46)
-                    font.pixelSize: 11
-                    anchors.verticalCenter: parent.verticalCenter
-                    style: ThemeService.isDark ? Text.Outline : Text.Normal
-                    styleColor: dialog.textOutlineColor
-                }
 
                 // Clear all clipboard history button
                 Item {
@@ -736,6 +765,19 @@ PanelWindow {
                 rightMargin: 12
             }
 
+            // The popover floats over the result list inside the same window.
+            // On glass themes KWin only blurs what lies behind the window, so
+            // without this backing the rows read straight through the text.
+            Rectangle {
+                anchors.fill: parent
+                radius: settingsPopover.radius
+                color: ThemeService.isDark
+                    ? Qt.rgba(0.12, 0.13, 0.16, 0.94)
+                    : Qt.rgba(0.96, 0.96, 0.98, 0.94)
+                border.width: 1
+                border.color: ThemeService.isDark ? Qt.rgba(1, 1, 1, 0.10) : Qt.rgba(0, 0, 0, 0.08)
+            }
+
             LiquidGlassPanel {
                 anchors.fill: parent
                 radius: settingsPopover.radius
@@ -761,6 +803,7 @@ PanelWindow {
                     width: parent.width
                     GlassText {
                         width: parent.width - 24
+                        elide: Text.ElideRight
                         text: I18n.tr("Clipboard Preferences")
                         font { pixelSize: 13; bold: true; family: "Noto Sans CJK SC" }
                         color: ThemeService.foregroundColor
@@ -794,10 +837,13 @@ PanelWindow {
                 // Watch Images row
                 Row {
                     width: parent.width
+                    spacing: 6
                     Column {
                         width: parent.width - 46
                         spacing: 2
                         GlassText {
+                            width: parent.width
+                            elide: Text.ElideRight
                             text: I18n.tr("Monitor image content")
                             font { pixelSize: 12; weight: Font.Medium; family: "Noto Sans CJK SC" }
                             color: ThemeService.foregroundColor
@@ -805,6 +851,8 @@ PanelWindow {
                             styleColor: dialog.textOutlineColor
                         }
                         GlassText {
+                            width: parent.width
+                            wrapMode: Text.WordWrap
                             text: I18n.tr("Automatically record screenshots and copied images")
                             font.pixelSize: 10
                             color: AppearanceTokens.content.glassInk(0.55)
@@ -918,6 +966,7 @@ PanelWindow {
                         GlassText {
                             width: parent.width - 20
                             anchors.verticalCenter: parent.verticalCenter
+                            elide: Text.ElideRight
                             text: I18n.tr("⌨ Configure global shortcut (Meta+V)")
                             font { pixelSize: 11; family: "Noto Sans CJK SC" }
                             color: ThemeService.foregroundColor
@@ -1048,10 +1097,10 @@ PanelWindow {
                     anchors {
                         left: parent.left
                         leftMargin: 54
-                        right: parent.right
-                        // Clipboard rows carry a star next to the delete button:
-                        // 12 margin + 38 (latest badge) + 6 + 28 + 6 + 28.
-                        rightMargin: root.mode === "clipboard" ? 118 : 12
+                        // Clipboard rows end at the badge row (latest badge, star,
+                        // delete), whose width follows the translated label.
+                        right: root.mode === "clipboard" ? rowActions.left : parent.right
+                        rightMargin: root.mode === "clipboard" ? 6 : 12
                         verticalCenter: parent.verticalCenter
                     }
                     spacing: 1
@@ -1085,6 +1134,7 @@ PanelWindow {
                 // topmost first, so without it the row swallows every press and
                 // the icons are decoration. Same trick as the grid delete button.
                 Row {
+                    id: rowActions
                     anchors {
                         right: parent.right
                         rightMargin: 12
@@ -1097,7 +1147,7 @@ PanelWindow {
                     Rectangle {
                         visible: root.mode === "clipboard" && !root.clipboardPinnedOnly
                             && resultItem.index === 0
-                        width: 38
+                        width: Math.max(38, newestLabel.implicitWidth + 12)
                         height: 18
                         radius: 9
                         anchors.verticalCenter: parent.verticalCenter
@@ -1106,6 +1156,7 @@ PanelWindow {
                         border.color: ThemeService.isDark ? Qt.rgba(0.66, 0.82, 1, 0.40) : Qt.rgba(0.0, 0.50, 0.90, 0.30)
 
                         GlassText {
+                            id: newestLabel
                             anchors.centerIn: parent
                             text: I18n.tr("Newest")
                             color: ThemeService.isDark ? Qt.rgba(0.84, 0.93, 1, 0.94) : Qt.rgba(0.0, 0.45, 0.85, 1.0)
@@ -1289,7 +1340,7 @@ PanelWindow {
                 Rectangle {
                     visible: root.mode === "clipboard" && !root.clipboardPinnedOnly
                         && gridResultItem.index === 0
-                    width: 34
+                    width: Math.max(34, gridNewestLabel.implicitWidth + 10)
                     height: 17
                     radius: 8.5
                     anchors {
@@ -1301,6 +1352,7 @@ PanelWindow {
                     color: ThemeService.isDark ? Qt.rgba(0.30, 0.56, 0.94, 0.36) : Qt.rgba(0.0, 0.50, 0.90, 0.18)
 
                     GlassText {
+                        id: gridNewestLabel
                         anchors.centerIn: parent
                         text: I18n.tr("Newest")
                         color: ThemeService.isDark ? Qt.rgba(0.84, 0.93, 1, 0.96) : Qt.rgba(0.0, 0.45, 0.85, 1.0)
@@ -1467,7 +1519,9 @@ PanelWindow {
             verticalAlignment: Text.AlignVCenter
             text: root.mode === "app" ? I18n.tr("No matching apps")
                 : (root.mode === "clipboard"
-                    ? (root.clipboardPinnedOnly ? I18n.tr("Nothing pinned yet") : I18n.tr("Clipboard history is empty"))
+                    ? (root.clipboardPinnedOnly ? I18n.tr("Nothing pinned yet")
+                        : (ClipboardService.historyAvailable ? I18n.tr("Clipboard history is empty")
+                            : I18n.tr("Clipboard history unavailable: install cliphist and wl-clipboard")))
                     : I18n.tr("No matching windows"))
             color: AppearanceTokens.content.glassInk(0.52)
             font.pixelSize: 13

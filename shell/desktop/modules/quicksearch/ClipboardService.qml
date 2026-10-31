@@ -21,6 +21,9 @@ QtObject {
 
     property var entries: []
     property int revision: 0
+    // False when the platform reports cliphist/wl-paste missing, so the panel
+    // can say why it is empty instead of claiming there is no history.
+    property bool historyAvailable: true
     property var _listProcess: null
 
     function setWatchImages(enabled) {
@@ -88,9 +91,11 @@ QtObject {
         _listProcess = true
         PlatformClient.request("clipboard.history.list", {}, function(response) {
             _listProcess = null
+            const unavailable = response?.error?.code === "command-unavailable"
+            service.historyAvailable = !unavailable
             if (response?.ok)
                 service._readList(response.result?.stdout ?? "")
-            else if (response?.error?.code !== "command-unavailable")
+            else if (!unavailable)
                 console.warn("[Clipboard] cliphist list failed: "
                     + (response?.error?.message || "platform unavailable"))
         })

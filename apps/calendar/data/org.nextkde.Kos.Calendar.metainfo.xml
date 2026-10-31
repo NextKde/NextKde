@@ -2,11 +2,11 @@
 <component type="desktop-application">
   <id>org.nextkde.Kos.Calendar</id>
   <name>KOS Calendar</name>
-  <summary>A focused calendar with linked task planning</summary>
+  <summary>Calendar and reminders in one window</summary>
   <metadata_license>CC0-1.0</metadata_license>
   <project_license>GPL-3.0-or-later</project_license>
   <developer id="org.nextkde"><name>NextKde Contributors</name></developer>
-  <description><p>Plan events in month, week, and day views while keeping calendar-linked tasks synchronized with KOS Todo.</p></description>
+  <description><p>Plan events in day, week, month and year views, then switch to reminders to manage lists, due dates, completion and notes in the same window.</p></description>
   <launchable type="desktop-id">kos-calendar.desktop</launchable>
   <provides><binary>kos-calendar</binary></provides>
   <categories><category>Office</category><category>Calendar</category></categories>
