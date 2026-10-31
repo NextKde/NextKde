@@ -16,6 +16,7 @@
   </context>
   <context>
     <name>CalendarScheduleView</name>
+    <message><source>New event</source><translation>新建日程</translation></message>
     <message>
       <location filename="../../calendar/qml/CalendarScheduleView.qml" line="+159" />
       <source>all-day</source>
