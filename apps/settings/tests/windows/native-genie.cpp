@@ -2,11 +2,13 @@
 #include <QCoreApplication>
 #include <QTemporaryDir>
 #include <QDebug>
+#include <functional>
 
 #define CHECK(x) do { if (!(x)) qFatal("Line %d: %s", __LINE__, #x); } while (false)
 
 class FakeKWin : public KOS::WindowAnimation::EffectRuntime {
 public:
+    std::function<void()> onFailure;
     bool connected = true;
     bool supportsLamp = true;
     bool failLampLoad = false;
@@ -25,6 +27,7 @@ public:
         if (name == "magiclamp" && enabled && failLampLoad) return false;
         if (name == "squash" && !enabled && failSquashDisableOnce) {
             failSquashDisableOnce = false;
+            if (onFailure) onFailure();
             return false;
         }
         loaded[name] = enabled;
@@ -62,8 +65,14 @@ int main(int argc, char **argv)
         CHECK(lamp.readEntry("AnimationDuration", 0) == 250);
         CHECK(KOS::WindowAnimation::applyWithRuntime(config, "genie", kwin, error));
         kwin.failSquashDisableOnce = true;
+        kwin.onFailure = [&] {
+            KConfigGroup plugins(config, "Plugins");
+            plugins.writeEntry("blurEnabled", false);
+            CHECK(config->sync());
+        };
         CHECK(!KOS::WindowAnimation::applyWithRuntime(config, "scale", kwin, error));
         CHECK(lamp.readEntry("AnimationDuration", 0) == 250);
+        CHECK(!KConfigGroup(config, "Plugins").readEntry("blurEnabled", true));
         CHECK(KOS::WindowAnimation::applyWithRuntime(config, "scale", kwin, error));
         CHECK(lamp.hasKey("AnimationDuration") == present);
         CHECK(lamp.readEntry("AnimationDuration", 0) == (present ? 911 : 0));

@@ -176,9 +176,16 @@ inline bool applyWithRuntime(const KSharedConfigPtr &config, const QString &styl
         for (auto it = entries.cbegin(); it != entries.cend(); ++it)
             group.writeEntry(it.key(), it.value());
     };
-    restore(lamp, previousLamp);
+    // Other desktop settings can change unrelated effect keys while KWin is
+    // slow. Roll back only the entries owned by this transaction.
+    const auto restoreKey = [](KConfigGroup &group, const QMap<QString, QString> &entries, const QString &key) {
+        if (entries.contains(key)) group.writeEntry(key, entries.value(key));
+        else group.deleteEntry(key);
+    };
+    restoreKey(lamp, previousLamp, QStringLiteral("AnimationDuration"));
     restore(animation, previousAnimation);
-    restore(plugins, previousPlugins);
+    restoreKey(plugins, previousPlugins, QStringLiteral("magiclampEnabled"));
+    restoreKey(plugins, previousPlugins, QStringLiteral("squashEnabled"));
     config->sync();
     // Attempt every restoration step even if one backend is still broken.
     bool restored = runtime.setEnabled(QStringLiteral("magiclamp"), false);

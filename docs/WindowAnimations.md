@@ -19,8 +19,8 @@ effect. Old water-drop configurations migrate automatically. None preserves or
 restores the previous KDE minimize-effect selection.
 
 Genie uses the NextKde preset for both minimize and restore, with no tuning required.
-If it is temporarily unavailable, Scale is used automatically. Previous native
-effect settings and duration are restored when leaving the Genie preset.
+If it is temporarily unavailable, Scale is used automatically. The previous native
+duration is restored when leaving Genie; None restores the previous effect switches.
 
 Pulling a commit changes source files only. Rebuild and install the changed
 Settings/platform components with the project's normal installer, then restart
