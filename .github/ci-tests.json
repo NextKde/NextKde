@@ -63,11 +63,13 @@
     "kos-ui.settings-material",
     "kos-ui.traditional-color",
     "kos-settings.window-config",
+    "kos-settings.native-genie-upgrade",
     "kos-settings.backend-modules",
     "kos-settings.app-store",
     "kos-dock.model",
     "kos-dock.policy",
     "kos-dock.motion",
+    "kos-dock.native-target",
     "kos-shell.application-traffic",
     "kos-shell.battery-data",
     "kos-shell.traffic-history",
@@ -78,6 +80,7 @@
     "kos-ui.widget-resize"
   ],
   "headless": [
+    "kos-shell.dock-native-target",
     "kos-calculator.engine",
     "kos-shell.dock-selection-highlight",
     "kos-shell.desktop-lyrics",

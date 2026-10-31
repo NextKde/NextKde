@@ -851,7 +851,7 @@ export const catalog = {
     "Loaded": "Carregado",
     "KWin blur and liquid glass effects": "Efeitos de desfoque e Liquid Glass do KWin",
     "Dock window animation": "Animação de janelas da Dock",
-    "KWin Dock zoom / genie animation": "Animação de zoom / gênio da Dock no KWin",
+    "KWin Dock opening / scaling animation": "Animação de abertura / escala da Dock no KWin",
     "Desktop input bridge": "Ponte de entrada da área de trabalho",
     "Global clicks and menu dismiss events": "Cliques globais e eventos de fechamento de menu",
     "Last checked ": "Última verificação ",
@@ -942,7 +942,7 @@ export const catalog = {
     "Waiting for wallpaper color extraction; three swatches will appear here": "Aguardando a extração de cores do papel de parede; três amostras aparecerão aqui",
     "Window animations": "Animações de janela",
     "Window show/hide": "Mostrar/ocultar janela",
-    "Genie-squeezes into the icon; opening windows still uses the regular expand": "Encolhe para o ícone com efeito gênio; abrir janelas continua usando a expansão normal",
+    "Uses KWin Magic Lamp to minimize into the Dock icon": "Usa a Lâmpada Mágica do KWin para minimizar até o ícone da Dock",
     "Scales proportionally into the icon; minimize and restore both keep a straight path": "Reduz proporcionalmente até o ícone; minimizar e restaurar seguem um trajeto reto",
     "Scale": "Escala",
     "Genie": "Gênio",
@@ -1268,4 +1268,5 @@ export const catalog = {
     "Click to expand · Alt-drag icons to reorder or collect": "Clique para expandir · Alt+arrastar ícones para reordenar ou agrupar",
     "Alt-drag icons here to collect; drag to reorder": "Alt+arrastar ícones para cá para agrupá-los; arraste para reordenar",
     "Alt-drag past the arrow to keep visible": "Alt+arrastar além da seta para manter visível",
+    "Temporarily using Scale. Your Genie preference is saved.": "Usando Escala temporariamente. Sua preferência por Gênio foi salva.",
 }
