@@ -1,4 +1,5 @@
 #pragma once
+#include <QJsonObject>
 #include <QObject>
 #include <QProcess>
 #include <QTimer>
@@ -21,11 +22,15 @@ private slots:
                        const QStringList &invalidated);
 private:
     void start(const QStringList &arguments, bool writing);
+    void finishFromBus();
+    void applyParsed(const QJsonObject &parsed);
     void complete(bool ok);
     QProcess m_process;
     QTimer m_timeout;
+    QStringList m_arguments;
     QStringList m_profiles;
     QString m_active, m_pending, m_degraded, m_error;
     bool m_busy = false, m_writing = false, m_refreshQueued = false;
+    bool m_busAttempted = false;
     int m_revision = 0, m_readRevision = 0;
 };

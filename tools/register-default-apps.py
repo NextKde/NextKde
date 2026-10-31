@@ -56,6 +56,13 @@ if args.with_listenfree:
     # Desktop-specific preferences take precedence if the user already has them.
     for name in ('kde-mimeapps.list', 'nextkde-mimeapps.list'):
         if (config / name).exists(): mime_files.append(config / name)
+# Only the new compatibility desktop entry authorizes retiring the old
+# standalone AppStream identity. Keep the executable, desktop shortcut, icons
+# and all task data for existing pins and scripts.
+todo_entry = ini(prefix / 'share/applications/kos-todo.desktop')
+if todo_entry.getboolean('Desktop Entry', 'X-NextKDE-UnifiedCalendar', fallback=False):
+    legacy_files.append(prefix / 'share/metainfo/org.nextkde.Kos.Todo.metainfo.xml')
+
 buttons = config / 'kos/window-buttons.json'
 previews = [prefix / location / f'kos-{app}-preview{suffix}'
             for app in apps for location, suffix in [('bin', ''), ('share/applications', '.desktop')]]

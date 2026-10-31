@@ -4,37 +4,68 @@ import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
 import Kos.Ui
+import Kos.Demo as Demo
 
-KosWorkspaceDialog {
+Demo.LiquidContentPopover {
     id: root
+    borderWidth: 0.5
+    borderColor: AppTheme.dark ? Qt.rgba(1, 1, 1, 0.18) : Qt.rgba(0, 0, 0, 0.12)
+    materialOpacity: 0.99
+    // Tall editors keep the floating material without a misleading pointer.
+    arrowEnabled: false
+    // Suppress background lettering while retaining sampled colour and refraction.
+    backdropBlur: 1.0
+    blurStrength: 1.0
+    tintStrength: 0.42
+    CalendarStyle { id: design }
 
     property string editingId: ""
-    property string calendarId: "personal"
+    // Retain imported/existing locations while the location editor is unavailable.
+    property string savedLocation: ""
+    property bool saving: false
+    property bool scheduleExpanded: false
+    closePolicy: saving ? Popup.NoAutoClose : Popup.CloseOnEscape | Popup.CloseOnPressOutside
+    property string calendarId: "default"
     property string linkedTodoId: ""
     property var availableLists: []
+    property var availableCategories: []
+    property int originalRecurrenceIndex: 0
+    property int originalReminderIndex: 0
+    property bool customRecurrence: false
+    property int savedReminderMinutes: -1
+    readonly property bool customReminder: ![-1, 0, 5, 15, 30, 60, 1440].includes(savedReminderMinutes)
     readonly property bool editing: editingId.length > 0
 
     signal saveRequested(string uid, var event)
     signal deleteRequested(string uid)
 
     // P02: one consistent field height for every editor control.
-    readonly property int fieldHeight: 30
+    readonly property int fieldHeight: design.fieldHeight
     readonly property int labelColumnWidth: 56
 
     title: editing ? qsTr("Edit event") : qsTr("New event")
-    modal: true
-    // P02/P03: compact editor — 380 wide, and never taller than the client
+    modal: false
+    popupType: Popup.Item
+    // P02/P03: compact editor — 420 wide, and never taller than the client
     // viewport minus margins so the footer stays reachable at 760x540.
-    width: Math.min(380, parent ? parent.width - 48 : 380)
-    height: Math.min(620, parent ? parent.height - 32 : 620)
-    anchors.centerIn: parent
+    width: Math.min(288, parent ? parent.width - 16 : 288)
+    height: Math.min((header ? header.implicitHeight : 0) + (footer ? footer.implicitHeight : 0)
+        + formLayout.implicitHeight + topPadding + bottomPadding, parent ? parent.height - 16 : 560)
     standardButtons: Dialog.Save | Dialog.Cancel
-    // P02: calendar-local neutral surface — the shared blue-gray windowRaised
-    // tint is replaced with a flat neutral panel; same elevation language.
-    background: KosSurface {
-        radius: AppTheme.smallRadius + 4
-        fillColor: AppTheme.dark ? "#262626" : "#F7F7F7"
-        elevation: 0.5
+    padding: 16
+    topPadding: header && header.visible ? 4 : 10
+    bottomPadding: 4
+    spacing: 0
+    signal switchTypeRequested()
+    header: CalendarEditorTabs {
+        visible: root.editingId.length === 0
+        implicitHeight: visible ? 55 : 0
+        leftInset: root.leftPadding
+        // Match the form width, including its 8px scrollbar gutter.
+        rightInset: root.rightPadding + 8
+        currentIndex: 0
+        switchingEnabled: root.editingId.length === 0 && !root.saving
+        onSwitchRequested: root.switchTypeRequested()
     }
 
     function twoDigits(value) {
@@ -222,13 +253,13 @@ KosWorkspaceDialog {
     function recurrenceIndex(preset) {
         const values = ["none", "daily", "weekly", "monthly", "yearly"]
         const index = values.indexOf(String(preset ?? "none"))
-        return index >= 0 ? index : 0
+        return index >= 0 ? index : 5
     }
 
     function reminderIndex(minutes) {
         const values = [-1, 0, 5, 15, 30, 60, 1440]
         const index = values.indexOf(Number(minutes))
-        return index >= 0 ? index : 0
+        return index >= 0 ? index : 7
     }
 
     function value(record, key, fallback) {
@@ -254,24 +285,45 @@ KosWorkspaceDialog {
         return 1
     }
 
+    function setTimeRange(start, end) {
+        startDateField.text = formatDateInput(dateText(start))
+        endDateField.text = formatDateInput(dateText(end))
+        startTimeField.text = formatTimeInput(twoDigits(start.getHours()) + ":" + twoDigits(start.getMinutes()))
+        endTimeField.text = formatTimeInput(twoDigits(end.getHours()) + ":" + twoDigits(end.getMinutes()))
+    }
+    function setQuickTitle(text) { titleField.text = text }
+    function applyReminderDraft(draft) {
+        titleField.text = draft.title
+        descriptionField.text = draft.description
+        calendarId = draft.calendarId
+        categoryBox.currentIndex = Math.max(0, availableCategories.findIndex(item => item.id === calendarId))
+        allDayCheck.checked = draft.allDay
+        if (draft.allDay) endDateField.text = nextDateFromText(startDateField.text)
+    }
     function openForDate(date, hour) {
         const startHour = hour === undefined ? 9 : Math.max(0, Math.min(22, Number(hour)))
+        scheduleExpanded = false
         editingId = ""
-        calendarId = "personal"
+        calendarId = "default"
+        categoryBox.currentIndex = 0
         linkedTodoId = ""
         errorText = ""
         errorFields = []
         confirmingDelete = false
         titleField.text = ""
         descriptionField.text = ""
-        locationField.text = ""
+        savedLocation = ""
         startDateField.text = formatDateInput(dateText(date))
         endDateField.text = formatDateInput(dateText(date))
         startTimeField.text = formatTimeInput(twoDigits(startHour) + ":00")
         endTimeField.text = formatTimeInput(twoDigits(startHour + 1) + ":00")
         allDayCheck.checked = false
+        customRecurrence = false
+        savedReminderMinutes = -1
         recurrenceBox.currentIndex = 0
         reminderBox.currentIndex = 0
+        originalRecurrenceIndex = 0
+        originalReminderIndex = 0
         linkTodoCheck.checked = false
         todoListBox.currentIndex = listIndex("personal")
         todoPriorityBox.currentIndex = 0
@@ -284,19 +336,25 @@ KosWorkspaceDialog {
         const fallbackDate = dateText(now)
         editingId = String(event?.seriesId ?? event?.id ?? "")
         calendarId = String(event?.calendarId ?? "personal")
+        categoryBox.currentIndex = Math.max(0, availableCategories.findIndex(item => item.id === calendarId))
+        confirmingDelete = false
         linkedTodoId = String(event?.linkedTodoId ?? "")
         errorText = ""
         errorFields = []
         titleField.text = String(event?.title ?? "")
         descriptionField.text = String(event?.description ?? "")
-        locationField.text = String(event?.location ?? "")
+        savedLocation = String(event?.location ?? "")
         startDateField.text = formatDateInput(isoDatePart(event?.start, fallbackDate))
         endDateField.text = formatDateInput(isoDatePart(event?.end, startDateField.text))
         startTimeField.text = formatTimeInput(isoTimePart(event?.start, "09:00"))
         endTimeField.text = formatTimeInput(isoTimePart(event?.end, "10:00"))
         allDayCheck.checked = Boolean(event?.allDay)
+        customRecurrence = String(event?.recurrence ?? "none") === "custom"
+        savedReminderMinutes = Number(event?.reminderMinutes ?? -1)
         recurrenceBox.currentIndex = recurrenceIndex(event?.recurrence)
         reminderBox.currentIndex = reminderIndex(event?.reminderMinutes)
+        originalRecurrenceIndex = recurrenceBox.currentIndex
+        originalReminderIndex = reminderBox.currentIndex
         linkTodoCheck.checked = linkedTodoId.length > 0
         todoListBox.currentIndex = listIndex(event?.linkedTodoListId ?? "personal")
         todoPriorityBox.currentIndex = priorityIndex(event?.linkedTodoPriority ?? 0)
@@ -310,10 +368,10 @@ KosWorkspaceDialog {
         const priorityValues = [0, 9, 5, 1]
         const list = availableLists.length > 0
             ? availableLists[Math.max(0, todoListBox.currentIndex)] : ({ id: "inbox" })
-        return {
+        const payload = {
             title: titleField.text.trim(),
             description: descriptionField.text.trim(),
-            location: locationField.text.trim(),
+            location: savedLocation,
             start: isoFromDateText(startDateField.text) + "T"
                 + (allDayCheck.checked ? "00:00" : isoFromTimeText(startTimeField.text)) + ":00",
             end: isoFromDateText(endDateField.text) + "T"
@@ -326,6 +384,13 @@ KosWorkspaceDialog {
             todoListId: String(value(list, "id", "inbox")),
             todoPriority: priorityValues[todoPriorityBox.currentIndex]
         }
+        // Preserve imported custom rules, repeat limits and alarm offsets when
+        // editing an unrelated field. The backend supports partial updates.
+        if (editing && recurrenceBox.currentIndex === originalRecurrenceIndex)
+            delete payload.recurrence
+        if (editing && reminderBox.currentIndex === originalReminderIndex)
+            delete payload.reminderMinutes
+        return payload
     }
 
     // I4: every accept path runs validation first — invalid input keeps the
@@ -335,144 +400,39 @@ KosWorkspaceDialog {
         if (problem !== null) {
             errorText = problem.message
             errorFields = problem.fields
+            scheduleExpanded = true
             return
         }
         errorText = ""
         errorFields = []
-        close()
         accepted()
     }
 
     onAccepted: saveRequested(editingId, eventPayload())
 
-    // D05: the dialog's actions are stacked, not a row — one full-width bar
-    // per action, all the same width and height with a hairline gap, primary
-    // (Save) on top, secondary (Cancel) under it, destructive (Delete) last,
-    // per the macOS 26 alert reference. KosButton supplies the 34px control
-    // height and the pill radius; nothing here restyles surface or shape.
-    // The footer stays fixed (only the form above it scrolls), so Delete can
-    // never scroll out of reach; the 16px insets match the shared footer.
-    //
-    // Labels are not hardcoded: standardButtons is still declared on the
-    // dialog, and the never-rendered DialogButtonBox below instantiates Qt's
-    // platform-localized Save/Cancel buttons, so the bars read exactly as the
-    // standard buttons did. The labels are bound, not copied once: reading
-    // `count` re-evaluates the binding as soon as the box finishes creating
-    // its standard buttons (no onCompleted creation-order fragility), and the
-    // button `text` dependency keeps the labels live if the platform strings
-    // change (locale hot-switch). The qsTr strings are only the
-    // pre-instantiation fallback.
-    readonly property string saveLabel: {
-        const b = labelSource.count > 0 ? labelSource.standardButton(Dialog.Save) : null
-        return b ? b.text : qsTr("Save")
-    }
-    readonly property string cancelLabel: {
-        const b = labelSource.count > 0 ? labelSource.standardButton(Dialog.Cancel) : null
-        return b ? b.text : qsTr("Cancel")
-    }
-
-    footer: Item {
-        implicitHeight: 16
-            + (root.confirmingDelete ? confirmCol.implicitHeight : footerCol.implicitHeight) + 16
-
-        // Label source only. Invisible and disabled so it neither paints over
-        // the stack nor joins the focus chain — Esc stays with the dialog.
-        DialogButtonBox {
-            id: labelSource
-            visible: false
-            enabled: false
-            padding: 0
-            standardButtons: root.standardButtons
-        }
-
-        ColumnLayout {
-            id: footerCol
-            anchors.fill: parent
-            anchors.margins: 16
-            spacing: 6
-            visible: !root.confirmingDelete
-
-            // Primary: the AcceptRole standard button of the shared footer.
-            KosButton {
-                Layout.fillWidth: true
-                text: root.saveLabel
-                highlighted: true
-                flatPrimary: true
-                lightLabel: true
-                onClicked: root.accept()
-            }
-
-            // Secondary: the RejectRole standard button of the shared footer.
-            KosButton {
-                Layout.fillWidth: true
-                text: root.cancelLabel
-                secondary: true
-                onClicked: root.reject()
-            }
-
-            KosButton {
-                Layout.fillWidth: true
-                text: qsTr("Delete event")
-                visible: root.editing
-                destructive: true
-                secondary: true
-                onClicked: {
-                    root.confirmingDelete = true
-                    confirmCancelButton.forceActiveFocus()
-                }
-            }
-        }
-
-        // P1-6: delete confirmation, macOS alert form (bold title, one-line
-        // description, stacked buttons) per the alert-macos reference. Cancel
-        // is the default (highlighted, focused); Delete fires only from here.
-        ColumnLayout {
-            id: confirmCol
-            anchors.fill: parent
-            anchors.margins: 16
-            spacing: 6
-            visible: root.confirmingDelete
-
-            Label {
-                Layout.fillWidth: true
-                text: qsTr("Delete this event?")
-                font.bold: true
-                wrapMode: Text.WordWrap
-            }
-
-            Label {
-                Layout.fillWidth: true
-                text: qsTr("The event is removed from every view. This cannot be undone.")
-                color: AppTheme.mutedText
-                font.pixelSize: 11
-                wrapMode: Text.WordWrap
-            }
-
-            KosButton {
-                id: confirmCancelButton
-                Layout.fillWidth: true
-                text: root.cancelLabel
-                highlighted: true
-                flatPrimary: true
-                lightLabel: true
-                onClicked: root.confirmingDelete = false
-            }
-
-            KosButton {
-                Layout.fillWidth: true
-                text: qsTr("Delete event")
-                destructive: true
-                secondary: true
-                onClicked: {
-                    root.deleteRequested(root.editingId)
-                    root.close()
-                }
-            }
+    // Fixed compact action row; the form scrolls independently.
+    footer: CalendarEditorFooter {
+        sourceItem: root.sourceItem
+        enabled: !root.saving
+        editing: root.editingId.length > 0
+        confirmingDelete: root.confirmingDelete
+        deleteLabel: qsTr("Delete event")
+        deleteTitle: qsTr("Delete this event?")
+        deleteMessage: qsTr("The event is removed from every view. This cannot be undone.")
+        onAccepted: root.accept()
+        onRejected: root.reject()
+        onDeleteArmed: root.confirmingDelete = true
+        onDeleteCanceled: root.confirmingDelete = false
+        onDeleteConfirmed: {
+            root.deleteRequested(root.editingId)
+            root.close()
         }
     }
 
     contentItem: Flickable {
         id: editorScroll
+        enabled: !root.saving
+        objectName: "calendarEventEditorScroll"
         clip: true
         // P1-18/A7: the custom footer hides the standard DialogButtonBox
         // that would normally wire a default button, so Return used to do
@@ -533,12 +493,12 @@ KosWorkspaceDialog {
             }
         }
 
-        // P02: aligned label-left rows with one field height; compact 380
+        // P02: aligned label-left rows with one field height; compact 420
         // editor keeps every existing field, just visually tamed.
         ColumnLayout {
             id: formLayout
-            width: editorScroll.width
-            spacing: 10
+            width: editorScroll.width - 8
+            spacing: 6
 
             // I4: inline validation error — pinned to the top of the form so
             // it is visible without scrolling; offending fields also get a
@@ -552,38 +512,87 @@ KosWorkspaceDialog {
                 wrapMode: Text.WordWrap
             }
 
-            RowLayout {
+            Demo.SettingsGroup {
+                cornerRadius: 8
+                backgroundColor: AppTheme.dark ? "#363638" : "#EDEDEF"
                 Layout.fillWidth: true
-                spacing: 8
-
-                Label {
-                    text: qsTr("Title")
-                    Layout.preferredWidth: root.labelColumnWidth
-                    Layout.alignment: Qt.AlignVCenter
-                    color: AppTheme.mutedText
-                    font.pixelSize: 11
-                }
-
-                KosTextField {
-                    id: titleField
+                Demo.SettingsItem {
+                allowStacking: false
+                Layout.fillWidth: true
+                title: qsTr("Category")
+                minimumLabelWidth: root.labelColumnWidth
+                horizontalPadding: 12
+                CalendarComboBox {
+                    Layout.preferredWidth: Math.max(0, parent.parent.availableWidth - parent.parent.minimumLabelWidth - parent.parent.controlSpacing)
+                    id: categoryBox
+                    objectName: "eventCategory"
                     Layout.fillWidth: true
-                    Layout.preferredHeight: fieldHeight
+                    model: root.availableCategories
+                    textRole: "name"
+                    colorRole: "color"
+                    Accessible.name: qsTr("Category")
+                    onActivated: root.calendarId = root.availableCategories[currentIndex].id
+                }
+            }
+            }
+
+            Demo.SettingsGroup {
+                cornerRadius: 8
+                backgroundColor: AppTheme.dark ? "#363638" : "#EDEDEF"
+                Layout.fillWidth: true
+                CalendarTextField {
+                    blockInput: true
+                    id: titleField
+                    objectName: "eventTitle"
+                    Layout.fillWidth: true
+                    implicitHeight: 28
+                    filled: false
+
+
                     placeholderText: qsTr("Event title")
                     Accessible.name: qsTr("Event title")
-                    outlineColor: root.hasError("title")
-                        ? AppTheme.destructive : AppTheme.border
+                    invalid: root.hasError("title")
                     onTextChanged: root.clearError("title")
                 }
             }
 
-            RowLayout {
+            Demo.SettingsGroup {
+                cornerRadius: 8
+                backgroundColor: AppTheme.dark ? "#363638" : "#EDEDEF"
                 Layout.fillWidth: true
-                spacing: 10
-
-                KosCheckBox {
+                ColumnLayout { Layout.fillWidth: true; spacing: 0
+                Demo.SettingsItem {
+                allowStacking: false
+                Layout.fillWidth: true
+                title: qsTr("Time")
+                minimumLabelWidth: root.labelColumnWidth
+                horizontalPadding: 12
+                Button {
+                    Layout.preferredWidth: Math.max(0, parent.parent.availableWidth - parent.parent.minimumLabelWidth - parent.parent.controlSpacing)
+                    Layout.fillWidth: true
+                    implicitHeight: 36
+                    background: Item {}
+                    leftPadding: 0
+                    rightPadding: 0
+                    contentItem: ColumnLayout {
+                        Label { Layout.fillWidth: true; elide: Text.ElideRight; text: startDateField.text + "  " + startTimeField.text + " – " + endTimeField.text; color: design.labelPrimary; font.pixelSize: 11 }
+                        Label { Layout.fillWidth: true; elide: Text.ElideRight; text: root.scheduleExpanded ? qsTr("Hide date and notification options") : qsTr("Date, repeat and notification options"); color: design.labelSecondary; font.pixelSize: 11 }
+                    }
+                    onClicked: root.scheduleExpanded = !root.scheduleExpanded
+                }
+                }
+                ColumnLayout {
+                    Layout.fillWidth: true
+                    visible: root.scheduleExpanded
+                    spacing: 0
+            Demo.SettingsItem {
+                allowStacking: false
+                title: qsTr("All day")
+                horizontalPadding: 12
+                Demo.SettingsSwitch {
                     id: allDayCheck
-                    text: qsTr("All day")
-                    onToggled: {
+                    onToggled: value => {
+                        checked = value
                         const next = root.nextDateFromText(startDateField.text.trim())
                         if (checked && endDateField.text.trim() === startDateField.text.trim())
                             endDateField.text = next
@@ -591,106 +600,199 @@ KosWorkspaceDialog {
                             endDateField.text = startDateField.text.trim()
                     }
                 }
-
-                Item { Layout.fillWidth: true }
             }
-
-            RowLayout {
+            Demo.SettingsItem {
+                allowStacking: false
                 Layout.fillWidth: true
-                spacing: 8
-
-                Label {
-                    text: qsTr("Start")
-                    Layout.preferredWidth: root.labelColumnWidth
-                    Layout.alignment: Qt.AlignVCenter
-                    color: AppTheme.mutedText
-                    font.pixelSize: 11
-                }
-                KosTextField {
+                title: qsTr("Start")
+                minimumLabelWidth: root.labelColumnWidth
+                horizontalPadding: 12
+                CalendarDateField {
+                    Layout.preferredWidth: Math.max(0, parent.parent.availableWidth - parent.parent.minimumLabelWidth - parent.parent.controlSpacing)
+                    parseDate: root.parseDateText
+                    formatDate: date => Qt.formatDate(date, root.inputDateFormat)
+                    calendarLocale: root.inputLocale
+                    font.pixelSize: design.editorInputFontSize
+                    font.weight: Font.Normal
                     id: startDateField
                     Layout.fillWidth: true
-                    Layout.preferredHeight: fieldHeight
                     placeholderText: root.datePattern
                     Accessible.name: qsTr("Start date")
+                    invalid: root.hasError("startDate")
                     outlineColor: root.hasError("startDate")
-                        ? AppTheme.destructive : AppTheme.border
+                        ? AppTheme.destructive : "transparent"
                     onTextChanged: root.clearError("startDate")
                 }
-                KosTextField {
+            }
+            Demo.SettingsItem {
+                allowStacking: false
+                Layout.fillWidth: true
+                title: qsTr("Start time")
+                minimumLabelWidth: root.labelColumnWidth
+                horizontalPadding: 12
+                CalendarTimeField {
+                    Layout.preferredWidth: Math.max(0, parent.parent.availableWidth - parent.parent.minimumLabelWidth - parent.parent.controlSpacing)
+                    parseTime: root.parseTimeText
+                    formatTime: date => Qt.formatTime(date, root.inputTimeFormat)
+                    font.pixelSize: design.editorInputFontSize
+                    font.weight: Font.Normal
                     id: startTimeField
-                    Layout.preferredWidth: 92
-                    Layout.preferredHeight: fieldHeight
+                    Layout.fillWidth: true
                     placeholderText: root.timePattern
                     enabled: !allDayCheck.checked
                     Accessible.name: qsTr("Start time")
+                    invalid: root.hasError("startTime")
                     outlineColor: root.hasError("startTime")
-                        ? AppTheme.destructive : AppTheme.border
+                        ? AppTheme.destructive : "transparent"
                     onTextChanged: root.clearError("startTime")
                 }
             }
-
-            RowLayout {
+            Demo.SettingsItem {
+                allowStacking: false
                 Layout.fillWidth: true
-                spacing: 8
-
-                Label {
-                    text: qsTr("End")
-                    Layout.preferredWidth: root.labelColumnWidth
-                    Layout.alignment: Qt.AlignVCenter
-                    color: AppTheme.mutedText
-                    font.pixelSize: 11
-                }
-                KosTextField {
+                title: qsTr("End")
+                minimumLabelWidth: root.labelColumnWidth
+                horizontalPadding: 12
+                CalendarDateField {
+                    Layout.preferredWidth: Math.max(0, parent.parent.availableWidth - parent.parent.minimumLabelWidth - parent.parent.controlSpacing)
+                    parseDate: root.parseDateText
+                    formatDate: date => Qt.formatDate(date, root.inputDateFormat)
+                    calendarLocale: root.inputLocale
+                    font.pixelSize: design.editorInputFontSize
+                    font.weight: Font.Normal
                     id: endDateField
                     Layout.fillWidth: true
-                    Layout.preferredHeight: fieldHeight
                     placeholderText: root.datePattern
                     Accessible.name: qsTr("End date")
+                    invalid: root.hasError("endDate")
                     outlineColor: root.hasError("endDate")
-                        ? AppTheme.destructive : AppTheme.border
+                        ? AppTheme.destructive : "transparent"
                     onTextChanged: root.clearError("endDate")
                 }
-                KosTextField {
+            }
+            Demo.SettingsItem {
+                allowStacking: false
+                Layout.fillWidth: true
+                title: qsTr("End time")
+                minimumLabelWidth: root.labelColumnWidth
+                horizontalPadding: 12
+                CalendarTimeField {
+                    Layout.preferredWidth: Math.max(0, parent.parent.availableWidth - parent.parent.minimumLabelWidth - parent.parent.controlSpacing)
+                    parseTime: root.parseTimeText
+                    formatTime: date => Qt.formatTime(date, root.inputTimeFormat)
+                    font.pixelSize: design.editorInputFontSize
+                    font.weight: Font.Normal
                     id: endTimeField
-                    Layout.preferredWidth: 92
-                    Layout.preferredHeight: fieldHeight
+                    Layout.fillWidth: true
                     placeholderText: root.timePattern
                     enabled: !allDayCheck.checked
                     Accessible.name: qsTr("End time")
+                    invalid: root.hasError("endTime")
                     outlineColor: root.hasError("endTime")
-                        ? AppTheme.destructive : AppTheme.border
+                        ? AppTheme.destructive : "transparent"
                     onTextChanged: root.clearError("endTime")
                 }
             }
-
-            RowLayout {
+            Demo.SettingsItem {
+                allowStacking: false
                 Layout.fillWidth: true
-                spacing: 8
-
-                Label {
-                    text: qsTr("Location")
-                    Layout.preferredWidth: root.labelColumnWidth
-                    Layout.alignment: Qt.AlignVCenter
-                    color: AppTheme.mutedText
-                    font.pixelSize: 11
-                }
-                KosTextField {
-                    id: locationField
+                title: qsTr("Repeat")
+                minimumLabelWidth: root.labelColumnWidth
+                horizontalPadding: 12
+                CalendarComboBox {
+                    Layout.preferredWidth: Math.max(0, parent.parent.availableWidth - parent.parent.minimumLabelWidth - parent.parent.controlSpacing)
+                    id: recurrenceBox
+                    objectName: "eventRecurrenceSelect"
                     Layout.fillWidth: true
-                    Layout.preferredHeight: fieldHeight
-                    placeholderText: qsTr("Optional location")
-                    Accessible.name: qsTr("Event location")
+                    model: [qsTr("Does not repeat"), qsTr("Daily"), qsTr("Weekly"),
+                        qsTr("Monthly"), qsTr("Yearly")].concat(root.customRecurrence ? [qsTr("Custom (keep existing rule)")] : [])
+                    Accessible.name: qsTr("Event recurrence")
                 }
             }
+            Demo.SettingsItem {
+                allowStacking: false
+                Layout.fillWidth: true
+                title: qsTr("Reminder")
+                minimumLabelWidth: root.labelColumnWidth
+                horizontalPadding: 12
+                CalendarComboBox {
+                    Layout.preferredWidth: Math.max(0, parent.parent.availableWidth - parent.parent.minimumLabelWidth - parent.parent.controlSpacing)
+                    id: reminderBox
+                    Layout.fillWidth: true
+                    model: [qsTr("None"), qsTr("At start"), qsTr("5 minutes before"),
+                        qsTr("15 minutes before"), qsTr("30 minutes before"),
+                        qsTr("1 hour before"), qsTr("1 day before")].concat(root.customReminder ? [qsTr("%1 minutes before").arg(root.savedReminderMinutes)] : [])
+                    Accessible.name: qsTr("Event reminder")
+                }
+            }
+                }
+                }
+            }
+            Demo.SettingsGroup {
+                cornerRadius: 8
+                backgroundColor: AppTheme.dark ? "#363638" : "#EDEDEF"
+                Layout.fillWidth: true
+                    Flickable {
+                        id: notesScroll
+                        Layout.fillWidth: true
+                        Layout.preferredHeight: 64
+                        clip: true
+                        boundsBehavior: Flickable.StopAtBounds
+                        // Non-interactive (see task editor): wheel + scrollbar
+                        // scrolling, presses always reach the editor.
+                        interactive: false
+                        // Native TextArea.flickable attached integration — the
+                        // attached property is on the Flickable, its value is
+                        // the TextArea; native pointer/cursor/selection ownership.
+                        TextArea.flickable: Demo.SettingsTextArea {
+                    blockInput: true
+                            filled: false
 
-            // P02: subdued task link — same semantics, quiet neutral chip
-            // instead of the large blue card. List/priority reveal only
-            // while linked.
+
+
+
+
+
+                            id: descriptionField
+                            width: notesScroll.width
+                            placeholderText: qsTr("Optional notes")
+                            wrapMode: TextEdit.Wrap
+                            Accessible.name: qsTr("Event notes")
+                            activeFocusOnPress: true
+                            selectByMouse: true
+                        }
+
+                        ScrollBar.vertical: ScrollBar {}
+
+                        // Wheel scrolling for the non-interactive flickable —
+                        // same NoButton MouseArea pattern as the task editor:
+                        // wheel-only, clicks/drag-selection pass through, and
+                        // the outer form does not move.
+                        MouseArea {
+                            anchors.fill: parent
+                            acceptedButtons: Qt.NoButton
+                            onWheel: function(wheel) {
+                                const max = Math.max(0, notesScroll.contentHeight
+                                                         - notesScroll.height)
+                                const step = wheel.pixelDelta.y !== 0
+                                    ? wheel.pixelDelta.y
+                                    : wheel.angleDelta.y / 2
+                                notesScroll.contentY = Math.max(0, Math.min(
+                                    max, notesScroll.contentY - step))
+                                wheel.accepted = true
+                            }
+                        }
+                    }
+            }
+
             ColumnLayout {
                 Layout.fillWidth: true
                 spacing: 8
+                // Keep legacy linked pairs editable; new entries use the two
+                // explicit event/reminder flows instead of a third hybrid type.
+                visible: root.linkedTodoId.length > 0
 
-                KosCheckBox {
+                CalendarCheckBox {
                     id: linkTodoCheck
                     text: qsTr("Also show this event as a task in Todo")
                     Accessible.description: qsTr("The title and schedule stay synchronized")
@@ -719,140 +821,21 @@ KosWorkspaceDialog {
                     visible: linkTodoCheck.checked
                     spacing: 8
 
-                    Label { text: qsTr("Todo list"); color: AppTheme.mutedText; font.pixelSize: 11 }
-                    KosComboBox {
+                    Label { text: qsTr("Todo list") + ":"; Layout.preferredWidth: root.labelColumnWidth; color: AppTheme.mutedText; font.pixelSize: 13; font.weight: Font.Bold }
+                    CalendarComboBox {
                         id: todoListBox
                         Layout.fillWidth: true
-                        Layout.preferredHeight: fieldHeight
                         model: root.availableLists
                         textRole: "name"
                         Accessible.name: qsTr("Linked todo list")
                     }
-                    Label { text: qsTr("Priority"); color: AppTheme.mutedText; font.pixelSize: 11 }
-                    KosComboBox {
+                    Label { text: qsTr("Priority") + ":"; Layout.preferredWidth: root.labelColumnWidth; color: AppTheme.mutedText; font.pixelSize: 13; font.weight: Font.Bold }
+                    CalendarComboBox {
                         id: todoPriorityBox
                         Layout.preferredWidth: 110
-                        Layout.preferredHeight: fieldHeight
                         model: [qsTr("None"), qsTr("Low"), qsTr("Medium"),
                             qsTr("High")]
                         Accessible.name: qsTr("Linked todo priority")
-                    }
-                }
-            }
-
-            RowLayout {
-                Layout.fillWidth: true
-                spacing: 8
-
-                Label {
-                    text: qsTr("Repeat")
-                    Layout.preferredWidth: root.labelColumnWidth
-                    Layout.alignment: Qt.AlignVCenter
-                    color: AppTheme.mutedText
-                    font.pixelSize: 11
-                }
-                KosComboBox {
-                    id: recurrenceBox
-                    Layout.fillWidth: true
-                    Layout.preferredHeight: fieldHeight
-                    model: [qsTr("Does not repeat"), qsTr("Daily"), qsTr("Weekly"),
-                        qsTr("Monthly"), qsTr("Yearly")]
-                    Accessible.name: qsTr("Event recurrence")
-                }
-            }
-
-            RowLayout {
-                Layout.fillWidth: true
-                spacing: 8
-
-                Label {
-                    text: qsTr("Reminder")
-                    Layout.preferredWidth: root.labelColumnWidth
-                    Layout.alignment: Qt.AlignVCenter
-                    color: AppTheme.mutedText
-                    font.pixelSize: 11
-                }
-                KosComboBox {
-                    id: reminderBox
-                    Layout.fillWidth: true
-                    Layout.preferredHeight: fieldHeight
-                    model: [qsTr("None"), qsTr("At start"), qsTr("5 minutes before"),
-                        qsTr("15 minutes before"), qsTr("30 minutes before"),
-                        qsTr("1 hour before"), qsTr("1 day before")]
-                    Accessible.name: qsTr("Event reminder")
-                }
-            }
-
-            RowLayout {
-                Layout.fillWidth: true
-                spacing: 8
-
-                Label {
-                    text: qsTr("Notes")
-                    Layout.preferredWidth: root.labelColumnWidth
-                    Layout.alignment: Qt.AlignTop
-                    color: AppTheme.mutedText
-                    font.pixelSize: 11
-                }
-
-                // Canonical editable-notes scroller, same as the task editor.
-                // P02: fixed neutral frame around the notes viewport — same
-                // treatment as the task editor.
-                Item {
-                    id: notesFrame
-                    Layout.fillWidth: true
-                    Layout.preferredHeight: 96
-
-                    KosSurface {
-                        anchors.fill: parent
-                        radius: AppTheme.smallRadius
-                        fillColor: AppTheme.fieldSurface
-                        elevation: 0
-                        focused: descriptionField.activeFocus
-                    }
-
-                    Flickable {
-                        id: notesScroll
-                        anchors.fill: parent
-                        clip: true
-                        boundsBehavior: Flickable.StopAtBounds
-                        // Non-interactive (see task editor): wheel + scrollbar
-                        // scrolling, presses always reach the editor.
-                        interactive: false
-                        // Native TextArea.flickable attached integration — the
-                        // attached property is on the Flickable, its value is
-                        // the TextArea; native pointer/cursor/selection ownership.
-                        TextArea.flickable: KosTextArea {
-                            id: descriptionField
-                            width: notesScroll.width
-                            placeholderText: qsTr("Optional notes")
-                            wrapMode: TextEdit.Wrap
-                            Accessible.name: qsTr("Event notes")
-                            background: null
-                            activeFocusOnPress: true
-                            selectByMouse: true
-                        }
-
-                        ScrollBar.vertical: ScrollBar {}
-
-                        // Wheel scrolling for the non-interactive flickable —
-                        // same NoButton MouseArea pattern as the task editor:
-                        // wheel-only, clicks/drag-selection pass through, and
-                        // the outer form does not move.
-                        MouseArea {
-                            anchors.fill: parent
-                            acceptedButtons: Qt.NoButton
-                            onWheel: function(wheel) {
-                                const max = Math.max(0, notesScroll.contentHeight
-                                                         - notesScroll.height)
-                                const step = wheel.pixelDelta.y !== 0
-                                    ? wheel.pixelDelta.y
-                                    : wheel.angleDelta.y / 2
-                                notesScroll.contentY = Math.max(0, Math.min(
-                                    max, notesScroll.contentY - step))
-                                wheel.accepted = true
-                            }
-                        }
                     }
                 }
             }

@@ -34,10 +34,11 @@ Button {
     contentItem: Label {
         text: root.text
         font: root.font
-        color: !root.enabled
+        color: root.emphasized && root.lightLabel
+            ? AppTheme.whiteSeed
+            : !root.enabled
             ? AppTheme.withAlpha(AppTheme.text, 0.42)
-            : (root.emphasized ? (root.lightLabel ? AppTheme.whiteSeed
-                                                  : AppTheme.accentText)
+            : (root.emphasized ? AppTheme.accentText
                                : (root.destructive ? AppTheme.destructive : AppTheme.text))
         horizontalAlignment: Text.AlignHCenter
         verticalAlignment: Text.AlignVCenter

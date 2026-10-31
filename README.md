@@ -13,8 +13,14 @@ Liquid glass, a floating dock, and a workspace you can make your own.</p>
 <p align="center">
   <a href="#get-started">Get started</a> ·
   <a href="#the-desktop">Explore</a> ·
-  <a href="docs/Development.md">Develop</a> ·
-  <a href="README.zh-CN.md">简体中文</a>
+  <a href="docs/Development.md">Develop</a>
+</p>
+
+<p align="center">
+  <strong>English</strong> ·
+  <a href="README.zh-CN.md">简体中文</a> ·
+  <a href="README.ja.md">日本語</a> ·
+  <a href="README.es.md">Español</a>
 </p>
 
 <p align="center"><code>Plasma 6 / Wayland</code> &nbsp; <code>Quickshell 0.3.x</code> &nbsp; <code>Qt 6</code></p>

@@ -1,4 +1,5 @@
 import QtQuick
+import QtQuick.Effects
 import QtQuick.Dialogs
 import Quickshell
 import Quickshell.Wayland
@@ -268,6 +269,13 @@ PanelWindow {
     // the live persistence target; `displayedFolder` is only presentation.
     property var displayedFolder: null
     property bool folderDialogOpen: false
+    property real folderBlurProgress: folderDialogOpen ? 1 : 0
+    Behavior on folderBlurProgress {
+        NumberAnimation {
+            duration: 220
+            easing.type: Easing.OutCubic
+        }
+    }
     property bool folderRenameActive: false
     property string folderRenameText: ""
     property var editingApplication: null
@@ -1267,7 +1275,8 @@ PanelWindow {
                     // Keep a softer blur so more backdrop detail remains visible.
                     // Legacy compositors receive the panel's sigma-to-level adapter.
                     blurSigma: tonal ? -1 : Math.max(6,
-                        18 * AppearanceConfigService.effectiveLauncherBlur)
+                        18 * AppearanceConfigService.effectiveLauncherBlur,
+                        20 * root.folderBlurProgress)
                     scrimEnabled: AppearanceTokens.surface.usesBackdrop
                     // Adaptive tint, one preset above the Dock's subtle level.
                     scrimLevel: "transparent"
@@ -1364,6 +1373,16 @@ PanelWindow {
 
                     Item {
                         id: launcherContentArea
+                        objectName: "launcher-root-content"
+                        // Filter only the root page; folder contents are outside this subtree
+                        // and retain their sharp icons and labels.
+                        layer.enabled: root.displayedFolder !== null || root.folderBlurProgress > 0
+                        layer.effect: MultiEffect {
+                            blurEnabled: true
+                            blurMax: 32
+                            blur: root.folderBlurProgress
+                            autoPaddingEnabled: false
+                        }
                         anchors.horizontalCenter: parent.horizontalCenter
                         anchors.top: parent.top
                         anchors.bottom: parent.bottom
@@ -2232,27 +2251,16 @@ PanelWindow {
                     // membership/order mutations isolated from root ordering.
                     Item {
                         id: folderPage
+                        objectName: "launcher-folder-page"
                         anchors.fill: parent
                         z: 100
                         visible: root.displayedFolder !== null
                         enabled: root.folderDialogOpen && root.editingApplication === null
 
-                        Rectangle {
+                        MouseArea {
                             anchors.fill: parent
-                            // The backdrop dims as the folder opens, focusing attention
-                            // on the scattered icons, then lifts as they collapse back.
-                            color: Qt.rgba(0, 0, 0, 0.20)
-                            opacity: root.folderDialogOpen ? 1.0 : 0.0
-                            Behavior on opacity {
-                                NumberAnimation {
-                                    duration: 220
-                                    easing.type: Easing.OutCubic
-                                }
-                            }
-                            MouseArea {
-                                anchors.fill: parent
-                                onClicked: root.closeFolder()
-                            }
+                            // Dismiss without painting a dark overlay over the blur.
+                            onClicked: root.closeFolder()
                         }
 
                         Rectangle {

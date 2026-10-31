@@ -36,8 +36,48 @@ Pane {
     property var itemHour: function(item) { return 0 }
 
     signal dateSelected(date date)
-    signal itemActivated(var item)
-    signal createRequested(date date, int hour)
+    signal itemActivated(var item, Item anchor)
+    signal createRequested(date date, int hour, Item anchor)
+    signal rangeCreateRequested(date start, date end, Item anchor, rect selection)
+
+    property bool selectionEditorOpen: false
+    property int rangeColumn: -1
+    property int rangeOrigin: 0
+    property int rangeCursor: 0
+    property bool rangeDragging: false
+    property bool rangeSelected: false
+    property real dragCursorY: 0
+    readonly property int rangeStartMinute: Math.min(rangeOrigin, rangeCursor) * 15
+    readonly property int rangeEndMinute: (Math.max(rangeOrigin, rangeCursor) + 1) * 15
+    function clearSelection() { rangeDragging = false; rangeSelected = false; rangeColumn = -1 }
+    onSelectionEditorOpenChanged: if (!selectionEditorOpen && !rangeDragging) clearSelection()
+    function slotAt(y) { return Math.max(0, Math.min(95, Math.floor(y / hourHeight * 4))) }
+    function updateRangePointer(y) {
+        dragCursorY = y
+        rangeCursor = slotAt(timedGrid.mapFromItem(timelineScroll, 0, y).y)
+    }
+    function finishRange(anchor, row) {
+        rangeDragging = false
+        const date = dateForColumn(rangeColumn)
+        const start = new Date(date.getFullYear(), date.getMonth(), date.getDate(), 0, rangeStartMinute)
+        const end = new Date(date.getFullYear(), date.getMonth(), date.getDate(), 0, rangeEndMinute)
+        rangeCreateRequested(start, end, anchor,
+            Qt.rect(0, (rangeStartMinute/60-row)*hourHeight, anchor.width,
+                    (rangeEndMinute-rangeStartMinute)/60*hourHeight))
+    }
+    Timer {
+        interval: 30
+        repeat: true
+        running: root.rangeDragging
+        onTriggered: {
+            const view = timelineScroll.contentItem
+            const delta = root.dragCursorY < 28 ? -8 : root.dragCursorY > timelineScroll.height-28 ? 8 : 0
+            if (delta && view && view.contentY !== undefined) {
+                view.contentY = Math.max(0, Math.min(view.contentHeight-view.height, view.contentY+delta))
+                root.updateRangePointer(root.dragCursorY)
+            }
+        }
+    }
 
     // W01: one shared geometry source. The gutter and every day column take
     // their widths from here, so the header, all-day and timed sections all
@@ -60,7 +100,7 @@ Pane {
     // Our vertical factor against the reference is 1.33 (40px hour pitch vs
     // 27), so row 18 -> 24, gap 1 -> 1, and the 60px band -> 80px. The band
     // height is DERIVED from the row height so the two can never drift.
-    readonly property int allDayRowHeight: 24
+    readonly property int allDayRowHeight: 20
     readonly property int allDayRowGap: 1
     // A04's cap: the tallest band this view will draw before a column spends its
     // last slot on a `+N` remainder row.
@@ -131,7 +171,7 @@ Pane {
     // pre-blended to OPAQUE rather than laid down translucent. Must stay equal
     // to Root's `tahoe.contentPlane` (Main.qml:59) — both now read the same
     // AppTheme.neutralPlane token (M05), so they cannot drift.
-    readonly property color scheduleField: AppTheme.neutralPlane
+    readonly property color scheduleField: AppTheme.dark ? "#1C1C1E" : "#FFFFFF"
     // The backdrop is the field, or the field with the weekend tint already
     // composited into it. `weekendField` cannot be used directly: it is a
     // translucent white on the dark leg, and its alpha would be dropped.
@@ -186,11 +226,7 @@ Pane {
     // label rather than letting the two overlap.
     readonly property real nowLabelClearance: 14
 
-    // The scrolling schedule viewport, exposed read-only for the header's
-    // liquid-glass lens: the glass buttons sample a live, blurred strip of
-    // this item (G01/G05). Sampling the viewport rather than the contentItem
-    // means the strip is always the content currently visible under the
-    // header, and follows real scrolling without any contentY binding.
+    // Expose the scroll surface for application navigation and diagnostics.
     readonly property alias contentViewport: timelineScroll
 
     function dateForColumn(column) {
@@ -312,8 +348,10 @@ Pane {
     }
 
     function positionTimeline() {
-        if (timelineScroll.contentItem)
-            timelineScroll.contentItem.contentY = usefulStartHour() * root.hourHeight
+        const viewport = timelineScroll.contentItem
+        if (!viewport) return
+        const maximum = Math.max(0, viewport.contentHeight - viewport.height)
+        viewport.contentY = Math.min(maximum, usefulStartHour() * root.hourHeight)
     }
 
     // R091: the 450 ms delay used to be the ONLY path to a correct scroll, so
@@ -625,7 +663,7 @@ Pane {
                                 // chips composite twice and read 11% darker than the bar
                                 // (R108, 191 against a 220 fill). Over white the blended
                                 // value is identical to the old `withAlpha` fill (220).
-                                color: AppTheme.mix(root.allDayBackdrop(allDayColumn.columnDate),
+                                color: AppTheme.mix(root.allDayBackdrop(allDayColumn.index),
                                     root.itemColor(modelData),
                                     AppTheme.dark ? 0.32 : 0.17)
                                 opacity: root.itemCompleted(modelData) ? 0.5 : 1
@@ -667,19 +705,19 @@ Pane {
                                 // All-day items have no time of their own — the
                                 // name carries an explicit "All-day" marker.
                                 activeFocusOnTab: true
-                                Keys.onReturnPressed: root.itemActivated(allDayChip.modelData)
-                                Keys.onSpacePressed: root.itemActivated(allDayChip.modelData)
+                                Keys.onReturnPressed: root.itemActivated(allDayChip.modelData, allDayChip)
+                                Keys.onSpacePressed: root.itemActivated(allDayChip.modelData, allDayChip)
                                 Accessible.role: Accessible.ListItem
                                 Accessible.name: root.itemTitle(allDayChip.modelData)
                                     + " — " + qsTr("All-day")
-                                Accessible.onPressAction: root.itemActivated(allDayChip.modelData)
+                                Accessible.onPressAction: root.itemActivated(allDayChip.modelData, allDayChip)
                                 // Focus ring only: R078/R109 keep the resting chip
                                 // fill-only, so the border appears on focus alone.
                                 border.color: allDayChip.inkColor
                                 border.width: allDayChip.activeFocus ? 1 : 0
 
                                 TapHandler {
-                                    onTapped: root.itemActivated(allDayChip.modelData)
+                                    onTapped: root.itemActivated(allDayChip.modelData, allDayChip)
                                 }
                             }
                         }
@@ -718,12 +756,18 @@ Pane {
 
         ScrollView {
             id: timelineScroll
+            onHeightChanged: Qt.callLater(function() {
+                const viewport = timelineScroll.contentItem
+                if (viewport) viewport.contentY = Math.max(0, Math.min(viewport.contentY,
+                    viewport.contentHeight - viewport.height))
+            })
             Layout.fillWidth: true
             Layout.fillHeight: true
             clip: true
             ScrollBar.horizontal.policy: ScrollBar.AlwaysOff
 
             GridLayout {
+                id: timedGrid
                 objectName: "scheduleTimedGrid"
                 // The grid is exactly the viewport width — never wider. Pin
                 // implicitWidth to the same value so the ScrollView's
@@ -775,7 +819,7 @@ Pane {
                         Keys.onRightPressed: hourCell.moveFocus(1)
                         Keys.onReturnPressed: {
                             if (hourCell.interactive)
-                                root.createRequested(hourCell.columnDate, hourCell.rowIndex)
+                                root.createRequested(hourCell.columnDate, hourCell.rowIndex, hourCell)
                         }
                         Keys.onSpacePressed: {
                             if (hourCell.interactive)
@@ -789,7 +833,7 @@ Pane {
                             : ""
                         Accessible.onPressAction: {
                             if (hourCell.interactive)
-                                root.createRequested(hourCell.columnDate, hourCell.rowIndex)
+                                root.createRequested(hourCell.columnDate, hourCell.rowIndex, hourCell)
                         }
 
                         // W01: same shared gutter width, same dayColumnWidth
@@ -962,12 +1006,59 @@ Pane {
                                 color: root.gridLine
                             }
 
+                            Rectangle {
+                                x: 2
+                                width: parent.width - 4
+                                y: Math.max(0, (root.rangeStartMinute/60-hourCell.rowIndex)*root.hourHeight)
+                                height: Math.max(0, Math.min(root.hourHeight, (root.rangeEndMinute/60-hourCell.rowIndex)*root.hourHeight)-y)
+                                visible: root.rangeSelected && hourCell.columnIndex-1 === root.rangeColumn
+                                    && (root.rangeDragging || root.selectionEditorOpen)
+                                color: AppTheme.withAlpha(AppTheme.accent, 0.25)
+                                Label {
+                                    anchors.left: parent.left
+                                    anchors.leftMargin: 5
+                                    anchors.top: parent.top
+                                    visible: hourCell.rowIndex === Math.floor(root.rangeStartMinute/60) && parent.height >= 14
+                                    text: qsTr("New event")
+                                    color: AppTheme.text
+                                    font.pixelSize: 11
+                                    elide: Text.ElideRight
+                                    width: parent.width-10
+                                }
+                            }
                             MouseArea {
+                                id: rangeMouse
                                 anchors.fill: parent
-                                onClicked: root.dateSelected(hourCell.columnDate)
-                                onDoubleClicked: {
+                                preventStealing: true
+                                property real pressY: 0
+                                property bool moved: false
+                                onPressed: mouse => {
+                                    forceActiveFocus()
+                                    root.clearSelection()
+                                    moved = false
+                                    pressY = mouse.y
+                                    root.rangeColumn = hourCell.columnIndex-1
+                                    root.rangeOrigin = root.slotAt(mapToItem(timedGrid, 0, mouse.y).y)
+                                    root.rangeCursor = root.rangeOrigin
                                     root.dateSelected(hourCell.columnDate)
-                                    root.createRequested(hourCell.columnDate, hourCell.rowIndex)
+                                }
+                                onPositionChanged: mouse => {
+                                    if (!pressed) return
+                                    if (Math.abs(mouse.y-pressY) >= 4) moved = true
+                                    if (!moved) return
+                                    root.rangeDragging = true
+                                    root.rangeSelected = true
+                                    root.updateRangePointer(mapToItem(timelineScroll, 0, mouse.y).y)
+                                }
+                                onReleased: {
+                                    if (moved && root.rangeSelected) root.finishRange(hourCell, hourCell.rowIndex)
+                                }
+                                onCanceled: root.clearSelection()
+                                Keys.onEscapePressed: { root.clearSelection(); moved = false }
+                                onDoubleClicked: {
+                                    root.clearSelection()
+                                    root.dateSelected(hourCell.columnDate)
+                                    root.createRequested(hourCell.columnDate, hourCell.rowIndex, hourCell)
                                 }
                             }
 
@@ -1161,19 +1252,19 @@ Pane {
                                         // as the all-day chip; the name is title + time
                                         // (itemSecondary carries the formatted time).
                                         activeFocusOnTab: true
-                                        Keys.onReturnPressed: root.itemActivated(timedChip.modelData)
-                                        Keys.onSpacePressed: root.itemActivated(timedChip.modelData)
+                                        Keys.onReturnPressed: root.itemActivated(timedChip.modelData, timedChip)
+                                        Keys.onSpacePressed: root.itemActivated(timedChip.modelData, timedChip)
                                         Accessible.role: Accessible.ListItem
                                         Accessible.name: root.itemTitle(timedChip.modelData)
                                             + (root.itemSecondary(timedChip.modelData) !== ""
                                                ? ", " + root.itemSecondary(timedChip.modelData) : "")
-                                        Accessible.onPressAction: root.itemActivated(timedChip.modelData)
+                                        Accessible.onPressAction: root.itemActivated(timedChip.modelData, timedChip)
                                         // Focus ring only (R078: resting chip is fill-only).
                                         border.color: timedChip.inkColor
                                         border.width: timedChip.activeFocus ? 1 : 0
 
                                         TapHandler {
-                                            onTapped: root.itemActivated(timedChip.modelData)
+                                            onTapped: root.itemActivated(timedChip.modelData, timedChip)
                                         }
                                     }
                                 }

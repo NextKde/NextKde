@@ -9,6 +9,8 @@ ShellRoot {
     property int phase: 0
     property var appHighlights: []
     property var folderHighlights: []
+    property real closedBlurSigma: -1
+    property real launcherBlurSetting: -1
     AppLauncherWindow { id: launcher; outputAvailable: true }
     ControlCenterPanel { id: center }
     function check(value, message) {
@@ -22,6 +24,12 @@ ShellRoot {
         for (let i = 0; i < children.length; ++i)
             result = result.concat(namedItems(children[i], name))
         return result
+    }
+    function isDescendantOf(item, ancestor) {
+        for (let current = item; current; current = current.parent) {
+            if (current === ancestor) return true
+        }
+        return false
     }
     Timer {
         interval: 200
@@ -59,10 +67,23 @@ ShellRoot {
                     check(!appHighlights[1].enabled, "merge target keeps its blue indication")
                     launcher.folderMergeTargetKey = ""
                     check(appHighlights[1].parent.width === width, "selection must not alter tile layout")
+                    closedBlurSigma = JSON.parse(launcher.inspectGlass()).blurSigma
+                    launcherBlurSetting = AppearanceConfigService.effectiveLauncherBlur
+                    const rootPage = namedItems(launcher.contentItem, "launcher-root-content")[0]
+                    check(rootPage && !rootPage.layer.enabled, "closed folders do not retain a root-page texture")
                     launcher.displayedFolder = {id: "folder-test", name: "Folder", apps: launcher.applications}
                     launcher.openFolder = launcher.displayedFolder
                     launcher.folderDialogOpen = true
                 } else if (phase === 2) {
+                    if (launcher.folderBlurProgress < 1)
+                        return
+                    const rootPage = namedItems(launcher.contentItem, "launcher-root-content")[0]
+                    const folderPage = namedItems(launcher.contentItem, "launcher-folder-page")[0]
+                    check(rootPage.layer.enabled, "opening a folder filters the root page")
+                    check(folderPage && !isDescendantOf(folderPage, rootPage) && !folderPage.layer.enabled,
+                        "folder contents remain outside the blurred root-page layer")
+                    check(JSON.parse(launcher.inspectGlass()).blurSigma === Math.max(closedBlurSigma, 20),
+                        "open folder increases backdrop blur without reducing stronger user settings")
                     folderHighlights = namedItems(launcher.contentItem, "launcher-folder-selection-highlight")
                     check(folderHighlights.length === 2, "folder apps use the shared selection plate")
                     launcher.folderEditMode = true
@@ -72,17 +93,28 @@ ShellRoot {
                 } else if (phase === 3) {
                     check(launcher.glassSelectionEnabled && folderHighlights.every(h => h.enabled),
                         "Material folder apps use default glass selection")
-                    launcher.folderDialogOpen = false
-                    launcher.openFolder = null
-                    launcher.displayedFolder = null
-                    AppearanceConfigService.shellStyle = "windows12"
+                    AppearanceConfigService.shellStyle = "macos"
+                    launcher.closeFolder()
+                    check(launcher.displayedFolder !== null, "closing retains folder contents during the animation")
+                    check(namedItems(launcher.contentItem, "launcher-root-content")[0].layer.enabled,
+                        "closing retains the blurred layer until the folder transition completes")
                 } else if (phase === 4) {
+                    if (launcher.displayedFolder !== null || launcher.folderBlurProgress > 0)
+                        return
+                    check(!namedItems(launcher.contentItem, "launcher-root-content")[0].layer.enabled,
+                        "closing releases the root-page texture")
+                    check(JSON.parse(launcher.inspectGlass()).blurSigma === closedBlurSigma,
+                        "closing restores the original backdrop blur")
+                    check(AppearanceConfigService.effectiveLauncherBlur === launcherBlurSetting,
+                        "folder transitions do not change the user's blur setting")
+                    AppearanceConfigService.shellStyle = "windows12"
+                } else if (phase === 5) {
                     check(appHighlights.every(h => h.enabled), "Windows uses default glass selection")
                     AppearanceConfigService.shellStyle = "material"
-                } else if (phase === 5) {
+                } else if (phase === 6) {
                     check(appHighlights.every(h => h.enabled), "Material uses default glass selection")
                     AppearanceConfigService.shellStyle = "macos"
-                } else if (phase === 6) {
+                } else if (phase === 7) {
                     check(appHighlights[1].selected, "keyboard selection survives style changes")
                     const controls = namedItems(center.contentItem, "control-center-selection-highlight")
                     check(controls.length >= 10, "shipping control center wires main cards and navigation")

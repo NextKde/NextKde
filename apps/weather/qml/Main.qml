@@ -4,11 +4,14 @@ import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
 import QtQuick.Effects
-import QtQuick.Particles
 import Kos.Ui
 
 KosApplicationWindow {
     id: root
+    neutralTypography: true
+    // Compact initial window, rounded to the nearest golden-ratio height.
+    width: 1000
+    height: 618
 
     modernDesign: true
     visible: true
@@ -17,13 +20,23 @@ KosApplicationWindow {
     readonly property string temperatureUnit: backend.units === "imperial" ? "°F" : "°C"
     readonly property string speedUnit: backend.units === "imperial" ? qsTr("mph") : qsTr("km/h")
     readonly property string distanceUnit: backend.units === "imperial" ? qsTr("mi") : qsTr("km")
-    readonly property int weatherSidebarWidth: Math.round(307 * AppTheme.densityScale) // ref-main 干净行（y=47 无卡无胶囊）Pillow 实测侧栏→主区过渡 x≈211.5@814 ×1.4501≈307；旧 x205 实为卡片右缘（卡右缘与侧栏缘间有 ~6px 侧栏底色带，y=440 带色 (60,91,128) ≈ 侧栏底），2026-10-18 勘误；AppTheme.sidebarWidth(224) 系 shared 值（music 引用）不动
-    readonly property var upcomingHours: upcomingForecast()
-    // §3 control.compact：窄窗（root.compact <940，KosApplicationWindow）工具盘圆形钮收为 compact lg=30；
-    // 默认窗宽取 AppTheme.controlHeight（34），窄窗外逐字节等价
-    readonly property int trayControlHeight: root.compact
-        ? Math.round(30 * AppTheme.densityScale)
-        : AppTheme.controlHeight
+    // Compact desktop geometry, independent of weather-scene material.
+    readonly property int weatherSidebarWidth: 224
+    readonly property bool hasLocation: String(root.value(backend.location, "id", "")).length > 0
+    property string cityMenuId: ""
+    onSidebarExpandedChanged: {
+        if (!sidebarExpanded) {
+            citySearchPopup.close()
+            cityMenu.close()
+        }
+    }
+    readonly property int trayControlHeight: 28
+    readonly property color sidebarPlane: "#141416"
+    readonly property color sidebarControlFill: "#343436"
+    readonly property var upcomingHours: upcomingForecast(backend.hourly,
+        String(value(backend.current, "time", "")))
+    readonly property string dailyForecastTitle: backend.daily.length > 0
+        ? qsTr("%1-Day Forecast").arg(backend.daily.length) : qsTr("Daily Forecast")
     property string pendingLocationId: ""
     readonly property int currentWeatherCode: number(backend.current, "weatherCode", -1)
     readonly property bool currentIsDay: Boolean(value(backend.current, "isDay", true))
@@ -70,88 +83,47 @@ KosApplicationWindow {
     // 单帧 GUI+RT ≈11.4ms → 帧数直接线性决定 CPU。
     // R116（CPU 轮）：本档曾试降到 133ms(7.5fps)，同会话 A/B 实测 17.7→16.0 / 16.9→17.2
     // （两对均值 17.3→16.6，落在 loadavg 噪声内）→ **帧率已不是 10fps 以下的瓶颈，试值已回退**，
-    // 保持 100ms(10fps)；本轮真实改动见 sidebarBackdrop.hideSource。
+    // Keep the existing 100ms sky animation cadence.
     property double ambientSec: 0
     Timer {
         id: ambientTick
         interval: 100; repeat: true
         running: !AppTheme.reduceMotion
         onRunningChanged: if (!running) root.ambientSec = 0
-        onTriggered: root.ambientSec = root.ambientSec + 0.100
+        onTriggered: {
+            root.ambientSec = root.ambientSec + 0.100
+            if (root.sidebarBlurEnabled) root.refreshSidebarBackground()
+        }
     }
     onSkyPeriodChanged: root.refreshSkyStops()
-    // live:false 的采样源：天空色每帧变化（12s 过渡）时补一次捕获；静止时不捕获。
-    onSkyTopChanged: sidebarBackdrop.refresh()
-    onSkyMidChanged: sidebarBackdrop.refresh()
-    onSkyBottomChanged: sidebarBackdrop.refresh()
-    onWidthChanged: sidebarBackdrop.refresh()
-    onHeightChanged: sidebarBackdrop.refresh()
+    readonly property bool sidebarBlurEnabled: root.visible && root.sidebarExpanded
+        && !AppTheme.reduceTransparency && GraphicsInfo.api !== GraphicsInfo.Software
+    function refreshSidebarBackground() {
+        sidebarSkySource.scheduleUpdate()
+        sidebarBackdrop.refresh()
+    }
+    onWidthChanged: { refreshSidebarBackground(); Qt.callLater(root.positionCitySearch) }
+    onHeightChanged: { refreshSidebarBackground(); Qt.callLater(root.positionCitySearch) }
+    onSkyTopChanged: refreshSidebarBackground()
+    onSkyMidChanged: refreshSidebarBackground()
+    onSkyBottomChanged: refreshSidebarBackground()
+    onSidebarBlurEnabledChanged: refreshSidebarBackground()
     onCurrentWeatherCodeChanged: root.refreshSkyStops()
     Component.onCompleted: root.refreshSkyStops()
     readonly property color skyText: "#ffffff"
     // R140｜§2.10 正文对比 ≥4.5:1：原白 α0.66 在压深后的卡面（clear (81,107,141)）上仅 3.48:1。
     // 反解得 α0.86 = 4.54:1（最低一档 4.50:1），故 0.66 → 0.86。
     readonly property color skyTextMuted: Qt.rgba(1, 1, 1, 0.86)
-    // tile-cards 原生分辨率实测：卡头小 caps 与卡头 glyph 同浅蓝墨（SUNSET/UV 峰值 (146,205,255)/(147,206,255)；
-    // 白@α 反解三通道矛盾 R 0.33/B 0.91，证独立蓝墨非白@α），与 glyph 色 #90cbff 同源。
-    // R140｜§2.10：原 #90cbff 在压深卡面上仅 2.09–3.17:1（<4.5:1）。同色相向亮端推到 **#eef7ff**
-    // （本轮实拍卡面实测 4.69–5.31:1），保「浅蓝墨」族感不改色相。
-    readonly property color cardHeaderText: "#eef7ff"
-    // R143｜§2.10 侧栏底部对比收口（「仍差」②）：侧栏底是 `AppTheme.sidebarSurface` 玻璃面
-    // （shared token 不动）叠在压深后的天空上，实测 clear (107,135,163) / rain (126,139,149)
-    // / fog (105,140,172) / dawn (166,126,100) / dusk (173,122,99)。其上原白字仅 3.49–3.74:1
-    // （<4.5:1）。只改这**一列控件的墨色**，侧栏材质与 glass 预算不动。
-    // 侧栏底的实测合成色：`AppTheme.sidebarSurface`(α0.32/0.36) 叠在天空渐变的底端之上。
-    // 夜间天空接近 #0c1a33，同一深墨会掉到 ~1.2:1，故墨色按**底亮度自适应**：亮底用深墨
-    // （黑 α0.92，实测 clear 5.28 / dusk 5.39:1）、暗底回到白墨。切换点取两种墨的等对比交点
-    // **L=0.174**（α0.92 墨在灰底 L=0.174 处深/白同为 4.25:1，是该点两侧最大最小对比的最优解）。
-    // 注意：§2.6 规定「侧栏不随背景翻转」，本轮让侧栏**状态墨**翻转属 §2.10 与 §2.6 的冲突取舍，
-    // 已记入 LEDGER「外推待确认」。
-    readonly property color sidebarFooterBackdrop: {
-        const s = AppTheme.sidebar
-        const a = AppTheme.sidebarSurface.a
-        return Qt.rgba(s.r * a + root.skyBottom.r * (1 - a),
-                       s.g * a + root.skyBottom.g * (1 - a),
-                       s.b * a + root.skyBottom.b * (1 - a), 1)
-    }
-    readonly property bool sidebarFooterOnLight: AppTheme.relativeLuminance(sidebarFooterBackdrop) > 0.174
-    readonly property color sidebarControlInk: sidebarFooterOnLight
-        ? Qt.rgba(0, 0, 0, 0.92) : Qt.rgba(1, 1, 1, 0.92)
-    readonly property color sidebarControlInkDisabled: sidebarFooterOnLight
-        ? Qt.rgba(0, 0, 0, 0.35) : Qt.rgba(1, 1, 1, 0.38)
-    // 状态行（● Open-Meteo / Cached / Offline）：原直接复用 §3 系统色 positive #16875f /
-    // warning #b96800，在侧栏底上仅 1.21 / 1.12:1。亮底用同色相压深（mix 黑 t=0.8）→
-    // positive (5,27,19) / warning (37,21,0)，实测 4.74–5.13:1；暗底沿用系统色本身
-    // （#16875f / #b96800 在夜空底上 3.5–4.5:1，取 dark 变体 #30d58a / #ffb340 可达 8:1+）。
-    readonly property color sidebarStatusPositive: sidebarFooterOnLight
-        ? Qt.rgba(0.0182, 0.1070, 0.0745, 1) : "#30d58a"
-    readonly property color sidebarStatusWarning: sidebarFooterOnLight
-        ? Qt.rgba(0.1445, 0.0808, 0, 1) : "#ffb340"
-
-    // R144｜§2.10 侧栏搜索胶囊对比收口：胶囊底 = 白@0.15（LiquidTextField glassColor）叠在
-    // 侧栏背板顶部之上。实测胶囊内底 clear (127,137,152) / rain (148,162,172) / night (141,150,165)
-    // / dusk (149,149,167)，原 `textColor #ffffff` + `mutedTextColor 白@0.66`（占位符）在其上仅
-    // **2.40 / 1.95 / 2.14:1**（<4.5:1）。与 R143 侧栏底部同一取舍：墨色按底亮度自适应，
-    // 亮底用黑@0.92（实测 5.56–7.43:1）、占位符黑@0.78（实测 4.72–5.97:1），暗底回退白墨。
-    // 阈值沿用 R143 的等对比交点 L=0.174（见 sidebarFooterOnLight 注释）。
-    readonly property color sidebarBackdropTop: {
-        const s = AppTheme.sidebar
-        const a = AppTheme.sidebarSurface.a
-        return Qt.rgba(s.r * a + root.skyTop.r * (1 - a),
-                       s.g * a + root.skyTop.g * (1 - a),
-                       s.b * a + root.skyTop.b * (1 - a), 1)
-    }
-    readonly property color searchPillBackdrop: { // 玻璃胶囊白@0.15 叠在背板顶部
-        const b = sidebarBackdropTop
-        return Qt.rgba(0.15 + b.r * 0.85, 0.15 + b.g * 0.85, 0.15 + b.b * 0.85, 1)
-    }
-    readonly property bool searchFieldOnLight: AppTheme.relativeLuminance(searchPillBackdrop) > 0.174
-    readonly property color searchFieldInk: searchFieldOnLight
-        ? Qt.rgba(0, 0, 0, 0.92) : "#ffffff"
-    readonly property color searchFieldMutedInk: searchFieldOnLight
-        ? Qt.rgba(0, 0, 0, 0.78) : Qt.rgba(1, 1, 1, 0.66)
-    readonly property color searchFieldGlyphInk: searchFieldOnLight
-        ? Qt.rgba(0, 0, 0, 0.78) : Qt.rgba(1, 1, 1, 0.72)
+    // Neutral header ink retains the previous luminance on the sky-backed cards.
+    readonly property color cardHeaderText: "#F6F6F6"
+    // Light navigation text sits on the dark panel above the shared weather sky.
+    readonly property color sidebarControlInk: root.cardHeaderText
+    readonly property color sidebarControlInkDisabled: Qt.rgba(1, 1, 1, 0.45)
+    readonly property color sidebarStatusPositive: "#6FE3AC"
+    readonly property color sidebarStatusWarning: "#FFD18A"
+    readonly property color searchFieldInk: sidebarControlInk
+    readonly property color searchFieldMutedInk: root.skyTextMuted
+    readonly property color searchFieldGlyphInk: searchFieldMutedInk
 
     // 用户裁定 2026-10-23：卡片改**中性白玻璃**，禁止蓝色 tint 压在蓝色天空上（旧值
     // α0.30 的 (0,96,210) 深蓝玻璃在模糊蓝底上糊成一片）。白底 α0.14（夜景 0.16 不变），
@@ -159,51 +131,49 @@ KosApplicationWindow {
     readonly property color cardGlassRgb: Qt.rgba(1, 1, 1, 1.0)
     readonly property real cardGlassAlpha: root.currentIsDay ? 0.14 : 0.16
     readonly property real cardGlassAlphaHot: root.cardGlassAlpha + 0.02 // §4 卡片（L0）hover 只 +2% 亮度（原 0.36/0.21 系 +0.06 超标）
-    readonly property int tileRadius: 16 // ref-main UV 瓦角部拟合 r≈10.5@814 × 1.46 窗比 ≈ 15.3，LEDGER WIND 瓦 r≈11±1 同证；AppTheme.smallRadius(12) 是 shared 基础件不动，weather 内显式覆盖
+    readonly property int tileRadius: 12
 
-    // Liquid Glass circular button background (stage 3, style A) for the
-    // sky top bar. `selected` shows the tinted glass disc, unselected stays
-    // transparent until hover; `subtle` is the always-on action-button glass
-    // (same family as KosSidebarToggle: fill white@0.14 + border white@0.22).
-    // hover/press 按 §4.1 叠 hoverFill/pressFill（dark 变体白 .08/.12：
-    // 位于天空媒体之上、glyph 恒白，§2.6 随背景翻转与 ref-main 白色控件冲突处按 §9 以参考图为准）。
-    // subtle 底 0.14 与 selected 0.27 系 ref-main 拟合值（§9 参考图优先），不随本轮改。
-    component GlassCircleBg: Rectangle {
+    // Sidebar search and actions use liquid controls; floating panels have their own surface.
+    component GlassCircleBg: Item {
+        id: glass
         property bool selected: false
         property bool pressed: false
         property bool hovered: false
         property bool subtle: false
-        // §5 Focus：失焦或禁用即移除外环（绑定方以 activeFocus && enabled 驱动）
         property bool focused: false
-        readonly property bool filled: selected || pressed || hovered || subtle
-        radius: width / 2
-        color: subtle ? Qt.rgba(1, 1, 1, 0.14)
-            : (selected ? Qt.rgba(1, 1, 1, 0.27)
-               : (pressed ? Qt.rgba(1, 1, 1, 0.12)
-                  : (hovered ? Qt.rgba(1, 1, 1, 0.08) : "transparent")))
-        // 用户裁决 2026-10-23（R80 0.5）：内容区白描边一律去掉——盘钮填充层即材质，
-        // 不再叠 1px 白边（spec §2.7 亮边由顶部 specular 高光承担）。
-        Rectangle {
-            // specular top sheen, clipped to the circle
-            visible: parent.filled
+        LiquidCompactSurface {
             anchors.fill: parent
-            anchors.margins: 1
-            radius: width / 2
-            gradient: Gradient {
-                GradientStop { position: 0; color: Qt.rgba(1, 1, 1, 0.28) }
-                GradientStop { position: 0.22; color: Qt.rgba(1, 1, 1, 0) }
-            }
+            radius: height / 2
+            visible: glass.subtle && !AppTheme.reduceTransparency
+            backdrop: sidebarBackdrop
+            convexLens: true
+            fullHighlight: true
+            darkAppearance: true
+            tintColor: glass.selected ? root.sidebarControlFill : "#1F1F22"
+            tintStrength: glass.selected || glass.pressed ? .28 : glass.hovered ? .22 : .18
+            refractionStrength: 1.5
+            magnification: 1.012
+            reflectionStrength: glass.hovered ? .36 : .28
+            blurStrength: .45
+            readability: 0
+            edgeWidth: Math.min(12, height / 2)
         }
         Rectangle {
-            // §5 Focus：2px accent 外环，偏移 2（margins −4 扣描边 2 留白恰 2px，外环计入描边宽度）；
-            // 色走 LiquidStyle.focusColor（accent 无彩/明度越界回退 #3478f6，§3 color.focusFallback）
-            visible: parent.focused
             anchors.fill: parent
-            anchors.margins: -4
-            radius: parent.radius + 2
-            border.width: 2
-            border.color: LiquidStyle.focusColor(AppTheme.accent)
+            radius: height / 2
+            visible: !glass.subtle || AppTheme.reduceTransparency
+            color: glass.selected || glass.pressed ? "#4A4A4E"
+                : glass.hovered || glass.subtle ? root.sidebarControlFill : "transparent"
+        }
+        Rectangle {
+            anchors.fill: parent
+            anchors.margins: -2
+            radius: height / 2
             color: "transparent"
+            border.width: 2
+            border.color: AppTheme.focusRing
+            // Match the demo: liquid controls retain their own glass edge on focus.
+            visible: glass.focused && (!glass.subtle || AppTheme.reduceTransparency)
         }
     }
     readonly property bool nightClearSky:
@@ -324,11 +294,6 @@ KosApplicationWindow {
     function rainMagFor(vy) {
         return Math.sqrt(root.windDriftX * root.windDriftX + vy * vy)
     }
-    // 批 11｜雨粒子层已删除（雨＝静止水痕），雨密度池/计数属性随之移除。
-    readonly property int snowParticlePool: 320
-    readonly property int snowParticleCount:
-        Math.round(root.snowParticlePool * root.precipitationIntensity)
-
     // 批 2｜云层分层与参数化（用户 2026-10-24）：单层 → 前/中/后三层，
     // 速度比 前:中:后 = 1 : 0.55 : 0.3（前最快），透明度随深度递减（后层更淡）。
     // 云朵数量与不透明度接 cloudCover（0% 无云、100% 满覆盖），不再写死随机数。
@@ -767,19 +732,23 @@ KosApplicationWindow {
             ? String(isoDate) : AppTheme.formatDate(parsed, "dddd")
     }
 
-    function upcomingForecast() {
-        const result = []
-        const points = backend.hourly ?? []
-        const currentTime = String(value(backend.current, "time", ""))
-        let start = 0
-        if (currentTime.length > 0) {
-            while (start < points.length
-                   && String(value(points[start], "time", "")) < currentTime)
-                start++
-        }
-        for (let index = start; index < Math.min(points.length, start + 10); index++)
-            result.push(points[index])
-        return result
+    function upcomingForecast(points, currentTime) {
+        // Provider timestamps share the selected city's local timezone. Compare
+        // hour buckets so a 14:15 observation keeps the 14:00 forecast as Now.
+        // Keep every remaining point supplied by the service, across midnight.
+        const currentHour = String(currentTime ?? "").substring(0, 13)
+        return (points ?? []).filter(point => currentHour.length === 0
+            || String(value(point, "time", "")).substring(0, 13) >= currentHour)
+    }
+
+    function airQualityCategory(aqi) {
+        // US AQI bands match the service contract; translate at the UI boundary.
+        if (aqi <= 50) return qsTr("Good")
+        if (aqi <= 100) return qsTr("Moderate")
+        if (aqi <= 150) return qsTr("Unhealthy for Sensitive Groups")
+        if (aqi <= 200) return qsTr("Unhealthy")
+        if (aqi <= 300) return qsTr("Very Unhealthy")
+        return qsTr("Hazardous")
     }
 
     component WeatherMetric: Rectangle {
@@ -820,7 +789,7 @@ KosApplicationWindow {
                     text: metric.symbol
                     color: root.skyTextMuted
                     font.pixelSize: 17
-                    font.weight: Font.DemiBold
+                    font.weight: Font.Normal
                     Accessible.ignored: true
                 }
             }
@@ -835,7 +804,7 @@ KosApplicationWindow {
                     text: metric.labelText.toLocaleUpperCase(Qt.locale())
                     color: root.skyTextMuted
                     font.pixelSize: 10
-                    font.letterSpacing: 1.4
+                    font.letterSpacing: 0.5
                     elide: Text.ElideRight
                     Accessible.ignored: true
                 }
@@ -845,7 +814,7 @@ KosApplicationWindow {
                     text: metric.valueText
                     color: root.skyText
                     font.pixelSize: 15
-                    font.weight: Font.DemiBold
+                    font.weight: Font.Normal
                     elide: Text.ElideRight
                     Accessible.ignored: true
                 }
@@ -864,45 +833,357 @@ KosApplicationWindow {
         onTriggered: backend.searchLocations(locationField.text)
     }
 
-    KosSettingsDialog {
-        id: settingsDialog
-        settings: root.applicationSettings
-        applicationName: qsTr("Weather")
+    // Floating menus use one liquid panel; their rows retain ordinary hover fills.
+    component CityPopupSurface: LiquidCompactSurface {
+        id: popupPanel
+        backdrop: cityPopupBackdrop
+        radius: 10
+        darkAppearance: true
+        tintColor: "#141416"
+        tintStrength: 0.7
+        readability: 0.65
+        blurStrength: 0.35
+        convexLens: true
+        fullHighlight: true
+        refractionStrength: 1.5
+        magnification: 1.012
+        edgeWidth: 8
+        reflectionStrength: 0.28
+        layer.enabled: true
+        layer.effect: MultiEffect {
+            shadowEnabled: true
+            shadowColor: Qt.rgba(0, 0, 0, 0.28)
+            shadowBlur: 0.35
+            shadowVerticalOffset: 4
+        }
+        Rectangle {
+            anchors.fill: parent
+            visible: !popupPanel.sampling
+            color: "#29292C"
+            radius: popupPanel.radius
+            border.width: 1
+            border.color: Qt.rgba(1, 1, 1, 0.10)
+        }
     }
+
+    Menu {
+        id: cityMenu
+        objectName: "cityContextMenu"
+        popupType: Popup.Item
+        width: 164
+        padding: 5
+        background: CityPopupSurface { objectName: "cityMenuSurface" }
+        MenuItem {
+            id: removeCityAction
+            objectName: "removeCityAction"
+            text: qsTr("Remove city")
+            implicitHeight: 30
+            leftPadding: 9
+            rightPadding: 9
+            background: Rectangle {
+                radius: 5
+                color: removeCityAction.highlighted ? Qt.rgba(1, 1, 1, 0.09) : "transparent"
+            }
+            contentItem: RowLayout {
+                spacing: 9
+                opacity: removeCityAction.enabled ? 1 : 0.4
+                Canvas {
+                    Layout.preferredWidth: 14
+                    Layout.preferredHeight: 14
+                    onPaint: {
+                        const ctx = getContext("2d")
+                        ctx.clearRect(0, 0, width, height)
+                        ctx.strokeStyle = "#E3E3E6"
+                        ctx.lineWidth = 1.1
+                        ctx.lineCap = "round"
+                        ctx.lineJoin = "round"
+                        ctx.beginPath()
+                        ctx.moveTo(2, 3.5); ctx.lineTo(12, 3.5)
+                        ctx.moveTo(5, 3.5); ctx.lineTo(5, 1.5)
+                        ctx.lineTo(9, 1.5); ctx.lineTo(9, 3.5)
+                        ctx.moveTo(3.5, 3.5); ctx.lineTo(4, 12)
+                        ctx.lineTo(10, 12); ctx.lineTo(10.5, 3.5)
+                        ctx.moveTo(6, 6); ctx.lineTo(6, 10)
+                        ctx.moveTo(8, 6); ctx.lineTo(8, 10)
+                        ctx.stroke()
+                    }
+                }
+                Label {
+                    Layout.fillWidth: true
+                    text: removeCityAction.text
+                    color: "#E3E3E6"
+                    font.pixelSize: 12
+                    verticalAlignment: Text.AlignVCenter
+                }
+            }
+            enabled: backend.connected && backend.removingLocationId.length === 0
+            onTriggered: backend.removeLocation(root.cityMenuId)
+        }
+    }
+
 
     Shortcut {
         sequences: [StandardKey.Refresh]
         onActivated: backend.refresh()
     }
 
-    // 液态玻璃采样源（§2.2：玻璃采样 L0 内容、拒绝自捕获）。声明在不透明天空矩形
-    // 之前 → 被 sky 全覆盖、屏上不可见，仅供 LiquidBackdrop 捕获。内容 = 胶囊背后
-    // 的真实合成（天空副本 + 半透明侧栏面 sidebarSurface@α，侧栏本体系 α0.32/0.36
-    // 玻璃面，星空/云可透）；不含任何玻璃消费方。
-    Rectangle {
-        id: sidebarGlassUnderlay
-        width: sidebar.width
-        height: root.height
-        gradient: Gradient {
-            GradientStop { position: 0.0; color: root.skyTop }
-            GradientStop { position: 0.45; color: root.skyMid }
-            GradientStop { position: 1.0; color: root.skyBottom }
-        }
-        Rectangle { anchors.fill: parent; color: AppTheme.sidebarSurface }
+    function positionCitySearch() {
+        if (!citySearchPopup.parent) return
+        const point = locationField.mapToItem(citySearchPopup.parent, 0, locationField.height)
+        citySearchPopup.x = Math.max(8, point.x)
+        citySearchPopup.y = point.y + 6
     }
-    // CPU 轮（批 9 后续）：静采源只在天空色/尺寸变化时重捕获，不再 live:true 每帧
-    // 强制重绘（§1 L0 采样源、不参与玻璃预算）。12s 天空过渡期间 onSky*Changed 每帧
-    // 触发 refresh()，观感与 live 等价；静止时 0 次捕获。
+    function showCitySearch() {
+        citySearchPopup.open()
+        if (locationField.text.trim().length >= 2 && backend.searchStatus === "idle"
+            && !searchDebounce.running) searchDebounce.restart()
+    }
+    function chooseSearchCity(index) {
+        if (index < 0 || index >= backend.searchResults.length) return
+        const city = backend.searchResults[index]
+        searchDebounce.stop()
+        backend.selectLocation(city)
+        locationField.clear()
+        citySearchPopup.close()
+    }
+    function isSavedCity(city) {
+        return backend.locations.some(item => String(item.id) === String(city.id))
+    }
+    Popup {
+        id: citySearchPopup
+        objectName: "citySearchPopup"
+        popupType: Popup.Item
+        parent: Overlay.overlay
+        // Position on opening, after the sidebar layout has settled.
+        onAboutToShow: root.positionCitySearch()
+        width: Math.min(locationField.width, root.width - x - 12)
+        padding: 5
+        focus: false
+        modal: false
+        closePolicy: Popup.CloseOnEscape | Popup.CloseOnPressOutside
+        onClosed: { searchDebounce.stop(); backend.clearSearch() }
+        readonly property bool busy: searchDebounce.running || backend.searching
+        background: CityPopupSurface { objectName: "citySearchSurface" }
+        contentItem: ColumnLayout {
+            spacing: 0
+            RowLayout {
+                visible: citySearchPopup.busy
+                Layout.fillWidth: true
+                Layout.margins: 10
+                spacing: 8
+                WeatherLoadingIndicator {
+                    implicitWidth: 16; implicitHeight: 16
+                    color: "#B9B9BF"
+                    running: citySearchPopup.busy
+                    description: qsTr("Searching…")
+                }
+                Label {
+                    Layout.fillWidth: true
+                    text: qsTr("Searching…")
+                    color: "#CECED3"
+                    font.pixelSize: 12
+                }
+            }
+            ColumnLayout {
+                visible: !citySearchPopup.busy && backend.searchStatus !== "ready"
+                Layout.fillWidth: true
+                Layout.margins: 10
+                spacing: 5
+                Label {
+                    objectName: "citySearchMessage"
+                    Layout.fillWidth: true
+                    text: backend.searchStatus === "error" ? qsTr("Unable to search")
+                        : backend.searchStatus === "empty" ? qsTr("No matching cities")
+                        : qsTr("Search for a city")
+                    color: "#E3E3E6"
+                    font.pixelSize: 12
+                    wrapMode: Text.WordWrap
+                }
+                Label {
+                    Layout.fillWidth: true
+                    text: backend.searchStatus === "error" ? backend.searchError
+                        : backend.searchStatus === "empty" ? qsTr("Try a different name or spelling.")
+                        : qsTr("Enter at least 2 characters.")
+                    color: "#AEAEB5"
+                    font.pixelSize: 11
+                    wrapMode: Text.WordWrap
+                }
+                KosButton {
+                    id: retrySearch
+                    objectName: "retryCitySearch"
+                    Layout.topMargin: 3
+                    visible: backend.searchStatus === "error"
+                    text: qsTr("Retry search")
+                    implicitHeight: 26
+                    leftPadding: 10; rightPadding: 10
+                    topPadding: 3; bottomPadding: 3
+                    background: Rectangle {
+                        radius: 6
+                        color: retrySearch.down ? "#505054"
+                            : retrySearch.hovered || retrySearch.activeFocus ? "#454549" : "#3A3A3C"
+                    }
+                    contentItem: Label {
+                        text: retrySearch.text
+                        font.pixelSize: 11
+                        color: "#E3E3E6"
+                        horizontalAlignment: Text.AlignHCenter
+                        verticalAlignment: Text.AlignVCenter
+                    }
+                    onClicked: backend.searchLocations(locationField.text)
+                }
+            }
+            ListView {
+                id: searchResults
+                objectName: "citySearchResults"
+                Layout.fillWidth: true
+                Layout.preferredHeight: visible ? Math.min(contentHeight, 264) : 0
+                visible: !citySearchPopup.busy && backend.searchStatus === "ready"
+                clip: true
+                spacing: 0
+                currentIndex: -1
+                onCountChanged: currentIndex = -1
+                model: backend.searchResults
+                delegate: ItemDelegate {
+                    id: candidate
+                    required property var modelData
+                    required property int index
+                    readonly property bool saved: root.isSavedCity(modelData)
+                    readonly property bool emphasized: hovered || searchResults.currentIndex === index
+                    width: searchResults.width
+                    height: 46
+                    leftPadding: 10; rightPadding: 10
+                    topPadding: 6; bottomPadding: 6
+                    focusPolicy: Qt.NoFocus
+                    Accessible.name: root.locationName(modelData) + ", " + root.locationDetail(modelData)
+                        + (saved ? ", " + qsTr("Added") : "")
+                    onClicked: root.chooseSearchCity(index)
+                    background: Rectangle {
+                        radius: 6
+                        color: candidate.emphasized ? Qt.rgba(1, 1, 1, 0.09) : "transparent"
+                    }
+                    contentItem: RowLayout {
+                        spacing: 8
+                        ColumnLayout {
+                            Layout.fillWidth: true
+                            spacing: 2
+                            Label {
+                                Layout.fillWidth: true
+                                text: root.locationName(candidate.modelData)
+                                color: "#EDEDF0"; font.pixelSize: 12; elide: Text.ElideRight
+                            }
+                            Label {
+                                Layout.fillWidth: true
+                                text: root.locationDetail(candidate.modelData)
+                                color: "#AEAEB5"; font.pixelSize: 10; elide: Text.ElideRight
+                            }
+                        }
+                        Canvas {
+                            Layout.preferredWidth: 12
+                            Layout.preferredHeight: 12
+                            opacity: candidate.saved || candidate.emphasized ? 1 : 0
+                            property bool saved: candidate.saved
+                            onSavedChanged: requestPaint()
+                            onPaint: {
+                                const ctx = getContext("2d")
+                                ctx.clearRect(0, 0, width, height)
+                                ctx.strokeStyle = "#B9B9BF"
+                                ctx.lineWidth = 1.2
+                                ctx.lineCap = "round"
+                                ctx.lineJoin = "round"
+                                ctx.beginPath()
+                                if (saved) {
+                                    ctx.moveTo(2, 6); ctx.lineTo(5, 9); ctx.lineTo(10, 3)
+                                } else {
+                                    ctx.moveTo(2, 6); ctx.lineTo(10, 6)
+                                    ctx.moveTo(6, 2); ctx.lineTo(6, 10)
+                                }
+                                ctx.stroke()
+                            }
+                        }
+                    }
+                    ToolTip.visible: hovered
+                    ToolTip.delay: 800
+                    ToolTip.text: root.locationName(modelData) + " · " + root.locationDetail(modelData)
+                }
+                ScrollBar.vertical: ScrollBar {
+                    width: 4
+                    policy: ScrollBar.AsNeeded
+                }
+            }
+        }
+    }
+
+    // This subtree contains the real page only, never the popup overlay or its capture.
+    Item {
+        id: weatherContent
+        anchors.fill: parent
+    }
+    Item {
+        id: cityPopupUnderlay
+        anchors.fill: parent
+        visible: false
+        Loader {
+            anchors.fill: parent
+            active: cityPopupBackdrop.active
+            sourceComponent: MultiEffect {
+                source: weatherContent
+                blurEnabled: true
+                blur: 0.65
+                blurMax: 32
+                autoPaddingEnabled: false
+            }
+        }
+    }
+    LiquidBackdrop {
+        id: cityPopupBackdrop
+        objectName: "cityPopupBackdrop"
+        registerAsDefault: false
+        sourceItem: cityPopupUnderlay
+        active: root.visible && (citySearchPopup.visible || cityMenu.visible)
+            && !AppTheme.reduceTransparency && GraphicsInfo.api !== GraphicsInfo.Software
+        live: true
+    }
+
+    // Capture only the real in-window sky beneath the rectangular sidebar.
+    ShaderEffectSource {
+        id: sidebarSkySource
+        width: root.weatherSidebarWidth
+        height: root.height
+        sourceItem: root.sidebarBlurEnabled ? skyComposite : null
+        sourceRect: Qt.rect(0, 0, root.weatherSidebarWidth, root.height)
+        textureSize: Qt.size(root.weatherSidebarWidth, Math.max(1, root.height))
+        live: false
+        recursive: false
+        smooth: true
+        visible: false
+        Component.onCompleted: scheduleUpdate()
+    }
+    // Search and actions sample the panel background, excluding all foreground UI.
     LiquidBackdrop {
         id: sidebarBackdrop
-        sourceItem: sidebarGlassUnderlay
+        objectName: "weatherSidebarBackdrop"
+        registerAsDefault: false
+        active: root.sidebarBlurEnabled
+        sourceItem: sidebarBackground
         live: false
-        // R116（CPU 轮）：采样源在场景里被后面的不透明天空矩形整块覆盖，本就不上屏；
-        // 但 ShaderEffectSource 默认 hideSource:false 会让它每帧仍参与合成（整窗高渐变 +
-        // 侧栏面填充，纯过绘制）。置 true 后只留 1 次按需捕获，稳态每帧少两层全窗/全高绘制。
-        hideSource: true
         onAvailableChanged: refresh()
         Component.onCompleted: refresh()
+    }
+
+    // One background-only subtree: the number samples the actual weather
+    // composite, including rain/snow glass, without capturing foreground UI.
+    Item {
+        id: weatherAtmosphere
+        parent: weatherContent
+        z: 0
+        anchors.fill: parent
+    }
+    LiquidBackdrop {
+        id: temperatureBackdrop
+        sourceItem: weatherAtmosphere
+        registerAsDefault: false
+        active: root.visible && backend.ready && heroColumn.opacity > 0
+            && !AppTheme.reduceTransparency && GraphicsInfo.api !== GraphicsInfo.Software
     }
 
     // 批 12｜天空折射源容器：所有天空层（渐变 / 云 / 日晕 / 星空 / 月亮 / 洗层）
@@ -910,17 +1191,21 @@ KosApplicationWindow {
     // 属于 L0 天空材质，不入玻璃预算（§1/§2.2）。
     Item {
         id: skyComposite
+        parent: weatherAtmosphere
+        z: 0
         anchors.fill: parent
     }
 
     ShaderEffectSource {
         id: skyRefractionSource
         anchors.fill: parent
+        // Texture input only; a frozen non-rain capture must not cover the live sky.
+        visible: false
         sourceItem: skyComposite
-        // 雨天：源不直接上屏，只经水图折射后由下方 ShaderEffect 输出；
-        // 非雨天完全旁路（hideSource=false、live=false），成本为零。
-        hideSource: root.rainySky
-        live: root.rainySky
+        // Rain and snow sample the sky through their glass pass; other weather
+        // renders the sky directly and does not keep this capture live.
+        hideSource: root.rainySky || (root.snowySky && snowSystem.supported)
+        live: root.rainySky || (root.snowySky && snowSystem.supported)
         recursive: false
         wrapMode: ShaderEffectSource.ClampToEdge
     }
@@ -937,6 +1222,7 @@ KosApplicationWindow {
     // 已被证明可持续绘制。坐标与屏幕一致（x/y 移出窗口只影响合成，不影响 Canvas 坐标系）。
     Canvas {
         id: refractionMaskCanvas
+        objectName: "weatherRefractionMask"
         x: -4096
         y: -4096
         width: Math.max(1, root.width)
@@ -955,6 +1241,8 @@ KosApplicationWindow {
                         hourlyConditionsCard, dailyCard]
             for (var i = 0; i < list.length; i++) {
                 var it = list[i]
+                if (!it.visible || it.width <= 0 || it.height <= 0)
+                    continue
                 var p = it.mapToItem(root.contentItem, 0, 0)
                 ctx.fillRect(p.x, p.y, it.width, it.height)
             }
@@ -963,11 +1251,25 @@ KosApplicationWindow {
         // 首帧可能早于布局完成；1.2s 后补一次（一次性）。
         Timer { id: maskKick; interval: 1200; running: false; repeat: false
                 onTriggered: refractionMaskCanvas.requestPaint() }
-        // 滚动/数据变化会让卡片位置/高度改变，重画掩码。
+        // Repaint after layout settles, including every sidebar animation step.
+        // The mask covers current geometry, never the former sidebar/card bounds.
+        function invalidateGeometry() {
+            Qt.callLater(refractionMaskCanvas.requestPaint)
+        }
+        Connections {
+            target: sidebar
+            function onWidthChanged() { refractionMaskCanvas.invalidateGeometry() }
+            function onHeightChanged() { refractionMaskCanvas.invalidateGeometry() }
+            function onVisibleChanged() { refractionMaskCanvas.invalidateGeometry() }
+        }
         Connections {
             target: mainFlick
-            function onContentYChanged() { refractionMaskCanvas.requestPaint() }
-            function onContentHeightChanged() { refractionMaskCanvas.requestPaint() }
+            function onXChanged() { refractionMaskCanvas.invalidateGeometry() }
+            function onYChanged() { refractionMaskCanvas.invalidateGeometry() }
+            function onWidthChanged() { refractionMaskCanvas.invalidateGeometry() }
+            function onHeightChanged() { refractionMaskCanvas.invalidateGeometry() }
+            function onContentYChanged() { refractionMaskCanvas.invalidateGeometry() }
+            function onContentHeightChanged() { refractionMaskCanvas.invalidateGeometry() }
         }
     }
 
@@ -994,6 +1296,8 @@ KosApplicationWindow {
 
     ShaderEffect {
         id: rainRefraction
+        parent: weatherAtmosphere
+        z: 1
         anchors.fill: parent
         visible: root.rainySky
         vertexShader: Qt.resolvedUrl("shaders/rain_refract.vert.qsb")
@@ -1423,16 +1727,14 @@ KosApplicationWindow {
 
     // Static procedural cirrus band for the clear day sky (see
     // clearSkyClouds). Painted once per canvas resize, never animated.
-    // Clouds are kept to the right of the (opaque) sidebar so none of the
-    // band is wasted behind it.
+    // The continuous sky also supplies the sidebar’s ordinary background blur.
     Item {
         id: clearSkyCloudLayer
         parent: skyComposite
         anchors.fill: parent
         visible: root.dayClearSky
         clip: true
-        readonly property real cloudLeft:
-            root.compact ? AppTheme.compactSidebarWidth : root.weatherSidebarWidth
+        readonly property real cloudLeft: 0
 
         Repeater {
             model: root.clearSkyClouds
@@ -1665,8 +1967,7 @@ KosApplicationWindow {
         anchors.fill: parent
         visible: root.nightClearSky
         clip: true
-        readonly property real cloudLeft:
-            root.compact ? AppTheme.compactSidebarWidth : root.weatherSidebarWidth
+        readonly property real cloudLeft: 0
 
         Repeater {
             model: root.nightClearClouds
@@ -1715,8 +2016,7 @@ KosApplicationWindow {
         }
     }
 
-    // 批 7｜雨/雪迁移到 Qt Quick Particles；闪电仍留 Canvas（瞬态、开销可忽略）。
-    // 原 PrecipitationLayer 的雨/雪绘制路径与 33ms 循环 Timer 已整段删除（不留两套并存）。
+    // Lightning sits within the cloud deck; only transient strikes repaint it.
     component LightningLayer: Canvas {
         id: lightning
         anchors.fill: parent
@@ -1724,13 +2024,25 @@ KosApplicationWindow {
         // R119（CPU 轮）：非闪光时不再把这块「全窗透明 Canvas」留在场景里。
         // 原先 visible 只绑 thunderSky，雷暴场景下即使 flashAlpha=0（绝大多数时间）仍会
         // 每帧参与一次 1180×727 的 alpha 合成（透明但照样全窗光栅化）。改为仅在闪光期间可见。
-        visible: root.thunderSky && lightning.flashAlpha > 0
+        objectName: "weatherLightning"
+        readonly property bool animationEnabled: root.thunderSky && root.visible && !AppTheme.reduceMotion
+        visible: animationEnabled && flashAlpha > 0
         Accessible.ignored: true
+        onAnimationEnabledChanged: {
+            if (animationEnabled) {
+                lightningTimer.interval = 900 + Math.random() * 600
+            } else {
+                flashSeq.stop()
+                flashAlpha = 0
+            }
+        }
 
         property real flashAlpha: 0
         property var bolt: []
-        property var fork: []
-        property real strikeXRatio: 0.5
+        property var branches: []
+        property var glows: []
+        property bool showChannel: true
+        property int strikeCount: 0
 
         // 可见性打开时补一次重绘（flashAlpha 与 visible 同一拍变化，信号顺序不保证）；
         // flashAlpha 回 0 时元素立即隐藏，无需再清空。
@@ -1748,42 +2060,53 @@ KosApplicationWindow {
             ctx.stroke()
         }
 
+        function fracturedPath(start, end, displacement, depth) {
+            if (depth === 0) return [start, end]
+            const dx = end.x - start.x, dy = end.y - start.y
+            const len = Math.max(1, Math.hypot(dx, dy))
+            const offset = (Math.random() - .5) * displacement
+            const middle = { x: (start.x + end.x) / 2 - dy / len * offset,
+                             y: (start.y + end.y) / 2 + dx / len * offset }
+            const left = fracturedPath(start, middle, displacement * .52, depth - 1)
+            const right = fracturedPath(middle, end, displacement * .52, depth - 1)
+            return left.slice(0, -1).concat(right)
+        }
+
         function buildBolt() {
-            lightning.strikeXRatio = 0.12 + Math.random() * 0.76
-            const segments = 9 + Math.floor(Math.random() * 4)
-            // 落雷限制在云层带内（顶缘 3% → 62% 高度）
-            const boltTop = height * 0.03
-            const boltHeight = height * 0.59
-            const stepY = boltHeight / segments
-            const points = []
-            let x = width * lightning.strikeXRatio
-            let y = boltTop
-            for (let i = 0; i <= segments; i++) {
-                points.push({ x: x, y: y })
-                x += (Math.random() - 0.5) * 46
-                y += stepY * (0.8 + Math.random() * 0.4)
+            strikeCount++
+            showChannel = strikeCount % 4 !== 0
+            // Keep channels in the exposed sky on either side of the city heading.
+            const x = width * (Math.random() < .5 ? .34 + Math.random() * .08
+                                                   : .78 + Math.random() * .10)
+            const y = height * (.04 + Math.random() * .10)
+            const end = { x: x + (Math.random() - .5) * width * .18,
+                          y: Math.min(height * .37, y + height * (.22 + Math.random() * .10)) }
+            bolt = fracturedPath({x: x, y: y}, end, width * .09, 5)
+            const twigs = []
+            for (let i = 0; i < 5; i++) {
+                const index = 5 + Math.floor(Math.random() * 20)
+                const start = bolt[index]
+                const length = height * (.025 + Math.random() * .07)
+                twigs.push(fracturedPath(start,
+                    {x: start.x + (Math.random() < .5 ? -1 : 1) * length,
+                     y: start.y + length * (.5 + Math.random() * .6)}, length * .8, 3))
             }
-            lightning.bolt = points
-            const anchor = points[Math.floor(segments / 2)]
-            const dir = Math.random() < 0.5 ? -1 : 1
-            const forkPoints = [{ x: anchor.x, y: anchor.y }]
-            let fx = anchor.x
-            let fy = anchor.y
-            for (let i = 0; i < 4; i++) {
-                fx += dir * (14 + Math.random() * 26)
-                fy += stepY * (0.5 + Math.random() * 0.4)
-                forkPoints.push({ x: fx, y: fy })
-            }
-            lightning.fork = forkPoints
+            branches = twigs
+            glows = [
+                {x: x, y: y, r: width * .24, a: .46},
+                {x: x + width * .09, y: y + height * .08, r: width * .17, a: .32},
+                {x: x - width * .12, y: y + height * .06, r: width * .19, a: .24}
+            ]
         }
 
         function triggerStrike() {
-            lightning.buildBolt()
-            strikeOn.duration = 50 + Math.random() * 60
-            strikeOff.duration = 70 + Math.random() * 80
-            strikeHold.duration = 90 + Math.random() * 120
-            afterOn.duration = 50 + Math.random() * 70
-            afterOff.duration = 120 + Math.random() * 120
+            if (!animationEnabled) return
+            buildBolt()
+            strikeOn.duration = 16 + Math.random() * 18
+            strikeOff.duration = 100 + Math.random() * 50
+            strikeHold.duration = 35 + Math.random() * 85
+            afterOn.duration = 12 + Math.random() * 18
+            afterOff.duration = 160 + Math.random() * 100
             flashSeq.restart()
         }
 
@@ -1791,40 +2114,50 @@ KosApplicationWindow {
             id: lightningTimer
             interval: 900 + Math.random() * 600
             repeat: true
-            running: lightning.visible && !AppTheme.reduceMotion
+            // Scheduling must not depend on a flash already being visible.
+            running: lightning.animationEnabled
             onTriggered: {
-                lightningTimer.interval = 3500 + Math.random() * 5000
+                lightningTimer.interval = 3000 + Math.random() * 3000
                 lightning.triggerStrike()
             }
         }
         SequentialAnimation {
             id: flashSeq
             NumberAnimation { id: strikeOn; target: lightning; property: "flashAlpha"; to: 0.95 }
-            NumberAnimation { id: strikeOff; target: lightning; property: "flashAlpha"; to: 0.12 }
+            PauseAnimation { duration: 55 }
+            NumberAnimation { id: strikeOff; target: lightning; property: "flashAlpha"; to: 0.02 }
             PauseAnimation { id: strikeHold }
-            NumberAnimation { id: afterOn; target: lightning; property: "flashAlpha"; to: 0.45 }
+            NumberAnimation { id: afterOn; target: lightning; property: "flashAlpha"; to: 0.78 }
+            PauseAnimation { duration: 40 }
             NumberAnimation { id: afterOff; target: lightning; property: "flashAlpha"; to: 0 }
         }
 
         function paintLightning(ctx) {
-            if (!lightning.visible || lightning.flashAlpha <= 0) return
-            if (!lightning.bolt || lightning.bolt.length < 2) return
-            ctx.globalAlpha = lightning.flashAlpha
-            ctx.fillStyle = "rgba(255,255,255,0.06)"
-            ctx.fillRect(0, 0, width, height)
-            const mid = lightning.bolt[Math.floor(lightning.bolt.length / 2)]
-            const glowR = Math.min(width, height) * 0.55
-            const glow = ctx.createRadialGradient(mid.x, mid.y, 0, mid.x, mid.y, glowR)
-            glow.addColorStop(0, "rgba(226,240,255,0.42)")
-            glow.addColorStop(0.35, "rgba(200,225,255,0.16)")
-            glow.addColorStop(1, "rgba(200,225,255,0)")
-            ctx.fillStyle = glow
-            ctx.fillRect(0, 0, width, height)
-            lightning.drawPolyline(ctx, lightning.bolt, 11, "rgba(190,220,255,0.18)")
-            lightning.drawPolyline(ctx, lightning.bolt, 4.5, "rgba(235,245,255,0.55)")
-            lightning.drawPolyline(ctx, lightning.bolt, 1.8, "rgba(255,255,255,0.95)")
-            lightning.drawPolyline(ctx, lightning.fork, 4, "rgba(220,235,255,0.35)")
-            lightning.drawPolyline(ctx, lightning.fork, 1.4, "rgba(255,255,255,0.8)")
+            if (!visible || flashAlpha <= 0 || bolt.length < 2) return
+            ctx.globalAlpha = flashAlpha
+            // Local scattered light illuminates the rear clouds; the front cloud veil
+            // still softens the channel without hiding it behind all three layers.
+            for (let i = 0; i < glows.length; i++) {
+                const g = glows[i]
+                const gradient = ctx.createRadialGradient(g.x, g.y, 0, g.x, g.y, g.r)
+                gradient.addColorStop(0, "rgba(226,231,255," + g.a + ")")
+                gradient.addColorStop(.28, "rgba(204,214,246," + g.a * .65 + ")")
+                gradient.addColorStop(1, "rgba(184,200,235,0)")
+                ctx.fillStyle = gradient
+                ctx.fillRect(g.x - g.r, g.y - g.r, g.r * 2, g.r * 2)
+            }
+            if (!showChannel) return
+            ctx.globalAlpha = flashAlpha
+            drawPolyline(ctx, bolt, 8, "rgba(204,216,255,0.10)")
+            drawPolyline(ctx, bolt, 3.5, "rgba(219,228,255,0.30)")
+            // An irregular thin channel, tapering towards its tip.
+            for (let i = 1; i < bolt.length; i++) {
+                drawPolyline(ctx, [bolt[i-1], bolt[i]], 1.65 - .9 * i / bolt.length,
+                             "rgba(244,245,255,0.98)")
+            }
+            for (let i = 0; i < branches.length; i++) {
+                drawPolyline(ctx, branches[i], .75, "rgba(222,231,255,0.65)")
+            }
         }
 
         onPaint: {
@@ -1838,48 +2171,24 @@ KosApplicationWindow {
 
     LightningLayer {
         id: lightningLayer
+        // Between the middle and front clouds, still sampled by the rain glass.
+        parent: skyComposite
+        z: 0.5
     }
 
-    // 批 11｜雨＝静止水痕：删除下落雨粒子层（原三层共 30 颗，批 9 定值）。
-    // 裁决：雨点贴在玻璃上不动，只允许 12–20 颗沿纯垂直方向缓慢下滑（见 waterMapCanvas.advanceSlides），
-    // 天上下落的雨丝不再作为视觉主体，全部关闭。雪与闪电保留（雪不是雨）。
-    // 批 7｜雪 = ParticleSystem + Emitter + Wander + ImageParticle（8×8 柔边圆 sprite）。
-    ParticleSystem {
+    // Snow combines depth-separated airborne flakes with wet clumps on the glass.
+    SnowGlass {
         id: snowSystem
+        objectName: "weatherSnow"
+        parent: weatherAtmosphere
+        z: 2
         anchors.fill: parent
         visible: root.snowySky
-        running: root.snowySky && !AppTheme.reduceMotion
-
-        Emitter {
-            system: snowSystem
-            anchors.fill: parent
-            emitRate: root.snowParticleCount / 2
-            lifeSpan: 2000
-            lifeSpanVariation: 0
-            size: 3.5
-            sizeVariation: 1.5
-            velocity: AngleDirection {
-                angle: root.rainAngleFor(99)
-                angleVariation: 3
-                magnitude: root.rainMagFor(99) * 0.5
-            }
-        }
-        Wander {
-            system: snowSystem
-            anchors.fill: parent
-            xVariance: 22
-            yVariance: 0
-            pace: 0.6
-        }
-        ImageParticle {
-            system: snowSystem
-            source: "particles/snow.png"
-            color: root.currentIsDay ? "#ffffff" : "#cfe0ff"
-            alpha: root.currentIsDay ? 0.6 : 0.42
-            alphaVariation: 0.25
-            smooth: true
-            entryEffect: ImageParticle.None
-        }
+        motionEnabled: root.visible
+        skySource: skyRefractionSource
+        maskSource: refractionMaskSource
+        wind: Math.max(-30, Math.min(30, root.windDriftX * .2))
+        density: root.precipitationIntensity
     }
 
     // 批 2｜云层三层（后/中/前，z 序由声明顺序决定：先声明者在下）。
@@ -1901,7 +2210,7 @@ KosApplicationWindow {
         // 「云带/亮边」上被看出来；而雨天 `cloudySky=false` 时三层云全部隐藏，
         // 天空是平滑渐变，水珠折射无可辨认的背景结构（R126/R128/R129 同一阻塞）。
         // 云层本身属 L0 天空材质（非玻璃，§1/§2.2 预算不变），雨天显示不改变层级。
-        visible: root.cloudySky || root.rainySky
+        visible: root.cloudySky || root.rainySky || root.snowySky
         clip: true
         onVisibleChanged: cloudTexture.requestPaint()
 
@@ -1929,7 +2238,7 @@ KosApplicationWindow {
                 target: root
                 function onAmbientSecChanged() {
                     // R130：雨天云层同样可见（折射需要结构），故漂移门控与 visible 一致。
-                    if ((!root.cloudySky && !root.rainySky) || AppTheme.reduceMotion) {
+                    if ((!root.cloudySky && !root.rainySky && !root.snowySky) || AppTheme.reduceMotion) {
                         cloudTexture.lastPanMs = 0
                         return
                     }
@@ -2006,7 +2315,7 @@ KosApplicationWindow {
 
     CloudLayer { id: cloudBackLayer; parent: skyComposite; clouds: root.cloudFieldBack; driftMs: root.cloudLayers[0].driftMs }
     CloudLayer { id: cloudMidLayer; parent: skyComposite; clouds: root.cloudFieldMid; driftMs: root.cloudLayers[1].driftMs }
-    CloudLayer { id: cloudFrontLayer; parent: skyComposite; clouds: root.cloudFieldFront; driftMs: root.cloudLayers[2].driftMs }
+    CloudLayer { id: cloudFrontLayer; parent: skyComposite; z: 1; clouds: root.cloudFieldFront; driftMs: root.cloudLayers[2].driftMs }
 
     // 批 4｜大气洗层（雾/雾凇/沙尘）：位于云层之上、闪电之下，蒙住整个天空。
     // 纯静态半透填充，无动画。
@@ -2032,67 +2341,127 @@ KosApplicationWindow {
     // 第二次全屏 clearRect/第二次纹理上传。
 
     RowLayout {
+        parent: weatherContent
+        z: 4
         anchors.fill: parent
         anchors.margins: 0
-        // 侧栏与内容列之间不加缝，内容左缝由内容列 Layout.margins: 20 统一提供（否则左缝 8+20=28 违反四周 20px 硬约定；参考 LEDGER 0g）。
+        // One continuous sidebar meets the window edges and the content divider.
         spacing: 0
 
         KosSidebar {
             id: sidebar
             objectName: "applicationSidebar"
             expanded: root.sidebarExpanded
-            expandedWidth: root.compact ? AppTheme.compactSidebarWidth : root.weatherSidebarWidth
+            expandedWidth: root.weatherSidebarWidth
             floating: false
-            // CPU 轮（R118）：侧栏子树（玻璃胶囊 + 4 张城市卡的天空缩略 Canvas/文字/软影）
-            // 全是静态内容，只有展开/收起宽度动画与搜索框输字会变；但环境节拍
-            // （云漂移 / hero 呼吸，100ms）每帧触发整窗重合成 → 侧栏被逐帧重新光栅化。
-            // layer.enabled 缓存为纹理后稳态每帧只 blit；内容/尺寸/主题变化时才重建。
-            layer.enabled: true
+            surfaceColor: "transparent"
+
+            Item {
+                id: sidebarBackground
+                anchors.fill: parent
+                // Composite only the background at 80%; text stays fully opaque.
+                opacity: root.sidebarBlurEnabled ? 0.8 : 1
+                layer.enabled: root.sidebarBlurEnabled
+                clip: true
+                MultiEffect {
+                    anchors.fill: parent
+                    source: sidebarSkySource
+                    visible: root.sidebarBlurEnabled
+                    blurEnabled: root.sidebarBlurEnabled
+                    blur: 0.35
+                    blurMax: 64
+                    autoPaddingEnabled: false
+                }
+                // A dark ordinary panel sits above the sky; only controls use liquid optics.
+                Rectangle {
+                    anchors.fill: parent
+                    color: root.sidebarPlane
+                    // Tint density is independent of the background group's 0.8 opacity.
+                    opacity: root.sidebarBlurEnabled ? 0.60 : 1
+                }
+            }
 
             ColumnLayout {
                 anchors.fill: parent
                 // ref-main Pillow 实测：卡左缘 x10、卡右缘 x205.5、侧栏右缘 x211.5@814 → 内缩左 14.5 / 右 9.4@1180（×1.4501），胶囊右缘与卡右缘同线（同用右内缩）；旧对称 18 系未校准值
-                anchors.leftMargin: 15
-                anchors.rightMargin: 9
-                spacing: 10
+                anchors.leftMargin: 12
+                anchors.rightMargin: 12
+                anchors.bottomMargin: 12
+                spacing: 8
 
                 Item {
-                    Layout.topMargin: 36
+                    Layout.topMargin: 42
                     Layout.fillWidth: true
                     Layout.minimumWidth: 0
-                    Layout.preferredHeight: 30
+                    Layout.preferredHeight: 28
 
-                    LiquidTextField {
+                    TextField {
                         id: locationField
+                        objectName: "citySearchField"
                         anchors.fill: parent
-                        leftPadding: 34
-                        cornerRadius: 15
-                        // 用户裁决 2026-10-23（R80 #0）：直用 shared 新液态玻璃组件
-                        // LiquidTextField（不再经 KosTextField 包装），darkAppearance 走
-                        // 组件默认绑定 AppTheme.dark（§2.6 小控件随主题翻转，dark 探针取证）。
-                        // 真采样：backdrop 指向侧栏背板注册的 LiquidBackdrop，LiquidSurface
-                        // 走 shader（折射/放大/反射渐变/rim）而非 fallback 平涂。
-                        // 填充/描边沿用 ref-main 实测拟合值：填充白@0.15、rim 白@0.30。
-                        backdrop: sidebarBackdrop
-                        liquidFinish: true
-                        liquidStrength: 0.2
-                        glassColor: Qt.rgba(1, 1, 1, 0.15)
-                        outlineColor: Qt.rgba(1, 1, 1, 0.30)
-                        // R144｜§2.10：原 textColor #ffffff / mutedTextColor 白@0.66 在胶囊底上
-                        // 仅 2.40 / 1.95:1。改为按底亮度自适应的 label 墨（亮底黑@0.92 / 黑@0.78）。
-                        textColor: root.searchFieldInk
-                        mutedTextColor: root.searchFieldMutedInk
+                        leftPadding: 30
+                        rightPadding: 28
+                        topPadding: 4
+                        bottomPadding: 4
+                        verticalAlignment: TextInput.AlignVCenter
+                        font.pixelSize: 11
+                        selectByMouse: true
+                        color: root.searchFieldInk
+                        placeholderTextColor: root.searchFieldMutedInk
+                        background: GlassCircleBg {
+                            subtle: true
+                            hovered: locationField.hovered
+                            focused: locationField.activeFocus
+                        }
                         placeholderText: qsTr("Search")
                         Accessible.name: qsTr("Location search")
-                        onAccepted: backend.searchLocations(text)
-                        onTextChanged: {
-                            if (text.trim().length >= 2)
-                                searchDebounce.restart()
-                            else {
+                        onAccepted: {
+                            if (citySearchPopup.visible && searchResults.currentIndex >= 0
+                                && backend.searchStatus === "ready") {
+                                root.chooseSearchCity(searchResults.currentIndex)
+                            } else {
                                 searchDebounce.stop()
-                                backend.clearSearch()
+                                backend.searchLocations(text)
+                                citySearchPopup.open()
                             }
                         }
+                        onActiveFocusChanged: if (activeFocus) root.showCitySearch()
+                        onTextChanged: {
+                            searchDebounce.stop()
+                            backend.clearSearch()
+                            searchResults.currentIndex = -1
+                            if (activeFocus) citySearchPopup.open()
+                            if (text.trim().length >= 2) searchDebounce.restart()
+                        }
+                        Keys.onDownPressed: {
+                            citySearchPopup.open()
+                            if (searchResults.count === 0) return
+                            searchResults.currentIndex = Math.min(searchResults.count - 1, searchResults.currentIndex + 1)
+                            searchResults.positionViewAtIndex(searchResults.currentIndex, ListView.Contain)
+                        }
+                        Keys.onUpPressed: {
+                            if (searchResults.count === 0) return
+                            searchResults.currentIndex = Math.max(0, searchResults.currentIndex - 1)
+                            searchResults.positionViewAtIndex(searchResults.currentIndex, ListView.Contain)
+                        }
+                        Keys.onEscapePressed: citySearchPopup.close()
+                        TapHandler { onTapped: root.showCitySearch() }
+                    }
+                    KosToolButton {
+                        anchors.right: parent.right
+                        anchors.verticalCenter: parent.verticalCenter
+                        width: 26; height: 26
+                        padding: 0
+                        visible: locationField.text.length > 0
+                        text: "×"
+                        focusPolicy: Qt.NoFocus
+                        Accessible.name: qsTr("Clear search")
+                        background: Item {}
+                        contentItem: Label {
+                            text: "×"; color: root.searchFieldMutedInk
+                            horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter
+                        }
+                        onClicked: { locationField.clear(); locationField.forceActiveFocus() }
                     }
 
                     // 搜索放大镜：手绘确定性渲染，替代字体 ⌕ glyph（该字形
@@ -2128,59 +2497,6 @@ KosApplicationWindow {
                     }
                 }
 
-                BusyIndicator {
-                    Layout.alignment: Qt.AlignHCenter
-                    Layout.preferredWidth: 26
-                    Layout.preferredHeight: 26
-                    running: backend.searching
-                    visible: running
-                }
-
-                ListView {
-                    id: searchResults
-                    Layout.fillWidth: true
-                    Layout.minimumWidth: 0
-                    implicitWidth: 0
-                    Layout.preferredHeight: visible ? Math.min(contentHeight, 220) : 0
-                    visible: backend.searchResults.length > 0
-                    clip: true
-                    spacing: 3
-                    model: backend.searchResults
-
-                    delegate: KosItemDelegate {
-                        id: searchResult
-
-                        required property var modelData
-                        width: searchResults.width
-                        implicitHeight: 52
-                        Accessible.name: root.locationName(modelData)
-                        onClicked: {
-                            backend.selectLocation(modelData)
-                            locationField.clear()
-                        }
-
-                        contentItem: Column {
-                            spacing: 2
-
-                            Label {
-                                width: parent.width
-                                text: root.locationName(searchResult.modelData)
-                                color: AppTheme.text
-                                elide: Text.ElideRight
-                            }
-
-                            Label {
-                                width: parent.width
-                                text: root.locationDetail(searchResult.modelData)
-                                color: AppTheme.mutedText
-                                font.pixelSize: 11
-                                elide: Text.ElideRight
-                            }
-                        }
-                    }
-                    KosKineticScroll { flickable: searchResults }
-                }
-
                 Item {
                     id: savedLocationsWrapper
                     Layout.fillWidth: true
@@ -2192,11 +2508,12 @@ KosApplicationWindow {
                         id: savedLocations
                         anchors.fill: parent
                         clip: true
-                        spacing: 9 // ref-main 卡缝 ~6@814 × 1.4503 ≈ 9
+                        spacing: 8
                         model: backend.locations
 
                         delegate: KosItemDelegate {
                             id: savedLocation
+                            objectName: "savedCity_" + String(modelData.id)
 
                             required property var modelData
                             required property int index
@@ -2213,17 +2530,32 @@ KosApplicationWindow {
                                 savedLocation.summary, "tempLow", Number.NaN)
 
                             width: savedLocations.width
-                            // ref-main 直测卡高 ~75@814 × 1.4503 ≈ 109；取 106 与卡缝 9 保持 pitch ~115（旧 74 系 tile-sidebar ÷2.1 旧口径，侧栏校准 297 后未跟改）
-                            implicitHeight: 106
-                            topPadding: 5
-                            bottomPadding: 5
+                            // Three compact information lines within a fixed city row.
+                            implicitHeight: 80
+                            topPadding: 8
+                            bottomPadding: 8
                             highlighted: String(root.value(modelData, "id", ""))
                                 === String(root.value(backend.location, "id", ""))
+                            Accessible.selected: highlighted
                             Accessible.name: savedLocation.summary
                                 ? root.locationName(modelData) + ", "
                                   + root.conditionText(savedLocation.summary.weatherCode)
                                 : root.locationName(modelData)
+                            enabled: backend.removingLocationId !== String(modelData.id)
+                            opacity: enabled ? 1 : 0.5
                             onClicked: backend.selectLocation(modelData)
+                            Keys.onDeletePressed: backend.removeLocation(String(modelData.id))
+                            TapHandler {
+                                acceptedButtons: Qt.RightButton
+                                onTapped: {
+                                    root.cityMenuId = String(savedLocation.modelData.id)
+                                    cityMenu.popup()
+                                }
+                            }
+                            onPressAndHold: {
+                                root.cityMenuId = String(modelData.id)
+                                cityMenu.popup()
+                            }
 
                             background: Rectangle {
                                 // ref-main 卡 3 角剖面实测 r≈7-8@814 ×1.4503 ≈ 10-12@1180，12 在误差带内；勿改为 16（旧 tile 换算链已勘误，见 LEDGER 0f）
@@ -2290,12 +2622,23 @@ KosApplicationWindow {
                                 }
                             }
 
+                            Rectangle {
+                                anchors.left: parent.left
+                                anchors.top: parent.top
+                                anchors.bottom: parent.bottom
+                                anchors.topMargin: 12
+                                anchors.bottomMargin: 12
+                                width: 3
+                                radius: 1.5
+                                color: "white"
+                                visible: savedLocation.highlighted
+                            }
                             contentItem: Item {
                                 id: cardContent
 
                                 RowLayout {
                                     id: cardTop
-                                    height: 30
+                                    height: 26
                                     anchors {
                                         left: parent.left
                                         right: parent.right
@@ -2307,25 +2650,56 @@ KosApplicationWindow {
                                         Layout.fillWidth: true
                                         text: root.locationName(savedLocation.modelData)
                                         color: "#ffffff"
-                                        font.pixelSize: 17
-                                        font.weight: Font.DemiBold
+                                        font.pixelSize: 13
+                                        font.weight: Font.Medium
                                         lineHeight: 0.85
                                         lineHeightMode: Text.ProportionalHeight
                                         elide: Text.ElideRight
-                                        style: Text.Raised
-                                        styleColor: Qt.rgba(0, 0, 0, 0.22)
+
                                     }
 
                                     Label {
                                         text: savedLocation.summary
                                             ? Math.round(savedLocation.summary.temperature) + "°" : "—"
                                         color: "#ffffff"
-                                        font.pixelSize: 30
+                                        font.pixelSize: 26
                                         font.weight: Font.Light
                                         lineHeight: 0.85
                                         lineHeightMode: Text.ProportionalHeight
-                                        style: Text.Raised
-                                        styleColor: Qt.rgba(0, 0, 0, 0.22)
+
+                                    }
+                                }
+
+                                KosToolButton {
+                                    id: cityOptions
+                                    objectName: "cityOptions_" + String(savedLocation.modelData.id)
+                                    anchors.right: parent.right
+                                    anchors.top: cardTop.bottom
+                                    anchors.topMargin: 1
+                                    width: 24; height: 24
+                                    padding: 0
+                                    opacity: savedLocation.hovered || savedLocation.activeFocus
+                                        || hovered || activeFocus
+                                        || (cityMenu.visible && root.cityMenuId === String(savedLocation.modelData.id)) ? 1 : 0
+                                    Accessible.name: qsTr("City options for %1").arg(root.locationName(savedLocation.modelData))
+                                    background: GlassCircleBg {
+                                        subtle: true
+                                        hovered: cityOptions.hovered
+                                        focused: cityOptions.activeFocus
+                                    }
+                                    contentItem: Item {
+                                        Row {
+                                            anchors.centerIn: parent
+                                            spacing: 2
+                                            Repeater {
+                                                model: 3
+                                                Rectangle { width: 2; height: 2; radius: 1; color: "#EDEDF0" }
+                                            }
+                                        }
+                                    }
+                                    onClicked: {
+                                        root.cityMenuId = String(savedLocation.modelData.id)
+                                        cityMenu.popup(cityOptions, width - cityMenu.width, height + 4)
                                     }
                                 }
 
@@ -2335,10 +2709,9 @@ KosApplicationWindow {
                                         right: parent.right
                                         top: cardTop.bottom
                                         topMargin: 0
+                                        rightMargin: 28
                                     }
-                                    text: savedLocation.highlighted
-                                        ? qsTr("My Location")
-                                        : savedLocation.summary
+                                    text: savedLocation.summary
                                           && String(savedLocation.summary.time ?? "").length > 0
                                         ? root.cardTimeText(savedLocation.summary.time)
                                         : root.locationDetail(savedLocation.modelData)
@@ -2347,9 +2720,8 @@ KosApplicationWindow {
                                     lineHeight: 0.85
                                     lineHeightMode: Text.ProportionalHeight
                                     elide: Text.ElideRight
-                                    visible: text.length > 0 && savedLocation.summary
-                                    style: Text.Raised
-                                    styleColor: Qt.rgba(0, 0, 0, 0.22)
+                                    visible: text.length > 0
+
                                 }
 
                                 RowLayout {
@@ -2379,8 +2751,7 @@ KosApplicationWindow {
                                         lineHeightMode: Text.ProportionalHeight
                                         elide: Text.ElideRight
                                         visible: text.length > 0
-                                        style: Text.Raised
-                                        styleColor: Qt.rgba(0, 0, 0, 0.22)
+
                                     }
 
                                     Label {
@@ -2392,8 +2763,7 @@ KosApplicationWindow {
                                         lineHeightMode: Text.ProportionalHeight
                                         visible: Number.isFinite(savedLocation.summaryHigh)
                                             && Number.isFinite(savedLocation.summaryLow)
-                                        style: Text.Raised
-                                        styleColor: Qt.rgba(0, 0, 0, 0.22)
+
                                     }
                                 }
                             }
@@ -2407,7 +2777,7 @@ KosApplicationWindow {
                         anchors.top: parent.top
                         anchors.left: parent.left
                         anchors.right: parent.right
-                        height: 26
+                        height: 16
                         visible: savedLocations.contentY > 0.5
                         clip: true
 
@@ -2426,7 +2796,7 @@ KosApplicationWindow {
                             gradient: Gradient {
                                 GradientStop {
                                     position: 0.0
-                                    color: Qt.rgba(AppTheme.sidebar.r, AppTheme.sidebar.g, AppTheme.sidebar.b, 0.9)
+                                    color: Qt.rgba(root.sidebarPlane.r, root.sidebarPlane.g, root.sidebarPlane.b, 0.9)
                                 }
                                 GradientStop { position: 1.0; color: "transparent" }
                             }
@@ -2439,7 +2809,7 @@ KosApplicationWindow {
                         anchors.bottom: parent.bottom
                         anchors.left: parent.left
                         anchors.right: parent.right
-                        height: 26
+                        height: 16
                         visible: savedLocations.contentY + savedLocations.height < savedLocations.contentHeight - 0.5
                         clip: true
 
@@ -2459,13 +2829,21 @@ KosApplicationWindow {
                                 GradientStop { position: 0.0; color: "transparent" }
                                 GradientStop {
                                     position: 1.0
-                                    color: Qt.rgba(AppTheme.sidebar.r, AppTheme.sidebar.g, AppTheme.sidebar.b, 0.9)
+                                    color: Qt.rgba(root.sidebarPlane.r, root.sidebarPlane.g, root.sidebarPlane.b, 0.9)
                                 }
                             }
                         }
                     }
                 }
 
+                Label {
+                    Layout.fillWidth: true
+                    visible: backend.locationError.length > 0
+                    text: backend.locationError
+                    color: root.sidebarStatusWarning
+                    wrapMode: Text.WordWrap
+                    font.pixelSize: 11
+                }
                 RowLayout {
                     Layout.fillWidth: true
                     Layout.minimumWidth: 0
@@ -2474,41 +2852,17 @@ KosApplicationWindow {
                     ButtonGroup { id: unitsGroup }
 
                     KosToolButton {
-                        id: settingsButton
-                        text: "⚙"
-                        font.pixelSize: 16
-                        Layout.preferredWidth: root.trayControlHeight
-                        Layout.preferredHeight: root.trayControlHeight // §3 control.compact.lg=30（窄窗）
-                        Layout.alignment: Qt.AlignVCenter
-                        background: GlassCircleBg {
-                            subtle: true
-                            focused: settingsButton.activeFocus && settingsButton.enabled
-                        }
-                        contentItem: Label {
-                            text: settingsButton.text
-                            font: settingsButton.font
-                            color: settingsButton.enabled
-                                ? root.sidebarControlInk
-                                : root.sidebarControlInkDisabled
-                            horizontalAlignment: Text.AlignHCenter
-                            verticalAlignment: Text.AlignVCenter
-                        }
-                        Accessible.name: qsTr("Weather settings")
-                        ToolTip.visible: hovered
-                        ToolTip.text: Accessible.name
-                        onClicked: settingsDialog.open()
-                    }
-
-                    KosToolButton {
                         id: refreshButton
                         text: "↻"
                         font.pixelSize: 18
                         Layout.preferredWidth: root.trayControlHeight
-                        Layout.preferredHeight: root.trayControlHeight // §3 control.compact.lg=30（窄窗）
-                        enabled: backend.connected && !backend.loading
+                        Layout.preferredHeight: root.trayControlHeight
+                        enabled: backend.connected && root.hasLocation && !backend.loading
                         background: GlassCircleBg {
                             subtle: true
                             focused: refreshButton.activeFocus && refreshButton.enabled
+                            hovered: refreshButton.hovered
+                            pressed: refreshButton.down
                         }
                         contentItem: Label {
                             id: refreshGlyph
@@ -2539,13 +2893,16 @@ KosApplicationWindow {
 
                     KosButton {
                         id: metricButton
+                        font.pixelSize: 11
+                        font.weight: Font.Medium
                         text: "°C"
                         checkable: true
                         leftPadding: 0
                         rightPadding: 0
                         Layout.preferredWidth: root.trayControlHeight
-                        Layout.preferredHeight: root.trayControlHeight // §3 control.compact.lg=30（窄窗）
+                        Layout.preferredHeight: root.trayControlHeight
                         background: GlassCircleBg {
+                            subtle: true
                             focused: metricButton.activeFocus && metricButton.enabled
                             selected: metricButton.checked
                             pressed: metricButton.down
@@ -2569,13 +2926,16 @@ KosApplicationWindow {
 
                     KosButton {
                         id: imperialButton
+                        font.pixelSize: 11
+                        font.weight: Font.Medium
                         text: "°F"
                         checkable: true
                         leftPadding: 0
                         rightPadding: 0
                         Layout.preferredWidth: root.trayControlHeight
-                        Layout.preferredHeight: root.trayControlHeight // §3 control.compact.lg=30（窄窗）
+                        Layout.preferredHeight: root.trayControlHeight
                         background: GlassCircleBg {
+                            subtle: true
                             focused: imperialButton.activeFocus && imperialButton.enabled
                             selected: imperialButton.checked
                             pressed: imperialButton.down
@@ -2619,9 +2979,9 @@ KosApplicationWindow {
             }
         }
 
-        // §2.7 光源左上 + §3 color.separator(0.10)：侧栏(左)的右缘属"下/右"暗侧，
-        // 补 1px 暗分隔让侧栏与主区的玻璃边界可读（§2.2 边界），不新增第二层玻璃。
+        // A plain divider separates the continuous sidebar from the forecast.
         Rectangle {
+            visible: sidebar.width > 0
             Layout.fillHeight: true
             Layout.preferredWidth: 1
             color: Qt.rgba(0, 0, 0, 0.10)
@@ -2630,8 +2990,8 @@ KosApplicationWindow {
         ColumnLayout {
             Layout.fillWidth: true
             Layout.fillHeight: true
-            Layout.margins: 20
-            spacing: 16
+            Layout.margins: 16
+            spacing: 12
 
             Label {
                 Layout.fillWidth: true
@@ -2642,8 +3002,26 @@ KosApplicationWindow {
                 wrapMode: Text.WordWrap
             }
 
+            KosEmptyState {
+                Layout.fillWidth: true
+                Layout.fillHeight: true
+                visible: !root.hasLocation
+                symbol: "☀"
+                title: qsTr("No saved cities")
+                description: qsTr("Search for a city in the sidebar to add its forecast.")
+                actionText: qsTr("Add a city")
+                symbolColor: root.skyText
+                titleColor: root.skyText
+                descriptionColor: root.skyTextMuted
+                onActionTriggered: {
+                    root.sidebarExpanded = true
+                    locationField.forceActiveFocus()
+                    root.showCitySearch()
+                }
+            }
             Flickable {
                 id: mainFlick
+                visible: root.hasLocation
                 objectName: "weatherForecast"
                 // Keep the layout allocated while the target city's snapshot
                 // loads; neither old-city values nor placeholder zeroes leak.
@@ -2657,40 +3035,44 @@ KosApplicationWindow {
                 clip: true
 
                 ScrollBar.vertical: ScrollBar {}
+                KosKineticScroll {
+                    id: forecastScroll
+                    flickable: mainFlick
+                    horizontal: false
+                }
 
                 ColumnLayout {
                     id: content
                     width: parent.width
-                    spacing: 16
+                    spacing: 12
 
                     ColumnLayout {
                         id: heroColumn
+                        objectName: "weatherHero"
+                        // Transform only the visual header; keep layout height stable
+                        // so scroll range and the cards never jump during collapse.
+                        readonly property real collapseProgress: Math.max(0, Math.min(1,
+                            mainFlick.contentY / Math.max(1, height * 0.75)))
+                        readonly property real collapseEase: collapseProgress * collapseProgress
+                            * (3 - 2 * collapseProgress)
+                        transformOrigin: Item.Top
+                        scale: AppTheme.reduceMotion ? 1 : 1 - 0.32 * collapseEase
+                        opacity: AppTheme.reduceMotion ? 1 : 1 - collapseEase
                         Layout.alignment: Qt.AlignHCenter
                         spacing: 2
-                        // 0e：ref-main hero 小标签 ink 顶 74/498=14.9% 窗高；我方 ink 顶=margin20+ink4=24 起步。
-                        // topMargin = 14.9% × flick 高 − 24，默认窗高(mainFlick 高≈687)时 ≈ 84px，ink 顶落位 ≈108px
-                        Layout.topMargin: Math.max(0, mainFlick.height * 0.149 - 24)
-                        // 0e：ref H·L ink 底→AQ 卡顶 30px@814 ×1.46 ≈ 44px；现 ink gap 22px（content spacing 16 + ink 余 ~6）
-                        Layout.bottomMargin: 22
-                        // Stage 3 motion B.3: hero parallax + slight shrink while the main area
-                        // scrolls. Scroll-linked mapping (no timed animation): the hero tracks
-                        // contentY at half speed and scales down gently; reduce-motion pins both.
-                        transform: Translate {
-                            y: AppTheme.reduceMotion ? 0 : Math.max(0, mainFlick.contentY) * 0.5
-                        }
-                        scale: AppTheme.reduceMotion
-                            ? 1.0
-                            : Math.max(1.0 - Math.max(0, mainFlick.contentY) / 240 * 0.12, 0.88)
-                        transformOrigin: Item.Top
+                        // Leave the window controls clear, with a bounded hero inset.
+                        Layout.topMargin: 72
+                        Layout.bottomMargin: 16
+                        // Scroll with the forecasts so the hero cannot cover their headings.
 
                         Label {
                             Layout.alignment: Qt.AlignHCenter
-                            text: qsTr("My Location")
+                            text: qsTr("Selected City")
                             visible: text.length > 0
                             color: root.skyTextMuted
                             font.pixelSize: 11
-                            font.weight: Font.DemiBold
-                            font.letterSpacing: 1.4
+                            font.weight: Font.Medium
+                            font.letterSpacing: 0.5
                         }
 
                         Label {
@@ -2698,54 +3080,35 @@ KosApplicationWindow {
                             text: root.locationName(backend.location)
                             color: root.skyText
                             // ref-main 城市名字高 15px/498 窗高 = 3.0-3.6%，×1.46 折算 ≈22-26px，取 26
-                            font.pixelSize: 26
-                            font.weight: Font.DemiBold
+                            font.pixelSize: 24
+                            font.weight: Font.Normal
                         }
 
-                        // R93（用户裁决 #0.7 第五轮「立体感仍然不够」）：根因 = 字面太透（深色厚度层
-                        // 从字面里透出变"脏"）+ 仅 2 层厚度不足以形成可辨立体块。本轮改法（照数字实现）：
-                        //   1. 挤出体：14 层堆叠（累计 translate(0,1)），fillStyle rgba(8,26,64, 0.88−i·0.045)，
-                        //      shadowBlur=0；绘制顺序先挤出体后字面
-                        //   2. 字面：体渐变 rgba(255,255,255,0.92/0.86/0.80)（上亮下暗，接近不透明）
-                        //   3. 倒角两笔（字面之上）：上沿高光 translate(0,−1.2) rgba(255,255,255,0.55)；
-                        //      下沿暗线 translate(0,+0.8) rgba(8,26,64,0.55)
-                        //   4. 可选透视 scale(1,0.94)：未用（记 LEDGER）
-                        // 呼吸保留；仍禁 lighter、禁移动高光带、禁纯白硬 rim。字族/字重/字号/位置不动
-                        // （Ubuntu Sans 800 / 92px / topMargin −24 / opacity 0.86↔1.0 5s）。
-                        // R94（用户裁决）：白色 50% 半透字 + 背景模糊（真·背板采样 + MultiEffect 遮罩）
+                        // Shared glass typography from nextkdeAppDemo, sized for
+                        // the compact weather hero. Its backdrop excludes this UI.
                         Item {
                             id: heroTempLiquid
                             Layout.alignment: Qt.AlignHCenter
                             Layout.topMargin: -24
-                            width: 340
-                            height: 124
-                            property string digits: Math.round(root.number(backend.current, "temperature", 0)).toString()
-                            Accessible.role: Accessible.StaticText
-                            Accessible.name: digits + "°"
+                            implicitWidth: 240
+                            implicitHeight: 144
 
-                            // 呼吸：整字 opacity 0.86↔1.0，周期 5s，InOutSine。
-                            // CPU 轮（批 8）：原 SequentialAnimation 每个显示帧（60Hz）推进一次，
-                            // 是晴/多云场景全窗口重绘的唯一 60fps 驱动源（实测基线 20.5–20.9%）。
-                            // 改为 33ms 定时器驱动同一余弦曲线（cos 在两端导数为 0 = InOutSine 等价），
-                            // 端点 0.86/1.0 与 5s 周期不变，仅时间分辨率降到 30fps（5s 慢渐变不可辨）。
-                            // R108：33ms(30fps)→66ms(15fps)，opacity 单步 Δ≤0.006（5s 正弦），肉眼不可辨。
-                            // R113：改由根级统一节拍驱动（不再单独占一条 Timer），
-                            // 端点 0.86/1.0 与 5s 周期逐值不变。
-                            opacity: AppTheme.reduceMotion ? 1.0
-                                     : 0.86 + 0.14 * (0.5 + 0.5 * Math.cos(2 * Math.PI * root.ambientSec / 5.0))
-
-
-                            // 4) 白色 50% 字面 + 柔光晕（磨砂感）
-                            Text {
+                            LiquidGlassNumber {
                                 id: heroFaceText
+                                objectName: "weatherGlassTemperature"
                                 anchors.centerIn: parent
-                                text: heroTempLiquid.digits + "°"
-                                color: "white"
-                                opacity: 0.5
+                                text: Math.round(root.number(backend.current, "temperature", 0)) + "°"
+                                font.pixelSize: 108
                                 font.weight: Font.Black
-                                font.pixelSize: 92
+                                backdrop: temperatureBackdrop
+                                thickness: 3
+                                refractionStrength: 4.5
+                                blurRadius: 1
+                                tintStrength: 0.28
+                                reflectionStrength: 1
+                                shadowOpacity: 0.10
+                                fallbackColor: "white"
                             }
-
                         }
 
                         Label {
@@ -2755,7 +3118,7 @@ KosApplicationWindow {
                             // ref 数字底→条件顶 gap 9px×1.46≈13px
                             Layout.topMargin: -14
                             font.pixelSize: 17
-                            font.weight: Font.DemiBold
+                            font.weight: Font.Normal
                         }
 
                         Label {
@@ -2769,7 +3132,7 @@ KosApplicationWindow {
                             Layout.topMargin: -3
                             // ref H·L ink 8px×1.46≈11.7 → 字号 16；ref 墨均值 (224,230,239) 与条件行同白系，hero 仅小标签 muted
                             font.pixelSize: 16
-                            font.weight: Font.DemiBold
+                            font.weight: Font.Normal
                         }
                     }
 
@@ -2805,20 +3168,24 @@ KosApplicationWindow {
                         layer.enabled: true
                         columns: root.compact ? 1 : 2
                         // ref-main(814x498) y260 行实测 AQ 卡右缘 x505 → Conditions 卡左缘 x519 ≈13px 间隙 × 1.4598 窗高比 ≈ 19px
-                        columnSpacing: 19
-                        rowSpacing: 16
+                        columnSpacing: 12
+                        rowSpacing: 12
                         // ref-main 左列：AQ 卡 → 指标瓦片（独立堆叠，不随右列高度走；列缝 19 见 GridLayout）
                         ColumnLayout {
+                            Layout.row: root.compact ? 1 : 0
+                            Layout.column: 0
                             Layout.fillWidth: true
                             Layout.minimumWidth: 0
                             Layout.preferredWidth: 0
                             Layout.alignment: Qt.AlignTop
-                            spacing: 16
+                            spacing: 12
                             KosCard {
+                                padding: 12
                                 id: airQualityCard
                                 // 空态（快照无 airQuality 字段）下旧代码显示假 "0"、全宽渐变条与模板文案，属仍差 14a 收口；
-                                // usAqi=0 是合法值（非负），故用 null 比较而非真值判断
-                                readonly property bool hasAqi: root.value(backend.airQuality, "usAqi", null) !== null
+                                // Zero is valid; missing, non-finite and negative readings use the empty state.
+                                readonly property real aqi: root.number(backend.airQuality, "usAqi", Number.NaN)
+                                readonly property bool hasAqi: Number.isFinite(aqi) && aqi >= 0
                                 Layout.fillWidth: true
                                 // ref-main 两列等宽(239/241@814)：preferred 拉平让 GridLayout 等分剩余宽度
                                 Layout.minimumWidth: 0
@@ -2827,7 +3194,7 @@ KosApplicationWindow {
 
                                 background: KosSurface {
                                     // ref-main Pillow 实测 Conditions 卡圆角 r≈14px@814 × 1.4598 窗高比 ≈ 20.4 → 20（同心圆角锚点，阶段三 A）
-                                    radius: 20
+                                    radius: 12
                                     fillColor: Qt.rgba(root.cardGlassRgb.r, root.cardGlassRgb.g, root.cardGlassRgb.b, root.cardGlassAlpha)
                                     // 用户裁决 2026-10-23（R80 0.5）：内容区白描边一律去掉，
                                     // 此为最后一处卡片 rim（R25 每卡一条 rim 的判定被本轮推翻）。
@@ -2873,8 +3240,8 @@ KosApplicationWindow {
                                             text: qsTr("Air Quality").toUpperCase()
                                             color: root.cardHeaderText
                                             font.pixelSize: 11
-                                            font.weight: Font.DemiBold
-                                            font.letterSpacing: 1.4
+                                            font.weight: Font.Medium
+                                            font.letterSpacing: 0.5
                                         }
                                     }
 
@@ -2883,12 +3250,12 @@ KosApplicationWindow {
                                         text: Math.round(root.number(backend.airQuality, "usAqi", 0))
                                         color: root.skyText
                                         font.pixelSize: 22
-                                        font.weight: Font.DemiBold
+                                        font.weight: Font.Normal
                                     }
 
                                     Label {
-                                        text: root.value(backend.airQuality, "category", "")
-                                        visible: text.length > 0
+                                        text: airQualityCard.hasAqi ? root.airQualityCategory(airQualityCard.aqi) : ""
+                                        visible: airQualityCard.hasAqi
                                         color: root.skyText
                                         Layout.topMargin: -12 // ref-main 实测数字底→rating cap 顶 ink gap 7px×1.46≈10，改前 22px（spacing 10 + 两行字体行高 padding），-12 只抵消行高 padding
                                         font.pixelSize: 13
@@ -2936,6 +3303,18 @@ KosApplicationWindow {
                                         }
                                     }
 
+                                    Label {
+                                        objectName: "weatherAirQualityEmpty"
+                                        visible: !airQualityCard.hasAqi
+                                        text: qsTr("Air quality data unavailable")
+                                        color: root.skyTextMuted
+                                        font.pixelSize: 13
+                                        wrapMode: Text.WordWrap
+                                        Layout.fillWidth: true
+                                        Layout.topMargin: 4
+                                        Layout.bottomMargin: 4
+                                    }
+
                                     // ref-main 实测：说明文字峰值纯白 (255,255,255) 且重于 rating，Demibold 白字
                                     Label {
                                         visible: airQualityCard.hasAqi
@@ -2943,7 +3322,7 @@ KosApplicationWindow {
                                             .arg(Math.round(root.number(backend.airQuality, "usAqi", 0)))
                                         color: root.skyText
                                         font.pixelSize: 11
-                                        font.weight: Font.DemiBold
+                                        font.weight: Font.Medium
                                         wrapMode: Text.WordWrap
                                         Layout.fillWidth: true
                                     }
@@ -2955,6 +3334,7 @@ KosApplicationWindow {
                             // 故本 Pane 只做布局，不带任何卡面 chrome（Pillow 实测 ref 指标卡
                             // 填充 (38.5,115.8,196.9) vs 卡间天空 (54.7,124.3,197.0)，无白玻璃亮层）。
                             KosCard {
+                                padding: 12
                                 id: conditionsCard
                                 // ref-main：瓦片区入左列 AQ 卡下方（左列 x271-505，与 AQ 同列对齐）；右列 dailyCard 不动（masonry 步骤 b 第一半）
                                 Layout.fillWidth: true
@@ -3057,7 +3437,7 @@ KosApplicationWindow {
                                                             text: "≋"
                                                             color: root.cardHeaderText
                                                             font.pixelSize: 11
-                                                            font.weight: Font.DemiBold
+                                                            font.weight: Font.Medium
                                                             Accessible.ignored: true
                                                         }
 
@@ -3065,15 +3445,15 @@ KosApplicationWindow {
                                                             text: qsTr("Wind").toLocaleUpperCase(Qt.locale())
                                                             color: root.cardHeaderText
                                                             font.pixelSize: 11
-                                                            font.letterSpacing: 1.4
+                                                            font.letterSpacing: 0.5
                                                             Accessible.ignored: true
                                                         }
                                                     }
 
-                                                    // ref-main 罗盘外径 72px@814 → 116×116，水平居中 y36
+                                                    // Leave a separate baseline below the compass for gusts.
                                                     Item {
                                                         anchors.horizontalCenter: parent.horizontalCenter
-                                                        y: 36
+                                                        y: 22
                                                         width: 116
                                                         height: 116
 
@@ -3158,7 +3538,7 @@ KosApplicationWindow {
                                                                     backend.current, "windSpeed", 0))
                                                                 color: root.skyText
                                                                 font.pixelSize: 30
-                                                                font.weight: Font.DemiBold
+                                                                font.weight: Font.Normal
                                                                 Accessible.ignored: true
                                                             }
 
@@ -3177,7 +3557,9 @@ KosApplicationWindow {
                                                     // ref-main Gusts 行：距卡底 9px@814、左 inset 12px@814
                                                     Label {
                                                         anchors.left: parent.left
-                                                        anchors.leftMargin: 17
+                                                        anchors.leftMargin: 12
+                                                        anchors.right: parent.right
+                                                        anchors.rightMargin: 12
                                                         anchors.bottom: parent.bottom
                                                         anchors.bottomMargin: 12
                                                         visible: windCard.hasGust
@@ -3185,7 +3567,7 @@ KosApplicationWindow {
                                                               + " " + windCard.cardinal
                                                         color: root.skyText
                                                         font.pixelSize: 13
-                                                        font.weight: Font.DemiBold
+                                                        font.weight: Font.Medium
                                                         elide: Text.ElideRight
                                                         Accessible.ignored: true
                                                     }
@@ -3279,7 +3661,7 @@ KosApplicationWindow {
                                                             text: moonCard.phaseName.toLocaleUpperCase(Qt.locale())
                                                             color: root.cardHeaderText
                                                             font.pixelSize: 11
-                                                            font.letterSpacing: 1.4
+                                                            font.letterSpacing: 0.5
                                                             elide: Text.ElideRight
                                                             Accessible.ignored: true
                                                         }
@@ -3501,7 +3883,7 @@ KosApplicationWindow {
                                                             text: qsTr("Sunset").toLocaleUpperCase(Qt.locale())
                                                             color: root.cardHeaderText
                                                             font.pixelSize: 11
-                                                            font.letterSpacing: 1.4
+                                                            font.letterSpacing: 0.5
                                                             Accessible.ignored: true
                                                         }
                                                     }
@@ -3515,7 +3897,7 @@ KosApplicationWindow {
                                                         text: sunsetCard.sunsetText
                                                         color: root.skyText
                                                         font.pixelSize: 30
-                                                        font.weight: Font.DemiBold
+                                                        font.weight: Font.Normal
                                                         Accessible.ignored: true
                                                     }
                                                 }
@@ -3582,7 +3964,7 @@ KosApplicationWindow {
                                                             text: qsTr("UV Index").toLocaleUpperCase(Qt.locale())
                                                             color: root.cardHeaderText
                                                             font.pixelSize: 11
-                                                            font.letterSpacing: 1.4
+                                                            font.letterSpacing: 0.5
                                                             Accessible.ignored: true
                                                         }
                                                     }
@@ -3595,7 +3977,7 @@ KosApplicationWindow {
                                                         text: uvCard.uvText
                                                         color: root.skyText
                                                         font.pixelSize: 30
-                                                        font.weight: Font.DemiBold
+                                                        font.weight: Font.Normal
                                                         Accessible.ignored: true
                                                     }
                                                 }
@@ -3657,13 +4039,16 @@ KosApplicationWindow {
                         }
                         // ref-main 右列：Conditions 卡 → 10 天卡（独立堆叠，不随左列高度走；列缝 19 见 GridLayout）
                         ColumnLayout {
+                            Layout.row: 0
+                            Layout.column: root.compact ? 0 : 1
                             Layout.fillWidth: true
                             Layout.minimumWidth: 0
                             Layout.preferredWidth: 0
                             Layout.alignment: Qt.AlignTop
-                            spacing: 16
+                            spacing: 12
                             // Conditions 单卡：包住 头部行 + 右上分段胶囊 + 逐小时列（对齐 ref-main）
                             KosCard {
+                                padding: 12
                                 id: hourlyConditionsCard
                                 Layout.fillWidth: true
                                 // ref-main 两列等宽(239/241@814)：preferred 拉平让 GridLayout 等分剩余宽度
@@ -3672,7 +4057,7 @@ KosApplicationWindow {
                                 Layout.alignment: Qt.AlignTop
 
                                 background: KosSurface {
-                                    radius: 20
+                                    radius: 12
                                     fillColor: Qt.rgba(root.cardGlassRgb.r, root.cardGlassRgb.g, root.cardGlassRgb.b, root.currentIsDay ? root.cardGlassAlpha : 0.16)
                                     strokeWidth: 0 // 用户裁决 2026-10-23（R80 0.5）：内容区白描边去除
                                     // innerHighlight（AppTheme 白@0.58 内侧 1px 高光线）同属白描边，一并去除
@@ -3695,7 +4080,7 @@ KosApplicationWindow {
                                                 text: qsTr("Conditions")
                                                 color: root.skyText
                                                 font.pixelSize: 14
-                                                font.weight: Font.DemiBold
+                                                font.weight: Font.Medium
                                                 Accessible.name: qsTr("Hourly forecast")
                                             }
 
@@ -3913,6 +4298,7 @@ KosApplicationWindow {
 
                                     Flickable {
                                         id: hourlyFlick
+                                        objectName: "weatherHourlyForecast"
                                         Layout.fillWidth: true
                                         Layout.preferredHeight: 142
                                         // ref-main 逐小时行为整列满卡（列距 40.4@814，末列墨右缘距卡缘 ~8px，无半列字形）。
@@ -3930,6 +4316,44 @@ KosApplicationWindow {
                                         clip: true
 
                                         ScrollBar.horizontal: ScrollBar {}
+                                        KosKineticScroll { id: hourlyScroll; flickable: hourlyFlick }
+                                        // Vertical input belongs to the page, even over
+                                        // the horizontal forecast. Preserve sideways
+                                        // gestures and Shift+wheel for the hourly list.
+                                        MouseArea {
+                                            anchors.fill: parent
+                                            z: 2
+                                            acceptedButtons: Qt.NoButton
+                                            onWheel: function(event) {
+                                                if (event.modifiers & Qt.ControlModifier) {
+                                                    event.accepted = false
+                                                    return
+                                                }
+                                                const dy = event.pixelDelta.y || event.angleDelta.y
+                                                const dx = event.pixelDelta.x || event.angleDelta.x
+                                                const shift = (event.modifiers & Qt.ShiftModifier) !== 0
+                                                const sideways = shift || Math.abs(dx) > Math.abs(dy)
+                                                const view = sideways ? hourlyFlick : mainFlick
+                                                const position = sideways ? "contentX" : "contentY"
+                                                view.cancelFlick()
+                                                if (AppTheme.reduceMotion) {
+                                                    const verticalStep = event.pixelDelta.y || event.angleDelta.y * 0.6
+                                                    const horizontalStep = event.pixelDelta.x || event.angleDelta.x * 0.6
+                                                    const step = sideways ? (shift && !dx ? verticalStep : horizontalStep) : verticalStep
+                                                    const origin = sideways ? view.originX : view.originY
+                                                    const extent = sideways ? view.contentWidth - view.width : view.contentHeight - view.height
+                                                    view[position] = Math.max(origin, Math.min(origin + Math.max(0, extent), view[position] - step))
+                                                } else if (sideways) {
+                                                    hourlyScroll._onWheel(event.angleDelta.x, event.angleDelta.y,
+                                                        event.pixelDelta.x, event.pixelDelta.y, shift)
+                                                } else {
+                                                    forecastScroll._onWheel(0, event.angleDelta.y,
+                                                        0, event.pixelDelta.y, false)
+                                                }
+                                                // Keep a gesture on its chosen axis at either boundary.
+                                                event.accepted = true
+                                            }
+                                        }
 
                                         // ref-main（参考图）Conditions 卡本无温度曲线；本条系 TASK.md
                                         // 用户裁定（2026-10-18）按 Apple Weather 惯例外推。
@@ -4193,7 +4617,7 @@ KosApplicationWindow {
                                                             text: Math.round(root.number(
                                                                 hourlyCard.modelData, "temperature", 0)) + "°"
                                                             color: root.skyText
-                                                            font.weight: Font.DemiBold
+                                                            font.weight: Font.Medium
                                                         }
 
                                                         Label {
@@ -4203,7 +4627,7 @@ KosApplicationWindow {
                                                                 hourlyCard.modelData,
                                                                 "precipitationProbability", 0)) + "%"
                                                             color: root.skyText
-                                                            font.weight: Font.DemiBold
+                                                            font.weight: Font.Medium
                                                             Accessible.name: qsTr("%1% chance of precipitation").arg(
                                                                 Math.round(root.number(hourlyCard.modelData,
                                                                                        "precipitationProbability", 0)))
@@ -4225,7 +4649,7 @@ KosApplicationWindow {
                                                                 text: Math.round(root.number(
                                                                     hourlyCard.modelData, "windSpeed", 0))
                                                                 color: root.skyText
-                                                                font.weight: Font.DemiBold
+                                                                font.weight: Font.Medium
                                                             }
 
                                                             Label {
@@ -4258,6 +4682,8 @@ KosApplicationWindow {
                             }
 
                             KosCard {
+
+                                padding: 12
                                 id: dailyCard
                                 // ref-main 实测：10 天卡与 Conditions 同右列（x519-760），Conditions 底 y≈317 → 10 天卡顶 y≈329，gap ~12px@814 × 1.4598 ≈ 17.5 → rowSpacing 16 吻合（masonry 步骤 c）
                                 Layout.fillWidth: true
@@ -4272,7 +4698,7 @@ KosApplicationWindow {
                                 Behavior on hoverFill { NumberAnimation { duration: AppTheme.motionNormal; easing.type: Easing.OutCubic } }
 
                                 background: KosSurface {
-                                    radius: 20
+                                    radius: 12
                                     fillColor: Qt.rgba(root.cardGlassRgb.r, root.cardGlassRgb.g, root.cardGlassRgb.b, dailyCard.hoverFill)
                                     strokeWidth: 0 // 用户裁决 2026-10-23（R80 0.5）：内容区白描边去除
                                     // innerHighlight（AppTheme 白@0.58 内侧 1px 高光线）同属白描边，一并去除
@@ -4287,7 +4713,7 @@ KosApplicationWindow {
                                     // ref-ipad-small.png 实测：10 天卡头部 "10-DAY FORECAST" 在卡内顶部——
                                     // calendar glyph + caps 字距 muted 文本（文本带 y321-329、glyph x276-284、与文字同色）；
                                     // ref-main 该卡被窗底裁切无头部可见，以 ipad 参考为准。
-                                    // 文案照参考 "10-Day Forecast"（数据上限 7 天，差异记 LEDGER）。
+                                    // The heading follows the actual available forecast length, including partial data.
                                     // 头部→首行 ink gap：ipad 参考实测 29px（头部墨底 y328 → Today 墨顶 y357），我方实测 33px（patrol-1792318394：头部墨底 y471 → 今天墨顶 y504），bottomMargin 8→4 收敛 +4px。
                                     RowLayout {
                                         spacing: 6
@@ -4329,12 +4755,12 @@ KosApplicationWindow {
                                         }
 
                                         Label {
-                                            text: qsTr("10-Day Forecast").toLocaleUpperCase(Qt.locale())
+                                            text: root.dailyForecastTitle.toLocaleUpperCase(Qt.locale())
                                             color: root.cardHeaderText
                                             font.pixelSize: 11
-                                            font.weight: Font.DemiBold
-                                            font.letterSpacing: 1.4
-                                            Accessible.name: qsTr("10-day forecast")
+                                            font.weight: Font.Medium
+                                            font.letterSpacing: 0.5
+                                            Accessible.name: root.dailyForecastTitle
                                         }
                                     }
 
@@ -4358,7 +4784,7 @@ KosApplicationWindow {
                                             required property int index
                                             required property var modelData
                                             Layout.fillWidth: true
-                                            Layout.preferredHeight: 54
+                                            Layout.preferredHeight: 40
 
                                             readonly property real dayMinimum: root.number(
                                                 dailyRow.modelData, "temperatureMinimum", 0)
@@ -4390,7 +4816,7 @@ KosApplicationWindow {
                                                     text: root.dayLabel(root.value(
                                                         dailyRow.modelData, "date", ""), dailyRow.index)
                                                     color: root.skyText
-                                                    font.weight: Font.DemiBold
+                                                    font.weight: Font.Medium
                                                 }
 
                                                 Column {
@@ -4487,7 +4913,7 @@ KosApplicationWindow {
                                                     text: Math.round(dailyRow.dayMaximum) + "°"
                                                     color: root.skyText
                                                     horizontalAlignment: Text.AlignLeft
-                                                    font.weight: Font.DemiBold
+                                                    font.weight: Font.Medium
                                                 }
                                             }
 
@@ -4520,6 +4946,8 @@ KosApplicationWindow {
     }
 
     Item {
+        parent: weatherContent
+        z: 5
         anchors.fill: parent
         anchors.leftMargin: sidebar.width
         visible: !backend.ready && backend.loading
@@ -4534,52 +4962,44 @@ KosApplicationWindow {
     }
 
     KosWindowControls {
+        parent: weatherContent
         targetWindow: root
+        maximizeMode: true
+        circleSize: 14
+        buttonWidth: 14
+        buttonHeight: 14
+        spacing: 14
         anchors.top: parent.top
         anchors.right: parent.right
-        anchors.margins: 10
+        anchors.topMargin: 10.5
+        anchors.rightMargin: 14.5
         z: 10
     }
 
     Item {
+        parent: weatherContent
         anchors.top: parent.top
         anchors.left: parent.left
         anchors.margins: root.sidebarExpanded ? 0 : 10
-        width: root.sidebarExpanded ? sidebar.expandedWidth : AppTheme.controlHeight
+        width: root.sidebarExpanded ? sidebar.expandedWidth : sidebarToggle.width
         height: root.sidebarExpanded ? 46 : 44
         z: 10
         KosSidebarToggle {
             id: sidebarToggle
             targetWindow: root
             anchors.right: parent.right
-            anchors.rightMargin: root.sidebarExpanded ? 5 : 0
+            anchors.rightMargin: root.sidebarExpanded ? 12 : 0
             anchors.top: parent.top
-            anchors.topMargin: root.sidebarExpanded ? 10 : (44 - AppTheme.controlHeight) / 2
-            implicitWidth: root.sidebarExpanded ? 26 : AppTheme.controlHeight
+            anchors.topMargin: root.sidebarExpanded ? 10 : (44 - height) / 2
+            implicitWidth: 26
             implicitHeight: implicitWidth
-            glyphColor: "#ffffff"
-            glyphPaneColor: Qt.rgba(1, 1, 1, 0.95)
-            background: Rectangle {
-                radius: width / 2
-                // 底 0.14 系 ref-main 拟合玻璃（§9 参考图优先）；hover 按 §4.1 玻璃项
-                // 「叠 hoverFill」：0.14 上叠 dark hoverFill 白 .08 → 合成 α≈0.21。
-                color: sidebarToggle.hovered
-                    ? Qt.rgba(1, 1, 1, 1 - (1 - 0.14) * (1 - 0.08))
-                    : Qt.rgba(1, 1, 1, 0.14)
-                Behavior on color { ColorAnimation { duration: 150 } } // §4.1 过渡 150ms
-                // 用户裁决 2026-10-23（R80 0.5）：白描边去掉，与 GlassCircleBg 同轮收口
-                //（盘钮填充层即材质，spec §2.7 亮边由顶部 specular 高光承担）。
-                border.width: 0
-                Rectangle {
-                    // specular top sheen, clipped to the circle
-                    anchors.fill: parent
-                    anchors.margins: 1
-                    radius: width / 2
-                    gradient: Gradient {
-                        GradientStop { position: 0; color: Qt.rgba(1, 1, 1, 0.28) }
-                        GradientStop { position: 0.22; color: Qt.rgba(1, 1, 1, 0) }
-                    }
-                }
+            glyphColor: root.sidebarControlInk
+            glyphPaneColor: root.sidebarControlInk
+            background: GlassCircleBg {
+                subtle: true
+                hovered: sidebarToggle.hovered
+                pressed: sidebarToggle.down
+                focused: sidebarToggle.activeFocus && sidebarToggle.enabled
             }
         }
     }

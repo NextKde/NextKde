@@ -11,6 +11,7 @@ import Kos.Ui
 Pane {
     id: root
 
+    CalendarStyle { id: design }
     padding: 0
     background: null
 
@@ -24,8 +25,8 @@ Pane {
     property var itemCompleted: function(item) { return false }
 
     signal dateSelected(date date)
-    signal itemActivated(var item)
-    signal createRequested(date date)
+    signal itemActivated(var item, Item anchor)
+    signal createRequested(date date, Item anchor)
 
     function dateForCell(index) {
         const first = new Date(visibleDate.getFullYear(), visibleDate.getMonth(), 1)
@@ -53,15 +54,16 @@ Pane {
         // height, the 24px date disc and the 18px chip (each +2 spacing).
         // Naming them keeps a change in one place from silently misaligning
         // the other two.
-        readonly property int headerHeight: 30
-        readonly property int dayDiscSize: 24
+        readonly property int headerHeight: 28
+        readonly property int dayDiscSize: 20
+        readonly property int dayHeaderHeight: 24
         readonly property int chipHeight: 18
         readonly property real dayHeight: Math.max(0, (height - headerHeight - 6 * rowSpacing) / 6)
         columns: 7
         uniformCellWidths: true
         uniformCellHeights: false
-        columnSpacing: 3
-        rowSpacing: 3
+        columnSpacing: 1
+        rowSpacing: 1
 
         Repeater {
             model: 7
@@ -77,7 +79,7 @@ Pane {
                 horizontalAlignment: Text.AlignHCenter
                 verticalAlignment: Text.AlignVCenter
                 font.pixelSize: 11
-                font.weight: Font.DemiBold
+                font.weight: Font.Normal
             }
         }
 
@@ -102,9 +104,9 @@ Pane {
                 Layout.maximumHeight: monthGrid.dayHeight
                 Layout.minimumWidth: 0
                 clip: true
-                readonly property int visibleItemCount: Math.max(0, Math.min(3,
+                readonly property int visibleItemCount: Math.max(0, Math.min(5,
                     Math.floor((height - topPadding - bottomPadding
-                        - (monthGrid.dayDiscSize + 2)) / (monthGrid.chipHeight + 2))))
+                        - (monthGrid.dayHeaderHeight + 2)) / (monthGrid.chipHeight + 2))))
                 leftPadding: 6
                 rightPadding: 6
                 topPadding: 5
@@ -112,6 +114,11 @@ Pane {
                 opacity: inVisibleMonth ? 1 : 0.5
                 Accessible.name: AppTheme.formatDate(cellDate, Locale.LongFormat)
                 onClicked: root.dateSelected(cellDate)
+                onDoubleClicked: {
+                    root.dateSelected(cellDate)
+                    root.createRequested(cellDate, dayButton)
+                }
+                Keys.onReturnPressed: root.createRequested(cellDate, dayButton)
 
                 contentItem: ColumnLayout {
                     spacing: 2
@@ -123,7 +130,7 @@ Pane {
                         Rectangle {
                             Layout.preferredWidth: monthGrid.dayDiscSize
                             Layout.preferredHeight: monthGrid.dayDiscSize
-                            radius: 12
+                            radius: monthGrid.dayDiscSize / 2
                             // C8: unified with the week header, now-pill and
                             // mini month's today disc — one M04 literal.
                             color: dayButton.today ? AppTheme.todayRed : "transparent"
@@ -149,20 +156,7 @@ Pane {
                         }
 
 
-                        KosToolButton {
-                            text: "+"
-                            flat: true
-                            visible: (dayButton.hovered || dayButton.activeFocus)
-                                && dayButton.inVisibleMonth
-                            implicitWidth: 24
-                            implicitHeight: 24
-                            Accessible.name: qsTr("Add event on %1").arg(
-                                AppTheme.formatDate(dayButton.cellDate, Locale.LongFormat))
-                            onClicked: {
-                                root.dateSelected(dayButton.cellDate)
-                                root.createRequested(dayButton.cellDate)
-                            }
-                        }
+
                     }
 
                     Repeater {
@@ -206,17 +200,17 @@ Pane {
                             activeFocusOnTab: true
                             Keys.onReturnPressed: {
                                 root.dateSelected(dayButton.cellDate)
-                                root.itemActivated(itemChip.modelData)
+                                root.itemActivated(itemChip.modelData, itemChip)
                             }
                             Keys.onSpacePressed: {
                                 root.dateSelected(dayButton.cellDate)
-                                root.itemActivated(itemChip.modelData)
+                                root.itemActivated(itemChip.modelData, itemChip)
                             }
                             Accessible.role: Accessible.ListItem
                             Accessible.name: root.itemTitle(itemChip.modelData)
                             Accessible.onPressAction: {
                                 root.dateSelected(dayButton.cellDate)
-                                root.itemActivated(itemChip.modelData)
+                                root.itemActivated(itemChip.modelData, itemChip)
                             }
                             // Focus ring only: the resting chip is fill-only,
                             // so the border appears on focus alone.
@@ -226,7 +220,7 @@ Pane {
                             TapHandler {
                                 onTapped: {
                                     root.dateSelected(dayButton.cellDate)
-                                    root.itemActivated(itemChip.modelData)
+                                    root.itemActivated(itemChip.modelData, itemChip)
                                 }
                             }
                         }
@@ -236,13 +230,23 @@ Pane {
                 }
 
                 background: Rectangle {
-                    radius: AppTheme.smallRadius
+                    radius: 0
                     color: dayButton.selected
-                        ? AppTheme.withAlpha(AppTheme.accent, AppTheme.dark ? 0.19 : 0.10)
-                        : (dayButton.hovered ? AppTheme.cardHover : "transparent")
-                    border.width: dayButton.selected || dayButton.activeFocus ? 1 : 0
-                    border.color: AppTheme.withAlpha(AppTheme.accent,
-                        dayButton.selected ? 0.62 : 0.38)
+                        ? design.selectionFill
+                        : dayButton.hovered ? design.sidebarPlane : "transparent"
+                    Rectangle {
+                        anchors.top: parent.top
+                        width: parent.width
+                        height: 1
+                        color: design.separator
+                    }
+                    Rectangle {
+                        anchors.right: parent.right
+                        height: parent.height
+                        width: 1
+                        color: design.separator
+                        visible: dayButton.index % 7 !== 6
+                    }
                 }
             }
         }
