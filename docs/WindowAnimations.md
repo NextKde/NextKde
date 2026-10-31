@@ -13,7 +13,7 @@ include it, but KWin does not enable it by default. KOS enables it when you choo
 Genie and publishes Dock icon targets for minimize and restore.
 
 If the native effect is missing, unsupported, or fails to load, KOS automatically
-uses its own Scale animation and displays the fallback reason. The selected Genie
+uses its own Scale animation and displays a short fallback notice. The selected Genie
 preference is retained; the next startup checks again and can recover the native
 effect. Old water-drop configurations migrate automatically. None preserves or
 restores the previous KDE minimize-effect selection.

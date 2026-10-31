@@ -40,11 +40,11 @@ export function surfaceRect(target, originX, originY, surfaceWidth, surfaceHeigh
     // lose its target and fall back to the cursor while hidden.
     if (Number.isFinite(surfaceWidth) && surfaceWidth >= 1) {
         left = Math.max(0, Math.min(left, Math.floor(surfaceWidth) - 1));
-        width = Math.max(1, Math.min(width, Math.floor(surfaceWidth) - left));
+        width = Math.max(1, Math.min(right, Math.floor(surfaceWidth)) - left);
     }
     if (Number.isFinite(surfaceHeight) && surfaceHeight >= 1) {
         top = Math.max(0, Math.min(top, Math.floor(surfaceHeight) - 1));
-        height = Math.max(1, Math.min(height, Math.floor(surfaceHeight) - top));
+        height = Math.max(1, Math.min(bottom, Math.floor(surfaceHeight)) - top);
     }
     if (left < 0 || top < 0)
         return null;
