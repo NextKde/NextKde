@@ -1,4 +1,5 @@
 import QtQuick
+import QtQuick.Window
 import QtQuick.Controls as Controls
 import QtQuick.Effects
 import QtQml.Models
@@ -699,19 +700,27 @@ PanelWindow {
                 z: 50
                 visible: widgetHover.hovered && !root.editMode
                 anchors { right: parent.right; bottom: parent.bottom; margins: 8 }
-                width: sizeLabel.implicitWidth + 14
-                height: 24
+                width: Math.min(sizeLabelMetrics.advanceWidth + 14, parent.width - 16)
+                height: Math.max(24, sizeLabel.implicitHeight + 10)
                 radius: 12
                 color: AppearanceTokens.surface.pick(AppearanceTokens.colors.layer4, Qt.rgba(0, 0, 0, 0.52))
                 border.width: 1
                 border.color: AppearanceTokens.surface.pick(AppearanceTokens.colors.outlineVariant, Qt.rgba(1, 1, 1, 0.18))
+                TextMetrics {
+                    id: sizeLabelMetrics
+                    font: sizeLabel.font
+                    text: sizeLabel.text
+                }
                 Text {
                     id: sizeLabel
                     anchors.centerIn: parent
+                    width: parent.width - 14
                     text: card.displayColumns + "×" + card.displayRows
                         + " · " + I18n.tr("Right-click to edit")
                     color: AppearanceTokens.surface.pick(AppearanceTokens.colors.surfaceForeground, "white")
                     font { pixelSize: 9; weight: Font.DemiBold }
+                    horizontalAlignment: Text.AlignHCenter
+                    wrapMode: Text.WordWrap
                 }
             }
 
@@ -2225,7 +2234,7 @@ PanelWindow {
                             anchors.fill: parent
                             cursorShape: Qt.PointingHandCursor
                             onClicked: AppActionService.launchById(
-                                "kos-todo", ["--view", "today"])
+                                "kos-calendar", ["--view", "today"])
                         }
 
                         // A parent Item's `clip` is rectangular, not rounded.
@@ -2321,8 +2330,8 @@ PanelWindow {
                                     MouseArea {
                                         anchors.fill: parent
                                         cursorShape: Qt.PointingHandCursor
-                                        onClicked: AppActionService.launchById("kos-todo", [
-                                            "--item", String(PimWidgetService.value(parent.modelData,
+                                        onClicked: AppActionService.launchById("kos-calendar", [
+                                            "--view", "reminders", "--item", String(PimWidgetService.value(parent.modelData,
                                                 "id", PimWidgetService.value(parent.modelData, "seriesId", "")))
                                         ])
                                     }
@@ -3774,6 +3783,12 @@ PanelWindow {
                         anchors.fill: parent
                         source: modelData.kind === "launcher"
                             ? AppPresentationService.iconSource(modelData.icon) : ""
+                        // Provider icons already scale with the display; raw
+                        // bundled artwork must request physical pixel sizes.
+                        readonly property int rasterSize: Math.max(1, Math.ceil(
+                            actualSize * (String(source).startsWith("image://")
+                                ? 1 : Math.max(1, Screen.devicePixelRatio))))
+                        backer.sourceSize: Qt.size(rasterSize, rasterSize)
                         // Theme icon: synchronous, see AppIcon.qml.
                         asynchronous: false
                         visible: source !== "" && status === Image.Ready

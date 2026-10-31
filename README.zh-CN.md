@@ -1,6 +1,8 @@
 # NextKDE
 
-[English](README.md) · [文档索引](docs/README.zh-CN.md)
+[English](README.md) · **简体中文** · [日本語](README.ja.md) · [Español](README.es.md)
+
+[文档索引](docs/README.zh-CN.md)
 
 基于 Quickshell 的 KDE Plasma 桌面，包含顶栏、浮动 Dock、启动器、搜索、通知、设置、桌面文件及组件。
 支持液态玻璃、柔光/磨砂、Material 外观，接入 KWin、NetworkManager、PipeWire、BlueZ、systemd。

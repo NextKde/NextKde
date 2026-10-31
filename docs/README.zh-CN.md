@@ -2,7 +2,7 @@
 
 [English](README.md)
 
-英文为默认；双语指南顶部提供中文对照。根 [README](../README.zh-CN.md)介绍桌面，详细操作由以下指南负责。
+英文为默认；双语指南顶部提供中文对照。项目介绍提供 [English](../README.md)、[简体中文](../README.zh-CN.md)、[日本語](../README.ja.md)和 [Español](../README.es.md)版本；详细操作由以下指南负责。
 
 ## 用户与发布
 
