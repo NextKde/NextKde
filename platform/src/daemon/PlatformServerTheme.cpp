@@ -1,6 +1,7 @@
 #include "PlatformServer.h"
 #include "PlatformProcess.h"
 #include "../windowanimation/NativeGenie.h"
+#include "../windowanimation/AnimationTask.h"
 
 #include <QByteArray>
 #include <QDBusInterface>
@@ -194,16 +195,26 @@ bool PlatformServer::handleThemeOperation(QLocalSocket *socket, const QJsonObjec
                     QStringLiteral("窗口动画样式无效"), false);
             return true;
         }
-        const auto config = KSharedConfig::openConfig(QStringLiteral("kwinrc"));
-        config->reparseConfiguration();
-        KConfigGroup animation(config, QStringLiteral("Effect-kos_dock_window_animation"));
-        // The legacy appearance preference must not overwrite the separate
-        // window animation page's explicit selection on every Shell startup.
-        animation.writeEntry("AnimationStyle", style);
-        QString error;
-        const bool saved = config->sync() && KOS::WindowAnimation::migrate(error);
-        respond(socket, request, saved, QJsonObject{{QStringLiteral("configured"), saved}},
-                saved ? QString() : QStringLiteral("theme-write-failed"), error, !saved);
+        if (m_animationSyncPending) {
+            respond(socket, request, false, {}, QStringLiteral("busy"),
+                    QStringLiteral("Animation configuration is being updated"), true);
+            return true;
+        }
+        m_animationSyncPending = true;
+        const QPointer<QLocalSocket> guardedSocket(socket);
+        new KOS::WindowAnimation::AnimationTask(this, [style] {
+            QString error;
+            // Preserve the separate animation page selection when syncing the
+            // legacy appearance preference at Shell startup.
+            const bool saved = KOS::WindowAnimation::migrate(error, style);
+            return KOS::WindowAnimation::AnimationTask::Result{saved, error};
+        }, [this, guardedSocket, request](const auto &result) {
+            m_animationSyncPending = false;
+            respond(guardedSocket.data(), request, result.first,
+                    QJsonObject{{QStringLiteral("configured"), result.first}},
+                    result.first ? QString() : QStringLiteral("theme-write-failed"),
+                    result.second, !result.first);
+        });
         return true;
     }
     if (op == QStringLiteral("theme.toggle")) {

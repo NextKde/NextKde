@@ -1,4 +1,5 @@
 #include "WindowSettings.h"
+#include "../../../platform/src/windowanimation/AnimationTask.h"
 #include "../../../platform/src/windowanimation/NativeGenie.h"
 #include <KConfigGroup>
 #include <KSharedConfig>
@@ -44,14 +45,16 @@ bool write(const QString &filename, const QJsonObject &value, QString &error) {
     return true;
 }
 void reconfigure(const QString &effect) {
-    QDBusInterface effects(QStringLiteral("org.kde.KWin"), QStringLiteral("/Effects"),
-                           QStringLiteral("org.kde.kwin.Effects"));
-    effects.asyncCall(QStringLiteral("reconfigureEffect"), effect);
+    auto message = QDBusMessage::createMethodCall(QStringLiteral("org.kde.KWin"),
+        QStringLiteral("/Effects"), QStringLiteral("org.kde.kwin.Effects"),
+        QStringLiteral("reconfigureEffect"));
+    message.setArguments({effect});
+    QDBusConnection::sessionBus().asyncCall(message, 1000);
 }
 }
 
 WindowSettings::WindowSettings(QObject *parent) : QObject(parent) {
-    KOS::WindowAnimation::migrate(m_error);
+    // Startup reconciliation belongs to the platform service, not page creation.
 }
 
 QVariantMap WindowSettings::state() const {
@@ -69,7 +72,6 @@ QVariantMap WindowSettings::state() const {
             {"radius", defaults.value("corners").toObject().value("radius").toInt(20)},
             {"shadow", defaults.value("shadow").toObject().value("enabled").toBool(true)},
             {"hideAnimation", hide},
-            {"nativeGenieSupported", KOS::WindowAnimation::nativeSupported()},
             {"nativeGenieFallback", animation.readEntry("NativeGenieFallback", QString())},
             {"closeAnimation", animation.readEntry("CloseAnimation", QStringLiteral("scale"))},
             {"decoration", decoration.readEntry("library", QStringLiteral("org.kde.breeze"))},
@@ -146,6 +148,28 @@ bool WindowSettings::setTakeover(bool enabled) {
     emit changed();
     return true;
 }
+bool WindowSettings::requestAnimation(const QString &kind, const QString &style) {
+    if (m_animationBusy) return false;
+    if ((kind != "hide" && kind != "close") || (kind == "hide"
+        ? style != "none" && style != "scale" && style != "genie"
+        : style != "none" && style != "scale" && style != "fade")) return false;
+    m_animationBusy = true;
+    m_error.clear();
+    emit changed();
+    new KOS::WindowAnimation::AnimationTask(this, [kind, style] {
+        // The synchronous entry point is also used by the CLI; keep all of its
+        // configuration and D-Bus objects on this worker's thread.
+        WindowSettings worker;
+        const bool saved = worker.setAnimation(kind, style);
+        return KOS::WindowAnimation::AnimationTask::Result{saved, worker.error()};
+    }, [this](const auto &result) {
+        m_animationBusy = false;
+        m_error = result.second;
+        emit changed();
+    });
+    return true;
+}
+
 bool WindowSettings::setAnimation(const QString &kind, const QString &style) {
     const bool close = kind == "close";
     if ((!close && kind != "hide") || (close
@@ -157,6 +181,8 @@ bool WindowSettings::setAnimation(const QString &kind, const QString &style) {
         emit changed();
         return saved;
     }
+    QLockFile lock(KOS::WindowAnimation::lockPath());
+    if (!lock.tryLock(3000)) { m_error = QStringLiteral("The configuration is being updated; please retry"); emit changed(); return false; }
     auto config = KSharedConfig::openConfig(QStringLiteral("kwinrc"));
     config->reparseConfiguration();
     KConfigGroup animation(config, QStringLiteral("Effect-kos_dock_window_animation"));

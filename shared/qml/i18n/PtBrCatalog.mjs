@@ -1268,4 +1268,5 @@ export const catalog = {
     "Click to expand · Alt-drag icons to reorder or collect": "Clique para expandir · Alt+arrastar ícones para reordenar ou agrupar",
     "Alt-drag icons here to collect; drag to reorder": "Alt+arrastar ícones para cá para agrupá-los; arraste para reordenar",
     "Alt-drag past the arrow to keep visible": "Alt+arrastar além da seta para manter visível",
+    "Temporarily using Scale. Your Genie preference is saved.": "Usando Escala temporariamente. Sua preferência por Gênio foi salva.",
 }

@@ -51,6 +51,29 @@ int main(int argc, char **argv)
         return config;
     };
     QString error;
+    // A previous custom duration (and absence of the key) must survive repeated
+    // Genie selection, fallback, switching away, and failed transactions.
+    for (bool present : {false, true}) {
+        auto config = fresh(); FakeKWin kwin;
+        KConfigGroup lamp(config, "Effect-magiclamp");
+        if (present) lamp.writeEntry("AnimationDuration", 911);
+        CHECK(config->sync());
+        CHECK(KOS::WindowAnimation::applyWithRuntime(config, "genie", kwin, error));
+        CHECK(lamp.readEntry("AnimationDuration", 0) == 250);
+        CHECK(KOS::WindowAnimation::applyWithRuntime(config, "genie", kwin, error));
+        kwin.failSquashDisableOnce = true;
+        CHECK(!KOS::WindowAnimation::applyWithRuntime(config, "scale", kwin, error));
+        CHECK(lamp.readEntry("AnimationDuration", 0) == 250);
+        CHECK(KOS::WindowAnimation::applyWithRuntime(config, "scale", kwin, error));
+        CHECK(lamp.hasKey("AnimationDuration") == present);
+        CHECK(lamp.readEntry("AnimationDuration", 0) == (present ? 911 : 0));
+        CHECK(KOS::WindowAnimation::applyWithRuntime(config, "genie", kwin, error));
+        kwin.failLampLoad = true;
+        CHECK(KOS::WindowAnimation::applyWithRuntime(config, "genie", kwin, error));
+        CHECK(lamp.hasKey("AnimationDuration") == present);
+        CHECK(lamp.readEntry("AnimationDuration", 0) == (present ? 911 : 0));
+    }
+
     // Standard installations need no manual KCM step, even when Lamp starts disabled.
     {
         auto config = fresh(); FakeKWin kwin;

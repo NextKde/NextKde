@@ -2,7 +2,12 @@
 
 #include <KConfigGroup>
 #include <KSharedConfig>
-#include <QDBusInterface>
+#include <QDBusConnection>
+#include <QDeadlineTimer>
+#include <QDir>
+#include <QLockFile>
+#include <QStandardPaths>
+#include <QUuid>
 #include <QDBusReply>
 
 namespace KOS::WindowAnimation {
@@ -25,39 +30,47 @@ public:
     virtual bool reloadDock() = 0;
 };
 
+// Called only from a worker or the command-line installer. Raw messages avoid
+// QDBusInterface's implicit, unbounded introspection on construction.
 class KWinRuntime final : public EffectRuntime {
-    QDBusInterface m_effects{QStringLiteral("org.kde.KWin"), QStringLiteral("/Effects"),
-                            QStringLiteral("org.kde.kwin.Effects")};
+    const QString m_busName = QStringLiteral("kos-animation-") + QUuid::createUuid().toString();
+    QDBusConnection m_bus = QDBusConnection::connectToBus(QDBusConnection::SessionBus, m_busName);
+    QDeadlineTimer m_deadline{4000};
+    QDBusMessage call(const QString &method, const QVariantList &arguments = {}) {
+        if (m_deadline.hasExpired())
+            return QDBusMessage::createError(QStringLiteral("org.kos.Timeout"), QStringLiteral("Animation operation timed out"));
+        auto message = QDBusMessage::createMethodCall(QStringLiteral("org.kde.KWin"),
+            QStringLiteral("/Effects"), QStringLiteral("org.kde.kwin.Effects"), method);
+        message.setArguments(arguments);
+        return m_bus.call(message, QDBus::Block, int(qMin<qint64>(1000, m_deadline.remainingTime())));
+    }
 public:
-    KWinRuntime() { m_effects.setTimeout(1000); }
-    bool available() override { return m_effects.isValid(); }
+    ~KWinRuntime() override { QDBusConnection::disconnectFromBus(m_busName); }
+    bool available() override {
+        // This also verifies the effects endpoint without introspection.
+        const QDBusReply<bool> reply = call(QStringLiteral("isEffectLoaded"), {QStringLiteral("magiclamp")});
+        return reply.isValid();
+    }
     bool supported(const QString &name) override {
-        const QDBusReply<bool> reply = m_effects.call(QStringLiteral("isEffectSupported"), name);
+        const QDBusReply<bool> reply = call(QStringLiteral("isEffectSupported"), {name});
         return reply.isValid() && reply.value();
     }
     bool setEnabled(const QString &name, bool enabled) override {
-        QDBusReply<bool> state = m_effects.call(QStringLiteral("isEffectLoaded"), name);
+        QDBusReply<bool> state = call(QStringLiteral("isEffectLoaded"), {name});
         if (!state.isValid()) return false;
         if (state.value() != enabled) {
-            if (enabled) m_effects.call(QStringLiteral("loadEffect"), name);
-            else m_effects.call(QStringLiteral("unloadEffect"), name);
-            state = m_effects.call(QStringLiteral("isEffectLoaded"), name);
+            const auto reply = call(enabled ? QStringLiteral("loadEffect") : QStringLiteral("unloadEffect"), {name});
+            if (reply.type() == QDBusMessage::ErrorMessage) return false;
+            state = call(QStringLiteral("isEffectLoaded"), {name});
         }
         return state.isValid() && state.value() == enabled;
     }
     bool reloadDock() override {
         if (!setEnabled(QStringLiteral("kos_dock_window_animation"), true)) return false;
-        const QDBusMessage reply = m_effects.call(QStringLiteral("reconfigureEffect"),
-                                                QStringLiteral("kos_dock_window_animation"));
-        return reply.type() != QDBusMessage::ErrorMessage;
+        return call(QStringLiteral("reconfigureEffect"), {QStringLiteral("kos_dock_window_animation")}).type()
+            != QDBusMessage::ErrorMessage;
     }
 };
-
-inline bool nativeSupported()
-{
-    KWinRuntime runtime;
-    return runtime.available() && runtime.supported(QStringLiteral("magiclamp"));
-}
 
 // Preserve the requested Genie choice even when its effective backend is Scale.
 // Writing none for native Genie also retires water-drop code in older plugins.
@@ -68,6 +81,7 @@ inline bool configure(const KSharedConfigPtr &config, const QString &style,
         && style != QLatin1String("genie")) return false;
     KConfigGroup animation(config, QStringLiteral("Effect-kos_dock_window_animation"));
     KConfigGroup plugins(config, QStringLiteral("Plugins"));
+    KConfigGroup lamp(config, QStringLiteral("Effect-magiclamp"));
     const QStringList effects{QStringLiteral("magiclamp"), QStringLiteral("squash")};
     if (style != QLatin1String("none")) {
         if (!animation.readEntry("NativeEffectsManaged", false)) {
@@ -92,6 +106,24 @@ inline bool configure(const KSharedConfigPtr &config, const QString &style,
         }
         animation.deleteEntry("NativeEffectsManaged");
     }
+    // One curated preset for minimize/restore. Save once, including an absent
+    // key, so changing presets or uninstalling restores the user's exact value.
+    const bool useLamp = style == QLatin1String("genie") && native;
+    if (useLamp) {
+        if (!animation.readEntry("NativeDurationManaged", false)) {
+            animation.writeEntry("Previous-LampDurationPresent", lamp.hasKey("AnimationDuration"));
+            animation.writeEntry("Previous-LampDuration", lamp.readEntry("AnimationDuration", 0));
+            animation.writeEntry("NativeDurationManaged", true);
+        }
+        lamp.writeEntry("AnimationDuration", 250);
+    } else if (animation.readEntry("NativeDurationManaged", false)) {
+        if (animation.readEntry("Previous-LampDurationPresent", false))
+            lamp.writeEntry("AnimationDuration", animation.readEntry("Previous-LampDuration", 0));
+        else lamp.deleteEntry("AnimationDuration");
+        animation.deleteEntry("NativeDurationManaged");
+        animation.deleteEntry("Previous-LampDurationPresent");
+        animation.deleteEntry("Previous-LampDuration");
+    }
     animation.writeEntry("HideAnimationSelection", style);
     animation.writeEntry("HideAnimation", style == QLatin1String("genie")
         ? (native ? QStringLiteral("none") : QStringLiteral("scale")) : style);
@@ -112,6 +144,8 @@ inline bool applyWithRuntime(const KSharedConfigPtr &config, const QString &styl
                              : QStringLiteral("KWin unavailable; Scale configured until reconnect");
     KConfigGroup animation(config, QStringLiteral("Effect-kos_dock_window_animation"));
     KConfigGroup plugins(config, QStringLiteral("Plugins"));
+    KConfigGroup lamp(config, QStringLiteral("Effect-magiclamp"));
+    const auto previousLamp = lamp.entryMap();
     const auto previousAnimation = animation.entryMap();
     const auto previousPlugins = plugins.entryMap();
     if (!configure(config, style, native, fallback)) {
@@ -142,6 +176,7 @@ inline bool applyWithRuntime(const KSharedConfigPtr &config, const QString &styl
         for (auto it = entries.cbegin(); it != entries.cend(); ++it)
             group.writeEntry(it.key(), it.value());
     };
+    restore(lamp, previousLamp);
     restore(animation, previousAnimation);
     restore(plugins, previousPlugins);
     config->sync();
@@ -156,8 +191,17 @@ inline bool applyWithRuntime(const KSharedConfigPtr &config, const QString &styl
     return false;
 }
 
+inline QString lockPath()
+{
+    const auto directory = QStandardPaths::writableLocation(QStandardPaths::GenericConfigLocation);
+    QDir().mkpath(directory);
+    return directory + QStringLiteral("/kos-window-animation.lock");
+}
+
 inline bool apply(const QString &style, QString &error)
 {
+    QLockFile lock(lockPath());
+    if (!lock.tryLock(3000)) { error = QStringLiteral("The configuration is being updated; please retry"); return false; }
     const auto config = KSharedConfig::openConfig(QStringLiteral("kwinrc"));
     config->reparseConfiguration();
     KWinRuntime runtime;
@@ -172,10 +216,18 @@ inline bool reconcileWithRuntime(const KSharedConfigPtr &config, EffectRuntime &
     return applyWithRuntime(config, QStringLiteral("genie"), runtime, error);
 }
 
-inline bool migrate(QString &error)
+inline bool migrate(QString &error, const QString &legacyStyle = {})
 {
+    QLockFile lock(lockPath());
+    if (!lock.tryLock(3000)) { error = QStringLiteral("The configuration is being updated; please retry"); return false; }
     const auto config = KSharedConfig::openConfig(QStringLiteral("kwinrc"));
     config->reparseConfiguration();
+    if (!legacyStyle.isEmpty()) {
+        KConfigGroup animation(config, QStringLiteral("Effect-kos_dock_window_animation"));
+        animation.writeEntry("AnimationStyle", legacyStyle);
+        if (!config->sync()) { error = QStringLiteral("Could not save the animation configuration"); return false; }
+    }
+    if (selection(config) != QLatin1String("genie")) return true;
     KWinRuntime runtime;
     return reconcileWithRuntime(config, runtime, error);
 }

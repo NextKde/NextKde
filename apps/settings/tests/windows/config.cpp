@@ -62,7 +62,6 @@ int main(int argc, char **argv) {
     // the removed water-drop path. Genie intent is retained for later recovery.
     CHECK(settings.setAnimation("hide", "genie"));
     CHECK(settings.state()["hideAnimation"]=="genie");
-    CHECK(!settings.state()["nativeGenieSupported"].toBool());
     CHECK(!settings.state()["nativeGenieFallback"].toString().isEmpty());
     KConfigGroup offlineAnimation(config, "Effect-kos_dock_window_animation");
     CHECK(offlineAnimation.readEntry("HideAnimation", QString())=="scale");

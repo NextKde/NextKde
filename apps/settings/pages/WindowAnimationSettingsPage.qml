@@ -157,9 +157,10 @@ ColumnLayout {
                         label: I18n.tr("Genie")
                     }
                 ]
+                enabled: windowPage.backend && !windowPage.backend.animationBusy
                 currentIndex: ["none", "scale", "genie"].indexOf(windowPage.snapshot.hideAnimation ?? "scale")
                 onSelectionChanged: function (index) {
-                    windowPage.backend.setAnimation("hide", model[index].id);
+                    windowPage.backend.requestAnimation("hide", model[index].id);
                 }
             }
         }
@@ -188,9 +189,10 @@ ColumnLayout {
                         label: I18n.tr("Shrink and fade")
                     }
                 ]
+                enabled: windowPage.backend && !windowPage.backend.animationBusy
                 currentIndex: ["none", "fade", "scale"].indexOf(windowPage.snapshot.closeAnimation ?? "scale")
                 onSelectionChanged: function (index) {
-                    windowPage.backend.setAnimation("close", model[index].id);
+                    windowPage.backend.requestAnimation("close", model[index].id);
                 }
             }
         }
@@ -200,37 +202,10 @@ ColumnLayout {
         Layout.leftMargin: 13
         Layout.rightMargin: 13
         visible: (windowPage.snapshot.nativeGenieFallback ?? "").length > 0
-        text: I18n.tr(windowPage.snapshot.nativeGenieFallback ?? "")
+        text: I18n.tr("Temporarily using Scale. Your Genie preference is saved.")
         color: colors.secondaryText
         font.pixelSize: 11
         wrapMode: Text.Wrap
-    }
-    Text {
-        Layout.fillWidth: true
-        Layout.leftMargin: 13
-        Layout.rightMargin: 13
-        text: I18n.tr("Genie uses KWin Magic Lamp and follows the Dock icon, with Scale as a fallback. None restores your previous KWin minimize effects.")
-        color: colors.secondaryText
-        font.pixelSize: 11
-        wrapMode: Text.Wrap
-    }
-    Text {
-        Layout.fillWidth: true
-        Layout.leftMargin: 13
-        Layout.rightMargin: 13
-        visible: (windowPage.snapshot.nativeGenieFallback ?? "").length > 0
-        text: I18n.tr("Magic Lamp comes with standard KDE Plasma installations and is enabled by this setting. If it is missing, repair the KWin package using your distribution’s software manager. In KDE System Settings → Desktop Effects, search for Magic Lamp to configure it.")
-        color: colors.secondaryText
-        font.pixelSize: 11
-        wrapMode: Text.Wrap
-    }
-    Demo.LiquidActionButton {
-        Layout.leftMargin: 13
-        visible: (windowPage.snapshot.nativeGenieFallback ?? "").length > 0
-        text: I18n.tr("Open KDE System Settings")
-        enabled: typeof settingsBridge !== "undefined"
-            && typeof settingsBridge.launchSystemSettings === "function"
-        onClicked: settingsBridge.launchSystemSettings()
     }
     Text {
         Layout.fillWidth: true
