@@ -15,19 +15,10 @@ KosButton {
     lightLabel: true
     scale: 1
     background: Rectangle {
-        radius: control.height < 28 ? 6 : height / 2
-        color: control.emphasized ? design.accent
+        radius: height / 2
+        color: control.emphasized ? AppTheme.withAlpha(design.accent, control.enabled ? 1 : 0.45)
             : control.flat && !control.hovered && !control.down ? "transparent"
             : control.down ? design.selectionFill
             : control.hovered ? design.rowHoverFill : design.controlFill
-        Rectangle {
-            anchors.fill: parent
-            anchors.margins: -2
-            radius: parent.radius + 2
-            color: "transparent"
-            border.width: 2
-            border.color: design.accent
-            visible: control.activeFocus && control.enabled
-        }
     }
 }

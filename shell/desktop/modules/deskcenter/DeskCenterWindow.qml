@@ -1,4 +1,5 @@
 import QtQuick
+import QtQuick.Window
 import QtQuick.Controls as Controls
 import QtQuick.Effects
 import QtQml.Models
@@ -2225,7 +2226,7 @@ PanelWindow {
                             anchors.fill: parent
                             cursorShape: Qt.PointingHandCursor
                             onClicked: AppActionService.launchById(
-                                "kos-todo", ["--view", "today"])
+                                "kos-calendar", ["--view", "today"])
                         }
 
                         // A parent Item's `clip` is rectangular, not rounded.
@@ -2321,8 +2322,8 @@ PanelWindow {
                                     MouseArea {
                                         anchors.fill: parent
                                         cursorShape: Qt.PointingHandCursor
-                                        onClicked: AppActionService.launchById("kos-todo", [
-                                            "--item", String(PimWidgetService.value(parent.modelData,
+                                        onClicked: AppActionService.launchById("kos-calendar", [
+                                            "--view", "reminders", "--item", String(PimWidgetService.value(parent.modelData,
                                                 "id", PimWidgetService.value(parent.modelData, "seriesId", "")))
                                         ])
                                     }
@@ -3774,6 +3775,12 @@ PanelWindow {
                         anchors.fill: parent
                         source: modelData.kind === "launcher"
                             ? AppPresentationService.iconSource(modelData.icon) : ""
+                        // Provider icons already scale with the display; raw
+                        // bundled artwork must request physical pixel sizes.
+                        readonly property int rasterSize: Math.max(1, Math.ceil(
+                            actualSize * (String(source).startsWith("image://")
+                                ? 1 : Math.max(1, Screen.devicePixelRatio))))
+                        backer.sourceSize: Qt.size(rasterSize, rasterSize)
                         // Theme icon: synchronous, see AppIcon.qml.
                         asynchronous: false
                         visible: source !== "" && status === Image.Ready
