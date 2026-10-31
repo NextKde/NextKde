@@ -639,6 +639,7 @@ export const catalog = {
     "Newest": "最新",
     "Nothing pinned yet": "还没有固定任何内容",
     "Clipboard history is empty": "剪贴板历史为空",
+    "Clipboard history unavailable: install cliphist and wl-clipboard": "剪贴板历史不可用：请安装 cliphist 和 wl-clipboard",
     "No matching windows": "未找到匹配的窗口",
 
     // notifications · 通知动作标签
