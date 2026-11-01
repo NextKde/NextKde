@@ -333,7 +333,14 @@ Item {
     Connections {
         target: ContextMenuCoordinator
         function onActiveMenuChanged() {
-            if (ContextMenuCoordinator.activeMenu && !trayMenu.visible) root.closeCollection()
+            const menu = ContextMenuCoordinator.activeMenu
+            if (!menu || trayMenu.visible) return
+            // activeMenu is published before the menu maps, so a menu opened
+            // from a collected icon used to collapse the collection under it.
+            // That unmapped the surface the menu hangs from, so the
+            // compositor dismissed it on open and left a stale popup.
+            if (menu === trayMenu && (trayMenu.anchorItem?.inCollection ?? false)) return
+            root.closeCollection()
         }
     }
     Connections {
