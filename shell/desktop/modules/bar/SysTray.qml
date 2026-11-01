@@ -813,10 +813,16 @@ Item {
     function openTrayMenu(anchor) {
         if (!anchor || !anchor.modelData || !anchor.modelData.hasMenu)
             return
-        if (trayMenu.visible)
-            trayMenu.hide()
-        closeTrayMenuState()
+        if (trayMenu.visible) {
+            // Switching items: keep the current rows on screen until the new
+            // tree arrives, and move the popup to the new item's anchor.
+            trayMenuShowFallback.stop()
+            root._trayMenuPendingShow = false
+        } else {
+            closeTrayMenuState()
+        }
         trayMenu.anchorItem = anchor
+        trayMenu.anchor.updateAnchor()
         root._trayMenuPendingShow = true
         trayMenuOpener.menu = anchor.modelData.menu
         if (trayMenuOpener.menu === null) {
@@ -825,6 +831,15 @@ Item {
         }
         rebuildTrayMenu()
         trayMenuShowFallback.restart()
+    }
+
+    // The collection popup hosts this menu's anchor, and presses on popup
+    // surfaces never reach the compositor's global pointer bridge. Its
+    // background therefore has to dismiss the menu itself.
+    readonly property bool trayMenuVisible: trayMenu.visible
+    function dismissTrayMenu() {
+        if (trayMenu.visible)
+            trayMenu.hide()
     }
 
     function closeTrayMenuState() {
