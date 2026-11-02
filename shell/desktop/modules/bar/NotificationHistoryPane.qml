@@ -177,12 +177,12 @@ Item {
         onFinished: { historyList.positionViewAtBeginning(); pane.folding = false; pane.expanded = false }
     }
     onActiveChanged: if (!active) { historyList.cancelFlick(); scrollHome.stop(); folding = false }
-    Region {
-        id: glassRegions
-        regions: pane.paintedCards.map(card => card.blurRegion).filter(region => region !== null)
-            .concat(footerButton.visible && footerButton.backdropVisible && footerButton.blurRegion ? [footerButton.blurRegion] : [])
-            .concat(emptyGlass.visible && emptyGlass.blurRegion ? [emptyGlass.blurRegion] : [])
-    }
+    // Region.regions has no change notification; keep the source list bindable
+    // so the host also updates when cards switch to the independent v8 path.
+    readonly property var legacyBlurRegions: pane.paintedCards.map(card => card.blurRegion).filter(region => region !== null)
+        .concat(footerButton.visible && footerButton.backdropVisible && footerButton.blurRegion ? [footerButton.blurRegion] : [])
+        .concat(emptyGlass.visible && emptyGlass.blurRegion ? [emptyGlass.blurRegion] : [])
+    Region { id: glassRegions; regions: pane.legacyBlurRegions }
     component DeckButton: AbstractButton {
         id: button
         property bool glassButton: false
