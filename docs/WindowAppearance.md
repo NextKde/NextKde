@@ -113,26 +113,6 @@ coverage round-trips, restoration, atomic settings updates and the real Settings
 switch. VM graphical acceptance must additionally check native hover/tooltips,
 background color matching, overlap/resize and mixed output scales.
 
-### Chrome / Chromium client decorations
-
-Chromium reads GTK's `gtk-decoration-layout` for its self-drawn browser frame.
-The GTK integration's left-side layout does not style those browser buttons;
-a fallback overlay pinned to the right would leave two visible groups.
-Normal Chrome/Chromium CSD windows therefore retain their original client
-controls with no KOS overlay or input/tint state. Exact browser app-ID/WM_CLASS
-tokens are matched; Electron applications, other applications and browser dialogs
-retain their existing policies. Native KOS server decorations remain supported
-when the browser uses a system titlebar. Saved browser overlay geometry is retained
-but cannot force a second group over client-owned controls. This fallback does
-not claim to provide KOS-colored browser buttons.
-
-The Bridge `window-controls` diagnostic reports `chromiumClientControls`,
-`clientControls` and `independentButtonBackground` to distinguish ownership and
-loaded policy. VM acceptance should launch Chrome/Chromium with an isolated
-profile, verify a single functional group in CSD mode and no overlay/tint state,
-then verify native KOS controls in system-titlebar mode. Other CSD applications
-must keep their fallback overlays.
-
 ## Surface-shape protocol
 
 `kos-surface-shape-v1.xml` defines versioned capability negotiation. Preserve interface/opcode order.

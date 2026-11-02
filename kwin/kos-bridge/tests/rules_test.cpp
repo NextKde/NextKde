@@ -986,37 +986,6 @@ void testStore()
     CHECK(!writing.store(WindowMatcher{}, written));
 }
 
-void testChromiumClientControls()
-{
-    removeRulesFile();
-    writeUserConfig(R"({"default":{"drawOnDecoratedWindows":"always"},
-        "apps":{"google-chrome":{"position":"right","buttonSize":30}}})");
-    ButtonConfig config;
-    PanelGeometry old;
-    old.position = ButtonPosition::Right;
-    old.buttonSize = 35;
-    CHECK(config.storeGeometry(classMatcher(QStringLiteral("google-chrome")), old));
-    for (const auto &app : {"google-chrome", "google-chrome Google-chrome", "google-chrome-stable",
-                           "google-chrome-beta", "google-chrome-unstable", "com.google.Chrome",
-                           "chromium Chromium", "chromium-browser", "org.chromium.Chromium"}) {
-        const auto browser = config.getAppConfig(query(QString::fromLatin1(app)));
-        CHECK(browser.chromiumClientControls);
-        CHECK(browser.usesClientControls(false));
-        CHECK(!browser.usesClientControls(true)); // System titlebar retains native KOS buttons.
-        CHECK(!browser.usesNativeGtkControls(false)); // Chrome is not CSS-qualified GTK.
-    }
-    for (const auto &app : {"qq", "code", "org.example.chromium-editor", "firefox", "org.example.App"}) {
-        const auto other = config.getAppConfig(query(QString::fromLatin1(app)));
-        CHECK(!other.chromiumClientControls);
-        CHECK(!other.usesClientControls(false));
-    }
-    CHECK(!config.getAppConfig(query(QStringLiteral("google-chrome"), {}, 5)).chromiumClientControls);
-    PanelGeometry kept;
-    WindowRuleStore store;
-    CHECK(store.found(query(QStringLiteral("google-chrome")), &kept));
-    CHECK(near(kept.buttonSize, 35)); // Retain saved user geometry; do not rewrite it.
-}
-
 void testIndependentBackground()
 {
     PanelGeometry base;
@@ -1116,7 +1085,6 @@ int main(int argc, char **argv)
     testNativeGtkControls();
     testStore();
     testIndependentBackground();
-    testChromiumClientControls();
 
     std::printf("%d checks, %d failures\n", g_checks, g_failures);
     return g_failures == 0 ? 0 : 1;

@@ -79,20 +79,6 @@ VM 验收进入/退出、手势取消、反复激活、多输出变动、动态�
 CI 检查按钮锚点、大小/间距手势锁定、全局配置优先级、覆盖范围保存恢复、设置原子更新及
 真实设置开关交互；VM 图形验收还需检查底层悬停/提示拦截、背景跟色、遮挡/缩放及混合输出比例。
 
-### Chrome / Chromium 自绘标题栏
-
-Chromium 读取 GTK 的 `gtk-decoration-layout` 来布局自己的浏览器按钮。GTK 适配设置的左侧
-布局不会给这些自绘按钮套用 GTK 样式；此时在右侧盖绘浮层会留下两组可见按钮。
-因此普通 Chrome/Chromium CSD 窗口保留原生按钮，不绘制 Kos 浮层，也不保留浮层输入或取色状态。
-仅匹配明确的浏览器 app ID / WM_CLASS token；Electron 应用、其他软件和浏览器对话框保留原策略。
-浏览器使用系统标题栏时仍支持原生 Kos 装饰器。已保存的浏览器浮层几何保留，但不能强制叠加
-第二组按钮。这条回退路径不提供 Kos 配色的浏览器自绘按钮。
-
-Bridge 的 `window-controls` 诊断新增 `chromiumClientControls`、`clientControls` 和
-`independentButtonBackground`，区分控件所有权及已加载的策略。VM 验收用隔离配置启动真实
-Chrome/Chromium，检查 CSD 仅一组按钮且功能正常、无浮层或取色状态，再检查系统标题栏模式
-下的原生 Kos 按钮；同时确认其他 CSD 应用仍使用原来的浮层。
-
 ## Surface-shape 协议
 
 `kos-surface-shape-v1.xml` 定义版本协商，保留接口/操作码顺序。
