@@ -17,6 +17,8 @@
 #include "desktopblurpolicy.h"
 #ifndef GLASS_X11
 #include "legacyblurregion.h"
+#include "overviewpreview.h"
+#include <QScopedValueRollback>
 #endif
 
 #include "core/pixelgrid.h"
@@ -301,6 +303,7 @@ BlurEffect::BlurEffect()
                 // Rebuild declared-shape fallback on output remapping too:
                 // the new surface may not have received a blur-region request.
                 updateBlurRegion(window);
+                if (m_overviewPreview) m_overviewPreview->invalidate();
                 // A blur override appearing, disappearing or changing level
                 // changes how far the repaint region has to expand, not just
                 // what is drawn this frame.
@@ -385,10 +388,29 @@ BlurEffect::BlurEffect()
     }
 
     m_valid = true;
+#ifndef GLASS_X11
+    m_overviewPreview = std::make_unique<OverviewPreview>(
+        [this](const RenderTarget &target, const RenderViewport &viewport, EffectWindow *window) {
+            QScopedValueRollback capture(m_overviewCapture, true);
+            QScopedValueRollback output(m_currentOutput, static_cast<BlurOutput *>(nullptr));
+            WindowPaintData data;
+            blur(target, viewport, window, 0, BlurRegion::infinite(), data);
+        }, this);
+    connect(effects, &EffectsHandler::activeFullScreenEffectChanged, this, [this] {
+        const auto *effect = effects->activeFullScreenEffect();
+        if (!effect || !effect->inherits("KWin::OverviewEffect")) {
+            effects->makeOpenGLContextCurrent();
+            for (auto &[window, data] : m_windows) data.render.erase(nullptr);
+        }
+    });
+#endif
 }
 
 BlurEffect::~BlurEffect()
 {
+#ifndef GLASS_X11
+    m_overviewPreview.reset();
+#endif
 #if !defined(GLASS_X11) && !defined(GLASS_KWIN_67)
     // When compositing is restarted, avoid removing the manager immediately.
     if (s_blurManager) {
@@ -1386,7 +1408,13 @@ void BlurEffect::prePaintWindow(RenderView *view, EffectWindow *w, WindowPrePain
 
 bool BlurEffect::shouldBlur(const EffectWindow *w, int mask, const WindowPaintData &data) const
 {
-    if (effects->activeFullScreenEffect() && !w->data(WindowForceBlurRole).toBool()) {
+    const bool overviewCapture =
+#ifndef GLASS_X11
+        m_overviewCapture;
+#else
+        false;
+#endif
+    if (effects->activeFullScreenEffect() && !overviewCapture && !w->data(WindowForceBlurRole).toBool()) {
         return false;
     }
 
