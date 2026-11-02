@@ -1055,6 +1055,7 @@ export const catalog = {
     "Settings app version mismatch": "设置程序版本不匹配",
     "Desktop preview is not supported in this environment yet": "当前环境暂不支持桌面预览",
     "Enters a fullscreen simulated desktop; the wallpaper changes only after Apply": "进入全屏模拟桌面，应用后才会更换壁纸",
+    "No menu actions available": "暂无菜单操作",
     "Loading…": "正在载入…",
     "Desktop preview  ›": "桌面预览  ›",
     "Fill mode": "填充方式",

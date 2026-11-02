@@ -333,7 +333,14 @@ Item {
     Connections {
         target: ContextMenuCoordinator
         function onActiveMenuChanged() {
-            if (ContextMenuCoordinator.activeMenu && !trayMenu.visible) root.closeCollection()
+            const menu = ContextMenuCoordinator.activeMenu
+            if (!menu || trayMenu.visible) return
+            // activeMenu is published before the menu maps, so a menu opened
+            // from a collected icon used to collapse the collection under it.
+            // That unmapped the surface the menu hangs from, so the
+            // compositor dismissed it on open and left a stale popup.
+            if (menu === trayMenu && (trayMenu.anchorItem?.inCollection ?? false)) return
+            root.closeCollection()
         }
     }
     Connections {
@@ -806,12 +813,22 @@ Item {
     function openTrayMenu(anchor) {
         if (!anchor || !anchor.modelData || !anchor.modelData.hasMenu)
             return
-        if (trayMenu.visible)
-            trayMenu.hide()
-        closeTrayMenuState()
-        trayMenu.anchorItem = anchor
+        trayMenuShowFallback.stop()
         root._trayMenuPendingShow = true
-        trayMenuOpener.menu = anchor.modelData.menu
+        // Switching the opener releases the previous app's entry objects.
+        // Replace both the logical and animated page before unref, so neither
+        // stale actions nor an empty surface appear while GetLayout is pending.
+        root._rebuildingTrayMenu = true
+        try {
+            trayMenu.setItems([{ label: I18n.tr("Loading…"), enabled: false }], true)
+            for (const rec of root._traySubmenuOpeners) rec.opener.destroy()
+            root._traySubmenuOpeners = []
+            trayMenu.anchorItem = anchor
+            trayMenu.anchor.updateAnchor()
+            trayMenuOpener.menu = anchor.modelData.menu
+        } finally {
+            root._rebuildingTrayMenu = false
+        }
         if (trayMenuOpener.menu === null) {
             root._trayMenuPendingShow = false
             return
@@ -820,12 +837,21 @@ Item {
         trayMenuShowFallback.restart()
     }
 
+    // The collection popup hosts this menu's anchor, and presses on popup
+    // surfaces never reach the compositor's global pointer bridge. Its
+    // background therefore has to dismiss the menu itself.
+    readonly property bool trayMenuVisible: trayMenu.visible
+    function dismissTrayMenu() {
+        if (trayMenu.visible)
+            trayMenu.hide()
+    }
+
     function closeTrayMenuState() {
         trayMenuShowFallback.stop()
         root._trayMenuPendingShow = false
         // Drop the delegates' entry references before the handles release
         // the DBusMenu tree and its entries are deleted.
-        trayMenu.clear()
+        trayMenu.setItems([], true)
         for (const rec of root._traySubmenuOpeners)
             rec.opener.destroy()
         root._traySubmenuOpeners = []
@@ -876,7 +902,8 @@ Item {
     function rebuildTrayMenu() {
         if (root._rebuildingTrayMenu)
             return
-        if (trayMenuOpener.menu === null)
+        if (trayMenuOpener.menu === null
+                || trayMenuOpener.children === root._trayMenuEmptyModel)
             return
         root._rebuildingTrayMenu = true
 
@@ -922,7 +949,9 @@ Item {
                 level = parentItem.children
             }
 
-            trayMenu.rootItems = rootItems
+            if (rootItems.length === 0)
+                level = [{ label: I18n.tr("No menu actions available"), enabled: false }]
+            trayMenu.rootItems = rootItems.length === 0 ? level : rootItems
             trayMenu.page = ({ items: level, parents: parents })
         } finally {
             root._rebuildingTrayMenu = false
@@ -940,6 +969,7 @@ Item {
 
     ContextMenu {
         id: trayMenu
+        objectName: "status-tray-context-menu"
         scrimLevel: AppearanceTokens.bar.popupScrimLevel
         customAnchorEdges: root.popupEdge
         customGravity: root.popupEdge

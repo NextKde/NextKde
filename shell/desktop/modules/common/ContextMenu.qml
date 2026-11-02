@@ -76,9 +76,12 @@ PopupWindow {
         enabled: root.visible && (!root.macosPopupMotion || popupMotion.requestedOpen)
     }
 
-    function setItems(items) {
+    function setItems(items, immediate) {
         root.rootItems = items || []
         root.page = ({ items: root.rootItems, parents: [] })
+        // A DBusMenu owner may release its entries immediately. Do not retain
+        // that page through the ordinary navigation crossfade.
+        if (immediate === true) pageMotion.reset(root.page)
     }
     function clear() { root.setItems([]) }
     function addItem(icon, label, cmd, enabled) {
