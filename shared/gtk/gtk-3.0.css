@@ -1,0 +1,33 @@
+/* Standard GtkHeaderBar controls only; application toolbar buttons are untouched. */
+headerbar button.titlebutton.close,
+headerbar button.titlebutton.minimize,
+headerbar button.titlebutton.maximize {
+    min-width: 16px;
+    min-height: 16px;
+    padding: 2px;
+    margin: 0 3px;
+    border: 1px solid alpha(black, 0.18);
+    border-radius: 999px;
+    background-image: none;
+    box-shadow: none;
+    color: alpha(black, 0.75);
+    -gtk-icon-shadow: none;
+}
+headerbar button.titlebutton.close { background-color: #ff5f57; }
+headerbar button.titlebutton.minimize { background-color: #febc2e; }
+headerbar button.titlebutton.maximize { background-color: #28c840; }
+headerbar button.titlebutton image { -gtk-icon-transform: scale(0.75); }
+headerbar button.titlebutton.close:hover,
+headerbar button.titlebutton.minimize:hover,
+headerbar button.titlebutton.maximize:hover {
+    background-image: linear-gradient(alpha(white, 0.18), alpha(white, 0.18));
+}
+headerbar button.titlebutton.close:active,
+headerbar button.titlebutton.minimize:active,
+headerbar button.titlebutton.maximize:active {
+    background-image: linear-gradient(alpha(black, 0.16), alpha(black, 0.16));
+}
+headerbar button.titlebutton.close:backdrop,
+headerbar button.titlebutton.minimize:backdrop,
+headerbar button.titlebutton.maximize:backdrop { background-color: #b8b8bd; }
+headerbar button.titlebutton:disabled { opacity: 0.45; }

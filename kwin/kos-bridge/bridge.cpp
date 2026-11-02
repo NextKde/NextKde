@@ -1,4 +1,7 @@
 #include "bridge.h"
+#include "windowbuttons/cooperativecontrols.h"
+#include <wayland_server.h>
+#include <wayland/surface.h>
 #ifdef KOS_KWIN_PAINT_RESULT_API
 #include <opengl/eglcontext.h>
 #endif
@@ -7,12 +10,16 @@
 #include "windowbuttons/buttoninput.h"
 #include "windowbuttons/windowquery.h"
 #include "windowappearance/windowappearance.h"
+#include "windowappearance/appearanceprotocol.h"
+#include <KDecoration3/Decoration>
 
 #include <effect/effecthandler.h>
 #include <effect/effectwindow.h>
 #include <core/renderviewport.h>
 #include <input.h>
 #include <window.h>
+#include <QJsonArray>
+#include <QJsonDocument>
 
 namespace KOS
 {
@@ -90,6 +97,18 @@ BridgeEffect::BridgeEffect()
     if (KWin::input()) {
         KWin::input()->installInputEventFilter(m_input.get());
     }
+    m_cooperative = std::make_unique<CooperativeControls>(
+        KWin::waylandServer() ? KWin::waylandServer()->display() : nullptr,
+        [this](KWin::EffectWindow *window) { return m_config->getAppConfig(windowQueryFor(window)); }, this);
+    connect(m_cooperative.get(), &CooperativeControls::changed, this, [this](KWin::SurfaceInterface *surface) {
+        for (auto *window : KWin::effects->stackingOrder()) {
+            if (!window->window() || (surface && window->window()->surface() != surface)) continue;
+            m_input->forgetWindow(window);
+            m_renderer->forget(window); // Drops pending tint timers/readbacks on handoff.
+            m_continuousClip->invalidate(window);
+            window->addRepaintFull();
+        }
+    });
 
     const auto watchFullscreen = [this](KWin::EffectWindow *window) {
         connect(window, &KWin::EffectWindow::windowFullScreenChanged,
@@ -166,6 +185,8 @@ BridgeEffect::BridgeEffect()
 
 BridgeEffect::~BridgeEffect()
 {
+    if (m_cooperative) disconnect(m_cooperative.get(), nullptr, this, nullptr);
+    m_cooperative.reset();
     if (KWin::effects->property(SharedWindowSourceProperty).value<QObject *>() == this)
         KWin::effects->setProperty(SharedWindowSourceProperty, QVariant());
     // QObject disconnects receiver connections only after members have been
@@ -183,6 +204,7 @@ void BridgeEffect::reconfigure(ReconfigureFlags flags)
     if (m_config) {
         m_config->load();
     }
+    if (m_cooperative) m_cooperative->refresh();
     // The configuration feeds the title-bar scan (position, padding, tint
     // override), so every cached measurement is stale now.
     if (m_renderer) {
@@ -202,6 +224,41 @@ void BridgeEffect::reconfigure(ReconfigureFlags flags)
 bool BridgeEffect::isActive() const
 {
     return true;
+}
+
+QString BridgeEffect::debug(const QString &parameter) const
+{
+    if (parameter != QLatin1String("window-controls")) return {};
+    QJsonArray windows;
+    for (auto *window : KWin::effects->stackingOrder()) {
+        if (!window->window()) continue;
+        AppConfig config = m_config->getAppConfig(windowQueryFor(window));
+        const bool declared = m_cooperative && m_cooperative->configureWindow(window, config);
+        auto entry = m_renderer->controlDiagnostics(window);
+        entry.insert("declared", declared);
+        entry.insert("nativeControls", config.usesNativeGtkControls(window->hasDecoration()));
+        entry.insert("windowClass", window->windowClass());
+        entry.insert("decorated", window->hasDecoration());
+        auto *decoration = window->window()->decoration();
+        const bool nativeDecoration = decoration && decoration->property(WindowAppearance::DecorationControlsProperty).toBool();
+        entry.insert("decorationControls", nativeDecoration);
+        QJsonArray nativeButtons;
+        if (nativeDecoration) for (auto *button : decoration->findChildren<QObject *>()) {
+            if (!button->inherits("KDecoration3::DecorationButton") || !button->property("visible").toBool()) continue;
+            const QRectF rect = button->property("geometry").toRectF().translated(window->frameGeometry().topLeft());
+            nativeButtons.append(QJsonObject{{"action",button->objectName()}, {"rect",QJsonArray{rect.x(),rect.y(),rect.width(),rect.height()}}});
+        }
+        entry.insert("decorationButtons", nativeButtons);
+        entry.insert("maximized", window->window()->maximizeMode() == KWin::MaximizeFull);
+        entry.insert("active", config.cooperativeControls);
+        entry.insert("id", window->window()->internalId().toString());
+        entry.insert("minimized", window->isMinimized());
+        entry.insert("caption", window->caption());
+        windows.append(entry);
+    }
+    return QString::fromUtf8(QJsonDocument(QJsonObject{{"windows", windows},
+        {"samplingWindows", m_renderer->samplingWindowCount()},
+        {"cursor", QJsonArray{KWin::effects->cursorPos().x(), KWin::effects->cursorPos().y()}}}).toJson(QJsonDocument::Compact));
 }
 
 void BridgeEffect::updateNativeThumbnails()
@@ -353,6 +410,15 @@ void BridgeEffect::paintButtons(const KWin::RenderTarget &renderTarget,
         return;
     }
 
+    // A native decoration owns both pixels and input. Never sample or cover
+    // its controls, even when a legacy per-app rule forces overlay rendering.
+    if (auto *native = window->window(); native && native->decoration()
+        && native->decoration()->property(WindowAppearance::DecorationControlsProperty).toBool()) {
+        m_input->forgetWindow(window);
+        m_renderer->forget(window); // Also stop tint timers inherited from an older decoration.
+        return;
+    }
+
     // Animated controls belong to the source capture, never a stationary
     // screen overlay. Only the capture may paint them during a Dock morph.
     if (!sourceCapture && window->data(DockSourceAnimationRole).toBool()) {
@@ -380,8 +446,9 @@ void BridgeEffect::paintButtons(const KWin::RenderTarget &renderTarget,
     // the caption, the role and the type. Read here rather than inside the
     // configuration so that the configuration stays a lookup and does not have
     // to know what an effect window is.
-    const AppConfig config = m_config->getAppConfig(windowQueryFor(window));
-    if (!config.showButtons) {
+    AppConfig config = m_config->getAppConfig(windowQueryFor(window));
+    if (m_cooperative) m_cooperative->configureWindow(window, config);
+    if (!config.showButtons || config.usesNativeGtkControls(window->hasDecoration())) {
         m_renderer->clearHits(window, sourceCapture);
         return;
     }

@@ -182,6 +182,10 @@
         <translation>Add holiday calendar…</translation>
     </message>
     <message><source>Reminder updated</source><translation>Reminder updated</translation></message>
+    <message>
+        <source>Locations</source>
+        <translation>Locations</translation>
+    </message>
 </context>
 <context>
     <name>EventEditorDialog</name>
