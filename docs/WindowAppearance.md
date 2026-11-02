@@ -43,7 +43,14 @@ Docks in stacking order into one GPU framebuffer per output. It renders bounded
 Glass against the captured wallpaper before the client content. Applications are
 excluded and keep KWin's own layout and z order. A Qt Quick texture item covers each
 native `DesktopBackground`, including grid/bar previews, so wallpaper, widgets and
-Dock scale together. Redundant panel thumbnail items temporarily use a transparent
+Dock scale together. Redirect native ShadowedTexture/FastBlur `source` properties
+to the composed texture provider: those effects sample a provider directly, so a
+child overlay beneath the original background does not replace their input.
+Publish texture revisions before Qt Quick synchronization even when the source
+item is invisible. Restore original consumer sources before releasing providers.
+Project redundant panel thumbnails only on outputs with connected consumers;
+log missing consumer connections and retain native rendering on failure.
+Redundant panel thumbnail items temporarily use a transparent
 visual parent, preserving their native QML opacity bindings. Client visibility,
 focus and desktop membership are untouched.
 
@@ -57,6 +64,7 @@ items on exit, lock and effect teardown. Release the isolated Glass capture cach
 on exit. VM acceptance must cover enter/exit and gesture cancellation, repeated
 activation, multi-output changes, moving widget content and actual material continuity.
 `kos-glass.overview-panel-projection` checks native opacity binding continuity,
+typed/variant texture source redirection, preservation of newer native sources,
 repeated projection, restoration and item/effect teardown with real Qt Quick items.
 
 ## Configuration
