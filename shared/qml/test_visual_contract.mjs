@@ -161,20 +161,26 @@ assert.match(collapsibleSidebar, /enabled:\s*expanded/,
 for (const app of ["calendar", "todo", "weather"]) {
     const source = read(`../../apps/${app}/qml/Main.qml`);
     if (app === "calendar") {
-        // Calendar deliberately uses a flush sidebar and custom window dots.
+        // Calendar uses a flush sidebar and shared accessible window controls.
         // Keep the focus, recovery and keyboard contracts without requiring
         // the older floating-card component names.
         assert.match(source, /objectName:\s*"applicationSidebar"[\s\S]*enabled:\s*root\.sidebarExpanded/,
             "collapsed calendar navigation cannot take keyboard focus");
         assert.match(source, /onClicked:\s*root\.sidebarExpanded\s*=\s*!root\.sidebarExpanded/,
             "calendar navigation can be restored");
-        assert.match(source, /Accessible\.role:\s*Accessible\.Button/,
-            "calendar window actions remain accessible buttons");
+        assert.match(source, /KosWindowControls\s*\{[\s\S]{0,200}?targetWindow:\s*root/,
+            "calendar exposes shared frameless window controls");
+        assert.match(source, /objectName:\s*"calendarWindowControls"[\s\S]{0,100}?maximizeMode:\s*true/,
+            "calendar retains maximize/restore rather than fullscreen behavior");
+        const controls = read("./foundation/KosWindowControls.qml");
+        assert.match(controls, /delegate:\s*AbstractButton\s*\{/,
+            "shared window actions retain the standard accessible button role");
+        assert.match(controls, /Accessible\.name:/, "window actions retain accessible names");
+        assert.match(controls, /focusPolicy:\s*Qt\.StrongFocus/,
+            "window actions remain keyboard focusable");
         for (const action of ["showMinimized", "showMaximized", "showNormal", "close"])
-            assert.ok(source.includes(`root.${action}()`), `calendar exposes ${action}`);
-        for (const key of ["Return", "Enter", "Space"])
-            assert.ok(source.includes(`Keys.on${key}Pressed: windowDot.activate()`),
-                `calendar window actions accept ${key}`);
+            assert.ok(controls.includes(`root.targetWindow.${action}()`), `shared controls expose ${action}`);
+        // Return, Enter and Space activation are exercised by InteractionControls.
     } else {
         assert.match(source, /KosSidebar\s*\{[\s\S]*expanded:\s*root\.sidebarExpanded/,
             `${app} uses the adaptive collapsible sidebar`);

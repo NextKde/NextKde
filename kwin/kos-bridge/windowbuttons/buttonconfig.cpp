@@ -26,6 +26,11 @@ AppFieldMask applyFields(AppConfig &config, const QJsonObject &object)
 {
     AppFieldMask fields = AppFieldNone;
 
+    if (object.value("nativeGtkControls").isBool()) {
+        config.nativeGtkControls = object["nativeGtkControls"].toBool();
+        fields |= AppFieldNativeGtkControls;
+    }
+
     if (object.contains("showButtons")) {
         config.showButtons = object["showButtons"].toBool();
         fields |= AppFieldShowButtons;
@@ -285,6 +290,9 @@ const ButtonConfig::AppEntry *ButtonConfig::findApp(const QString &windowClass) 
 void ButtonConfig::mergeInto(AppConfig &base, const AppConfig &overlay,
                              AppFieldMask fields)
 {
+    if (fields & AppFieldNativeGtkControls) {
+        base.nativeGtkControls = overlay.nativeGtkControls;
+    }
     if (fields & AppFieldShowButtons) {
         base.showButtons = overlay.showButtons;
     }

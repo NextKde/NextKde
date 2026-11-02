@@ -8,6 +8,7 @@
 #include <QVector>
 
 #include <functional>
+#include <array>
 
 #include "panelgeometry.h"
 #include "windowrules.h"
@@ -60,10 +61,21 @@ enum AppField : AppFieldMask {
     AppFieldBackground = 1u << 9,
     AppFieldDecoratedWindows = 1u << 10,
     AppFieldGlyphMode = 1u << 11,
+    AppFieldNativeGtkControls = 1u << 12,
 };
 
 struct AppConfig {
     bool showButtons = true;
+    // Explicitly qualified GTK CSD windows only. SSD still needs our panel.
+    bool nativeGtkControls = false;
+    // Runtime-only, negotiated per wl_surface. Never read from app-ID rules.
+    bool cooperativeControls = false;
+    QRectF cooperativeRect;
+    std::array<QRectF, 3> cooperativeButtons; // maximize, minimize, close; empty means absent
+    bool usesNativeGtkControls(bool hasDecoration) const
+    {
+        return nativeGtkControls && !hasDecoration;
+    }
     GlyphMode glyphMode = GlyphMode::Always;
     // Where the panel is and how big it is: the part of this struct an adjust
     // session changes and a machine-written rule stores (WindowRuleStore).

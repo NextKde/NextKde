@@ -15,6 +15,9 @@ find_package(KF6Config REQUIRED)
 find_package(KF6KIO REQUIRED)
 find_package(KF6Service REQUIRED)
 
+# Embed the GTK adapter and assets: installed Settings must work without a checkout.
+qt_add_resources(KOS_GTK_RESOURCES ../../shared/gtk/integration.qrc)
+
 qt_add_executable(kos-settings
     src/main.cpp
     src/AppStore.cpp
@@ -34,6 +37,7 @@ qt_add_executable(kos-settings
     src/PowerSettings.cpp
     src/PowerSettings.h
     src/WindowSettings.cpp
+    ${KOS_GTK_RESOURCES}
     ../../platform/src/daemon/PlatformDbus.cpp
     ../../platform/src/daemon/PowerProfilesBus.cpp
 )
@@ -123,12 +127,12 @@ if(BUILD_TESTING)
         set_tests_properties(kos-settings.power-bus PROPERTIES LABELS logic TIMEOUT 20)
     endif()
 
-    add_executable(kos-window-settings-test tests/windows/config.cpp src/WindowSettings.cpp)
+    add_executable(kos-window-settings-test tests/windows/config.cpp src/WindowSettings.cpp ${KOS_GTK_RESOURCES})
     target_include_directories(kos-window-settings-test PRIVATE src)
     target_link_libraries(kos-window-settings-test PRIVATE Qt6::Core Qt6::DBus KF6::ConfigCore)
     add_test(NAME kos-settings.window-config COMMAND kos-window-settings-test)
     set_tests_properties(kos-settings.window-config PROPERTIES LABELS logic TIMEOUT 15)
-    add_executable(kos-animation-async-test tests/windows/async.cpp src/WindowSettings.cpp)
+    add_executable(kos-animation-async-test tests/windows/async.cpp src/WindowSettings.cpp ${KOS_GTK_RESOURCES})
     target_include_directories(kos-animation-async-test PRIVATE src)
     target_link_libraries(kos-animation-async-test PRIVATE Qt6::Core Qt6::DBus KF6::ConfigCore)
     add_test(NAME kos-settings.animation-async COMMAND dbus-run-session -- $<TARGET_FILE:kos-animation-async-test>)

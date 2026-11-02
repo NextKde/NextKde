@@ -1,9 +1,11 @@
 import QtQuick
+import QtQuick.Window
 import QtTest
 import "../../shared/qml/controls" as Controls
 import "../../shared/qml/foundation" as Foundation
 
 Item {
+    id: harness
     width: 560; height: 320
     property bool confirmed: false
     property int toggles: 0
@@ -60,8 +62,51 @@ Item {
             onMoved: kosMoved++
         }
     }
+    QtObject {
+        id: windowTarget
+        property int visibility: Window.Windowed
+        property int closed: 0
+        function showMinimized() { visibility = Window.Minimized }
+        function showMaximized() { visibility = Window.Maximized }
+        function showNormal() { visibility = Window.Windowed }
+        function close() { closed++ }
+    }
+    Component {
+        id: windowControlsFactory
+        Foundation.KosWindowControls {
+            x: 420; y: 260
+            targetWindow: windowTarget
+            maximizeMode: true
+            compositorIntegration: false
+        }
+    }
     TestCase {
         name: "InteractionControls"; when: windowShown
+        function test_window_actions_keyboard_data() {
+            const rows = []
+            for (const action of ["maximize", "minimize", "close"])
+                for (const key of [Qt.Key_Return, Qt.Key_Enter, Qt.Key_Space])
+                    rows.push({tag: action + "-" + key, action: action, key: key})
+            return rows
+        }
+        function test_window_actions_keyboard(row) {
+            windowTarget.visibility = Window.Windowed
+            windowTarget.closed = 0
+            const controls = createTemporaryObject(windowControlsFactory, harness, {actions: [row.action]})
+            verify(controls !== null)
+            const button = findChild(controls, "window" + (row.action === "maximize" ? "fullscreen" : row.action) + "Button")
+            verify(button !== null)
+            button.forceActiveFocus()
+            tryCompare(button, "activeFocus", true)
+            keyClick(row.key)
+            if (row.action === "close") compare(windowTarget.closed, 1)
+            else if (row.action === "minimize") compare(windowTarget.visibility, Window.Minimized)
+            else {
+                compare(windowTarget.visibility, Window.Maximized)
+                keyClick(row.key)
+                compare(windowTarget.visibility, Window.Windowed)
+            }
+        }
         function init() {
             confirmed = false; toggles = 0; triggers = 0; commits = 0
             ancestorWheel = 0; rampCommits = 0; kosMoved = 0

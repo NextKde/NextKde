@@ -4945,6 +4945,19 @@ KosApplicationWindow {
         width: root.sidebarExpanded ? sidebar.expandedWidth : sidebarToggle.width
         height: root.sidebarExpanded ? 46 : 44
         z: 10
+        Text {
+            objectName: "sidebarTitle"
+            visible: root.sidebarExpanded
+            anchors.left: parent.left
+            anchors.leftMargin: 16
+            width: Math.max(0, sidebarToggle.x - x - 12)
+            anchors.verticalCenter: sidebarToggle.verticalCenter
+            text: qsTr("Locations")
+            color: root.sidebarControlInk
+            font.pixelSize: 15
+            font.weight: Font.DemiBold
+            elide: Text.ElideRight
+        }
         KosSidebarToggle {
             id: sidebarToggle
             targetWindow: root

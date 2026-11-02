@@ -193,7 +193,7 @@ bool ButtonInput::pointerMotion(KWin::PointerMotionEvent *event)
         // the light is inside the panel, the panel is inside the menu's own
         // region, and a pointer in that region returned above.
         if ((event->modifiers & Qt::AltModifier)
-            && action == ButtonRenderer::Action::Maximize && window) {
+            && action == ButtonRenderer::Action::Maximize && window && !m_renderer->cooperativeControls(window)) {
             m_renderer->openTileMenu(window);
         }
     }
@@ -269,7 +269,7 @@ bool ButtonInput::pointerButton(KWin::PointerButtonEvent *event)
     // A right press on a panel is how an adjustment starts. It is swallowed
     // whether or not a session begins, as every press on the panel is -- an
     // application's context menu must not open through the panel.
-    if (event->button == Qt::RightButton && insidePanel && window) {
+    if (event->button == Qt::RightButton && insidePanel && window && !window->hasDecoration() && !m_renderer->cooperativeControls(window)) {
         m_consumedButtons |= event->button;
         startSession(window);
         return true;

@@ -2,6 +2,7 @@
 
 #include <QPainter>
 #include <QPainterPath>
+#include <algorithm>
 
 namespace KOS
 {
@@ -35,6 +36,24 @@ QColor dotBorderColor(Type type, bool active)
     case TypeCount: break;
     }
     return QColor(0x82, 0x82, 0x86);
+}
+
+QImage renderCooperativeLight(const QSizeF &size, qreal scale, Type type,
+                             bool active, bool hovered, bool maximized, bool glyphs)
+{
+    const QSizeF canvas = size + QSizeF(2*CooperativeLightPadding, 2*CooperativeLightPadding);
+    const QSize pixels(std::max(1, qRound(canvas.width()*scale)),
+                       std::max(1, qRound(canvas.height()*scale)));
+    QImage image(pixels*4, QImage::Format_ARGB32_Premultiplied);
+    image.fill(Qt::transparent);
+    QPainter painter(&image);
+    painter.setRenderHint(QPainter::Antialiasing);
+    painter.scale(qreal(image.width())/canvas.width(), qreal(image.height())/canvas.height());
+    const QRectF dot(QPointF(CooperativeLightPadding, CooperativeLightPadding), size);
+    if (hovered) drawHoverRing(painter, dot, type, false);
+    drawLight(painter, dot, type, active, maximized, glyphs);
+    painter.end();
+    return image.scaled(pixels, Qt::IgnoreAspectRatio, Qt::SmoothTransformation);
 }
 
 void drawLight(QPainter &painter, const QRectF &dot, Type type, bool active,

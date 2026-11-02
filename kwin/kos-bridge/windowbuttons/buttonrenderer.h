@@ -3,6 +3,7 @@
 #include <QColor>
 #include <QHash>
 #include <QImage>
+#include <QJsonObject>
 #include <QObject>
 #include <QPointer>
 #include <QRectF>
@@ -172,6 +173,9 @@ public:
     // Drop every cached tint. Called when the configuration changes, since the
     // configuration decides which band is sampled.
     void invalidateAll();
+    bool cooperativeControls(KWin::EffectWindow *) const;
+    QJsonObject controlDiagnostics(KWin::EffectWindow *) const;
+    int samplingWindowCount() const { return m_cache.size(); }
 
 Q_SIGNALS:
     void sourceRepaint(const QRectF &region);
@@ -233,6 +237,7 @@ private:
     KWin::GLTexture *panelTexture(const QSizeF &panelSize, qreal scale, bool active,
                                   bool dark, const PanelGeometry &geometry,
                                   Action hovered, bool adjusting, bool maximized, bool showGlyphs);
+    KWin::GLTexture *cooperativeTexture(const QSizeF &, qreal, Type, bool, bool, bool, bool);
     KWin::GLTexture *cacheTexture(const QString &key, QImage image);
     QImage buildPanel(const QSizeF &panelSize, qreal scale, bool active, bool dark,
                       const PanelGeometry &geometry, Action hovered,
@@ -276,6 +281,7 @@ private:
     quint64 m_nextSampleToken = 0;
 
     struct HitRects {
+        bool cooperative = false;
         QPointF windowOrigin;
         // The drawn panel, and the pointer area it claims: the panel expanded
         // by the intercept margin, never beyond the window's own edge.
