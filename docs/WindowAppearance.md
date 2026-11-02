@@ -37,6 +37,25 @@ While either effect is active, Bridge releases continuous captures and restores 
 thumbnail capture, including previously hidden continuous windows. Normal painting resumes continuous
 corners after the effect exits; Slide keeps its output clipping.
 
+Glass owns `overviewpreview.cpp`: from the same `WorkspaceScene::preFrameRender`
+hook used by native window thumbnails, it composes Desktop surfaces and Quickshell
+Docks in stacking order into one GPU framebuffer per output. It renders bounded
+Glass against the captured wallpaper before the client content. Applications are
+excluded and keep KWin's own layout and z order. A Qt Quick texture item covers each
+native `DesktopBackground`, including grid/bar previews, so wallpaper, widgets and
+Dock scale together. Only redundant panel thumbnail items have their opacity
+temporarily suppressed; client visibility, focus and desktop membership are untouched.
+
+Share textures using Qt's native OpenGL import and GPU fences, without CPU readback.
+Desktop/panel damage, geometry, opacity and shape changes invalidate capture;
+unchanged frames reuse the last texture. Preview RGBA8 buffers have a 128 MiB total
+admission limit across outputs (Glass scratch buffers and native thumbnails are
+additional). Allocation/render failure retains native previews for that activation;
+software Qt Quick also falls back. Restore thumbnail opacity and remove preview
+items on exit, lock and effect teardown. Release the isolated Glass capture cache
+on exit. VM acceptance must cover enter/exit and gesture cancellation, repeated
+activation, multi-output changes, moving widget content and actual material continuity.
+
 ## Configuration
 
 `~/.config/kos/window-appearance.json` uses schema 2; the parser accepts schema 1 migration.

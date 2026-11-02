@@ -13,8 +13,10 @@ using actual font height. The preference is `DesktopFiles/iconSpacing` in
 Its layer-shell namespace is `dock`, which makes KWin exclude it from ordinary
 window close/move shortcuts and Show Desktop hiding without making its transparent
 surface a wallpaper candidate. Native Overview captures a single Desktop window;
-only wallpaper surfaces use `desktop`. The widgets fade with panels in Overview,
-leaving the wallpaper in desktop previews. Keep its Bottom layer: moving it to Background can
+only wallpaper surfaces use `desktop`. Glass composes wallpaper, widgets and Dock
+into native Overview's desktop backgrounds, so all scale with the desktop preview.
+Redundant native panel thumbnails are suppressed only while this composed preview
+is available. Keep its Bottom layer: moving it to Background can
 put it behind Plasma. `installDesktopStack()` in the platform-owned
 `kwin/window-bridge.js` orders existing Below-layer surfaces as wallpaper < widgets
 < Stage strip, independently of Stage mode and mapping order. It never changes

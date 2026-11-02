@@ -28,6 +28,18 @@ Overview 和“展示窗口”的缩略图直接绘制场景项，绕过 Bridge 
 这些效果激活时，Bridge 在首次缩略图捕获前释放连续圆角缓存、恢复原生圆弧，包括此前隐藏的连续圆角窗口。
 退出后正常绘制恢复连续圆角；Slide 仍保留按输出裁剪。
 
+Glass 的 `overviewpreview.cpp` 在原生窗口缩略图也使用的 `WorkspaceScene::preFrameRender`
+钩子中，按层序将 Desktop 表面和 Quickshell Dock 合成到各输出的 GPU 帧缓冲。
+先以捕获的壁纸绘制有界 Glass，再绘制客户端内容；应用窗口不进入合成，继续由 KWin 排列和遮挡。
+Qt Quick 纹理项覆盖原生 `DesktopBackground`（含桌面网格及顶部缩略图），让壁纸、组件和 Dock
+共同缩放。仅临时抑制重复面板缩略图的透明度，不修改实际客户端可见性、焦点或虚拟桌面归属。
+
+通过 Qt 原生 OpenGL 导入及 GPU fence 共享纹理，不读回 CPU。桌面/面板像素、几何、透明度及形状
+变动使捕获失效，未变化帧复用纹理。各输出 RGBA8 预览缓冲总计最多 128 MiB；Glass 临时缓冲和
+原生缩略图另计。分配/渲染失败后本次概览保留原生预览，Qt Quick 软件渲染也回退。
+退出、锁屏或特效销毁时恢复缩略图透明度并移除预览项；退出时释放隔离的 Glass 捕获缓存。
+VM 验收进入/退出、手势取消、反复激活、多输出变动、动态组件内容及实际材质连续性。
+
 ## 配置
 
 `~/.config/kos/window-appearance.json` 为 schema 2，解析器兼容 schema 1 迁移。
