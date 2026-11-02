@@ -138,7 +138,8 @@ protected:
     {
         auto *provider = std::exchange(m_provider, nullptr);
         if (!provider) return;
-        if (window()) window()->scheduleRenderJob(new ProviderCleanup(provider), QQuickWindow::AfterSynchronizingStage);
+        auto *view = window() ? window() : m_resourceWindow.data();
+        if (view) view->scheduleRenderJob(new ProviderCleanup(provider), QQuickWindow::AfterSynchronizingStage);
         else delete provider;
     }
     QSGNode *updatePaintNode(QSGNode *old, UpdatePaintNodeData *) override
@@ -159,16 +160,23 @@ private:
     void bindWindow(QQuickWindow *view)
     {
         disconnect(m_sync);
+        disconnect(m_invalidate);
         if (!view) return;
+        m_resourceWindow = view;
         m_sync = connect(view, &QQuickWindow::beforeSynchronizing, this, [this] {
             // Invisible texture sources need not get updatePaintNode(). Publish
             // the new frame on Qt's render thread before consumers synchronize.
             if (!m_provider) m_provider = new PreviewTextureProvider;
             m_provider->present(window(), frame);
         }, Qt::DirectConnection);
+        m_invalidate = connect(view, &QQuickWindow::sceneGraphInvalidated, this, [this] {
+            delete std::exchange(m_provider, nullptr);
+        }, Qt::DirectConnection);
     }
     mutable PreviewTextureProvider *m_provider = nullptr;
     QMetaObject::Connection m_sync;
+    QMetaObject::Connection m_invalidate;
+    QPointer<QQuickWindow> m_resourceWindow;
 };
 
 auto *workspaceScene()

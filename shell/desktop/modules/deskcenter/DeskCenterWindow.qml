@@ -40,7 +40,8 @@ PanelWindow {
     // native Overview's DesktopBackground captures one Desktop window, so
     // typing this transparent widget surface as Desktop loses the wallpaper.
     // Bottom still puts widgets below applications; the bridge orders them
-    // above the separate wallpaper. Overview fades this Dock like its panels.
+    // above the separate wallpaper. Native Overview fades Dock thumbnails;
+    // Glass supplies the composed desktop texture so widgets scale with it.
     WlrLayershell.namespace: "dock"
     WlrLayershell.layer: WlrLayer.Bottom
     // A desktop needs shortcuts only after the user explicitly clicks it.
