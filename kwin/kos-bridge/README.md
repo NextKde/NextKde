@@ -241,6 +241,12 @@ qdbus6 org.kde.KWin /Effects org.kde.kwin.Effects.reconfigureEffect kos_bridge
 
 ## Adjusting a panel
 
+Settings' **Independent button cover** switch locks all fallback overlay circles
+and gaps to 14 logical pixels. In that mode the edge grips change separately
+saved cover margins without moving the buttons; plain/Shift wheel size changes
+are disabled, and Ctrl+wheel changes only the cover. Turning it off restores the
+original button geometry. See [ownership, persistence and validation](../../docs/WindowAppearance.md#independent-window-button-cover).
+
 Right-click a panel. A blue ring appears around it, a grip appears on each of its
 four edges, and the panel is now being positioned:
 

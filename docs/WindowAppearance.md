@@ -82,6 +82,37 @@ Clipping does not implement content-protection padding. Settings exposes selecte
 controls; the parser/example remains the reference for detailed rules. Palette-derived appearance and explicit per-app overrides do not
 sample wallpaper or recover content already removed by the client.
 
+## Independent window-button cover
+
+Settings → Window appearance → **Independent button cover** writes the global
+`independentButtonBackground` boolean in `~/.config/kos/window-buttons.json`
+(default false). Fallback CSD overlays then use 14 logical-pixel circles and
+14 logical-pixel gaps, matching Settings, Calendar, Weather and native KOS
+controls. Application overrides and saved adjustments cannot change this size.
+The shared application control defaults use the same diameter and pitch.
+Native/cooperative controls retain their input/layout ownership and receive no
+additional cover.
+
+Right-click a fallback overlay to adjust it. Drag each edge to grow/shrink its
+background independently; buttons stay at their existing positions. Plain and
+Shift+wheel cannot resize buttons or spacing while enabled; Ctrl+wheel changes
+all four cover margins. Moving/nudging moves the cover and buttons together.
+The existing title-bar tint policy supplies the opaque background. Pointer
+interception expands with the cover and remains clipped to its window, as does
+painting. The independent cover uses a 4 px corner radius to cover the original
+controls near its corners.
+
+The per-application adjustment file stores four bounded `geometry.coverage`
+margins (`left`, `top`, `right`, `bottom`, 0–200 logical px). Its original button
+size/spacing and padding are preserved; disabling the switch ignores the margins
+and restores that layout. Re-enabling restores the saved cover. Configuration
+reload cancels an unfinished adjustment so a draft cannot retain the old mode.
+
+CI checks geometry anchoring, disabled size/spacing gestures, global precedence,
+coverage round-trips, restoration, atomic settings updates and the real Settings
+switch. VM graphical acceptance must additionally check native hover/tooltips,
+background color matching, overlap/resize and mixed output scales.
+
 ## Surface-shape protocol
 
 `kos-surface-shape-v1.xml` defines versioned capability negotiation. Preserve interface/opcode order.
