@@ -41,8 +41,21 @@ for the current grid geometry and their original saved positions are retained.
 
 `WidgetLayout.mjs` owns packing, snapping and collision checks. `WidgetResizeHandle.qml`
 previews spans and commits only on release; resizing and moving are mutually exclusive.
+Dragging updates the card's `x/y` directly, with position animations disabled until
+release. The card is also the native glass anchor: a `Translate` alone does not
+trigger `SurfaceShape` geometry sync. Drop snapping reads these coordinates without
+adding the drag offset again; release animates to the accepted or original cell.
+The Repeater uses a `ListModel` reconciled by widget ID. Position/size snapshots
+update layout data without replacing delegates; visibility and order changes only
+remove, insert or move the affected rows. This keeps the clock face and other
+widget content alive when another widget is moved.
+The clock animates a shared page-selection fraction for its face and countdown,
+then derives each page's position from the current height. Height changes alone
+must keep the hidden countdown below the face rather than replaying a slide.
 `kos-deskcenter.widget-layout` covers geometry and migration-compatible sizes;
-`kos-ui.widget-resize` exercises pointer input and persistence across a Shell restart.
+`kos-ui.widget-resize` exercises pointer input, glass-anchor geometry after the lift
+animation finishes, retained card/clock instances across layout saves and reorder,
+and persistence across a Shell restart.
 Run both in a VM/CI with the required graphical environment; live screenshots remain
 part of VM review.
 

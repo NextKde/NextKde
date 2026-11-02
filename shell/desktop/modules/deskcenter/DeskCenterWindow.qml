@@ -603,15 +603,59 @@ PanelWindow {
         border.color: allowed ? "#34c759" : "#ff453a"
     }
 
+    // Position/size saves replace widgetDefinitions. Keep delegate identity
+    // separate from those snapshots so an unrelated move cannot recreate the
+    // clock face, reset content state or replay every card's size animation.
+    readonly property var visibleWidgetIds:
+        root.screen?.name === ScreenLifecycle.activeScreen?.name
+            ? root.widgetDefinitions.map(widget => widget.id) : []
+    onVisibleWidgetIdsChanged: syncWidgetModel()
+
+    ListModel {
+        id: desktopWidgetModel
+        Component.onCompleted: root.syncWidgetModel()
+    }
+
+    function syncWidgetModel() {
+        if (!desktopWidgetModel) return
+        const ids = root.visibleWidgetIds
+        for (let index = desktopWidgetModel.count - 1; index >= 0; --index) {
+            if (ids.indexOf(desktopWidgetModel.get(index).widgetId) < 0)
+                desktopWidgetModel.remove(index)
+        }
+        for (let target = 0; target < ids.length; ++target) {
+            let current = -1
+            for (let index = target; index < desktopWidgetModel.count; ++index) {
+                if (desktopWidgetModel.get(index).widgetId === ids[target]) {
+                    current = index
+                    break
+                }
+            }
+            if (current < 0)
+                desktopWidgetModel.insert(target, { widgetId: ids[target] })
+            else if (current !== target)
+                desktopWidgetModel.move(current, target, 1)
+        }
+    }
+
     Repeater {
         id: widgetRepeater
         objectName: "desktop-widget-repeater"
-        model: root.screen?.name === ScreenLifecycle.activeScreen?.name ? root.widgetDefinitions : []
+        model: desktopWidgetModel
 
         delegate: DeskWidgetCard {
             id: card
             objectName: "desktop-widget-" + modelData.id
-            required property var modelData
+            required property string widgetId
+            readonly property var modelData: {
+                for (const widget of root.widgetDefinitions) {
+                    if (widget.id === widgetId) return widget
+                }
+                // A visibility change can invalidate the definition before
+                // the keyed model removes its delegate in the same update.
+                return { id: widgetId, title: "", startColor: "transparent",
+                    endColor: "transparent", surface: false }
+            }
             property real dragOffsetX: 0
             property real dragOffsetY: 0
             readonly property var placement: root.placementFor(modelData.id)
@@ -619,7 +663,7 @@ PanelWindow {
             // 组件之上），组件不再随台前调度开启而隐藏
             readonly property bool moving: widgetDrag.active
             readonly property var dropPosition: WidgetLayout.snappedPosition(
-                x + dragOffsetX - root.leftInset, y + dragOffsetY - root.topInset,
+                x - root.leftInset, y - root.topInset,
                 displayColumns, displayRows, root.cellSize, root.gap,
                 root.maximumWidgetColumns, root.usableRows)
             readonly property bool dropAllowed: WidgetLayout.canPlace(root.placements,
@@ -627,7 +671,6 @@ PanelWindow {
                 displayColumns, displayRows, root.maximumWidgetColumns, root.usableRows)
             visible: placement !== null
             z: widgetDrag.active || resizeHandle.resizing ? 120 : (root.editMode ? 20 : 1)
-            transform: Translate { x: card.dragOffsetX; y: card.dragOffsetY }
             scale: widgetDrag.active ? 1.035 : 1
             // The clock is the one card whose glass outline is a shape rather
             // than a rectangle: it draws MaterialFlower, so its surface has to
@@ -639,16 +682,25 @@ PanelWindow {
             startColor: modelData.id === "weather" ? root.weatherTheme.primary : modelData.startColor
             endColor: modelData.id === "weather" ? root.weatherTheme.secondary : modelData.endColor
             showSurface: modelData.surface
-            x: root.leftInset + (placement?.column ?? 0) * (root.cellSize + root.gap)
-            y: root.topInset + (placement?.row ?? 0) * (root.cellSize + root.gap)
+            // SurfaceShape listens to Item geometry and scale changes, not
+            // Translate.x/y. Move the anchor itself so the native glass and
+            // the QML content publish the same position on every drag frame.
+            x: root.leftInset + (placement?.column ?? 0) * (root.cellSize + root.gap) + dragOffsetX
+            y: root.topInset + (placement?.row ?? 0) * (root.cellSize + root.gap) + dragOffsetY
             readonly property int displayColumns: resizeHandle.resizing
                 ? resizeHandle.previewColumns : (placement?.columns ?? 1)
             readonly property int displayRows: resizeHandle.resizing
                 ? resizeHandle.previewRows : (placement?.rows ?? 1)
             width: root.spanSize(displayColumns)
             height: root.spanSize(displayRows)
-            Behavior on x { NumberAnimation { duration: AppearanceTokens.motion.normalDuration; easing.type: AppearanceTokens.motion.standardEasing } }
-            Behavior on y { NumberAnimation { duration: AppearanceTokens.motion.normalDuration; easing.type: AppearanceTokens.motion.standardEasing } }
+            Behavior on x {
+                enabled: !card.moving
+                NumberAnimation { duration: AppearanceTokens.motion.normalDuration; easing.type: AppearanceTokens.motion.standardEasing }
+            }
+            Behavior on y {
+                enabled: !card.moving
+                NumberAnimation { duration: AppearanceTokens.motion.normalDuration; easing.type: AppearanceTokens.motion.standardEasing }
+            }
             Behavior on width {
                 enabled: !resizeHandle.resizing
                 NumberAnimation { duration: AppearanceTokens.motion.normalDuration; easing.type: AppearanceTokens.motion.standardEasing }
@@ -796,15 +848,23 @@ PanelWindow {
                 active: card.visible && card.modelData.id === "clock"
                 sourceComponent: Component {
 	                    Item {
+	                id: clockPages
+	                objectName: "desktop-clock-pages"
 	                anchors.fill: parent
                 clip: true
+                // Animate the selected page, not its pixel position. Geometry
+                // changes must keep the hidden timer exactly below the face,
+                // including while a newly loaded card grows from zero height.
+                property real pageProgress: root.timerView ? 1 : 0
+                Behavior on pageProgress {
+                    NumberAnimation { duration: 240; easing.type: Easing.OutCubic }
+                }
 
                 Item {
                     id: clockPage
                     width: parent.width
                     height: parent.height
-                    y: root.timerView ? -height : 0
-                    Behavior on y { NumberAnimation { duration: 240; easing.type: Easing.OutCubic } }
+                    y: -height * clockPages.pageProgress
 
                 // The flower itself is not drawn here: this card is a regular
                 // Material card whose outline happens to be the flower, so its
@@ -815,6 +875,7 @@ PanelWindow {
 
                 DeskClockFace {
                     id: analogClock
+                    objectName: "desktop-clock-face"
                     anchors.fill: parent
                     anchors.margins: 14
                     date: clock.date
@@ -862,10 +923,10 @@ PanelWindow {
 
                 Item {
                     id: timerPage
+                    objectName: "desktop-clock-timer-page"
                     width: parent.width
                     height: parent.height
-                    y: root.timerView ? 0 : height
-                    Behavior on y { NumberAnimation { duration: 240; easing.type: Easing.OutCubic } }
+                    y: height * (1 - clockPages.pageProgress)
                     Item {
                         id: timerDial
                         width: Math.min(parent.width - 28, parent.height - 45)
