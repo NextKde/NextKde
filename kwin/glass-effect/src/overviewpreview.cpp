@@ -146,6 +146,7 @@ protected:
     {
         if (!frame || !frame->texture || !window()) return old;
         auto *provider = textureProvider();
+        if (!provider->texture()) return old;
         auto *node = static_cast<QSGSimpleTextureNode *>(old);
         if (!node) node = new QSGSimpleTextureNode;
         node->setTexture(provider->texture());

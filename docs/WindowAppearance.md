@@ -41,8 +41,8 @@ Glass owns `overviewpreview.cpp`: from the same `WorkspaceScene::preFrameRender`
 hook used by native window thumbnails, it composes Desktop surfaces and Quickshell
 Docks in stacking order into one GPU framebuffer per output. It renders bounded
 Glass against the captured wallpaper before the client content. Applications are
-excluded and keep KWin's own layout and z order. A Qt Quick texture item covers each
-native `DesktopBackground`, including grid/bar previews, so wallpaper, widgets and
+excluded and keep KWin's own layout and z order. A Qt Quick texture provider feeds
+native desktop background consumers, including grid/bar previews, so wallpaper, widgets and
 Dock scale together. Redirect native ShadowedTexture/FastBlur `source` properties
 to the composed texture provider: those effects sample a provider directly, so a
 child overlay beneath the original background does not replace their input.

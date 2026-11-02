@@ -31,7 +31,7 @@ Overview 和“展示窗口”的缩略图直接绘制场景项，绕过 Bridge 
 Glass 的 `overviewpreview.cpp` 在原生窗口缩略图也使用的 `WorkspaceScene::preFrameRender`
 钩子中，按层序将 Desktop 表面和 Quickshell Dock 合成到各输出的 GPU 帧缓冲。
 先以捕获的壁纸绘制有界 Glass，再绘制客户端内容；应用窗口不进入合成，继续由 KWin 排列和遮挡。
-Qt Quick 纹理项覆盖原生 `DesktopBackground`（含桌面网格及顶部缩略图），让壁纸、组件和 Dock
+Qt Quick 纹理提供器为原生桌面背景消费方提供画面（含桌面网格及顶部缩略图），让壁纸、组件和 Dock
 共同缩放。须将原生 ShadowedTexture/FastBlur 的 `source` 重定向到合成纹理提供器：
 这些效果直接采样提供器，在原背景下面添加子项不能替换输入。即使来源项不可见，也在 Qt Quick
 同步前发布纹理版本；释放提供器前恢复原消费方来源。仅在相应输出的纹理入口已接通后投影重复
