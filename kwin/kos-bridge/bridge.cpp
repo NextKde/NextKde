@@ -201,6 +201,8 @@ BridgeEffect::~BridgeEffect()
 void BridgeEffect::reconfigure(ReconfigureFlags flags)
 {
     Q_UNUSED(flags)
+    // An in-flight draft must not retain the previous geometry policy.
+    if (m_input) m_input->cancelAdjustment();
     if (m_config) {
         m_config->load();
     }

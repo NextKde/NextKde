@@ -4,7 +4,7 @@ Item {
     property var windowSettings: backend
     QtObject {
         id: backend
-        property var state: ({enabled:true, radius:20, shadow:true, hideAnimation:"scale", closeAnimation:"scale", buttonGlyphMode:"always"})
+        property var state: ({enabled:true, radius:20, shadow:true, hideAnimation:"scale", closeAnimation:"scale", buttonGlyphMode:"always", independentButtonBackground:false})
         property bool animationBusy: false
         property string error: ""
         property var calls: []
@@ -17,6 +17,7 @@ Item {
         function setShadow(value) { change("shadow", value); return true }
         function setTakeover(value) { change("enabled", value); return true }
         function requestAnimation(kind, value) { change(kind + "Animation", value); return true }
+        function setIndependentButtonBackground(value) { change("independentButtonBackground", value); return true }
         function setButtonGlyphMode(value) { change("buttonGlyphMode", value); return true }
     }
     TestCase {
@@ -25,7 +26,7 @@ Item {
         property var app: null
         function init() {
             backend.calls = []
-            backend.state = {enabled:true, radius:20, shadow:true, hideAnimation:"scale", closeAnimation:"scale", buttonGlyphMode:"always"}
+            backend.state = {enabled:true, radius:20, shadow:true, hideAnimation:"scale", closeAnimation:"scale", buttonGlyphMode:"always", independentButtonBackground:false}
             const component = Qt.createComponent("../../main.qml")
             compare(component.status, Component.Ready, component.errorString())
             app = component.createObject(null, {currentPage:11})
@@ -76,6 +77,15 @@ Item {
                     compare(backend.state[kind+"Animation"], styles[i])
                 }
             }
+        }
+        function test_independent_cover() {
+            const toggle = control("windowIndependentButtonBackground")
+            mouseClick(toggle, toggle.width/2, toggle.height/2)
+            compare(backend.state.independentButtonBackground, true)
+            mouseClick(toggle, toggle.width/2, toggle.height/2)
+            compare(backend.state.independentButtonBackground, false)
+            backend.state = Object.assign({}, backend.state, {enabled:false})
+            verify(!toggle.enabled)
         }
         function test_button_glyph_mode() {
             const picker = control("windowButtonGlyphMode")

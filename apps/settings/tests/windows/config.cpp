@@ -142,5 +142,27 @@ int main(int argc, char **argv) {
     CHECK(!settings.setTakeover(true));
     CHECK(get()==beforeGtkFailure);
     CHECK(gtkStyle()=="managed externally");
+    const QString buttonsPath = temporary.path() + "/kos/window-buttons.json";
+    auto putButtons = [&](const QByteArray &data) { QFile file(buttonsPath); CHECK(file.open(QIODevice::WriteOnly)); CHECK(file.write(data) == data.size()); };
+    auto getButtons = [&]() { QFile file(buttonsPath); CHECK(file.open(QIODevice::ReadOnly)); return file.readAll(); };
+    putButtons(R"({"extra":42,"default":{"buttonSize":30},"apps":{"demo":{"buttonSize":24}},"rules":[{"match":{"class":"demo"},"buttonSize":26}]})");
+    CHECK(!settings.state()["independentButtonBackground"].toBool());
+    CHECK(settings.setIndependentButtonBackground(true));
+    CHECK(settings.state()["independentButtonBackground"].toBool());
+    const auto coverDoc = QJsonDocument::fromJson(getButtons()).object();
+    CHECK(coverDoc["extra"].toInt() == 42);
+    CHECK(coverDoc["default"].toObject()["buttonSize"].toInt() == 30);
+    CHECK(coverDoc["apps"].toObject()["demo"].toObject()["buttonSize"].toInt() == 24);
+    CHECK(coverDoc["rules"].isArray());
+    WindowSettings reread;
+    CHECK(reread.state()["independentButtonBackground"].toBool());
+    CHECK(settings.setIndependentButtonBackground(false));
+    CHECK(!settings.state()["independentButtonBackground"].toBool());
+    const auto beforeCoverFailure = getButtons();
+    { QLockFile lock(buttonsPath + ".lock"); CHECK(lock.tryLock(0)); CHECK(!settings.setIndependentButtonBackground(true)); }
+    CHECK(getButtons() == beforeCoverFailure);
+    putButtons("malformed");
+    CHECK(!settings.setIndependentButtonBackground(true));
+    CHECK(getButtons() == "malformed");
     qInfo("Window settings configuration checks passed");
 }

@@ -233,7 +233,7 @@ private:
     // handler has been crashing KWin, and a panel is a small fixed rectangle.
     static void repaintRect(const QRectF &globalRect);
 
-    KWin::GLTexture *backgroundTexture(const QSizeF &panelSize, qreal scale);
+    KWin::GLTexture *backgroundTexture(const QSizeF &panelSize, qreal scale, bool independent);
     KWin::GLTexture *panelTexture(const QSizeF &panelSize, qreal scale, bool active,
                                   bool dark, const PanelGeometry &geometry,
                                   Action hovered, bool adjusting, bool maximized, bool showGlyphs);

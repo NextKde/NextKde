@@ -108,7 +108,8 @@ QVariantMap WindowSettings::state() const {
             {"nativeGenieFallback", animation.readEntry("NativeGenieFallback", QString())},
             {"closeAnimation", animation.readEntry("CloseAnimation", QStringLiteral("scale"))},
             {"decoration", decoration.readEntry("library", QStringLiteral("org.kde.breeze"))},
-            {"buttonGlyphMode", buttonGlyphMode}};
+            {"buttonGlyphMode", buttonGlyphMode},
+            {"independentButtonBackground", buttonsDoc.value("independentButtonBackground").toBool(false)}};
 }
 
 bool WindowSettings::patchAppearance(const QString &section, const QString &key,
@@ -268,6 +269,25 @@ bool WindowSettings::setButtonGlyphMode(const QString &mode) {
         QString ignored;
         syncGtkControls(gtkEnabled, current.value("buttonGlyphMode").toString(), ignored);
     }
+    if (saved) reconfigure(QStringLiteral("kos_bridge"));
+    emit changed();
+    return saved;
+}
+bool WindowSettings::setIndependentButtonBackground(bool enabled) {
+    m_error.clear();
+    const QString filename = path(QStringLiteral("window-buttons.json"));
+    QDir().mkpath(QFileInfo(filename).absolutePath());
+    QLockFile lock(filename + QStringLiteral(".lock"));
+    if (!lock.tryLock(0)) {
+        m_error = QStringLiteral("The configuration is being updated; please retry");
+        emit changed();
+        return false;
+    }
+    auto doc = read(filename, &m_error);
+    if (!m_error.isEmpty()) { emit changed(); return false; }
+    // A global policy outside app rules; preserve all saved custom geometry.
+    doc.insert(QStringLiteral("independentButtonBackground"), enabled);
+    const bool saved = write(filename, doc, m_error);
     if (saved) reconfigure(QStringLiteral("kos_bridge"));
     emit changed();
     return saved;

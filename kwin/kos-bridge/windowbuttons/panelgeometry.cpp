@@ -18,16 +18,28 @@ qreal clamp(qreal value, qreal low, qreal high)
 // next.
 qreal panelWidth(const PanelGeometry &geometry)
 {
-    return 3 * geometry.buttonSize + 2 * geometry.buttonSpacing
-        + 2 * effectivePanelPaddingX(geometry);
+    return 3 * effectiveButtonSize(geometry) + 2 * effectiveButtonSpacing(geometry)
+        + 2 * effectivePanelPaddingX(geometry)
+        + (geometry.independentBackground ? geometry.coverage.left() + geometry.coverage.right() : 0);
 }
 
 qreal panelHeight(const PanelGeometry &geometry)
 {
-    return geometry.buttonSize + 2 * geometry.panelPadding;
+    return effectiveButtonSize(geometry) + 2 * geometry.panelPadding
+        + (geometry.independentBackground ? geometry.coverage.top() + geometry.coverage.bottom() : 0);
 }
 
 } // namespace
+
+qreal effectiveButtonSize(const PanelGeometry &g)
+{
+    return g.independentBackground ? StandardButtonSize : g.buttonSize;
+}
+
+qreal effectiveButtonSpacing(const PanelGeometry &g)
+{
+    return g.independentBackground ? StandardButtonSpacing : g.buttonSpacing;
+}
 
 qreal effectivePanelPaddingX(const PanelGeometry &geometry)
 {
@@ -43,7 +55,12 @@ QPointF panelOrigin(const PanelGeometry &geometry, const QSizeF &windowSize)
     const qreal x = geometry.position == ButtonPosition::Left
         ? geometry.offset.x
         : windowSize.width() - geometry.offset.x - panelWidth(geometry);
-    return QPointF(x, geometry.offset.y);
+    if (!geometry.independentBackground) return QPointF(x, geometry.offset.y);
+    // The old offset anchors the buttons. Each coverage edge can move without
+    // moving those buttons, including on right-pinned windows.
+    return QPointF(x + (geometry.position == ButtonPosition::Right
+                           ? geometry.coverage.right() : -geometry.coverage.left()),
+                   geometry.offset.y - geometry.coverage.top());
 }
 
 QRectF panelRectUnclipped(const PanelGeometry &geometry, const QSizeF &windowSize)
@@ -62,10 +79,16 @@ QRectF panelRect(const PanelGeometry &geometry, const QSizeF &windowSize)
 
 QRectF dotRect(const QSizeF &panelSize, const PanelGeometry &geometry, int index)
 {
-    const qreal size = geometry.buttonSize;
-    const qreal total = 3 * size + 2 * geometry.buttonSpacing;
+    const qreal size = effectiveButtonSize(geometry);
+    const qreal spacing = effectiveButtonSpacing(geometry);
+    if (geometry.independentBackground) {
+        return QRectF(geometry.coverage.left() + effectivePanelPaddingX(geometry)
+                          + index * (size + spacing),
+                      geometry.coverage.top() + geometry.panelPadding, size, size);
+    }
+    const qreal total = 3 * size + 2 * spacing;
     const qreal x = (panelSize.width() - total) / 2.0
-        + index * (size + geometry.buttonSpacing);
+        + index * (size + spacing);
     const qreal y = (panelSize.height() - size) / 2.0;
     return QRectF(x, y, size, size);
 }
@@ -137,6 +160,11 @@ PanelGeometry panelGeometryFromTopLeft(PanelGeometry geometry,
         geometry.offset.x = windowSize.width() - x - width;
     }
     geometry.offset.y = y;
+    if (geometry.independentBackground) {
+        if (geometry.position == ButtonPosition::Left) geometry.offset.x += geometry.coverage.left();
+        else geometry.offset.x += geometry.coverage.right();
+        geometry.offset.y += geometry.coverage.top();
+    }
     return geometry;
 }
 
@@ -153,6 +181,17 @@ PanelGeometry resized(const PanelGeometry &geometry, GeometryField field,
                       qreal steps)
 {
     PanelGeometry out = geometry;
+    if (geometry.independentBackground) {
+        // Size and spacing gestures are deliberately disabled in this mode.
+        // Ctrl+wheel grows only the independent cover, like its edge grips.
+        if (field == GeometryField::Padding) {
+            out.coverage = QMarginsF(clamp(geometry.coverage.left() + steps, 0.0, MaxCoverage),
+                clamp(geometry.coverage.top() + steps, 0.0, MaxCoverage),
+                clamp(geometry.coverage.right() + steps, 0.0, MaxCoverage),
+                clamp(geometry.coverage.bottom() + steps, 0.0, MaxCoverage));
+        }
+        return out;
+    }
     switch (field) {
     case GeometryField::DotSize:
         out.buttonSize =
@@ -179,6 +218,15 @@ PanelGeometry resizedByEdge(const PanelGeometry &geometry, PanelEdge edge,
                             const QPointF &delta)
 {
     PanelGeometry out = geometry;
+    if (geometry.independentBackground) {
+        switch (edge) {
+        case PanelEdge::Left: out.coverage.setLeft(clamp(geometry.coverage.left() - delta.x(), 0.0, MaxCoverage)); break;
+        case PanelEdge::Right: out.coverage.setRight(clamp(geometry.coverage.right() + delta.x(), 0.0, MaxCoverage)); break;
+        case PanelEdge::Top: out.coverage.setTop(clamp(geometry.coverage.top() - delta.y(), 0.0, MaxCoverage)); break;
+        case PanelEdge::Bottom: out.coverage.setBottom(clamp(geometry.coverage.bottom() + delta.y(), 0.0, MaxCoverage)); break;
+        }
+        return out;
+    }
 
     if (edge == PanelEdge::Top || edge == PanelEdge::Bottom) {
         // Vertical padding is the panel's height, so this is the height grip.
@@ -268,6 +316,10 @@ PanelGeometry clamped(const PanelGeometry &geometry)
         : clamp(geometry.panelPaddingX, 0.0, MaxPanelPaddingX);
     out.offset.x = clamp(geometry.offset.x, 0.0, MaxOffset);
     out.offset.y = clamp(geometry.offset.y, 0.0, MaxOffset);
+    out.coverage = QMarginsF(clamp(geometry.coverage.left(), 0.0, MaxCoverage),
+        clamp(geometry.coverage.top(), 0.0, MaxCoverage),
+        clamp(geometry.coverage.right(), 0.0, MaxCoverage),
+        clamp(geometry.coverage.bottom(), 0.0, MaxCoverage));
     out.position = geometry.position == ButtonPosition::Left
         ? ButtonPosition::Left
         : ButtonPosition::Right;
@@ -281,7 +333,10 @@ bool sameGeometry(const PanelGeometry &a, const PanelGeometry &b)
         return std::abs(x - y) <= Tolerance;
     };
 
-    return a.position == b.position && close(a.offset.x, b.offset.x)
+    return a.independentBackground == b.independentBackground
+        && close(a.coverage.left(), b.coverage.left()) && close(a.coverage.right(), b.coverage.right())
+        && close(a.coverage.top(), b.coverage.top()) && close(a.coverage.bottom(), b.coverage.bottom())
+        && a.position == b.position && close(a.offset.x, b.offset.x)
         && close(a.offset.y, b.offset.y) && close(a.buttonSize, b.buttonSize)
         && close(a.buttonSpacing, b.buttonSpacing)
         && close(a.panelPadding, b.panelPadding)

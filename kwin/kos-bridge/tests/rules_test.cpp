@@ -986,6 +986,74 @@ void testStore()
     CHECK(!writing.store(WindowMatcher{}, written));
 }
 
+void testIndependentBackground()
+{
+    PanelGeometry base;
+    base.buttonSize = 32;
+    base.buttonSpacing = 30;
+    base.offset = {100, 80};
+    base.independentBackground = true;
+    const QSizeF window(1200, 700);
+    CHECK(near(effectiveButtonSize(base), 14));
+    CHECK(near(effectiveButtonSpacing(base), 14));
+    CHECK(sameGeometry(resized(base, GeometryField::DotSize, 20), base));
+    CHECK(sameGeometry(resized(base, GeometryField::Spacing, -20), base));
+    auto dotOnWindow = [&](const PanelGeometry &g, int i) {
+        const auto box = panelRectUnclipped(g, window);
+        return dotRect(box.size(), g, i).translated(box.topLeft());
+    };
+    for (auto side : {ButtonPosition::Left, ButtonPosition::Right}) {
+        base.position = side;
+        for (auto edge : {PanelEdge::Left, PanelEdge::Right, PanelEdge::Top, PanelEdge::Bottom}) {
+            const QPointF delta = edge == PanelEdge::Left ? QPointF(-35, 0)
+                : edge == PanelEdge::Right ? QPointF(35, 0)
+                : edge == PanelEdge::Top ? QPointF(0, -25) : QPointF(0, 25);
+            const auto grown = resizedByEdge(base, edge, delta);
+            CHECK(!sameGeometry(grown, base));
+            for (int i = 0; i < 3; ++i) CHECK(dotOnWindow(base, i) == dotOnWindow(grown, i));
+            const auto box = panelRectUnclipped(grown, window);
+            CHECK(gripAt(grown, gripRect(grown, edge).center()) == edge);
+            CHECK(sameGeometry(panelGeometryFromTopLeft(grown, window, box.topLeft()), grown));
+            const auto moved = nudged(grown, window, QPointF(10, 10));
+            CHECK(dotOnWindow(moved, 0) == dotOnWindow(grown, 0).translated(10, 10));
+        }
+    }
+    const auto all = resized(base, GeometryField::Padding, 20);
+    CHECK(all.coverage == QMarginsF(20, 20, 20, 20));
+    CHECK(dotOnWindow(all, 0) == dotOnWindow(base, 0));
+    const auto bounded = clamped(resizedByEdge(all, PanelEdge::Bottom, QPointF(0, 10000)));
+    CHECK(near(bounded.coverage.bottom(), MaxCoverage));
+    // A cover that reaches outside a window is clipped without moving lights.
+    auto outside = base;
+    outside.offset = {2, 2};
+    outside.coverage = QMarginsF(80, 80, 80, 80);
+    CHECK(QRectF(QPointF(), window).contains(panelRect(outside, window)));
+    CHECK(near(dotOnWindow(outside, 0).width(), 14));
+
+    removeRulesFile();
+    writeUserConfig(R"({"independentButtonBackground":true,
+        "apps":{"covered":{"buttonSize":40,"buttonSpacing":40,"independentButtonBackground":false}}})");
+    ButtonConfig config;
+    auto saved = base;
+    saved.coverage = QMarginsF(35, 25, 30, 20);
+    CHECK(config.storeGeometry(classMatcher(QStringLiteral("covered")), saved));
+    config.load();
+    auto resolved = config.getAppConfig(query(QStringLiteral("covered"))).geometry;
+    CHECK(resolved.independentBackground);
+    CHECK(near(effectiveButtonSize(resolved), 14));
+    CHECK(near(effectiveButtonSpacing(resolved), 14));
+    CHECK(resolved.coverage == saved.coverage);
+    CHECK(near(resolved.buttonSize, 32)); // Original custom size was not overwritten.
+    CHECK(near(effectiveButtonSize(config.getAppConfig(query(QStringLiteral("other"))).geometry), 14));
+    writeUserConfig(R"({"independentButtonBackground":false})");
+    config.load();
+    resolved = config.getAppConfig(query(QStringLiteral("covered"))).geometry;
+    CHECK(!resolved.independentBackground);
+    CHECK(near(effectiveButtonSize(resolved), 32));
+    CHECK(near(effectiveButtonSpacing(resolved), 30));
+    CHECK(resolved.coverage == saved.coverage); // Reactivating restores the cover.
+}
+
 } // namespace
 
 int main(int argc, char **argv)
@@ -1016,6 +1084,7 @@ int main(int argc, char **argv)
     testResolution();
     testNativeGtkControls();
     testStore();
+    testIndependentBackground();
 
     std::printf("%d checks, %d failures\n", g_checks, g_failures);
     return g_failures == 0 ? 0 : 1;

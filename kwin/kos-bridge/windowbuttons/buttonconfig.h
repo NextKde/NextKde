@@ -163,6 +163,7 @@ private:
     QString m_configPath;
     QString m_kwinrcPath;
     bool m_kosDecorationSelected = false;
+    bool m_independentButtonBackground = false;
     bool m_watchingKwinrc = false;
 
     // The watchers below are connected with this as the context object, so the

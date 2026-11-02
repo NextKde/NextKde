@@ -73,6 +73,8 @@ QJsonObject geometryToJson(const PanelGeometry &geometry)
     out["buttonSpacing"] = geometry.buttonSpacing;
     out["panelPadding"] = geometry.panelPadding;
     out["panelPaddingX"] = geometry.panelPaddingX;
+    out["coverage"] = QJsonObject{{"left", geometry.coverage.left()}, {"top", geometry.coverage.top()},
+        {"right", geometry.coverage.right()}, {"bottom", geometry.coverage.bottom()}};
     return out;
 }
 
@@ -108,6 +110,9 @@ PanelGeometry geometryFromJson(const QJsonObject &object)
     if (object.contains("panelPaddingX")) {
         geometry.panelPaddingX = object["panelPaddingX"].toDouble();
     }
+    const auto coverage = object.value("coverage").toObject();
+    geometry.coverage = QMarginsF(coverage.value("left").toDouble(), coverage.value("top").toDouble(),
+        coverage.value("right").toDouble(), coverage.value("bottom").toDouble());
     // Through the same clamp the gesture goes through, because this file is
     // editable text and a typo in it must not produce an absurd panel.
     return clamped(geometry);

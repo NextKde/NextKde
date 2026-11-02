@@ -151,6 +151,7 @@ void ButtonConfig::load()
     m_store.load();
 
     m_default = AppConfig();
+    m_independentButtonBackground = false;
     m_apps.clear();
     m_rules.clear();
 
@@ -172,6 +173,7 @@ void ButtonConfig::load()
     }
 
     const QJsonObject root = document.object();
+    m_independentButtonBackground = root.value("independentButtonBackground").toBool(false);
 
     if (root.contains("default")) {
         applyFields(m_default, root["default"].toObject());
@@ -251,6 +253,9 @@ AppConfig ButtonConfig::getAppConfig(const WindowQuery &query) const
         config.geometry = geometry;
     }
 
+    // Global policy is applied after every app and machine rule. Rules cannot
+    // re-enable button resizing or override the standard size in this mode.
+    config.geometry.independentBackground = m_independentButtonBackground;
     config.kosDecorationSelected = m_kosDecorationSelected;
     config.drawOnDecoratedWindows =
         config.decoratedWindows == DecoratedWindows::Always ? true

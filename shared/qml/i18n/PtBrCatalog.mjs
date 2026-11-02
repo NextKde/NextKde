@@ -1126,6 +1126,8 @@ export const catalog = {
     "KOS window appearance": "Aparência de janelas do KOS",
     "Corner radius": "Raio dos cantos",
     "Window shadow": "Sombra da janela",
+    "Independent button cover": "Fundo independente dos botões",
+    "Buttons use the standard KOS size (14 px). Right-click the cover and drag its edges to resize only the background. Button size and spacing adjustments are disabled.": "Os botões usam o tamanho padrão do KOS (14 px). Clique com o botão direito no fundo e arraste suas bordas para redimensionar apenas o fundo. O ajuste de tamanho e espaçamento dos botões fica desativado.",
     "Window button icons": "Ícones dos botões da janela",
     "macOS (on hover)": "macOS (ao passar o cursor)",
     "Turning off KOS window appearance restores the original decorator. Radius and shadow apply immediately; decorator switches take effect on next login.": "Desativar a aparência de janelas do KOS restaura a decoração original. Raio e sombra são aplicados na hora; a troca de decoração entra em vigor no próximo login.",

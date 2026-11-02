@@ -354,8 +354,16 @@ void ButtonRenderer::paint(const KWin::RenderTarget &renderTarget,
     // lands in the wrong place is worse than one that is a few pixels off the
     // controls it covers.
     const QPointF windowTopLeft = window->frameGeometry().topLeft();
-    const QRectF local = config.cooperativeControls ? config.cooperativeRect : panelRect(geometry, window->frameGeometry().size());
+    const QRectF local = config.cooperativeControls ? config.cooperativeRect
+        : geometry.independentBackground ? panelRectUnclipped(geometry, window->frameGeometry().size())
+                                         : panelRect(geometry, window->frameGeometry().size());
     const QSizeF panelSize = local.size();
+    // Growing the cover into application content must not move the title-bar
+    // sampling band down into that content.
+    auto tintGeometry = geometry;
+    tintGeometry.coverage = {};
+    const QRectF tintPanel = geometry.independentBackground
+        ? panelRect(tintGeometry, window->frameGeometry().size()) : local;
 
     // The panel is opaque, so its tint has to come from the title bar
     // underneath before that is covered. Until the read succeeds nothing is
@@ -377,7 +385,8 @@ void ButtonRenderer::paint(const KWin::RenderTarget &renderTarget,
                  + 19 * panelColor.blue()) >> 8) < 128;
         break;
     case PanelBackground::Auto:
-        if (!tintFor(renderTarget, viewport, window, local, deviceRegion,
+        if (!tintFor(renderTarget, viewport, window,
+                     tintPanel, deviceRegion,
                      &dark, &panelColor)) {
             // Fallback while the title bar has not been sampled yet
             if (config.kosDecorationSelected && window->hasDecoration()
@@ -490,7 +499,13 @@ void ButtonRenderer::paint(const KWin::RenderTarget &renderTarget,
         ? logicalRect.adjusted(-CooperativeLightPadding*transform.xScale, -CooperativeLightPadding*transform.yScale,
                                CooperativeLightPadding*transform.xScale, CooperativeLightPadding*transform.yScale)
         : logicalRect;
-    const KWin::Region clip = clippedToWindow(deviceRegion, viewport, paintBounds);
+    // The independent cover can extend beyond an edge. Crop its painting,
+    // without re-centering or clipping the layout used by the button hit rects.
+    const QRectF transformedFrame(origin, QSizeF(window->frameGeometry().width() * transform.xScale,
+                                                window->frameGeometry().height() * transform.yScale));
+    const auto panelRegion = geometry.independentBackground && !config.cooperativeControls
+        ? clippedToWindow(deviceRegion, viewport, transformedFrame) : deviceRegion;
+    const KWin::Region clip = clippedToWindow(panelRegion, viewport, paintBounds);
     if (!clip.isEmpty()) {
         const bool active = (KWin::effects->activeWindow() == window);
         // The hover ring is not drawn while the window is being adjusted: the
@@ -511,7 +526,7 @@ void ButtonRenderer::paint(const KWin::RenderTarget &renderTarget,
         // RGB changes only a uniform, not three supersampled button textures.
         const qreal scale = viewport.scale();
         if (!config.cooperativeControls) {
-            if (KWin::GLTexture *background = backgroundTexture(panelSize, scale))
+            if (KWin::GLTexture *background = backgroundTexture(panelSize, scale, geometry.independentBackground))
                 blit(viewport, clip, logicalRect, background, panelColor);
         }
         if (config.cooperativeControls) {
@@ -673,7 +688,7 @@ bool ButtonRenderer::tintFor(const KWin::RenderTarget &renderTarget,
     } else {
         // This paint will use the accepted tint immediately; invalidating its
         // source here would only force another full-window capture.
-        consumeSample(*it, now);
+        if (consumeSample(*it, now)) repaintRect(currentRect(window));
         if (!it->sampler->pending()
             && (it->lastRead == Clock::time_point{} || now - it->lastRead >= it->interval())) {
             // Failed/occluded attempts also consume the cadence budget.
@@ -734,7 +749,7 @@ void ButtonRenderer::scheduleSample(KWin::EffectWindow *window)
                 entry->sampler->discard();
                 entry->pending = false;
             } else if (consumeSample(*entry, Clock::now())) {
-                repaintRect(entry->panel.translated(guarded->frameGeometry().topLeft()));
+                repaintRect(currentRect(guarded));
             }
             if (active || entry->sampler->pending()) scheduleSample(guarded);
         } else if (active) {
@@ -877,14 +892,14 @@ bool ButtonRenderer::adjusting(KWin::EffectWindow *window) const
     return m_adjusting.contains(window);
 }
 
-KWin::GLTexture *ButtonRenderer::backgroundTexture(const QSizeF &panelSize, qreal scale)
+KWin::GLTexture *ButtonRenderer::backgroundTexture(const QSizeF &panelSize, qreal scale, bool independent)
 {
     const QSize deviceSize(std::max(1, qRound(panelSize.width() * scale)),
                            std::max(1, qRound(panelSize.height() * scale)));
-    const QString key = QStringLiteral("background_%1x%2@%3")
+    const QString key = QStringLiteral("background_%1x%2@%3_%4")
                             .arg(deviceSize.width())
                             .arg(deviceSize.height())
-                            .arg(qRound(scale * 100));
+                            .arg(qRound(scale * 100)).arg(independent);
     const auto found = m_textures.find(key);
     if (found != m_textures.end()) return found->second.get();
 
@@ -900,8 +915,8 @@ KWin::GLTexture *ButtonRenderer::backgroundTexture(const QSizeF &panelSize, qrea
     painter.scale(sx, sy);
     painter.setPen(Qt::NoPen);
     painter.setBrush(Qt::white);
-    painter.drawRoundedRect(QRectF(QPointF(), panelSize), panelSize.height() / 2.0,
-                            panelSize.height() / 2.0);
+    const qreal radius = independent ? std::min(qreal(4), panelSize.height() / 2) : panelSize.height() / 2;
+    painter.drawRoundedRect(QRectF(QPointF(), panelSize), radius, radius);
     painter.end();
 
     QImage image = superImage.scaled(deviceSize, Qt::IgnoreAspectRatio,
@@ -936,7 +951,10 @@ KWin::GLTexture *ButtonRenderer::panelTexture(const QSizeF &panelSize, qreal sca
                             .arg(qRound(effectivePanelPaddingX(geometry) * 4))
                             .arg(adjusting ? 1 : 0)
                             .arg(maximized ? 1 : 0)
-                            .arg(showGlyphs ? 1 : 0);
+                            .arg(showGlyphs ? 1 : 0)
+        + QStringLiteral("_%1_%2_%3_%4_%5").arg(geometry.independentBackground)
+            .arg(geometry.coverage.left()).arg(geometry.coverage.top())
+            .arg(geometry.coverage.right()).arg(geometry.coverage.bottom());
     auto it = m_textures.find(key);
     if (it == m_textures.end()) {
         return cacheTexture(key, buildPanel(panelSize, scale, active, dark,
