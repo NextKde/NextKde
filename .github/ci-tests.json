@@ -76,6 +76,7 @@
     "kos-settings.power-config"
   ],
   "widgets": [
+    "kos-ui.desktop-overview",
     "kos-ui.widget-experience",
     "kos-ui.widget-resize"
   ],

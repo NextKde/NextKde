@@ -33,7 +33,7 @@ PanelWindow {
     // 桌面层序脚本固定壁纸 < DeskCenter < 本窗，不依赖映射先后。
     WlrLayershell.layer: WlrLayer.Bottom
     // KWin 桌面层序脚本通过类型与键盘模式识别：本窗 Normal + None，
-    // DeskCenter Desktop + OnDemand，壁纸 Desktop + None。
+    // DeskCenter Dock + OnDemand，壁纸 Desktop + None。
     // 改动此处需同步 kwin/window-bridge.js。
     WlrLayershell.keyboardFocus: WlrKeyboardFocus.None
     // 全屏透明浮层（2026-09-30 用户定稿"完完全全不用侧边栏，卡片就是

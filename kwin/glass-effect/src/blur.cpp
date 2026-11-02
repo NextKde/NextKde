@@ -93,6 +93,13 @@ static bool isQuickshellWindow(const EffectWindow *window)
                QLatin1String("quickshell"), Qt::CaseInsensitive);
 }
 
+static bool isDesktopWidgetSurface(const EffectWindow *window)
+{
+    return window && window->window()
+        && isDesktopWidgetSurface(isQuickshellWindow(window), window->isDock(),
+                                  window->window()->layer() == Layer::BelowLayer);
+}
+
 // Shape-path tracing. The per-surface geometry is the one thing about this path
 // that cannot be checked from the outside -- the numbers only mean something
 // next to the blur region the compositor published for the same frame -- so a
@@ -1396,10 +1403,10 @@ bool BlurEffect::shouldBlur(const EffectWindow *w, int mask, const WindowPaintDa
     const bool explicitlyRequestedBlur = blurData != m_windows.end()
         && blurData->second.hasExplicitBlurRequest;
 
-    // DeskCenter is a real Desktop window so KWin cannot move/close it through
-    // ordinary window shortcuts. Its declared card regions still need glass;
-    // wallpapers and forced whole-desktop blur remain excluded.
-    if (w->isDesktop()
+    // DeskCenter's Below-layer Dock role keeps it out of Overview's wallpaper
+    // candidates. Retain its bounded desktop blur policy and keep wallpapers
+    // and forced whole-desktop blur excluded.
+    if ((w->isDesktop() || isDesktopWidgetSurface(w))
         && (blurData == m_windows.end()
             || !desktopSurfaceRequestsBlur(isQuickshellWindow(w), explicitlyRequestedBlur,
                                            blurData->second.content))) {
@@ -1607,7 +1614,7 @@ void BlurEffect::blur(const RenderTarget &renderTarget, const RenderViewport &vi
     const BlurRegion effectShape = transformShape(blurRegion(w, &cornerRadius));
     const BlurRegion contentShape = transformShape(contentRegion(w, &cornerRadius));
     const BlurRegion frameShape = effectShape - contentShape;
-    const BlurPipelineSettings &contentBlurSettings = w->isDock()
+    const BlurPipelineSettings &contentBlurSettings = w->isDock() && !isDesktopWidgetSurface(w)
         ? m_dockBlurSettings
         : m_contentBlurSettings;
     const BlurPipelineSettings &combinedBlurSettings =
