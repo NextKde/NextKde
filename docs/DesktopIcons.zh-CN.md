@@ -7,7 +7,7 @@
 `DeskCenterWindow.qml` 在各输出上承载组件、图标及其右键菜单。它使用
 `dock` layer-shell namespace，让 KWin 的普通窗口关闭、移动快捷键和显示桌面隐藏逻辑排除桌面组件，
 同时避免透明组件层被当成壁纸。原生概览只捕获一个 Desktop 窗口，因此只有壁纸表面使用
-`desktop`。组件在概览中随面板淡出，桌面预览显示壁纸。
+`desktop`。Bridge 在概览中抑制不携带模糊的原生面板缩略图，退出时恢复完整组件/Dock 材质，桌面预览显示壁纸。
 保留 Bottom 层，降到 Background 可能被 Plasma 盖住。平台托管的
 `kwin/window-bridge.js` 中，`installDesktopStack()` 将已有 Below 层表面固定为
 壁纸 < 组件 < 台前调度条，不依赖台前调度开关或映射先后。它不修改可见性、
