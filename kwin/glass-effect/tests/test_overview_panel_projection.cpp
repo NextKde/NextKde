@@ -1,4 +1,5 @@
 #include "../src/overviewpanelprojection.h"
+#include "../src/overviewtexturesources.h"
 #include <QGuiApplication>
 #include <QQmlComponent>
 #include <QQmlEngine>
@@ -53,4 +54,55 @@ int main(int argc, char **argv)
         unloading.project(&livePanel);
     }
     check(livePanel.parentItem() == &liveParent, "effect teardown must restore a live delegate");
+
+    QQmlComponent consumers(&engine);
+    consumers.setData(R"(
+        import QtQuick
+        Item {
+            id: root
+            property bool alternate: false
+            Item {
+                id: original
+                objectName: "original"
+                Item { id: preview; objectName: "preview" }
+            }
+            Item { id: other; objectName: "other" }
+            Item {
+                objectName: "consumer"
+                property var source: root.alternate ? other : original
+            }
+            Item { objectName: "typedConsumer"; property Item source: original }
+        }
+    )", QUrl());
+    object.reset(consumers.create());
+    check(bool(object), "texture-consumer fixture must load");
+    auto *original = object->findChild<QQuickItem *>(QStringLiteral("original"));
+    auto *preview = object->findChild<QQuickItem *>(QStringLiteral("preview"));
+    auto *consumer = object->findChild<QQuickItem *>(QStringLiteral("consumer"));
+    auto *typedConsumer = object->findChild<QQuickItem *>(QStringLiteral("typedConsumer"));
+    check(KWin::overviewTextureSource(consumer) == original,
+          "adding a preview child does not redirect a texture consumer");
+    KWin::OverviewTextureSources sources;
+    check(sources.replace(typedConsumer, original, preview)
+          && KWin::overviewTextureSource(typedConsumer) == preview,
+          "typed native card source must sample the composed provider");
+    check(sources.replace(consumer, original, preview), "native consumer must accept the composed texture source");
+    check(KWin::overviewTextureSource(consumer) == preview,
+          "native desktop card must sample the preview, not the original wallpaper");
+    sources.restore();
+    check(KWin::overviewTextureSource(consumer) == original
+          && KWin::overviewTextureSource(typedConsumer) == original,
+          "Overview exit must restore native texture sources");
+    sources.replace(consumer, original, preview);
+    object->setProperty("alternate", true);
+    auto *other = object->findChild<QQuickItem *>(QStringLiteral("other"));
+    check(KWin::overviewTextureSource(consumer) == other,
+          "texture source replacement must retain the native binding");
+    sources.restore();
+    check(KWin::overviewTextureSource(consumer) == other,
+          "restoration must not overwrite a newer native source");
+    object->setProperty("alternate", false);
+    sources.replace(consumer, original, preview);
+    object.reset();
+    sources.restore(); // QML consumers can disappear before the effect stops.
 }

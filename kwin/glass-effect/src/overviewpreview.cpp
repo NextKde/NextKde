@@ -5,6 +5,7 @@
  */
 #include "overviewpreview.h"
 #include "overviewpanelprojection.h"
+#include "overviewtexturesources.h"
 #include <compositor.h>
 #include <main.h>
 #include <core/output.h>
@@ -28,7 +29,9 @@
 #include <QQuickWindow>
 #include <QSGSimpleTextureNode>
 #include <QSGTexture>
+#include <QSGTextureProvider>
 #include <QSGRendererInterface>
+#include <QRunnable>
 #include <map>
 #include <utility>
 
@@ -57,26 +60,68 @@ struct PreviewFrame
     }
 };
 
-class PreviewNode final : public QSGSimpleTextureNode
+class PreviewTextureProvider final : public QSGTextureProvider
 {
 public:
-    // Textures are shared across GL contexts; framebuffer objects are not.
-    // Keep only the texture alive on Qt's render thread, never the capture FBO.
-    std::shared_ptr<GLTexture> texture;
-    std::unique_ptr<QSGTexture> wrapped;
+    QSGTexture *texture() const override { return m_wrapped.get(); }
+    void present(QQuickWindow *window, const std::shared_ptr<PreviewFrame> &frame)
+    {
+        if (!window || !frame || !frame->texture) return;
+        if (m_texture == frame->texture && m_revision == frame->revision) return;
+        if (frame->fence) {
+            glWaitSync(frame->fence, 0, GL_TIMEOUT_IGNORED);
+            frame->releaseFence();
+        }
+        if (m_texture != frame->texture) {
+            m_texture = frame->texture;
+            m_wrapped.reset(QNativeInterface::QSGOpenGLTexture::fromNative(
+                m_texture->texture(), window, m_texture->size(), QQuickWindow::TextureHasAlphaChannel));
+            if (m_wrapped) m_wrapped->setFiltering(QSGTexture::Linear);
+        }
+        m_revision = frame->revision;
+        if (m_wrapped) Q_EMIT textureChanged();
+    }
+private:
+    // Only the texture crosses contexts, never the capture framebuffer.
+    std::shared_ptr<GLTexture> m_texture;
+    std::unique_ptr<QSGTexture> m_wrapped;
+    quint64 m_revision = 0;
+};
+
+class ProviderCleanup final : public QRunnable
+{
+public:
+    explicit ProviderCleanup(PreviewTextureProvider *provider) : m_provider(provider) {}
+    void run() override { m_provider.reset(); }
+private:
+    std::unique_ptr<PreviewTextureProvider> m_provider;
 };
 
 class PreviewItem final : public QQuickItem
 {
 public:
-    explicit PreviewItem(QQuickItem *parent) : QQuickItem(parent)
+    explicit PreviewItem(QQuickItem *source) : QQuickItem(source->parentItem())
     {
+        setParent(source); // Lifetime follows the background, not its visual parent.
         setFlag(ItemHasContents);
-        setZ(1);
-        const auto resize = [this, parent] { setSize(parent->size()); };
-        connect(parent, &QQuickItem::widthChanged, this, resize);
-        connect(parent, &QQuickItem::heightChanged, this, resize);
+        setVisible(false); // A texture source, never an additional scene overlay.
+        const auto resize = [this, source] { setSize(source->size()); };
+        connect(source, &QQuickItem::widthChanged, this, resize);
+        connect(source, &QQuickItem::heightChanged, this, resize);
+        connect(this, &QQuickItem::windowChanged, this, [this](QQuickWindow *view) { bindWindow(view); });
+        bindWindow(window());
         resize();
+    }
+    ~PreviewItem() override { releaseResources(); }
+    bool isTextureProvider() const override { return true; }
+    QSGTextureProvider *textureProvider() const override
+    {
+        if (QQuickItem::isTextureProvider()) return QQuickItem::textureProvider();
+        if (!m_provider) m_provider = new PreviewTextureProvider;
+        // Consumers can request the provider without drawing this item (native
+        // DesktopBackground is explicitly invisible). Publish here as well.
+        m_provider->present(window(), frame);
+        return m_provider;
     }
     std::shared_ptr<PreviewFrame> frame;
     quint64 revision = 0;
@@ -89,29 +134,41 @@ public:
         }
     }
 protected:
+    void releaseResources() override
+    {
+        auto *provider = std::exchange(m_provider, nullptr);
+        if (!provider) return;
+        if (window()) window()->scheduleRenderJob(new ProviderCleanup(provider), QQuickWindow::AfterSynchronizingStage);
+        else delete provider;
+    }
     QSGNode *updatePaintNode(QSGNode *old, UpdatePaintNodeData *) override
     {
         if (!frame || !frame->texture || !window()) return old;
-        if (frame->fence) {
-            glWaitSync(frame->fence, 0, GL_TIMEOUT_IGNORED);
-            frame->releaseFence();
-        }
-        auto *node = static_cast<PreviewNode *>(old);
-        if (!node) node = new PreviewNode;
-        if (node->texture != frame->texture) {
-            node->texture = frame->texture;
-            node->wrapped.reset(QNativeInterface::QSGOpenGLTexture::fromNative(
-                frame->texture->texture(), window(), frame->texture->size(),
-                QQuickWindow::TextureHasAlphaChannel));
-            node->setTexture(node->wrapped.get());
-            node->setFiltering(QSGTexture::Linear);
-        }
+        auto *provider = textureProvider();
+        auto *node = static_cast<QSGSimpleTextureNode *>(old);
+        if (!node) node = new QSGSimpleTextureNode;
+        node->setTexture(provider->texture());
+        node->setFiltering(QSGTexture::Linear);
         // The FBO follows WindowThumbnailSource's FlipY/import convention.
         node->setTextureCoordinatesTransform(QSGSimpleTextureNode::NoTransform);
         node->setRect(boundingRect());
         node->markDirty(QSGNode::DirtyMaterial);
         return node;
     }
+private:
+    void bindWindow(QQuickWindow *view)
+    {
+        disconnect(m_sync);
+        if (!view) return;
+        m_sync = connect(view, &QQuickWindow::beforeSynchronizing, this, [this] {
+            // Invisible texture sources need not get updatePaintNode(). Publish
+            // the new frame on Qt's render thread before consumers synchronize.
+            if (!m_provider) m_provider = new PreviewTextureProvider;
+            m_provider->present(window(), frame);
+        }, Qt::DirectConnection);
+    }
+    mutable PreviewTextureProvider *m_provider = nullptr;
+    QMetaObject::Connection m_sync;
 };
 
 auto *workspaceScene()
@@ -143,6 +200,8 @@ public:
     std::map<LogicalOutput *, std::shared_ptr<PreviewFrame>> frames;
     std::map<QQuickItem *, QPointer<PreviewItem>> previews;
     OverviewPanelProjection panels;
+    OverviewTextureSources sources;
+    bool reported = false;
 
     void watch(EffectWindow *window)
     {
@@ -157,6 +216,7 @@ public:
 
     void clear()
     {
+        sources.restore();
         panels.restore();
         auto items = std::exchange(previews, {});
         for (const auto &[key, item] : items)
@@ -168,6 +228,7 @@ public:
             frames.clear();
         }
         dirty = true;
+        reported = false;
     }
 
     bool capture(LogicalOutput *output, const QSize &size)
@@ -237,14 +298,35 @@ public:
             item->present(frame);
             return;
         }
-        if (root->inherits("KWin::WindowThumbnailItem")) {
+        for (auto *child : children) attach(child, frame);
+    }
+
+    int redirect(QQuickItem *root)
+    {
+        int count = 0;
+        auto *original = overviewTextureSource(root);
+        if (const auto it = previews.find(original); it != previews.end() && it->second) {
+            if (sources.replace(root, original, it->second)) ++count;
+        } else if (original) {
+            for (const auto &[background, preview] : previews)
+                if (preview == original) { ++count; break; }
+        }
+        for (auto *child : root->childItems()) count += redirect(child);
+        return count;
+    }
+
+    void projectPanels(QQuickItem *root)
+    {
+        const auto children = root->childItems();
+        if (root->inherits("KWin::WindowThumbnailItem")
+            && !root->inherits("KWin::DesktopBackgroundItem")) {
             auto *client = root->property("client").value<Window *>();
             if (shellPanel(client)) {
                 panels.project(root);
                 return;
             }
         }
-        for (auto *child : children) attach(child, frame);
+        for (auto *child : children) projectPanels(child);
     }
 
     void update()
@@ -278,9 +360,28 @@ public:
             }
         }
         dirty = false;
+        int redirected = 0;
+        QList<QQuickItem *> connectedRoots;
         for (auto *output : outputs) {
             if (auto *view = overview->viewForScreen(output))
-                if (auto *root = view->rootItem()) attach(root, frames.at(output));
+                if (auto *root = view->rootItem()) {
+                    attach(root, frames.at(output));
+                    const int consumers = redirect(root);
+                    redirected += consumers;
+                    if (consumers > 0) connectedRoots.append(root);
+                }
+        }
+        if (previews.empty()) return; // Delegate creation can finish next frame.
+        if (!reported && redirected == 0) {
+            qWarning() << "Glass: no native desktop texture consumer was replaced";
+            fail();
+            return;
+        }
+        for (auto *root : connectedRoots) projectPanels(root);
+        if (!reported) {
+            qInfo() << "Glass: composed Overview connected" << outputs.size()
+                    << "outputs," << previews.size() << "backgrounds," << redirected << "texture consumers";
+            reported = true;
         }
         // Keep only live QML items and connected output buffers.
         std::erase_if(previews, [](const auto &entry) { return !entry.second; });
