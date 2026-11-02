@@ -125,6 +125,7 @@ bool CooperativeControls::configureWindow(KWin::EffectWindow *window, AppConfig 
     config.cooperativeControls = entry->active;
     config.showButtons = entry->active && !entry->rect.isEmpty();
     config.nativeGtkControls = false;
+    config.chromiumClientControls = false; // Explicit surface ownership supersedes fallback policy.
     config.interceptMargin = 0;
     config.geometry.buttonSize = entry->diameter;
     config.geometry.buttonSpacing = entry->gap;

@@ -68,6 +68,10 @@ struct AppConfig {
     bool showButtons = true;
     // Explicitly qualified GTK CSD windows only. SSD still needs our panel.
     bool nativeGtkControls = false;
+    // Chromium reads GTK's button placement but paints its own browser chrome;
+    // GTK CSS does not replace those controls. Keep their input/drawing owned
+    // by the client rather than stamping a second group at a guessed corner.
+    bool chromiumClientControls = false; // runtime-only, exact browser app IDs
     // Runtime-only, negotiated per wl_surface. Never read from app-ID rules.
     bool cooperativeControls = false;
     QRectF cooperativeRect;
@@ -75,6 +79,10 @@ struct AppConfig {
     bool usesNativeGtkControls(bool hasDecoration) const
     {
         return nativeGtkControls && !hasDecoration;
+    }
+    bool usesClientControls(bool hasDecoration) const
+    {
+        return !hasDecoration && (nativeGtkControls || chromiumClientControls);
     }
     GlyphMode glyphMode = GlyphMode::Always;
     // Where the panel is and how big it is: the part of this struct an adjust

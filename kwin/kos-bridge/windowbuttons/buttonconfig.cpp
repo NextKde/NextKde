@@ -19,6 +19,22 @@ namespace KOS
 namespace
 {
 
+bool chromiumBrowser(const QString &windowClass)
+{
+    // Match WM_CLASS/app-ID tokens, never substrings: Electron applications
+    // also use Chromium, but keep their existing fallback overlay behavior.
+    const auto tokens = windowClass.split(QLatin1Char(' '), Qt::SkipEmptyParts);
+    for (const auto &token : tokens) {
+        if (token == QLatin1String("google-chrome") || token == QLatin1String("Google-chrome")
+            || token == QLatin1String("google-chrome-stable") || token == QLatin1String("google-chrome-beta")
+            || token == QLatin1String("google-chrome-unstable") || token == QLatin1String("com.google.Chrome")
+            || token == QLatin1String("chromium") || token == QLatin1String("Chromium")
+            || token == QLatin1String("chromium-browser") || token == QLatin1String("org.chromium.Chromium"))
+            return true;
+    }
+    return false;
+}
+
 // Reads one JSON object over the config it is given and reports which keys it
 // named. Shared by `default`, `apps` and the hand-written `rules`, so the three
 // accept exactly the same keys with exactly the same meanings.
@@ -256,6 +272,7 @@ AppConfig ButtonConfig::getAppConfig(const WindowQuery &query) const
     // Global policy is applied after every app and machine rule. Rules cannot
     // re-enable button resizing or override the standard size in this mode.
     config.geometry.independentBackground = m_independentButtonBackground;
+    config.chromiumClientControls = query.type == 0 && chromiumBrowser(query.windowClass);
     config.kosDecorationSelected = m_kosDecorationSelected;
     config.drawOnDecoratedWindows =
         config.decoratedWindows == DecoratedWindows::Always ? true
