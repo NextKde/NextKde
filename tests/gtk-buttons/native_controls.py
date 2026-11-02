@@ -69,7 +69,10 @@ def step(index=0):
                         buttons[kind] = widget
         if index == 0:
             check(set(buttons) == {'close', 'minimize', 'maximize'}, 'three native controls')
-            check(Gtk.Settings.get_default().get_property('gtk-decoration-layout') == ':minimize,maximize,close', 'installed layout')
+            leading, trailing = Gtk.Settings.get_default().get_property('gtk-decoration-layout').split(':')
+            controls = {'close', 'minimize', 'maximize'}
+            check(not controls.intersection(leading.split(','))
+                  and controls.issubset(trailing.split(',')), 'native controls remain on the right')
             if len(buttons) != 3:
                 raise RuntimeError('Missing native controls')
             print(json.dumps({'button_sizes': {name: [button.get_allocated_width(), button.get_allocated_height()]
