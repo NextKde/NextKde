@@ -24,12 +24,36 @@ ShellRoot {
     property int moveIndex: 0
     property var moveTargets: []
     property var beforeMove: []
+    property var retainedWidgetCards: []
+    property Item retainedClockFace: null
+    property Item trackedDragCard: null
+    property int dragGeometryChanges: 0
+    Connections {
+        target: test.trackedDragCard
+        function onXChanged() { test.dragGeometryChanges++ }
+        function onYChanged() { test.dragGeometryChanges++ }
+    }
     function check(ok, message) { if (!ok) throw new Error(message) }
     function find(item, name) {
         if (item.objectName === name) return item
         for (const child of item.children || []) {
             const result = find(child, name)
             if (result) return result
+        }
+        return null
+    }
+    function glassRegion(card) {
+        // v8 publishes SurfaceShape directly and deliberately has no legacy
+        // blurRegion. Inspect the declaration under the active backend too.
+        const pending = [card]
+        const seen = []
+        while (pending.length > 0) {
+            const object = pending.pop()
+            if (!object || seen.indexOf(object) >= 0) continue
+            seen.push(object)
+            if (object.surfaceShape?.target === card) return object
+            for (const child of object.data || []) pending.push(child)
+            for (const child of object.children || []) pending.push(child)
         }
         return null
     }
@@ -80,9 +104,37 @@ ShellRoot {
                     return
                 }
                 check(repeat.count === 7, "all enabled cards instantiated")
+                if (retainedWidgetCards.length === 0) {
+                    const snapshot = []
+                    for (let i = 0; i < repeat.count; ++i) {
+                        const card = repeat.itemAt(i)
+                        snapshot.push({ id: card.modelData.id, item: card })
+                    }
+                    retainedWidgetCards = snapshot
+                    retainedClockFace = find(desktop.contentItem, "desktop-clock-face")
+                    check(retainedClockFace !== null, "clock face is loaded before interaction")
+                }
+                check(retainedClockFace !== null
+                    && find(desktop.contentItem, "desktop-clock-face") === retainedClockFace,
+                    "clock face survives size and position saves without reloading")
+                const clockPages = find(desktop.contentItem, "desktop-clock-pages")
+                const timerPage = find(desktop.contentItem, "desktop-clock-timer-page")
+                // Await explicit page transitions on a loaded compositor;
+                // layout changes below must not start such a transition.
+                if ((stage === 11 || stage === 13)
+                        && clockPages.pageProgress !== (desktop.timerView ? 1 : 0)) return
+                if (!desktop.timerView) {
+                    check(clockPages.pageProgress === 0 && timerPage.y === timerPage.height,
+                        "hidden countdown stays below the face during layout changes")
+                }
                 for (let i = 0; i < repeat.count; i++) {
                     const card = repeat.itemAt(i)
+                    const retained = retainedWidgetCards.find(saved => saved.id === card.modelData.id)
+                    check(retained && retained.item === card,
+                        card.modelData.id + " retains its instance across layout saves")
                     check(card.visible, card.modelData.id + " remains visible")
+                    // A dragged card follows the pointer, not its saved cell.
+                    if (card.moving) continue
                     check(card.x >= 0 && card.y >= 0, "card stays in screen")
                     check(card.x + card.width <= desktop.width + 1, "card stays inside right edge")
                     check(card.y + card.height <= desktop.height - desktop.bottomInset + 1, "card stays above dock")
@@ -141,11 +193,40 @@ ShellRoot {
                     stage = 6
                     return
                 }
-                if (stage >= 6) {
+                if (stage === 10) {
+                    check(repeat.itemAt(0).modelData.id === "music", "saved order updates without recreating cards")
+                    desktop.timerView = true
+                    stage = 11
+                    return
+                }
+                if (stage === 11) {
+                    check(clockPages.pageProgress === 1 && timerPage.y === 0,
+                        "explicit page switch reveals the countdown")
+                    const placement = desktop.placementFor("clock")
+                    DeskCenterConfigService.savePosition(desktop.desktopOutput, desktop.placements,
+                        "clock", placement.column, placement.row, desktop.widgetGeometry)
+                    stage = 12
+                    return
+                }
+                if (stage === 12) {
+                    check(clockPages.pageProgress === 1 && timerPage.y === 0,
+                        "layout save preserves the selected countdown page")
+                    desktop.timerView = false
+                    stage = 13
+                    return
+                }
+                if (stage === 13) {
+                    console.log("WIDGET_RESIZE_PASS")
+                    running = false
+                    finish.start()
+                    return
+                }
+                if (stage >= 6 && stage <= 9) {
                     const target = moveTargets[moveIndex]
                     const draggedId = target.id || "clock"
                     const card = find(desktop.contentItem, "desktop-widget-" + draggedId)
                     if (stage === 6) {
+                        trackedDragCard = card
                         beforeMove = desktop.placements.slice()
                         if (target.relocate) {
                             let destination = null
@@ -165,16 +246,37 @@ ShellRoot {
                             start.y + (target.row - card.placement.row) * step)
                         events.mousePress(card, card.width / 2, card.height / 2, Qt.LeftButton, Qt.NoModifier, 5)
                         events.mouseMove(desktop.contentItem, start.x + 25, start.y, 10, Qt.LeftButton, Qt.NoModifier)
-                        events.mouseMove(desktop.contentItem, releasePoint.x, releasePoint.y, 20, Qt.LeftButton, Qt.NoModifier)
                         stage = 7
                         return
                     }
                     if (stage === 7) {
                         check(card.moving, "card body starts position drag")
+                        // The 120ms lift animation has finished. A subsequent
+                        // move must still notify SurfaceShape through x/y;
+                        // Translate alone leaves native glass at the old point.
+                        dragGeometryChanges = 0
+                        events.mouseMove(desktop.contentItem, releasePoint.x, releasePoint.y, 20, Qt.LeftButton, Qt.NoModifier)
+                        stage = 8
+                        return
+                    }
+                    if (stage === 8) {
+                        check(card.moving && dragGeometryChanges > 0,
+                            "continued drag updates native glass anchor geometry after lift finishes")
+                        const step = desktop.cellSize + desktop.gap
+                        check(Math.abs(card.x - (desktop.leftInset + card.placement.column * step + card.dragOffsetX)) < 1
+                            && Math.abs(card.y - (desktop.topInset + card.placement.row * step + card.dragOffsetY)) < 1,
+                            "drag geometry follows the pointer without position animation")
+                        const region = card.blurRegion || glassRegion(card)
+                        check(region !== null && region.surfaceShape.target === card, "native glass tracks the moved card")
+                        const visual = card.mapToItem(null, Qt.rect(0, 0, card.width, card.height))
+                        const blur = region.itemRect
+                        check(Math.abs(blur.x - visual.x) < 1 && Math.abs(blur.y - visual.y) < 1
+                            && Math.abs(blur.width - visual.width) < 1 && Math.abs(blur.height - visual.height) < 1,
+                            "blur region follows the dragged and scaled content")
                         const preview = find(desktop.contentItem, "widget-drop-preview")
                         check(preview.visible && preview.allowed === target.allowed, "drop preview distinguishes empty and occupied cells")
                         events.mouseRelease(desktop.contentItem, releasePoint.x, releasePoint.y, Qt.LeftButton, Qt.NoModifier, 5)
-                        stage = 8
+                        stage = 9
                         return
                     }
                     for (const old of beforeMove) {
@@ -212,9 +314,8 @@ ShellRoot {
                         moveTargets = moveTargets.concat(extra)
                     }
                     if (moveIndex < moveTargets.length) { stage = 6; return }
-                    console.log("WIDGET_RESIZE_PASS")
-                    running = false
-                    finish.start()
+                    DeskCenterConfigService.moveWidget("music", 0)
+                    stage = 10
                     return
                 }
                 const card = find(desktop.contentItem, "desktop-widget-clock")
