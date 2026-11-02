@@ -5,7 +5,9 @@ windows with an iPadOS-style rounded panel containing three macOS traffic
 lights, so applications that draw their own title bar get consistent KOS
 chrome. KOS server-side decorations own native KDecoration buttons and are
 never covered by this panel. Cooperative applications and qualified GTK/Firefox
-controls use their respective native paths instead.
+controls use their respective native paths instead. Chrome/Chromium self-drawn
+frames retain their own buttons rather than receiving a second fallback group;
+see [browser ownership](../../docs/WindowAppearance.md#chrome--chromium-client-decorations).
 
 ## How it works
 
