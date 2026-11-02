@@ -42,6 +42,21 @@ ShellRoot {
         }
         return null
     }
+    function glassRegion(card) {
+        // v8 publishes SurfaceShape directly and deliberately has no legacy
+        // blurRegion. Inspect the declaration under the active backend too.
+        const pending = [card]
+        const seen = []
+        while (pending.length > 0) {
+            const object = pending.pop()
+            if (!object || seen.indexOf(object) >= 0) continue
+            seen.push(object)
+            if (object.surfaceShape?.target === card) return object
+            for (const child of object.data || []) pending.push(child)
+            for (const child of object.children || []) pending.push(child)
+        }
+        return null
+    }
     Timer {
         interval: 350; running: true; repeat: true
         onTriggered: {
@@ -251,8 +266,8 @@ ShellRoot {
                         check(Math.abs(card.x - (desktop.leftInset + card.placement.column * step + card.dragOffsetX)) < 1
                             && Math.abs(card.y - (desktop.topInset + card.placement.row * step + card.dragOffsetY)) < 1,
                             "drag geometry follows the pointer without position animation")
-                        const region = card.blurRegion
-                        check(region.surfaceShape.target === card, "native glass tracks the moved card")
+                        const region = card.blurRegion || glassRegion(card)
+                        check(region !== null && region.surfaceShape.target === card, "native glass tracks the moved card")
                         const visual = card.mapToItem(null, Qt.rect(0, 0, card.width, card.height))
                         const blur = region.itemRect
                         check(Math.abs(blur.x - visual.x) < 1 && Math.abs(blur.y - visual.y) < 1
