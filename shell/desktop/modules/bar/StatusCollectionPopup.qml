@@ -47,6 +47,16 @@ AnimatedPopupWindow {
     BackgroundEffect.blurRegion: popup.visible && popup.revealProgress > 0
         && AppearanceTokens.surface.usesKwinBlur ? surface.blurRegion : null
 
+    // Presses on a popup surface never reach the compositor's global pointer
+    // bridge, so a tray menu anchored in here cannot be dismissed by the
+    // shared outside-press handler. Catch background presses under the grid.
+    MouseArea {
+        anchors.fill: parent
+        enabled: popup.coordinator.trayMenuVisible
+        acceptedButtons: Qt.LeftButton | Qt.RightButton | Qt.MiddleButton
+        onPressed: popup.coordinator.dismissTrayMenu()
+    }
+
     LiquidGlassPanel {
         id: surface
         anchors.fill: parent
