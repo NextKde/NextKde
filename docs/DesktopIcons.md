@@ -13,8 +13,7 @@ using actual font height. The preference is `DesktopFiles/iconSpacing` in
 Its layer-shell namespace is `dock`, which makes KWin exclude it from ordinary
 window close/move shortcuts and Show Desktop hiding without making its transparent
 surface a wallpaper candidate. Native Overview captures a single Desktop window;
-only wallpaper surfaces use `desktop`. Bridge suppresses the unblurred native panel
-thumbnails during Overview and restores complete widget/Dock material on exit,
+only wallpaper surfaces use `desktop`. The widgets fade with panels in Overview,
 leaving the wallpaper in desktop previews. Keep its Bottom layer: moving it to Background can
 put it behind Plasma. `installDesktopStack()` in the platform-owned
 `kwin/window-bridge.js` orders existing Below-layer surfaces as wallpaper < widgets

@@ -1,5 +1,4 @@
 #include "windowappearance/windowappearance.h"
-#include "windowappearance/overviewpanels.h"
 
 #include <scene/item.h>
 #include <scene/outlinedborderitem.h>
@@ -22,32 +21,6 @@ class WindowAppearanceLifecycleTest
 public:
     static void run()
     {
-        {
-            WindowAppearance::OverviewPanels panels;
-            KWin::Item widget, dock;
-            widget.setOpacity(0.75);
-            panels.suppress(&widget);
-            panels.suppress(&widget);
-            panels.suppress(&dock);
-            require(widget.opacity() == 0 && dock.opacity() == 0,
-                "native panel captures must not expose unblurred content");
-            auto *removed = new KWin::Item;
-            panels.suppress(removed);
-            delete removed;
-            panels.restore();
-            require(widget.opacity() == 0.75 && dock.opacity() == 1,
-                "Overview exit must restore original scene opacity");
-            panels.suppress(&widget);
-            widget.setOpacity(0.4);
-            panels.suppress(&widget);
-            panels.restore();
-            require(widget.opacity() == 0.4, "new compositor opacity was lost");
-            {
-                WindowAppearance::OverviewPanels unloading;
-                unloading.suppress(&dock);
-            }
-            require(dock.opacity() == 1, "effect teardown left a panel invisible");
-        }
         WindowAppearanceManager manager;
         auto *parent = new KWin::Item;
         auto *bounds = new KWin::Item(parent);

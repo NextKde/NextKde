@@ -37,16 +37,6 @@ While either effect is active, Bridge releases continuous captures and restores 
 thumbnail capture, including previously hidden continuous windows. Normal painting resumes continuous
 corners after the effect exits; Slide keeps its output clipping.
 
-Overview's Dock thumbnails also bypass Glass. Bridge suppresses only Quickshell
-Dock scene items during Overview, including the Below-layer desktop widgets and
-Top-layer Dock/Bar. They return at the effect boundary with normal Glass and client
-content in the same frame, rather than fading in as unblurred thumbnails first.
-This intentionally omits native Overview's panel fade; no client visibility, focus,
-desktop membership or material setting changes. Restore saved scene opacity on exit
-and plugin teardown, tolerate destroyed items and panels mapped during Overview.
-The offline appearance lifecycle test covers opacity restoration and item removal;
-enter/exit/gesture cancellation and live glass still require VM visual acceptance.
-
 ## Configuration
 
 `~/.config/kos/window-appearance.json` uses schema 2; the parser accepts schema 1 migration.
