@@ -142,7 +142,7 @@ jobs:
             extra-cmake-modules wayland plasma-workspace libplasma kpackage \
             kwindowsystem kiconthemes kglobalaccel kio kconfig \
             go dbus nodejs python opencv onnxruntime-cpu \
-            quickshell kwin python-pillow mesa vulkan-swrast libcap
+            quickshell kwin python-pillow python-dbus python-gobject mesa vulkan-swrast libcap
 
       # Arch gives KWin CAP_SYS_NICE, which Docker's default capability
       # bounding set excludes. execve then fails with EPERM before KWin starts.
@@ -196,6 +196,12 @@ jobs:
             -L '^logic$' \
             --output-log "$GITHUB_WORKSPACE/.build/tests/test-results/logic.log" \
             --output-junit "$GITHUB_WORKSPACE/.build/tests/test-results/logic.xml"
+
+      - name: Check delayed tray context menus
+        if: ${{ !cancelled() && steps.prepare.outcome == 'success' }}
+        env:
+          QML_IMPORT_PATH: ${{ github.workspace }}/.build/tests/qml
+        run: python3 tests/tray-menu/run.py --private-compositor
 
       - name: Render tray icons and appearance settings on a private compositor
         if: ${{ !cancelled() && steps.prepare.outcome == 'success' }}

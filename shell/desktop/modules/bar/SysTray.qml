@@ -813,18 +813,22 @@ Item {
     function openTrayMenu(anchor) {
         if (!anchor || !anchor.modelData || !anchor.modelData.hasMenu)
             return
-        if (trayMenu.visible) {
-            // Switching items: keep the current rows on screen until the new
-            // tree arrives, and move the popup to the new item's anchor.
-            trayMenuShowFallback.stop()
-            root._trayMenuPendingShow = false
-        } else {
-            closeTrayMenuState()
-        }
-        trayMenu.anchorItem = anchor
-        trayMenu.anchor.updateAnchor()
+        trayMenuShowFallback.stop()
         root._trayMenuPendingShow = true
-        trayMenuOpener.menu = anchor.modelData.menu
+        // Switching the opener releases the previous app's entry objects.
+        // Replace both the logical and animated page before unref, so neither
+        // stale actions nor an empty surface appear while GetLayout is pending.
+        root._rebuildingTrayMenu = true
+        try {
+            trayMenu.setItems([{ label: I18n.tr("Loading…"), enabled: false }], true)
+            for (const rec of root._traySubmenuOpeners) rec.opener.destroy()
+            root._traySubmenuOpeners = []
+            trayMenu.anchorItem = anchor
+            trayMenu.anchor.updateAnchor()
+            trayMenuOpener.menu = anchor.modelData.menu
+        } finally {
+            root._rebuildingTrayMenu = false
+        }
         if (trayMenuOpener.menu === null) {
             root._trayMenuPendingShow = false
             return
@@ -847,7 +851,7 @@ Item {
         root._trayMenuPendingShow = false
         // Drop the delegates' entry references before the handles release
         // the DBusMenu tree and its entries are deleted.
-        trayMenu.clear()
+        trayMenu.setItems([], true)
         for (const rec of root._traySubmenuOpeners)
             rec.opener.destroy()
         root._traySubmenuOpeners = []
@@ -898,7 +902,8 @@ Item {
     function rebuildTrayMenu() {
         if (root._rebuildingTrayMenu)
             return
-        if (trayMenuOpener.menu === null)
+        if (trayMenuOpener.menu === null
+                || trayMenuOpener.children === root._trayMenuEmptyModel)
             return
         root._rebuildingTrayMenu = true
 
@@ -944,7 +949,9 @@ Item {
                 level = parentItem.children
             }
 
-            trayMenu.rootItems = rootItems
+            if (rootItems.length === 0)
+                level = [{ label: I18n.tr("No menu actions available"), enabled: false }]
+            trayMenu.rootItems = rootItems.length === 0 ? level : rootItems
             trayMenu.page = ({ items: level, parents: parents })
         } finally {
             root._rebuildingTrayMenu = false
@@ -962,6 +969,7 @@ Item {
 
     ContextMenu {
         id: trayMenu
+        objectName: "status-tray-context-menu"
         scrimLevel: AppearanceTokens.bar.popupScrimLevel
         customAnchorEdges: root.popupEdge
         customGravity: root.popupEdge

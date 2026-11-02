@@ -998,6 +998,7 @@ export const catalog = {
     "Settings app version mismatch": "Versão do app de configurações incompatível",
     "Desktop preview is not supported in this environment yet": "A prévia da área de trabalho ainda não é compatível com este ambiente",
     "Enters a fullscreen simulated desktop; the wallpaper changes only after Apply": "Abre uma área de trabalho simulada em tela cheia; o papel de parede só muda depois de Aplicar",
+    "No menu actions available": "Nenhuma ação de menu disponível",
     "Loading…": "Carregando…",
     "Desktop preview  ›": "Prévia da área de trabalho  ›",
     "Fill mode": "Modo de preenchimento",
