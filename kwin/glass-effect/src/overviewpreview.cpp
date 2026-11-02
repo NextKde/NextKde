@@ -47,7 +47,7 @@ bool shellPanel(const Window *window)
 
 struct PreviewFrame
 {
-    std::unique_ptr<GLTexture> texture;
+    std::shared_ptr<GLTexture> texture;
     std::unique_ptr<GLFramebuffer> framebuffer;
     GLsync fence = nullptr;
     quint64 revision = 0;
@@ -60,7 +60,9 @@ struct PreviewFrame
 class PreviewNode final : public QSGSimpleTextureNode
 {
 public:
-    std::shared_ptr<PreviewFrame> frame;
+    // Textures are shared across GL contexts; framebuffer objects are not.
+    // Keep only the texture alive on Qt's render thread, never the capture FBO.
+    std::shared_ptr<GLTexture> texture;
     std::unique_ptr<QSGTexture> wrapped;
 };
 
@@ -96,8 +98,8 @@ protected:
         }
         auto *node = static_cast<PreviewNode *>(old);
         if (!node) node = new PreviewNode;
-        if (node->frame != frame) {
-            node->frame = frame;
+        if (node->texture != frame->texture) {
+            node->texture = frame->texture;
             node->wrapped.reset(QNativeInterface::QSGOpenGLTexture::fromNative(
                 frame->texture->texture(), window(), frame->texture->size(),
                 QQuickWindow::TextureHasAlphaChannel));
