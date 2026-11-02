@@ -34,11 +34,11 @@ jobs:
         run: |
           node tests/dock/native-target.test.mjs
           node tests/dock/runtime.mjs native-target /usr/lib/qt6/bin/qmltestrunner
-      - name: Build Settings and check native animation transitions
+      - name: Build Settings and check native animation and window controls
         run: |
           cmake -S apps/settings -B .build/native-genie-settings -G Ninja -DBUILD_TESTING=ON
-          cmake --build .build/native-genie-settings --target kos-window-settings-test kos-native-genie-test kos-animation-async-test kos-settings --parallel 2
-          ctest --test-dir .build/native-genie-settings -R '^kos-settings.(window-config|native-genie-upgrade|animation-async)$' --output-on-failure
+          cmake --build .build/native-genie-settings --target kos-window-settings-test kos-native-genie-test kos-animation-async-test kos-settings kos-settings-qml-tests --parallel 2
+          ctest --test-dir .build/native-genie-settings -R '^kos-settings.(window-config|window-interactions|native-genie-upgrade|animation-async)$' --output-on-failure
 
   fedora-dependencies:
     name: Fedora 44 dependency packages

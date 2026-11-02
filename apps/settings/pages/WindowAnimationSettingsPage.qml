@@ -125,6 +125,7 @@ ColumnLayout {
 
             Controls.SettingsSwitch {
                 objectName: "windowIndependentButtonBackground"
+                enabled: windowPage.backend !== null && windowPage.snapshot.enabled !== false
                 checked: windowPage.snapshot.independentButtonBackground === true
                 accentColor: colors.accent
                 trackColor: colors.divider

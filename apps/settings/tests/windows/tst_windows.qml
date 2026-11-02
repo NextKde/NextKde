@@ -85,7 +85,10 @@ Item {
             mouseClick(toggle, toggle.width/2, toggle.height/2)
             compare(backend.state.independentButtonBackground, false)
             backend.state = Object.assign({}, backend.state, {enabled:false})
-            verify(!toggle.enabled)
+            tryCompare(toggle, "enabled", false)
+            const count = backend.calls.length
+            mouseClick(toggle, toggle.width/2, toggle.height/2)
+            compare(backend.calls.length, count, "disabled cover switch cannot save")
         }
         function test_button_glyph_mode() {
             const picker = control("windowButtonGlyphMode")
