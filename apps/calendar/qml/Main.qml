@@ -1335,60 +1335,21 @@ KosApplicationWindow {
         // One header row: liquid controls share the window dots' centre line.
         readonly property real toolbarCenterY: windowControls.y + windowControls.height / 2
 
-        // 自绘窗口圆点：14px 圆点、间距 14、右缘距窗口右 14.5。
-        // 顶部留白 12.5px，工具栏跟随其中心线，整行比原位置下移 2px。
-        Row {
+        // The same slot is used by the client fallback and negotiated KWin lights.
+        KosWindowControls {
             id: windowControls
             objectName: "calendarWindowControls"
-            anchors {
-                right: parent.right
-                rightMargin: 14.5
-                top: parent.top
-                topMargin: 12.5
-            }
-            spacing: 14
+            targetWindow: root
+            maximizeMode: true
+            circleSize: 14
+            buttonWidth: 22
+            buttonHeight: 22
+            spacing: 6
+            anchors.right: parent.right
+            anchors.rightMargin: 10.5
+            anchors.top: parent.top
+            anchors.topMargin: 8.5
             z: 10
-            Repeater {
-                model: [
-                    { color: "#28c840", act: "max" },
-                    { color: "#febc2e", act: "min" },
-                    { color: "#ff5f57", act: "close" }
-                ]
-                delegate: Rectangle {
-                    id: windowDot
-                    required property var modelData
-                    width: 14; height: 14; radius: 7
-                    color: modelData.color
-                    // P1-A6b: 键盘聚焦时给最小可见反馈（常态外观 0.85 不变）。
-                    opacity: activeFocus ? 1.0 : 0.85
-                    border.width: activeFocus ? 1 : 0
-                    border.color: AppTheme.text
-                    activeFocusOnTab: true
-                    function activate() {
-                        if (modelData.act === "min")
-                            root.showMinimized()
-                        else if (modelData.act === "max")
-                            root.visibility === Window.Maximized
-                                ? root.showNormal() : root.showMaximized()
-                        else
-                            root.close()
-                    }
-                    Keys.onReturnPressed: windowDot.activate()
-                    Keys.onEnterPressed: windowDot.activate()
-                    Keys.onSpacePressed: windowDot.activate()
-                    Accessible.role: Accessible.Button
-                    Accessible.name: modelData.act === "min" ? qsTr("Minimize")
-                        : modelData.act === "max" ? qsTr("Zoom") : qsTr("Close")
-                    MouseArea {
-                        // P1-A6b: 命中区放大到 22×22 居中（中心距 28 不重叠），
-                        // 视觉圆点仍是 14×14。
-                        anchors.centerIn: parent
-                        width: 22; height: 22
-                        cursorShape: Qt.PointingHandCursor
-                        onClicked: windowDot.activate()
-                    }
-                }
-            }
         }
 
         Item {
@@ -1442,6 +1403,20 @@ KosApplicationWindow {
             width: root.sidebarExpanded ? root.design.sidebarWidth : sidebarToggleButton.width
             height: 2 * windowChrome.toolbarCenterY
             z: 10
+
+            Text {
+                objectName: "sidebarTitle"
+                visible: root.sidebarExpanded
+                anchors.left: parent.left
+                anchors.leftMargin: 16
+                width: Math.max(0, sidebarToggleButton.x - x - 12)
+                anchors.verticalCenter: sidebarToggleButton.verticalCenter
+                text: qsTr("Calendar")
+                color: AppTheme.text
+                font.pixelSize: 15
+                font.weight: Font.DemiBold
+                elide: Text.ElideRight
+            }
 
             ToolbarButton {
                 id: sidebarToggleButton

@@ -1,0 +1,47 @@
+/* GTK 4 stretches the button's hit target over the header bar. Paint the
+   centered image node, so the light stays circular at any header bar height. */
+windowcontrols button.close,
+windowcontrols button.minimize,
+windowcontrols button.maximize {
+    min-width: 22px;
+    min-height: 22px;
+    padding: 0;
+    margin: 0 3px;
+    border: none;
+    background: none;
+    box-shadow: none;
+}
+windowcontrols button.close > image,
+windowcontrols button.minimize > image,
+windowcontrols button.maximize > image {
+    min-width: 16px;
+    min-height: 16px;
+    padding: 2px;
+    margin: 0;
+    border: 1px solid alpha(black, 0.18);
+    border-radius: 999px;
+    background-image: none;
+    box-shadow: none;
+    color: alpha(black, 0.75);
+    -gtk-icon-shadow: none;
+    -gtk-icon-size: 12px;
+}
+windowcontrols button.close > image { background-color: #ff5f57; }
+windowcontrols button.minimize > image { background-color: #febc2e; }
+windowcontrols button.maximize > image { background-color: #28c840; }
+windowcontrols button.close:hover > image,
+windowcontrols button.minimize:hover > image,
+windowcontrols button.maximize:hover > image {
+    background-image: linear-gradient(alpha(white, 0.18), alpha(white, 0.18));
+}
+windowcontrols button.close:active > image,
+windowcontrols button.minimize:active > image,
+windowcontrols button.maximize:active > image {
+    background-image: linear-gradient(alpha(black, 0.16), alpha(black, 0.16));
+}
+windowcontrols button.close:backdrop > image,
+windowcontrols button.minimize:backdrop > image,
+windowcontrols button.maximize:backdrop > image { background-color: #b8b8bd; }
+windowcontrols button.close:disabled > image,
+windowcontrols button.minimize:disabled > image,
+windowcontrols button.maximize:disabled > image { opacity: 0.45; }

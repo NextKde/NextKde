@@ -27,6 +27,10 @@
 | 持久数据、socket 与并发 | [数据服务](DataServiceArchitecture.md) |
 | 外观、Token、图标 | [外观](AppearanceArchitecture.zh-CN.md)、[桌面图标](DesktopIcons.zh-CN.md) |
 | 窗口裁剪、阴影、资源限制及 VM 审阅 | [窗口外观](WindowAppearance.zh-CN.md) |
+| GTK 原生三色按钮与浮层回退 | [GTK 窗口按钮](GtkWindowButtons.zh-CN.md) |
+| Firefox 原生按钮与主题兼容 | [Firefox 窗口按钮](FirefoxWindowButtons.zh-CN.md) |
+| 自有应用预留位置、透明按钮与自动回退 | [协作式窗口按钮](CooperativeWindowControls.zh-CN.md) |
+| KDE 应用的原生装饰器按钮 | [原生窗口装饰](NativeWindowDecoration.zh-CN.md) |
 | Dock 输入、生命周期、动画 | [Dock](DockArchitecture.md) |
 | 壁纸所有权及主题格式 | [壁纸](WallpaperArchitecture.zh-CN.md)、[主题包](ThemePackFormat.zh-CN.md)、[深度引擎](DepthEngine.md) |
 | 网络、PIM、天气 | [网络](NetworkArchitecture.md)、[PIM](PimArchitecture.md)、[天气](WeatherArchitecture.md) |
