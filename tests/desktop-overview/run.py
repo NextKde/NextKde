@@ -19,6 +19,14 @@ spec.loader.exec_module(fixture)
 
 def run(base_env):
     bus = dbus.SessionBus()
+    # The Wayland socket is created before KWin finishes Workspace/Scripting
+    # initialization. Unlike the existing client-only widget fixtures, this
+    # test needs the compositor's D-Bus service as well.
+    deadline = time.monotonic() + 10
+    while not bus.name_has_owner("org.kde.KWin"):
+        if time.monotonic() >= deadline:
+            raise AssertionError("private KWin did not register its D-Bus service")
+        time.sleep(0.05)
     scripting = dbus.Interface(bus.get_object("org.kde.KWin", "/Scripting"), "org.kde.kwin.Scripting")
     compositor_log = Path(base_env["KOS_TEST_KWIN_LOG"])
     runtime = Path(base_env["XDG_RUNTIME_DIR"])
