@@ -7,18 +7,28 @@
 #include "windowbuttons/buttoninput.h"
 #include "windowbuttons/windowquery.h"
 #include "windowappearance/windowappearance.h"
+#include "windowappearance/overviewpanels.h"
 
 #include <effect/effecthandler.h>
 #include <effect/effectwindow.h>
 #include <core/renderviewport.h>
 #include <input.h>
 #include <window.h>
+#include <scene/windowitem.h>
 
 namespace KOS
 {
 
 namespace
 {
+
+bool overviewPanelEligible(const KWin::EffectWindow *window)
+{
+    const auto *native = window ? window->window() : nullptr;
+    return native && window->isDock()
+        && (native->resourceClass() == QLatin1String("quickshell")
+            || native->resourceClass() == QLatin1String("org.quickshell"));
+}
 
 // The window types the unified appearance applies to. The same filter the
 // button panels use -- shell surfaces, docks, popups and notifications are
@@ -73,6 +83,7 @@ BridgeEffect::BridgeEffect()
     , m_input(std::make_unique<ButtonInput>(m_renderer.get(), m_config.get()))
     , m_appearance(std::make_unique<WindowAppearanceManager>())
     , m_continuousClip(std::make_unique<WindowAppearance::ContinuousClip>())
+    , m_overviewPanels(std::make_unique<WindowAppearance::OverviewPanels>())
 {
     KWin::effects->setProperty(SharedWindowSourceProperty,
         QVariant::fromValue(static_cast<QObject *>(this)));
@@ -92,6 +103,12 @@ BridgeEffect::BridgeEffect()
     }
 
     const auto watchFullscreen = [this](KWin::EffectWindow *window) {
+        // Also cover panels mapped while Overview is already active.
+        updateNativeThumbnails();
+        if (overviewPanelEligible(window)) {
+            connect(window->window(), &KWin::Window::opacityChanged, this,
+                    [this] { updateNativeThumbnails(); });
+        }
         connect(window, &KWin::EffectWindow::windowFullScreenChanged,
                 this, [this](KWin::EffectWindow *changed) {
                     m_input->fullscreenChanged(changed);
@@ -174,6 +191,7 @@ BridgeEffect::~BridgeEffect()
     disconnect(KWin::effects, nullptr, this, nullptr);
     disconnect(m_renderer.get(), nullptr, this, nullptr);
     disconnect(m_appearance.get(), nullptr, this, nullptr);
+    m_overviewPanels->restore();
     m_appearance->restoreAll();
 }
 
@@ -207,6 +225,18 @@ bool BridgeEffect::isActive() const
 void BridgeEffect::updateNativeThumbnails()
 {
     const auto *effect = KWin::effects->activeFullScreenEffect();
+    const bool overview = effect && effect->inherits("KWin::OverviewEffect");
+    if (overview) {
+        for (auto *window : KWin::effects->stackingOrder()) {
+            if (overviewPanelEligible(window)) {
+                m_overviewPanels->suppress(window->windowItem());
+            }
+        }
+    } else {
+        // Synchronous with the full-screen effect boundary: the first regular
+        // frame paints Glass and client content together, without a timer.
+        m_overviewPanels->restore();
+    }
     const bool nativeThumbnails = effect && (effect->inherits("KWin::OverviewEffect")
         || effect->inherits("KWin::WindowViewEffect"));
     if (m_nativeThumbnails == nativeThumbnails) {

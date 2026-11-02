@@ -12,6 +12,7 @@ class ButtonConfig;
 class ButtonInput;
 class WindowAppearanceManager;
 namespace WindowAppearance { class ContinuousClip; }
+namespace WindowAppearance { class OverviewPanels; }
 
 // Simple KWin effect that draws window buttons on top of CSD windows, and
 // owns the unified window appearance: corner rounding, the frame band and
@@ -69,6 +70,7 @@ private:
     std::unique_ptr<ButtonInput> m_input;
     std::unique_ptr<WindowAppearanceManager> m_appearance;
     std::unique_ptr<WindowAppearance::ContinuousClip> m_continuousClip;
+    std::unique_ptr<WindowAppearance::OverviewPanels> m_overviewPanels;
     bool m_nativeThumbnails = false;
 
     // The window that was active last, so that the panel it had can be repainted
