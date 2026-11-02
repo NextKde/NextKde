@@ -37,6 +37,7 @@ Row {
     // Keep delegates in the Row layout while takeover hides only their opacity.
     Loader {
         id: compositorLoader
+        active: root.compositorIntegration
         width: 0; height: 0
         source: "KosCompositorControls.qml"
         onLoaded: item.target = root
@@ -57,6 +58,8 @@ Row {
             Accessible.ignored: root.compositorActive
             hoverEnabled: true
             focusPolicy: Qt.StrongFocus
+            Keys.onReturnPressed: button.clicked()
+            Keys.onEnterPressed: button.clicked()
             Accessible.name: modelData === "maximize"
                 ? (root.maximizeMode
                     ? (root.targetWindow.visibility === Window.Maximized ? qsTr("Restore") : qsTr("Maximize"))
