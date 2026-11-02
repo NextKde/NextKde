@@ -15,8 +15,15 @@ Item {
         if (!condition) throw new Error(message)
     }
     function surfaces() {
-        return KW.Workspace.windowList().filter(window =>
-            String(window.resourceClass).includes("quickshell"))
+        // The declarative Workspace exposes a QML list; windowList() belongs
+        // to the separate JavaScript scripting wrapper.
+        const windows = KW.Workspace.windows
+        const result = []
+        for (let index = 0; index < windows.length; ++index) {
+            if (String(windows[index].resourceClass).includes("quickshell"))
+                result.push(windows[index])
+        }
+        return result
     }
     Component {
         id: backgroundComponent
