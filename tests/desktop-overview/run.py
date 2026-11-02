@@ -56,7 +56,9 @@ def run(base_env):
                         start_offset = compositor_log.stat().st_size
                         try:
                             script_id = scripting.loadDeclarativeScript(
-                                str(Path(__file__).with_name("probe.qml")), plugin)
+                                # KWin exports one- and two-argument overloads;
+                                # dbus-python introspection may pick the former.
+                                str(Path(__file__).with_name("probe.qml")), plugin, signature="ss")
                             assert script_id >= 0, "failed to load native KWin probe"
                             scripting.start()
                             deadline = time.monotonic() + 15
