@@ -730,6 +730,13 @@ if(BUILD_TESTING)
     target_link_libraries(kos-desktop-glass-blur-test PRIVATE Qt6::Core Qt6::Gui)
     add_test(NAME kos-glass.desktop-blur COMMAND kos-desktop-glass-blur-test)
     set_tests_properties(kos-glass.desktop-blur PROPERTIES LABELS platform TIMEOUT 10)
+    qt_add_executable(kos-overview-panel-projection-test
+        kwin/glass-effect/tests/test_overview_panel_projection.cpp)
+    target_link_libraries(kos-overview-panel-projection-test PRIVATE Qt6::Quick)
+    add_test(NAME kos-glass.overview-panel-projection COMMAND kos-overview-panel-projection-test)
+    set_tests_properties(kos-glass.overview-panel-projection PROPERTIES
+        LABELS platform TIMEOUT 10
+        ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_QUICK_BACKEND=software")
 endif()
 if(KOS_BUILD_CALENDAR OR KOS_BUILD_TODO)
     find_package(KF6CalendarCore 6.0 REQUIRED)

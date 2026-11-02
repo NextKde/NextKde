@@ -4,6 +4,7 @@
  * SPDX-License-Identifier: GPL-2.0-or-later
  */
 #include "overviewpreview.h"
+#include "overviewpanelprojection.h"
 #include <compositor.h>
 #include <main.h>
 #include <core/output.h>
@@ -113,7 +114,7 @@ protected:
 
 auto *workspaceScene()
 {
-#ifdef KOS_KWIN_PAINT_RESULT_API
+#ifdef GLASS_KWIN_67
     return kwinApp()->scene();
 #else
     return Compositor::self()->scene();
@@ -139,8 +140,7 @@ public:
     bool failed = false;
     std::map<LogicalOutput *, std::shared_ptr<PreviewFrame>> frames;
     std::map<QQuickItem *, QPointer<PreviewItem>> previews;
-    struct Panel { QPointer<QQuickItem> item; qreal opacity; };
-    std::map<QQuickItem *, Panel> panels;
+    OverviewPanelProjection panels;
 
     void watch(EffectWindow *window)
     {
@@ -155,11 +155,7 @@ public:
 
     void clear()
     {
-        // Never change client visibility/focus. Restore only the redundant
-        // native panel thumbnail; its pixels are in the composed desktop now.
-        auto saved = std::exchange(panels, {});
-        for (const auto &[key, panel] : saved)
-            if (panel.item) panel.item->setOpacity(panel.opacity);
+        panels.restore();
         auto items = std::exchange(previews, {});
         for (const auto &[key, item] : items)
             if (item) delete item;
@@ -242,9 +238,7 @@ public:
         if (root->inherits("KWin::WindowThumbnailItem")) {
             auto *client = root->property("client").value<Window *>();
             if (shellPanel(client)) {
-                auto &saved = panels[root];
-                if (!saved.item) saved = {root, root->opacity()};
-                root->setOpacity(0);
+                panels.project(root);
                 return;
             }
         }
@@ -288,7 +282,6 @@ public:
         }
         // Keep only live QML items and connected output buffers.
         std::erase_if(previews, [](const auto &entry) { return !entry.second; });
-        std::erase_if(panels, [](const auto &entry) { return !entry.second.item; });
         for (auto it = frames.begin(); it != frames.end();) {
             if (!outputs.contains(it->first)) {
                 it->second->releaseFence();

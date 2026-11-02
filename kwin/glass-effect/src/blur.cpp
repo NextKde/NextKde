@@ -318,6 +318,7 @@ BlurEffect::BlurEffect()
     });
     connect(m_surfaceShapeManager.get(), &SurfaceShapeManager::revealFrameChanged,
             this, [this](SurfaceInterface *surface, const QRectF &bounds) {
+        if (m_overviewPreview) m_overviewPreview->invalidate();
         // The timeline changes shader uniforms, not capture geometry or blur
         // strength. Repaint only the panel and sampling margin; do not rebuild
         // the legacy region or invalidate the full-screen transparent window.
@@ -549,6 +550,9 @@ void BlurEffect::reconfigure(ReconfigureFlags flags)
     }
 
     // Update all windows for the blur to take effect
+#ifndef GLASS_X11
+    if (m_overviewPreview) m_overviewPreview->invalidate();
+#endif
     effects->addRepaintFull();
 }
 

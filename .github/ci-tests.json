@@ -24,6 +24,7 @@
     "kos-platform.contracts",
     "kos-glass.legacy-blur-region",
     "kos-glass.desktop-blur",
+    "kos-glass.overview-panel-projection",
     "kos-platform.status-panel-data",
     "kos-platform.status-panel-operations"
   ],
