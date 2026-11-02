@@ -27,6 +27,7 @@
 #include <QQuickWindow>
 #include <QSGSimpleTextureNode>
 #include <QSGTexture>
+#include <QSGRendererInterface>
 #include <map>
 #include <utility>
 
@@ -164,7 +165,8 @@ public:
             if (item) delete item;
         if (!frames.empty()) {
             effects->makeOpenGLContextCurrent();
-            for (auto &[output, frame] : frames) frame->releaseFence();
+            for (auto &[output, frame] : frames)
+                if (frame) frame->releaseFence();
             frames.clear();
         }
         dirty = true;
@@ -190,6 +192,7 @@ public:
         RenderTarget target(frame->framebuffer.get());
         RenderViewport viewport(output->geometry(), output->scale(), target, QPoint());
         auto *renderer = desktopRenderer();
+        if (!renderer) return false;
         GLFramebuffer::pushFramebuffer(frame->framebuffer.get());
         renderer->beginFrame(target, viewport);
         renderer->renderBackground(target, viewport, target.transformedRect());
@@ -260,7 +263,8 @@ public:
             failed = true;
             qWarning() << "Glass: composed Overview preview unavailable; retaining native previews";
         };
-        if (QQuickWindow::sceneGraphBackend().startsWith(QLatin1String("software"))) { clear(); return; }
+        if (QQuickWindow::graphicsApi() != QSGRendererInterface::OpenGL
+            || QQuickWindow::sceneGraphBackend().startsWith(QLatin1String("software"))) { fail(); return; }
         // Admit all outputs together: on a failure retain native Overview.
         quint64 bytes = 0;
         const auto outputs = effects->screens();
