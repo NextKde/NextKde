@@ -4,6 +4,14 @@ set -euo pipefail
 project_dir=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 # These commands must not create build directories or probe desktop processes.
 case "${1:-}" in
+    firefox-buttons)
+        shift
+        exec python3 "$project_dir/tools/firefox_buttons.py" "$@"
+        ;;
+    gtk-buttons)
+        shift
+        exec python3 "$project_dir/tools/gtk-window-buttons.py" "$@"
+        ;;
     update|version)
         command -v python3 >/dev/null 2>&1 || { echo "python3 is required" >&2; exit 1; }
         if [[ "$1" == update ]]; then
@@ -302,6 +310,14 @@ Source selection (does not install or restart anything):
   ./tools/kosctl update main        # explicitly choose development
   ./tools/kosctl update v0.1.0      # explicitly choose a version tag
   ./tools/kosctl version            # deployed files and source checkout separately
+
+GTK compatibility rules (styles follow the common Window appearance switch):
+  ./tools/kosctl gtk-buttons adapt APP_ID [--title TITLE]
+  ./tools/kosctl gtk-buttons fallback APP_ID [--title TITLE]
+
+Firefox native buttons (one-time profile registration, then the common switch):
+  ./tools/kosctl firefox-buttons install [--profile PATH]
+  ./tools/kosctl firefox-buttons uninstall
 
 Optional components are installed by naming them:
   ./tools/kosctl install lockscreen   # lock screen (user level, no root)

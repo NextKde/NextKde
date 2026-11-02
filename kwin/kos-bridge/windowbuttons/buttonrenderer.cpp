@@ -15,6 +15,7 @@
 #include <QPainterPath>
 #include <QPalette>
 #include <QTimer>
+#include <QJsonArray>
 #include <QVector4D>
 
 #include <epoxy/gl.h>
@@ -322,7 +323,7 @@ void ButtonRenderer::paint(const KWin::RenderTarget &renderTarget,
     // KWin does not tell an effect which decoration is in use, so the flag is
     // read out of kwinrc by the configuration and the redraw for a change comes
     // from its watcher (ButtonConfig::recheckDecoration).
-    if (!config.kosDecorationSelected
+    if (!config.cooperativeControls && !config.kosDecorationSelected
         && config.decoratedWindows != DecoratedWindows::Always) {
         return;
     }
@@ -345,7 +346,7 @@ void ButtonRenderer::paint(const KWin::RenderTarget &renderTarget,
     // A window being adjusted uses the draft, and nothing else in this function
     // has to know which of the two it is: the drawn panel, the hit rects, the
     // tint band and hitTest() all follow from `geometry`.
-    const PanelGeometry geometry = effectiveGeometry(window, config);
+    const PanelGeometry geometry = config.cooperativeControls ? config.geometry : effectiveGeometry(window, config);
 
     // The panel goes where the configuration says, not where the application's
     // own controls happen to be: those can be told apart from a logo, a
@@ -353,7 +354,7 @@ void ButtonRenderer::paint(const KWin::RenderTarget &renderTarget,
     // lands in the wrong place is worse than one that is a few pixels off the
     // controls it covers.
     const QPointF windowTopLeft = window->frameGeometry().topLeft();
-    const QRectF local = panelRect(geometry, window->frameGeometry().size());
+    const QRectF local = config.cooperativeControls ? config.cooperativeRect : panelRect(geometry, window->frameGeometry().size());
     const QSizeF panelSize = local.size();
 
     // The panel is opaque, so its tint has to come from the title bar
@@ -361,7 +362,7 @@ void ButtonRenderer::paint(const KWin::RenderTarget &renderTarget,
     // drawn: a guessed tint is exactly the misalignment this replaced.
     bool dark = false;
     QColor panelColor;
-    switch (config.background) {
+    if (!config.cooperativeControls) switch (config.background) {
     case PanelBackground::Dark:
         dark = true;
         panelColor = QColor(28, 28, 32);
@@ -409,6 +410,7 @@ void ButtonRenderer::paint(const KWin::RenderTarget &renderTarget,
     // the same layout buildPanel() draws, so the two cannot drift apart.
     const QPointF panelOrigin = windowTopLeft + local.topLeft();
     HitRects hit;
+    hit.cooperative = config.cooperativeControls;
     hit.windowOrigin = windowTopLeft;
     hit.panelRect = QRectF(panelOrigin, panelSize);
     // The margin is part of the panel as far as the pointer is concerned --
@@ -421,7 +423,9 @@ void ButtonRenderer::paint(const KWin::RenderTarget &renderTarget,
             .intersected(QRectF(windowTopLeft, window->frameGeometry().size()));
     QRectF cluster;
     for (int i = 0; i < TypeCount; ++i) {
-        hit.dots[i] = dotRect(panelSize, geometry, i).translated(panelOrigin);
+        hit.dots[i] = config.cooperativeControls
+            ? config.cooperativeButtons[i].translated(windowTopLeft)
+            : dotRect(panelSize, geometry, i).translated(panelOrigin);
         cluster = cluster.isEmpty() ? hit.dots[i] : cluster.united(hit.dots[i]);
     }
     hit.clusterRect = cluster.adjusted(-1.0, -1.0, 1.0, 1.0);
@@ -482,7 +486,11 @@ void ButtonRenderer::paint(const KWin::RenderTarget &renderTarget,
     // Both are asked after the hit rects are published rather than before, so
     // that a frame with nothing to paint still ends with the panel and the menu
     // where they are, and taking the pointer with them.
-    const KWin::Region clip = clippedToWindow(deviceRegion, viewport, logicalRect);
+    const QRectF paintBounds = config.cooperativeControls
+        ? logicalRect.adjusted(-CooperativeLightPadding*transform.xScale, -CooperativeLightPadding*transform.yScale,
+                               CooperativeLightPadding*transform.xScale, CooperativeLightPadding*transform.yScale)
+        : logicalRect;
+    const KWin::Region clip = clippedToWindow(deviceRegion, viewport, paintBounds);
     if (!clip.isEmpty()) {
         const bool active = (KWin::effects->activeWindow() == window);
         // The hover ring is not drawn while the window is being adjusted: the
@@ -502,10 +510,25 @@ void ButtonRenderer::paint(const KWin::RenderTarget &renderTarget,
             w && w->maximizeMode() == KWin::MaximizeFull;
         // RGB changes only a uniform, not three supersampled button textures.
         const qreal scale = viewport.scale();
-        if (KWin::GLTexture *background = backgroundTexture(panelSize, scale)) {
-            blit(viewport, clip, logicalRect, background, panelColor);
+        if (!config.cooperativeControls) {
+            if (KWin::GLTexture *background = backgroundTexture(panelSize, scale))
+                blit(viewport, clip, logicalRect, background, panelColor);
         }
-        if (KWin::GLTexture *tex = panelTexture(panelSize, scale, active, dark,
+        if (config.cooperativeControls) {
+            for (int i = 0; i < TypeCount; ++i) {
+                const auto dot = config.cooperativeButtons[i];
+                if (dot.isEmpty()) continue;
+                const QRectF padded = dot.adjusted(-CooperativeLightPadding, -CooperativeLightPadding,
+                                                   CooperativeLightPadding, CooperativeLightPadding);
+                const QRectF drawn(origin + QPointF(padded.x()*transform.xScale, padded.y()*transform.yScale),
+                                   QSizeF(padded.width()*transform.xScale, padded.height()*transform.yScale));
+                const auto dotClip = clippedToWindow(deviceRegion, viewport, drawn);
+                if (dotClip.isEmpty()) continue;
+                if (auto *texture = cooperativeTexture(dot.size(), scale, typeAt(i), active,
+                        hovered == actionFor(typeAt(i)), maximized, showGlyphs))
+                    blit(viewport, dotClip, drawn, texture);
+            }
+        } else if (KWin::GLTexture *tex = panelTexture(panelSize, scale, active, dark,
                                                 geometry, hovered, adjusting,
                                                 maximized, showGlyphs)) {
             blit(viewport, clip, logicalRect, tex);
@@ -772,7 +795,10 @@ QRectF ButtonRenderer::currentRect(KWin::EffectWindow *window) const
     // being animated, or one the guards reject -- and then there is nothing to
     // damage.
     const auto hit = m_hits.constFind(window);
-    return hit == m_hits.constEnd() ? QRectF() : hit.value().panelRect;
+    if (hit == m_hits.constEnd()) return {};
+    return hit->cooperative ? hit->panelRect.adjusted(-CooperativeLightPadding, -CooperativeLightPadding,
+                                                     CooperativeLightPadding, CooperativeLightPadding)
+                            : hit->panelRect;
 }
 
 PanelGeometry ButtonRenderer::pendingGeometry(KWin::EffectWindow *window) const
@@ -918,6 +944,15 @@ KWin::GLTexture *ButtonRenderer::panelTexture(const QSizeF &panelSize, qreal sca
                                             maximized, showGlyphs));
     }
     return it->second.get();
+}
+
+KWin::GLTexture *ButtonRenderer::cooperativeTexture(const QSizeF &size, qreal scale,
+    Type type, bool active, bool hovered, bool maximized, bool glyphs)
+{
+    const QString key = QStringLiteral("cooperative:%1:%2:%3:%4:%5:%6:%7:%8")
+        .arg(size.width()).arg(size.height()).arg(scale).arg(int(type)).arg(active).arg(hovered).arg(maximized).arg(glyphs);
+    if (auto found = m_textures.find(key); found != m_textures.end()) return found->second.get();
+    return cacheTexture(key, renderCooperativeLight(size, scale, type, active, hovered, maximized, glyphs));
 }
 
 KWin::GLTexture *ButtonRenderer::cacheTexture(const QString &key, QImage image)
@@ -1325,6 +1360,12 @@ ButtonRenderer::Action ButtonRenderer::hitTest(const QPointF &logicalPos,
             continue;
         }
 
+        if (hit.cooperative) {
+            bool onButton = false;
+            for (const auto &dot : hit.dots) onButton = onButton || dot.contains(logicalPos);
+            if (!onButton) continue; // Transparent gaps remain the application's drag area.
+        }
+
         if (window) {
             *window = w;
         }
@@ -1422,6 +1463,30 @@ void ButtonRenderer::invalidateAll()
     // m_pending and m_adjusting are deliberately kept: they belong to a session
     // that is still running, and reloading the configuration is not a reason to
     // throw away the panel the user is in the middle of positioning.
+}
+
+bool ButtonRenderer::cooperativeControls(KWin::EffectWindow *window) const
+{
+    const auto it = m_hits.constFind(window);
+    return it != m_hits.constEnd() && it->cooperative;
+}
+
+QJsonObject ButtonRenderer::controlDiagnostics(KWin::EffectWindow *window) const
+{
+    QJsonObject result{{"sampling", m_cache.contains(window)}};
+    const auto it = m_hits.constFind(window);
+    if (it == m_hits.constEnd()) { result.insert("painted", false); return result; }
+    const auto rectJson = [](const QRectF &rect) {
+        return QJsonArray{rect.x(), rect.y(), rect.width(), rect.height()};
+    };
+    result.insert("painted", true);
+    result.insert("cooperative", it->cooperative);
+    result.insert("background", !it->cooperative);
+    result.insert("localRect", rectJson(it->panelRect.translated(-window->frameGeometry().topLeft())));
+    QJsonArray buttons;
+    for (const auto &rect : it->dots) buttons.append(rectJson(rect));
+    result.insert("buttons", buttons);
+    return result;
 }
 
 } // namespace KOS

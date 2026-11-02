@@ -34,10 +34,14 @@ set(protocol_sources)
 ecm_add_wayland_client_protocol(protocol_sources
     PROTOCOL "${KOS_SURFACE_PROTOCOL_FILE}"
     BASENAME kos-surface-shape-v1)
+ecm_add_wayland_client_protocol(protocol_sources
+    PROTOCOL "${CMAKE_CURRENT_SOURCE_DIR}/kos-window-controls-v1.xml"
+    BASENAME kos-window-controls-v1)
 
 add_library(kos_surface_shape MODULE
     cursoroverride.cpp
     surfaceshape.cpp
+    windowcontrolslot.cpp
     surfaceshapeplugin.cpp
     ${protocol_sources}
 )

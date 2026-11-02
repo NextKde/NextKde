@@ -721,6 +721,37 @@ void testTileMenu()
 // Which configuration a window gets
 // ---------------------------------------------------------------------------
 
+void testNativeGtkControls()
+{
+    removeRulesFile();
+    writeKwinrc("kos_decoration");
+    writeUserConfig(R"({"rules": [
+        {"match": {"class": "org.example.Gtk", "type": "normal"},
+         "nativeGtkControls": true},
+        {"match": {"class": "org.example.Gtk", "title": "Custom", "type": "normal"},
+         "nativeGtkControls": false}
+    ]})");
+    ButtonConfig config;
+    const auto native = config.getAppConfig(query(QStringLiteral("org.example.Gtk")));
+    CHECK(native.usesNativeGtkControls(false));
+    CHECK(!native.usesNativeGtkControls(true)); // SSD must keep its only controls.
+    CHECK(native.showButtons);
+    CHECK(config.getAppConfig(query(QStringLiteral("instance org.example.Gtk")))
+              .usesNativeGtkControls(false));
+    CHECK(!config.getAppConfig(query(QStringLiteral("org.example.Gtk"), {}, 5))
+               .usesNativeGtkControls(false)); // Dialogs are separately qualified.
+    CHECK(!config.getAppConfig(query(QStringLiteral("org.example.Gtk"), QStringLiteral("Custom")))
+               .usesNativeGtkControls(false));
+    CHECK(!config.getAppConfig(query(QStringLiteral("org.example.Unknown")))
+               .usesNativeGtkControls(false));
+    CHECK(config.storeGeometry(classMatcher(QStringLiteral("org.example.Gtk")), PanelGeometry{}));
+    CHECK(config.getAppConfig(query(QStringLiteral("org.example.Gtk"))).usesNativeGtkControls(false));
+    writeUserConfig(R"({"apps":{"org.example.Gtk":{"nativeGtkControls":"true"}}})");
+    config.load();
+    CHECK(!config.getAppConfig(query(QStringLiteral("org.example.Gtk"))).usesNativeGtkControls(false));
+    removeRulesFile();
+}
+
 void testResolution()
 {
     removeRulesFile();
@@ -983,6 +1014,7 @@ int main(int argc, char **argv)
     testEdgeResize();
     testTileMenu();
     testResolution();
+    testNativeGtkControls();
     testStore();
 
     std::printf("%d checks, %d failures\n", g_checks, g_failures);
