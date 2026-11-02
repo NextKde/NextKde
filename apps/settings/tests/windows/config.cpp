@@ -52,6 +52,25 @@ int main(int argc, char **argv) {
     CHECK(settings.state()["decoration"]=="kos_decoration");
     CHECK(gtkStyle().contains("#ff5f57"));
     CHECK(gtkStyle().contains("personal GTK style"));
+    // Exercise the embedded installer, not a source-only mock. It must not
+    // send Chromium/GTK originals to the opposite side of KOS overlays.
+    for (const auto &version : {"3.0", "4.0"}) {
+        QFile ini(temporary.path() + "/gtk-" + QString::fromLatin1(version) + "/settings.ini");
+        CHECK(ini.open(QIODevice::ReadOnly));
+        const auto lines = QString::fromUtf8(ini.readAll()).split('\n');
+        bool found = false;
+        for (const auto &line : lines) if (line.startsWith("gtk-decoration-layout=")) {
+            found = true;
+            const auto parts = line.section('=', 1).split(':');
+            CHECK(parts.size() == 2);
+            for (const auto &action : {"close", "minimize", "maximize"}) {
+                CHECK(!parts[0].split(',').contains(QString::fromLatin1(action)));
+                CHECK(parts[1].split(',').contains(QString::fromLatin1(action)));
+            }
+        }
+        CHECK(found);
+    }
+
     CHECK(settings.setButtonGlyphMode("hover"));
     CHECK(gtkStyle().contains("opacity: 0"));
     CHECK(settings.setButtonGlyphMode("always"));

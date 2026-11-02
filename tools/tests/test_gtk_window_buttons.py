@@ -40,6 +40,73 @@ class GtkButtonsTests(unittest.TestCase):
         self.assertEqual(ini.read_text(), original_ini)
         self.assertFalse((self.config / 'gtk-4.0/gtk.css').exists())
 
+    def test_right_layout_keeps_chromium_under_the_overlay(self):
+        # Chromium consumes this same GTK layout even though it draws its own
+        # browser controls. Keep both toolkit sources on the overlay's side.
+        module.install(self.config)
+        for version in ('3.0', '4.0'):
+            line = module.layout_setting((self.config / f'gtk-{version}/settings.ini').read_text())
+            leading, trailing = line.strip().split('=', 1)[1].split(':')
+            self.assertEqual(leading, '')
+            self.assertEqual(trailing.split(','), ['minimize', 'maximize', 'close'])
+
+    def test_upgrade_left_layout_preserves_original_backup(self):
+        self.which.stop()
+        ini = self.config / 'gtk-3.0/settings.ini'
+        ini.parent.mkdir()
+        original = '[Settings]\ngtk-decoration-layout=:close\ngtk-font-name=Sans 12\n'
+        ini.write_text(original)
+        current = ["':close'"]
+        def setting(action, schema, key, *value):
+            if action == 'get': return current[0]
+            current[0] = value[0] if value[0].startswith("'") else repr(value[0])
+        with patch.object(module.shutil, 'which', return_value='/usr/bin/gsettings'), \
+             patch.object(module, 'gsettings', side_effect=setting):
+            with patch.object(module, 'layout_for_install', return_value=module.LEGACY_LAYOUT):
+                module.install(self.config)
+            state_path = self.config / 'kos/gtk-buttons-state.json'
+            state = json.loads(state_path.read_text())
+            state.pop('installedLayout') # Original releases did not record it.
+            module.json_write(state_path, state)
+            module.install(self.config)
+            self.assertIn('gtk-decoration-layout=:minimize,maximize,close', ini.read_text())
+            self.assertEqual(current[0], repr(':minimize,maximize,close'))
+            module.restore_styles(self.config)
+            self.assertEqual(ini.read_text(), original)
+            self.assertEqual(current[0], "':close'")
+
+    def test_preserve_original_right_layout_and_menu(self):
+        ini = self.config / 'gtk-3.0/settings.ini'
+        ini.parent.mkdir()
+        original = '[Settings]\ngtk-decoration-layout=icon:minimize,maximize,close\n'
+        ini.write_text(original)
+        module.install(self.config)
+        module.install(self.config)
+        self.assertEqual(ini.read_text(), original)
+        state = json.loads((self.config / 'kos/gtk-buttons-state.json').read_text())
+        self.assertEqual(state['installedLayout'], 'icon:minimize,maximize,close')
+
+    def test_restore_old_left_layout_with_later_unrelated_edits(self):
+        self.which.stop()
+        current = ["':close'"]
+        def setting(action, schema, key, *value):
+            if action == 'get': return current[0]
+            current[0] = value[0] if value[0].startswith("'") else repr(value[0])
+        with patch.object(module.shutil, 'which', return_value='/usr/bin/gsettings'), \
+             patch.object(module, 'gsettings', side_effect=setting):
+            with patch.object(module, 'layout_for_install', return_value=module.LEGACY_LAYOUT):
+                module.install(self.config)
+            state_path = self.config / 'kos/gtk-buttons-state.json'
+            state = json.loads(state_path.read_text())
+            state.pop('installedLayout')
+            module.json_write(state_path, state)
+            ini = self.config / 'gtk-3.0/settings.ini'
+            ini.write_text(ini.read_text() + 'gtk-font-name=Sans 15\n')
+            module.restore_styles(self.config)
+            self.assertIn('gtk-font-name=Sans 15', ini.read_text())
+            self.assertNotIn('gtk-decoration-layout=', ini.read_text())
+            self.assertEqual(current[0], "':close'")
+
     def test_preserve_later_edits(self):
         module.install(self.config)
         css = self.config / 'gtk-3.0/gtk.css'

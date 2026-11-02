@@ -804,6 +804,9 @@ void testResolution()
     CHECK(chrome.background == PanelBackground::Custom);
     CHECK(chrome.customBackground == QColor("#202124"));
     CHECK(chrome.glyphMode == GlyphMode::Always);
+    CHECK(chrome.geometry.position == ButtonPosition::Right);
+    CHECK(chrome.showButtons);
+    CHECK(!chrome.usesNativeGtkControls(false)); // Keep the right-side overlay.
 
     // 3. The hand-written rules, by the first that matches.
     const AppConfig dialog =
