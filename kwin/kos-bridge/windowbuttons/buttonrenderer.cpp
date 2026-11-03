@@ -690,7 +690,10 @@ bool ButtonRenderer::tintFor(const KWin::RenderTarget &renderTarget,
 
     // This paint will use the accepted tint immediately; invalidating its
     // source here would only force another full-window capture.
-    if (consumeSample(*it, now)) repaintRect(currentRect(window));
+    if (consumeSample(*it, now)) {
+        const QRectF frame = window->frameGeometry();
+        repaintRect(it->cover.translated(frame.topLeft()).intersected(frame));
+    }
     if (!it->sampler->pending()
         && (it->lastRead == Clock::time_point{} || now - it->lastRead >= it->interval())) {
         // Failed/occluded attempts also consume the cadence budget.
@@ -758,7 +761,10 @@ void ButtonRenderer::scheduleSample(KWin::EffectWindow *window)
                 entry->sampler->discard();
                 entry->requestRefresh();
             } else if (consumeSample(*entry, Clock::now())) {
-                repaintRect(currentRect(guarded));
+                const QRectF frame = guarded->frameGeometry();
+                // The initial confirmed tint has no published hit rect yet.
+                // Repaint the cached cover, including its expanded margins.
+                repaintRect(entry->cover.translated(frame.topLeft()).intersected(frame));
             }
             if (active || entry->sampler->pending() || entry->needsFollowup()) scheduleSample(guarded);
         } else if (active || entry->needsFollowup()) {
