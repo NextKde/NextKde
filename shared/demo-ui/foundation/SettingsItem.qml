@@ -9,7 +9,7 @@ Item {
     property string description: ""
     property real minimumRowHeight: 28
     property real horizontalPadding: 16
-    property real verticalPadding: 2
+    property real verticalPadding: 6
     property real controlSpacing: 12
     property real minimumLabelWidth: 120
     property bool separator: true
