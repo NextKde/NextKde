@@ -258,6 +258,10 @@ if(BUILD_TESTING)
                 ${CMAKE_CURRENT_SOURCE_DIR}/shell/desktop/modules/stage/test_stage_geometry.mjs
         )
         set_tests_properties(kos-shell.stage-geometry PROPERTIES TIMEOUT 10)
+        add_test(NAME kos-shell.stage-visibility
+            COMMAND ${KOS_NODE_EXECUTABLE}
+                ${CMAKE_CURRENT_SOURCE_DIR}/shell/desktop/modules/stage/test_stage_visibility.mjs)
+        set_tests_properties(kos-shell.stage-visibility PROPERTIES TIMEOUT 10)
         add_test(NAME kos-shell.stage-groups
             COMMAND ${KOS_NODE_EXECUTABLE}
                 ${CMAKE_CURRENT_SOURCE_DIR}/shell/desktop/modules/stage/test_stage_groups.mjs
@@ -683,6 +687,7 @@ if(BUILD_TESTING)
             kos-shell.theme-wallpaper-policy
             kos-shell.theme-wallpaper-state
             kos-shell.stage-geometry kos-shell.stage-groups kos-shell.stage-effects kos-shell.stage-protocol
+            kos-shell.stage-visibility
             kos-shell.appearance-config
             kos-deskcenter.desktop-outputs
             kos-shell.screen-selection

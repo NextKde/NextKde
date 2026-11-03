@@ -2608,16 +2608,16 @@ PanelWindow {
     readonly property bool desktopFullscreen: _fullscreenOverride !== null
         ? _fullscreenOverride : _computeDesktopFullscreen()
     function _computeDesktopFullscreen(): bool {
-        WindowService.revision
+        // visible 在 records 中原地更新，只递增 placementRevision。
+        WindowService.placementRevision
         const desktop = WindowService.currentDesktopId
         const recs = WindowService.records || []
         for (let i = 0; i < recs.length; i++) {
             const r = recs[i]
             if (r.toplevel?.fullscreen === true
                     && r.toplevel?.minimized !== true
-                    && (r.toplevel?.onAllDesktops === true
-                        || !r.toplevel?.desktopIds
-                        || r.toplevel.desktopIds.indexOf(desktop) >= 0))
+                    && r.toplevel?.visible !== false
+                    && StageGroups.isOnDesktop(r, desktop))
                 return true
         }
         return false
@@ -2698,9 +2698,12 @@ PanelWindow {
                 root._stripYield = true
         }
     }
-    // 同样必须 revision 锚定（几何在 records 里原地 mutate 不通知）
-    readonly property real _stripOverlapRaw: {
+    // 几何/可见性原地更新靠 placementRevision；切桌面即使没有窗口快照
+    // 变化，也必须重新过滤，否则其他桌面的窗口会让空闲桌面的抽屉收起。
+    readonly property real _stripOverlapRaw: _computeStripOverlap()
+    function _computeStripOverlap(): real {
         WindowService.placementRevision
+        const desktop = WindowService.currentDesktopId
         const recs = WindowService.records || []
         // 判定基准 = 列基础 x（不含抽屉滑移——收起让位判定本身不需要
         // 跟踪滑出过程）；stripMargin 改动后侵占阈值随列位置同步
@@ -2713,7 +2716,8 @@ PanelWindow {
         let worst = 0
         for (let i = 0; i < recs.length; i++) {
             const r = recs[i]
-            if (r.toplevel?.minimized === true
+            if (!StageGroups.isOnDesktop(r, desktop)
+                    || r.toplevel?.minimized === true
                     || r.toplevel?.visible === false)
                 continue
             const g = r.toplevel?.geometry

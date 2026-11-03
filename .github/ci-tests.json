@@ -53,6 +53,7 @@
     "kos-shell.theme-wallpaper-policy",
     "kos-shell.theme-wallpaper-state",
     "kos-shell.stage-geometry",
+    "kos-shell.stage-visibility",
     "kos-shell.stage-groups",
     "kos-shell.stage-effects",
     "kos-shell.stage-protocol",
