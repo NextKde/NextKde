@@ -753,6 +753,17 @@ Use `AppGroupService` for grouping and add provider-specific workspace data
 as optional runtime metadata. Do not put Hyprland workspace IDs into the
 canonical app identity or persisted pinned records.
 
+The Stage drawer checks overlap and fullscreen windows on
+`WindowService.currentDesktopId`, including windows on all desktops. Windows
+on other desktops, hidden windows and minimized windows do not retract it.
+Both checks observe `placementRevision` because geometry and visibility can
+update in place without a presentation revision. Changing only the current
+desktop must also recompute overlap, cancel pending retraction and release
+an existing yield when the strip is clear. The overlap thresholds remain
+above 60% to retract (after 400ms) and below 50% to release. The production drawer
+checks and overlap release handler have regressions in `test_stage_visibility.mjs`;
+real desktop switching still requires graphical VM validation.
+
 ### Desktop lyrics
 
 Desktop lyrics are an accessory of the desktop music widget, not a Dock
