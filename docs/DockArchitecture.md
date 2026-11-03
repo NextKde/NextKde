@@ -766,6 +766,14 @@ checks and overlap release handler have regressions in `test_stage_visibility.mj
 Qt Quick Test with fixture window records. Full Shell rendering and real
 compositor desktop switching still require graphical VM validation.
 
+`StageDesktopTransition` holds the outgoing card model during a 120ms fade
+and a 24px move toward the screen edge. After one transparent publication
+frame it commits the latest desktop and reveals the new cards over 220ms.
+The same progress drives QML opacity and live-card fade; the published pose
+includes the horizontal offset. Card input is suspended during the transition.
+Rapid switches retarget from the current pose, and disabling Stage cancels
+pending commits. Already hidden or empty sidebars skip the exit animation.
+
 ### Desktop lyrics
 
 Desktop lyrics are an accessory of the desktop music widget, not a Dock
