@@ -83,6 +83,7 @@
     "kos-ui.widget-resize"
   ],
   "headless": [
+    "kos-shell.stage-visibility-qml",
     "kos-shell.dock-native-target",
     "kos-calculator.engine",
     "kos-shell.dock-selection-highlight",
