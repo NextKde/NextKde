@@ -327,6 +327,7 @@ BlurEffect::BlurEffect()
 #endif
 
     connect(effects, &EffectsHandler::windowAdded, this, &BlurEffect::slotWindowAdded);
+    connect(effects, &EffectsHandler::windowClosed, this, &BlurEffect::slotWindowClosed);
     connect(effects, &EffectsHandler::windowDeleted, this, &BlurEffect::slotWindowDeleted);
 #ifdef GLASS_X11
     connect(effects, &EffectsHandler::screenRemoved, this, &BlurEffect::slotOutputRemoved);
@@ -597,6 +598,11 @@ int BlurEffect::blurExpandSize(EffectWindow *w) const
 
 void BlurEffect::updateBlurRegion(EffectWindow *w)
 {
+    // Late surface/geometry notifications during a compositor close animation
+    // must not resurrect the cached capture as a region-only glass rectangle.
+    if (m_closedShapeWindows.contains(w)) {
+        return;
+    }
     std::optional<BlurRegion> content;
     std::optional<BlurRegion> frame;
     bool hasExplicitBlurRequest = false;
@@ -655,12 +661,16 @@ void BlurEffect::updateBlurRegion(EffectWindow *w)
 
 #ifndef GLASS_X11
     if (m_surfaceShapeManager && w->surface() && m_surfaceShapeManager->ownsGeometry(w->surface())) {
-        BlurRegion derived;
-        for (const SurfaceShape &shape : m_surfaceShapeManager->shapesFor(w->surface())) {
-            if (shape.enabled && shape.materialOpacity > 0)
-                derived += Rect(surfaceCaptureBounds(shape).toAlignedRect());
+        const auto region = surfaceShapeBlurRegion(m_surfaceShapeManager->shapesFor(w->surface()));
+        // Retire the cached effect when the last card fades out. Caching an
+        // empty region means full-window blur once the popup's wl_surface is
+        // gone and contentRegion() can no longer consult its declarations.
+        content.reset();
+        if (region) {
+            BlurRegion derived;
+            for (const QRect &rect : *region) derived += Rect(rect);
+            content = derived;
         }
-        content = derived;
         hasExplicitBlurRequest = true;
     } else if (!content.has_value() && isQuickshellWindow(w) && m_surfaceShapeManager && w->surface()) {
         const auto region = legacySurfaceBlurRegion(std::nullopt,
@@ -753,6 +763,10 @@ void BlurEffect::updateBlurRegion(EffectWindow *w)
     if (content.has_value() || frame.has_value()) {
         BlurEffectData &data = m_windows[w];
         data.hasExplicitBlurRequest = hasExplicitBlurRequest;
+#ifndef GLASS_X11
+        data.surfaceShapeOwned = data.surfaceShapeOwned || (m_surfaceShapeManager && w->surface()
+            && !m_surfaceShapeManager->shapesFor(w->surface()).isEmpty());
+#endif
         data.content = content;
         data.frame = frame;
 #if PLASMA_VERSION < 0x060404 || defined(GLASS_X11)
@@ -815,8 +829,36 @@ void BlurEffect::slotWindowAdded(EffectWindow *w)
     repaintDynamicCorners();
 }
 
+void BlurEffect::slotWindowClosed(EffectWindow *w)
+{
+#ifndef GLASS_X11
+    const auto it = m_windows.find(w);
+    const bool shapeOwned = (it != m_windows.end() && it->second.surfaceShapeOwned)
+        || (m_surfaceShapeManager && w->surface()
+            && m_surfaceShapeManager->ownsGeometry(w->surface()));
+    if (!shapeOwned) {
+        return;
+    }
+    m_closedShapeWindows.insert(w);
+    if (it != m_windows.end()) {
+        effects->makeOpenGLContextCurrent();
+        m_windows.erase(it);
+    }
+    // KWin's fading-popups effect can retain the closed window for another
+    // 600 ms. The client has finished its own fade; its glass must end now,
+    // without waiting for windowDeleted or the wl_surface destruction order.
+    effects->addRepaintFull();
+    if (shapeTraceEnabled()) {
+        qCWarning(shapeTraceCategory()) << "glass trace: retired closed shape window" << w->frameGeometry();
+    }
+#else
+    Q_UNUSED(w)
+#endif
+}
+
 void BlurEffect::slotWindowDeleted(EffectWindow *w)
 {
+    m_closedShapeWindows.remove(w);
     if (auto it = m_windows.find(w); it != m_windows.end()) {
         effects->makeOpenGLContextCurrent();
         m_windows.erase(it);
@@ -1102,6 +1144,15 @@ BlurRegion BlurEffect::contentRegion(EffectWindow *w, const BorderRadius *fallba
 {
     BlurRegion region;
 #ifndef GLASS_X11
+    // The popup can lose its declarations before KWin marks it deleted.
+    // Its cached capture bounds are an allocation, not a material outline;
+    // never render those bounds as a rectangle during that teardown gap.
+    if (const auto it = m_windows.find(w); it != m_windows.end()
+        && it->second.surfaceShapeOwned
+        && (w->isDeleted() || !w->surface() || !m_surfaceShapeManager
+            || m_surfaceShapeManager->shapesFor(w->surface()).isEmpty())) {
+        return region;
+    }
     if (m_surfaceShapeManager && w->surface() && m_surfaceShapeManager->ownsGeometry(w->surface())) {
         for (const SurfaceShape &shape : m_surfaceShapeManager->shapesFor(w->surface())) {
             if (shape.enabled && shape.materialOpacity > 0)

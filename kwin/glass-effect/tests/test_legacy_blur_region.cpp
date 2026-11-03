@@ -39,6 +39,27 @@ int main(int argc, char **argv)
         check(legacySurfaceBlurRegion(requested, {left, right}) == requested, "legacy KDE blur requests must take precedence");
         const auto empty = legacySurfaceBlurRegion(QRegion(), {left, right});
         check(empty && empty->isEmpty(), "explicit empty region must keep KDE full-surface semantics");
+
+        // Notification history keeps a large, fixed popup allocation while
+        // its independent cards fade. The final transparent frame must erase
+        // the cached effect before KWin starts animating the deleted popup.
+        left.captureGeometry = QRectF(0, 0, 336, 576);
+        right.captureGeometry = left.captureGeometry;
+        check(surfaceShapeBlurRegion({left, right}) == QRegion(left.captureGeometry.toAlignedRect()),
+              "visible history cards must retain their fixed capture");
+        left.materialOpacity = 0;
+        check(surfaceShapeBlurRegion({left, right}).has_value(), "a remaining visible card must keep blur");
+        right.materialOpacity = 0;
+        check(!surfaceShapeBlurRegion({left, right}),
+              "fully faded cards must remove the cached effect, never request full-window blur");
+        check(!legacySurfaceBlurRegion(std::nullopt, {left, right}),
+              "legacy fallback must also ignore fully faded cards");
+        check(!surfaceShapeBlurRegion({}), "retired declarations must not restore full-window blur");
+        left.materialOpacity = 1;
+        right.materialOpacity = 1;
+        left.captureGeometry = QRectF();
+        right.captureGeometry = QRectF();
+        check(surfaceShapeBlurRegion({left, right}).has_value(), "reopening must restore card blur");
         right.geometry = QRectF(10, 10, 0, 44);
         check(!legacySurfaceBlurRegion(std::nullopt, {right}), "invalid geometry must not trigger whole-surface blur");
         left.geometry = QRectF(1.25, 2.5, 10.5, 11.25);
