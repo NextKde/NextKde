@@ -72,7 +72,7 @@ void geometryTests()
                     const QRect panel(right ? band.right() - 109 : origin, 150, 110, height);
                     for (bool fallback : {false, true}) {
                         const QRect rect = tintSampleRect(band, panel, fallback);
-                        CHECK(rect.width() <= 160 && rect.height() <= 64);
+                        CHECK(rect.width() <= (fallback ? 160 : 32) && rect.height() <= 64);
                         CHECK(rect.isEmpty() || band.contains(rect));
                         CHECK(!rect.intersects(panel));
                         if (fallback) {
@@ -92,6 +92,46 @@ void geometryTests()
     CHECK(!tintSampleRect(band, cover, true).intersects(cover));
     CHECK(tintSampleRect({}, {}).isEmpty());
     CHECK(tintSampleRect(QRect(0, 0, 100, 30), QRect(0, 0, 100, 30)).isEmpty());
+}
+
+void neighboringWidgetTests()
+{
+    const QColor background(23, 29, 37), widget(39, 45, 55);
+    const QColor oppositeEnd(60, 65, 70), icon(103, 112, 123);
+    for (int scale : {1, 2, 3}) {
+        const QRect band(-300, 150, 700 * scale, 23 * scale);
+        for (bool right : {false, true}) {
+            const QRect cover(right ? band.x() + band.width() - 110 * scale : band.x(),
+                              band.y() - 5 * scale, 110 * scale, 33 * scale);
+            const QRect sample = tintSampleRect(band, cover);
+            TintHistogram histogram;
+            // Steam-like layout: a filled account/balance widget occupies most
+            // of the old 160px strip. A small monitor glyph sits in the gap
+            // beside the cover. The far end has a different background, so
+            // switching to the fallback unconditionally is also incorrect.
+            for (int y = sample.top(); y <= sample.bottom(); ++y) {
+                for (int x = sample.left(); x <= sample.right(); ++x) {
+                    const int distance = right ? cover.left() - 1 - x : x - cover.right() - 1;
+                    QColor pixel = distance >= 48 * scale ? widget : background;
+                    if (distance >= 8 * scale && distance < 28 * scale
+                        && y >= band.y() + 7 * scale && y < band.y() + 10 * scale) {
+                        pixel = icon;
+                    }
+                    if (right ? x < band.x() + 160 : x >= band.x() + band.width() - 160) {
+                        pixel = oppositeEnd;
+                    }
+                    const uchar rgba[] = {uchar(pixel.red()), uchar(pixel.green()),
+                                          uchar(pixel.blue()), 255};
+                    histogram.add(rgba);
+                }
+            }
+            bool dark = false;
+            QColor color;
+            CHECK(histogram.tint(&dark, &color));
+            CHECK(dark);
+            CHECK(color == background);
+        }
+    }
 }
 
 void timingTests()
@@ -168,6 +208,7 @@ int main()
 {
     histogramTests();
     geometryTests();
+    neighboringWidgetTests();
     timingTests();
     std::printf("%d checks, %d failures\n", checks, failures);
     return failures ? 1 : 0;

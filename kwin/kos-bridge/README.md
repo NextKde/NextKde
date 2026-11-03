@@ -57,12 +57,14 @@ controls use their respective native paths instead.
 `windowbuttons/titlebarmetrics.cpp` samples the title bar's rendered pixels for
 legacy overlay windows (excluding native KOS decorations):
 
-- **Local neighborhood priority.** Read the strip immediately beside the panel,
-  at most **160 × 64 device pixels** (40 KiB), independent of window width and
-  output scale. Taller bands use their central rows. If the local strip is
-  obscured or unpainted, retry at the opposite end outside the caption's middle
-  third. Never sample the panel's own columns or pixels outside the visible
-  region.
+- **Local neighborhood priority.** Read the strip immediately beside the cover,
+  at most **32 × 64 device pixels** (8 KiB), independent of window width and
+  output scale. Keeping the median near the seam avoids sampling mostly a
+  neighboring filled toolbar widget, such as Steam's account/balance button.
+  Taller bands use their central rows. If the local strip is obscured or
+  unpainted, retry at the opposite end outside the caption's middle third,
+  at most **160 × 64 device pixels** (40 KiB). Never sample the cover's own
+  columns or pixels outside the visible region.
 - **Non-blocking readback.** Transfer into a per-window pixel-pack buffer and
   inspect its fence on a later paint. Only signalled buffers are mapped; paint
   hooks never wait on a GPU fence. Preserve the read framebuffer, source read-buffer selection, pixel-pack
@@ -106,7 +108,8 @@ ctest --test-dir .build/kos-bridge --output-on-failure
 ```
 
 `titlebar_tint_test` checks histogram equivalence, bounded sampling geometry,
-noise rejection and confirmation timing. `titlebar_readback_test` exercises the
+neighboring filled toolbar widgets on both sides, noise rejection and confirmation
+timing. `titlebar_readback_test` exercises the
 real PBO/fence path, row orientation, buffer reuse and GL-state restoration on
 an offscreen context; CTest reports it as skipped if no GL context is available.
 With `-DKOS_BRIDGE_BUILD_GPU_TESTS=ON`, `titlebar_pixels_gpu_test` also covers

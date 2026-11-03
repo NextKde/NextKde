@@ -25,8 +25,9 @@ private:
 };
 
 // Device-pixel bounds, independent of the output/window width and scale.
-// The preferred strip is beside the controls. The fallback is at the opposite
-// end, outside the caption's middle third. Neither includes the panel itself.
+// The preferred strip stays within 32px of the cover seam, avoiding neighboring
+// filled toolbar widgets. The 160px fallback is at the opposite end, outside
+// the caption's middle third. Neither includes the panel itself.
 QRect tintSampleRect(const QRect &band, const QRect &panel, bool fallback = false);
 
 struct TitlebarTintState {

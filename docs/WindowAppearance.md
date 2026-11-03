@@ -118,6 +118,9 @@ Fallback button-cover tint refreshes use two consistent valid samples at least
 Focus changes refresh both active/inactive titlebars; client damage requests
 bounded inactive refreshes without discarding newer damage during a GPU transfer.
 Expanded covers are excluded in full while sampling rows remain on the controls.
+The preferred strip stays within 32 device pixels of the cover seam to reduce
+contamination from adjacent filled toolbar widgets; unavailable local
+pixels fall back to a strip of up to 160 pixels at the opposite titlebar end.
 Keep validated RGB on failed reads, reject incomplete targets, and initialize
 transfer storage transparently so failed/uninitialized reads cannot create black
 blocks. Real black remains a valid color after confirmation. The configured

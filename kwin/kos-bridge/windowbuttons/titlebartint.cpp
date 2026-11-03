@@ -52,7 +52,10 @@ bool TintHistogram::tint(bool *dark, QColor *color, quint64 minimumSamples) cons
 QRect tintSampleRect(const QRect &band, const QRect &panel, bool fallback)
 {
     if (band.isEmpty()) return {};
-    constexpr int MaxWidth = 160;
+    // Keep the preferred median close to the cover seam. A wide strip can
+    // contain mostly a filled toolbar widget (e.g. Steam's account/balance),
+    // whose perfectly valid pixels are still the wrong background color.
+    const int maxWidth = fallback ? 160 : 32;
     constexpr int MaxHeight = 64;
     const bool onRight = panel.center().x() >= band.center().x();
     int left = band.x();
@@ -60,15 +63,15 @@ QRect tintSampleRect(const QRect &band, const QRect &panel, bool fallback)
     if (!fallback) {
         if (onRight) {
             right = std::min(right, panel.x());
-            left = std::max(left, right - MaxWidth);
+            left = std::max(left, right - maxWidth);
         } else {
             left = std::max(left, panel.x() + panel.width());
-            right = std::min(right, left + MaxWidth);
+            right = std::min(right, left + maxWidth);
         }
     } else if (onRight) {
-        right = std::min({right, left + MaxWidth, left + band.width() / 3, panel.x()});
+        right = std::min({right, left + maxWidth, left + band.width() / 3, panel.x()});
     } else {
-        left = std::max({left, right - MaxWidth, right - band.width() / 3,
+        left = std::max({left, right - maxWidth, right - band.width() / 3,
                          panel.x() + panel.width()});
     }
     const int height = std::min(MaxHeight, band.height());
