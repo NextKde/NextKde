@@ -761,8 +761,10 @@ update in place without a presentation revision. Changing only the current
 desktop must also recompute overlap, cancel pending retraction and release
 an existing yield when the strip is clear. The overlap thresholds remain
 above 60% to retract (after 400ms) and below 50% to release. The production drawer
-checks and overlap release handler have regressions in `test_stage_visibility.mjs`;
-real desktop switching still requires graphical VM validation.
+checks and overlap release handler have regressions in `test_stage_visibility.mjs`.
+`tests/stage-visibility/run.mjs` also runs the production bindings and timers in
+Qt Quick Test with fixture window records. Full Shell rendering and real
+compositor desktop switching still require graphical VM validation.
 
 ### Desktop lyrics
 
