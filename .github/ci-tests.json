@@ -28,6 +28,8 @@
     "kos-platform.status-panel-operations"
   ],
   "logic": [
+    "kos-window.gtk-buttons-install",
+    "kos-window.firefox-buttons-install",
     "kos-shell.language",
     "kos-shell.translation-catalogs",
     "kos-ci.inventory-contract",

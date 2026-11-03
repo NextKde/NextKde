@@ -5,6 +5,8 @@
     ninja,
     kdePackages,
     quickshell,
+    python3,
+    glib,
     src,
 }:
 
@@ -23,7 +25,7 @@ stdenv.mkDerivation {
                     kdePackages.qtsvg kdePackages.qtimageformats kdePackages.qt5compat ];
 
     preFixup = ''
-        qtWrapperArgs+=(--prefix PATH : ${lib.makeBinPath [ quickshell ]})
+        qtWrapperArgs+=(--prefix PATH : ${lib.makeBinPath [ quickshell python3 glib ]})
     '';
 
     dontBuild = true;
