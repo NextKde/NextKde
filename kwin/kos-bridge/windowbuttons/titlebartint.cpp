@@ -27,9 +27,9 @@ void TintHistogram::add(const uchar *p)
     ++m_count;
 }
 
-bool TintHistogram::tint(bool *dark, QColor *color) const
+bool TintHistogram::tint(bool *dark, QColor *color, quint64 minimumSamples) const
 {
-    if (m_count < MinSamples) return false;
+    if (m_count < std::max(quint64(MinSamples), minimumSamples)) return false;
     quint64 count = 0;
     int median = 0;
     for (; median < 255; ++median) {

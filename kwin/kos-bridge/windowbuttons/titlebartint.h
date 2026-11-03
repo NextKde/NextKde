@@ -14,7 +14,7 @@ class TintHistogram
 public:
     static constexpr int MinSamples = 64;
     void add(const uchar *rgba);
-    bool tint(bool *dark, QColor *color) const;
+    bool tint(bool *dark, QColor *color, quint64 minimumSamples = MinSamples) const;
 
 private:
     struct Bin {

@@ -75,6 +75,8 @@ legacy overlay windows (excluding native KOS decorations):
   fast retry loop alive indefinitely.
 - Independent-cover sampling rows stay on the controls, while exclusion uses
   the entire expanded cover. Enlarging it cannot sample the cover itself.
+  Require at least 75% visible strip coverage and 75% usable alpha coverage;
+  sparse damaged glyphs cannot stand in for an undrawn/occluded background.
 - **A median, not a mean.** A fixed 256-bin luma histogram averages RGB within
   ±3 of the median, rejecting transparent pixels, glyphs and antialiased edges
   without allocating, copying and sorting per-pixel sample vectors.

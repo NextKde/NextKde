@@ -30,6 +30,9 @@ void histogramTests()
     CHECK(empty.tint(&dark, &color));
     CHECK(dark);
     CHECK(color == QColor(32, 33, 36));
+    // A valid pixel minimum alone would accept the sparse glyphs of a mostly
+    // transparent/undrawn strip. Sampling requires representative coverage.
+    CHECK(!empty.tint(&dark, &color, 128));
 
     // Equivalence to the old sort+median+cluster algorithm, including alpha
     // rejection, the upper median for even counts, and clamped +/-3 bins.

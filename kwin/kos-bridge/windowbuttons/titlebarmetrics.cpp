@@ -90,7 +90,12 @@ bool TitlebarSampler::enqueue(const KWin::RenderTarget &renderTarget,
         m_visible = visible.intersected(m_rect);
         qsizetype count = 0;
         for (const QRect &rect : m_visible) count += qsizetype(rect.width()) * rect.height();
-        if (count >= TintHistogram::MinSamples) {
+        // A few damaged glyph pixels are not a representative titlebar strip.
+        // Request a complete band on the next bounded refresh rather than
+        // accepting a mostly occluded/undrawn strip as a black background.
+        const quint64 required = std::max(quint64(TintHistogram::MinSamples),
+            (quint64(m_rect.width()) * m_rect.height() * 3 + 3) / 4);
+        if (quint64(count) >= required) {
             return m_readback.enqueue(renderTarget, m_rect);
         }
         m_fallback = !m_fallback;
@@ -103,8 +108,10 @@ bool TitlebarSampler::take(bool *dark, QColor *color)
     QByteArray pixels;
     if (!m_readback.take(pixels)) return false;
     TintHistogram histogram;
+    quint64 visibleCount = 0;
     // Visit visible spans, not a QRegion::contains lookup for every pixel.
     for (const QRect &rect : m_visible) {
+        visibleCount += quint64(rect.width()) * rect.height();
         for (int y = rect.y(); y < rect.y() + rect.height(); ++y) {
             const auto *row = reinterpret_cast<const uchar *>(pixels.constData())
                 + qsizetype(y - m_rect.y()) * m_rect.width() * 4;
@@ -113,7 +120,7 @@ bool TitlebarSampler::take(bool *dark, QColor *color)
             }
         }
     }
-    const bool usable = histogram.tint(dark, color);
+    const bool usable = histogram.tint(dark, color, (visibleCount * 3 + 3) / 4);
     // A transparent/unpainted local strip can fall back on the next attempt,
     // without a second transfer (or a synchronous wait) in this frame.
     m_fallback = usable ? false : !m_fallback;
