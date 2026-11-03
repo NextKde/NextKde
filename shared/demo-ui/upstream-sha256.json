@@ -44,7 +44,7 @@
   "controls/LiquidSelect.qml": "07b7ade9a952112a4784f9218cb0f67f11e3cf8e7100521e7b26475f9fed5385",
   "controls/LiquidActionButtonGroup.qml": "bc54f2c296399a4e240f2fe0f9dfd2dabff853abd6dc2bdacd61be89e84494a7",
   "foundation/SettingsGroup.qml": "49e9f0c86c6c26f2fa081fea802c98b504776b0c64b0a061011347f8ccdf4899",
-  "foundation/SettingsItem.qml": "8c8d2b69f8f01c53d07f08f610b814e8b63b83d2dd7ef757a21c00e722b58ec2",
+  "foundation/SettingsItem.qml": "24d65b7246d491f5c3c13af17fd052aab20e6309aa66b9d1289687ddd5cb7b73",
   "foundation/SettingsAppearancePreview.qml": "86a5abcdba2d043daa3ad4c8b4ba95be0bc0b2dc9e3a7067699ed7a16155ffd6",
   "foundation/KosToolTip.qml": "4ad28f8270702ca1494197f2c64ff873909285ebbf7dc3db3ede51fc860be703"
 }
