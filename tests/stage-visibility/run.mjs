@@ -24,6 +24,8 @@ const production = [
 const directory = mkdtempSync(join(tmpdir(), "kos-stage-visibility-"));
 try {
     copyFileSync(new URL("stage-groups.mjs", stage), join(directory, "stage-groups.mjs"));
+    copyFileSync(new URL("StageDesktopTransition.qml", stage), join(directory, "StageDesktopTransition.qml"));
+    copyFileSync(new URL("tst_transition.qml", import.meta.url), join(directory, "tst_transition.qml"));
     const fixture = readFileSync(new URL("tst_visibility.qml.in", import.meta.url), "utf8");
     assert.ok(fixture.includes("// PRODUCTION_DRAWER"));
     writeFileSync(join(directory, "tst_visibility.qml"),

@@ -1183,7 +1183,7 @@ PanelWindow {
                     engaging: engaging,
                     dropHover: slot.cardItem.dropHovered,
                     dwellHint: slot.cardItem.dwellHint,
-                    fade: slot.opacity,            // 压暗 × 边缘渐隐（QML 同源）
+                    fade: slot.opacity * desktopTransition.progress,
                     hoverScale: p.hoverScale, hoverTilt: p.hoverTilt,
                     hoverMs: p.hoverMs,
                     hoverDwellMs: p.hoverDwellMs !== undefined ? p.hoverDwellMs : 0,
@@ -1638,6 +1638,8 @@ PanelWindow {
     }
 
     function _beginCardDrag(slot, index, sceneX, sceneY) {
+        if (desktopTransition.active)
+            return
         if (root.dragKey !== "" || slot.cardItem.engaging)
             return
         // 驻留定时器一并作废：按下后 12px 内进拖拽时驻留可能还在跑，
@@ -2162,6 +2164,8 @@ PanelWindow {
     property var _groupFocusMemory: ({})
 
     function engageCard(slot) {
+        if (desktopTransition.active)
+            return
         const ids = root._idsOf(slot.idsJson)
         const mem = root._groupFocusMemory[slot.appKey]
         const focusId = mem && ids.indexOf(mem) >= 0 ? mem : slot.targetId
@@ -2172,6 +2176,8 @@ PanelWindow {
     // 窗时焦点钉它（macOS Stage Manager：图标排是逐窗直达），点卡面用
     // 代表窗。整组还原语义不变，只有 focus 目标不同。
     function engageCardWindow(slot, iconWindowId) {
+        if (desktopTransition.active)
+            return
         // 面板隐藏/模式关闭后不可从不可见卡片派发展开
         if (!StageModeService.enabled || !open)
             return
@@ -2241,6 +2247,30 @@ PanelWindow {
         return JSON.stringify({ requested: uuid })
     }
 
+    StageDesktopTransition {
+        id: desktopTransition
+        desktopId: WindowService.currentDesktopId
+        enabled: root.open
+        hasCards: cardModel.count > 0
+        offscreen: root._retractPx >= root._retractFull - 1
+        rightSide: root.rightSide
+        onCommit: root.syncCards()
+        onProgressChanged: {
+            root.scheduleLivePublish()
+            if (!active)
+                root._updateHitRegionExtent()
+        }
+        onActiveChanged: {
+            if (active) {
+                root._abortDrag()
+                root.hoveredKey = ""
+                root._hoverDwellTimer.stop()
+                root._dwellKey = ""
+            }
+            root._updateHitRegionExtent()
+        }
+    }
+
     // ── 卡片堆叠区 ──
     // 背景完全透明（用户要求）：无背板、无霜层，只留悬浮卡片本身。
     // 左右贴"内容列"（窗宽减两侧溢出余量 = PANEL_WIDTH）；上下留出
@@ -2260,6 +2290,8 @@ PanelWindow {
             // 抽屉滑移：收起时滑向常驻侧屏缘（左条向左/右条向右），
             // 发布姿态经 mapToItem 自动跟随
             + (root.rightSide ? root._retractPx : -root._retractPx)
+            + desktopTransition.offset
+        opacity: desktopTransition.progress
         anchors {
             // 顶距跟随顶栏厚度 + 扇叠/辉光上探余量（顶栏让位修复）：
             // 多窗卡的扇叠背板向左上探出（静置 ~16px、悬停扩散 ~26-
@@ -2483,7 +2515,7 @@ PanelWindow {
 
         // 空态提示
         Text {
-            visible: root.sideGroups.length === 0
+            visible: cardModel.count === 0 && root.sideGroups.length === 0
             width: parent.width - 24
             x: 12
             horizontalAlignment: Text.AlignHCenter
@@ -2891,6 +2923,10 @@ PanelWindow {
                 w: g ? Math.round(g.width) : -1, h: g ? Math.round(g.height) : -1 })
         }
         return JSON.stringify({ open: root.open, visible: root.visible,
+            desktopTransition: { active: desktopTransition.active,
+                progress: desktopTransition.progress,
+                displayed: desktopTransition._displayedDesktopId,
+                pending: desktopTransition._pendingDesktopId },
             chromeOwned: root.liveChromeOwned,
             hoverPos: [Math.round(drawerEdgeHover.point.position.x),
                 Math.round(drawerEdgeHover.point.position.y)],
@@ -3469,6 +3505,10 @@ PanelWindow {
             root._syncCardsAgain = true
             return
         }
+        // Detect the desktop here as well as in the transition component:
+        // sideGroups can change before its desktopId binding is delivered.
+        if (desktopTransition && desktopTransition.deferSync(WindowService.currentDesktopId))
+            return
         root._syncingCards = true
         // 悬停键自愈（scroll 分支原有、adaptive 分支缺）：键不在模型里 =
         // 该组已离开侧栏但指针没动；组键日后复用时 focusKey 立即为真＝
@@ -3657,6 +3697,13 @@ PanelWindow {
     }
 
     function _updateHitRegionExtent() {
+        if (desktopTransition && desktopTransition.active) {
+            stripHitRegion.x = 0
+            stripHitRegion.y = 0
+            stripHitRegion.width = 0
+            stripHitRegion.height = 0
+            return
+        }
         // 拖拽中 = 全窗输入区：指针必须能拖出卡条（中心手势）。⚠️ 走
         // **同一 item 的几何扩展**而不是切换 Region.item——Region 对
         // item 引用翻转是否触发输入区更新未证实（真机拖出卡条后事件
