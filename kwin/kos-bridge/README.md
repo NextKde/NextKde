@@ -65,21 +65,29 @@ legacy overlay windows (excluding native KOS decorations):
   region.
 - **Non-blocking readback.** Transfer into a per-window pixel-pack buffer and
   inspect its fence on a later paint. Only signalled buffers are mapped; paint
-  hooks never wait on a GPU fence. Preserve the read framebuffer, pixel-pack
-  buffer and pack layout. Preserve the render target's content transform
+  hooks never wait on a GPU fence. Preserve the read framebuffer, source read-buffer selection, pixel-pack
+  buffer and pack layout. Reject incomplete/missing-color targets and initialize
+  orphaned transfer storage to transparent zeros: a failed read cannot turn
+  undefined buffer bytes into an opaque black panel. Preserve the render target's content transform
   (including DRM FlipY and output rotation), then normalize the completed
   pixels to top-down viewport coordinates. Failed/occluded reads count against the sampling
   cadence, and a busy transfer is abandoned after 250 ms rather than keeping a
   fast retry loop alive indefinitely.
+- Independent-cover sampling rows stay on the controls, while exclusion uses
+  the entire expanded cover. Enlarging it cannot sample the cover itself.
 - **A median, not a mean.** A fixed 256-bin luma histogram averages RGB within
   ±3 of the median, rejecting transparent pixels, glyphs and antialiased edges
   without allocating, copying and sorting per-pixel sample vectors.
-- **Prompt confirmation without flicker.** The first usable tint appears
-  immediately. Four warm-up attempts run at 250 ms intervals; the active window
-  is then checked every 750 ms. A changed color returns to the 250 ms cadence
-  and must hold for 500 ms before replacing the displayed color. Near-equal
-  readings (up to two levels per RGB channel) do not change the cached color.
-  Inactive windows get one initial read and otherwise reuse their cached tint.
+- **Prompt confirmation without flicker.** The first tint and later changes require two
+  consistent usable observations at least 32 ms apart. Four warm-up attempts run
+  at 32 ms intervals; steady active-window checks use a 125 ms cadence. These
+  are scheduling intervals, not measured end-to-end latency. Focus changes
+  restart the fast phase for both windows while retaining validated RGB. Client
+  damage also requests a throttled refresh for inactive windows; damage during
+  an in-flight transfer remains outstanding until a newer capture completes.
+  Invalid observations break confirmation, and failed inactive refreshes stop
+  after the bounded warm-up budget. Near-equal readings (up to two levels per
+  RGB channel) do not change the cached color.
 - **No texture upload on RGB changes.** A cached white rounded background mask
   is tinted with a premultiplied shader uniform; buttons, hover rings and
   adjustment marks live in a separate reusable transparent texture. New RGB
@@ -101,7 +109,9 @@ real PBO/fence path, row orientation, buffer reuse and GL-state restoration on
 an offscreen context; CTest reports it as skipped if no GL context is available.
 With `-DKOS_BRIDGE_BUILD_GPU_TESTS=ON`, `titlebar_pixels_gpu_test` also covers
 the asynchronous path across all eight output transforms, fractional scale,
-non-zero viewport origins and target clipping (64 cases, no pre-read `glFinish`).
+non-zero viewport origins and target clipping, plus incomplete/integer-target
+failures, transparent failure pixels, valid black titlebars and source read-buffer
+restoration (no pre-read `glFinish`).
 These tests do not replace checking the installed effect's appearance in a new
 KWin session; do not hot-load a replaced plugin into the running compositor.
 

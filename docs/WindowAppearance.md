@@ -113,6 +113,17 @@ coverage round-trips, restoration, atomic settings updates and the real Settings
 switch. VM graphical acceptance must additionally check native hover/tooltips,
 background color matching, overlap/resize and mixed output scales.
 
+Fallback button-cover tint refreshes use two consistent valid samples at least
+32 ms apart, a four-attempt 32 ms warm-up, and a 125 ms steady active cadence.
+Focus changes refresh both active/inactive titlebars; client damage requests
+bounded inactive refreshes without discarding newer damage during a GPU transfer.
+Expanded covers are excluded in full while sampling rows remain on the controls.
+Keep validated RGB on failed reads, reject incomplete targets, and initialize
+transfer storage transparently so failed/uninitialized reads cannot create black
+blocks. Real black remains a valid color after confirmation. The configured
+intervals are not measured presentation latency; VM acceptance must exercise
+focus, theme changes, resizing, covered windows and real GL drivers.
+
 ## Surface-shape protocol
 
 `kos-surface-shape-v1.xml` defines versioned capability negotiation. Preserve interface/opcode order.
