@@ -31,9 +31,9 @@ QRect tintSampleRect(const QRect &band, const QRect &panel, bool fallback = fals
 
 struct TitlebarTintState {
     using Clock = std::chrono::steady_clock;
-    static constexpr auto ConfirmTime = std::chrono::milliseconds(500);
-    static constexpr auto WarmupInterval = std::chrono::milliseconds(250);
-    static constexpr auto RecheckInterval = std::chrono::milliseconds(750);
+    static constexpr auto ConfirmTime = std::chrono::milliseconds(32);
+    static constexpr auto WarmupInterval = std::chrono::milliseconds(32);
+    static constexpr auto RecheckInterval = std::chrono::milliseconds(125);
     static constexpr int WarmupReads = 4;
 
     bool known = false;
@@ -45,8 +45,14 @@ struct TitlebarTintState {
     Clock::time_point pendingSince{};
     Clock::time_point lastRead{};
     int warmupReads = 0;
+    bool refreshRequested = true;
+    quint64 contentRevision = 0, sampleRevision = 0;
 
     std::chrono::milliseconds interval() const;
+    void requestRefresh();
+    void contentChanged() { ++contentRevision; refreshRequested = true; }
+    void rejectSample() { pending = false; refreshRequested = warmupReads < WarmupReads || sampleRevision != contentRevision; }
+    bool needsFollowup() const { return pending || refreshRequested || warmupReads < WarmupReads; }
     void attempted(Clock::time_point now);
     // Returns true only when the displayed color actually changes. Near-equal
     // samples must not drift the cached RGB and create more texture variants.

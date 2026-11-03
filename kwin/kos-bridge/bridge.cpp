@@ -110,16 +110,18 @@ BridgeEffect::BridgeEffect()
         }
     });
 
-    const auto watchFullscreen = [this](KWin::EffectWindow *window) {
+    const auto watchWindowState = [this](KWin::EffectWindow *window) {
+        connect(window, &KWin::EffectWindow::windowDamaged, this,
+                [this, window] { m_renderer->contentChanged(window); });
         connect(window, &KWin::EffectWindow::windowFullScreenChanged,
                 this, [this](KWin::EffectWindow *changed) {
                     m_input->fullscreenChanged(changed);
                 });
     };
     connect(KWin::effects, &KWin::EffectsHandler::windowAdded,
-            this, watchFullscreen);
+            this, watchWindowState);
     for (auto *window : KWin::effects->stackingOrder()) {
-        watchFullscreen(window);
+        watchWindowState(window);
     }
 
     connect(KWin::effects, &KWin::EffectsHandler::windowDeleted, this,

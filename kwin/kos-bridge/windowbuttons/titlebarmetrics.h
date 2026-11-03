@@ -45,7 +45,7 @@ public:
     bool enqueue(const KWin::RenderTarget &renderTarget,
                  const KWin::RenderViewport &viewport,
                  KWin::EffectWindow *window, const KWin::Region &deviceClip,
-                 const QRectF &panel);
+                 const QRectF &panel, const QRectF &cover);
     bool take(bool *dark, QColor *color);
     bool pending() const { return m_readback.pending(); }
     void discard() { m_readback.discard(); }

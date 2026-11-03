@@ -81,6 +81,12 @@ void geometryTests()
             }
         }
     }
+    // Independent cover expands left while sampling rows remain on the buttons.
+    const QRect band(0, 6, 1920, 23);
+    const QRect controls(1830, 6, 80, 23), cover(1730, 0, 190, 60);
+    CHECK(tintSampleRect(band, controls).intersects(cover)); // Former wrong exclusion.
+    CHECK(!tintSampleRect(band, cover).intersects(cover));
+    CHECK(!tintSampleRect(band, cover, true).intersects(cover));
     CHECK(tintSampleRect({}, {}).isEmpty());
     CHECK(tintSampleRect(QRect(0, 0, 100, 30), QRect(0, 0, 100, 30)).isEmpty());
 }
@@ -89,33 +95,70 @@ void timingTests()
 {
     TitlebarTintState state;
     const auto start = TitlebarTintState::Clock::time_point{} + 1s;
-    const QColor first(30, 30, 30), next(200, 180, 160);
-    CHECK(state.interval() == 250ms);
-    CHECK(state.accept(true, first, start));
-    CHECK(state.known && !state.pending);
-    for (int i = 0; i < 8; ++i) state.attempted(start + i * 250ms);
+    const QColor first(30, 30, 30), next(200, 180, 160), black(0, 0, 0);
+    CHECK(state.interval() == 32ms);
+    // A single startup black frame must never appear as a black cover.
+    CHECK(!state.accept(true, black, start));
+    CHECK(!state.known);
+    CHECK(!state.accept(true, first, start + 32ms));
+    CHECK(!state.known);
+    CHECK(state.accept(true, first, start + 64ms));
+    CHECK(state.known && state.color == first && !state.pending);
+    for (int i = 0; i < 8; ++i) state.attempted(start + i * 32ms);
     CHECK(state.warmupReads == 4);
-    CHECK(state.interval() == 750ms);
+    CHECK(state.interval() == 125ms);
     CHECK(!state.accept(false, next, start + 2s));
-    CHECK(state.pending && state.interval() == 250ms);
-    CHECK(!state.accept(false, next, start + 2250ms));
+    CHECK(state.pending && state.interval() == 32ms);
+    CHECK(!state.accept(false, next, start + 2016ms));
     CHECK(state.color == first);
-    CHECK(state.accept(false, next, start + 2500ms));
+    CHECK(state.accept(false, next, start + 2032ms));
     CHECK(state.color == next && !state.dark && !state.pending);
-    CHECK(state.interval() == 750ms);
-    // Dither does not mutate the displayed RGB.
+    CHECK(state.interval() == 125ms);
     CHECK(!state.accept(false, QColor(202, 179, 160), start + 3s));
     CHECK(state.color == next);
-    // A transient that returns to the displayed color cancels confirmation.
-    CHECK(!state.accept(true, first, start + 4s));
-    CHECK(!state.accept(false, next, start + 4250ms));
-    CHECK(!state.pending);
-    // Conflicting observations restart the confirmation clock.
+    CHECK(!state.accept(true, black, start + 4s));
+    CHECK(!state.accept(false, next, start + 4032ms));
+    CHECK(!state.pending && state.color == next);
+    // Invalid/transparent reads retain validated RGB and break confirmation.
     CHECK(!state.accept(true, first, start + 5s));
-    CHECK(!state.accept(true, QColor(60, 60, 60), start + 5500ms));
-    CHECK(!state.accept(true, QColor(60, 60, 60), start + 5750ms));
-    CHECK(state.accept(true, QColor(60, 60, 60), start + 6s));
+    CHECK(!state.accept(true, QColor(), start + 5032ms));
+    CHECK(!state.pending && state.color == next);
+    CHECK(!state.accept(true, first, start + 5064ms));
+    CHECK(!state.accept(true, QColor(0, 0, 0, 0), start + 5096ms));
+    CHECK(!state.pending && state.color == next);
+    // Real opaque black remains supported after two consistent observations.
+    CHECK(!state.accept(true, black, start + 6s));
+    CHECK(state.accept(true, black, start + 6032ms));
+    CHECK(state.color == black);
+    // Both gain and loss of focus re-enter a bounded fast phase, preserving
+    // the previous color until the new active/inactive titlebar is validated.
+    state.requestRefresh();
+    CHECK(state.known && state.color == black && !state.pending);
+    CHECK(state.lastRead == TitlebarTintState::Clock::time_point{});
+    CHECK(state.interval() == 32ms && state.needsFollowup());
+    CHECK(!state.accept(false, next, start + 7s));
+    CHECK(state.accept(false, next, start + 7032ms));
+    CHECK(state.color == next && !state.pending);
+    for (int i = 0; i < 4; ++i) state.attempted(start + 7100ms + i * 32ms);
+    CHECK(!state.needsFollowup());
+    // Damage during an in-flight read cannot be swallowed by its old RGB.
+    state.contentChanged();
+    CHECK(state.needsFollowup());
+    state.attempted(start + 7500ms);
+    state.contentChanged();
+    CHECK(!state.accept(false, next, start + 7516ms));
+    CHECK(state.needsFollowup());
+    state.attempted(start + 7625ms);
+    CHECK(!state.accept(false, next, start + 7641ms));
+    CHECK(!state.needsFollowup());
+    // Occluded/failed refreshes do not create an unlimited fast retry loop.
+    state.requestRefresh();
+    for (int i = 0; i < 4; ++i) state.attempted(start + 8s + i * 32ms);
+    state.rejectSample();
+    CHECK(state.interval() == 125ms && !state.needsFollowup());
+    CHECK(state.known && state.color == next);
 }
+
 }
 
 int main()

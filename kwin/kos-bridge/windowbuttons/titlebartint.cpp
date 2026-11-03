@@ -86,21 +86,30 @@ std::chrono::milliseconds TitlebarTintState::interval() const
 void TitlebarTintState::attempted(Clock::time_point now)
 {
     lastRead = now;
+    sampleRevision = contentRevision;
     warmupReads = std::min(warmupReads + 1, WarmupReads);
+}
+
+void TitlebarTintState::requestRefresh()
+{
+    // Keep the last validated RGB while focus/geometry catches up. Never
+    // replace it with an uninitialized palette or the previous transfer.
+    refreshRequested = true;
+    pending = false;
+    warmupReads = 0;
+    lastRead = {};
 }
 
 bool TitlebarTintState::accept(bool sampledDark, const QColor &sampledColor,
                               Clock::time_point now)
 {
-    if (!known) {
-        known = true;
-        dark = sampledDark;
-        color = sampledColor;
-        pending = false;
-        return true;
+    if (!sampledColor.isValid() || sampledColor.alpha() != 255) {
+        rejectSample();
+        return false;
     }
-    if (sampledDark == dark && sameColor(sampledColor, color)) {
+    if (known && sampledDark == dark && sameColor(sampledColor, color)) {
         pending = false;
+        refreshRequested = sampleRevision != contentRevision;
         return false;
     }
     if (!pending || sampledDark != pendingDark || !sameColor(sampledColor, pendingColor)) {
@@ -113,6 +122,8 @@ bool TitlebarTintState::accept(bool sampledDark, const QColor &sampledColor,
     if (now - pendingSince < ConfirmTime) return false;
     dark = sampledDark;
     color = sampledColor;
+    known = true;
+    refreshRequested = sampleRevision != contentRevision;
     pending = false;
     return true;
 }

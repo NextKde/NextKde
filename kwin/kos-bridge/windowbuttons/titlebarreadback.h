@@ -26,6 +26,7 @@ private:
     GLuint m_buffer = 0;
     GLsync m_fence = nullptr;
     qsizetype m_bytes = 0;
+    QByteArray m_clearPixels;
 };
 
 } // namespace KOS

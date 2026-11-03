@@ -94,6 +94,7 @@ public:
     // this a panel shows the colours of the window that used to be active until
     // something else happens to repaint it.
     void repaintPanels(KWin::EffectWindow *a, KWin::EffectWindow *b);
+    void contentChanged(KWin::EffectWindow *window);
 
     // ---- the tiling menu --------------------------------------------------
     //
@@ -194,8 +195,8 @@ private:
     // light is, this says what it does.
     static Action actionFor(Type type);
 
-    // Read the active window's title bar and reuse the last tint while it is
-    // inactive. Returns false until the first successful reading.
+    // Sample visible titlebars and preserve validated RGB between observations.
+    // Returns false until two consistent usable readings confirm the first tint.
     //
     // Reading is easy; deciding when a reading is the bar rather than something
     // that happens to be under the panel for a moment is not, and is what most
@@ -204,14 +205,15 @@ private:
                  const KWin::RenderViewport &viewport,
                  KWin::EffectWindow *window,
                  const QRectF &panel,
+                 const QRectF &cover,
                  const KWin::Region &deviceRegion,
                  bool *dark,
                  QColor *color = nullptr);
 
     // Poll in-flight reads without repainting; request a fresh capture at the
     // next sampling deadline. The timer is
-    // cancelled with this renderer. Inactive windows only finish an initial
-    // in-flight read; deleted windows are always skipped.
+    // cancelled with this renderer. Inactive windows finish bounded refreshes
+    // after focus/damage; deleted windows are always skipped.
     void scheduleSample(KWin::EffectWindow *window);
     static void requestSample(KWin::EffectWindow *window, const QRectF &panel);
 
@@ -275,6 +277,8 @@ private:
         // without restarting the fast sampling phase.
         QSizeF windowSize;
         QRectF panel;
+        QRectF cover;
+        bool resetReadback = false;
     };
     static bool consumeSample(CacheEntry &entry, Clock::time_point now);
     QHash<KWin::EffectWindow *, CacheEntry> m_cache;

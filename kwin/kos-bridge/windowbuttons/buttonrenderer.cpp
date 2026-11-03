@@ -386,7 +386,7 @@ void ButtonRenderer::paint(const KWin::RenderTarget &renderTarget,
         break;
     case PanelBackground::Auto:
         if (!tintFor(renderTarget, viewport, window,
-                     tintPanel, deviceRegion,
+                     tintPanel, local, deviceRegion,
                      &dark, &panelColor)) {
             // Fallback while the title bar has not been sampled yet
             if (config.kosDecorationSelected && window->hasDecoration()
@@ -659,6 +659,7 @@ bool ButtonRenderer::tintFor(const KWin::RenderTarget &renderTarget,
                               const KWin::RenderViewport &viewport,
                               KWin::EffectWindow *window,
                               const QRectF &panel,
+                              const QRectF &cover,
                               const KWin::Region &deviceRegion,
                               bool *dark,
                               QColor *color)
@@ -671,33 +672,34 @@ bool ButtonRenderer::tintFor(const KWin::RenderTarget &renderTarget,
     if (it == m_cache.end()) {
         it = m_cache.insert(window, CacheEntry{});
         it->sampleToken = ++m_nextSampleToken;
-    } else if (!sameSize(it->windowSize, windowSize)
+    } else if (it->resetReadback || !sameSize(it->windowSize, windowSize)
                || !sameSize(it->panel.size(), panel.size())
                || std::abs(it->panel.x() - panel.x()) > SizeTolerance
-               || std::abs(it->panel.y() - panel.y()) > SizeTolerance) {
+               || std::abs(it->panel.y() - panel.y()) > SizeTolerance
+               || !sameSize(it->cover.size(), cover.size())
+               || std::abs(it->cover.x() - cover.x()) > SizeTolerance
+               || std::abs(it->cover.y() - cover.y()) > SizeTolerance) {
         // A completed transfer belongs to the geometry at enqueue time.
         it->sampler->discard();
-        it->pending = false;
+        it->requestRefresh();
+        it->resetReadback = false;
     }
     it->windowSize = windowSize;
     it->panel = panel;
+    it->cover = cover;
 
-    if (!isActive && it->known) {
-        it->sampler->discard();
-        it->pending = false;
-    } else {
-        // This paint will use the accepted tint immediately; invalidating its
-        // source here would only force another full-window capture.
-        if (consumeSample(*it, now)) repaintRect(currentRect(window));
-        if (!it->sampler->pending()
-            && (it->lastRead == Clock::time_point{} || now - it->lastRead >= it->interval())) {
-            // Failed/occluded attempts also consume the cadence budget.
-            it->attempted(now);
-            it->sampler->enqueue(renderTarget, viewport, window, deviceRegion, panel);
-        }
+    // This paint will use the accepted tint immediately; invalidating its
+    // source here would only force another full-window capture.
+    if (consumeSample(*it, now)) repaintRect(currentRect(window));
+    if (!it->sampler->pending()
+        && (it->lastRead == Clock::time_point{} || now - it->lastRead >= it->interval())) {
+        // Failed/occluded attempts also consume the cadence budget.
+        it->attempted(now);
+        if (!it->sampler->enqueue(renderTarget, viewport, window, deviceRegion, panel, cover))
+            it->rejectSample();
     }
 
-    if (isActive || it->sampler->pending()) scheduleSample(window);
+    if (isActive || it->sampler->pending() || it->needsFollowup()) scheduleSample(window);
     if (!it->known) return false;
     *dark = it->dark;
     if (color) *color = it->color;
@@ -706,6 +708,7 @@ bool ButtonRenderer::tintFor(const KWin::RenderTarget &renderTarget,
 
 bool ButtonRenderer::consumeSample(CacheEntry &entry, Clock::time_point now)
 {
+    const bool wasPending = entry.sampler->pending();
     bool sampledDark = false;
     QColor sampledColor;
     if (entry.sampler->take(&sampledDark, &sampledColor)) {
@@ -714,6 +717,7 @@ bool ButtonRenderer::consumeSample(CacheEntry &entry, Clock::time_point now)
     if (entry.sampler->pending() && now - entry.lastRead >= ReadbackTimeout) {
         entry.sampler->discard();
     }
+    if (wasPending && !entry.sampler->pending()) entry.rejectSample();
     return false;
 }
 
@@ -740,19 +744,24 @@ void ButtonRenderer::scheduleSample(KWin::EffectWindow *window)
         entry->sampleScheduled = false;
         if (!KWin::effects) return;
         const bool active = KWin::effects->activeWindow() == guarded;
+        if (entry->resetReadback) {
+            // Focus callbacks only mark CPU state. Retire the old GPU read in
+            // the next paint, where the correct context is already current.
+            requestSample(guarded, entry->panel);
+            return;
+        }
         if (entry->sampler->pending()) {
             // Fence polling and mapping need a context, but no scene repaint.
             // A source repaint invalidates ContinuousClip's whole-window FBO.
             KWin::effects->makeOpenGLContextCurrent();
-            if ((!active && entry->known)
-                || !sameSize(entry->windowSize, guarded->frameGeometry().size())) {
+            if (!sameSize(entry->windowSize, guarded->frameGeometry().size())) {
                 entry->sampler->discard();
-                entry->pending = false;
+                entry->requestRefresh();
             } else if (consumeSample(*entry, Clock::now())) {
                 repaintRect(currentRect(guarded));
             }
-            if (active || entry->sampler->pending()) scheduleSample(guarded);
-        } else if (active) {
+            if (active || entry->sampler->pending() || entry->needsFollowup()) scheduleSample(guarded);
+        } else if (active || entry->needsFollowup()) {
             requestSample(guarded, entry->panel);
         }
     });
@@ -1013,6 +1022,15 @@ void ButtonRenderer::setHovered(KWin::EffectWindow *window, Action action, bool 
 
 void ButtonRenderer::repaintPanels(KWin::EffectWindow *a, KWin::EffectWindow *b)
 {
+    for (auto *window : {a, b}) {
+        const auto entry = m_cache.find(window);
+        if (entry == m_cache.end()) continue;
+        entry->requestRefresh();
+        entry->resetReadback = true;
+        // Updating only the chip would leave the adjacent sampling strip out
+        // of this frame's damage, delaying the new focus color again.
+        requestSample(window, entry->panel);
+    }
     // Through the compositor, for the reason setHovered() gives. Only the panels
     // that are on screen: currentRect() is the rectangle a panel was last drawn
     // at, and empty for a window that has none.
@@ -1023,6 +1041,16 @@ void ButtonRenderer::repaintPanels(KWin::EffectWindow *a, KWin::EffectWindow *b)
         // panel yet. Give it one paint on activation so its first read runs.
         repaintRect(panel.isEmpty() && b ? QRectF(b->frameGeometry()) : panel);
     }
+}
+
+void ButtonRenderer::contentChanged(KWin::EffectWindow *window)
+{
+    const auto entry = m_cache.find(window);
+    if (entry == m_cache.end()) return;
+    entry->contentChanged();
+    // Client damage requests one refresh even for an inactive window. Keep
+    // the last attempt time so video/scroll damage cannot bypass the budget.
+    scheduleSample(window);
 }
 
 int ButtonRenderer::zoomDotIndex()

@@ -61,7 +61,7 @@ TitlebarSampler::~TitlebarSampler()
 bool TitlebarSampler::enqueue(const KWin::RenderTarget &renderTarget,
                               const KWin::RenderViewport &viewport,
                               KWin::EffectWindow *window, const KWin::Region &deviceClip,
-                              const QRectF &panel)
+                              const QRectF &panel, const QRectF &cover)
 {
     if (pending() || !window || panel.height() < 2) return false;
     const QRectF frame = window->frameGeometry();
@@ -70,7 +70,9 @@ bool TitlebarSampler::enqueue(const KWin::RenderTarget &renderTarget,
     const QRect bandDevice = viewport.mapToDeviceCoordinatesAligned(bandLogical);
     const QRect bandTarget = viewport.mapToRenderTargetTexture(bandLogical).toAlignedRect();
     const QPoint offset = bandTarget.topLeft() - bandDevice.topLeft();
-    const QRect panelTarget = viewport.mapToDeviceCoordinatesAligned(panel.translated(frame.topLeft()))
+    // The sampling rows follow the controls, but the exclusion follows the
+    // entire independent cover, including all four expanded edges.
+    const QRect panelTarget = viewport.mapToDeviceCoordinatesAligned(cover.translated(frame.topLeft()))
                                   .translated(offset);
     // Clip in device space first, then translate to the target. This preserves
     // the secondary-output / offscreen-target origin, not just output zero.
