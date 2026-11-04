@@ -130,36 +130,60 @@ Item {
         }
     }
 
-    function openItem(item, clickedItem) {
-        if (!item || !item.enabled)
+    // Chromium/Electron rebuild their dbusmenu shortly after launch and every
+    // rebuild reassigns item ids, so the ids the bar cached can already be dead
+    // (a stale id answers an empty layout, which opens an empty popup). Resolve
+    // the clicked entry against a fresh root read before opening anything.
+    function freshRoot(callback) {
+        AppMenuService.requestLayout(0, function(rootItems) {
+            callback((rootItems || []).filter(item => item.visible !== false && !item.separator))
+        }, 2)
+    }
+
+    function openItem(index, clickedItem) {
+        const shown = items[index]
+        if (!shown || !shown.enabled)
             return
         const serial = ++_openingSerial
-        console.info("[GlobalMenu] click id=" + item.id + " children=" + item.hasChildren)
-        if (!item.hasChildren) {
-            PlatformClient.request("appmenu.trigger", { service, path, id: item.id })
-            return
-        }
-        popupRootId = item.id
-        activeOpeningId = item.id
-        PlatformClient.request("appmenu.open", { service, path, id: item.id })
-        AppMenuService.requestLayout(item.id, function(children) {
-            if (serial !== root._openingSerial)
+        freshRoot(function(fresh) {
+            if (serial !== _openingSerial)
                 return
-            hydrate(children, 0, function(result) {
+            const item = fresh[index] || shown
+            if (items[index])
+                items[index].id = item.id
+            if (item.enabled === false)
+                return
+            console.info("[GlobalMenu] click id=" + item.id + " children=" + item.hasChildren)
+            if (!item.hasChildren) {
+                PlatformClient.request("appmenu.trigger", { service, path, id: item.id })
+                return
+            }
+            popupRootId = item.id
+            activeOpeningId = item.id
+            PlatformClient.request("appmenu.open", { service, path, id: item.id })
+            AppMenuService.requestLayout(item.id, function(children) {
                 if (serial !== root._openingSerial)
                     return
-                root.presentMenu(item.id, clickedItem, result, serial)
-            }, serial)
-        }, 2)
+                hydrate(children, 0, function(result) {
+                    if (serial !== root._openingSerial)
+                        return
+                    root.presentMenu(item.id, clickedItem, result, serial)
+                }, serial)
+            }, 2)
+        })
     }
 
     function openOverflow(anchor) {
         const serial = ++_openingSerial
         popupRootId = 0
         activeOpeningId = 0
-        hydrate(overflowItems, 0, function(result) {
-            root.presentMenu(0, anchor, result, serial)
-        }, serial)
+        freshRoot(function(fresh) {
+            if (serial !== _openingSerial)
+                return
+            hydrate(fresh.slice(visibleCount), 0, function(result) {
+                root.presentMenu(0, anchor, result, serial)
+            }, serial)
+        })
     }
 
     onMaximumWidthChanged: updateVisibleCount()
@@ -229,12 +253,12 @@ Item {
                         if (menuPopup.visible && root.popupRootId === modelData.id) {
                             menuPopup.hide()
                         } else {
-                            root.openItem(modelData, menuItem)
+                            root.openItem(index, menuItem)
                         }
                     }
                     onEntered: {
                         if (menuPopup.visible && root.popupRootId !== modelData.id) {
-                            root.openItem(modelData, menuItem)
+                            root.openItem(index, menuItem)
                         }
                     }
                 }
