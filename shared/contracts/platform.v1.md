@@ -157,6 +157,18 @@ On `kwin.subscribe`, the daemon replays both its latest `window.snapshot` and
 latest `desktops` event when available. Consumers may explicitly request a
 fresh desktop event with `kwin.command {action: "desktops"}` during startup.
 
+The optional `desktops.transitionActive` boolean gates UI entrances while
+KWin's `slide`, `cubeslide`, or `fadedesktop` effect is active. The daemon sets
+it before publishing a changed `current` desktop and republishes the latest
+desktop snapshot with `transitionActive: false` when the effect finishes.
+Initial snapshots do not start a transition. The bridge polls asynchronously
+only during a change (32ms between replies, 250ms per-call timeout), allows
+80ms for effect startup, and releases after at most 5 seconds. Query errors
+and compositor disconnection also release the gate. Rapid changes supersede
+older replies. Missing fields from older daemons mean `false`; Shell clears
+the gate when its platform connection drops. Replayed snapshots carry the
+latest gate value.
+
 Platform adapters validate all paths and operation names before executing a
 system action. Existing paths are canonicalized and new targets are resolved
 through a canonical existing parent. Passwords and raw command output
