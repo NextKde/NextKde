@@ -157,7 +157,7 @@ On `kwin.subscribe`, the daemon replays both its latest `window.snapshot` and
 latest `desktops` event when available. Consumers may explicitly request a
 fresh desktop event with `kwin.command {action: "desktops"}` during startup.
 
-The optional `desktops.transitionActive` boolean gates UI entrances while
+The optional `desktops.transitionActive` boolean marks desktop navigation while
 KWin's `slide`, `cubeslide`, or `fadedesktop` effect is active. The daemon sets
 it before publishing a changed `current` desktop and republishes the latest
 desktop snapshot with `transitionActive: false` when the effect finishes.

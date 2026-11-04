@@ -766,23 +766,38 @@ checks and overlap release handler have regressions in `test_stage_visibility.mj
 Qt Quick Test with fixture window records. Full Shell rendering and real
 compositor desktop switching still require graphical VM validation.
 
-`StageDesktopTransition` holds the outgoing card model during a 120ms fade
-and a 24px move toward the screen edge. After one transparent publication
-frame it commits the latest desktop and reveals the new cards over 260ms.
-The same progress drives QML opacity and live-card fade; the published pose
-includes the horizontal offset. Card input is suspended during the transition.
-Rapid switches retarget from the current pose, and disabling Stage cancels
-pending commits. Already hidden or empty sidebars skip the exit animation.
-When `WindowService.desktopTransitionActive` is true, the controller keeps
-the incoming cards transparent until KWin finishes switching desktops. This
-also covers leaving a fullscreen desktop: live cards are not painted during
-KWin's fullscreen switch effect, so starting their entrance immediately would
-finish it while invisible. The platform bridge supplies the bounded gate via
+`StageDesktopTransition` keeps the displayed card model and the drawer's
+horizontal position unchanged while `WindowService.desktopTransitionActive`
+is true. Desktop navigation does not animate the whole strip's opacity or
+add a horizontal offset. After switching settles, it commits only the latest
+desktop; cards created by that commit start opaque. Input is suspended during
+the switch. Rapid switches, returning to the original desktop and disabling
+Stage cancel or supersede pending commits. Fullscreen/overlap drawer rules
+are applied after the switch, so a new desktop cannot move the old strip.
+
+The platform bridge supplies the bounded switch lifetime through
 `desktops.transitionActive` (see the [platform contract](../shared/contracts/platform.v1.md)).
-The QML regressions hold that gate longer than the entrance and verify a fresh
-fade/slide after release, retargeting, interruption and cancellation. The
-private-bus `kos-platform.desktop-transition` test covers native effect polling,
-disabled animations, stale replies, errors, timeouts and reconnection.
+The live-card payload identifies the **displayed** model with top-level
+`desktopId`. A changed nonempty desktop ID replaces absent compositor cards
+immediately and starts the incoming cards opaque, bypassing ordinary
+missing-card grace and entrance fading for this handoff. Older payloads
+without that field retain the usual lifecycle behavior.
+
+Stage's post-scene compositor overlay continues painting in fixed screen
+coordinates during KWin's `slide`, `cubeslide` and `fadedesktop` effects. Other
+fullscreen effects, including Overview, remain exclusive; screen lock always
+suppresses the overlay. This native change requires the newly installed KWin
+plugin and a new login session; restarting only Shell cannot enable it.
+
+The Qt Quick fixtures run the production controller, integration handlers and
+drawer bindings, covering model/position retention, fullscreen destinations,
+rapid switches and cancellation. `kos-platform.desktop-transition` covers
+bounded native effect polling on a private bus; `kos-stage.desktop-policy`
+covers fullscreen/lock exclusivity. The optional graphical
+`kos-stage.static-desktop-compositor` test loads the built plugin into an
+isolated virtual KWin and verifies that opaque cards stay at fixed coordinates
+and keep painting during a real slide, then replace without ghost cards.
+See the [Stage test guide](../tests/stage-visibility/README.md).
 
 ### Desktop lyrics
 
