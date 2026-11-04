@@ -24,6 +24,7 @@ TestCase {
         motion.hasCards = true
         motion.offscreen = false
         motion.rightSide = false
+        motion.blocked = false
         motion.enabled = true
         commits.clear()
         root.progressAtCommit = -1
@@ -127,5 +128,57 @@ TestCase {
         verify(motion.offset > 0)
         tryCompare(motion, "active", false)
         compare(motion.offset, 0)
+    }
+    function test_fullscreen_to_clear_desktop_reveals_after_compositor_finishes() {
+        motion.hasCards = false
+        motion.offscreen = true
+        motion.blocked = true
+        motion.desktopId = "desk2"
+        tryCompare(commits, "count", 1)
+        motion.hasCards = true
+        motion.offscreen = false
+        wait(350)
+        verify(motion.active)
+        compare(motion.progress, 0)
+        compare(root.modelDesktop, "desk2")
+        motion.blocked = false
+        tryVerify(() => motion.progress > 0 && motion.progress < 1)
+        verify(motion.offset < 0)
+        tryCompare(motion, "active", false)
+        compare(motion.progress, 1)
+    }
+    function test_switch_again_while_waiting_reveals_only_latest_desktop() {
+        motion.blocked = true
+        motion.desktopId = "desk2"
+        tryCompare(commits, "count", 1)
+        motion.desktopId = "desk3"
+        tryCompare(commits, "count", 2)
+        compare(root.modelDesktop, "desk3")
+        compare(motion.progress, 0)
+        motion.blocked = false
+        tryCompare(motion, "active", false)
+        compare(motion.progress, 1)
+    }
+    function test_compositor_can_interrupt_an_entrance() {
+        motion.desktopId = "desk2"
+        tryCompare(commits, "count", 1)
+        tryVerify(() => motion.progress > 0 && motion.progress < 1)
+        motion.blocked = true
+        wait(300)
+        compare(motion.progress, 0)
+        verify(motion.active)
+        motion.blocked = false
+        tryVerify(() => motion.progress > 0 && motion.progress < 1)
+        tryCompare(motion, "active", false)
+    }
+    function test_disabling_while_waiting_does_not_restart_entrance() {
+        motion.blocked = true
+        motion.desktopId = "desk2"
+        tryCompare(commits, "count", 1)
+        motion.enabled = false
+        motion.blocked = false
+        wait(300)
+        compare(motion.progress, 1)
+        verify(!motion.active)
     }
 }

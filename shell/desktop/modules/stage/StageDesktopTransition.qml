@@ -10,6 +10,7 @@ QtObject {
     property bool hasCards: false
     property bool offscreen: false
     property bool rightSide: false
+    property bool blocked: false
     property real progress: 1
     readonly property real offset: (rightSide ? 24 : -24) * (1 - progress)
     readonly property bool active: _phase !== 0
@@ -37,7 +38,7 @@ QtObject {
     function _startExit() {
         _animation.stop()
         _phase = 1
-        if (!hasCards || offscreen || progress <= 0) {
+        if (!hasCards || offscreen || blocked || progress <= 0) {
             progress = 0
             _commitTimer.restart()
         } else {
@@ -57,8 +58,14 @@ QtObject {
         // desktop. Do not restart an entrance over that newer state.
         if (_phase !== 2 || !enabled)
             return
+        _startEntrance()
+    }
+
+    function _startEntrance() {
+        if (blocked || !enabled || _phase !== 2)
+            return
         _animation.to = 1
-        _animation.duration = 220
+        _animation.duration = 260
         _animation.start()
     }
 
@@ -78,6 +85,18 @@ QtObject {
             commit()
     }
     onEnabledChanged: if (_ready) _reset()
+    onBlockedChanged: {
+        if (!_ready || !active)
+            return
+        if (blocked) {
+            _animation.stop()
+            progress = 0
+            if (_phase === 1)
+                _commitTimer.restart()
+        } else {
+            _startEntrance()
+        }
+    }
     Component.onCompleted: {
         _displayedDesktopId = desktopId
         _pendingDesktopId = desktopId

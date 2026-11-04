@@ -2254,6 +2254,7 @@ PanelWindow {
         hasCards: cardModel.count > 0
         offscreen: root._retractPx >= root._retractFull - 1
         rightSide: root.rightSide
+        blocked: WindowService.desktopTransitionActive
         onCommit: root.syncCards()
         onProgressChanged: {
             root.scheduleLivePublish()
@@ -2924,6 +2925,7 @@ PanelWindow {
         }
         return JSON.stringify({ open: root.open, visible: root.visible,
             desktopTransition: { active: desktopTransition.active,
+                blocked: desktopTransition.blocked,
                 progress: desktopTransition.progress,
                 displayed: desktopTransition._displayedDesktopId,
                 pending: desktopTransition._pendingDesktopId },
