@@ -79,10 +79,7 @@ bool exposedAt(KWin::EffectWindow *window, const QPointF &point)
     }
     for (int j = index + 1; j < windows.size(); ++j) {
         KWin::EffectWindow *above = windows[j];
-        if (!above || !above->isVisible()) {
-            continue;
-        }
-        if (above->isDesktop()) {
+        if (!above || !above->isVisible() || above->isDeleted() || above->isDesktop()) {
             continue;
         }
         // Shell surfaces (dock, OSD, notification) may have large transparent frames
@@ -92,11 +89,19 @@ bool exposedAt(KWin::EffectWindow *window, const QPointF &point)
             continue;
         }
         if (KWin::Window *w = above->window()) {
+            // A window that has been closed but is still stacked only because an
+            // effect keeps it alive for its close animation is not an input target.
+            if (w->isDeleted()) {
+                continue;
+            }
             // Internal windows (KRunner, OSDs, outlines, tab switchers) are owned by KWin.
             // When an internal window is being torn down, its QWindow handle may already
             // be destroyed while the InternalWindow object remains in the stacking order;
             // calling InternalWindow::hitTest() dereferences m_handle->mask() and segfaults.
             if (w->isInternal()) {
+                if (!above->internalWindow()) {
+                    continue;
+                }
                 if (above->frameGeometry().contains(point)) {
                     return false;
                 }
@@ -1345,7 +1350,7 @@ ButtonRenderer::Action ButtonRenderer::hitTest(const QPointF &logicalPos,
     const QList<KWin::EffectWindow *> windows = KWin::effects->stackingOrder();
     for (int i = windows.size() - 1; i >= 0; --i) {
         KWin::EffectWindow *w = windows[i];
-        if (!w || !w->isVisible() || w->isFullScreen()) {
+        if (!w || !w->isVisible() || w->isDeleted() || w->isFullScreen()) {
             continue;
         }
         const auto found = m_hits.constFind(w);
