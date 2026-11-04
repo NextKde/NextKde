@@ -15,6 +15,7 @@
 #include <QQmlContext>
 #include <QTimer>
 #include <QtQml/qqmlextensionplugin.h>
+#include "NotesExtension.h"
 
 Q_IMPORT_QML_PLUGIN(Kos_DemoPlugin)
 
@@ -58,6 +59,12 @@ int main(int argc, char* argv[])
     engine.rootContext()->setContextProperty(QStringLiteral("settingsBridge"), &bridge);
     engine.rootContext()->setContextProperty(QStringLiteral("windowSettings"), &windowSettings);
     engine.rootContext()->setContextProperty(QStringLiteral("powerSettings"), &powerSettings);
+    QString notesSource;
+#ifdef KOS_NOTES_SOURCE
+    notesSource = QStringLiteral(KOS_NOTES_SOURCE);
+#endif
+    NotesExtension notesExtension(notesSource);
+    engine.rootContext()->setContextProperty(QStringLiteral("notesExtension"), &notesExtension);
 
     const SettingsEntry entry
         = chooseSettingsEntry(bridge.isDevelopmentSession(), bridge.sessionShellDir());

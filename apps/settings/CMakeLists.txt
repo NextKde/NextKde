@@ -40,6 +40,8 @@ qt_add_executable(kos-settings
     ${KOS_GTK_RESOURCES}
     ../../platform/src/daemon/PlatformDbus.cpp
     ../../platform/src/daemon/PowerProfilesBus.cpp
+    src/NotesExtension.cpp
+    src/NotesExtension.h
 )
 target_include_directories(kos-settings PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/../../services/ai/include)

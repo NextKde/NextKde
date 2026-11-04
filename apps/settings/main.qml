@@ -893,6 +893,7 @@ ApplicationWindow {
                             store: typeof appStore !== "undefined" ? appStore : null
                             bridge: (typeof settingsBridge !== "undefined") ? settingsBridge : null
                             colors: theme
+            notes: (typeof notesExtension !== "undefined") ? notesExtension : null
                         }
                     }
 
