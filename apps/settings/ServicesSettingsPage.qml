@@ -8,6 +8,7 @@ Flow {
     id: page
     property var bridge: null
     property var store: null
+    property var notes: null
     readonly property var music: store ? store.music : ({})
     property var colors
     property var resources: ({})
@@ -232,6 +233,105 @@ Flow {
         }
     }
 
+    // 便签 + Markdown 笔记 + 记忆系统。安装后点「开启」才会启动；启动后常驻
+    // 状态栏（StatusNotifierItem）并出现桌面悬浮球。运行状态由 D-Bus 上的
+    // org.nextkde.Notes 判断：从悬浮球/托盘退出后，这里会自动回到「开启」。
+    Controls.ExtensionEntry {
+        id: notesEntry
+        objectName: "myNotesEntry"
+        width: page.entryWidth
+        height: page.columns === 2 ? page.rowHeight : implicitHeight
+        category: I18n.tr("Extension")
+        colors: page.colors
+        title: I18n.tr("My notes")
+        description: I18n.tr("Sticky notes, Markdown notes and the memory system — with a floating ball and a status bar entry")
+        iconSource: Qt.resolvedUrl("icons/my-notes.svg")
+        actionObjectName: "myNotesAction"
+        readonly property var nt: page.notes ? page.notes.state : ({})
+        actionText: !page.notes || !notesEntry.nt.available ? I18n.tr("Unavailable")
+            : notesEntry.nt.busy ? I18n.tr("Working…")
+            : notesEntry.nt.installed && notesEntry.nt.running ? I18n.tr("Turned on")
+            : notesEntry.nt.installed ? I18n.tr("Turn on")
+            : I18n.tr("Install")
+        actionEnabled: !!page.notes && !!notesEntry.nt.available && !notesEntry.nt.busy
+            && !(notesEntry.nt.installed && notesEntry.nt.running)
+        secondaryText: !page.notes || !notesEntry.nt.available ? ""
+            : notesEntry.nt.running ? I18n.tr("Quit")
+            : notesEntry.nt.installed ? I18n.tr("Uninstall")
+            : ""
+        secondaryEnabled: !!page.notes && !notesEntry.nt.busy
+            && (!!notesEntry.nt.running || !!notesEntry.nt.installed)
+        onActivated: {
+            if (!page.notes) return
+            if (notesEntry.nt.installed && !notesEntry.nt.running) page.notes.launch()
+            else if (!notesEntry.nt.installed) page.notes.install()
+        }
+        onSecondaryActivated: {
+            if (!page.notes) return
+            if (notesEntry.nt.running) page.notes.quit()
+            else if (notesEntry.nt.installed) notesUninstallDialog.open()
+        }
+        Text {
+            objectName: "myNotesStatus"
+            Layout.fillWidth: true
+            text: !page.notes ? I18n.tr("Rebuild Settings to manage this extension")
+                : !notesEntry.nt.available ? I18n.tr("The NextKde/Notes source directory was not found")
+                : notesEntry.nt.busy ? I18n.tr("Building My notes…")
+                : notesEntry.nt.code === "BUILD_FAILED" ? I18n.tr("Build failed — open the install log")
+                : notesEntry.nt.code === "SOURCE_MISSING" ? I18n.tr("The NextKde/Notes source directory was not found")
+                : notesEntry.nt.code === "LAUNCH_FAILED" ? I18n.tr("My notes could not be started")
+                : notesEntry.nt.running ? I18n.tr("Turned on · the status bar icon and floating ball are ready")
+                : notesEntry.nt.installed ? I18n.tr("Installed · press “Turn on” to start notes and the floating ball")
+                : I18n.tr("The first launch builds locally and takes about 1–2 minutes")
+            color: page.colors.secondaryText
+            font.pixelSize: 11
+            wrapMode: Text.Wrap
+        }
+        Text {
+            objectName: "myNotesStorage"
+            Layout.fillWidth: true
+            visible: !!page.notes && !!notesEntry.nt.storageRoot && notesEntry.nt.storageRoot.length > 0
+            text: I18n.tr("Notes folder: %1").arg(notesEntry.nt.storageRoot || "")
+            color: page.colors.secondaryText
+            font.pixelSize: 11
+            elide: Text.ElideMiddle
+            wrapMode: Text.NoWrap
+        }
+        RowLayout {
+            Layout.fillWidth: true
+            spacing: 8
+            visible: !!page.notes && !!notesEntry.nt.installed
+            WallpaperTextButton {
+                label: I18n.tr("Open notes")
+                colors: page.colors
+                onClicked: page.notes.openMainWindow()
+            }
+            WallpaperTextButton {
+                label: I18n.tr("View install log")
+                colors: page.colors
+                visible: !!(notesEntry.nt.logPath && notesEntry.nt.logPath.length > 0)
+                onClicked: Qt.openUrlExternally("file://" + notesEntry.nt.logPath)
+            }
+        }
+    }
+
+    Dialog {
+        id: notesUninstallDialog
+        objectName: "myNotesUninstallDialog"
+        parent: Overlay.overlay
+        anchors.centerIn: parent
+        width: Math.min(380, parent ? parent.width - 32 : 380)
+        modal: true
+        title: I18n.tr("Uninstall My notes?")
+        standardButtons: Dialog.Ok | Dialog.Cancel
+        onAccepted: if (page.notes)
+            page.notes.uninstall()
+        contentItem: Text {
+            text: I18n.tr("Only the program is removed; your Markdown notes stay untouched.")
+            color: page.colors.primaryText
+            wrapMode: Text.Wrap
+        }
+    }
     Dialog {
         id: uninstallDialog
         objectName: "kmusicUninstallDialog"
