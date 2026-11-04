@@ -1,0 +1,77 @@
+import QtQuick
+import QtTest
+
+TestCase {
+    id: root
+    name: "StageStaticSidebar"
+    property bool open: true
+    property bool drawerRetracted: false
+    property real _retractPx: 0
+    property real _retractFull: 284
+    property string hoveredKey: ""
+    property string _dwellKey: ""
+    property Timer _hoverDwellTimer: Timer {}
+    property string modelDesktop: "desk1"
+    property bool opaqueAtCommit: false
+    function _abortDrag() {}
+    function _updateHitRegionExtent() {}
+    function scheduleLivePublish() {}
+    function syncCards() {
+        if (desktopTransition.deferSync(windowService.currentDesktopId))
+            return
+        modelDesktop = windowService.currentDesktopId
+        opaqueAtCommit = _committingDesktop
+    }
+    QtObject {
+        id: windowService
+        property string currentDesktopId: "desk1"
+        property bool desktopTransitionActive: false
+    }
+    // PRODUCTION_TRANSITION
+    // PRODUCTION_RETRACT
+
+    function init() {
+        root.open = false
+        windowService.desktopTransitionActive = false
+        windowService.currentDesktopId = "desk1"
+        root.drawerRetracted = false
+        root._retractPx = 0
+        root.open = true
+        root.opaqueAtCommit = false
+    }
+    function cleanup() { root.open = false }
+
+    function test_visible_sidebar_stays_in_place_until_destination_settles() {
+        windowService.desktopTransitionActive = true
+        windowService.currentDesktopId = "desk2"
+        wait(350)
+        compare(root.modelDesktop, "desk1")
+        compare(root._retractPx, 0)
+        windowService.desktopTransitionActive = false
+        tryCompare(root, "modelDesktop", "desk2")
+        compare(root._retractPx, 0)
+        verify(root.opaqueAtCommit)
+    }
+    function test_switching_to_fullscreen_does_not_retract_mid_switch() {
+        windowService.desktopTransitionActive = true
+        windowService.currentDesktopId = "desk2"
+        root.drawerRetracted = true
+        wait(100)
+        compare(root._retractPx, 0)
+        windowService.desktopTransitionActive = false
+        tryCompare(root, "modelDesktop", "desk2")
+        compare(root._retractPx, root._retractFull)
+    }
+    function test_leaving_fullscreen_does_not_slide_old_cards_in_mid_switch() {
+        root.drawerRetracted = true
+        compare(root._retractPx, root._retractFull)
+        windowService.desktopTransitionActive = true
+        windowService.currentDesktopId = "desk2"
+        root.drawerRetracted = false
+        wait(100)
+        compare(root._retractPx, root._retractFull)
+        windowService.desktopTransitionActive = false
+        tryCompare(root, "modelDesktop", "desk2")
+        compare(root._retractPx, 0)
+    }
+}

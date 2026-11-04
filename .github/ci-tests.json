@@ -17,6 +17,7 @@
     "kos-platform.keep-awake",
     "kos-platform.kwin-shortcut-conflict",
     "kos-platform.desktop-transition",
+    "kos-stage.desktop-policy",
     "kos-platform.startup",
     "kos-platform.media-feedback",
     "kos-platform.file-copy",

@@ -57,6 +57,12 @@ assert(parsedCard.length >= 30,
     `suspiciously few parsed fields (${parsedCard.length}) — parser moved?`);
 assert(published.has("winId"), "v3 winId field missing from publish");
 cases += 2;
+assert(sidebar.includes("const desktopId = desktopTransition._displayedDesktopId"),
+    "live payload must identify the displayed model, not the pending desktop");
+assert(sidebar.includes("desktopId: desktopId, cards: out"), "desktop commit field missing");
+assert(reloadBlock.includes('obj.value(QStringLiteral("desktopId"))'),
+    "effect must consume the desktop commit field");
+cases += 3;
 
 // 反向：发布侧死字段检测（白名单=发布但特效有意不读的键）
 const publishWhitelist = new Set([]);

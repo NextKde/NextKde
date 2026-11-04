@@ -1183,7 +1183,7 @@ PanelWindow {
                     engaging: engaging,
                     dropHover: slot.cardItem.dropHovered,
                     dwellHint: slot.cardItem.dwellHint,
-                    fade: slot.opacity * desktopTransition.progress,
+                    fade: slot.opacity,
                     hoverScale: p.hoverScale, hoverTilt: p.hoverTilt,
                     hoverMs: p.hoverMs,
                     hoverDwellMs: p.hoverDwellMs !== undefined ? p.hoverDwellMs : 0,
@@ -1202,8 +1202,9 @@ PanelWindow {
         // "at 是首键/卡字段不叫 at"的隐式正则约定
         // 启动台打开时照常发布、卡片留在原位——启动台不再收起抽屉
         //（2026-10-18 用户定案）；全屏/侵占让位的滑出仍逐帧发布
-        const body = { cards: out }
-        const json = JSON.stringify({ at: Date.now(), cards: out })
+        const desktopId = desktopTransition._displayedDesktopId
+        const body = { desktopId: desktopId, cards: out }
+        const json = JSON.stringify({ at: Date.now(), desktopId: desktopId, cards: out })
         const payloadChanged = JSON.stringify(body) !== root._lastLiveBody
         const now = Date.now()
         if (payloadChanged || now - root._lastLiveWriteAt > 10000) {
@@ -2247,19 +2248,17 @@ PanelWindow {
         return JSON.stringify({ requested: uuid })
     }
 
+    property bool _committingDesktop: false
     StageDesktopTransition {
         id: desktopTransition
         desktopId: WindowService.currentDesktopId
         enabled: root.open
-        hasCards: cardModel.count > 0
-        offscreen: root._retractPx >= root._retractFull - 1
-        rightSide: root.rightSide
         blocked: WindowService.desktopTransitionActive
-        onCommit: root.syncCards()
-        onProgressChanged: {
+        onCommit: {
+            root._committingDesktop = true
+            root.syncCards()
+            root._committingDesktop = false
             root.scheduleLivePublish()
-            if (!active)
-                root._updateHitRegionExtent()
         }
         onActiveChanged: {
             if (active) {
@@ -2267,6 +2266,8 @@ PanelWindow {
                 root.hoveredKey = ""
                 root._hoverDwellTimer.stop()
                 root._dwellKey = ""
+            } else {
+                root._retractPx = root.drawerRetracted ? root._retractFull : 0
             }
             root._updateHitRegionExtent()
         }
@@ -2291,8 +2292,6 @@ PanelWindow {
             // 抽屉滑移：收起时滑向常驻侧屏缘（左条向左/右条向右），
             // 发布姿态经 mapToItem 自动跟随
             + (root.rightSide ? root._retractPx : -root._retractPx)
-            + desktopTransition.offset
-        opacity: desktopTransition.progress
         anchors {
             // 顶距跟随顶栏厚度 + 扇叠/辉光上探余量（顶栏让位修复）：
             // 多窗卡的扇叠背板向左上探出（静置 ~16px、悬停扩散 ~26-
@@ -2466,6 +2465,7 @@ PanelWindow {
                     rowsJson: slot.rowsJson
                     merged: slot.merged
                     enterInstant: slot.enterInstant
+                    enterOpaque: root._committingDesktop
                     dropHovered: root._dropMergeKey === slot.appKey
                     // 驻留预示 = 指针在候选上计时中；中心合并预示 =
                     // 被拖卡自身进了屏幕中心区且前台可并组
@@ -2668,7 +2668,8 @@ PanelWindow {
         NumberAnimation { duration: 260; easing.type: Easing.OutCubic }
     }
     onDrawerRetractedChanged: {
-        root._retractPx = drawerRetracted ? root._retractFull : 0
+        if (!desktopTransition || !desktopTransition.active)
+            root._retractPx = drawerRetracted ? root._retractFull : 0
         _updateHitRegionExtent()
         scheduleLivePublish()
     }
@@ -2926,7 +2927,6 @@ PanelWindow {
         return JSON.stringify({ open: root.open, visible: root.visible,
             desktopTransition: { active: desktopTransition.active,
                 blocked: desktopTransition.blocked,
-                progress: desktopTransition.progress,
                 displayed: desktopTransition._displayedDesktopId,
                 pending: desktopTransition._pendingDesktopId },
             chromeOwned: root.liveChromeOwned,

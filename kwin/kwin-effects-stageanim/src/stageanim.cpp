@@ -10,6 +10,7 @@
 */
 
 #include "stageanim.h"
+#include "stage-desktop-policy.h"
 #include "effect/effecthandler.h"
 #include "opengl/glutils.h"
 #include "compositor.h"
@@ -740,16 +741,10 @@ StageAnimEffect::paintScreen(const RenderTarget &renderTarget, const RenderViewp
 #else
         return;
 #endif
-    if (effects->activeFullScreenEffect())
-#ifdef KOS_KWIN_PAINT_RESULT_API
-        return painted;
-#else
-        return;
-#endif
     // 锁屏守卫：后置通道画在场景（含锁屏窗口）之上，无此判断＝锁屏时
     // 卡列仍悬浮在锁屏画面上（2026-10-09 用户实报"锁屏时卡还在"）。
     // 软件光标补绘在 drawLiveCards 尾部，同被此闸挡住
-    if (effects->isScreenLocked())
+    if (!liveOverlayAllowed())
 #ifdef KOS_KWIN_PAINT_RESULT_API
         return painted;
 #else
@@ -1469,6 +1464,7 @@ void StageAnimEffect::reloadLiveCards()
     qCDebug(STAGEANIM_LOG) << "RELOAD enter";
     QSet<QString> wanted;
     QVector<std::tuple<QString, LiveCardPose, CardMeta>> entries;
+    QString publishedDesktopId;
     QFile f(m_livePath);
     const QFileInfo publisherInfo(m_livePath);
     const bool fileMissing = !publisherInfo.exists();
@@ -1487,6 +1483,7 @@ void StageAnimEffect::reloadLiveCards()
         m_lastLiveReadMtime = QFileInfo(m_livePath).lastModified();
         {
             const auto obj = doc.object();
+            publishedDesktopId = obj.value(QStringLiteral("desktopId")).toString();
             const auto arr = obj.value(QStringLiteral("cards")).toArray();
             for (const auto &v : arr) {
                 const auto o = v.toObject();
@@ -1604,8 +1601,26 @@ void StageAnimEffect::reloadLiveCards()
     //（reload 与 33ms 帧钟共用——只靠 reload 评估时，发布文件静默期
     //（载荷去重后无写）无 reload 可触发，被吞的卡满 alpha 卡在屏上直
     // 到下一次发布变化或 10s 兜底，"合并后三张卡/残影到切换才消失"的根因）。
+    const bool desktopChanged = !publishedDesktopId.isEmpty() && !m_liveDesktopId.isEmpty()
+        && publishedDesktopId != m_liveDesktopId;
+    if (!publishedDesktopId.isEmpty())
+        m_liveDesktopId = publishedDesktopId;
+    bool changed = false;
+    if (desktopChanged) {
+        // Shell held the old desktop's model throughout the switch. Replace
+        // it now, without the missing-card grace leaving ghost cards behind.
+        for (auto it = m_liveCards.begin(); it != m_liveCards.end();) {
+            if (wanted.contains(it.key())) {
+                ++it;
+                continue;
+            }
+            releaseLiveCard(**it);
+            it = m_liveCards.erase(it);
+            changed = true;
+        }
+    }
     m_liveWanted = wanted;
-    bool changed = expireAbsentLiveCards();
+    changed = expireAbsentLiveCards() || changed;
     for (const auto &e : entries) {
         const QString &eid = std::get<0>(e);
         // 渲染窗口匹配：优先 winId（v3 协议，id=组键）；旧载荷无 winId
@@ -1672,6 +1687,11 @@ void StageAnimEffect::reloadLiveCards()
                 card->fadeTl = TimeLine(card->enterInstant
                     ? card->animMs : card->enterMs);
                 card->fadeAnimating = true;
+            }
+            if (desktopChanged && w->isMinimized()) {
+                card->alpha = card->alphaFrom = card->alphaTo = 1.0;
+                card->fadeAnimating = false;
+                card->enterInstant = true;
             }
             if (card->enterInstant) {
                 // 收编落卡（老 QML enterInstant 语义）：**只淡入**，时长=
@@ -2136,6 +2156,35 @@ void StageAnimEffect::renderLiveTexture(LiveCard &card)
     }
     GLFramebuffer::popFramebuffer();
     card.dirty = false;
+}
+
+bool StageAnimEffect::liveOverlayAllowed() const
+{
+    return stageOverlayAllowed<Effect>(effects->isScreenLocked(), effects->activeFullScreenEffect(),
+        {effects->findEffect(QStringLiteral("slide")),
+         effects->findEffect(QStringLiteral("cubeslide")),
+         effects->findEffect(QStringLiteral("fadedesktop"))});
+}
+
+QString StageAnimEffect::debug(const QString &parameter) const
+{
+    if (parameter != QLatin1String("live-cards"))
+        return Effect::debug(parameter);
+    QJsonArray cards;
+    for (const auto &card : m_liveCards) {
+        const QRectF rect = card->target.rect;
+        cards.append(QJsonObject{{QStringLiteral("id"), card->id},
+            {QStringLiteral("alpha"), card->alpha}, {QStringLiteral("fade"), card->fade},
+            {QStringLiteral("x"), rect.x()}, {QStringLiteral("y"), rect.y()},
+            {QStringLiteral("w"), rect.width()}, {QStringLiteral("h"), rect.height()},
+            {QStringLiteral("renderCount"), double(card->renderCount)},
+            {QStringLiteral("paintCount"), double(card->paintCount)}});
+    }
+    return QString::fromUtf8(QJsonDocument(QJsonObject{
+        {QStringLiteral("fullscreenEffect"), effects->activeFullScreenEffect() != nullptr},
+        {QStringLiteral("paintAllowed"), liveOverlayAllowed()},
+        {QStringLiteral("desktopId"), m_liveDesktopId},
+        {QStringLiteral("cards"), cards}}).toJson(QJsonDocument::Compact));
 }
 
 bool StageAnimEffect::liveCardPaintable(const LiveCard &card) const

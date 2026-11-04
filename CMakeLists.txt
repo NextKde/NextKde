@@ -731,6 +731,10 @@ find_package(Qt6 6.5 REQUIRED COMPONENTS
 find_package(KF6WindowSystem 6.0 QUIET)
 if(BUILD_TESTING)
     find_package(Qt6 6.5 REQUIRED COMPONENTS Test)
+    add_executable(kos-stage-desktop-policy-test
+        kwin/kwin-effects-stageanim/tests/test_desktop_policy.cpp)
+    add_test(NAME kos-stage.desktop-policy COMMAND kos-stage-desktop-policy-test)
+    set_tests_properties(kos-stage.desktop-policy PROPERTIES LABELS platform TIMEOUT 10)
     qt_add_executable(kos-legacy-glass-blur-test
         kwin/glass-effect/tests/test_legacy_blur_region.cpp)
     target_link_libraries(kos-legacy-glass-blur-test PRIVATE Qt6::Core Qt6::Gui)
@@ -881,6 +885,22 @@ if(KOS_BUILD_KWIN_PLUGINS)
     add_subdirectory(kwin/kos-bridge)
     add_subdirectory(kwin/kos-decoration)
     add_subdirectory(kwin/kwin-effects-stageanim)
+    if(BUILD_TESTING AND KOS_PYTHON_EXECUTABLE)
+        find_program(KOS_STAGE_QUICKSHELL_EXECUTABLE NAMES quickshell qs)
+        find_program(KOS_STAGE_KWIN_EXECUTABLE NAMES kwin_wayland)
+        find_program(KOS_STAGE_QDBUS_EXECUTABLE NAMES qdbus6)
+        find_program(KOS_STAGE_DBUS_EXECUTABLE NAMES dbus-run-session)
+        if(KOS_STAGE_QUICKSHELL_EXECUTABLE AND KOS_STAGE_KWIN_EXECUTABLE
+                AND KOS_STAGE_QDBUS_EXECUTABLE AND KOS_STAGE_DBUS_EXECUTABLE)
+            add_test(NAME kos-stage.static-desktop-compositor
+                COMMAND ${KOS_PYTHON_EXECUTABLE}
+                    ${CMAKE_CURRENT_SOURCE_DIR}/tests/stage-visibility/static_compositor.py
+                    $<TARGET_FILE:stageanim13>
+                    --quickshell ${KOS_STAGE_QUICKSHELL_EXECUTABLE}
+                    --output ${CMAKE_BINARY_DIR}/stage-static-compositor)
+            set_tests_properties(kos-stage.static-desktop-compositor PROPERTIES LABELS ui TIMEOUT 40)
+        endif()
+    endif()
 endif()
 
 # The spatial wallpaper mesh is an optional QML extension, built only when the

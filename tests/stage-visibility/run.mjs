@@ -26,6 +26,13 @@ try {
     copyFileSync(new URL("stage-groups.mjs", stage), join(directory, "stage-groups.mjs"));
     copyFileSync(new URL("StageDesktopTransition.qml", stage), join(directory, "StageDesktopTransition.qml"));
     copyFileSync(new URL("tst_transition.qml", import.meta.url), join(directory, "tst_transition.qml"));
+    const transition = section("    property bool _committingDesktop:", "    // ── 卡片堆叠区")
+        .replaceAll("WindowService.", "windowService.");
+    const retract = section("    onDrawerRetractedChanged:", "    on_RetractPxChanged:");
+    const staticFixture = readFileSync(new URL("tst_static_sidebar.qml.in", import.meta.url), "utf8");
+    writeFileSync(join(directory, "tst_static_sidebar.qml"), staticFixture
+        .replace("// PRODUCTION_TRANSITION", transition)
+        .replace("// PRODUCTION_RETRACT", retract));
     const fixture = readFileSync(new URL("tst_visibility.qml.in", import.meta.url), "utf8");
     assert.ok(fixture.includes("// PRODUCTION_DRAWER"));
     writeFileSync(join(directory, "tst_visibility.qml"),
