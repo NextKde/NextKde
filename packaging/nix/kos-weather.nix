@@ -2,20 +2,24 @@
   lib,
   stdenv,
   cmake,
+  ninja,
+  pkg-config,
+  go,
   kdePackages,
+  # Fixed-output source of NextKde/kos-apps, never the core desktop tree.
   src,
+  version ? "0.2.0",
 }:
 
-let
-  go-service = kdePackages.callPackage ./shell-data-service.nix { inherit src; };
-in
 stdenv.mkDerivation {
   pname = "kos-weather";
-  version = lib.removeSuffix "\n" (builtins.readFile "${src}/VERSION");
-  inherit src;
+  inherit src version;
 
   nativeBuildInputs = [
     cmake
+    ninja
+    pkg-config
+    go
     kdePackages.extra-cmake-modules
     kdePackages.qttools
     kdePackages.wrapQtAppsHook
@@ -24,41 +28,27 @@ stdenv.mkDerivation {
   buildInputs = [
     kdePackages.qtbase
     kdePackages.qtdeclarative
+    kdePackages.qtsvg
+    kdePackages.kwindowsystem
   ];
 
-  # Patch out the Go data-service build from CMake.
-  # The real data service is built separately via buildGoModule (shell-data-service.nix).
-  postPatch = ''
-    # Root CMakeLists.txt: skip data-service subdirectory
-    substituteInPlace CMakeLists.txt \
-      --replace-fail 'add_subdirectory(services/data-service)' '# skipped: data-service built separately'
-
-    # apps/weather/CMakeLists.txt: remove dependency on data-service build target
-    substituteInPlace apps/weather/CMakeLists.txt \
-      --replace-fail 'add_dependencies(kos-weather kos-data-service-build)' '# skipped: data-service built separately'
-    substituteInPlace apps/weather/CMakeLists.txt \
-      --replace-fail 'target_compile_definitions(kos-weather PRIVATE' 'target_compile_definitions(kos-weather PRIVATE'
-  '';
-
+  # The exported project needs CMake >=3.25, Qt >=6.8 and Go >=1.22.
+  # Its stdlib-only backend builds offline and installs bin/kos-weather-backend;
+  # no core data service, user unit or D-Bus activation file belongs to this app.
   cmakeFlags = [
     "-DCMAKE_BUILD_TYPE=Release"
-    "-DKOS_BUILD_PLATFORM=OFF"
-    "-DKOS_BUILD_KWIN_PLUGINS=OFF"
-    "-DKOS_BUILD_CALENDAR=OFF"
-    "-DKOS_BUILD_TODO=OFF"
-    "-DKOS_BUILD_WEATHER=ON"
+    "-DKOS_APPS=weather"
     "-DBUILD_TESTING=OFF"
   ];
 
-  # Install the pre-built data service alongside the weather binary
-  postInstall = ''
-    mkdir -p $out/libexec
-    ln -s ${go-service}/libexec/kos-data-service $out/libexec/kos-data-service
+  # Go's build cache must be writable inside the Nix sandbox.
+  preBuild = ''
+    export GOCACHE="$TMPDIR/go-cache"
   '';
 
   meta = with lib; {
     description = "KOS Weather - standalone Qt Quick forecast application";
-    homepage = "https://gitee.com/xiaoyintx_ciallo/test";
+    homepage = "https://github.com/NextKde/kos-apps";
     license = licenses.gpl3;
     platforms = platforms.linux;
   };

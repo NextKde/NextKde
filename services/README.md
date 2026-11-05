@@ -6,9 +6,11 @@ snapshots, and the shared weather cache. Live desktop integration belongs to the
 `platform/` service. Both services expose versioned JSONL sockets documented in
 `shared/contracts/`.
 
-`pim-service/` builds `kos-pim-service`, the D-Bus owner of calendar, task,
-reminder, and widget snapshot state. Its activation and persistence contracts
-are described in [PimArchitecture](../docs/PimArchitecture.md).
+`kos-pim-service`, the D-Bus owner of calendar, task, reminder and widget snapshot
+state, is built and installed by the independent
+[NextKde/kos-apps](https://github.com/NextKde/kos-apps) repository, not this
+service tree. Core widgets consume its identity-bound read-only summary contract
+described in [PimArchitecture](../docs/PimArchitecture.md).
 
 `ai/` supplies the optional `kos-ai-worker` used by the platform service for
 spatial wallpaper preparation. It is a subprocess worker rather than a

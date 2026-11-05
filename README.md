@@ -30,7 +30,7 @@ Liquid glass, a floating dock, and a workspace you can make your own.</p>
 <p align="center"><sub>The NextKDE desktop · macOS appearance · Theme settings</sub></p>
 
 NextKDE's desktop experience extends to a growing family of companion apps:
-Calendar, Weather, Calculator, and Todo are available as optional apps, while
+Calendar (including tasks), Weather and Calculator are available as optional apps, while
 [KMusic](https://github.com/NextKde/KMusic) brings music into the mix. Mail and
 File Manager are planned for the future.
 
@@ -53,9 +53,12 @@ KWin, NetworkManager, PipeWire, BlueZ, and systemd.
 - **Desktop files** — open, rename, copy, move, delete, and choose an application.
 - **Settings & motion** — configure the bar, dock, launcher, shortcuts, window decoration, and animations.
 
-Calendar, Calculator, Todo and Weather are available as
+Calendar (including tasks), Calculator and Weather are available as
 [optional standalone applications](apps/README.md). `./tools/kosctl install apps`
-installs these four. ListenFree and its audio SDK require an explicit
+now uses signed GitHub Release Flatpak bundles, with no hosted NextKde app source.
+Signed distribution is not yet available,
+so new installations remain disabled. Legacy source builds require explicit
+`--backend=source`. ListenFree requires an explicit
 `./tools/kosctl install apps --with-listenfree`;
 see the [application installation guide](docs/GettingStarted.md#optional-standalone-applications).
 

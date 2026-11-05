@@ -64,9 +64,11 @@ three live desktop sessions. Clearly label unverified distributions, features an
 - Test fresh **default core install**, installed stable → candidate upgrade, same-version reinstall,
   candidate → previous supported tag reinstall rollback, retained settings and backup recovery.
 - Test the actual **`./tools/kosctl install apps`** default command, not a manual CMake substitute.
-  Confirm four standard apps, ListenFree OFF, no SDK preparation, unchanged music MIME/legacy player,
-  unchanged core Settings, an old ON cache reset to OFF and a fresh apps-only prefix.
-  Test explicit audio selection separately; missing audio dependencies must fail before SDK build.
+  Confirm three independent user Flatpaks (Calendar includes tasks), ListenFree unselected,
+  no source SDK preparation, unchanged music MIME/legacy player and core Settings.
+  Confirm missing approved releases/runtime configuration fails explicitly, without source fallback
+  or automatic remote setup. Test explicit ListenFree and `--backend=source` separately;
+  check core cache migration, offline uninstall and preservation of app data/shared runtimes.
 - Verify service activation/autostart, reboot/logout plugin loading, launcher/Dock/bar/settings/
   notifications and affected app interactions. Test uninstall/reboot recovery to Plasma.
 - Verify invalid refs, dirty sources, unavailable API/network and build/deploy failures stop correctly;

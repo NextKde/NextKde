@@ -16,11 +16,18 @@ KDE Plasma 6 **Wayland**, Quickshell 0.3.x. Start with this file, then
   [versioned platform contract](shared/contracts/platform.v1.md); review disconnected/error paths.
 - Local atomic persistence of existing module-owned state is a narrow legacy exception.
   New integration belongs in the service. Preserve state roots, socket envelopes and migrations.
-- Core installation owns the complete Settings/runtime QML trees. The optional apps installer
-  must not overwrite fragments of core Settings. Standard apps are Calendar, Calculator, Todo
-  and Weather; ListenFree and its SDK require explicit opt-in. Legacy Music source is removed;
-  preserve its installed files, user data and audio associations on standard upgrades.
-  Only explicit ListenFree installation owns legacy player migration.
+- Calendar (including tasks), Calculator, Weather and ListenFree are owned by the independent
+  NextKde/kos-apps repository (first three, `apps/org.nextks.<app>`) and
+  NextKde/ListenFree, including their private PIM/runtime code. The first three
+  share a version/Release, not an installation; source is published, but signed
+  packages are not yet released. Root app presets/targets and extracted app sources
+  are removed; deprecated ON build switches fail explicitly.
+- Core installation owns the complete Settings/runtime QML trees. The compatibility
+  apps dispatcher defaults to signed Flatpak bundles; source is explicit
+  --backend=source. No approved Release/runtime policy means unavailable.
+  Default selection is Calendar (including tasks), Calculator and Weather; ListenFree is explicit.
+  Lifecycle actions never activate services, modify MIME defaults, remove legacy players
+  or overwrite core Settings. Core data-service remains a Shell dependency.
 - Never hot-replace/reload KWin plugins in a running compositor. Install, then logout/login or reboot.
 - Run project verification only in a VM or hosted CI. Preserve unrelated worktree changes.
 

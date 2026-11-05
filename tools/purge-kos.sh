@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# purge-kos.sh — remove every KOS install artifact so the next
+# purge-kos.sh — remove core desktop install artifacts so the next
 # `./tools/kosctl install` is a true clean install.
 #
 # Workflow:
@@ -9,10 +9,9 @@
 #      it runs unloadEffect + blur restore BEFORE deleting the /usr .so files,
 #      using the state it saved at install time. This step will ask for sudo to
 #      remove /usr/lib/qt6/plugins/...
-#   3. Sweep leftovers uninstall leaves behind: empty share dirs, apps-era
-#      files (install-apps.sh产物, not owned by kosctl), stray systemd wants
-#      links, the optional lockscreen/app surfaces, and any kwinrc keys that
-#      survived.
+#   3. Sweep core leftovers: empty share dirs, stray core systemd wants links,
+#      optional lockscreen surfaces, and surviving core kwinrc keys.
+#      Independent applications, PIM, their data and registrations are preserved.
 #   4. daemon-reload, then verify every target is gone.
 #
 # Idempotent: safe to run multiple times. Read-only until you confirm.
@@ -26,7 +25,6 @@ fi
 
 project_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 prefix="${KOS_PREFIX:-$HOME/.local}"
-apps_prefix="${KOS_INSTALL_PREFIX:-$prefix}"
 data_dir="${XDG_DATA_HOME:-$HOME/.local/share}"
 cache_dir="${XDG_CACHE_HOME:-$HOME/.cache}"
 state_dir="${XDG_STATE_HOME:-$HOME/.local/state}"
@@ -37,7 +35,7 @@ wants_dir="$unit_dir/graphical-session.target.wants"
 kwinrc="$config_dir/kwinrc"
 
 # Never accept a root/home/source directory as a deletion root through overrides.
-for root in "$prefix" "$apps_prefix" "$data_dir" "$cache_dir" "$state_dir" "$config_dir"; do
+for root in "$prefix" "$data_dir" "$cache_dir" "$state_dir" "$config_dir"; do
     case "$root" in
         /*) ;;
         *) echo "Paths must be absolute: $root" >&2; exit 2 ;;
@@ -82,18 +80,14 @@ core_targets=(
 # --- leftovers that uninstall does NOT cover (sweep these) ---
 leftover_targets=(
     # empty share dirs (uninstall deletes contents, leaves the dirs)
-    "$prefix/share/kos"
+    "$prefix/share/kos/settings"
+    "$prefix/share/kos/platform"
     "$prefix/share/shared/qml"
-    # apps-era files (install-apps.sh产物, kosctl uninstall does not touch)
-    "$prefix/lib/quickshell"
-    "$prefix/bin/kos-pim-service"
-    "$unit_dir/kos-pim-service.service"
     "$unit_dir/shell-data-service.service"
     # stray wants symlinks (orphans can survive service disable)
     "$wants_dir/kos-shell.service"
     "$wants_dir/kos-platform.service"
     "$wants_dir/kos-data.service"
-    "$wants_dir/kos-pim-service.service"
     "$wants_dir/shell-data-service.service"
     # optional surfaces (uninstall removes them if installed; sweep to be sure)
     "$prefix/share/plasma/shells/org.kos.desktop"
@@ -114,7 +108,8 @@ leftover_targets=(
     /usr/share/sddm/themes/kos
     /etc/sddm.conf.d/kos-theme.conf
     "$config_dir/Quickshell/kos-settings.conf"
-    "$data_dir/kos"
+    # $data_dir/kos also contains independently owned Calendar PIM data.
+    # Preserve the shared root rather than recursively deleting application data.
     "$cache_dir/kos"
     "$cache_dir/kos-settings"
     "$cache_dir/kos-platform"
@@ -131,7 +126,7 @@ leftover_targets=(
 )
 
 # Include explicit build overrides, but never source/home/root.
-for build_root in "${KOS_BUILD_DIR:-}" "${KOS_APPS_BUILD_DIR:-}"; do
+for build_root in "${KOS_BUILD_DIR:-}"; do
     [[ -n "$build_root" ]] || continue
     case "$build_root" in
         /|"$HOME"|"$project_dir"|*/../*|*/..|*/./*|*/.|[!/]*)
@@ -166,20 +161,11 @@ for result in "$project_dir/result" "$project_dir/result-kos"; do
 done
 shopt -s nullglob
 leftover_targets+=("$prefix"/lib/libonnxruntime.so* "$prefix"/lib/libonnxruntime_providers_shared.so)
-for app in kos-settings kos-weather kos-calendar kos-todo kos-music kos-pim-service kos-music-lx-source-host; do
-    leftover_targets+=("$apps_prefix/bin/$app"
-        "$apps_prefix/share/applications/$app.desktop"
-        "$apps_prefix/share/icons/hicolor/scalable/apps/$app.svg"
-        "$config_dir/NextKde/$app.conf"
-        "$cache_dir/$app")
-done
-leftover_targets+=("$config_dir/NextKde/KosApplications.conf"
-    "$apps_prefix/bin/kos-music-lx-source-host.js"
-    "$apps_prefix/share/dbus-1/services/org.nextkde.Kos.Pim1.service"
-    "$apps_prefix"/share/metainfo/org.nextkde.Kos.*.metainfo.xml
-    "$apps_prefix/lib/quickshell")
-for units_root in "$unit_dir" "$prefix/share/systemd/user" "$apps_prefix/share/systemd/user"; do
-    for unit in kos-shell kos-platform kos-data kos-pim-service kos-shell-init shell-data-service; do
+# Settings is core-owned; application registrations/preferences are not.
+leftover_targets+=("$prefix/share/icons/hicolor/scalable/apps/kos-settings.svg"
+    "$config_dir/NextKde/kos-settings.conf")
+for units_root in "$unit_dir" "$prefix/share/systemd/user"; do
+    for unit in kos-shell kos-platform kos-data kos-shell-init shell-data-service; do
         leftover_targets+=("$units_root/$unit.service" "$units_root/$unit.service.d")
         for link in "$units_root"/*.wants/"$unit.service" "$units_root"/*.requires/"$unit.service"; do
             leftover_targets+=("$link")
@@ -203,6 +189,24 @@ kwinrc_keys=(
     kos_dock_window_animationEnabled
     quickshell_context_menu_inputEnabled
 )
+
+# A core override/symlink must not turn a core target into an independent app
+# path (or an ancestor of app state). Abort before uninstall, never unlink it.
+protected_app_roots=("$data_dir/nextkde-apps" "$state_dir/nextkde-apps"
+    "$data_dir/kos/pim" "$config_dir/NextKde/KosApplications.conf")
+for target in "${core_targets[@]}" "${leftover_targets[@]}"; do
+    resolved=$(realpath -m -- "$target") || exit 2
+    lexical=$(realpath -ms -- "$target") || exit 2
+    for protected in "${protected_app_roots[@]}"; do
+        protected=$(realpath -m -- "$protected") || exit 2
+        for candidate in "$resolved" "$lexical"; do
+            if [[ "$candidate" == "$protected" || "$candidate/" == "$protected/"* || "$protected/" == "$candidate/"* ]]; then
+                echo "Core purge target overlaps independent application state: $target" >&2
+                exit 2
+            fi
+        done
+    done
+done
 
 # --- scan what is actually present ---
 present_core=()
@@ -238,7 +242,7 @@ if (( ${#present_core[@]} == 0 )); then
 fi
 for f in "${present_core[@]}"; do echo "    $f"; done
 echo
-echo "[2] Full reset (includes imported gallery copies, settings, caches, models and builds):"
+echo "[2] Core reset (core settings, caches, models and builds; mixed app data preserved):"
 if (( ${#present_leftover[@]} == 0 )); then
     echo "    (none)"
 fi
@@ -250,7 +254,8 @@ if (( ${#present_keys[@]} == 0 )); then
 fi
 for k in "${present_keys[@]}"; do echo "    $k"; done
 echo
-echo "Full reset: imported gallery copies, app data (including calendar/tasks), settings, models, caches and builds are deleted."
+echo "Core reset: core settings, models, caches and builds are deleted; mixed app data roots are preserved."
+echo "Independent apps, ownership metadata, user data (including calendar/tasks), PIM units and processes are preserved."
 echo "Original pictures outside KOS directories and shared OS packages (Qt/OpenCV/etc.) are preserved."
 echo "NixOS declarative services must first be disabled in configuration and rebuilt."
 [[ "${1:-}" == --dry-run ]] && exit 0
@@ -265,7 +270,7 @@ fi
 # recreate models/thumbnail caches while the deletion sweep is running.
 if command -v systemctl >/dev/null 2>&1; then
     systemctl --user disable --now kos-shell.service kos-platform.service \
-        kos-data.service kos-pim-service.service shell-data-service.service \
+        kos-data.service shell-data-service.service \
         kos-shell-init.service 2>/dev/null || true
 fi
 pids=()
@@ -275,7 +280,7 @@ for proc in /proc/[0-9]*; do
     name=${exe##*/}
     name=${name% (deleted)}
     case "$name" in
-        kos-platform|kos-ai-worker|kos-data-service|kos-pim-service|kos-settings|kos-weather|kos-calendar|kos-todo|kos-music|kos-music-lx-source-host)
+        kos-platform|kos-ai-worker|kos-data-service|kos-settings)
             pids+=("${proc##*/}") ;;
         qs|quickshell)
             mapfile -d '' -t args < "$proc/cmdline" 2>/dev/null || continue
@@ -393,7 +398,7 @@ fi
 if command -v systemctl >/dev/null 2>&1; then
     systemctl --user daemon-reload 2>/dev/null || true
     systemctl --user reset-failed kos-shell.service kos-platform.service kos-data.service \
-        kos-pim-service.service shell-data-service.service 2>/dev/null || true
+        shell-data-service.service 2>/dev/null || true
 fi
 
 if command -v busctl >/dev/null 2>&1; then

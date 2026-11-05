@@ -13,7 +13,7 @@ import "../../shared/qml/i18n"
 ApplicationWindow {
     id: window
     onClosing: function(event) {
-        if (typeof appStore !== "undefined" && appStore.music.busy) {
+        if (typeof appStore !== "undefined" && appStore.anyBusy) {
             event.accepted = false
             window.currentPage = 9
         }
@@ -46,6 +46,10 @@ ApplicationWindow {
     flags: Qt.Window | Qt.FramelessWindowHint
 
     property int currentPage: 1
+    property string requestedApp: ""
+    function revealRequestedApp() {
+        if (servicesPage.item) servicesPage.item.requestReveal()
+    }
     property var pageHistory: [1]
     property int historyIndex: 0
     property bool navigationReady: false
@@ -93,6 +97,7 @@ ApplicationWindow {
         onDisplayedPageChanged: {
             if (pageScroll)
                 pageScroll.contentY = 0
+            if (window.displayedPage === 9) window.revealRequestedApp()
         }
     }
 
@@ -886,10 +891,21 @@ ApplicationWindow {
                     }
 
                     Loader {
+                        id: servicesPage
                         Layout.fillWidth: true
                         active: window.displayedPage === 9
                         visible: active
                         sourceComponent: ServicesSettingsPage {
+                            onRevealRequested: function(card) {
+                                Qt.callLater(function() {
+                                    if (!card || window.displayedPage !== 9) return
+                                    const top = card.mapToItem(pageScroll.contentItem, 0, 0).y
+                                    pageScroll.cancelFlick()
+                                    pageScroll.contentY = Math.max(0, Math.min(top,
+                                        pageScroll.contentHeight - pageScroll.height))
+                                })
+                            }
+                            requestedApp: window.requestedApp
                             store: typeof appStore !== "undefined" ? appStore : null
                             bridge: (typeof settingsBridge !== "undefined") ? settingsBridge : null
                             colors: theme

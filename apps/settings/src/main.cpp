@@ -4,9 +4,16 @@
 #include "SettingsBridge.h"
 #include "SettingsRuntime.h"
 #include "WindowSettings.h"
-#include "../../common/include/KosApp/DesktopTypography.h"
+#include "DesktopTypography.h"
 
 #include <QDebug>
+#include <QCryptographicHash>
+#include <QLocalServer>
+#include <QLocalSocket>
+#include <QPointer>
+#include <QLockFile>
+#include <QDir>
+#include <QStandardPaths>
 #include <QFileInfo>
 #include <QGuiApplication>
 #include <QImage>
@@ -51,6 +58,42 @@ int main(int argc, char* argv[])
     application.setDesktopFileName(QStringLiteral("kos-settings"));
     application.setOrganizationName(QStringLiteral("Quickshell"));
 
+    QString requestedApp;
+    for (const auto &argument : application.arguments()) {
+        if (argument == QLatin1String("--app=calendar") || argument == QLatin1String("--app=weather"))
+            requestedApp = argument.mid(6);
+    }
+    // Installed and development shells must never navigate each other's window.
+    const QByteArray session = QCryptographicHash::hash(qgetenv("KOS_SHELL_DIR"), QCryptographicHash::Sha256).toHex().left(16);
+    const QString navigationPath = QDir(QStandardPaths::writableLocation(QStandardPaths::RuntimeLocation))
+        .filePath(QStringLiteral("kos-settings-navigation-") + QString::fromLatin1(session));
+    QLockFile navigationLock(navigationPath + QStringLiteral(".lock"));
+    QLocalServer navigation;
+    const bool navigationOwner = navigationLock.tryLock(0);
+    if (!navigationOwner && !requestedApp.isEmpty()) {
+        QLocalSocket existing;
+        existing.connectToServer(navigationPath);
+        if (!existing.waitForConnected(1500)) {
+            qWarning() << "Settings navigation is not ready; try again";
+            return 1;
+        }
+        existing.write(requestedApp.toUtf8() + '\n');
+        if (!existing.waitForBytesWritten(1500) || !existing.waitForReadyRead(1500)
+            || existing.readAll() != "ok\n") {
+            qWarning() << "Settings navigation was not acknowledged";
+            return 1;
+        }
+        return 0;
+    }
+    if (navigationOwner) {
+        QLocalServer::removeServer(navigationPath);
+        navigation.setSocketOptions(QLocalServer::UserAccessOption);
+        if (!navigation.listen(navigationPath)) {
+            qWarning() << "Unable to establish Settings navigation" << navigation.errorString();
+            if (!requestedApp.isEmpty()) return 1;
+        }
+    }
+
     SettingsBridge bridge;
     WindowSettings windowSettings;
     PowerSettings powerSettings;
@@ -80,11 +123,52 @@ int main(int argc, char* argv[])
     engine.load(entrypoint);
     if (engine.rootObjects().isEmpty())
         return 1;
+    const auto acceptNavigation = [&] {
+        while (navigation.hasPendingConnections()) {
+            QLocalSocket *client = navigation.nextPendingConnection();
+            client->setReadBufferSize(64);
+            QObject::connect(client, &QLocalSocket::disconnected, client, &QObject::deleteLater);
+            QTimer::singleShot(2000, client, [client] { client->disconnectFromServer(); });
+            const auto receive = [client, &engine] {
+                if (!client->canReadLine()) return;
+                const QByteArray app = client->readLine(64).trimmed();
+                if (app != "calendar" && app != "weather") {
+                    client->disconnectFromServer();
+                    return;
+                }
+                if (engine.rootObjects().isEmpty()) {
+                    client->disconnectFromServer();
+                    return;
+                }
+                QObject *root = engine.rootObjects().constFirst();
+                if (!root->setProperty("requestedApp", QString::fromUtf8(app))
+                    || !root->setProperty("currentPage", 9)) {
+                    client->disconnectFromServer();
+                    return;
+                }
+                QMetaObject::invokeMethod(root, "revealRequestedApp");
+                if (auto *window = qobject_cast<QQuickWindow *>(root)) {
+                    window->show();
+                    window->raise();
+                    window->requestActivate();
+                }
+                client->write("ok\n");
+                client->disconnectFromServer();
+            };
+            QObject::connect(client, &QLocalSocket::readyRead, client, receive);
+            receive();
+        }
+    };
+    QObject::connect(&navigation, &QLocalServer::newConnection, &application, acceptNavigation);
+    QTimer::singleShot(0, &application, acceptNavigation);
     // Generic page selector for probes and manual debugging: --page=N opens
     // contentByPage index N directly (integration status is 6). --page=windows
     // keeps its named form for the existing window-install test.
     for (const QString& argument : application.arguments()) {
-        if (argument == QStringLiteral("--page=windows")) {
+        if (argument == QStringLiteral("--app=calendar") || argument == QStringLiteral("--app=weather")) {
+            engine.rootObjects().constFirst()->setProperty("requestedApp", argument.mid(6));
+            engine.rootObjects().constFirst()->setProperty("currentPage", 9);
+        } else if (argument == QStringLiteral("--page=windows")) {
             engine.rootObjects().constFirst()->setProperty("currentPage", 11);
         } else if (argument.startsWith(QStringLiteral("--page="))) {
             bool ok = false;

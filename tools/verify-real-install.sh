@@ -50,8 +50,7 @@ ck  "kos-shell unit"             "[[ -f \$unit_dir/kos-shell.service ]]"
 ck  "kos-platform running"       "systemctl --user is-active --quiet kos-platform.service"
 ck  "kos-data running"            "systemctl --user is-active --quiet kos-data.service"
 ck  "kos-shell running"           "systemctl --user is-active --quiet kos-shell.service"
-# pim is D-Bus activated on demand and must NOT be resident/enabled.
-ckn "kos-pim NOT enabled (D-Bus activated)" "systemctl --user is-enabled --quiet kos-pim-service.service"
+# Independent Calendar owns PIM lifecycle; core verification does not inspect its unit.
 ck  "kos-platform socket"        "[[ -S \$runtime_dir/kos-platform.sock ]]"
 ck  "kos-data socket"            "[[ -S \$runtime_dir/kos-data.sock ]]"
 
@@ -95,14 +94,8 @@ if [[ -f "$prefix/share/plasma/shells/org.kos.desktop/contents/lockscreen/LockSc
     ck  "laf metadata.json"      "[[ -f \$prefix/share/plasma/look-and-feel/org.kos.desktop/metadata.json ]]"
     ckn "laf no tests/"          "[[ -d \$prefix/share/plasma/look-and-feel/org.kos.desktop/tests ]]"
 fi
-if [[ -x "$prefix/bin/kos-calendar" ]]; then
-    hdr "apps (installed)"
-    for app in calendar todo weather music; do
-        ck "kos-$app binary"    "[[ -x \$prefix/bin/kos-$app ]]"
-        ck "kos-$app desktop"   "[[ -f \$prefix/share/applications/kos-$app.desktop ]]"
-        ck "kos-$app icon"      "[[ -f \$prefix/share/icons/hicolor/scalable/apps/kos-$app.svg ]]"
-    done
-fi
+# Independent app ownership/health is reported by app-installer.py status.
+# Core verification must not assume a monorepo app bundle or require legacy Music.
 
 printf '\n'
 if (( bad > 0 )); then

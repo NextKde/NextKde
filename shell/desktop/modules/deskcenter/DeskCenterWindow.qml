@@ -826,6 +826,32 @@ PanelWindow {
                 }
             }
 
+            // A bounded status strip remains visible even on the smallest card.
+            Rectangle {
+                id: appStatusStrip
+                z: 20
+                anchors { left: parent.left; right: parent.right; bottom: parent.bottom; margins: 4 }
+                readonly property string appKey: card.modelData.id === "weather" ? "weather"
+                    : (card.modelData.id === "calendar" || card.modelData.id === "todo" ? "calendar" : "")
+                readonly property var appRecord: appKey ? IndependentAppWidgetService.record(appKey) : ({})
+                readonly property string statusText: appKey ? IndependentAppWidgetService.feedback(appKey) : ""
+                visible: !!appKey && !!statusText && (appRecord.state !== "ready"
+                    || !!IndependentAppWidgetService.launchErrors[appKey])
+                height: Math.min(38, statusLabel.contentHeight + 8)
+                radius: 5
+                color: "#e6222222"
+                Text {
+                    id: statusLabel
+                    anchors { fill: parent; margins: 4 }
+                    text: parent.statusText
+                    color: "white"
+                    font.pixelSize: 9
+                    wrapMode: Text.Wrap
+                    maximumLineCount: 2
+                    elide: Text.ElideRight
+                }
+            }
+
             // Instantiate only this card's content. `visible: false` keeps a
             // QML tree alive, so the old delegate built every widget for every
             // card even though only one could be shown.
@@ -833,6 +859,7 @@ PanelWindow {
                 id: widgetContentLayer
                 objectName: "widget-content-layer"
                 anchors.fill: parent
+                anchors.bottomMargin: appStatusStrip.visible ? appStatusStrip.height + 8 : 0
                 // The clock resolves monochrome ink in its face. Keep its text
                 // out of the extra saturation texture so it renders at the
                 // window's resolution. Other glass artwork is desaturated.
@@ -1362,7 +1389,13 @@ PanelWindow {
                     Text {
                         anchors.centerIn: parent
                         visible: WeatherService.forecastDays.length === 0
-                        text: WeatherService.loading ? I18n.tr("Loading 7-day forecast…") : I18n.tr("No 7-day forecast")
+                        width: Math.max(0, parent.width - 12)
+                        horizontalAlignment: Text.AlignHCenter
+                        wrapMode: Text.Wrap
+                        maximumLineCount: 3
+                        elide: Text.ElideRight
+                        text: WeatherService.sourceMessage || WeatherService.errorMessage
+                            || (WeatherService.loading ? I18n.tr("Loading 7-day forecast…") : I18n.tr("No 7-day forecast"))
 	                        color: AppearanceTokens.content.ink(Qt.rgba(1, 1, 1, 0.65), 0.65)
                         font.pixelSize: 11
                     }
@@ -1372,8 +1405,8 @@ PanelWindow {
                     cursorShape: Qt.PointingHandCursor
                     onClicked: {
                         const locationId = String(WeatherService.location?.id ?? "")
-                        AppActionService.launchById("kos-weather",
-                            locationId ? ["--location", locationId] : [])
+                        IndependentAppWidgetService.open("weather",
+                            locationId ? { location: locationId } : {})
                     }
                 }
             }
@@ -2294,8 +2327,7 @@ PanelWindow {
                         MouseArea {
                             anchors.fill: parent
                             cursorShape: Qt.PointingHandCursor
-                            onClicked: AppActionService.launchById(
-                                "kos-calendar", ["--view", "today"])
+                            onClicked: IndependentAppWidgetService.open("calendar", { view: "today" })
                         }
 
                         // A parent Item's `clip` is rectangular, not rounded.
@@ -2391,10 +2423,10 @@ PanelWindow {
                                     MouseArea {
                                         anchors.fill: parent
                                         cursorShape: Qt.PointingHandCursor
-                                        onClicked: AppActionService.launchById("kos-calendar", [
-                                            "--view", "reminders", "--item", String(PimWidgetService.value(parent.modelData,
+                                        onClicked: IndependentAppWidgetService.open("calendar", {
+                                            view: "reminders", item: String(PimWidgetService.value(parent.modelData,
                                                 "id", PimWidgetService.value(parent.modelData, "seriesId", "")))
-                                        ])
+                                        })
                                     }
                                 }
                             }
@@ -2408,8 +2440,12 @@ PanelWindow {
                                 // activates the service on demand.
                                 text: PimWidgetService.ready
                                     ? I18n.tr("All done for today")
-                                    : (PimWidgetService.state === PimWidgetService.stateLoading
-                                       ? I18n.tr("Loading todos…") : I18n.tr("Todo service not connected"))
+                                    : (PimWidgetService.errorMessage || I18n.tr("Todo service not connected"))
+                                width: Math.max(0, parent.width - 16)
+                                horizontalAlignment: Text.AlignHCenter
+                                wrapMode: Text.Wrap
+                                maximumLineCount: 3
+                                elide: Text.ElideRight
                                 color: AppearanceTokens.content.ink("#6c6c75", 0.6)
                                 font.pixelSize: 11
                             }
@@ -2444,9 +2480,9 @@ PanelWindow {
                 MouseArea {
                     anchors.fill: parent
                     cursorShape: Qt.PointingHandCursor
-                    onClicked: AppActionService.launchById("kos-calendar", [
-                        "--date", Qt.formatDate(clock.date, "yyyy-MM-dd")
-                    ])
+                    onClicked: IndependentAppWidgetService.open("calendar", {
+                        date: Qt.formatDate(clock.date, "yyyy-MM-dd")
+                    })
                 }
 
                 Rectangle {
@@ -2513,7 +2549,6 @@ PanelWindow {
                 Column {
                     visible: calendarContent.widgetSize !== "small"
                         && !calendarContent.narrow
-                        && calendarContent.todayEvents.length > 0
                     anchors { left: parent.left; right: monthGrid.left; bottom: parent.bottom; leftMargin: 16; rightMargin: 8; bottomMargin: 10 }
                     spacing: 3
                     Repeater {
@@ -2529,9 +2564,11 @@ PanelWindow {
                         }
                     }
                     Text {
-                        visible: calendarContent.todayEvents.length === 0
-                            && PimWidgetService.state === PimWidgetService.stateUnavailable
-                        text: I18n.tr("Calendar service not connected")
+                        visible: !PimWidgetService.ready || !!IndependentAppWidgetService.launchErrors.calendar
+                        width: parent.width
+                        text: PimWidgetService.errorMessage
+                        maximumLineCount: 2
+                        wrapMode: Text.Wrap
                         color: AppearanceTokens.content.ink("#9a9aa2", 0.55)
                         elide: Text.ElideRight
                         font.pixelSize: 9

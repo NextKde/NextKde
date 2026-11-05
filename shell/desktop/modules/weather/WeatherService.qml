@@ -3,10 +3,10 @@ pragma Singleton
 import QtQuick
 import "../../../shared/qml/i18n"
 import qs.desktop.modules.platform
+import qs.desktop.modules.common
 
-// Weather network, location, unit and cache state is owned by
-// kos-data-service. This adapter keeps the established shell-facing API while
-// consuming the shared versioned JSONL protocol.
+// Keep one shell-facing weather source: core data when the app is absent,
+// otherwise the uniquely installed app's validated summary.
 QtObject {
     id: service
 
@@ -24,13 +24,48 @@ QtObject {
     property real nextRefreshAt: 0
     property real clockNow: Date.now()
     property bool ready: false
+    readonly property var appSource: IndependentAppWidgetService.weather
+    readonly property bool coreMode: appSource.state === "not-installed"
+    readonly property string sourceMessage: IndependentAppWidgetService.feedback("weather")
+    property int sourceGeneration: 0
+    property bool snapshotPending: false
+    property bool snapshotQueued: false
+    onAppSourceChanged: {
+        sourceGeneration++
+        snapshotPending = false
+        snapshotQueued = false
+        clearWeather()
+        if (coreMode) reload()
+        else if (appSource.state === "ready" || appSource.state === "stale")
+            applyWeather(appSource.payload || {})
+        else {
+            status = appSource.state === "loading" ? "loading" : "error"
+            errorMessage = sourceMessage
+        }
+    }
+
+    function clearWeather() {
+        location = ({})
+        locations = []
+        current = null
+        hourly = []
+        daily = []
+        airQuality = null
+        ready = false
+        status = "idle"
+        errorMessage = ""
+        fetchedAt = new Date(0)
+        staleAt = 0
+        nextRefreshAt = 0
+    }
 
     readonly property string cityName: String(location?.name ?? "--")
     readonly property real latitude: Number(location?.latitude ?? 0)
     readonly property real longitude: Number(location?.longitude ?? 0)
     readonly property bool loading: status === "loading"
     readonly property bool available: current !== null
-    readonly property bool stale: available && staleAt > 0 && clockNow >= staleAt
+    readonly property bool stale: available && ((!coreMode && appSource.state === "stale")
+        || (staleAt > 0 && clockNow >= staleAt))
     readonly property string temperature: available
         ? Math.round(Number(current.temperature)) + "°" : "--°"
     readonly property string apparentTemperature: available
@@ -124,7 +159,21 @@ QtObject {
     }
 
     function reload() {
+        if (!coreMode) return
+        if (snapshotPending) {
+            snapshotQueued = true
+            return
+        }
+        snapshotPending = true
+        const epoch = sourceGeneration
         DataClient.request("weather.snapshot", {}, function(response) {
+            if (!service.coreMode || epoch !== service.sourceGeneration) return
+            service.snapshotPending = false
+            if (service.snapshotQueued) {
+                service.snapshotQueued = false
+                service.reload()
+                return
+            }
             if (!response.ok) {
                 if (!available)
                     errorMessage = String(response.error?.message ?? I18n.tr("Weather data service is not ready"))
@@ -153,7 +202,14 @@ QtObject {
     }
 
     function refresh() {
+        if (!coreMode) {
+            IndependentAppWidgetService.reload("weather")
+            IndependentAppWidgetService.open("weather", {})
+            return
+        }
+        const epoch = sourceGeneration
         DataClient.request("weather.refresh", {}, function(response) {
+            if (!service.coreMode || epoch !== service.sourceGeneration) return
             if (!response.ok)
                 errorMessage = String(response.error?.message ?? I18n.tr("Weather refresh failed"))
         })
@@ -166,8 +222,13 @@ QtObject {
                 service.reload()
         }
         function onTransportChanged(connected) {
-            if (connected)
-                service.reload()
+            if (service.coreMode) {
+                service.sourceGeneration++
+                service.snapshotPending = false
+                service.snapshotQueued = false
+                service.clearWeather()
+                if (connected) service.reload()
+            }
         }
     }
 

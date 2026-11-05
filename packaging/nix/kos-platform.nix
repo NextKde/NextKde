@@ -2,6 +2,8 @@
     lib,
     stdenv,
     cmake,
+    pkg-config,
+    flatpak,
     kdePackages,
     opencv,
     onnxruntime,
@@ -22,10 +24,12 @@ stdenv.mkDerivation {
 
     nativeBuildInputs = [
         cmake
+        pkg-config
         kdePackages.extra-cmake-modules
     ];
 
     buildInputs = [
+        flatpak
         kdePackages.qtbase
         kdePackages.qtdeclarative
         kdePackages.kiconthemes

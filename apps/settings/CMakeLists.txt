@@ -14,6 +14,16 @@ endif()
 find_package(KF6Config REQUIRED)
 find_package(KF6KIO REQUIRED)
 find_package(KF6Service REQUIRED)
+find_package(Qt6 6.5 REQUIRED COMPONENTS Concurrent)
+find_package(PkgConfig REQUIRED)
+pkg_check_modules(FLATPAK REQUIRED IMPORTED_TARGET flatpak>=1.12 ostree-1>=2021.4)
+
+add_library(kos-flatpak-apps STATIC src/FlatpakApps.cpp src/FlatpakApps.h src/FlatpakRelease.cpp src/FlatpakRelease.h)
+target_link_libraries(kos-flatpak-apps PUBLIC Qt6::Core Qt6::Concurrent PRIVATE Qt6::Network PkgConfig::FLATPAK)
+
+add_executable(kos-apps src/FlatpakAppsCli.cpp)
+target_link_libraries(kos-apps PRIVATE kos-flatpak-apps)
+install(TARGETS kos-apps RUNTIME DESTINATION bin)
 
 # Embed the GTK adapter and assets: installed Settings must work without a checkout.
 qt_add_resources(KOS_GTK_RESOURCES ../../shared/gtk/integration.qrc)
@@ -22,6 +32,8 @@ qt_add_executable(kos-settings
     src/main.cpp
     src/AppStore.cpp
     src/AppStore.h
+    src/IndependentApps.cpp
+    src/IndependentApps.h
     src/SettingsBridge.h
     src/SettingsBridge.cpp
     src/SettingsBridgeDesktop.cpp
@@ -47,6 +59,7 @@ target_include_directories(kos-settings PRIVATE
 target_link_libraries(kos-settings PRIVATE
     kos_demo_ui
     kos_demo_ui_plugin
+    kos-flatpak-apps
     Qt6::Core
     Qt6::DBus
     Qt6::Gui
@@ -80,12 +93,25 @@ install(DIRECTORY pages components DESTINATION share/kos/settings
 if(BUILD_TESTING)
     find_package(Qt6 6.5 REQUIRED COMPONENTS Test)
     find_package(Qt6 6.5 QUIET COMPONENTS QuickTest)
-    add_executable(kos-app-store-test tests/store/backend.cpp src/AppStore.cpp)
+    add_executable(kos-flatpak-release-test tests/store/flatpak_release.cpp)
+    target_include_directories(kos-flatpak-release-test PRIVATE src)
+    target_link_libraries(kos-flatpak-release-test PRIVATE Qt6::Core Qt6::Network Qt6::Test)
+    add_test(NAME kos-settings.flatpak-release COMMAND kos-flatpak-release-test)
+    set_tests_properties(kos-settings.flatpak-release PROPERTIES
+        WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/../.. LABELS logic TIMEOUT 30)
+    add_executable(kos-app-store-test tests/store/backend.cpp src/AppStore.cpp src/IndependentApps.cpp)
     target_include_directories(kos-app-store-test PRIVATE src)
     target_link_libraries(kos-app-store-test PRIVATE Qt6::Core Qt6::Gui Qt6::Network
-        Qt6::Test KF6::KIOGui KF6::Service)
+        Qt6::Test KF6::KIOGui KF6::Service kos-flatpak-apps)
     add_test(NAME kos-settings.app-store COMMAND kos-app-store-test)
     set_tests_properties(kos-settings.app-store PROPERTIES LABELS logic TIMEOUT 30)
+    add_executable(kos-independent-apps-test tests/store/independent.cpp src/AppStore.cpp src/IndependentApps.cpp)
+    target_include_directories(kos-independent-apps-test PRIVATE src)
+    target_link_libraries(kos-independent-apps-test PRIVATE Qt6::Core Qt6::Gui Qt6::Network
+        Qt6::Test KF6::KIOGui KF6::Service kos-flatpak-apps)
+    add_test(NAME kos-settings.independent-apps COMMAND kos-independent-apps-test)
+    set_tests_properties(kos-settings.independent-apps PROPERTIES
+        WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/../.. LABELS logic TIMEOUT 30)
 
     add_executable(kos-settings-backend-test
         tests/backend/ModulesTest.cpp

@@ -26,20 +26,20 @@ package (`qt6-translations` or `qt6-translations-l10n`).
 | Surface | Chinese | Brazilian Portuguese |
 |---|---|---|
 | Shell and Settings (`I18n.tr`) | `shared/qml/i18n/ZhCatalog.mjs` | `shared/qml/i18n/PtBrCatalog.mjs` |
-| Calendar, Todo, Weather, Calculator | `apps/common/translations/kos_apps_zh_CN.ts` | `apps/common/translations/kos_apps_pt_BR.ts` |
+| Independent apps | Catalogs owned by [their repositories](../../apps/README.md) | Catalogs owned by their repositories |
 | KWin glass effect | `kwin/glass-effect/po/zh_CN/` | `kwin/glass-effect/po/pt_BR/` |
 
 The Chinese catalogs must cover every source string. The Portuguese catalogs may
 lag behind: a missing entry falls back to English, but every entry present must
 match a current source string and keep its placeholders. ListenFree's English
 catalog is generated from `en_US.tsv` by
-`apps/listenfree/tools/compile_translations.py`.
+the independent [ListenFree repository](https://github.com/NextKde/ListenFree).
 
 ## Checks
 
-- `python tests/localization/check_catalogs.py`: extracted UI messages and placeholders; reports untranslated pt_BR app messages.
+- App catalog extraction/placeholder checks are owned and run by the independent app repositories.
 - `node tests/localization/widget-language.mjs`: the shared QML primary-language policy and literal Shell/Settings translation calls, including dictionary coverage and placeholders; reports untranslated pt-BR Shell strings.
-- `ctest --test-dir BUILD -R language --output-on-failure`: app and shell language tests.
+- `ctest --test-dir BUILD -R language --output-on-failure`: core Shell language tests; app suites run in their repositories.
 - ListenFree's standalone build with `LISTENFREE_BUILD_TESTS=ON` adds
   `listenfree.language.*`, including saved-language override regression tests.
 

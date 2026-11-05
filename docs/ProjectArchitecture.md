@@ -3,10 +3,11 @@
 KOS is organized by runtime boundary and lifecycle, not by the command used
 to reach a feature. The core produces one Quickshell process, one C++ platform
 daemon, one Go data daemon, one settings app, and KWin effects and decoration.
-Calendar, Calculator, Todo and Weather form the optional standard app bundle.
-ListenFree is separately opt-in.
-Legacy Music source and build targets have been removed; existing installations are preserved
-on standard upgrades. Explicit ListenFree installation owns legacy player migration.
+Calendar (including tasks), Calculator and Weather share the independent kos-apps
+repository; ListenFree retains its own repository. The compatibility app installer
+selects signed Flatpak bundles by default, with source builds explicitly selected
+through `--backend=source`. ListenFree is explicitly selected. It does not
+migrate legacy players or change MIME/default-app associations.
 
 ```text
 NextKde/
@@ -14,14 +15,13 @@ NextKde/
 │   ├── shell.qml
 │   ├── desktop/              UI feature modules
 │   └── native/               shell-owned QML native plugins (SurfaceShape, Spatial3D)
-├── apps/                     settings plus optional standalone applications
+├── apps/                     settings, lockscreen and retained sddm theme
 ├── shared/
 │   ├── qml/                  portable controls
 │   └── contracts/            JSONL and shortcut contracts
 ├── services/                 long-running process owners
 │   ├── ai/                   portable C++ local inference library (kos-ai)
-│   ├── data-service/         Go metrics/history/desktop service
-│   └── pim-service/          D-Bus activated Calendar/Todo storage
+│   └── data-service/         Go metrics/history/desktop service
 ├── platform/                 kos-platform C++/Qt daemon
 ├── kwin/                     project-owned KWin plugins, bridge script, and glass-effect
 ├── packaging/                systemd, desktop files, and the nix packages
@@ -58,8 +58,8 @@ versions, error codes, and default shortcut definitions.
 | `kos-ai-worker` | lazily started child process | isolated local model download, CPU inference, and depth cache; exits after 15 idle seconds |
 | `kos-data-service` | systemd `--user` resident | telemetry, activity ledger, desktop snapshots, weather cache |
 | `kos-settings` | on demand | settings UI; communicates with Shell IPC only |
-| `kos-calendar`, `kos-calculator`, `kos-todo`, `kos-weather`, opt-in `listenfree` | on demand | optional Qt Quick applications; Calendar includes Reminders, kos-todo is a compatibility launcher; ListenFree is explicitly selected |
-| `kos-pim-service` | D-Bus activated | shared Calendar/Todo storage and reminders |
+| Independent `kos-calendar`, `kos-calculator`, `kos-weather`, `listenfree` | on demand; externally built/installed | Qt Quick applications owned by their repositories; Calendar includes integrated Reminders; ListenFree is explicitly selected |
+| Independent `kos-pim-service` | D-Bus activated; externally built/installed | Calendar-owned storage and reminders; core widgets read its bounded identity-bound summaries without activating it |
 | KWin effect `.so` files | KWin managed | compositor effects, independent plugin IDs |
 
 The old `helpers/` category is intentionally gone. A short-lived utility is
@@ -124,24 +124,27 @@ optional application.
 
 An application-owned service must be activated on demand by that application
 or through D-Bus activation. It must not install a session autostart entry by
-default. Calendar and Todo therefore share the D-Bus-activated PIM service;
+default. Calendar and its integrated tasks therefore use the D-Bus-activated PIM service;
 Music keeps playback in its application process.
 
 Optional services are enhancements, never a single point of failure for an
-existing Shell feature. Weather is not application-owned: it is an operation
-set in the core `kos-data-service`, so the Shell and standalone Weather app
-share one Open-Meteo request policy and persisted cache. Consumers preserve
-their previous complete conditions and show an unavailable/error state while
-the core service reconnects.
+existing Shell feature. Shell weather remains an operation set in core
+`kos-data-service`, with its own Open-Meteo policy and persisted cache. The
+independent Weather application instead owns its private `kos-weather-backend`;
+it neither installs nor activates a core data service. Shell consumers retain
+complete conditions while the core service reconnects and expose unavailable/error state.
 
 `apps/settings/` is the first application. The gear exposed by the top bar or
 Dock-hosted status area starts its process through `DesktopAppLauncher`; it
 never loads Settings UI into the Quickshell process.
 
-The optional applications are separate CMake modules under `apps/<name>/`.
-They link portable `shared/` modules but never import `shell/desktop`. Calendar
-and Todo share the contracts in `shared/pim`; Weather speaks the versioned
-`kos-data.sock` protocol; Music exposes MPRIS for ordinary shell consumers.
+Calendar (including tasks), Calculator, Weather and ListenFree are maintained in independent
+NextKde repositories, including their runtime, PIM and app-specific tests; see
+[applications](../apps/README.md). They never import `shell/desktop`.
+Calendar owns the versioned PIM D-Bus service; Weather owns its private backend;
+ListenFree exposes ordinary MPRIS integration. Extracted application sources are
+not retained in core. The app installer consumes stable signed Flatpak bundles,
+with an explicit source-Release build route.
 
 ## Code-review rules
 

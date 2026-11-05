@@ -2,88 +2,56 @@
 
 **[English](README.md) | [中文](README.zh-CN.md)**
 
-每个应用有独立的 Qt Quick 窗口与进程；`todo/` 是日历提醒事项的兼容启动入口，不再提供独立应用。应用可以导入 `shared/`，
-通过已记录的契约与 `services/` 通信，但绝不能导入 `shell/desktop/`。
+核心 `apps/` 源码树保留 `settings/`、`lockscreen/` 和 `sddm/` 主题（暂无支持的 SDDM 安装入口）。日历（含待办功能）、计算器、天气和
+ListenFree 均独立于 core；前三款共用 kos-apps 仓库、版本和 Release，但分别安装／更新／卸载：
 
-应用工作区从仓库根目录配置。构建开关和对应 CMake preset 使各应用可
-独立管理：
+| 应用 | 源码、Release 与应用测试 |
+| --- | --- |
+| 日历（内置待办功能） | [NextKde/kos-apps](https://github.com/NextKde/kos-apps) |
+| 计算器 | [NextKde/kos-apps](https://github.com/NextKde/kos-apps) |
+| 天气 | [NextKde/kos-apps](https://github.com/NextKde/kos-apps) |
+| ListenFree | [NextKde/ListenFree](https://github.com/NextKde/ListenFree) |
 
-| 应用 | 目标 | 配置 preset |
-| --- | --- | --- |
-| 日历 | `kos-calendar` | `calendar-dev` |
-| 计算器 | `kos-calculator` | `apps-dev` |
-| 提醒事项兼容入口（自动构建日历） | `kos-todo` | `todo-dev` |
-| 天气 | `kos-weather` | `weather-dev` |
-| KOS ListenFree（显式安装的音乐应用） | `listenfree` | `listenfree-dev` |
+根构建不再编译这些应用、其私有运行时或 PIM 服务，应用 CMake preset 已移除。
+启用原 `KOS_BUILD_CALENDAR`、`KOS_BUILD_TODO`、`KOS_BUILD_CALCULATOR`、
+`KOS_BUILD_WEATHER` 或 `KOS_BUILD_LISTENFREE` 会明确报错并提示迁移。
+请在对应独立仓库构建和贡献。切换期间保留的源码目录不是备用构建/安装路径，
+独立验收门槛通过前不得删除。
 
-使用 `apps-dev` 可构建日历（含提醒事项）、计算器、天气及待办兼容入口。每个应用拥有自己的可执行文件、QML
-模块、桌面入口、测试和中英文文档。`apps/common/` 只是很小的应用运行时，
-不是功能层；应用之间不会互相导入。天气 preset 还会构建并安装 Go 数据服务，
-应用会在需要时自动启动它。
+前三款源码目录与应用 ID 为 `apps/org.nextks.calendar`、`apps/org.nextks.calculator`、
+`apps/org.nextks.weather`（ID 去掉 `apps/`）。新远端尚未创建／推送，旧仓库保留历史。
+旧 `org.nextkde.*` Flatpak 不自动改名、卸载或迁移数据。
 
-贡献者构建、测试、启动和图形验证仅在专用 VM/托管 CI，见[开发指南](../docs/Development.zh-CN.md)。
-
-## 开发调试：QML 热重载
-
-基于 `apps/common` 的 KOS 应用支持直接从源码树加载 QML 并热重载，改 QML 不需要重编或重启：
-
-```bash
-.build/calendar-dev/apps/calendar/kos-calendar --watch-qml apps/calendar/qml
-# 或者用环境变量省去参数
-KOS_APP_QML_DIR=apps/calendar/qml .build/calendar-dev/apps/calendar/kos-calendar
-```
-
-参数指向存放 `Main.qml` 的目录（或入口文件本身）。监视树内的
-`*.qml`/`*.mjs`，保存后 300ms 防抖重建窗口；新代码会先在一次性引擎上
-完整编译校验（含被引用的兄弟组件），编译不过就报错并保留当前窗口。
-由 C++ 创建、经 initial properties 注入 QML 的控制器跨重载存活；
-QML 自己拥有的状态（当前页面、打开的对话框）会重置。`shared/qml`
-（Kos.Ui）编译在二进制里，改动它仍需重编。
-
-watch 运行是独立的开发实例：不与已运行的正式实例争单例激活。
-各应用的 C++ 改动仍需重编；只有 QML/JS 改动走热重载。
-
-要在 Plasma 虚拟机中注册为持久的用户级系统应用，请运行：
+## 安装与生命周期
 
 ```sh
-./tools/install-apps.sh
-```
-
-`./tools/kosctl install apps`（或 `install-apps.sh`）默认只构建日历、计算器、待办和天气。
-预检只检查选中应用的依赖：标准安装要求 Qt 6.5+、兼容 KF6、Go 1.26+、QML 运行模块和 SQLite 驱动。
-缺少依赖时给出 Arch `pacman` 或 Ubuntu `apt` 命令，不会自动执行 sudo。
-
-ListenFree 和私有音频 SDK 必须显式选择：
-
-```sh
+./tools/kosctl install apps
+./tools/kosctl install apps --app calendar
 ./tools/kosctl install apps --with-listenfree
+./tools/kosctl install apps check-update --app weather
+./tools/kosctl install apps update --app weather
+./tools/kosctl install apps status --app calendar
+./tools/kosctl install apps uninstall --app calculator
 ```
 
-该选项额外要求 Qt 6.10+ 和音频依赖，首次下载、校验并构建 QuickJS-ng、Qmmp，必要时还构建 TagLib，耗时较长。
-后续构建指纹相同时复用 `.build/listenfree-sdk`；已有 SDK 可用 `KOS_LISTENFREE_SDK=/path/to/sdk` 指定。
-标准安装不准备 SDK，不移除已有音乐应用，也不改音频文件关联。
-详见 [ListenFree 构建指南](listenfree/packaging/linux/README.md)。
+`tools/install-apps.sh` 是相同命令的兼容分发入口。默认选择日历（含待办）、
+计算器和天气，ListenFree 必须显式选择。`--app todo` 是日历的别名；
+`--update`、`--uninstall` 是对应生命周期动作的别名。
+修改操作要求终端确认或 `--yes`。默认经 `kos-apps` 使用与 Settings 相同的用户级 Flatpak 后端，
+采用 GitHub Release 签名单文件包，无需自建应用源，不自动添加在线源。本地已接入专用发布者公钥，但 runtime 策略仍为空且无正式签名包，因此新安装／更新仍不可用，不静默回退源码构建。
+历史兼容／开发源码入口必须显式 `--backend=source`；`--app APP --version X.Y.Z` 及构建依赖 `check` 仅用于源码模式。
+`--with-listenfree-video` 会明确拒绝；自定义视频功能请按独立 ListenFree
+仓库指南构建，不能覆盖稳定 Release 清单的功能选择。
 
-脚本会完成 Release 构建，安装到 `~/.local`，注册桌面入口、hicolor
-图标和 AppStream 元数据，启用核心 `kos-data.service`、注册由 D-Bus 按需激活的
-PIM 服务，并刷新 Plasma 应用缓存。桌面入口使用绝对可执行路径，因此重新登录后无需回到源码目录构建。
-后续升级可重复运行同一个脚本。
+Flatpak 管理安装记录，外部 Flatpak 工具可卸载同一 ref。GitHub 包更新由 Settings／CLI 发现，
+无在线 origin 时不承诺 Discover／`flatpak update` 自动发现新版。libflatpak 可能留下本地 origin／公钥记录，
+即便随后拒绝事务；runtime 仍需独立认可的现有分发源。目前没有正式签名包，唯一用户级 Flatpak
+状态查询／卸载不要求发布者认可；普通卸载保留个人数据，不自动迁移旧安装。
 
-每个应用都可通过平台“首选项”快捷键（通常为 `Ctrl+,`）打开统一外观设置，包括跟随系统/浅色/深色、
-自动/玻璃/实色材质、不透明度、强调色、减少透明度和减少动画。偏好保存在
-四个 KOS 应用共用的配置中，并会同步到其他正在运行的应用。在 KDE Plasma
-上，应用运行时会在合成器支持时通过 `KWindowEffects` 请求原生背景模糊和
-背景对比；不可用时会自动切换为保证可读性的实色方案。
+显式源码模式从固定 NextKde 仓库下载稳定 **源码** Release，在本地编译；其私有所有权记录
+不是 Discover 软件包。两种模式均不回退本仓库源码或开发分支；批量操作遇错即停，保留已完成项。
+完整边界见[生命周期与信任契约](../docs/app-store/IndependentApps.zh-CN.md)。
 
-应用安装保留核心 Settings 及共享运行 QML，应用专用前缀不要求已安装核心。
-
-`settings` 早于该工作区存在，在它依赖源码路径的 QML 加载方式单独迁移前，
-仍沿用现有构建路径。
-
-## 默认应用与升级
-
-标准四款应用沿用其 `kos-*` 桌面 ID、服务和用户数据。
-旧 `kos-music` 的源码和构建目标已移除，普通安装与升级仍保留已安装的旧播放器、曲库和音频关联。
-只有 `--with-listenfree` 会注册 ListenFree，
-通过运行检查后备份并移除旧 KOS Music 的程序与注册文件。用户数据、其他播放器的默认关联和后续用户选择保留。
-桌面音乐组件优先唤起当前 MPRIS 播放器，没有播放器时尝试打开 ListenFree；未安装时需要自行选择播放器。
+核心 `services/data-service` 仍是 Shell 依赖，保留共享天气能力和 Go 测试。
+日历 PIM 与应用专有测试由独立仓库负责。核心 CI 检查独立安装器和发布契约，
+不再构建过时的单仓库应用目录。剩余核心门槛见[开发指南](../docs/Development.zh-CN.md)。

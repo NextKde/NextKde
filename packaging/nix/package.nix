@@ -23,7 +23,16 @@ let
   kwin-kos-bridge = pkgs.callPackage ./kwin-kos-bridge.nix { inherit src; };
   kosctl = pkgs.callPackage ./kosctl.nix { inherit src; };
   kwin-kos-decoration = pkgs.callPackage ./kwin-kos-decoration.nix { inherit src; };
-  kos-weather = if buildWeather then pkgs.callPackage ./kos-weather.nix { inherit src; } else null;
+  # Independent application archive: this is a flat download hash, not a
+  # fetchFromGitHub unpacked-source hash. Never reuse core src as app source.
+  kos-weather = if buildWeather then pkgs.callPackage ./kos-weather.nix {
+    version = "0.2.0";
+    src = pkgs.fetchurl {
+      name = "kos-apps-76068d787af68a1d5f759146787c00e8a71a8d1c.tar.gz";
+      url = "https://codeload.github.com/NextKde/kos-apps/tar.gz/76068d787af68a1d5f759146787c00e8a71a8d1c";
+      hash = "sha256-viGWmVEV0+7xUeD+erUn+LEH8TYxlFrdNWV/Su+WQGE=";
+    };
+  } else null;
 
   qs_bin = if quickshell != null then "${quickshell}/bin/quickshell" else "/run/current-system/sw/bin/quickshell";
 
@@ -76,6 +85,7 @@ stdenv.mkDerivation {
 
     mkdir -p $out/bin
     ln -s ${kos-settings}/bin/kos-settings $out/bin/kos-settings
+    ln -s ${kos-settings}/bin/kos-apps $out/bin/kos-apps
 
     # --- Weather app (optional) ---
     ${lib.optionalString buildWeather ''

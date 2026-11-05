@@ -7,6 +7,10 @@
     quickshell,
     python3,
     glib,
+    flatpak,
+    ostree,
+    gnupg,
+    pkg-config,
     src,
 }:
 
@@ -18,14 +22,15 @@ stdenv.mkDerivation {
     nativeBuildInputs = [
         cmake
         ninja
+        pkg-config
         kdePackages.wrapQtAppsHook
     ];
 
-    buildInputs = [ kdePackages.kconfig kdePackages.kio kdePackages.kservice kdePackages.qtbase kdePackages.qtdeclarative
+    buildInputs = [ flatpak ostree kdePackages.kconfig kdePackages.kio kdePackages.kservice kdePackages.qtbase kdePackages.qtdeclarative
                     kdePackages.qtsvg kdePackages.qtimageformats kdePackages.qt5compat ];
 
     preFixup = ''
-        qtWrapperArgs+=(--prefix PATH : ${lib.makeBinPath [ quickshell python3 glib ]})
+        qtWrapperArgs+=(--prefix PATH : ${lib.makeBinPath [ quickshell python3 glib flatpak gnupg ]})
     '';
 
     dontBuild = true;
@@ -36,6 +41,7 @@ stdenv.mkDerivation {
 
         cmake -S apps/settings -B "$TMPDIR/build" -G Ninja \
             -DCMAKE_BUILD_TYPE=Release \
+            -DBUILD_TESTING=OFF \
             -DCMAKE_INSTALL_PREFIX=$out
         cmake --build "$TMPDIR/build" --parallel
         cmake --install "$TMPDIR/build"

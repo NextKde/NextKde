@@ -47,6 +47,7 @@ JsonlClient {
     timeoutName: "platform"
     readOperations: ({
         "session.visibility": true,
+        "application.widget-snapshot": true,
         "appmenu.active": true,
         "appmenu.layout": true,
         "audio.applications": true,

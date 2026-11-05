@@ -1,65 +1,11 @@
 #!/bin/sh
-set -eu
-
-prefix=${1:-${KOS_INSTALL_PREFIX:-"$HOME/.local"}}
-failed=0
-with_listenfree=false
-case "${2:-}" in
-    --with-listenfree) with_listenfree=true ;;
-    "") ;;
-    *) echo "Unknown verification option: $2" >&2; exit 2 ;;
-esac
-
-for app in calendar todo weather calculator; do
-    binary="$prefix/bin/kos-$app"
-    desktop="$prefix/share/applications/kos-$app.desktop"
-    icon="$prefix/share/icons/hicolor/scalable/apps/kos-$app.svg"
-    if test ! -x "$binary" || test ! -f "$desktop" || test ! -f "$icon"; then
-        echo "Incomplete registration: kos-$app" >&2
-        failed=1
-        continue
-    fi
-    if command -v desktop-file-validate >/dev/null 2>&1; then
-        desktop-file-validate "$desktop" || failed=1
-    fi
-    QT_QPA_PLATFORM=offscreen "$binary" --version >/dev/null || failed=1
-done
-
-# Only the explicitly selected music bundle owns legacy music migration.
-if "$with_listenfree"; then
-    # ListenFree replaces the legacy music application in the installed bundle.
-    if test -x "$prefix/bin/listenfree"; then
-        test -f "$prefix/share/applications/listenfree.desktop" || failed=1
-        test -f "$prefix/share/icons/hicolor/scalable/apps/listenfree.svg" || failed=1
-        if command -v desktop-file-validate >/dev/null 2>&1; then
-            desktop-file-validate "$prefix/share/applications/listenfree.desktop" || failed=1
-        fi
-        QT_QPA_PLATFORM=offscreen "$prefix/bin/listenfree" --version >/dev/null || failed=1
-    else
-        echo "Incomplete registration: listenfree" >&2
-        failed=1
-    fi
-    if test -e "$prefix/bin/kos-music" || test -e "$prefix/share/applications/kos-music.desktop"; then
-        echo "Legacy music application has not been retired." >&2
-        failed=1
-    fi
-
-fi
-
-for metadata in "$prefix"/share/metainfo/org.nextkde.Kos.*.metainfo.xml; do
-    test -f "$metadata" || continue
-    if command -v appstreamcli >/dev/null 2>&1; then
-        appstreamcli validate --no-net "$metadata" || failed=1
-    fi
-done
-
-systemctl --user is-enabled kos-data.service >/dev/null || failed=1
-systemctl --user is-active kos-data.service >/dev/null || failed=1
-test -f "$prefix/share/dbus-1/services/org.nextkde.Kos.Pim1.service" || failed=1
-test -f "$prefix/share/systemd/user/kos-pim-service.service" || failed=1
-
-if test "$failed" -ne 0; then
-    echo "KOS application registration verification failed." >&2
-    exit 1
-fi
-echo "Verified desktop entries, icons, metadata, binaries, and service registration."
+# Independent apps no longer form a fixed prefix bundle or own core services.
+printf '%s\n' \
+  'The monorepo application bundle verifier has been retired.' \
+  'Inspect individual installer ownership/health instead:' \
+  '  tools/kosctl install apps status --app calendar' \
+  '  tools/kosctl install apps status --app calculator' \
+  '  tools/kosctl install apps status --app weather' \
+  '  tools/kosctl install apps status --app listenfree' \
+  'Application runtime gates belong to the independent NextKde repositories.' >&2
+exit 2

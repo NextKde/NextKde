@@ -547,7 +547,7 @@ ensure_quickshell() {
 # 与 tools/kosctl 的 Debian 分支保持一致。这里刻意在脚本内自带一份：
 # upstream main 的 kosctl 还没有 apt 分支，而本脚本要求“从零可用”。
 debian_core_build_packages=(
-    git python3 cmake ninja-build g++ golang-go curl patchelf pkg-config
+    git python3 cmake ninja-build g++ golang-go curl patchelf pkg-config libflatpak-dev libostree-dev flatpak gpgv
     extra-cmake-modules libwayland-dev wayland-protocols libxkbcommon-dev
     qt6-base-dev qt6-declarative-dev qt6-tools-dev qt6-l10n-tools qt6-translations-l10n qt6-quick3d-dev qt6-svg-dev qt6-wayland-dev
     qt6-image-formats-plugins qt6-5compat-dev libqt6svg6

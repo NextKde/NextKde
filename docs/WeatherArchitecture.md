@@ -1,8 +1,11 @@
 # Weather architecture
 
-Weather is shared desktop state. `kos-data-service` is the only process that
-talks to Open-Meteo, chooses the active location and units, and persists the
-last complete forecast. KOS Weather and Quickshell are independent consumers.
+Shell weather is shared desktop state owned by core `kos-data-service`: it
+queries Open-Meteo, chooses the Shell's active location and units, and persists
+the last complete forecast. The independently maintained
+[NextKde/kos-apps](https://github.com/NextKde/kos-apps) Weather application instead
+owns a private `kos-weather-backend`, endpoint and state. It does not share the
+core service's ownership or install/activate `kos-data.service`.
 
 ```text
 Open-Meteo forecast/geocoding
@@ -11,23 +14,19 @@ Open-Meteo forecast/geocoding
 services/data-service/weather.go
     | snapshot.json (offline fallback)
     | kos-data.sock JSONL requests and weather.changed events
-    +-------------------------+
-    v                         v
-KOS Weather              Quickshell WeatherService
+    v
+Quickshell WeatherService
 ```
 
 ## Service delivery and lifecycle
 
-The Weather CMake preset includes the core Go data service and installs
-`kos-data-service` under `libexec`. The Qt client first connects to
-`$XDG_RUNTIME_DIR/kos-data.sock`; after a failed connection it can start an
-executable selected from the `KOS_DATA_SERVICE` override, the application
-prefix's `libexec`, the current build output, or `PATH`. A non-blocking lock at
-`kos-data.sock.lock` prevents concurrent application and systemd launches from
-creating competing state owners.
-
-The complete application installer enables `kos-data.service`. A development
-Weather-only build can still launch the build-tree service on demand.
+Core builds and deploys `kos-data-service` for the Shell. Application CMake
+presets no longer exist in this repository. The independent Weather project
+builds and installs `bin/kos-weather-backend` with its own application; its
+installer does not enable, stop or restart a core service. Application build,
+private backend lifecycle and runtime verification belong to that repository.
+The contract below describes the retained core Shell weather endpoint; later
+application visual notes are historical design context, not a core app build path.
 
 ## Contract
 

@@ -7,7 +7,8 @@ Quickshell, KWin, or Wayland-specific APIs.
 The module provides the application window, semantic palette and material
 surfaces, cards, empty states, navigation controls, rounded buttons, switch,
 slider, segmented control, text field, and the common application settings
-dialog. KDE compositor integration remains in `apps/common`; when native blur
+dialog. KDE compositor integration belongs to the independent applications'
+runtime (see [application ownership](../../../apps/README.md)); when native blur
 is unavailable these portable QML surfaces automatically use a high-opacity
 fallback.
 

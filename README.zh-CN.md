@@ -9,7 +9,7 @@
 
 ![NextKDE 桌面](docs/images/desktop.png)
 
-NextKDE 的桌面体验也延伸到一套持续完善的配套应用：日历、天气、计算器和待办可按需安装，
+NextKDE 的桌面体验也延伸到一套持续完善的配套应用：日历（含待办功能）、天气和计算器可按需安装，
 [KMusic](https://github.com/NextKde/KMusic) 则带来音乐体验。邮件和文件管理器也在后续规划中。
 
 ![NextKDE 的全家桶：细边框展示的日历、KMusic 与天气](docs/images/apps-showcase.zh-CN.webp)
@@ -50,14 +50,15 @@ cd NextKde
 
 ### 可选应用与后续设置
 
-独立应用另装：`./tools/kosctl install apps` 默认仅日历、计算器、待办、天气。
-ListenFree 及音频 SDK 需显式 `./tools/kosctl install apps --with-listenfree`。
+独立应用另装：`./tools/kosctl install apps` 默认使用用户级 Flatpak 后端，选择日历（含待办）、计算器、天气。
+采用 GitHub Release 签名 Flatpak 单文件包，无需自建应用源。签名发行尚未上线，新安装暂不可用；历史源码构建需显式 `--backend=source`。
+ListenFree 需显式 `./tools/kosctl install apps --with-listenfree`。
 核心 Settings 属于核心安装。锁屏可选；安装、桌面接管、更新、备份/回退、卸载及各发行版依赖统一见安装指南。
 
 ## 项目与开发
 
 Shell 负责呈现，C++ `kos-platform` 负责桌面接入，Go `kos-data-service` 负责指标/历史/共享天气。
-日历/待办共享按需 PIM，独立应用不导入 Shell 模块。
+日历与内置待办使用按需 PIM，独立应用不导入 Shell 模块。
 [项目架构](docs/ProjectArchitecture.md)、[外观](docs/AppearanceArchitecture.zh-CN.md)、
 [Dock](docs/DockArchitecture.md)、[桌面图标](docs/DesktopIcons.zh-CN.md)、[深度引擎](docs/DepthEngine.md)。
 
