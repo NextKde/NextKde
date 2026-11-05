@@ -1,133 +1,99 @@
 #!/usr/bin/env python3
-"""Check distribution guidance and preflight failures without installing packages."""
-import contextlib
-import importlib.util
-import io
+"""Guard explicit migration instead of falsely passing obsolete app preflights.
+
+Distribution/SDK dependency suites now belong to each independent app repository;
+this core compatibility contract must not probe packages or mutate a user prefix.
+"""
 from pathlib import Path
-from types import SimpleNamespace
+import os
+import re
+import subprocess
+import sys
 import tempfile
 import unittest
-from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parents[2]
-spec = importlib.util.spec_from_file_location('dependencies', ROOT / 'tools/check-apps-dependencies.py')
-deps = importlib.util.module_from_spec(spec)
-spec.loader.exec_module(deps)
 
-class DependencyTests(unittest.TestCase):
-    def check(self, family, missing=(), qt='6.10.2', markers='', go='1.26.0', sdk=False, absent=(), release=None, audio=True, cmake='3.31.0', features=()):
-        calls = []
-        def command(args):
-            calls.append(args)
-            if args[:2] == ['cmake', '--version']: output = 'cmake version ' + cmake
-            elif args[:2] == ['go', 'version']: output = 'go version go' + go + ' linux/arm64'
-            elif args[:2] == ['pkg-config', '--modversion']: output = qt
-            elif args[:2] == ['pkg-config', '--exists']:
-                return SimpleNamespace(returncode=int(args[2] in missing), stdout='')
-            else: output = markers
-            return SimpleNamespace(returncode=0, stdout=output)
-        output = io.StringIO()
-        # The old-Qt hint names the release it detected by reading /etc/os-release
-        # directly, so the assertion has to inject that file as well; otherwise the
-        # test passes on an Arch CI container and fails on any Debian-family host,
-        # which is exactly where the Debian branch is meant to be exercised.
-        release = release or {'ID': family, 'PRETTY_NAME': family.capitalize() + ' Linux'}
-        with patch.object(deps, 'distribution', return_value=family), patch.object(deps, 'os_release', return_value=release), patch.object(deps.shutil, 'which', side_effect=lambda name: None if name in absent else '/usr/bin/tool'), patch.object(deps, 'run', side_effect=command), patch('sys.argv', ['check'] + (['--sdk-only'] if sdk else ['--with-listenfree'] if audio else []) + list(features)), contextlib.redirect_stdout(output):
-            result = deps.main()
-        return result, output.getvalue(), calls
 
-    def test_missing_build_tools_fail_before_cmake(self):
-        result, output, calls = self.check('ubuntu', absent=['cmake', 'pkg-config'])
-        self.assertEqual(result, 1)
-        self.assertIn('sudo apt install cmake pkg-config', output)
-        self.assertFalse(any(call[0] in ('cmake', 'pkg-config') for call in calls))
+class DependencyMigrationTests(unittest.TestCase):
+    def test_removed_bundle_preflight_is_explicit_and_non_successful(self):
+        for options in ([], ["--sdk-only"], ["--with-listenfree"], ["--with-listenfree-video"]):
+            with self.subTest(options=options):
+                result = subprocess.run([sys.executable, str(ROOT / "tools/check-apps-dependencies.py"), *options], capture_output=True, text=True)
+                self.assertEqual(result.returncode, 2)
+                for repo in ("kos-apps", "ListenFree"):
+                    self.assertIn("https://github.com/NextKde/" + repo, result.stderr)
+                self.assertIn("cannot validate", result.stderr)
 
-    def test_arch_missing_audio(self):
-        result, output, _ = self.check('arch', missing=['libpulse', 'libavcodec'])
-        self.assertEqual(result, 1)
-        self.assertIn('sudo pacman -S --needed ffmpeg libpulse', output)
+    def test_sdk_preparation_redirects_without_creating_destination(self):
+        source = (ROOT / "tools/prepare-listenfree-sdk.sh").read_text()
+        self.assertIn("https://github.com/NextKde/ListenFree", source)
+        self.assertIn("exit 2", source)
+        for obsolete in ("mkdir", "cmake", "patch_root", "curl", "systemctl"):
+            self.assertNotIn(obsolete, source)
 
-    def test_ubuntu_development_packages(self):
-        result, output, _ = self.check('ubuntu', missing=['Qt6WebEngineWidgets', 'libavcodec'], features=['--with-listenfree-web-login'])
-        self.assertEqual(result, 1)
-        self.assertIn('sudo apt update && sudo apt install libavcodec-dev qt6-webengine-dev', output)
+    def test_core_upgrade_configure_clears_retired_app_cache_and_invalidates_stamp(self):
+        source = (ROOT / "tools/kosctl").read_text()
+        functions = []
+        for name in ("configure_if_needed", "configure_build"):
+            match = re.search(r"^" + name + r"\(\) \{.*?^\}", source, re.M | re.S)
+            self.assertIsNotNone(match)
+            functions.append(match.group())
+        with tempfile.TemporaryDirectory(dir=ROOT / "tmp", prefix="app-cache-migration-") as directory:
+            build = Path(directory)
+            (build / "CMakeCache.txt").write_text("# Existing core cache\n")
+            stamp = build / "kos-configure-inputs"
+            stamp.write_text("old configure inputs without app migration\n")
+            script = "\n".join(functions) + r'''
+project_dir="$PROJECT"
+build_dir="$BUILD"
+kwin_system_prefix=/usr
+spatial_forced() { return 1; }
+spatial_requested() { return 1; }
+prepare_cmake_build_dir() { :; }
+cmake() { printf '%s\n' "$@" >> "$BUILD/configure-args"; }
+configure_build
+configure_build
+'''
+            result = subprocess.run(["bash", "-euc", script], capture_output=True, text=True,
+                                    env={**os.environ, "PROJECT": str(ROOT), "BUILD": str(build)})
+            self.assertEqual(result.returncode, 0, result.stderr)
+            args = (build / "configure-args").read_text().splitlines()
+            self.assertEqual(args.count("-S"), 1, "new inputs configure once, unchanged stamp skips next configure")
+            for app in ("CALENDAR", "TODO", "WEATHER", "LISTENFREE", "CALCULATOR"):
+                key = "KOS_BUILD_" + app
+                self.assertIn(key, args)
+                self.assertEqual(args[args.index(key) - 1], "-U")
+                self.assertIn("-U " + key, stamp.read_text())
+            self.assertIn("-DBUILD_TESTING=OFF", args)
 
-    def test_default_audio_does_not_require_video_or_browser(self):
-        result, _, calls = self.check('ubuntu', missing=['Qt6Multimedia', 'Qt6WebEngineWidgets'])
-        self.assertEqual(result, 0)
-        self.assertNotIn(['pkg-config', '--exists', 'Qt6Multimedia'], calls)
-        self.assertNotIn(['pkg-config', '--exists', 'Qt6WebEngineWidgets'], calls)
-        self.assertTrue(any('-DLISTENFREE_BUILD_VIDEO=OFF' in call for call in calls))
+    def test_test_runner_clears_the_same_retired_switches(self):
+        source = (ROOT / "tools/run-tests.sh").read_text()
+        configure = re.search(r"^cmake -S .*?(?=\n\n)", source, re.M | re.S).group()
+        for app in ("CALENDAR", "TODO", "WEATHER", "LISTENFREE", "CALCULATOR"):
+            self.assertIn("-U KOS_BUILD_" + app, configure)
+        self.assertIn("-DBUILD_TESTING=ON", configure)
 
-    def test_video_requires_multimedia_but_not_webengine(self):
-        result, output, calls = self.check('ubuntu', missing=['Qt6Multimedia', 'Qt6WebEngineWidgets'],
-                                          features=['--with-listenfree-video'])
-        self.assertEqual(result, 1)
-        self.assertIn('qt6-multimedia-dev', output)
-        self.assertNotIn(['pkg-config', '--exists', 'Qt6WebEngineWidgets'], calls)
+    def test_core_purge_preserves_independent_app_ownership(self):
+        # Source contract only: never source/execute purge, even with --dry-run.
+        source = (ROOT / "tools/purge-kos.sh").read_text()
+        for external in ("kos-calendar", "kos-todo", "kos-weather", "kos-pim-service",
+                         "kos-music", "listenfree", "KOS_INSTALL_PREFIX", "KOS_APPS_BUILD_DIR"):
+            self.assertNotIn(external, source)
+        for unsafe_target in ('"$data_dir/kos"', '"$prefix/share/kos"',
+                              '"$config_dir/NextKde/KosApplications.conf"\n    "$apps_prefix'):
+            self.assertNotIn(unsafe_target, source)
+        self.assertIn('kos-platform|kos-ai-worker|kos-data-service|kos-settings)', source)
+        self.assertIn('protected_app_roots=("$data_dir/nextkde-apps" "$state_dir/nextkde-apps"', source)
+        self.assertIn('"$data_dir/kos/pim" "$config_dir/NextKde/KosApplications.conf"', source)
+        self.assertIn('resolved=$(realpath -m -- "$target")', source)
+        self.assertIn('lexical=$(realpath -ms -- "$target")', source)
+        self.assertIn('"$protected/" == "$candidate/"*', source)
+        self.assertLess(source.index("protected_app_roots="), source.index("# --- scan what is actually present ---"))
+        self.assertIn('"$unit_dir/kos-shell.service"', source)
+        self.assertIn('"$unit_dir/kos-platform.service"', source)
+        self.assertIn('"$unit_dir/kos-data.service"', source)
 
-    def test_ubuntu_old_qt_explicit_version(self):
-        result, output, _ = self.check('ubuntu', missing=['Qt6Core >= 6.10'], qt='6.4.2',
-                                       release={'ID': 'ubuntu', 'PRETTY_NAME': 'Ubuntu 25.10'})
-        self.assertEqual(result, 1)
-        self.assertIn('ListenFree requires Qt >= 6.10', output)
-        self.assertIn('Ubuntu 26.04+', output)
 
-    def test_debian_old_qt_names_detected_release(self):
-        # The hint has to report whichever release it actually found, not a
-        # hard-coded one, so a Debian host gets Debian-specific advice.
-        result, output, _ = self.check('ubuntu', missing=['Qt6Core >= 6.10'], qt='6.4.2',
-                                       release={'ID': 'debian', 'PRETTY_NAME': 'Debian GNU/Linux 13 (trixie)'})
-        self.assertEqual(result, 1)
-        self.assertIn('Debian GNU/Linux 13 (trixie) stock Qt is too old', output)
-        self.assertNotIn('Ubuntu 26.04+', output)
-
-    def test_split_runtime_and_framework_packages(self):
-        result, output, _ = self.check('ubuntu', markers='KOS_MISSING:Qml_QtQuick_Effects\nKOS_MISSING:KF6CalendarCore\nKOS_MISSING:SQLiteDriver')
-        self.assertEqual(result, 1)
-        self.assertIn('libkf6calendarcore-dev libqt6sql6-sqlite qml6-module-qtquick-effects', output)
-
-    def test_old_taglib_selects_private_build(self):
-        result, _, calls = self.check('ubuntu', missing=['taglib >= 2.3.1'])
-        self.assertEqual(result, 0)
-        self.assertTrue(any('-DKOS_BUILD_TAGLIB=ON' in call for call in calls))
-
-    def test_private_taglib_missing_utfcpp(self):
-        result, output, _ = self.check('ubuntu', missing=['taglib >= 2.3.1'], markers='KOS_MISSING:Utf8Cpp')
-        self.assertEqual(result, 1)
-        self.assertIn('sudo apt install libutfcpp-dev', output)
-
-    def test_old_go(self):
-        result, output, _ = self.check('ubuntu', go='1.22.0')
-        self.assertEqual(result, 1)
-        self.assertIn('Go >= 1.26', output)
-
-    def test_sdk_does_not_require_go(self):
-        result, _, calls = self.check('arch', go='1.22.0', sdk=True)
-        self.assertEqual(result, 0)
-        self.assertNotIn(['go', 'version'], calls)
-
-    def test_standard_apps_do_not_probe_audio_or_private_sdk_dependencies(self):
-        result, _, calls = self.check('ubuntu', qt='6.8.3', cmake='3.25.1', audio=False,
-            missing=['Qt6Core >= 6.10', 'Qt6WebEngineWidgets', 'libavcodec', 'taglib >= 2.3.1'],
-            absent=['curl', 'bzip2', 'patch', 'flock'])
-        self.assertEqual(result, 0)
-        self.assertFalse(any(call[:3] == ['pkg-config', '--exists', 'Qt6WebEngineWidgets'] for call in calls))
-        self.assertFalse(any('taglib >= 2.3.1' in call for call in calls))
-        self.assertTrue(any('-DKOS_WITH_LISTENFREE=OFF' in call for call in calls))
-
-    def test_standard_apps_still_require_the_data_service_go_toolchain(self):
-        result, output, _ = self.check('ubuntu', go='1.22.0', audio=False)
-        self.assertEqual(result, 1)
-        self.assertIn('Go >= 1.26', output)
-
-    def test_distribution_derivatives(self):
-        with tempfile.TemporaryDirectory() as directory:
-            release = Path(directory) / 'os-release'
-            release.write_text('ID=manjaro\nID_LIKE="arch"\n')
-            self.assertEqual(deps.distribution(release), 'arch')
-            release.write_text('ID=linuxmint\nID_LIKE="ubuntu debian"\n')
-            self.assertEqual(deps.distribution(release), 'ubuntu')
-
-if __name__ == '__main__':
+if __name__ == "__main__":
     unittest.main()

@@ -61,7 +61,9 @@ host.pkgs.runCommand "nextkde-nixos-packaging-check" {} ''
   test ! -d "$deployment/shared/qml/controls/controls"
   ${if buildWeather then ''
     test -x ${kos}/bin/kos-weather
-    test -x ${kos.passthru.weather}/libexec/kos-data-service
+    test -x ${kos.passthru.weather}/bin/kos-weather-backend
+    test ! -e ${kos.passthru.weather}/libexec/kos-data-service
+    test ! -e ${kos.passthru.weather}/share/systemd/user/kos-data.service
   '' else ''
     test ! -e ${kos}/bin/kos-weather
   ''}

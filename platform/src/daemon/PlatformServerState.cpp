@@ -3,11 +3,18 @@
 
 #include <QByteArray>
 #include <QDir>
+#include <QDateTime>
+#include <QJsonArray>
+#include <QJsonDocument>
+#include <fcntl.h>
+#include <sys/stat.h>
+#include <unistd.h>
 #include <QFile>
 #include <QFileInfo>
 #include <QJsonValue>
 #include <QSaveFile>
 #include <QStandardPaths>
+#include <QUuid>
 
 namespace KosPlatform {
 using namespace Detail;
@@ -89,6 +96,75 @@ QString resolveStatePath(const QString &dir, const QString &file)
 bool PlatformServer::handleStateOperation(QLocalSocket *socket, const QJsonObject &request)
 {
     const QString op = operation(request);
+    if (op == QLatin1String("lockscreen.weather-publish")) {
+        const QJsonObject payload = request.value(QStringLiteral("payload")).toObject();
+        static const QStringList fields{
+            QStringLiteral("weatherSymbol"), QStringLiteral("weatherTemperature"),
+            QStringLiteral("weatherCity"), QStringLiteral("weatherCondition"),
+            QStringLiteral("weatherApparent"), QStringLiteral("weatherHumidity")};
+        if (payload.size() != fields.size()) {
+            respond(socket, request, false, {}, QStringLiteral("invalid-lockscreen-weather"),
+                    QStringLiteral("Invalid lock-screen weather fields"), false);
+            return true;
+        }
+        QByteArray bytes("// Generated weather data. Do not edit.\nimport QtQuick\nQtObject {\n");
+        for (const auto &field : fields) {
+            const auto value = payload.value(field);
+            if (!value.isString() || value.toString().size() > 256) {
+                respond(socket, request, false, {}, QStringLiteral("invalid-lockscreen-weather"),
+                        QStringLiteral("Invalid lock-screen weather value"), false);
+                return true;
+            }
+            // JSON escapes executable QML syntax in caller-provided display text.
+            const QByteArray quoted = QJsonDocument(QJsonArray{value}).toJson(QJsonDocument::Compact);
+            bytes += "    property string " + field.toUtf8() + ": " + quoted.mid(1, quoted.size() - 2) + '\n';
+        }
+        bytes += "    property double generatedAt: "
+            + QByteArray::number(payload.value(QStringLiteral("weatherTemperature")).toString() == QLatin1String("--°")
+                                     ? 0 : QDateTime::currentMSecsSinceEpoch()) + "\n}\n";
+
+        // Keep the directory inode pinned and never create it. renameat cannot
+        // resurrect an unlinked theme directory or be redirected by replacing
+        // its path. No worker remains alive after the response or timeout.
+        const QByteArray directory = QFile::encodeName(QStandardPaths::writableLocation(QStandardPaths::GenericDataLocation)
+            + QStringLiteral("/plasma/shells/org.kos.desktop/contents/lockscreen"));
+        const int dir = ::open(directory.constData(), O_RDONLY | O_DIRECTORY | O_NOFOLLOW | O_CLOEXEC);
+        struct stat directoryInfo{};
+        struct stat themeInfo{};
+        if (dir < 0 || ::fstat(dir, &directoryInfo) != 0 || directoryInfo.st_uid != ::geteuid()
+            || ::fstatat(dir, "LockScreen.qml", &themeInfo, AT_SYMLINK_NOFOLLOW) != 0
+            || !S_ISREG(themeInfo.st_mode) || themeInfo.st_uid != ::geteuid()) {
+            if (dir >= 0) ::close(dir);
+            respond(socket, request, true, {{QStringLiteral("published"), false},
+                                          {QStringLiteral("reason"), QStringLiteral("theme-unavailable")}});
+            return true;
+        }
+        const QByteArray temporary = ".LockFeed-" + QUuid::createUuid().toByteArray(QUuid::WithoutBraces);
+        const int output = ::openat(dir, temporary.constData(), O_WRONLY | O_CREAT | O_EXCL | O_NOFOLLOW | O_CLOEXEC, 0600);
+        bool ok = output >= 0;
+        if (ok) {
+            QFile file;
+            ok = file.open(output, QIODevice::WriteOnly, QFileDevice::AutoCloseHandle);
+            if (!ok) ::close(output);
+            else {
+                ok = file.write(bytes) == bytes.size() && file.flush();
+                file.close();
+            }
+        }
+        struct stat currentDirectory{};
+        struct stat currentTheme{};
+        ok = ok && ::stat(directory.constData(), &currentDirectory) == 0
+            && currentDirectory.st_dev == directoryInfo.st_dev && currentDirectory.st_ino == directoryInfo.st_ino
+            && ::fstatat(dir, "LockScreen.qml", &currentTheme, AT_SYMLINK_NOFOLLOW) == 0
+            && currentTheme.st_dev == themeInfo.st_dev && currentTheme.st_ino == themeInfo.st_ino;
+        if (ok) ok = ::renameat(dir, temporary.constData(), dir, "LockFeed.qml") == 0;
+        if (!ok && output >= 0) ::unlinkat(dir, temporary.constData(), 0);
+        ::close(dir);
+        respond(socket, request, ok, {{QStringLiteral("published"), ok}},
+                ok ? QString() : QStringLiteral("lockscreen-weather-publish-failed"),
+                ok ? QString() : QStringLiteral("Lock-screen theme changed or weather publication failed"), true);
+        return true;
+    }
     if (!op.startsWith(QStringLiteral("state.")))
         return false;
     const QJsonObject payload = request.value(QStringLiteral("payload")).toObject();

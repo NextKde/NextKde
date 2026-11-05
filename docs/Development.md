@@ -53,22 +53,26 @@ Record actual test counts instead of copying a historical count from an old repo
 
 ## Optional apps
 
-Core installation excludes the independent apps. In the VM, test the **actual default entry point**:
+Application development and runtime suites now belong to
+[NextKde/kos-apps](https://github.com/NextKde/kos-apps) (Calendar including tasks
+and PIM, Calculator and Weather) and
+[NextKde/ListenFree](https://github.com/NextKde/ListenFree).
+The root app presets, build targets and extracted app sources are removed; old
+ON app switches fail with migration instructions.
 
-```sh
-./tools/kosctl install apps
-cmake --preset apps-dev
-cmake --build --preset apps-dev
-ctest --preset apps-dev
-```
+`./tools/kosctl install apps` defaults to signed GitHub Release Flatpak bundles
+for Calendar, Calculator and Weather. Source builds require `--backend=source`;
+`--app APP` selects one app, and `--with-listenfree` explicitly includes ListenFree. Actions `update`, `status`, `check-update` and
+`uninstall` use the same dispatcher. No stable Release means unavailable.
+There are no service activation or MIME/default-app changes in this path.
+See [apps](../apps/README.md) for usage and ownership boundaries.
 
-The bundle selects Calendar, Calculator, Todo and Weather, with ListenFree OFF even if an old
-CMake cache enabled it. Verify no audio SDK creation or MIME/legacy-player migration and no
-partial replacement of core Settings. Also check an app-only prefix without core Settings.
-Qt 6.5+, compatible KF6 and Go 1.26+ are the standard bundle baseline.
-`./tools/kosctl install apps --with-listenfree` explicitly enables the audio SDK and additional
-[ListenFree dependencies](../apps/listenfree/packaging/linux/README.md), including Qt 6.10+.
-See [apps](../apps/README.md) for individual presets and registration.
+Core CI replaces the former monorepo app job with
+`tools/tests/test_app_installer.py` and `tools/tests/test_app_release.py`.
+Application preferences, PIM, Calendar language and Weather/Calculator client
+suites are owned by the external repositories; core Go data-service, Settings,
+Shell, lock screen and platform coverage remain required.
+
 
 ## Review checklist
 

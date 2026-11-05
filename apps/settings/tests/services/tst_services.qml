@@ -22,15 +22,22 @@ TestCase {
     QtObject {
         id: fakeStore
         property var music: ({available: true, installed: false, busy: false})
+        property var apps: []
+        property bool anyBusy: false
+        property string lastId: ""
+        property int checks: 0
+        property int updates: 0
         property int installs: 0
         property int opens: 0
         property int removals: 0
         property int cancellations: 0
         function refresh() {}
-        function install() { installs++ }
-        function open() { opens++ }
-        function uninstall() { removals++ }
-        function cancel() { cancellations++ }
+        function install(id) { installs++; lastId = id || "kmusic" }
+        function open(id) { opens++; lastId = id || "kmusic" }
+        function uninstall(id) { removals++; lastId = id || "kmusic" }
+        function cancel(id) { cancellations++; lastId = id || "kmusic" }
+        function checkUpdates(id) { checks++; lastId = id }
+        function update(id) { updates++; lastId = id }
         function openRepository() {}
         function openLog() {}
     }
@@ -48,6 +55,7 @@ TestCase {
         I18n.language = "en"
         fakeStore.music = {available: true, installed: false, busy: false}
         fakeStore.installs = fakeStore.opens = fakeStore.removals = fakeStore.cancellations = 0
+        fakeStore.apps = []; fakeStore.anyBusy = false; fakeStore.lastId = ""; fakeStore.checks = fakeStore.updates = 0
     }
     function snapshot(state) { bridge.wallpaperSnapshotChanged({spatialResources: state}) }
 
@@ -164,6 +172,40 @@ TestCase {
         compare(findChild(page, "kmusicStatus").visible, false)
         I18n.language = "zh-CN"
         compare(findChild(page, "kmusicError").text, "下载超时，已尝试 5 次。请检查网络后重试。")
+    }
+
+    function appState(id, extra) {
+        return Object.assign({id: id, name: id, description: "", available: true, statusKnown: true, managed: true, installed: true, busy: false, version: "1.0", latestVersion: "2.0", updateAvailable: true}, extra || {});
+    }
+    function test_multi_app_actions_and_busy() {
+        fakeStore.apps = [appState("calendar", {installed: false}), appState("calculator"), appState("weather"), appState("listenfree")];
+        const page = createTemporaryObject(factory, this, {store: fakeStore});
+        tryVerify(function() { return !!findChild(page, "calendarAction") });
+        findChild(page, "calendarAction").clicked(); compare(fakeStore.lastId, "calendar"); compare(fakeStore.installs, 1);
+        findChild(page, "weatherAction").clicked(); compare(fakeStore.lastId, "weather"); compare(fakeStore.opens, 1);
+        findChild(page, "calculatorCheckUpdates").clicked(); compare(fakeStore.lastId, "calculator"); compare(fakeStore.checks, 1);
+        findChild(page, "listenfreeUpdate").clicked(); compare(fakeStore.lastId, "listenfree"); compare(fakeStore.updates, 1);
+        findChild(page, "weatherActionSecondary").clicked();
+        const dialog = findChild(page, "appUninstallDialog"); verify(dialog.visible); compare(fakeStore.removals, 0);
+        dialog.accept(); compare(fakeStore.lastId, "weather"); compare(fakeStore.removals, 1);
+        fakeStore.anyBusy = true;
+        compare(findChild(page, "calendarAction").enabled, false);
+        compare(findChild(page, "calculatorCheckUpdates").enabled, false);
+        fakeStore.apps = [appState("calendar", {busy: true, stage: "build"}), appState("calculator")];
+        tryCompare(findChild(page, "calendarStatus"), "text", "Building from source…");
+        findChild(page, "calendarActionSecondary").clicked(); compare(fakeStore.lastId, "calendar"); compare(fakeStore.cancellations, 1);
+    }
+    function test_multi_app_offline_and_external() {
+        fakeStore.apps = [appState("weather", {code: "RATE_LIMITED"}), appState("calculator", {managed: false, code: "EXTERNALLY_MANAGED", message: "Executable already supplied by another installation"})];
+        const page = createTemporaryObject(factory, this, {store: fakeStore, width: 420});
+        tryVerify(function() { return !!findChild(page, "weatherError") });
+        compare(findChild(page, "weatherError").text, "GitHub request limit reached. Try again later.");
+        compare(findChild(page, "weatherAction").text, "Open"); verify(findChild(page, "weatherAction").enabled);
+        compare(findChild(page, "calculatorError").visible, false);
+        compare(findChild(page, "calculatorActionSecondary").visible, false);
+        compare(findChild(page, "calculatorUpdate").visible, false);
+        verify(findChild(page, "calculatorStatus").text.indexOf("Installed outside Settings") === 0);
+        compare(findChild(page, "weatherVersion").text, "Installed: 1.0 · Latest: 2.0");
     }
 
     function test_music_unpublished_release() {

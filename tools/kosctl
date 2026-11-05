@@ -83,7 +83,7 @@ is_nixos() {
 # is needed only while compositor plugins are enabled.
 arch_core_build_packages=(
     git python quickshell cmake ninja gcc qt6-base qt6-declarative qt6-tools qt6-translations qt6-quick3d qt6-svg qt6-imageformats qt6-5compat qt6-wayland go curl
-    extra-cmake-modules wayland
+    extra-cmake-modules wayland pkgconf flatpak ostree gnupg
     kwindowsystem kiconthemes kglobalaccel kio patchelf
 )
 # The depth engine and 3D wallpaper plugin follow KOS_BUILD_SPATIAL.
@@ -106,7 +106,7 @@ arch_optional_runtime_packages=(
 # "Could NOT find Libdrm". The xcb extension headers are the same story:
 # kwin-dev does not pull them and the KWinX11 export needs them.
 debian_core_build_packages=(
-    git python3 cmake ninja-build g++ golang-go curl patchelf pkg-config
+    git python3 cmake ninja-build g++ golang-go curl patchelf pkg-config libflatpak-dev libostree-dev flatpak gpgv
     quickshell
     extra-cmake-modules libwayland-dev wayland-protocols libxkbcommon-dev
     qt6-base-dev qt6-declarative-dev qt6-tools-dev qt6-l10n-tools qt6-translations-l10n qt6-quick3d-dev qt6-svg-dev qt6-wayland-dev
@@ -154,7 +154,7 @@ debian_optional_runtime_packages=(
 fedora_core_build_packages=(
     git python3 cmake ninja-build gcc-c++ golang curl patchelf pkgconf-pkg-config
     quickshell
-    extra-cmake-modules wayland-devel wayland-protocols-devel libxkbcommon-devel
+    extra-cmake-modules wayland-devel wayland-protocols-devel libxkbcommon-devel flatpak-devel ostree-devel flatpak gnupg2
     qt6-qtbase-devel qt6-qtbase-private-devel qt6-qtdeclarative-devel qt6-qttools-devel
     qt6-qttranslations qt6-qtquick3d-devel qt6-qtsvg-devel qt6-qtwayland-devel
     qt6-qtimageformats qt6-qt5compat-devel
@@ -321,9 +321,11 @@ Firefox native buttons (one-time profile registration, then the common switch):
 
 Optional components are installed by naming them:
   ./tools/kosctl install lockscreen   # lock screen (user level, no root)
-  ./tools/kosctl install apps         # Calendar, Calculator, Todo, Weather
-  ./tools/kosctl install apps --with-listenfree # also build ListenFree + audio SDK
-  ./tools/kosctl install apps --with-listenfree-video # also enable video features
+  ./tools/kosctl install apps         # independent user Flatpaks: Calendar, Calculator, Weather
+  ./tools/kosctl install apps --app calendar # one independent app; also calculator/weather/listenfree
+  ./tools/kosctl install apps --with-listenfree # explicitly include ListenFree
+  ./tools/kosctl install apps status --app calendar # also update/check-update/uninstall
+  # --with-listenfree-video is unsupported; use NextKde/ListenFree for video builds.
   ./tools/kosctl uninstall lockscreen
 
 Plain `install` / `uninstall` cover the core desktop only -- no apps, no lock
@@ -561,11 +563,16 @@ configure_build() {
     #   - the KWin plugin components are governed by KOS_BUILD_KWIN_PLUGINS,
     #     not BUILD_TESTING, so `cmake --install --component kwin_plugins`
     #     still finds its binaries;
-    #   - `kosctl install apps` builds from its own .build/apps-release tree
-    #     (tools/install-apps.sh), so nothing here feeds that path.
+    #   - `kosctl install apps` dispatches to kos-apps through tools/install-apps.sh
+    #     (Flatpak by default; explicit legacy source mode), not core app targets.
     # Tests now have one owner: ./tools/run-tests.sh, which keeps its own
     # .build/tests directory.
+    # Core upgrades may reuse a cache that previously enabled bundled apps.
+    # Clear only retired app entries; direct root CMake still rejects old ON flags.
+    # These arguments also change configure_if_needed's input stamp on upgrade.
     configure_if_needed "$project_dir" "$build_dir" \
+        -U KOS_BUILD_CALENDAR -U KOS_BUILD_TODO -U KOS_BUILD_WEATHER \
+        -U KOS_BUILD_LISTENFREE -U KOS_BUILD_CALCULATOR \
         -DCMAKE_BUILD_TYPE="$build_type" \
         -DCMAKE_INSTALL_PREFIX="$kwin_system_prefix" \
         "${spatial_flags[@]}" \
@@ -928,10 +935,10 @@ deploy_artifacts() {
     local required
     local -a required_files
     if [[ "$nix_artifact" == true ]]; then
-        required_files=(libexec/kos-platform libexec/kos-data-service bin/kos-settings)
+        required_files=(libexec/kos-platform libexec/kos-data-service bin/kos-settings bin/kos-apps)
         spatial_requested && required_files+=(libexec/kos-ai-worker)
     else
-        required_files=(platform/kos-platform bin/kos-data-service apps/settings/kos-settings)
+        required_files=(platform/kos-platform bin/kos-data-service apps/settings/kos-settings apps/settings/kos-apps)
         spatial_built && required_files+=(platform/kos-ai-worker)
     fi
     for required in "${required_files[@]}"; do
@@ -951,13 +958,14 @@ deploy_artifacts() {
         "$prefix/share/shared/qml" "$prefix/share/applications"
     # --- Binaries ---
     rm -f "$prefix/libexec/kos-platform" "$prefix/libexec/kos-ai-worker" \
-        "$prefix/libexec/kos-data-service" "$prefix/bin/kos-settings"
+        "$prefix/libexec/kos-data-service" "$prefix/bin/kos-settings" "$prefix/bin/kos-apps"
     if [[ "$nix_artifact" == true ]]; then
         ln -s "$artifact_root/libexec/kos-platform"    "$prefix/libexec/kos-platform"
         spatial_requested && ln -s "$artifact_root/libexec/kos-ai-worker" \
             "$prefix/libexec/kos-ai-worker"
         ln -s "$artifact_root/libexec/kos-data-service" "$prefix/libexec/kos-data-service"
         ln -s "$artifact_root/bin/kos-settings"          "$prefix/bin/kos-settings"
+        ln -s "$artifact_root/bin/kos-apps"              "$prefix/bin/kos-apps"
     else
         install -m 0755 "$artifact_root/platform/kos-platform"    "$prefix/libexec/kos-platform"
         if spatial_built; then
@@ -983,6 +991,7 @@ deploy_artifacts() {
         fi
         install -m 0755 "$artifact_root/bin/kos-data-service"     "$prefix/libexec/kos-data-service"
         install -m 0755 "$artifact_root/apps/settings/kos-settings" "$prefix/bin/kos-settings"
+        install -m 0755 "$artifact_root/apps/settings/kos-apps"     "$prefix/bin/kos-apps"
         if command -v patchelf >/dev/null 2>&1; then
             patchelf --set-rpath '$ORIGIN/../lib' "$prefix/libexec/kos-platform"
             if spatial_built; then
@@ -1169,11 +1178,8 @@ deploy_artifacts() {
         local -a kos_units=(
             kos-platform.service kos-data.service kos-shell.service
         )
-        # kos-pim-service is deliberately not enabled. It is D-Bus activated
-        # on demand (org.nextkde.Kos.Pim1.service) and tools/install-apps.sh
-        # keeps it non-resident; enabling it from the core install fought
-        # that policy -- which one won depended on the order the two
-        # installs happened to run in.
+        # PIM belongs to the independent Calendar application. Core installation
+        # owns only the units above and does not manage external app lifecycle.
         # install is non-disruptive: it registers the units for the next
         # session (and login autostart) but leaves the running session alone.
         # In-place updates of executables and QML only take effect after the
@@ -1334,9 +1340,8 @@ start_all() {
     local -a kos_units=(
         kos-platform.service kos-data.service kos-shell.service
     )
-    # kos-pim-service is D-Bus activated on demand and is deliberately kept
-    # non-resident (see deploy_artifacts). It must not be enabled or restarted
-    # from `start` either, or `install apps`'s disable keeps fighting this.
+    # PIM belongs to the independent Calendar application; core start does not
+    # enable, disable or restart its service.
     # Replace a manually launched `kos` instance so systemd becomes its sole
     # supervisor; the unit's --no-duplicate would otherwise exit repeatedly
     # while that instance is alive.
@@ -1934,7 +1939,7 @@ remove_lockscreen() {
 # pull heavy optional dependencies. Naming them keeps that cost out of the
 # default install.
 install_apps() {
-    "$project_dir/tools/install-apps.sh" "$@"
+    PATH="$prefix/bin:$PATH" "$project_dir/tools/install-apps.sh" "$@"
 }
 
 install_all() {
@@ -2100,7 +2105,7 @@ uninstall() {
     fi
     rm -f "$prefix/share/kos/release.json"
     rm -f "$prefix/libexec/kos-platform" "$prefix/libexec/kos-ai-worker" \
-        "$prefix/libexec/kos-data-service" "$prefix/bin/kos-settings"
+        "$prefix/libexec/kos-data-service" "$prefix/bin/kos-settings" "$prefix/bin/kos-apps"
     rm -f "$prefix/lib/libonnxruntime.so" "$prefix/lib/libonnxruntime.so.1" \
         "$prefix/lib/libonnxruntime.so.1.30.0" \
         "$prefix/lib/libonnxruntime_providers_shared.so"
