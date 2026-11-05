@@ -1,5 +1,6 @@
 {
   "data-platform": [
+    "kos-platform.appmenu",
     "kos-data-service.go",
     "kos-platform.ai-worker-client",
     "kos-platform.keep-awake",
@@ -18,6 +19,7 @@
     "kos-app.dependency-migration"
   ],
   "logic": [
+    "kos-shell.appmenu-refresh",
     "kos-window.gtk-buttons-install",
     "kos-window.firefox-buttons-install",
     "kos-shell.language",
