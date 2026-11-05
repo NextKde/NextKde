@@ -202,26 +202,24 @@ def test_brightness_targets_one_kde_display() -> None:
     assert "setKdeDisplayBrightness(displayId, value)" in handler
 
 
-def test_lockscreen_feed_hands_the_daemon_a_local_path() -> None:
-    """StandardPaths.writableLocation() is a QUrl in QML, not a path.
-
-    Concatenated straight into the publish destination it read as
-    "file:///home/.../LockFeed.qml". FileView loads that happily, so the probe
-    gating the publish never noticed, but QFileInfo does not treat it as
-    absolute and the daemon answered every file.copy with "invalid-path": the
-    lock screen silently kept the weather its package was installed with. The
-    QUrl therefore has to go through the file URL conversion.
-    """
+def test_lockscreen_feed_uses_daemon_owned_fixed_destination() -> None:
+    """Weather text crosses IPC; paths and atomic publication stay in C++."""
     source = (ROOT
               / "shell/desktop/modules/weather/LockScreenFeedService.qml"
               ).read_text()
-    assert "StandardPaths.writableLocation" in source
-    assert "decodeURIComponent" in source, (
-        "the QUrl from StandardPaths must be converted to a local path"
-    )
-    assert 'replace(/^file:\\/\\//, "")' in source, (
-        "the file URL scheme must be stripped before the value is used as a path"
-    )
+    assert 'PlatformClient.request("lockscreen.weather-publish", payload()' in source
+    for obsolete in ("StandardPaths.writableLocation", "file.copy", "FileView", "LockFeed.qml"):
+        assert obsolete not in source, "the client must not choose or stage a publication path"
+    daemon = (DAEMON / "PlatformServerState.cpp").read_text()
+    publisher = daemon[daemon.index('if (op == QLatin1String("lockscreen.weather-publish"))'):]
+    publisher = publisher[:publisher.index('if (!op.startsWith(QStringLiteral("state.")))')]
+    assert 'payload.value(QStringLiteral("path"))' not in publisher
+    assert 'QStringLiteral("/plasma/shells/org.kos.desktop/contents/lockscreen")' in publisher
+    assert '::open(directory.constData(), O_RDONLY | O_DIRECTORY | O_NOFOLLOW | O_CLOEXEC)' in publisher
+    assert '::openat(dir, temporary.constData()' in publisher
+    assert '::renameat(dir, temporary.constData(), dir, "LockFeed.qml")' in publisher
+    assert 'QJsonDocument(QJsonArray{value})' in publisher
+    assert 'QStringLiteral("theme-unavailable")' in publisher
 
 
 if __name__ == "__main__":
@@ -236,5 +234,5 @@ if __name__ == "__main__":
     test_thumbnail_capture_closes_every_descriptor_it_opens()
     test_thumbnail_memory_is_bounded_and_recent_frames_are_reused()
     test_brightness_targets_one_kde_display()
-    test_lockscreen_feed_hands_the_daemon_a_local_path()
+    test_lockscreen_feed_uses_daemon_owned_fixed_destination()
     print("platform contracts: ok")
