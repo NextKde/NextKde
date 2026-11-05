@@ -6,9 +6,12 @@ GitHub Release Flatpak bundles, using structured libflatpak transactions. It doe
 not require a hosted NextKde app repository or a Flathub listing. Signed manifests
 pin version/ref/commit/size/hash; reviewed public keys ship in core and are never
 trusted from the downloaded bundle. `gpgv` is a runtime dependency. The local
-bundle-publisher policy contains the dedicated public key for all four app IDs;
-the runtime-source policy remains empty and no signed production bundle is
-published. New installation/update remains unavailable. No online
+bundle-publisher policy contains the dedicated public key for all four app IDs.
+The runtime-source policy approves only the reviewed Flathub runtime URL/key,
+not Flathub applications; users must configure that remote separately. See the
+[independent-app contract](../../../docs/app-store/IndependentApps.md) for the
+full primary fingerprint and review evidence. No signed production bundle is
+published, so new installation/update remains unavailable. No online
 remote is added, no source fallback occurs, and no legacy migration is automatic.
 Libflatpak may create a URL-less local origin/key record even before a refused or
 cancelled deployment; complete rollback is not claimed. Runtime sources must be

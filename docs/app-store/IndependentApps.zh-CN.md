@@ -41,9 +41,13 @@ GitHub 包更新。Flatpak 管理文件及 ref，外部 Flatpak 工具能卸载�
 对应清单名加 `.sig` 签原始清单字节，包内 OSTree commit 也必须签名。
 公钥与完整主密钥指纹通过经过审核的 core 版本内置在 `FlatpakTrustPolicy.h`，不从同一 Release
 或包内建立信任。运行依赖增加 `gpgv`。当前已在 core 策略中为四款应用嵌入专用发布者公钥，
-主指纹为 `3751DC833ED4BC7E797A9766ADF7411B531A56B4`；runtime 来源策略仍为空，尚无正式签名
-Release。密钥虽已在本机专用目录生成，但尚未配置 CI secret 或发布受信 core 版本，因此验证安装／
-更新仍不可用，不自动回退源码安装。
+主指纹为 `3751DC833ED4BC7E797A9766ADF7411B531A56B4`；尚无正式签名 Release。
+密钥在本机专用目录生成，不是 CI secret，也尚未通过受信 core 版本发行。
+runtime 专用策略于 2026-11-05 按[官方安装文档](https://docs.flathub.org/docs/for-users/installation)
+及其 HTTPS 仓库文件审核，接受 `https://dl.flathub.org/repo/` 与完整主指纹
+`6E5C05D979C76DAF93C081354184DD4D907A7CAE`，主密钥于 2027-06-14 到期。
+此项仅授权运行库，不接受 Flathub 应用更新；未知额外主密钥、关闭校验或其他 URL 仍拒绝。
+用户须自行配置来源，Settings 不自动添加。签名包安装／更新仍待验收，不自动回退源码。
 
 显式检查更新只查固定仓库最新稳定 Release，校验唯一附件、签名、tag／版本和本机架构 stable ref。
 元数据上限 256 KiB、签名 64 KiB、包 2 GiB；下载只允许固定 GitHub HTTPS 端点与附件 CDN，
@@ -102,8 +106,11 @@ flatpak --user uninstall org.nextks.calculator
 
 ## 各应用打包状态
 
-下表前三款的 SDK／未签名开发包是**旧 ID** 历史结果；新 `org.nextks.*` 合仓版本
-目前只完成本机原生编译与 tmp 暂存，新 ID 的 SDK 出包、签名与运行验收尚未完成。
+下表保留**旧 ID** 的历史准备结果。新 `org.nextks.*` 已在托管 CI 原生编译并运行注册回归。
+固定源码 `03c92edd0b0c9f54013ba8c63ee1e591482eb928` 的 Calendar 与 Weather 也已在
+[run 41945820505](https://github.com/NextKde/kos-apps/actions/runs/41945820505)
+完成 KDE 6.11 SDK 的 app／Sources 导出；Calculator SDK 准备仍待完成。
+这些未签名候选不代表签名、沙箱生命周期或生产交付已验收。
 
 | 应用 | 本地准备 | 仍缺 |
 | --- | --- | --- |
@@ -113,7 +120,7 @@ flatpak --user uninstall org.nextks.calculator
 | ListenFree | 身份／MPRIS／独立凭据命名空间、可选功能边界、声明式依赖与补丁、必要许可证检查、出包脚本／工作流；本机与 KDE 6.11 SDK 应用／sourcehost 编译完成，已导出清理构建目录后的未签名开发包 | 实际依赖／许可／对应源码交付审核、portal／音频／凭据验收；经审核的固定源码版本、密钥和正式 Release |
 
 身份选项本机编译不等于完成 Flatpak 出包或验收。共享后端已接线，发布者公钥已接入本地 core，
-但 runtime 来源策略仍为空，尚无正式签名 Release；上述准备不代表生产安装已经可用。
+并已审核 runtime 专用来源策略，但尚无正式签名 Release；上述准备不代表生产安装已经可用。
 
 ### 待人工完成的 bundle 验收
 

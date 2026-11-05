@@ -53,9 +53,16 @@ bundle's OSTree commit must also be signed. Reviewed binary public keys and full
 primary fingerprints ship in core's `FlatpakTrustPolicy.h`, never from the same
 Release or from the bundle. The dedicated development publisher key is now embedded
 for all four app IDs, fingerprint `3751DC833ED4BC7E797A9766ADF7411B531A56B4`;
-the runtime-source allowlist remains empty and no signed production bundle has
-been published. The key was generated locally but is not yet a CI secret or
-published trust release, so verified installation/update remains unavailable.
+no signed production bundle has been published. The key was generated locally
+but is not a CI secret or published trust release. The runtime-only policy now
+accepts `https://dl.flathub.org/repo/` with primary fingerprint
+`6E5C05D979C76DAF93C081354184DD4D907A7CAE`, reviewed on 2026-11-05 against the
+[official setup documentation](https://docs.flathub.org/docs/for-users/installation)
+and its HTTPS repository file. The primary expires on 2027-06-14. This authorizes
+runtimes only, not application updates from Flathub; unknown additional primary
+keys, disabled verification and other URLs remain refused. Users must configure
+the source separately; Settings does not add it. Signed bundle installation and
+update acceptance remain pending.
 
 Explicit update checks contact only the fixed repository's latest stable GitHub
 Release, validate unique attachments, signatures, tag/version and native stable
@@ -142,9 +149,13 @@ public keys, signed bundles and approved runtime policy.
 
 ## Application packaging readiness
 
-The first three entries below describe historical **old-ID** SDK builds. The new
-`org.nextks.*` monorepo applications have completed host native builds/staging only;
-new-ID SDK export/signing and runtime acceptance remain outstanding.
+The table below retains historical **old-ID** preparation. New `org.nextks.*`
+native builds and registered regressions run in hosted CI. At exact revision
+`03c92edd0b0c9f54013ba8c63ee1e591482eb928`, Calendar and Weather also completed
+KDE 6.11 SDK app/Sources exports in
+[run 41945820505](https://github.com/NextKde/kos-apps/actions/runs/41945820505).
+Calculator SDK preparation is still pending. These unsigned candidates do not
+establish signing, sandbox lifecycle or production acceptance.
 
 | App | Local preparation | Still required |
 | --- | --- | --- |
@@ -154,8 +165,8 @@ new-ID SDK export/signing and runtime acceptance remain outstanding.
 | ListenFree | Identity/MPRIS/private credential namespace, explicit optional-feature limits, declared dependency modules/patches, mandatory license inputs, helper/workflow; host and KDE 6.11 SDK app/sourcehost builds compiled; cleaned unsigned development bundle exported | Dependency/runtime/license/source delivery review, portal/audio/credential acceptance; reviewed immutable source, keys and signed Release |
 
 Host identity compilation does not mean a Flatpak bundle was built or accepted.
-The shared backend has a local publisher key, but runtime policy remains empty
-and no signed Release exists; none of these entries implies production availability.
+The shared backend embeds the publisher key and the reviewed runtime-only policy,
+but no signed Release exists; none of these entries implies production availability.
 
 ### Pending manual bundle acceptance
 
