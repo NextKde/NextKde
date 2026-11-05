@@ -233,15 +233,16 @@ private:
     // handler has been crashing KWin, and a panel is a small fixed rectangle.
     static void repaintRect(const QRectF &globalRect);
 
-    KWin::GLTexture *backgroundTexture(const QSizeF &panelSize, qreal scale);
+    KWin::GLTexture *backgroundTexture(const QSizeF &panelSize, qreal scale,
+                                       const PanelGeometry &geometry, const PanelWindowContour &contour);
     KWin::GLTexture *panelTexture(const QSizeF &panelSize, qreal scale, bool active,
                                   bool dark, const PanelGeometry &geometry,
-                                  Action hovered, bool adjusting, bool maximized, bool showGlyphs);
+                                  Action hovered, bool adjusting, bool maximized, bool showGlyphs, const PanelWindowContour &contour);
     KWin::GLTexture *cooperativeTexture(const QSizeF &, qreal, Type, bool, bool, bool, bool);
     KWin::GLTexture *cacheTexture(const QString &key, QImage image);
     QImage buildPanel(const QSizeF &panelSize, qreal scale, bool active, bool dark,
                       const PanelGeometry &geometry, Action hovered,
-                      bool adjusting, bool maximized, bool showGlyphs) const;
+                      bool adjusting, bool maximized, bool showGlyphs, const PanelWindowContour &contour) const;
 
     KWin::GLTexture *tileMenuTexture(qreal scale, bool dark, std::optional<TilePreset> hovered);
     QImage buildTileMenu(qreal scale, bool dark, std::optional<TilePreset> hovered) const;

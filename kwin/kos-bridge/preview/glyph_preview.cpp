@@ -63,8 +63,7 @@ QImage buildPanel(const PanelGeometry &geometry, bool maximized, bool dark)
 
     painter.setPen(Qt::NoPen);
     painter.setBrush(dark ? QColor(28, 28, 32) : QColor(242, 242, 245));
-    painter.drawRoundedRect(QRectF(QPointF(0, 0), panel), panel.height() / 2.0,
-                            panel.height() / 2.0);
+    painter.drawPath(panelBackgroundPath(QRectF(QPointF(0, 0), panel), geometry));
 
     for (int i = 0; i < TypeCount; ++i) {
         // The order the panel is laid out in, which ButtonRenderer::typeAt owns.

@@ -288,4 +288,47 @@ bool sameGeometry(const PanelGeometry &a, const PanelGeometry &b)
         && close(effectivePanelPaddingX(a), effectivePanelPaddingX(b));
 }
 
+int panelFlushMask(const PanelGeometry &geometry)
+{
+    constexpr qreal FlushThreshold = 1.0;
+    int mask = geometry.offset.y <= FlushThreshold ? PanelFlushTop : 0;
+    if (geometry.offset.x <= FlushThreshold)
+        mask |= geometry.position == ButtonPosition::Left ? PanelFlushLeft : PanelFlushRight;
+    return mask;
+}
+
+QPainterPath panelBackgroundPath(const QRectF &rect, const PanelGeometry &geometry,
+                                 const PanelWindowContour &window)
+{
+    QPainterPath path;
+    if (rect.isEmpty())
+        return path;
+    if (panelFlushMask(geometry) == 0) {
+        const qreal r = std::min(rect.width(), rect.height()) / 2.0;
+        path.addRoundedRect(rect, r, r);
+    } else {
+        path.addRect(rect);
+    }
+    if (!window.size.isEmpty()) {
+        const QPointF origin = panelRect(geometry, window.size).topLeft();
+        const auto contour = WindowAppearance::contourPath(
+            QRectF(-origin, window.size), window.radii, 0.0);
+        path = path.intersected(contour);
+    }
+    return path;
+}
+
+QString panelBackgroundKey(const PanelGeometry &geometry, const PanelWindowContour &window)
+{
+    // Include the contour and its position relative to the panel: a change in
+    // window size, native radius, or subpixel offset can change the cutout.
+    const QPointF origin = panelRect(geometry, window.size).topLeft();
+    QString key = QString::number(panelFlushMask(geometry));
+    for (qreal value : {origin.x(), origin.y(), window.size.width(), window.size.height(),
+                       window.radii.topLeft, window.radii.topRight,
+                       window.radii.bottomRight, window.radii.bottomLeft})
+        key += QLatin1Char('_') + QString::number(value, 'g', 17);
+    return key;
+}
+
 } // namespace KOS
