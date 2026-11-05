@@ -107,9 +107,9 @@ flatpak --user uninstall org.nextks.calculator
 ## 各应用打包状态
 
 下表保留**旧 ID** 的历史准备结果。新 `org.nextks.*` 已在托管 CI 原生编译并运行注册回归。
-固定源码 `03c92edd0b0c9f54013ba8c63ee1e591482eb928` 的 Calendar 与 Weather 也已在
+固定源码 `03c92edd0b0c9f54013ba8c63ee1e591482eb928` 的三款应用也已在
 [run 41945820505](https://github.com/NextKde/kos-apps/actions/runs/41945820505)
-完成 KDE 6.11 SDK 的 app／Sources 导出；Calculator SDK 准备仍待完成。
+全部完成 KDE 6.11 SDK 的 app／Sources 导出。
 这些未签名候选不代表签名、沙箱生命周期或生产交付已验收。
 
 | 应用 | 本地准备 | 仍缺 |
