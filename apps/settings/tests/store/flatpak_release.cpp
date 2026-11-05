@@ -100,6 +100,38 @@ private slots:
         QFETCH(QString, field); QFETCH(QJsonValue, value);
         rejected(manifest({{field, value}}), "INVALID_RELEASE");
     }
+    void genuinePublisherSignatureAndTampering()
+    {
+        // Public, offline specimen from the retained 03c92ed SDK candidate;
+        // this is verification evidence, not a published release or trust source.
+        const QByteArray bytes = R"({
+  "schemaVersion": 1,
+  "appId": "org.nextks.calculator",
+  "version": "0.2.0",
+  "revision": "03c92edd0b0c9f54013ba8c63ee1e591482eb928",
+  "bundles": {
+    "x86_64": {
+      "ref": "app/org.nextks.calculator/x86_64/stable",
+      "commit": "67629e9097b2c0b85634452f76c88660d4741415336d267e2982968dc2dc545c",
+      "asset": "org.nextks.calculator-0.2.0-x86_64.flatpak",
+      "size": 661776,
+      "sha256": "3d393bd0200abdc9351fffa04b140c973dd8e4051e2766f39afebcc247882636"
+    }
+  }
+}
+)";
+        const auto signature = QByteArray::fromBase64(
+            "iQGzBAABCAAdFiEEXuP4f+gD/NFHuzTBTu3EiF6MqhMFAmrr3jAACgkQTu3EiF6MqhMcUAv/YZimoPi6f4NacoJf8sJabXFfHthKqvr0oz4dc/XAN0/QHjBg31H+GC0T3qMtWxMLPkJ2aP0S9rPPQpQu/H2cAEtCSm//ep7QI7RZBo5dW/DhJ2aLwT+11CAfwQEJSwCh6JDm3JTyLae5G2x4A3tLdnMK4VW2mYXCf2Zdhmk9H2FrgTN02L2UaDXk7RMa7pF+MXpcAS7uix8sgpg1dp7GyMiXtqdBjsbQQgG8DMflt/0BbEUG4Hlm3KlfuQ0ADKJc9GG3Pax8c5Mh88moxkxOY+jnw8qzXfIhC2K5tBIWTMJ6edC7iQbe5Pk3qKIg14I06febwCek/dA341S4/X0ldvU048cp4v0SsCBsrFM+KADTW0xxeuUi8A2Bnyvcy7olT9vGY8Pc+VoZjPwxLl9jBpfqQG1VPrtJGNWgoXMN3IJF8x+Dfris/zzX7LgC07IC+2ohIJNnCOZEhhS5Fg94SrZWWXpTjYtnYKF6p9qObQo4i4rEq3OrW4JV9Oxv6oCQ");
+        QVERIFY(verify("org.nextks.calculator", bytes, signature, [] { return false; }));
+        QCOMPARE(parseManifest("org.nextks.calculator", "x86_64", bytes)["version"].toString(), "0.2.0");
+        auto altered = bytes;
+        altered.replace("0.2.0", "0.2.1");
+        QVERIFY(!verify("org.nextks.calculator", altered, signature, [] { return false; }));
+        auto broken = signature;
+        broken[broken.size() / 2] = char(broken.at(broken.size() / 2) ^ 1);
+        QVERIFY(!verify("org.nextks.calculator", bytes, broken, [] { return false; }));
+        QVERIFY(!verify("unknown", bytes, signature, [] { return false; }));
+    }
     void invalidSignatureCannotReachDownload()
     {
         QVERIFY(!verify(appId, manifest(), {}, [] { return false; }));
