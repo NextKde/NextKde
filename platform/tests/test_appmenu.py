@@ -65,7 +65,7 @@ with tempfile.TemporaryDirectory(prefix='kos-menu-', dir='/tmp') as directory:
         try:
             processes.append(subprocess.Popen([sys.executable, __file__, '--serve'], env=env, stdout=log, stderr=log))
             wait_for(ready.exists)
-            processes.append(subprocess.Popen([sys.argv[1], 'daemon'], env=env, stdout=log, stderr=log))
+            processes.append(subprocess.Popen(['gdb', '--batch', '-ex', 'run', '-ex', 'thread apply all bt', '--args', sys.argv[1], 'daemon'], env=env, stdout=log, stderr=log))
             path = runtime / 'kos-platform.sock'
             wait_for(path.exists)
             with socket.socket(socket.AF_UNIX) as client:
@@ -79,6 +79,7 @@ with tempfile.TemporaryDirectory(prefix='kos-menu-', dir='/tmp') as directory:
                     while True:
                         line = stream.readline()
                         if not line:
+                            time.sleep(1)
                             log.flush()
                             log.seek(0)
                             raise AssertionError('daemon disconnected; exits=' + str([p.poll() for p in processes])
