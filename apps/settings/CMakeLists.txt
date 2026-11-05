@@ -240,6 +240,13 @@ if(BUILD_TESTING)
             ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_QUICK_BACKEND=software"
             LABELS ui TIMEOUT 15)
 
+        add_test(NAME kos-settings.close-policy
+            COMMAND ${KOS_QMLTESTRUNNER_EXECUTABLE}
+                -input ${CMAKE_CURRENT_SOURCE_DIR}/tests/close/tst_close.qml)
+        set_tests_properties(kos-settings.close-policy PROPERTIES
+            ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_QUICK_BACKEND=software"
+            LABELS "ui;headless" TIMEOUT 20)
+
         add_test(NAME kos-settings.services-page
             COMMAND ${KOS_QMLTESTRUNNER_EXECUTABLE}
                 -input ${CMAKE_CURRENT_SOURCE_DIR}/tests/services/tst_services.qml)

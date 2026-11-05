@@ -12,11 +12,10 @@ import "../../shared/qml/i18n"
 
 ApplicationWindow {
     id: window
-    onClosing: function(event) {
-        if (typeof appStore !== "undefined" && appStore.anyBusy) {
-            event.accepted = false
-            window.currentPage = 9
-        }
+    SettingsControls.AppOperationCloseDialog {
+        targetWindow: window
+        store: typeof appStore !== "undefined" ? appStore : null
+        parent: Overlay.overlay
     }
 
     width: 850

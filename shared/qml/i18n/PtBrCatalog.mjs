@@ -3,6 +3,12 @@
 // Keys mirror ZhCatalog.mjs; when an English source string changes, update
 // the key here too. Date patterns use Qt format strings (quote literals).
 export const catalog = {
+    "An application task is still running": "Uma tarefa de aplicativo ainda está em andamento",
+    "Finishing the task safely. Settings will close when it has stopped.": "Finalizando a tarefa com segurança. As Configurações serão fechadas quando ela terminar.",
+    "An application is being installed, updated or removed. Keep Settings open, or cancel the task and close after it has stopped.": "Um aplicativo está sendo instalado, atualizado ou removido. Mantenha as Configurações abertas ou cancele a tarefa e feche após ela terminar.",
+    "Keep Settings open": "Manter Configurações abertas",
+    "Cancel task and close": "Cancelar tarefa e fechar",
+
     "Application inspection is taking too long; installation state is unknown": "A consulta está demorando; o estado da instalação é desconhecido",
     "Selected": "Selecionado",
     "Loading application data…": "Carregando dados do aplicativo…",

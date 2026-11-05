@@ -25,8 +25,38 @@ class IndependentAppsTest : public QObject {
         return {};
     }
 private slots:
+    void closePolicyKeepsMutationsAndVerificationProtected()
+    {
+        IndependentApps store(temporary.path());
+        store.m_active = 0;
+        for (const auto &action : {"status", "check-update", "cleanup-plan"}) {
+            store.m_action = action;
+            QVERIFY(store.busy());
+            QVERIFY(!store.hasActiveMutation());
+        }
+        for (const auto &action : {"install", "update", "uninstall", "prune"}) {
+            store.m_action = action;
+            QVERIFY(store.hasActiveMutation());
+        }
+        store.m_action = "status";
+        store.m_verifying = true;
+        QVERIFY(store.hasActiveMutation());
+        store.m_active = -1;
+        QVERIFY(!store.hasActiveMutation());
+    }
     void init() { QVERIFY(temporary.isValid()); oldState = qgetenv("XDG_STATE_HOME"); qputenv("XDG_STATE_HOME", (temporary.path()+"/state").toUtf8()); }
     void cleanup() { if (oldState.isNull()) qunsetenv("XDG_STATE_HOME"); else qputenv("XDG_STATE_HOME", oldState); }
+    void closeCancellationWaitsForNativeProcess()
+    {
+        fixture("time.sleep(10)\nemit()\n");
+        IndependentApps store(temporary.path());
+        store.start(store.indexOf("calendar"), "update");
+        QVERIFY(store.hasActiveMutation());
+        store.cancelActiveMutation();
+        QVERIFY(store.hasActiveMutation());
+        QTRY_VERIFY_WITH_TIMEOUT(!store.hasActiveMutation(), 4000);
+        QCOMPARE(state(store, "calendar").value("code").toString(), "CANCELLED");
+    }
     void registryAndLegacyFacade()
     {
         AppStore store(temporary.path());
@@ -104,6 +134,7 @@ private slots:
     {
         fixture("time.sleep(10)\nemit()\n");
         AppStore facade(temporary.path()); facade.refreshApps(); QVERIFY(facade.anyBusy());
+        QVERIFY(!facade.hasActiveMutation());
         facade.install(); QCOMPARE(facade.music().value("code").toString(), "");
         facade.checkUpdates("weather"); facade.cancel("weather"); QVERIFY(facade.anyBusy());
         facade.cancel("calendar"); QTRY_VERIFY_WITH_TIMEOUT(!facade.anyBusy(),4000);

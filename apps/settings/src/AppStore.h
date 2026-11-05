@@ -16,6 +16,7 @@ class AppStore final : public QObject {
     Q_PROPERTY(QVariantMap music READ music NOTIFY changed)
     Q_PROPERTY(QVariantList apps READ apps NOTIFY changed)
     Q_PROPERTY(bool anyBusy READ anyBusy NOTIFY changed)
+    Q_PROPERTY(bool hasActiveMutation READ hasActiveMutation NOTIFY changed)
 public:
     explicit AppStore(const QString& resourcesDirectory, QObject* parent = nullptr);
     ~AppStore() override;
@@ -29,6 +30,8 @@ public:
     Q_INVOKABLE void openRepository();
     QVariantList apps() const;
     bool anyBusy() const;
+    bool hasActiveMutation() const;
+    Q_INVOKABLE void cancelActiveMutations();
     Q_INVOKABLE void install(const QString& id);
     Q_INVOKABLE void uninstall(const QString& id);
     Q_INVOKABLE void update(const QString& id);

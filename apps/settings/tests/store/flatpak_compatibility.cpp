@@ -10,6 +10,22 @@
 class FlatpakCompatibilityTest : public QObject {
     Q_OBJECT
 private slots:
+    void closePolicyDistinguishesDiscoveryFromTransactions()
+    {
+        FlatpakApps backend;
+        backend.m_activeId = "org.nextks.calendar";
+        backend.m_action = "check-update";
+        QVERIFY(backend.busy());
+        QVERIFY(!backend.hasActiveMutation());
+        for (const auto &action : {"install", "update", "uninstall", "remove-retired"}) {
+            backend.m_action = action;
+            QVERIFY(backend.hasActiveMutation());
+            backend.m_verifying = true;
+            QVERIFY(backend.hasActiveMutation());
+        }
+        backend.m_activeId.clear();
+        QVERIFY(!backend.hasActiveMutation());
+    }
     void incompatibleLibraryStopsBeforeDownload()
     {
         if (FlatpakCompatibility::checkBundleCleanup().isEmpty())

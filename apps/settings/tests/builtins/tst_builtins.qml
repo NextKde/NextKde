@@ -1,6 +1,13 @@
 import QtQuick
 import QtTest
 Item {
+    property var appStore: closeStore
+    QtObject {
+        id: closeStore
+        property bool anyBusy: false
+        property bool hasActiveMutation: false
+        function cancelActiveMutations() {}
+    }
     property var settingsBridge: bridge
     QtObject {
         id: bridge
@@ -39,6 +46,31 @@ Item {
             bridge.groupingCalls = []
             bridge.deferSnapshot = false
             bridge.lastError = ""
+        }
+
+        function test_real_window_close_policy() {
+            const component = Qt.createComponent("../../main.qml")
+            compare(component.status, Component.Ready, component.errorString())
+            const app = component.createObject(null, {currentPage: 3})
+            verify(app !== null)
+            try {
+                closeStore.anyBusy = true
+                closeStore.hasActiveMutation = true
+                app.close()
+                compare(app.visible, true)
+                compare(app.currentPage, 3)
+                const dialog = findChild(app, "appOperationCloseDialog")
+                verify(dialog !== null)
+                tryCompare(dialog, "visible", true)
+                dialog.keepOpen()
+                closeStore.hasActiveMutation = false
+                app.close()
+                tryCompare(app, "visible", false)
+            } finally {
+                closeStore.anyBusy = false
+                closeStore.hasActiveMutation = false
+                app.destroy()
+            }
         }
 
         function test_grouping_binding() {

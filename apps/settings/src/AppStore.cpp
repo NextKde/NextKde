@@ -493,3 +493,14 @@ void AppStore::cancel(const QString& id) { if (id == "kmusic") cancel(); else m_
 void AppStore::open(const QString& id) { if (anyBusy()) return; if (id == "kmusic") open(); else m_independent.open(id); }
 void AppStore::openLog(const QString& id) { if (id == "kmusic") openLog(); else m_independent.openLog(id); }
 void AppStore::openRepository(const QString& id) { if (id == "kmusic") openRepository(); else m_independent.openRepository(id); }
+
+bool AppStore::hasActiveMutation() const
+{
+    return m_state.value("busy").toBool() || m_independent.hasActiveMutation();
+}
+
+void AppStore::cancelActiveMutations()
+{
+    if (m_state.value("busy").toBool()) cancel();
+    m_independent.cancelActiveMutation();
+}

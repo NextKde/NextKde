@@ -3,6 +3,12 @@
 // 规则：值必须与改造前界面上的中文逐字一致（含空格、间隔符与省略号），
 // 改动文案时同步更新对应键，不要只改一边。
 export const catalog = {
+    "An application task is still running": "应用任务仍在进行",
+    "Finishing the task safely. Settings will close when it has stopped.": "正在安全结束任务，结束后将关闭设置。",
+    "An application is being installed, updated or removed. Keep Settings open, or cancel the task and close after it has stopped.": "应用正在安装、更新或卸载。你可以保持设置打开，或取消任务并在任务结束后关闭。",
+    "Keep Settings open": "保持设置打开",
+    "Cancel task and close": "取消任务后关闭",
+
     "Compatibility guide": "兼容性指南",
     "Remove retired program…": "移除旧身份程序…",
     "Remove only the exact old user Flatpak program. Personal data and shared runtimes are kept. This does not install a replacement or import data. Keep the old installation until the replacement and its requirements are ready.": "仅移除指定的旧身份用户级 Flatpak 程序，保留个人数据与共享运行时。此操作不会安装替代程序或导入数据。请在新程序及其所需依赖准备就绪前保留旧安装。",

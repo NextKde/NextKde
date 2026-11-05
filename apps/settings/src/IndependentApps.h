@@ -1,5 +1,7 @@
 #pragma once
 
+#include "AppOperationPolicy.h"
+
 #include "FlatpakApps.h"
 
 #include <QElapsedTimer>
@@ -17,6 +19,8 @@ public:
     ~IndependentApps() override;
     QVariantList apps() const;
     bool busy() const { return m_active >= 0 || !m_pendingStatus.isEmpty() || m_flatpak.busy(); }
+    bool hasActiveMutation() const { return m_flatpak.hasActiveMutation() || (m_active >= 0 && (m_verifying || isAppMutation(m_action))); }
+    void cancelActiveMutation();
     void refresh();
     void perform(const QString& id, const QString& action);
     void cancel(const QString& id);

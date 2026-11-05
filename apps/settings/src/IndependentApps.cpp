@@ -477,3 +477,9 @@ void IndependentApps::openRepository(const QString& id)
     const int index = indexOf(id);
     if (index >= 0) QDesktopServices::openUrl(QUrl(m_apps[index].toMap().value("repository").toString()));
 }
+
+void IndependentApps::cancelActiveMutation()
+{
+    if (m_flatpak.hasActiveMutation()) m_flatpak.cancel();
+    else if (hasActiveMutation()) cancel(m_apps[m_active].toMap().value("id").toString());
+}
