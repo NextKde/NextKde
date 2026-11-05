@@ -13,7 +13,7 @@ import "../../shared/qml/i18n"
 ApplicationWindow {
     id: window
     onClosing: function(event) {
-        if (typeof appStore !== "undefined" && appStore.music.busy) {
+        if (typeof appStore !== "undefined" && appStore.anyBusy) {
             event.accepted = false
             window.currentPage = 9
         }
@@ -46,6 +46,10 @@ ApplicationWindow {
     flags: Qt.Window | Qt.FramelessWindowHint
 
     property int currentPage: 1
+    property string requestedApp: ""
+    function revealRequestedApp() {
+        if (servicesPage.item) servicesPage.item.requestReveal()
+    }
     property var pageHistory: [1]
     property int historyIndex: 0
     property bool navigationReady: false
@@ -93,6 +97,7 @@ ApplicationWindow {
         onDisplayedPageChanged: {
             if (pageScroll)
                 pageScroll.contentY = 0
+            if (window.displayedPage === 9) window.revealRequestedApp()
         }
     }
 
@@ -506,6 +511,20 @@ ApplicationWindow {
             height: parent.height
             color: "transparent"
 
+            Text {
+                objectName: "settingsSidebarTitle"
+                x: 16
+                y: 0
+                width: parent.width - 32
+                height: 38
+                text: I18n.tr("Settings")
+                color: theme.primaryText
+                font.pixelSize: 15
+                font.weight: Font.DemiBold
+                verticalAlignment: Text.AlignVCenter
+                elide: Text.ElideRight
+            }
+
             ColumnLayout {
                 anchors.fill: parent
                 // 两侧对称 24:内容区已顶天立地(无 inset),卡片不再需要
@@ -872,10 +891,21 @@ ApplicationWindow {
                     }
 
                     Loader {
+                        id: servicesPage
                         Layout.fillWidth: true
                         active: window.displayedPage === 9
                         visible: active
                         sourceComponent: ServicesSettingsPage {
+                            onRevealRequested: function(card) {
+                                Qt.callLater(function() {
+                                    if (!card || window.displayedPage !== 9) return
+                                    const top = card.mapToItem(pageScroll.contentItem, 0, 0).y
+                                    pageScroll.cancelFlick()
+                                    pageScroll.contentY = Math.max(0, Math.min(top,
+                                        pageScroll.contentHeight - pageScroll.height))
+                                })
+                            }
+                            requestedApp: window.requestedApp
                             store: typeof appStore !== "undefined" ? appStore : null
                             bridge: (typeof settingsBridge !== "undefined") ? settingsBridge : null
                             colors: theme
@@ -992,40 +1022,22 @@ ApplicationWindow {
             property bool moveArmed: false
         }
 
-        // 自绘窗口按钮:几何与 bridge 面板对齐(offset 10,6 + padding 4.5),
-        // KOS 装饰器选中时被面板完整盖住(输入走面板),面板不在时它们就是
-        // 窗口控件。
-        Row {
+        // The compositor paints only the declared controls. Without protocol
+        // support, the shared component keeps its own functional fallback.
+        Foundation.KosWindowControls {
             id: windowControls
             objectName: "settingsWindowControls"
+            targetWindow: window
+            maximizeMode: true
+            circleSize: 14
+            buttonWidth: 14
+            buttonHeight: 14
+            spacing: 14
             anchors {
                 right: parent.right
-                rightMargin: 14.5   // 面板 offset.x 10 + panelPaddingX 4.5
+                rightMargin: 14.5
                 top: parent.top
-                topMargin: 12.5     // offset.y 6 + panelPadding 4.5
-            }
-            spacing: 14
-            Repeater {
-                model: [
-                    { color: "#28c840", act: "max" },
-                    { color: "#febc2e", act: "min" },
-                    { color: "#ff5f57", act: "close" }
-                ]
-                delegate: Rectangle {
-                    required property var modelData
-                    width: 14; height: 14; radius: 7
-                    color: modelData.color
-                    opacity: 0.85
-                    MouseArea {
-                        anchors.fill: parent
-                        cursorShape: Qt.PointingHandCursor
-                        onClicked: modelData.act === "min" ? window.showMinimized()
-                            : modelData.act === "max"
-                            ? (window.visibility === Window.Maximized
-                                ? window.showNormal() : window.showMaximized())
-                            : window.close()
-                    }
-                }
+                topMargin: 12.5
             }
         }
 

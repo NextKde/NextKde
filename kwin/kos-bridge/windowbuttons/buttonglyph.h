@@ -1,6 +1,7 @@
 #pragma once
 
 #include <QColor>
+#include <QImage>
 #include <QRectF>
 
 class QPainter;
@@ -39,6 +40,11 @@ QColor dotBorderColor(Type type, bool active);
 // gets tuned blind.
 void drawLight(QPainter &painter, const QRectF &dot, Type type, bool active,
                bool maximized, bool showGlyph = true);
+
+// Transparent sampling gutter includes the outer hover halo and its AA edge.
+inline constexpr qreal CooperativeLightPadding = 4;
+QImage renderCooperativeLight(const QSizeF &size, qreal scale, Type type,
+                             bool active, bool hovered, bool maximized, bool glyphs);
 
 // Tone-matched or luminous hover halo color for the selected button.
 QColor dotHoverRingColor(Type type, bool dark);

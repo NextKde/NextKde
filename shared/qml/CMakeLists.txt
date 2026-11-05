@@ -54,6 +54,7 @@ qt_add_qml_module(kos_ui
         controls/LiquidCompactSurface.qml
         controls/SelectionHighlight.qml
     RESOURCES
+        foundation/KosCompositorControls.qml
         controls/shaders/liquid_number.vert.qsb
         controls/shaders/liquid_number.frag.qsb
         i18n/qmldir

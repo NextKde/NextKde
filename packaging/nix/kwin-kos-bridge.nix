@@ -2,6 +2,10 @@
   lib,
   stdenv,
   cmake,
+  pkg-config,
+  wayland,
+  libxcb,
+  wayland-scanner,
   kdePackages,
   src,
 }:
@@ -9,14 +13,20 @@
 stdenv.mkDerivation {
   pname = "kwin-kos-bridge";
   version = lib.removeSuffix "\n" (builtins.readFile "${src}/VERSION");
-  src = "${src}/kwin/kos-bridge";
+  # Keep the shared Wayland protocol under shell/native available.
+  inherit src;
+  sourceRoot = "source/kwin/kos-bridge";
 
   nativeBuildInputs = [
     cmake
+    pkg-config
+    wayland-scanner
     kdePackages.extra-cmake-modules
   ];
 
   buildInputs = [
+    wayland
+    libxcb
     kdePackages.kwin
     kdePackages.qtbase
     kdePackages.qttools

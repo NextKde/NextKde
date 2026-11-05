@@ -158,73 +158,7 @@ assert.doesNotMatch(collapsibleSidebar, /withAlpha\(AppTheme\.sidebar/,
     "collapsible sidebars do not expose desktop content");
 assert.match(collapsibleSidebar, /enabled:\s*expanded/,
     "collapsed navigation cannot take keyboard focus");
-for (const app of ["calendar", "todo", "weather"]) {
-    const source = read(`../../apps/${app}/qml/Main.qml`);
-    if (app === "calendar") {
-        // Calendar deliberately uses a flush sidebar and custom window dots.
-        // Keep the focus, recovery and keyboard contracts without requiring
-        // the older floating-card component names.
-        assert.match(source, /objectName:\s*"applicationSidebar"[\s\S]*enabled:\s*root\.sidebarExpanded/,
-            "collapsed calendar navigation cannot take keyboard focus");
-        assert.match(source, /onClicked:\s*root\.sidebarExpanded\s*=\s*!root\.sidebarExpanded/,
-            "calendar navigation can be restored");
-        assert.match(source, /Accessible\.role:\s*Accessible\.Button/,
-            "calendar window actions remain accessible buttons");
-        for (const action of ["showMinimized", "showMaximized", "showNormal", "close"])
-            assert.ok(source.includes(`root.${action}()`), `calendar exposes ${action}`);
-        for (const key of ["Return", "Enter", "Space"])
-            assert.ok(source.includes(`Keys.on${key}Pressed: windowDot.activate()`),
-                `calendar window actions accept ${key}`);
-    } else {
-        assert.match(source, /KosSidebar\s*\{[\s\S]*expanded:\s*root\.sidebarExpanded/,
-            `${app} uses the adaptive collapsible sidebar`);
-        assert.match(source, /KosSidebarToggle\s*\{[\s\S]*targetWindow:\s*root/,
-            `${app} provides a way to restore collapsed navigation`);
-        assert.match(source, /KosWindowControls\s*\{[\s\S]{0,200}?targetWindow:\s*root/,
-            `${app} exposes its frameless window controls`);
-    }
-    assert.doesNotMatch(source, /withAlpha\(AppTheme\.sidebar/,
-        `${app} sidebar does not expose desktop content`);
-    if (app === "calendar") {
-        // Ordinary sidebar actions are intentionally not liquid controls. Keep
-        // their explicit rounded geometry and accessibility, rather than forcing
-        // them back to the legacy shared surface merely to satisfy a type-name check.
-        assert.match(read("../../apps/calendar/qml/CalendarStyle.qml"),
-            /readonly property int navigationRadius:\s*6\b/,
-            "calendar navigation shares the six-pixel rounded geometry");
-        const ordinaryActions = new Set(["addCalendarButton", "categoryMoreButton", "holidayMoreButton", "addHolidayButton"]);
-        for (const match of source.matchAll(/\b(?:Button|ToolButton|RoundButton)\s*\{\s*id:\s*(\w+)/g)) {
-            assert.ok(ordinaryActions.has(match[1]), `review ordinary calendar control ${match[1]}`);
-            const block = source.slice(match.index, source.indexOf("onClicked:", match.index));
-            assert.match(block, /background:\s*Rectangle\s*\{\s*radius:\s*(?:6\b|root\.design\.navigationRadius\b)/,
-                `${match[1]} keeps ordinary rounded geometry`);
-            assert.match(block, /Accessible\.name:/, `${match[1]} retains an accessible name`);
-        }
-    } else {
-        assert.doesNotMatch(source, /\b(?:Button|ToolButton|RoundButton)\s*\{/,
-            `${app} uses the shared rounded button controls`);
-    }
-    if (app === "weather") {
-        // Weather deliberately exposes units inline, without a separate settings dialog.
-        assert.match(source, /ButtonGroup\s*\{\s*id:\s*unitsGroup/,
-            "weather retains its inline units controls");
-        assert.doesNotMatch(source, /KosSettingsDialog\s*\{/,
-            "weather does not restore the removed settings dialog");
-    } else {
-        assert.match(source, /KosSettingsDialog\s*\{/,
-            `${app} exposes the shared settings panel`);
-        assert.match(source, app === "calendar"
-            ? /text:\s*qsTr\("Calendar settings"\)/
-            : /Accessible\.name:\s*qsTr\(".*settings"\)/,
-            `${app} settings entry has an accessible label`);
-    }
-    assert.match(source, /function handleActivation\(activationArgs, workingDirectory\)/,
-        `${app} accepts normalized reuse context from the shared runner`);
-    assert.doesNotMatch(source,
-        /function [A-Za-z0-9_]+\([^)]*\barguments\b/,
-        `${app} does not shadow JavaScript's implicit arguments object`);
-}
-
+// Application integration assertions moved with their independent repositories.
 const settingsDialog = read("./foundation/KosSettingsDialog.qml");
 for (const option of ["appearanceMode", "materialMode", "materialOpacity",
                       "accentName", "reduceTransparency", "reduceMotion"])
@@ -341,44 +275,6 @@ assert.match(segmentedSource,
     /onCurrentIndexChanged:[\s\S]{0,320}_visualIndex = clampedIndex\(currentIndex\)/,
     "segmented choices immediately mirror externally changed state");
 
-const calendar = read("../../apps/calendar/qml/Main.qml");
-assert.match(calendar,
-    /KosPageCache[\s\S]{0,320}cacheLimit:\s*2[\s\S]{0,220}monthPage[\s\S]{0,100}weekPage[\s\S]{0,100}dayPage/,
-    "Calendar keeps its active and recent date views without retaining every page");
-assert.match(calendar, /model:\s*42/, "calendar mini-month contains six complete weeks");
-assert.doesNotMatch(calendar, /\bCheckBox\s*\{/,
-    "calendar uses custom rounded toggles instead of native checkboxes");
-assert.match(calendar, /property date now[\s\S]*interval:\s*60000/,
-    "calendar refreshes date and time-dependent UI while it remains open");
-assert.match(calendar, /Qt\.locale\(\)\.firstDayOfWeek/,
-    "calendar follows the locale's first weekday");
-assert.match(calendar, /date\.getDay\(\) - localeFirstDayOfWeek \+ 7/,
-    "calendar date offsets support both Sunday- and Monday-first locales");
-for (const calendarView of ["CalendarMonthView.qml", "CalendarScheduleView.qml"]) {
-    const source = read(`../../apps/calendar/qml/${calendarView}`);
-    assert.match(source, /required property date currentTime/,
-        `${calendarView} receives the observable application clock`);
-    assert.doesNotMatch(source, /new Date\(\)/,
-        `${calendarView} does not freeze an unobservable current time in bindings`);
-}
-const calendarMonth = read("../../apps/calendar/qml/CalendarMonthView.qml");
-assert.doesNotMatch(calendarMonth, /"✓ "/,
-    "completed calendar items use shape and typography instead of checkmark text");
-assert.doesNotMatch(calendarMonth, /\b(?:Button|ToolButton|RoundButton)\s*\{/,
-    "the full calendar month view uses rounded shared or custom controls");
-
-const todo = read("../../apps/todo/qml/Main.qml");
-assert.match(todo, /property date now[\s\S]*interval:\s*60000/,
-    "Todo refreshes today and overdue state while it remains open");
-assert.doesNotMatch(todo, /function todayKey\(\)[\s\S]{0,80}new Date\(\)/,
-    "Todo date filters depend on its observable application clock");
-assert.match(todo, /pendingItemId[\s\S]*onSnapshotChanged:\s*root\.openPendingItem/,
-    "Todo retains widget item deep links until its async snapshot arrives");
-
-const weather = read("../../apps/weather/qml/Main.qml");
-assert.match(weather, /ButtonGroup \{ id: unitsGroup \}[\s\S]*ButtonGroup\.group: unitsGroup[\s\S]*ButtonGroup\.group: unitsGroup/,
-    "Weather unit choices form one exclusive accessible group");
-
 // LiquidTextField is shell-owned: it is directory-imported by the Quickshell
 // surfaces where the AppTheme singleton is not in scope, so it keeps the
 // shell's own fixed motion policy. The AppTheme-backed foundation controls
@@ -388,26 +284,6 @@ for (const control of ["KosButton", "KosRoundButton", "KosSlider", "KosSwitch"])
     assert.doesNotMatch(source, /duration:\s*(?:130|150)/,
         `${control} honors the reduce-motion duration tokens`);
 }
-
-const preferences = read("../../apps/common/src/ApplicationPreferences.cpp");
-assert.match(preferences, /KosApplications/,
-    "appearance preferences share one store across all applications");
-assert.match(preferences, /setInterval\(1000\)/,
-    "appearance preferences refresh across running application processes");
-
-const runner = read("../../apps/common/src/ApplicationRunner.cpp");
-assert.match(runner, /KWindowEffects::enableBlurBehind/,
-    "application windows request KDE native blur when it is available");
-assert.match(runner, /QQuickWindow::setDefaultAlphaBuffer\(true\)/,
-    "application windows allocate an alpha-capable framebuffer before creation");
-assert.match(runner, /isolatedTestRun[\s\S]*!isolatedTestRun/,
-    "smoke and screenshot runs cannot be short-circuited by a primary instance");
-
-const activation = read("../../apps/common/src/ApplicationActivation.cpp");
-assert.match(activation, /XDG_ACTIVATION_TOKEN[\s\S]*setCurrentXdgActivationToken/,
-    "secondary launches forward the Wayland activation token to the primary window");
-assert.match(activation, /AcquireResult::Error/,
-    "a failed single-instance hand-off is not reported as a successful launch");
 
 const glassEffect = read("../../kwin/glass-effect/src/blur.cpp");
 assert.match(glassEffect, /hasExplicitBlurRequest[\s\S]*explicitlyRequestedBlur/,
@@ -421,15 +297,14 @@ assert.match(glassEffect, /if \(m_valid\)[\s\S]*stackingOrder\(\)[\s\S]*updateBl
 const deskCenter = read("../../shell/desktop/modules/deskcenter/DeskCenterWindow.qml");
 assert.doesNotMatch(deskCenter, /#101010|#17151c|#170f14/,
     "desktop widget palette avoids near-black blocks");
-for (const [widget, desktopId] of [
-    ["Weather", "kos-weather"],
-    ["Calendar", "kos-calendar"],
-    ["Reminders", "kos-calendar"],
-    ["Music", "listenfree"]
-]) {
-    assert.match(deskCenter, new RegExp(`launchById\\("${desktopId}"`),
-        `${widget} widget launches its matching installed application`);
+for (const app of ["weather", "calendar"]) {
+    assert.match(deskCenter, new RegExp(`IndependentAppWidgetService\\.open\\("${app}"`),
+        `${app} widgets open their inspected installation through the identity-bound service`);
+    assert.doesNotMatch(deskCenter, new RegExp(`launchById\\("kos-${app}"`),
+        `${app} widgets never fall back to a different desktop identity`);
 }
+assert.match(deskCenter, /launchById\("listenfree"/,
+    "Music retains its independent player launch behavior");
 
 const appActions = read("../../shell/desktop/modules/common/AppActionService.qml");
 assert.doesNotMatch(appActions,

@@ -1,4 +1,5 @@
 #include "WindowSettings.h"
+#include <QCoreApplication>
 #include "../../../platform/src/windowanimation/AnimationTask.h"
 #include "../../../platform/src/windowanimation/NativeGenie.h"
 #include <KConfigGroup>
@@ -12,6 +13,8 @@
 #include <QLockFile>
 #include <QSaveFile>
 #include <QStandardPaths>
+#include <QTemporaryDir>
+#include <QProcess>
 
 namespace {
 QString path(const QString &name) {
@@ -50,6 +53,45 @@ void reconfigure(const QString &effect) {
         QStringLiteral("reconfigureEffect"));
     message.setArguments({effect});
     QDBusConnection::sessionBus().asyncCall(message, 1000);
+}
+
+bool syncGtkControls(bool enabled, const QString &glyphMode, QString &error) {
+    QTemporaryDir temporary;
+    if (!temporary.isValid()) { error = QStringLiteral("Could not prepare GTK window controls"); return false; }
+    const QStringList assets{QStringLiteral("tools/gtk-window-buttons.py"),
+        QStringLiteral("shared/gtk/gtk-3.0.css"), QStringLiteral("shared/gtk/gtk-4.0.css"),
+        QStringLiteral("tools/firefox_buttons.py"), QStringLiteral("shared/firefox/window-buttons.css")};
+    for (const auto &asset : assets) {
+        const QString destination = temporary.filePath(asset);
+        if (!QDir().mkpath(QFileInfo(destination).absolutePath())
+            || !QFile::copy(QStringLiteral(":/kos/gtk-integration/") + asset, destination)) {
+            error = QStringLiteral("Could not prepare GTK window control resources"); return false;
+        }
+    }
+    QStringList arguments{temporary.filePath(assets.first()),
+        QStringLiteral("sync"), QStringLiteral("--enabled"), enabled ? QStringLiteral("true") : QStringLiteral("false"),
+        QStringLiteral("--glyph-mode"), glyphMode};
+#ifdef KOS_GTK_MODULE_BUILD_PATH
+    QString module = QDir(QCoreApplication::applicationDirPath()).absoluteFilePath(
+        QStringLiteral("../lib/gtk-3.0/modules/libkos-gtk-window-controls.so"));
+    if (QCoreApplication::applicationDirPath() == QStringLiteral(KOS_SETTINGS_BUILD_DIR))
+        module = QStringLiteral(KOS_GTK_MODULE_BUILD_PATH);
+    arguments << QStringLiteral("--gtk3-module") << QDir::cleanPath(module);
+#endif
+    QProcess process;
+    process.start(QStringLiteral("python3"), arguments);
+    if (!process.waitForStarted(1000) || !process.waitForFinished(5000)) {
+        process.kill();
+        process.waitForFinished(1000);
+        error = QStringLiteral("Could not synchronize GTK window controls: ") + process.errorString();
+        return false;
+    }
+    if (process.exitStatus() != QProcess::NormalExit || process.exitCode() != 0) {
+        error = QStringLiteral("Could not synchronize GTK window controls: ")
+            + QString::fromUtf8(process.readAllStandardError()).trimmed();
+        return false;
+    }
+    return true;
 }
 }
 
@@ -134,7 +176,16 @@ bool WindowSettings::setTakeover(bool enabled) {
         integration.insert("originalTheme", decoration.readEntry("theme", QString()));
         if (!write(filename, integration, m_error)) { emit changed(); return false; }
     }
-    if (!patchAppearance({}, "enabled", enabled)) return false;
+    const auto previous = state();
+    const bool gtkWasEnabled = previous.value("enabled").toBool()
+        && selected == QLatin1String("kos_decoration");
+    const QString glyphMode = previous.value("buttonGlyphMode").toString();
+    if (!syncGtkControls(enabled, glyphMode, m_error)) { emit changed(); return false; }
+    if (!patchAppearance({}, "enabled", enabled)) {
+        QString ignored;
+        syncGtkControls(gtkWasEnabled, glyphMode, ignored);
+        return false;
+    }
     if (enabled || selected == "kos_decoration") {
         decoration.writeEntry("library", enabled ? QStringLiteral("kos_decoration")
             : integration.value("originalDecoration").toString(QStringLiteral("org.kde.breeze")));
@@ -198,6 +249,14 @@ bool WindowSettings::setButtonGlyphMode(const QString &mode) {
     m_error.clear();
     const QString filename = path(QStringLiteral("window-buttons.json"));
     QDir().mkpath(QFileInfo(filename).absolutePath());
+    // Serialize the shared switch and icon mode: otherwise a concurrent mode
+    // update could restore GTK just as takeover is being enabled.
+    QLockFile integrationLock(path(QStringLiteral("window-integration.json.lock")));
+    if (!integrationLock.tryLock(0)) {
+        m_error = QStringLiteral("Window takeover settings are being updated; please retry");
+        emit changed();
+        return false;
+    }
     QLockFile lock(filename + QStringLiteral(".lock"));
     if (!lock.tryLock(0)) {
         m_error = QStringLiteral("The configuration is being updated; please retry");
@@ -207,9 +266,17 @@ bool WindowSettings::setButtonGlyphMode(const QString &mode) {
     auto doc = read(filename, &m_error);
     if (!m_error.isEmpty()) { emit changed(); return false; }
     auto defaultObj = doc.value(QStringLiteral("default")).toObject();
+    const auto current = state();
+    const bool gtkEnabled = current.value("enabled").toBool()
+        && current.value("decoration").toString() == QLatin1String("kos_decoration");
+    if (!syncGtkControls(gtkEnabled, mode, m_error)) { emit changed(); return false; }
     defaultObj.insert(QStringLiteral("glyphMode"), mode);
     doc.insert(QStringLiteral("default"), defaultObj);
     const bool saved = write(filename, doc, m_error);
+    if (!saved) {
+        QString ignored;
+        syncGtkControls(gtkEnabled, current.value("buttonGlyphMode").toString(), ignored);
+    }
     if (saved) reconfigure(QStringLiteral("kos_bridge"));
     emit changed();
     return saved;
@@ -220,7 +287,14 @@ bool WindowSettings::installDefaults() {
     const auto integration = read(path(QStringLiteral("window-integration.json")), &error);
     if (!error.isEmpty()) { m_error = error; return false; }
     // Never undo a saved opt-out on an upgrade or `kosctl start`.
-    if (integration.contains("originalDecoration")) return true;
+    if (integration.contains("originalDecoration")) {
+        QLockFile lock(path(QStringLiteral("window-integration.json.lock")));
+        if (!lock.tryLock(0)) { m_error = QStringLiteral("Window takeover settings are being updated; please retry"); return false; }
+        const auto current = state();
+        return syncGtkControls(current.value("enabled").toBool()
+            && current.value("decoration").toString() == QLatin1String("kos_decoration"),
+            current.value("buttonGlyphMode").toString(), m_error);
+    }
     return setTakeover(state().value("enabled").toBool());
 }
 bool WindowSettings::restoreAnimationDefaults() {

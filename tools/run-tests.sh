@@ -87,7 +87,10 @@ fi
 label_regex=$(IFS='|'; echo "${layers[*]}")
 
 printf '==> configuring %s\n' "$build_dir"
+# Reused core test caches must not retain retired bundled-application switches.
 cmake -S "$project_dir" -B "$build_dir" -G Ninja \
+    -U KOS_BUILD_CALENDAR -U KOS_BUILD_TODO -U KOS_BUILD_WEATHER \
+    -U KOS_BUILD_LISTENFREE -U KOS_BUILD_CALCULATOR \
     -DCMAKE_BUILD_TYPE="${KOS_BUILD_TYPE:-Debug}" \
     -DCMAKE_INSTALL_PREFIX=/usr \
     -DKOS_BUILD_KWIN_PLUGINS=OFF \

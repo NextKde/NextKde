@@ -13,6 +13,10 @@ The root README introduces the desktop in [English](../README.md), [简体中文
 | Dependencies, install, update, uninstall | [Getting started](GettingStarted.md) |
 | NixOS declarative installation | [NixOS](nixos-quickstart.md) |
 | Window animation choices, native Genie and fallback | [Window animations](WindowAnimations.md) |
+| Native GTK traffic lights and overlay fallback | [GTK window buttons](GtkWindowButtons.md) |
+| Firefox native buttons and themes | [Firefox window buttons](FirefoxWindowButtons.md) |
+| App-provided placement and transparent compositor controls | [Cooperative window controls](CooperativeWindowControls.md) |
+| Native KDE decoration controls | [Native window decoration](NativeWindowDecoration.md) |
 | Maintenance, acceptance and publication | [Releasing](Releasing.md) |
 | Version-specific changes and actual evidence | [v0.1.1](releases/v0.1.1.md), [v0.1.0](releases/v0.1.0.md) |
 | Release-note format | [Template](releases/TEMPLATE.md) |
@@ -33,7 +37,7 @@ ownership; they are not chronological work logs or proof that a feature passed r
 | Dock input, lifecycle and animations | [Dock](DockArchitecture.md) |
 | Wallpaper ownership and theme format | [Wallpaper](WallpaperArchitecture.md), [theme packs](ThemePackFormat.md), [depth engine](DepthEngine.md) |
 | Network, PIM and weather | [Network](NetworkArchitecture.md), [PIM](PimArchitecture.md), [weather](WeatherArchitecture.md) |
-| Optional applications and legacy player migration | [Applications](../apps/README.md), [ListenFree build](../apps/listenfree/packaging/linux/README.md) |
+| Independent applications and lifecycle | [Applications](../apps/README.md), [ListenFree](https://github.com/NextKde/ListenFree) |
 | Reusable QML components, Gallery and sidebar demo | [nextkdeAppDemo](https://github.com/NextKde/nextkdeAppDemo) |
 
 The component Gallery and sidebar demo are maintained in `nextkdeAppDemo`. Their preview

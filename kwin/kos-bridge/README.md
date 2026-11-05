@@ -3,9 +3,9 @@
 A KWin effect that covers the window controls of client-side decorated
 windows with an iPadOS-style rounded panel containing three macOS traffic
 lights, so applications that draw their own title bar get consistent KOS
-chrome. The same panel is drawn over windows KWin decorates itself, where the
-KOS decoration draws a frame and no buttons at all. It is drawn only while the
-KOS decoration is selected — see **Which decoration the panel belongs to**.
+chrome. KOS server-side decorations own native KDecoration buttons and are
+never covered by this panel. Cooperative applications and qualified GTK/Firefox
+controls use their respective native paths instead.
 
 ## How it works
 
@@ -13,18 +13,14 @@ KOS decoration is selected — see **Which decoration the panel belongs to**.
   a corner by `position` and `offset`, the same way on every window, so it
   never lands somewhere arbitrary. Its tint is read from the title bar under
   it, because that is the one thing configuration cannot know.
-- **Adjustable in place.** A right press on a panel starts an adjust session:
+- **Adjustable in place.** A right press on a fallback CSD panel starts an adjust session:
   drag it, wheel it larger or smaller, and the geometry it ends at is written to
   a rules file the plugin owns. See **Adjusting a panel**.
-- **One panel for both kinds of window.** An effect is the only place this can
-  live. KWin paints a decoration *below* the client surface and instantiates
-  none at all for a client-side decorated window, so a decoration can never draw
-  over one; this effect paints after the window — decoration included — has been
-  rendered, so it can cover either. The price is that an effect cannot *remove*
-  a decoration: every server-side decorated window gets one, whichever is
-  selected. That is what the KOS decoration is for — it draws a frame and no
-  buttons, so the panel over it is the window's only controls — and why the
-  panel follows the decoration selection rather than standing alone.
+- **Separate ownership.** KOS server-side decorations paint and handle their own
+  controls through KDecoration. Bridge recognizes their capability marker,
+  drops legacy hit regions/tint timers and skips overlay painting even when a
+  legacy rule requests `always`. Undeclared client-side windows still use the
+  fallback overlay; cooperative clients supply their own layout.
 - **Why the position is not measured.** A compositor cannot ask a client-side
   decorated window where it put its controls: `xdg-decoration` carries only a
   mode, `_GTK_FRAME_EXTENTS` carries shadow margins (and only on X11), and
@@ -42,8 +38,7 @@ KOS decoration is selected — see **Which decoration the panel belongs to**.
 - Draws a single **opaque rounded panel**. Being opaque is what lets it
   *cover* the application's own controls rather than float above them.
 - Client-side decorated windows take their tint from the title bar's own
-  pixels. KOS server-side decorations use the window palette that paints their
-  frame, without reading pixels back from the GPU.
+  pixels. Native KOS decorations are excluded before sampling begins.
 - **Fails closed, on the tint only.** If the title bar cannot be read yet —
   the window has not painted, or it is covered — no panel is drawn on that
   frame and the read is retried. The panel never appears with a guessed tint.
@@ -60,7 +55,7 @@ KOS decoration is selected — see **Which decoration the panel belongs to**.
 ## The tint
 
 `windowbuttons/titlebarmetrics.cpp` samples the title bar's rendered pixels for
-both client-side and server-side decorations:
+legacy overlay windows (excluding native KOS decorations):
 
 - **Local neighborhood priority.** Read the strip immediately beside the panel,
   at most **160 × 64 device pixels** (40 KiB), independent of window width and
@@ -90,8 +85,7 @@ both client-side and server-side decorations:
   adjustment marks live in a separate reusable transparent texture. New RGB
   values do not churn the panel texture cache. Explicit `dark`, `light` and
   custom-color settings still bypass sampling.
-- KOS server-side decorations use `QPalette::Window` only as a fallback until
-  the first usable read completes.
+- Legacy server decorations without the native capability marker retain their palette fallback for upgrade compatibility.
 
 Offline regressions (no plugin installation or compositor restart):
 
@@ -157,6 +151,7 @@ adjustment at once).
 | Key | Values | Meaning |
 | --- | --- | --- |
 | `showButtons` | bool | Disable the panel for this app |
+| `nativeGtkControls` | bool | Legacy manual qualification for native GTK CSD controls; defaults to false. Standard GTK 3 controls declare ownership automatically through the installed GTK module. Suppresses painting and input interception only without a server-side decoration. Native KOS SSD uses decoration buttons. See [GTK integration](../../docs/GtkWindowButtons.md) |
 | `position` | `left` / `right` | Which edge the panel is pinned to. Anything else falls back to `right`, the layout these applications follow |
 | `offset` | `{ "x": n, "y": n }` | Distance in logical pixels from that edge to the panel's outer edge (`x`), and from the window's top to the panel's top (`y`) |
 | `buttonSize` | number | Traffic light diameter |
@@ -221,31 +216,22 @@ with a warning.
 
 ### Which decoration the panel belongs to
 
-The panel *is* the KOS decoration's window controls, so it is drawn only while
-that decoration is selected in System Settings. `kosctl install` installs the
-decoration and never selects it: the choice is the user's, and until it is made
-the panel is drawn nowhere — `always` in the user's own file is the one
-exception, below. Selecting Breeze, or anything else, takes the panel off every
-window again — the client-side decorated ones included, because an application
-that draws its own title bar draws its own controls in it and a KOS panel in
-the corner of that is a panel nobody asked for.
-
-KWin does not report the decoration to effects, so the configuration reads
-`[org.kde.kdecoration2] library` out of `kwinrc` and watches that file; when it
-changes, every cached decision is dropped and the screen is repainted.
+The common KOS appearance switch controls the selected decoration and CSD
+integration. Fallback CSD overlays normally require KOS decoration selection;
+`drawOnDecoratedWindows: always` retains the explicit legacy override.
 
 ### Server-side decorated windows
 
-On windows KWin decorates itself, `drawOnDecoratedWindows` decides how far the
-panel goes. `auto`, the default, means "when the decoration in use is ours" —
-that decoration draws a frame and no buttons at all, so the panel is the only
-controls such a window has. `never` leaves those windows to the decoration
-entirely.
+The current KOS decoration advertises `_kos_native_decoration_controls` and
+owns its KDecoration buttons, including layout and input. This capability takes
+precedence over all overlay rules. Native controls use the common glyph mode
+and KDE's left/right button layout, not overlay geometry or background settings.
+They cannot enter Bridge's right-click adjustment mode. See
+[native decoration controls](../../docs/NativeWindowDecoration.md).
 
-`always` is the one way to ask for the panel without the decoration: it draws it
-over another decoration's buttons as well, and it is the only thing that
-survives that decoration being selected. Only a hand-written file can set it —
-the rules this plugin writes never carry the key.
+For older decorations without that marker, `auto` / `always` / `never` retain
+legacy behavior so updating Bridge before the decoration does not remove the
+window's only buttons. Update both plugins together and log in again to load them.
 
 Reload without restarting KWin:
 
@@ -419,11 +405,8 @@ the panel is.
 
 ## Notes
 
-- Windows KWin decorates itself are handled too — the panel is the same panel,
-  drawn by this effect in both cases, and the decoration
-  (`kwin/kos-decoration/`) draws a frame and no buttons. There is
-  no way around the decoration for the task switcher, the resize grips and the
-  shadow to come from KWin; the effect is what draws the controls over it.
+- Server-decorated KOS windows use native KDecoration controls; Bridge still
+  supplies their shared corner/shadow appearance, without a button overlay.
 - Only the macOS traffic-light look is implemented.
 - A KWin window rule cannot help here. Since Plasma 6.6, `noborder` = Force: No
   makes KWin draw a decoration for a CSD window, but it does not stop the
@@ -531,3 +514,12 @@ ctest --test-dir .build/titlebar-gpu -R '^titlebar_pixels_gpu_test$' -V
 ```
 
 CTest reports a skipped test (exit 77) when an EGL context is unavailable.
+
+## Cooperative application controls
+
+Custom Wayland apps can declare a surface-local controls slot. Bridge draws only
+the three buttons without a background or title-bar sampling, independently of
+the selected window decoration. The shared appearance switch controls takeover;
+declared surfaces never fall through to the legacy overlay. See the
+[integration contract](../../docs/CooperativeWindowControls.md) and
+[VM test](../../tests/cooperative-controls/README.md).

@@ -3,6 +3,7 @@
 #include <effect/effect.h>
 #include "windowappearance/sharedwindowsource.h"
 #include <memory>
+#include <QSet>
 
 namespace KOS
 {
@@ -10,6 +11,7 @@ namespace KOS
 class ButtonRenderer;
 class ButtonConfig;
 class ButtonInput;
+class CooperativeControls;
 class WindowAppearanceManager;
 namespace WindowAppearance { class ContinuousClip; }
 
@@ -27,6 +29,7 @@ public:
 
     void reconfigure(ReconfigureFlags flags) override;
     bool isActive() const override;
+    QString debug(const QString &parameter) const override;
     // Draw-chain wrappers run from lower to higher positions. Dock (50) asks
     // this provider to draw the shared source with its own mesh deformation.
     // Stage retains its legacy outer capture. Keep Bridge inside both wrappers
@@ -57,6 +60,9 @@ public:
 
 private:
     void updateNativeThumbnails();
+    void refreshGtkNativeControls(KWin::EffectWindow *);
+    QSet<KWin::EffectWindow *> m_gtkNativeWindows;
+    uint32_t m_gtkNativeAtom = 0;
     void paintButtons(const KWin::RenderTarget &, const KWin::RenderViewport &,
                       KWin::EffectWindow *, const KWin::Region &,
                       const KWin::WindowPaintData &, bool sourceCapture);
@@ -67,6 +73,7 @@ private:
     std::unique_ptr<ButtonRenderer> m_renderer;
     std::unique_ptr<ButtonConfig> m_config;
     std::unique_ptr<ButtonInput> m_input;
+    std::unique_ptr<CooperativeControls> m_cooperative;
     std::unique_ptr<WindowAppearanceManager> m_appearance;
     std::unique_ptr<WindowAppearance::ContinuousClip> m_continuousClip;
     bool m_nativeThumbnails = false;

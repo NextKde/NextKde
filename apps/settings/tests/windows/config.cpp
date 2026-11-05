@@ -24,9 +24,14 @@ int main(int argc, char **argv) {
     QTemporaryDir temporary;
     CHECK(temporary.isValid());
     qputenv("XDG_CONFIG_HOME", temporary.path().toUtf8());
+    qputenv("GSETTINGS_BACKEND", "keyfile");
     qputenv("DBUS_SESSION_BUS_ADDRESS", "unix:path=/nonexistent-kos-test-bus");
     QCoreApplication app(argc, argv);
     QDir().mkpath(temporary.path() + "/kos");
+    QDir().mkpath(temporary.path() + "/gtk-3.0");
+    const QString gtkCss = temporary.path() + "/gtk-3.0/gtk.css";
+    { QFile file(gtkCss); CHECK(file.open(QIODevice::WriteOnly)); file.write("/* personal GTK style */\n"); }
+    auto gtkStyle = [&]() { QFile file(gtkCss); CHECK(file.open(QIODevice::ReadOnly)); return file.readAll(); };
     const QString filename = temporary.path() + "/kos/window-appearance.json";
     auto put = [&](const QByteArray &bytes) { QFile f(filename); CHECK(f.open(QIODevice::WriteOnly)); CHECK(f.write(bytes)==bytes.size()); };
     auto get = [&]() { QFile f(filename); CHECK(f.open(QIODevice::ReadOnly)); return f.readAll(); };
@@ -45,15 +50,27 @@ int main(int argc, char **argv) {
     decoration.writeEntry("library", "third_party"); decoration.writeEntry("theme", "theme-a"); CHECK(config->sync());
     CHECK(settings.installDefaults());
     CHECK(settings.state()["decoration"]=="kos_decoration");
+    CHECK(gtkStyle().contains("kos_native_controls"));
+    CHECK(gtkStyle().contains("personal GTK style"));
+    CHECK(settings.setButtonGlyphMode("hover"));
+    CHECK(gtkStyle().contains("opacity: 0"));
+    CHECK(settings.setButtonGlyphMode("always"));
+    CHECK(!gtkStyle().contains("opacity: 0;"));
     CHECK(settings.setTakeover(false));
+    CHECK(gtkStyle()=="/* personal GTK style */\n");
     CHECK(settings.state()["decoration"]=="third_party");
     CHECK(decoration.readEntry("theme", QString())=="theme-a");
     CHECK(settings.installDefaults()); // upgrade must preserve opt-out
     CHECK(!settings.state()["enabled"].toBool());
     CHECK(settings.setTakeover(true));
+    CHECK(gtkStyle().contains("kos_native_controls"));
+    // Repeated startup/upgrade sync keeps the choice and does not duplicate CSS.
+    CHECK(settings.installDefaults());
+    CHECK(gtkStyle().count("NextKde native GTK buttons: begin")==1);
     decoration.writeEntry("library", "changed_externally"); CHECK(config->sync());
     CHECK(settings.setTakeover(false));
     CHECK(settings.state()["decoration"]=="changed_externally");
+    CHECK(gtkStyle()=="/* personal GTK style */\n");
     CHECK(settings.setAnimation("close", "fade"));
     CHECK(settings.setAnimation("hide", "none"));
     CHECK(settings.state()["closeAnimation"]=="fade");
@@ -117,5 +134,13 @@ int main(int argc, char **argv) {
     CHECK(settings.setRadius(8)); json=QJsonDocument::fromJson(get()).object();
     CHECK(json["version"].toInt()==1);
     CHECK(json["defaults"].toObject()["stroke"].toObject()["width"].toInt()==1);
+    const auto beforeGtkFailure = get();
+    const QString managedCss = temporary.path() + "/managed.css";
+    { QFile file(managedCss); CHECK(file.open(QIODevice::WriteOnly)); file.write("managed externally"); }
+    CHECK(QFile::remove(gtkCss));
+    CHECK(QFile::link(managedCss, gtkCss));
+    CHECK(!settings.setTakeover(true));
+    CHECK(get()==beforeGtkFailure);
+    CHECK(gtkStyle()=="managed externally");
     qInfo("Window settings configuration checks passed");
 }
