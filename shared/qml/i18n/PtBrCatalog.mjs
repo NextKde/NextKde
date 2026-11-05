@@ -42,6 +42,7 @@ export const catalog = {
     "Signature verification is enabled; publisher approval is not configured in Settings.": "A verificação de assinaturas está ativada; a aprovação do publicador não foi configurada nas Configurações.",
     "Managed by Flatpak. Settings checks GitHub for bundle updates; external Flatpak tools can remove the same installation.": "Gerenciado pelo Flatpak. Configurações consulta atualizações no GitHub; ferramentas Flatpak externas podem remover a mesma instalação.",
     "Flatpak could not complete the operation. See the details below.": "O Flatpak não conseguiu concluir a operação. Veja os detalhes abaixo.",
+    "The installed Flatpak library cannot safely handle signed bundles. Update Flatpak and libflatpak before retrying. Nothing was deployed.": "A biblioteca Flatpak instalada não pode processar pacotes assinados com segurança. Atualize Flatpak e libflatpak antes de tentar novamente. Nada foi implantado.",
     "Plan your days and events": "Planeje seus dias e eventos",
     "Everyday calculations, made simple": "Cálculos do dia a dia, sem complicação",
     "Forecasts for your favorite places": "Previsões para seus lugares favoritos",

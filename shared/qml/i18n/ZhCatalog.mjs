@@ -60,6 +60,7 @@ export const catalog = {
     "Signature verification is enabled; publisher approval is not configured in Settings.": "签名校验已启用；Settings 尚未配置对发布者的信任认可。",
     "Managed by Flatpak. Settings checks GitHub for bundle updates; external Flatpak tools can remove the same installation.": "由 Flatpak 管理。Settings 从 GitHub 检查安装包更新；外部 Flatpak 工具可卸载同一份安装。",
     "Flatpak could not complete the operation. See the details below.": "Flatpak 未能完成操作，请查看下方详细信息。",
+    "The installed Flatpak library cannot safely handle signed bundles. Update Flatpak and libflatpak before retrying. Nothing was deployed.": "已安装的 Flatpak 库无法安全处理签名包，请先更新 Flatpak 和 libflatpak 后重试。未进行部署。",
     "Plan your days and events": "规划日程与活动",
     "Everyday calculations, made simple": "轻松完成日常计算",
     "Forecasts for your favorite places": "查看常用地点的天气预报",

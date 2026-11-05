@@ -28,6 +28,7 @@ signals:
     void changed();
     void operationFinished(const QString& appId, const QString& code, const QString& message);
 private:
+    friend class FlatpakCompatibilityTest;
     struct Inventory {
         QVariantMap apps;
         QString error;
