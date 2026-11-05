@@ -629,6 +629,7 @@ export const catalog = {
     "Open app": "Abrir app",
     "Edit app": "Editar app",
     "Pin to Dock": "Fixar na Dock",
+    "Unpin from Dock": "Desafixar do Dock",
     "Importing PNG from clipboard…": "Importando PNG da área de transferência…",
     "Icon imported — click Save to apply": "Ícone importado — clique em Salvar para aplicar",
     "Import failed: copy a PNG image first and make sure wl-clipboard is installed": "Falha na importação: copie primeiro uma imagem PNG e verifique se o wl-clipboard está instalado",

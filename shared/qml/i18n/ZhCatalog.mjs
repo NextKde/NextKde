@@ -681,6 +681,7 @@ export const catalog = {
     "Open app": "打开应用",
     "Edit app": "编辑应用",
     "Pin to Dock": "固定到 Dock",
+    "Unpin from Dock": "从 Dock 取消固定",
     "Importing PNG from clipboard…": "正在从剪贴板导入 PNG…",
     "Icon imported — click Save to apply": "图标已导入，点击保存生效",
     "Import failed: copy a PNG image first and make sure wl-clipboard is installed": "导入失败：请确认已复制 PNG 图片，且安装了 wl-clipboard",
