@@ -53,8 +53,11 @@ AnimatedPopupWindow {
             DockModelService.releaseDockPopup(panel)
     }
     Component.onDestruction: DockModelService.releaseDockPopup(panel)
+    // v8 cards publish their own glass declarations and leave this legacy
+    // aggregate empty. An empty blur region can mean the entire popup to the
+    // compositor, exposing a rectangular backdrop while the cards fade out.
     BackgroundEffect.blurRegion: (panel.visible && panel.revealProgress > 0
-        && AppearanceTokens.surface.usesKwinBlur)
+        && AppearanceTokens.surface.usesKwinBlur && historyPane.legacyBlurRegions.length > 0)
         ? historyPane.blurRegion : null
 
     function toggle(item) {
