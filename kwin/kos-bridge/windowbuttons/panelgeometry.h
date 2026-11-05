@@ -1,6 +1,7 @@
 #pragma once
 
 #include <QPainterPath>
+#include "../windowappearance/contour.h"
 #include <QPointF>
 #include <QRectF>
 #include <QSizeF>
@@ -141,18 +142,23 @@ PanelGeometry clamped(const PanelGeometry &);
 // difference anyone can see.
 bool sameGeometry(const PanelGeometry &, const PanelGeometry &);
 
-// Bitmask of which edges of the panel sit flush against the window's top or
-// pinned side edge (`offset <= 1.0`), used to key cached background/ring
-// textures.
+// Actual touched edges, independent of the panel's pinning direction.
+inline constexpr int PanelFlushTop = 1;
+inline constexpr int PanelFlushLeft = 2;
+inline constexpr int PanelFlushRight = 4;
 int panelFlushMask(const PanelGeometry &);
 
-// The panel's background path inside `rect`, rounding all four corners into a
-// pill when floating freely inside the title bar. When the panel touches the
-// top or pinned side edge of the window (`offset <= 1.0`), the three inner and
-// seam corners become square so the opaque mask covers a rectangular native
-// Window Controls Overlay (WCO) box without leaving crescent gaps, while the
-// outer window corner (top-right when pinned right, top-left when pinned left)
-// keeps the window's corner radius.
-QPainterPath panelBackgroundPath(const QRectF &rect, const PanelGeometry &geometry);
+// Native scene contour. Continuous corners are applied to the complete source
+// after buttons are painted, so that path supplies zero native radii here.
+struct PanelWindowContour {
+    QSizeF size;
+    WindowAppearance::CornerRadii radii;
+};
+
+// Floating panels remain pills. Edge-attached panels cover the control box
+// with a rectangle, clipped only by the real window contour at that location.
+QPainterPath panelBackgroundPath(const QRectF &rect, const PanelGeometry &geometry,
+                                 const PanelWindowContour &window = {});
+QString panelBackgroundKey(const PanelGeometry &, const PanelWindowContour &);
 
 } // namespace KOS

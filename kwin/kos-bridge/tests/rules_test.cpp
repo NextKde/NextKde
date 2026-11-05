@@ -326,50 +326,64 @@ void testGeometry()
     CHECK(close.left() < close.right());
     CHECK(close.right() <= maximize.left());
 
-    // A floating panel rounds all four corners into a pill, so its extreme
-    // corners are outside the background path. A panel flushed against the
-    // top-right or top-left corner squares off the three inner/seam corners to
-    // cover a rectangular native WCO control box without crescent gaps, while
-    // keeping the outer window corner (top-right when pinned right, top-left
-    // when pinned left) rounded to match the window's corner radius.
     const QRectF box(0, 0, 100, 34);
-    const QPainterPath floatingPath = panelBackgroundPath(box, geometry);
-    CHECK(!floatingPath.contains(QPointF(1, 1)));
-    CHECK(!floatingPath.contains(QPointF(99, 1)));
-    CHECK(!floatingPath.contains(QPointF(99, 33)));
-    CHECK(!floatingPath.contains(QPointF(1, 33)));
-    CHECK(floatingPath.contains(box.center()));
+    PanelGeometry shape;
+    shape.buttonSize = 20;
+    shape.buttonSpacing = 10;
+    shape.panelPadding = 7;
+    shape.panelPaddingX = 10;
+    const PanelWindowContour rounded{QSizeF(500, 300), {18, 18, 18, 18}};
+    const PanelWindowContour square{rounded.size, {}};
+    for (auto side : {ButtonPosition::Left, ButtonPosition::Right}) {
+        shape.position = side;
+        shape.offset = AppOffset{40, 40};
+        const auto floating = panelBackgroundPath(box, shape, rounded);
+        for (const QPointF p : {QPointF(1, 1), QPointF(99, 1),
+                                QPointF(1, 33), QPointF(99, 33)})
+            CHECK(!floating.contains(p));
+        CHECK(floating.contains(box.center()));
+        CHECK(panelFlushMask(shape) == 0);
 
-    PanelGeometry flushRight = geometry;
-    flushRight.position = ButtonPosition::Right;
-    flushRight.offset = AppOffset{0, 0};
-    const QPainterPath flushRightPath = panelBackgroundPath(box, flushRight);
-    CHECK(flushRightPath.contains(QPointF(1, 1)));
-    CHECK(!flushRightPath.contains(QPointF(99, 1)));
-    CHECK(flushRightPath.contains(QPointF(99, 33)));
-    CHECK(flushRightPath.contains(QPointF(1, 33)));
-    CHECK(panelFlushMask(geometry) == 0);
-    CHECK(panelFlushMask(flushRight) == 2);
+        const int sideMask = side == ButtonPosition::Left ? PanelFlushLeft : PanelFlushRight;
+        // Single-edge contact is not a window corner. No artificial cutout.
+        shape.offset = AppOffset{0, 40};
+        CHECK(panelFlushMask(shape) == sideMask);
+        const auto sideOnly = panelBackgroundPath(box, shape, rounded);
+        shape.offset = AppOffset{40, 0};
+        CHECK(panelFlushMask(shape) == PanelFlushTop);
+        const auto topOnly = panelBackgroundPath(box, shape, rounded);
+        for (const QPointF p : {QPointF(1, 1), QPointF(99, 1),
+                                QPointF(1, 33), QPointF(99, 33)}) {
+            CHECK(sideOnly.contains(p));
+            CHECK(topOnly.contains(p));
+        }
+        // A side-only panel near the top follows the translated window arc,
+        // not a fresh quarter circle at the panel's own top corner.
+        shape.offset = AppOffset{0, 4};
+        const QPointF shiftedCorner(side == ButtonPosition::Left ? 9 : 91, 1);
+        CHECK(panelBackgroundPath(box, shape, rounded).contains(shiftedCorner));
+        shape.offset = AppOffset{0, 0};
+        CHECK(panelFlushMask(shape) == (PanelFlushTop | sideMask));
+        const QPointF outer(side == ButtonPosition::Left ? 1 : 99, 1);
+        CHECK(!panelBackgroundPath(box, shape, rounded).contains(outer));
+        // A square/maximized native contour must leave no circular gap.
+        CHECK(panelBackgroundPath(box, shape, square).contains(outer));
+        const PanelWindowContour smallRadius{rounded.size, {6, 6, 6, 6}};
+        const QPointF nearCorner(side == ButtonPosition::Left ? 5 : 95, 1);
+        CHECK(panelBackgroundPath(box, shape, smallRadius).contains(nearCorner));
+        CHECK(!panelBackgroundPath(box, shape, rounded).contains(nearCorner));
+        CHECK(panelBackgroundKey(shape, rounded) != panelBackgroundKey(shape, square));
+        const auto originalKey = panelBackgroundKey(shape, rounded);
+        // Even within the same edge mask, offset changes the true intersection.
+        shape.offset.y = 0.5;
+        CHECK(panelBackgroundKey(shape, rounded) != originalKey);
+        shape.offset = AppOffset{1, 1};
+        CHECK(panelFlushMask(shape) == (PanelFlushTop | sideMask));
+        shape.offset = AppOffset{1.01, 1.01};
+        CHECK(panelFlushMask(shape) == 0);
+    }
+    CHECK(panelBackgroundPath(QRectF(), shape, rounded).isEmpty());
 
-    PanelGeometry flushRightSideOnly = flushRight;
-    flushRightSideOnly.offset = AppOffset{0, 4};
-    const QPainterPath flushRightSidePath =
-        panelBackgroundPath(box, flushRightSideOnly);
-    CHECK(flushRightSidePath.contains(QPointF(1, 1)));
-    CHECK(!flushRightSidePath.contains(QPointF(99, 1)));
-    CHECK(flushRightSidePath.contains(QPointF(99, 33)));
-    CHECK(flushRightSidePath.contains(QPointF(1, 33)));
-    CHECK(panelFlushMask(flushRightSideOnly) == 2);
-
-    PanelGeometry flushLeft = geometry;
-    flushLeft.position = ButtonPosition::Left;
-    flushLeft.offset = AppOffset{0, 0};
-    const QPainterPath flushLeftPath = panelBackgroundPath(box, flushLeft);
-    CHECK(!flushLeftPath.contains(QPointF(1, 1)));
-    CHECK(flushLeftPath.contains(QPointF(99, 1)));
-    CHECK(flushLeftPath.contains(QPointF(99, 33)));
-    CHECK(flushLeftPath.contains(QPointF(1, 33)));
-    CHECK(panelFlushMask(flushLeft) == 1);
 }
 
 // ---------------------------------------------------------------------------

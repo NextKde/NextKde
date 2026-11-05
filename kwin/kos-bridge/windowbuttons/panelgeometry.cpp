@@ -291,66 +291,44 @@ bool sameGeometry(const PanelGeometry &a, const PanelGeometry &b)
 int panelFlushMask(const PanelGeometry &geometry)
 {
     constexpr qreal FlushThreshold = 1.0;
-    const bool flushed =
-        geometry.offset.y <= FlushThreshold || geometry.offset.x <= FlushThreshold;
-    if (!flushed) {
-        return 0;
-    }
-    return geometry.position == ButtonPosition::Left ? 1 : 2;
+    int mask = geometry.offset.y <= FlushThreshold ? PanelFlushTop : 0;
+    if (geometry.offset.x <= FlushThreshold)
+        mask |= geometry.position == ButtonPosition::Left ? PanelFlushLeft : PanelFlushRight;
+    return mask;
 }
 
-QPainterPath panelBackgroundPath(const QRectF &rect, const PanelGeometry &geometry)
+QPainterPath panelBackgroundPath(const QRectF &rect, const PanelGeometry &geometry,
+                                 const PanelWindowContour &window)
 {
     QPainterPath path;
-    if (rect.isEmpty()) {
+    if (rect.isEmpty())
         return path;
-    }
-
-    const qreal r = std::min(rect.width(), rect.height()) / 2.0;
-    constexpr qreal FlushThreshold = 1.0;
-    const bool flushed =
-        geometry.offset.y <= FlushThreshold || geometry.offset.x <= FlushThreshold;
-    if (!flushed) {
+    if (panelFlushMask(geometry) == 0) {
+        const qreal r = std::min(rect.width(), rect.height()) / 2.0;
         path.addRoundedRect(rect, r, r);
-        return path;
+    } else {
+        path.addRect(rect);
     }
-
-    // A panel flushed to the top or side edge of the window is covering a
-    // full-height title-bar control box (such as an Electron/Chromium WCO
-    // strip). Square off the three inner/seam corners so the opaque mask
-    // covers the rectangular WCO box without gaps, while keeping only the
-    // outer window corner (top-right when pinned right, top-left when pinned
-    // left) rounded to follow the window's rounded corner.
-    const bool pinnedLeft = geometry.position == ButtonPosition::Left;
-    const qreal rTL = pinnedLeft ? r : 0.0;
-    const qreal rTR = pinnedLeft ? 0.0 : r;
-    const qreal rBR = 0.0;
-    const qreal rBL = 0.0;
-
-    const qreal x = rect.x();
-    const qreal y = rect.y();
-    const qreal w = rect.width();
-    const qreal h = rect.height();
-
-    path.moveTo(x + rTL, y);
-    path.lineTo(x + w - rTR, y);
-    if (rTR > 0.0) {
-        path.arcTo(QRectF(x + w - 2.0 * rTR, y, 2.0 * rTR, 2.0 * rTR), 90.0, -90.0);
+    if (!window.size.isEmpty()) {
+        const QPointF origin = panelRect(geometry, window.size).topLeft();
+        const auto contour = WindowAppearance::contourPath(
+            QRectF(-origin, window.size), window.radii, 0.0);
+        path = path.intersected(contour);
     }
-    path.lineTo(x + w, y + h - rBR);
-    if (rBR > 0.0) {
-        path.arcTo(QRectF(x + w - 2.0 * rBR, y + h - 2.0 * rBR, 2.0 * rBR, 2.0 * rBR), 0.0, -90.0);
-    }
-    path.lineTo(x + rBL, y + h);
-    if (rBL > 0.0) {
-        path.arcTo(QRectF(x, y + h - 2.0 * rBL, 2.0 * rBL, 2.0 * rBL), 270.0, -90.0);
-    }
-    path.lineTo(x, y + rTL);
-    if (rTL > 0.0) {
-        path.arcTo(QRectF(x, y, 2.0 * rTL, 2.0 * rTL), 180.0, -90.0);
-    }
-    path.closeSubpath();
     return path;
+}
+
+QString panelBackgroundKey(const PanelGeometry &geometry, const PanelWindowContour &window)
+{
+    // Include the contour and its position relative to the panel: a change in
+    // window size, native radius, or subpixel offset can change the cutout.
+    const QPointF origin = panelRect(geometry, window.size).topLeft();
+    QString key = QString::number(panelFlushMask(geometry));
+    for (qreal value : {origin.x(), origin.y(), window.size.width(), window.size.height(),
+                       window.radii.topLeft, window.radii.topRight,
+                       window.radii.bottomRight, window.radii.bottomLeft})
+        key += QLatin1Char('_') + QString::number(value, 'g', 17);
+    return key;
 }
 
 } // namespace KOS

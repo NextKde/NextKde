@@ -515,8 +515,11 @@ void ButtonRenderer::paint(const KWin::RenderTarget &renderTarget,
             w && w->maximizeMode() == KWin::MaximizeFull;
         // RGB changes only a uniform, not three supersampled button textures.
         const qreal scale = viewport.scale();
+        const QVector4D nativeRadii = w ? w->borderRadius().toVector() : QVector4D();
+        const PanelWindowContour contour{window->frameGeometry().size(),
+            {nativeRadii.x(), nativeRadii.y(), nativeRadii.z(), nativeRadii.w()}};
         if (!config.cooperativeControls) {
-            if (KWin::GLTexture *background = backgroundTexture(panelSize, scale, geometry))
+            if (KWin::GLTexture *background = backgroundTexture(panelSize, scale, geometry, contour))
                 blit(viewport, clip, logicalRect, background, panelColor);
         }
         if (config.cooperativeControls) {
@@ -535,7 +538,7 @@ void ButtonRenderer::paint(const KWin::RenderTarget &renderTarget,
             }
         } else if (KWin::GLTexture *tex = panelTexture(panelSize, scale, active, dark,
                                                 geometry, hovered, adjusting,
-                                                maximized, showGlyphs)) {
+                                                maximized, showGlyphs, contour)) {
             blit(viewport, clip, logicalRect, tex);
         }
     }
@@ -883,7 +886,7 @@ bool ButtonRenderer::adjusting(KWin::EffectWindow *window) const
 }
 
 KWin::GLTexture *ButtonRenderer::backgroundTexture(const QSizeF &panelSize, qreal scale,
-                                                   const PanelGeometry &geometry)
+                                                   const PanelGeometry &geometry, const PanelWindowContour &contour)
 {
     const QSize deviceSize(std::max(1, qRound(panelSize.width() * scale)),
                            std::max(1, qRound(panelSize.height() * scale)));
@@ -891,7 +894,7 @@ KWin::GLTexture *ButtonRenderer::backgroundTexture(const QSizeF &panelSize, qrea
                             .arg(deviceSize.width())
                             .arg(deviceSize.height())
                             .arg(qRound(scale * 100))
-                            .arg(panelFlushMask(geometry));
+                            .arg(panelBackgroundKey(geometry, contour));
     const auto found = m_textures.find(key);
     if (found != m_textures.end()) return found->second.get();
 
@@ -907,7 +910,7 @@ KWin::GLTexture *ButtonRenderer::backgroundTexture(const QSizeF &panelSize, qrea
     painter.scale(sx, sy);
     painter.setPen(Qt::NoPen);
     painter.setBrush(Qt::white);
-    painter.drawPath(panelBackgroundPath(QRectF(QPointF(), panelSize), geometry));
+    painter.drawPath(panelBackgroundPath(QRectF(QPointF(), panelSize), geometry, contour));
     painter.end();
 
     QImage image = superImage.scaled(deviceSize, Qt::IgnoreAspectRatio,
@@ -919,14 +922,14 @@ KWin::GLTexture *ButtonRenderer::panelTexture(const QSizeF &panelSize, qreal sca
                                                bool active, bool dark,
                                                const PanelGeometry &geometry,
                                                Action hovered, bool adjusting,
-                                               bool maximized, bool showGlyphs)
+                                               bool maximized, bool showGlyphs, const PanelWindowContour &contour)
 {
     // The device size and scale are part of the key so each output scale gets
     // pixel-perfect rasterisation. The maximized flag is part of it for the same
     // reason: it is the same panel with the restore glyph on its green dot.
     const QSize deviceSize(std::max(1, qRound(panelSize.width() * scale)),
                            std::max(1, qRound(panelSize.height() * scale)));
-    const int flushMask = adjusting ? panelFlushMask(geometry) : 0;
+    const QString shapeKey = adjusting ? panelBackgroundKey(geometry, contour) : QStringLiteral("none");
     const QString key = QStringLiteral("%1x%2@%3_%4_%5_%6_%7_%8_%9_%10_%11_%12_%13_f%14")
                             .arg(deviceSize.width())
                             .arg(deviceSize.height())
@@ -944,12 +947,12 @@ KWin::GLTexture *ButtonRenderer::panelTexture(const QSizeF &panelSize, qreal sca
                             .arg(adjusting ? 1 : 0)
                             .arg(maximized ? 1 : 0)
                             .arg(showGlyphs ? 1 : 0)
-                            .arg(flushMask);
+                            .arg(shapeKey);
     auto it = m_textures.find(key);
     if (it == m_textures.end()) {
         return cacheTexture(key, buildPanel(panelSize, scale, active, dark,
                                             geometry, hovered, adjusting,
-                                            maximized, showGlyphs));
+                                            maximized, showGlyphs, contour));
     }
     return it->second.get();
 }
@@ -1163,7 +1166,7 @@ void ButtonRenderer::setTileMenuHovered(const QPointF &logicalPos)
 QImage ButtonRenderer::buildPanel(const QSizeF &panelSize, qreal scale, bool active,
                                    bool dark, const PanelGeometry &geometry,
                                    Action hovered, bool adjusting,
-                                   bool maximized, bool showGlyphs) const
+                                   bool maximized, bool showGlyphs, const PanelWindowContour &contour) const
 {
     const QSize deviceSize(std::max(1, qRound(panelSize.width() * scale)),
                            std::max(1, qRound(panelSize.height() * scale)));
@@ -1193,7 +1196,7 @@ QImage ButtonRenderer::buildPanel(const QSizeF &panelSize, qreal scale, bool act
         painter.setBrush(Qt::NoBrush);
         const QRectF ringRect = QRectF(0, 0, w, h).adjusted(
             RingWidth / 2.0, RingWidth / 2.0, -RingWidth / 2.0, -RingWidth / 2.0);
-        painter.drawPath(panelBackgroundPath(ringRect, geometry));
+        painter.drawPath(panelBackgroundPath(ringRect, geometry, contour));
 
         // The grips, one bar on each edge. They are what makes the width and the
         // height adjustable on their own rather than through the dot size, and
