@@ -29,7 +29,9 @@ if '--serve' in sys.argv:
         @dbus.service.method('com.canonical.dbusmenu', in_signature='iias', out_signature='u(ia{sv}av)')
         def GetLayout(self, item, depth, properties):
             record('layout:' + str(item))
-            child = dbus.Struct((11, {'label': 'Copy'}, dbus.Array([], signature='v')), signature='ia{sv}av', variant_level=1)
+            # Children travel inside variants; their nested dictionary must keep
+            # a{sv} explicitly rather than letting dbus-python infer a{ss}.
+            child = dbus.Struct((dbus.Int32(11), dbus.Dictionary({'label': 'Copy'}, signature='sv'), dbus.Array([], signature='v')), signature='ia{sv}av', variant_level=1)
             return 1, (item, {'label': 'Edit'}, dbus.Array([child], signature='v'))
         @dbus.service.method('com.canonical.dbusmenu', in_signature='isvu', out_signature='', async_callbacks=('done', 'failed'))
         def Event(self, item, event, data, timestamp, done, failed):
@@ -65,7 +67,7 @@ with tempfile.TemporaryDirectory(prefix='kos-menu-', dir='/tmp') as directory:
         try:
             processes.append(subprocess.Popen([sys.executable, __file__, '--serve'], env=env, stdout=log, stderr=log))
             wait_for(ready.exists)
-            processes.append(subprocess.Popen(['gdb', '--batch', '-ex', 'run', '-ex', 'thread apply all bt', '--args', sys.argv[1], 'daemon'], env=env, stdout=log, stderr=log))
+            processes.append(subprocess.Popen([sys.argv[1], 'daemon'], env=env, stdout=log, stderr=log))
             path = runtime / 'kos-platform.sock'
             wait_for(path.exists)
             with socket.socket(socket.AF_UNIX) as client:
@@ -79,7 +81,6 @@ with tempfile.TemporaryDirectory(prefix='kos-menu-', dir='/tmp') as directory:
                     while True:
                         line = stream.readline()
                         if not line:
-                            time.sleep(1)
                             log.flush()
                             log.seek(0)
                             raise AssertionError('daemon disconnected; exits=' + str([p.poll() for p in processes])
