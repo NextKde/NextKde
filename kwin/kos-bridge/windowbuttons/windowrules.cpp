@@ -255,6 +255,17 @@ WindowMatcher WindowMatcher::fromJson(const QJsonObject &object, bool *ok)
     return matcher;
 }
 
+WindowMatcher adjustmentMatcher(const WindowQuery &query)
+{
+    WindowMatcher matcher;
+    matcher.className = query.windowClass;
+    matcher.hasType = true;
+    matcher.type = query.type;
+    matcher.role = query.role;
+    if (query.role.isEmpty()) matcher.title = query.caption;
+    return matcher;
+}
+
 bool moreSpecific(const WindowMatcher &a, const WindowMatcher &b)
 {
     return a.specificity() > b.specificity();

@@ -1061,6 +1061,18 @@ void testIndependentBackground()
 
 int main(int argc, char **argv)
 {
+    {
+        const auto main = query(QStringLiteral("qq"), QStringLiteral("QQ"), 0);
+        const auto image = query(QStringLiteral("qq"), QStringLiteral("Image viewer"), 0);
+        const auto matcher = adjustmentMatcher(main);
+        CHECK(matcher.matches(main));
+        CHECK(!matcher.matches(image));
+        const auto roled = adjustmentMatcher(query(QStringLiteral("qq"), {}, 0, QStringLiteral("main")));
+        CHECK(roled.matches(query(QStringLiteral("qq"), QStringLiteral("New caption"), 0, QStringLiteral("main"))));
+        CHECK(!roled.matches(query(QStringLiteral("qq"), {}, 0, QStringLiteral("viewer"))));
+        CHECK(!roled.matches(query(QStringLiteral("qq"), {}, 5, QStringLiteral("main"))));
+    }
+
     QTemporaryDir dir;
     if (!dir.isValid()) {
         std::fprintf(stderr, "FAIL could not create a temporary directory\n");

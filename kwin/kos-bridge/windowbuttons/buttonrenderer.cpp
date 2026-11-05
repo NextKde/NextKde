@@ -526,8 +526,17 @@ void ButtonRenderer::paint(const KWin::RenderTarget &renderTarget,
         // RGB changes only a uniform, not three supersampled button textures.
         const qreal scale = viewport.scale();
         if (!config.cooperativeControls) {
+            auto backgroundClip = clip;
+            if (geometry.independentBackground && config.background == PanelBackground::Auto) {
+                const auto cached = m_cache.constFind(window);
+                if (cached != m_cache.constEnd() && cached->backgroundBottom >= 0) {
+                    QRectF backgroundBounds = transformedFrame;
+                    backgroundBounds.setHeight(cached->backgroundBottom * transform.yScale);
+                    backgroundClip = clippedToWindow(backgroundClip, viewport, backgroundBounds);
+                }
+            }
             if (KWin::GLTexture *background = backgroundTexture(panelSize, scale, geometry.independentBackground))
-                blit(viewport, clip, logicalRect, background, panelColor);
+                blit(viewport, backgroundClip, logicalRect, background, panelColor);
         }
         if (config.cooperativeControls) {
             for (int i = 0; i < TypeCount; ++i) {
@@ -682,6 +691,9 @@ bool ButtonRenderer::tintFor(const KWin::RenderTarget &renderTarget,
         // A completed transfer belongs to the geometry at enqueue time.
         it->sampler->discard();
         it->requestRefresh();
+        it->backgroundBottom = -1;
+        it->bottomVotes = 0;
+        it->bottomAttempts = 0;
         it->resetReadback = false;
     }
     it->windowSize = windowSize;
@@ -715,12 +727,32 @@ bool ButtonRenderer::consumeSample(CacheEntry &entry, Clock::time_point now)
     bool sampledDark = false;
     QColor sampledColor;
     if (entry.sampler->take(&sampledDark, &sampledColor)) {
-        return entry.accept(sampledDark, sampledColor, now);
+        const bool changed = entry.accept(sampledDark, sampledColor, now);
+        // Publish the boundary only with a confirmed background color.
+        if (entry.known && !entry.pending) {
+            const qreal bottom = entry.sampler->backgroundBottom();
+            entry.bottomAttempts = std::min(entry.bottomAttempts + 1, TitlebarTintState::WarmupReads);
+            if (entry.bottomVotes == 0 || std::abs(bottom - entry.pendingBottom) > 0.5) {
+                entry.pendingBottom = bottom;
+                entry.bottomVotes = 1;
+            } else {
+                entry.bottomVotes = 2;
+                entry.bottomAttempts = 0;
+                if (std::abs(bottom - entry.backgroundBottom) > 0.5) {
+                    entry.backgroundBottom = bottom;
+                    return true;
+                }
+            }
+        }
+        return changed;
     }
     if (entry.sampler->pending() && now - entry.lastRead >= ReadbackTimeout) {
         entry.sampler->discard();
     }
-    if (wasPending && !entry.sampler->pending()) entry.rejectSample();
+    if (wasPending && !entry.sampler->pending()) {
+        entry.rejectSample();
+        entry.bottomVotes = 0;
+    }
     return false;
 }
 
@@ -746,11 +778,12 @@ void ButtonRenderer::scheduleSample(KWin::EffectWindow *window)
         if (entry == m_cache.end() || entry->sampleToken != token) return;
         entry->sampleScheduled = false;
         if (!KWin::effects) return;
+        if (guarded->isMinimized()) return; // Delayed eviction preserves the animation capture.
         const bool active = KWin::effects->activeWindow() == guarded;
         if (entry->resetReadback) {
             // Focus callbacks only mark CPU state. Retire the old GPU read in
             // the next paint, where the correct context is already current.
-            requestSample(guarded, entry->panel);
+            requestSample(guarded, entry->panel.united(entry->cover));
             return;
         }
         if (entry->sampler->pending()) {
@@ -768,21 +801,22 @@ void ButtonRenderer::scheduleSample(KWin::EffectWindow *window)
             }
             if (active || entry->sampler->pending() || entry->needsFollowup()) scheduleSample(guarded);
         } else if (active || entry->needsFollowup()) {
-            requestSample(guarded, entry->panel);
+            requestSample(guarded, entry->panel.united(entry->cover), entry->sampler->probeRect());
         }
     });
 }
 
-void ButtonRenderer::requestSample(KWin::EffectWindow *window, const QRectF &panel)
+void ButtonRenderer::requestSample(KWin::EffectWindow *window, const QRectF &panel, const QRectF &probe)
 {
     if (!KWin::effects || !window) {
         return;
     }
     const QRectF frame = window->frameGeometry();
-    // The band the tint is read from: the panel's rows, across the window's
-    // whole width. addRepaint takes global logical coordinates.
-    const QRectF band(frame.x(), frame.y() + panel.y(), frame.width(),
-                      panel.height());
+    // Include the top-anchored RGB gutter and the whole vertical boundary
+    // probe, even when the configured controls start lower down the window.
+    const QRectF band = probe.isEmpty()
+        ? QRectF(frame.x(), frame.y(), frame.width(), std::min(frame.height(), panel.bottom() + 4))
+        : probe.translated(frame.topLeft()).adjusted(-1, -1, 1, 1).intersected(frame);
     repaintRect(band);
 }
 
@@ -1035,7 +1069,7 @@ void ButtonRenderer::repaintPanels(KWin::EffectWindow *a, KWin::EffectWindow *b)
         entry->resetReadback = true;
         // Updating only the chip would leave the adjacent sampling strip out
         // of this frame's damage, delaying the new focus color again.
-        requestSample(window, entry->panel);
+        requestSample(window, entry->panel.united(entry->cover));
     }
     // Through the compositor, for the reason setHovered() gives. Only the panels
     // that are on screen: currentRect() is the rectangle a panel was last drawn
@@ -1053,6 +1087,7 @@ void ButtonRenderer::contentChanged(KWin::EffectWindow *window)
 {
     const auto entry = m_cache.find(window);
     if (entry == m_cache.end()) return;
+    if (window->isMinimized()) return;
     entry->contentChanged();
     // Client damage requests one refresh even for an inactive window. Keep
     // the last attempt time so video/scroll damage cannot bypass the budget.
@@ -1475,6 +1510,11 @@ void ButtonRenderer::clearHits(KWin::EffectWindow *window, bool clearSource)
     }
 }
 
+void ButtonRenderer::dropSamplingCache(KWin::EffectWindow *window)
+{
+    m_cache.remove(window); // Destructor retires the PBO in a current GL context.
+}
+
 void ButtonRenderer::forget(KWin::EffectWindow *window)
 {
     m_hits.remove(window);
@@ -1526,6 +1566,12 @@ bool ButtonRenderer::cooperativeControls(KWin::EffectWindow *window) const
 QJsonObject ButtonRenderer::controlDiagnostics(KWin::EffectWindow *window) const
 {
     QJsonObject result{{"sampling", m_cache.contains(window)}};
+    const auto cached = m_cache.constFind(window);
+    if (cached != m_cache.constEnd()) {
+        result.insert("tintKnown", cached->known);
+        result.insert("tintColor", cached->color.name());
+        result.insert("backgroundBottom", cached->backgroundBottom);
+    }
     const auto it = m_hits.constFind(window);
     if (it == m_hits.constEnd()) { result.insert("painted", false); return result; }
     const auto rectJson = [](const QRectF &rect) {

@@ -15,6 +15,7 @@ void TitlebarReadback::discard()
 {
     if (m_fence) glDeleteSync(m_fence);
     m_fence = nullptr;
+    m_reusable = false;
 }
 
 bool TitlebarReadback::enqueue(GLuint framebuffer, const QSize &targetSize, const QRect &rect)
@@ -53,12 +54,18 @@ bool TitlebarReadback::enqueue(GLuint framebuffer, const QSize &targetSize, cons
     }
     if (!m_buffer) glGenBuffers(1, &m_buffer);
     glBindBuffer(GL_PIXEL_PACK_BUFFER, m_buffer);
-    m_bytes = qsizetype(rect.width()) * rect.height() * 4;
+    const qsizetype bytes = qsizetype(rect.width()) * rect.height() * 4;
+    const bool reuse = m_reusable && m_bytes == bytes;
+    m_bytes = bytes;
+    m_reusable = false;
     // Failed reads must leave transparent pixels, not undefined buffer bytes
     // which can look like an opaque black titlebar. Reuse bounded zero storage
     // while still orphaning the GPU buffer; never wait for its previous fence.
     if (m_clearPixels.size() != m_bytes) m_clearPixels = QByteArray(m_bytes, '\0');
-    glBufferData(GL_PIXEL_PACK_BUFFER, m_bytes, m_clearPixels.constData(), GL_STREAM_READ);
+    // A successfully consumed fence proves this storage is idle. Reuse it;
+    // canceled/timed-out transfers still orphan to avoid waiting on the GPU.
+    if (reuse) glBufferSubData(GL_PIXEL_PACK_BUFFER, 0, m_bytes, m_clearPixels.constData());
+    else glBufferData(GL_PIXEL_PACK_BUFFER, m_bytes, m_clearPixels.constData(), GL_STREAM_READ);
     glReadPixels(rect.x(), targetSize.height() - rect.y() - rect.height(),
                  rect.width(), rect.height(), GL_RGBA, GL_UNSIGNED_BYTE, nullptr);
     m_fence = glFenceSync(GL_SYNC_GPU_COMMANDS_COMPLETE, 0);
@@ -91,6 +98,7 @@ bool TitlebarReadback::take(QByteArray &pixels)
     }
     glBindBuffer(GL_PIXEL_PACK_BUFFER, previousBuffer);
     if (!ok) pixels.clear();
+    m_reusable = ok;
     return ok;
 }
 

@@ -57,14 +57,23 @@ controls use their respective native paths instead.
 `windowbuttons/titlebarmetrics.cpp` samples the title bar's rendered pixels for
 legacy overlay windows (excluding native KOS decorations):
 
-- **Local neighborhood priority.** Read the strip immediately beside the cover,
-  at most **32 × 64 device pixels** (8 KiB), independent of window width and
-  output scale. Keeping the median near the seam avoids sampling mostly a
-  neighboring filled toolbar widget, such as Steam's account/balance button.
-  Taller bands use their central rows. If the local strip is obscured or
-  unpainted, retry at the opposite end outside the caption's middle third,
-  at most **160 × 64 device pixels** (40 KiB). Never sample the cover's own
-  columns or pixels outside the visible region.
+- **Top-anchored background gutter.** RGB comes from a narrow strip immediately
+  beside the cover, starting two logical pixels below the window top. It does
+  not follow the controls' vertical offset into avatars or lower toolbars. The
+  preferred RGB strip is at most 32 device pixels wide; the fallback is at the
+  opposite end outside the caption's middle third, at most 160 pixels wide.
+  Neither includes the cover's own columns.
+- **Per-window vertical boundary.** One asynchronous read captures a strip of
+  at most **160 × 192 device pixels** (120 KiB), shared by RGB and boundary
+  detection. Eight horizontal groups form robust row profiles. Median colors
+  above and below a candidate edge are compared against their local median
+  deviation, rather than a fixed 12-level RGB threshold: coherent flat steps
+  as small as two channel levels can qualify. At least 3/4 of the columns must
+  support the direction of the change. The strongest local row step places
+  the edge, and two consistent observations confirm it before trimming.
+  Icons, isolated lines and gradual gradients do not trim it. The controls retain their
+  configured positions. Boundary detection requires a completely visible
+  probe; unavailable evidence leaves the configured cover extent in place.
 - **Non-blocking readback.** Transfer into a per-window pixel-pack buffer and
   inspect its fence on a later paint. Only signalled buffers are mapped; paint
   hooks never wait on a GPU fence. Preserve the read framebuffer, source read-buffer selection, pixel-pack
@@ -75,8 +84,8 @@ legacy overlay windows (excluding native KOS decorations):
   pixels to top-down viewport coordinates. Failed/occluded reads count against the sampling
   cadence, and a busy transfer is abandoned after 250 ms rather than keeping a
   fast retry loop alive indefinitely.
-- Independent-cover sampling rows stay on the controls, while exclusion uses
-  the entire expanded cover. Enlarging it cannot sample the cover itself.
+- RGB sampling stays near the window top, while exclusion uses the entire
+  expanded cover. Enlarging it cannot sample the cover itself.
   Require at least 75% visible strip coverage and 75% usable alpha coverage;
   sparse damaged glyphs cannot stand in for an undrawn/occluded background.
 - **A median, not a mean.** A fixed 256-bin luma histogram averages RGB within
@@ -84,7 +93,10 @@ legacy overlay windows (excluding native KOS decorations):
   without allocating, copying and sorting per-pixel sample vectors.
 - **Prompt confirmation without flicker.** The first tint and later changes require two
   consistent usable observations at least 32 ms apart. Four warm-up attempts run
-  at 32 ms intervals; steady active-window checks use a 125 ms cadence. These
+  at 32 ms intervals; steady active-window checks back off from 125 ms through
+  250/500 ms to 1000 ms as observations stay unchanged. Unrelated document or
+  video damage does not reset that backoff; observed RGB changes return to
+  32 ms confirmation. Failed observations also back off after warm-up. These
   are scheduling intervals, not measured end-to-end latency. Focus changes
   restart the fast phase for both windows while retaining validated RGB. Client
   damage also requests a throttled refresh for inactive windows; damage during
@@ -92,12 +104,26 @@ legacy overlay windows (excluding native KOS decorations):
   Invalid observations break confirmation, and failed inactive refreshes stop
   after the bounded warm-up budget. Near-equal readings (up to two levels per
   RGB channel) do not change the cached color.
+- **Bounded reusable storage.** The scan uses fixed stack arrays, without
+  per-pixel heap allocations. CPU pixel arrays are reused. The common GL row
+  flip normalizes in place, avoiding a second full pixel array; rotated/mirrored
+  outputs retain a reusable scratch array. A signalled, consumed PBO is reused;
+  canceled or timed-out transfers orphan storage to avoid GPU waits. The RGBA
+  payload is capped at 120 KiB per buffer (360 KiB for three CPU buffers and
+  120 KiB for one PBO in the general transform path, excluding driver overhead).
+  Minimized windows stop scheduled sampling and release sample caches after
+  a 500 ms animation grace period; closing windows releases them immediately.
+  Periodic repaint requests cover the bounded probe instead of the whole
+  window-width band after the first observation.
 - **No texture upload on RGB changes.** A cached white rounded background mask
   is tinted with a premultiplied shader uniform; buttons, hover rings and
   adjustment marks live in a separate reusable transparent texture. New RGB
   values do not churn the panel texture cache. Explicit `dark`, `light` and
   custom-color settings still bypass sampling.
 - Legacy server decorations without the native capability marker retain their palette fallback for upgrade compatibility.
+
+Optional CPU-only maximum-probe microbenchmark (excludes GPU/readback/repaint):
+`./.build/kos-bridge/titlebar_tint_test --benchmark`.
 
 Offline regressions (no plugin installation or compositor restart):
 
@@ -295,10 +321,13 @@ continuously there, so dragging across the middle of a window changes the side
 without a jump. The wheel leaves `offset` alone, so the panel grows away from the
 edge it is pinned to rather than away from its own middle.
 
-Saving writes a rule matched on the **window class** alone — the one thing about
-a window that is the same now and the next time the application starts — so a
-window with no class cannot be adjusted at all. A `title`, `titleRegex` or `type`
-matcher is something to write in `rules` by hand.
+Saving matches the **window class and type**, plus the window role when one
+is available. Without a role (including Wayland), the exact caption is used as
+a fallback, so a QQ image viewer need not inherit the main window's cover size.
+A caption-based adjustment must be saved again if the caption changes; use a
+hand-written `titleRegex` for changing document titles when appropriate. Old
+class-only rules remain compatible as fallbacks; adjust and save the secondary
+window once to override them. A window with no class cannot be adjusted.
 
 Every session ends in a line in the journal, because the file is the only readout
 an adjustment has:

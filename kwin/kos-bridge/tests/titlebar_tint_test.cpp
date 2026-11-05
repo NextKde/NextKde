@@ -1,5 +1,7 @@
 #include "windowbuttons/titlebartint.h"
 
+#include <QElapsedTimer>
+
 #include <algorithm>
 #include <array>
 #include <cstdio>
@@ -134,6 +136,114 @@ void neighboringWidgetTests()
     }
 }
 
+void toolbarGutterTests()
+{
+    for (int scale : {1, 2, 3}) {
+        const QRect band(0, 0, 700 * scale, 24 * scale);
+        const QRect cover(590 * scale, 0, 110 * scale, 40 * scale);
+        const QRect sample = tintSampleRect(band, cover);
+        TintHistogram histogram;
+        for (int y = sample.top(); y <= sample.bottom(); ++y) {
+            for (int x = sample.left(); x <= sample.right(); ++x) {
+                // Avatar / toolbar occupies the middle and lower rows.
+                const uchar v = y >= 7 * scale ? 80 : 240;
+                const uchar rgba[] = {v, v, v, 255};
+                histogram.add(rgba);
+            }
+        }
+        bool dark = true;
+        QColor color;
+        CHECK(histogram.tint(&dark, &color));
+        CHECK(!dark && color == QColor(240, 240, 240));
+    }
+}
+
+void backgroundBoundaryTests()
+{
+    for (int scale : {1, 2, 3}) {
+        const int width = 160, height = 45 * scale, boundary = 30 * scale;
+        std::vector<uchar> pixels(width * height * 4, 255);
+        for (int y = 0; y < height; ++y) {
+            for (int x = 0; x < width; ++x) {
+                auto *p = pixels.data() + (y * width + x) * 4;
+                // QQ's short black bar, then image content. A small toolbar
+                // icon must not be mistaken for the full-width boundary.
+                const uchar value = y >= boundary ? 75 : (x < 20 && y > 8 * scale ? 220 : 17);
+                p[0] = p[1] = p[2] = value;
+            }
+        }
+        CHECK(tintBackgroundBottom(pixels.data(), width, height, QColor(17, 17, 17),
+                                   5 * scale, 3 * scale) == boundary);
+        CHECK(tintBackgroundBottom(pixels.data(), width, boundary, QColor(17, 17, 17),
+                                   5 * scale, 3 * scale) == boundary);
+        // One horizontal line is insufficient evidence to trim a cover.
+        for (int x = 0; x < width; ++x) {
+            auto *p = pixels.data() + (6 * scale * width + x) * 4;
+            p[0] = p[1] = p[2] = 255;
+        }
+        CHECK(tintBackgroundBottom(pixels.data(), width, height, QColor(17, 17, 17),
+                                   5 * scale, 3 * scale) == boundary);
+    }
+    std::vector<uchar> gradient(160 * 60 * 4, 255);
+    for (int y = 0; y < 60; ++y) for (int x = 0; x < 160; ++x) {
+        auto *p = gradient.data() + (y * 160 + x) * 4;
+        p[0] = p[1] = p[2] = 20 + y;
+    }
+    CHECK(tintBackgroundBottom(gradient.data(), 160, 60, QColor(20,20,20), 5, 3) == 60);
+
+}
+
+void subtleBoundaryTests()
+{
+    for (int scale : {1, 2, 3}) {
+        for (int delta : {2, 3, 5, 8, 12}) {
+            const int width = 160, height = 60 * scale, boundary = 35 * scale;
+            std::vector<uchar> pixels(width * height * 4, 255);
+            for (int y = 0; y < height; ++y) for (int x = 0; x < width; ++x) {
+                auto *p = pixels.data() + (y * width + x) * 4;
+                p[0] = p[1] = p[2] = y < boundary ? 19 : 19 + delta;
+                // A small glyph should not defeat the low-contrast boundary.
+                if (x < 16 && y >= 10 * scale && y < 20 * scale)
+                    p[0] = p[1] = p[2] = 200;
+            }
+            CHECK(tintBackgroundBottom(pixels.data(), width, height, QColor(19,19,19),
+                                       5 * scale, 3 * scale) == boundary);
+            // An isolated low-contrast separator must not be mistaken for a
+            // new persistent surface.
+            for (int y = boundary + 1; y < height; ++y)
+                for (int x = 0; x < width; ++x) {
+                    auto *p = pixels.data() + (y * width + x) * 4;
+                    p[0] = p[1] = p[2] = 19;
+                }
+            CHECK(tintBackgroundBottom(pixels.data(), width, height, QColor(19,19,19),
+                                       5 * scale, 3 * scale) == height);
+        }
+    }
+    // Transparent rows cannot supply evidence of a new background.
+    std::vector<uchar> empty(160 * 60 * 4, 0);
+    CHECK(tintBackgroundBottom(empty.data(), 160, 60, QColor(19,19,19), 5, 3) == 60);
+}
+
+
+void boundaryBenchmark()
+{
+    std::vector<uchar> pixels(TintProbeWidth * TintProbeHeight * 4, 255);
+    for (int y = 0; y < TintProbeHeight; ++y) for (int x = 0; x < TintProbeWidth; ++x) {
+        auto *p = pixels.data() + (y * TintProbeWidth + x) * 4;
+        p[0] = p[1] = p[2] = y < 160 ? 19 : 27;
+    }
+    constexpr int iterations = 5000;
+    int checksum = 0;
+    QElapsedTimer timer;
+    timer.start();
+    for (int i = 0; i < iterations; ++i)
+        checksum += tintBackgroundBottom(pixels.data(), TintProbeWidth, TintProbeHeight,
+                                         QColor(19,19,19), 5, 3);
+    std::printf("160x192 boundary CPU: %.2f us/scan (%d scans, checksum %d); excludes GPU/readback/repaint\n",
+                timer.nsecsElapsed() / 1000.0 / iterations, iterations, checksum);
+}
+
+
 void timingTests()
 {
     TitlebarTintState state;
@@ -200,15 +310,38 @@ void timingTests()
     state.rejectSample();
     CHECK(state.interval() == 125ms && !state.needsFollowup());
     CHECK(state.known && state.color == next);
-}
+    state.requestRefresh();
+    for (int i = 0; i < 12; ++i) {
+        state.attempted(start + 9s + i * 1s);
+        state.accept(true, black, start + 9s + i * 1s + 32ms);
+    }
+    CHECK(state.interval() == 1000ms);
+    state.contentChanged();
+    CHECK(state.interval() == 1000ms); // Scrolling does not restore 8Hz polling.
+    CHECK(!state.accept(false, next, start + 22s));
+    CHECK(state.interval() == 32ms); // Observed change confirms promptly.
+
+    state.requestRefresh();
+    for (int i = 0; i < 12; ++i) {
+        state.attempted(start + 23s + i * 1s);
+        state.rejectSample();
+    }
+    CHECK(state.interval() == 1000ms); // Persistent occlusion also backs off.
+    CHECK(!state.needsFollowup());
 
 }
 
-int main()
+}
+
+int main(int argc, char **argv)
 {
+    if (argc > 1 && QString::fromUtf8(argv[1]) == QStringLiteral("--benchmark")) boundaryBenchmark();
     histogramTests();
     geometryTests();
     neighboringWidgetTests();
+    toolbarGutterTests();
+    backgroundBoundaryTests();
+    subtleBoundaryTests();
     timingTests();
     std::printf("%d checks, %d failures\n", checks, failures);
     return failures ? 1 : 0;

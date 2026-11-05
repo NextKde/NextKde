@@ -113,6 +113,14 @@ BridgeEffect::BridgeEffect()
     const auto watchWindowState = [this](KWin::EffectWindow *window) {
         connect(window, &KWin::EffectWindow::windowDamaged, this,
                 [this, window] { m_renderer->contentChanged(window); });
+        connect(window, &KWin::EffectWindow::minimizedChanged, this,
+                [this, window] {
+                    // Let the minimize animation capture its validated controls,
+                    // then release this hidden window's CPU/GPU sample buffers.
+                    QTimer::singleShot(500, this, [this, guarded = QPointer<KWin::EffectWindow>(window)] {
+                        if (guarded && guarded->isMinimized()) m_renderer->dropSamplingCache(guarded);
+                    });
+                });
         connect(window, &KWin::EffectWindow::windowFullScreenChanged,
                 this, [this](KWin::EffectWindow *changed) {
                     m_input->fullscreenChanged(changed);
@@ -258,6 +266,8 @@ QString BridgeEffect::debug(const QString &parameter) const
         entry.insert("id", window->window()->internalId().toString());
         entry.insert("minimized", window->isMinimized());
         entry.insert("caption", window->caption());
+        entry.insert("role", window->windowRole());
+        entry.insert("type", window->windowTypeInt());
         windows.append(entry);
     }
     return QString::fromUtf8(QJsonDocument(QJsonObject{{"windows", windows},

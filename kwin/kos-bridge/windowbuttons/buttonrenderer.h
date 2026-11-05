@@ -163,6 +163,7 @@ public:
 
     // Drop cached geometry for a window that has gone away.
     void forget(KWin::EffectWindow *window);
+    void dropSamplingCache(KWin::EffectWindow *window);
 
     // Drop the hit rects of a window whose panel is not on screen this frame,
     // keeping its cached tint. A panel that is not drawn must not take the
@@ -215,7 +216,7 @@ private:
     // cancelled with this renderer. Inactive windows finish bounded refreshes
     // after focus/damage; deleted windows are always skipped.
     void scheduleSample(KWin::EffectWindow *window);
-    static void requestSample(KWin::EffectWindow *window, const QRectF &panel);
+    static void requestSample(KWin::EffectWindow *window, const QRectF &panel, const QRectF &probe = {});
 
     // The geometry the window's panel is drawn with: the draft while one is
     // being adjusted, otherwise the configuration's.
@@ -279,6 +280,17 @@ private:
         QRectF panel;
         QRectF cover;
         bool resetReadback = false;
+        qreal backgroundBottom = -1;
+        qreal pendingBottom = -1;
+        int bottomVotes = 0;
+        int bottomAttempts = 0;
+        bool needsFollowup() const {
+            return TitlebarTintState::needsFollowup() || (bottomVotes == 1 && bottomAttempts < WarmupReads);
+        }
+        std::chrono::milliseconds interval() const {
+            return bottomVotes == 1 && bottomAttempts < WarmupReads
+                ? WarmupInterval : TitlebarTintState::interval();
+        }
     };
     static bool consumeSample(CacheEntry &entry, Clock::time_point now);
     QHash<KWin::EffectWindow *, CacheEntry> m_cache;
