@@ -85,6 +85,18 @@ Settings never adopts a third-party online-origin installation for bundle update
 New installs refuse legacy executable/desktop/ownership conflicts. Duplicate,
 system, other-branch/architecture and concurrent changes are not silently resolved.
 
+Before downloading a bundle, the backend checks signed-bundle transaction cleanup
+in an isolated, bounded `kos-apps` subprocess without executing an installation.
+Some libflatpak packages (including unpatched 1.16.6) incorrectly release explicit
+GPG `GBytes` as a GObject and crash on transaction destruction. A failed/crashing
+probe reports `FLATPAK_INCOMPATIBLE`, rather than crashing Settings or partially
+deploying an app. Update Flatpak/libflatpak to a distribution package containing
+[upstream fix 95b70b71](https://github.com/flatpak/flatpak/commit/95b70b71e366c78d16abadaa7e33f6d6bcdc01f4).
+The probe checks behavior, not a version floor, so backported fixes are supported.
+It neither runs a transaction nor changes the user's Flatpak installation. Direct
+manual Flatpak CLI installs need the same upstream correction; do not omit explicit
+trusted keys or signature checks to avoid the crash.
+
 The backend checks bundle identity/ref/commit and rejects embedded online app or
 runtime-repository URLs. It passes explicit trusted key bytes to libflatpak and
 checks the resolved plan before/after authentication. The target must be an exact

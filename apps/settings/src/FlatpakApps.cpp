@@ -1,4 +1,5 @@
 #include "FlatpakApps.h"
+#include "FlatpakCompatibility.h"
 #include "FlatpakTrustPolicy.h"
 #include "FlatpakRelease.h"
 #include <QTemporaryDir>
@@ -692,6 +693,9 @@ bool FlatpakApps::deploy(const QString& appId, bool installing)
     m_updates.remove(appId);
     const auto cancellation = m_transactionCancellation;
     m_transaction.setFuture(QtConcurrent::run([cancellation, appId, selected, target, installing, discovery] {
+        auto compatibility = FlatpakCompatibility::checkBundleCleanup();
+        if (!compatibility.isEmpty()) return compatibility;
+        if (g_cancellable_is_cancelled(cancellation->value)) return QVariantMap{{"code", "CANCELLED"}};
         QVariantMap result;
         const auto cache = qEnvironmentVariable("XDG_CACHE_HOME", QDir::homePath() + "/.cache") + "/kos-settings/flatpak";
         if (!QDir::isAbsolutePath(cache) || !QDir().mkpath(cache)) return QVariantMap{{"code", "PERMISSION_DENIED"}};

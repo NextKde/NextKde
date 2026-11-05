@@ -560,6 +560,7 @@ Flow {
         case "FLATPAK_RUNTIME_MISSING": return I18n.tr("A required Flatpak runtime is unavailable. Configure its approved software source first.");
         case "DISK_FULL": return I18n.tr("There is not enough disk space. Free space and retry.");
         case "FLATPAK_FAILED": return I18n.tr("Flatpak could not complete the operation. See the details below.");
+        case "FLATPAK_INCOMPATIBLE": return I18n.tr("The installed Flatpak library cannot safely handle signed bundles. Update Flatpak and libflatpak before retrying. Nothing was deployed.");
         case "FLATPAK_EXTERNAL":
         case "EXTERNAL_INSTALL": case "EXTERNALLY_MANAGED": case "NOT_MANAGED": case "OWNERSHIP_CONFLICT": return I18n.tr("Installed outside Settings. Open is available; updates and removal stay with its installer.");
         case "APP_RUNNING": return I18n.tr("Close the old and new app and their background helpers, then retry.");

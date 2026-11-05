@@ -62,6 +62,14 @@ runtime 专用策略于 2026-11-05 按[官方安装文档](https://docs.flathub.
 新安装遇到旧原生可执行文件／桌面入口／ownership 冲突会拒绝，不自动迁移；系统级／多份／其他分支或架构／
 并发状态变化都不会静默解决。
 
+下载包之前，后端通过隔离且有时限的 `kos-apps` 子进程检查签名包事务的销毁，不执行安装。
+部分 libflatpak 软件包（包括未打补丁的 1.16.6）错误地把公钥 `GBytes` 当作 GObject 释放，
+导致事务销毁时崩溃。探测失败或崩溃时返回 `FLATPAK_INCOMPATIBLE`，而不是让 Settings 崩溃
+或留下部分部署。请更新到包含[上游修复 95b70b71](https://github.com/flatpak/flatpak/commit/95b70b71e366c78d16abadaa7e33f6d6bcdc01f4)
+的发行版 Flatpak/libflatpak 软件包。探测实际行为而非硬编码版本号，支持发行版回移补丁；
+不运行事务、不改用户 Flatpak 安装。直接手动使用 Flatpak CLI 同样需要上游修复，不能靠省略
+认可公钥或签名校验规避崩溃。
+
 包的 app/ref/commit 必须与签名清单一致，禁止嵌入在线 origin 或 runtime-repo URL；显式向 libflatpak
 传入认可公钥，认证前后检查完整计划。目标必须是锁定 commit 的 INSTALL_BUNDLE，拒绝其他应用或卸载。
 runtime 安装／更新及复用的基础 runtime 要求单独认可且已配置的用户源，精确 HTTPS URL、commit／summary

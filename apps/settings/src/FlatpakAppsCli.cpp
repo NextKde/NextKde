@@ -1,4 +1,5 @@
 #include "FlatpakApps.h"
+#include "FlatpakCompatibility.h"
 #include "IndependentAppRegistry.h"
 
 #include <QCoreApplication>
@@ -18,6 +19,8 @@ void interrupt(int) { interrupted = 1; }
 int main(int argc, char** argv)
 {
     QCoreApplication application(argc, argv);
+    if (argc == 2 && QByteArray(argv[1]) == "--probe-flatpak-bundle-cleanup")
+        return FlatpakCompatibility::probeBundleCleanup();
     QCoreApplication::setApplicationName("kos-apps");
     QCommandLineParser parser;
     parser.setApplicationDescription("Manage signed user Flatpaks and explicitly remove retired app refs. No automatic remote setup or personal-data deletion.");

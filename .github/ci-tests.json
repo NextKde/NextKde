@@ -59,6 +59,7 @@
     "kos-settings.app-store",
     "kos-settings.independent-apps",
     "kos-settings.flatpak-release",
+    "kos-settings.flatpak-compatibility",
     "kos-dock.model",
     "kos-dock.policy",
     "kos-dock.motion",

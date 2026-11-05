@@ -18,7 +18,8 @@ find_package(Qt6 6.5 REQUIRED COMPONENTS Concurrent)
 find_package(PkgConfig REQUIRED)
 pkg_check_modules(FLATPAK REQUIRED IMPORTED_TARGET flatpak>=1.12 ostree-1>=2021.4)
 
-add_library(kos-flatpak-apps STATIC src/FlatpakApps.cpp src/FlatpakApps.h src/FlatpakRelease.cpp src/FlatpakRelease.h)
+add_library(kos-flatpak-apps STATIC src/FlatpakApps.cpp src/FlatpakApps.h src/FlatpakRelease.cpp src/FlatpakRelease.h
+    src/FlatpakCompatibility.cpp src/FlatpakCompatibility.h)
 target_link_libraries(kos-flatpak-apps PUBLIC Qt6::Core Qt6::Concurrent PRIVATE Qt6::Network PkgConfig::FLATPAK)
 
 add_executable(kos-apps src/FlatpakAppsCli.cpp)
@@ -56,6 +57,7 @@ qt_add_executable(kos-settings
 target_include_directories(kos-settings PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/../../services/ai/include)
 
+add_dependencies(kos-settings kos-apps)
 target_link_libraries(kos-settings PRIVATE
     kos_demo_ui
     kos_demo_ui_plugin
@@ -93,6 +95,13 @@ install(DIRECTORY pages components DESTINATION share/kos/settings
 if(BUILD_TESTING)
     find_package(Qt6 6.5 REQUIRED COMPONENTS Test)
     find_package(Qt6 6.5 QUIET COMPONENTS QuickTest)
+    add_executable(kos-flatpak-compatibility-test tests/store/flatpak_compatibility.cpp)
+    target_include_directories(kos-flatpak-compatibility-test PRIVATE src)
+    target_link_libraries(kos-flatpak-compatibility-test PRIVATE kos-flatpak-apps Qt6::Test)
+    add_dependencies(kos-flatpak-compatibility-test kos-apps)
+    add_test(NAME kos-settings.flatpak-compatibility COMMAND kos-flatpak-compatibility-test)
+    set_tests_properties(kos-settings.flatpak-compatibility PROPERTIES
+        WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/../.. LABELS logic TIMEOUT 20)
     add_executable(kos-flatpak-release-test tests/store/flatpak_release.cpp)
     target_include_directories(kos-flatpak-release-test PRIVATE src)
     target_link_libraries(kos-flatpak-release-test PRIVATE Qt6::Core Qt6::Network Qt6::Test)
