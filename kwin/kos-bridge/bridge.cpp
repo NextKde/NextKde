@@ -248,7 +248,7 @@ QString BridgeEffect::debug(const QString &parameter) const
         const bool declared = m_cooperative && m_cooperative->configureWindow(window, config);
         auto entry = m_renderer->controlDiagnostics(window);
         entry.insert("declared", declared);
-        entry.insert("nativeControls", config.usesNativeGtkControls(window->hasDecoration()));
+        entry.insert("nativeControls", config.usesClientControls(window->hasDecoration()));
         entry.insert("windowClass", window->windowClass());
         entry.insert("decorated", window->hasDecoration());
         auto *decoration = window->window()->decoration();
@@ -462,7 +462,14 @@ void BridgeEffect::paintButtons(const KWin::RenderTarget &renderTarget,
     // to know what an effect window is.
     AppConfig config = m_config->getAppConfig(windowQueryFor(window));
     if (m_cooperative) m_cooperative->configureWindow(window, config);
-    if (!config.showButtons || config.usesNativeGtkControls(window->hasDecoration())) {
+    if (config.usesClientControls(window->hasDecoration())) {
+        // A previous overlay rule may still have live input/tint state. Give
+        // ownership back completely, including the sampling timer and PBO.
+        m_input->forgetWindow(window);
+        m_renderer->forget(window);
+        return;
+    }
+    if (!config.showButtons) {
         m_renderer->clearHits(window, sourceCapture);
         return;
     }

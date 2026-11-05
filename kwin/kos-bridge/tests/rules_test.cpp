@@ -752,6 +752,41 @@ void testNativeGtkControls()
     removeRulesFile();
 }
 
+void testFormaControls()
+{
+    removeRulesFile();
+    writeKwinrc("kos_decoration");
+    writeUserConfig(R"({"default":{"showButtons":true,"decoratedWindows":"always",
+                                  "nativeGtkControls":false},
+                        "independentButtonBackground":true})");
+    ButtonConfig config;
+    for (const auto id : {"io.github.egely1337.Mayonnaise.Calculator",
+                          "io.github.egely1337.Mayonnaise.Finder",
+                          "io.github.egely1337.Mayonnaise.Terminal",
+                          "io.github.skjsbsnq.Forma.AppStore",
+                          "io.github.skjsbsnq.Forma.Mail"}) {
+        const QString appId = QString::fromLatin1(id);
+        const auto csd = config.getAppConfig(query(appId));
+        CHECK(csd.usesClientControls(false));
+        CHECK(!csd.usesNativeGtkControls(false)); // Forma uses OpenGL, not GTK.
+        CHECK(!csd.usesClientControls(true)); // Never suppress an SSD's controls.
+        CHECK(config.getAppConfig(query(QStringLiteral("instance ") + appId)).usesClientControls(false));
+        CHECK(config.getAppConfig(query(appId, {}, 5)).usesClientControls(false));
+        // Old adjustments and forced-paint policy must not bring back a second
+        // set of lights or change their input ownership.
+        CHECK(config.storeGeometry(classMatcher(appId), PanelGeometry{}));
+        CHECK(config.getAppConfig(query(appId)).usesClientControls(false));
+    }
+    for (const auto other : {"finder", "forma-terminal", "org.example.Forma",
+                             "io.github.egely1337.Mayonnaise.Finder.Other",
+                             "io.github.skjsbsnq.Forma.Unknown",
+                             "io.github.egely1337.Mayonnaise.Finder unrelated.Class",
+                             "google-chrome", "qq QQ"}) {
+        CHECK(!config.getAppConfig(query(QString::fromLatin1(other))).usesClientControls(false));
+    }
+    removeRulesFile();
+}
+
 void testResolution()
 {
     removeRulesFile();
@@ -1098,6 +1133,7 @@ int main(int argc, char **argv)
     testTileMenu();
     testResolution();
     testNativeGtkControls();
+    testFormaControls();
     testStore();
     testIndependentBackground();
 
