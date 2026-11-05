@@ -325,6 +325,51 @@ void testGeometry()
     CHECK(near(close.center().y(), panelSize.height() / 2.0));
     CHECK(close.left() < close.right());
     CHECK(close.right() <= maximize.left());
+
+    // A floating panel rounds all four corners into a pill, so its extreme
+    // corners are outside the background path. A panel flushed against the
+    // top-right or top-left corner squares off the three inner/seam corners to
+    // cover a rectangular native WCO control box without crescent gaps, while
+    // keeping the outer window corner (top-right when pinned right, top-left
+    // when pinned left) rounded to match the window's corner radius.
+    const QRectF box(0, 0, 100, 34);
+    const QPainterPath floatingPath = panelBackgroundPath(box, geometry);
+    CHECK(!floatingPath.contains(QPointF(1, 1)));
+    CHECK(!floatingPath.contains(QPointF(99, 1)));
+    CHECK(!floatingPath.contains(QPointF(99, 33)));
+    CHECK(!floatingPath.contains(QPointF(1, 33)));
+    CHECK(floatingPath.contains(box.center()));
+
+    PanelGeometry flushRight = geometry;
+    flushRight.position = ButtonPosition::Right;
+    flushRight.offset = AppOffset{0, 0};
+    const QPainterPath flushRightPath = panelBackgroundPath(box, flushRight);
+    CHECK(flushRightPath.contains(QPointF(1, 1)));
+    CHECK(!flushRightPath.contains(QPointF(99, 1)));
+    CHECK(flushRightPath.contains(QPointF(99, 33)));
+    CHECK(flushRightPath.contains(QPointF(1, 33)));
+    CHECK(panelFlushMask(geometry) == 0);
+    CHECK(panelFlushMask(flushRight) == 2);
+
+    PanelGeometry flushRightSideOnly = flushRight;
+    flushRightSideOnly.offset = AppOffset{0, 4};
+    const QPainterPath flushRightSidePath =
+        panelBackgroundPath(box, flushRightSideOnly);
+    CHECK(flushRightSidePath.contains(QPointF(1, 1)));
+    CHECK(!flushRightSidePath.contains(QPointF(99, 1)));
+    CHECK(flushRightSidePath.contains(QPointF(99, 33)));
+    CHECK(flushRightSidePath.contains(QPointF(1, 33)));
+    CHECK(panelFlushMask(flushRightSideOnly) == 2);
+
+    PanelGeometry flushLeft = geometry;
+    flushLeft.position = ButtonPosition::Left;
+    flushLeft.offset = AppOffset{0, 0};
+    const QPainterPath flushLeftPath = panelBackgroundPath(box, flushLeft);
+    CHECK(!flushLeftPath.contains(QPointF(1, 1)));
+    CHECK(flushLeftPath.contains(QPointF(99, 1)));
+    CHECK(flushLeftPath.contains(QPointF(99, 33)));
+    CHECK(flushLeftPath.contains(QPointF(1, 33)));
+    CHECK(panelFlushMask(flushLeft) == 1);
 }
 
 // ---------------------------------------------------------------------------

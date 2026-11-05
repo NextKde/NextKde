@@ -1,5 +1,6 @@
 #pragma once
 
+#include <QPainterPath>
 #include <QPointF>
 #include <QRectF>
 #include <QSizeF>
@@ -139,5 +140,19 @@ PanelGeometry clamped(const PanelGeometry &);
 // arrive from JSON and from pointer motion and a hundredth of a pixel is not a
 // difference anyone can see.
 bool sameGeometry(const PanelGeometry &, const PanelGeometry &);
+
+// Bitmask of which edges of the panel sit flush against the window's top or
+// pinned side edge (`offset <= 1.0`), used to key cached background/ring
+// textures.
+int panelFlushMask(const PanelGeometry &);
+
+// The panel's background path inside `rect`, rounding all four corners into a
+// pill when floating freely inside the title bar. When the panel touches the
+// top or pinned side edge of the window (`offset <= 1.0`), the three inner and
+// seam corners become square so the opaque mask covers a rectangular native
+// Window Controls Overlay (WCO) box without leaving crescent gaps, while the
+// outer window corner (top-right when pinned right, top-left when pinned left)
+// keeps the window's corner radius.
+QPainterPath panelBackgroundPath(const QRectF &rect, const PanelGeometry &geometry);
 
 } // namespace KOS
