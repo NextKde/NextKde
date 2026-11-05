@@ -826,32 +826,6 @@ PanelWindow {
                 }
             }
 
-            // A bounded status strip remains visible even on the smallest card.
-            Rectangle {
-                id: appStatusStrip
-                z: 20
-                anchors { left: parent.left; right: parent.right; bottom: parent.bottom; margins: 4 }
-                readonly property string appKey: card.modelData.id === "weather" ? "weather"
-                    : (card.modelData.id === "calendar" || card.modelData.id === "todo" ? "calendar" : "")
-                readonly property var appRecord: appKey ? IndependentAppWidgetService.record(appKey) : ({})
-                readonly property string statusText: appKey ? IndependentAppWidgetService.feedback(appKey) : ""
-                visible: !!appKey && !!statusText && (appRecord.state !== "ready"
-                    || !!IndependentAppWidgetService.launchErrors[appKey])
-                height: Math.min(38, statusLabel.contentHeight + 8)
-                radius: 5
-                color: "#e6222222"
-                Text {
-                    id: statusLabel
-                    anchors { fill: parent; margins: 4 }
-                    text: parent.statusText
-                    color: "white"
-                    font.pixelSize: 9
-                    wrapMode: Text.Wrap
-                    maximumLineCount: 2
-                    elide: Text.ElideRight
-                }
-            }
-
             // Instantiate only this card's content. `visible: false` keeps a
             // QML tree alive, so the old delegate built every widget for every
             // card even though only one could be shown.
@@ -859,7 +833,6 @@ PanelWindow {
                 id: widgetContentLayer
                 objectName: "widget-content-layer"
                 anchors.fill: parent
-                anchors.bottomMargin: appStatusStrip.visible ? appStatusStrip.height + 8 : 0
                 // The clock resolves monochrome ink in its face. Keep its text
                 // out of the extra saturation texture so it renders at the
                 // window's resolution. Other glass artwork is desaturated.
@@ -1394,7 +1367,7 @@ PanelWindow {
                         wrapMode: Text.Wrap
                         maximumLineCount: 3
                         elide: Text.ElideRight
-                        text: WeatherService.sourceMessage || WeatherService.errorMessage
+                        text: (!WeatherService.coreMode ? WeatherService.sourceMessage : "") || WeatherService.errorMessage
                             || (WeatherService.loading ? I18n.tr("Loading 7-day forecast…") : I18n.tr("No 7-day forecast"))
 	                        color: AppearanceTokens.content.ink(Qt.rgba(1, 1, 1, 0.65), 0.65)
                         font.pixelSize: 11
@@ -2432,12 +2405,10 @@ PanelWindow {
                             }
                             Text {
                                 visible: todoContent.tasks.length === 0
+                                    && PimWidgetService.state !== "not-installed"
                                 anchors.horizontalCenter: parent.horizontalCenter
-                                // Distinguish a starting service from one
-                                // that never produced data (uninstalled or
-                                // not yet activated); tapping the card
-                                // launches the app, whose PIM client
-                                // activates the service on demand.
+                                // Only a ready snapshot can mean all tasks are done.
+                                // App installation is handled when the card is opened.
                                 text: PimWidgetService.ready
                                     ? I18n.tr("All done for today")
                                     : (PimWidgetService.errorMessage || I18n.tr("Todo service not connected"))
@@ -2564,7 +2535,8 @@ PanelWindow {
                         }
                     }
                     Text {
-                        visible: !PimWidgetService.ready || !!IndependentAppWidgetService.launchErrors.calendar
+                        visible: PimWidgetService.state !== "not-installed"
+                            && (!PimWidgetService.ready || !!IndependentAppWidgetService.launchErrors.calendar)
                         width: parent.width
                         text: PimWidgetService.errorMessage
                         maximumLineCount: 2
