@@ -37,7 +37,7 @@ def health():
         if int(fields['MainPID']) <= 0:
             raise RuntimeError(f'{name} has no process')
         units[name] = fields
-    value = json.loads(output('qs', 'ipc', '--any-display', '--pid',
+    value = json.loads(output('qs', 'ipc', '--pid',
                              units['kos-shell']['MainPID'],
                              'call', 'integration-status', 'snapshot'))
     for key in ('shellReady', 'platformConnected', 'dataConnected', 'outputAvailable',
