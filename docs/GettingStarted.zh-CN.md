@@ -158,21 +158,29 @@ KWin 插件及桌面接管需注销登录/重启。浅版本切换不下载旧�
 
 ## 可选独立应用
 
+日历、计算器、天气合用独立 `NextKde/kos-apps` 仓库／版本／Release，各自仍是
+`org.nextks.<app>` 独立包，目录为 `apps/org.nextks.<app>`；ListenFree 保持独立。
+源码已公开，签名新身份包尚未发行；旧 Flatpak ID 报告冲突，不自动改名、卸载或迁移数据。
+
 ```sh
 ./tools/kosctl install apps
-```
-
-默认 `~/.local` 安装日历、计算器、待办和天气，需 Qt 6.5+、兼容 KF6、Go 1.26+，检查所选依赖但不 sudo 装包。
-不构建 ListenFree/SDK、不迁移音频关联；旧 ON 缓存也重置 OFF。应用安装不改核心 Settings/QML，未装核心也可用。
-
-```sh
+./tools/kosctl install apps --app calendar
 ./tools/kosctl install apps --with-listenfree
+./tools/kosctl install apps check-update --app weather
 ```
 
-显式音频需 Qt 6.10+ 及[ListenFree 依赖](../apps/listenfree/packaging/linux/README.zh-CN.md)，准备 SDK、注册并迁移旧 Music。
-选音频时可用 `KOS_LISTENFREE_SDK` 指定现有 SDK。`apps-dev`/`apps-release` 只选标准四个。
-旧 Music 不再构建，普通升级保留已安装的播放器、曲库和音频关联。
-计算器汇率为注明日期离线参考，不是实时。详见[应用](../apps/README.zh-CN.md)。
+分发入口默认经 `kos-apps` 使用与 Settings 相同的用户级 Flatpak 后端。
+默认选择日历（含待办）、计算器和天气；ListenFree 必须显式选择。修改操作要求终端确认或 `--yes`。
+采用 GitHub Release 签名包，无需自建应用源；本地已接入专用发布者公钥，但 runtime 策略仍为空且无正式签名 Release，新安装／更新仍不可用；不自动添加在线源，也不回退源码构建。
+唯一用户级 Flatpak 支持状态查询／卸载，普通卸载保留数据。GitHub 更新由 Settings 发现，不承诺 Discover 自动发现。
+runtime 源须单独配置／认可；libflatpak 可能建立无在线 URL 的本地 bundle origin。
+
+显式 `--backend=source` 保留历史兼容／开发用源码 Release 本地构建；这些不是 Discover 管理的软件包。
+开发依赖及自定义 SDK/视频构建见各独立仓库，包含 [ListenFree](https://github.com/NextKde/ListenFree)。
+根应用 preset 和 ON 构建开关不再支持；两种后端均不自动迁移旧播放器或个人数据。
+`update`、`status`、`check-update`、`uninstall` 使用同一应用分发入口。
+计算器汇率为注明日期的离线参考，不是实时。详见[应用指南](../apps/README.zh-CN.md)。
+
 
 ## 桌面接管与可选锁屏
 

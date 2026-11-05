@@ -8,11 +8,14 @@
 #include <QProcess>
 #include <QTimer>
 #include <QVariantMap>
+#include "IndependentApps.h"
 
 // One process owns each operation, independently of the lifetime of its QML page.
 class AppStore final : public QObject {
     Q_OBJECT
     Q_PROPERTY(QVariantMap music READ music NOTIFY changed)
+    Q_PROPERTY(QVariantList apps READ apps NOTIFY changed)
+    Q_PROPERTY(bool anyBusy READ anyBusy NOTIFY changed)
 public:
     explicit AppStore(const QString& resourcesDirectory, QObject* parent = nullptr);
     ~AppStore() override;
@@ -24,6 +27,19 @@ public:
     Q_INVOKABLE void open();
     Q_INVOKABLE void openLog();
     Q_INVOKABLE void openRepository();
+    QVariantList apps() const;
+    bool anyBusy() const;
+    Q_INVOKABLE void install(const QString& id);
+    Q_INVOKABLE void uninstall(const QString& id);
+    Q_INVOKABLE void update(const QString& id);
+    Q_INVOKABLE void cancel(const QString& id);
+    Q_INVOKABLE void open(const QString& id);
+    Q_INVOKABLE void openLog(const QString& id);
+    Q_INVOKABLE void openRepository(const QString& id);
+    Q_INVOKABLE void checkUpdates(const QString& id);
+    Q_INVOKABLE void refreshApps();
+    Q_INVOKABLE void openCompatibilityGuide();
+    Q_INVOKABLE void cleanupProgram(const QString& id, const QString& action);
 signals:
     void changed();
 private:
@@ -44,6 +60,8 @@ private:
     bool validFile(const QString& relative) const;
     void stopProcess(int signal);
 
+    QString m_compatibilityGuide;
+    IndependentApps m_independent;
     QVariantMap m_state;
     QJsonObject m_release;
     QFile m_log;

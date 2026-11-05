@@ -533,6 +533,9 @@ void PlatformServer::handleRequest(QLocalSocket *socket, const QJsonObject &requ
             {QStringLiteral("ready"), true},
             {QStringLiteral("capabilities"), QJsonArray{
                 QStringLiteral("input.clipboard-anchor"),
+                QStringLiteral("application.widget-snapshot"),
+                QStringLiteral("application.widget-open"),
+                QStringLiteral("lockscreen.weather-publish"),
                 QStringLiteral("wallpaper.plasma.proxy"),
                 QStringLiteral("wallpaper.plasma.restore"),
                 QStringLiteral("wallpaper.preview.desktop"),

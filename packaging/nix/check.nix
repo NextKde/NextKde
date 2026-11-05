@@ -40,6 +40,7 @@ assert builtins.any (input: input.nextkdeHostPackage or false)
   kos.passthru.kwin-dock-window-animation.buildInputs;
 host.pkgs.runCommand "nextkde-nixos-packaging-check" {} ''
   test -x ${kos}/bin/kos-settings
+  test -f ${kos}/lib/gtk-3.0/modules/libkos-gtk-window-controls.so
   test -x ${kos}/libexec/kos-platform
   test -x ${kos}/libexec/kos-ai-worker
   test -x ${kos}/libexec/kos-data-service
@@ -61,7 +62,9 @@ host.pkgs.runCommand "nextkde-nixos-packaging-check" {} ''
   test ! -d "$deployment/shared/qml/controls/controls"
   ${if buildWeather then ''
     test -x ${kos}/bin/kos-weather
-    test -x ${kos.passthru.weather}/libexec/kos-data-service
+    test -x ${kos.passthru.weather}/bin/kos-weather-backend
+    test ! -e ${kos.passthru.weather}/libexec/kos-data-service
+    test ! -e ${kos.passthru.weather}/share/systemd/user/kos-data.service
   '' else ''
     test ! -e ${kos}/bin/kos-weather
   ''}

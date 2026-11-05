@@ -1,10 +1,11 @@
 import assert from 'node:assert/strict';
-import {mkdtempSync,mkdirSync,copyFileSync,cpSync,readFileSync,writeFileSync,rmSync} from 'node:fs';
+import {mkdtempSync,mkdirSync,copyFileSync,cpSync,readFileSync,writeFileSync,rmSync,existsSync} from 'node:fs';
 import {spawnSync} from 'node:child_process';
 import {tmpdir} from 'node:os';
 import {join,resolve} from 'node:path';
 import {fileURLToPath} from 'node:url';
 const binary=resolve(process.argv[2]);
+const gtkModule=resolve(process.argv[3]);
 const root=mkdtempSync(join(tmpdir(),'kos-window-install-'));
 const repo=fileURLToPath(new URL('../../../..',import.meta.url));
 try {
@@ -35,13 +36,25 @@ try {
         assert.equal(r.status,expected,r.stdout+r.stderr);
         return r.stdout+r.stderr;
     }
+    env.XDG_CONFIG_HOME=join(root,'missing-module-config');
+    mkdirSync(env.XDG_CONFIG_HOME);
+    assert.match(run('--install-window-defaults',1),/GTK detection module is missing/);
+    env.XDG_CONFIG_HOME=config;
+    const installedModule=join(prefix,'lib/gtk-3.0/modules/libkos-gtk-window-controls.so');
+    mkdirSync(join(prefix,'lib/gtk-3.0/modules'),{recursive:true});
+    copyFileSync(gtkModule,installedModule);
     run('--install-window-defaults');
+    const startup=join(config,'plasma-workspace/env/kos-gtk-window-controls.sh');
+    assert.ok(readFileSync(startup,'utf8').includes(installedModule));
+    run('--install-window-defaults'); // Existing integration state upgrades without an app list.
+    assert.ok(readFileSync(startup,'utf8').includes(installedModule));
     assert.match(readFileSync(join(config,'kwinrc'),'utf8'),/library=kos_decoration/);
-    assert.match(readFileSync(join(config,'gtk-3.0/gtk.css'),'utf8'),/#ff5f57/);
+    assert.match(readFileSync(join(config,'gtk-3.0/gtk.css'),'utf8'),/kos_native_controls/);
     assert.match(readFileSync(join(config,'gtk-4.0/gtk.css'),'utf8'),/#28c840/);
     assert.match(readFileSync(join(firefox,'chrome/userChrome.css'),'utf8'),/NextKde Firefox buttons: begin/);
     assert.match(readFileSync(join(firefox,'user.js'),'utf8'),/legacyUserProfileCustomizations.stylesheets/);
     run('--restore-window-defaults');
+    assert.equal(existsSync(startup),false);
     assert.equal(readFileSync(join(firefox,'chrome/userChrome.css'),'utf8'),personalCss);
     run('--install-window-defaults');
     assert.match(readFileSync(join(config,'kwinrc'),'utf8'),/library=third_party/);
