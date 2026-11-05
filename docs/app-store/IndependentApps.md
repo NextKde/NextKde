@@ -134,11 +134,19 @@ and checksums, without recursively including itself. The existing source prepare
 also generates `app-release.json` from the same revision's exact GitHub codeload
 bytes so a new latest stable Release does not break the legacy source entry point.
 
-This new helper path has not completed an actual signed build. Preserve and publish
-the complete artifact directory with relative paths, not only the application
-bundle. Sources is not an app dependency and is not installed by Settings. It does
-not automatically supply external SDK/runtime sources or approve source completeness,
-linked component configuration, aggregate licensing or notice obligations.
+As of 2026-11-05, this helper has prepared signed Calendar, Calculator and Weather
+app/Sources candidates from the same reviewed `ee0175f4` source revision. In the
+dedicated VM, their manifest/material signatures, checksums and bundle identities
+passed verification; production `kos-apps` recognized their installed signatures
+and uninstalled them while retaining private-data sentinels. Those offline checks
+used a process-local libflatpak with the upstream cleanup fix; the system package
+was not replaced. No runtime or application was launched, and real version upgrades,
+graphical acceptance and a stable Release remain outstanding.
+
+Preserve and publish the complete artifact directory with relative paths, not only
+the application bundle. Sources is not an app dependency and is not installed by
+Settings. It does not automatically supply external SDK/runtime sources or approve
+source completeness, linked component configuration, aggregate licensing or notice obligations.
 
 ### Without Settings
 
@@ -156,8 +164,9 @@ flatpak --user uninstall org.nextks.calculator
 
 Repeat verified bundle installation to update; `flatpak update`/Discover alone
 cannot discover a newer GitHub bundle with no online origin. Do not use
-`--delete-data` for ordinary removal. Actual manual acceptance remains pending
-public keys, signed bundles and approved runtime policy.
+`--delete-data` for ordinary removal. Publisher keys, matched-source signed
+candidates and runtime policy are prepared; full runtime/desktop and real-version
+update acceptance still remain.
 
 ## Application packaging readiness
 
