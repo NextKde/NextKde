@@ -158,8 +158,33 @@ process-only TLS fixture and genuine publisher-signed materials, not a published
 Latest. Calculator and Weather passed external Flatpak removal, periodic inventory
 refresh and reinstall; Calendar passed that cycle after transaction supervision
 was added. A passing rerun does not explain its earlier transfer timeout. Offscreen
-platform/portal warnings and optional compositor-module warnings remain; real
-version upgrades, interactive graphical acceptance and a stable Release are open.
+platform/portal warnings and optional compositor-module warnings remain.
+Calculator also completed a two-version signed metadata-fixture lifecycle through
+production discovery/download, supervised install/update, current-version checks
+and uninstall, retaining data and runtime. It ran as separate user operations with
+standard runtime-cache warmup between deployments; both versions retain the same
+executable source revision. Earlier cold-cache runs cancelled at diagnostic limits
+remain incomplete, not successful reruns. This is not historical executable/data-schema
+upgrade acceptance. Calculator's source route also completed real native-artifact
+installation, repeat-install/current checks, cleanup preview and offline removal
+with data retention, using retained codeload transport and a persistent CMake
+source/build-path fixture. The untouched cold-build attempt stopped at its diagnostic
+limit and remains incomplete. Actual Calendar PIM mutations also reached the core widget
+reader through an app-published sandbox summary; uninstall retained the data but
+hid that summary from the widget. Weather published its own summary, correctly
+reported as missing without a current reading, and left no sandbox backend process
+after normal window exit. A matching upstream-fixed Flatpak CLI was installed only
+in the temporary prefix, not over the system CLI. All three unmodified exported
+Exec commands then started and exited normally with isolated offscreen and
+app-owned screenshot arguments added. This is not desktop-click or single-instance
+activation acceptance. With a longer application-owned window, Weather fetched
+real current conditions and published a ready summary whose current reading
+matched the production widget payload; supervised removal retained data/runtime.
+The three signed bundles also launched and exited normally in the VM's real
+Wayland session, producing nonempty app-owned screenshots and leaving no sandbox
+processes. This was process/screenshot startup evidence, not click, portal,
+notification, single-instance or live Settings acceptance. A stable Release
+remains open.
 
 Preserve and publish the complete artifact directory with relative paths, not only
 the application bundle. Sources is not an app dependency and is not installed by
