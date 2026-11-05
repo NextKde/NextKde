@@ -67,4 +67,17 @@ for (const fresh of [[], [item(2, 'Help')], [item(8, 'Edit', { enabled: false })
     assert.equal(h.state.items, previous, 'stale response must not replace another application menu');
     assert.equal(h.requests.length, 0);
 }
+{
+    const h = harness();
+    let visible = true;
+    h.state.menuPopup.hide = () => { throw new Error('animated hide can cancel the next opening'); };
+    Object.defineProperty(h.state.menuPopup, 'visible', {
+        get: () => visible,
+        set: value => { visible = value; if (!value) h.state._openingSerial++; }
+    });
+    h.state.openItem(1);
+    h.requests.shift().callback([item(8, 'Edit')]);
+    h.flush();
+    assert.equal(h.requests.shift().payload.id, 8, 'close must finish before issuing the new serial');
+}
 console.log('App menu refresh: identity, failure, ordering and stale callbacks passed');

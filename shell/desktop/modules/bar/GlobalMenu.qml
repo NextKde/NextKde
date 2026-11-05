@@ -154,7 +154,7 @@ Item {
         if (!shown || shown.enabled === false)
             return
         if (menuPopup.visible)
-            menuPopup.hide()
+            menuPopup.visible = false
         const serial = ++_openingSerial
         freshRoot(serial, function(fresh) {
             const freshIndex = MenuIdentity.resolve(previous, index, fresh)
@@ -190,7 +190,7 @@ Item {
 
     function openOverflow(anchor) {
         if (menuPopup.visible)
-            menuPopup.hide()
+            menuPopup.visible = false
         const serial = ++_openingSerial
         popupRootId = 0
         activeOpeningId = 0
