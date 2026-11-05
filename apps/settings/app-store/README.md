@@ -1,4 +1,52 @@
-# KMusic catalogue
+# Application store
+
+Calendar (including Todo), Calculator, Weather and ListenFree are independent
+applications. The recommended Settings/`kos-apps` backend downloads signed
+GitHub Release Flatpak bundles, using structured libflatpak transactions. It does
+not require a hosted NextKde app repository or a Flathub listing. Signed manifests
+pin version/ref/commit/size/hash; reviewed public keys ship in core and are never
+trusted from the downloaded bundle. `gpgv` is a runtime dependency. The local
+bundle-publisher policy contains the dedicated public key for all four app IDs.
+The runtime-source policy approves only the reviewed Flathub runtime URL/key,
+not Flathub applications; users must configure that remote separately. See the
+[independent-app contract](../../../docs/app-store/IndependentApps.md) for the
+full primary fingerprint and review evidence. No signed production bundle is
+published, so new installation/update remains unavailable. No online
+remote is added, no source fallback occurs, and no legacy migration is automatic.
+Libflatpak may create a URL-less local origin/key record even before a refused or
+cancelled deployment; complete rollback is not claimed. Runtime sources must be
+separately configured and approved. Read-only inventory and ordinary offline user
+uninstall remain available and preserve data. Settings and CLI share the backend;
+Discover is not promised to discover GitHub bundle updates.
+
+For existing source installs, Settings bundles the reviewed `installer.py` lifecycle
+engine; it never downloads new installer code during a release check. The fixed
+repository registry discovers each app's stable GitHub Release and bounded
+`<appId>.app-release.json` manifest (ListenFree retains `app-release.json`). Explicit **Check for updates** and **Update** do not
+require a NextKDE release. A release manifest pins the source commit and archive
+SHA-256. GitHub repository publication permissions are the trust boundary;
+these checks do not constitute a separate cryptographic signature.
+
+The same engine is distributed as `packaging/installer.py` in each application
+repository and exposed by `./install.sh`. It supports offline status/uninstall,
+owned-file removal, preserved user data, and staged source builds. See
+[the independent-app contract](../../../docs/app-store/IndependentApps.md) for
+network deadlines, ownership, failure recovery and command-line use. The canonical
+engine source is `tools/app-installer.py`; its Settings copy must stay identical.
+
+Calendar, Calculator and Weather now share `NextKde/kos-apps`, VERSION and one
+Release, but retain separate `org.nextks.<app>` bundles, source manifests and
+selective builds. Source is published; the new-ID signed Release is not yet available.
+Flatpak manifests use `<appId>.flatpak-release.json` plus `.sig`; ListenFree keeps
+its independent repository and generic filenames. Retired old Flatpak identities
+are reported as conflicts, not adopted or automatically removed/migrated. Old
+installer-owned source desktop links remain recognized for offline management.
+
+## KMusic compatibility catalogue
+
+KMusic retains its existing pinned installer and installation/data identity. It
+is not migrated to the four independent applications' release format implicitly.
+
 
 The Settings application reads `catalog.json` from the same resource tree as its
 QML entry point. The current catalogue pins KMusic commit
@@ -33,8 +81,10 @@ This is a source installer. It does not install system dependencies, use sudo,
 launch KMusic automatically or remove music/account data. Missing dependencies
 are displayed with their required/detected versions. Opening the application is
 an explicit action through its installed desktop entry and KDE's launcher.
-The catalogue is bundled with Settings; remote catalogue updates, binary package
-delivery, automatic updates and system package installation are not implemented.
+This KMusic compatibility catalogue is bundled with Settings. KMusic remote
+catalogue updates, binary package delivery, automatic installation and system
+package installation are not implemented. The four independent applications use
+the separate explicit stable-release discovery described above.
 
 `src/AppStore.cpp` is the native controller. The `appStore` QML context object is
 created by the Settings executable. An older binary can preview the new card but

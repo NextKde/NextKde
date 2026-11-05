@@ -12,6 +12,8 @@ find_package(KF6Config REQUIRED)
 find_package(KF6IconThemes REQUIRED)
 find_package(KF6GlobalAccel REQUIRED)
 find_package(KF6KIO REQUIRED)
+find_package(PkgConfig REQUIRED)
+pkg_check_modules(PLATFORM_FLATPAK REQUIRED IMPORTED_TARGET flatpak>=1.12)
 # The depth engine is the only part of the platform that needs OpenCV and the
 # ONNX Runtime, so it follows KOS_SPATIAL_ENABLED (resolved from
 # KOS_BUILD_SPATIAL in the top-level file) instead of being unconditional. The
@@ -36,6 +38,8 @@ set(kos_platform_sources
     src/daemon/PlatformProcess.cpp
     src/daemon/PlatformServerAppMenu.cpp
     src/daemon/PlatformServerApplications.cpp
+    src/daemon/IndependentAppWidgets.cpp
+    src/daemon/IndependentAppWidgets.h
     src/daemon/PlatformServerAudio.cpp
     src/daemon/PlatformServerBluetooth.cpp
     src/daemon/PlatformServerClipboard.cpp
@@ -64,6 +68,8 @@ set(kos_platform_sources
     src/daemon/Shortcuts.h
     src/kwin/KWinBridge.cpp
     src/kwin/KWinBridge.h
+    src/kwin/DesktopTransitionMonitor.cpp
+    src/kwin/DesktopTransitionMonitor.h
     src/wallpaper/PlasmaWallpaperAdapter.cpp
     src/wallpaper/PlasmaWallpaperAdapter.h
 )
@@ -74,6 +80,16 @@ if(KOS_SPATIAL_ENABLED)
 endif()
 
 if(BUILD_TESTING)
+    find_package(Qt6 REQUIRED COMPONENTS Test)
+    qt_add_executable(kos-independent-app-widgets-test
+        tests/test_independent_app_widgets.cpp src/daemon/IndependentAppWidgets.cpp)
+    target_include_directories(kos-independent-app-widgets-test PRIVATE src/daemon)
+    target_link_libraries(kos-independent-app-widgets-test PRIVATE
+        Qt6::Core Qt6::Test KF6::ConfigCore PkgConfig::PLATFORM_FLATPAK)
+    add_test(NAME kos-platform.independent-app-widgets COMMAND kos-independent-app-widgets-test)
+    set_tests_properties(kos-platform.independent-app-widgets PROPERTIES
+        WORKING_DIRECTORY ${CMAKE_SOURCE_DIR} LABELS "platform;data" TIMEOUT 30)
+
     qt_add_executable(kos-status-panel-data-test tests/test_status_panel_data.cpp)
     target_link_libraries(kos-status-panel-data-test PRIVATE Qt6::Core)
     add_test(NAME kos-platform.status-panel-data COMMAND kos-status-panel-data-test)
@@ -112,6 +128,7 @@ target_link_libraries(kos-platform PRIVATE
     KF6::IconThemes
     KF6::GlobalAccel
     KF6::KIOGui
+    PkgConfig::PLATFORM_FLATPAK
 )
 
 if(KOS_SPATIAL_ENABLED)
@@ -170,6 +187,15 @@ if(BUILD_TESTING)
     endif()
     find_program(DBUS_RUN_SESSION_EXECUTABLE dbus-run-session)
     if(DBUS_RUN_SESSION_EXECUTABLE)
+        qt_add_executable(kos-desktop-transition-test
+            tests/test_desktop_transition.cpp
+            src/kwin/DesktopTransitionMonitor.cpp
+            src/kwin/DesktopTransitionMonitor.h)
+        target_link_libraries(kos-desktop-transition-test PRIVATE Qt6::Core Qt6::DBus)
+        add_test(NAME kos-platform.desktop-transition
+            COMMAND ${DBUS_RUN_SESSION_EXECUTABLE} -- $<TARGET_FILE:kos-desktop-transition-test>)
+        set_tests_properties(kos-platform.desktop-transition PROPERTIES LABELS platform TIMEOUT 20)
+
         qt_add_executable(kos-keep-awake-test tests/test_keep_awake.cpp)
         target_link_libraries(kos-keep-awake-test PRIVATE Qt6::Core Qt6::DBus Qt6::Network)
         add_test(NAME kos-platform.keep-awake
@@ -197,6 +223,9 @@ if(BUILD_TESTING)
             TIMEOUT 30)
     endif()
     if(KOS_PYTHON_EXECUTABLE AND DBUS_RUN_SESSION_EXECUTABLE)
+        add_test(NAME kos-platform.appmenu
+            COMMAND ${KOS_PYTHON_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/test_appmenu.py $<TARGET_FILE:kos-platform>)
+        set_tests_properties(kos-platform.appmenu PROPERTIES LABELS platform TIMEOUT 40)
         add_test(NAME kos-platform.status-panel-operations
             COMMAND ${KOS_PYTHON_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/test_status_panel_operations.py $<TARGET_FILE:kos-platform> $<TARGET_FILE:kos-power-profiles-bus-test>)
         set_tests_properties(kos-platform.status-panel-operations PROPERTIES LABELS platform TIMEOUT 30)
