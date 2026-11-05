@@ -297,15 +297,14 @@ assert.match(glassEffect, /if \(m_valid\)[\s\S]*stackingOrder\(\)[\s\S]*updateBl
 const deskCenter = read("../../shell/desktop/modules/deskcenter/DeskCenterWindow.qml");
 assert.doesNotMatch(deskCenter, /#101010|#17151c|#170f14/,
     "desktop widget palette avoids near-black blocks");
-for (const [widget, desktopId] of [
-    ["Weather", "kos-weather"],
-    ["Calendar", "kos-calendar"],
-    ["Reminders", "kos-calendar"],
-    ["Music", "listenfree"]
-]) {
-    assert.match(deskCenter, new RegExp(`launchById\\("${desktopId}"`),
-        `${widget} widget launches its matching installed application`);
+for (const app of ["weather", "calendar"]) {
+    assert.match(deskCenter, new RegExp(`IndependentAppWidgetService\\.open\\("${app}"`),
+        `${app} widgets open their inspected installation through the identity-bound service`);
+    assert.doesNotMatch(deskCenter, new RegExp(`launchById\\("kos-${app}"`),
+        `${app} widgets never fall back to a different desktop identity`);
 }
+assert.match(deskCenter, /launchById\("listenfree"/,
+    "Music retains its independent player launch behavior");
 
 const appActions = read("../../shell/desktop/modules/common/AppActionService.qml");
 assert.doesNotMatch(appActions,

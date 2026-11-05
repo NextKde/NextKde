@@ -181,7 +181,12 @@ TestCase {
         fakeStore.apps = [appState("calendar", {installed: false}), appState("calculator"), appState("weather"), appState("listenfree")];
         const page = createTemporaryObject(factory, this, {store: fakeStore});
         tryVerify(function() { return !!findChild(page, "calendarAction") });
-        findChild(page, "calendarAction").clicked(); compare(fakeStore.lastId, "calendar"); compare(fakeStore.installs, 1);
+        findChild(page, "calendarAction").clicked();
+        const installation = findChild(page, "appInstallDialog");
+        verify(installation.visible); compare(fakeStore.installs, 0);
+        installation.reject(); compare(fakeStore.installs, 0);
+        findChild(page, "calendarAction").clicked();
+        installation.accept(); compare(fakeStore.lastId, "calendar"); compare(fakeStore.installs, 1);
         findChild(page, "weatherAction").clicked(); compare(fakeStore.lastId, "weather"); compare(fakeStore.opens, 1);
         findChild(page, "calculatorCheckUpdates").clicked(); compare(fakeStore.lastId, "calculator"); compare(fakeStore.checks, 1);
         findChild(page, "listenfreeUpdate").clicked(); compare(fakeStore.lastId, "listenfree"); compare(fakeStore.updates, 1);
