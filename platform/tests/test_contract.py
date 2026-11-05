@@ -195,6 +195,10 @@ def test_brightness_targets_one_kde_display() -> None:
     handler = source[source.index('if (op == QStringLiteral("display.brightness.set"))'):]
     assert 'payload.value(QStringLiteral("displayId"))' in handler
     assert "setKdeDisplayBrightness(displayId, value)" in handler
+    assert "setKdeBrightness(value)" in handler
+    assert "bool setKdeBrightness(int percent)" in source
+    assert "preferExternal" in source
+    assert "org.kde.Solid.PowerManagement.Actions.BrightnessControl" in source
 
 
 def test_lockscreen_feed_hands_the_daemon_a_local_path() -> None:
