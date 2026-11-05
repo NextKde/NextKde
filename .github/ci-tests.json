@@ -60,6 +60,7 @@
     "kos-settings.independent-apps",
     "kos-settings.flatpak-release",
     "kos-settings.flatpak-compatibility",
+    "kos-settings.flatpak-process",
     "kos-dock.model",
     "kos-dock.policy",
     "kos-dock.motion",

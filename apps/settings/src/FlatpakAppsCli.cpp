@@ -19,6 +19,8 @@ void interrupt(int) { interrupted = 1; }
 int main(int argc, char** argv)
 {
     QCoreApplication application(argc, argv);
+    if (argc == 2 && QByteArray(argv[1]) == "--flatpak-transaction-helper")
+        return FlatpakTransactionProcess::helperMain();
     if (argc == 2 && QByteArray(argv[1]) == "--probe-flatpak-bundle-cleanup")
         return FlatpakCompatibility::probeBundleCleanup();
     QCoreApplication::setApplicationName("kos-apps");

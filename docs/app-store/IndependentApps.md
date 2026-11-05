@@ -97,6 +97,15 @@ It neither runs a transaction nor changes the user's Flatpak installation. Direc
 manual Flatpak CLI installs need the same upstream correction; do not omit explicit
 trusted keys or signature checks to avoid the crash.
 
+Mutation transactions run in the fixed companion `kos-apps` process, preserving
+the same bundle/publisher/runtime/ownership checks. Cancellation requests graceful
+termination, then kills a non-responsive helper after two seconds; Settings keeps
+the operation busy until the helper exits and actual inventory is re-read. This
+also bounds libflatpak paths that fail to propagate GCancellable while fetching
+runtime metadata. An interrupted transaction is not promised to roll back: the
+reconciled installed state is authoritative. A crashed/missing/malformed helper
+returns `RESULT_UNKNOWN`, never a fabricated successful deployment.
+
 The backend checks bundle identity/ref/commit and rejects embedded online app or
 runtime-repository URLs. It passes explicit trusted key bytes to libflatpak and
 checks the resolved plan before/after authentication. The target must be an exact
@@ -109,10 +118,11 @@ still necessary somewhere, e.g. an independently trusted existing provider.
 Libflatpak may create a **local URL-less origin record and import the supplied
 public key before transaction readiness**; cancellation/refusal can leave that
 record. This is not a hosted app source and is not claimed to roll back. Download
-and deployment together request cooperative cancellation after 60 minutes, not a
-hard worker kill. Results always re-query actual installed refs/commits; a partial
-runtime deployment or interrupted transaction is not claimed to be atomic.
-No real runtime acceptance has been performed for this route.
+and deployment together have a 60-minute operation deadline; the companion
+transaction process is supervised as described above. Results always re-query
+actual installed refs/commits; a partial runtime deployment or interrupted
+transaction is not claimed to be atomic. Isolated runtime-ready transaction
+acceptance is recorded below; interactive desktop acceptance remains outstanding.
 
 Permissions in the manifest are not the complete effective permission set. The
 KDE 6.11 runtime used by the development builds also contributes read-only
@@ -140,8 +150,16 @@ dedicated VM, their manifest/material signatures, checksums and bundle identitie
 passed verification; production `kos-apps` recognized their installed signatures
 and uninstalled them while retaining private-data sentinels. Those offline checks
 used a process-local libflatpak with the upstream cleanup fix; the system package
-was not replaced. No runtime or application was launched, and real version upgrades,
-graphical acceptance and a stable Release remain outstanding.
+was not replaced. In a separate disposable runtime-ready profile, all three apps
+also completed production signed discovery/download/install, current-version and
+duplicate-operation checks, offscreen sandbox startup, persistent-503 inventory
+preservation and uninstall with data/runtime retention. Discovery used a local
+process-only TLS fixture and genuine publisher-signed materials, not a published
+Latest. Calculator and Weather passed external Flatpak removal, periodic inventory
+refresh and reinstall; Calendar passed that cycle after transaction supervision
+was added. A passing rerun does not explain its earlier transfer timeout. Offscreen
+platform/portal warnings and optional compositor-module warnings remain; real
+version upgrades, interactive graphical acceptance and a stable Release are open.
 
 Preserve and publish the complete artifact directory with relative paths, not only
 the application bundle. Sources is not an app dependency and is not installed by

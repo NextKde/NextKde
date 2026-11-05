@@ -15,6 +15,13 @@
 #include <mutex>
 #include <sys/stat.h>
 #include <unistd.h>
+#include <sys/prctl.h>
+#include <sys/resource.h>
+#include <csignal>
+#include <cstdio>
+#include <QCoreApplication>
+#include <QJsonDocument>
+#include <QJsonObject>
 
 #include <QtConcurrentRun>
 #include <QVariantList>
@@ -27,6 +34,9 @@
 #pragma pop_macro("signals")
 
 namespace {
+volatile std::sig_atomic_t helperInterrupted = 0;
+void interruptHelper(int) { helperInterrupted = 1; }
+
 bool writersRunning(const QString& appId)
 {
     const auto* app = IndependentAppRegistry::find(appId);
@@ -340,6 +350,236 @@ struct FlatpakApps::Cancellation {
     }
 };
 
+QVariantMap FlatpakApps::executeRemoval(const QVariantMap& request, const std::shared_ptr<Cancellation>& cancellation)
+{
+    const auto appId = request.value("appId").toString();
+    const auto* app = IndependentAppRegistry::find(appId);
+    const bool retired = request.value("action").toString() == "remove-retired";
+    if (!app || (retired && (!*app->retiredId || writersRunning(appId)))) return {{"code", "RESULT_UNKNOWN"}};
+    const auto selectedId = retired ? QString::fromLatin1(app->retiredId) : appId;
+    const auto selected = request.value("selected").toMap();
+    if (selected.value("scope").toString() != "user") return {{"code", "RESULT_UNKNOWN"}};
+    const auto refName = QStringLiteral("app/%1/%2/%3").arg(selectedId,
+        selected.value("arch").toString(), selected.value("branch").toString()).toUtf8();
+    const auto commit = selected.value("commit").toString();
+    const auto origin = selected.value("origin").toString();
+    QVariantMap result;
+    GError* error = nullptr;
+    auto* installation = flatpak_installation_new_user(cancellation->value, &error);
+    FlatpakInstalledRef* installed = nullptr;
+    FlatpakTransaction* transaction = nullptr;
+    if (installation) {
+        installed = flatpak_installation_get_installed_ref(installation, FLATPAK_REF_KIND_APP,
+            selectedId.toUtf8().constData(), selected.value("arch").toString().toUtf8().constData(),
+            selected.value("branch").toString().toUtf8().constData(), cancellation->value, &error);
+    }
+    if (installed && (commit != QString::fromUtf8(flatpak_ref_get_commit(FLATPAK_REF(installed)))
+        || origin != QString::fromUtf8(flatpak_installed_ref_get_origin(installed)))) {
+        result["code"] = "RESULT_UNKNOWN";
+        result["message"] = "The installation changed. Refresh before uninstalling.";
+    } else if (installed) {
+        transaction = flatpak_transaction_new_for_installation(installation, cancellation->value, &error);
+        if (transaction) {
+            Cancellation::attach(transaction, cancellation);
+            struct Removal { QByteArray ref; QString appId, selectedId, commit, origin; bool retired; };
+            Removal removal{refName, appId, selectedId, commit, origin, retired};
+            const auto ready = +[](FlatpakTransaction* transaction, gpointer data) -> gboolean {
+                const auto& removal = *static_cast<Removal*>(data);
+                if (removal.retired && writersRunning(removal.appId)) return FALSE;
+                auto* operations = flatpak_transaction_get_operations(transaction);
+                bool allowed = g_list_length(operations) == 1;
+                for (auto* it = operations; it; it = it->next) {
+                    auto* operation = FLATPAK_TRANSACTION_OPERATION(it->data);
+                    allowed &= flatpak_transaction_operation_get_operation_type(operation) == FLATPAK_TRANSACTION_OPERATION_UNINSTALL
+                        && QByteArray(flatpak_transaction_operation_get_ref(operation)) == removal.ref;
+                }
+                g_list_free_full(operations, g_object_unref);
+                auto* installation = flatpak_transaction_get_installation(transaction);
+                auto* refs = flatpak_installation_list_installed_refs_by_kind(installation, FLATPAK_REF_KIND_APP, nullptr, nullptr);
+                int count = 0;
+                if (!refs) return FALSE;
+                for (guint i = 0; i < refs->len; ++i) {
+                    auto* installed = FLATPAK_INSTALLED_REF(g_ptr_array_index(refs, i));
+                    if (QString::fromUtf8(flatpak_ref_get_name(FLATPAK_REF(installed))) != removal.selectedId) continue;
+                    ++count;
+                    allowed &= removal.commit == QString::fromUtf8(flatpak_ref_get_commit(FLATPAK_REF(installed)))
+                        && removal.origin == QString::fromUtf8(flatpak_installed_ref_get_origin(installed));
+                }
+                g_ptr_array_unref(refs);
+                if (removal.retired) {
+                    auto* systems = flatpak_get_system_installations(nullptr, nullptr);
+                    if (!systems) return FALSE;
+                    for (guint i = 0; i < systems->len; ++i) {
+                        auto* system = FLATPAK_INSTALLATION(g_ptr_array_index(systems, i));
+                        auto* systemRefs = flatpak_installation_list_installed_refs_by_kind(system, FLATPAK_REF_KIND_APP, nullptr, nullptr);
+                        if (!systemRefs) { allowed = false; continue; }
+                        for (guint j = 0; j < systemRefs->len; ++j)
+                            if (QString::fromUtf8(flatpak_ref_get_name(FLATPAK_REF(g_ptr_array_index(systemRefs, j)))) == removal.selectedId)
+                                allowed = false;
+                        g_ptr_array_unref(systemRefs);
+                    }
+                    g_ptr_array_unref(systems);
+                }
+                return allowed && count == 1;
+            };
+            g_signal_connect(transaction, "ready-pre-auth", G_CALLBACK(ready), &removal);
+            g_signal_connect(transaction, "ready", G_CALLBACK(ready), &removal);
+            flatpak_transaction_set_no_interaction(transaction, TRUE);
+            flatpak_transaction_set_no_pull(transaction, TRUE);
+            flatpak_transaction_set_disable_dependencies(transaction, TRUE);
+            flatpak_transaction_set_disable_related(transaction, TRUE);
+            flatpak_transaction_set_include_unused_uninstall_ops(transaction, FALSE);
+            if (!flatpak_transaction_add_uninstall(transaction, refName.constData(), &error)
+                || !flatpak_transaction_run(transaction, cancellation->value, &error))
+                result["code"] = "FLATPAK_FAILED";
+        }
+    }
+    if (error) {
+        result["code"] = errorCode(error);
+        result["message"] = QString::fromUtf8(error->message);
+        g_clear_error(&error);
+    } else if (!installed || (!transaction && result.isEmpty())) {
+        result["code"] = "RESULT_UNKNOWN";
+    }
+    if (transaction) g_object_unref(transaction);
+    if (installed) g_object_unref(installed);
+    if (installation) g_object_unref(installation);
+    return result;
+}
+
+QVariantMap FlatpakApps::executeDeployment(const QVariantMap& request, const std::shared_ptr<Cancellation>& cancellation)
+{
+    const auto appId = request.value("appId").toString();
+    const auto discovery = request.value("discovery").toMap();
+    const auto selected = request.value("selected").toMap();
+    const bool installing = request.value("action").toString() == "install";
+    const auto path = request.value("path").toString();
+    auto result = FlatpakRelease::validateDownloaded(appId, discovery, path,
+        [cancellation] { return bool(g_cancellable_is_cancelled(cancellation->value)); });
+    if (!result.isEmpty()) return result;
+    const auto target = discovery.value("commit").toString();
+    bool valid = false;
+    const int order = installing ? 1 : FlatpakRelease::compareVersions(discovery.value("version").toString(), selected.value("version").toString(), &valid);
+    if (selected.value("scope").toString() != "user" || selected.value("branch").toString() != "stable"
+        || selected.value("arch").toString() != QString::fromUtf8(flatpak_get_default_arch())
+        || discovery.value("arch") != selected.value("arch")
+        || (!installing && (!valid || order <= 0))) return {{"code", "VERSION_CONFLICT"}};
+    GError* error = nullptr;
+    auto* file = g_file_new_for_path(path.toUtf8().constData());
+    auto* bundle = flatpak_bundle_ref_new(file, &error);
+    if (bundle) {
+        auto* origin = flatpak_bundle_ref_get_origin(bundle);
+        auto* runtimeRepo = flatpak_bundle_ref_get_runtime_repo_url(bundle);
+        const bool valid = flatpak_ref_get_kind(FLATPAK_REF(bundle)) == FLATPAK_REF_KIND_APP
+            && QString::fromUtf8(flatpak_ref_get_name(FLATPAK_REF(bundle))) == appId
+            && QString::fromUtf8(flatpak_ref_get_arch(FLATPAK_REF(bundle))) == selected.value("arch").toString()
+            && QString::fromUtf8(flatpak_ref_get_branch(FLATPAK_REF(bundle))) == "stable"
+            && QString::fromUtf8(flatpak_ref_get_commit(FLATPAK_REF(bundle))) == target
+            && (!origin || !*origin) && (!runtimeRepo || !*runtimeRepo);
+        g_free(origin); g_free(runtimeRepo);
+        if (!valid) result = {{"code", "FLATPAK_UNTRUSTED"}, {"message", "Bundle identity, commit or embedded source does not match the approved standalone release contract."}};
+    }
+    auto* installation = bundle && result.isEmpty() ? flatpak_installation_new_user(cancellation->value, &error) : nullptr;
+    FlatpakTransaction* transaction = nullptr;
+    const auto ref = QStringLiteral("app/%1/%2/stable").arg(appId, selected.value("arch").toString());
+    DeploymentGuard guard{installation, cancellation->value, appId, ref,
+        selected.value("origin").toString(), target, selected, installing, {}};
+    if (installation && guard.localUnchanged()) {
+        transaction = flatpak_transaction_new_for_installation(installation, cancellation->value, &error);
+        if (transaction) {
+            Cancellation::attach(transaction, cancellation);
+            flatpak_transaction_set_no_interaction(transaction, TRUE);
+            flatpak_transaction_set_include_unused_uninstall_ops(transaction, FALSE);
+            const auto ready = +[](FlatpakTransaction* transaction, gpointer data) -> gboolean {
+                return static_cast<DeploymentGuard*>(data)->ready(transaction);
+            };
+            g_signal_connect(transaction, "ready-pre-auth", G_CALLBACK(ready), &guard);
+            g_signal_connect(transaction, "ready", G_CALLBACK(ready), &guard);
+            g_signal_connect(transaction, "add-new-remote", G_CALLBACK(+[](FlatpakTransaction*, int,
+                const char*, const char*, const char*, gpointer) -> gboolean { return FALSE; }), nullptr);
+            g_signal_connect(transaction, "choose-remote-for-ref", G_CALLBACK(+[](FlatpakTransaction*,
+                const char*, const char*, const char* const* remotes, gpointer data) -> int {
+                auto* guard = static_cast<DeploymentGuard*>(data);
+                int selected = -1;
+                for (int i = 0; remotes && remotes[i]; ++i) {
+                    if (!guard->approved(QString::fromUtf8(remotes[i]), true)) continue;
+                    if (selected >= 0) return -1;
+                    selected = i;
+                }
+                return selected;
+            }), &guard);
+            const auto bytes = FlatpakRelease::publicKeys(appId);
+            auto* keys = g_bytes_new(bytes.constData(), bytes.size());
+            const bool added = !bytes.isEmpty() && flatpak_transaction_add_install_bundle(transaction, file, keys, &error);
+            g_bytes_unref(keys);
+            { std::lock_guard lock(cancellation->mutex); cancellation->status = "Resolving and deploying signed Flatpak bundle"; cancellation->progress = -1; }
+            if (!added || !flatpak_transaction_run(transaction, cancellation->value, &error)) result["code"] = "FLATPAK_FAILED";
+        }
+    } else if (result.isEmpty() && !error) result["code"] = "RESULT_UNKNOWN";
+    if (error) {
+        result["code"] = errorCode(error);
+        result["message"] = QString::fromUtf8(error->message);
+        g_clear_error(&error);
+    } else if (!transaction && result.isEmpty()) result["code"] = "RESULT_UNKNOWN";
+    if (!guard.refusal.isEmpty()) {
+        result["code"] = "FLATPAK_UNTRUSTED";
+        result["message"] = guard.refusal;
+    }
+    if (transaction) g_object_unref(transaction);
+    if (installation) g_object_unref(installation);
+    if (bundle) g_object_unref(bundle);
+    g_object_unref(file);
+    return result;
+}
+
+int FlatpakTransactionProcess::helperMain()
+{
+    const auto parent = ::getppid();
+    if (parent <= 1 || ::prctl(PR_SET_PDEATHSIG, SIGKILL) != 0 || ::getppid() != parent) return 2;
+    const rlimit noCore{0, 0};
+    setrlimit(RLIMIT_CORE, &noCore);
+    std::signal(SIGTERM, interruptHelper);
+    std::signal(SIGINT, interruptHelper);
+    QFile input;
+    if (!input.open(stdin, QIODevice::ReadOnly)) return 2;
+    const auto bytes = input.read(65537);
+    QJsonParseError error;
+    const auto document = QJsonDocument::fromJson(bytes, &error);
+    if (bytes.size() > 65536 || error.error != QJsonParseError::NoError || !document.isObject()) return 2;
+    const auto request = document.object().toVariantMap();
+    const auto action = request.value("action").toString();
+    const auto* app = IndependentAppRegistry::find(request.value("appId").toString());
+    if (!app || !QStringList{"install", "update", "uninstall", "remove-retired"}.contains(action)) return 2;
+    const auto cancellation = std::make_shared<FlatpakApps::Cancellation>();
+    QTimer timer;
+    timer.setInterval(100);
+    QString lastStatus;
+    int lastProgress = -2;
+    const auto send = [](const QJsonObject& object) {
+        std::puts(QJsonDocument(object).toJson(QJsonDocument::Compact).constData());
+        std::fflush(stdout);
+    };
+    QObject::connect(&timer, &QTimer::timeout, [&] {
+        if (helperInterrupted) g_cancellable_cancel(cancellation->value);
+        std::lock_guard lock(cancellation->mutex);
+        if (lastStatus == cancellation->status && lastProgress == cancellation->progress) return;
+        lastStatus = cancellation->status.left(4096);
+        lastProgress = cancellation->progress;
+        send({{"type", "progress"}, {"status", lastStatus}, {"progress", lastProgress}});
+    });
+    QFutureWatcher<QVariantMap> worker;
+    QObject::connect(&worker, &QFutureWatcher<QVariantMap>::finished, [&] {
+        send({{"type", "result"}, {"result", QJsonObject::fromVariantMap(worker.result())}});
+        QCoreApplication::exit(0);
+    });
+    timer.start();
+    worker.setFuture(QtConcurrent::run([request, cancellation, action] {
+        return action == "install" || action == "update"
+            ? FlatpakApps::executeDeployment(request, cancellation) : FlatpakApps::executeRemoval(request, cancellation);
+    }));
+    return QCoreApplication::exec();
+}
+
 FlatpakApps::FlatpakApps(QObject* parent) : QObject(parent)
 {
     m_deadline.setSingleShot(true);
@@ -534,96 +774,16 @@ bool FlatpakApps::remove(const QString& appId, bool retired)
     if (installations.size() != 1) return false;
     const auto selected = installations.first().toMap();
     if (selected.value("scope").toString() != "user") return false;
-    const auto refName = QStringLiteral("app/%1/%2/%3").arg(selectedId,
-        selected.value("arch").toString(), selected.value("branch").toString()).toUtf8();
-    const auto commit = selected.value("commit").toString();
-    const auto origin = selected.value("origin").toString();
     if (!beginOperation(appId, retired ? "remove-retired" : "uninstall", 30000)) return false;
     m_updates.remove(appId);
     const auto cancellation = m_transactionCancellation;
-    m_transaction.setFuture(QtConcurrent::run([cancellation, appId, selectedId, retired, selected, refName, commit, origin] {
-        QVariantMap result;
-        GError* error = nullptr;
-        auto* installation = flatpak_installation_new_user(cancellation->value, &error);
-        FlatpakInstalledRef* installed = nullptr;
-        FlatpakTransaction* transaction = nullptr;
-        if (installation) {
-            installed = flatpak_installation_get_installed_ref(installation, FLATPAK_REF_KIND_APP,
-                selectedId.toUtf8().constData(), selected.value("arch").toString().toUtf8().constData(),
-                selected.value("branch").toString().toUtf8().constData(), cancellation->value, &error);
-        }
-        if (installed && (commit != QString::fromUtf8(flatpak_ref_get_commit(FLATPAK_REF(installed)))
-            || origin != QString::fromUtf8(flatpak_installed_ref_get_origin(installed)))) {
-            result["code"] = "RESULT_UNKNOWN";
-            result["message"] = "The installation changed. Refresh before uninstalling.";
-        } else if (installed) {
-            transaction = flatpak_transaction_new_for_installation(installation, cancellation->value, &error);
-            if (transaction) {
-                Cancellation::attach(transaction, cancellation);
-                struct Removal { QByteArray ref; QString appId, selectedId, commit, origin; bool retired; };
-                Removal removal{refName, appId, selectedId, commit, origin, retired};
-                const auto ready = +[](FlatpakTransaction* transaction, gpointer data) -> gboolean {
-                    const auto& removal = *static_cast<Removal*>(data);
-                    if (removal.retired && writersRunning(removal.appId)) return FALSE;
-                    auto* operations = flatpak_transaction_get_operations(transaction);
-                    bool allowed = g_list_length(operations) == 1;
-                    for (auto* it = operations; it; it = it->next) {
-                        auto* operation = FLATPAK_TRANSACTION_OPERATION(it->data);
-                        allowed &= flatpak_transaction_operation_get_operation_type(operation) == FLATPAK_TRANSACTION_OPERATION_UNINSTALL
-                            && QByteArray(flatpak_transaction_operation_get_ref(operation)) == removal.ref;
-                    }
-                    g_list_free_full(operations, g_object_unref);
-                    auto* installation = flatpak_transaction_get_installation(transaction);
-                    auto* refs = flatpak_installation_list_installed_refs_by_kind(installation, FLATPAK_REF_KIND_APP, nullptr, nullptr);
-                    int count = 0;
-                    if (!refs) return FALSE;
-                    for (guint i = 0; i < refs->len; ++i) {
-                        auto* installed = FLATPAK_INSTALLED_REF(g_ptr_array_index(refs, i));
-                        if (QString::fromUtf8(flatpak_ref_get_name(FLATPAK_REF(installed))) != removal.selectedId) continue;
-                        ++count;
-                        allowed &= removal.commit == QString::fromUtf8(flatpak_ref_get_commit(FLATPAK_REF(installed)))
-                            && removal.origin == QString::fromUtf8(flatpak_installed_ref_get_origin(installed));
-                    }
-                    g_ptr_array_unref(refs);
-                    if (removal.retired) {
-                        auto* systems = flatpak_get_system_installations(nullptr, nullptr);
-                        if (!systems) return FALSE;
-                        for (guint i = 0; i < systems->len; ++i) {
-                            auto* system = FLATPAK_INSTALLATION(g_ptr_array_index(systems, i));
-                            auto* systemRefs = flatpak_installation_list_installed_refs_by_kind(system, FLATPAK_REF_KIND_APP, nullptr, nullptr);
-                            if (!systemRefs) { allowed = false; continue; }
-                            for (guint j = 0; j < systemRefs->len; ++j)
-                                if (QString::fromUtf8(flatpak_ref_get_name(FLATPAK_REF(g_ptr_array_index(systemRefs, j)))) == removal.selectedId)
-                                    allowed = false;
-                            g_ptr_array_unref(systemRefs);
-                        }
-                        g_ptr_array_unref(systems);
-                    }
-                    return allowed && count == 1;
-                };
-                g_signal_connect(transaction, "ready-pre-auth", G_CALLBACK(ready), &removal);
-                g_signal_connect(transaction, "ready", G_CALLBACK(ready), &removal);
-                flatpak_transaction_set_no_interaction(transaction, TRUE);
-                flatpak_transaction_set_no_pull(transaction, TRUE);
-                flatpak_transaction_set_disable_dependencies(transaction, TRUE);
-                flatpak_transaction_set_disable_related(transaction, TRUE);
-                flatpak_transaction_set_include_unused_uninstall_ops(transaction, FALSE);
-                if (!flatpak_transaction_add_uninstall(transaction, refName.constData(), &error)
-                    || !flatpak_transaction_run(transaction, cancellation->value, &error))
-                    result["code"] = "FLATPAK_FAILED";
-            }
-        }
-        if (error) {
-            result["code"] = errorCode(error);
-            result["message"] = QString::fromUtf8(error->message);
-            g_clear_error(&error);
-        } else if (!installed || (!transaction && result.isEmpty())) {
-            result["code"] = "RESULT_UNKNOWN";
-        }
-        if (transaction) g_object_unref(transaction);
-        if (installed) g_object_unref(installed);
-        if (installation) g_object_unref(installation);
-        return result;
+    m_transaction.setFuture(QtConcurrent::run([cancellation, appId, retired, selected] {
+        return FlatpakTransactionProcess::run({{"action", retired ? "remove-retired" : "uninstall"},
+            {"appId", appId}, {"selected", selected}},
+            [cancellation] { return bool(g_cancellable_is_cancelled(cancellation->value)); },
+            [cancellation](const QString& status, int progress) {
+                std::lock_guard lock(cancellation->mutex); cancellation->status = status; cancellation->progress = progress;
+            });
     }));
     emit changed();
     return true;
@@ -689,10 +849,9 @@ bool FlatpakApps::deploy(const QString& appId, bool installing)
     if (!beginOperation(appId, installing ? "install" : "update", 60 * 60 * 1000)) return false;
     m_checkedInstallation = selected;
     m_targetCommit = discovery.value("commit").toString();
-    const auto target = m_targetCommit;
     m_updates.remove(appId);
     const auto cancellation = m_transactionCancellation;
-    m_transaction.setFuture(QtConcurrent::run([cancellation, appId, selected, target, installing, discovery] {
+    m_transaction.setFuture(QtConcurrent::run([cancellation, appId, selected, installing, discovery] {
         auto compatibility = FlatpakCompatibility::checkBundleCleanup();
         if (!compatibility.isEmpty()) return compatibility;
         if (g_cancellable_is_cancelled(cancellation->value)) return QVariantMap{{"code", "CANCELLED"}};
@@ -709,72 +868,12 @@ bool FlatpakApps::deploy(const QString& appId, bool installing)
         if (result.contains("code")) return result;
         const auto path = result.value("path").toString();
         result.clear();
-        GError* error = nullptr;
-        auto* file = g_file_new_for_path(path.toUtf8().constData());
-        auto* bundle = flatpak_bundle_ref_new(file, &error);
-        if (bundle) {
-            auto* origin = flatpak_bundle_ref_get_origin(bundle);
-            auto* runtimeRepo = flatpak_bundle_ref_get_runtime_repo_url(bundle);
-            const bool valid = flatpak_ref_get_kind(FLATPAK_REF(bundle)) == FLATPAK_REF_KIND_APP
-                && QString::fromUtf8(flatpak_ref_get_name(FLATPAK_REF(bundle))) == appId
-                && QString::fromUtf8(flatpak_ref_get_arch(FLATPAK_REF(bundle))) == selected.value("arch").toString()
-                && QString::fromUtf8(flatpak_ref_get_branch(FLATPAK_REF(bundle))) == "stable"
-                && QString::fromUtf8(flatpak_ref_get_commit(FLATPAK_REF(bundle))) == target
-                && (!origin || !*origin) && (!runtimeRepo || !*runtimeRepo);
-            g_free(origin); g_free(runtimeRepo);
-            if (!valid) result = {{"code", "FLATPAK_UNTRUSTED"}, {"message", "Bundle identity, commit or embedded source does not match the approved standalone release contract."}};
-        }
-        auto* installation = bundle && result.isEmpty() ? flatpak_installation_new_user(cancellation->value, &error) : nullptr;
-        FlatpakTransaction* transaction = nullptr;
-        const auto ref = QStringLiteral("app/%1/%2/stable").arg(appId, selected.value("arch").toString());
-        DeploymentGuard guard{installation, cancellation->value, appId, ref,
-            selected.value("origin").toString(), target, selected, installing, {}};
-        if (installation && guard.localUnchanged()) {
-            transaction = flatpak_transaction_new_for_installation(installation, cancellation->value, &error);
-            if (transaction) {
-                Cancellation::attach(transaction, cancellation);
-                flatpak_transaction_set_no_interaction(transaction, TRUE);
-                flatpak_transaction_set_include_unused_uninstall_ops(transaction, FALSE);
-                const auto ready = +[](FlatpakTransaction* transaction, gpointer data) -> gboolean {
-                    return static_cast<DeploymentGuard*>(data)->ready(transaction);
-                };
-                g_signal_connect(transaction, "ready-pre-auth", G_CALLBACK(ready), &guard);
-                g_signal_connect(transaction, "ready", G_CALLBACK(ready), &guard);
-                g_signal_connect(transaction, "add-new-remote", G_CALLBACK(+[](FlatpakTransaction*, int,
-                    const char*, const char*, const char*, gpointer) -> gboolean { return FALSE; }), nullptr);
-                g_signal_connect(transaction, "choose-remote-for-ref", G_CALLBACK(+[](FlatpakTransaction*,
-                    const char*, const char*, const char* const* remotes, gpointer data) -> int {
-                    auto* guard = static_cast<DeploymentGuard*>(data);
-                    int selected = -1;
-                    for (int i = 0; remotes && remotes[i]; ++i) {
-                        if (!guard->approved(QString::fromUtf8(remotes[i]), true)) continue;
-                        if (selected >= 0) return -1;
-                        selected = i;
-                    }
-                    return selected;
-                }), &guard);
-                const auto bytes = FlatpakRelease::publicKeys(appId);
-                auto* keys = g_bytes_new(bytes.constData(), bytes.size());
-                const bool added = !bytes.isEmpty() && flatpak_transaction_add_install_bundle(transaction, file, keys, &error);
-                g_bytes_unref(keys);
-                { std::lock_guard lock(cancellation->mutex); cancellation->status = "Resolving and deploying signed Flatpak bundle"; cancellation->progress = -1; }
-                if (!added || !flatpak_transaction_run(transaction, cancellation->value, &error)) result["code"] = "FLATPAK_FAILED";
-            }
-        } else if (result.isEmpty() && !error) result["code"] = "RESULT_UNKNOWN";
-        if (error) {
-            result["code"] = errorCode(error);
-            result["message"] = QString::fromUtf8(error->message);
-            g_clear_error(&error);
-        } else if (!transaction && result.isEmpty()) result["code"] = "RESULT_UNKNOWN";
-        if (!guard.refusal.isEmpty()) {
-            result["code"] = "FLATPAK_UNTRUSTED";
-            result["message"] = guard.refusal;
-        }
-        if (transaction) g_object_unref(transaction);
-        if (installation) g_object_unref(installation);
-        if (bundle) g_object_unref(bundle);
-        g_object_unref(file);
-        return result;
+        return FlatpakTransactionProcess::run({{"action", installing ? "install" : "update"},
+            {"appId", appId}, {"selected", selected}, {"discovery", discovery}, {"path", path}},
+            [cancellation] { return bool(g_cancellable_is_cancelled(cancellation->value)); },
+            [cancellation](const QString& status, int progress) {
+                std::lock_guard lock(cancellation->mutex); cancellation->status = status; cancellation->progress = progress;
+            });
     }));
     emit changed();
     return true;
