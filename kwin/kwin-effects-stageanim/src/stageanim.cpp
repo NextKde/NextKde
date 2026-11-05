@@ -1606,6 +1606,8 @@ void StageAnimEffect::reloadLiveCards()
     if (!publishedDesktopId.isEmpty())
         m_liveDesktopId = publishedDesktopId;
     bool changed = false;
+    updateStageOpaquePending(m_livePendingOpaque, desktopChanged, wanted,
+        QSet<QString>(m_liveCards.keyBegin(), m_liveCards.keyEnd()));
     if (desktopChanged) {
         // Shell held the old desktop's model throughout the switch. Replace
         // it now, without the missing-card grace leaving ghost cards behind.
@@ -1688,7 +1690,7 @@ void StageAnimEffect::reloadLiveCards()
                     ? card->animMs : card->enterMs);
                 card->fadeAnimating = true;
             }
-            if (desktopChanged && w->isMinimized()) {
+            if (m_livePendingOpaque.contains(eid) && w->isMinimized()) {
                 card->alpha = card->alphaFrom = card->alphaTo = 1.0;
                 card->fadeAnimating = false;
                 card->enterInstant = true;
@@ -1721,6 +1723,7 @@ void StageAnimEffect::reloadLiveCards()
             m_liveCards.insert(eid, card);
             updateLiveFrameTimer();
             m_livePending.remove(eid);
+            m_livePendingOpaque.remove(eid);
             renderLiveTexture(*card); // 注册时机（非绘制）先拍一帧
             card->lastRenderMs = std::chrono::duration_cast<std::chrono::milliseconds>(
                 std::chrono::steady_clock::now().time_since_epoch()).count();

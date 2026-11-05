@@ -38,8 +38,24 @@ TestCase {
         root._retractPx = 0
         root.open = true
         root.opaqueAtCommit = false
+        retractMotion.stop()
+        root._retractPx = 0
     }
     function cleanup() { root.open = false }
+
+    function test_switch_freezes_an_inflight_retraction() {
+        root.drawerRetracted = true
+        tryVerify(() => root._retractPx > 0 && root._retractPx < root._retractFull)
+        windowService.desktopTransitionActive = true
+        windowService.currentDesktopId = "desk2"
+        const frozen = root._retractPx
+        root.drawerRetracted = false
+        wait(350)
+        compare(root._retractPx, frozen)
+        windowService.desktopTransitionActive = false
+        tryCompare(root, "modelDesktop", "desk2")
+        tryCompare(root, "_retractPx", 0)
+    }
 
     function test_visible_sidebar_stays_in_place_until_destination_settles() {
         windowService.desktopTransitionActive = true
@@ -60,18 +76,18 @@ TestCase {
         compare(root._retractPx, 0)
         windowService.desktopTransitionActive = false
         tryCompare(root, "modelDesktop", "desk2")
-        compare(root._retractPx, root._retractFull)
+        tryCompare(root, "_retractPx", root._retractFull)
     }
     function test_leaving_fullscreen_does_not_slide_old_cards_in_mid_switch() {
         root.drawerRetracted = true
-        compare(root._retractPx, root._retractFull)
+        tryCompare(root, "_retractPx", root._retractFull)
         windowService.desktopTransitionActive = true
         windowService.currentDesktopId = "desk2"
         root.drawerRetracted = false
         wait(100)
-        compare(root._retractPx, root._retractFull)
+        tryCompare(root, "_retractPx", root._retractFull)
         windowService.desktopTransitionActive = false
         tryCompare(root, "modelDesktop", "desk2")
-        compare(root._retractPx, 0)
+        tryCompare(root, "_retractPx", 0)
     }
 }

@@ -8,8 +8,8 @@
 
 namespace KosPlatform {
 
-// Only poll while a desktop change is in flight. Stage's compositor cards
-// cannot be painted while KWin's desktop-switch effect owns the screen.
+// Only poll while a desktop change is in flight. Stage keeps painting the
+// displayed desktop's cards and commits the new model after the effect settles.
 class DesktopTransitionMonitor final : public QObject {
     Q_OBJECT
 public:

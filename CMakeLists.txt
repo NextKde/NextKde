@@ -727,6 +727,7 @@ if(BUILD_TESTING)
     find_package(Qt6 6.5 REQUIRED COMPONENTS Test)
     add_executable(kos-stage-desktop-policy-test
         kwin/kwin-effects-stageanim/tests/test_desktop_policy.cpp)
+    target_link_libraries(kos-stage-desktop-policy-test PRIVATE Qt6::Core)
     add_test(NAME kos-stage.desktop-policy COMMAND kos-stage-desktop-policy-test)
     set_tests_properties(kos-stage.desktop-policy PROPERTIES LABELS platform TIMEOUT 10)
     qt_add_executable(kos-legacy-glass-blur-test

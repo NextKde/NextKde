@@ -303,6 +303,7 @@ private:
     qint64 m_shaderLastFailMs = 0;    // 最近一次编译失败时刻（steady ms）
     QHash<QString, QSharedPointer<LiveCard>> m_liveCards; // 含 dying 退场卡（统一绘制管线）
     QSet<QString> m_liveWanted; // 最近一次发布在册的 id（缺席踢除的对照基准）
+    QSet<QString> m_livePendingOpaque; // Desktop handoff: retain until registration succeeds.
     QSet<QString> m_livePending; // 文件里有、窗口还没出现（等 windowAdded）
     QSet<QString> m_liveAcknowledged; // Only cards with rendered, painted content own QML visuals.
     quint32 m_liveFeedTick = 0;  // 帧投喂分级节拍

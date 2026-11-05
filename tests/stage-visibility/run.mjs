@@ -17,7 +17,7 @@ function section(start, end) {
 }
 const production = [
     section("    property var _fullscreenOverride:", "    property bool _drawerPeek:"),
-    section("    readonly property bool drawerRetracted:", "    Behavior on _retractPx"),
+    section("    readonly property bool drawerRetracted:", "    NumberAnimation {\n        id: retractMotion"),
     section("    readonly property real _yieldEngage:", "    // ── 滚动状态"),
 ].join("\n").replaceAll("WindowService.", "windowService.")
     .replaceAll("ConfigService.", "configService.");
@@ -28,7 +28,7 @@ try {
     copyFileSync(new URL("tst_transition.qml", import.meta.url), join(directory, "tst_transition.qml"));
     const transition = section("    property bool _committingDesktop:", "    // ── 卡片堆叠区")
         .replaceAll("WindowService.", "windowService.");
-    const retract = section("    onDrawerRetractedChanged:", "    on_RetractPxChanged:");
+    const retract = section("    NumberAnimation {\n        id: retractMotion", "    on_RetractPxChanged:");
     const staticFixture = readFileSync(new URL("tst_static_sidebar.qml.in", import.meta.url), "utf8");
     writeFileSync(join(directory, "tst_static_sidebar.qml"), staticFixture
         .replace("// PRODUCTION_TRANSITION", transition)

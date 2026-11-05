@@ -2262,12 +2262,13 @@ PanelWindow {
         }
         onActiveChanged: {
             if (active) {
+                retractMotion.stop()
                 root._abortDrag()
                 root.hoveredKey = ""
                 root._hoverDwellTimer.stop()
                 root._dwellKey = ""
             } else {
-                root._retractPx = root.drawerRetracted ? root._retractFull : 0
+                root._animateRetraction()
             }
             root._updateHitRegionExtent()
         }
@@ -2664,12 +2665,22 @@ PanelWindow {
     readonly property bool drawerRetracted:
         (root.desktopFullscreen || root._stripYield)
         && !root._drawerPeek
-    Behavior on _retractPx {
-        NumberAnimation { duration: 260; easing.type: Easing.OutCubic }
+    NumberAnimation {
+        id: retractMotion
+        target: root
+        property: "_retractPx"
+        duration: 260
+        easing.type: Easing.OutCubic
+    }
+    function _animateRetraction() {
+        retractMotion.stop()
+        retractMotion.from = root._retractPx
+        retractMotion.to = root.drawerRetracted ? root._retractFull : 0
+        retractMotion.start()
     }
     onDrawerRetractedChanged: {
         if (!desktopTransition || !desktopTransition.active)
-            root._retractPx = drawerRetracted ? root._retractFull : 0
+            root._animateRetraction()
         _updateHitRegionExtent()
         scheduleLivePublish()
     }
