@@ -855,44 +855,6 @@ build() {
     python3 "$project_dir/tools/source-release.py" --root "$project_dir" stamp "$build_dir/release.json"
 }
 
-# materialize_kos_ui — turn the repo's source-level Kos.Ui alias into real
-# files under the installed shell config.
-#
-# In the checkout, shell/Kos/Ui/{colorize,foundation,controls} are symlinks
-# into shared/qml so `qs -p shell` resolves `import "../../../Kos/Ui"` with no
-# build step and no environment variables. `cp -a` preserves those symlinks,
-# and their ../../../shared targets do not exist under
-# ~/.config/quickshell/kos, so the installed copy would dangle. This replaces
-# the alias with real copies of the same files.
-#
-#   $1: installed shell config dir
-#   $2: qmldir source (checkout or Nix store path)
-#   $3: the directory that directly contains colorize/, foundation/ and
-#       controls/ — the checkout's shared/qml, or
-#       $out/share/kos-desktop/shared/qml in a built Nix derivation. Do not
-#       pass the parent: package.nix copies shared/ wholesale, so the QML
-#       files sit one level deeper in the store than in the checkout.
-materialize_kos_ui() {
-    local shell_config="$1" qmldir_src="$2" qml_root="$3"
-    if [[ ! -f "$qmldir_src" ]]; then
-        printf 'Kos.Ui alias qmldir not found: %s\n' "$qmldir_src" >&2
-        return 1
-    fi
-    local dir
-    for dir in colorize foundation controls wallpapers i18n; do
-        if [[ ! -d "$qml_root/$dir" ]]; then
-            printf 'Kos.Ui source dir not found: %s\n' "$qml_root/$dir" >&2
-            return 1
-        fi
-    done
-    rm -rf "$shell_config/Kos/Ui"
-    mkdir -p "$shell_config/Kos/Ui"
-    install -m 0644 "$qmldir_src" "$shell_config/Kos/Ui/qmldir"
-    for dir in colorize foundation controls wallpapers i18n; do
-        cp -rL --no-preserve=mode "$qml_root/$dir" "$shell_config/Kos/Ui/"
-    done
-}
-
 # Unit names whose process is still running an executable that was replaced
 # underneath it, one per line. Linux refuses to write a running executable
 # (ETXTBSY), so an in-place deploy cannot keep the inode alive and
@@ -947,6 +909,17 @@ deploy_artifacts() {
             return 1
         }
     done
+
+    # Validate canonical content before backing up/removing a working runtime.
+    # Checkout aliases may have become empty directories or link-text files.
+    local shell_qml_src="$project_dir/shell"
+    local shared_qml_src="$project_dir/shared/qml"
+    if [[ "$nix_artifact" == true ]]; then
+        shell_qml_src="$artifact_root/share/kos-desktop/shell"
+        shared_qml_src="$artifact_root/share/shared/qml"
+    fi
+    python3 "$project_dir/tools/deploy-shell-qml.py" check \
+        --shell "$shell_qml_src" --shared "$shared_qml_src" || return 1
 
     # Replace managed runtime trees rather than overlaying versions. Back up
     # local runtime edits and kos settings before removing stale QML/plugins.
@@ -1049,10 +1022,6 @@ deploy_artifacts() {
     # and the window died inside QQmlApplicationEngine before it was shown —
     # clicking Settings simply did nothing. Copy the whole tree so a new
     # subdirectory never needs another edit here.
-    local shared_qml_src="$project_dir/shared/qml"
-    if [[ "$nix_artifact" == true ]] && [[ -d "$artifact_root/share/shared/qml" ]]; then
-        shared_qml_src="$artifact_root/share/shared/qml"
-    fi
     if [[ -d "$prefix/share/shared/qml" ]]; then
         find "$prefix/share/shared/qml" -type d -exec chmod u+w {} +
     fi
@@ -1068,45 +1037,9 @@ deploy_artifacts() {
 
     # --- Shell QML → ~/.config/quickshell/kos ---
     local shell_config="$config_dir/quickshell/kos"
-    mkdir -p "$shell_config"
-    find "$shell_config" -type d -exec chmod u+w {} +
-    find "$shell_config" -type f -exec chmod u+w {} +
-    # These source entries are symlinks in the checkout, but older releases
-    # installed them as directories. Remove only those known legacy targets
-    # before copying the shell tree; otherwise cp refuses to replace a
-    # directory with the symlink and the install aborts before materializing
-    # Kos.Ui below.
-    # Retire the short-lived glass facade; LiquidGlassPanel owns the API.
-    rm -f "$shell_config/desktop/modules/common/GlassPanel.qml"
-    rm -rf "$shell_config/Kos/Ui/colorize" \
-           "$shell_config/Kos/Ui/foundation" \
-           "$shell_config/Kos/Ui/controls" \
-           "$shell_config/Kos/Ui/wallpapers"
-    rm -rf "$shell_config/shared/qml/controls"
-    if [[ "$nix_artifact" == true ]]; then
-        cp -rL --no-preserve=mode "$artifact_root/share/kos-desktop/shell/." "$shell_config/"
-    else
-        cp -rL --no-preserve=mode "$project_dir/shell/." "$shell_config/"
-    fi
-    mkdir -p "$shell_config/shared/qml"
-    rm -rf "$shell_config/shared/qml/controls"
-    if [[ "$nix_artifact" == true ]]; then
-        cp -rL --no-preserve=mode "$artifact_root/share/shared/qml/controls" "$shell_config/shared/qml/"
-    else
-        cp -rL --no-preserve=mode "$project_dir/shared/qml/controls" "$shell_config/shared/qml/"
-    fi
-    # Kos.Ui alias: replace the checkout's symlinks with real files (see
-    # materialize_kos_ui above for why the symlinks cannot survive the copy).
-    # Nix sources live alongside the packaged shell; CMake deployments use
-    # the checkout. In both cases the installed aliases contain real files.
-    if [[ "$nix_artifact" == true ]] && [[ -f "$artifact_root/share/kos-desktop/shell/Kos/Ui/qmldir" ]]; then
-        materialize_kos_ui "$shell_config" \
-            "$artifact_root/share/kos-desktop/shell/Kos/Ui/qmldir" \
-            "$artifact_root/share/kos-desktop/shared/qml"
-    else
-        materialize_kos_ui "$shell_config" \
-            "$project_dir/shell/Kos/Ui/qmldir" "$project_dir/shared/qml"
-    fi
+    python3 "$project_dir/tools/deploy-shell-qml.py" deploy \
+        --shell "$shell_qml_src" --shared "$shared_qml_src" \
+        --destination "$shell_config" || return 1
 
     # SurfaceShape native QML plugin: copy from build dir to user shell config
     # so Quickshell finds `import Kos.SurfaceShape 1.0` without requiring root install to /usr
@@ -1957,7 +1890,7 @@ install_all() {
     fi
     ensure_build_dependencies
     build
-    deploy_artifacts "$build_dir"
+    deploy_artifacts "$build_dir" || return 1
     if ! is_nixos; then
         install_kwin_plugins
     fi
@@ -2152,7 +2085,7 @@ nix_deploy_artifacts() {
         printf 'result symlink not found. Run ./tools/kosctl nix build first.\n' >&2
         return 1
     fi
-    deploy_artifacts "$result_dir"
+    deploy_artifacts "$result_dir" || return 1
     install -m 0644 "$result_dir/share/kos/release.json" "$prefix/share/kos/release.json"
 }
 
