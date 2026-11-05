@@ -1,4 +1,5 @@
 #include "WindowSettings.h"
+#include <QCoreApplication>
 #include "../../../platform/src/windowanimation/AnimationTask.h"
 #include "../../../platform/src/windowanimation/NativeGenie.h"
 #include <KConfigGroup>
@@ -67,10 +68,18 @@ bool syncGtkControls(bool enabled, const QString &glyphMode, QString &error) {
             error = QStringLiteral("Could not prepare GTK window control resources"); return false;
         }
     }
-    QProcess process;
-    process.start(QStringLiteral("python3"), {temporary.filePath(assets.first()),
+    QStringList arguments{temporary.filePath(assets.first()),
         QStringLiteral("sync"), QStringLiteral("--enabled"), enabled ? QStringLiteral("true") : QStringLiteral("false"),
-        QStringLiteral("--glyph-mode"), glyphMode});
+        QStringLiteral("--glyph-mode"), glyphMode};
+#ifdef KOS_GTK_MODULE_BUILD_PATH
+    QString module = QDir(QCoreApplication::applicationDirPath()).absoluteFilePath(
+        QStringLiteral("../lib/gtk-3.0/modules/libkos-gtk-window-controls.so"));
+    if (QCoreApplication::applicationDirPath() == QStringLiteral(KOS_SETTINGS_BUILD_DIR))
+        module = QStringLiteral(KOS_GTK_MODULE_BUILD_PATH);
+    arguments << QStringLiteral("--gtk3-module") << QDir::cleanPath(module);
+#endif
+    QProcess process;
+    process.start(QStringLiteral("python3"), arguments);
     if (!process.waitForStarted(1000) || !process.waitForFinished(5000)) {
         process.kill();
         process.waitForFinished(1000);

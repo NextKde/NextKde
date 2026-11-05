@@ -54,6 +54,7 @@ add_library(kos_bridge MODULE
 
 target_link_libraries(kos_bridge PRIVATE
     Wayland::Server
+    xcb
     Qt6::Core
     Qt6::DBus
     KF6::ConfigCore

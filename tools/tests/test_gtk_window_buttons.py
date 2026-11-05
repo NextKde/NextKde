@@ -4,6 +4,8 @@ import json
 from pathlib import Path
 import tempfile
 import unittest
+import os
+import subprocess
 from unittest.mock import patch
 
 spec = importlib.util.spec_from_file_location('gtk_buttons', Path(__file__).parents[1] / 'gtk-window-buttons.py')
@@ -22,6 +24,47 @@ class GtkButtonsTests(unittest.TestCase):
         self.reload = patch.object(module, 'reload_bridge')
         self.reload.start()
         self.addCleanup(self.reload.stop)
+
+    def test_module_install_upgrade_and_restore(self):
+        binary = self.config / 'libkos-gtk-window-controls.so'
+        binary.touch()
+        ini = self.config / 'gtk-3.0/settings.ini'
+        ini.parent.mkdir()
+        original = '[Settings]\ngtk-modules=existing-module\ngtk-decoration-layout=:close\n'
+        ini.write_text(original)
+        with patch.object(module, 'LAYOUT', 'close,minimize,maximize:'):
+            module.install(self.config)  # Previous release: left layout and no module.
+        state_path = self.config/'kos/gtk-buttons-state.json'
+        state = json.loads(state_path.read_text())
+        state.pop('gsettings_installed', None)
+        module.json_write(state_path, state)
+        module.install(self.config, gtk3_module=str(binary))
+        module.install(self.config, gtk3_module=str(binary))
+        self.assertEqual(ini.read_text().count(str(binary)), 1)
+        startup = self.config/'plasma-workspace/env/kos-gtk-window-controls.sh'
+        self.assertTrue(startup.is_file())
+        env = dict(os.environ, GTK_MODULES='existing-module')
+        modules = subprocess.check_output(['sh', '-c', '. \"$1\"; . \"$1\"; printf %s \"$GTK_MODULES\"', 'sh', str(startup)], env=env, text=True)
+        self.assertEqual(modules.split(':'), ['existing-module', str(binary)])
+        self.assertIn('existing-module:', ini.read_text())
+        self.assertIn('gtk-decoration-layout=:maximize,minimize,close', ini.read_text())
+        module.restore_styles(self.config)
+        self.assertEqual(ini.read_text(), original)
+        self.assertFalse(startup.exists())
+
+    def test_module_restore_preserves_later_settings(self):
+        binary = self.config / 'module.so'
+        binary.touch()
+        module.install(self.config, gtk3_module=str(binary))
+        ini = self.config / 'gtk-3.0/settings.ini'
+        ini.write_text(ini.read_text().replace(str(binary), str(binary) + ':user-module') + 'gtk-font-name=Sans 16\n')
+        startup = self.config/'plasma-workspace/env/kos-gtk-window-controls.sh'
+        startup.write_text(startup.read_text() + '# personal startup note\n')
+        module.restore_styles(self.config)
+        self.assertIn('gtk-modules=user-module', ini.read_text())
+        self.assertIn('gtk-font-name=Sans 16', ini.read_text())
+        self.assertNotIn(str(binary), ini.read_text())
+        self.assertEqual(startup.read_text(), '# personal startup note\n')
 
     def test_restore_and_idempotence(self):
         css = self.config / 'gtk-3.0/gtk.css'

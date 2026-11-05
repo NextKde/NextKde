@@ -20,6 +20,8 @@
 #include <window.h>
 #include <QJsonArray>
 #include <QJsonDocument>
+#include <xcb/xcb.h>
+#include <cstring>
 
 namespace KOS
 {
@@ -97,6 +99,22 @@ BridgeEffect::BridgeEffect()
     if (KWin::input()) {
         KWin::input()->installInputEventFilter(m_input.get());
     }
+#if KWIN_BUILD_X11
+    const auto registerGtk = [this] {
+        m_gtkNativeAtom = KWin::effects->announceSupportProperty("_KOS_GTK_NATIVE_CONTROLS_V1", this);
+        for (auto *window : KWin::effects->stackingOrder()) refreshGtkNativeControls(window);
+    };
+    connect(KWin::effects, &KWin::EffectsHandler::xcbConnectionChanged, this, registerGtk);
+    connect(KWin::effects, &KWin::EffectsHandler::propertyNotify, this,
+        [this](KWin::EffectWindow *window, long atom) {
+            if (atom == m_gtkNativeAtom) refreshGtkNativeControls(window);
+        });
+    connect(KWin::effects, &KWin::EffectsHandler::windowAdded, this,
+        [this](KWin::EffectWindow *window) { refreshGtkNativeControls(window); });
+    connect(KWin::effects, &KWin::EffectsHandler::windowDeleted, this,
+        [this](KWin::EffectWindow *window) { m_gtkNativeWindows.remove(window); });
+    if (KWin::effects->xcbConnection()) registerGtk();
+#endif
     m_cooperative = std::make_unique<CooperativeControls>(
         KWin::waylandServer() ? KWin::waylandServer()->display() : nullptr,
         [this](KWin::EffectWindow *window) { return m_config->getAppConfig(windowQueryFor(window)); }, this);
@@ -236,7 +254,7 @@ QString BridgeEffect::debug(const QString &parameter) const
         const bool declared = m_cooperative && m_cooperative->configureWindow(window, config);
         auto entry = m_renderer->controlDiagnostics(window);
         entry.insert("declared", declared);
-        entry.insert("nativeControls", config.usesNativeGtkControls(window->hasDecoration()));
+        entry.insert("nativeControls", !window->hasDecoration() && (m_gtkNativeWindows.contains(window) || config.nativeGtkControls));
         entry.insert("windowClass", window->windowClass());
         entry.insert("decorated", window->hasDecoration());
         auto *decoration = window->window()->decoration();
@@ -402,6 +420,35 @@ bool BridgeEffect::drawSharedWindow(const KWin::RenderTarget &target,
     return result;
 }
 
+void BridgeEffect::refreshGtkNativeControls(KWin::EffectWindow *window)
+{
+#if KWIN_BUILD_X11
+    if (!window) return;
+    bool native = false;
+    auto *connection = KWin::effects->xcbConnection();
+    if (connection && m_gtkNativeAtom && window->windowId()) {
+        const auto cookie = xcb_get_property(connection, false, window->windowId(),
+            m_gtkNativeAtom, XCB_ATOM_CARDINAL, 0, 1);
+        auto *reply = xcb_get_property_reply(connection, cookie, nullptr);
+        if (reply && reply->type == XCB_ATOM_CARDINAL && reply->format == 32
+            && reply->value_len == 1 && reply->bytes_after == 0) {
+            uint32_t value = 0;
+            std::memcpy(&value, xcb_get_property_value(reply), sizeof(value));
+            native = value == 1;
+        }
+        free(reply);
+    }
+    const bool previous = m_gtkNativeWindows.contains(window);
+    if (native) m_gtkNativeWindows.insert(window); else m_gtkNativeWindows.remove(window);
+    if (previous != native) {
+        m_input->forgetWindow(window);
+        m_renderer->forget(window);
+        m_continuousClip->invalidate(window);
+        window->addRepaintFull();
+    }
+#endif
+}
+
 void BridgeEffect::paintButtons(const KWin::RenderTarget &renderTarget,
     const KWin::RenderViewport &viewport, KWin::EffectWindow *window,
     const KWin::Region &deviceRegion, const KWin::WindowPaintData &data, bool sourceCapture)
@@ -448,7 +495,8 @@ void BridgeEffect::paintButtons(const KWin::RenderTarget &renderTarget,
     // to know what an effect window is.
     AppConfig config = m_config->getAppConfig(windowQueryFor(window));
     if (m_cooperative) m_cooperative->configureWindow(window, config);
-    if (!config.showButtons || config.usesNativeGtkControls(window->hasDecoration())) {
+    if (!config.showButtons || config.usesNativeGtkControls(window->hasDecoration())
+        || (!window->hasDecoration() && !config.cooperativeControls && m_gtkNativeWindows.contains(window))) {
         m_renderer->clearHits(window, sourceCapture);
         return;
     }

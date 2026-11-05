@@ -27,6 +27,8 @@ add_executable(kos-apps src/FlatpakAppsCli.cpp)
 target_link_libraries(kos-apps PRIVATE kos-flatpak-apps)
 install(TARGETS kos-apps RUNTIME DESTINATION bin)
 
+add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/../../shared/gtk/module ${CMAKE_CURRENT_BINARY_DIR}/gtk-module)
+
 # Embed the GTK adapter and assets: installed Settings must work without a checkout.
 qt_add_resources(KOS_GTK_RESOURCES ../../shared/gtk/integration.qrc)
 
@@ -55,6 +57,10 @@ qt_add_executable(kos-settings
     ../../platform/src/daemon/PlatformDbus.cpp
     ../../platform/src/daemon/PowerProfilesBus.cpp
 )
+add_dependencies(kos-settings kos-gtk-window-controls)
+target_compile_definitions(kos-settings PRIVATE
+    KOS_GTK_MODULE_BUILD_PATH="$<TARGET_FILE:kos-gtk-window-controls>"
+    KOS_SETTINGS_BUILD_DIR="${CMAKE_CURRENT_BINARY_DIR}")
 target_include_directories(kos-settings PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/../../services/ai/include)
 
@@ -282,7 +288,7 @@ if(BUILD_TESTING)
         endif()
         add_test(NAME kos-settings.window-install
             COMMAND ${KOS_NODE_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/windows/installed.mjs
-                $<TARGET_FILE:kos-settings>)
+                $<TARGET_FILE:kos-settings> $<TARGET_FILE:kos-gtk-window-controls>)
         set_tests_properties(kos-settings.window-install PROPERTIES LABELS ui TIMEOUT 25)
         add_test(NAME kos-settings.wallpaper-colors
             COMMAND ${KOS_NODE_EXECUTABLE}
