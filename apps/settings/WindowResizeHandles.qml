@@ -3,7 +3,7 @@ import QtQuick.Window
 
 // Eight invisible edge/corner zones for a frameless window, delegating the
 // actual resize to the Wayland compositor via startSystemResize. Copied from
-// apps/listenfree/music_player_desktop/components/WindowResizeHandles.qml.
+// https://github.com/NextKde/ListenFree/blob/228cc261d7c626719c567afebf05e887d56810fc/music_player_desktop/components/WindowResizeHandles.qml.
 // The settings window is always frameless (see the flags note on the root
 // window in main.qml); handles are only for the windowed state.
 Item {

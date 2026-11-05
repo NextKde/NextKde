@@ -36,6 +36,7 @@ def session(output, glyph_mode):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--plugin', type=Path, help='Path to newly built kos_bridge.so')
+    parser.add_argument('--module', type=Path, help='GTK 3 module, required without --settings')
     parser.add_argument('--settings', type=Path, help='Built Settings binary: exercise the shared appearance switch')
     parser.add_argument('--glyph-mode', choices=['always', 'hover'], default='always')
     parser.add_argument('--output', type=Path, required=True, help='New directory for isolated configuration and logs')
@@ -44,6 +45,8 @@ def main():
     output = args.output.resolve()
     if args.session:
         return session(output, args.glyph_mode)
+    if not args.settings and (not args.module or not args.module.is_file()):
+        parser.error('--module or --settings is required for native GTK 3 rendering')
     if not args.plugin or not args.plugin.is_file():
         parser.error('--plugin must name the built kos_bridge.so')
     output.mkdir(parents=True, exist_ok=False)
@@ -64,8 +67,10 @@ def main():
     if args.settings:
         subprocess.run([str(args.settings.resolve()), '--install-window-defaults'], env=setup_env, check=True)
     else:
-        subprocess.run(tool + ['sync', '--enabled', 'true', '--glyph-mode', args.glyph_mode], env=setup_env, check=True)
-    for major in (3, 4):
+        subprocess.run(tool + ['sync', '--enabled', 'true', '--glyph-mode', args.glyph_mode, '--gtk3-module', str(args.module.resolve())], env=setup_env, check=True)
+    startup = config / 'plasma-workspace/env/kos-gtk-window-controls.sh'
+    env['GTK_MODULES'] = subprocess.check_output(['sh', '-c', '. "$1"; printf %s "${GTK_MODULES:-}"', 'sh', str(startup)], env=env, text=True)
+    for major in (4,):
         subprocess.run(tool + ['adapt', f'org.nextkde.Gtk{major}Controls'], env=setup_env, check=True)
     (config / 'kwinrc').write_text('[org.kde.kdecoration2]\nlibrary=kos_decoration\n'
                                   '[Plugins]\nkos_bridgeEnabled=true\n')

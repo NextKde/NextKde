@@ -50,7 +50,7 @@ int main(int argc, char **argv) {
     decoration.writeEntry("library", "third_party"); decoration.writeEntry("theme", "theme-a"); CHECK(config->sync());
     CHECK(settings.installDefaults());
     CHECK(settings.state()["decoration"]=="kos_decoration");
-    CHECK(gtkStyle().contains("#ff5f57"));
+    CHECK(gtkStyle().contains("kos_native_controls"));
     CHECK(gtkStyle().contains("personal GTK style"));
     CHECK(settings.setButtonGlyphMode("hover"));
     CHECK(gtkStyle().contains("opacity: 0"));
@@ -63,7 +63,7 @@ int main(int argc, char **argv) {
     CHECK(settings.installDefaults()); // upgrade must preserve opt-out
     CHECK(!settings.state()["enabled"].toBool());
     CHECK(settings.setTakeover(true));
-    CHECK(gtkStyle().contains("#ff5f57"));
+    CHECK(gtkStyle().contains("kos_native_controls"));
     // Repeated startup/upgrade sync keeps the choice and does not duplicate CSS.
     CHECK(settings.installDefaults());
     CHECK(gtkStyle().count("NextKde native GTK buttons: begin")==1);

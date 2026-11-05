@@ -181,25 +181,41 @@ Shallow source selection avoids historical process assets; an existing full clon
 
 ## Optional standalone applications
 
+Calendar, Calculator and Weather share the independent `NextKde/kos-apps`
+repository/version/Release with separate `org.nextks.<app>` packages and
+`apps/org.nextks.<app>` source directories. ListenFree stays independent. The
+source is published, but signed new-ID packages are not yet released. Old Flatpak
+IDs are reported as conflicts, never automatically renamed, removed or migrated.
+
 ```sh
 ./tools/kosctl install apps
-```
-
-Installs Calendar, Calculator, Todo and Weather into `~/.local` by default. Requires Qt 6.5+,
-compatible KF6 and Go 1.26+; it checks selected dependencies without sudo package installation.
-No ListenFree/SDK build or audio association migration occurs. Even an old enabled CMake cache
-is reset to OFF. Apps installation leaves core Settings/runtime QML untouched and works without core.
-
-```sh
+./tools/kosctl install apps --app calendar
 ./tools/kosctl install apps --with-listenfree
+./tools/kosctl install apps check-update --app weather
 ```
 
-Explicit audio opt-in adds Qt 6.10+ and the [ListenFree dependencies](../apps/listenfree/packaging/linux/README.md),
-prepares its SDK, registers it and migrates legacy Music. `KOS_LISTENFREE_SDK` can select an existing
-SDK only when opting in. `apps-dev`/`apps-release` select the standard four. Legacy Music is no
-longer built; standard upgrades preserve an existing player, library and audio associations.
+The dispatcher defaults to `kos-apps`, the same user-Flatpak backend as Settings.
+Default selection is Calendar (including tasks), Calculator and Weather; ListenFree
+requires explicit selection. Mutations require terminal confirmation or `--yes`.
+The route uses signed GitHub Release bundles, with no hosted NextKde app source.
+The local core publisher policy now includes the dedicated release public key,
+but runtime trust approval and signed Releases are still pending, so new
+installations/updates remain unavailable. No online software source is added and no
+source-build fallback occurs. Status and uninstall support an unambiguous user
+Flatpak; normal uninstall preserves app data. Settings discovers GitHub bundle
+updates; Discover is not promised to discover them. Runtime sources are separately
+configured/approved. Libflatpak may create a local URL-less bundle origin record.
+
+Explicit `--backend=source` retains legacy/developer source Releases and local
+builds; these are not Discover-managed packages. Build dependencies and custom
+SDK/video builds are documented by each independent repository, including
+[ListenFree](https://github.com/NextKde/ListenFree). Root application presets and
+ON build switches are no longer supported. Neither backend automatically migrates
+legacy players or personal data.
+Use `update`, `status`, `check-update` or `uninstall` through the same app dispatcher.
 Calculator currency conversion uses a dated offline reference, not live rates.
-See [apps](../apps/README.md) for per-app details.
+See [apps](../apps/README.md) for repository ownership and lifecycle usage.
+
 
 ## Desktop takeover and optional lockscreen
 

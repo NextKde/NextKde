@@ -69,7 +69,7 @@ def step(index=0):
                         buttons[kind] = widget
         if index == 0:
             check(set(buttons) == {'close', 'minimize', 'maximize'}, 'three native controls')
-            check(Gtk.Settings.get_default().get_property('gtk-decoration-layout') == 'close,minimize,maximize:', 'installed layout')
+            check(Gtk.Settings.get_default().get_property('gtk-decoration-layout') == ':maximize,minimize,close', 'installed layout')
             if len(buttons) != 3:
                 raise RuntimeError('Missing native controls')
             print(json.dumps({'button_sizes': {name: [button.get_allocated_width(), button.get_allocated_height()]
@@ -77,9 +77,16 @@ def step(index=0):
             if major == 3:
                 expected = {'close': (255, 95, 87), 'minimize': (254, 188, 46), 'maximize': (40, 200, 64)}
                 for name, button in buttons.items():
-                    color = button.get_style_context().get_background_color(Gtk.StateFlags.NORMAL)
-                    rgb = tuple(round(component * 255) for component in (color.red, color.green, color.blue))
-                    check(rgb == expected[name], f'{name} native color')
+                    import cairo
+                    import io
+                    from PIL import Image
+                    window.check_resize()
+                    surface = cairo.ImageSurface(cairo.FORMAT_ARGB32, button.get_allocated_width(), button.get_allocated_height())
+                    button.draw(cairo.Context(surface))
+                    buffer = io.BytesIO()
+                    surface.write_to_png(buffer)
+                    pixels = Image.open(io.BytesIO(buffer.getvalue())).convert('RGB')
+                    check(any(pixel == expected[name] for pixel in pixels.getdata()), f'{name} native color')
                     icon = next(child for child in descendants(button) if isinstance(child, Gtk.Image))
                     # Widget.opacity is an independent API property; CSS opacity
                     # must be read from the image's style context.
