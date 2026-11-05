@@ -94,9 +94,14 @@ manifest 不是完整的最终权限清单。本次开发构建所用 KDE 6.11 r
 `release-materials.tar.gz`，保留嵌套补丁路径；归档不递归包含自身。旧源码协议的 `app-release.json`
 也由原有准备器按同一 revision 的 GitHub codeload 原始字节生成，避免新版成为 latest 后破坏源码入口。
 
-这套新增脚本尚未完成实际签名出包，不代表已生成可信发行产物。发行时要保留完整目录及相对路径，
-不能只上传应用包而丢掉源码／补丁／构建材料。Sources 包不是应用运行依赖，Settings 不会安装它。
-它也不自动提供外部 SDK/runtime 的对应源码；完整性、实际链接配置及各组件许可／告知义务仍须维护者审核。
+截至 2026-11-05，这套脚本已从同一受审源码 `ee0175f4` 准备 Calendar、Calculator、Weather 的签名
+应用／Sources 候选。专用 VM 已核验清单／材料签名、校验和与包身份；生产 `kos-apps` 能识别已安装
+commit 的签名，并在卸载后保留隔离资料哨兵。这些离线检查仅对相关进程使用带上游清理修复的
+libflatpak，未替换系统软件包。没有安装 runtime 或启动应用；真实版本升级、图形验收和稳定 Release 仍未完成。
+
+发行时要保留完整目录及相对路径，不能只上传应用包而丢掉源码／补丁／构建材料。
+Sources 包不是应用运行依赖，Settings 不会安装它。它也不自动提供外部 SDK/runtime 的对应源码；
+完整性、实际链接配置及各组件许可／告知义务仍须维护者审核。
 
 ### 不通过 Settings 安装
 
@@ -110,7 +115,7 @@ flatpak --user uninstall org.nextks.calculator
 ```
 
 更新重复“核验后安装新版 bundle”。没有在线 origin 时，`flatpak update`／Discover 不能自动发现 GitHub 新包。
-普通卸载不用 `--delete-data`。公钥、签名包和 runtime 策略就绪后仍需人工验收。
+普通卸载不用 `--delete-data`。公钥、同源签名候选和 runtime 策略已准备；完整 runtime／桌面体验与真实版本升级仍待验收。
 
 ## 各应用打包状态
 
