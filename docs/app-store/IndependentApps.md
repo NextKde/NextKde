@@ -151,11 +151,11 @@ public keys, signed bundles and approved runtime policy.
 
 The table below retains historical **old-ID** preparation. New `org.nextks.*`
 native builds and registered regressions run in hosted CI. At exact revision
-`03c92edd0b0c9f54013ba8c63ee1e591482eb928`, Calendar and Weather also completed
-KDE 6.11 SDK app/Sources exports in
+`03c92edd0b0c9f54013ba8c63ee1e591482eb928`, all three also completed KDE 6.11
+SDK app/Sources exports in
 [run 41945820505](https://github.com/NextKde/kos-apps/actions/runs/41945820505).
-Calculator SDK preparation is still pending. These unsigned candidates do not
-establish signing, sandbox lifecycle or production acceptance.
+These unsigned candidates do not establish signing, sandbox lifecycle or
+production acceptance.
 
 | App | Local preparation | Still required |
 | --- | --- | --- |
