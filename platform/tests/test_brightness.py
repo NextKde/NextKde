@@ -1,213 +1,176 @@
 #!/usr/bin/env python3
-"""Integration tests for kos-platform brightness IPC endpoints."""
-
+"""Brightness IPC regressions on a private bus with fake hardware only."""
 import json
 import os
-import shutil
+from pathlib import Path
 import socket
 import subprocess
 import sys
 import tempfile
 import time
-from pathlib import Path
 
-ROOT = Path(__file__).resolve().parents[2]
+if '--serve' in sys.argv:
+    import dbus
+    import dbus.service
+    from dbus.mainloop.glib import DBusGMainLoop
+    from gi.repository import GLib
+    DBusGMainLoop(set_as_default=True)
+    bus = dbus.SessionBus()
+    names = [dbus.service.BusName(name, bus) for name in
+             ('org.kde.ScreenBrightness', 'org.kde.Solid.PowerManagement')]
+    root = Path(os.environ['BRIGHTNESS_FIXTURE'])
+    def mode():
+        return (root / 'mode').read_text()
+    def record(*args):
+        with (root / 'trace').open('a') as f:
+            f.write(json.dumps(args) + '\n')
+    class Manager(dbus.service.Object):
+        @dbus.service.method('org.freedesktop.DBus.Properties', in_signature='ss', out_signature='v')
+        def Get(self, interface, prop):
+            assert interface == 'org.kde.ScreenBrightness' and prop == 'DisplaysDBusNames'
+            record('enumerate')
+            return dbus.Array([] if mode() in ('solid', 'legacy') else ['internal', 'external'], signature='s')
+    class Display(dbus.service.Object):
+        def __init__(self, ident):
+            super().__init__(bus, '/org/kde/ScreenBrightness/' + ident)
+            self.ident = ident
+        @dbus.service.method('org.freedesktop.DBus.Properties', in_signature='ss', out_signature='v')
+        def Get(self, interface, prop):
+            assert interface == 'org.kde.ScreenBrightness.Display' and prop == 'MaxBrightness'
+            record('maximum', self.ident)
+            return dbus.Int32(200 if self.ident == 'external' else 100)
+        @dbus.service.method('org.kde.ScreenBrightness.Display', in_signature='iu', out_signature='',
+                             async_callbacks=('done', 'failed'))
+        def SetBrightness(self, value, flags, done, failed):
+            record('set', self.ident, int(value))
+            state = mode()
+            if state == 'hang' and self.ident == 'external':
+                return
+            if state == 'fail-all' or (state == 'partial' and self.ident == 'external'):
+                failed(dbus.exceptions.DBusException('fixture failure', name='org.test.Failed'))
+                return
+            if state == 'delayed':
+                GLib.timeout_add(800, lambda: (done(), False)[1])
+            else:
+                done()
+    class Solid(dbus.service.Object):
+        @dbus.service.method('org.kde.Solid.PowerManagement.Actions.BrightnessControl', out_signature='i')
+        def brightnessMax(self):
+            record('solid-max')
+            return 0 if mode() == 'legacy' else 1000
+        @dbus.service.method('org.kde.Solid.PowerManagement.Actions.BrightnessControl', in_signature='i')
+        def setBrightness(self, value):
+            record('solid-set', int(value))
+    objects = [Manager(bus, '/org/kde/ScreenBrightness'), Display('internal'), Display('external'),
+               Solid(bus, '/org/kde/Solid/PowerManagement/Actions/BrightnessControl')]
+    (root / 'ready').touch()
+    GLib.MainLoop().run()
+    sys.exit()
 
+if '--session' not in sys.argv:
+    subprocess.run(['dbus-run-session', '--', sys.executable, __file__, sys.argv[1], '--session'], check=True)
+    sys.exit()
 
-def find_bin() -> Path:
-    env_bin = os.environ.get("KOS_PLATFORM_BIN")
-    if env_bin and Path(env_bin).is_file():
-        return Path(env_bin)
-    for candidate in [
-        ROOT / "build/platform/kos-platform",
-        ROOT / ".build/platform/kos-platform",
-        Path.home() / ".local/libexec/kos-platform",
-    ]:
-        if candidate.is_file() and os.access(candidate, os.X_OK):
-            return candidate
-    return ROOT / "build/platform/kos-platform"
-
-
-BIN_PATH = find_bin()
-
-
-def wait_for_socket(sock_path: Path, timeout: float = 5.0) -> None:
-    start = time.monotonic()
-    while time.monotonic() - start < timeout:
-        if sock_path.exists():
-            try:
-                with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as s:
-                    s.connect(str(sock_path))
-                    return
-            except (ConnectionRefusedError, FileNotFoundError):
-                pass
-        time.sleep(0.05)
-    raise TimeoutError(f"Socket {sock_path} did not become ready within {timeout}s")
-
-
-def send_ipc(sock_path: Path, req: dict) -> dict:
-    with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as s:
-        s.connect(str(sock_path))
-        payload = (json.dumps(req) + "\n").encode("utf-8")
-        s.sendall(payload)
-        data = bytearray()
-        while b"\n" not in data:
-            chunk = s.recv(4096)
-            if not chunk:
-                break
-            data.extend(chunk)
-        return json.loads(data.decode("utf-8").strip())
-
-
-def test_brightness_ipc() -> None:
-    if not BIN_PATH.is_file():
-        # Try building if in dev tree
-        build_dir = ROOT / "build"
-        if (build_dir / "CMakeCache.txt").exists():
-            subprocess.run(["cmake", "--build", str(build_dir), "--target", "kos-platform", "-j4"], check=True)
-        elif not BIN_PATH.exists():
-            print("kos-platform binary not found, skipping IPC test")
-            return
-
-    temp_dir = Path(tempfile.mkdtemp(prefix="kos-brightness-test-"))
-    sock_path = temp_dir / "test-platform.sock"
-
-    env = os.environ.copy()
-    env["KOS_PLATFORM_SOCKET"] = str(sock_path)
-    env["KOS_PLATFORM_NO_TRAY"] = "1"
-
-    proc = subprocess.Popen(
-        [str(BIN_PATH), "daemon"],
-        env=env,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
-    )
-
-    try:
-        wait_for_socket(sock_path)
-
-        # 1. Test display.brightness.get
-        get_req = {
-            "version": 1,
-            "requestId": "req-bright-get-1",
-            "operation": "display.brightness.get",
-            "payload": {},
-        }
-        res_get = send_ipc(sock_path, get_req)
-        assert res_get.get("ok") is True, f"display.brightness.get failed: {res_get}"
-        assert res_get.get("requestId") == "req-bright-get-1"
-        result = res_get.get("result", {})
-        assert "available" in result, f"Expected 'available' key in result: {result}"
-        print(f"display.brightness.get result: {result}")
-
-        if result.get("available"):
-            assert "percent" in result
-            assert 0 <= result["percent"] <= 100
-            assert "device" in result
-            orig_percent = result["percent"]
-
-            # 2. Test display.brightness.set via payload
-            target_percent = 85 if orig_percent != 85 else 90
-            set_req = {
-                "version": 1,
-                "requestId": "req-bright-set-1",
-                "operation": "display.brightness.set",
-                "payload": {"percent": target_percent},
-            }
-            res_set = send_ipc(sock_path, set_req)
-            assert res_set.get("ok") is True, f"display.brightness.set failed: {res_set}"
-            assert res_set.get("result", {}).get("percent") == target_percent
-
-            # 3. Test display.brightness.set top-level fallback parameter
-            restore_req = {
-                "version": 1,
-                "requestId": "req-bright-set-2",
-                "operation": "display.brightness.set",
-                "percent": orig_percent,
-            }
-            res_restore = send_ipc(sock_path, restore_req)
-            assert res_restore.get("ok") is True, f"display.brightness.set restore failed: {res_restore}"
-            assert res_restore.get("result", {}).get("percent") == orig_percent
-            print(f"display.brightness.set verified and restored to {orig_percent}%")
-
-            # 4. Test bounds clamping (<0 and >100)
-            clamp_low_req = {
-                "version": 1,
-                "requestId": "req-clamp-low",
-                "operation": "display.brightness.set",
-                "payload": {"percent": -20},
-            }
-            res_low = send_ipc(sock_path, clamp_low_req)
-            assert res_low.get("ok") is True
-            assert res_low.get("result", {}).get("percent") == 0
-
-            clamp_high_req = {
-                "version": 1,
-                "requestId": "req-clamp-high",
-                "operation": "display.brightness.set",
-                "payload": {"percent": 150},
-            }
-            res_high = send_ipc(sock_path, clamp_high_req)
-            assert res_high.get("ok") is True
-            assert res_high.get("result", {}).get("percent") == 100
-
-            # Restore original
-            send_ipc(sock_path, {"version": 1, "requestId": "req-restore-final", "operation": "display.brightness.set", "payload": {"percent": orig_percent}})
-            print("bounds clamping verified")
-
-    finally:
-        proc.terminate()
+with tempfile.TemporaryDirectory(prefix='kos-brightness-', dir='/tmp') as directory:
+    root = Path(directory)
+    for name in ('runtime', 'config', 'state', 'bin'):
+        (root / name).mkdir(mode=0o700)
+    (root / 'mode').write_text('normal')
+    (root / 'trace').touch()
+    stub = root / 'bin/brightnessctl'
+    stub.write_text('#!/bin/sh\nprintf "legacy\\n" >> "$BRIGHTNESS_FIXTURE/legacy"\n')
+    stub.chmod(0o700)
+    env = dict(os.environ, BRIGHTNESS_FIXTURE=str(root), HOME=str(root),
+               XDG_RUNTIME_DIR=str(root / 'runtime'), XDG_CONFIG_HOME=str(root / 'config'),
+               XDG_STATE_HOME=str(root / 'state'), KOS_PLATFORM_SOCKET=str(root / 'runtime/socket'),
+               PATH=str(root / 'bin') + os.pathsep + os.environ['PATH'],
+               QT_QPA_PLATFORM='offscreen', DISPLAY='', WAYLAND_DISPLAY='',
+               DBUS_SYSTEM_BUS_ADDRESS=os.environ['DBUS_SESSION_BUS_ADDRESS'])
+    processes = []
+    with (root / 'log').open('w+') as log:
+        def wait_for(predicate):
+            deadline = time.monotonic() + 15
+            while not predicate():
+                if time.monotonic() >= deadline or any(p.poll() is not None for p in processes):
+                    log.seek(0)
+                    raise AssertionError(log.read())
+                time.sleep(.01)
+        def trace():
+            return [json.loads(line) for line in (root / 'trace').read_text().splitlines()]
+        def scenario(name):
+            (root / 'mode').write_text(name)
+            (root / 'trace').write_text('')
         try:
-            proc.wait(timeout=3.0)
-        except subprocess.TimeoutExpired:
-            proc.kill()
-            proc.wait()
-        shutil.rmtree(temp_dir, ignore_errors=True)
-
-
-def test_seat1_ipc() -> None:
-    if not BIN_PATH.is_file():
-        return
-
-    temp_dir = Path(tempfile.mkdtemp(prefix="kos-brightness-seat1-"))
-    sock_path = temp_dir / "test-platform-seat1.sock"
-
-    env = os.environ.copy()
-    env["KOS_PLATFORM_SOCKET"] = str(sock_path)
-    env["KOS_PLATFORM_NO_TRAY"] = "1"
-    env["XDG_SEAT"] = "seat1"
-
-    proc = subprocess.Popen(
-        [str(BIN_PATH), "daemon"],
-        env=env,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
-    )
-
-    try:
-        wait_for_socket(sock_path)
-        get_req = {
-            "version": 1,
-            "requestId": "req-seat1-get",
-            "operation": "display.brightness.get",
-            "payload": {},
-        }
-        res_get = send_ipc(sock_path, get_req)
-        assert res_get.get("ok") is True
-        result = res_get.get("result", {})
-        assert "available" in result
-        print(f"seat1 display.brightness.get result: {result}")
-    finally:
-        proc.terminate()
-        try:
-            proc.wait(timeout=3.0)
-        except subprocess.TimeoutExpired:
-            proc.kill()
-            proc.wait()
-        shutil.rmtree(temp_dir, ignore_errors=True)
-
-
-if __name__ == "__main__":
-    test_brightness_ipc()
-    test_seat1_ipc()
-    print("all brightness ipc tests passed successfully")
+            processes.append(subprocess.Popen([sys.executable, __file__, '--serve'], env=env, stdout=log, stderr=log))
+            wait_for((root / 'ready').exists)
+            processes.append(subprocess.Popen([sys.argv[1], 'daemon'], env=env, stdout=log, stderr=log))
+            wait_for((root / 'runtime/socket').exists)
+            with socket.socket(socket.AF_UNIX) as client:
+                client.settimeout(10)
+                client.connect(str(root / 'runtime/socket'))
+                stream = client.makefile('r')
+                def send(ident, percent=60, display=None, top=False, op='display.brightness.set'):
+                    req = dict(version=1, requestId=ident, operation=op, payload={})
+                    (req if top else req['payload'])['percent'] = percent
+                    if display is not None: req['payload']['displayId'] = display
+                    client.sendall((json.dumps(req) + '\n').encode())
+                def receive(ident):
+                    while True:
+                        line = stream.readline()
+                        assert line, 'daemon disconnected'
+                        response = json.loads(line)
+                        if 'requestId' in response:
+                            assert response['requestId'] == ident, response
+                            return response
+                send('all')
+                assert receive('all')['ok']
+                assert sorted(trace()) == sorted([['enumerate'], ['maximum', 'internal'], ['maximum', 'external'],
+                                                  ['set', 'internal', 60], ['set', 'external', 120]])
+                scenario('normal')
+                send('single', display='external')
+                assert receive('single')['ok']
+                assert ['set', 'external', 120] in trace() and ['maximum', 'internal'] not in trace()
+                scenario('normal')
+                send('missing', display='missing')
+                assert not receive('missing')['ok']
+                assert trace() == [['enumerate']]
+                for percent, expected in ((-20, 0), (150, 100)):
+                    scenario('normal')
+                    send('clamp', percent, top=True)
+                    assert receive('clamp')['result']['percent'] == expected
+                    assert ['set', 'external', expected * 2] in trace()
+                for state, code in (('partial', 'brightness-partial-failure'),
+                                    ('fail-all', 'brightness-display-set-failed'),
+                                    ('hang', 'brightness-partial-failure')):
+                    scenario(state)
+                    send('failure')
+                    response = receive('failure')
+                    assert not response['ok'] and response['error']['code'] == code, response
+                    results = response['error']['details']['displays']
+                    assert len(results) == 2 and any(not r['ok'] for r in results)
+                    assert not any(row[0].startswith('solid') for row in trace())
+                    assert not (root / 'legacy').exists()
+                scenario('delayed')
+                send('slow')
+                wait_for(lambda: len([r for r in trace() if r[0] == 'set']) == 2)
+                send('fast', op='platform.ping')
+                assert receive('fast')['ok'], 'slow brightness blocked unrelated IPC'
+                assert receive('slow')['ok']
+                scenario('solid')
+                send('solid', 37)
+                assert receive('solid')['ok']
+                assert trace() == [['enumerate'], ['enumerate'], ['solid-max'], ['solid-set', 370]]
+                scenario('legacy')
+                send('legacy')
+                assert receive('legacy')['ok']
+                assert (root / 'legacy').read_text() == 'legacy\n'
+                assert ['solid-set', 600] not in trace()
+                print('Brightness: targeting, parallel writes, partial failure, timeout, fallbacks and clamping passed')
+        finally:
+            for process in reversed(processes):
+                process.terminate()
+                try:
+                    process.wait(timeout=5)
+                except subprocess.TimeoutExpired:
+                    process.kill()
+                    process.wait()

@@ -7,6 +7,9 @@
 #include <QDBusInterface>
 #include <QDBusMessage>
 #include <QDBusReply>
+#include <QDBusPendingCallWatcher>
+#include <QDBusPendingCall>
+#include <functional>
 #include <QDir>
 #include <QFile>
 #include <QFileInfo>
@@ -135,29 +138,156 @@ QJsonObject readKdeBrightness(QString *serviceNameOut = nullptr,
     return {{QStringLiteral("available"), false}};
 }
 
-bool setKdeDisplayBrightness(const QString &displayId, int percent)
-{
-    QString serviceName;
-    auto screenBrightness = openScreenBrightness(serviceName);
-    if (!screenBrightness)
-        return false;
-    const QStringList displayIds = screenBrightness->property("DisplaysDBusNames").toStringList();
-    if (!displayIds.contains(displayId))
-        return false;
-    QDBusInterface display(serviceName, screenBrightnessPath(displayId),
-                           QStringLiteral("org.kde.ScreenBrightness.Display"),
-                           QDBusConnection::sessionBus());
-    display.setTimeout(kDbusCallTimeoutMs);
-    if (!display.isValid())
-        return false;
-    const int maximum = display.property("MaxBrightness").toInt();
-    if (maximum <= 0)
-        return false;
-    const int target = qRound(qBound(0, percent, 100) * maximum / 100.0);
-    const QDBusMessage reply = display.call(QStringLiteral("SetBrightness"), target,
-                                            static_cast<uint>(0));
-    return reply.type() == QDBusMessage::ReplyMessage;
-}
+// One request owns its watchers. Discover once, then write displays in parallel;
+// no QDBusInterface construction/introspection or synchronous calls on this path.
+class BrightnessWrite final : public QObject {
+public:
+    using Done = std::function<void(bool, bool, QJsonObject, QString)>;
+    BrightnessWrite(QObject *owner, QString id, int percent, Done done)
+        : QObject(owner), m_id(std::move(id)), m_percent(percent), m_done(std::move(done)) {}
+
+    void start() { discover(0); }
+
+private:
+    void call(const QString &service, const QString &path, const QString &interface,
+              const QString &method, const QVariantList &args,
+              std::function<void(const QDBusMessage &)> done)
+    {
+        auto message = QDBusMessage::createMethodCall(service, path, interface, method);
+        message.setArguments(args);
+        auto *watcher = new QDBusPendingCallWatcher(
+            QDBusConnection::sessionBus().asyncCall(message, kDbusCallTimeoutMs), this);
+        connect(watcher, &QDBusPendingCallWatcher::finished, this,
+                [watcher, done = std::move(done)] {
+            const auto reply = watcher->reply();
+            watcher->deleteLater();
+            done(reply);
+        });
+    }
+
+    void property(const QString &service, const QString &path, const QString &interface,
+                  const QString &name, std::function<void(const QDBusMessage &)> done)
+    {
+        call(service, path, QStringLiteral("org.freedesktop.DBus.Properties"),
+             QStringLiteral("Get"), {interface, name}, std::move(done));
+    }
+
+    static QVariant value(const QDBusMessage &reply)
+    {
+        if (reply.type() != QDBusMessage::ReplyMessage || reply.arguments().isEmpty())
+            return {};
+        return unwrapDbusValue(reply.arguments().first());
+    }
+
+    void finish(bool handled, bool ok, QJsonObject result = {}, QString error = {})
+    {
+        m_done(handled, ok, result, error);
+        deleteLater();
+    }
+
+    void discover(int index)
+    {
+        const QStringList services{QStringLiteral("org.kde.ScreenBrightness"),
+                                   QStringLiteral("org.kde.Solid.PowerManagement")};
+        if (index == services.size()) {
+            if (!m_id.isEmpty())
+                finish(true, false, {}, QStringLiteral("brightness-display-set-failed"));
+            else
+                solid();
+            return;
+        }
+        const QString service = services.at(index);
+        property(service, QStringLiteral("/org/kde/ScreenBrightness"),
+                 QStringLiteral("org.kde.ScreenBrightness"), QStringLiteral("DisplaysDBusNames"),
+                 [this, service, index](const QDBusMessage &reply) {
+            QStringList ids = qdbus_cast<QStringList>(value(reply));
+            ids.removeDuplicates();
+            ids.removeIf([](const QString &id) {
+                static const QRegularExpression segment(QStringLiteral("^[A-Za-z0-9_]+$"));
+                return !segment.match(id).hasMatch();
+            });
+            if (ids.isEmpty()) {
+                discover(index + 1);
+                return;
+            }
+            if (!m_id.isEmpty()) {
+                if (!ids.contains(m_id)) {
+                    finish(true, false, {}, QStringLiteral("brightness-display-set-failed"));
+                    return;
+                }
+                ids = {m_id};
+            }
+            m_pending = ids.size();
+            for (const auto &id : ids)
+                writeDisplay(service, id);
+        });
+    }
+
+    void writeDisplay(const QString &service, const QString &id)
+    {
+        property(service, screenBrightnessPath(id), QStringLiteral("org.kde.ScreenBrightness.Display"),
+                 QStringLiteral("MaxBrightness"), [this, service, id](const QDBusMessage &reply) {
+            bool valid = false;
+            const int maximum = value(reply).toInt(&valid);
+            if (!valid || maximum <= 0) {
+                displayDone(id, false);
+                return;
+            }
+            const int target = qRound(m_percent * (maximum / 100.0));
+            call(service, screenBrightnessPath(id), QStringLiteral("org.kde.ScreenBrightness.Display"),
+                 QStringLiteral("SetBrightness"), {target, uint(0)},
+                 [this, id](const QDBusMessage &written) {
+                displayDone(id, written.type() == QDBusMessage::ReplyMessage);
+            });
+        });
+    }
+
+    void displayDone(const QString &id, bool ok)
+    {
+        m_results.append(QJsonObject{{QStringLiteral("displayId"), id}, {QStringLiteral("ok"), ok}});
+        if (ok) ++m_succeeded;
+        if (--m_pending != 0) return;
+        const bool all = m_succeeded == m_results.size();
+        QJsonObject result{{QStringLiteral("displays"), m_results}};
+        if (!m_id.isEmpty()) result.insert(QStringLiteral("displayId"), m_id);
+        if (all) result.insert(QStringLiteral("percent"), m_percent);
+        // An advertised display that fails is not replaced by a write to some
+        // other backend/device, even if every display failed.
+        finish(true, all, result, all ? QString() : m_succeeded > 0
+            ? QStringLiteral("brightness-partial-failure")
+            : QStringLiteral("brightness-display-set-failed"));
+    }
+
+    void solid()
+    {
+        const QString service = QStringLiteral("org.kde.Solid.PowerManagement");
+        const QString path = QStringLiteral("/org/kde/Solid/PowerManagement/Actions/BrightnessControl");
+        const QString interface = QStringLiteral("org.kde.Solid.PowerManagement.Actions.BrightnessControl");
+        call(service, path, interface, QStringLiteral("brightnessMax"), {},
+             [this, service, path, interface](const QDBusMessage &reply) {
+            bool valid = false;
+            const int maximum = value(reply).toInt(&valid);
+            if (!valid || maximum <= 0) {
+                finish(false, false); // No KDE backend: permit the legacy fallback.
+                return;
+            }
+            const int target = qRound(m_percent * (maximum / 100.0));
+            call(service, path, interface, QStringLiteral("setBrightness"), {target},
+                 [this](const QDBusMessage &written) {
+                const bool ok = written.type() == QDBusMessage::ReplyMessage;
+                finish(true, ok, ok ? QJsonObject{{QStringLiteral("percent"), m_percent}} : QJsonObject{},
+                       ok ? QString() : QStringLiteral("brightness-set-failed"));
+            });
+        });
+    }
+
+    QString m_id;
+    int m_percent;
+    Done m_done;
+    int m_pending = 0;
+    int m_succeeded = 0;
+    QJsonArray m_results;
+};
 
 QJsonObject readSysfsBrightness()
 {
@@ -182,39 +312,6 @@ QJsonObject readSysfsBrightness()
                            {QStringLiteral("maximum"), maximum}};
     }
     return QJsonObject{{QStringLiteral("available"), false}};
-}
-
-bool setKdeBrightness(int percent)
-{
-    bool success = false;
-    QString serviceName;
-    auto screenBrightness = openScreenBrightness(serviceName);
-    if (screenBrightness) {
-        const QStringList displayIds = screenBrightness->property("DisplaysDBusNames").toStringList();
-        for (const QString &d : displayIds) {
-            if (d.isEmpty() || d.contains(QLatin1Char('/')))
-                continue;
-            if (setKdeDisplayBrightness(d, percent))
-                success = true;
-        }
-    }
-
-    QDBusInterface kde(QStringLiteral("org.kde.Solid.PowerManagement"),
-                       QStringLiteral("/org/kde/Solid/PowerManagement/Actions/BrightnessControl"),
-                       QStringLiteral("org.kde.Solid.PowerManagement.Actions.BrightnessControl"),
-                       QDBusConnection::sessionBus());
-    kde.setTimeout(kDbusCallTimeoutMs);
-    if (kde.isValid()) {
-        const QDBusReply<int> maxReply = kde.call(QStringLiteral("brightnessMax"));
-        if (maxReply.isValid() && maxReply.value() > 0) {
-            const int maximum = maxReply.value();
-            const int targetVal = qRound(qBound(0, percent, 100) * maximum / 100.0);
-            const QDBusMessage reply = kde.call(QStringLiteral("setBrightness"), targetVal);
-            if (reply.type() == QDBusMessage::ReplyMessage)
-                success = true;
-        }
-    }
-    return success;
 }
 
 QJsonObject parseBrightness(const QByteArray &output, int exitCode)
@@ -463,48 +560,46 @@ bool PlatformServer::handleDisplayOperation(QLocalSocket *socket, const QJsonObj
             percent = request.value(QStringLiteral("percent")).toInt();
         const int value = qBound(0, percent, 100);
         const QString displayId = payload.value(QStringLiteral("displayId")).toString();
-        if (!displayId.isEmpty()) {
-            if (!setKdeDisplayBrightness(displayId, value)) {
-                respond(socket, request, false, {}, QStringLiteral("brightness-display-set-failed"),
-                        QStringLiteral("无法设置指定显示器亮度"), true);
-                return true;
+        const QPointer<QLocalSocket> guarded(socket);
+        auto *write = new BrightnessWrite(this, displayId, value,
+            [this, guarded, request, value](bool handled, bool ok, QJsonObject result, QString error) {
+            invalidateReplies(QStringLiteral("display.brightness."));
+            if (handled) {
+                respond(guarded.data(), request, ok, result, error,
+                        ok ? QString() : QStringLiteral("部分或全部显示器亮度设置失败"), !ok, result);
+                return;
             }
-            respond(socket, request, true, {
-                {QStringLiteral("displayId"), displayId},
-                {QStringLiteral("percent"), value}
+            QLocalSocket *socket = guarded.data();
+            if (!socket) return;
+            const QString brightnessctl = QStandardPaths::findExecutable(QStringLiteral("brightnessctl"));
+            if (!brightnessctl.isEmpty()) {
+                runCommand(socket, request, brightnessctl,
+                           {QStringLiteral("set"), QStringLiteral("%1%").arg(value)});
+                return;
+            }
+            const QJsonObject backlight = readSysfsBrightness();
+            if (!backlight.value(QStringLiteral("available")).toBool()) {
+                respond(socket, request, false, {}, QStringLiteral("brightness-unavailable"),
+                        QStringLiteral("亮度控制不可用"), false);
+                return;
+            }
+            const quint32 rawValue = qRound(value * backlight.value(QStringLiteral("maximum")).toInt() / 100.0);
+            auto message = QDBusMessage::createMethodCall(QStringLiteral("org.freedesktop.login1"),
+                QStringLiteral("/org/freedesktop/login1/session/auto"),
+                QStringLiteral("org.freedesktop.login1.Session"), QStringLiteral("SetBrightness"));
+            message.setArguments({QStringLiteral("backlight"), backlight.value(QStringLiteral("device")).toString(), rawValue});
+            auto *watcher = new QDBusPendingCallWatcher(
+                QDBusConnection::systemBus().asyncCall(message, kDbusCallTimeoutMs), this);
+            connect(watcher, &QDBusPendingCallWatcher::finished, this, [this, guarded, request, value, watcher] {
+                const bool ok = watcher->reply().type() == QDBusMessage::ReplyMessage;
+                watcher->deleteLater();
+                invalidateReplies(QStringLiteral("display.brightness."));
+                respond(guarded.data(), request, ok, ok ? QJsonObject{{QStringLiteral("percent"), value}} : QJsonObject{},
+                        ok ? QString() : QStringLiteral("brightness-set-failed"),
+                        ok ? QString() : QStringLiteral("无法设置显示亮度"), !ok);
             });
-            return true;
-        }
-        if (setKdeBrightness(value)) {
-            respond(socket, request, true, QJsonObject{{QStringLiteral("percent"), value}});
-            return true;
-        }
-        const QString brightnessctl = QStandardPaths::findExecutable(QStringLiteral("brightnessctl"));
-        if (!brightnessctl.isEmpty()) {
-            runCommand(socket, request, brightnessctl,
-                       {QStringLiteral("set"), QStringLiteral("%1%").arg(value)});
-            return true;
-        }
-        const QJsonObject backlight = readSysfsBrightness();
-        if (!backlight.value(QStringLiteral("available")).toBool()) {
-            respond(socket, request, false, {}, QStringLiteral("brightness-unavailable"),
-                    QStringLiteral("亮度控制不可用"), false);
-            return true;
-        }
-        const quint32 rawValue = qRound(value * backlight.value(QStringLiteral("maximum")).toInt() / 100.0);
-        QDBusInterface session(QStringLiteral("org.freedesktop.login1"),
-                               QStringLiteral("/org/freedesktop/login1/session/auto"),
-                               QStringLiteral("org.freedesktop.login1.Session"),
-                               QDBusConnection::systemBus());
-        session.setTimeout(kDbusCallTimeoutMs);
-        const QDBusMessage reply = session.call(QStringLiteral("SetBrightness"),
-                                                QStringLiteral("backlight"),
-                                                backlight.value(QStringLiteral("device")).toString(), rawValue);
-        if (reply.type() == QDBusMessage::ErrorMessage)
-            respond(socket, request, false, {}, QStringLiteral("brightness-set-failed"),
-                    QStringLiteral("无法设置显示亮度"), true);
-        else
-            respond(socket, request, true, QJsonObject{{QStringLiteral("percent"), value}});
+        });
+        write->start();
         return true;
     }
     return false;
