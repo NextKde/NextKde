@@ -48,20 +48,21 @@ python3 tools/check-docs.py
 
 ## 可选应用
 
-核心安装不包含独立应用。在 VM 检查**真实默认入口**：
+应用开发及运行测试现由独立仓库负责：
+[NextKde/kos-apps](https://github.com/NextKde/kos-apps)（日历含待办和 PIM、计算器、天气）和
+[NextKde/ListenFree](https://github.com/NextKde/ListenFree)。
+根应用 preset、构建目标及已拆出的应用源码已移除；原应用开关设为 ON 会报错并提示迁移。
 
-```sh
-./tools/kosctl install apps
-cmake --preset apps-dev
-cmake --build --preset apps-dev
-ctest --preset apps-dev
-```
+`./tools/kosctl install apps` 默认使用 GitHub Release 签名 Flatpak 包；
+源码构建须显式 `--backend=source`。`--app APP` 选择单个应用，`--with-listenfree` 显式包含 ListenFree。
+`update`、`status`、`check-update`、`uninstall` 使用同一分发入口。
+尚无稳定 Release 时明确显示不可用。此路径不启停服务，不修改 MIME/默认应用关联。
+用法及所有权边界见[应用指南](../apps/README.zh-CN.md)。
 
-标准包为日历、计算器、待办和天气，旧 CMake 缓存即使启用 ListenFree，默认安装也必须关闭它。
-确认没有音频 SDK、MIME/旧播放器迁移或部分覆盖核心 Settings；另验无核心 Settings 的应用专用前缀。
-标准应用基线为 Qt 6.5+、匹配 KF6、Go 1.26+。
-`./tools/kosctl install apps --with-listenfree` 才启用音频 SDK 和[额外依赖](../apps/listenfree/packaging/linux/README.zh-CN.md)，包括 Qt 6.10+。
-单应用预设和注册见[应用指南](../apps/README.zh-CN.md)。
+核心 CI 用 `tools/tests/test_app_installer.py` 与 `tools/tests/test_app_release.py`
+替代原单仓库应用任务。应用偏好、PIM、日历语言及天气/计算器客户端测试归独立仓库；
+核心 Go 数据服务、Settings、Shell、锁屏和平台测试仍是必需门槛。
+
 
 ## 审阅清单
 

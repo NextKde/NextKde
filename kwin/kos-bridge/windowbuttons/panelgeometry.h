@@ -1,5 +1,7 @@
 #pragma once
 
+#include <QPainterPath>
+#include "../windowappearance/contour.h"
 #include <QPointF>
 #include <QRectF>
 #include <QSizeF>
@@ -152,5 +154,24 @@ PanelGeometry clamped(const PanelGeometry &);
 // arrive from JSON and from pointer motion and a hundredth of a pixel is not a
 // difference anyone can see.
 bool sameGeometry(const PanelGeometry &, const PanelGeometry &);
+
+// Actual touched edges, independent of the panel's pinning direction.
+inline constexpr int PanelFlushTop = 1;
+inline constexpr int PanelFlushLeft = 2;
+inline constexpr int PanelFlushRight = 4;
+int panelFlushMask(const PanelGeometry &);
+
+// Native scene contour. Continuous corners are applied to the complete source
+// after buttons are painted, so that path supplies zero native radii here.
+struct PanelWindowContour {
+    QSizeF size;
+    WindowAppearance::CornerRadii radii;
+};
+
+// Floating panels remain pills. Edge-attached panels cover the control box
+// with a rectangle, clipped only by the real window contour at that location.
+QPainterPath panelBackgroundPath(const QRectF &rect, const PanelGeometry &geometry,
+                                 const PanelWindowContour &window = {});
+QString panelBackgroundKey(const PanelGeometry &, const PanelWindowContour &);
 
 } // namespace KOS

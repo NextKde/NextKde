@@ -192,7 +192,7 @@ adjustment at once).
 | Key | Values | Meaning |
 | --- | --- | --- |
 | `showButtons` | bool | Disable the panel for this app |
-| `nativeGtkControls` | bool | Use qualified native GTK CSD controls; defaults to false. Suppresses painting and input interception only without a server-side decoration. Native KOS SSD uses decoration buttons. See [GTK integration](../../docs/GtkWindowButtons.md) |
+| `nativeGtkControls` | bool | Legacy manual qualification for native GTK CSD controls; defaults to false. Standard GTK 3 controls declare ownership automatically through the installed GTK module. Suppresses painting and input interception only without a server-side decoration. Native KOS SSD uses decoration buttons. See [GTK integration](../../docs/GtkWindowButtons.md) |
 | `position` | `left` / `right` | Which edge the panel is pinned to. Anything else falls back to `right`, the layout these applications follow |
 | `offset` | `{ "x": n, "y": n }` | Distance in logical pixels from that edge to the panel's outer edge (`x`), and from the window's top to the panel's top (`y`) |
 | `buttonSize` | number | Traffic light diameter |

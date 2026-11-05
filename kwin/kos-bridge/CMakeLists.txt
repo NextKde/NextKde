@@ -54,6 +54,7 @@ add_library(kos_bridge MODULE
 
 target_link_libraries(kos_bridge PRIVATE
     Wayland::Server
+    xcb
     Qt6::Core
     Qt6::DBus
     KF6::ConfigCore
@@ -100,6 +101,7 @@ if(KOS_BRIDGE_BUILD_PREVIEW)
         preview/glyph_preview.cpp
         windowbuttons/buttonglyph.cpp
         windowbuttons/panelgeometry.cpp
+        windowappearance/contour.cpp
     )
     # Qt6::Gui and nothing else: no KWin, no KF6, no DBus. If this target ever
     # needs one of those, the light drawing has picked up a dependency it should
@@ -130,6 +132,7 @@ if(KOS_BRIDGE_BUILD_TESTS)
     add_executable(rules_test
         tests/rules_test.cpp
         windowbuttons/panelgeometry.cpp
+        windowappearance/contour.cpp
         windowbuttons/tilemenu.cpp
         windowbuttons/windowrules.cpp
         windowbuttons/buttonconfig.cpp

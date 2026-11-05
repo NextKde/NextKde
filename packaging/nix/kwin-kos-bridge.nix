@@ -4,6 +4,7 @@
   cmake,
   pkg-config,
   wayland,
+  libxcb,
   wayland-scanner,
   kdePackages,
   src,
@@ -25,6 +26,7 @@ stdenv.mkDerivation {
 
   buildInputs = [
     wayland
+    libxcb
     kdePackages.kwin
     kdePackages.qtbase
     kdePackages.qttools

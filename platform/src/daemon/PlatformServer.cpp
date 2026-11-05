@@ -286,15 +286,18 @@ bool PlatformServer::writeClientMessage(QLocalSocket *socket, const QJsonObject 
 void PlatformServer::respond(QLocalSocket *socket, const QJsonObject &request,
                               bool ok, const QJsonObject &result,
                               const QString &code, const QString &message,
-                              bool retryable)
+                              bool retryable, const QJsonObject &details)
 {
     QJsonObject response{{QStringLiteral("version"), kProtocolVersion},
                          {QStringLiteral("requestId"), requestId(request)},
                          {QStringLiteral("ok"), ok}};
     if (ok)
         response.insert(QStringLiteral("result"), result);
-    else
-        response.insert(QStringLiteral("error"), errorObject(code, message, retryable));
+    else {
+        auto error = errorObject(code, message, retryable);
+        if (!details.isEmpty()) error.insert(QStringLiteral("details"), details);
+        response.insert(QStringLiteral("error"), error);
+    }
     writeClientMessage(socket, response);
 }
 
@@ -533,6 +536,9 @@ void PlatformServer::handleRequest(QLocalSocket *socket, const QJsonObject &requ
             {QStringLiteral("ready"), true},
             {QStringLiteral("capabilities"), QJsonArray{
                 QStringLiteral("input.clipboard-anchor"),
+                QStringLiteral("application.widget-snapshot"),
+                QStringLiteral("application.widget-open"),
+                QStringLiteral("lockscreen.weather-publish"),
                 QStringLiteral("wallpaper.plasma.proxy"),
                 QStringLiteral("wallpaper.plasma.restore"),
                 QStringLiteral("wallpaper.preview.desktop"),

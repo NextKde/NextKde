@@ -712,6 +712,9 @@ Item {
                 desktopWidgetsVisible: ScreenLifecycle.outputAvailable
                     && ScreenLifecycle.activeScreen !== null,
                 desktopFilesReady: DesktopFilesService.ready,
+                barExpected: !shell.barIntegratedWithDock,
+                barVisible: desktopBar.windowVisible,
+                dockVisible: desktopDock.windowVisible,
             })
         }
     }
@@ -765,10 +768,12 @@ Item {
     // can crash while cleaning that incomplete QQuickWindow scene. Wait for
     // the persisted integration choice before making the Bar visible.
     Bar {
+        id: desktopBar
         enabled: AppearanceConfigService.ready
             && !shell.barIntegratedWithDock
     }
     Dock {
+        id: desktopDock
         clockInInfoCarousel: shell.barIntegratedWithDock
             && ConfigService.position === "bottom"
         trailingAccessory: shell.barIntegratedWithDock

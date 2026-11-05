@@ -19,9 +19,10 @@ def test_entry(name, label, **properties):
 class InventoryTests(unittest.TestCase):
     def setUp(self):
         self.entries = [test_entry("data", "data"), test_entry("logic", "logic"),
-                        test_entry("widget", "widgets"), test_entry("ui", "headless")]
+                        test_entry("widget", "widgets"), test_entry("installed", "installed"),
+                        test_entry("ui", "headless")]
         self.required = {"data-platform": ["data"], "logic": ["logic"],
-                         "widgets": ["widget"], "headless": ["ui"]}
+                         "widgets": ["widget"], "installed": ["installed"], "headless": ["ui"]}
 
     def test_missing_registration_and_changed_label(self):
         self.entries.pop()
@@ -82,6 +83,11 @@ class InventoryTests(unittest.TestCase):
             directory = Path(temporary)
             errors = ci.results(report, directory)[1]
             self.assertIn("No result in widgets: widget", errors)
+
+    def test_installed_startup_cannot_silently_disappear(self):
+        self.entries = [entry for entry in self.entries if entry['name'] != 'installed']
+        errors = ci.inventory(self.entries, self.required)['errors']
+        self.assertIn('Required test not registered: installed', errors)
 
 
 if __name__ == "__main__":

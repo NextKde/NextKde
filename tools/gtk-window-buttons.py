@@ -9,6 +9,7 @@ import os
 from pathlib import Path
 import re
 import shutil
+import shlex
 import subprocess
 import tempfile
 import sys
@@ -18,6 +19,8 @@ import firefox_buttons
 ROOT = Path(__file__).resolve().parents[1]
 BEGIN = '/* NextKde native GTK buttons: begin */'
 END = '/* NextKde native GTK buttons: end */'
+ENV_BEGIN = '# NextKde native GTK module: begin'
+ENV_END = '# NextKde native GTK module: end'
 OWNER = 'nextkde-native-gtk'
 # Chromium consumes this GTK setting too. Keep original right-side layouts,
 # and use the normal right-side layout when no suitable original exists.
@@ -60,7 +63,13 @@ def strip_css(text):
     return re.sub(re.escape(BEGIN) + r'.*?' + re.escape(END) + r'\n?', '', text, flags=re.S)
 
 
-def layout_setting(text, replacement=None, *, write=False):
+def strip_env(text):
+    if text.count(ENV_BEGIN) != text.count(ENV_END) or text.count(ENV_BEGIN) > 1:
+        raise ValueError('Malformed NextKde GTK startup block')
+    return re.sub(re.escape(ENV_BEGIN) + r'.*?' + re.escape(ENV_END) + r'\n?', '', text, flags=re.S)
+
+
+def layout_setting(text, replacement=None, *, write=False, key="gtk-decoration-layout"):
     """Edit just this key in [Settings], preserving unrelated text and comments."""
     lines = text.splitlines(keepends=True)
     start = next((i for i, line in enumerate(lines) if line.strip() == '[Settings]'), None)
@@ -69,7 +78,7 @@ def layout_setting(text, replacement=None, *, write=False):
             return None if not write else text
         return text + ('\n' if text and not text.endswith('\n') else '') + '[Settings]\n' + replacement
     end = next((i for i in range(start + 1, len(lines)) if lines[i].lstrip().startswith('[')), len(lines))
-    found = [i for i in range(start + 1, end) if re.match(r'\s*gtk-decoration-layout\s*=', lines[i])]
+    found = [i for i in range(start + 1, end) if re.match(r'\s*' + re.escape(key) + r'\s*=', lines[i])]
     if len(found) > 1:
         raise ValueError('Duplicate gtk-decoration-layout keys')
     if not write:
@@ -90,7 +99,7 @@ def glyph_css(version, mode):
         return ''
     if version == '3.0':
         selectors = [f'headerbar button.titlebutton.{kind}' for kind in ('close', 'minimize', 'maximize')]
-        return ('\n' + ',\n'.join(s + ' image' for s in selectors) + ' { opacity: 0; }\n'
+        return ('\n@define-color kos_native_glyph transparent;\n' + ',\n'.join(s + ' image' for s in selectors) + ' { opacity: 0; }\n'
                 + ',\n'.join(s + ':hover image' for s in selectors) + ' { opacity: 1; }\n')
     selectors = [f'windowcontrols button.{kind}' for kind in ('close', 'minimize', 'maximize')]
     # Filter only the icon, not the image node's circular background.
@@ -121,7 +130,9 @@ def layout_for_install(config, state):
     return LAYOUT
 
 
-def install(config, glyph_mode='always'):
+def install(config, glyph_mode='always', gtk3_module=None):
+    if gtk3_module and not Path(gtk3_module).is_file():
+        raise ValueError(f'GTK detection module is missing: {gtk3_module}')
     state_path = config / 'kos/gtk-buttons-state.json'
     state = json_read(state_path, {'files': {}, 'gsettings': None})
     if shutil.which('gsettings') and state['gsettings'] is None:
@@ -145,11 +156,43 @@ def install(config, glyph_mode='always'):
         asset = (ROOT / f'shared/gtk/gtk-{version}.css').read_text() + glyph_css(version, glyph_mode)
         updated = clean + ('\n' if clean and not clean.endswith('\n') else '') + BEGIN + '\n' + asset + END + '\n'
         state['files'][str(ini_path)].setdefault('layout', layout_setting(ini))
-        updates.extend(((css_path, updated), (ini_path, layout_setting(ini, f'gtk-decoration-layout={installed_layout}\n', write=True))))
+        updated_ini = layout_setting(ini, f'gtk-decoration-layout={installed_layout}\n', write=True)
+        entry = state['files'][str(ini_path)]
+        if version == '3.0' and gtk3_module:
+            line = layout_setting(ini, key='gtk-modules')
+            modules = line.split('=', 1)[1].strip().split(':') if line else []
+            previous = entry.get('module')
+            modules = [m for m in modules if m and m != previous and m != str(gtk3_module)]
+            modules.append(str(gtk3_module))
+            updated_ini = layout_setting(updated_ini, 'gtk-modules=' + ':'.join(modules) + '\n', write=True, key='gtk-modules')
+            entry['module'] = str(gtk3_module)
+        updates.extend(((css_path, updated), (ini_path, updated_ini)))
+    if gtk3_module:
+        # Plasma sources these before launching applications. GtkSettings' module
+        # property alone is not a reliable startup loader on Wayland.
+        env_path = config / 'plasma-workspace/env/kos-gtk-window-controls.sh'
+        if env_path.is_symlink():
+            raise ValueError(f'{env_path} is managed by another configuration owner')
+        original = read(env_path)
+        state['files'].setdefault(str(env_path), {'original': original, 'existed': env_path.exists()})
+        quoted = shlex.quote(str(gtk3_module))
+        script = (ENV_BEGIN + '\n'
+                  'case ":${GTK_MODULES:-}:" in\n'
+                  '  *:' + quoted + ':*) ;;\n'
+                  '  *) export GTK_MODULES="${GTK_MODULES:+${GTK_MODULES}:}"' + quoted + ' ;;\n'
+                  'esac\n' + ENV_END + '\n')
+        clean = strip_env(original)
+        updates.append((env_path, clean + ('\n' if clean and not clean.endswith('\n') else '') + script))
     # Save recovery information before changing user settings.
     for path, updated in updates:
         state['files'][str(path)]['installed'] = updated
+    if shutil.which('gsettings') and state['gsettings'] is None:
+        try:
+            state['gsettings'] = gsettings('get', SCHEMA, KEY)
+        except subprocess.CalledProcessError:
+            pass  # settings.ini remains the fallback on desktops without this schema.
     state['installedLayout'] = installed_layout
+    state['gsettings_installed'] = repr(installed_layout)
     json_write(state_path, state)
     for path, updated in updates:
         atomic_write(path, updated)
@@ -198,10 +241,20 @@ def restore_styles(config):
                 path.unlink(missing_ok=True)
         elif path.name == 'gtk.css':
             atomic_write(path, strip_css(current))
-        elif layout_setting(current) == layout_setting(entry['installed']):
-            atomic_write(path, layout_setting(current, entry['layout'], write=True))
+        elif path.name == 'kos-gtk-window-controls.sh':
+            atomic_write(path, strip_env(current))
+        elif path.name == 'settings.ini':
+            installed_layout = layout_setting(entry['installed'])
+            if layout_setting(current) == installed_layout:
+                current = layout_setting(current, entry['layout'], write=True)
+            if entry.get('module'):
+                line = layout_setting(current, key='gtk-modules')
+                if line:
+                    modules = [m for m in line.split('=', 1)[1].strip().split(':') if m != entry['module']]
+                    current = layout_setting(current, 'gtk-modules=' + ':'.join(modules) + '\n' if any(modules) else None, write=True, key='gtk-modules')
+            atomic_write(path, current)
     if state['gsettings'] is not None and shutil.which('gsettings'):
-        if gsettings('get', SCHEMA, KEY) == repr(state.get('installedLayout', LEGACY_LAYOUT)):
+        if gsettings('get', SCHEMA, KEY) == state.get('gsettings_installed', repr(state.get('installedLayout', LEGACY_LAYOUT))):
             gsettings('set', SCHEMA, KEY, state['gsettings'])
     state_path.unlink()
 
@@ -230,6 +283,7 @@ def main():
     sub.add_parser('uninstall', help='Restore settings and remove managed adaptation rules')
     sync = sub.add_parser('sync', help='Internal: apply the shared WindowSettings switch and icon mode')
     sync.add_argument('--enabled', choices=['true', 'false'], required=True)
+    sync.add_argument('--gtk3-module')
     sync.add_argument('--glyph-mode', choices=['always', 'hover'], required=True)
     for name in ('adapt', 'fallback'):
         command = sub.add_parser(name)
@@ -240,7 +294,7 @@ def main():
     try:
         if args.action == 'sync':
             if args.enabled == 'true':
-                install(config, args.glyph_mode)
+                install(config, args.glyph_mode, args.gtk3_module)
             else:
                 restore_styles(config)
             firefox_buttons.sync(config, args.enabled == 'true', args.glyph_mode)

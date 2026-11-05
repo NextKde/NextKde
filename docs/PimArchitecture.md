@@ -1,7 +1,12 @@
 # Local PIM architecture
 
+PIM implementation and its build/runtime tests are owned by
+[NextKde/kos-apps](https://github.com/NextKde/kos-apps). This document
+records the versioned integration contract consumed by core widgets, not a core
+service build or installation path.
+
 Calendar and Reminders are two workspaces in one Qt Quick application, backed by one local service.
-They share one `PimClient` instance and the same detail/edit popovers. `kos-todo` is a compatibility launcher that execs Calendar; it has no UI or separate data store.
+They share one `PimClient` instance and the same detail/edit popovers. Tasks open through `kos-calendar --view reminders`; no separate Todo application or data store is needed.
 
 ```text
 KOS Calendar: Calendar / Reminders

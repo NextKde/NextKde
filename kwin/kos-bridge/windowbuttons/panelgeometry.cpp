@@ -343,4 +343,54 @@ bool sameGeometry(const PanelGeometry &a, const PanelGeometry &b)
         && close(effectivePanelPaddingX(a), effectivePanelPaddingX(b));
 }
 
+int panelFlushMask(const PanelGeometry &geometry)
+{
+    constexpr qreal FlushThreshold = 1.0;
+    const qreal topOffset = geometry.offset.y - (geometry.independentBackground ? geometry.coverage.top() : 0);
+    const qreal sideOffset = geometry.offset.x - (geometry.independentBackground
+        ? (geometry.position == ButtonPosition::Left ? geometry.coverage.left() : geometry.coverage.right()) : 0);
+    int mask = topOffset <= FlushThreshold ? PanelFlushTop : 0;
+    if (sideOffset <= FlushThreshold)
+        mask |= geometry.position == ButtonPosition::Left ? PanelFlushLeft : PanelFlushRight;
+    return mask;
+}
+
+QPainterPath panelBackgroundPath(const QRectF &rect, const PanelGeometry &geometry,
+                                 const PanelWindowContour &window)
+{
+    QPainterPath path;
+    if (rect.isEmpty())
+        return path;
+    if (panelFlushMask(geometry) == 0) {
+        const qreal r = geometry.independentBackground
+            ? std::min(qreal(4), rect.height() / 2.0) : std::min(rect.width(), rect.height()) / 2.0;
+        path.addRoundedRect(rect, r, r);
+    } else {
+        path.addRect(rect);
+    }
+    if (!window.size.isEmpty()) {
+        const QPointF origin = geometry.independentBackground
+            ? panelRectUnclipped(geometry, window.size).topLeft() : panelRect(geometry, window.size).topLeft();
+        const auto contour = WindowAppearance::contourPath(
+            QRectF(-origin, window.size), window.radii, 0.0);
+        path = path.intersected(contour);
+    }
+    return path;
+}
+
+QString panelBackgroundKey(const PanelGeometry &geometry, const PanelWindowContour &window)
+{
+    // Include the contour and its position relative to the panel: a change in
+    // window size, native radius, or subpixel offset can change the cutout.
+    const QPointF origin = geometry.independentBackground
+            ? panelRectUnclipped(geometry, window.size).topLeft() : panelRect(geometry, window.size).topLeft();
+    QString key = QString::number(panelFlushMask(geometry)) + QLatin1Char('_')
+        + QString::number(geometry.independentBackground);
+    for (qreal value : {origin.x(), origin.y(), window.size.width(), window.size.height(),
+                       window.radii.topLeft, window.radii.topRight,
+                       window.radii.bottomRight, window.radii.bottomLeft})
+        key += QLatin1Char('_') + QString::number(value, 'g', 17);
+    return key;
+}
+
 } // namespace KOS

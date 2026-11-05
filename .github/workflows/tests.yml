@@ -26,7 +26,7 @@ jobs:
       image: archlinux:base-devel
     steps:
       - name: Install fixture dependencies
-        run: pacman -Sy --noconfirm --needed git nodejs qt6-base qt6-declarative cmake ninja kconfig kio kservice dbus
+        run: pacman -Sy --noconfirm --needed git nodejs qt6-base qt6-declarative cmake ninja kconfig kio kservice dbus gtk3 wayland pkgconf flatpak ostree
       - uses: actions/checkout@v7
       - name: Run native target identity and publication regressions
         env:
@@ -101,6 +101,8 @@ jobs:
 
       - name: Test release selection without installing the desktop
         run: python3 -m unittest discover -s tools/tests -p 'test_*release*.py'
+      - name: Test Shell QML deployment with damaged source aliases
+        run: python3 tools/tests/test_shell_qml_deploy.py
       - name: Check KMusic catalogue preparation
         run: python3 -m unittest discover -s tools/tests -p 'test_kmusic_catalog.py'
       - name: Check project contracts and documentation
@@ -138,7 +140,7 @@ jobs:
       - name: Install build dependencies
         run: |
           pacman -S --noconfirm --needed \
-            cmake ninja gcc \
+            cmake ninja gcc gtk3 pkgconf flatpak ostree gnupg \
             qt6-base qt6-declarative qt6-wayland qt6-tools qt6-translations qt6-5compat \
             extra-cmake-modules wayland plasma-workspace libplasma kpackage \
             kwindowsystem kiconthemes kglobalaccel kio kconfig \
@@ -243,6 +245,15 @@ jobs:
             -L '^widgets$' \
             --output-log "$GITHUB_WORKSPACE/.build/tests/test-results/widgets.log" \
             --output-junit "$GITHUB_WORKSPACE/.build/tests/test-results/widgets.xml"
+
+      - name: Load deployed Shell trees on a private compositor
+        if: ${{ !cancelled() && steps.prepare.outcome == 'success' }}
+        run: |
+          mkdir -p .build/tests/test-results
+          ctest --test-dir .build/tests --output-on-failure --no-tests=error \
+            -L '^installed$' \
+            --output-log "$GITHUB_WORKSPACE/.build/tests/test-results/installed.log" \
+            --output-junit "$GITHUB_WORKSPACE/.build/tests/test-results/installed.xml"
 
       - name: Summarise actual test results
         if: always()
@@ -387,35 +398,13 @@ jobs:
   applications:
     name: Calendar Calculator Weather build and tests
     runs-on: ubuntu-24.04
-    timeout-minutes: 30
-    container: archlinux:base-devel
+    timeout-minutes: 5
     steps:
-      - name: Install git
-        run: pacman -Sy --noconfirm --needed git
       - uses: actions/checkout@v7
-      - name: Install application SDK
+      # App build/runtime suites belong to NextKde/kos-apps and
+      # NextKde/ListenFree. Core owns its shipped installer contract.
+      # These offline suites must exist; missing files are an error, not a skip.
+      - name: Check source installer ownership and release metadata
         run: |
-          pacman -S --noconfirm --needed cmake ninja gcc python nodejs go dbus \
-            qt6-base qt6-declarative qt6-tools qt6-translations qt6-wayland \
-            extra-cmake-modules kcalendarcore kwindowsystem kconfig
-      - name: Configure applications and tests
-        run: |
-          cmake --preset apps-release -B .build/applications \
-            -DBUILD_TESTING=ON -DKOS_BUILD_SPATIAL=OFF
-      - name: Build applications
-        run: cmake --build .build/applications --parallel "$(nproc)"
-      - name: Run application and data regressions
-        run: |
-          ctest --test-dir .build/applications --output-on-failure --no-tests=error \
-            -R '^(kos-(calendar|calculator|weather|todo)\.|kos-pim\.|kos-application\.|kos-language\.)' \
-            --output-junit "$GITHUB_WORKSPACE/.build/applications/results.xml"
-      - name: Upload application diagnostics
-        if: always()
-        uses: actions/upload-artifact@v7
-        with:
-          name: application-results
-          include-hidden-files: true
-          path: |
-            .build/applications/results.xml
-            .build/applications/Testing/Temporary/
-            .build/applications/CMakeFiles/CMakeConfigureLog.yaml
+          python3 tools/tests/test_app_installer.py
+          python3 tools/tests/test_app_release.py
