@@ -319,6 +319,20 @@ private slots:
             [] { return false; }, [](const QString&, int) {});
         QCOMPARE(downloaded.value("code").toString(), QString("INTEGRITY_FAILED"));
         QCOMPARE(server.requests, 4);
+        const auto path = temporary.filePath("application.flatpak");
+        QCOMPARE(FlatpakRelease::validateDownloaded("org.nextks.calculator", discovery, path,
+            [] { return false; }).value("code").toString(), QString("INTEGRITY_FAILED"));
+        auto changed = discovery;
+        changed["commit"] = QString(64, 'a');
+        QCOMPARE(FlatpakRelease::validateDownloaded("org.nextks.calculator", changed, path,
+            [] { return false; }).value("code").toString(), QString("INVALID_RELEASE"));
+        changed = discovery;
+        changed["signature"] = QByteArray("fake").toBase64();
+        QCOMPARE(FlatpakRelease::validateDownloaded("org.nextks.calculator", changed, path,
+            [] { return false; }).value("code").toString(), QString("FLATPAK_UNTRUSTED"));
+        QCOMPARE(FlatpakRelease::validateDownloaded("org.nextks.calculator", discovery, path,
+            [] { return true; }).value("code").toString(), QString("CANCELLED"));
+        QCOMPARE(server.requests, 4);
     }
     void invalidSignatureCannotReachDownload()
     {

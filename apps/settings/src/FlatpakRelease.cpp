@@ -332,6 +332,25 @@ QVariantMap discover(const QString& appId, const QString& arch, const Cancelled&
         return result;
     } catch (const Failure& failure) { return {{"code", failure.code}, {"message", failure.message}}; }
 }
+QVariantMap validateDownloaded(const QString& appId, const QVariantMap& discovery, const QString& path,
+    const Cancelled& cancelled)
+{
+    try {
+        const auto manifest = QByteArray::fromBase64(discovery.value("manifest").toByteArray());
+        const auto signature = QByteArray::fromBase64(discovery.value("signature").toByteArray());
+        if (!verify(appId, manifest, signature, cancelled)) fail("FLATPAK_UNTRUSTED", "Flatpak release signature validation failed before deployment.");
+        const auto signedData = parseManifest(appId, discovery.value("arch").toString(), manifest);
+        for (auto it = signedData.begin(); it != signedData.end(); ++it)
+            if (discovery.value(it.key()) != it.value()) fail("INVALID_RELEASE", "The selected release changed before deployment.");
+        QFile file(path);
+        if (!QDir::isAbsolutePath(path) || !file.open(QIODevice::ReadOnly)
+            || file.size() != signedData.value("size").toLongLong()) fail("INTEGRITY_FAILED", "Cannot read the complete downloaded bundle.");
+        QCryptographicHash hash(QCryptographicHash::Sha256);
+        while (!file.atEnd()) { checkCancelled(cancelled); hash.addData(file.read(128 * 1024)); if (file.error() != QFileDevice::NoError) fail("INTEGRITY_FAILED", "Cannot read complete Flatpak bundle."); }
+        if (QString::fromLatin1(hash.result().toHex()) != signedData.value("sha256").toString()) fail("INTEGRITY_FAILED", "Flatpak bundle digest does not match its signed release.");
+        return {};
+    } catch (const Failure& failure) { return {{"code", failure.code}, {"message", failure.message}}; }
+}
 QVariantMap download(const QString& appId, const QVariantMap& discovery, const QString& directory,
     const Cancelled& cancelled, const Progress& progress)
 {

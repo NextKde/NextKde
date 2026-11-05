@@ -70,14 +70,20 @@ runtime 专用策略于 2026-11-05 按[官方安装文档](https://docs.flathub.
 不运行事务、不改用户 Flatpak 安装。直接手动使用 Flatpak CLI 同样需要上游修复，不能靠省略
 认可公钥或签名校验规避崩溃。
 
+修改安装的事务在固定伴随 `kos-apps` 进程中执行，保留原有包／发布者／runtime／所有权检查。
+取消先请求正常终止，两秒后强制结束不响应的伴随进程；进程退出并复查真实库存前仍保持忙碌。
+这也覆盖 libflatpak 下载 runtime 元数据时未传递 GCancellable 的路径。中断不代表回滚，真实库存才是准数；
+伴随程序缺失、崩溃或返回损坏协议时报告 `RESULT_UNKNOWN`，不虚报部署成功。
+
 包的 app/ref/commit 必须与签名清单一致，禁止嵌入在线 origin 或 runtime-repo URL；显式向 libflatpak
 传入认可公钥，认证前后检查完整计划。目标必须是锁定 commit 的 INSTALL_BUNDLE，拒绝其他应用或卸载。
 runtime 安装／更新及复用的基础 runtime 要求单独认可且已配置的用户源，精确 HTTPS URL、commit／summary
 校验及全部有效主密钥指纹都要符合策略，不自动添加在线源。运行时仍须有分发渠道，例如独立认可的现有提供方。
 
 libflatpak 在事务 ready 前可能创建**无在线 URL 的本地 origin 记录并导入传入公钥**，拒绝／取消后可能留下，
-不假称会回滚；这不等于需要托管应用源。下载加部署六十分钟后请求协作式取消，不保证线程立刻退出。
-结束后始终复查实际 ref／commit，不承诺整笔事务或已部署 runtime 原子回滚。此路线尚未进行真实运行验收。
+不假称会回滚；这不等于需要托管应用源。下载加部署总时限为六十分钟，伴随事务进程按上述方式受监督。
+结束后始终复查实际 ref／commit，不承诺整笔事务或已部署 runtime 原子回滚。
+隔离 runtime-ready 事务结果见下文；交互式桌面验收仍未完成。
 
 manifest 不是完整的最终权限清单。本次开发构建所用 KDE 6.11 runtime 还继承了只读
 `xdg-config/kdeglobals`，以及 `com.canonical.AppMenu.Registrar`、`org.kde.kconfig.notify`、
@@ -97,7 +103,12 @@ manifest 不是完整的最终权限清单。本次开发构建所用 KDE 6.11 r
 截至 2026-11-05，这套脚本已从同一受审源码 `ee0175f4` 准备 Calendar、Calculator、Weather 的签名
 应用／Sources 候选。专用 VM 已核验清单／材料签名、校验和与包身份；生产 `kos-apps` 能识别已安装
 commit 的签名，并在卸载后保留隔离资料哨兵。这些离线检查仅对相关进程使用带上游清理修复的
-libflatpak，未替换系统软件包。没有安装 runtime 或启动应用；真实版本升级、图形验收和稳定 Release 仍未完成。
+libflatpak，未替换系统软件包。另一个隔离 runtime-ready 目录中，三应用均完成生产后端的签名发现／下载／安装、
+当前版本与重复操作检查、offscreen 沙箱启动、持续 503 后保留安装、卸载及资料／runtime 保留。
+发现使用进程内 TLS 夹具与真实发布者签名材料，不是真实已发布 Latest。Calculator、Weather 已通过外部
+Flatpak 卸载／定时库存刷新／重新安装；Calendar 在加入事务进程监督后也通过这条流程。
+通过的重跑不能解释先前传输超时。offscreen／portal 与可选 compositor 模块警告仍保留；
+真实版本升级、交互式图形验收和稳定 Release 仍未完成。
 
 发行时要保留完整目录及相对路径，不能只上传应用包而丢掉源码／补丁／构建材料。
 Sources 包不是应用运行依赖，Settings 不会安装它。它也不自动提供外部 SDK/runtime 的对应源码；

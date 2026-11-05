@@ -7,6 +7,7 @@
 #include <QElapsedTimer>
 #include <QFile>
 #include <memory>
+#include "FlatpakTransactionProcess.h"
 
 // Flatpak inventory and transactions never fall back to the source installer.
 class FlatpakApps final : public QObject {
@@ -28,7 +29,11 @@ signals:
     void changed();
     void operationFinished(const QString& appId, const QString& code, const QString& message);
 private:
+    struct Cancellation;
     friend class FlatpakCompatibilityTest;
+    friend int FlatpakTransactionProcess::helperMain();
+    static QVariantMap executeRemoval(const QVariantMap& request, const std::shared_ptr<Cancellation>& cancellation);
+    static QVariantMap executeDeployment(const QVariantMap& request, const std::shared_ptr<Cancellation>& cancellation);
     struct Inventory {
         QVariantMap apps;
         QString error;
@@ -37,7 +42,6 @@ private:
     bool remove(const QString& appId, bool retired);
     bool beginOperation(const QString& appId, const QString& action, int timeout);
     void reportProgress();
-    struct Cancellation;
     QFutureWatcher<Inventory> m_watcher;
     QFutureWatcher<QVariantMap> m_transaction;
     QTimer m_refreshTimer, m_deadline, m_transactionDeadline, m_progressTimer;
