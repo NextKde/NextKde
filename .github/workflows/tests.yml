@@ -100,6 +100,8 @@ jobs:
 
       - name: Test release selection without installing the desktop
         run: python3 -m unittest discover -s tools/tests -p 'test_*release*.py'
+      - name: Test Shell QML deployment with damaged source aliases
+        run: python3 tools/tests/test_shell_qml_deploy.py
       - name: Check KMusic catalogue preparation
         run: python3 -m unittest discover -s tools/tests -p 'test_kmusic_catalog.py'
       - name: Check project contracts and documentation
