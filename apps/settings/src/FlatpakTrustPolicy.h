@@ -15,7 +15,15 @@ struct Remote {
 // Each entry explicitly authorizes applications, runtimes, or both. Key rotation
 // requires reviewing every primary key accepted by the configured remote.
 // Runtime sources are independently reviewed; bundle apps need no hosted remote.
-inline constexpr std::array<Remote, 0> remotes{};
+// Reviewed 2026-11-05 against the official setup URL documented at
+// https://docs.flathub.org/docs/for-users/installation and its HTTPS
+// https://flathub.org/repo/flathub.flatpakrepo (redirects to dl.flathub.org).
+// Primary key expires 2027-06-14; signing subkeys are not policy identities.
+// Existing remote configuration must still verify commits and summaries, and
+// every imported primary key must match. This never adds a consumer remote.
+inline constexpr std::array remotes{
+    Remote{"https://dl.flathub.org/repo/", "6E5C05D979C76DAF93C081354184DD4D907A7CAE", false, true},
+};
 
 struct BundlePublisher {
     const char* appId;
