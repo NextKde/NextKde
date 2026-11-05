@@ -77,7 +77,13 @@ with tempfile.TemporaryDirectory(prefix='kos-menu-', dir='/tmp') as directory:
                     client.sendall((json.dumps(dict(version=1, requestId=ident, operation=op, payload=payload))+'\n').encode())
                 def receive():
                     while True:
-                        reply = json.loads(stream.readline())
+                        line = stream.readline()
+                        if not line:
+                            log.flush()
+                            log.seek(0)
+                            raise AssertionError('daemon disconnected; exits=' + str([p.poll() for p in processes])
+                                                 + '\ntrace: ' + trace.read_text() + '\n' + log.read())
+                        reply = json.loads(line)
                         if 'requestId' in reply:
                             return reply
                 send('root', 'appmenu.layout', id=0, depth=2)
