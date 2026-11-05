@@ -223,6 +223,9 @@ if(BUILD_TESTING)
             TIMEOUT 30)
     endif()
     if(KOS_PYTHON_EXECUTABLE AND DBUS_RUN_SESSION_EXECUTABLE)
+        add_test(NAME kos-platform.brightness
+            COMMAND ${KOS_PYTHON_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/test_brightness.py $<TARGET_FILE:kos-platform>)
+        set_tests_properties(kos-platform.brightness PROPERTIES LABELS platform TIMEOUT 40)
         add_test(NAME kos-platform.appmenu
             COMMAND ${KOS_PYTHON_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/test_appmenu.py $<TARGET_FILE:kos-platform>)
         set_tests_properties(kos-platform.appmenu PROPERTIES LABELS platform TIMEOUT 40)

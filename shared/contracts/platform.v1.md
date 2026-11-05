@@ -313,3 +313,17 @@ as `—` while UPower charge/state, available capacity, time and health continue
 to update. The independent Power settings page uses the same helper-or-D-Bus
 choice and observes system D-Bus profile changes on both names; it is
 available without a battery or running shell.
+
+### Brightness write outcomes
+
+`display.brightness.set` accepts `payload.percent` (clamped to 0–100) and an
+optional `payload.displayId`. The top-level `percent` is accepted for compatibility
+only when the payload omits it. Explicit display IDs never fall back to another
+backend/device. Without an ID, available KDE displays are written in parallel.
+Success includes `result.percent`; KDE multi-display writes additionally return
+`result.displays`, an array of `{displayId, ok}` outcomes. If some displays fail,
+`ok` is false with code `brightness-partial-failure`; if all fail, the code is
+`brightness-display-set-failed`. Those errors include the outcomes in
+`error.details.displays` and do not claim that the requested percent was applied
+universally. Legacy backend fallback occurs only when no KDE display is available,
+not after an advertised display fails. Solid is used before brightnessctl/logind.

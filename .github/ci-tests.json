@@ -1,6 +1,7 @@
 {
   "data-platform": [
     "kos-platform.appmenu",
+    "kos-platform.brightness",
     "kos-data-service.go",
     "kos-platform.ai-worker-client",
     "kos-platform.keep-awake",
