@@ -24,6 +24,9 @@ Current operation groups are:
 
 - `application.launch` (KDE-native desktop-entry launch; accepts a desktop ID
   and optional URLs, never an arbitrary command)
+- `application.widget-snapshot`, `application.widget-open` (fixed Calendar/Weather
+  identity-bound summaries and navigation; see [widget contract](../../docs/app-store/WidgetIntegration.md).
+  No arbitrary paths/commands; stale installation tokens fail without fallback.)
 - `clipboard.set`, `clipboard.read`, `clipboard.save-image`,
   `clipboard.history.watch-images`,
   `clipboard.history.list`, `clipboard.history.copy`,
@@ -80,10 +83,16 @@ Current operation groups are:
   capability, which is what keeps the Shell's spatial wallpaper switched off.)
 - `settings.open` (allow-listed KDE System Settings modules) and
   `settings.launch` (launch the `kos-settings` app with a fixed argv; the
-  only accepted payload field is `shellDir`, an optional absolute path that
-  must canonicalise to an existing directory and is exported to the child as
-  `KOS_SHELL_DIR` so a development Settings session reconnects to the Shell
-  that launched it; no caller-supplied arguments)
+  optional `shellDir` must canonicalise to an existing absolute directory and
+  is exported as `KOS_SHELL_DIR` so a development Settings session reconnects to
+  its Shell. Optional `app` is restricted to `calendar` or `weather`: navigate
+  an existing session-scoped window first, otherwise attempt one detached spawn,
+  then await its local navigation acknowledgement for at most 20 seconds.
+  Success returns `started:true,navigated:true`; failure reports
+  `settings-navigation-failed`. Acknowledgement means the loaded QML root
+  accepted the destination, not that rendering or installation succeeded.
+  Without `app`, success retains process-start-only semantics.
+  No arbitrary caller-supplied arguments are accepted.)
 - `state.read`, `state.write` (bounded read/write of UTF-8 state files under
   `$XDG_STATE_HOME/quickshell`; payload `{dir, file[, data]}` where `dir` is a
   relative sub-path -- or an absolute path that must stay under the state root
@@ -92,6 +101,30 @@ Current operation groups are:
   escapes are rejected); payloads are capped at 1 MiB. `state.write` commits
   rename. `state.read` returns `{data, exists}` and reports `exists:false`
   with an empty `data` for a missing file)
+- Widget inspection (`application.widget-snapshot`, `application.widget-open`)
+  has one worker slot per fixed app, shared between reads and launch preflight.
+  Same-key reads coalesce under the bounded reply queue. At 15 seconds the daemon
+  responds `widget-query-timeout`, requests cooperative libflatpak cancellation,
+  drops late results and retains the slot until actual completion. Conflicting
+  or still-cancelling work returns `widget-query-busy`; no replacement worker is
+  queued. Non-cancellable filesystem/library stalls may outlive the deadline or
+  delay shutdown. This deadline excludes the subsequent KIO launch job.
+  Widget open rechecks canonical desktop path/content hash around KService loading
+  and Flatpak current/active deployment links; changes or unsupported layouts
+  fail with `source-changed`. This is not an atomic lock against external managers
+  after the last check and does not pin executable bytes or a running instance.
+- `lockscreen.weather-publish` (fixed lockscreen weather output; payload contains
+  exactly six string fields: `weatherSymbol`, `weatherTemperature`, `weatherCity`,
+  `weatherCondition`, `weatherApparent`, `weatherHumidity`, each <=256 UTF-16 units.
+  No QML, paths or executable input. The daemon emits escaped data-only QML to
+  GenericDataLocation/plasma/shells/org.kos.desktop/contents/lockscreen/LockFeed.qml.
+  Requires the existing current-user directory and regular LockScreen.qml; missing
+  theme returns `published:false,reason:theme-unavailable` without creating it.
+  Directory-relative atomic rename pins the destination inode; no async copy work.
+  Writes are ordered by platform dispatch, not multi-shell source timestamps.
+  Errors: `invalid-lockscreen-weather`, `lockscreen-weather-publish-failed`.
+  A timeout does not undo a committed write; local filesystem calls have no hard
+  time limit. No generic-copy fallback or full uninstall transaction is provided.)
 - `notify` (freedesktop notification; payload `{summary, body?, icon?,
   appName?, urgency?}` with `urgency` one of `low`/`normal`/`critical` and
   `appName` (<=128 chars) the notification's grouping/app label, defaulting
@@ -156,6 +189,18 @@ meets the Bar/Dock safe edges directly and does not create an invisible gap.
 On `kwin.subscribe`, the daemon replays both its latest `window.snapshot` and
 latest `desktops` event when available. Consumers may explicitly request a
 fresh desktop event with `kwin.command {action: "desktops"}` during startup.
+
+The optional `desktops.transitionActive` boolean marks desktop navigation while
+KWin's `slide`, `cubeslide`, or `fadedesktop` effect is active. The daemon sets
+it before publishing a changed `current` desktop and republishes the latest
+desktop snapshot with `transitionActive: false` when the effect finishes.
+Initial snapshots do not start a transition. The bridge polls asynchronously
+only during a change (32ms between replies, 250ms per-call timeout), allows
+80ms for effect startup, and releases after at most 5 seconds. Query errors
+and compositor disconnection also release the gate. Rapid changes supersede
+older replies. Missing fields from older daemons mean `false`; Shell clears
+the gate when its platform connection drops. Replayed snapshots carry the
+latest gate value.
 
 Platform adapters validate all paths and operation names before executing a
 system action. Existing paths are canonicalized and new targets are resolved

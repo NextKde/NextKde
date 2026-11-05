@@ -27,10 +27,12 @@ constexpr qsizetype maximumOutput = 1024 * 1024;
 }
 
 AppStore::AppStore(const QString& directory, QObject* parent)
-    : QObject(parent)
+    : QObject(parent), m_independent(directory, this)
 {
+    connect(&m_independent, &IndependentApps::changed, this, &AppStore::changed);
     m_state = {{"busy", false}, {"installed", false}, {"available", false}, {"code", ""},
                {"stage", ""}, {"message", ""}, {"logPath", ""}, {"dependencies", QVariantList{}}};
+    m_compatibilityGuide = directory + QStringLiteral("/app-store/Compatibility.md");
     QFile catalog(directory + QStringLiteral("/app-store/catalog.json"));
     if (catalog.open(QIODevice::ReadOnly)) {
         const auto document = QJsonDocument::fromJson(catalog.readAll()).object();
@@ -156,7 +158,7 @@ void AppStore::uninstall() { begin(QStringLiteral("uninstall")); }
 
 void AppStore::begin(const QString& action)
 {
-    if (m_state.value("busy").toBool()) return;
+    if (anyBusy()) return;
     if (!m_published) { fail(QStringLiteral("RELEASE_UNAVAILABLE")); return; }
     m_requestedAction = action;
     m_cancelled = false;
@@ -461,3 +463,33 @@ void AppStore::openLog()
 }
 
 void AppStore::openRepository() { QDesktopServices::openUrl(QUrl(repository)); }
+
+bool AppStore::anyBusy() const { return m_state.value("busy").toBool() || m_independent.busy(); }
+QVariantList AppStore::apps() const
+{
+    auto music = m_state;
+    music["id"] = "kmusic"; music["name"] = "KMusic";
+    music["appId"] = appId; music["repository"] = repository;
+    music["managed"] = music.value("installed");
+    QVariantList result{music};
+    result.append(m_independent.apps());
+    return result;
+}
+void AppStore::refreshApps() { if (!anyBusy()) { refresh(); m_independent.refresh(); } }
+void AppStore::install(const QString& id) { if (id == "kmusic") install(); else if (!anyBusy()) m_independent.perform(id, "install"); }
+void AppStore::uninstall(const QString& id) { if (id == "kmusic") uninstall(); else if (!anyBusy()) m_independent.perform(id, "uninstall"); }
+void AppStore::update(const QString& id) { if (id != "kmusic" && !anyBusy()) m_independent.perform(id, "update"); }
+void AppStore::checkUpdates(const QString& id) { if (id != "kmusic" && !anyBusy()) m_independent.perform(id, "check-update"); }
+void AppStore::openCompatibilityGuide()
+{
+    QDesktopServices::openUrl(QUrl::fromLocalFile(m_compatibilityGuide));
+}
+void AppStore::cleanupProgram(const QString& id, const QString& action)
+{
+    if (!anyBusy() && (action == "cleanup-plan" || action == "prune" || action == "remove-retired"))
+        m_independent.perform(id, action);
+}
+void AppStore::cancel(const QString& id) { if (id == "kmusic") cancel(); else m_independent.cancel(id); }
+void AppStore::open(const QString& id) { if (anyBusy()) return; if (id == "kmusic") open(); else m_independent.open(id); }
+void AppStore::openLog(const QString& id) { if (id == "kmusic") openLog(); else m_independent.openLog(id); }
+void AppStore::openRepository(const QString& id) { if (id == "kmusic") openRepository(); else m_independent.openRepository(id); }

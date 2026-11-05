@@ -3,6 +3,7 @@
 #include <effect/effect.h>
 #include "windowappearance/sharedwindowsource.h"
 #include <memory>
+#include <QSet>
 
 namespace KOS
 {
@@ -59,6 +60,9 @@ public:
 
 private:
     void updateNativeThumbnails();
+    void refreshGtkNativeControls(KWin::EffectWindow *);
+    QSet<KWin::EffectWindow *> m_gtkNativeWindows;
+    uint32_t m_gtkNativeAtom = 0;
     void paintButtons(const KWin::RenderTarget &, const KWin::RenderViewport &,
                       KWin::EffectWindow *, const KWin::Region &,
                       const KWin::WindowPaintData &, bool sourceCapture);
