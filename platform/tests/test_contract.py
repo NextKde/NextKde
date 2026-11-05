@@ -75,7 +75,12 @@ def test_application_launch_uses_kde_launcher_without_arbitrary_commands() -> No
     assert "KIO::ApplicationLauncherJob" in handler
     assert 'value(QStringLiteral("desktopId"))' in handler
     assert 'value(QStringLiteral("urls"))' in handler
-    assert 'value(QStringLiteral("command"))' not in handler
+    launch = handler[handler.index('if (op != QStringLiteral("application.launch"))'):]
+    assert 'value(QStringLiteral("command"))' not in launch
+    assert 'payload.value(QStringLiteral("command"))' not in handler
+    # Widget launch compares daemon-owned inventory with the desktop file; it
+    # must not turn that internal command field into a caller-supplied command.
+    assert 'service->exec() != result.value(QStringLiteral("command")).toString()' in handler
 
     qml = (ROOT / "shell/desktop/modules/common/AppActionService.qml").read_text()
     assert 'PlatformClient.request("application.launch"' in qml

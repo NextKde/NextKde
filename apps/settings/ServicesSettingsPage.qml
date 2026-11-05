@@ -470,6 +470,7 @@ Flow {
     }
     Dialog {
         id: appInstallDialog
+        objectName: "appInstallDialog"
         property string appId: ""
         property string appName: ""
         parent: Overlay.overlay

@@ -39,7 +39,9 @@ class DependencyMigrationTests(unittest.TestCase):
             match = re.search(r"^" + name + r"\(\) \{.*?^\}", source, re.M | re.S)
             self.assertIsNotNone(match)
             functions.append(match.group())
-        with tempfile.TemporaryDirectory(dir=ROOT / "tmp", prefix="app-cache-migration-") as directory:
+        temporary_root = ROOT / "tmp" / "app-cache-migration"
+        temporary_root.mkdir(parents=True, exist_ok=True)
+        with tempfile.TemporaryDirectory(dir=temporary_root) as directory:
             build = Path(directory)
             (build / "CMakeCache.txt").write_text("# Existing core cache\n")
             stamp = build / "kos-configure-inputs"
