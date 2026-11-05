@@ -461,6 +461,20 @@ if(BUILD_TESTING)
                 TIMEOUT 180
             )
         endif()
+        find_program(KOS_LOGIN_KWIN_EXECUTABLE NAMES kwin_wayland)
+        if(KOS_QUICKSHELL_EXECUTABLE AND KOS_LOGIN_KWIN_EXECUTABLE)
+            find_package(Python3 REQUIRED COMPONENTS Interpreter)
+            add_test(NAME kos-shell.installed-startup
+                COMMAND ${Python3_EXECUTABLE}
+                    ${CMAKE_CURRENT_SOURCE_DIR}/tests/shell-startup/installed.py
+                    --private-compositor
+            )
+            set_tests_properties(kos-shell.installed-startup PROPERTIES
+                LABELS "ui;installed"
+                ENVIRONMENT "QML2_IMPORT_PATH=${CMAKE_BINARY_DIR}/qml"
+                TIMEOUT 300
+            )
+        endif()
         add_test(NAME kos-ui.page-cache-policy
             COMMAND ${KOS_NODE_EXECUTABLE}
                 ${CMAKE_CURRENT_SOURCE_DIR}/shared/qml/test_page_cache_policy.mjs
