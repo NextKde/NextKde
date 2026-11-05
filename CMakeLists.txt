@@ -210,6 +210,11 @@ if(BUILD_TESTING)
         find_program(KOS_QMLTESTRUNNER_EXECUTABLE NAMES qmltestrunner
             HINTS /usr/lib/qt6/bin /usr/lib64/qt6/bin)
         if(KOS_QMLTESTRUNNER_EXECUTABLE)
+            add_test(NAME kos-shell.stage-visibility-qml
+                COMMAND ${KOS_NODE_EXECUTABLE}
+                    ${CMAKE_CURRENT_SOURCE_DIR}/tests/stage-visibility/run.mjs
+                    ${KOS_QMLTESTRUNNER_EXECUTABLE})
+            set_tests_properties(kos-shell.stage-visibility-qml PROPERTIES LABELS "ui;headless" TIMEOUT 25)
             add_test(NAME kos-shell.dock-native-target
                 COMMAND ${KOS_NODE_EXECUTABLE}
                     ${CMAKE_CURRENT_SOURCE_DIR}/tests/dock/runtime.mjs native-target
@@ -263,6 +268,10 @@ if(BUILD_TESTING)
                 ${CMAKE_CURRENT_SOURCE_DIR}/shell/desktop/modules/stage/test_stage_geometry.mjs
         )
         set_tests_properties(kos-shell.stage-geometry PROPERTIES TIMEOUT 10)
+        add_test(NAME kos-shell.stage-visibility
+            COMMAND ${KOS_NODE_EXECUTABLE}
+                ${CMAKE_CURRENT_SOURCE_DIR}/shell/desktop/modules/stage/test_stage_visibility.mjs)
+        set_tests_properties(kos-shell.stage-visibility PROPERTIES TIMEOUT 10)
         add_test(NAME kos-shell.stage-groups
             COMMAND ${KOS_NODE_EXECUTABLE}
                 ${CMAKE_CURRENT_SOURCE_DIR}/shell/desktop/modules/stage/test_stage_groups.mjs
@@ -677,6 +686,7 @@ if(BUILD_TESTING)
             kos-shell.theme-wallpaper-policy
             kos-shell.theme-wallpaper-state
             kos-shell.stage-geometry kos-shell.stage-groups kos-shell.stage-effects kos-shell.stage-protocol
+            kos-shell.stage-visibility
             kos-shell.appearance-config
             kos-deskcenter.desktop-outputs
             kos-shell.screen-selection
@@ -715,6 +725,11 @@ find_package(Qt6 6.5 REQUIRED COMPONENTS
 find_package(KF6WindowSystem 6.0 QUIET)
 if(BUILD_TESTING)
     find_package(Qt6 6.5 REQUIRED COMPONENTS Test)
+    add_executable(kos-stage-desktop-policy-test
+        kwin/kwin-effects-stageanim/tests/test_desktop_policy.cpp)
+    target_link_libraries(kos-stage-desktop-policy-test PRIVATE Qt6::Core)
+    add_test(NAME kos-stage.desktop-policy COMMAND kos-stage-desktop-policy-test)
+    set_tests_properties(kos-stage.desktop-policy PROPERTIES LABELS platform TIMEOUT 10)
     qt_add_executable(kos-legacy-glass-blur-test
         kwin/glass-effect/tests/test_legacy_blur_region.cpp)
     target_link_libraries(kos-legacy-glass-blur-test PRIVATE Qt6::Core Qt6::Gui)
@@ -791,6 +806,22 @@ if(KOS_BUILD_KWIN_PLUGINS)
     add_subdirectory(kwin/kos-bridge)
     add_subdirectory(kwin/kos-decoration)
     add_subdirectory(kwin/kwin-effects-stageanim)
+    if(BUILD_TESTING AND KOS_PYTHON_EXECUTABLE)
+        find_program(KOS_STAGE_QUICKSHELL_EXECUTABLE NAMES quickshell qs)
+        find_program(KOS_STAGE_KWIN_EXECUTABLE NAMES kwin_wayland)
+        find_program(KOS_STAGE_QDBUS_EXECUTABLE NAMES qdbus6)
+        find_program(KOS_STAGE_DBUS_EXECUTABLE NAMES dbus-run-session)
+        if(KOS_STAGE_QUICKSHELL_EXECUTABLE AND KOS_STAGE_KWIN_EXECUTABLE
+                AND KOS_STAGE_QDBUS_EXECUTABLE AND KOS_STAGE_DBUS_EXECUTABLE)
+            add_test(NAME kos-stage.static-desktop-compositor
+                COMMAND ${KOS_PYTHON_EXECUTABLE}
+                    ${CMAKE_CURRENT_SOURCE_DIR}/tests/stage-visibility/static_compositor.py
+                    $<TARGET_FILE:stageanim13>
+                    --quickshell ${KOS_STAGE_QUICKSHELL_EXECUTABLE}
+                    --output ${CMAKE_BINARY_DIR}/stage-static-compositor)
+            set_tests_properties(kos-stage.static-desktop-compositor PROPERTIES LABELS ui TIMEOUT 40)
+        endif()
+    endif()
 endif()
 
 # The spatial wallpaper mesh is an optional QML extension, built only when the
