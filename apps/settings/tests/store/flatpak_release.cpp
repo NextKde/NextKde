@@ -25,6 +25,15 @@ class FlatpakReleaseTest : public QObject {
         }
     }
 private slots:
+    void runtimePolicyDoesNotAuthorizeApplications()
+    {
+        QCOMPARE(FlatpakTrustPolicy::remotes.size(), std::size_t(1));
+        const auto &remote = FlatpakTrustPolicy::remotes.front();
+        QCOMPARE(QByteArray(remote.url), "https://dl.flathub.org/repo/");
+        QCOMPARE(QByteArray(remote.primaryFingerprint), "6E5C05D979C76DAF93C081354184DD4D907A7CAE");
+        QVERIFY(remote.runtimes);
+        QVERIFY(!remote.applications);
+    }
     void versionComparison()
     {
         bool valid = false;
