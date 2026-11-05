@@ -191,15 +191,12 @@ def test_brightness_targets_one_kde_display() -> None:
     assert "openScreenBrightness" in source
     assert 'property("DisplaysDBusNames")' in source
     assert 'QStringLiteral("org.kde.ScreenBrightness.Display")' in source
-    setter = source[source.index("bool setKdeDisplayBrightness("):]
-    setter = setter[:setter.index("QJsonObject readSysfsBrightness()")]
-    assert "displayIds.contains(displayId)" in setter
-    assert 'display.call(QStringLiteral("SetBrightness")' in setter
-    assert "for (const QString &displayId : displayIds)" not in setter
-
-    handler = source[source.index('if (op == QStringLiteral("display.brightness.set"))'):]
-    assert 'payload.value(QStringLiteral("displayId"))' in handler
-    assert "setKdeDisplayBrightness(displayId, value)" in handler
+    # Behavior (targeting, partial failures, timeouts and fallback ordering)
+    # is exercised by the private-bus kos-platform.brightness fixture.
+    setter = source[source.index("class BrightnessWrite"):source.index("QJsonObject readSysfsBrightness()")]
+    assert "asyncCall" in setter
+    assert "QDBusInterface" not in setter[setter.index("public:"):]
+    assert 'payload.value(QStringLiteral("displayId"))' in source
 
 
 def test_lockscreen_feed_uses_daemon_owned_fixed_destination() -> None:
