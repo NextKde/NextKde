@@ -451,7 +451,10 @@ PanelWindow {
         appContextMenu.clear()
         appContextMenu.addItem("application-open", I18n.tr("Open app"), "open")
         appContextMenu.addItem("edit-rename", I18n.tr("Edit app"), "edit")
-        appContextMenu.addItem("pin", I18n.tr("Pin to Dock"), "pin")
+        const pinned = DockModelService.isAppPinned(app.id)
+        appContextMenu.addItem(pinned ? "unpin" : "pin",
+            pinned ? I18n.tr("Unpin from Dock") : I18n.tr("Pin to Dock"),
+            pinned ? "unpin" : "pin")
         appContextMenu.show()
     }
 
@@ -1102,6 +1105,8 @@ PanelWindow {
                 AppActionService.edit(app);
             else if (name === "pin")
                 AppActionService.pin(app.id);
+            else if (name === "unpin")
+                AppActionService.unpin(app.id);
         }
     }
 
