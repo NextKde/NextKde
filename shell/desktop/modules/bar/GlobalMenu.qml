@@ -1,4 +1,5 @@
 import QtQuick
+import "AppMenuIdentity.mjs" as MenuIdentity
 import Quickshell
 import qs.desktop
 import qs.desktop.modules.common
@@ -130,57 +131,74 @@ Item {
         }
     }
 
-    // Chromium/Electron rebuild their dbusmenu shortly after launch and every
-    // rebuild reassigns item ids, so the ids the bar cached can already be dead
-    // (a stale id answers an empty layout, which opens an empty popup). Resolve
-    // the clicked entry against a fresh root read before opening anything.
-    function freshRoot(callback) {
+    // Refresh the whole model, including labels and enabled state. A failed
+    // refresh must never send a cached ID back to the application.
+    function freshRoot(serial, callback) {
         AppMenuService.requestLayout(0, function(rootItems) {
-            callback((rootItems || []).filter(item => item.visible !== false && !item.separator))
+            if (serial !== root._openingSerial)
+                return
+            const fresh = (rootItems || []).filter(item => item.visible !== false && !item.separator)
+            AppMenuService.items = fresh
+            root.updateVisibleCount()
+            // Repeater delegates are recreated when the model changes.
+            Qt.callLater(function() {
+                if (serial === root._openingSerial)
+                    callback(fresh)
+            })
         }, 2)
     }
 
-    function openItem(index, clickedItem) {
-        const shown = items[index]
-        if (!shown || !shown.enabled)
+    function openItem(index) {
+        const previous = items
+        const shown = previous[index]
+        if (!shown || shown.enabled === false)
             return
+        if (menuPopup.visible)
+            menuPopup.hide()
         const serial = ++_openingSerial
-        freshRoot(function(fresh) {
-            if (serial !== _openingSerial)
+        freshRoot(serial, function(fresh) {
+            const freshIndex = MenuIdentity.resolve(previous, index, fresh)
+            if (freshIndex < 0)
                 return
-            const item = fresh[index] || shown
-            if (items[index])
-                items[index].id = item.id
+            const item = fresh[freshIndex]
             if (item.enabled === false)
                 return
-            console.info("[GlobalMenu] click id=" + item.id + " children=" + item.hasChildren)
+            const anchor = freshIndex < root.visibleCount
+                ? menuItems.itemAt(freshIndex) : overflowButton
+            if (!anchor)
+                return
             if (!item.hasChildren) {
                 PlatformClient.request("appmenu.trigger", { service, path, id: item.id })
                 return
             }
             popupRootId = item.id
             activeOpeningId = item.id
-            PlatformClient.request("appmenu.open", { service, path, id: item.id })
-            AppMenuService.requestLayout(item.id, function(children) {
-                if (serial !== root._openingSerial)
+            // Layout owns AboutToShow; open only emits the lifecycle event.
+            PlatformClient.request("appmenu.open", { service, path, id: item.id }, function(response) {
+                if (serial !== root._openingSerial || !response?.ok)
                     return
-                hydrate(children, 0, function(result) {
+                AppMenuService.requestLayout(item.id, function(children) {
                     if (serial !== root._openingSerial)
                         return
-                    root.presentMenu(item.id, clickedItem, result, serial)
-                }, serial)
-            }, 2)
+                    hydrate(children, 0, function(result) {
+                        root.presentMenu(item.id, anchor, result, serial)
+                    }, serial)
+                }, 2)
+            })
         })
     }
 
     function openOverflow(anchor) {
+        if (menuPopup.visible)
+            menuPopup.hide()
         const serial = ++_openingSerial
         popupRootId = 0
         activeOpeningId = 0
-        freshRoot(function(fresh) {
-            if (serial !== _openingSerial)
+        freshRoot(serial, function(fresh) {
+            const remaining = fresh.slice(root.visibleCount)
+            if (remaining.length === 0)
                 return
-            hydrate(fresh.slice(visibleCount), 0, function(result) {
+            hydrate(remaining, 0, function(result) {
                 root.presentMenu(0, anchor, result, serial)
             }, serial)
         })
@@ -206,6 +224,7 @@ Item {
         spacing: 1
 
         Repeater {
+            id: menuItems
             model: root.shownItems
             delegate: Item {
                 id: menuItem
@@ -253,12 +272,12 @@ Item {
                         if (menuPopup.visible && root.popupRootId === modelData.id) {
                             menuPopup.hide()
                         } else {
-                            root.openItem(index, menuItem)
+                            root.openItem(index)
                         }
                     }
                     onEntered: {
                         if (menuPopup.visible && root.popupRootId !== modelData.id) {
-                            root.openItem(index, menuItem)
+                            root.openItem(index)
                         }
                     }
                 }

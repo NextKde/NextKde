@@ -170,9 +170,9 @@ bool PlatformServer::handleAppMenu(QLocalSocket *socket, const QJsonObject &requ
             });
         };
         // Electron/Chromium build a submenu only once AboutToShow(id) has been
-        // sent; GetLayout alone answers an empty children array below the root,
-        // which made every nested Typora/Electron submenu unfetchable. Qt apps
-        // ignore the extra call, and the root (id 0) needs none.
+        // sent; GetLayout alone can answer an empty children array. Layout
+        // owns preparation for all callers; open only sends the opened event.
+        // The root (id 0) needs no preparation.
         if (id == 0) {
             fetchLayout();
             return true;
@@ -198,23 +198,24 @@ bool PlatformServer::handleAppMenu(QLocalSocket *socket, const QJsonObject &requ
             : QStringLiteral("clicked");
         const quint32 timestamp = static_cast<quint32>(QDateTime::currentMSecsSinceEpoch());
 
-        if (op == QStringLiteral("appmenu.open")) {
-            // Give Qt / KDE applications an opportunity to populate lazy dynamic submenus.
-            menu.call(QStringLiteral("AboutToShow"), id);
-        }
-
         // com.canonical.dbusmenu Event signature is (isvu): the data argument
         // MUST be typed as a D-Bus variant. Sending a bare QVariantMap produces
         // (isa{sv}u), which Qt's QDBusMenuAdaptor rejects as an unknown method.
         const QDBusVariant dbusData(QVariantMap{{QStringLiteral("timestamp"), timestamp}});
-        const QDBusMessage reply = menu.call(QStringLiteral("Event"), id, event,
+        const QDBusPendingCall pending = menu.asyncCall(QStringLiteral("Event"), id, event,
             QVariant::fromValue(dbusData), timestamp);
-        if (reply.type() == QDBusMessage::ErrorMessage) {
-            respond(socket, request, false, {}, QStringLiteral("appmenu-event-failed"),
-                    QStringLiteral("应用菜单操作失败"), true);
-            return true;
-        }
-        respond(socket, request, true);
+        auto *watcher = new QDBusPendingCallWatcher(pending, this);
+        connect(watcher, &QDBusPendingCallWatcher::finished, this,
+                [this, guardedSocket = QPointer<QLocalSocket>(socket), request, watcher] {
+            const QDBusMessage reply = watcher->reply();
+            watcher->deleteLater();
+            if (reply.type() == QDBusMessage::ErrorMessage) {
+                respond(guardedSocket.data(), request, false, {}, QStringLiteral("appmenu-event-failed"),
+                        QStringLiteral("应用菜单操作失败"), true);
+                return;
+            }
+            respond(guardedSocket.data(), request, true);
+        });
         return true;
     }
     respond(socket, request, false, {}, QStringLiteral("unknown-appmenu-operation"),

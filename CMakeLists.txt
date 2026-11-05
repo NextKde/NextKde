@@ -475,6 +475,10 @@ if(BUILD_TESTING)
         # nothing ran them. They cover the Dock's adaptive layout and auto-hide
         # math, the appearance configuration migration, and the platform
         # window-placement rules -- all pure logic, no display or shell needed.
+        add_test(NAME kos-shell.appmenu-refresh
+            COMMAND ${KOS_NODE_EXECUTABLE}
+                ${CMAKE_CURRENT_SOURCE_DIR}/shell/desktop/modules/bar/test_appmenu_refresh.mjs)
+        set_tests_properties(kos-shell.appmenu-refresh PROPERTIES TIMEOUT 10 LABELS logic)
         add_test(NAME kos-shell.appearance-config
             COMMAND ${KOS_NODE_EXECUTABLE}
                 ${CMAKE_CURRENT_SOURCE_DIR}/shell/desktop/modules/common/test_appearance_config.mjs
