@@ -26,7 +26,7 @@ jobs:
       image: archlinux:base-devel
     steps:
       - name: Install fixture dependencies
-        run: pacman -Sy --noconfirm --needed git nodejs qt6-base qt6-declarative cmake ninja kconfig kio kservice dbus pkgconf flatpak ostree gnupg
+        run: pacman -Sy --noconfirm --needed git nodejs qt6-base qt6-declarative cmake ninja kconfig kio kservice dbus gtk3 wayland pkgconf flatpak ostree
       - uses: actions/checkout@v7
       - name: Run native target identity and publication regressions
         env:
@@ -137,7 +137,7 @@ jobs:
       - name: Install build dependencies
         run: |
           pacman -S --noconfirm --needed \
-            cmake ninja gcc pkgconf flatpak ostree gnupg \
+            cmake ninja gcc gtk3 pkgconf flatpak ostree gnupg \
             qt6-base qt6-declarative qt6-wayland qt6-tools qt6-translations qt6-5compat \
             extra-cmake-modules wayland plasma-workspace libplasma kpackage \
             kwindowsystem kiconthemes kglobalaccel kio kconfig \

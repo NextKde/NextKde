@@ -10,7 +10,10 @@
     flatpak,
     ostree,
     gnupg,
+    gtk3,
     pkg-config,
+    wayland,
+    wayland-scanner,
     src,
 }:
 
@@ -23,10 +26,11 @@ stdenv.mkDerivation {
         cmake
         ninja
         pkg-config
+        wayland-scanner
         kdePackages.wrapQtAppsHook
     ];
 
-    buildInputs = [ flatpak ostree kdePackages.kconfig kdePackages.kio kdePackages.kservice kdePackages.qtbase kdePackages.qtdeclarative
+    buildInputs = [ flatpak ostree gtk3 wayland kdePackages.kconfig kdePackages.kio kdePackages.kservice kdePackages.qtbase kdePackages.qtdeclarative
                     kdePackages.qtsvg kdePackages.qtimageformats kdePackages.qt5compat ];
 
     preFixup = ''

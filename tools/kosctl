@@ -83,7 +83,7 @@ is_nixos() {
 # is needed only while compositor plugins are enabled.
 arch_core_build_packages=(
     git python quickshell cmake ninja gcc qt6-base qt6-declarative qt6-tools qt6-translations qt6-quick3d qt6-svg qt6-imageformats qt6-5compat qt6-wayland go curl
-    extra-cmake-modules wayland pkgconf flatpak ostree gnupg
+    extra-cmake-modules wayland gtk3 pkgconf flatpak ostree gnupg
     kwindowsystem kiconthemes kglobalaccel kio patchelf
 )
 # The depth engine and 3D wallpaper plugin follow KOS_BUILD_SPATIAL.
@@ -108,7 +108,7 @@ arch_optional_runtime_packages=(
 debian_core_build_packages=(
     git python3 cmake ninja-build g++ golang-go curl patchelf pkg-config libflatpak-dev libostree-dev flatpak gpgv
     quickshell
-    extra-cmake-modules libwayland-dev wayland-protocols libxkbcommon-dev
+    extra-cmake-modules libwayland-dev wayland-protocols libxkbcommon-dev libgtk-3-dev
     qt6-base-dev qt6-declarative-dev qt6-tools-dev qt6-l10n-tools qt6-translations-l10n qt6-quick3d-dev qt6-svg-dev qt6-wayland-dev
     qt6-image-formats-plugins qt6-5compat-dev libqt6svg6
     qml6-module-qtquick qml6-module-qtquick-controls qml6-module-qtquick-layouts
@@ -154,7 +154,7 @@ debian_optional_runtime_packages=(
 fedora_core_build_packages=(
     git python3 cmake ninja-build gcc-c++ golang curl patchelf pkgconf-pkg-config
     quickshell
-    extra-cmake-modules wayland-devel wayland-protocols-devel libxkbcommon-devel flatpak-devel ostree-devel flatpak gnupg2
+    extra-cmake-modules wayland-devel wayland-protocols-devel libxkbcommon-devel gtk3-devel flatpak-devel ostree-devel flatpak gnupg2
     qt6-qtbase-devel qt6-qtbase-private-devel qt6-qtdeclarative-devel qt6-qttools-devel
     qt6-qttranslations qt6-qtquick3d-devel qt6-qtsvg-devel qt6-qtwayland-devel
     qt6-qtimageformats qt6-qt5compat-devel
@@ -935,10 +935,10 @@ deploy_artifacts() {
     local required
     local -a required_files
     if [[ "$nix_artifact" == true ]]; then
-        required_files=(libexec/kos-platform libexec/kos-data-service bin/kos-settings bin/kos-apps)
+        required_files=(libexec/kos-platform libexec/kos-data-service bin/kos-settings bin/kos-apps lib/gtk-3.0/modules/libkos-gtk-window-controls.so)
         spatial_requested && required_files+=(libexec/kos-ai-worker)
     else
-        required_files=(platform/kos-platform bin/kos-data-service apps/settings/kos-settings apps/settings/kos-apps)
+        required_files=(platform/kos-platform bin/kos-data-service apps/settings/kos-settings apps/settings/kos-apps apps/settings/gtk-module/libkos-gtk-window-controls.so)
         spatial_built && required_files+=(platform/kos-ai-worker)
     fi
     for required in "${required_files[@]}"; do
@@ -956,6 +956,14 @@ deploy_artifacts() {
     mkdir -p "$prefix/libexec" "$prefix/bin" "$prefix/lib" \
         "$prefix/share/kos/platform/kwin" "$prefix/share/kos/settings" \
         "$prefix/share/shared/qml" "$prefix/share/applications"
+    mkdir -p "$prefix/lib/gtk-3.0/modules"
+    if [[ "$nix_artifact" == true ]]; then
+        ln -sfn "$artifact_root/lib/gtk-3.0/modules/libkos-gtk-window-controls.so" "$prefix/lib/gtk-3.0/modules/libkos-gtk-window-controls.so"
+    else
+        # Replace the directory entry, never overwrite a library mapped by GTK.
+        install -m 0755 "$artifact_root/apps/settings/gtk-module/libkos-gtk-window-controls.so" "$prefix/lib/gtk-3.0/modules/.libkos-gtk-window-controls.so.new"
+        mv -f "$prefix/lib/gtk-3.0/modules/.libkos-gtk-window-controls.so.new" "$prefix/lib/gtk-3.0/modules/libkos-gtk-window-controls.so"
+    fi
     # --- Binaries ---
     rm -f "$prefix/libexec/kos-platform" "$prefix/libexec/kos-ai-worker" \
         "$prefix/libexec/kos-data-service" "$prefix/bin/kos-settings" "$prefix/bin/kos-apps"
@@ -2103,6 +2111,7 @@ uninstall() {
     if command -v systemctl >/dev/null 2>&1; then
         systemctl --user daemon-reload || true
     fi
+    rm -f "$prefix/lib/gtk-3.0/modules/libkos-gtk-window-controls.so"
     rm -f "$prefix/share/kos/release.json"
     rm -f "$prefix/libexec/kos-platform" "$prefix/libexec/kos-ai-worker" \
         "$prefix/libexec/kos-data-service" "$prefix/bin/kos-settings" "$prefix/bin/kos-apps"

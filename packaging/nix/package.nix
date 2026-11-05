@@ -86,6 +86,8 @@ stdenv.mkDerivation {
     mkdir -p $out/bin
     ln -s ${kos-settings}/bin/kos-settings $out/bin/kos-settings
     ln -s ${kos-settings}/bin/kos-apps $out/bin/kos-apps
+    mkdir -p $out/lib/gtk-3.0/modules
+    ln -s ${kos-settings}/lib/gtk-3.0/modules/libkos-gtk-window-controls.so $out/lib/gtk-3.0/modules/libkos-gtk-window-controls.so
 
     # --- Weather app (optional) ---
     ${lib.optionalString buildWeather ''

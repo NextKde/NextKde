@@ -40,6 +40,7 @@ assert builtins.any (input: input.nextkdeHostPackage or false)
   kos.passthru.kwin-dock-window-animation.buildInputs;
 host.pkgs.runCommand "nextkde-nixos-packaging-check" {} ''
   test -x ${kos}/bin/kos-settings
+  test -f ${kos}/lib/gtk-3.0/modules/libkos-gtk-window-controls.so
   test -x ${kos}/libexec/kos-platform
   test -x ${kos}/libexec/kos-ai-worker
   test -x ${kos}/libexec/kos-data-service
