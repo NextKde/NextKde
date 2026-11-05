@@ -1183,7 +1183,7 @@ PanelWindow {
                     engaging: engaging,
                     dropHover: slot.cardItem.dropHovered,
                     dwellHint: slot.cardItem.dwellHint,
-                    fade: slot.opacity,            // 压暗 × 边缘渐隐（QML 同源）
+                    fade: slot.opacity,
                     hoverScale: p.hoverScale, hoverTilt: p.hoverTilt,
                     hoverMs: p.hoverMs,
                     hoverDwellMs: p.hoverDwellMs !== undefined ? p.hoverDwellMs : 0,
@@ -1202,8 +1202,9 @@ PanelWindow {
         // "at 是首键/卡字段不叫 at"的隐式正则约定
         // 启动台打开时照常发布、卡片留在原位——启动台不再收起抽屉
         //（2026-10-18 用户定案）；全屏/侵占让位的滑出仍逐帧发布
-        const body = { cards: out }
-        const json = JSON.stringify({ at: Date.now(), cards: out })
+        const desktopId = desktopTransition._displayedDesktopId
+        const body = { desktopId: desktopId, cards: out }
+        const json = JSON.stringify({ at: Date.now(), desktopId: desktopId, cards: out })
         const payloadChanged = JSON.stringify(body) !== root._lastLiveBody
         const now = Date.now()
         if (payloadChanged || now - root._lastLiveWriteAt > 10000) {
@@ -1638,6 +1639,8 @@ PanelWindow {
     }
 
     function _beginCardDrag(slot, index, sceneX, sceneY) {
+        if (desktopTransition.active)
+            return
         if (root.dragKey !== "" || slot.cardItem.engaging)
             return
         // 驻留定时器一并作废：按下后 12px 内进拖拽时驻留可能还在跑，
@@ -2162,6 +2165,8 @@ PanelWindow {
     property var _groupFocusMemory: ({})
 
     function engageCard(slot) {
+        if (desktopTransition.active)
+            return
         const ids = root._idsOf(slot.idsJson)
         const mem = root._groupFocusMemory[slot.appKey]
         const focusId = mem && ids.indexOf(mem) >= 0 ? mem : slot.targetId
@@ -2172,6 +2177,8 @@ PanelWindow {
     // 窗时焦点钉它（macOS Stage Manager：图标排是逐窗直达），点卡面用
     // 代表窗。整组还原语义不变，只有 focus 目标不同。
     function engageCardWindow(slot, iconWindowId) {
+        if (desktopTransition.active)
+            return
         // 面板隐藏/模式关闭后不可从不可见卡片派发展开
         if (!StageModeService.enabled || !open)
             return
@@ -2239,6 +2246,32 @@ PanelWindow {
         const uuid = rec ? rec.handleId : ""
         _streamProbe.uuid = uuid
         return JSON.stringify({ requested: uuid })
+    }
+
+    property bool _committingDesktop: false
+    StageDesktopTransition {
+        id: desktopTransition
+        desktopId: WindowService.currentDesktopId
+        enabled: root.open
+        blocked: WindowService.desktopTransitionActive
+        onCommit: {
+            root._committingDesktop = true
+            root.syncCards()
+            root._committingDesktop = false
+            root.scheduleLivePublish()
+        }
+        onActiveChanged: {
+            if (active) {
+                retractMotion.stop()
+                root._abortDrag()
+                root.hoveredKey = ""
+                root._hoverDwellTimer.stop()
+                root._dwellKey = ""
+            } else {
+                root._animateRetraction()
+            }
+            root._updateHitRegionExtent()
+        }
     }
 
     // ── 卡片堆叠区 ──
@@ -2433,6 +2466,7 @@ PanelWindow {
                     rowsJson: slot.rowsJson
                     merged: slot.merged
                     enterInstant: slot.enterInstant
+                    enterOpaque: root._committingDesktop
                     dropHovered: root._dropMergeKey === slot.appKey
                     // 驻留预示 = 指针在候选上计时中；中心合并预示 =
                     // 被拖卡自身进了屏幕中心区且前台可并组
@@ -2483,7 +2517,7 @@ PanelWindow {
 
         // 空态提示
         Text {
-            visible: root.sideGroups.length === 0
+            visible: cardModel.count === 0 && root.sideGroups.length === 0
             width: parent.width - 24
             x: 12
             horizontalAlignment: Text.AlignHCenter
@@ -2608,16 +2642,16 @@ PanelWindow {
     readonly property bool desktopFullscreen: _fullscreenOverride !== null
         ? _fullscreenOverride : _computeDesktopFullscreen()
     function _computeDesktopFullscreen(): bool {
-        WindowService.revision
+        // visible 在 records 中原地更新，只递增 placementRevision。
+        WindowService.placementRevision
         const desktop = WindowService.currentDesktopId
         const recs = WindowService.records || []
         for (let i = 0; i < recs.length; i++) {
             const r = recs[i]
             if (r.toplevel?.fullscreen === true
                     && r.toplevel?.minimized !== true
-                    && (r.toplevel?.onAllDesktops === true
-                        || !r.toplevel?.desktopIds
-                        || r.toplevel.desktopIds.indexOf(desktop) >= 0))
+                    && r.toplevel?.visible !== false
+                    && StageGroups.isOnDesktop(r, desktop))
                 return true
         }
         return false
@@ -2631,11 +2665,22 @@ PanelWindow {
     readonly property bool drawerRetracted:
         (root.desktopFullscreen || root._stripYield)
         && !root._drawerPeek
-    Behavior on _retractPx {
-        NumberAnimation { duration: 260; easing.type: Easing.OutCubic }
+    NumberAnimation {
+        id: retractMotion
+        target: root
+        property: "_retractPx"
+        duration: 260
+        easing.type: Easing.OutCubic
+    }
+    function _animateRetraction() {
+        retractMotion.stop()
+        retractMotion.from = root._retractPx
+        retractMotion.to = root.drawerRetracted ? root._retractFull : 0
+        retractMotion.start()
     }
     onDrawerRetractedChanged: {
-        root._retractPx = drawerRetracted ? root._retractFull : 0
+        if (!desktopTransition || !desktopTransition.active)
+            root._animateRetraction()
         _updateHitRegionExtent()
         scheduleLivePublish()
     }
@@ -2698,9 +2743,12 @@ PanelWindow {
                 root._stripYield = true
         }
     }
-    // 同样必须 revision 锚定（几何在 records 里原地 mutate 不通知）
-    readonly property real _stripOverlapRaw: {
+    // 几何/可见性原地更新靠 placementRevision；切桌面即使没有窗口快照
+    // 变化，也必须重新过滤，否则其他桌面的窗口会让空闲桌面的抽屉收起。
+    readonly property real _stripOverlapRaw: _computeStripOverlap()
+    function _computeStripOverlap(): real {
         WindowService.placementRevision
+        const desktop = WindowService.currentDesktopId
         const recs = WindowService.records || []
         // 判定基准 = 列基础 x（不含抽屉滑移——收起让位判定本身不需要
         // 跟踪滑出过程）；stripMargin 改动后侵占阈值随列位置同步
@@ -2713,7 +2761,8 @@ PanelWindow {
         let worst = 0
         for (let i = 0; i < recs.length; i++) {
             const r = recs[i]
-            if (r.toplevel?.minimized === true
+            if (!StageGroups.isOnDesktop(r, desktop)
+                    || r.toplevel?.minimized === true
                     || r.toplevel?.visible === false)
                 continue
             const g = r.toplevel?.geometry
@@ -2887,6 +2936,10 @@ PanelWindow {
                 w: g ? Math.round(g.width) : -1, h: g ? Math.round(g.height) : -1 })
         }
         return JSON.stringify({ open: root.open, visible: root.visible,
+            desktopTransition: { active: desktopTransition.active,
+                blocked: desktopTransition.blocked,
+                displayed: desktopTransition._displayedDesktopId,
+                pending: desktopTransition._pendingDesktopId },
             chromeOwned: root.liveChromeOwned,
             hoverPos: [Math.round(drawerEdgeHover.point.position.x),
                 Math.round(drawerEdgeHover.point.position.y)],
@@ -3465,6 +3518,10 @@ PanelWindow {
             root._syncCardsAgain = true
             return
         }
+        // Detect the desktop here as well as in the transition component:
+        // sideGroups can change before its desktopId binding is delivered.
+        if (desktopTransition && desktopTransition.deferSync(WindowService.currentDesktopId))
+            return
         root._syncingCards = true
         // 悬停键自愈（scroll 分支原有、adaptive 分支缺）：键不在模型里 =
         // 该组已离开侧栏但指针没动；组键日后复用时 focusKey 立即为真＝
@@ -3653,6 +3710,13 @@ PanelWindow {
     }
 
     function _updateHitRegionExtent() {
+        if (desktopTransition && desktopTransition.active) {
+            stripHitRegion.x = 0
+            stripHitRegion.y = 0
+            stripHitRegion.width = 0
+            stripHitRegion.height = 0
+            return
+        }
         // 拖拽中 = 全窗输入区：指针必须能拖出卡条（中心手势）。⚠️ 走
         // **同一 item 的几何扩展**而不是切换 Region.item——Region 对
         // item 引用翻转是否触发输入区更新未证实（真机拖出卡条后事件

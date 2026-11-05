@@ -152,6 +152,7 @@ Item {
     // 延迟"迟一步"被砍成即时蹦出，又压着飞行中段突兀（2026-10-03 两轮
     // 回归后的折中：淡入时长=飞行时长，窗口飞到时卡片恰好凝实）
     property bool enterInstant: false
+    property bool enterOpaque: false
     property bool shown: false
     property bool engaging: false
     // 同组换代表（点同应用的另一扇窗）时模型行不销毁，engaging 不会随
@@ -327,7 +328,10 @@ Item {
     // ⚠️ 无 Behavior on y：y 由窗口侧 layoutCards 经 slot（anchors 垂直
     // 居中）管理，这里没有 y 属性可动画；拖拽跟手走 slot.y 直赋
     // 收集落卡的淡入时长 = animDuration（收编飞行时长）：卡与窗同拍
-    Behavior on opacity { NumberAnimation { duration: engaging ? StageGeo.ENGAGE_FADE_MS : (enterInstant ? StageConfigService.animDuration : StageConfigService.cardEnterDuration); easing.type: Easing.OutCubic } }
+    Behavior on opacity {
+        enabled: !card.enterOpaque
+        NumberAnimation { duration: engaging ? StageGeo.ENGAGE_FADE_MS : (enterInstant ? StageConfigService.animDuration : StageConfigService.cardEnterDuration); easing.type: Easing.OutCubic }
+    }
     // 缩放带过冲（OutBack）：悬停放大/入场有弹性回弹；位置类刻意保持
     // OutCubic——x/y 过冲会越过槽位触发悬停丢失（kill 循环前科）
     Behavior on scale {

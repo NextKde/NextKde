@@ -1,0 +1,111 @@
+import QtQuick
+import QtTest
+import "stage-groups.mjs" as StageGroups
+
+TestCase {
+    id: root
+    name: "StageVisibility"
+    width: 1920
+    height: 1080
+    property bool open: true
+    property bool rightSide: false
+    property real panelW: 240
+    property real _stripInset: 20
+    property bool _drawerPeek: false
+
+    QtObject {
+        id: windowService
+        property var records: []
+        property string currentDesktopId: "desk1"
+        property int placementRevision: 0
+    }
+    QtObject {
+        id: configService
+        property real barHeight: 35
+        property real baseHeight: 40
+    }
+
+    // PRODUCTION_DRAWER
+
+    function record(fullscreen, sticky) {
+        return {
+            desktopIds: sticky ? [] : ["desk1"], onAllDesktops: !!sticky,
+            toplevel: { desktopIds: sticky ? [] : ["desk1"], onAllDesktops: !!sticky,
+                fullscreen: !!fullscreen, minimized: false, visible: true,
+                geometry: fullscreen ? { x: 0, y: 0, width: 1920, height: 1080 }
+                    : { x: 20, y: 100, width: 240, height: 800 } }
+        }
+    }
+    function init() {
+        root._yieldPrime.stop()
+        root._yieldDebounce.stop()
+        windowService.records = []
+        windowService.currentDesktopId = "desk1"
+        windowService.placementRevision++
+        root._stripYield = false
+        root._drawerPeek = false
+    }
+    function cleanup() {
+        windowService.records = []
+        root._yieldDebounce.stop()
+    }
+
+    function test_fullscreen_on_first_desktop_does_not_hide_second() {
+        windowService.records = [record(true, false)]
+        tryCompare(root, "drawerRetracted", true)
+        tryCompare(root, "_stripYield", true, 1500)
+        const records = windowService.records
+        const revision = windowService.placementRevision
+        windowService.currentDesktopId = "desk2"
+        tryCompare(root, "desktopFullscreen", false)
+        tryCompare(root, "_stripOverlap", 0)
+        tryCompare(root, "drawerRetracted", false)
+        compare(windowService.records, records)
+        compare(windowService.placementRevision, revision)
+        verify(!root._yieldDebounce.running)
+        windowService.currentDesktopId = "desk1"
+        tryCompare(root, "drawerRetracted", true)
+    }
+    function test_switching_desktop_cancels_pending_hide() {
+        windowService.records = [record(false, false)]
+        tryCompare(root, "_stripOverlap", 1)
+        verify(root._yieldDebounce.running)
+        windowService.currentDesktopId = "desk2"
+        tryCompare(root, "drawerRetracted", false)
+        verify(!root._yieldDebounce.running)
+        wait(450)
+        verify(!root.drawerRetracted)
+    }
+    function test_switching_desktop_releases_completed_yield() {
+        windowService.records = [record(false, false)]
+        tryCompare(root, "_stripYield", true, 1500)
+        verify(root.drawerRetracted)
+        windowService.currentDesktopId = "desk2"
+        tryCompare(root, "drawerRetracted", false)
+        windowService.currentDesktopId = "desk1"
+        tryCompare(root, "_stripYield", true, 1500)
+        verify(root.drawerRetracted)
+    }
+    function test_hidden_fullscreen_releases_after_placement_only_update() {
+        windowService.records = [record(true, false)]
+        tryCompare(root, "drawerRetracted", true)
+        windowService.records[0].toplevel.visible = false
+        windowService.placementRevision++
+        tryCompare(root, "desktopFullscreen", false)
+        tryCompare(root, "drawerRetracted", false)
+    }
+    function test_moving_window_away_releases_after_placement_only_update() {
+        windowService.records = [record(false, false)]
+        tryCompare(root, "_stripYield", true, 1500)
+        windowService.records[0].toplevel.geometry.x = 500
+        windowService.placementRevision++
+        tryCompare(root, "drawerRetracted", false)
+    }
+    function test_sticky_fullscreen_still_retracts_both_desktops() {
+        windowService.records = [record(true, true)]
+        tryCompare(root, "drawerRetracted", true)
+        windowService.currentDesktopId = "desk2"
+        verify(root.desktopFullscreen)
+        verify(root.drawerRetracted)
+    }
+}

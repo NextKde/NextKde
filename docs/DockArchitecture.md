@@ -753,6 +753,52 @@ Use `AppGroupService` for grouping and add provider-specific workspace data
 as optional runtime metadata. Do not put Hyprland workspace IDs into the
 canonical app identity or persisted pinned records.
 
+The Stage drawer checks overlap and fullscreen windows on
+`WindowService.currentDesktopId`, including windows on all desktops. Windows
+on other desktops, hidden windows and minimized windows do not retract it.
+Both checks observe `placementRevision` because geometry and visibility can
+update in place without a presentation revision. Changing only the current
+desktop must also recompute overlap, cancel pending retraction and release
+an existing yield when the strip is clear. The overlap thresholds remain
+above 60% to retract (after 400ms) and below 50% to release. The production drawer
+checks and overlap release handler have regressions in `test_stage_visibility.mjs`.
+`tests/stage-visibility/run.mjs` also runs the production bindings and timers in
+Qt Quick Test with fixture window records. Full Shell rendering and real
+compositor desktop switching still require graphical VM validation.
+
+`StageDesktopTransition` keeps the displayed card model and the drawer's
+horizontal position unchanged while `WindowService.desktopTransitionActive`
+is true. Desktop navigation does not animate the whole strip's opacity or
+add a horizontal offset. After switching settles, it commits only the latest
+desktop; cards created by that commit start opaque. Input is suspended during
+the switch. Rapid switches, returning to the original desktop and disabling
+Stage cancel or supersede pending commits. Fullscreen/overlap drawer rules
+are applied after the switch, so a new desktop cannot move the old strip.
+
+The platform bridge supplies the bounded switch lifetime through
+`desktops.transitionActive` (see the [platform contract](../shared/contracts/platform.v1.md)).
+The live-card payload identifies the **displayed** model with top-level
+`desktopId`. A changed nonempty desktop ID replaces absent compositor cards
+immediately and starts the incoming cards opaque, bypassing ordinary
+missing-card grace and entrance fading for this handoff. Older payloads
+without that field retain the usual lifecycle behavior.
+
+Stage's post-scene compositor overlay continues painting in fixed screen
+coordinates during KWin's `slide`, `cubeslide` and `fadedesktop` effects. Other
+fullscreen effects, including Overview, remain exclusive; screen lock always
+suppresses the overlay. This native change requires the newly installed KWin
+plugin and a new login session; restarting only Shell cannot enable it.
+
+The Qt Quick fixtures run the production controller, integration handlers and
+drawer bindings, covering model/position retention, fullscreen destinations,
+rapid switches and cancellation. `kos-platform.desktop-transition` covers
+bounded native effect polling on a private bus; `kos-stage.desktop-policy`
+covers fullscreen/lock exclusivity. The optional graphical
+`kos-stage.static-desktop-compositor` test loads the built plugin into an
+isolated virtual KWin and verifies that opaque cards stay at fixed coordinates
+and keep painting during a real slide, then replace without ghost cards.
+See the [Stage test guide](../tests/stage-visibility/README.md).
+
 ### Desktop lyrics
 
 Desktop lyrics are an accessory of the desktop music widget, not a Dock

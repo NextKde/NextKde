@@ -5,6 +5,8 @@
     "kos-platform.ai-worker-client",
     "kos-platform.keep-awake",
     "kos-platform.kwin-shortcut-conflict",
+    "kos-platform.desktop-transition",
+    "kos-stage.desktop-policy",
     "kos-platform.startup",
     "kos-platform.media-feedback",
     "kos-platform.file-copy",
@@ -44,6 +46,7 @@
     "kos-shell.theme-wallpaper-policy",
     "kos-shell.theme-wallpaper-state",
     "kos-shell.stage-geometry",
+    "kos-shell.stage-visibility",
     "kos-shell.stage-groups",
     "kos-shell.stage-effects",
     "kos-shell.stage-protocol",
@@ -77,6 +80,7 @@
     "kos-ui.widget-resize"
   ],
   "headless": [
+    "kos-shell.stage-visibility-qml",
     "kos-shell.dock-native-target",
     "kos-shell.dock-selection-highlight",
     "kos-shell.desktop-lyrics",

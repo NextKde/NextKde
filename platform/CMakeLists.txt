@@ -68,6 +68,8 @@ set(kos_platform_sources
     src/daemon/Shortcuts.h
     src/kwin/KWinBridge.cpp
     src/kwin/KWinBridge.h
+    src/kwin/DesktopTransitionMonitor.cpp
+    src/kwin/DesktopTransitionMonitor.h
     src/wallpaper/PlasmaWallpaperAdapter.cpp
     src/wallpaper/PlasmaWallpaperAdapter.h
 )
@@ -185,6 +187,15 @@ if(BUILD_TESTING)
     endif()
     find_program(DBUS_RUN_SESSION_EXECUTABLE dbus-run-session)
     if(DBUS_RUN_SESSION_EXECUTABLE)
+        qt_add_executable(kos-desktop-transition-test
+            tests/test_desktop_transition.cpp
+            src/kwin/DesktopTransitionMonitor.cpp
+            src/kwin/DesktopTransitionMonitor.h)
+        target_link_libraries(kos-desktop-transition-test PRIVATE Qt6::Core Qt6::DBus)
+        add_test(NAME kos-platform.desktop-transition
+            COMMAND ${DBUS_RUN_SESSION_EXECUTABLE} -- $<TARGET_FILE:kos-desktop-transition-test>)
+        set_tests_properties(kos-platform.desktop-transition PROPERTIES LABELS platform TIMEOUT 20)
+
         qt_add_executable(kos-keep-awake-test tests/test_keep_awake.cpp)
         target_link_libraries(kos-keep-awake-test PRIVATE Qt6::Core Qt6::DBus Qt6::Network)
         add_test(NAME kos-platform.keep-awake
