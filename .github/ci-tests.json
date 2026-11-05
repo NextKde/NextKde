@@ -1,4 +1,5 @@
 {
+  "installed": ["kos-shell.installed-startup"],
   "data-platform": [
     "kos-platform.appmenu",
     "kos-platform.brightness",

@@ -245,6 +245,15 @@ jobs:
             --output-log "$GITHUB_WORKSPACE/.build/tests/test-results/widgets.log" \
             --output-junit "$GITHUB_WORKSPACE/.build/tests/test-results/widgets.xml"
 
+      - name: Load deployed Shell trees on a private compositor
+        if: ${{ !cancelled() && steps.prepare.outcome == 'success' }}
+        run: |
+          mkdir -p .build/tests/test-results
+          ctest --test-dir .build/tests --output-on-failure --no-tests=error \
+            -L '^installed$' \
+            --output-log "$GITHUB_WORKSPACE/.build/tests/test-results/installed.log" \
+            --output-junit "$GITHUB_WORKSPACE/.build/tests/test-results/installed.xml"
+
       - name: Summarise actual test results
         if: always()
         run: python tools/ci_tests.py report
