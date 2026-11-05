@@ -143,7 +143,8 @@ take_over_plasma_desktop() { echo unexpected; }
 warn_notification_claimers() { echo unexpected; }
 print_install_summary() { echo unexpected; }
 build_dir=fixture
-if install_all; then exit 99; else exit 1; fi
+install_all
+echo unexpected
 '''
         result = subprocess.run(['bash', '-euc', script], capture_output=True, text=True)
         self.assertEqual(result.returncode, 1)

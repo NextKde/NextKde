@@ -1890,7 +1890,9 @@ install_all() {
     fi
     ensure_build_dependencies
     build
-    deploy_artifacts "$build_dir" || return 1
+    # Keep this a simple command: an || guard would disable errexit inside
+    # the entire deployment function, allowing failed copies to be ignored.
+    deploy_artifacts "$build_dir"
     if ! is_nixos; then
         install_kwin_plugins
     fi
@@ -2085,7 +2087,7 @@ nix_deploy_artifacts() {
         printf 'result symlink not found. Run ./tools/kosctl nix build first.\n' >&2
         return 1
     fi
-    deploy_artifacts "$result_dir" || return 1
+    deploy_artifacts "$result_dir"
     install -m 0644 "$result_dir/share/kos/release.json" "$prefix/share/kos/release.json"
 }
 
