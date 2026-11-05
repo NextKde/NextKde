@@ -101,6 +101,7 @@ public:
                 QTimer poll;
                 poll.setInterval(100);
                 const auto consume = [&] {
+                    if (!reply->isOpen()) return;
                     const int status = reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();
                     if (status != 200) { reply->readAll(); return; }
                     const auto length = reply->header(QNetworkRequest::ContentLengthHeader).toLongLong();
