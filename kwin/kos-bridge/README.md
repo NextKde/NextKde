@@ -219,6 +219,12 @@ panel on the window: see **Adjusting a panel** below.
 App keys match the window class exactly, or its first whitespace-separated token
 (`"code code"` matches `"code"`).
 
+Qualified Forma/Mayonnaise CSD apps retain their own OpenGL controls, without
+overlay painting, input interception or tint sampling. Saved overlay geometry
+and forced-paint rules cannot add a duplicate cluster. This policy uses verified
+desktop IDs and leaves SSD controls and cooperative surface negotiation intact;
+see [control ownership](../../docs/NativeWindowDecoration.md).
+
 ### Which configuration a window gets
 
 1. `default` — every key.
