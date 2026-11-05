@@ -30,7 +30,7 @@
 <p align="center"><sub>NextKDE のデスクトップ · macOS 外観 · テーマ設定</sub></p>
 
 NextKDE のデスクトップ体験は、充実しつつあるコンパニオンアプリにも広がっています。
-カレンダー、天気、電卓、Todo はオプションアプリとして利用でき、
+カレンダー（タスク機能を含む）、天気、電卓はオプションアプリとして利用でき、
 [KMusic](https://github.com/NextKde/KMusic) が音楽体験を加えます。
 メールとファイルマネージャーは今後登場予定です。
 
@@ -53,10 +53,13 @@ PipeWire、BlueZ、systemd と連携します。
 - **デスクトップファイル** — 開く、名前変更、コピー、移動、削除、アプリケーションの選択。
 - **設定とモーション** — バー、ドック、ランチャー、ショートカット、ウィンドウ装飾、アニメーションを設定。
 
-カレンダー、電卓、Todo、天気は
+カレンダー（タスク機能を含む）、電卓、天気は
 [オプションの単体アプリケーション](apps/README.md)として利用できます。
-`./tools/kosctl install apps` でこの 4 つがインストールされます。
-ListenFree とそのオーディオ SDK は明示的に
+`./tools/kosctl install apps` はユーザー Flatpak バックエンドを使用します。
+GitHub Release の署名付き Flatpak バンドルを使い、専用アプリ配信サーバーは不要です。
+署名付き配布は未公開のため、新規インストールはまだ利用できません。
+従来のソースビルドには明示的な `--backend=source` が必要です。
+ListenFree は明示的に
 `./tools/kosctl install apps --with-listenfree` を指定する必要があります。
 詳しくは[アプリケーションのインストールガイド](docs/GettingStarted.md#optional-standalone-applications)を参照してください。
 

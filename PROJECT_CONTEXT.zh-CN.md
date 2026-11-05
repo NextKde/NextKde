@@ -12,9 +12,14 @@ KDE Plasma 6 **Wayland**、Quickshell 0.3.x。先读本文件，再读[文档索
 - QML 不执行 `nmcli`、`wpctl`、`qdbus6`、`systemctl`、`gio` 等系统接入命令，也不绕过服务。
   新能力增加到[版本化平台契约](shared/contracts/platform.v1.md)，检查断连和错误路径。
 - 已有模块自身状态的原子持久化是有限的历史例外；新接入放服务层。保留状态根目录、协议封装及迁移。
-- 核心安装负责完整 Settings/运行 QML 树；应用安装不能覆盖其中的片段。
-  标准应用为日历、计算器、待办和天气；ListenFree/SDK 需显式选择。旧 Music 源码已移除，
-  普通升级仍保留其已安装文件、用户数据和音频关联；仅显式安装 ListenFree 时迁移旧播放器。
+- 日历（含待办功能）、计算器、天气合用独立 NextKde/kos-apps 仓库
+  （`apps/org.nextks.<app>`），ListenFree 保持 NextKde/ListenFree 独立仓库，包含私有 PIM/运行时代码。
+  前三款统一版本／Release，分别安装卸载；源码已公开，签名包尚未发行。
+  根应用 preset/目标及已拆出的应用源码已移除，旧开关 ON 明确报错。
+- 核心安装负责完整 Settings/运行 QML 树；兼容应用入口默认使用签名 Flatpak 包，
+  源码须显式 --backend=source；无认可 Release/runtime 策略则不可用。默认选择日历（含待办功能）、计算器和天气；ListenFree 显式选择。
+  生命周期操作不启停服务、不改 MIME 默认关联、不移除旧播放器、不覆盖核心 Settings。
+  核心 data-service 仍是 Shell 依赖。
 - 不在运行中的合成器热替换/重载 KWin 插件；安装后注销登录或重启。
 - 项目验证只在 VM 或托管 CI 执行，保留工作树中无关改动。
 
