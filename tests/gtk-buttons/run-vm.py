@@ -63,7 +63,7 @@ def main():
                QT_LOGGING_RULES='kwin_scripting.debug=true', QT_DEBUG_PLUGINS='1')
     # Setup requires no D-Bus session: avoid reconfiguring the outer compositor.
     setup_env = dict(env, DBUS_SESSION_BUS_ADDRESS='unix:path=/nonexistent/gtk201')
-    tool = [sys.executable, str(ROOT / 'tools/gtk-window-buttons.py')]
+    tool = [sys.executable, str(ROOT / 'tools/integration/gtk-window-buttons.py')]
     if args.settings:
         subprocess.run([str(args.settings.resolve()), '--install-window-defaults'], env=setup_env, check=True)
     else:

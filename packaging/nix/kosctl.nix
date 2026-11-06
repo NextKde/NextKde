@@ -26,8 +26,9 @@ stdenv.mkDerivation {
     mkdir -p $out/bin
     cp tools/kosctl $out/bin/kosctl
     chmod +x $out/bin/kosctl
-    mkdir -p $out/tools
-    cp tools/source-release.py tools/deploy-runtime.py $out/tools/
+    mkdir -p $out/tools/release $out/tools/deploy
+    cp tools/release/source-release.py $out/tools/release/
+    cp tools/deploy/deploy-runtime.py tools/deploy/deploy-shell-qml.py $out/tools/deploy/
     cp VERSION $out/VERSION
     # The control tool's version is not proof that the desktop is installed.
     # Read the core package's system-profile record; standalone wrappers report

@@ -30,7 +30,7 @@ Quickshell 的 `-c` 与 `-p` 不可混用。手动启动时 `QML_IMPORT_PATH` �
 
 ```sh
 python3 platform/tests/test_contract.py
-python3 tools/check-docs.py
+python3 tools/ci/check-docs.py
 ./tools/run-tests.sh                 # 默认只跑数据层
 ./tools/run-tests.sh --layer platform
 ./tools/run-tests.sh --layer logic

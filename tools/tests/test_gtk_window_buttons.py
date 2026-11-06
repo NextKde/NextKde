@@ -8,7 +8,7 @@ import os
 import subprocess
 from unittest.mock import patch
 
-spec = importlib.util.spec_from_file_location('gtk_buttons', Path(__file__).parents[1] / 'gtk-window-buttons.py')
+spec = importlib.util.spec_from_file_location('gtk_buttons', Path(__file__).parents[1] / 'integration/gtk-window-buttons.py')
 module = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(module)
 

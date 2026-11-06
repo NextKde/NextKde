@@ -5,7 +5,7 @@ from pathlib import Path
 import tempfile
 import unittest
 
-spec = importlib.util.spec_from_file_location('firefox_buttons', Path(__file__).parents[1]/'firefox_buttons.py')
+spec = importlib.util.spec_from_file_location('firefox_buttons', Path(__file__).parents[1]/'integration/firefox_buttons.py')
 m = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(m)
 

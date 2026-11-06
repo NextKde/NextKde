@@ -59,7 +59,7 @@ The module builds against the host's package set, including its Qt/KWin versions
 The legacy `kos-ctl` helper and `kos-shell-init` share the same deployment script, bound to the
 module's selected package. `kos-ctl sync` also copies the native QML modules; it never searches
 for an arbitrary matching store directory. Use the selected system generation for versioned upgrades.
-`tools/nix-start.sh` is an alternative development helper; do not mix manual units with declarative
+`tools/platform/nix-start.sh` is an alternative development helper; do not mix manual units with declarative
 units during acceptance. Settings packages must include their QML and ECM build dependency;
 missing modules are a packaging failure, not a reason to bypass initialization.
 

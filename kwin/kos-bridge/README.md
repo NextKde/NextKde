@@ -483,7 +483,7 @@ for the KWin installation that will load them. Run acceptance only in a VM.
 For repeatable API checks against another KWin source checkout:
 
 ```sh
-python3 tools/check-kwin-api.py --build-dir .build/kosctl --kwin-headers /path/to/kwin/src
+python3 tools/ci/check-kwin-api.py --build-dir .build/kosctl --kwin-headers /path/to/kwin/src
 ```
 
 Bridge detects the installed paint-hook signature rather than assuming a version

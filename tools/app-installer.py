@@ -673,7 +673,7 @@ class Installer:
         if self.repo == "kos-apps":
             old_desktop = self.data / "applications" / (self.executables[0] + ".desktop")
             if present(old_desktop) and str(old_desktop) not in owned:
-                fail("EXTERNALLY_MANAGED", "Old desktop activation is not installer-owned; review tools/purge-legacy-apps.py for explicit legacy program/data cleanup", path=str(old_desktop))
+                fail("EXTERNALLY_MANAGED", "Old desktop activation is not installer-owned; review tools/maintenance/purge-legacy-apps.py for explicit legacy program/data cleanup", path=str(old_desktop))
         for executable in self.executables:
             for directory in os.get_exec_path():
                 candidate = Path(directory) / executable

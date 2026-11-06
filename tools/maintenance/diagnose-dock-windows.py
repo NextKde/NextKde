@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Read Dock's KWin snapshot on the affected VM without restarting anything.
 
-Run as the desktop session user: python3 tools/diagnose-dock-windows.py
+Run as the desktop session user: python3 tools/maintenance/diagnose-dock-windows.py
 Only subscribes to the platform socket and queries KWin's script-loaded flag.
 No scripts, effects, window commands, or service restarts are requested.
 Window titles, application IDs, and UUIDs are omitted from the output.

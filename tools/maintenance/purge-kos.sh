@@ -23,7 +23,7 @@ if (( EUID == 0 )); then
     exit 2
 fi
 
-project_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+project_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 prefix="${KOS_PREFIX:-$HOME/.local}"
 data_dir="${XDG_DATA_HOME:-$HOME/.local/share}"
 cache_dir="${XDG_CACHE_HOME:-$HOME/.cache}"

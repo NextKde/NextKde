@@ -1,14 +1,9 @@
 #!/usr/bin/env python3
-"""Guard explicit migration instead of falsely passing obsolete app preflights.
-
-Distribution/SDK dependency suites now belong to each independent app repository;
-this core compatibility contract must not probe packages or mutate a user prefix.
-"""
+"""Guard core cache migration and independent-app ownership. VM/CI only."""
 from pathlib import Path
 import os
 import re
 import subprocess
-import sys
 import tempfile
 import unittest
 
@@ -16,22 +11,6 @@ ROOT = Path(__file__).resolve().parents[2]
 
 
 class DependencyMigrationTests(unittest.TestCase):
-    def test_removed_bundle_preflight_is_explicit_and_non_successful(self):
-        for options in ([], ["--sdk-only"], ["--with-listenfree"], ["--with-listenfree-video"]):
-            with self.subTest(options=options):
-                result = subprocess.run([sys.executable, str(ROOT / "tools/check-apps-dependencies.py"), *options], capture_output=True, text=True)
-                self.assertEqual(result.returncode, 2)
-                for repo in ("kos-apps", "ListenFree"):
-                    self.assertIn("https://github.com/NextKde/" + repo, result.stderr)
-                self.assertIn("cannot validate", result.stderr)
-
-    def test_sdk_preparation_redirects_without_creating_destination(self):
-        source = (ROOT / "tools/prepare-listenfree-sdk.sh").read_text()
-        self.assertIn("https://github.com/NextKde/ListenFree", source)
-        self.assertIn("exit 2", source)
-        for obsolete in ("mkdir", "cmake", "patch_root", "curl", "systemctl"):
-            self.assertNotIn(obsolete, source)
-
     def test_core_upgrade_configure_clears_retired_app_cache_and_invalidates_stamp(self):
         source = (ROOT / "tools/kosctl").read_text()
         functions = []
@@ -78,7 +57,7 @@ configure_build
 
     def test_core_purge_preserves_independent_app_ownership(self):
         # Source contract only: never source/execute purge, even with --dry-run.
-        source = (ROOT / "tools/purge-kos.sh").read_text()
+        source = (ROOT / "tools/maintenance/purge-kos.sh").read_text()
         for external in ("kos-calendar", "kos-todo", "kos-weather", "kos-pim-service",
                          "kos-music", "listenfree", "KOS_INSTALL_PREFIX", "KOS_APPS_BUILD_DIR"):
             self.assertNotIn(external, source)

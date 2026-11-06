@@ -58,9 +58,9 @@ void reconfigure(const QString &effect) {
 bool syncGtkControls(bool enabled, const QString &glyphMode, QString &error) {
     QTemporaryDir temporary;
     if (!temporary.isValid()) { error = QStringLiteral("Could not prepare GTK window controls"); return false; }
-    const QStringList assets{QStringLiteral("tools/gtk-window-buttons.py"),
+    const QStringList assets{QStringLiteral("tools/integration/gtk-window-buttons.py"),
         QStringLiteral("shared/gtk/gtk-3.0.css"), QStringLiteral("shared/gtk/gtk-4.0.css"),
-        QStringLiteral("tools/firefox_buttons.py"), QStringLiteral("shared/firefox/window-buttons.css")};
+        QStringLiteral("tools/integration/firefox_buttons.py"), QStringLiteral("shared/firefox/window-buttons.css")};
     for (const auto &asset : assets) {
         const QString destination = temporary.filePath(asset);
         if (!QDir().mkpath(QFileInfo(destination).absolutePath())

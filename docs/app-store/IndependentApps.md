@@ -31,7 +31,7 @@ applications, not upgrade sources. Breaking change is intentional: current
 source ownership, native preferences/data/state and Calendar service use new
 identities; old profiles are not read, copied or merged. Settings only manages
 current IDs and has no remove-retired operation. Legacy program AND personal-data
-deletion is the separate explicit `tools/purge-legacy-apps.py`, preview by default.
+deletion is the separate explicit `tools/maintenance/purge-legacy-apps.py`, preview by default.
 Unproven core/system ownership and shared data are retained, not guessed. See
 [boundaries, exact paths and cleanup](ProfileMigration.md) and
 [human acceptance](ProfileMigrationAcceptance.md).

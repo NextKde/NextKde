@@ -9,7 +9,7 @@ import unittest
 from unittest.mock import patch
 
 ROOT = Path(__file__).parents[2]
-spec = importlib.util.spec_from_file_location('deploy_runtime', ROOT / 'tools/deploy-runtime.py')
+spec = importlib.util.spec_from_file_location('deploy_runtime', ROOT / 'tools/deploy/deploy-runtime.py')
 runtime = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(runtime)
 

@@ -25,7 +25,7 @@ Todo 已整合进 Calendar 的提醒事项视图，不再提供独立启动入�
 `org.nextkde.Weather` 是不同的旧应用，不是升级来源。允许 breaking change：新版 source
 所有权、原生配置／资料／状态及 Calendar 服务均隔离，不读取、复制或合并旧 profile。
 Settings 只管理当前 ID，已移除 remove-retired。旧程序及个人资料由单独的
-`tools/purge-legacy-apps.py` 人工显式删除，默认仅预览；无法确权的 core／系统文件和共享资料
+`tools/maintenance/purge-legacy-apps.py` 人工显式删除，默认仅预览；无法确权的 core／系统文件和共享资料
 保留并报告，不猜路径删除。参见 [边界、确切路径与清理用法](ProfileMigration.md) 和
 [人工验收矩阵](ProfileMigrationAcceptance.md)。旧的三个单应用 GitHub 仓库已删除，
 改用 NextKde/kos-apps；本次 breaking 修改尚未发布签名 Release。
