@@ -14,6 +14,7 @@ ApplicationWindow {
     id: window
     SettingsControls.AppOperationCloseDialog {
         targetWindow: window
+        colors: theme
         store: typeof appStore !== "undefined" ? appStore : null
         parent: Overlay.overlay
     }

@@ -38,7 +38,7 @@ TestCase {
         backend.immediate = false
     }
     function makeWindow() {
-        const window = createTemporaryObject(factory, this)
+        const window = createTemporaryObject(factory, null)
         verify(window)
         tryCompare(window, "visible", true)
         return window
@@ -87,6 +87,53 @@ TestCase {
         backend.hasActiveMutation = false
         tryCompare(dialog, "visible", false)
         compare(window.visible, true)
+    }
+    function keyClickInWindow(window, key) {
+        // QtTest sends keys to the window containing the TestCase.
+        const originalParent = parent
+        try {
+            parent = window.contentItem
+            keyClick(key)
+        } finally {
+            parent = originalParent
+        }
+    }
+    function test_return_keeps_settings_open() {
+        backend.hasActiveMutation = true
+        const window = makeWindow()
+        const dialog = findChild(window, "appOperationCloseDialog")
+        window.close()
+        tryCompare(dialog, "opened", true)
+        tryCompare(findChild(dialog, "keepSettingsOpen"), "activeFocus", true)
+        keyClickInWindow(window, Qt.Key_Return)
+        tryCompare(dialog, "visible", false)
+        compare(window.visible, true)
+        compare(backend.cancellations, 0)
+    }
+    function test_escape_keeps_settings_open() {
+        backend.hasActiveMutation = true
+        const window = makeWindow()
+        const dialog = findChild(window, "appOperationCloseDialog")
+        window.close()
+        tryCompare(dialog, "opened", true)
+        keyClickInWindow(window, Qt.Key_Escape)
+        tryCompare(dialog, "visible", false)
+        compare(window.visible, true)
+        compare(backend.cancellations, 0)
+    }
+    function test_narrow_window_stacks_actions() {
+        backend.hasActiveMutation = true
+        const window = makeWindow()
+        window.width = 320
+        const dialog = findChild(window, "appOperationCloseDialog")
+        window.close()
+        tryCompare(dialog, "opened", true)
+        const keep = findChild(dialog, "keepSettingsOpen")
+        const cancel = findChild(dialog, "cancelTaskAndClose")
+        cancel.text = "Cancel the current task and close"
+        tryVerify(() => keep.y >= cancel.y + cancel.height)
+        verify(keep.width >= keep.implicitWidth)
+        verify(dialog.height <= window.height)
     }
     function test_synchronous_cancellation() {
         backend.hasActiveMutation = true
