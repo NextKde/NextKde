@@ -323,6 +323,10 @@ if(BUILD_TESTING)
             set_tests_properties(kos-shell.dock-reveal-indicator PROPERTIES
                 LABELS ui TIMEOUT 25
                 ENVIRONMENT "QML2_IMPORT_PATH=${CMAKE_BINARY_DIR}/qml")
+            add_test(NAME kos-shell.tray-notification-intent
+                COMMAND bash ${CMAKE_CURRENT_SOURCE_DIR}/tests/notification-history/run-tray-bridge.sh
+                    ${KOS_QUICKSHELL_EXECUTABLE})
+            set_tests_properties(kos-shell.tray-notification-intent PROPERTIES LABELS "ui;headless" TIMEOUT 15)
             add_test(NAME kos-shell.notification-history
                 COMMAND ${KOS_NODE_EXECUTABLE}
                     ${CMAKE_CURRENT_SOURCE_DIR}/tests/notification-history/run.mjs
