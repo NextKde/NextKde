@@ -31,7 +31,6 @@ public:
     QVariantList apps() const;
     bool anyBusy() const;
     bool hasActiveMutation() const;
-    Q_INVOKABLE void cancelActiveMutations();
     Q_INVOKABLE void install(const QString& id);
     Q_INVOKABLE void uninstall(const QString& id);
     Q_INVOKABLE void update(const QString& id);
@@ -45,6 +44,7 @@ public:
     Q_INVOKABLE void cleanupProgram(const QString& id, const QString& action);
 signals:
     void changed();
+    void taskFinished(const QString& name, const QString& code);
 private:
     void begin(const QString& action);
     friend class AppStoreTest;

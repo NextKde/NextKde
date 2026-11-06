@@ -30,6 +30,7 @@ public:
     void cancel();
 signals:
     void changed();
+    void mutationFinished(const QString& appId, const QString& code);
     void operationFinished(const QString& appId, const QString& code, const QString& message);
 private:
     struct Cancellation;

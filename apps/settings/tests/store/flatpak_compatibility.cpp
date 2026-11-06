@@ -36,10 +36,13 @@ private slots:
             {"version", "0.2.0"}, {"commit", QString(64, 'a')}, {"arch", "x86_64"},
             {"available", true}, {"installation", QVariantMap{}}};
         QSignalSpy finished(&backend, &FlatpakApps::operationFinished);
+        QSignalSpy notified(&backend, &FlatpakApps::mutationFinished);
         QVERIFY(backend.install("org.nextks.calendar"));
         QTRY_COMPARE_WITH_TIMEOUT(finished.size(), 1, 10000);
         QCOMPARE(finished.first()[1].toString(), "FLATPAK_INCOMPATIBLE");
         QVERIFY(!backend.busy());
+        QCOMPARE(notified.size(), 1);
+        QCOMPARE(notified.first()[1].toString(), "FLATPAK_INCOMPATIBLE");
         QVERIFY(backend.state("org.nextks.calendar").value("installations").toList().isEmpty());
         QVERIFY(!QFileInfo::exists(qEnvironmentVariable("XDG_CACHE_HOME") + "/kos-settings/flatpak"));
     }

@@ -34,6 +34,8 @@ qt_add_resources(KOS_GTK_RESOURCES ../../shared/gtk/integration.qrc)
 
 qt_add_executable(kos-settings
     src/main.cpp
+    src/TaskNotifications.cpp
+    src/TaskNotifications.h
     src/AppStore.cpp
     src/AppStore.h
     src/IndependentApps.cpp
@@ -101,6 +103,18 @@ install(DIRECTORY pages components DESTINATION share/kos/settings
 
 if(BUILD_TESTING)
     find_package(Qt6 6.5 REQUIRED COMPONENTS Test)
+    find_program(DBUS_RUN_SESSION_EXECUTABLE dbus-run-session REQUIRED)
+    add_executable(kos-settings-background-test tests/background/session.cpp)
+    target_link_libraries(kos-settings-background-test PRIVATE Qt6::Core Qt6::DBus Qt6::Test)
+    target_compile_definitions(kos-settings-background-test PRIVATE
+        SETTINGS_EXECUTABLE="$<TARGET_FILE:kos-settings>"
+        SETTINGS_COMPONENTS="${CMAKE_CURRENT_SOURCE_DIR}/components")
+    add_dependencies(kos-settings-background-test kos-settings)
+    add_test(NAME kos-settings.close-policy
+        COMMAND ${DBUS_RUN_SESSION_EXECUTABLE} -- $<TARGET_FILE:kos-settings-background-test>)
+    set_tests_properties(kos-settings.close-policy PROPERTIES
+        ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_QUICK_BACKEND=software"
+        LABELS "headless" TIMEOUT 60)
     find_package(Qt6 6.5 QUIET COMPONENTS QuickTest)
     add_executable(kos-flatpak-process-test tests/store/flatpak_process.cpp src/FlatpakTransactionProcess.cpp)
     target_include_directories(kos-flatpak-process-test PRIVATE src)
@@ -239,13 +253,6 @@ if(BUILD_TESTING)
         set_tests_properties(kos-settings.wallpaper-page PROPERTIES
             ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_QUICK_BACKEND=software"
             LABELS ui TIMEOUT 15)
-
-        add_test(NAME kos-settings.close-policy
-            COMMAND ${KOS_QMLTESTRUNNER_EXECUTABLE}
-                -input ${CMAKE_CURRENT_SOURCE_DIR}/tests/close/tst_close.qml)
-        set_tests_properties(kos-settings.close-policy PROPERTIES
-            ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_QUICK_BACKEND=software"
-            LABELS "ui;headless" TIMEOUT 20)
 
         add_test(NAME kos-settings.services-page
             COMMAND ${KOS_QMLTESTRUNNER_EXECUTABLE}

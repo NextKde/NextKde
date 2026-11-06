@@ -30,6 +30,7 @@ AppStore::AppStore(const QString& directory, QObject* parent)
     : QObject(parent), m_independent(directory, this)
 {
     connect(&m_independent, &IndependentApps::changed, this, &AppStore::changed);
+    connect(&m_independent, &IndependentApps::taskFinished, this, &AppStore::taskFinished);
     m_state = {{"busy", false}, {"installed", false}, {"available", false}, {"code", ""},
                {"stage", ""}, {"message", ""}, {"logPath", ""}, {"dependencies", QVariantList{}}};
     m_compatibilityGuide = directory + QStringLiteral("/app-store/Compatibility.md");
@@ -132,6 +133,7 @@ void AppStore::setStage(const QString& stage)
 
 void AppStore::fail(const QString& code, const QString& message)
 {
+    const bool wasBusy = m_state.value("busy").toBool();
     m_killTimer.stop();
     m_deadline.stop();
     m_retryTimer.stop();
@@ -143,6 +145,7 @@ void AppStore::fail(const QString& code, const QString& message)
     m_state["message"] = message;
     m_state["stage"] = "";
     refresh();
+    if (wasBusy) emit taskFinished(QStringLiteral("KMusic"), code);
 }
 
 bool AppStore::validFile(const QString& relative) const
@@ -409,6 +412,7 @@ void AppStore::finish(int exitCode, QProcess::ExitStatus status)
         || m_result.value("installed").toBool() != expectedInstalled
         || m_state.value("installed").toBool() != expectedInstalled)
         fail(QStringLiteral("RESULT_UNKNOWN"));
+    emit taskFinished(QStringLiteral("KMusic"), m_state.value("code").toString());
 }
 
 void AppStore::stopProcess(int signal)
@@ -499,8 +503,3 @@ bool AppStore::hasActiveMutation() const
     return m_state.value("busy").toBool() || m_independent.hasActiveMutation();
 }
 
-void AppStore::cancelActiveMutations()
-{
-    if (m_state.value("busy").toBool()) cancel();
-    m_independent.cancelActiveMutation();
-}

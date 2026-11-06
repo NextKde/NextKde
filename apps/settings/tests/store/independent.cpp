@@ -46,13 +46,13 @@ private slots:
     }
     void init() { QVERIFY(temporary.isValid()); oldState = qgetenv("XDG_STATE_HOME"); qputenv("XDG_STATE_HOME", (temporary.path()+"/state").toUtf8()); }
     void cleanup() { if (oldState.isNull()) qunsetenv("XDG_STATE_HOME"); else qputenv("XDG_STATE_HOME", oldState); }
-    void closeCancellationWaitsForNativeProcess()
+    void explicitCancellationWaitsForNativeProcess()
     {
         fixture("time.sleep(10)\nemit()\n");
         IndependentApps store(temporary.path());
         store.start(store.indexOf("calendar"), "update");
         QVERIFY(store.hasActiveMutation());
-        store.cancelActiveMutation();
+        store.cancel("calendar");
         QVERIFY(store.hasActiveMutation());
         QTRY_VERIFY_WITH_TIMEOUT(!store.hasActiveMutation(), 4000);
         QCOMPARE(state(store, "calendar").value("code").toString(), "CANCELLED");
@@ -113,9 +113,26 @@ private slots:
     {
         QFETCH(QByteArray,body); fixture(body);
         IndependentApps store(temporary.path());
+        QSignalSpy finished(&store, &IndependentApps::taskFinished);
         store.start(store.indexOf("calendar"), "install");
         QTRY_VERIFY_WITH_TIMEOUT(!store.busy(),4000);
         QCOMPARE(state(store,"calendar").value("code").toString(),"RESULT_UNKNOWN");
+        QCOMPARE(finished.size(), 1);
+        QCOMPARE(finished.first()[0].toString(), "Calendar");
+        QCOMPARE(finished.first()[1].toString(), "RESULT_UNKNOWN");
+    }
+    void notificationWaitsForVerificationAndIgnoresQueries()
+    {
+        fixture("if action=='status': emit(details=dict(installed=True,managed=True,currentVersion='1.0'),version='1.0',revision='abc')\nelse: emit(code='INSTALLED',version='1.0',revision='abc')\n");
+        IndependentApps store(temporary.path());
+        QSignalSpy finished(&store, &IndependentApps::taskFinished);
+        store.start(store.indexOf("calendar"), "status");
+        QTRY_VERIFY_WITH_TIMEOUT(!store.busy(), 4000);
+        QCOMPARE(finished.size(), 0);
+        store.start(store.indexOf("calendar"), "install");
+        QTRY_VERIFY_WITH_TIMEOUT(!store.busy(), 4000);
+        QCOMPARE(finished.size(), 1);
+        QCOMPARE(finished.first()[1].toString(), "");
     }
     void networkFailureKeepsOfflineState()
     {

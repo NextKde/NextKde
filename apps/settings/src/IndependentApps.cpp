@@ -41,6 +41,16 @@ IndependentApps::IndependentApps(const QString& resources, QObject* parent)
             m_flatpakResults[appId] = QVariantMap{{"code", code}, {"message", message}};
             refresh();
         });
+    connect(&m_flatpak, &FlatpakApps::mutationFinished, this,
+        [this](const QString& appId, const QString& code) {
+            for (const auto& entry : m_apps) {
+                const auto state = entry.toMap();
+                if (state.value("appId").toString() == appId) {
+                    emit taskFinished(state.value("name").toString(), code);
+                    break;
+                }
+            }
+        });
     m_process.setChildProcessModifier([] { if (::setsid() < 0) ::_exit(126); });
     connect(&m_process, &QProcess::started, this, [this] {
         m_group = m_process.processId();
@@ -391,7 +401,9 @@ void IndependentApps::complete(const QString& code, const QString& message)
     log((code + ": " + message + '\n').toUtf8()); m_log.close();
     auto state = m_apps[m_active].toMap();
     state["busy"] = false; state["stage"] = ""; state["code"] = code; state["message"] = message;
+    const bool mutated = m_verifying || isAppMutation(m_action);
     m_apps[m_active] = state; m_active = -1; m_verifying = false; emit changed();
+    if (mutated) emit taskFinished(state.value("name").toString(), code);
     QTimer::singleShot(0, this, &IndependentApps::nextStatus);
 }
 void IndependentApps::stop(int signal)
@@ -478,8 +490,3 @@ void IndependentApps::openRepository(const QString& id)
     if (index >= 0) QDesktopServices::openUrl(QUrl(m_apps[index].toMap().value("repository").toString()));
 }
 
-void IndependentApps::cancelActiveMutation()
-{
-    if (m_flatpak.hasActiveMutation()) m_flatpak.cancel();
-    else if (hasActiveMutation()) cancel(m_apps[m_active].toMap().value("id").toString());
-}

@@ -3,11 +3,11 @@
 // Keys mirror ZhCatalog.mjs; when an English source string changes, update
 // the key here too. Date patterns use Qt format strings (quote literals).
 export const catalog = {
-    "An application task is still running": "Uma tarefa de aplicativo ainda está em andamento",
-    "Finishing the task safely. Settings will close when it has stopped.": "Finalizando a tarefa com segurança. As Configurações serão fechadas quando ela terminar.",
-    "An application is being installed, updated or removed. Keep Settings open, or cancel the task and close after it has stopped.": "Um aplicativo está sendo instalado, atualizado ou removido. Mantenha as Configurações abertas ou cancele a tarefa e feche após ela terminar.",
-    "Keep Settings open": "Manter Configurações abertas",
-    "Cancel task and close": "Cancelar tarefa e fechar",
+    "Application task completed": "Tarefa de aplicativo concluída",
+    "Application task cancelled": "Tarefa de aplicativo cancelada",
+    "Application task failed": "Falha na tarefa de aplicativo",
+    "Open Settings to view the result.": "Abra as Configurações para ver o resultado.",
+    "Tasks continue in the background after closing this window. Return anytime to view progress or cancel.": "A tarefa continua em segundo plano após fechar a janela. Volte a qualquer momento para ver o progresso ou cancelar.",
 
     "Application inspection is taking too long; installation state is unknown": "A consulta está demorando; o estado da instalação é desconhecido",
     "Selected": "Selecionado",
@@ -93,7 +93,6 @@ export const catalog = {
     "Download timed out after %1 attempt(s). Check your connection and try again.": "O download expirou após %1 tentativa(s). Verifique sua conexão e tente novamente.",
     "The operation timed out and was stopped. View the log before trying again.": "A operação expirou e foi interrompida. Consulte o log antes de tentar novamente.",
     "Service": "Serviço",
-    "Keep Settings open until the operation finishes, or cancel it here.": "Mantenha as Configurações abertas até a operação terminar, ou cancele aqui.",
     "The operation failed. View the log for details.": "A operação falhou. Consulte o log para mais detalhes.",
     "The installer could not be started. Check that Python 3.9 or newer is installed.": "Não foi possível iniciar o instalador. Verifique se o Python 3.9 ou mais recente está instalado.",
     "KMusic could not be uninstalled. View the log for details.": "Não foi possível desinstalar o KMusic. Consulte o log para mais detalhes.",

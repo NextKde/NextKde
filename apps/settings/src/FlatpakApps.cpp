@@ -651,8 +651,10 @@ FlatpakApps::FlatpakApps(QObject* parent) : QObject(parent)
             m_log.close();
             m_progress["cancelling"] = false;
             m_progress["status"] = "";
+            const bool mutated = isAppMutation(m_action);
             m_activeId.clear(); m_action.clear(); m_verifying = false;
             emit operationFinished(appId, code, message);
+            if (mutated) emit mutationFinished(appId, code);
         }
         emit changed();
     });

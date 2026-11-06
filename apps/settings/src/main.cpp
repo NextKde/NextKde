@@ -1,4 +1,5 @@
 #include "AppStore.h"
+#include "TaskNotifications.h"
 #include "PowerSettings.h"
 #include "CacheMaintenance.h"
 #include "SettingsBridge.h"
@@ -51,6 +52,10 @@ int main(int argc, char* argv[])
     QQuickWindow::setDefaultAlphaBuffer(true);
     QGuiApplication application(argc, argv);
     Kos::App::applyDesktopTypography(application);
+    // This session's single Settings process owns installation tasks and their
+    // results. Closing a window hides it; relaunching activates the same owner.
+    // Keep the event loop alive even when all windows are hidden.
+    application.setQuitOnLastWindowClosed(false);
     // Keep this window out of the Shell's KWin rules. This must match the
     // installed desktop entry basename: kos-settings.desktop.
     application.setApplicationName(QStringLiteral("kos-settings"));
@@ -70,14 +75,23 @@ int main(int argc, char* argv[])
     QLockFile navigationLock(navigationPath + QStringLiteral(".lock"));
     QLocalServer navigation;
     const bool navigationOwner = navigationLock.tryLock(0);
-    if (!navigationOwner && !requestedApp.isEmpty()) {
+    QString navigationRequest = requestedApp.isEmpty() ? QStringLiteral("show") : requestedApp;
+    for (const auto& argument : application.arguments()) {
+        if (requestedApp.isEmpty() && argument.startsWith(QLatin1String("--page="))) {
+            bool ok = false;
+            const int page = argument.mid(7).toInt(&ok);
+            if (argument == QLatin1String("--page=windows")) navigationRequest = QStringLiteral("page:11");
+            else if (ok && page >= 0 && page <= 13) navigationRequest = QStringLiteral("page:%1").arg(page);
+        }
+    }
+    if (!navigationOwner) {
         QLocalSocket existing;
         existing.connectToServer(navigationPath);
         if (!existing.waitForConnected(1500)) {
             qWarning() << "Settings navigation is not ready; try again";
             return 1;
         }
-        existing.write(requestedApp.toUtf8() + '\n');
+        existing.write(navigationRequest.toUtf8() + '\n');
         if (!existing.waitForBytesWritten(1500) || !existing.waitForReadyRead(1500)
             || existing.readAll() != "ok\n") {
             qWarning() << "Settings navigation was not acknowledged";
@@ -90,15 +104,17 @@ int main(int argc, char* argv[])
         navigation.setSocketOptions(QLocalServer::UserAccessOption);
         if (!navigation.listen(navigationPath)) {
             qWarning() << "Unable to establish Settings navigation" << navigation.errorString();
-            if (!requestedApp.isEmpty()) return 1;
+            return 1;
         }
     }
 
+    TaskNotifications taskNotifications;
     SettingsBridge bridge;
     WindowSettings windowSettings;
     PowerSettings powerSettings;
     QQmlApplicationEngine engine;
     engine.rootContext()->setContextProperty(QStringLiteral("settingsBridge"), &bridge);
+    engine.rootContext()->setContextProperty(QStringLiteral("taskNotifications"), &taskNotifications);
     engine.rootContext()->setContextProperty(QStringLiteral("windowSettings"), &windowSettings);
     engine.rootContext()->setContextProperty(QStringLiteral("powerSettings"), &powerSettings);
 
@@ -129,10 +145,13 @@ int main(int argc, char* argv[])
             client->setReadBufferSize(64);
             QObject::connect(client, &QLocalSocket::disconnected, client, &QObject::deleteLater);
             QTimer::singleShot(2000, client, [client] { client->disconnectFromServer(); });
-            const auto receive = [client, &engine] {
+            const auto receive = [client, &engine, &appStore] {
                 if (!client->canReadLine()) return;
                 const QByteArray app = client->readLine(64).trimmed();
-                if (app != "calendar" && app != "weather") {
+                bool pageOk = false;
+                const int page = app.startsWith("page:") ? app.mid(5).toInt(&pageOk) : -1;
+                pageOk = pageOk && page >= 0 && page <= 13;
+                if (app != "show" && app != "calendar" && app != "weather" && !pageOk) {
                     client->disconnectFromServer();
                     return;
                 }
@@ -141,12 +160,15 @@ int main(int argc, char* argv[])
                     return;
                 }
                 QObject *root = engine.rootObjects().constFirst();
-                if (!root->setProperty("requestedApp", QString::fromUtf8(app))
-                    || !root->setProperty("currentPage", 9)) {
-                    client->disconnectFromServer();
-                    return;
+                if (app == "calendar" || app == "weather") {
+                    root->setProperty("requestedApp", QString::fromUtf8(app));
+                    root->setProperty("currentPage", 9);
+                    QMetaObject::invokeMethod(root, "revealRequestedApp");
+                } else if (pageOk) {
+                    root->setProperty("currentPage", page);
+                } else if (appStore.hasActiveMutation()) {
+                    root->setProperty("currentPage", 9);
                 }
-                QMetaObject::invokeMethod(root, "revealRequestedApp");
                 if (auto *window = qobject_cast<QQuickWindow *>(root)) {
                     window->show();
                     window->raise();
@@ -173,7 +195,7 @@ int main(int argc, char* argv[])
         } else if (argument.startsWith(QStringLiteral("--page="))) {
             bool ok = false;
             const int page = argument.mid(7).toInt(&ok);
-            if (ok)
+            if (ok && page >= 0 && page <= 13)
                 engine.rootObjects().constFirst()->setProperty("currentPage", page);
         }
     }

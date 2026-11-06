@@ -294,7 +294,7 @@ private slots:
         store.uninstall(); // ignored while installing
         QVERIFY(store.music().value("busy").toBool());
         QVERIFY(store.hasActiveMutation());
-        store.cancelActiveMutations();
+        store.cancel();
         QVERIFY(store.hasActiveMutation());
         QTRY_VERIFY_WITH_TIMEOUT(!store.music().value("busy").toBool(), 12000);
         QCOMPARE(store.music().value("code").toString(), "RESULT_UNKNOWN");

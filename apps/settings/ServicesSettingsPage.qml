@@ -221,7 +221,7 @@ Flow {
         Text {
             Layout.fillWidth: true
             visible: !!page.music.busy
-            text: I18n.tr("Keep Settings open until the operation finishes, or cancel it here.")
+            text: I18n.tr("Tasks continue in the background after closing this window. Return anytime to view progress or cancel.")
             color: page.colors.secondaryText
             font.pixelSize: 11
             wrapMode: Text.Wrap
@@ -341,7 +341,7 @@ Flow {
             Text {
                 Layout.fillWidth: true
                 visible: !!appCard.app.busy
-                text: I18n.tr("Keep Settings open until the operation finishes, or cancel it here.") + " · " + I18n.tr("Elapsed: %1").arg(Math.floor((appCard.app.elapsedSeconds || 0) / 60) + ":" + ("0" + ((appCard.app.elapsedSeconds || 0) % 60)).slice(-2))
+                text: I18n.tr("Tasks continue in the background after closing this window. Return anytime to view progress or cancel.") + " · " + I18n.tr("Elapsed: %1").arg(Math.floor((appCard.app.elapsedSeconds || 0) / 60) + ":" + ("0" + ((appCard.app.elapsedSeconds || 0) % 60)).slice(-2))
                 color: page.colors.secondaryText
                 font.pixelSize: 11
                 wrapMode: Text.Wrap

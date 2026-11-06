@@ -6,7 +6,7 @@ Item {
         id: closeStore
         property bool anyBusy: false
         property bool hasActiveMutation: false
-        function cancelActiveMutations() {}
+        signal taskFinished(string name, string code)
     }
     property var settingsBridge: bridge
     QtObject {
@@ -57,12 +57,12 @@ Item {
                 closeStore.anyBusy = true
                 closeStore.hasActiveMutation = true
                 app.close()
-                compare(app.visible, true)
+                tryCompare(app, "visible", false)
+                compare(closeStore.hasActiveMutation, true)
                 compare(app.currentPage, 3)
-                const dialog = findChild(app, "appOperationCloseDialog")
-                verify(dialog !== null)
-                tryCompare(dialog, "visible", true)
-                dialog.keepOpen()
+                app.show()
+                tryCompare(app, "visible", true)
+                compare(closeStore.hasActiveMutation, true)
                 closeStore.hasActiveMutation = false
                 app.close()
                 tryCompare(app, "visible", false)

@@ -12,12 +12,7 @@ import "../../shared/qml/i18n"
 
 ApplicationWindow {
     id: window
-    SettingsControls.AppOperationCloseDialog {
-        targetWindow: window
-        colors: theme
-        store: typeof appStore !== "undefined" ? appStore : null
-        parent: Overlay.overlay
-    }
+    SettingsControls.TaskCompletionNotifications {}
 
     width: 850
     height: 650
