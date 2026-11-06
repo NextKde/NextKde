@@ -8,6 +8,7 @@
 #include <QDBusMessage>
 #include <QDBusPendingCallWatcher>
 #include <QRegularExpression>
+#include <QProcess>
 #include <QDebug>
 
 namespace KosPlatform {
@@ -160,6 +161,15 @@ void KimpanelBridge::setEnabled(bool enabled)
 
 void KimpanelBridge::manageFcitxClassicUi(bool disable)
 {
+    // Sanitize Wayland environment: clearing GTK_IM_MODULE & QT_IM_MODULE ensures
+    // applications use native Wayland text-input-v3 instead of legacy client-side
+    // immodules (ClientSideInputPanel) that bypass desktop shell rendering.
+    if (disable) {
+        QProcess::startDetached(QStringLiteral("systemctl"),
+                                {QStringLiteral("--user"), QStringLiteral("set-environment"),
+                                 QStringLiteral("GTK_IM_MODULE="), QStringLiteral("QT_IM_MODULE=")});
+    }
+
     auto bus = QDBusConnection::sessionBus();
     if (!bus.isConnected())
         return;
