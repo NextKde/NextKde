@@ -9,6 +9,7 @@ Scope {
     id: root
 
     property bool enabled: true
+    readonly property bool windowVisible: barWindow.visible
 
     // Bridge system tray attention signals into desktop notifications.
     TrayNotificationBridge {}
@@ -24,6 +25,7 @@ Scope {
     }
 
     BarWindow {
+        id: barWindow
         screen: root.targetScreen
         visible: root.enabled && ScreenLifecycle.outputAvailable
             && root.targetScreen !== null

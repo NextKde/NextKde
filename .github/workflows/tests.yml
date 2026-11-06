@@ -100,6 +100,8 @@ jobs:
 
       - name: Test release selection without installing the desktop
         run: python3 -m unittest discover -s tools/tests -p 'test_*release*.py'
+      - name: Test Shell QML deployment with damaged source aliases
+        run: python3 tools/tests/test_shell_qml_deploy.py
       - name: Check KMusic catalogue preparation
         run: python3 -m unittest discover -s tools/tests -p 'test_kmusic_catalog.py'
       - name: Check project contracts and documentation
@@ -242,6 +244,15 @@ jobs:
             -L '^widgets$' \
             --output-log "$GITHUB_WORKSPACE/.build/tests/test-results/widgets.log" \
             --output-junit "$GITHUB_WORKSPACE/.build/tests/test-results/widgets.xml"
+
+      - name: Load deployed Shell trees on a private compositor
+        if: ${{ !cancelled() && steps.prepare.outcome == 'success' }}
+        run: |
+          mkdir -p .build/tests/test-results
+          ctest --test-dir .build/tests --output-on-failure --no-tests=error \
+            -L '^installed$' \
+            --output-log "$GITHUB_WORKSPACE/.build/tests/test-results/installed.log" \
+            --output-junit "$GITHUB_WORKSPACE/.build/tests/test-results/installed.xml"
 
       - name: Summarise actual test results
         if: always()

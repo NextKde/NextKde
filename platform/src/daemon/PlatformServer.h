@@ -63,7 +63,7 @@ private:
     void respond(QLocalSocket *socket, const QJsonObject &request,
                  bool ok, const QJsonObject &result = {},
                  const QString &code = {}, const QString &message = {},
-                 bool retryable = false);
+                 bool retryable = false, const QJsonObject &details = {});
     // Drops a peer whose write backlog (kMaxClientWriteBytes) shows it is no
     // longer draining. Deferred: the abort lands after the current dispatch
     // returns, so callers iterating subscribers or parsing the same socket's

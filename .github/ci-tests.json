@@ -1,9 +1,14 @@
 {
+  "installed": ["kos-shell.installed-startup"],
   "data-platform": [
+    "kos-platform.appmenu",
+    "kos-platform.brightness",
     "kos-data-service.go",
     "kos-platform.ai-worker-client",
     "kos-platform.keep-awake",
     "kos-platform.kwin-shortcut-conflict",
+    "kos-platform.desktop-transition",
+    "kos-stage.desktop-policy",
     "kos-platform.startup",
     "kos-platform.media-feedback",
     "kos-platform.file-copy",
@@ -18,6 +23,7 @@
     "kos-app.dependency-migration"
   ],
   "logic": [
+    "kos-shell.appmenu-refresh",
     "kos-window.gtk-buttons-install",
     "kos-window.firefox-buttons-install",
     "kos-shell.language",
@@ -42,6 +48,7 @@
     "kos-shell.theme-wallpaper-policy",
     "kos-shell.theme-wallpaper-state",
     "kos-shell.stage-geometry",
+    "kos-shell.stage-visibility",
     "kos-shell.stage-groups",
     "kos-shell.stage-effects",
     "kos-shell.stage-protocol",
@@ -75,6 +82,7 @@
     "kos-ui.widget-resize"
   ],
   "headless": [
+    "kos-shell.stage-visibility-qml",
     "kos-shell.dock-native-target",
     "kos-shell.dock-selection-highlight",
     "kos-shell.desktop-lyrics",
@@ -93,6 +101,7 @@
     "kos-settings.window-interactions",
     "kos-settings.wallpaper-page",
     "kos-settings.services-page",
+    "kos-settings.close-policy",
     "kos-settings.builtin-checkboxes",
     "kos-settings.widget-appearance",
     "kos-settings.segmented-layout",

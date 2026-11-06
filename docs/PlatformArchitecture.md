@@ -147,7 +147,7 @@ operation list and examples live in
 | `network` | refresh, scan, connect, 802.1X, radio, traffic counters | NetworkManager/sysfs adapter |
 | `audio` | get volume, set volume/mute | PipeWire/WirePlumber adapter |
 | `bluetooth` | power, list, connect/disconnect | BlueZ adapter |
-| `display` | per-display brightness get/set | KDE ScreenBrightness (including DDC/CI) / brightnessctl / sysfs fallback |
+| `display` | targeted or all-display brightness get/set | KDE ScreenBrightness; Solid / brightnessctl / logind fallback when no KDE display is available |
 | `session` | lock, suspend, hibernate, logout, power | logind/systemd adapter |
 | `theme` | toggle/reconfigure, glass and Dock-animation sync | KDE config and KWin reconfigure |
 | `screenshot` | interactive capture | first available supported utility |
@@ -160,3 +160,21 @@ adapter; the daemon remains alive and other operations continue. A service
 restart removes and recreates only its own socket. Clients reconnect and
 re-issue subscriptions (`kwin.subscribe`) after observing the connection
 transition.
+
+### Brightness write routing
+
+`display.brightness.set` with `payload.displayId` targets only that KDE display;
+missing or failed targets never fall through to another device. Without a target,
+the daemon enumerates ScreenBrightness once and writes all advertised displays
+concurrently. D-Bus discovery and writes are asynchronous with bounded call
+timeouts. Any failed display makes the response fail; partial success uses
+`brightness-partial-failure` with per-display outcomes in `error.details.displays`.
+A successful display never hides another display's failure.
+
+Solid is tried only when neither ScreenBrightness service exposes a usable display
+list. If Solid has no usable brightness range, the existing brightnessctl/logind
+fallback is used. A failed write to an available KDE backend is reported directly.
+The Control Center continues to target its selected primary display when an ID is
+available; this change does not make its slider synchronize every monitor.
+The non-seat0 external-display preference is a selection heuristic, not a mapping
+of physical connectors to seats.

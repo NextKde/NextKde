@@ -12,6 +12,7 @@ GROUPS = {
     "logic": {"logic"},
     "headless": {"headless"},
     "widgets": {"widgets"},
+    "installed": {"installed"},
 }
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -89,7 +90,7 @@ def results(report, directory):
                 errors.append(f"{state.capitalize()} in {group}: {name}")
         lines.append(f"| {group} | {len(names)} | {counts['passed']} | "
                      f"{counts['failed']} | {counts['skipped']} | {len(missing)} |")
-    lines += ["", "Scope: data, platform, logic, explicitly labelled offscreen UI tests and private-compositor widget regressions.",
+    lines += ["", "Scope: data, platform, logic, explicitly labelled offscreen UI tests and private-compositor widget and installed Shell regressions.",
               "Other compositor integration, optional application suites and ListenFree are not guaranteed by this job."]
     if report["excluded"]:
         lines += ["", "Registered but outside this job: " + ", ".join(report["excluded"])]

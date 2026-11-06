@@ -131,6 +131,7 @@ QtObject {
             return
         }
         svc._kwinSubscribePending = false
+        svc.desktopTransitionActive = false
         svc._pendingKwinActivation = null
         svc._lastKwinActivationId = null
         svc._kwinActivationTimer.stop()
@@ -629,6 +630,7 @@ QtObject {
     // record.desktopIds against these ids to place windows on desktops.
     property var desktops: []
     property string currentDesktopId: ""
+    property bool desktopTransitionActive: false
 
     // Switch to a virtual desktop by id (KWin performs the actual switch).
     function switchDesktop(id) {
@@ -1032,6 +1034,9 @@ QtObject {
                         }
                 } else if (event.type === "desktops") {
                         svc.desktops = PayloadArray.toArray(event.desktops) || [];
+                        // Set the gate before the id: Stage may synchronously
+                        // rebuild its model as soon as currentDesktopId changes.
+                        svc.desktopTransitionActive = event.transitionActive === true;
                         svc.currentDesktopId = event.current ?? "";
                         if (!svc._kwinReceivedDesktopSnapshot) {
                             svc._kwinReceivedDesktopSnapshot = true;
