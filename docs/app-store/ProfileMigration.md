@@ -46,17 +46,17 @@ reinstall can reuse it. That is not old-to-new migration.
 ## Explicit legacy purge
 
 The tool is maintained in the NextKde core repository as
-[`tools/purge-legacy-apps.py`](../../tools/purge-legacy-apps.py). Run it as the
+[`tools/maintenance/purge-legacy-apps.py`](../../tools/maintenance/purge-legacy-apps.py). Run it as the
 owning desktop user, never root or sudo. These are commands for a human to review
 and execute, not actions performed by Settings or during this implementation:
 
 ```sh
 # Read-only inventory; inspect every DELETE / UNINSTALL / RETAINED / BLOCKED line.
-python3 tools/purge-legacy-apps.py --app calendar
+python3 tools/maintenance/purge-legacy-apps.py --app calendar
 # Only after making any desired backup and closing applications/helpers:
-python3 tools/purge-legacy-apps.py --app calendar --apply
+python3 tools/maintenance/purge-legacy-apps.py --app calendar --apply
 # Select calendar, calculator, weather or all. Noninteractive destructive consent:
-python3 tools/purge-legacy-apps.py --app all --apply --yes
+python3 tools/maintenance/purge-legacy-apps.py --app all --apply --yes
 ```
 
 `--apply` requires typing `DELETE LEGACY APPS AND DATA` in a terminal unless

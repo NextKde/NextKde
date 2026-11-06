@@ -9,7 +9,7 @@ import re
 import tempfile
 from urllib.parse import quote
 
-ROOT = Path(__file__).resolve().parents[1]
+ROOT = Path(__file__).resolve().parents[2]
 OWNER = 'nextkde-firefox-buttons'
 BEGIN = '/* NextKde Firefox buttons: begin */'
 END = '/* NextKde Firefox buttons: end */'

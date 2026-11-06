@@ -4,7 +4,7 @@ from pathlib import Path
 import unittest
 
 spec = importlib.util.spec_from_file_location(
-    'kmusic_catalog', Path(__file__).resolve().parents[1] / 'prepare-kmusic-catalog.py')
+    'kmusic_catalog', Path(__file__).resolve().parents[1] / 'release/prepare-kmusic-catalog.py')
 catalog = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(catalog)
 

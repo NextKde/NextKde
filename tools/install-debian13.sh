@@ -680,8 +680,8 @@ clone_repo() {
 
         fi
     fi
-    local selector="$INSTALLER_DIR/source-release.py"
-    [[ -f "$selector" ]] || selector="$CLONE_DIR/tools/source-release.py"
+    local selector="$INSTALLER_DIR/release/source-release.py"
+    [[ -f "$selector" ]] || selector="$CLONE_DIR/tools/release/source-release.py"
     [[ -f "$selector" ]] || die "缺少 source-release.py；请使用包含发布入口的新安装脚本。"
     local -a env_pairs=()
     mapfile -t env_pairs < <(kos_env)

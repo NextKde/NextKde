@@ -24,9 +24,9 @@ jobs:
       - name: Check tag and desktop version
         env:
           RELEASE_TAG: ${{ inputs.tag || github.ref_name }}
-        run: python3 tools/source-release.py check-release "$RELEASE_TAG"
+        run: python3 tools/release/source-release.py check-release "$RELEASE_TAG"
       - name: Save source identity
-        run: python3 tools/source-release.py stamp "$RUNNER_TEMP/release.json"
+        run: python3 tools/release/source-release.py stamp "$RUNNER_TEMP/release.json"
       - uses: actions/upload-artifact@v7
         with:
           name: release-identity

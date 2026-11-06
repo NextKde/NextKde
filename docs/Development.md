@@ -33,7 +33,7 @@ In the VM/CI:
 
 ```sh
 python3 platform/tests/test_contract.py
-python3 tools/check-docs.py
+python3 tools/ci/check-docs.py
 ./tools/run-tests.sh                 # data layer only by default
 ./tools/run-tests.sh --layer platform
 ./tools/run-tests.sh --layer logic

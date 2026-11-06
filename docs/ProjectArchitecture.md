@@ -186,12 +186,12 @@ Run desktop integration checks in a virtual machine.
 ```
 
 `.github/ci-tests.json` lists the tests that must register in the CI environment.
-`tools/ci_tests.py inventory` compares that list with CTest discovery after the
+`tools/ci/ci_tests.py inventory` compares that list with CTest discovery after the
 build. Missing dependencies, disabled tests, missing executables and incorrect
 labels fail the check. Newly registered tests with the selected labels also run
 automatically; add mandatory tests to the manifest to guard their registration.
 
-Each group writes its own JUnit XML and log. `tools/ci_tests.py report` compares
+Each group writes its own JUnit XML and log. `tools/ci/ci_tests.py report` compares
 those results with the discovered inventory, reports passed/failed/skipped/missing
 counts in the Actions summary, and fails for incomplete or skipped coverage.
 Actions uploads the inventory, reports and build diagnostics even after a failure.

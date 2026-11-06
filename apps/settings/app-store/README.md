@@ -59,7 +59,7 @@ After the KMusic maintainer publishes the reviewed `install.sh` and
 `packaging/installer.py`, prepare the catalogue locally:
 
 ```sh
-python3 tools/prepare-kmusic-catalog.py <full-40-character-commit-sha>
+python3 tools/release/prepare-kmusic-catalog.py <full-40-character-commit-sha>
 ```
 
 This downloads the two files without executing them, pins their SHA-256 hashes,

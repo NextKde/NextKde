@@ -79,13 +79,13 @@ else:
         XDG_CACHE_HOME=str(out/'cache'), GSETTINGS_BACKEND='keyfile', QT_PLUGIN_PATH=str(out/'plugins'))
     setup = dict(env, DBUS_SESSION_BUS_ADDRESS='unix:path=/nonexistent/gtk-auto')
     if args.upgrade:
-        subprocess.run([sys.executable, str(ROOT/'tools/gtk-window-buttons.py'), 'sync',
+        subprocess.run([sys.executable, str(ROOT/'tools/integration/gtk-window-buttons.py'), 'sync',
             '--enabled','true','--glyph-mode','always'], env=setup, check=True)
         (config/'kos/window-integration.json').write_text('{"originalDecoration":"org.kde.breeze"}')
     if args.settings:
         subprocess.run([str(args.settings.resolve()), '--install-window-defaults'], env=setup, check=True)
     else:
-        subprocess.run([sys.executable, str(ROOT/'tools/gtk-window-buttons.py'), 'sync',
+        subprocess.run([sys.executable, str(ROOT/'tools/integration/gtk-window-buttons.py'), 'sync',
             '--enabled','true','--glyph-mode','always','--gtk3-module',str(args.module.resolve())], env=setup, check=True)
     # Apply exactly the startup script Plasma will source on next login.
     startup = config/'plasma-workspace/env/kos-gtk-window-controls.sh'

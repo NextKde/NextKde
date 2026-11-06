@@ -7,7 +7,7 @@ import tempfile
 import unittest
 from unittest.mock import patch
 
-spec = importlib.util.spec_from_file_location('check_docs', Path(__file__).parents[1] / 'check-docs.py')
+spec = importlib.util.spec_from_file_location('check_docs', Path(__file__).parents[1] / 'ci/check-docs.py')
 docs = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(docs)
 

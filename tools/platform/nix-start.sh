@@ -144,7 +144,7 @@ usage() {
     cat <<'EOF'
 KOS NixOS Quick Start
 
-Usage: ./tools/nix-start.sh <command>
+Usage: ./tools/platform/nix-start.sh <command>
 
 Commands:
   start     Start all KOS services

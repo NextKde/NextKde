@@ -5,7 +5,7 @@ import tempfile
 import unittest
 
 spec = importlib.util.spec_from_file_location(
-    "ci_tests", Path(__file__).resolve().parents[2] / "tools/ci_tests.py")
+    "ci_tests", Path(__file__).resolve().parents[2] / "tools/ci/ci_tests.py")
 ci = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(ci)
 

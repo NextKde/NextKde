@@ -16,7 +16,7 @@ import sys
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import firefox_buttons
 
-ROOT = Path(__file__).resolve().parents[1]
+ROOT = Path(__file__).resolve().parents[2]
 BEGIN = '/* NextKde native GTK buttons: begin */'
 END = '/* NextKde native GTK buttons: end */'
 ENV_BEGIN = '# NextKde native GTK module: begin'

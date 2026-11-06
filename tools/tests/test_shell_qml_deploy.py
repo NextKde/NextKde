@@ -9,7 +9,7 @@ import unittest
 from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parents[2]
-SPEC = importlib.util.spec_from_file_location('deploy_shell', ROOT / 'tools/deploy-shell-qml.py')
+SPEC = importlib.util.spec_from_file_location('deploy_shell', ROOT / 'tools/deploy/deploy-shell-qml.py')
 DEPLOY = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(DEPLOY)
 KOSCTL = (ROOT / 'tools/kosctl').read_text()
@@ -111,9 +111,9 @@ class ShellDeployment(unittest.TestCase):
         self.assertTrue((self.output / 'old-runtime').is_file())
 
     def test_preflight_precedes_runtime_cleanup(self):
-        tools = self.project / 'tools'
-        tools.mkdir()
-        shutil.copy2(ROOT / 'tools/deploy-shell-qml.py', tools)
+        tools = self.project / 'tools/deploy'
+        tools.mkdir(parents=True)
+        shutil.copy2(ROOT / 'tools/deploy/deploy-shell-qml.py', tools)
         build = self.root / 'build'
         for name in ('platform/kos-platform', 'bin/kos-data-service', 'apps/settings/kos-settings',
                      'apps/settings/kos-apps', 'apps/settings/gtk-module/libkos-gtk-window-controls.so'):

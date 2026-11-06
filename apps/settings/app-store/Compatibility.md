@@ -10,7 +10,7 @@ Settings 和 kos-apps 只管理当前身份，不提供 remove-retired、迁移�
 正常更新／卸载保留当前身份资料；同 ID 重装可以复用这些资料，不等于读取旧版资料。
 旧 ID 或旧源码目录存在本身不是新版库存或升级路径。
 
-旧版程序和个人资料仅由 core 仓库 `tools/purge-legacy-apps.py` 人工显式清理。
+旧版程序和个人资料仅由 core 仓库 `tools/maintenance/purge-legacy-apps.py` 人工显式清理。
 默认预览；--apply 要求破坏性确认（非交互须 --yes），会同时删除列明的旧个人资料。
 脚本只处理确权旧 source 安装、唯一旧 user Flatpak ref 和固定旧专有目录。
 发行版／Nix／历史 core 的未确权文件只报告保留，由原管理器处理；不删整个 core、

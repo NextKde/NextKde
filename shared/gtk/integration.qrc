@@ -1,9 +1,9 @@
 <RCC>
   <qresource prefix="/kos/gtk-integration">
-    <file alias="tools/gtk-window-buttons.py">../../tools/gtk-window-buttons.py</file>
+    <file alias="tools/integration/gtk-window-buttons.py">../../tools/integration/gtk-window-buttons.py</file>
     <file alias="shared/gtk/gtk-3.0.css">gtk-3.0.css</file>
     <file alias="shared/gtk/gtk-4.0.css">gtk-4.0.css</file>
-    <file alias="tools/firefox_buttons.py">../../tools/firefox_buttons.py</file>
+    <file alias="tools/integration/firefox_buttons.py">../../tools/integration/firefox_buttons.py</file>
     <file alias="shared/firefox/window-buttons.css">../firefox/window-buttons.css</file>
   </qresource>
 </RCC>

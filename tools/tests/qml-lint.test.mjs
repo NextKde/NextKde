@@ -6,8 +6,8 @@ import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { execFileSync, spawnSync } from 'node:child_process';
 
-const syntax = fileURLToPath(new URL('../qmllint-changed.mjs', import.meta.url));
-const duplicates = fileURLToPath(new URL('../qml-duplicate-handlers.mjs', import.meta.url));
+const syntax = fileURLToPath(new URL('../ci/qmllint-changed.mjs', import.meta.url));
+const duplicates = fileURLToPath(new URL('../ci/qml-duplicate-handlers.mjs', import.meta.url));
 function fixture(fn) {
     const cwd = mkdtempSync(join(tmpdir(), 'qml-gate-'));
     const git = (...args) => execFileSync('git', args, {cwd, encoding: 'utf8'}).trim();
