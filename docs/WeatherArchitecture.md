@@ -168,3 +168,12 @@ points, and twenty saved locations are persisted.
 The previous hard-coded Changsha location is the version-1 migration default.
 After the first user selection, both the app and Shell consume that selection.
 Failed refreshes preserve the previous complete forecast and surface the error.
+The Shell also retains its last forecast through widget inspection failures,
+repeated polls and transport reconnects, marking retained data as cached while
+loading or in error. A confirmed source change invalidates that forecast. An
+empty loading/error snapshot may retain data only for the same city and units;
+an explicit empty selection still clears the display.
+The five-minute weather widget poll inspects local installation state and
+reads a local summary (or requests the core snapshot when no app is installed);
+it does not fetch Open-Meteo. Identical hourly/daily arrays retain their model
+identity so polling does not recreate forecast delegates.

@@ -161,12 +161,8 @@ if(BUILD_TESTING)
         set_tests_properties(kos-settings.flatpak-release PROPERTIES
             WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/../.. LABELS logic TIMEOUT 30)
     endif()
-    add_executable(kos-app-store-test tests/store/backend.cpp src/AppStore.cpp src/IndependentApps.cpp)
-    target_include_directories(kos-app-store-test PRIVATE src)
-    target_link_libraries(kos-app-store-test PRIVATE Qt6::Core Qt6::Gui Qt6::Network
-        Qt6::Test KF6::KIOGui KF6::Service kos-flatpak-client)
-    add_test(NAME kos-settings.app-store COMMAND kos-app-store-test)
-    set_tests_properties(kos-settings.app-store PROPERTIES LABELS logic TIMEOUT 30)
+    # Native KMusic controller was removed; catalogue behavior is covered by independent-apps.
+
     add_executable(kos-independent-apps-test tests/store/independent.cpp src/AppStore.cpp src/IndependentApps.cpp)
     target_include_directories(kos-independent-apps-test PRIVATE src)
     target_link_libraries(kos-independent-apps-test PRIVATE Qt6::Core Qt6::Gui Qt6::Network
