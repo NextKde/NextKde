@@ -2173,6 +2173,7 @@ nix_status() {
 case "${1:-}" in
     doctor) doctor ;;
     build) build ;;
+    deploy) deploy_artifacts "$build_dir" ;;
     install)
         case "${2:-}" in
             "") install_all ;;
