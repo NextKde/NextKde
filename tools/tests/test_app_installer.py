@@ -129,7 +129,7 @@ elif "--install" in args:
     (prefix/"share/applications"/(desktop+".desktop")).write_text("[Desktop Entry]\\nType=Application\\nExec="+str(binary)+"\\n")
     if selected=="calendar":
         (prefix/"share/dbus-1/services").mkdir(parents=True)
-        (prefix/"share/dbus-1/services/org.nextkde.Kos.Pim1.service").write_text("[D-BUS Service]\\nName=org.nextkde.Kos.Pim1\\nExec="+str(binary)+"\\n")
+        (prefix/"share/dbus-1/services/org.nextks.calendar.Pim.service").write_text("[D-BUS Service]\\nName=org.nextks.calendar.Pim\\nExec="+str(binary)+"\\n")
 '''.format(python=os.sys.executable)
         (self.tools / "cmake").write_text(script)
         (self.tools / "cmake").chmod(0o755)
@@ -329,7 +329,7 @@ elif "--install" in args:
         self.assertEqual(self.invoke("install")[1]["code"], "EXTERNALLY_MANAGED")
 
     def test_dbus_conflict_retains_existing_service(self):
-        path = self.home / "data/dbus-1/services/org.nextkde.Kos.Pim1.service"
+        path = self.home / "data/dbus-1/services/org.nextks.calendar.Pim.service"
         path.parent.mkdir(parents=True); path.write_text("existing-core")
         self.assertEqual(self.invoke("install")[1]["code"], "EXTERNALLY_MANAGED")
         self.assertEqual(path.read_text(), "existing-core")
@@ -374,7 +374,7 @@ elif "--install" in args:
         self.assertEqual(desktop.read_text(), "external")
 
     def test_system_dbus_activation_conflict(self):
-        path = self.folder / "system/dbus-1/services/org.nextkde.Kos.Pim1.service"
+        path = self.folder / "system/dbus-1/services/org.nextks.calendar.Pim.service"
         path.parent.mkdir(parents=True); path.write_text("existing")
         self.assertEqual(self.invoke("install")[1]["code"], "EXTERNALLY_MANAGED")
         self.assertEqual(path.read_text(), "existing")
@@ -562,10 +562,10 @@ elif "--install" in args:
 
     def test_committed_service_cleanup_failure_resumes(self):
         engine = self.installed()
-        stale = self.home / "data/dbus-1/services/org.nextkde.Kos.Pim1.service"
+        stale = self.home / "data/dbus-1/services/org.nextks.calendar.Pim.service"
         cmake = self.tools / "cmake"
         script = cmake.read_text()
-        script = "\n".join(line for line in script.splitlines() if 'org.nextkde.Kos.Pim1.service' not in line) + "\n"
+        script = "\n".join(line for line in script.splitlines() if 'org.nextks.calendar.Pim.service' not in line) + "\n"
         cmake.write_text(script)
         self.publish("1.2.4", REV2)
         original = app.Installer.checked_unlink
@@ -636,7 +636,7 @@ elif "--install" in args:
         for version, revision in (("1.2.4", REV2), ("1.2.5", "c" * 40)):
             self.publish(version, revision)
             self.assertEqual(self.invoke("update")[1]["code"], "INSTALLED")
-        personal = self.home / "data/kos/pim/events.ics"
+        personal = self.home / "data/org.nextks.calendar/pim/events.ics"
         personal.parent.mkdir(parents=True)
         personal.write_text("keep personal data")
         type(self).responses = {}
@@ -672,32 +672,6 @@ elif "--install" in args:
         self.assertFalse((engine.root / "versions" / REV).exists())
         self.assertFalse(engine.journal.exists())
         self.assertEqual(type(self).requests, [])
-
-    def test_legacy_calendar_owned_links_are_removed_on_upgrade_without_todo(self):
-        engine = self.installed()
-        info = json.loads(engine.metadata.read_text())
-        old_desktop = engine.current / "share/applications/kos-calendar.desktop"
-        old_desktop.write_text((engine.current / "share/applications/org.nextks.calendar.desktop").read_text())
-        new_link = self.home / "data/applications/org.nextks.calendar.desktop"
-        new_link.unlink()
-        del info["links"][str(new_link)]
-        legacy_desktop = self.home / "data/applications/kos-calendar.desktop"
-        legacy_desktop.symlink_to(old_desktop)
-        info["appId"] = "org.nextkde.Calendar"
-        info["links"][str(legacy_desktop)] = str(old_desktop)
-        for path, target in engine.legacy_links().items():
-            destination = Path(target)
-            destination.write_text("legacy")
-            Path(path).symlink_to(target)
-            info["links"][path] = target
-        app.write_json(engine.metadata, info)
-        self.publish("1.2.4", REV2)
-        self.assertEqual(self.invoke("update")[1]["code"], "INSTALLED")
-        self.assertTrue(new_link.is_symlink())
-        self.assertFalse(legacy_desktop.is_symlink())
-        for path in engine.legacy_links():
-            self.assertFalse(Path(path).is_symlink())
-        self.assertEqual(json.loads(engine.metadata.read_text())["appId"], "org.nextks.calendar")
 
     def test_other_app_release_manifest_cannot_satisfy_selected_app(self):
         self.release["assets"][0]["name"] = "org.nextks.weather.app-release.json"

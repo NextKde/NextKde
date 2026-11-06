@@ -23,10 +23,11 @@ public:
     bool querying() const { return m_watcher.isRunning(); }
     bool busy() const { return !m_activeId.isEmpty(); }
     bool uninstall(const QString& appId);
-    bool removeRetired(const QString& appId);
     bool checkUpdates(const QString& appId);
     bool update(const QString& appId);
     bool install(const QString& appId);
+    QVariantMap makePlan(const QString& appId, bool installing) const;
+    bool confirmPlan(const QString& appId, const QVariantMap& plan);
     void cancel();
 signals:
     void changed();
@@ -42,8 +43,7 @@ private:
         QVariantMap apps;
         QString error;
     };
-    bool deploy(const QString& appId, bool installing);
-    bool remove(const QString& appId, bool retired);
+    bool deploy(const QString& appId, bool installing, const QVariantMap& authorizedPlan = {});
     bool beginOperation(const QString& appId, const QString& action, int timeout);
     void reportProgress();
     QFutureWatcher<Inventory> m_watcher;

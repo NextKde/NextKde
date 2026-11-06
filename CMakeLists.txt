@@ -20,6 +20,11 @@ include(GNUInstallDirs)
 
 option(KOS_BUILD_PLATFORM "Build the KOS platform daemon and settings app" ON)
 option(KOS_BUILD_KWIN_PLUGINS "Build the KWin plugins and the window decoration" ON)
+set(KOS_FLATPAK_SUPPORT "AUTO" CACHE STRING "Optional Flatpak backend: AUTO, ON or OFF")
+set_property(CACHE KOS_FLATPAK_SUPPORT PROPERTY STRINGS AUTO ON OFF)
+if(NOT KOS_FLATPAK_SUPPORT MATCHES "^(AUTO|ON|OFF)$")
+    message(FATAL_ERROR "KOS_FLATPAK_SUPPORT must be AUTO, ON or OFF")
+endif()
 # Removed application switches are migration errors, not silently ignored knobs.
 foreach(app CALENDAR TODO WEATHER LISTENFREE CALCULATOR)
     if(DEFINED KOS_BUILD_${app} AND KOS_BUILD_${app})

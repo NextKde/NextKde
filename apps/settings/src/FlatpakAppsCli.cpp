@@ -1,5 +1,8 @@
-#include "FlatpakApps.h"
+#include "FlatpakAppsClient.h"
+#ifdef KOS_FLATPAK_NATIVE_HELPERS
 #include "FlatpakCompatibility.h"
+#include "FlatpakTransactionProcess.h"
+#endif
 #include "IndependentAppRegistry.h"
 
 #include <QCoreApplication>
@@ -9,103 +12,128 @@
 #include <QTimer>
 #include <cstdio>
 #include <csignal>
-#include <unistd.h>
 
 namespace {
 volatile std::sig_atomic_t interrupted = 0;
 void interrupt(int) { interrupted = 1; }
+
+void printState(const QString& appId, const QString& action, const QVariantMap& state,
+    const QString& code = {}, const QString& message = {})
+{
+    const QJsonObject result{{"schemaVersion", 1}, {"appId", appId}, {"action", action},
+        {"code", code}, {"message", message}, {"success", code.isEmpty()},
+        {"state", QJsonObject::fromVariantMap(state)}};
+    std::puts(QJsonDocument(result).toJson(QJsonDocument::Compact).constData());
+}
 }
 
 int main(int argc, char** argv)
 {
-    QCoreApplication application(argc, argv);
+#ifdef KOS_FLATPAK_NATIVE_HELPERS
     if (argc == 2 && QByteArray(argv[1]) == "--flatpak-transaction-helper")
         return FlatpakTransactionProcess::helperMain();
     if (argc == 2 && QByteArray(argv[1]) == "--probe-flatpak-bundle-cleanup")
         return FlatpakCompatibility::probeBundleCleanup();
+#endif
+    QCoreApplication application(argc, argv);
     QCoreApplication::setApplicationName("kos-apps");
     QCommandLineParser parser;
-    parser.setApplicationDescription("Manage signed user Flatpaks and explicitly remove retired app refs. No automatic remote setup or personal-data deletion.");
+    parser.setApplicationDescription("Manage signed user Flatpaks. No automatic remote setup, legacy app management or personal-data deletion.");
     parser.addHelpOption();
     parser.addOption({"app", "Application key: calendar, calculator, weather, listenfree", "app"});
-    parser.addOption({"yes", "Confirm an install, update, uninstall or retired-ref removal without a terminal prompt"});
-    parser.addPositionalArgument("action", "status, check-update, install, update, uninstall or remove-retired");
+    parser.addOption({"yes", "Confirm a previously displayed plan without a terminal prompt"});
+    parser.addOption({"plan-id", "Opaque plan ID returned by a prior plan operation", "plan-id"});
+    parser.addPositionalArgument("action", "status, check-update, install, update or uninstall");
     parser.process(application);
     const auto* entry = IndependentAppRegistry::find(parser.value("app"));
     const auto actions = parser.positionalArguments();
-    const QStringList supported{"status", "check-update", "install", "update", "uninstall", "remove-retired"};
+    const QStringList supported{"status", "check-update", "install", "update", "uninstall"};
     if (!entry || actions.size() != 1 || !supported.contains(actions.first())) parser.showHelp(2);
     const auto action = actions.first();
     const QString appId = QString::fromLatin1(entry->appId);
-    if (action == "install" && *entry->retiredId)
-        std::fputs("Independent installation: old native/Flatpak data is not imported. Existing data for this ID is kept. See the compatibility guide; Calendar imports do not transfer all metadata, images or reminder permissions.\n", stderr);
-    if (action == "remove-retired")
-        std::fputs("Removes only the old program, not its data. No replacement is installed and reminders are not handed over. Keep the old installation until the replacement and its requirements are ready.\n", stderr);
-    if ((action == "install" || action == "update" || action == "uninstall" || action == "remove-retired") && !parser.isSet("yes")) {
-        if (!isatty(STDIN_FILENO)) {
-            std::fputs("A package operation requires explicit confirmation: use --yes. Personal data is kept.\n", stderr);
-            return 2;
-        }
-        std::fprintf(stderr, "%s %s (user Flatpak; personal data is kept)? [y/N] ", qPrintable(action), qPrintable(appId));
-        char answer[16]{};
-        if (!std::fgets(answer, sizeof answer, stdin) || (answer[0] != 'y' && answer[0] != 'Y')) return 130;
-    }
-    FlatpakApps backend;
-    bool started = false, done = false, discovering = false;
+    if (action == "install" && QString::fromLatin1(entry->repository) == "kos-apps")
+        std::fputs("This is a separate application: old program/data is not adopted or imported. Existing data for the new ID is kept. Legacy cleanup is a separate explicit operation.\n", stderr);
+
+    FlatpakAppsClient backend;
+    bool started = false;
+    bool mutationStarted = false;
+    bool done = false;
     const auto finish = [&](const QString& code, const QString& message) {
         if (done) return;
         done = true;
-        const QJsonObject result{{"schemaVersion", 1}, {"appId", appId}, {"action", action},
-            {"code", code}, {"message", message}, {"success", code.isEmpty()},
-            {"state", QJsonObject::fromVariantMap(backend.state(appId))}};
-        std::puts(QJsonDocument(result).toJson(QJsonDocument::Compact).constData());
+        printState(appId, action, backend.state(appId), code, message);
         application.exit(code.isEmpty() ? 0 : code == "CANCELLED" ? 130 : 2);
     };
-    QObject::connect(&backend, &FlatpakApps::operationFinished, &application,
-        [&](const QString&, const QString& code, const QString& message) {
-            if (!discovering || !code.isEmpty()) { finish(code, message); return; }
-            discovering = false;
-            if (interrupted) { finish("CANCELLED", "Cancelled before package mutation."); return; }
-            const auto state = backend.state(appId);
-            if (action == "update" && !state.value("update").toMap().value("available").toBool()) {
-                finish({}, {}); return;
+    QObject::connect(&backend, &FlatpakAppsClient::operationFinished, &application,
+        [&](const QString& completedId, const QString& code, const QString& message) {
+            if (completedId != appId) return;
+            if ((action == "install" || action == "update") && code.isEmpty()) {
+                if (mutationStarted) { finish(code, message); return; }
+                if (parser.isSet("yes")) return;
+                const auto plan = backend.plan(appId);
+                if (plan.isEmpty()) {
+                    finish("PLAN_REQUIRED", "No dependency plan was returned; prepare a fresh plan.");
+                    return;
+                }
+                std::fputs(QJsonDocument(QJsonObject::fromVariantMap(plan)).toJson(QJsonDocument::Compact).constData(), stdout);
+                std::fputc('\n', stdout);
+                finish("CONFIRMATION_REQUIRED", "Review the plan and rerun with --plan-id PLAN_ID --yes.");
+                return;
             }
-            const bool accepted = action == "install" ? backend.install(appId) : backend.update(appId);
-            if (!accepted) finish("FLATPAK_UNAVAILABLE", "No approved signed bundle or unambiguous user installation. Inspect state and resolve legacy/system/external-origin conflicts explicitly.");
+            finish(code, message);
         });
-    QString lastProgress;
-    QObject::connect(&backend, &FlatpakApps::changed, &application, [&] {
-        const auto progress = backend.state(appId).value("progressState").toMap();
-        const auto status = progress.value("status").toString();
-        if (!status.isEmpty() && status != lastProgress) {
-            lastProgress = status;
-            std::fprintf(stderr, "%s\n", qPrintable(status));
-        }
-        if (started || done || backend.querying()) return;
+    QObject::connect(&backend, &FlatpakAppsClient::changed, &application, [&] {
+        if (done || backend.querying()) return;
+        if (interrupted) { backend.cancel(); return; }
         const auto state = backend.state(appId);
-        started = true;
-        if (interrupted) { finish("CANCELLED", "Cancelled before package mutation."); return; }
-        if (!state.value("known").toBool()) { finish("RESULT_UNKNOWN", state.value("error").toString()); return; }
-        if (action == "status") { finish({}, {}); return; }
-        if (action == "remove-retired") {
-            if (!backend.removeRetired(appId)) finish("RETIRED_REF_AMBIGUOUS", "Close old applications first. Only one exact user ref can be removed; system or ambiguous installations must be managed externally. Personal data is kept.");
+        if (!state.value("known").toBool()) {
+            if (!state.value("querying").toBool()) finish("RESULT_UNKNOWN", state.value("error").toString());
             return;
         }
-        if (!state.value("retiredInstallations").toList().isEmpty() && action != "uninstall") {
-            finish("RETIRED_FLATPAK_ID", QStringLiteral("An older Flatpak identity (%1) is installed. Manage/uninstall that exact ref externally; no data migration or automatic removal was attempted.").arg(state.value("retiredAppId").toString())); return;
+        if (action == "status") { finish({}, {}); return; }
+        if (action == "check-update") {
+            if (!started) {
+                started = true;
+                if (!backend.checkUpdates(appId)) finish("FLATPAK_UNAVAILABLE", "The application state is unknown or conflicts with another installation.");
+            }
+            return;
         }
-        if (action == "uninstall" && state.value("installations").toList().isEmpty()) {
-            finish("NOT_INSTALLED", "No matching Flatpak is installed; legacy files and user data were not touched."); return;
+        if (action == "uninstall") {
+            if (!started) {
+                started = true;
+                if (!parser.isSet("yes")) { finish("CONFIRMATION_REQUIRED", "Use --yes to confirm uninstall; personal data is kept."); return; }
+                if (!backend.uninstall(appId)) finish("FLATPAK_UNAVAILABLE", "No matching user Flatpak is installed.");
+            }
+            return;
         }
-        discovering = action == "install" || action == "update";
-        const bool accepted = action == "uninstall" ? backend.uninstall(appId) : backend.checkUpdates(appId);
-        if (!accepted) finish("FLATPAK_UNAVAILABLE", "No approved bundle-managed ref, or a legacy/system installation conflicts. No source-install fallback was attempted.");
+        const bool installing = action == "install";
+        if (started) return;
+        if (parser.isSet("yes")) {
+            if (parser.value("plan-id").isEmpty()) {
+                finish("PLAN_REQUIRED", "A plan must be prepared first; use --plan-id PLAN_ID --yes.");
+                return;
+            }
+            started = true;
+            mutationStarted = true;
+            if (!backend.confirmPlan(appId, parser.value("plan-id")))
+                finish("PLAN_CHANGED", "The requested plan is no longer available; prepare a fresh plan.");
+            return;
+        }
+        if (parser.isSet("plan-id")) {
+            finish("PLAN_REQUIRED", "Use --yes together with --plan-id PLAN_ID to confirm a plan.");
+            return;
+        }
+        started = true;
+        if (!backend.preparePlan(appId, installing))
+            finish("FLATPAK_UNAVAILABLE", "Unable to prepare a dependency plan without downloading payloads.");
     });
     std::signal(SIGINT, interrupt);
     std::signal(SIGTERM, interrupt);
     QTimer signalTimer;
     signalTimer.setInterval(100);
-    QObject::connect(&signalTimer, &QTimer::timeout, &application, [&] { if (interrupted) backend.cancel(); });
+    QObject::connect(&signalTimer, &QTimer::timeout, &application, [&] {
+        if (interrupted) backend.cancel();
+    });
     signalTimer.start();
     return application.exec();
 }

@@ -1,8 +1,10 @@
 # App/widget integration — contract and manual acceptance
 
-Status: local implementation, 2026-11-04. Native compilation is not runtime or
-sandbox acceptance. No applications, graphical sessions or automated tests were
-run. New-ID signed releases/runtime trust remain separate release blockers.
+Current boundary: 2026-11-05, new identities and default native paths only.
+Production compilation is not runtime or sandbox acceptance. No applications,
+graphical sessions or automated tests were run for this boundary change. Earlier
+runtime evidence describes earlier revisions. Current signed releases and runtime
+availability remain separate delivery concerns.
 
 ## Behavior
 
@@ -28,11 +30,10 @@ environment; Flatpak data uses the exact app identity's standard private directo
 Configured Flatpak installation locations are supported separately from custom
 application data profiles.
 
-Known native overrides visible to the platform are rejected: a non-empty
-`KOS_PIM_STORAGE_DIR` for Calendar or a set `KOS_DATA_SOCKET` for Weather returns
+A non-empty native `KOS_PIM_STORAGE_DIR` visible to the platform returns
 unsupported. Calendar v2 summaries also identify their storage mode/path; custom
-or mismatched profiles are rejected. Weather using an explicit core backend does
-not publish it as the standalone app's private summary.
+or mismatched profiles are rejected. New Weather always uses its bundled private
+backend and ignores `KOS_DATA_SOCKET` in both native and Flatpak builds.
 
 This is not detection of arbitrary launch environments. An override set only in
 an app's wrapper, desktop command or separately launched process may be invisible
@@ -44,18 +45,25 @@ added to cover them. Use a standard launch with default data paths for acceptanc
 
 ## Fixed read-only summary interface
 
-Calendar publishes `widget-snapshot.json` in GenericDataLocation/kos/pim.
+Calendar publishes `widget-snapshot.json` in
+GenericDataLocation/org.nextks.calendar/pim (native), or
+GenericDataLocation/kos/pim (Flatpak).
 Weather publishes `widget-snapshot.json` in its standalone backend directory:
-`$XDG_STATE_HOME/quickshell/kos-weather/standalone-backend` (native), or
+`$XDG_STATE_HOME/org.nextks.weather/standalone-backend` (native; XDG_STATE_HOME
+falls back to `~/.local/state`), or
 GenericDataLocation/state/quickshell/kos-weather/standalone-backend (Flatpak).
+Native Weather uses `$XDG_RUNTIME_DIR/org.nextks.weather-<uid>/weather.sock`
+(with the system temporary directory as runtime-root fallback). Flatpak uses
+`$XDG_RUNTIME_DIR/app/org.nextks.weather/backend/weather.sock`.
+Neither app reads or migrates the old native application's profile.
 Host readers map the latter and Calendar to the exact app's
 `~/.var/app/org.nextks.<app>/data/` directory. No additional sandbox filesystem
 permission is requested; no ICS, metadata.json, private state.json or preferences
 are read. Unsupported/custom paths are not searched or copied.
 
 `widgetContractVersion=2`, exact appId, channel (native/flatpak), storageMode and
-generatedAt bind the data. Calendar retains schemaVersion=1 for older readers,
-adds storagePath/timeZone and publishes its existing bounded event/todo subset.
+generatedAt bind the data. Calendar uses payload schemaVersion=1 plus the required
+v2 envelope, storagePath/timeZone and its bounded event/todo subset.
 Weather wraps the current schemaVersion=1 weather fields. Writes are atomic.
 The reader accepts only current-user regular files, walks without following
 symlinks, limits the file to 512 KiB, JSON depth/array/object/string sizes and
@@ -69,7 +77,7 @@ all core fields and precipitation probability (at most 48 rows); daily rows
 require ISO dates in increasing order, ordered high/low temperatures and
 precipitation probability (at most seven rows). Optional sunrise/sunset may be
 absent or empty at polar locations. Optional extension readings and air quality
-are type/range checked when present; omitted legacy extensions remain supported.
+are type/range checked when present; these fields are optional in the current schema.
 Timestamps must be non-negative safe integers, collection cannot be in the
 future, and expiry cannot precede collection. No current reading returns missing,
 not ready. A refresh-error snapshot with otherwise valid readings is cached/stale.
@@ -78,9 +86,9 @@ or hourly monotonicity across daylight-saving transitions. Core weather's direct
 JSONL path does not pass through this independent-app validator.
 Calendar becomes stale after 12 minutes or a different date/timezone; Weather
 uses publication age plus actual fetchedAt/staleAt (at most two hours fresh).
-A timestamp over one minute in the future is invalid. Old native Calendar v1
-is supported only with its unique old native entry. Retired Flatpak identities
-without this contract never consume host-native snapshots.
+A timestamp over one minute in the future is invalid. Only new org.nextks.*
+identities and the current widget contract are supported. Old native Calendar
+summaries and retired Flatpak identities are not consumed.
 
 Desktop detection enumerates fixed IDs in standard XDG application directories
 and Flatpak exports, deduplicating canonical files. Read-only libflatpak inventory
@@ -188,13 +196,13 @@ Only use disposable user data. Do not prepare automation or fault-injection scri
 | No apps | Date grid remains; no retained PIM data; core weather; click selects Settings app, cancel installs nothing | Pending |
 | Unique native/user/system Flatpak | Open app, edit data, wait for summary/poll; same-source dates/items/city; already-running window navigates | Pending; sandbox release blocked |
 | First launch/closed Weather | Missing summary prompts opening; closed app cache is explicit, no hidden new background service | Pending |
-| Old native/retired app | Supported v1 only for old native PIM; no cross-identity data fallback | Pending |
+| Old native/retired app | Not a current installation/source; no old summary contract or cross-identity fallback | Pending |
 | Duplicate/hidden/broken exports | Explicit ambiguity/unavailable; no arbitrary target | Pending |
 | Multiple refs/custom configured installations | Detect non-exported branches/architectures, user+system duplicates and native coexistence; refuse ambiguity. Unexported installed ref and failed inventory are unavailable, not absent | Pending |
 | External uninstall/update/reinstall | Poll clears old data; clicking old token refuses changed entry | Pending |
 | Missing/damaged/oversized/symlink/unreadable summary | Bounded failure, no false empty/ready, next valid summary heals | Pending |
 | Wrong schema/field types/identity | Reject, no previous-source contents retained | Pending |
-| Known custom native source | With overrides visible to the platform, Calendar storage or Weather backend is unsupported; no default/core data masquerades as that custom source. App-only wrapper environments are outside scope, not a promised detection case | Pending |
+| Known custom native source | Visible Calendar storage override is unsupported; Weather ignores KOS_DATA_SOCKET and uses its bundled backend. App-only XDG wrapper environments are outside scope, not a promised detection case | Pending |
 | Old/future time, suspend, midnight/timezone | Cache label, no false current-day empty success; correct current date | Pending |
 | Disconnect/reconnect/late replies/double click | No stale overwrite, request pile-up or cross-identity fallback; visible errors | Pending |
 | Core/app source switching | All WeatherService consumers agree; refresh doesn't mutate wrong backend | Pending |

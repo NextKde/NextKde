@@ -11,13 +11,12 @@ struct App {
     const char* desktop;
     const char* repository;
     const char* manifest;
-    const char* retiredId;
 };
 inline constexpr std::array apps{
-    App{"calendar", "org.nextks.calendar", "kos-calendar", "kos-calendar.desktop", "kos-apps", "org.nextks.calendar.flatpak-release.json", "org.nextkde.Calendar"},
-    App{"calculator", "org.nextks.calculator", "kos-calculator", "kos-calculator.desktop", "kos-apps", "org.nextks.calculator.flatpak-release.json", "org.nextkde.Calculator"},
-    App{"weather", "org.nextks.weather", "kos-weather", "kos-weather.desktop", "kos-apps", "org.nextks.weather.flatpak-release.json", "org.nextkde.Weather"},
-    App{"listenfree", "org.nextkde.ListenFree", "listenfree", "listenfree.desktop", "ListenFree", "flatpak-release.json", ""},
+    App{"calendar", "org.nextks.calendar", "kos-calendar", "org.nextks.calendar.desktop", "kos-apps", "org.nextks.calendar.flatpak-release.json"},
+    App{"calculator", "org.nextks.calculator", "kos-calculator", "org.nextks.calculator.desktop", "kos-apps", "org.nextks.calculator.flatpak-release.json"},
+    App{"weather", "org.nextks.weather", "kos-weather", "org.nextks.weather.desktop", "kos-apps", "org.nextks.weather.flatpak-release.json"},
+    App{"listenfree", "org.nextkde.ListenFree", "listenfree", "listenfree.desktop", "ListenFree", "flatpak-release.json"},
 };
 inline const App* find(const QString& id)
 {
