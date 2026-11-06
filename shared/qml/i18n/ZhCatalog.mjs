@@ -3,6 +3,8 @@
 // 规则：值必须与改造前界面上的中文逐字一致（含空格、间隔符与省略号），
 // 改动文案时同步更新对应键，不要只改一边。
 export const catalog = {
+    "The optional Flatpak backend is unavailable. Install it and its distribution dependencies, then recheck.": "可选 Flatpak 后端不可用。请安装后端及其发行版依赖，然后重新检查。",
+    "The optional Flatpak backend timed out. Installed state is unknown; recheck before retrying.": "可选 Flatpak 后端已超时，安装状态未知。请重新检查后再重试。",
     "Review Flatpak plan": "审阅 Flatpak 安装计划",
     "Unknown version": "未知版本",
     "Branch: %1 · Architecture: %2 · Scope: user": "分支：%1 · 架构：%2 · 范围：当前用户",
