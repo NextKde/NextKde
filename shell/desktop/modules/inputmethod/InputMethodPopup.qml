@@ -26,7 +26,12 @@ Scope {
 
                 anchors { top: true; bottom: true; left: true; right: true }
 
-                readonly property var scrGeom: modelData?.geometry || ({ x: 0, y: 0, width: 1920, height: 1080 })
+                readonly property var scrGeom: ({
+                    x: Number(modelData?.x) || 0,
+                    y: Number(modelData?.y) || 0,
+                    width: Number(modelData?.width) || 1920,
+                    height: Number(modelData?.height) || 1080
+                })
                 readonly property var globalAnchor: InputMethodService.globalAnchor
 
                 readonly property bool isTargetScreen: {
@@ -55,8 +60,8 @@ Scope {
                     id: cardContainer
 
                     // Layout placement calculation
-                    readonly property real cardW: contentColumn.implicitWidth + 24
-                    readonly property real cardH: contentColumn.implicitHeight + 16
+                    readonly property real cardW: Math.max(120, contentColumn.implicitWidth + 24)
+                    readonly property real cardH: Math.max(34, contentColumn.implicitHeight + 16)
 
                     readonly property var placement: Placement.placeCandidatePopup(
                         window.scrGeom,

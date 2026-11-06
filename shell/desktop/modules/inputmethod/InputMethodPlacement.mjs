@@ -43,8 +43,8 @@ export function resolveGlobalSpotRect(spot, activeWindow, kwinCaret, fallbackScr
         };
     }
 
-    // 2. If spot mode is relative (Wayland dbus clients: Konsole, Firefox, KRunner)
-    if (spot && (spot.mode === "relative" || spot.scale > 0)) {
+    // 2. If spot mode is relative with non-zero coordinates (Wayland dbus clients: Konsole, Firefox, KRunner)
+    if (spot && (spot.mode === "relative" || spot.scale > 0) && (spot.x !== 0 || spot.y !== 0)) {
         const scale = spot.scale > 0 ? spot.scale : 1.0;
         const winContent = (activeWindow && activeWindow.contentGeometry)
             || (activeWindow && activeWindow.geometry)
@@ -69,7 +69,18 @@ export function resolveGlobalSpotRect(spot, activeWindow, kwinCaret, fallbackScr
         };
     }
 
-    // 4. Fallback: active window top-left or screen safe center
+    // 4. If KWin returned a pointer anchor fallback (clicks in webviews/terminals)
+    if (kwinCaret && kwinCaret.available && kwinCaret.x !== undefined && kwinCaret.y !== undefined) {
+        return {
+            x: Number(kwinCaret.x) || 0,
+            y: Number(kwinCaret.y) || 0,
+            width: Number(kwinCaret.width) || 0,
+            height: Number(kwinCaret.height) || 20,
+            source: "kwin-pointer"
+        };
+    }
+
+    // 5. Fallback: active window top-left or screen safe center
     if (activeWindow && (activeWindow.contentGeometry || activeWindow.geometry)) {
         const geom = activeWindow.contentGeometry || activeWindow.geometry;
         return {
