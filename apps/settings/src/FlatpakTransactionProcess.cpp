@@ -13,7 +13,7 @@ namespace FlatpakTransactionProcess {
 QVariantMap run(const QVariantMap& request, const Cancelled& cancelled, const Progress& progress)
 {
     QProcess process;
-    process.setProgram(QCoreApplication::applicationDirPath() + "/kos-apps");
+    process.setProgram(QCoreApplication::applicationDirPath() + "/kos-flatpak-worker");
     process.setArguments({"--flatpak-transaction-helper"});
     const auto parent = ::getpid();
     process.setChildProcessModifier([parent] {

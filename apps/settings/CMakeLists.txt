@@ -15,16 +15,38 @@ find_package(KF6Config REQUIRED)
 find_package(KF6KIO REQUIRED)
 find_package(KF6Service REQUIRED)
 find_package(Qt6 6.5 REQUIRED COMPONENTS Concurrent)
-find_package(PkgConfig REQUIRED)
-pkg_check_modules(FLATPAK REQUIRED IMPORTED_TARGET flatpak>=1.12 ostree-1>=2021.4)
-
-add_library(kos-flatpak-apps STATIC src/FlatpakApps.cpp src/FlatpakApps.h src/FlatpakRelease.cpp src/FlatpakRelease.h
-    src/FlatpakCompatibility.cpp src/FlatpakCompatibility.h
-    src/FlatpakTransactionProcess.cpp src/FlatpakTransactionProcess.h)
-target_link_libraries(kos-flatpak-apps PUBLIC Qt6::Core Qt6::Concurrent PRIVATE Qt6::Network PkgConfig::FLATPAK)
-
+if(NOT TARGET kos-flatpak-client)
+    add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/../../platform/flatpak-client ${CMAKE_CURRENT_BINARY_DIR}/flatpak-client)
+endif()
+if(NOT KOS_FLATPAK_SUPPORT STREQUAL "OFF")
+    find_package(PkgConfig QUIET)
+    if(PkgConfig_FOUND)
+        pkg_check_modules(FLATPAK QUIET IMPORTED_TARGET flatpak>=1.12 ostree-1>=2021.4)
+    endif()
+    if(FLATPAK_FOUND)
+        add_library(kos-flatpak-apps STATIC src/FlatpakApps.cpp src/FlatpakApps.h src/FlatpakRelease.cpp src/FlatpakRelease.h
+            src/FlatpakCompatibility.cpp src/FlatpakCompatibility.h
+            src/FlatpakTransactionProcess.cpp src/FlatpakTransactionProcess.h)
+        target_link_libraries(kos-flatpak-apps PUBLIC Qt6::Core Qt6::Concurrent PRIVATE Qt6::Network PkgConfig::FLATPAK)
+        add_executable(kos-flatpak-worker src/FlatpakWorkerMain.cpp)
+        target_link_libraries(kos-flatpak-worker PRIVATE kos-flatpak-apps)
+        target_compile_definitions(kos-flatpak-worker PRIVATE KOS_FLATPAK_NATIVE_HELPERS)
+        target_compile_definitions(kos-flatpak-client PRIVATE KOS_FLATPAK_WORKER_BUILD_PATH="$<TARGET_FILE:kos-flatpak-worker>")
+        add_dependencies(kos-flatpak-client kos-flatpak-worker)
+        install(TARGETS kos-flatpak-worker RUNTIME DESTINATION bin)
+    elseif(KOS_FLATPAK_SUPPORT STREQUAL "ON")
+        message(FATAL_ERROR "KOS_FLATPAK_SUPPORT=ON requires flatpak>=1.12 and ostree-1>=2021.4 development libraries")
+    else()
+        message(STATUS "Optional Flatpak backend not built; Settings, platform and kos-apps remain available")
+    endif()
+endif()
 add_executable(kos-apps src/FlatpakAppsCli.cpp)
-target_link_libraries(kos-apps PRIVATE kos-flatpak-apps)
+if(TARGET kos-flatpak-apps)
+    target_link_libraries(kos-apps PRIVATE kos-flatpak-apps kos-flatpak-client)
+    target_compile_definitions(kos-apps PRIVATE KOS_FLATPAK_NATIVE_HELPERS)
+else()
+    target_link_libraries(kos-apps PRIVATE kos-flatpak-client)
+endif()
 install(TARGETS kos-apps RUNTIME DESTINATION bin)
 
 add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/../../shared/gtk/module ${CMAKE_CURRENT_BINARY_DIR}/gtk-module)
@@ -70,7 +92,7 @@ add_dependencies(kos-settings kos-apps)
 target_link_libraries(kos-settings PRIVATE
     kos_demo_ui
     kos_demo_ui_plugin
-    kos-flatpak-apps
+    kos-flatpak-client
     Qt6::Core
     Qt6::DBus
     Qt6::Gui
@@ -122,6 +144,7 @@ if(BUILD_TESTING)
     add_test(NAME kos-settings.flatpak-process COMMAND kos-flatpak-process-test)
     set_tests_properties(kos-settings.flatpak-process PROPERTIES
         WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/../.. LABELS logic TIMEOUT 20)
+    if(TARGET kos-flatpak-apps)
     add_executable(kos-flatpak-compatibility-test tests/store/flatpak_compatibility.cpp)
     target_include_directories(kos-flatpak-compatibility-test PRIVATE src)
     target_link_libraries(kos-flatpak-compatibility-test PRIVATE kos-flatpak-apps Qt6::Test)
@@ -129,6 +152,7 @@ if(BUILD_TESTING)
     add_test(NAME kos-settings.flatpak-compatibility COMMAND kos-flatpak-compatibility-test)
     set_tests_properties(kos-settings.flatpak-compatibility PROPERTIES
         WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/../.. LABELS logic TIMEOUT 20)
+    endif()
     add_executable(kos-flatpak-release-test tests/store/flatpak_release.cpp)
     target_include_directories(kos-flatpak-release-test PRIVATE src)
     target_link_libraries(kos-flatpak-release-test PRIVATE Qt6::Core Qt6::Network Qt6::Test)
@@ -138,13 +162,13 @@ if(BUILD_TESTING)
     add_executable(kos-app-store-test tests/store/backend.cpp src/AppStore.cpp src/IndependentApps.cpp)
     target_include_directories(kos-app-store-test PRIVATE src)
     target_link_libraries(kos-app-store-test PRIVATE Qt6::Core Qt6::Gui Qt6::Network
-        Qt6::Test KF6::KIOGui KF6::Service kos-flatpak-apps)
+        Qt6::Test KF6::KIOGui KF6::Service kos-flatpak-client)
     add_test(NAME kos-settings.app-store COMMAND kos-app-store-test)
     set_tests_properties(kos-settings.app-store PROPERTIES LABELS logic TIMEOUT 30)
     add_executable(kos-independent-apps-test tests/store/independent.cpp src/AppStore.cpp src/IndependentApps.cpp)
     target_include_directories(kos-independent-apps-test PRIVATE src)
     target_link_libraries(kos-independent-apps-test PRIVATE Qt6::Core Qt6::Gui Qt6::Network
-        Qt6::Test KF6::KIOGui KF6::Service kos-flatpak-apps)
+        Qt6::Test KF6::KIOGui KF6::Service kos-flatpak-client)
     add_test(NAME kos-settings.independent-apps COMMAND kos-independent-apps-test)
     set_tests_properties(kos-settings.independent-apps PROPERTIES
         WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/../.. LABELS logic TIMEOUT 30)

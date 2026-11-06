@@ -6,8 +6,6 @@
 #include <chrono>
 #include <memory>
 
-typedef struct _GCancellable GCancellable;
-
 namespace KosPlatform::IndependentAppWidgets {
 // Fixed app keys only; no caller-supplied filesystem paths or executable names.
 bool supported(const QString &key);
@@ -18,7 +16,6 @@ struct QueryControl {
     QueryControl &operator=(const QueryControl &) = delete;
     void cancel();
     bool expired() const;
-    GCancellable *cancellable;
     const std::chrono::steady_clock::time_point deadline;
     std::atomic_bool cancelled{false};
 };

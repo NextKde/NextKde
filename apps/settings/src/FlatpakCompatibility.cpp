@@ -2,6 +2,7 @@
 
 #include <QCoreApplication>
 #include <QDir>
+#include <QFileInfo>
 #include <QProcess>
 #include <QTemporaryDir>
 #include <cstdio>
@@ -55,7 +56,11 @@ QVariantMap checkBundleCleanup()
     }
     QProcess process;
     process.setProcessEnvironment(environment);
-    process.setProgram(QCoreApplication::applicationDirPath() + "/kos-apps");
+    const auto worker = QCoreApplication::applicationDirPath() + "/kos-flatpak-worker";
+    if (!QFileInfo(worker).isExecutable())
+        return {{"code", "FLATPAK_INCOMPATIBLE"},
+            {"message", "The optional Flatpak worker is unavailable; no bundle was downloaded or deployed."}};
+    process.setProgram(worker);
     process.setArguments({"--probe-flatpak-bundle-cleanup"});
     process.start();
     const bool started = process.waitForStarted(1000);

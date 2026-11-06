@@ -3,8 +3,8 @@
 Calendar, Calculator and Weather share the independent `NextKde/kos-apps` source
 repository and release version. ListenFree remains in its own repository.
 KMusic retains its existing installation controller and is not handled by this
-installer. The recommended backend is user Flatpak as described below. For legacy
-source compatibility, Settings and the independent repositories ship the same
+installer. The recommended backend is user Flatpak as described below. For explicit
+source installation, Settings and the independent repositories ship the same
 Python 3 standard-library installer, `tools/app-installer.py`; that path never
 fetches or executes a replacement installer.
 
@@ -15,24 +15,50 @@ fetches or executes a replacement installer.
 | `weather` | `NextKde/kos-apps` | `org.nextks.weather` | `kos-weather` |
 | `listenfree` | `NextKde/ListenFree` | `org.nextkde.ListenFree` | `listenfree` |
 
-Tasks are integrated in Calendar; no separate Todo entry is exposed. Legacy
-installer-owned `kos-todo` links remain recognized for offline removal and
-upgrade cleanup. Externally installed Todo files are never removed.
+Tasks are integrated in Calendar; no separate Todo entry is exposed. Current
+installers do not adopt old Todo ownership. Only the separate explicit legacy
+purge handles verified old Calendar/Todo artifacts.
 
 The last column lists executable commands. New native and Flatpak desktop files
 for the first three apps use their application ID, e.g. `org.nextks.calendar.desktop`.
-Old native desktop identities remain recognized; ListenFree native naming is unchanged. No repository URL, executable name, shell command or installation root is
+Old desktop identities are not launch fallbacks; ListenFree native naming is unchanged. No repository URL, executable name, shell command or installation root is
 accepted from a store entry.
 
 The first three apps use one VERSION/commit/Release but separate packages, source
 manifests and `-DKOS_APPS=<app>` builds. Old `org.nextkde.Calendar`,
-`org.nextkde.Calculator` and `org.nextkde.Weather` Flatpaks are distinct retired
-refs: Settings reports RETIRED_FLATPAK_ID. No cross-identity profile copying is provided; exact user-ref
-removal is a separate confirmed action that keeps data and does not install a replacement. See
-[compatibility and manual transition](ProfileMigration.md) and [human acceptance](ProfileMigrationAcceptance.md).
+`org.nextkde.Calculator` and `org.nextkde.Weather` apps are separate retired
+applications, not upgrade sources. Breaking change is intentional: current
+source ownership, native preferences/data/state and Calendar service use new
+identities; old profiles are not read, copied or merged. Settings only manages
+current IDs and has no remove-retired operation. Legacy program AND personal-data
+deletion is the separate explicit `tools/purge-legacy-apps.py`, preview by default.
+Unproven core/system ownership and shared data are retained, not guessed. See
+[boundaries, exact paths and cleanup](ProfileMigration.md) and
+[human acceptance](ProfileMigrationAcceptance.md).
 The old per-app GitHub repositories were deleted in favor of NextKde/kos-apps;
-no renamed signed release is available yet. Old installer-owned source IDs/desktop
-links remain strictly recognized for offline status/uninstall.
+no signed release of these breaking changes is available yet.
+
+## Historical native lifecycle evidence (2026-11-05)
+
+The table and detailed lifecycle records below describe the earlier `ee0175f4`
+candidate and contemporaneous core, not the current breaking working tree.
+Old-to-new ownership upgrade/data readback is no longer a product requirement.
+Incomplete historical readback/reinstall rows are not outstanding delivery gates.
+No runtime acceptance of the current boundary or purge is claimed. Historical
+PASS applies only to its recorded VM route, not published Latest.
+
+| Acceptance item | Calculator | Calendar | Weather |
+| --- | --- | --- | --- |
+| Empty-profile cold build/install, repeat/current checks, offline removal | PASS | PASS | PASS |
+| Genuine historical 0.1.0 → 0.2.0 program/ownership upgrade and removal | PASS | PASS | PASS |
+| Actual old business data read by newer installation | Not executed: history/preferences | PASS: one event and todo | PASS: city list, selected city, units |
+| Real business files preserved on removal | Not executed | PASS | PASS |
+| Historical fresh source reinstall / retained data readback | Not executed (retired requirement) | Unfinished (retired requirement) | Historical PASS |
+
+Settings interaction and ordinary desktop activation remain unaccepted. Whole-NextKde
+historical upgrade/removal/Plasma recovery/reinstall is blocked by the absence of a
+verified system recovery point. These open gates do not invalidate the individual
+PASS results above.
 
 ## Signed GitHub Flatpak bundles (not yet published)
 
@@ -168,8 +194,58 @@ remain incomplete, not successful reruns. This is not historical executable/data
 upgrade acceptance. Calculator's source route also completed real native-artifact
 installation, repeat-install/current checks, cleanup preview and offline removal
 with data retention, using retained codeload transport and a persistent CMake
-source/build-path fixture. The untouched cold-build attempt stopped at its diagnostic
-limit and remains incomplete. Actual Calendar PIM mutations also reached the core widget
+source/build-path fixture. A separate fresh-profile run subsequently completed the
+unchanged cold configure/build/install path in about 134 seconds, launched the
+installed executable, and passed repeat/current/cleanup/offline-removal checks with
+data retention. It used retained verified codeload transport, not published Latest;
+the earlier short diagnostic timeout remains a failed attempt. Calendar and Weather
+subsequently completed their own fresh-profile, unchanged cold builds/installations
+in about 247 and 206 seconds respectively, with repeat/current/cleanup/prune and
+offline removal checks retaining data sentinels and removing owned activation/build
+state. Those two runs did not launch their executables or validate business data.
+All use the same verified original archive, but separate empty build profiles;
+none represents published Latest, an unprovisioned OS or a historical upgrade.
+A separate genuine Calculator source upgrade then installed historical `0.1.0`
+(`9432b21d`) with its
+original installer and updated it to `0.2.0` (`ee0175f4`) with the current installer.
+Both revisions were freshly built and their actual executables launched; their
+binary hashes differ. Ownership and the desktop launcher changed from the retired
+identity to `org.nextks.calculator`; repeat/current checks and offline removal of
+both owned revisions passed, preserving the original data sentinel. Retained
+verified archives replace unpublished release transport. This validates source
+program/ownership upgrade, not historical Flatpak deployment or compatibility of
+actual calculation history/preferences across identities.
+Calendar separately completed a genuine native source upgrade from `0.1.0`
+(`ce8b36b5`, original installer) to `0.2.0` (`ee0175f4`, current installer), with
+fresh builds and different executable hashes. Ownership moved from the retired
+identity to `org.nextks.calendar`; the old managed Todo binary/desktop activation
+links were removed. The actual old PIM service created an event and a todo on a
+private bus in an isolated data directory. After the old service exited, the new
+service read both rows identically; `calendar.ics` and `metadata.json` hashes stayed
+unchanged. Repeat/current checks and offline removal passed, removing both owned
+program revisions and activation state while preserving those real data files.
+The historical archive was recovered from the exact commit in consolidated Git
+ancestry, not the original deleted-repository release bytes. This is native
+source/data compatibility evidence for those records, not historical Flatpak
+identity migration, all PIM data shapes, Calendar GUI or desktop activation acceptance.
+Weather also completed a genuine native source upgrade from `0.1.0` (`de8f9769`,
+original installer) to `0.2.0` (`ee0175f4`, current installer), freshly building both
+applications with different executable hashes and handing ownership/desktop entry
+to `org.nextks.weather`. The installed old helper saved a selected city, a two-city
+list and imperial units; the installed new helper read identical preference fields
+from the same isolated native state path. The Go helper hashes are identical across
+these builds; this is not evidence of a changed helper schema. Forecast requests
+were deliberately blocked, so transient weather status/timestamps and whole-file
+hashes changed on restart. Repeat/current checks and offline removal passed;
+both owned program revisions and activation state were removed, while real state
+and snapshot files retained their exact pre-uninstall hashes. This does not cover
+Weather GUI interaction or historical Flatpak identity migration.
+Weather subsequently completed a fresh source reinstall after removal in about
+197 seconds. The installer left retained real state/snapshot files byte-identical;
+the newly installed helper read the original city list, selected city and units.
+A second offline removal cleaned the owned program/activation state and preserved
+both files with their exact pre-removal hashes.
+Actual Calendar PIM mutations also reached the core widget
 reader through an app-published sandbox summary; uninstall retained the data but
 hid that summary from the widget. Weather published its own summary, correctly
 reported as missing without a current reading, and left no sandbox backend process
@@ -182,9 +258,16 @@ real current conditions and published a ready summary whose current reading
 matched the production widget payload; supervised removal retained data/runtime.
 The three signed bundles also launched and exited normally in the VM's real
 Wayland session, producing nonempty app-owned screenshots and leaving no sandbox
-processes. This was process/screenshot startup evidence, not click, portal,
-notification, single-instance or live Settings acceptance. A stable Release
-remains open.
+processes. Visual inspection showed actual Calculator/Weather content. Calendar's
+forced software-backend capture was black; removing that override rendered the UI,
+and an isolated activation bus let the native-rendered window visibly recover the
+retained synthetic event. This does not establish forced software-renderer support,
+ordinary desktop activation, portal, notification or single-instance acceptance.
+With actual signed Calendar/Weather deployments, adding an owned synthetic native
+launcher made the core withhold ambiguous widget data. Flatpak removal preserved
+that launcher and sandbox data; the native source did not consume the sandbox
+summary. This does not cover two running native/Flatpak applications or user/system
+duplicates. Live Settings action acceptance and a stable Release remain open.
 
 Preserve and publish the complete artifact directory with relative paths, not only
 the application bundle. Sources is not an app dependency and is not installed by
@@ -333,7 +416,7 @@ record; earlier `type: "progress"` records are optional. Child output goes only
 to a mode-0600 log, never into this protocol.
 
 ```json
-{"schemaVersion":1,"appId":"org.nextks.calculator","action":"status","stage":"status","type":"result","success":true,"code":"INSTALLED","version":"0.1.0","revision":"0123456789012345678901234567890123456789","details":{"installed":true,"managed":true,"available":true,"version":"0.1.0","revision":"0123456789012345678901234567890123456789","currentVersion":"0.1.0","currentRevision":"0123456789012345678901234567890123456789","desktopFile":"/home/example/.local/share/applications/org.nextks.calculator.desktop","root":"/home/example/.local/share/nextkde-apps/calculator"}}
+{"schemaVersion":1,"appId":"org.nextks.calculator","action":"status","stage":"status","type":"result","success":true,"code":"INSTALLED","version":"0.1.0","revision":"0123456789012345678901234567890123456789","details":{"installed":true,"managed":true,"available":true,"version":"0.1.0","revision":"0123456789012345678901234567890123456789","currentVersion":"0.1.0","currentRevision":"0123456789012345678901234567890123456789","desktopFile":"/home/example/.local/share/applications/org.nextks.calculator.desktop","root":"/home/example/.local/share/nextkde-apps/org.nextks.calculator"}}
 ```
 
 `available` means the local allowlisted engine supports this app; it does not
@@ -395,6 +478,11 @@ sandboxed. Never install untrusted source by editing the allowlist.
 
 ## Storage, activation and ownership
 
+KEY is the full `org.nextks.<app>` ID for Calendar/Calculator/Weather, and
+`listenfree` for ListenFree. Old short-key roots are not adopted. Current native
+business/configuration paths and the separate legacy purge are listed in
+[the boundary contract](ProfileMigration.md).
+
 - `${XDG_DATA_HOME:-~/.local/share}/nextkde-apps/KEY/versions/REVISION/`
 - `.../KEY/current` — atomic symlink to the published immutable version
 - `.../KEY/ownership.json` — exact owned revision and activation link inventory
@@ -413,10 +501,10 @@ installer crash can bypass cleanup and leave a child build process running.
 
 Existing user desktop/bin/service files and distro/Nix activation entries are
 not overwritten. The installer checks executable PATH entries and system XDG
-desktop/D-Bus locations. Calendar's shared PIM service must use its immutable
+desktop/D-Bus locations. Calendar's PIM service must use its immutable
 owned executable directly, not a systemd unit that could activate a different
-installation. Existing core PIM service activation is a conflict, not a file to
-replace. Stop conflicting applications/services and resolve the package
+installation. A conflicting current service/command is not replaced; the old
+org.nextkde.Kos.Pim1 service name alone is no longer the same activation identity. Stop conflicting applications/services and resolve the package
 ownership manually before choosing an independent installation.
 
 A private `transaction.json` in the app state directory records the explicit

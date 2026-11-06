@@ -22,6 +22,11 @@
 #include <QUrl>
 #include <limits>
 
+#pragma push_macro("signals")
+#undef signals
+#include <flatpak.h>
+#pragma pop_macro("signals")
+
 namespace {
 constexpr qint64 metadataLimit = 256 * 1024;
 constexpr qint64 bundleLimit = 2LL * 1024 * 1024 * 1024;
@@ -242,9 +247,10 @@ QVariantMap parseManifest(const QString& appId, const QString& arch, const QByte
     const auto object = QJsonDocument::fromJson(bytes, &error).object();
     QList<qulonglong> parts;
     const auto version = object.value("version").toString();
-    if (error.error != QJsonParseError::NoError || object.value("schemaVersion").toInt() != 1
+    if (error.error != QJsonParseError::NoError || object.value("schemaVersion").toInt() != 2
         || object.value("appId").toString() != appId || !versionParts(version, parts)
-        || !matches("^[0-9a-f]{40}$", object.value("revision").toString())) fail("INVALID_RELEASE", "Invalid signed Flatpak release identity or version.");
+        || !matches("^[0-9a-f]{40}$", object.value("revision").toString()))
+        fail("INVALID_RELEASE", "Invalid signed Flatpak release identity or version; this release lacks an installation plan.");
     const auto bundle = object.value("bundles").toObject().value(arch).toObject();
     if (bundle.isEmpty()) fail("ARCH_UNAVAILABLE", "No Flatpak bundle has been published for this architecture.");
     const auto name = bundle.value("asset").toString();
@@ -255,7 +261,26 @@ QVariantMap parseManifest(const QString& appId, const QString& arch, const QByte
         || !matches("^[0-9a-f]{64}$", bundle.value("sha256").toString())
         || size <= 0 || size > bundleLimit || double(qint64(size)) != size)
         fail("INVALID_RELEASE", "The signed Flatpak attachment has invalid ref, commit, size or digest.");
+    const auto metadata = QByteArray::fromBase64(bundle.value("metadata").toString().toLatin1());
+    const auto metadataDigest = bundle.value("metadataSha256").toString();
+    const auto installedSize = bundle.value("installedSize").toDouble(-1);
+    const auto runtime = bundle.value("runtime").toObject();
+    if (metadata.isEmpty() || metadata.size() > metadataLimit
+        || !matches("^[0-9a-f]{64}$", metadataDigest)
+        || QString::fromLatin1(QCryptographicHash::hash(metadata, QCryptographicHash::Sha256).toHex()) != metadataDigest
+        || installedSize < 0 || installedSize > bundleLimit || double(qint64(installedSize)) != installedSize
+        || !matches("^runtime/[A-Za-z0-9.\\-]+/[A-Za-z0-9_\\-]+/[A-Za-z0-9_.\\-]+$", runtime.value("ref").toString()))
+        fail("INVALID_RELEASE", "The signed Flatpak release has no valid application metadata or runtime plan.");
+    const auto extensions = bundle.value("requiredExtensions");
+    if (!extensions.isArray() || extensions.toArray().size() > 128)
+        fail("INVALID_RELEASE", "The signed Flatpak release has an invalid extension plan.");
+    for (const auto& item : extensions.toArray()) {
+        const auto extension = item.toObject();
+        if (!matches("^runtime/[A-Za-z0-9.\\-]+/[A-Za-z0-9_\\-]+/[A-Za-z0-9_.\\-]+$", extension.value("ref").toString()))
+            fail("INVALID_RELEASE", "The signed Flatpak release has an invalid extension reference.");
+    }
     auto result = bundle.toVariantMap();
+    result["schemaVersion"] = 2;
     result["version"] = version; result["revision"] = object.value("revision").toString();
     result["arch"] = arch; result["branch"] = "stable";
     return result;
@@ -348,6 +373,33 @@ QVariantMap validateDownloaded(const QString& appId, const QVariantMap& discover
         QCryptographicHash hash(QCryptographicHash::Sha256);
         while (!file.atEnd()) { checkCancelled(cancelled); hash.addData(file.read(128 * 1024)); if (file.error() != QFileDevice::NoError) fail("INTEGRITY_FAILED", "Cannot read complete Flatpak bundle."); }
         if (QString::fromLatin1(hash.result().toHex()) != signedData.value("sha256").toString()) fail("INTEGRITY_FAILED", "Flatpak bundle digest does not match its signed release.");
+        auto* bundleFile = g_file_new_for_path(path.toUtf8().constData());
+        GError* bundleError = nullptr;
+        auto* bundle = flatpak_bundle_ref_new(bundleFile, &bundleError);
+        if (!bundle) {
+            const auto message = bundleError ? QString::fromUtf8(bundleError->message)
+                : QStringLiteral("Cannot inspect Flatpak bundle metadata.");
+            g_clear_error(&bundleError);
+            g_object_unref(bundleFile);
+            fail("INTEGRITY_FAILED", message);
+        }
+        auto* metadataBytes = flatpak_bundle_ref_get_metadata(bundle);
+        gsize metadataSize = 0;
+        const auto* metadataData = metadataBytes
+            ? static_cast<const char*>(g_bytes_get_data(metadataBytes, &metadataSize)) : nullptr;
+        const QByteArray actualMetadata(metadataData ? metadataData : "", qsizetype(metadataSize));
+        const auto actualDigest = QString::fromLatin1(
+            QCryptographicHash::hash(actualMetadata, QCryptographicHash::Sha256).toHex());
+        const auto actualSize = flatpak_bundle_ref_get_installed_size(bundle);
+        const bool metadataMatches = actualMetadata
+                == QByteArray::fromBase64(signedData.value("metadata").toString().toLatin1())
+            && actualDigest == signedData.value("metadataSha256").toString()
+            && actualSize == signedData.value("installedSize").toULongLong();
+        if (metadataBytes) g_bytes_unref(metadataBytes);
+        g_object_unref(bundle);
+        g_object_unref(bundleFile);
+        if (!metadataMatches)
+            fail("INTEGRITY_FAILED", "Flatpak bundle metadata or installed size does not match the signed release plan.");
         return {};
     } catch (const Failure& failure) { return {{"code", failure.code}, {"message", failure.message}}; }
 }

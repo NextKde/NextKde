@@ -33,7 +33,6 @@ AppStore::AppStore(const QString& directory, QObject* parent)
     connect(&m_independent, &IndependentApps::taskFinished, this, &AppStore::taskFinished);
     m_state = {{"busy", false}, {"installed", false}, {"available", false}, {"code", ""},
                {"stage", ""}, {"message", ""}, {"logPath", ""}, {"dependencies", QVariantList{}}};
-    m_compatibilityGuide = directory + QStringLiteral("/app-store/Compatibility.md");
     QFile catalog(directory + QStringLiteral("/app-store/catalog.json"));
     if (catalog.open(QIODevice::ReadOnly)) {
         const auto document = QJsonDocument::fromJson(catalog.readAll()).object();
@@ -483,14 +482,14 @@ void AppStore::refreshApps() { if (!anyBusy()) { refresh(); m_independent.refres
 void AppStore::install(const QString& id) { if (id == "kmusic") install(); else if (!anyBusy()) m_independent.perform(id, "install"); }
 void AppStore::uninstall(const QString& id) { if (id == "kmusic") uninstall(); else if (!anyBusy()) m_independent.perform(id, "uninstall"); }
 void AppStore::update(const QString& id) { if (id != "kmusic" && !anyBusy()) m_independent.perform(id, "update"); }
-void AppStore::checkUpdates(const QString& id) { if (id != "kmusic" && !anyBusy()) m_independent.perform(id, "check-update"); }
-void AppStore::openCompatibilityGuide()
+void AppStore::confirmPlan(const QString& id, const QString& planId)
 {
-    QDesktopServices::openUrl(QUrl::fromLocalFile(m_compatibilityGuide));
+    if (id != "kmusic" && !anyBusy()) m_independent.confirmPlan(id, planId);
 }
+void AppStore::checkUpdates(const QString& id) { if (id != "kmusic" && !anyBusy()) m_independent.perform(id, "check-update"); }
 void AppStore::cleanupProgram(const QString& id, const QString& action)
 {
-    if (!anyBusy() && (action == "cleanup-plan" || action == "prune" || action == "remove-retired"))
+    if (!anyBusy() && (action == "cleanup-plan" || action == "prune"))
         m_independent.perform(id, action);
 }
 void AppStore::cancel(const QString& id) { if (id == "kmusic") cancel(); else m_independent.cancel(id); }
