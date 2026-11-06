@@ -295,7 +295,8 @@ if(BUILD_TESTING)
         if(KOS_QUICKSHELL_EXECUTABLE AND KOS_WEATHER_PYTHON_EXECUTABLE)
             add_test(NAME kos-shell.weather-refresh
                 COMMAND ${KOS_WEATHER_PYTHON_EXECUTABLE}
-                    ${CMAKE_CURRENT_SOURCE_DIR}/tests/weather-refresh/run.py)
+                    ${CMAKE_CURRENT_SOURCE_DIR}/tests/weather-refresh/run.py
+                    ${KOS_QUICKSHELL_EXECUTABLE})
             set_tests_properties(kos-shell.weather-refresh PROPERTIES
                 LABELS "ui;headless" TIMEOUT 20
                 ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_QUICK_BACKEND=software")
