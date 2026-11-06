@@ -57,6 +57,9 @@ set(kos_platform_sources
     src/daemon/PlatformServerWallpaper.cpp
     src/daemon/PlatformServerWatches.cpp
     src/daemon/PlatformServerWindows.cpp
+    src/daemon/KimpanelBridge.cpp
+    src/daemon/KimpanelBridge.h
+    src/daemon/PlatformServerInputMethod.cpp
     src/daemon/PlatformClipboardStorage.h
     src/daemon/PlatformDbus.h
     src/daemon/PlatformNetworkBackend.h
