@@ -24,7 +24,7 @@ Scope {
                 WlrLayershell.layer: WlrLayer.Overlay
                 WlrLayershell.keyboardFocus: WlrKeyboardFocus.None
 
-                anchors.fill: parent
+                anchors { top: true; bottom: true; left: true; right: true }
 
                 readonly property var scrGeom: modelData?.geometry || ({ x: 0, y: 0, width: 1920, height: 1080 })
                 readonly property var globalAnchor: InputMethodService.globalAnchor

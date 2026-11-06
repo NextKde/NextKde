@@ -5,6 +5,7 @@ import Quickshell.Widgets
 import "../../../shared/qml/i18n"
 import qs.desktop.modules.common
 import qs.desktop.modules.dock
+import qs.desktop.modules.bar
 import "../../../Kos/Ui"
 
 Item {
@@ -15,11 +16,20 @@ Item {
     property bool verticalDock: false
     property real iconSize: 18
 
+    readonly property string displayLabel: {
+        const raw = InputMethodService.imLabel || "中";
+        if (raw.indexOf("中") >= 0) return "中";
+        if (raw.toLowerCase().indexOf("en") >= 0 || raw.indexOf("英") >= 0) return "英";
+        return raw.length > 2 ? raw.slice(0, 1) : raw;
+    }
+
     rotation: verticalDock ? -90 : 0
-    implicitWidth: 26
+    implicitWidth: Math.max(24, badgeText.implicitWidth + 10)
     implicitHeight: 24
     width: implicitWidth
     height: implicitHeight
+
+    readonly property real cellExtraWidth: Math.max(0, implicitWidth - 24)
 
     property bool menuOpen: false
 
@@ -46,12 +56,13 @@ Item {
     // Status glyph / Chinese-English badge
     Item {
         anchors.centerIn: parent
-        width: root.iconSize
+        width: badgeText.implicitWidth
         height: root.iconSize
 
         Text {
+            id: badgeText
             anchors.centerIn: parent
-            text: InputMethodService.imLabel || "中"
+            text: root.displayLabel
             font.pixelSize: 13
             font.bold: true
             font.family: "Noto Sans CJK SC, sans-serif"
@@ -88,7 +99,7 @@ Item {
         shown: hoverArea.containsMouse && !root.menuOpen
         dockHosted: root.dockHosted
         dockEdge: root.dockEdge
-        primaryText: (InputMethodService.imName || "输入法") + " (" + (InputMethodService.imLabel || "中") + ")"
+        primaryText: (InputMethodService.imName || "输入法") + " (" + root.displayLabel + ")"
         secondaryText: I18n.tr("左键切换模式，右键弹出菜单")
         minimumWidth: 120
     }
@@ -96,9 +107,9 @@ Item {
     // Liquid Glass Context Menu Popup
     AnimatedPopupWindow {
         id: menuPopup
-        required property var anchorItem: root
+        property Item anchorItem: root
         requestedOpen: root.menuOpen
-        implicitWidth: 190
+        implicitWidth: 200
         implicitHeight: menuColumn.implicitHeight + 20
         color: "transparent"
         contentItem.scale: 1
@@ -168,8 +179,28 @@ Item {
                     color: AppearanceTokens.isDarkTheme ? Qt.rgba(1, 1, 1, 0.12) : Qt.rgba(0, 0, 0, 0.08)
                 }
 
-                // Rime Actions
+                // Dynamic Rime Properties list from Fcitx5 Kimpanel
+                Repeater {
+                    model: {
+                        const all = InputMethodService.properties;
+                        if (!Array.isArray(all)) return [];
+                        return all.filter(p => p && p.id !== "/Fcitx/im" && (p.label || p.shortText));
+                    }
+
+                    delegate: MenuItemDelegate {
+                        readonly property var prop: modelData
+                        text: prop.label ? (prop.label + (prop.shortText ? " (" + prop.shortText + ")" : "")) : prop.shortText
+                        iconName: prop.icon || "system-run"
+                        onTriggered: {
+                            root.menuOpen = false;
+                            InputMethodService.triggerProperty(prop.id);
+                        }
+                    }
+                }
+
+                // If no dynamic properties loaded yet, show core Rime fallback actions
                 MenuItemDelegate {
+                    visible: !InputMethodService.properties || InputMethodService.properties.length <= 1
                     text: I18n.tr("重新部署 (Rime)")
                     iconName: "system-run"
                     onTriggered: {
@@ -179,15 +210,7 @@ Item {
                 }
 
                 MenuItemDelegate {
-                    text: I18n.tr("同步用户词库")
-                    iconName: "folder-sync"
-                    onTriggered: {
-                        root.menuOpen = false;
-                        InputMethodService.triggerProperty("/Fcitx/rime-sync");
-                    }
-                }
-
-                MenuItemDelegate {
+                    visible: !InputMethodService.properties || InputMethodService.properties.length <= 1
                     text: I18n.tr("简繁切换")
                     iconName: "character-set"
                     onTriggered: {
@@ -208,6 +231,15 @@ Item {
                     onTriggered: {
                         root.menuOpen = false;
                         InputMethodService.configure();
+                    }
+                }
+
+                MenuItemDelegate {
+                    text: I18n.tr("重新加载配置")
+                    iconName: "view-refresh"
+                    onTriggered: {
+                        root.menuOpen = false;
+                        InputMethodService.reloadConfig();
                     }
                 }
             }
