@@ -44,6 +44,7 @@ function* qmlFiles(directory) {
 }
 
 let checked = 0;
+const missingTranslations = [];
 for (const directory of ['../../shell/desktop/', '../../apps/settings/']) {
     for (const path of qmlFiles(new URL(directory, import.meta.url))) {
         const source = readFileSync(path, 'utf8');
@@ -55,7 +56,10 @@ for (const directory of ['../../shell/desktop/', '../../apps/settings/']) {
         // the shell. Dynamic messages are checked by their producing code.
         for (const match of source.matchAll(/I18n\.(?:tr|trPattern)\(\s*("(?:[^"\\]|\\.)*")/g)) {
             const key = JSON.parse(match[1]);
-            assert.ok(Object.hasOwn(catalog, key), `${path.pathname}: missing ${key}`);
+            if (!Object.hasOwn(catalog, key)) {
+                missingTranslations.push(`${path.pathname}: missing ${key}`);
+                continue;
+            }
             assert.equal(typeof catalog[key], 'string', key);
             assert.ok(catalog[key].length > 0, key);
             assert.deepEqual(placeholders(catalog[key]), placeholders(key), key);
@@ -63,6 +67,7 @@ for (const directory of ['../../shell/desktop/', '../../apps/settings/']) {
         }
     }
 }
+assert.equal(missingTranslations.length, 0, missingTranslations.join('\n'));
 assert.ok(checked > 0, 'No translation calls found; check the extraction pattern');
 const untranslated = Object.keys(catalog).filter(key => !Object.hasOwn(portugueseCatalog, key)).length;
 console.log(`PASS: primary-language policy and ${checked} UI translation calls (${untranslated} untranslated in pt-BR)`);
