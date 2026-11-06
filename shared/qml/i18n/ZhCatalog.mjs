@@ -44,6 +44,7 @@ export const catalog = {
     "Inspecting old program versions…": "正在检查旧程序版本…",
     "Cleaning installer-owned old versions…": "正在清理由安装器管理的旧版本…",
     "Close the old and new app and their background helpers, then retry.": "请关闭新旧应用及其后台辅助进程，然后重试。",
+    "Close the app and its background helpers, then retry.": "请关闭应用及其后台辅助进程，然后重试。",
     "An interrupted program operation needs attention. Keep its ownership records and see the details.": "程序操作曾被中断，需要处理。请保留归属记录并查看详细信息。",
     "An older Flatpak identity is installed. The new identity does not inherit its data; consult the compatibility guide before removing the old program.": "已安装旧 Flatpak 身份。新身份不会继承其数据；移除旧程序前请查阅兼容性指南。",
     "The old installation cannot be removed safely here. Use its external manager.": "无法在此安全移除旧安装，请使用原安装管理工具。",
