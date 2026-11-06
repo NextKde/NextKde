@@ -560,6 +560,7 @@ Flow {
         footer: DialogButtonBox {
             standardButtons: DialogButtonBox.Cancel
             Button {
+                objectName: "flatpakPlanConfirm"
                 text: planDialog.plan.operation === "update" ? I18n.tr("Download and update") : I18n.tr("Download and install")
                 enabled: !!page.store && !!page.planId && !page.store.anyBusy
                 DialogButtonBox.buttonRole: DialogButtonBox.AcceptRole
