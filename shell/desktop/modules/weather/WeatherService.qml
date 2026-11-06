@@ -28,19 +28,34 @@ QtObject {
     readonly property bool coreMode: appSource.state === "not-installed"
     readonly property string sourceMessage: IndependentAppWidgetService.feedback("weather")
     property int sourceGeneration: 0
+    property string weatherSourceKey: ""
     property bool snapshotPending: false
     property bool snapshotQueued: false
     onAppSourceChanged: {
         sourceGeneration++
         snapshotPending = false
         snapshotQueued = false
-        clearWeather()
-        if (coreMode) reload()
+        // Poll results are new objects even when the source is unchanged.
+        // Keep the last forecast through inspection failures and reconnects;
+        // only a confirmed different source invalidates its data.
+        // Read the source directly: coreMode's dependent binding may not
+        // have reevaluated yet inside this change handler.
+        const sourceKey = appSource.state === "not-installed" ? "core"
+            : (appSource.sourceToken ? "app:" + appSource.sourceToken : "")
+        if (sourceKey !== "") {
+            if (weatherSourceKey !== sourceKey)
+                clearWeather()
+            weatherSourceKey = sourceKey
+        } else if (appSource.state === "ambiguous" || appSource.state === "unsupported") {
+            weatherSourceKey = ""
+            clearWeather()
+        }
+        if (appSource.state === "not-installed") reload()
         else if (appSource.state === "ready" || appSource.state === "stale")
             applyWeather(appSource.payload || {})
         else {
             status = appSource.state === "loading" ? "loading" : "error"
-            errorMessage = sourceMessage
+            errorMessage = IndependentAppWidgetService.feedback("weather")
         }
     }
 
@@ -64,7 +79,8 @@ QtObject {
     readonly property real longitude: Number(location?.longitude ?? 0)
     readonly property bool loading: status === "loading"
     readonly property bool available: current !== null
-    readonly property bool stale: available && ((!coreMode && appSource.state === "stale")
+    readonly property bool stale: available && (status === "loading" || status === "error"
+        || (!coreMode && appSource.state !== "ready")
         || (staleAt > 0 && clockNow >= staleAt))
     readonly property string temperature: available
         ? Math.round(Number(current.temperature)) + "°" : "--°"
@@ -159,7 +175,7 @@ QtObject {
     }
 
     function reload() {
-        if (!coreMode) return
+        if (appSource.state !== "not-installed") return
         if (snapshotPending) {
             snapshotQueued = true
             return
@@ -175,8 +191,8 @@ QtObject {
                 return
             }
             if (!response.ok) {
-                if (!available)
-                    errorMessage = String(response.error?.message ?? I18n.tr("Weather data service is not ready"))
+                status = "error"
+                errorMessage = String(response.error?.message ?? I18n.tr("Weather data service is not ready"))
                 return
             }
             applyWeather(response.result?.weather ?? {})
@@ -186,14 +202,34 @@ QtObject {
     function applyWeather(weather) {
         if (Number(weather.schemaVersion) !== 1)
             return
+        const nextUnits = weather.units === "imperial" ? "imperial" : "metric"
+        const nextStatus = String(weather.status ?? "idle")
+        // A backend may publish an empty reading while it reloads. Retain
+        // data only for the same city and units; an explicit empty/idle
+        // selection or a changed configuration must still replace it.
+        if (available && !weather.current
+                && (nextStatus === "loading" || nextStatus === "error")
+                && String(weather.location?.id ?? "") !== ""
+                && weather.location.id === location.id && nextUnits === units) {
+            status = nextStatus
+            errorMessage = String(weather.error ?? "")
+            nextRefreshAt = Number(weather.nextRefreshAt ?? 0)
+            return
+        }
         location = weather.location ?? ({})
         locations = Array.isArray(weather.locations) ? weather.locations : []
         current = weather.current ?? null
-        hourly = Array.isArray(weather.hourly) ? weather.hourly : []
-        daily = Array.isArray(weather.daily) ? weather.daily : []
+        // Array models recreate their delegates on assignment. Polling the
+        // same forecast must not rebuild the desktop's seven-day row.
+        const nextHourly = Array.isArray(weather.hourly) ? weather.hourly : []
+        const nextDaily = Array.isArray(weather.daily) ? weather.daily : []
+        if (JSON.stringify(hourly) !== JSON.stringify(nextHourly))
+            hourly = nextHourly
+        if (JSON.stringify(daily) !== JSON.stringify(nextDaily))
+            daily = nextDaily
         airQuality = weather.airQuality ?? null
-        units = weather.units === "imperial" ? "imperial" : "metric"
-        status = String(weather.status ?? "idle")
+        units = nextUnits
+        status = nextStatus
         errorMessage = String(weather.error ?? "")
         fetchedAt = new Date(Number(weather.fetchedAt ?? 0))
         staleAt = Number(weather.staleAt ?? 0)
@@ -210,8 +246,10 @@ QtObject {
         const epoch = sourceGeneration
         DataClient.request("weather.refresh", {}, function(response) {
             if (!service.coreMode || epoch !== service.sourceGeneration) return
-            if (!response.ok)
+            if (!response.ok) {
+                status = "error"
                 errorMessage = String(response.error?.message ?? I18n.tr("Weather refresh failed"))
+            }
         })
     }
 
@@ -226,7 +264,9 @@ QtObject {
                 service.sourceGeneration++
                 service.snapshotPending = false
                 service.snapshotQueued = false
-                service.clearWeather()
+                service.status = connected ? "loading" : "error"
+                service.errorMessage = connected ? ""
+                    : I18n.tr("Weather data service is not ready")
                 if (connected) service.reload()
             }
         }

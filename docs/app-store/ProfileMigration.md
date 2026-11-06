@@ -1,22 +1,33 @@
 # Separate application identities and explicit legacy cleanup / 新旧应用边界与旧版清理
 
+**Installation boundary:** Native and Flatpak versions may coexist. Settings uses
+only current Flatpak inventory for Install/Open/Uninstall; native executables,
+desktop entries and source ownership never block discovery, planning or deployment.
+Native cleanup is optional and independent, never a prerequisite for Flatpak.
+To uninstall, click the app icon/name to expand details, then Uninstall and confirm.
+This removes only the selected user Flatpak, keeping personal data and native apps.
+System installations and ambiguous multiple Flatpak refs require their own manager.
+
 Current contract, 2026-11-05: old and new Calendar, Calculator and Weather are
 **different applications**. Breaking change is intentional. There is no old-profile
 adoption, cross-identity copy/merge, old ownership upgrade or old bus alias.
-ListenFree and KMusic are unchanged. Historical compatibility results are not
+ListenFree and KMusic identities are unchanged; Settings manages all five via Flatpak.
+No historical Flatpak release is presumed and there is no old-Flatpak cleanup flow. Native ListenFree programs can
+also be explicitly removed by the cleanup tool; its Flatpak and user data stay.
+Historical compatibility results are not
 acceptance of this boundary. No legacy purge has been executed during development.
 
 ## Current identities and paths
 
-| Application | Retired Flatpak ID | Current ID |
+| Application | Historical native ownership ID | Current ID |
 | --- | --- | --- |
 | Calendar | `org.nextkde.Calendar` | `org.nextks.calendar` |
 | Calculator | `org.nextkde.Calculator` | `org.nextks.calculator` |
 | Weather | `org.nextkde.Weather` | `org.nextks.weather` |
 
 Commands remain `kos-calendar`, `kos-calculator`, `kos-weather`. Current desktop
-files use the current ID. A real occupied command/desktop entry is a conflict,
-not permission to overwrite it. Merely retaining an old Flatpak ID or old short-key
+files use the current ID. Native source installers must not overwrite an occupied
+native command/desktop entry. That file-ownership rule does not block Flatpak installation. Merely retaining an old Flatpak ID or old short-key
 source directory does not make it part of the new application's inventory.
 
 Native default locations (XDG defaults apply when variables are unset):
@@ -51,16 +62,28 @@ owning desktop user, never root or sudo. These are commands for a human to revie
 and execute, not actions performed by Settings or during this implementation:
 
 ```sh
-# Read-only inventory; inspect every DELETE / UNINSTALL / RETAINED / BLOCKED line.
+# Read-only inventory; inspect every DELETE / KEEP / RETAINED / BLOCKED line.
 python3 tools/maintenance/purge-legacy-apps.py --app calendar
 # Only after making any desired backup and closing applications/helpers:
 python3 tools/maintenance/purge-legacy-apps.py --app calendar --apply
-# Select calendar, calculator, weather or all. Noninteractive destructive consent:
-python3 tools/maintenance/purge-legacy-apps.py --app all --apply --yes
+# Select all: review and confirm each application separately.
+python3 tools/maintenance/purge-legacy-apps.py --app all --apply
+# Preview only the old native ListenFree program:
+python3 tools/maintenance/purge-legacy-apps.py --app listenfree
 ```
 
-`--apply` requires typing `DELETE LEGACY APPS AND DATA` in a terminal unless
-`--yes` is supplied. **Deletion includes personal data and is irreversible.**
+`--apply` requires an interactive terminal. Before each application is deleted,
+its exact directories/files are listed. Type
+`DELETE calendar APPS AND DATA` (or `calculator` / `weather` as displayed) to
+confirm that application only. Enter or any other text skips it. With `--app all`,
+confirmation repeats separately for every application with deletion targets;
+there is no blanket consent and `--yes` is no longer supported. Ctrl+C or end of
+input stops the remaining applications; completed deletions are not rolled back.
+All-app preflight still refuses the run if any application is blocked.
+`all` includes native ListenFree, whose separate confirmation is
+`DELETE listenfree PROGRAMS`. Its Flatpak installation and personal data are
+excluded from deletion.
+**Deletion includes personal data and is irreversible.**
 The tool does not install a replacement, migrate, back up or restore data.
 
 It only deletes:
@@ -69,32 +92,32 @@ It only deletes:
   revision, known installed-file and activation-link checks. Calendar includes
   owned old Todo artifacts. Replaced links, unknown files or pending transactions
   block application; missing owned activation links can be skipped on retry.
-- One unambiguous exact old **user** Flatpak app ref using Flatpak itself, with
-  `--no-related` and without runtime autoremove or `--delete-data`; it then removes
-  the separately listed exact old-ID private directory.
 - Fixed old native private locations: `NextKde/kos-<app>.conf` and corresponding
   cache, Calendar's `$XDG_DATA_HOME/kos/pim` and old Todo settings/cache, Weather's
   `$XDG_STATE_HOME/quickshell/kos-weather/standalone-backend`.
+- Native ListenFree: verified installer-owned source programs, or the historical
+  `~/.local/opt/listenfree` bundle and its exact launcher/desktop entry. Bundle
+  contents must match the committed filename allowlist; unknown additions block
+  cleanup. Unowned icons and installer logs are retained. ListenFree Flatpak refs,
+  `~/.var/app/org.nextkde.ListenFree`, preferences, music library and downloads
+  are never cleanup targets.
 
 It does not guess ownership of plain historical core/distro/Nix binaries or delete
-`/usr`, `/usr/local`, the whole core, shared runtimes, ListenFree or KMusic. Such
+`/usr`, `/usr/local`, the whole core, shared runtimes or KMusic. The narrowly
+identified native ListenFree bundle above is the explicit exception. Other such
 candidates are `RETAINED`, requiring their original manager. Shared
 `NextKde/KosApplications.conf` and core Weather state are kept because they are
 not exclusively owned by these three apps. Non-default historical profiles,
 backups and withdrawn development-migration journals are not searched or deleted.
 Do not claim a full-machine cleanup when retained items remain.
 
-System/custom-installation or multiple old Flatpak refs, unavailable inventory,
-unsafe ancestors/ownership, symlinked data roots, special files, writable-by-others
-nodes, overlapping paths or running writers cause refusal. Symlinks inside a
-listed private tree are unlinked, not traversed. Source locks, inventory and file
-snapshots are checked again before mutation; new identity paths are protected.
-Flatpak list output may abbreviate commits even with `active:full`; for retired IDs,
-the tool resolves the full commit with installation-scoped `info --show-commit`
-and rejects a mismatch before uninstalling. Unrelated apps are never uninstalled.
+All Flatpak installations and the whole `~/.var/app` tree are protected. The tool
+never invokes Flatpak uninstall. Unsafe ancestors/ownership, symlinked roots,
+special files, overlapping paths or running writers cause refusal. Source locks
+and file snapshots are checked again before mutation.
 Same command names mean the tool can conservatively require closing a new app too.
 
-This is **not an atomic transaction**. Flatpak uninstall or a later deletion can
+This is **not an atomic transaction**. A later deletion can
 fail after earlier actions completed; external auto-start or concurrent changes
 must be stopped manually. A changed tree is refused, not silently rescanned and
 accepted. Incomplete source roots/orphan state need manual ownership review;
