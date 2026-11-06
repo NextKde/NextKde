@@ -1,5 +1,7 @@
 #pragma once
 
+#include "AppOperationPolicy.h"
+
 #include <QFutureWatcher>
 #include <QObject>
 #include <QTimer>
@@ -15,18 +17,21 @@ class FlatpakApps final : public QObject {
 public:
     explicit FlatpakApps(QObject* parent = nullptr);
     ~FlatpakApps() override;
+    bool hasActiveMutation() const { return busy() && isAppMutation(m_action); }
     void refresh();
     QVariantMap state(const QString& appId) const;
     bool querying() const { return m_watcher.isRunning(); }
     bool busy() const { return !m_activeId.isEmpty(); }
     bool uninstall(const QString& appId);
-    bool removeRetired(const QString& appId);
     bool checkUpdates(const QString& appId);
     bool update(const QString& appId);
     bool install(const QString& appId);
+    QVariantMap makePlan(const QString& appId, bool installing) const;
+    bool confirmPlan(const QString& appId, const QVariantMap& plan);
     void cancel();
 signals:
     void changed();
+    void mutationFinished(const QString& appId, const QString& code);
     void operationFinished(const QString& appId, const QString& code, const QString& message);
 private:
     struct Cancellation;
@@ -38,8 +43,7 @@ private:
         QVariantMap apps;
         QString error;
     };
-    bool deploy(const QString& appId, bool installing);
-    bool remove(const QString& appId, bool retired);
+    bool deploy(const QString& appId, bool installing, const QVariantMap& authorizedPlan = {});
     bool beginOperation(const QString& appId, const QString& action, int timeout);
     void reportProgress();
     QFutureWatcher<Inventory> m_watcher;

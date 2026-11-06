@@ -46,6 +46,7 @@ stdenv.mkDerivation {
         cmake -S apps/settings -B "$TMPDIR/build" -G Ninja \
             -DCMAKE_BUILD_TYPE=Release \
             -DBUILD_TESTING=OFF \
+            -DKOS_FLATPAK_SUPPORT=AUTO \
             -DCMAKE_INSTALL_PREFIX=$out
         cmake --build "$TMPDIR/build" --parallel
         cmake --install "$TMPDIR/build"

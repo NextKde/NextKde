@@ -1,6 +1,8 @@
 #pragma once
 
-#include "FlatpakApps.h"
+#include "AppOperationPolicy.h"
+
+#include "FlatpakAppsClient.h"
 
 #include <QElapsedTimer>
 #include <QFile>
@@ -17,14 +19,17 @@ public:
     ~IndependentApps() override;
     QVariantList apps() const;
     bool busy() const { return m_active >= 0 || !m_pendingStatus.isEmpty() || m_flatpak.busy(); }
+    bool hasActiveMutation() const { return m_flatpak.hasActiveMutation() || (m_active >= 0 && (m_verifying || isAppMutation(m_action))); }
     void refresh();
     void perform(const QString& id, const QString& action);
+    void confirmPlan(const QString& id, const QString& planId);
     void cancel(const QString& id);
     void open(const QString& id);
     void openLog(const QString& id);
     void openRepository(const QString& id);
 signals:
     void changed();
+    void taskFinished(const QString& name, const QString& code);
 private:
     friend class IndependentAppsTest;
     int indexOf(const QString& id) const;
@@ -37,7 +42,7 @@ private:
     void stop(int signal);
     void log(const QByteArray& bytes);
     void applyStatus(QVariantMap& state, const QJsonObject& event);
-    FlatpakApps m_flatpak;
+    FlatpakAppsClient m_flatpak;
     QVariantList m_apps;
     QVariantMap m_flatpakResults;
     QString m_script;

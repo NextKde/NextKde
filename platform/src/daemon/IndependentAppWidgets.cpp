@@ -2,6 +2,7 @@
 
 #include <KDesktopFile>
 #include <KConfigGroup>
+#include "FlatpakAppsClient.h"
 #include <QCryptographicHash>
 #include <QDateTime>
 #include <QDate>
@@ -20,11 +21,6 @@
 #include <fcntl.h>
 #include <sys/stat.h>
 #include <unistd.h>
-
-#pragma push_macro("signals")
-#undef signals
-#include <flatpak.h>
-#pragma pop_macro("signals")
 
 namespace KosPlatform::IndependentAppWidgets {
 namespace {
@@ -190,15 +186,12 @@ bool bounded(const QJsonValue &value, int depth = 0)
 }
 
 QueryControl::QueryControl()
-    : cancellable(g_cancellable_new()), deadline(std::chrono::steady_clock::now() + std::chrono::seconds(15))
+    : deadline(std::chrono::steady_clock::now() + std::chrono::seconds(15))
 {
 }
 
-QueryControl::~QueryControl() { g_object_unref(cancellable); }
-void QueryControl::cancel() {
-    cancelled.store(true);
-    g_cancellable_cancel(cancellable);
-}
+QueryControl::~QueryControl() = default;
+void QueryControl::cancel() { cancelled.store(true); }
 bool QueryControl::expired() const {
     return cancelled.load() || std::chrono::steady_clock::now() >= deadline;
 }
@@ -264,62 +257,28 @@ QJsonObject snapshot(const QString &key, const std::shared_ptr<QueryControl> &co
     if (control->expired()) return timeout();
     if (!supported(key)) return state(QStringLiteral("invalid"), QStringLiteral("Unsupported widget app"));
     const QString appId = QStringLiteral("org.nextks.") + key;
-    const QString legacyId = QStringLiteral("kos-") + key;
-    const QString retiredId = QStringLiteral("org.nextkde.")
-        + (key == QLatin1String("calendar") ? QStringLiteral("Calendar") : QStringLiteral("Weather"));
     QStringList roots;
     for (const auto &root : QStandardPaths::standardLocations(QStandardPaths::GenericDataLocation))
         roots.append(QDir(root).filePath(QStringLiteral("applications")));
     roots << QDir::homePath() + QStringLiteral("/.local/share/flatpak/exports/share/applications")
           << QStringLiteral("/var/lib/flatpak/exports/share/applications");
-    const QStringList ids{appId, legacyId, retiredId};
-    // Inventory all configured installations, not just the branch exported to
-    // the desktop. A hidden second ref still shares this app's private data.
-    g_autoptr(GError) inventoryError = nullptr;
-    g_autoptr(FlatpakInstallation) user = flatpak_installation_new_user(control->cancellable, &inventoryError);
-    if (!user)
-        return state(QStringLiteral("unavailable"), QStringLiteral("Cannot inspect user Flatpak installation"));
-    g_autoptr(GPtrArray) installations = flatpak_get_system_installations(control->cancellable, &inventoryError);
-    if (!installations)
-        return state(QStringLiteral("unavailable"), QStringLiteral("Cannot enumerate configured Flatpak installations"));
-    g_ptr_array_add(installations, g_object_ref(user));
+    const QStringList ids{appId};
+    // Read the exact all-installation inventory from the optional Qt-only worker.
+    // An unavailable backend remains unknown; it is never treated as an empty install.
+    const auto inventory = FlatpakAppsClient::inventory([control] { return control->expired(); });
+    if (!inventory.value(QStringLiteral("known")).toBool())
+        return state(QStringLiteral("unavailable"), inventory.value(QStringLiteral("error")).toString());
+    const auto apps = inventory.value(QStringLiteral("apps")).toMap();
+    const auto appState = apps.value(appId).toMap();
+    if (!appState.value(QStringLiteral("known")).toBool())
+        return state(QStringLiteral("unavailable"), appState.value(QStringLiteral("error")).toString());
+    const auto installed = appState.value(QStringLiteral("installations")).toList();
     QList<QJsonObject> installedRefs;
-    QSet<QString> installationsSeen;
-    for (guint i = 0; i < installations->len; ++i) {
-        if (control->expired()) return timeout();
-        auto *installation = FLATPAK_INSTALLATION(g_ptr_array_index(installations, i));
-        flatpak_installation_set_no_interaction(installation, TRUE);
-        g_autofree char *rawPath = g_file_get_path(flatpak_installation_get_path(installation));
-        const QString installPath = QString::fromUtf8(rawPath);
-        if (installPath.isEmpty())
-            return state(QStringLiteral("unavailable"), QStringLiteral("Flatpak installation has no local path"));
-        const QString canonical = QFileInfo(installPath).canonicalFilePath();
-        const QString identity = canonical.isEmpty() ? QDir::cleanPath(installPath) : canonical;
-        if (installationsSeen.contains(identity)) continue;
-        installationsSeen.insert(identity);
-        roots.append(installPath + QStringLiteral("/exports/share/applications"));
-        g_autoptr(GPtrArray) refs = flatpak_installation_list_installed_refs_by_kind(
-            installation, FLATPAK_REF_KIND_APP, control->cancellable, &inventoryError);
-        if (!refs)
-            return state(QStringLiteral("unavailable"), QStringLiteral("Flatpak inventory is unreadable; installation state is unknown"));
-        for (guint j = 0; j < refs->len; ++j) {
-            if (control->expired()) return timeout();
-            auto *installed = FLATPAK_INSTALLED_REF(g_ptr_array_index(refs, j));
-            auto *ref = FLATPAK_REF(installed);
-            const QString id = QString::fromUtf8(flatpak_ref_get_name(ref));
-            if (!ids.contains(id)) continue;
-            installedRefs.append({
-                {QStringLiteral("id"), id},
-                {QStringLiteral("installation"), identity},
-                {QStringLiteral("scope"), flatpak_installation_get_is_user(installation) ? QStringLiteral("user") : QStringLiteral("system")},
-                {QStringLiteral("arch"), QString::fromUtf8(flatpak_ref_get_arch(ref))},
-                {QStringLiteral("branch"), QString::fromUtf8(flatpak_ref_get_branch(ref))},
-                {QStringLiteral("commit"), QString::fromUtf8(flatpak_ref_get_commit(ref))},
-                {QStringLiteral("origin"), QString::fromUtf8(flatpak_installed_ref_get_origin(installed))},
-                {QStringLiteral("deployDirectory"), QFileInfo(QString::fromUtf8(flatpak_installed_ref_get_deploy_dir(installed))).canonicalFilePath()},
-                {QStringLiteral("current"), bool(flatpak_installed_ref_get_is_current(installed))},
-            });
-        }
+    for (const auto &item : installed) {
+        const auto ref = item.toMap();
+        installedRefs.append(QJsonObject::fromVariantMap(ref));
+        const QString path = ref.value(QStringLiteral("installationPath")).toString();
+        if (!path.isEmpty()) roots.append(path + QStringLiteral("/exports/share/applications"));
     }
     if (installedRefs.size() > 1)
         return state(QStringLiteral("ambiguous"), QStringLiteral("Multiple Flatpak identities, branches, architectures or installations found; manage them before connecting widgets"));
@@ -392,9 +351,13 @@ QJsonObject snapshot(const QString &key, const std::shared_ptr<QueryControl> &co
     const QString configuredState = qEnvironmentVariable("XDG_STATE_HOME");
     const QString stateRoot = sandbox ? dataRoot + QStringLiteral("/state")
         : (configuredState.isEmpty() ? QDir::homePath() + QStringLiteral("/.local/state") : configuredState);
+    const QString calendarStorage = dataRoot + (sandbox
+        ? QStringLiteral("/kos/pim") : QStringLiteral("/org.nextks.calendar/pim"));
     const QString path = key == QLatin1String("calendar")
-        ? dataRoot + QStringLiteral("/kos/pim/widget-snapshot.json")
-        : stateRoot + QStringLiteral("/quickshell/kos-weather/standalone-backend/widget-snapshot.json");
+        ? calendarStorage + QStringLiteral("/widget-snapshot.json")
+        : stateRoot + (sandbox
+            ? QStringLiteral("/quickshell/kos-weather/standalone-backend/widget-snapshot.json")
+            : QStringLiteral("/org.nextks.weather/standalone-backend/widget-snapshot.json"));
     const QByteArray identity = QJsonDocument(result).toJson(QJsonDocument::Compact) + path.toUtf8();
     result.insert(QStringLiteral("sourceToken"), QString::fromLatin1(QCryptographicHash::hash(identity, QCryptographicHash::Sha256).toHex()));
     result.insert(QStringLiteral("installed"), true);
@@ -403,12 +366,8 @@ QJsonObject snapshot(const QString &key, const std::shared_ptr<QueryControl> &co
         result.insert(QStringLiteral("message"), message);
         return result;
     };
-    if (id == retiredId || (sandbox && id != appId))
-        return fail(QStringLiteral("unsupported"), QStringLiteral("This application identity does not provide the widget interface"));
     if (!sandbox && key == QLatin1String("calendar") && !qEnvironmentVariableIsEmpty("KOS_PIM_STORAGE_DIR"))
         return fail(QStringLiteral("unsupported"), QStringLiteral("Custom Calendar storage is not connected to widgets"));
-    if (!sandbox && key == QLatin1String("weather") && qEnvironmentVariableIsSet("KOS_DATA_SOCKET"))
-        return fail(QStringLiteral("unsupported"), QStringLiteral("Custom Weather backend is not connected to widgets"));
     if (control->expired()) return timeout();
     QString error;
     const QByteArray bytes = readSummary(path, error);
@@ -419,12 +378,10 @@ QJsonObject snapshot(const QString &key, const std::shared_ptr<QueryControl> &co
     if (parseError.error != QJsonParseError::NoError || !document.isObject() || !bounded(document.object()))
         return fail(QStringLiteral("invalid"), QStringLiteral("Invalid widget summary"));
     const QJsonObject payload = document.object();
-    const bool legacy = !sandbox && id == legacyId && key == QLatin1String("calendar")
-        && !payload.contains(QStringLiteral("widgetContractVersion"));
-    if (!legacy && (payload.value(QStringLiteral("widgetContractVersion")).toInt() != 2
+    if (payload.value(QStringLiteral("widgetContractVersion")).toInt() != 2
         || payload.value(QStringLiteral("appId")).toString() != appId
         || payload.value(QStringLiteral("channel")) != result.value(QStringLiteral("channel"))
-        || payload.value(QStringLiteral("storageMode")).toString() != QLatin1String("default")))
+        || payload.value(QStringLiteral("storageMode")).toString() != QLatin1String("default"))
         return fail(QStringLiteral("unsupported"), QStringLiteral("Widget summary identity or version is unsupported"));
     const qint64 now = QDateTime::currentMSecsSinceEpoch();
     const qint64 generatedAt = payload.value(QStringLiteral("generatedAt")).toInteger();
@@ -437,11 +394,11 @@ QJsonObject snapshot(const QString &key, const std::shared_ptr<QueryControl> &co
             || payload.value(QStringLiteral("events")).toArray().size() > 16
             || payload.value(QStringLiteral("todos")).toArray().size() > 16)
             return fail(QStringLiteral("invalid"), QStringLiteral("Invalid Calendar widget data"));
-        if (!legacy && payload.value(QStringLiteral("storagePath")).toString()
-            != (sandbox ? QStringLiteral("/var/data/kos/pim") : dataRoot + QStringLiteral("/kos/pim"))) {
+        if (payload.value(QStringLiteral("storagePath")).toString()
+            != (sandbox ? QStringLiteral("/var/data/kos/pim") : calendarStorage)) {
             // Flatpak may expose XDG_DATA_HOME using its host-shaped path.
             const QString stored = payload.value(QStringLiteral("storagePath")).toString();
-            if (!sandbox || stored != dataRoot + QStringLiteral("/kos/pim"))
+            if (!sandbox || stored != calendarStorage)
                 return fail(QStringLiteral("unsupported"), QStringLiteral("Calendar uses a different storage profile"));
         }
         for (const auto *list : {"events", "todos"}) {
@@ -458,7 +415,7 @@ QJsonObject snapshot(const QString &key, const std::shared_ptr<QueryControl> &co
             }
         }
         stale |= payload.value(QStringLiteral("today")).toString() != QDate::currentDate().toString(Qt::ISODate);
-        if (!legacy) stale |= payload.value(QStringLiteral("timeZone")).toString() != QString::fromUtf8(QTimeZone::systemTimeZoneId());
+        stale |= payload.value(QStringLiteral("timeZone")).toString() != QString::fromUtf8(QTimeZone::systemTimeZoneId());
         result.insert(QStringLiteral("payload"), payload);
     } else {
         const QJsonObject weather = payload.value(QStringLiteral("weather")).toObject();

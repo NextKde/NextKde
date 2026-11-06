@@ -295,10 +295,6 @@ def extract_archive(archive, target):
         fail("UNSAFE_ARCHIVE", "Cannot safely unpack source archive", error=str(exc))
 
 
-RETIRED_IDS = {"calendar": "org.nextkde.Calendar", "calculator": "org.nextkde.Calculator",
-               "weather": "org.nextkde.Weather"}
-
-
 class Installer:
     def __init__(self, key, action, requested=None, client=None, emit=None, confirmed=False, expected_plan=None):
         self.key, self.action, self.requested = key, action, requested
@@ -306,8 +302,9 @@ class Installer:
         self.repo, self.app_id, self.executables = APPS[key]
         home = Path.home()
         self.data = Path(os.environ.get("XDG_DATA_HOME", str(home / ".local/share")))
-        self.state = Path(os.environ.get("XDG_STATE_HOME", str(home / ".local/state"))) / "nextkde-apps" / key
-        self.root = self.data / "nextkde-apps" / key
+        namespace = self.app_id if self.repo == "kos-apps" else key
+        self.state = Path(os.environ.get("XDG_STATE_HOME", str(home / ".local/state"))) / "nextkde-apps" / namespace
+        self.root = self.data / "nextkde-apps" / namespace
         self.bin = home / ".local/bin"
         self.current = self.root / "current"
         self.metadata = self.root / "ownership.json"
@@ -352,17 +349,14 @@ class Installer:
     def validate_journal_info(self, info):
         if info is None:
             return
-        if (not isinstance(info, dict) or info.get("managedBy") != OWNER or info.get("appId") not in (self.app_id, RETIRED_IDS.get(self.key, self.app_id))
+        if (not isinstance(info, dict) or info.get("managedBy") != OWNER or info.get("appId") != self.app_id
                 or not isinstance(info.get("version"), str) or not SEMVER.fullmatch(info["version"])
                 or not isinstance(info.get("revision"), str) or not REVISION.fullmatch(info["revision"])
                 or not isinstance(info.get("versions"), list) or not isinstance(info.get("links"), dict)
                 or any(not isinstance(r, str) or not REVISION.fullmatch(r) for r in info["versions"])
                 or info["revision"] not in info["versions"]):
             fail("CORRUPT_STATE", "Transaction ownership metadata is invalid")
-        base = self.expected_links(self.root / "nonexistent", info["appId"])
-        legacy = self.legacy_links()
-        if set(info["links"]) & set(legacy) and not set(legacy).issubset(info["links"]):
-            fail("CORRUPT_STATE", "Transaction omits legacy activation paths")
+        base = self.expected_links(self.root / "nonexistent")
         for path, target in info["links"].items():
             if not isinstance(path, str) or not isinstance(target, str):
                 fail("CORRUPT_STATE", "Transaction link is invalid")
@@ -370,7 +364,7 @@ class Installer:
             valid_service = (service.parent == self.data / "dbus-1/services" and service.suffix == ".service"
                              and service.name not in (".service", "..service")
                              and target == str(self.current / "share/dbus-1/services" / service.name))
-            if base.get(path) != target and legacy.get(path) != target and not valid_service:
+            if base.get(path) != target and not valid_service:
                 fail("CORRUPT_STATE", "Transaction contains an unowned activation path")
         if not set(base).issubset(info["links"]):
             fail("CORRUPT_STATE", "Transaction omits required activation paths")
@@ -624,7 +618,7 @@ class Installer:
         if versions.is_symlink() or not versions.is_dir():
             fail("CORRUPT_STATE", "Version storage is missing or unsafe")
         info = read_json(self.metadata)
-        if (not isinstance(info, dict) or info.get("managedBy") != OWNER or info.get("appId") not in (self.app_id, RETIRED_IDS.get(self.key, self.app_id))
+        if (not isinstance(info, dict) or info.get("managedBy") != OWNER or info.get("appId") != self.app_id
                 or not isinstance(info.get("versions"), list) or not isinstance(info.get("links"), dict)
                 or not isinstance(info.get("revision"), str) or not REVISION.fullmatch(info["revision"])
                 or not isinstance(info.get("version"), str) or not SEMVER.fullmatch(info["version"])):
@@ -641,10 +635,7 @@ class Installer:
             version = self.root / "versions" / revision
             if version.is_symlink() or not version.is_dir():
                 fail("CORRUPT_STATE", "Owned version directory is missing or unsafe")
-        allowed = self.expected_links(expected, info["appId"])
-        legacy = self.legacy_links()
-        if set(info["links"]) & set(legacy):
-            allowed.update(legacy)
+        allowed = self.expected_links(expected)
         for path, target in info["links"].items():
             if path not in allowed or target != allowed[path]:
                 fail("CORRUPT_STATE", "Ownership metadata contains an unexpected link")
@@ -655,23 +646,14 @@ class Installer:
             fail("CORRUPT_STATE", "Ownership metadata omits activation links")
         return info
 
-    def legacy_links(self):
-        # Only old ownership records may retain these retired Calendar entries.
-        if self.key != "calendar":
-            return {}
-        return {str(self.bin / "kos-todo"): str(self.current / "bin/kos-todo"),
-                str(self.data / "applications/kos-todo.desktop"):
-                    str(self.current / "share/applications/kos-todo.desktop")}
+    def desktop_name(self):
+        return (self.app_id if self.repo == "kos-apps" else self.executables[0]) + ".desktop"
 
-    def desktop_name(self, identity=None):
-        identity = identity or self.app_id
-        return (identity if identity.startswith("org.nextks.") else self.executables[0]) + ".desktop"
-
-    def expected_links(self, version, identity=None):
+    def expected_links(self, version):
         links = {}
         for executable in self.executables:
             links[str(self.bin / executable)] = str(self.current / "bin" / executable)
-            desktop = self.desktop_name(identity)
+            desktop = self.desktop_name()
             links[str(self.data / "applications" / desktop)] = str(self.current / "share/applications" / desktop)
         services = version / "share/dbus-1/services"
         if services.is_dir():
@@ -688,10 +670,10 @@ class Installer:
             target = Path(path)
             if present(target) and path not in owned:
                 fail("EXTERNALLY_MANAGED", "Existing user activation is not owned by this installer", path=path)
-        if self.key in RETIRED_IDS:
+        if self.repo == "kos-apps":
             old_desktop = self.data / "applications" / (self.executables[0] + ".desktop")
             if present(old_desktop) and str(old_desktop) not in owned:
-                fail("EXTERNALLY_MANAGED", "Old desktop activation is not installer-owned", path=str(old_desktop))
+                fail("EXTERNALLY_MANAGED", "Old desktop activation is not installer-owned; review tools/purge-legacy-apps.py for explicit legacy program/data cleanup", path=str(old_desktop))
         for executable in self.executables:
             for directory in os.get_exec_path():
                 candidate = Path(directory) / executable
@@ -850,7 +832,7 @@ class Installer:
                 "version": info["version"] if info else None, "revision": info["revision"] if info else None,
                 "currentVersion": info["version"] if info else None,
                 "currentRevision": info["revision"] if info else None, "root": str(self.root),
-                "desktopFile": str(self.data / "applications" / self.desktop_name(info["appId"])) if info else None}
+                "desktopFile": str(self.data / "applications" / self.desktop_name()) if info else None}
 
     def execute(self):
         with self.lock():

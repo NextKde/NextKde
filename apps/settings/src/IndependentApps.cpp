@@ -35,11 +35,26 @@ IndependentApps::IndependentApps(const QString& resources, QObject* parent)
             {"version", ""}, {"latestVersion", ""}, {"updateAvailable", false}, {"code", ""},
             {"stage", ""}, {"logPath", ""}, {"dependencies", QVariantList{}}});
     }
-    connect(&m_flatpak, &FlatpakApps::changed, this, &IndependentApps::changed);
-    connect(&m_flatpak, &FlatpakApps::operationFinished, this,
+    connect(&m_flatpak, &FlatpakAppsClient::changed, this, &IndependentApps::changed);
+    connect(&m_flatpak, &FlatpakAppsClient::operationFinished, this,
         [this](const QString& appId, const QString& code, const QString& message) {
             m_flatpakResults[appId] = QVariantMap{{"code", code}, {"message", message}};
+            const auto state = m_flatpak.state(appId);
+            if (state.contains("plan")) {
+                emit changed();
+                return;
+            }
             refresh();
+        });
+    connect(&m_flatpak, &FlatpakAppsClient::mutationFinished, this,
+        [this](const QString& appId, const QString& code) {
+            for (const auto& entry : m_apps) {
+                const auto state = entry.toMap();
+                if (state.value("appId").toString() == appId) {
+                    emit taskFinished(state.value("name").toString(), code);
+                    break;
+                }
+            }
         });
     m_process.setChildProcessModifier([] { if (::setsid() < 0) ::_exit(126); });
     connect(&m_process, &QProcess::started, this, [this] {
@@ -93,7 +108,6 @@ QVariantList IndependentApps::apps() const
         const auto inventory = m_flatpak.state(state.value("appId").toString());
         const auto installations = inventory.value("installations").toList();
         state["flatpak"] = inventory;
-        state["retiredInstallations"] = inventory.value("retiredInstallations");
         const auto progress = inventory.value("progressState").toMap();
         if (inventory.value("busy").toBool()) {
             state["busy"] = true;
@@ -139,22 +153,14 @@ QVariantList IndependentApps::apps() const
             state["dependencies"] = QVariantList{};
         } else if (state.value("statusKnown").toBool() && !state.value("installed").toBool()) {
             state["backend"] = inventory.value("canDiscover").toBool() ? "flatpak-ready" : "flatpak-unavailable";
-            state["available"] = inventory.value("known").toBool() && inventory.value("canInstall").toBool();
+            // Install only needs a discoverable signed release; whether one exists is
+            // answered by the prepare step, not by a prior update check.
+            state["available"] = inventory.value("known").toBool() && inventory.value("canDiscover").toBool();
             state["canCheckUpdates"] = !inventory.value("querying").toBool() && inventory.value("known").toBool() && inventory.value("canDiscover").toBool();
             state["latestVersion"] = inventory.value("update").toMap().value("version");
             state["updateAvailable"] = false;
             if (inventory.value("busy").toBool()) {
                 state["busy"] = true; state["stage"] = progress.value("cancelling").toBool() ? QVariant("cancelling") : inventory.value("stage");
-            }
-        }
-        if (!inventory.value("retiredInstallations").toList().isEmpty()) {
-            state["available"] = false;
-            state["canCheckUpdates"] = false;
-            state["updateAvailable"] = false;
-            if (state.value("code").toString().isEmpty()) {
-                state["code"] = "RETIRED_FLATPAK_ID";
-                state["message"] = QStringLiteral("An older Flatpak identity (%1) is installed. The new identity does not inherit its data. Keep the old installation until a replacement and its requirements are ready; consult the compatibility guide before explicitly removing the old program. Personal data is kept.")
-                    .arg(inventory.value("retiredAppId").toString());
             }
         }
         result[i] = state;
@@ -186,36 +192,30 @@ void IndependentApps::perform(const QString& id, const QString& action)
     const int index = indexOf(id);
     if (index < 0 || busy()) return;
     if (action != "install" && action != "update" && action != "uninstall" && action != "check-update"
-        && action != "remove-retired" && action != "cleanup-plan" && action != "prune") return;
+        && action != "cleanup-plan" && action != "prune") return;
     const auto appId = m_apps[index].toMap().value("appId").toString();
     m_flatpakResults.remove(appId);
     const auto flatpak = m_flatpak.state(appId);
-    if (action == "remove-retired") {
-        if (!m_flatpak.removeRetired(appId)) {
-            m_flatpakResults[appId] = QVariantMap{{"code", "RETIRED_REF_AMBIGUOUS"},
-                {"message", "Close the app first. Only one exact user ref can be removed; system/ambiguous installs require their external manager. Personal data is kept."}};
-            emit changed();
-        }
-        return;
-    }
     if (action == "cleanup-plan" || action == "prune") {
         if (!m_apps[index].toMap().value("managed").toBool() || !flatpak.value("installations").toList().isEmpty()) return;
         m_pendingStatus.clear();
         start(index, action);
         return;
     }
-    if (action == "install") {
-        if (m_apps[index].toMap().value("installed").toBool() || !m_flatpak.install(appId)) {
-            auto state = m_apps[index].toMap(); state["code"] = "FLATPAK_UNAVAILABLE";
-            state["message"] = ""; m_apps[index] = state; emit changed();
-        }
-        return;
-    }
-    if (action == "update" && !flatpak.value("installations").toList().isEmpty()) {
-        if (!m_flatpak.update(appId)) {
-            auto state = m_apps[index].toMap(); state["code"] = "FLATPAK_UNAVAILABLE";
-            state["message"] = "";
-            m_apps[index] = state; emit changed();
+    if (action == "install" || action == "update") {
+        const bool installing = action == "install";
+        auto state = m_apps[index].toMap();
+        state["code"] = "";
+        state["message"] = "";
+        state["flatpak"] = QVariantMap{};
+        m_apps[index] = state;
+        if ((installing && state.value("installed").toBool())
+            || (!installing && flatpak.value("installations").toList().isEmpty())
+            || !m_flatpak.preparePlan(appId, installing)) {
+            state["code"] = "FLATPAK_UNAVAILABLE";
+            state["message"] = flatpak.value("error").toString();
+            m_apps[index] = state;
+            emit changed();
         }
         return;
     }
@@ -391,9 +391,30 @@ void IndependentApps::complete(const QString& code, const QString& message)
     log((code + ": " + message + '\n').toUtf8()); m_log.close();
     auto state = m_apps[m_active].toMap();
     state["busy"] = false; state["stage"] = ""; state["code"] = code; state["message"] = message;
+    const bool mutated = m_verifying || isAppMutation(m_action);
     m_apps[m_active] = state; m_active = -1; m_verifying = false; emit changed();
+    if (mutated) emit taskFinished(state.value("name").toString(), code);
     QTimer::singleShot(0, this, &IndependentApps::nextStatus);
 }
+
+void IndependentApps::confirmPlan(const QString& id, const QString& planId)
+{
+    const int index = indexOf(id);
+    if (index < 0 || planId.isEmpty() || planId.size() > 128 || busy()) return;
+    const auto appId = m_apps[index].toMap().value("appId").toString();
+    const auto inventory = m_flatpak.state(appId);
+    const auto plan = m_flatpak.plan(appId);
+    if (!inventory.value("known").toBool() || inventory.value("querying").toBool()
+        || inventory.value("busy").toBool() || plan.value("planId").toString() != planId
+        || !m_flatpak.confirmPlan(appId, planId)) {
+        auto state = m_apps[index].toMap();
+        state["code"] = "PLAN_CHANGED";
+        state["message"] = "The installation plan is no longer current. Prepare a fresh plan before continuing.";
+        m_apps[index] = state;
+        emit changed();
+    }
+}
+
 void IndependentApps::stop(int signal)
 {
     const auto group = m_group > 0 ? m_group : m_process.processId();
@@ -435,14 +456,16 @@ void IndependentApps::open(const QString& id)
     }
     if (!state.value("installed").toBool()) return;
     // Resolve only a registry-owned service identity, never a path or Exec from JSONL.
-    const QString legacyName = id == "listenfree" ? QStringLiteral("listenfree") : QStringLiteral("kos-") + id;
-    const QStringList desktopNames{state.value("appId").toString(), legacyName};
+    const QString namespaceId = id == "listenfree" ? id : state.value("appId").toString();
+    const QStringList desktopNames = id == "listenfree"
+        ? QStringList{state.value("appId").toString(), QStringLiteral("listenfree")}
+        : QStringList{state.value("appId").toString()};
     KService::Ptr service;
     for (const auto& desktopName : desktopNames) {
         if (state.value("managed").toBool()) {
             const auto data = QStandardPaths::writableLocation(QStandardPaths::GenericDataLocation);
             const auto desktop = data + "/applications/" + desktopName + ".desktop";
-            const auto expected = QFileInfo(data + "/nextkde-apps/" + id + "/current/share/applications/" + desktopName + ".desktop").canonicalFilePath();
+            const auto expected = QFileInfo(data + "/nextkde-apps/" + namespaceId + "/current/share/applications/" + desktopName + ".desktop").canonicalFilePath();
             if (!expected.isEmpty() && QFileInfo(desktop).canonicalFilePath() == expected)
                 service = KService::Ptr(new KService(desktop));
         } else service = KService::serviceByDesktopName(desktopName);
@@ -462,7 +485,8 @@ void IndependentApps::openLog(const QString& id)
     const int index = indexOf(id); if (index < 0) return;
     const auto stateHome = qEnvironmentVariable("XDG_STATE_HOME", QDir::homePath() + "/.local/state");
     const auto state = apps()[index].toMap();
-    const auto engineRoot = QFileInfo(stateHome + "/nextkde-apps/" + id).canonicalFilePath();
+    const auto namespaceId = id == "listenfree" ? id : state.value("appId").toString();
+    const auto engineRoot = QFileInfo(stateHome + "/nextkde-apps/" + namespaceId).canonicalFilePath();
     const auto enginePath = QFileInfo(state.value("engineLogPath").toString()).canonicalFilePath();
     if (!engineRoot.isEmpty() && !enginePath.isEmpty() && enginePath.startsWith(engineRoot + '/')) {
         QDesktopServices::openUrl(QUrl::fromLocalFile(enginePath)); return;
@@ -477,3 +501,4 @@ void IndependentApps::openRepository(const QString& id)
     const int index = indexOf(id);
     if (index >= 0) QDesktopServices::openUrl(QUrl(m_apps[index].toMap().value("repository").toString()));
 }
+

@@ -14,6 +14,10 @@ Flow {
     property var resources: ({})
     property string errorText: ""
     property string requestedApp: ""
+    property string planAppId: ""
+    property string planId: ""
+    property var planData: ({})
+    property var dismissedPlanIds: ({})
     signal revealRequested(var card)
     property bool revealPending: true
     function requestReveal() {
@@ -150,6 +154,25 @@ Flow {
         running: page.visible && !!page.store
         onTriggered: page.store.refresh()
     }
+    Connections {
+        target: page.store
+        ignoreUnknownSignals: true
+        function onChanged() {
+            if (!page.store || planDialog.visible) return;
+            const apps = page.store.apps || [];
+            for (let i = 0; i < apps.length; ++i) {
+                const app = apps[i];
+                const plan = app.flatpak ? app.flatpak.plan || ({}) : ({});
+                const id = plan.planId || "";
+                if (!id || page.dismissedPlanIds[id]) continue;
+                page.planAppId = app.id;
+                page.planId = id;
+                page.planData = plan;
+                planDialog.open();
+                return;
+            }
+        }
+    }
 
     Controls.ExtensionEntry {
         id: musicEntry
@@ -221,7 +244,7 @@ Flow {
         Text {
             Layout.fillWidth: true
             visible: !!page.music.busy
-            text: I18n.tr("Keep Settings open until the operation finishes, or cancel it here.")
+            text: I18n.tr("Tasks continue in the background after closing this window. Return anytime to view progress or cancel.")
             color: page.colors.secondaryText
             font.pixelSize: 11
             wrapMode: Text.Wrap
@@ -279,11 +302,7 @@ Flow {
             secondaryEnabled: app.stage !== "cancelling" && (!!app.busy || !blocked)
             onActivated: {
                 if (app.installed) page.store.open(app.id);
-                else if (app.id === "calendar" || app.id === "calculator" || app.id === "weather") {
-                    appInstallDialog.appId = app.id;
-                    appInstallDialog.appName = app.name;
-                    appInstallDialog.open();
-                } else page.store.install(app.id);
+                else page.store.install(app.id);
             }
             onSecondaryActivated: {
                 if (app.busy) page.store.cancel(app.id);
@@ -292,7 +311,7 @@ Flow {
             Text {
                 objectName: appCard.app.id + "Status"
                 Layout.fillWidth: true
-                text: appCard.app.busy ? page.appStage(appCard.app.stage) : !appCard.app.statusKnown ? I18n.tr("Checking installation status…") : appCard.app.backend === "flatpak-unavailable" ? I18n.tr("Flatpak bundles are unavailable: no reviewed publisher key is included in this core version.") : appCard.app.backend === "flatpak-ready" ? I18n.tr("Check GitHub for a signed Flatpak bundle before installing.") : appCard.app.backend === "flatpak" ? I18n.tr("Managed by Flatpak. Settings checks GitHub for bundle updates; external Flatpak tools can remove the same installation.") : appCard.app.installed && !appCard.app.managed ? I18n.tr("Installed outside Settings. Open is available; updates and removal stay with its installer.") : appCard.app.available === false ? I18n.tr("No stable release is available yet") : I18n.tr("Builds from source; development dependencies are required")
+                text: appCard.app.busy ? page.appStage(appCard.app.stage) : !appCard.app.statusKnown ? I18n.tr("Checking installation status…") : appCard.app.backend === "flatpak-unavailable" ? (appCard.app.flatpak && appCard.app.flatpak.error ? appCard.app.flatpak.error : I18n.tr("Flatpak bundles are unavailable: no reviewed publisher key is included in this core version.")) : appCard.app.backend === "flatpak-ready" ? I18n.tr("Check GitHub for a signed Flatpak bundle before installing.") : appCard.app.backend === "flatpak" ? I18n.tr("Managed by Flatpak. Settings checks GitHub for bundle updates; external Flatpak tools can remove the same installation.") : appCard.app.installed && !appCard.app.managed ? I18n.tr("Installed outside Settings. Open is available; updates and removal stay with its installer.") : appCard.app.available === false ? I18n.tr("No stable release is available yet") : I18n.tr("Builds from source; development dependencies are required")
                 color: page.colors.secondaryText
                 font.pixelSize: 11
                 wrapMode: Text.Wrap
@@ -341,7 +360,7 @@ Flow {
             Text {
                 Layout.fillWidth: true
                 visible: !!appCard.app.busy
-                text: I18n.tr("Keep Settings open until the operation finishes, or cancel it here.") + " · " + I18n.tr("Elapsed: %1").arg(Math.floor((appCard.app.elapsedSeconds || 0) / 60) + ":" + ("0" + ((appCard.app.elapsedSeconds || 0) % 60)).slice(-2))
+                text: I18n.tr("Tasks continue in the background after closing this window. Return anytime to view progress or cancel.") + " · " + I18n.tr("Elapsed: %1").arg(Math.floor((appCard.app.elapsedSeconds || 0) / 60) + ":" + ("0" + ((appCard.app.elapsedSeconds || 0) % 60)).slice(-2))
                 color: page.colors.secondaryText
                 font.pixelSize: 11
                 wrapMode: Text.Wrap
@@ -391,26 +410,6 @@ Flow {
                     label: I18n.tr("Update")
                     colors: page.colors
                     onClicked: page.store.update(appCard.app.id)
-                }
-                WallpaperTextButton {
-                    visible: appCard.app.id === "calendar" || appCard.app.id === "calculator" || appCard.app.id === "weather"
-                    label: I18n.tr("Compatibility guide")
-                    colors: page.colors
-                    onClicked: page.store.openCompatibilityGuide()
-                }
-                WallpaperTextButton {
-                    visible: !!appCard.app.retiredInstallations && appCard.app.retiredInstallations.length > 0
-                    enabled: !appCard.blocked
-                    label: I18n.tr("Remove retired program…")
-                    colors: page.colors
-                    onClicked: {
-                        programActionDialog.appId = appCard.app.id;
-                        programActionDialog.action = "remove-retired";
-                        programActionDialog.detail = I18n.tr("Remove only the exact old user Flatpak program. Personal data and shared runtimes are kept. This does not install a replacement or import data. Keep the old installation until the replacement and its requirements are ready.");
-                        if (appCard.app.id === "calendar")
-                            programActionDialog.detail += "\n" + I18n.tr("Export needed calendar entries before removal. Background reminders may stop; the new app needs separate permission and a manual handover. ICS does not include all metadata or image files.");
-                        programActionDialog.open();
-                    }
                 }
                 WallpaperTextButton {
                     visible: !!appCard.app.installed && !!appCard.app.managed && appCard.app.backend !== "flatpak"
@@ -469,26 +468,111 @@ Flow {
         background: Rectangle { radius: 10; color: page.colors.card; border.color: page.colors.secondaryText }
     }
     Dialog {
-        id: appInstallDialog
-        objectName: "appInstallDialog"
-        property string appId: ""
-        property string appName: ""
+        id: planDialog
+        objectName: "flatpakPlanDialog"
         parent: Overlay.overlay
         anchors.centerIn: parent
-        width: Math.min(460, parent ? parent.width - 32 : 460)
+        width: Math.min(560, parent ? parent.width - 32 : 560)
+        height: Math.min(620, parent ? parent.height - 32 : 620)
         modal: true
-        title: I18n.tr("Install %1 independently?").arg(appName)
-        standardButtons: Dialog.Ok | Dialog.Cancel
-        onAccepted: {
-            if (page.store && !page.store.anyBusy) page.store.install(appId);
+        title: I18n.tr("Review Flatpak plan")
+        property var app: {
+            const list = page.store ? page.store.apps || [] : [];
+            for (let i = 0; i < list.length; ++i)
+                if (list[i].id === page.planAppId) return list[i];
+            return ({});
         }
-        contentItem: Text {
-            text: I18n.tr("This identity does not automatically inherit old native or Flatpak data. Old data and any existing data for this ID are kept. Read the compatibility guide before switching.")
-                + (appInstallDialog.appId === "calendar" ? "\n" + I18n.tr("ICS import is not a complete backup: lists, categories and images may not transfer. Background reminders require separate permission and manual handover. Host widgets require a compatible app summary; sandbox integration still needs manual acceptance.") : "")
-            color: page.colors.primaryText
-            wrapMode: Text.Wrap
+        property var plan: page.planData
+        onClosed: {
+            if (page.planId) {
+                const dismissed = Object.assign({}, page.dismissedPlanIds);
+                dismissed[page.planId] = true;
+                page.dismissedPlanIds = dismissed;
+            }
+            page.planId = "";
+            page.planAppId = "";
+            page.planData = ({});
         }
-        background: Rectangle { radius: 10; color: page.colors.card; border.color: page.colors.secondaryText }
+        contentItem: Flickable {
+            contentWidth: width
+            contentHeight: planContent.implicitHeight
+            clip: true
+            boundsBehavior: Flickable.StopAtBounds
+            ColumnLayout {
+                id: planContent
+                width: parent.width
+                spacing: 10
+                Text {
+                    Layout.fillWidth: true
+                    text: (planDialog.app.name || page.planAppId) + " · " + (planDialog.plan.operation || "")
+                        + " · " + (planDialog.plan.version || I18n.tr("Unknown version"))
+                    color: page.colors.primaryText
+                    font.bold: true
+                    wrapMode: Text.WrapAnywhere
+                }
+                Text {
+                    Layout.fillWidth: true
+                    text: I18n.tr("Branch: %1 · Architecture: %2 · Scope: user").arg(planDialog.plan.branch || I18n.tr("Unknown")).arg(planDialog.plan.arch || I18n.tr("Unknown"))
+                        + "\n" + I18n.tr("Trusted publisher: %1").arg((planDialog.plan.sourceTrust || []).join(", ") || I18n.tr("Unknown"))
+                    color: page.colors.secondaryText
+                    wrapMode: Text.WrapAnywhere
+                }
+                Repeater {
+                    model: planDialog.plan.operationSet || []
+                    delegate: ColumnLayout {
+                        required property var modelData
+                        Layout.fillWidth: true
+                        spacing: 2
+                        Text {
+                            Layout.fillWidth: true
+                            text: (modelData.role || I18n.tr("Dependency")) + " · " + (modelData.ref || I18n.tr("Unknown reference"))
+                            color: page.colors.primaryText
+                            wrapMode: Text.WrapAnywhere
+                        }
+                        Text {
+                            Layout.fillWidth: true
+                            text: (modelData.action || "") + " · " + (modelData.remote || I18n.tr("Signed bundle"))
+                                + " · " + (modelData.sizeKnown === false ? I18n.tr("Download size unknown") : page.formatBytes(modelData.downloadBytes))
+                                + " · " + (modelData.installedBytes === undefined ? I18n.tr("Installed size unknown") : page.formatBytes(modelData.installedBytes))
+                            color: page.colors.secondaryText
+                            font.pixelSize: 11
+                            wrapMode: Text.WrapAnywhere
+                        }
+                    }
+                }
+                Text {
+                    Layout.fillWidth: true
+                    text: I18n.tr("Estimated download: %1").arg(page.formatBytes(page.planDownloadBytes(planDialog.plan)))
+                        + "\n" + I18n.tr("Reference installed size: %1").arg(page.formatBytes(page.planInstalledBytes(planDialog.plan)))
+                    color: page.colors.primaryText
+                    wrapMode: Text.Wrap
+                }
+                Text {
+                    Layout.fillWidth: true
+                    text: I18n.tr("Installed sizes are reference values; actual additional disk use can be lower when OSTree objects are shared. Unknown sizes are not included in totals. Reused runtimes show zero download in this plan, but shared objects may still affect disk use.")
+                        + " " + I18n.tr("KDE on the host does not count as a Flatpak sandbox runtime.")
+                    color: page.colors.secondaryText
+                    font.pixelSize: 11
+                    wrapMode: Text.Wrap
+                }
+            }
+        }
+        footer: DialogButtonBox {
+            standardButtons: DialogButtonBox.Cancel
+            Button {
+                text: planDialog.plan.operation === "update" ? I18n.tr("Download and update") : I18n.tr("Download and install")
+                enabled: !!page.store && !!page.planId && !page.store.anyBusy
+                DialogButtonBox.buttonRole: DialogButtonBox.AcceptRole
+                onClicked: {
+                    const id = page.planAppId;
+                    const planId = page.planId;
+                    planDialog.close();
+                    if (page.store && !page.store.anyBusy) page.store.confirmPlan(id, planId);
+                }
+            }
+            onRejected: planDialog.close()
+        }
+        background: Rectangle { radius: 8; color: page.colors.card; border.color: page.colors.secondaryText }
     }
     Dialog {
         id: appUninstallDialog
@@ -523,6 +607,38 @@ Flow {
         }
     }
 
+    function formatBytes(value) {
+        if (value === undefined || value === null || value === "" || Number(value) < 0 || !isFinite(Number(value)))
+            return I18n.tr("Unknown");
+        const bytes = Number(value);
+        if (bytes < 1024) return Math.round(bytes) + " B";
+        if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + " KiB";
+        if (bytes < 1024 * 1024 * 1024) return (bytes / (1024 * 1024)).toFixed(1) + " MiB";
+        return (bytes / (1024 * 1024 * 1024)).toFixed(2) + " GiB";
+    }
+    function planDownloadBytes(plan) {
+        const operations = plan && plan.operationSet ? plan.operationSet : [];
+        let total = 0;
+        for (let i = 0; i < operations.length; ++i) {
+            const value = operations[i].downloadBytes;
+            if (operations[i].sizeKnown === false || value === undefined || value === null || value === "" || Number(value) < 0 || !isFinite(Number(value)))
+                return undefined;
+            total += Number(value);
+        }
+        return operations.length ? total : undefined;
+    }
+    function planInstalledBytes(plan) {
+        const operations = plan && plan.operationSet ? plan.operationSet : [];
+        let total = 0;
+        for (let i = 0; i < operations.length; ++i) {
+            const value = operations[i].installedBytes;
+            if (value === undefined || value === null || value === "" || Number(value) < 0 || !isFinite(Number(value)))
+                return undefined;
+            total += Number(value);
+        }
+        return operations.length ? total : undefined;
+    }
+
     function appStage(stage) {
         switch (stage) {
         case "check-update": return I18n.tr("Checking for updates…");
@@ -534,7 +650,6 @@ Flow {
         case "install": return I18n.tr("Installing…");
         case "update": return I18n.tr("Updating…");
         case "uninstall": return I18n.tr("Uninstalling…");
-        case "remove-retired": return I18n.tr("Removing retired program; keeping data…");
         case "cleanup-plan": return I18n.tr("Inspecting old program versions…");
         case "prune": return I18n.tr("Cleaning installer-owned old versions…");
         case "cancelling": return I18n.tr("Cancelling…");
@@ -555,6 +670,11 @@ Flow {
         case "VERSION_CONFLICT": return I18n.tr("The signed release would downgrade or replace an existing version. Deployment was refused.");
         case "INVALID_RELEASE": case "INTEGRITY_FAILED": case "UNTRUSTED_URL": case "RESPONSE_TOO_LARGE": return I18n.tr("The release metadata or bundle failed validation. Nothing was deployed.");
         case "FLATPAK_UNAVAILABLE": return I18n.tr("No approved signed bundle is available. Check publisher trust and installation conflicts, then check for updates.");
+        case "PLAN_REQUIRED": return I18n.tr("Review and confirm the Flatpak dependency plan before downloading.");
+        case "PLAN_UNAVAILABLE": return I18n.tr("A complete Flatpak installation plan could not be prepared. Check the approved sources and try again.");
+        case "PLAN_CHANGED": return I18n.tr("The Flatpak installation plan changed or expired. Prepare a fresh plan before continuing.");
+        case "WORKER_UNAVAILABLE": return I18n.tr("The optional Flatpak backend is unavailable. Install it and its distribution dependencies, then recheck.");
+        case "WORKER_TIMEOUT": return I18n.tr("The optional Flatpak backend timed out. Installed state is unknown; recheck before retrying.");
         case "FLATPAK_TIMEOUT": return I18n.tr("The Flatpak operation exceeded its time limit. Cancellation was requested; the displayed installation state was queried again.");
         case "FLATPAK_UNTRUSTED": return I18n.tr("The app or runtime source does not match the approved publisher policy. No unapproved deployment was authorized.");
         case "FLATPAK_RUNTIME_MISSING": return I18n.tr("A required Flatpak runtime is unavailable. Configure its approved software source first.");
@@ -563,10 +683,8 @@ Flow {
         case "FLATPAK_INCOMPATIBLE": return I18n.tr("The installed Flatpak library cannot safely handle signed bundles. Update Flatpak and libflatpak before retrying. Nothing was deployed.");
         case "FLATPAK_EXTERNAL":
         case "EXTERNAL_INSTALL": case "EXTERNALLY_MANAGED": case "NOT_MANAGED": case "OWNERSHIP_CONFLICT": return I18n.tr("Installed outside Settings. Open is available; updates and removal stay with its installer.");
-        case "APP_RUNNING": return I18n.tr("Close the old and new app and their background helpers, then retry.");
+        case "APP_RUNNING": return I18n.tr("Close the app and its background helpers, then retry.");
         case "RECOVERY_REQUIRED": return I18n.tr("An interrupted program operation needs attention. Keep its ownership records and see the details.");
-        case "RETIRED_FLATPAK_ID": return I18n.tr("An older Flatpak identity is installed. The new identity does not inherit its data; consult the compatibility guide before removing the old program.");
-        case "RETIRED_REF_AMBIGUOUS": return I18n.tr("The old installation cannot be removed safely here. Use its external manager.");
         case "BUSY": return I18n.tr("Another app installation is already running.");
         case "UNSUPPORTED_PLATFORM": return I18n.tr("Source installation is not supported on this platform.");
         case "RESULT_UNKNOWN": case "OUTPUT_LIMIT": return I18n.tr("Installation was interrupted or its result could not be confirmed. Check the log before retrying.");

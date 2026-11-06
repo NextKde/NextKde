@@ -10,6 +10,22 @@
 class FlatpakCompatibilityTest : public QObject {
     Q_OBJECT
 private slots:
+    void closePolicyDistinguishesDiscoveryFromTransactions()
+    {
+        FlatpakApps backend;
+        backend.m_activeId = "org.nextks.calendar";
+        backend.m_action = "check-update";
+        QVERIFY(backend.busy());
+        QVERIFY(!backend.hasActiveMutation());
+        for (const auto &action : {"install", "update", "uninstall", "remove-retired"}) {
+            backend.m_action = action;
+            QVERIFY(backend.hasActiveMutation());
+            backend.m_verifying = true;
+            QVERIFY(backend.hasActiveMutation());
+        }
+        backend.m_activeId.clear();
+        QVERIFY(!backend.hasActiveMutation());
+    }
     void incompatibleLibraryStopsBeforeDownload()
     {
         if (FlatpakCompatibility::checkBundleCleanup().isEmpty())
@@ -20,10 +36,13 @@ private slots:
             {"version", "0.2.0"}, {"commit", QString(64, 'a')}, {"arch", "x86_64"},
             {"available", true}, {"installation", QVariantMap{}}};
         QSignalSpy finished(&backend, &FlatpakApps::operationFinished);
+        QSignalSpy notified(&backend, &FlatpakApps::mutationFinished);
         QVERIFY(backend.install("org.nextks.calendar"));
         QTRY_COMPARE_WITH_TIMEOUT(finished.size(), 1, 10000);
         QCOMPARE(finished.first()[1].toString(), "FLATPAK_INCOMPATIBLE");
         QVERIFY(!backend.busy());
+        QCOMPARE(notified.size(), 1);
+        QCOMPARE(notified.first()[1].toString(), "FLATPAK_INCOMPATIBLE");
         QVERIFY(backend.state("org.nextks.calendar").value("installations").toList().isEmpty());
         QVERIFY(!QFileInfo::exists(qEnvironmentVariable("XDG_CACHE_HOME") + "/kos-settings/flatpak"));
     }
