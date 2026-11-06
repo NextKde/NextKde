@@ -25,8 +25,38 @@ class IndependentAppsTest : public QObject {
         return {};
     }
 private slots:
+    void closePolicyKeepsMutationsAndVerificationProtected()
+    {
+        IndependentApps store(temporary.path());
+        store.m_active = 0;
+        for (const auto &action : {"status", "check-update", "cleanup-plan"}) {
+            store.m_action = action;
+            QVERIFY(store.busy());
+            QVERIFY(!store.hasActiveMutation());
+        }
+        for (const auto &action : {"install", "update", "uninstall", "prune"}) {
+            store.m_action = action;
+            QVERIFY(store.hasActiveMutation());
+        }
+        store.m_action = "status";
+        store.m_verifying = true;
+        QVERIFY(store.hasActiveMutation());
+        store.m_active = -1;
+        QVERIFY(!store.hasActiveMutation());
+    }
     void init() { QVERIFY(temporary.isValid()); oldState = qgetenv("XDG_STATE_HOME"); qputenv("XDG_STATE_HOME", (temporary.path()+"/state").toUtf8()); }
     void cleanup() { if (oldState.isNull()) qunsetenv("XDG_STATE_HOME"); else qputenv("XDG_STATE_HOME", oldState); }
+    void explicitCancellationWaitsForNativeProcess()
+    {
+        fixture("time.sleep(10)\nemit()\n");
+        IndependentApps store(temporary.path());
+        store.start(store.indexOf("calendar"), "update");
+        QVERIFY(store.hasActiveMutation());
+        store.cancel("calendar");
+        QVERIFY(store.hasActiveMutation());
+        QTRY_VERIFY_WITH_TIMEOUT(!store.hasActiveMutation(), 4000);
+        QCOMPARE(state(store, "calendar").value("code").toString(), "CANCELLED");
+    }
     void registryAndLegacyFacade()
     {
         AppStore store(temporary.path());
@@ -83,9 +113,26 @@ private slots:
     {
         QFETCH(QByteArray,body); fixture(body);
         IndependentApps store(temporary.path());
+        QSignalSpy finished(&store, &IndependentApps::taskFinished);
         store.start(store.indexOf("calendar"), "install");
         QTRY_VERIFY_WITH_TIMEOUT(!store.busy(),4000);
         QCOMPARE(state(store,"calendar").value("code").toString(),"RESULT_UNKNOWN");
+        QCOMPARE(finished.size(), 1);
+        QCOMPARE(finished.first()[0].toString(), "Calendar");
+        QCOMPARE(finished.first()[1].toString(), "RESULT_UNKNOWN");
+    }
+    void notificationWaitsForVerificationAndIgnoresQueries()
+    {
+        fixture("if action=='status': emit(details=dict(installed=True,managed=True,currentVersion='1.0'),version='1.0',revision='abc')\nelse: emit(code='INSTALLED',version='1.0',revision='abc')\n");
+        IndependentApps store(temporary.path());
+        QSignalSpy finished(&store, &IndependentApps::taskFinished);
+        store.start(store.indexOf("calendar"), "status");
+        QTRY_VERIFY_WITH_TIMEOUT(!store.busy(), 4000);
+        QCOMPARE(finished.size(), 0);
+        store.start(store.indexOf("calendar"), "install");
+        QTRY_VERIFY_WITH_TIMEOUT(!store.busy(), 4000);
+        QCOMPARE(finished.size(), 1);
+        QCOMPARE(finished.first()[1].toString(), "");
     }
     void networkFailureKeepsOfflineState()
     {
@@ -104,6 +151,7 @@ private slots:
     {
         fixture("time.sleep(10)\nemit()\n");
         AppStore facade(temporary.path()); facade.refreshApps(); QVERIFY(facade.anyBusy());
+        QVERIFY(!facade.hasActiveMutation());
         facade.install(); QCOMPARE(facade.music().value("code").toString(), "");
         facade.checkUpdates("weather"); facade.cancel("weather"); QVERIFY(facade.anyBusy());
         facade.cancel("calendar"); QTRY_VERIFY_WITH_TIMEOUT(!facade.anyBusy(),4000);

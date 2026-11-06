@@ -293,10 +293,13 @@ private slots:
         QTRY_COMPARE_WITH_TIMEOUT(store.music().value("stage").toString(), "build", 5000);
         store.uninstall(); // ignored while installing
         QVERIFY(store.music().value("busy").toBool());
+        QVERIFY(store.hasActiveMutation());
         store.cancel();
+        QVERIFY(store.hasActiveMutation());
         QTRY_VERIFY_WITH_TIMEOUT(!store.music().value("busy").toBool(), 12000);
         QCOMPARE(store.music().value("code").toString(), "RESULT_UNKNOWN");
         QVERIFY(!store.music().value("installed").toBool());
+        QVERIFY(!store.hasActiveMutation());
     }
 };
 QTEST_GUILESS_MAIN(AppStoreTest)

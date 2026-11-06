@@ -101,6 +101,7 @@
     "kos-settings.window-interactions",
     "kos-settings.wallpaper-page",
     "kos-settings.services-page",
+    "kos-settings.close-policy",
     "kos-settings.builtin-checkboxes",
     "kos-settings.widget-appearance",
     "kos-settings.segmented-layout",

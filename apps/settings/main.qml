@@ -12,12 +12,7 @@ import "../../shared/qml/i18n"
 
 ApplicationWindow {
     id: window
-    onClosing: function(event) {
-        if (typeof appStore !== "undefined" && appStore.anyBusy) {
-            event.accepted = false
-            window.currentPage = 9
-        }
-    }
+    SettingsControls.TaskCompletionNotifications {}
 
     width: 850
     height: 650
