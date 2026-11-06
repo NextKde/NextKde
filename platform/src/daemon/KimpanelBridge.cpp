@@ -297,6 +297,7 @@ void KimpanelBridge::handleSetLookupTable(const QStringList &labels, const QStri
     }
 
     m_candidates = candidates;
+    m_lookupVisible = !m_candidates.isEmpty();
 
     if (m_spotX == 0 && m_spotY == 0 && m_spotWidth == 0 && m_spotHeight == 0) {
         queryKWinCaret();
@@ -376,6 +377,11 @@ void KimpanelBridge::onUpdatePreeditText(const QString &text, const QString &att
 {
     Q_UNUSED(attr);
     m_preeditText = text;
+    if (!text.isEmpty()) {
+        m_preeditVisible = true;
+    } else if (m_candidates.isEmpty()) {
+        m_preeditVisible = false;
+    }
     notifyState();
 }
 
@@ -383,6 +389,11 @@ void KimpanelBridge::onUpdateAux(const QString &text, const QString &attr)
 {
     Q_UNUSED(attr);
     m_auxText = text;
+    if (!text.isEmpty()) {
+        m_auxVisible = true;
+    } else if (m_candidates.isEmpty() && m_preeditText.isEmpty()) {
+        m_auxVisible = false;
+    }
     notifyState();
 }
 
@@ -447,7 +458,7 @@ void KimpanelBridge::parseAndStoreProperty(const QString &prop)
     const QString key = id.startsWith(QStringLiteral("/Fcitx/")) ? id.mid(7) : id;
 
     if (key == QStringLiteral("im")) {
-        if (!shortText.isEmpty())
+        if (!shortText.isEmpty() && shortText != QStringLiteral("不可用"))
             m_imLabel = shortText;
         if (!icon.isEmpty())
             m_imIcon = icon;

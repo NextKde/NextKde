@@ -55,6 +55,14 @@ assert.equal(resAbs.source, "absolute");
 assert.equal(resAbs.x, 720);
 assert.equal(resAbs.y, 600);
 
+// 3d. KWin pointer anchor fallback when spot coordinates are zero
+const spotZero = { mode: "relative", x: 0, y: 0 };
+const kwinPointer = { available: true, source: "pointer", x: 2117, y: 1019, width: 0, height: 0 };
+const resPointer = resolveGlobalSpotRect(spotZero, null, kwinPointer);
+assert.equal(resPointer.source, "kwin-pointer");
+assert.equal(resPointer.x, 2117);
+assert.equal(resPointer.y, 1019);
+
 // 4. Candidate popup placement & Boundary clamping
 const safeBounds = { x: 0, y: 35, width: 1920, height: 1045 }; // top bar reserved 35px
 

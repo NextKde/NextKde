@@ -20,6 +20,7 @@ Item {
         const raw = InputMethodService.imLabel || "中";
         if (raw.indexOf("中") >= 0) return "中";
         if (raw.toLowerCase().indexOf("en") >= 0 || raw.indexOf("英") >= 0) return "英";
+        if (raw === "不可用") return "中";
         return raw.length > 2 ? raw.slice(0, 1) : raw;
     }
 
