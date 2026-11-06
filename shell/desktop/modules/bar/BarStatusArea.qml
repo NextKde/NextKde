@@ -1,6 +1,7 @@
 import QtQuick
 import Quickshell.Services.UPower
 import qs.desktop.modules.common
+import qs.desktop.modules.inputmethod
 import "../common/VisibilityPolicy.mjs" as VisibilityPolicy
 
 // Reusable system-status cluster. Popup panels stay anchored to the same
@@ -33,6 +34,7 @@ Item {
     // hidden cell can never desynchronise the two lists. Reading the persisted
     // hidden set here is what makes the Settings switch take effect live.
     readonly property var trailingCells: [
+        { key: "inputmethod", component: inputMethodQuickControl },
         { key: "network", component: networkQuickControl },
         { key: "battery", component: batteryQuickControl },
         { key: "settings", component: settingsQuickControl },
@@ -134,6 +136,20 @@ Item {
 
     function controlCenterAnchor() {
         return systemTray.trailingItemForKey("controlcenter")?.control ?? null
+    }
+
+    Component {
+        id: inputMethodQuickControl
+        Item {
+            readonly property alias control: imControl
+            InputMethodStatus {
+                id: imControl
+                anchors.centerIn: parent
+                dockHosted: root.dockHosted
+                dockEdge: root.dockEdge
+                verticalDock: root.verticalDock && !SysTrayOrderService.isCollected("cell:inputmethod")
+            }
+        }
     }
 
     Component {

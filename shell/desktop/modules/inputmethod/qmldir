@@ -1,0 +1,3 @@
+singleton InputMethodService 1.0 InputMethodService.qml
+InputMethodPopup 1.0 InputMethodPopup.qml
+InputMethodStatus 1.0 InputMethodStatus.qml
