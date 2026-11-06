@@ -7,8 +7,8 @@
 #include <QVariantMap>
 #include <functional>
 
-// Mutations that deploy or remove software; prepare and confirm-plan deploy
-// through the worker, so confirm-plan counts as a mutation too.
+// Software deployment/removal notifications exclude preparation. Preparation
+// may configure component sources and is separately locked by hasActiveMutation.
 inline bool isWorkerMutation(const QString& action)
 {
     return action == QLatin1String("install") || action == QLatin1String("update")
@@ -25,7 +25,7 @@ public:
     QVariantMap state(const QString& appId) const;
     bool querying() const { return !m_requestId.isEmpty() || !m_queue.isEmpty(); }
     bool busy() const { return !m_activeId.isEmpty() && m_activeAction != "inventory"; }
-    bool hasActiveMutation() const { return busy() && isWorkerMutation(m_activeAction); }
+    bool hasActiveMutation() const { return busy() && (isWorkerMutation(m_activeAction) || m_activeAction.startsWith("prepare-")); }
     bool uninstall(const QString& appId);
     bool checkUpdates(const QString& appId);
     bool update(const QString& appId);
@@ -41,6 +41,7 @@ signals:
     void operationFinished(const QString& appId, const QString& code, const QString& message);
     void mutationFinished(const QString& appId, const QString& code);
 private:
+    friend class IndependentAppsTest;
     bool start(const QString& appId, const QString& action);
     bool ensureWorker();
     void startNext();
@@ -50,8 +51,9 @@ private:
     QTimer m_refreshTimer, m_deadline, m_killTimer;
     QVariantMap m_states;
     QStringList m_queue;
-    QString m_activeId, m_activeAction, m_lastStatus, m_requestId;
+    QString m_activeId, m_activeAction, m_lastStatus, m_lastCode, m_requestId;
     QString m_planId, m_forcedCode, m_forcedMessage;
     QByteArray m_stdout;
     bool m_cancelRequested = false;
+    bool m_workerResponded = false;
 };

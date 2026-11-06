@@ -1,5 +1,9 @@
 # App/widget integration — contract and manual acceptance
 
+Native/Flatpak coexistence is allowed by the Settings application store. Widget
+source selection is a separate concern: any ambiguity described below governs
+which summary or app a widget uses, never permission to install a Flatpak.
+
 Current boundary: 2026-11-05, new identities and default native paths only.
 Production compilation is not runtime or sandbox acceptance. No applications,
 graphical sessions or automated tests were run for this boundary change. Earlier

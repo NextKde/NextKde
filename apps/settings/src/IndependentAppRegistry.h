@@ -13,6 +13,7 @@ struct App {
     const char* manifest;
 };
 inline constexpr std::array apps{
+    App{"kmusic", "org.nextkde.KMusic", "kmusic", "kmusic.desktop", "KMusic", "flatpak-release.json"},
     App{"calendar", "org.nextks.calendar", "kos-calendar", "org.nextks.calendar.desktop", "kos-apps", "org.nextks.calendar.flatpak-release.json"},
     App{"calculator", "org.nextks.calculator", "kos-calculator", "org.nextks.calculator.desktop", "kos-apps", "org.nextks.calculator.flatpak-release.json"},
     App{"weather", "org.nextks.weather", "kos-weather", "org.nextks.weather.desktop", "kos-apps", "org.nextks.weather.flatpak-release.json"},

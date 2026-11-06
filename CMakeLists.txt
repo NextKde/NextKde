@@ -291,6 +291,16 @@ if(BUILD_TESTING)
                 ${CMAKE_CURRENT_SOURCE_DIR}/shell/desktop/modules/stage/test_stage_protocol.mjs)
         set_tests_properties(kos-shell.stage-protocol PROPERTIES TIMEOUT 10)
         find_program(KOS_QUICKSHELL_EXECUTABLE NAMES quickshell)
+        find_program(KOS_WEATHER_PYTHON_EXECUTABLE NAMES python3)
+        if(KOS_QUICKSHELL_EXECUTABLE AND KOS_WEATHER_PYTHON_EXECUTABLE)
+            add_test(NAME kos-shell.weather-refresh
+                COMMAND ${KOS_WEATHER_PYTHON_EXECUTABLE}
+                    ${CMAKE_CURRENT_SOURCE_DIR}/tests/weather-refresh/run.py
+                    ${KOS_QUICKSHELL_EXECUTABLE})
+            set_tests_properties(kos-shell.weather-refresh PROPERTIES
+                LABELS "ui;headless" TIMEOUT 20
+                ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_QUICK_BACKEND=software")
+        endif()
         if(KOS_QUICKSHELL_EXECUTABLE)
             add_test(NAME kos-shell.dock-surface
                 COMMAND ${KOS_NODE_EXECUTABLE}

@@ -115,6 +115,18 @@ Item {
                     {section:"Colour",key:"Name",label:"Name",type:"string",value:"test"}
                 ]
             }
+            if (data.name === "ServicesSettingsPage") {
+                // This page now has application/service catalogue cards instead
+                // of SettingsItem rows. Check the visible service action bounds.
+                page.selectedCategory = 1
+                const action = findChild(page, "spatialServiceAction")
+                verify(action !== null)
+                tryVerify(() => action.visible && action.width > 0)
+                const corner = action.mapToItem(page, action.width, action.height)
+                verify(corner.x <= page.width + 0.6, "service action stays inside the page")
+                verify(corner.y <= page.implicitHeight + 0.6, "service action is not clipped")
+                return
+            }
             tryVerify(() => collectSettingsItems(page).length > 0)
             const rows = collectSettingsItems(page)
             for (const row of rows) {

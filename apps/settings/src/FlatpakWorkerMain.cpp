@@ -32,6 +32,10 @@ QString appId;
 QString action;
 bool requestPending = false;
 bool confirmRechecking = false;
+bool settingUpSource = false;
+bool sourceSetupAttempted = false;
+bool preparingPlan() { return action == "prepare-install" || action == "prepare-update"; }
+bool installingPlan() { return action == "prepare-install"; }
 QHash<QString, QVariantMap> plans;
 
 QString planDirectory()
@@ -144,6 +148,13 @@ void finishRequest(FlatpakApps& backend, const QString& code = {}, const QString
     QJsonObject result = QJsonObject::fromVariantMap(current);
     result.insert("code", code);
     result.insert("message", message);
+    // Discovery and plan preparation are separate steps. Keep the final failure
+    // in the same app log rather than leaving a misleading successful query.
+    if (!code.isEmpty() && preparingPlan()) {
+        QFile log(current.value("logPath").toString());
+        if (log.open(QIODevice::WriteOnly | QIODevice::Append))
+            log.write((action + " " + code + ": " + message + '\n').toUtf8());
+    }
     send(response("result", {{"appId", appId}, {"result", result}}));
     requestPending = false;
     confirmRechecking = false;
@@ -158,6 +169,7 @@ bool dispatch(FlatpakApps& backend, const QJsonObject& request)
     action = request.value("action").toString();
     appId = request.value("appId").toString();
     requestPending = true;
+    sourceSetupAttempted = false;
     if (action == "inventory") {
         backend.refresh();
         return true;
@@ -175,12 +187,12 @@ bool dispatch(FlatpakApps& backend, const QJsonObject& request)
         if (!backend.checkUpdates(appId)) finishRequest(backend, "FLATPAK_UNAVAILABLE", "The application state is unknown or conflicts with another installation.");
         return true;
     }
-    if (action == "prepare-install" || action == "prepare-update") {
+    if (preparingPlan()) {
         // A fresh preparation supersedes any unconfirmed plan for this app.
         plans.remove(appId);
         removePersistedPlan(appId);
-        // Planning is deliberately read-only. It resolves the signed release and
-        // runtime metadata but does not download a bundle or start a transaction.
+        // Install/Update prepares missing component sources automatically. No
+        // application or runtime download starts before the normal plan consent.
         if (!backend.checkUpdates(appId)) {
             finishRequest(backend, "FLATPAK_UNAVAILABLE", "The application state is unknown or conflicts with another installation.");
         }
@@ -241,19 +253,34 @@ int main(int argc, char** argv)
             requestPending = false; requestId.clear(); appId.clear(); action.clear();
             return;
         }
-        if (requestPending && (action == "prepare-install" || action == "prepare-update")
-            && !backend.busy() && !backend.querying()) {
+        if (requestPending && preparingPlan()
+            && !settingUpSource && !backend.busy() && !backend.querying()) {
             auto current = backend.state(appId);
-            auto plan = backend.makePlan(appId, action == "prepare-install");
+            QVariantMap failure;
+            auto plan = backend.makePlan(appId, installingPlan(), &failure);
             QString planError;
             if (!plan.isEmpty()) {
                 plan.insert("planId", QUuid::createUuid().toString(QUuid::WithoutBraces));
                 if (persistPlan(appId, plan)) plans.insert(appId, plan);
                 else { plan.clear(); planError = "The dependency plan could not be retained for confirmation."; }
             }
+            if (plan.isEmpty() && failure.value("code").toString() == "RUNTIME_SOURCE_MISSING" && !sourceSetupAttempted) {
+                sourceSetupAttempted = true;
+                settingUpSource = true;
+                if (!backend.setupRuntimeSource(appId)) {
+                    settingUpSource = false;
+                    finishRequest(backend, "RUNTIME_SETUP_FAILED");
+                }
+                return;
+            }
+            if (plan.isEmpty()) {
+                finishRequest(backend, failure.value("code").toString(),
+                    planError.isEmpty() ? failure.value("message").toString() : planError);
+                return;
+            }
             current.insert("plan", plan);
-            current.insert("code", plan.isEmpty() ? "PLAN_UNAVAILABLE" : "");
-            current.insert("message", plan.isEmpty() ? (planError.isEmpty() ? "The signed release did not provide a complete installation plan." : planError) : "");
+            current.insert("code", "");
+            current.insert("message", "");
             send(response("result", {{"appId", appId}, {"result", QJsonObject::fromVariantMap(current)}}));
             requestPending = false; requestId.clear(); appId.clear(); action.clear();
             return;
@@ -268,7 +295,18 @@ int main(int argc, char** argv)
     QObject::connect(&backend, &FlatpakApps::operationFinished, &application,
         [&](const QString& completedId, const QString& code, const QString& message) {
             if (!requestPending || completedId != appId) return;
-            if (action == "prepare-install" || action == "prepare-update") return;
+            if (settingUpSource) {
+                settingUpSource = false;
+                if (!code.isEmpty()) finishRequest(backend, code, message);
+                else if (!backend.checkUpdates(appId)) finishRequest(backend, "PLAN_UNAVAILABLE");
+                return;
+            }
+            if (preparingPlan()) {
+                // Do not replace discovery errors (network/signature/release) with
+                // a generic empty-plan error from the subsequent changed signal.
+                if (!code.isEmpty()) finishRequest(backend, code, message);
+                return;
+            }
             if (action == "confirm-plan" && confirmRechecking) {
                 confirmRechecking = false;
                 const auto plan = plans.value(appId);

@@ -74,6 +74,7 @@ ApplicationWindow {
     property int currentPage: 3
     property string requestedApp: ""
     property bool started: false
+    property bool confirmed: false
     property bool hiddenOnce: false
     Components.TaskCompletionNotifications {}
     function revealRequestedApp() {}
@@ -87,8 +88,16 @@ ApplicationWindow {
     Timer {
         interval: 20; running: true; repeat: true
         onTriggered: {
-            if (!window.started) { window.started = true; appStore.install() }
-            if (!window.hiddenOnce && appStore.music.stage === "build") {
+            if (!window.started && appStore.music.statusKnown && !appStore.music.flatpak.querying) {
+                window.started = true
+                appStore.install()
+            }
+            const plan = appStore.music.flatpak ? appStore.music.flatpak.plan : null
+            if (window.started && !window.confirmed && plan && plan.planId && !appStore.anyBusy) {
+                window.confirmed = true
+                appStore.confirmPlan("kmusic", plan.planId)
+            }
+            if (!window.hiddenOnce && appStore.music.stage === "confirm-plan") {
                 window.close()
                 window.hiddenOnce = true
                 console.log("CLOSED:" + window.visible + ":" + appStore.music.busy)
@@ -105,47 +114,49 @@ ApplicationWindow {
 )QML";
         qml.replace("COMPONENTS_PATH", "file:" + QByteArray(SETTINGS_COMPONENTS));
         write(resources + "/main.qml", qml);
-        const QByteArray revision(40, 'a');
-        const QByteArray script = "#!/bin/sh\nexec python3 \"$(dirname \"$0\")/packaging/installer.py\" \"$@\"\n";
-        const QByteArray implementation = R"PY(
+        // The companion uses the real client RPC protocol. No native installer,
+        // real Flatpak deployment, external network or host profile is involved.
+        const QByteArray worker = R"PY(#!/usr/bin/env python3
 import json, os, pathlib, sys, time
 root = pathlib.Path(os.environ['BACKGROUND_FIXTURE'])
-action = sys.argv[1]
-revision = 'a' * 40
-def emit(**kw):
-    obj = dict(schemaVersion=1, type='result', appId='org.nextkde.KMusic', action=action, success=True, code='OK')
-    obj.update(kw)
-    print(json.dumps(obj), flush=True)
-if action == 'check':
-    emit()
-elif action == 'install':
-    emit(type='progress', stage='build')
-    while not (root / 'release').exists(): time.sleep(.02)
-    if os.environ['BACKGROUND_OUTCOME'] == 'failure':
-        emit(success=False, code='BUILD_FAILED')
-        sys.exit(1)
-    data = root / 'data/kmusic-app'
-    (data / 'current/bin').mkdir(parents=True)
-    executable = data / 'current/bin/kmusic'
-    executable.write_text('#!/bin/sh\nexit 0\n')
-    executable.chmod(0o755)
-    (data / 'manifest.json').write_text(json.dumps(dict(appId='org.nextkde.KMusic', version=revision)))
-    emit(code='INSTALLED', version=revision)
-elif action == 'status':
-    emit(installed=os.environ['BACKGROUND_OUTCOME'] != 'verification-failure')
+ids = ['org.nextkde.KMusic', 'org.nextks.calendar', 'org.nextks.calculator', 'org.nextks.weather', 'org.nextkde.ListenFree']
+installed = False
+def state():
+    refs = [dict(scope='user', version='0.2.2', bundleManaged=True, arch='x86_64', branch='stable')] if installed else []
+    return dict(known=True, installations=refs, canDiscover=True, publisherConfigured=True)
+for line in sys.stdin:
+    request = json.loads(line)
+    action = request['action']
+    response = dict(schemaVersion=1, requestId=request['requestId'], appId=request['appId'], action=action, type='result')
+    if action == 'inventory':
+        response['result'] = dict(apps={app: state() for app in ids})
+    elif action == 'prepare-install':
+        response['result'] = dict(state(), plan=dict(planId='background-plan', operation='install'), code='', message='')
+    elif action == 'confirm-plan':
+        progress = dict(response, type='progress', status='Installing fixture', progress=10)
+        print(json.dumps(progress), flush=True)
+        while not (root / 'release').exists():
+            if not root.exists() or os.getppid() == 1: sys.exit(1)
+            time.sleep(.02)
+        outcome = os.environ['BACKGROUND_OUTCOME']
+        installed = outcome == 'success'
+        code = '' if installed else 'FLATPAK_FAILED' if outcome == 'failure' else 'RESULT_UNKNOWN'
+        response['result'] = dict(state(), code=code, message='')
+    else:
+        raise RuntimeError('Unexpected RPC action: ' + action)
+    print(json.dumps(response), flush=True)
 )PY";
-        QJsonObject hashes{{"install.sh", QString::fromLatin1(QCryptographicHash::hash(script, QCryptographicHash::Sha256).toHex())},
-            {"packaging/installer.py", QString::fromLatin1(QCryptographicHash::hash(implementation, QCryptographicHash::Sha256).toHex())}};
-        QJsonObject release{{"revision", QString::fromLatin1(revision)}, {"sha256", hashes}};
-        QJsonObject music{{"appId", "org.nextkde.KMusic"}, {"repository", "https://github.com/NextKde/KMusic"}, {"release", release}};
-        write(resources + "/app-store/catalog.json", QJsonDocument(QJsonObject{{"schemaVersion", 1}, {"kmusic", music}}).toJson());
-        const QString cache = root + "/cache/Quickshell/kos-settings/installers/KMusic/" + QString::fromLatin1(revision);
-        write(cache + "/install.sh", script);
-        write(cache + "/packaging/installer.py", implementation);
+        const QString companion = root + "/bin/kos-flatpak-worker";
+        write(companion, worker);
+        write(root + "/bin/flatpak", "#!/bin/sh\nexit 0\n");
+        const auto executable = QFile::ReadOwner | QFile::WriteOwner | QFile::ExeOwner;
+        QVERIFY(QFile::setPermissions(companion, executable));
+        QVERIFY(QFile::setPermissions(root + "/bin/flatpak", executable));
         QVERIFY(QDir().mkpath(root + "/runtime"));
         QFile::setPermissions(root + "/runtime", QFile::ReadOwner | QFile::WriteOwner | QFile::ExeOwner);
         auto env = QProcessEnvironment::systemEnvironment();
         env.insert("QT_QPA_PLATFORM", qEnvironmentVariable("QT_QPA_PLATFORM", "offscreen")); env.insert("QT_QUICK_BACKEND", "software");
+        env.insert("PATH", root + "/bin:" + env.value("PATH"));
         env.insert("LANG", "C.UTF-8"); env.insert("LC_ALL", "C.UTF-8"); env.insert("LANGUAGE", "en");
         env.insert("XDG_RUNTIME_DIR", root + "/runtime");
         env.insert("XDG_DATA_HOME", root + "/data"); env.insert("XDG_CACHE_HOME", root + "/cache");
@@ -171,12 +182,12 @@ elif action == 'status':
         relaunch.start(binary, {});
         QVERIFY(relaunch.waitForFinished(5000));
         QCOMPARE(relaunch.exitCode(), 0);
-        QTRY_VERIFY(contains("REOPENED:build:9"));
+        QTRY_VERIFY(contains("REOPENED:confirm-plan:9"));
         QTest::qWait(100);
         relaunch.start(binary, {QStringLiteral("--page=windows")});
         QVERIFY(relaunch.waitForFinished(5000));
         QCOMPARE(relaunch.exitCode(), 0);
-        QTRY_VERIFY(contains("REOPENED:build:11"));
+        QTRY_VERIFY(contains("REOPENED:confirm-plan:11"));
         // Close again before completing the child; the same owner must deliver
         // exactly one notification, including failures of final verification.
         QTest::qWait(100);

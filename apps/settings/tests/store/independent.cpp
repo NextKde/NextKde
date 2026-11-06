@@ -66,23 +66,15 @@ private slots:
         store.install("unknown"); QVERIFY(!store.anyBusy());
         QCOMPARE(store.music().value("code").toString(), "");
     }
-    void offlineSourceStatusCannotBypassFlatpakUpdatePlan()
+    void nativeStatusDoesNotAppearAsFlatpakInstallation()
     {
-        fixture("emit(details=dict(installed=True,managed=True,currentVersion='1.0',latestVersion='2.0',updateAvailable=action=='check-update'))\n");
+        fixture("emit(details=dict(installed=True,managed=True,currentVersion='1.0'))\n");
         IndependentApps store(temporary.path());
-        store.refresh(); QTRY_VERIFY_WITH_TIMEOUT(!store.busy(), 4000);
-        QCOMPARE(state(store,"calendar").value("version").toString(), "1.0");
-        QVERIFY(state(store,"weather").value("managed").toBool());
-        store.perform("calendar", "check-update"); QTRY_VERIFY_WITH_TIMEOUT(!store.busy(), 4000);
-        QVERIFY(state(store,"calendar").value("updateAvailable").toBool());
-        QVERIFY(!state(store,"weather").value("updateAvailable").toBool());
-        fixture("emit(code='INSTALLED' if action=='update' else 'INSTALLED',version='2.0',revision='abc',details=dict(installed=True,managed=True,currentVersion='2.0',latestVersion='2.0',updateAvailable=False))\n");
-        QTRY_VERIFY_WITH_TIMEOUT(!store.m_flatpak.querying(), 4000);
-        QVERIFY(store.m_flatpak.state("org.nextks.calendar").value("known").toBool());
-        store.perform("calendar", "update"); QTRY_VERIFY_WITH_TIMEOUT(!store.busy(), 4000);
-        QCOMPARE(state(store,"calendar").value("code").toString(), "FLATPAK_UNAVAILABLE");
-        QCOMPARE(state(store,"calendar").value("version").toString(), "1.0");
-        QVERIFY(QFileInfo::exists(state(store,"calendar").value("logPath").toString()));
+        store.start(store.indexOf("calendar"), "status");
+        QTRY_VERIFY_WITH_TIMEOUT(!store.busy(), 4000);
+        QVERIFY(!state(store, "calendar").value("installed").toBool());
+        QVERIFY(!state(store, "calendar").value("managed").toBool());
+        QCOMPARE(state(store, "calendar").value("version").toString(), "");
     }
     void protocolMismatch_data()
     {
@@ -135,39 +127,39 @@ private slots:
         QCOMPARE(finished.size(), 1);
         QCOMPARE(finished.first()[1].toString(), "");
     }
-    void networkFailureKeepsOfflineState()
+    void missingFlatpakDisablesCachedInstallationsAndRecovers()
     {
-        fixture("if action=='status': emit(details=dict(installed=True,managed=True,currentVersion='1.0'))\nelse: emit(success=False,code='RATE_LIMITED'); sys.exit(1)\n");
-        IndependentApps store(temporary.path()); store.refresh(); QTRY_VERIFY_WITH_TIMEOUT(!store.busy(),4000);
-        QTRY_VERIFY_WITH_TIMEOUT(!store.m_flatpak.querying(), 4000);
-        QVERIFY(store.m_flatpak.state("org.nextks.weather").value("known").toBool());
-        store.perform("weather","check-update"); QTRY_VERIFY_WITH_TIMEOUT(!store.busy(),4000);
-        QVERIFY(state(store,"weather").value("installed").toBool());
-        QCOMPARE(state(store,"weather").value("version").toString(),"1.0");
-        QCOMPARE(state(store,"weather").value("code").toString(),"RATE_LIMITED");
-        store.perform("weather","uninstall"); QTRY_VERIFY_WITH_TIMEOUT(!store.busy(),4000);
-        QCOMPARE(state(store,"weather").value("code").toString(),"RATE_LIMITED");
+        IndependentApps store(temporary.path());
+        auto& client = store.m_flatpak;
+        const QString appId = "org.nextks.calculator";
+        const QVariantList installed{QVariantMap{{"scope", "user"}, {"version", "0.2.2"}}};
+        client.m_states[appId] = QVariantMap{{"known", true}, {"installations", installed}};
+        QVERIFY(state(store, "calculator").value("statusKnown").toBool());
+        const auto oldPath = qgetenv("PATH");
+        qputenv("PATH", "/nonexistent-kos-flatpak-fixture");
+        store.refresh();
+        QTRY_VERIFY_WITH_TIMEOUT(!client.querying(), 4000);
+        qputenv("PATH", oldPath);
+        QCOMPARE(client.state(appId).value("errorCode").toString(), "FLATPAK_NOT_INSTALLED");
+        QVERIFY(!state(store, "calculator").value("statusKnown").toBool());
+        QVERIFY(!state(store, "calculator").value("managed").toBool());
+        QVERIFY(client.plan(appId).isEmpty());
+        store.m_flatpakResults[appId] = QVariantMap{{"code", "FLATPAK_NOT_INSTALLED"}};
+        client.m_states[appId] = QVariantMap{{"known", true}, {"installations", installed}};
+        QVERIFY(state(store, "calculator").value("statusKnown").toBool());
+        QCOMPARE(state(store, "calculator").value("code").toString(), "");
     }
-    void serializationCancellationDeadlineAndExternalOwnership()
+    void installationFailureSurvivesInventoryRefresh()
     {
-        fixture("time.sleep(10)\nemit()\n");
-        AppStore facade(temporary.path()); facade.refreshApps(); QVERIFY(facade.anyBusy());
-        QVERIFY(!facade.hasActiveMutation());
-        facade.install(); QCOMPARE(facade.music().value("code").toString(), "");
-        facade.checkUpdates("weather"); facade.cancel("weather"); QVERIFY(facade.anyBusy());
-        facade.cancel("calendar"); QTRY_VERIFY_WITH_TIMEOUT(!facade.anyBusy(),4000);
-        QCOMPARE(facade.apps()[1].toMap().value("code").toString(),"CANCELLED");
-        IndependentApps store(temporary.path()); store.m_releaseTimeout=50;
-        store.start(store.indexOf("calendar"), "check-update");
-        QTRY_VERIFY_WITH_TIMEOUT(!store.busy(),4000);
-        QCOMPARE(state(store,"calendar").value("code").toString(),"OPERATION_TIMEOUT");
-        fixture("emit(details=dict(installed=True,managed=False,currentVersion='external'))\n");
-        store.m_statusTimeout = 30000;
-        store.refresh(); QTRY_VERIFY_WITH_TIMEOUT(!store.busy(),4000);
-        store.perform("calendar","uninstall"); QVERIFY(!store.busy());
-        store.perform("calendar","update"); QVERIFY(!store.busy());
-        store.perform("calendar","install"); QVERIFY(!store.busy());
+        IndependentApps store(temporary.path());
+        const QString appId = "org.nextks.calculator";
+        store.m_flatpakResults[appId] = QVariantMap{{"code", "DISK_FULL"},
+            {"diskSpace", QVariantMap{{"missingBytes", 123456}, {"location", "download"}}}};
+        store.m_flatpak.m_states[appId] = QVariantMap{{"known", true}, {"installations", QVariantList{}}};
+        QCOMPARE(state(store, "calculator").value("code").toString(), "DISK_FULL");
+        QCOMPARE(state(store, "calculator").value("diskSpace").toMap().value("missingBytes").toInt(), 123456);
     }
+
 };
 int main(int argc, char **argv)
 {

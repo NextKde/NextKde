@@ -6,6 +6,7 @@
 #include <QJsonObject>
 #include <QJsonArray>
 #include <QUuid>
+#include <QStandardPaths>
 #include <utility>
 
 namespace {
@@ -51,6 +52,7 @@ FlatpakAppsClient::FlatpakAppsClient(QObject* parent) : QObject(parent)
                 failActive("PROTOCOL_ERROR", "Flatpak worker response identity or protocol did not match."); return;
             }
             const auto type = object.value("type").toString();
+            m_workerResponded = true;
             if (type == "progress") {
                 const int progress = object.value("progress").toInt(-2);
                 if (m_activeId.isEmpty() || !object.value("status").isString()
@@ -90,6 +92,8 @@ FlatpakAppsClient::FlatpakAppsClient(QObject* parent) : QObject(parent)
                         state.insert("update", previous.value("update"));
                     m_states.insert(it.key(), state);
                 }
+                m_lastStatus.clear();
+                m_lastCode.clear();
             } else {
                 if (!validState(result)) {
                     failActive("PROTOCOL_ERROR", "Flatpak operation state was invalid."); return;
@@ -157,7 +161,8 @@ QString FlatpakAppsClient::planId(const QString& appId) const
 QVariantMap FlatpakAppsClient::state(const QString& appId) const
 {
     auto result = m_states.value(appId).toMap();
-    if (result.isEmpty()) result = {{"known", false}, {"installations", QVariantList{}}, {"error", m_lastStatus}};
+    if (result.isEmpty()) result = {{"known", false}, {"installations", QVariantList{}},
+        {"error", m_lastStatus}, {"errorCode", m_lastCode}};
     result.insert("querying", querying());
     result.insert("busy", m_activeId == appId);
     if (m_activeId == appId) result.insert("stage", m_activeAction);
@@ -198,6 +203,7 @@ bool FlatpakAppsClient::ensureWorker()
     if (m_process.state() != QProcess::NotRunning || !QFileInfo(workerPath()).isExecutable()) return false;
     m_process.setProgram(workerPath());
     m_process.setArguments({"--rpc"});
+    m_workerResponded = false;
     m_process.start();
     return m_process.waitForStarted(1000);
 }
@@ -209,9 +215,16 @@ void FlatpakAppsClient::startNext()
     if (queued == "*") { m_activeId.clear(); m_activeAction = "inventory"; }
     else { const auto parts = queued.split('\n'); m_activeId = parts.at(0); m_activeAction = parts.at(1); }
     m_requestId = QUuid::createUuid().toString(QUuid::WithoutBraces);
+    // Check again for every request, including confirmation, so an environment
+    // removed after inventory cannot reach bundle download or deployment.
+    if (QStandardPaths::findExecutable(QStringLiteral("flatpak")).isEmpty()) {
+        failActive("FLATPAK_NOT_INSTALLED", "Flatpak is not installed or its command is not available. Install Flatpak using your system software manager, then check again."); return;
+    }
     if (!ensureWorker()) {
         failActive("WORKER_UNAVAILABLE", "The optional Flatpak backend is not installed or cannot start. Install the KOS Flatpak backend and its distribution dependencies, then recheck."); return;
     }
+    // Process startup can deliver an error/exit signal while waiting above.
+    if (m_requestId.isEmpty()) return;
     QJsonObject request{{"schemaVersion", 1}, {"requestId", m_requestId}, {"action", m_activeAction}, {"appId", m_activeId}};
     if (m_activeAction == "confirm-plan") request.insert("planId", std::exchange(m_planId, {}));
     m_process.write(QJsonDocument(request).toJson(QJsonDocument::Compact) + '\n');
@@ -231,8 +244,12 @@ void FlatpakAppsClient::cancel()
 void FlatpakAppsClient::finish(int, QProcess::ExitStatus)
 {
     m_killTimer.stop();
-    failActive(m_forcedCode.isEmpty() ? "RESULT_UNKNOWN" : m_forcedCode,
-        m_forcedMessage.isEmpty() ? "Flatpak backend exited; installed state is unknown. Recheck before retrying." : m_forcedMessage);
+    const auto code = m_workerResponded ? QStringLiteral("RESULT_UNKNOWN") : QStringLiteral("WORKER_UNAVAILABLE");
+    const auto message = m_workerResponded
+        ? QStringLiteral("Flatpak backend exited; installed state is unknown. Recheck before retrying.")
+        : QStringLiteral("The optional Flatpak backend could not start. Install the KOS Flatpak backend and its distribution dependencies, then recheck.");
+    failActive(m_forcedCode.isEmpty() ? code : m_forcedCode,
+        m_forcedMessage.isEmpty() ? message : m_forcedMessage);
 }
 
 void FlatpakAppsClient::failActive(const QString& code, const QString& message)
@@ -244,10 +261,12 @@ void FlatpakAppsClient::failActive(const QString& code, const QString& message)
     }
     const auto id = m_activeId;
     m_lastStatus = message;
+    m_lastCode = code;
     for (auto it = m_states.begin(); it != m_states.end(); ++it) {
         auto state = it.value().toMap();
         state.insert("known", false); state.insert("querying", false); state.insert("busy", false);
         state.insert("error", message); state.insert("plan", QVariantMap{}); state.insert("update", QVariantMap{});
+        state.insert("errorCode", code);
         it.value() = state;
     }
     m_activeId.clear(); m_activeAction.clear(); m_requestId.clear(); m_planId.clear();
@@ -258,6 +277,9 @@ void FlatpakAppsClient::failActive(const QString& code, const QString& message)
 
 QVariantMap FlatpakAppsClient::inventory(const std::function<bool()>& cancelled)
 {
+    if (QStandardPaths::findExecutable(QStringLiteral("flatpak")).isEmpty())
+        return {{"known", false}, {"errorCode", "FLATPAK_NOT_INSTALLED"},
+            {"error", "Flatpak is not installed or its command is not available. Install Flatpak using your system software manager, then check again."}};
     QProcess process;
     process.setProgram(workerPath());
     process.setArguments({"--inventory"});

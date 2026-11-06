@@ -7,9 +7,6 @@
 #include <QJsonArray>
 #include <QStandardPaths>
 #include <QUuid>
-#include <KIO/ApplicationLauncherJob>
-#include <KJob>
-#include <KService>
 #include <csignal>
 #include <unistd.h>
 
@@ -17,6 +14,7 @@ namespace {
 constexpr qint64 maximumOutput = 1024 * 1024;
 struct Entry { const char* key; const char* name; const char* appId; const char* repository; const char* icon; const char* description; };
 const Entry registry[] = {
+    {"kmusic", "KMusic", "org.nextkde.KMusic", "KMusic", "waves", "Discover and listen to music"},
     {"calendar", "Calendar", "org.nextks.calendar", "kos-apps", "panel", "Plan your days and events"},
     {"calculator", "Calculator", "org.nextks.calculator", "kos-apps", "grid", "Everyday calculations, made simple"},
     {"weather", "Weather", "org.nextks.weather", "kos-apps", "circle", "Forecasts for your favorite places"},
@@ -38,7 +36,8 @@ IndependentApps::IndependentApps(const QString& resources, QObject* parent)
     connect(&m_flatpak, &FlatpakAppsClient::changed, this, &IndependentApps::changed);
     connect(&m_flatpak, &FlatpakAppsClient::operationFinished, this,
         [this](const QString& appId, const QString& code, const QString& message) {
-            m_flatpakResults[appId] = QVariantMap{{"code", code}, {"message", message}};
+            m_flatpakResults[appId] = QVariantMap{{"code", code}, {"message", message},
+                {"diskSpace", m_flatpak.state(appId).value("diskSpace")}};
             const auto state = m_flatpak.state(appId);
             if (state.contains("plan")) {
                 emit changed();
@@ -107,6 +106,14 @@ QVariantList IndependentApps::apps() const
         auto state = result[i].toMap();
         const auto inventory = m_flatpak.state(state.value("appId").toString());
         const auto installations = inventory.value("installations").toList();
+        // Only the current Flatpak identity is part of Settings inventory.
+        // Native programs may coexist: they neither count as installed Flatpaks nor
+        // block installation. Native cleanup is an independent, optional action.
+        state["installed"] = false;
+        state["managed"] = false;
+        state["statusKnown"] = inventory.value("known").toBool();
+        state["version"] = "";
+        state["updateAvailable"] = false;
         state["flatpak"] = inventory;
         const auto progress = inventory.value("progressState").toMap();
         if (inventory.value("busy").toBool()) {
@@ -125,19 +132,25 @@ QVariantList IndependentApps::apps() const
         const auto appId = state.value("appId").toString();
         if (m_flatpakResults.contains(appId)) {
             const auto outcome = m_flatpakResults.value(appId).toMap();
-            state["code"] = outcome.value("code");
-            state["message"] = outcome.value("message");
+            const auto code = outcome.value("code").toString();
+            const bool environmentRecovered = inventory.value("known").toBool()
+                && (code == "FLATPAK_NOT_INSTALLED" || code == "WORKER_UNAVAILABLE");
+            if (!environmentRecovered) {
+                state["code"] = outcome.value("code");
+                state["message"] = outcome.value("message");
+                state["diskSpace"] = outcome.value("diskSpace");
+            }
         }
         if (!installations.isEmpty()) {
             const auto installation = installations.first().toMap();
-            state["sourceInstalled"] = state.value("installed");
             state["installed"] = true;
             state["managed"] = inventory.value("known").toBool() && installations.size() == 1
                 && installation.value("scope").toString() == "user";
             if (inventory.value("busy").toBool()) {
                 state["busy"] = true; state["stage"] = progress.value("cancelling").toBool() ? QVariant("cancelling") : inventory.value("stage");
             }
-            state["statusKnown"] = true;
+            // Cached installations do not prove that the environment still works.
+            state["statusKnown"] = inventory.value("known").toBool();
             state["backend"] = "flatpak";
             state["version"] = installation.value("version");
             state["scope"] = installation.value("scope");
@@ -151,7 +164,7 @@ QVariantList IndependentApps::apps() const
             state["updateAvailable"] = state.value("canCheckUpdates").toBool() && state.value("managed").toBool()
                 && inventory.value("update").toMap().value("available").toBool();
             state["dependencies"] = QVariantList{};
-        } else if (state.value("statusKnown").toBool() && !state.value("installed").toBool()) {
+        } else {
             state["backend"] = inventory.value("canDiscover").toBool() ? "flatpak-ready" : "flatpak-unavailable";
             // Install only needs a discoverable signed release; whether one exists is
             // answered by the prepare step, not by a prior update check.
@@ -177,10 +190,8 @@ int IndependentApps::indexOf(const QString& id) const
 void IndependentApps::refresh()
 {
     m_flatpak.refresh();
-    if (busy()) return;
-    m_pendingStatus.clear();
-    for (int i = 0; i < m_apps.size(); ++i) m_pendingStatus.append(i);
-    nextStatus();
+    // Source lifecycle remains an explicit CLI operation, never a fallback
+    // for the Flatpak application catalogue.
 }
 void IndependentApps::nextStatus()
 {
@@ -191,17 +202,10 @@ void IndependentApps::perform(const QString& id, const QString& action)
 {
     const int index = indexOf(id);
     if (index < 0 || busy()) return;
-    if (action != "install" && action != "update" && action != "uninstall" && action != "check-update"
-        && action != "cleanup-plan" && action != "prune") return;
+    if (action != "install" && action != "update" && action != "uninstall" && action != "check-update") return;
     const auto appId = m_apps[index].toMap().value("appId").toString();
     m_flatpakResults.remove(appId);
     const auto flatpak = m_flatpak.state(appId);
-    if (action == "cleanup-plan" || action == "prune") {
-        if (!m_apps[index].toMap().value("managed").toBool() || !flatpak.value("installations").toList().isEmpty()) return;
-        m_pendingStatus.clear();
-        start(index, action);
-        return;
-    }
     if (action == "install" || action == "update") {
         const bool installing = action == "install";
         auto state = m_apps[index].toMap();
@@ -219,8 +223,7 @@ void IndependentApps::perform(const QString& id, const QString& action)
         }
         return;
     }
-    if (action == "check-update" && (!flatpak.value("installations").toList().isEmpty()
-        || !m_apps[index].toMap().value("installed").toBool())) {
+    if (action == "check-update") {
         if (!m_flatpak.checkUpdates(appId)) {
             auto state = m_apps[index].toMap(); state["code"] = flatpak.value("publisherConfigured").toBool() ? "FLATPAK_UNAVAILABLE" : "BUNDLE_KEY_MISSING";
             state["message"] = flatpak.value("error").toString();
@@ -235,17 +238,6 @@ void IndependentApps::perform(const QString& id, const QString& action)
         }
         return;
     }
-    if (!flatpak.value("known").toBool() || !flatpak.value("installations").toList().isEmpty()) {
-        auto state = m_apps[index].toMap();
-        state["code"] = "FLATPAK_EXTERNAL";
-        state["message"] = flatpak.value("error").toString();
-        m_apps[index] = state; emit changed(); return;
-    }
-    const auto state = m_apps[index].toMap();
-    if ((action == "update" || action == "uninstall") && !state.value("managed").toBool()) return;
-    if (action == "install" && state.value("installed").toBool()) return;
-    m_pendingStatus.clear();
-    start(index, action);
 }
 void IndependentApps::start(int index, const QString& action)
 {
@@ -454,31 +446,6 @@ void IndependentApps::open(const QString& id)
         }
         return;
     }
-    if (!state.value("installed").toBool()) return;
-    // Resolve only a registry-owned service identity, never a path or Exec from JSONL.
-    const QString namespaceId = id == "listenfree" ? id : state.value("appId").toString();
-    const QStringList desktopNames = id == "listenfree"
-        ? QStringList{state.value("appId").toString(), QStringLiteral("listenfree")}
-        : QStringList{state.value("appId").toString()};
-    KService::Ptr service;
-    for (const auto& desktopName : desktopNames) {
-        if (state.value("managed").toBool()) {
-            const auto data = QStandardPaths::writableLocation(QStandardPaths::GenericDataLocation);
-            const auto desktop = data + "/applications/" + desktopName + ".desktop";
-            const auto expected = QFileInfo(data + "/nextkde-apps/" + namespaceId + "/current/share/applications/" + desktopName + ".desktop").canonicalFilePath();
-            if (!expected.isEmpty() && QFileInfo(desktop).canonicalFilePath() == expected)
-                service = KService::Ptr(new KService(desktop));
-        } else service = KService::serviceByDesktopName(desktopName);
-        if (service) break;
-    }
-    if (!service) { state["code"] = "OPEN_FAILED"; m_apps[index] = state; emit changed(); return; }
-    auto* job = new KIO::ApplicationLauncherJob(service, this);
-    connect(job, &KJob::result, this, [this, index](KJob* job) {
-        if (!job->error()) return;
-        auto state = m_apps[index].toMap(); state["code"] = "OPEN_FAILED";
-        state["message"] = job->errorText(); m_apps[index] = state; emit changed();
-    });
-    job->start();
 }
 void IndependentApps::openLog(const QString& id)
 {

@@ -391,15 +391,19 @@ QVariantMap validateDownloaded(const QString& appId, const QVariantMap& discover
         const auto actualDigest = QString::fromLatin1(
             QCryptographicHash::hash(actualMetadata, QCryptographicHash::Sha256).toHex());
         const auto actualSize = flatpak_bundle_ref_get_installed_size(bundle);
-        const bool metadataMatches = actualMetadata
-                == QByteArray::fromBase64(signedData.value("metadata").toString().toLatin1())
-            && actualDigest == signedData.value("metadataSha256").toString()
-            && actualSize == signedData.value("installedSize").toULongLong();
+        const auto expectedMetadata = QByteArray::fromBase64(signedData.value("metadata").toString().toLatin1());
+        const auto expectedDigest = signedData.value("metadataSha256").toString();
+        const auto expectedSize = signedData.value("installedSize").toULongLong();
+        const bool metadataMatches = actualMetadata == expectedMetadata && actualDigest == expectedDigest;
         if (metadataBytes) g_bytes_unref(metadataBytes);
         g_object_unref(bundle);
         g_object_unref(bundleFile);
         if (!metadataMatches)
-            fail("INTEGRITY_FAILED", "Flatpak bundle metadata or installed size does not match the signed release plan.");
+            fail("BUNDLE_METADATA_MISMATCH", QString("Bundle metadata differs from signed plan: expected %1 bytes, SHA-256 %2; actual %3 bytes, SHA-256 %4.")
+                .arg(expectedMetadata.size()).arg(expectedDigest).arg(actualMetadata.size()).arg(actualDigest));
+        if (actualSize != expectedSize)
+            fail("BUNDLE_INSTALLED_SIZE_MISMATCH", QString("Bundle installed size differs from signed plan: expected %1 bytes; actual %2 bytes.")
+                .arg(expectedSize).arg(actualSize));
         return {};
     } catch (const Failure& failure) { return {{"code", failure.code}, {"message", failure.message}}; }
 }

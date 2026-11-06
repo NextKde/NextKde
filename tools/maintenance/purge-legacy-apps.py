@@ -1,7 +1,12 @@
 #!/usr/bin/env python3
-"""Remove retired Calendar/Calculator/Weather programs and data; preview by default."""
+"""Optional native cleanup; never required for Flatpak installation.
+
+Native and Flatpak apps may coexist. This tool never uninstalls Flatpak apps
+or deletes their profiles. Preview first, then confirm each native app.
+"""
 
 import argparse
+import configparser
 import fcntl
 import json
 import os
@@ -17,7 +22,9 @@ APPS = {
     "calendar": ("org.nextkde.Calendar", ("kos-calendar", "kos-pim-service", "kos-todo")),
     "calculator": ("org.nextkde.Calculator", ("kos-calculator",)),
     "weather": ("org.nextkde.Weather", ("kos-weather", "kos-weather-backend")),
+    "listenfree": ("org.nextkde.ListenFree", ("listenfree",)),
 }
+
 OWNER = "nextkde-source-installer-v1"
 REVISION = re.compile(r"[0-9a-f]{40}\Z")
 LIMIT = 50000
@@ -108,42 +115,7 @@ def remove(path, expected):
         os.close(fd)
 
 
-def command(executable, *arguments):
-    return subprocess.run([executable, *arguments], capture_output=True, text=True,
-                          timeout=15, check=True, env={**os.environ, "LC_ALL": "C"}).stdout
-
-
-def flatpak_inventory(executable):
-    # Without a scope selector Flatpak lists user AND all configured system installations.
-    result = []
-    for line in command(executable, "list", "--app", "--all",
-                        "--columns=ref:full,active:full,installation").splitlines():
-        fields = [field.strip() for field in line.split("\t")]
-        if len(fields) != 3:
-            raise ValueError("unreadable Flatpak inventory")
-        ref, commit, scope = fields
-        if not re.fullmatch(r"(?:app/)?[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+", ref):
-            raise ValueError("invalid Flatpak ref")
-        if not re.fullmatch(r"[0-9a-f]{12,64}", commit) or not scope:
-            raise ValueError("invalid Flatpak commit/installation")
-        ref = ref if ref.startswith("app/") else "app/" + ref
-        # list hard-truncates active commits even with :full. Resolve only our
-        # retired IDs, using the same installation and exact ref, before deletion.
-        if ref.split("/")[1] in {app[0] for app in APPS.values()}:
-            selector = "--" + scope if scope in ("user", "system") else "--installation=" + scope
-            full = command(executable, "info", selector, "--show-commit", ref).strip()
-            if not re.fullmatch(r"[0-9a-f]{64}", full) or not full.startswith(commit):
-                raise ValueError("invalid Flatpak commit or inventory changed during inspection")
-            commit = full
-        result.append((ref, commit, scope))
-    return sorted(result)
-
-
-def running(names, executable, old_ids):
-    if executable:
-        for app in command(executable, "ps", "--columns=application").splitlines():
-            if app.strip() in old_ids:
-                raise ValueError(f"close running Flatpak first: {app}")
+def running(names):
     for proc in Path("/proc").iterdir():
         if not proc.name.isdigit():
             continue
@@ -161,6 +133,8 @@ def running(names, executable, old_ids):
 
 def installed_files(key):
     """Whitelist from retained old per-app and historical core CMake inventories."""
+    if key == "listenfree":
+        return set(json.loads(Path(__file__).with_name("listenfree-legacy-files.json").read_text())["files"])
     _, executables = APPS[key]
     names = {"kos-" + key} | ({"kos-todo"} if key == "calendar" else set())
     files = {"bin/" + name for name in executables}
@@ -224,7 +198,8 @@ def source_targets(key, data, state, home):
     allowed = {}
     for name in executables:
         allowed[str(home / ".local/bin" / name)] = str(current / "bin" / name)
-    for name in ({"kos-" + key} | ({"kos-todo"} if key == "calendar" else set())):
+    for name in ({"listenfree" if key == "listenfree" else "kos-" + key}
+                 | ({"kos-todo"} if key == "calendar" else set())):
         path = data / "applications" / (name + ".desktop")
         allowed[str(path)] = str(current / "share/applications" / path.name)
     if key == "calendar":
@@ -256,18 +231,73 @@ def source_targets(key, data, state, home):
     return targets, engine / "lock"
 
 
-def main():
+def listenfree_native_targets(home, data):
+    """Recognize the historical private bundle, never arbitrary PATH binaries."""
+    prefix = home / ".local"
+    root = prefix / "opt/listenfree"
+    launcher = prefix / "bin/listenfree"
+    if not present(root):
+        return []
+    if root.is_symlink() or not root.is_dir():
+        raise ValueError("ListenFree bundle directory was replaced")
+    snapshot = inspect(root)
+    allowed = installed_files("listenfree")
+    for raw, info in snapshot.items():
+        relative = Path(raw).relative_to(prefix).as_posix()
+        if stat.S_ISDIR(info[2]):
+            if not any(name.startswith(relative + "/") for name in allowed):
+                raise ValueError(f"unknown ListenFree directory: {raw}")
+        elif relative not in allowed:
+            raise ValueError(f"unknown ListenFree file: {raw}")
+    binary = root / "listenfree"
+    if binary.is_symlink() or not binary.is_file() or not os.access(binary, os.X_OK):
+        raise ValueError("ListenFree bundle executable is missing or replaced")
+    expected = ("#!/usr/bin/env sh\nset -eu\nlistenfree_app='" + str(root) + "'\n"
+                'export LD_LIBRARY_PATH="$listenfree_app/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"\n'
+                'export QMMP_PLUGINS="$listenfree_app/qmmp"\n'
+                'export LISTENFREE_QMMP_OUTPUT="${LISTENFREE_QMMP_OUTPUT:-pulse}"\n'
+                'exec "$listenfree_app/listenfree" "$@"\n')
+    if launcher.is_symlink() or not launcher.is_file() or launcher.read_text() != expected:
+        raise ValueError("ListenFree launcher is not the historical bundle launcher")
+    desktop = data / "applications/listenfree.desktop"
+    if desktop.is_symlink() or not desktop.is_file():
+        raise ValueError("ListenFree desktop entry is missing or replaced")
+    metadata = configparser.ConfigParser(interpolation=None)
+    metadata.read_string(desktop.read_text())
+    entry = metadata["Desktop Entry"]
+    if (entry.get("Exec") != str(launcher) + " %U" or entry.get("TryExec") != str(launcher)
+            or entry.get("Icon") != "listenfree" or entry.get("X-Flatpak")):
+        raise ValueError("ListenFree desktop entry does not belong to the native bundle")
+    # Remove only proven program/activation paths. Icons and user data stay.
+    return [(launcher, inspect(launcher)), (desktop, inspect(desktop)), (root, snapshot)]
+
+
+def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--app", choices=[*APPS, "all"], required=True)
-    parser.add_argument("--apply", action="store_true", help="Delete listed legacy programs AND personal data")
-    parser.add_argument("--yes", action="store_true", help="Noninteractive destructive confirmation (requires --apply)")
-    args = parser.parse_args()
+    parser.add_argument("--apply", action="store_true", help="Delete listed legacy targets (ListenFree: native programs only)")
+    args = parser.parse_args(argv)
     if os.geteuid() == 0:
         parser.error("run as the affected desktop user, never root or sudo")
-    if args.yes and not args.apply:
-        parser.error("--yes requires --apply")
-    if any(os.environ.get(name) for name in ("FLATPAK_USER_DIR", "FLATPAK_SYSTEM_DIR", "FLATPAK_CONFIG_DIR")):
-        parser.error("custom Flatpak environment overrides are unsupported; use the original manager")
+    if args.apply and not sys.stdin.isatty():
+        parser.error("deletion requires interactive confirmation for each application; run in a terminal")
+    if args.app == "all" and args.apply:
+        # Preserve the all-app preflight: a blocked app prevents any deletion.
+        result = main(["--app", "all"])
+        if result != 0:
+            return result
+        skipped, retained = False, False
+        for key in APPS:
+            # Inspect and print this app's current paths immediately before
+            # its own confirmation. Consent never carries to the next app.
+            result = main(["--app", key, "--apply"])
+            if result == 130:
+                skipped = True
+            elif result == 3:
+                retained = True
+            elif result != 0:
+                return result
+        return 130 if skipped else 3 if retained else 0
     home = Path.home()
     roots = [Path(os.environ.get(var) or str(home / fallback)) for var, fallback in (
         ("XDG_DATA_HOME", ".local/share"), ("XDG_STATE_HOME", ".local/state"),
@@ -285,38 +315,27 @@ def main():
     data, state, config, cache = roots
     keys = list(APPS) if args.app == "all" else [args.app]
     names = {name for key in keys for name in APPS[key][1]}
-    old_ids = {APPS[key][0] for key in keys}
-    executable = shutil.which("flatpak")
-    running(names, executable, old_ids)
-    inventory = flatpak_inventory(executable) if executable else []
-    targets, locks, removals, blocked, retained = [], [], [], [], []
+    running(names)
+    targets, locks, blocked, retained = [], [], [], []
     for key in keys:
-        old_id = APPS[key][0]
         try:
-            matching = [item for item in inventory if item[0].split("/")[1] == old_id]
-            if any(scope != "user" for _, _, scope in matching):
-                raise ValueError("system/custom-installation old Flatpak present; use its original manager first")
-            if len(matching) > 1:
-                raise ValueError("multiple old Flatpak refs; resolve branches/architectures with original manager first")
-            source, lock = source_targets(key, data, state, home)
+            if key == "listenfree" and not present(data / "nextkde-apps/listenfree"):
+                source, lock = listenfree_native_targets(home, data), None
+            else:
+                source, lock = source_targets(key, data, state, home)
             targets.extend(source)
             if lock:
                 locks.append(lock)
-            paths = [config / "NextKde" / ("kos-" + key + ".conf"), cache / "NextKde" / ("kos-" + key)]
+            paths = [] if key == "listenfree" else [config / "NextKde" / ("kos-" + key + ".conf"), cache / "NextKde" / ("kos-" + key)]
             if key == "calendar":
                 paths += [data / "kos/pim", config / "NextKde/kos-todo.conf", cache / "NextKde/kos-todo"]
             elif key == "weather":
                 paths += [state / "quickshell/kos-weather/standalone-backend"]
-            sandbox = home / ".var/app" / old_id
-            if present(sandbox) and not executable:
-                raise ValueError("Flatpak unavailable: cannot confirm old sandbox installation/writers")
-            paths.append(sandbox)
             for path in paths:
                 if present(path):
                     targets.append((path, inspect(path)))
                 else:
                     print(f"ABSENT {path}")
-            removals.extend(matching)
             # A shared command can belong to the new installation: never unlink by name.
             for name in APPS[key][1]:
                 found = shutil.which(name)
@@ -325,18 +344,22 @@ def main():
             for relative in sorted(installed_files(key)):
                 for prefix in (home / ".local", Path("/usr/local"), Path("/usr")):
                     path = prefix / relative
-                    if present(path) and not any(path == item for item, _ in source):
+                    if present(path) and not any(path == item or item in path.parents for item, _ in source):
                         retained.append(f"unowned historical/core candidate, not deleted: {path}")
-        except (ValueError, OSError) as exc:
+        except (ValueError, OSError, configparser.Error, KeyError) as exc:
             blocked.append(f"{key}: {exc}")
     protected = []
     for key in APPS:
+        if key == "listenfree":
+            continue
         app_id = "org.nextks." + key
         protected += [data / "nextkde-apps" / app_id, state / "nextkde-apps" / app_id,
                       data / app_id, state / app_id, config / "NextKde" / (app_id + ".conf"),
                       cache / "NextKde" / app_id, home / ".var/app" / app_id]
-    protected += [data / "nextkde-apps/listenfree", state / "nextkde-apps/listenfree",
+    protected += [home / ".var/app",
                   state / "quickshell/shell-data-service", config / "NextKde/KosApplications.conf"]
+    if "listenfree" not in keys:
+        protected += [data / "nextkde-apps/listenfree", state / "nextkde-apps/listenfree"]
     unique = {}
     for path, expected in targets:
         if any(overlaps(path, p) for p in protected):
@@ -345,11 +368,14 @@ def main():
             blocked.append(f"overlapping cleanup targets: {path}")
         unique[path] = expected
     targets = list(unique.items())
+    print(f"\nAPPLICATION: {args.app}")
+    print("DELETE directories include ALL listed contents; Calendar/Calculator/Weather targets can include personal data.")
+    print("KEEP all Flatpak installations and ~/.var/app profiles; this tool only cleans native apps.")
     for path, _ in targets:
         print(f"DELETE {path}")
-    for ref, commit, _ in removals:
-        print(f"UNINSTALL user {ref} @ {commit}")
     print("KEEP shared NextKde/KosApplications.conf and core weather state: not exclusively owned by these apps")
+    if "listenfree" in keys:
+        print("KEEP ListenFree Flatpak installations, ~/.var/app/org.nextkde.ListenFree, native user settings, library and downloads")
     for reason in dict.fromkeys(retained):
         print("RETAINED " + reason)
     for reason in blocked:
@@ -358,35 +384,30 @@ def main():
         print("Nothing changed: resolve blocked ownership before applying.")
         return 2
     if not args.apply:
-        print("PREVIEW ONLY. Nothing changed. --apply deletes listed legacy programs AND personal data irreversibly.")
+        print("PREVIEW ONLY. Nothing changed. --apply irreversibly deletes the listed targets after confirmation.")
         return 0
-    if not args.yes:
-        if not sys.stdin.isatty():
-            parser.error("noninteractive deletion requires --apply --yes")
-        if input("Type DELETE LEGACY APPS AND DATA to confirm: ") != "DELETE LEGACY APPS AND DATA":
-            return 130
+    if not targets:
+        print(f"Nothing to delete for {args.app}.")
+        return 3 if retained else 0
+    confirmation = "DELETE listenfree PROGRAMS" if args.app == "listenfree" else f"DELETE {args.app} APPS AND DATA"
+    try:
+        answer = input(f"Type {confirmation} to delete this application's listed targets; Enter skips: ")
+    except EOFError:
+        raise KeyboardInterrupt
+    if answer != confirmation:
+        print(f"SKIPPED {args.app}: nothing deleted for this application.")
+        return 130
     descriptors = []
     try:
         for lock in locks:
             fd = os.open(lock, os.O_RDONLY | os.O_NOFOLLOW)
             descriptors.append(fd)
             fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
-        running(names, executable, old_ids)
+        running(names)
         for path, expected in targets:
             if inspect(path) != expected:
                 raise ValueError(f"target changed after preview: {path}")
-        if executable and flatpak_inventory(executable) != inventory:
-            raise ValueError("Flatpak inventory changed after preview")
-        for ref, commit, scope in removals:
-            running(names, executable, old_ids)
-            current = flatpak_inventory(executable)
-            if [item for item in current if item[0].split("/")[1] == ref.split("/")[1]] != [(ref, commit, scope)]:
-                raise ValueError(f"old Flatpak identity changed before uninstall: {ref}")
-            subprocess.run([executable, "--user", "uninstall", "--app", "--no-related",
-                            "--noninteractive", "--assumeyes", "--", ref], check=True, timeout=45)
-            if any(item[0] == ref for item in flatpak_inventory(executable)):
-                raise ValueError(f"Flatpak removal could not be confirmed: {ref}")
-        running(names, executable, old_ids)
+        running(names)
         for path, expected in targets:
             remove(path, expected)
             print(f"REMOVED {path}")
@@ -400,6 +421,9 @@ def main():
 if __name__ == "__main__":
     try:
         sys.exit(main())
+    except KeyboardInterrupt:
+        print("Cancelled. No further applications will be processed; previously completed removals remain.", file=sys.stderr)
+        sys.exit(130)
     except (ValueError, OSError, subprocess.SubprocessError, RecursionError) as error:
         print(f"STOPPED: {error}. Removal may be partial; inspect reported paths before retrying.", file=sys.stderr)
         sys.exit(2)
