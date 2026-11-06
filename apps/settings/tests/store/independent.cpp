@@ -66,7 +66,7 @@ private slots:
         store.install("unknown"); QVERIFY(!store.anyBusy());
         QCOMPARE(store.music().value("code").toString(), "");
     }
-    void offlineStatusAndUpdate()
+    void offlineSourceStatusCannotBypassFlatpakUpdatePlan()
     {
         fixture("emit(details=dict(installed=True,managed=True,currentVersion='1.0',latestVersion='2.0',updateAvailable=action=='check-update'))\n");
         IndependentApps store(temporary.path());
@@ -80,7 +80,8 @@ private slots:
         QTRY_VERIFY_WITH_TIMEOUT(!store.m_flatpak.querying(), 4000);
         QVERIFY(store.m_flatpak.state("org.nextks.calendar").value("known").toBool());
         store.perform("calendar", "update"); QTRY_VERIFY_WITH_TIMEOUT(!store.busy(), 4000);
-        QCOMPARE(state(store,"calendar").value("code").toString(), "");
+        QCOMPARE(state(store,"calendar").value("code").toString(), "FLATPAK_UNAVAILABLE");
+        QCOMPARE(state(store,"calendar").value("version").toString(), "1.0");
         QVERIFY(QFileInfo::exists(state(store,"calendar").value("logPath").toString()));
     }
     void protocolMismatch_data()

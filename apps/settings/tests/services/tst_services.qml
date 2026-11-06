@@ -31,6 +31,10 @@ TestCase {
         property int opens: 0
         property int removals: 0
         property int cancellations: 0
+        property int confirmations: 0
+        property string confirmedPlan: ""
+        signal changed()
+        function confirmPlan(id, planId) { confirmations++; lastId = id; confirmedPlan = planId }
         function refresh() {}
         function install(id) { installs++; lastId = id || "kmusic" }
         function open(id) { opens++; lastId = id || "kmusic" }
@@ -55,6 +59,7 @@ TestCase {
         I18n.language = "en"
         fakeStore.music = {available: true, installed: false, busy: false}
         fakeStore.installs = fakeStore.opens = fakeStore.removals = fakeStore.cancellations = 0
+        fakeStore.confirmations = 0; fakeStore.confirmedPlan = ""
         fakeStore.apps = []; fakeStore.anyBusy = false; fakeStore.lastId = ""; fakeStore.checks = fakeStore.updates = 0
     }
     function snapshot(state) { bridge.wallpaperSnapshotChanged({spatialResources: state}) }
@@ -182,11 +187,27 @@ TestCase {
         const page = createTemporaryObject(factory, this, {store: fakeStore});
         tryVerify(function() { return !!findChild(page, "calendarAction") });
         findChild(page, "calendarAction").clicked();
-        const installation = findChild(page, "appInstallDialog");
-        verify(installation.visible); compare(fakeStore.installs, 0);
-        installation.reject(); compare(fakeStore.installs, 0);
+        compare(fakeStore.lastId, "calendar"); compare(fakeStore.installs, 1);
+        // Install first prepares a plan. Dismissing it must not confirm deployment.
+        fakeStore.apps = [appState("calendar", {installed: false, flatpak: {plan: {planId: "first", operation: "install"}}}), appState("calculator"), appState("weather"), appState("listenfree")];
+        fakeStore.changed();
+        const installation = findChild(page, "flatpakPlanDialog");
+        tryCompare(installation, "visible", true);
+        compare(fakeStore.confirmations, 0);
+        installation.reject();
+        tryCompare(installation, "visible", false);
+        tryCompare(page, "planId", "");
+        compare(fakeStore.confirmations, 0);
+        fakeStore.changed();
+        compare(installation.visible, false); // a dismissed plan stays dismissed
         findChild(page, "calendarAction").clicked();
-        installation.accept(); compare(fakeStore.lastId, "calendar"); compare(fakeStore.installs, 1);
+        fakeStore.apps = [appState("calendar", {installed: false, flatpak: {plan: {planId: "second", operation: "install"}}}), appState("calculator"), appState("weather"), appState("listenfree")];
+        fakeStore.changed();
+        tryCompare(installation, "visible", true);
+        findChild(installation, "flatpakPlanConfirm").clicked();
+        compare(fakeStore.lastId, "calendar"); compare(fakeStore.confirmations, 1);
+        compare(fakeStore.confirmedPlan, "second");
+        tryCompare(page, "planId", "");
         findChild(page, "weatherAction").clicked(); compare(fakeStore.lastId, "weather"); compare(fakeStore.opens, 1);
         findChild(page, "calculatorCheckUpdates").clicked(); compare(fakeStore.lastId, "calculator"); compare(fakeStore.checks, 1);
         findChild(page, "listenfreeUpdate").clicked(); compare(fakeStore.lastId, "listenfree"); compare(fakeStore.updates, 1);
