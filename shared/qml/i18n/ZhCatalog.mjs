@@ -3,6 +3,12 @@
 // 规则：值必须与改造前界面上的中文逐字一致（含空格、间隔符与省略号），
 // 改动文案时同步更新对应键，不要只改一边。
 export const catalog = {
+    "Application task completed": "应用任务已完成",
+    "Application task cancelled": "应用任务已取消",
+    "Application task failed": "应用任务失败",
+    "Open Settings to view the result.": "打开设置查看结果。",
+    "Tasks continue in the background after closing this window. Return anytime to view progress or cancel.": "关闭窗口后任务仍会在后台继续。你可以随时回来查看进度或取消任务。",
+
     "Compatibility guide": "兼容性指南",
     "Remove retired program…": "移除旧身份程序…",
     "Remove only the exact old user Flatpak program. Personal data and shared runtimes are kept. This does not install a replacement or import data. Keep the old installation until the replacement and its requirements are ready.": "仅移除指定的旧身份用户级 Flatpak 程序，保留个人数据与共享运行时。此操作不会安装替代程序或导入数据。请在新程序及其所需依赖准备就绪前保留旧安装。",
@@ -103,7 +109,6 @@ export const catalog = {
     "Download timed out after %1 attempt(s). Check your connection and try again.": "下载超时，已尝试 %1 次。请检查网络后重试。",
     "The operation timed out and was stopped. View the log before trying again.": "操作超时，已停止。请查看日志后重试。",
     "Service": "服务",
-    "Keep Settings open until the operation finishes, or cancel it here.": "操作期间请保持设置窗口打开，也可以在此取消。",
     "The operation failed. View the log for details.": "操作失败，请查看日志。",
     "The installer could not be started. Check that Python 3.9 or newer is installed.": "无法启动安装器，请确认已安装 Python 3.9 或更新版本。",
     "KMusic could not be uninstalled. View the log for details.": "KMusic 卸载失败，请查看日志。",

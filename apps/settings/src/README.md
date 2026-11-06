@@ -67,3 +67,24 @@ color generation, installed entry selection, hot reload, pages and controls. Lif
 completion on the owning thread and destruction with both probes running, with no stale callback.
 Run all verification only in the VM/hosted CI per [Development](../../../docs/Development.md).
 Do not treat a historical refactoring report as evidence for the current source.
+
+## Window and background task lifetime
+
+Settings is a session-scoped single instance. Closing its window leaves the
+process and application operations running, including final installation-state
+verification. Launching Settings again activates that owner; when a mutation is
+active, ordinary launch opens application management with the existing progress.
+Explicit page and Calendar/Weather navigation still take precedence. Cancellation
+is only performed through the application's existing task controls.
+
+The process stays resident after completion to retain its task state. Mutation
+completion emits one desktop notification after verification; read-only inventory
+and update queries do not notify. Notification delivery is asynchronous and a
+missing notification service does not change the task result. This is window-close
+continuation within the login session, not task recovery after logout, reboot, or
+process termination.
+
+`kos-settings.close-policy` launches the real Settings binary with an isolated
+installer fixture and notification bus, closes and relaunches it mid-operation,
+and checks success, installer failure, and final-verification failure while hidden.
+The builtin QML suite also closes and reopens the real Settings window while busy.
