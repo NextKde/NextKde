@@ -78,26 +78,32 @@ Item {
         onActivated: root.menuOpen = false
     }
 
-    // Full-screen transparent dismissal catcher on Top layer for clicks outside popup
-    PanelWindow {
-        id: dismissalCatcher
-        screen: root.targetScreen
-        visible: ScreenLifecycle.outputAvailable && root.targetScreen !== null && root.menuOpen
-        color: "transparent"
-        exclusionMode: ExclusionMode.Ignore
-        WlrLayershell.layer: WlrLayer.Top
-        WlrLayershell.namespace: "quickshell-im-status-backdrop"
-        WlrLayershell.keyboardFocus: WlrKeyboardFocus.None
-        anchors {
-            top: true
-            bottom: true
-            left: true
-            right: true
-        }
-        MouseArea {
-            anchors.fill: parent
-            cursorShape: Qt.ArrowCursor
-            onPressed: root.menuOpen = false
+    // Full-screen transparent dismissal catcher on Overlay layer for clicks outside popup
+    Variants {
+        model: ScreenLifecycle.usableScreens
+        delegate: Component {
+            PanelWindow {
+                id: dismissalCatcher
+                required property var modelData
+                screen: modelData
+                visible: ScreenLifecycle.outputAvailable && modelData !== null && root.menuOpen
+                color: "transparent"
+                exclusionMode: ExclusionMode.Ignore
+                WlrLayershell.layer: WlrLayer.Overlay
+                WlrLayershell.namespace: "quickshell-im-status-backdrop"
+                WlrLayershell.keyboardFocus: WlrKeyboardFocus.None
+                anchors {
+                    top: true
+                    bottom: true
+                    left: true
+                    right: true
+                }
+                MouseArea {
+                    anchors.fill: parent
+                    cursorShape: Qt.ArrowCursor
+                    onPressed: root.menuOpen = false
+                }
+            }
         }
     }
 
@@ -177,6 +183,7 @@ Item {
         id: menuPopup
         property Item anchorItem: root
         requestedOpen: root.menuOpen
+        grabFocus: true
         implicitWidth: 200
         implicitHeight: menuColumn.implicitHeight + 20
         color: "transparent"
@@ -218,6 +225,8 @@ Item {
             anchors.fill: parent
             radius: 12
             cornerExponent: AppearanceTokens.shape.cornerExponent
+            blurOverrideEnabled: true
+            blurStrength: AppearanceConfigService.globalBlurStrength
             scrimEnabled: true
             scrimLevel: "readable"
             material: "thick"
@@ -236,8 +245,12 @@ Item {
 
             Column {
                 id: menuColumn
-                anchors.centerIn: parent
-                width: parent.width - 16
+                anchors.top: parent.top
+                anchors.topMargin: 10
+                anchors.left: parent.left
+                anchors.leftMargin: 8
+                anchors.right: parent.right
+                anchors.rightMargin: 8
                 spacing: 4
 
                 // Header
@@ -335,7 +348,8 @@ Item {
         signal triggered()
 
         width: parent ? parent.width : 160
-        height: 28
+        height: visible ? 28 : 0
+        implicitHeight: visible ? 28 : 0
 
         Rectangle {
             anchors.fill: parent
