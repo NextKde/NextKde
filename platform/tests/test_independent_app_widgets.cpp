@@ -20,8 +20,8 @@ class IndependentAppWidgetsTest : public QObject {
     QString data;
     QString summary(const QString &key) const
     {
-        return key == "calendar" ? data + "/kos/pim/widget-snapshot.json"
-            : qEnvironmentVariable("XDG_STATE_HOME") + "/quickshell/kos-weather/standalone-backend/widget-snapshot.json";
+        return key == "calendar" ? data + "/org.nextks.calendar/pim/widget-snapshot.json"
+            : qEnvironmentVariable("XDG_STATE_HOME") + "/org.nextks.weather/standalone-backend/widget-snapshot.json";
     }
     void write(const QString &path, const QByteArray &bytes)
     {
@@ -38,7 +38,7 @@ class IndependentAppWidgetsTest : public QObject {
     QJsonObject calendar() const
     {
         return {{"widgetContractVersion", 2}, {"schemaVersion", 1}, {"appId", "org.nextks.calendar"},
-            {"channel", "native"}, {"storageMode", "default"}, {"storagePath", data + "/kos/pim"},
+            {"channel", "native"}, {"storageMode", "default"}, {"storagePath", data + "/org.nextks.calendar/pim"},
             {"generatedAt", QDateTime::currentMSecsSinceEpoch()}, {"today", QDate::currentDate().toString(Qt::ISODate)},
             {"timeZone", QString::fromUtf8(QTimeZone::systemTimeZoneId())},
             {"events", QJsonArray{}}, {"todos", QJsonArray{}}};
@@ -71,6 +71,7 @@ private slots:
         data = qEnvironmentVariable("XDG_DATA_HOME");
         QVERIFY(QDir(data).removeRecursively());
         QVERIFY(QDir(qEnvironmentVariable("XDG_STATE_HOME")).removeRecursively());
+        QVERIFY(QDir(qEnvironmentVariable("XDG_DATA_DIRS")).removeRecursively());
         qunsetenv("KOS_PIM_STORAGE_DIR");
         qunsetenv("KOS_DATA_SOCKET");
     }
@@ -144,27 +145,32 @@ private slots:
     }
     void duplicateIdentitiesAndHiddenEntry()
     {
-        entry("org.nextks.calendar"); entry("kos-calendar");
+        entry("org.nextks.calendar");
+        const auto second = qEnvironmentVariable("XDG_DATA_DIRS") + "/applications/org.nextks.calendar.desktop";
+        write(second, "[Desktop Entry]\nType=Application\nName=Other fixture\nExec=/bin/true\nTryExec=/bin/true\n");
         QCOMPARE(inspect()["state"].toString(), "ambiguous");
-        QVERIFY(QFile::remove(data + "/applications/kos-calendar.desktop"));
+        QVERIFY(QFile::remove(second));
         entry("org.nextks.calendar", "Hidden=true\n");
         QCOMPARE(inspect()["state"].toString(), "unavailable");
     }
-    void nativeOverrideIsExplicitlyUnsupported()
+    void nativeCalendarOverrideAndCoreWeatherSocketIsolation()
     {
         entry("org.nextks.calendar"); publish("calendar", calendar());
         qputenv("KOS_PIM_STORAGE_DIR", "/custom");
         QCOMPARE(inspect()["state"].toString(), "unsupported");
         entry("org.nextks.weather");
-        qputenv("KOS_DATA_SOCKET", "");
-        QCOMPARE(inspect("weather")["state"].toString(), "unsupported");
+        qputenv("KOS_DATA_SOCKET", "/unrelated/core-data.sock");
+        publish("weather", weather());
+        QCOMPARE(inspect("weather")["state"].toString(), "ready");
     }
     void legacyCalendarIsNotAdoptedByNewIdentity()
     {
         auto payload = calendar();
         payload.remove("widgetContractVersion");
         entry("kos-calendar"); publish("calendar", payload);
-        QCOMPARE(inspect()["state"].toString(), "ready");
+        const auto legacy = inspect();
+        QCOMPARE(legacy["state"].toString(), "not-installed");
+        QVERIFY(!legacy.contains("payload"));
         QVERIFY(QFile::remove(data + "/applications/kos-calendar.desktop"));
         entry("org.nextks.calendar");
         QCOMPARE(inspect()["state"].toString(), "unsupported");

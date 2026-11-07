@@ -76,7 +76,7 @@ def run(base_env=None):
                 else:
                     alias.symlink_to(source / 'does-not-exist')
             installed = base / 'installed'
-            subprocess.run(['python3', str(ROOT / 'tools/deploy-shell-qml.py'),
+            subprocess.run(['python3', str(ROOT / 'tools/deploy/deploy-shell-qml.py'),
                             'deploy', '--shell', str(shell), '--shared', str(shared),
                             '--destination', str(installed)], check=True)
             # A successful load must not be rescued by files in the input tree.

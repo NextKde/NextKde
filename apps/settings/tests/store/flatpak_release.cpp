@@ -8,11 +8,16 @@ class FlatpakReleaseTest : public QObject {
     const QString appId = QStringLiteral("org.nextks.calendar");
     QByteArray manifest(const QJsonObject &changes = {}) const
     {
-        QJsonObject bundle{{"asset", "org.nextks.calendar-0.2.0-x86_64.flatpak"},
+        const QByteArray metadata = "[Application]\nname=org.nextks.calendar\nruntime=org.kde.Platform/x86_64/6.8\n";
+        QJsonObject bundle{{"metadata", QString::fromLatin1(metadata.toBase64())},
+            {"metadataSha256", QString::fromLatin1(QCryptographicHash::hash(metadata, QCryptographicHash::Sha256).toHex())},
+            {"installedSize", 4096},
+            {"runtime", QJsonObject{{"ref", "runtime/org.kde.Platform/x86_64/6.8"}}},
+            {"requiredExtensions", QJsonArray{}}, {"asset", "org.nextks.calendar-0.2.0-x86_64.flatpak"},
             {"ref", "app/org.nextks.calendar/x86_64/stable"},
             {"commit", QString(64, 'a')}, {"sha256", QString(64, 'b')}, {"size", 1234}};
         for (auto it = changes.begin(); it != changes.end(); ++it) bundle[it.key()] = it.value();
-        return QJsonDocument(QJsonObject{{"schemaVersion", 1}, {"appId", appId},
+        return QJsonDocument(QJsonObject{{"schemaVersion", 2}, {"appId", appId},
             {"version", "0.2.0"}, {"revision", QString(40, 'c')},
             {"bundles", QJsonObject{{"x86_64", bundle}}}}).toJson();
     }
@@ -257,6 +262,10 @@ private slots:
         QTest::newRow("zero-size") << QString("size") << QJsonValue(0);
         QTest::newRow("fractional-size") << QString("size") << QJsonValue(1.5);
         QTest::newRow("oversize") << QString("size") << QJsonValue(3.0 * 1024 * 1024 * 1024);
+        QTest::newRow("missing-metadata") << QString("metadata") << QJsonValue("");
+        QTest::newRow("metadata-digest") << QString("metadataSha256") << QJsonValue(QString(64, '0'));
+        QTest::newRow("missing-runtime") << QString("runtime") << QJsonValue(QJsonObject{});
+        QTest::newRow("invalid-extensions") << QString("requiredExtensions") << QJsonValue("not an array");
         QTest::newRow("string-size") << QString("size") << QJsonValue("1234");
     }
     void invalidBundle()
@@ -287,7 +296,13 @@ private slots:
         const auto signature = QByteArray::fromBase64(
             "iQGzBAABCAAdFiEEXuP4f+gD/NFHuzTBTu3EiF6MqhMFAmrr3jAACgkQTu3EiF6MqhMcUAv/YZimoPi6f4NacoJf8sJabXFfHthKqvr0oz4dc/XAN0/QHjBg31H+GC0T3qMtWxMLPkJ2aP0S9rPPQpQu/H2cAEtCSm//ep7QI7RZBo5dW/DhJ2aLwT+11CAfwQEJSwCh6JDm3JTyLae5G2x4A3tLdnMK4VW2mYXCf2Zdhmk9H2FrgTN02L2UaDXk7RMa7pF+MXpcAS7uix8sgpg1dp7GyMiXtqdBjsbQQgG8DMflt/0BbEUG4Hlm3KlfuQ0ADKJc9GG3Pax8c5Mh88moxkxOY+jnw8qzXfIhC2K5tBIWTMJ6edC7iQbe5Pk3qKIg14I06febwCek/dA341S4/X0ldvU048cp4v0SsCBsrFM+KADTW0xxeuUi8A2Bnyvcy7olT9vGY8Pc+VoZjPwxLl9jBpfqQG1VPrtJGNWgoXMN3IJF8x+Dfris/zzX7LgC07IC+2ohIJNnCOZEhhS5Fg94SrZWWXpTjYtnYKF6p9qObQo4i4rEq3OrW4JV9Oxv6oCQ");
         QVERIFY(verify("org.nextks.calculator", bytes, signature, [] { return false; }));
-        QCOMPARE(parseManifest("org.nextks.calculator", "x86_64", bytes)["version"].toString(), "0.2.0");
+        // The authentic historical schema-1 manifest cannot authorize a schema-2 plan.
+        try {
+            parseManifest("org.nextks.calculator", "x86_64", bytes);
+            QFAIL("A legacy manifest without an installation plan was accepted");
+        } catch (const Failure &failure) {
+            QCOMPARE(failure.code, "INVALID_RELEASE");
+        }
         auto altered = bytes;
         altered.replace("0.2.0", "0.2.1");
         QVERIFY(!verify("org.nextks.calculator", altered, signature, [] { return false; }));
@@ -310,29 +325,26 @@ private slots:
             {200, QByteArray(661776, 'x'), {}}};
         const auto discovery = FlatpakRelease::discover("org.nextks.calculator", "x86_64",
             [] { return false; }, [](const QString&, int) {});
-        QVERIFY2(!discovery.contains("code"), qPrintable(discovery.value("message").toString()));
-        QCOMPARE(discovery.value("commit").toString(), QString("67629e9097b2c0b85634452f76c88660d4741415336d267e2982968dc2dc545c"));
+        QCOMPARE(discovery.value("code").toString(), "INVALID_RELEASE");
         QCOMPARE(server.requests, 3);
         QTemporaryDir temporary(QDir::currentPath() + "/tmp/release-digest-XXXXXX");
         QVERIFY(temporary.isValid());
-        const auto downloaded = FlatpakRelease::download("org.nextks.calculator", discovery, temporary.path(),
+        const QVariantMap selected{{"manifest", bytes.toBase64()}, {"signature", signature.toBase64()}, {"arch", "x86_64"}};
+        const auto downloaded = FlatpakRelease::download("org.nextks.calculator", selected, temporary.path(),
             [] { return false; }, [](const QString&, int) {});
-        QCOMPARE(downloaded.value("code").toString(), QString("INTEGRITY_FAILED"));
-        QCOMPARE(server.requests, 4);
+        QCOMPARE(downloaded.value("code").toString(), QString("INVALID_RELEASE"));
+        QCOMPARE(server.requests, 3);
         const auto path = temporary.filePath("application.flatpak");
-        QCOMPARE(FlatpakRelease::validateDownloaded("org.nextks.calculator", discovery, path,
-            [] { return false; }).value("code").toString(), QString("INTEGRITY_FAILED"));
-        auto changed = discovery;
-        changed["commit"] = QString(64, 'a');
-        QCOMPARE(FlatpakRelease::validateDownloaded("org.nextks.calculator", changed, path,
+        QCOMPARE(FlatpakRelease::validateDownloaded("org.nextks.calculator", selected, path,
             [] { return false; }).value("code").toString(), QString("INVALID_RELEASE"));
-        changed = discovery;
+        QVERIFY(!QFileInfo::exists(path));
+        auto changed = selected;
         changed["signature"] = QByteArray("fake").toBase64();
         QCOMPARE(FlatpakRelease::validateDownloaded("org.nextks.calculator", changed, path,
             [] { return false; }).value("code").toString(), QString("FLATPAK_UNTRUSTED"));
-        QCOMPARE(FlatpakRelease::validateDownloaded("org.nextks.calculator", discovery, path,
+        QCOMPARE(FlatpakRelease::validateDownloaded("org.nextks.calculator", selected, path,
             [] { return true; }).value("code").toString(), QString("CANCELLED"));
-        QCOMPARE(server.requests, 4);
+        QCOMPARE(server.requests, 3);
     }
     void invalidSignatureCannotReachDownload()
     {

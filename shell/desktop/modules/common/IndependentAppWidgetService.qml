@@ -145,7 +145,14 @@ QtObject {
         repeat: true
         running: PlatformClient.connected
         triggeredOnStart: true
-        onTriggered: { service.reload("calendar"); service.reload("weather") }
+        onTriggered: service.reload("calendar")
+    }
+    property Timer weatherPoll: Timer {
+        interval: 300000
+        repeat: true
+        running: PlatformClient.connected
+        triggeredOnStart: true
+        onTriggered: service.reload("weather")
     }
     property Connections transport: Connections {
         target: PlatformClient

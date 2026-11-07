@@ -64,7 +64,6 @@
     "kos-settings.window-config",
     "kos-settings.native-genie-upgrade",
     "kos-settings.backend-modules",
-    "kos-settings.app-store",
     "kos-settings.independent-apps",
     "kos-settings.flatpak-release",
     "kos-settings.flatpak-compatibility",
@@ -84,6 +83,7 @@
     "kos-ui.widget-resize"
   ],
   "headless": [
+    "kos-shell.weather-refresh",
     "kos-shell.stage-visibility-qml",
     "kos-shell.dock-native-target",
     "kos-shell.dock-selection-highlight",

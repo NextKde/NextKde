@@ -1,8 +1,14 @@
 # 独立 NextKde 应用
 
+**安装边界：原生版与 Flatpak 版允许共存。** Settings 的“安装／打开／卸载”只看当前
+Flatpak 库存；原生程序、桌面入口、源码安装记录均不得阻止查询、计划或安装。
+旧原生清理是独立可选操作，绝不是安装 Flatpak 的前置条件。
+卸载入口：点击应用图标或名称展开详情 →“卸载”→确认；仅删除选中的用户级 Flatpak，
+保留个人资料、配置和原生应用。系统级或多份 Flatpak 须由对应管理器明确处理。
+
 Calendar、Calculator、Weather 合用独立的 `NextKde/kos-apps` 源码仓库与版本；
 ListenFree 继续使用自己的独立仓库。
-KMusic 继续使用原有安装控制器，不经过这里的安装器。
+KMusic 改用统一 Flatpak 控制器（`org.nextkde.KMusic`），不再识别或打开旧原生安装。
 推荐后端为下述用户级 Flatpak。显式选择源码安装时，Settings 与独立仓库随代码分发
 同一份 `tools/app-installer.py`，只依赖 Python 3 标准库，不下载或执行替代安装器。
 
@@ -25,7 +31,7 @@ Todo 已整合进 Calendar 的提醒事项视图，不再提供独立启动入�
 `org.nextkde.Weather` 是不同的旧应用，不是升级来源。允许 breaking change：新版 source
 所有权、原生配置／资料／状态及 Calendar 服务均隔离，不读取、复制或合并旧 profile。
 Settings 只管理当前 ID，已移除 remove-retired。旧程序及个人资料由单独的
-`tools/purge-legacy-apps.py` 人工显式删除，默认仅预览；无法确权的 core／系统文件和共享资料
+`tools/maintenance/purge-legacy-apps.py` 人工显式删除，默认仅预览；无法确权的 core／系统文件和共享资料
 保留并报告，不猜路径删除。参见 [边界、确切路径与清理用法](ProfileMigration.md) 和
 [人工验收矩阵](ProfileMigrationAcceptance.md)。旧的三个单应用 GitHub 仓库已删除，
 改用 NextKde/kos-apps；本次 breaking 修改尚未发布签名 Release。
@@ -59,14 +65,15 @@ GitHub 包更新。Flatpak 管理文件及 ref，外部 Flatpak 工具能卸载�
 源码 revision 与架构表；每个包锁定 ref、OSTree commit、附件名、字节大小和 SHA256。
 对应清单名加 `.sig` 签原始清单字节，包内 OSTree commit 也必须签名。
 公钥与完整主密钥指纹通过经过审核的 core 版本内置在 `FlatpakTrustPolicy.h`，不从同一 Release
-或包内建立信任。运行依赖增加 `gpgv`。当前已在 core 策略中为四款应用嵌入专用发布者公钥，
+或包内建立信任。运行依赖增加 `gpgv`。当前已在 core 策略中为五款应用嵌入专用发布者公钥，
 主指纹为 `3751DC833ED4BC7E797A9766ADF7411B531A56B4`；尚无正式签名 Release。
 密钥在本机专用目录生成，不是 CI secret，也尚未通过受信 core 版本发行。
 runtime 专用策略于 2026-11-05 按[官方安装文档](https://docs.flathub.org/docs/for-users/installation)
 及其 HTTPS 仓库文件审核，接受 `https://dl.flathub.org/repo/` 与完整主指纹
 `6E5C05D979C76DAF93C081354184DD4D907A7CAE`，主密钥于 2027-06-14 到期。
 此项仅授权运行库，不接受 Flathub 应用更新；未知额外主密钥、关闭校验或其他 URL 仍拒绝。
-用户须自行配置来源，Settings 不自动添加。签名包安装／更新仍待验收，不自动回退源码。
+用户点击安装／更新后，缺少依赖来源时由 Settings 自动准备，不弹配置窗口、不要求终端操作。
+仅查询库存或检查更新不改来源；正常下载确认仍保留，签名包安装／更新仍待人工验收。
 
 显式检查更新只查固定仓库最新稳定 Release，校验唯一附件、签名、tag／版本和本机架构 stable ref。
 元数据上限 256 KiB、签名 64 KiB、包 2 GiB；下载只允许固定 GitHub HTTPS 端点与附件 CDN，
@@ -78,7 +85,7 @@ runtime 专用策略于 2026-11-05 按[官方安装文档](https://docs.flathub.
 候选绑定真实本地安装快照。低于已装 AppStream 版本、无法解析已装版本、同版本不同 commit 均拒绝；
 首次安装没有历史基准，不声称完全防止旧签名重放。更新要求现有 commit 的发布者签名通过核验，
 且 origin 为开启校验、没有在线 URL 的本地 bundle 来源，不能接管第三方在线源安装。
-新安装遇到旧原生可执行文件／桌面入口／ownership 冲突会拒绝，不自动迁移；系统级／多份／其他分支或架构／
+新安装不检查原生可执行文件／桌面入口／ownership，也不迁移原生资料；Flatpak 系统级／多份／其他分支或架构／
 并发状态变化都不会静默解决。
 
 下载包之前，后端通过隔离且有时限的 `kos-apps` 子进程检查签名包事务的销毁，不执行安装。
@@ -96,8 +103,12 @@ runtime 专用策略于 2026-11-05 按[官方安装文档](https://docs.flathub.
 
 包的 app/ref/commit 必须与签名清单一致，禁止嵌入在线 origin 或 runtime-repo URL；显式向 libflatpak
 传入认可公钥，认证前后检查完整计划。目标必须是锁定 commit 的 INSTALL_BUNDLE，拒绝其他应用或卸载。
-runtime 安装／更新及复用的基础 runtime 要求单独认可且已配置的用户源，精确 HTTPS URL、commit／summary
-校验及全部有效主密钥指纹都要符合策略，不自动添加在线源。运行时仍须有分发渠道，例如独立认可的现有提供方。
+按 ID／架构／分支检查已安装的 Flatpak 运行库，优先用户级、再系统级；匹配且来源受认可则复用，
+不要求再配置同一份用户源。原生 Qt／KDE 库不计入复用。计划记录安装范围、origin、commit，
+部署前再次核对；只明确加入缺少的依赖，不顺带升级已有兼容组件。
+缺少组件时自动准备已审核的用户级 Flathub 来源，精确 URL、公钥及 commit／summary 校验仍须符合策略。
+不覆盖已有源。用户只需正常确认下载，复用项显示“已安装，无需下载”，不计入新增占用。
+来源准备可能在取消安装后保留；不承诺取消会回滚配置。
 
 libflatpak 在事务 ready 前可能创建**无在线 URL 的本地 origin 记录并导入传入公钥**，拒绝／取消后可能留下，
 不假称会回滚；这不等于需要托管应用源。下载加部署总时限为六十分钟，伴随事务进程按上述方式受监督。
@@ -220,7 +231,7 @@ flatpak --user uninstall org.nextks.calculator
 | 下载失败 | 断网、404、限流、TLS 错误、停滞／慢速传输和临时 5xx 有明确且可操作的提示；重试／时限有效，半包不部署 |
 | 取消／空间不足 | 分别在退避、下载、部署时取消，检查真实安装状态和半包；尚未发生部署变更时旧应用保留，磁盘满有诊断 |
 | 非法包 | 清单／包篡改、未知密钥、错误签名、错误 app／arch／branch／commit 和越界重定向均在应用部署前拒绝 |
-| runtime／归属冲突 | 缺失或未认可 runtime、意外事务／远端、系统／重复 ref、原生入口冲突和外部并发变更不被静默接管 |
+| runtime／归属冲突 | 缺失或未认可 runtime、意外事务／远端、系统／重复 ref 和外部 Flatpak 并发变更不被静默接管 |
 | 外部卸载 | Settings 卸载后检查外部 Flatpak，再反向操作；Settings 刷新状态，个人数据和共享 runtime 保留 |
 | Calendar | 后台权限拒绝／部分允许／超时／允许、关窗、重新登录、提醒激活与重复服务拒绝；原生数据不受影响 |
 | ListenFree | portal 选文件后重启访问、播放／跳转／音频设备、MPRIS、凭据保存失败／退出账号和网页登录不可用提示，使用隔离非个人输入 |

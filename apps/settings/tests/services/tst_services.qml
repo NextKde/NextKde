@@ -8,7 +8,7 @@ TestCase {
     when: windowShown
     visible: true
     width: 760
-    height: 300
+    height: 640
     QtObject {
         id: bridge
         property int starts: 0
@@ -24,6 +24,8 @@ TestCase {
         property var music: ({available: true, installed: false, busy: false})
         property var apps: []
         property bool anyBusy: false
+        property bool hasActiveMutation: false
+        property int refreshes: 0
         property string lastId: ""
         property int checks: 0
         property int updates: 0
@@ -31,7 +33,11 @@ TestCase {
         property int opens: 0
         property int removals: 0
         property int cancellations: 0
-        function refresh() {}
+        property int confirmations: 0
+        property string confirmedPlan: ""
+        signal changed()
+        function confirmPlan(id, planId) { confirmations++; lastId = id; confirmedPlan = planId }
+        function refresh() { refreshes++ }
         function install(id) { installs++; lastId = id || "kmusic" }
         function open(id) { opens++; lastId = id || "kmusic" }
         function uninstall(id) { removals++; lastId = id || "kmusic" }
@@ -46,6 +52,7 @@ TestCase {
         Settings.ServicesSettingsPage {
             width: 700
             height: implicitHeight
+            selectedCategory: store ? 0 : 1
             colors: ({card: "#222222", primaryText: "#ffffff", secondaryText: "#aaaaaa", accent: Qt.rgba(10/255, 132/255, 1, 1)})
         }
     }
@@ -55,6 +62,7 @@ TestCase {
         I18n.language = "en"
         fakeStore.music = {available: true, installed: false, busy: false}
         fakeStore.installs = fakeStore.opens = fakeStore.removals = fakeStore.cancellations = 0
+        fakeStore.confirmations = 0; fakeStore.confirmedPlan = ""
         fakeStore.apps = []; fakeStore.anyBusy = false; fakeStore.lastId = ""; fakeStore.checks = fakeStore.updates = 0
     }
     function snapshot(state) { bridge.wallpaperSnapshotChanged({spatialResources: state}) }
@@ -130,50 +138,6 @@ TestCase {
         verify(corner.y <= page.height)
         grabImage(page).save("extensions-" + data.tag + ".png")
     }
-    function test_music_install_open_cancel_and_uninstall_confirmation() {
-        const page = createTemporaryObject(factory, this, {bridge: bridge, store: fakeStore})
-        const action = findChild(page, "kmusicAction")
-        const secondary = findChild(page, "kmusicActionSecondary")
-        compare(action.text, "Install")
-        verify(waitForRendering(page))
-        mouseClick(action, action.width / 2, action.height / 2)
-        compare(fakeStore.installs, 1)
-        fakeStore.music = {available: true, installed: false, busy: true, stage: "build"}
-        compare(action.enabled, false)
-        compare(findChild(page, "kmusicStatus").text, "Building KMusic…")
-        verify(waitForRendering(page))
-        mouseClick(secondary, secondary.width / 2, secondary.height / 2)
-        compare(fakeStore.cancellations, 1)
-        fakeStore.music = {available: true, installed: true, busy: false}
-        compare(action.text, "Open")
-        verify(waitForRendering(page))
-        mouseClick(action, action.width / 2, action.height / 2)
-        compare(fakeStore.opens, 1)
-        mouseClick(secondary, secondary.width / 2, secondary.height / 2)
-        compare(fakeStore.removals, 0)
-        const confirmation = findChild(page, "kmusicUninstallDialog")
-        verify(confirmation.visible)
-        confirmation.accept()
-        compare(fakeStore.removals, 1)
-    }
-    function test_music_download_feedback() {
-        const page = createTemporaryObject(factory, this, {store: fakeStore})
-        fakeStore.music = {available: true, busy: true, stage: "download", attempt: 3, maxAttempts: 5, elapsedSeconds: 305}
-        compare(findChild(page, "kmusicStatus").text, "Downloading KMusic… Attempt 3/5 (up to 5 minutes each)")
-        compare(findChild(page, "kmusicElapsed").text, "Elapsed: 5:05")
-        fakeStore.music = {available: true, busy: true, stage: "retry-download", attempt: 4, maxAttempts: 5}
-        compare(findChild(page, "kmusicStatus").text, "Source download failed. Retrying… Attempt 4/5")
-        fakeStore.music = {available: true, busy: true, stage: "build"}
-        verify(findChild(page, "kmusicBuildHint").visible)
-        compare(findChild(page, "kmusicStatus").text, "Building KMusic…")
-        fakeStore.music = {available: true, busy: false, code: "DOWNLOAD_TIMEOUT", attempt: 5}
-        compare(findChild(page, "kmusicError").text, "Download timed out after 5 attempt(s). Check your connection and try again.")
-        verify(findChild(page, "kmusicAction").enabled)
-        compare(findChild(page, "kmusicStatus").visible, false)
-        I18n.language = "zh-CN"
-        compare(findChild(page, "kmusicError").text, "下载超时，已尝试 5 次。请检查网络后重试。")
-    }
-
     function appState(id, extra) {
         return Object.assign({id: id, name: id, description: "", available: true, statusKnown: true, managed: true, installed: true, busy: false, version: "1.0", latestVersion: "2.0", updateAvailable: true}, extra || {});
     }
@@ -182,11 +146,27 @@ TestCase {
         const page = createTemporaryObject(factory, this, {store: fakeStore});
         tryVerify(function() { return !!findChild(page, "calendarAction") });
         findChild(page, "calendarAction").clicked();
-        const installation = findChild(page, "appInstallDialog");
-        verify(installation.visible); compare(fakeStore.installs, 0);
-        installation.reject(); compare(fakeStore.installs, 0);
+        compare(fakeStore.lastId, "calendar"); compare(fakeStore.installs, 1);
+        // Install first prepares a plan. Dismissing it must not confirm deployment.
+        fakeStore.apps = [appState("calendar", {installed: false, flatpak: {plan: {planId: "first", operation: "install"}}}), appState("calculator"), appState("weather"), appState("listenfree")];
+        fakeStore.changed();
+        const installation = findChild(page, "flatpakPlanDialog");
+        tryCompare(installation, "visible", true);
+        compare(fakeStore.confirmations, 0);
+        installation.reject();
+        tryCompare(installation, "visible", false);
+        tryCompare(page, "planId", "");
+        compare(fakeStore.confirmations, 0);
+        fakeStore.changed();
+        compare(installation.visible, false); // a dismissed plan stays dismissed
         findChild(page, "calendarAction").clicked();
-        installation.accept(); compare(fakeStore.lastId, "calendar"); compare(fakeStore.installs, 1);
+        fakeStore.apps = [appState("calendar", {installed: false, flatpak: {plan: {planId: "second", operation: "install"}}}), appState("calculator"), appState("weather"), appState("listenfree")];
+        fakeStore.changed();
+        tryCompare(installation, "visible", true);
+        findChild(installation, "flatpakPlanConfirm").clicked();
+        compare(fakeStore.lastId, "calendar"); compare(fakeStore.confirmations, 1);
+        compare(fakeStore.confirmedPlan, "second");
+        tryCompare(page, "planId", "");
         findChild(page, "weatherAction").clicked(); compare(fakeStore.lastId, "weather"); compare(fakeStore.opens, 1);
         findChild(page, "calculatorCheckUpdates").clicked(); compare(fakeStore.lastId, "calculator"); compare(fakeStore.checks, 1);
         findChild(page, "listenfreeUpdate").clicked(); compare(fakeStore.lastId, "listenfree"); compare(fakeStore.updates, 1);
@@ -213,11 +193,77 @@ TestCase {
         compare(findChild(page, "weatherVersion").text, "Installed: 1.0 · Latest: 2.0");
     }
 
-    function test_music_unpublished_release() {
-        fakeStore.music = {available: false, installed: false, busy: false}
-        const page = createTemporaryObject(factory, this, {store: fakeStore})
-        compare(findChild(page, "kmusicAction").enabled, false)
-        compare(findChild(page, "kmusicStatus").text, "The installation release has not been published yet")
+    function planState(planId, busy) {
+        return appState("calculator", {name: "Calculator", installed: false, busy: !!busy,
+            flatpak: {known: true, busy: !!busy, plan: {planId: planId, operation: "install", version: "0.2.2",
+                operationSet: [{role: "application", downloadBytes: 1024}, {role: "runtime", downloadBytes: 2048}]}}});
     }
-
+    function test_cached_plan_does_not_open_on_navigation_or_refresh() {
+        fakeStore.apps = [planState("cached")];
+        let page = factory.createObject(this, {store: fakeStore});
+        verify(page);
+        fakeStore.changed();
+        const dialog = findChild(page, "flatpakPlanDialog");
+        compare(dialog.visible, false);
+        page.destroy();
+        wait(0);
+        page = createTemporaryObject(factory, this, {store: fakeStore});
+        fakeStore.changed();
+        compare(findChild(page, "flatpakPlanDialog").visible, false);
+    }
+    function test_escape_then_reenter_requires_another_install_click() {
+        fakeStore.apps = [planState("")];
+        let page = factory.createObject(this, {store: fakeStore});
+        verify(page);
+        findChild(page, "calculatorAction").clicked();
+        fakeStore.apps = [planState("first")];
+        fakeStore.changed();
+        let dialog = findChild(page, "flatpakPlanDialog");
+        tryCompare(dialog, "visible", true);
+        verify(dialog.height < 440, "confirmation follows content height");
+        grabImage(dialog.contentItem.parent).save("flatpak-plan-confirmation.png");
+        dialog.forceActiveFocus();
+        keyClick(Qt.Key_Escape);
+        tryCompare(dialog, "visible", false);
+        compare(fakeStore.confirmations, 0);
+        page.destroy();
+        wait(0);
+        page = createTemporaryObject(factory, this, {store: fakeStore});
+        fakeStore.changed();
+        dialog = findChild(page, "flatpakPlanDialog");
+        compare(dialog.visible, false);
+        findChild(page, "calculatorAction").clicked();
+        fakeStore.changed();
+        compare(dialog.visible, false); // cached first plan cannot satisfy a new click
+        fakeStore.apps = [planState("second")];
+        fakeStore.changed();
+        tryCompare(dialog, "visible", true);
+        findChild(dialog, "flatpakPlanConfirm").clicked();
+        compare(fakeStore.confirmations, 1);
+        compare(fakeStore.confirmedPlan, "second");
+    }
+    function test_leaving_during_preparation_does_not_open_on_return() {
+        fakeStore.apps = [planState("")];
+        let page = factory.createObject(this, {store: fakeStore});
+        findChild(page, "calculatorAction").clicked();
+        fakeStore.apps = [planState("", true)];
+        fakeStore.changed();
+        page.destroy();
+        wait(0);
+        page = createTemporaryObject(factory, this, {store: fakeStore});
+        fakeStore.apps = [planState("late")];
+        fakeStore.changed();
+        compare(findChild(page, "flatpakPlanDialog").visible, false);
+    }
+    function test_missing_flatpak_shows_actionable_error_and_retry() {
+        I18n.language = "zh-CN";
+        fakeStore.apps = [appState("calculator", {installed: false, available: false, statusKnown: false,
+            flatpak: {known: false, error: "missing", errorCode: "FLATPAK_NOT_INSTALLED"}})];
+        const page = createTemporaryObject(factory, this, {store: fakeStore});
+        verify(findChild(page, "calculatorStatus").text.indexOf("未安装 Flatpak") === 0);
+        verify(!findChild(page, "calculatorAction").enabled);
+        const before = fakeStore.refreshes;
+        findChild(page, "calculatorRecheckEnvironment").clicked();
+        compare(fakeStore.refreshes, before + 1);
+    }
 }

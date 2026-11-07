@@ -37,7 +37,13 @@ private slots:
             {"available", true}, {"installation", QVariantMap{}}};
         QSignalSpy finished(&backend, &FlatpakApps::operationFinished);
         QSignalSpy notified(&backend, &FlatpakApps::mutationFinished);
-        QVERIFY(backend.install("org.nextks.calendar"));
+        // Direct installation no longer authorizes deployment. Exercise the
+        // compatibility gate with the explicit plan required by confirmation.
+        QVERIFY(!backend.install("org.nextks.calendar"));
+        const QVariantMap plan{{"appId", "org.nextks.calendar"}, {"operation", "install"},
+            {"selected", QVariantMap{{"scope", "user"}, {"arch", "x86_64"}, {"branch", "stable"}}},
+            {"bundleCommit", QString(64, 'a')}};
+        QVERIFY(backend.deploy("org.nextks.calendar", true, plan));
         QTRY_COMPARE_WITH_TIMEOUT(finished.size(), 1, 10000);
         QCOMPARE(finished.first()[1].toString(), "FLATPAK_INCOMPATIBLE");
         QVERIFY(!backend.busy());

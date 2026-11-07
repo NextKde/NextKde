@@ -24,9 +24,10 @@ public:
     bool busy() const { return !m_activeId.isEmpty(); }
     bool uninstall(const QString& appId);
     bool checkUpdates(const QString& appId);
+    bool setupRuntimeSource(const QString& appId);
     bool update(const QString& appId);
     bool install(const QString& appId);
-    QVariantMap makePlan(const QString& appId, bool installing) const;
+    QVariantMap makePlan(const QString& appId, bool installing, QVariantMap* failure = nullptr) const;
     bool confirmPlan(const QString& appId, const QVariantMap& plan);
     void cancel();
 signals:

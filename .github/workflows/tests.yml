@@ -88,8 +88,8 @@ jobs:
           if [ -z "$base" ] || ! git cat-file -e "$base^{commit}" 2>/dev/null; then
             base=$(git rev-parse HEAD^)
           fi
-          node tools/qmllint-changed.mjs --base "$base"
-          node tools/qml-duplicate-handlers.mjs --base "$base"
+          node tools/ci/qmllint-changed.mjs --base "$base"
+          node tools/ci/qml-duplicate-handlers.mjs --base "$base"
 
   source-release:
     name: source release selection
@@ -108,7 +108,7 @@ jobs:
       - name: Check project contracts and documentation
         run: |
           python3 platform/tests/test_contract.py
-          python3 tools/check-docs.py
+          python3 tools/ci/check-docs.py
 
   tests:
     name: data + platform + logic + headless
@@ -152,7 +152,7 @@ jobs:
       # Virtual outputs with software rendering do not need elevated scheduling.
       - name: Remove privileged scheduling from the CI compositor
         run: |
-          sh tools/ci-prepare-kwin.sh
+          sh tools/ci/ci-prepare-kwin.sh
 
       # Warm Go's build cache across runs. `kos-data-service.go` compiles the
       # whole standard library on a cold cache (>50 s locally, ~1 s warm),
@@ -180,7 +180,7 @@ jobs:
 
       - name: Check required test registrations
         if: ${{ !cancelled() && steps.prepare.outcome == 'success' }}
-        run: python tools/ci_tests.py inventory
+        run: python tools/ci/ci_tests.py inventory
 
       - name: Run data and platform tests
         if: ${{ !cancelled() && steps.prepare.outcome == 'success' }}
@@ -257,7 +257,7 @@ jobs:
 
       - name: Summarise actual test results
         if: always()
-        run: python tools/ci_tests.py report
+        run: python tools/ci/ci_tests.py report
 
       - name: Upload test reports and diagnostics
         if: always()
@@ -378,7 +378,7 @@ jobs:
             # KDE's official mirror avoids Invent's HTTP 403 on hosted runners.
             git clone --quiet --depth 1 --branch "v${version}" \
               https://github.com/KDE/kwin.git ".build/kwin-${version}"
-            python tools/check-kwin-api.py --build-dir .build/kwin \
+            python tools/ci/check-kwin-api.py --build-dir .build/kwin \
               --kwin-headers ".build/kwin-${version}/src"
           done
 

@@ -11,7 +11,7 @@ import unittest
 from unittest.mock import patch
 import urllib.error
 
-spec = importlib.util.spec_from_file_location("source_release", Path(__file__).parents[1] / "source-release.py")
+spec = importlib.util.spec_from_file_location("source_release", Path(__file__).parents[1] / "release/source-release.py")
 release = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(release)
 
@@ -147,9 +147,9 @@ class CliTests(unittest.TestCase):
     def test_version_reports_installed_and_source_without_creating_build_directory(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
-            (root / "tools").mkdir()
+            (root / "tools/release").mkdir(parents=True)
             original = Path(__file__).parents[1]
-            for name in ("kosctl", "source-release.py"):
+            for name in ("kosctl", "release/source-release.py"):
                 shutil.copy(original / name, root / "tools" / name)
             (root / "VERSION").write_text("0.2.0-dev\n")
             record = root / "installed" / "share" / "kos" / "release.json"

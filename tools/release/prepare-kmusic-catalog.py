@@ -34,7 +34,7 @@ def release(revision, fetch=None):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("revision", help="Reviewed commit containing both installer files")
-    parser.add_argument("--output", type=Path, default=Path(__file__).resolve().parents[1]
+    parser.add_argument("--output", type=Path, default=Path(__file__).resolve().parents[2]
                         / "apps/settings/app-store/catalog.json")
     args = parser.parse_args()
     # Finish every download before touching the currently approved catalogue.

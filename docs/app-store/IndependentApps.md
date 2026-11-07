@@ -1,9 +1,17 @@
 # Independent NextKde applications
 
+**Installation boundary:** Native and Flatpak versions may coexist. Settings uses
+only current Flatpak inventory for Install/Open/Uninstall; native executables,
+desktop entries and source ownership never block discovery, planning or deployment.
+Native cleanup is optional and independent, never a prerequisite for Flatpak.
+To uninstall, click the app icon/name to expand details, then Uninstall and confirm.
+This removes only the selected user Flatpak, keeping personal data and native apps.
+System installations and ambiguous multiple Flatpak refs require their own manager.
+
 Calendar, Calculator and Weather share the independent `NextKde/kos-apps` source
 repository and release version. ListenFree remains in its own repository.
-KMusic retains its existing installation controller and is not handled by this
-installer. The recommended backend is user Flatpak as described below. For explicit
+KMusic now uses the same Settings Flatpak controller with `org.nextkde.KMusic`;
+its native installation is not opened or counted as a Flatpak installation. The recommended backend is user Flatpak as described below. For explicit
 source installation, Settings and the independent repositories ship the same
 Python 3 standard-library installer, `tools/app-installer.py`; that path never
 fetches or executes a replacement installer.
@@ -31,7 +39,7 @@ applications, not upgrade sources. Breaking change is intentional: current
 source ownership, native preferences/data/state and Calendar service use new
 identities; old profiles are not read, copied or merged. Settings only manages
 current IDs and has no remove-retired operation. Legacy program AND personal-data
-deletion is the separate explicit `tools/purge-legacy-apps.py`, preview by default.
+deletion is the separate explicit `tools/maintenance/purge-legacy-apps.py`, preview by default.
 Unproven core/system ownership and shared data are retained, not guessed. See
 [boundaries, exact paths and cleanup](ProfileMigration.md) and
 [human acceptance](ProfileMigrationAcceptance.md).
@@ -86,9 +94,10 @@ accepts `https://dl.flathub.org/repo/` with primary fingerprint
 [official setup documentation](https://docs.flathub.org/docs/for-users/installation)
 and its HTTPS repository file. The primary expires on 2027-06-14. This authorizes
 runtimes only, not application updates from Flathub; unknown additional primary
-keys, disabled verification and other URLs remain refused. Users must configure
-the source separately; Settings does not add it. Signed bundle installation and
-update acceptance remain pending.
+keys, disabled verification and other URLs remain refused. An explicit Install/Update
+request automatically prepares the pinned runtime source only if dependencies are
+missing. No configuration dialog or terminal step is required. Inventory and
+standalone update discovery do not change sources. Runtime acceptance remains pending.
 
 Explicit update checks contact only the fixed repository's latest stable GitHub
 Release, validate unique attachments, signatures, tag/version and native stable
@@ -136,10 +145,17 @@ The backend checks bundle identity/ref/commit and rejects embedded online app or
 runtime-repository URLs. It passes explicit trusted key bytes to libflatpak and
 checks the resolved plan before/after authentication. The target must be an exact
 INSTALL_BUNDLE operation; extra applications/uninstalls are refused. Runtime
-installs/updates and reused base runtimes require separately reviewed, configured
-user runtime sources (exact HTTPS URL, commit/summary verification and approved
-valid primary keys). No online source is added automatically. Runtime hosting is
-still necessary somewhere, e.g. an independently trusted existing provider.
+installs use reviewed user runtime sources (exact HTTPS URL, commit/summary
+verification and valid primary keys). Compatible installed user/system runtimes
+are reused without requiring a duplicate user source: ID, architecture and branch
+must match, and their installed origin is checked. Scope/origin/commit are retained
+in the plan and rechecked before deployment. Native host libraries are never reused.
+Missing dependencies trigger automatic preparation of the pinned Flathub runtime
+source, without overwriting an existing source. This is internal to Install/Update,
+not a prerequisite the user must configure. It can persist after plan cancellation.
+Only the normal download confirmation remains; reused dependencies count as zero
+download and zero additional disk usage. Transactions explicitly add planned
+missing refs and suppress automatic unrelated runtime/extension updates.
 
 Libflatpak may create a **local URL-less origin record and import the supplied
 public key before transaction readiness**; cancellation/refusal can leave that
@@ -329,7 +345,7 @@ profiles, credentials or an existing production installation.
 | Download failure | Offline, 404, rate limiting, TLS failure, stalled/slow transfer and transient 5xx show distinct actionable errors; retry/deadline limits hold and no partial package is deployed |
 | Cancellation / space | Cancel during retry wait, download and deployment; inspect actual installed state and partial files, preserving the previous app where deployment has not changed it; verify disk-full diagnostics |
 | Invalid package | Altered manifest/bundle, unknown key, invalid signature, wrong app/arch/branch/commit and off-allowlist redirects are refused before app deployment |
-| Runtime / ownership conflict | Missing or unapproved runtimes, unexpected operations/remotes, system/duplicate refs, native entry conflicts and concurrent external changes are refused without silent takeover |
+| Runtime / ownership conflict | Missing or unapproved runtimes, unexpected operations/remotes, system/duplicate refs, concurrent external Flatpak changes are refused without silent takeover |
 | External uninstall | Remove through Settings and inspect external Flatpak, then reverse the direction; Settings refreshes state, app data and shared runtimes remain |
 | Calendar | Exercise background permission denial/partial approval/timeout/approval, closing the window, relogin, reminder activation and duplicate-service rejection; native data stays untouched |
 | ListenFree | Check portal-selected files after restart, playback/seeking/audio devices, MPRIS, credential-save failure/logout and the excluded web-login message with isolated non-personal inputs |

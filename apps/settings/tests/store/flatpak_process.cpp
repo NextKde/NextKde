@@ -35,7 +35,7 @@ private slots:
         const auto driver = temporary.filePath("supervisor-driver");
         QVERIFY(QFile::copy(QCoreApplication::applicationFilePath(), driver));
         if (scenario != "missing") {
-            QFile helper(temporary.filePath("kos-apps"));
+            QFile helper(temporary.filePath("kos-flatpak-worker"));
             QVERIFY(helper.open(QIODevice::WriteOnly | QIODevice::NewOnly));
             const QByteArray script = R"(#!/usr/bin/python3
 import json, os, signal, sys, time
