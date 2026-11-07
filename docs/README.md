@@ -38,6 +38,7 @@ ownership; they are not chronological work logs or proof that a feature passed r
 | Wallpaper ownership and theme format | [Wallpaper](WallpaperArchitecture.md), [theme packs](ThemePackFormat.md), [depth engine](DepthEngine.md) |
 | Network, PIM and weather | [Network](NetworkArchitecture.md), [PIM](PimArchitecture.md), [weather](WeatherArchitecture.md) |
 | Independent applications and lifecycle | [Applications](../apps/README.md), [ListenFree](https://github.com/NextKde/ListenFree) |
+| Input method integration and compatibility | [Input method integration](InputMethodIntegration.md) |
 | Reusable QML components, Gallery and sidebar demo | [nextkdeAppDemo](https://github.com/NextKde/nextkdeAppDemo) |
 
 The component Gallery and sidebar demo are maintained in `nextkdeAppDemo`. Their preview

@@ -2170,9 +2170,30 @@ nix_status() {
     done
 }
 
+deploy_shell() {
+    local shell_config="$config_dir/quickshell/kos"
+    local shell_qml_src="$project_dir/shell"
+    local shared_qml_src="$project_dir/shared/qml"
+    uv run python "$project_dir/tools/deploy/deploy-shell-qml.py" deploy \
+        --shell "$shell_qml_src" --shared "$shared_qml_src" \
+        --destination "$shell_config" || return 1
+    if [[ -d "$build_dir/qml/Kos/SurfaceShape" ]]; then
+        mkdir -p "$shell_config/Kos"
+        rm -rf "$shell_config/Kos/SurfaceShape"
+        cp -rL --no-preserve=mode "$build_dir/qml/Kos/SurfaceShape" "$shell_config/Kos/"
+    fi
+    if [[ -d "$prefix/share/kos/settings" ]]; then
+        cp -rL --no-preserve=mode "$project_dir/apps/settings/pages" "$prefix/share/kos/settings/"
+    fi
+    if [[ -d "$prefix/share/shared/qml" ]]; then
+        cp -rL --no-preserve=mode "$shared_qml_src/." "$prefix/share/shared/qml/"
+    fi
+}
+
 case "${1:-}" in
     doctor) doctor ;;
     build) build ;;
+    deploy) deploy_shell ;;
     install)
         case "${2:-}" in
             "") install_all ;;

@@ -35,6 +35,7 @@
 | 壁纸所有权及主题格式 | [壁纸](WallpaperArchitecture.zh-CN.md)、[主题包](ThemePackFormat.zh-CN.md)、[深度引擎](DepthEngine.md) |
 | 网络、PIM、天气 | [网络](NetworkArchitecture.md)、[PIM](PimArchitecture.md)、[天气](WeatherArchitecture.md) |
 | 独立应用与生命周期 | [应用](../apps/README.zh-CN.md)、[ListenFree](https://github.com/NextKde/ListenFree) |
+| 输入法集成与应用兼容性 | [输入法集成](InputMethodIntegration.zh-CN.md) |
 | 可复用 QML 组件、Gallery 与侧栏 Demo | [nextkdeAppDemo](https://github.com/NextKde/nextkdeAppDemo) |
 
 组件 Gallery 与侧栏 Demo 由 `nextkdeAppDemo` 独立维护，NextKde 不再附带它们的预览入口。

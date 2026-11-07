@@ -16,6 +16,7 @@ import qs.desktop.modules.common
 import qs.desktop.modules.platform
 import qs.desktop.modules.shortcuts
 import qs.desktop.modules.weather
+import qs.desktop.modules.inputmethod
 
 Item {
     id: shell
@@ -760,6 +761,8 @@ Item {
     NotificationCenter {
         id: notificationCenter
     }
+
+    InputMethodPopup {}
 
     DeskCenter {}
     DesktopLyrics {}
