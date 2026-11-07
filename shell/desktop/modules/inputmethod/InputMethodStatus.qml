@@ -31,8 +31,75 @@ Item {
     height: implicitHeight
 
     readonly property real cellExtraWidth: Math.max(0, implicitWidth - 24)
+    readonly property var targetScreen: root.QsWindow?.window?.screen ?? ScreenLifecycle.activeScreen
 
     property bool menuOpen: false
+
+    QtObject {
+        id: menuCoordinatorAdapter
+        property bool visible: root.menuOpen
+        property bool dismissOnGlobalPointerPress: true
+        property int globalDismissGraceMs: 150
+        function hide() {
+            root.menuOpen = false
+        }
+    }
+
+    onMenuOpenChanged: {
+        if (root.menuOpen) {
+            ContextMenuCoordinator.open(menuCoordinatorAdapter)
+        } else {
+            ContextMenuCoordinator.release(menuCoordinatorAdapter)
+        }
+    }
+
+    Connections {
+        target: WindowService
+        function onActiveWindowIdChanged() {
+            if (root.menuOpen)
+                root.menuOpen = false
+        }
+    }
+
+    Connections {
+        target: ContextMenuCoordinator
+        function onActiveMenuChanged() {
+            if (ContextMenuCoordinator.activeMenu
+                    && ContextMenuCoordinator.activeMenu !== menuCoordinatorAdapter
+                    && root.menuOpen) {
+                root.menuOpen = false
+            }
+        }
+    }
+
+    Shortcut {
+        sequence: "Escape"
+        enabled: root.menuOpen
+        onActivated: root.menuOpen = false
+    }
+
+    // Full-screen transparent dismissal catcher on Top layer for clicks outside popup
+    PanelWindow {
+        id: dismissalCatcher
+        screen: root.targetScreen
+        visible: ScreenLifecycle.outputAvailable && root.targetScreen !== null && root.menuOpen
+        color: "transparent"
+        exclusionMode: ExclusionMode.Ignore
+        WlrLayershell.layer: WlrLayer.Top
+        WlrLayershell.namespace: "quickshell-im-status-backdrop"
+        WlrLayershell.keyboardFocus: WlrKeyboardFocus.None
+        anchors {
+            top: true
+            bottom: true
+            left: true
+            right: true
+        }
+        MouseArea {
+            anchors.fill: parent
+            cursorShape: Qt.ArrowCursor
+            onPressed: root.menuOpen = false
+        }
+    }
 
     SelectionHighlight {
         objectName: "inputmethod-status-selection-highlight"
@@ -160,8 +227,6 @@ Item {
             ambientPrimary: WallpaperColorSource.primary
             ambientSecondary: WallpaperColorSource.secondary
             ambientStrength: 0.35 * AppearanceTokens.glass.ambientMultiplier
-            blurOverrideEnabled: true
-            blurStrength: Math.max(0.40, AppearanceConfigService.effectiveDockBlur)
 
             Rectangle {
                 anchors.fill: parent

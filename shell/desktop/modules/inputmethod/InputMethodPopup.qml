@@ -131,8 +131,6 @@ Scope {
                         ambientPrimary: WallpaperColorSource.primary
                         ambientSecondary: WallpaperColorSource.secondary
                         ambientStrength: 0.35 * AppearanceTokens.glass.ambientMultiplier
-                        blurOverrideEnabled: true
-                        blurStrength: Math.max(0.40, AppearanceConfigService.effectiveDockBlur)
 
                         // Inner plate for text contrast protection
                         Rectangle {
