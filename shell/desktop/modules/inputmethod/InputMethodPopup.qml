@@ -53,7 +53,7 @@ Scope {
 
                 Behavior on openProgress {
                     NumberAnimation {
-                        duration: window.shouldShow ? 100 : 80
+                        duration: window.shouldShow ? 50 : 40
                         easing.type: window.shouldShow ? Easing.OutCubic : Easing.InQuad
                     }
                 }
@@ -73,12 +73,17 @@ Scope {
                     readonly property bool isOnlyTip: !InputMethodService.lookupVisible
                         || InputMethodService.candidates.length === 0
 
+                    readonly property string cleanTipText: {
+                        const raw = InputMethodService.auxText || InputMethodService.preeditText;
+                        return raw ? raw.replace(/\|/g, "").trim() : "";
+                    }
+
                     // Layout placement calculation
                     readonly property real cardW: isOnlyTip
-                        ? Math.max(34, contentColumn.implicitWidth + 20)
+                        ? Math.max(26, contentColumn.implicitWidth + 12)
                         : Math.max(120, contentColumn.implicitWidth + 24)
                     readonly property real cardH: isOnlyTip
-                        ? Math.max(26, contentColumn.implicitHeight + 10)
+                        ? Math.max(22, contentColumn.implicitHeight + 6)
                         : Math.max(34, contentColumn.implicitHeight + 16)
 
                     readonly property var placement: Placement.placeCandidatePopup(
@@ -95,11 +100,6 @@ Scope {
                     height: cardH
 
                     opacity: window.openProgress
-                    scale: 0.95 + 0.05 * window.openProgress
-                    transformOrigin: placement.placedAbove ? Item.Bottom : Item.Top
-                    transform: Translate {
-                        y: (1 - window.openProgress) * (cardContainer.placement.placedAbove ? 4 : -4)
-                    }
 
                     KosCardShadow {
                         cardWidth: glassPanel.width
@@ -109,9 +109,9 @@ Scope {
                         x: glassPanel.x - margin
                         y: glassPanel.y - margin
                         offsetX: 0
-                        offsetY: 6
-                        softness: 20
-                        spread: 2
+                        offsetY: cardContainer.isOnlyTip ? 2 : 6
+                        softness: cardContainer.isOnlyTip ? 8 : 20
+                        spread: cardContainer.isOnlyTip ? 0 : 2
                         opacity: AppearanceTokens.isDarkTheme ? 0.45 : 0.22
                     }
 
@@ -122,6 +122,8 @@ Scope {
                         cornerExponent: cardContainer.isOnlyTip ? 2.0 : AppearanceTokens.shape.cornerExponent
                         blurAnchor: cardContainer
                         useKwinEffect: AppearanceTokens.surface.usesKwinBlur
+                        blurOverrideEnabled: true
+                        blurStrength: AppearanceConfigService.globalBlurStrength
                         scrimEnabled: true
                         scrimLevel: "readable"
                         material: "thick"
@@ -164,9 +166,11 @@ Scope {
 
                                 GlassText {
                                     id: preeditLabel
-                                    text: InputMethodService.auxText
-                                        ? InputMethodService.auxText
-                                        : InputMethodService.preeditText
+                                    text: cardContainer.isOnlyTip
+                                        ? cardContainer.cleanTipText
+                                        : (InputMethodService.auxText
+                                            ? InputMethodService.auxText
+                                            : InputMethodService.preeditText)
                                     font.pixelSize: cardContainer.isOnlyTip ? 13 : 14
                                     font.weight: cardContainer.isOnlyTip ? Font.Bold : Font.Medium
                                     color: ThemeService.foregroundColor
@@ -235,7 +239,7 @@ Scope {
                                                     font.pixelSize: 13
                                                     color: ThemeService.secondaryForegroundColor
                                                     opacity: isSelected ? 0.95 : 0.65
-                                                    anchors.baseline: mainText.baseline
+                                                    anchors.verticalCenter: parent.verticalCenter
                                                 }
 
                                                 GlassText {
@@ -244,6 +248,7 @@ Scope {
                                                     font.pixelSize: 15
                                                     color: ThemeService.foregroundColor
                                                     font.weight: isSelected ? Font.DemiBold : Font.Normal
+                                                    anchors.verticalCenter: parent.verticalCenter
                                                 }
 
                                                 GlassText {
@@ -252,7 +257,7 @@ Scope {
                                                     font.pixelSize: 12
                                                     color: ThemeService.tertiaryForegroundColor
                                                     opacity: 0.65
-                                                    anchors.baseline: mainText.baseline
+                                                    anchors.verticalCenter: parent.verticalCenter
                                                 }
                                             }
 
@@ -344,7 +349,7 @@ Scope {
                                                     font.pixelSize: 13
                                                     color: ThemeService.secondaryForegroundColor
                                                     opacity: isSelected ? 0.95 : 0.65
-                                                    anchors.baseline: vMainText.baseline
+                                                    anchors.verticalCenter: parent.verticalCenter
                                                 }
 
                                                 GlassText {
@@ -353,6 +358,7 @@ Scope {
                                                     font.pixelSize: 15
                                                     color: ThemeService.foregroundColor
                                                     font.weight: isSelected ? Font.DemiBold : Font.Normal
+                                                    anchors.verticalCenter: parent.verticalCenter
                                                 }
 
                                                 GlassText {
@@ -361,7 +367,7 @@ Scope {
                                                     font.pixelSize: 12
                                                     color: ThemeService.tertiaryForegroundColor
                                                     opacity: 0.65
-                                                    anchors.baseline: vMainText.baseline
+                                                    anchors.verticalCenter: parent.verticalCenter
                                                 }
                                             }
 
