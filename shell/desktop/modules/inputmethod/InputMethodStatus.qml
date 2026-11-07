@@ -174,7 +174,7 @@ Item {
         dockHosted: root.dockHosted
         dockEdge: root.dockEdge
         primaryText: (InputMethodService.imName || "输入法") + " (" + root.displayLabel + ")"
-        secondaryText: I18n.tr("左键切换模式，右键弹出菜单")
+        secondaryText: I18n.tr("Left-click to switch modes, right-click to open the menu")
         minimumWidth: 120
     }
 
@@ -296,7 +296,7 @@ Item {
                 // If no dynamic properties loaded yet, show core Rime fallback actions
                 MenuItemDelegate {
                     visible: !InputMethodService.properties || InputMethodService.properties.length <= 1
-                    text: I18n.tr("重新部署 (Rime)")
+                    text: I18n.tr("Redeploy (Rime)")
                     iconName: "system-run"
                     onTriggered: {
                         root.menuOpen = false;
@@ -306,7 +306,7 @@ Item {
 
                 MenuItemDelegate {
                     visible: !InputMethodService.properties || InputMethodService.properties.length <= 1
-                    text: I18n.tr("简繁切换")
+                    text: I18n.tr("Toggle Simplified/Traditional Chinese")
                     iconName: "character-set"
                     onTriggered: {
                         root.menuOpen = false;
@@ -321,7 +321,7 @@ Item {
                 }
 
                 MenuItemDelegate {
-                    text: I18n.tr("输入法设置...")
+                    text: I18n.tr("Input Method Settings...")
                     iconName: "configure"
                     onTriggered: {
                         root.menuOpen = false;
@@ -330,7 +330,7 @@ Item {
                 }
 
                 MenuItemDelegate {
-                    text: I18n.tr("重新加载配置")
+                    text: I18n.tr("Reload Input Method Configuration")
                     iconName: "view-refresh"
                     onTriggered: {
                         root.menuOpen = false;

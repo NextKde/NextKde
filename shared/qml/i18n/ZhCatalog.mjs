@@ -327,6 +327,11 @@ export const catalog = {
     "Status update": "状态更新",
     "WeChat": "微信",
     "Input Method": "输入法",
+    "Left-click to switch modes, right-click to open the menu": "左键切换模式，右键弹出菜单",
+    "Redeploy (Rime)": "重新部署 (Rime)",
+    "Toggle Simplified/Traditional Chinese": "简繁切换",
+    "Input Method Settings...": "输入法设置...",
+    "Reload Input Method Configuration": "重新加载配置",
 
     // bar · 网络指示
     "Wired network": "有线网络",
