@@ -7,7 +7,8 @@ QtObject {
     id: presentation
 
     property var state: ({ candidates: [], lookupVisible: false,
-        preeditVisible: false, auxVisible: false, preeditText: "", auxText: "" })
+        preeditVisible: false, auxVisible: false, preeditText: "", auxText: "",
+        hasPrev: false, hasNext: false, layout: 0, cursorIndex: -1 })
     property var anchor: null
     readonly property bool isOnlyTip: !state.lookupVisible || state.candidates.length === 0
     readonly property bool mapped: motion.mapped
