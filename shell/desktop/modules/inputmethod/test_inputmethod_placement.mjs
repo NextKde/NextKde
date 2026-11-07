@@ -63,6 +63,11 @@ assert.equal(resPointer.source, "kwin-pointer");
 assert.equal(resPointer.x, 2117);
 assert.equal(resPointer.y, 1019);
 
+// An uninitialized spot must not masquerade as an absolute top-left anchor.
+assert.equal(resolveGlobalSpotRect({}, activeWin, kwinPointer).source, "kwin-pointer");
+assert.equal(resolveGlobalSpotRect({}, activeWin, null).source, "fallback-window");
+assert.equal(resolveGlobalSpotRect({ x: NaN, y: undefined }, null, null).source, "fallback-screen");
+
 // 4. Candidate popup placement & Boundary clamping
 const safeBounds = { x: 0, y: 35, width: 1920, height: 1045 }; // top bar reserved 35px
 

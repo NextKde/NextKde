@@ -58,7 +58,10 @@ Scope {
 
                 InputMethodPresentation { id: presentation }
 
-                visible: presentation.mapped
+                // Keep the empty, input-transparent layer surface mapped.
+                // Recreating a full-screen window lets KWin animate its entire
+                // bounds, which makes a caret-sized card travel across screen.
+                visible: ScreenLifecycle.outputAvailable
                 mask: presentation.interactive ? cardInputRegion : emptyRegion
 
                 Region { id: emptyRegion }
@@ -69,6 +72,7 @@ Scope {
 
                 Item {
                     id: cardContainer
+                    visible: presentation.mapped
 
                     readonly property bool isOnlyTip: presentation.isOnlyTip
 

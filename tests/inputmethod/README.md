@@ -13,6 +13,12 @@ size changes settle over 100 ms, with text anchored at the padded top left.
 Caret tracking remains immediate and the input region closes as soon as exit
 starts. Screen handoff fades the old panel at its previous anchor.
 
+The empty full-screen layer surface stays mapped with an empty input region;
+only the card is revealed. This prevents window-map effects from moving the
+whole surface. Each opening resolves a fresh compositor caret before revealing
+content, with a 180 ms upper bound and cancellation of late replies. Missing
+spot coordinates use the pointer/window fallback rather than absolute `(0, 0)`.
+
 Run **only in a dedicated VM or hosted CI**:
 
 ```sh
