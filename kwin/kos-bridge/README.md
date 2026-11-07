@@ -39,9 +39,11 @@ controls use their respective native paths instead.
   *cover* the application's own controls rather than float above them.
 - Client-side decorated windows take their tint from the title bar's own
   pixels. Native KOS decorations are excluded before sampling begins.
-- **Fails closed, on the tint only.** If the title bar cannot be read yet —
-  the window has not painted, or it is covered — no panel is drawn on that
-  frame and the read is retried. The panel never appears with a guessed tint.
+- **Same-frame tint, without a guessed first color.** A fully visible titlebar
+  gutter is copied and reduced to a median color on the GPU before drawing the
+  panel in that same paint. The first cover need not wait for CPU readback.
+  Unusable pixels hide both layers unless a previously validated fallback exists;
+  input stays with the client until CPU confirmation, avoiding invisible hit areas.
 - Skips screen-space panels and sampling while the window is transformed,
   faded, dimmed or desaturated: those pixels are not its unmodified title bar.
   Neutral offscreen source captures still include the controls during animations.
@@ -65,6 +67,20 @@ legacy overlay windows (excluding native KOS decorations):
   preferred RGB strip is at most 32 device pixels wide; the fallback is at the
   opposite end outside the caption's middle third, at most 160 pixels wide.
   Neither includes the cover's own columns.
+- **GPU visual tint.** `titlebargputint.cpp` copies only a fully visible gutter
+  (at most 160 × 8 pixels) into separate scratch storage, then computes the same
+  integer luma histogram/median cluster as the CPU sampler into one RGBA texel.
+  The panel samples that texel immediately; GPU ordering replaces the former
+  first-frame wait without `glReadPixels`, fence polling or a CPU/GPU stall.
+  Copying first avoids sampling from the framebuffer being painted. Output
+  rotations only reorder the histogram's pixels. This also follows late titlebar
+  changes beyond the five-second CPU warm-up, rather than switching back to an
+  older tint after an arbitrary deadline. It adds one bounded copy and one
+  single-pixel reduction per eligible paint, not another scheduled repaint.
+  Incomplete/integer targets, partial gutter visibility and shader/allocation
+  failures retain the asynchronous path. Invalid alpha yields transparent output,
+  never an uninitialized black fallback. GPU storage is one reusable 100 KiB
+  scratch texture plus a color texel for the renderer, not per window.
 - **Per-window vertical boundary.** One asynchronous read captures a strip of
   at most **160 × 192 device pixels** (120 KiB), shared by RGB and boundary
   detection. Eight horizontal groups form robust row profiles. Median colors
@@ -95,8 +111,9 @@ legacy overlay windows (excluding native KOS decorations):
 - **A median, not a mean.** A fixed 256-bin luma histogram averages RGB within
   ±3 of the median, rejecting transparent pixels, glyphs and antialiased edges
   without allocating, copying and sorting per-pixel sample vectors.
-- **Prompt confirmation without flicker.** The first tint and later changes require two
-  consistent usable captures at least 32 ms apart, measured at capture rather
+- **CPU fallback confirmation.** Cached fallback RGB and initial input readiness
+  require two consistent usable captures at least 32 ms apart. The GPU visual
+  path does not wait for this confirmation. The interval is measured at capture rather
   than GPU completion so polling jitter cannot force an unnecessary third read.
   Startup/change confirmation polls the fence every 4 ms for the first 32 ms of
   a transfer, then returns to the regular 16 ms poll; neither path waits on the GPU.
@@ -132,16 +149,18 @@ legacy overlay windows (excluding native KOS decorations):
   Periodic repaint requests cover the bounded probe instead of the whole
   window-width band after the first observation.
 - **No texture upload on RGB changes.** A cached white rounded background mask
-  is tinted with a premultiplied shader uniform; buttons, hover rings and
-  adjustment marks live in a separate reusable transparent texture. New RGB
+  is tinted by the GPU color texel, or a premultiplied uniform on the fallback
+  path; buttons, hover rings and adjustment marks live in a separate reusable
+  transparent texture. New RGB
   values do not churn the panel texture cache. Explicit `dark`, `light` and
   custom-color settings still bypass sampling.
 - Legacy server decorations without the native capability marker retain their palette fallback for upgrade compatibility.
 
-The effect's `window-controls` debug payload includes `tintStartingUp`,
-`tintIntervalMs`, `tintReadbackPending` and `tintChangePending` alongside the
-validated RGB. These distinguish startup backoff from a busy GPU read or a
-color awaiting confirmation during live cold-start checks.
+The effect's `window-controls` debug payload includes `tintSameFrame`,
+`tintStartingUp`, `tintIntervalMs`, `tintReadbackPending` and `tintChangePending`
+alongside the CPU-validated fallback RGB. These distinguish the GPU visual path
+from startup backoff, a busy readback or a fallback color awaiting confirmation;
+the GPU color itself is not synchronously read for diagnostics.
 
 Optional CPU-only maximum-probe microbenchmark (excludes GPU/readback/repaint):
 `./.build/kos-bridge/titlebar_tint_test --benchmark`.
@@ -163,7 +182,11 @@ With `-DKOS_BRIDGE_BUILD_GPU_TESTS=ON`, `titlebar_pixels_gpu_test` also covers
 the asynchronous path across all eight output transforms, fractional scale,
 non-zero viewport origins and target clipping, plus incomplete/integer-target
 failures, transparent failure pixels, valid black titlebars and source read-buffer
-restoration (no pre-read `glFinish`).
+restoration (no pre-read `glFinish`). `titlebar_gpu_tint_test` draws the final
+panel in the same command stream as changing titlebar content, before any CPU
+read or additional frame. It checks CPU/GPU histogram equivalence across all
+output transforms, gutter visibility, GL-state restoration, valid black,
+transparent failure, premultiplied mask edges and fallback compositing.
 These tests do not replace checking the installed effect's appearance in a new
 KWin session; do not hot-load a replaced plugin into the running compositor.
 

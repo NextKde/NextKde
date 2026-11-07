@@ -37,6 +37,12 @@ private:
     QByteArray m_rawPixels;
 };
 
+// Fully visible, top-down target coordinates for same-frame GPU tinting. Empty
+// when neither gutter can be copied without including occlusion/undrawn damage.
+QRect visibleTitlebarGutter(const KWin::RenderTarget &, const KWin::RenderViewport &,
+                            const QRectF &frame, const KWin::Region &deviceClip,
+                            const QRectF &panel, const QRectF &cover);
+
 // Per-window, bounded asynchronous readback. The panel's position remains
 // configuration-driven; only its tint is measured, never inferred controls.
 class TitlebarSampler

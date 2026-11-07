@@ -374,10 +374,12 @@ void ButtonRenderer::paint(const KWin::RenderTarget &renderTarget,
     const QRectF tintPanel = geometry.independentBackground
         ? panelRect(tintGeometry, window->frameGeometry().size()) : local;
 
-    // The panel is opaque, so its tint has to come from the title bar
-    // underneath before that is covered. Until the read succeeds nothing is
-    // drawn: a guessed tint is exactly the misalignment this replaced.
+    // A startup cover uses the current frame's GPU median, not a previous
+    // asynchronous observation. CPU confirmation remains the fallback and
+    // controls input publication; invalid GPU pixels never become black.
     bool dark = false;
+    bool tintKnown = true;
+    bool sameFrameTint = false;
     QColor panelColor;
     if (!config.cooperativeControls) switch (config.background) {
     case PanelBackground::Dark:
@@ -393,10 +395,21 @@ void ButtonRenderer::paint(const KWin::RenderTarget &renderTarget,
         dark = ((54 * panelColor.red() + 183 * panelColor.green()
                  + 19 * panelColor.blue()) >> 8) < 128;
         break;
-    case PanelBackground::Auto:
-        if (!tintFor(renderTarget, viewport, window,
-                     tintPanel, local, deviceRegion,
-                     &dark, &panelColor)) {
+    case PanelBackground::Auto: {
+        tintKnown = tintFor(renderTarget, viewport, window,
+                            tintPanel, local, deviceRegion, &dark, &panelColor);
+        auto cached = m_cache.find(window);
+        if (cached != m_cache.end()) {
+            const QRect gutter = visibleTitlebarGutter(renderTarget, viewport,
+                window->frameGeometry(), deviceRegion, tintPanel, local);
+            sameFrameTint = !gutter.isEmpty() && m_gpuTint.update(renderTarget, gutter);
+            cached->sameFrameTint = sameFrameTint;
+        }
+        if (!tintKnown && sameFrameTint) {
+            // The shader hides both layers if the current gutter is unusable.
+            // Do not substitute a guessed palette for a new CSD window.
+            panelColor = Qt::transparent;
+        } else if (!tintKnown) {
             // Fallback while the title bar has not been sampled yet
             if (config.kosDecorationSelected && window->hasDecoration()
                 && window->window()) {
@@ -412,6 +425,10 @@ void ButtonRenderer::paint(const KWin::RenderTarget &renderTarget,
         }
         break;
     }
+    }
+    // GPU alpha is not read synchronously. Until the CPU validates a sample,
+    // leave input with the client rather than intercepting an invisible cover.
+    const bool controlsReady = !sameFrameTint || tintKnown;
 
     // Apply the window's animation transform: scale about the window's
     // top-left, then translate, matching what KWin does to the window itself.
@@ -468,7 +485,7 @@ void ButtonRenderer::paint(const KWin::RenderTarget &renderTarget,
     QRectF menuRect;
     QRectF menuLogical;
     KWin::Region menuClip;
-    if (m_menu.window == window) {
+    if (m_menu.window == window && controlsReady) {
         const auto menu = tileMenuRect(hit.panelRect, window->frameGeometry(),
                                        hit.dots[zoomDotIndex()].center());
         m_menu.rect = menu.value_or(QRectF());
@@ -484,8 +501,10 @@ void ButtonRenderer::paint(const KWin::RenderTarget &renderTarget,
             menuClip = clippedToWindow(deviceRegion, viewport, menuLogical);
         }
     }
-    m_hits[window] = hit;
-    if (sourceCapture) m_sourceHits[window] = hit;
+    if (controlsReady) {
+        m_hits[window] = hit;
+        if (sourceCapture) m_sourceHits[window] = hit;
+    }
 
     // What this frame has to draw: the panel, and then the menu under it if one
     // is open. `deviceRegion` is this frame's damage, not a statement about
@@ -548,7 +567,7 @@ void ButtonRenderer::paint(const KWin::RenderTarget &renderTarget,
                 }
             }
             if (KWin::GLTexture *background = backgroundTexture(panelSize, scale, geometry, contour))
-                blit(viewport, backgroundClip, logicalRect, background, panelColor);
+                blit(viewport, backgroundClip, logicalRect, background, panelColor, sameFrameTint);
         }
         if (config.cooperativeControls) {
             for (int i = 0; i < TypeCount; ++i) {
@@ -567,7 +586,7 @@ void ButtonRenderer::paint(const KWin::RenderTarget &renderTarget,
         } else if (KWin::GLTexture *tex = panelTexture(panelSize, scale, active, dark,
                                                 geometry, hovered, adjusting,
                                                 maximized, showGlyphs, contour)) {
-            blit(viewport, clip, logicalRect, tex);
+            blit(viewport, clip, logicalRect, tex, sameFrameTint ? panelColor : QColor(Qt::white), sameFrameTint, false);
         }
     }
 
@@ -589,7 +608,8 @@ void ButtonRenderer::paint(const KWin::RenderTarget &renderTarget,
 
 void ButtonRenderer::blit(const KWin::RenderViewport &viewport,
                           const KWin::Region &clip, const QRectF &logicalRect,
-                          KWin::GLTexture *texture, const QColor &modulation)
+                          KWin::GLTexture *texture, const QColor &modulation,
+                          bool sameFrameTint, bool tintBackground)
 {
     if (!texture || clip.isEmpty()) {
         return;
@@ -613,8 +633,23 @@ void ButtonRenderer::blit(const KWin::RenderViewport &viewport,
     auto *shaderManager = KWin::ShaderManager::instance();
     // Explicit premultiplied modulation, including alpha; never inherit an
     // unset/stale uniform that would make transparent corners render black.
-    shaderManager->pushShader(KWin::ShaderTrait::MapTexture | KWin::ShaderTrait::Modulate);
+    GLint previousActiveTexture = 0, previousTintTexture = 0;
+    if (sameFrameTint) {
+        glGetIntegerv(GL_ACTIVE_TEXTURE, &previousActiveTexture);
+        glActiveTexture(GL_TEXTURE1);
+        glGetIntegerv(GL_TEXTURE_BINDING_2D, &previousTintTexture);
+        m_gpuTint.texture()->bind();
+        glActiveTexture(GL_TEXTURE0);
+        shaderManager->pushShader(m_gpuTint.panelShader());
+    } else {
+        shaderManager->pushShader(KWin::ShaderTrait::MapTexture | KWin::ShaderTrait::Modulate);
+    }
     KWin::GLShader *shader = shaderManager->getBoundShader();
+    if (sameFrameTint) {
+        shader->setUniform("sampler", 0);
+        shader->setUniform("tintSampler", 1);
+        shader->setUniform("tintBackground", int(tintBackground));
+    }
     const float alpha = modulation.alphaF();
     shader->setUniform(KWin::GLShader::Vec4Uniform::ModulationConstant,
                        QVector4D(modulation.redF() * alpha, modulation.greenF() * alpha,
@@ -674,6 +709,11 @@ void ButtonRenderer::blit(const KWin::RenderViewport &viewport,
     }
 
     shaderManager->popShader();
+    if (sameFrameTint) {
+        glActiveTexture(GL_TEXTURE1);
+        glBindTexture(GL_TEXTURE_2D, previousTintTexture);
+        glActiveTexture(previousActiveTexture);
+    }
 }
 
 bool ButtonRenderer::tintFor(const KWin::RenderTarget &renderTarget,
@@ -1585,6 +1625,7 @@ QJsonObject ButtonRenderer::controlDiagnostics(KWin::EffectWindow *window) const
     if (cached != m_cache.constEnd()) {
         result.insert("tintKnown", cached->known);
         result.insert("tintColor", cached->color.name());
+        result.insert("tintSameFrame", cached->sameFrameTint);
         result.insert("tintStartingUp", cached->startingUp(Clock::now()));
         result.insert("tintIntervalMs", int(cached->interval().count()));
         result.insert("tintReadbackPending", cached->sampler->pending());

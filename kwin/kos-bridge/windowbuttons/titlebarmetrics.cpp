@@ -71,6 +71,55 @@ TitlebarSampler::~TitlebarSampler()
     if (KWin::effects) KWin::effects->makeOpenGLContextCurrent();
 }
 
+namespace
+{
+struct SampleArea {
+    QRect band, gutter, cover;
+    QRegion visible;
+    qreal scale;
+};
+
+SampleArea sampleArea(const KWin::RenderViewport &viewport, const QRectF &frame,
+                      const KWin::Region &deviceClip, const QRectF &panel, const QRectF &cover)
+{
+    // Both paths use the same top-anchored gutter and exclude the entire cover.
+    const qreal probeHeight = std::min(frame.height(), std::max(panel.bottom(), cover.bottom()) + 4);
+    const QRectF bandLogical(frame.x(), frame.y(), frame.width(), probeHeight);
+    const QRect bandDevice = viewport.mapToDeviceCoordinatesAligned(bandLogical);
+    const QRect bandTarget = viewport.mapToRenderTargetTexture(bandLogical).toAlignedRect();
+    const QPoint offset = bandTarget.topLeft() - bandDevice.topLeft();
+    const qreal scale = bandTarget.height() / bandLogical.height();
+    const QRect gutter(bandTarget.x(), bandTarget.y() + qRound(2 * scale),
+                       bandTarget.width(), std::max(2, qRound(3 * scale)));
+    const QRect panelTarget = viewport.mapToDeviceCoordinatesAligned(cover.translated(frame.topLeft()))
+                                  .translated(offset);
+    QRegion visible;
+    // Bound infinite source-capture regions before converting to Qt rectangles.
+    const KWin::Region boundedClip = deviceClip & KWin::Region(KWin::Rect(bandDevice));
+    for (const auto &rect : boundedClip.rects())
+        visible += QRect(rect.x(), rect.y(), rect.width(), rect.height());
+    visible.translate(offset);
+    return {bandTarget, gutter, panelTarget, visible, scale};
+}
+}
+
+QRect visibleTitlebarGutter(const KWin::RenderTarget &target, const KWin::RenderViewport &viewport,
+                            const QRectF &frame, const KWin::Region &deviceClip,
+                            const QRectF &panel, const QRectF &cover)
+{
+    if (panel.height() < 2 || frame.width() < 8 || frame.height() < 8) return {};
+    const auto area = sampleArea(viewport, frame, deviceClip, panel, cover);
+    const QRect bounds(QPoint(), target.transformedSize());
+    for (bool fallback : {false, true}) {
+        const QRect rect = tintSampleRect(area.gutter, area.cover, fallback);
+        // The same-frame path cannot inspect a CPU visibility mask. Require
+        // the entire gutter, rather than copy pixels from an occluding window.
+        if (rect.width() * rect.height() >= TintHistogram::MinSamples
+            && bounds.contains(rect) && QRegion(rect).subtracted(area.visible).isEmpty()) return rect;
+    }
+    return {};
+}
+
 bool TitlebarSampler::enqueue(const KWin::RenderTarget &renderTarget,
                               const KWin::RenderViewport &viewport,
                               KWin::EffectWindow *window, const KWin::Region &deviceClip,
@@ -79,30 +128,12 @@ bool TitlebarSampler::enqueue(const KWin::RenderTarget &renderTarget,
     if (pending() || !window || panel.height() < 2) return false;
     const QRectF frame = window->frameGeometry();
     if (frame.width() < 8 || frame.height() < 8) return false;
-    // The background gutter is anchored to the window top, not to the
-    // controls' offset: that offset may land on an avatar or a second toolbar.
-    const qreal probeHeight = std::min(frame.height(), std::max(panel.bottom(), cover.bottom()) + 4);
-    const QRectF bandLogical(frame.x(), frame.y(), frame.width(), probeHeight);
-    const QRect bandDevice = viewport.mapToDeviceCoordinatesAligned(bandLogical);
-    const QRect bandTarget = viewport.mapToRenderTargetTexture(bandLogical).toAlignedRect();
-    const QPoint offset = bandTarget.topLeft() - bandDevice.topLeft();
-    m_deviceScale = bandTarget.height() / bandLogical.height();
-    const QRect gutter(bandTarget.x(), bandTarget.y() + qRound(2 * m_deviceScale),
-                       bandTarget.width(), std::max(2, qRound(3 * m_deviceScale)));
-    // Exclude the entire independent cover, including all expanded edges,
-    // even though the RGB gutter is anchored above the controls.
-    const QRect panelTarget = viewport.mapToDeviceCoordinatesAligned(cover.translated(frame.topLeft()))
-                                  .translated(offset);
-    // Clip in device space first, then translate to the target. This preserves
-    // the secondary-output / offscreen-target origin, not just output zero.
-    QRegion visible;
-    // Source captures use Region::infinite(); bound it before converting KWin's
-    // coordinates to Qt's finite integer rectangles.
-    const KWin::Region boundedClip = deviceClip & KWin::Region(KWin::Rect(bandDevice));
-    for (const auto &rect : boundedClip.rects()) {
-        visible += QRect(rect.x(), rect.y(), rect.width(), rect.height());
-    }
-    visible.translate(offset);
+    const auto area = sampleArea(viewport, frame, deviceClip, panel, cover);
+    const auto &bandTarget = area.band;
+    const auto &gutter = area.gutter;
+    const auto &panelTarget = area.cover;
+    const auto &visible = area.visible;
+    m_deviceScale = area.scale;
     const QRect targetBounds(QPoint(), renderTarget.transformedSize());
     for (int attempt = 0; attempt < 2; ++attempt) {
         m_tintRect = tintSampleRect(gutter, panelTarget, m_fallback).intersected(targetBounds);

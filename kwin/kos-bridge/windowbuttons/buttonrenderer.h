@@ -18,6 +18,7 @@
 #include "buttonglyph.h"
 #include "buttonconfig.h"
 #include "titlebarmetrics.h"
+#include "titlebargputint.h"
 #include "titlebartint.h"
 #include "tilemenu.h"
 #include "painttransform.h"
@@ -244,9 +245,10 @@ private:
     // to the part of the window that is actually being painted. The panel and
     // the tile menu both come through here, so the shader setup, the blend
     // state and its restoration exist once.
-    static void blit(const KWin::RenderViewport &viewport, const KWin::Region &clip,
-                     const QRectF &logicalRect, KWin::GLTexture *texture,
-                     const QColor &modulation = Qt::white);
+    void blit(const KWin::RenderViewport &viewport, const KWin::Region &clip,
+              const QRectF &logicalRect, KWin::GLTexture *texture,
+              const QColor &modulation = Qt::white,
+              bool sameFrameTint = false, bool tintBackground = true);
 
     // The light that opens the tiling menu: the one that performs Action::Maximize.
     // Found through typeAt() so that reordering the panel moves the menu's
@@ -255,6 +257,7 @@ private:
 
     std::map<QString, std::unique_ptr<KWin::GLTexture>> m_textures;
     qsizetype m_textureBytes = 0;
+    TitlebarGpuTint m_gpuTint;
 
     // Times are read against this clock, which does not jump when the wall
     // clock does.
@@ -271,6 +274,7 @@ private:
         QRectF panel;
         QRectF cover;
         bool resetReadback = false;
+        bool sameFrameTint = false;
         qreal backgroundBottom = -1;
         qreal pendingBottom = -1;
         int bottomVotes = 0;
