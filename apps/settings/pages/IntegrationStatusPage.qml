@@ -18,6 +18,7 @@ ColumnLayout {
     property var bridge: null
     property var snapshot: ({})
     property string errorText: ""
+    property bool inputMethodExpanded: false
 
     function refresh() {
         if (!bridge) {
@@ -123,7 +124,14 @@ ColumnLayout {
 
         Demo.SettingsItem {
             title: I18n.tr("Input Method Candidate Styling")
-            description: I18n.tr("NextKde renders liquid glass popups via Wayland text-input-v3. If an app shows classic square popups, see the integration guide.")
+            description: I18n.tr("NextKde renders liquid glass popups via Wayland text-input-v3. Expand to view per-app adaptation flags and environment settings.")
+            Demo.LiquidActionButton {
+                text: integrationPage.inputMethodExpanded ? I18n.tr("Hide Solutions ▴") : I18n.tr("App Solutions ▾")
+                materialForm: true
+                implicitHeight: 24
+                cornerRadius: 6
+                onClicked: integrationPage.inputMethodExpanded = !integrationPage.inputMethodExpanded
+            }
             Demo.LiquidActionButton {
                 text: I18n.tr("View Guide")
                 materialForm: true
@@ -134,17 +142,20 @@ ColumnLayout {
         }
 
         Demo.SettingsItem {
-            title: I18n.tr("Chromium & Electron (Chrome, VS Code)")
+            visible: integrationPage.inputMethodExpanded
+            title: "↳ " + I18n.tr("Chromium & Electron (Chrome, VS Code)")
             description: I18n.tr("Add startup flags: --enable-wayland-ime --wayland-text-input-version=3")
         }
 
         Demo.SettingsItem {
-            title: I18n.tr("Bundled Qt Applications (WeChat RPM, WPS)")
+            visible: integrationPage.inputMethodExpanded
+            title: "↳ " + I18n.tr("Bundled Qt Applications (WeChat RPM, WPS)")
             description: I18n.tr("Launch with environment variable: QT_IM_MODULE=text-input-unstable-v3")
         }
 
         Demo.SettingsItem {
-            title: I18n.tr("Firefox & Native Desktop Apps")
+            visible: integrationPage.inputMethodExpanded
+            title: "↳ " + I18n.tr("Firefox & Native Desktop Apps")
             description: I18n.tr("Leave GTK_IM_MODULE and QT_IM_MODULE empty to enable compositor takeover.")
         }
     }
