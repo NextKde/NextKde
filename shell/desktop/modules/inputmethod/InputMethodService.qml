@@ -33,6 +33,10 @@ QtObject {
     // Published once after all fields are applied, rather than exposing the
     // intermediate assignments to the animated panel.
     property var popupState: ({})
+    property bool _popupSessionOpen: false
+    property bool _anchorPending: false
+    property int _anchorSerial: 0
+    property var _openingCaret: ({})
 
     signal menuReceived(var items)
 
@@ -49,7 +53,7 @@ QtObject {
     readonly property var globalAnchor: Placement.resolveGlobalSpotRect(
         spot,
         activeWindow,
-        kwinCaret,
+        _openingCaret,
         Quickshell.screens && Quickshell.screens.length > 0 ? Quickshell.screens[0] : null
     )
 
@@ -72,6 +76,7 @@ QtObject {
                 svc._subscribe();
             } else {
                 svc.visible = false;
+                svc._endPopupSession();
                 svc.popupState = Object.assign({}, svc.popupState, { visible: false });
             }
         }
@@ -111,18 +116,69 @@ QtObject {
             svc.candidates = nextCandidates;
         svc.spot = state.spot || ({});
         svc.kwinCaret = state.caret || ({});
+        if (svc._popupSessionOpen && !svc._anchorPending
+                && svc.kwinCaret.available && svc.kwinCaret.source === "caret")
+            svc._openingCaret = svc.kwinCaret;
         if (state.imLabel) svc.imLabel = String(state.imLabel);
         if (state.imIcon) svc.imIcon = String(state.imIcon);
         if (state.imName) svc.imName = String(state.imName);
         if (Array.isArray(state.properties)) svc.properties = state.properties;
+        const showing = svc.enabled && svc.visible
+            && (svc.lookupVisible || svc.preeditVisible || svc.auxVisible);
+        if (showing && !svc._popupSessionOpen)
+            svc._beginPopupSession();
+        else if (!showing)
+            svc._endPopupSession();
+        svc._publishPopupState();
+    }
+
+    function _publishPopupState() {
         svc.popupState = {
             enabled: svc.enabled, visible: svc.visible,
+            anchorReady: !svc._anchorPending,
             lookupVisible: svc.lookupVisible, candidates: svc.candidates,
             preeditVisible: svc.preeditVisible, preeditText: svc.preeditText,
             auxVisible: svc.auxVisible, auxText: svc.auxText,
             cursorIndex: svc.cursorIndex, layout: svc.layout,
             hasPrev: svc.hasPrev, hasNext: svc.hasNext
         };
+    }
+
+    function _beginPopupSession() {
+        svc._popupSessionOpen = true;
+        svc._openingCaret = ({});
+        svc._anchorPending = true;
+        const serial = ++svc._anchorSerial;
+        const windowId = WindowService.kwinActiveId;
+        svc._anchorDeadline.restart();
+        PlatformClient.request("input.clipboard-anchor", { expectedWindowId: windowId }, function(response) {
+            if (serial !== svc._anchorSerial || !svc._anchorPending)
+                return;
+            // A response for an old focused window must never move this panel.
+            if (WindowService.kwinActiveId === windowId && response?.ok)
+                svc._openingCaret = response.result || ({});
+            svc._anchorDeadline.stop();
+            svc._anchorPending = false;
+            svc._publishPopupState();
+        });
+    }
+
+    function _endPopupSession() {
+        if (!svc._popupSessionOpen)
+            return;
+        svc._popupSessionOpen = false;
+        ++svc._anchorSerial;
+        svc._anchorPending = false;
+        svc._anchorDeadline.stop();
+    }
+
+    property Timer _anchorDeadline: Timer {
+        interval: 180
+        onTriggered: {
+            // Older bridges still show at the current spot/window fallback.
+            svc._anchorPending = false;
+            svc._publishPopupState();
+        }
     }
 
     function selectCandidate(index) {

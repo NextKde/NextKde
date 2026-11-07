@@ -32,6 +32,10 @@ export function parseKimpanelProperty(raw) {
 }
 
 export function resolveGlobalSpotRect(spot, activeWindow, kwinCaret, fallbackScreen) {
+    // Missing coordinates are not an absolute (0, 0) spot. In particular,
+    // undefined !== 0 used to bypass the real pointer/window fallback.
+    const hasSpot = spot && Number.isFinite(spot.x) && Number.isFinite(spot.y)
+        && (spot.x !== 0 || spot.y !== 0);
     // 1. If KWin compositor returned a valid global text-input caret (e.g. VS Code, Antigravity, Obsidian)
     if (kwinCaret && kwinCaret.available && kwinCaret.source === "caret") {
         return {
@@ -44,7 +48,7 @@ export function resolveGlobalSpotRect(spot, activeWindow, kwinCaret, fallbackScr
     }
 
     // 2. If spot mode is relative with non-zero coordinates (Wayland dbus clients: Konsole, Firefox, KRunner)
-    if (spot && (spot.mode === "relative" || spot.scale > 0) && (spot.x !== 0 || spot.y !== 0)) {
+    if (hasSpot && (spot.mode === "relative" || spot.scale > 0)) {
         const scale = spot.scale > 0 ? spot.scale : 1.0;
         const winContent = (activeWindow && activeWindow.contentGeometry)
             || (activeWindow && activeWindow.geometry)
@@ -59,7 +63,7 @@ export function resolveGlobalSpotRect(spot, activeWindow, kwinCaret, fallbackScr
     }
 
     // 3. If spot mode is absolute and non-zero (XWayland clients)
-    if (spot && (spot.x !== 0 || spot.y !== 0)) {
+    if (hasSpot) {
         return {
             x: Number(spot.x) || 0,
             y: Number(spot.y) || 0,

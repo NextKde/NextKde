@@ -39,6 +39,10 @@ QtObject {
                 motion.close()
             return
         }
+        // Resolve a fresh caret before revealing the first frame. The cached
+        // anchor can belong to the previous input field or pointer position.
+        if (next.anchorReady === false)
+            return
 
         state = next
         anchor = _pendingAnchor

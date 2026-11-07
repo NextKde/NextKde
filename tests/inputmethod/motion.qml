@@ -28,6 +28,9 @@ TestCase {
     function cleanup() {
         panel.update({ enabled: true, visible: false }, null, false)
         tryCompare(panel, "mapped", false)
+        InputMethodService._applyState({ enabled: true, visible: false })
+        PlatformClient.calls = []
+        WindowService.kwinActiveId = "window-a"
     }
 
     function test_exit_retains_candidates_and_anchor() {
@@ -90,5 +93,53 @@ TestCase {
         wait(30)
         compare(panel.mapped, false)
         compare(panel.progress, 0)
+    }
+
+    function test_first_frame_waits_for_fresh_anchor() {
+        const state = candidates()
+        state.anchorReady = false
+        panel.update(state, { x: 0, y: 0 }, true)
+        wait(35)
+        compare(panel.mapped, false)
+        compare(panel.progress, 0)
+        panel.update(Object.assign({}, state, { anchorReady: true }),
+            { x: 1500, y: 900 }, true)
+        tryCompare(panel, "mapped", true)
+        compare(panel.anchor.x, 1500)
+        compare(panel.anchor.y, 900)
+        tryCompare(panel, "progress", 1)
+    }
+
+    function test_service_resolves_anchor_once_per_opening() {
+        const state = Object.assign(candidates(), { spot: {}, caret: {} })
+        InputMethodService._applyState(state)
+        compare(InputMethodService.popupState.anchorReady, false)
+        compare(PlatformClient.calls.length, 1)
+        InputMethodService._applyState(state)
+        compare(PlatformClient.calls.length, 1)
+        const call = PlatformClient.calls[0]
+        compare(call.op, "input.clipboard-anchor")
+        call.callback({ ok: true, result: { available: true, source: "caret", x: 1600, y: 950 } })
+        compare(InputMethodService.popupState.anchorReady, true)
+        compare(InputMethodService.globalAnchor.x, 1600)
+        compare(InputMethodService.globalAnchor.y, 950)
+    }
+
+    function test_service_ignores_late_response_after_close() {
+        InputMethodService._applyState(candidates())
+        const call = PlatformClient.calls[0]
+        InputMethodService._applyState({ enabled: true, visible: false })
+        call.callback({ ok: true, result: { available: true, source: "caret", x: 2400, y: 1300 } })
+        compare(InputMethodService.popupState.visible, false)
+        compare(InputMethodService._openingCaret.available, undefined)
+    }
+
+    function test_service_anchor_timeout_releases_panel() {
+        InputMethodService._applyState(candidates())
+        compare(InputMethodService.popupState.anchorReady, false)
+        tryVerify(function() { return InputMethodService.popupState.anchorReady }, 500)
+        const call = PlatformClient.calls[0]
+        call.callback({ ok: true, result: { available: true, source: "caret", x: 2400, y: 1300 } })
+        compare(InputMethodService._openingCaret.available, undefined)
     }
 }
