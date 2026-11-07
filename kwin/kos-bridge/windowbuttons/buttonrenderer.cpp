@@ -34,8 +34,6 @@ constexpr int Supersample = 4;
 // Bound textures created by repeated panel size/spacing adjustments. These
 // are GPU uploads kept for reuse, not per-window resources.
 constexpr qsizetype MaxTextureCacheBytes = 16 * 1024 * 1024;
-// Poll a queued GPU transfer on a later frame, never block the paint hook.
-constexpr auto ReadbackPollInterval = std::chrono::milliseconds(16);
 constexpr auto ReadbackTimeout = std::chrono::milliseconds(250);
 // Window sizes are compared with this tolerance, in logical pixels. KWin's
 // geometry is fractional -- a restored window reports a width like
@@ -249,6 +247,12 @@ void ButtonRenderer::paint(const KWin::RenderTarget &renderTarget,
         }
         return;
     }
+
+    // Screen-space animation pixels are not the titlebar at its resting
+    // coordinates: sampling them can confirm the black backdrop during an
+    // opening animation. Raw source captures still sample and carry the panel
+    // through the animation. Other paints publish neither a panel nor hits.
+    if (!transform.canSampleTitlebar()) return;
 
     // KWin's own user interface is not an application window. The OSD the
     // desktop-change script draws, the outline, the tab switcher, the tile
@@ -735,7 +739,9 @@ bool ButtonRenderer::consumeSample(CacheEntry &entry, Clock::time_point now)
     bool sampledDark = false;
     QColor sampledColor;
     if (entry.sampler->take(&sampledDark, &sampledColor)) {
-        const bool changed = entry.accept(sampledDark, sampledColor, now);
+        // Confirmation measures separation between captures, not variable GPU
+        // completion/poll times; otherwise two valid frames can need a third.
+        const bool changed = entry.accept(sampledDark, sampledColor, entry.lastRead);
         // Publish the boundary only with a confirmed background color.
         if (entry.known && !entry.pending) {
             const qreal bottom = entry.sampler->backgroundBottom();
@@ -769,7 +775,7 @@ void ButtonRenderer::scheduleSample(KWin::EffectWindow *window)
     auto it = m_cache.find(window);
     if (it == m_cache.end()) return;
     const auto now = Clock::now();
-    const auto due = it->sampler->pending() ? now + ReadbackPollInterval
+    const auto due = it->sampler->pending() ? now + it->readbackPollInterval(now)
                                           : it->lastRead + it->interval();
     // A natural paint may queue a read before the idle timer fires. Replace
     // that timer with the earlier GPU poll; its old callback is token-guarded.

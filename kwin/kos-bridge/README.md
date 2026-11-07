@@ -42,8 +42,10 @@ controls use their respective native paths instead.
 - **Fails closed, on the tint only.** If the title bar cannot be read yet —
   the window has not painted, or it is covered — no panel is drawn on that
   frame and the read is retried. The panel never appears with a guessed tint.
-- Skips frames where the window is being animated
-  (`PAINT_WINDOW_TRANSFORMED`), and only touches normal windows / dialogs.
+- Skips screen-space panels and sampling while the window is transformed,
+  faded, dimmed or desaturated: those pixels are not its unmodified title bar.
+  Neutral offscreen source captures still include the controls during animations.
+  Only touches normal windows / dialogs.
   Popups, context menus, tooltips, OSDs, notifications, docks, the Quickshell
   bar, the Plasma desktop and input-method surfaces are ignored.
 - **Skips internal windows**, which is every window KWin makes for itself: its
@@ -86,18 +88,25 @@ legacy overlay windows (excluding native KOS decorations):
   fast retry loop alive indefinitely.
 - RGB sampling stays near the window top, while exclusion uses the entire
   expanded cover. Enlarging it cannot sample the cover itself.
-  Require at least 75% visible strip coverage and 75% usable alpha coverage;
+  Require at least 75% visible strip coverage and 75% opaque pixel coverage;
   sparse damaged glyphs cannot stand in for an undrawn/occluded background.
+  Partially transparent pixels are rejected rather than mistaking their
+  premultiplied RGB for a darker titlebar during a client-side fade-in.
 - **A median, not a mean.** A fixed 256-bin luma histogram averages RGB within
   ±3 of the median, rejecting transparent pixels, glyphs and antialiased edges
   without allocating, copying and sorting per-pixel sample vectors.
 - **Prompt confirmation without flicker.** The first tint and later changes require two
-  consistent usable observations at least 32 ms apart. Four warm-up attempts run
-  at 32 ms intervals; steady active-window checks back off from 125 ms through
-  250/500 ms to 1000 ms as observations stay unchanged. Unrelated document or
-  video damage does not reset that backoff; observed RGB changes return to
-  32 ms confirmation. Failed observations also back off after warm-up. These
-  are scheduling intervals, not measured end-to-end latency. Focus changes
+  consistent usable captures at least 32 ms apart, measured at capture rather
+  than GPU completion so polling jitter cannot force an unnecessary third read.
+  Startup/change confirmation polls the fence every 4 ms for the first 32 ms of
+  a transfer, then returns to the regular 16 ms poll; neither path waits on the GPU.
+  Four warm-up attempts run at 32 ms intervals; steady active-window checks back
+  off from 125 ms through 250/500 ms to 1000 ms as observations stay unchanged.
+  Once a tint is known, unrelated document or video damage does not reset that
+  backoff; observed RGB changes return to 32 ms confirmation. Before the first
+  tint, client damage restarts warm-up so a late first frame does not inherit
+  a long delay from earlier failed reads. Failed observations also back off
+  after warm-up. These are scheduling intervals, not measured end-to-end latency. Focus changes
   restart the fast phase for both windows while retaining validated RGB. Client
   damage also requests a throttled refresh for inactive windows; damage during
   an in-flight transfer remains outstanding until a newer capture completes.

@@ -63,7 +63,19 @@ struct TitlebarTintState {
 
     std::chrono::milliseconds interval() const;
     void requestRefresh();
-    void contentChanged() { ++contentRevision; refreshRequested = true; }
+    void contentChanged() {
+        ++contentRevision;
+        refreshRequested = true;
+        // A late first client frame must not inherit the backoff accumulated
+        // while its titlebar was still undrawn. Validated windows keep it.
+        if (!known) { warmupReads = 0; stableReads = 0; }
+    }
+    std::chrono::milliseconds readbackPollInterval(Clock::time_point now) const {
+        // Only startup/confirmation needs a sub-frame poll. A slow transfer
+        // returns to the regular cadence after the first warm-up interval.
+        return (!known || pending) && now - lastRead < WarmupInterval
+            ? std::chrono::milliseconds(4) : std::chrono::milliseconds(16);
+    }
     void rejectSample() {
         pending = false;
         stableReads = std::min(stableReads + 1, StableReads);
@@ -71,9 +83,10 @@ struct TitlebarTintState {
     }
     bool needsFollowup() const { return pending || refreshRequested || warmupReads < WarmupReads; }
     void attempted(Clock::time_point now);
+    // sampledAt is the capture time, not the asynchronous completion time.
     // Returns true only when the displayed color actually changes. Near-equal
     // samples must not drift the cached RGB and create more texture variants.
-    bool accept(bool sampledDark, const QColor &sampledColor, Clock::time_point now);
+    bool accept(bool sampledDark, const QColor &sampledColor, Clock::time_point sampledAt);
 };
 
 } // namespace KOS

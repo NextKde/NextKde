@@ -20,6 +20,7 @@
 #include "titlebarmetrics.h"
 #include "titlebartint.h"
 #include "tilemenu.h"
+#include "painttransform.h"
 
 namespace KWin
 {
@@ -32,17 +33,6 @@ class GLTexture;
 
 namespace KOS
 {
-
-// Animation state copied from the window's WindowPaintData, so the panel moves,
-// scales and fades together with the window instead of appearing at its final
-// place before the window gets there.
-struct PaintTransform {
-    qreal xScale = 1.0;
-    qreal yScale = 1.0;
-    qreal xTranslate = 0.0;
-    qreal yTranslate = 0.0;
-    qreal opacity = 1.0;
-};
 
 // Draws an iPadOS-style rounded panel behind three traffic-light buttons,
 // covering the window controls that a client-side decorated application drew

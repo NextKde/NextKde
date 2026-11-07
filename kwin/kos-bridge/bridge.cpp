@@ -381,7 +381,7 @@ BridgeEffect::drawWindow(const KWin::RenderTarget &renderTarget,
 #else
     Effect::drawWindow(renderTarget, viewport, window, mask, deviceRegion, data);
 #endif
-    paintButtons(renderTarget, viewport, window, deviceRegion, data, capture);
+    paintButtons(renderTarget, viewport, window, mask, deviceRegion, data, capture);
     if (capture)
         m_renderer->clearHits(window);
 #ifdef KOS_KWIN_PAINT_RESULT_API
@@ -415,7 +415,7 @@ bool BridgeEffect::drawSharedWindow(const KWin::RenderTarget &target,
 #ifdef KOS_KWIN_PAINT_RESULT_API
             if (painted)
 #endif
-                paintButtons(sourceTarget, sourceViewport, window, KWin::Region::infinite(), sourceData, true);
+                paintButtons(sourceTarget, sourceViewport, window, 0, KWin::Region::infinite(), sourceData, true);
             window->setData(WindowSourceCaptureRole, previous);
 #ifdef KOS_KWIN_PAINT_RESULT_API
             return painted;
@@ -465,7 +465,7 @@ void BridgeEffect::refreshGtkNativeControls(KWin::EffectWindow *window)
 }
 
 void BridgeEffect::paintButtons(const KWin::RenderTarget &renderTarget,
-    const KWin::RenderViewport &viewport, KWin::EffectWindow *window,
+    const KWin::RenderViewport &viewport, KWin::EffectWindow *window, int mask,
     const KWin::Region &deviceRegion, const KWin::WindowPaintData &data, bool sourceCapture)
 {
     if (!window || !m_config || !m_renderer) {
@@ -542,6 +542,11 @@ void BridgeEffect::paintButtons(const KWin::RenderTarget &renderTarget,
                           .xTranslate = data.xTranslation(),
                           .yTranslate = data.yTranslation(),
                           .opacity = data.opacity(),
+                          .brightness = data.brightness(),
+                          .saturation = data.saturation(),
+                          // Captures deliberately set TRANSFORMED to draw the
+                          // raw source; their actual paint data must stay neutral.
+                          .transformed = !sourceCapture && (mask & PAINT_WINDOW_TRANSFORMED),
                       }, sourceCapture);
 }
 

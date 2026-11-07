@@ -218,6 +218,22 @@ int main(int argc, char **argv)
         for (qsizetype i = 0; i + 4 <= pixels.size(); i += 4)
             valid.add(reinterpret_cast<const uchar *>(pixels.constData()) + i);
         check(valid.tint(&dark, &color) && dark && color == QColor(0, 0, 0), "real opaque black supported");
+
+        // A raw capture can also contain the client's own fade-in. Its
+        // premultiplied pixels must not confirm a temporarily dark background.
+        auto faded = opaqueBlack;
+        for (int i = 0; i < int(faded.size()); i += 4) {
+            faded[i] = faded[i + 1] = faded[i + 2] = 120;
+            faded[i + 3] = 128;
+        }
+        glBindTexture(GL_TEXTURE_2D, sampleTexture);
+        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, 8, 8, 0, GL_RGBA, GL_UNSIGNED_BYTE, faded.data());
+        check(readback.enqueue(sampleFbo, QSize(8, 8), QRect(0, 0, 8, 8)), "queue faded titlebar read");
+        check(take(pixels), "faded titlebar read completes");
+        KOS::TintHistogram translucent;
+        for (qsizetype i = 0; i + 4 <= pixels.size(); i += 4)
+            translucent.add(reinterpret_cast<const uchar *>(pixels.constData()) + i);
+        check(!translucent.tint(&dark, &color), "premultiplied fade cannot supply dark RGB");
         check(glGetError() == GL_NO_ERROR, "no leftover readback errors");
     }
     glBindFramebuffer(GL_FRAMEBUFFER, 0);

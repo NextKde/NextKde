@@ -1,4 +1,5 @@
 #include "windowbuttons/titlebartint.h"
+#include "windowbuttons/painttransform.h"
 
 #include <QElapsedTimer>
 
@@ -48,9 +49,9 @@ void histogramTests()
             const uchar value = trial == 0 ? 0 : 255;
             const std::array<uchar, 4> p{extreme ? value : uchar(random() % 256),
                 extreme ? value : uchar(random() % 256), extreme ? value : uchar(random() % 256),
-                uchar(random() % 256)};
+                uchar(i % 2 ? 255 : random() % 255)};
             histogram.add(p.data());
-            if (p[3] >= 128) reference.push_back({p[0], p[1], p[2], (54*p[0]+183*p[1]+19*p[2]) >> 8});
+            if (p[3] == 255) reference.push_back({p[0], p[1], p[2], (54*p[0]+183*p[1]+19*p[2]) >> 8});
         }
         std::sort(reference.begin(), reference.end(), [](auto a, auto b) { return a.luma < b.luma; });
         const int median = reference[reference.size()/2].luma;
@@ -62,6 +63,43 @@ void histogramTests()
         CHECK(dark == (median < 128));
         CHECK(color == QColor(r/count, g/count, b/count));
     }
+}
+
+void startupPixelsTests()
+{
+    bool dark = false;
+    QColor color;
+    for (int alpha : {0, 64, 127, 128, 200, 254}) {
+        TintHistogram histogram;
+        const uchar faded[] = {uchar(alpha / 2), uchar(alpha / 2), uchar(alpha / 2), uchar(alpha)};
+        for (int i = 0; i < 96; ++i) histogram.add(faded);
+        CHECK(!histogram.tint(&dark, &color));
+    }
+    TintHistogram opaque;
+    const uchar black[] = {0, 0, 0, 255};
+    for (int i = 0; i < 96; ++i) opaque.add(black);
+    CHECK(opaque.tint(&dark, &color));
+    CHECK(dark && color == QColor(0, 0, 0));
+}
+
+void paintTransformTests()
+{
+    CHECK(PaintTransform{}.canSampleTitlebar()); // Neutral offscreen source.
+    for (auto member : {&PaintTransform::xScale, &PaintTransform::yScale,
+                        &PaintTransform::opacity, &PaintTransform::brightness,
+                        &PaintTransform::saturation}) {
+        PaintTransform transform;
+        transform.*member = 0.5;
+        CHECK(!transform.canSampleTitlebar());
+    }
+    for (auto member : {&PaintTransform::xTranslate, &PaintTransform::yTranslate}) {
+        PaintTransform transform;
+        transform.*member = 8;
+        CHECK(!transform.canSampleTitlebar());
+    }
+    PaintTransform rotated;
+    rotated.transformed = true;
+    CHECK(!rotated.canSampleTitlebar());
 }
 
 void geometryTests()
@@ -244,6 +282,38 @@ void boundaryBenchmark()
 }
 
 
+void startupTimingTests()
+{
+    using Clock = TitlebarTintState::Clock;
+    const auto start = Clock::time_point{} + 1s;
+    const QColor color(240, 240, 240);
+    TitlebarTintState state;
+    state.attempted(start);
+    CHECK(state.readbackPollInterval(start) == 4ms);
+    CHECK(state.readbackPollInterval(start + 32ms) == 16ms); // Slow GPU backs off.
+    // First read completes after 16ms, second after 4ms. Poll-time separation
+    // is only 20ms, but the two captured frames are already 32ms apart.
+    CHECK(!state.accept(false, color, state.lastRead));
+    state.attempted(start + 32ms);
+    CHECK(state.accept(false, color, state.lastRead));
+    CHECK(state.known && state.color == color);
+    CHECK(state.readbackPollInterval(start + 36ms) == 16ms);
+
+    TitlebarTintState late;
+    for (int i = 0; i < 12; ++i) {
+        late.attempted(start + i * 1s);
+        late.rejectSample();
+    }
+    CHECK(!late.known && late.interval() == 1000ms);
+    late.contentChanged(); // The client's real first frame finally arrives.
+    CHECK(late.interval() == 32ms && late.needsFollowup());
+    CHECK(late.lastRead == start + 11s); // Damage cannot bypass the throttle.
+    late.attempted(start + 12s);
+    CHECK(!late.accept(false, color, late.lastRead));
+    late.attempted(start + 12s + 32ms);
+    CHECK(late.accept(false, color, late.lastRead));
+}
+
 void timingTests()
 {
     TitlebarTintState state;
@@ -337,6 +407,9 @@ int main(int argc, char **argv)
 {
     if (argc > 1 && QString::fromUtf8(argv[1]) == QStringLiteral("--benchmark")) boundaryBenchmark();
     histogramTests();
+    startupPixelsTests();
+    paintTransformTests();
+    startupTimingTests();
     geometryTests();
     neighboringWidgetTests();
     toolbarGutterTests();

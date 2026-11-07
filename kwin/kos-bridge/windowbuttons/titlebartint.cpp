@@ -17,8 +17,9 @@ bool sameColor(const QColor &a, const QColor &b)
 
 void TintHistogram::add(const uchar *p)
 {
-    // Transparent/unpainted pixels are not evidence of a black title bar.
-    if (p[3] < 128) return;
+    // Only opaque pixels carry the titlebar's actual RGB. Translucent source
+    // pixels are premultiplied and would turn a fade-in into a dark tint.
+    if (p[3] != 255) return;
     auto &bin = m_bins[(54 * p[0] + 183 * p[1] + 19 * p[2]) >> 8];
     ++bin.count;
     bin.red += p[0];
@@ -196,7 +197,7 @@ void TitlebarTintState::requestRefresh()
 }
 
 bool TitlebarTintState::accept(bool sampledDark, const QColor &sampledColor,
-                              Clock::time_point now)
+                              Clock::time_point sampledAt)
 {
     if (!sampledColor.isValid() || sampledColor.alpha() != 255) {
         rejectSample();
@@ -213,10 +214,10 @@ bool TitlebarTintState::accept(bool sampledDark, const QColor &sampledColor,
         pending = true;
         pendingDark = sampledDark;
         pendingColor = sampledColor;
-        pendingSince = now;
+        pendingSince = sampledAt;
         return false;
     }
-    if (now - pendingSince < ConfirmTime) return false;
+    if (sampledAt - pendingSince < ConfirmTime) return false;
     dark = sampledDark;
     color = sampledColor;
     known = true;
