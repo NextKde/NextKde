@@ -30,6 +30,9 @@ QtObject {
     property string imName: "中州韵"
     property var properties: []
     property var menuItems: []
+    // Published once after all fields are applied, rather than exposing the
+    // intermediate assignments to the animated panel.
+    property var popupState: ({})
 
     signal menuReceived(var items)
 
@@ -67,6 +70,9 @@ QtObject {
         function onTransportChanged(connected) {
             if (connected) {
                 svc._subscribe();
+            } else {
+                svc.visible = false;
+                svc.popupState = Object.assign({}, svc.popupState, { visible: false });
             }
         }
     }
@@ -98,13 +104,25 @@ QtObject {
         svc.hasPrev = !!state.hasPrev;
         svc.hasNext = !!state.hasNext;
         svc.layout = Number(state.layout) || 0;
-        svc.candidates = Array.isArray(state.candidates) ? state.candidates : [];
+        const nextCandidates = Array.isArray(state.candidates) ? state.candidates : [];
+        // Caret/visibility events also carry the table. Keep the Repeater's
+        // delegates when only those fields changed.
+        if (JSON.stringify(nextCandidates) !== JSON.stringify(svc.candidates))
+            svc.candidates = nextCandidates;
         svc.spot = state.spot || ({});
         svc.kwinCaret = state.caret || ({});
         if (state.imLabel) svc.imLabel = String(state.imLabel);
         if (state.imIcon) svc.imIcon = String(state.imIcon);
         if (state.imName) svc.imName = String(state.imName);
         if (Array.isArray(state.properties)) svc.properties = state.properties;
+        svc.popupState = {
+            enabled: svc.enabled, visible: svc.visible,
+            lookupVisible: svc.lookupVisible, candidates: svc.candidates,
+            preeditVisible: svc.preeditVisible, preeditText: svc.preeditText,
+            auxVisible: svc.auxVisible, auxText: svc.auxText,
+            cursorIndex: svc.cursorIndex, layout: svc.layout,
+            hasPrev: svc.hasPrev, hasNext: svc.hasNext
+        };
     }
 
     function selectCandidate(index) {
