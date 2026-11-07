@@ -151,7 +151,23 @@ Item {
             anchors.fill: parent
             radius: 12
             cornerExponent: AppearanceTokens.shape.cornerExponent
-            scrimLevel: "balanced"
+            scrimEnabled: true
+            scrimLevel: "readable"
+            material: "thick"
+            baseColor: ThemeService.isDark
+                ? Qt.rgba(0.08, 0.09, 0.12, 0.50)
+                : Qt.rgba(0.95, 0.95, 0.98, 0.70)
+            ambientPrimary: WallpaperColorSource.primary
+            ambientSecondary: WallpaperColorSource.secondary
+            ambientStrength: 0.35 * AppearanceTokens.glass.ambientMultiplier
+            blurOverrideEnabled: true
+            blurStrength: Math.max(0.40, AppearanceConfigService.effectiveDockBlur)
+
+            Rectangle {
+                anchors.fill: parent
+                radius: menuGlass.radius
+                color: ThemeService.isDark ? Qt.rgba(0, 0, 0, 0.22) : Qt.rgba(1, 1, 1, 0.28)
+            }
 
             Column {
                 id: menuColumn
