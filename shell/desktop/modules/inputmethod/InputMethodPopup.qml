@@ -3,6 +3,8 @@ import QtQuick.Layouts
 import Quickshell
 import Quickshell.Wayland
 import qs.desktop.modules.common
+import qs.desktop.modules.dock
+import "../../../Kos/Ui"
 import "InputMethodPlacement.mjs" as Placement
 
 Scope {
@@ -47,8 +49,23 @@ Scope {
                     && isTargetScreen
                     && (InputMethodService.lookupVisible || InputMethodService.preeditVisible || InputMethodService.auxVisible)
 
-                visible: shouldShow
-                mask: shouldShow ? cardInputRegion : emptyRegion
+                property real openProgress: 0.0
+
+                NumberAnimation {
+                    id: openAnim
+                    target: window
+                    property: "openProgress"
+                    duration: window.shouldShow ? 100 : 80
+                    to: window.shouldShow ? 1.0 : 0.0
+                    easing.type: window.shouldShow ? Easing.OutCubic : Easing.InQuad
+                }
+
+                onShouldShowChanged: {
+                    openAnim.restart();
+                }
+
+                visible: shouldShow || openProgress > 0.001
+                mask: (shouldShow && openProgress > 0.1) ? cardInputRegion : emptyRegion
 
                 Region { id: emptyRegion }
                 Region { id: cardInputRegion; item: cardContainer }
@@ -59,9 +76,16 @@ Scope {
                 Item {
                     id: cardContainer
 
+                    readonly property bool isOnlyTip: !InputMethodService.lookupVisible
+                        || InputMethodService.candidates.length === 0
+
                     // Layout placement calculation
-                    readonly property real cardW: Math.max(120, contentColumn.implicitWidth + 24)
-                    readonly property real cardH: Math.max(34, contentColumn.implicitHeight + 16)
+                    readonly property real cardW: isOnlyTip
+                        ? Math.max(34, contentColumn.implicitWidth + 20)
+                        : Math.max(120, contentColumn.implicitWidth + 24)
+                    readonly property real cardH: isOnlyTip
+                        ? Math.max(26, contentColumn.implicitHeight + 10)
+                        : Math.max(34, contentColumn.implicitHeight + 16)
 
                     readonly property var placement: Placement.placeCandidatePopup(
                         window.scrGeom,
@@ -76,11 +100,11 @@ Scope {
                     width: cardW
                     height: cardH
 
-                    Behavior on x {
-                        NumberAnimation { duration: 80; easing.type: Easing.OutCubic }
-                    }
-                    Behavior on y {
-                        NumberAnimation { duration: 80; easing.type: Easing.OutCubic }
+                    opacity: window.openProgress
+                    scale: 0.95 + 0.05 * window.openProgress
+                    transformOrigin: placement.placedAbove ? Item.Bottom : Item.Top
+                    transform: Translate {
+                        y: (1 - window.openProgress) * (cardContainer.placement.placedAbove ? 4 : -4)
                     }
 
                     KosCardShadow {
@@ -100,9 +124,28 @@ Scope {
                     LiquidGlassPanel {
                         id: glassPanel
                         anchors.fill: parent
-                        radius: 14
-                        cornerExponent: AppearanceTokens.shape.cornerExponent
-                        scrimLevel: "balanced"
+                        radius: cardContainer.isOnlyTip ? Math.round(cardContainer.cardH / 2) : 14
+                        cornerExponent: cardContainer.isOnlyTip ? 2.0 : AppearanceTokens.shape.cornerExponent
+                        blurAnchor: cardContainer
+                        useKwinEffect: AppearanceTokens.surface.usesKwinBlur
+                        scrimEnabled: true
+                        scrimLevel: "readable"
+                        material: "thick"
+                        baseColor: ThemeService.isDark
+                            ? Qt.rgba(0.08, 0.09, 0.12, 0.50)
+                            : Qt.rgba(0.95, 0.95, 0.98, 0.70)
+                        ambientPrimary: WallpaperColorSource.primary
+                        ambientSecondary: WallpaperColorSource.secondary
+                        ambientStrength: 0.35 * AppearanceTokens.glass.ambientMultiplier
+                        blurOverrideEnabled: true
+                        blurStrength: Math.max(0.40, AppearanceConfigService.effectiveDockBlur)
+
+                        // Inner plate for text contrast protection
+                        Rectangle {
+                            anchors.fill: parent
+                            radius: glassPanel.radius
+                            color: ThemeService.isDark ? Qt.rgba(0, 0, 0, 0.22) : Qt.rgba(1, 1, 1, 0.28)
+                        }
 
                         MouseArea {
                             anchors.fill: parent
@@ -118,45 +161,29 @@ Scope {
                         Column {
                             id: contentColumn
                             anchors.centerIn: parent
-                            spacing: 6
+                            spacing: cardContainer.isOnlyTip ? 0 : 6
 
                             // 1. Preedit & Aux row
                             Row {
                                 id: preeditRow
                                 visible: InputMethodService.preeditVisible || InputMethodService.auxVisible
                                 spacing: 4
+                                anchors.horizontalCenter: cardContainer.isOnlyTip ? parent.horizontalCenter : undefined
 
                                 GlassText {
                                     id: preeditLabel
                                     text: InputMethodService.auxText
                                         ? InputMethodService.auxText
                                         : InputMethodService.preeditText
-                                    font.pixelSize: 14
-                                    font.weight: Font.Medium
-                                }
-
-                                // Blinking caret bar
-                                Rectangle {
-                                    id: caretBar
-                                    visible: preeditRow.visible && InputMethodService.preeditCaret >= 0
-                                    width: 1.5
-                                    height: preeditLabel.implicitHeight * 0.85
-                                    anchors.verticalCenter: parent.verticalCenter
-                                    color: AppearanceTokens.isDarkTheme ? "#ffffff" : "#000000"
-                                    opacity: 0.85
-
-                                    SequentialAnimation on opacity {
-                                        loops: Animation.Infinite
-                                        running: caretBar.visible
-                                        NumberAnimation { to: 0.15; duration: 500; easing.type: Easing.InOutQuad }
-                                        NumberAnimation { to: 0.85; duration: 500; easing.type: Easing.InOutQuad }
-                                    }
+                                    font.pixelSize: cardContainer.isOnlyTip ? 13 : 14
+                                    font.weight: cardContainer.isOnlyTip ? Font.Bold : Font.Medium
+                                    color: ThemeService.foregroundColor
                                 }
                             }
 
                             // Subtle divider line
                             Rectangle {
-                                visible: preeditRow.visible && candidateArea.visible
+                                visible: !cardContainer.isOnlyTip && preeditRow.visible && candidateArea.visible
                                 width: Math.max(preeditRow.implicitWidth, candidateArea.implicitWidth)
                                 height: 1
                                 color: AppearanceTokens.isDarkTheme ? Qt.rgba(1, 1, 1, 0.12) : Qt.rgba(0, 0, 0, 0.08)
