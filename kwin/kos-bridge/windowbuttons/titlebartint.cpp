@@ -180,6 +180,7 @@ std::chrono::milliseconds TitlebarTintState::interval() const
 
 void TitlebarTintState::attempted(Clock::time_point now)
 {
+    if (firstRead == Clock::time_point{}) firstRead = now;
     lastRead = now;
     sampleRevision = contentRevision;
     warmupReads = std::min(warmupReads + 1, WarmupReads);

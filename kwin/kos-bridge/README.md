@@ -102,11 +102,18 @@ legacy overlay windows (excluding native KOS decorations):
   a transfer, then returns to the regular 16 ms poll; neither path waits on the GPU.
   Four warm-up attempts run at 32 ms intervals; steady active-window checks back
   off from 125 ms through 250/500 ms to 1000 ms as observations stay unchanged.
-  Once a tint is known, unrelated document or video damage does not reset that
-  backoff; observed RGB changes return to 32 ms confirmation. Before the first
-  tint, client damage restarts warm-up so a late first frame does not inherit
-  a long delay from earlier failed reads. Failed observations also back off
-  after warm-up. These are scheduling intervals, not measured end-to-end latency. Focus changes
+  During the first five seconds after sampling starts, client damage restarts
+  warm-up even with a known tint: a cold-start placeholder is not evidence that
+  the application's titlebar has finished loading. This deadline is not extended
+  by damage, focus or resize. Afterwards, known windows retain their document/video
+  backoff; observed RGB changes still return to 32 ms confirmation. Before the
+  first tint, client damage also restarts warm-up after failed reads. Damage does
+  not reset the last-attempt time, and a static startup window still backs off;
+  this is not unconditional 32 ms polling for five seconds. New damage during a
+  transfer requests a newer capture without discarding every usable observation,
+  which would starve confirmation in a continuously repainting startup window.
+  Failed observations also back off after warm-up. These are scheduling intervals,
+  not measured end-to-end latency. Focus changes
   restart the fast phase for both windows while retaining validated RGB. Client
   damage also requests a throttled refresh for inactive windows; damage during
   an in-flight transfer remains outstanding until a newer capture completes.
@@ -130,6 +137,11 @@ legacy overlay windows (excluding native KOS decorations):
   values do not churn the panel texture cache. Explicit `dark`, `light` and
   custom-color settings still bypass sampling.
 - Legacy server decorations without the native capability marker retain their palette fallback for upgrade compatibility.
+
+The effect's `window-controls` debug payload includes `tintStartingUp`,
+`tintIntervalMs`, `tintReadbackPending` and `tintChangePending` alongside the
+validated RGB. These distinguish startup backoff from a busy GPU read or a
+color awaiting confirmation during live cold-start checks.
 
 Optional CPU-only maximum-probe microbenchmark (excludes GPU/readback/repaint):
 `./.build/kos-bridge/titlebar_tint_test --benchmark`.

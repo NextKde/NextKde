@@ -45,6 +45,7 @@ struct TitlebarTintState {
     static constexpr auto WarmupInterval = std::chrono::milliseconds(32);
     static constexpr auto RecheckInterval = std::chrono::milliseconds(125);
     static constexpr auto IdleInterval = std::chrono::milliseconds(1000);
+    static constexpr auto StartupDuration = std::chrono::seconds(5);
     static constexpr int StableReads = 8;
     static constexpr int WarmupReads = 4;
 
@@ -55,6 +56,7 @@ struct TitlebarTintState {
     bool pendingDark = false;
     QColor pendingColor;
     Clock::time_point pendingSince{};
+    Clock::time_point firstRead{};
     Clock::time_point lastRead{};
     int warmupReads = 0;
     int stableReads = 0;
@@ -63,17 +65,22 @@ struct TitlebarTintState {
 
     std::chrono::milliseconds interval() const;
     void requestRefresh();
-    void contentChanged() {
+    bool startingUp(Clock::time_point now) const {
+        return firstRead != Clock::time_point{} && now >= firstRead
+            && now - firstRead < StartupDuration;
+    }
+    void contentChanged(Clock::time_point now = Clock::now()) {
         ++contentRevision;
         refreshRequested = true;
-        // A late first client frame must not inherit the backoff accumulated
-        // while its titlebar was still undrawn. Validated windows keep it.
-        if (!known) { warmupReads = 0; stableReads = 0; }
+        // Cold starts can confirm a placeholder before drawing the titlebar.
+        // Track subsequent client frames promptly even with a known tint, but
+        // never extend the startup deadline on damage, focus or resize.
+        if (!known || startingUp(now)) { warmupReads = 0; stableReads = 0; }
     }
     std::chrono::milliseconds readbackPollInterval(Clock::time_point now) const {
         // Only startup/confirmation needs a sub-frame poll. A slow transfer
         // returns to the regular cadence after the first warm-up interval.
-        return (!known || pending) && now - lastRead < WarmupInterval
+        return (!known || pending || startingUp(now)) && now - lastRead < WarmupInterval
             ? std::chrono::milliseconds(4) : std::chrono::milliseconds(16);
     }
     void rejectSample() {

@@ -297,7 +297,9 @@ void startupTimingTests()
     state.attempted(start + 32ms);
     CHECK(state.accept(false, color, state.lastRead));
     CHECK(state.known && state.color == color);
-    CHECK(state.readbackPollInterval(start + 36ms) == 16ms);
+    CHECK(state.readbackPollInterval(start + 36ms) == 4ms);
+    state.attempted(start + 6s);
+    CHECK(state.readbackPollInterval(start + 6s) == 16ms);
 
     TitlebarTintState late;
     for (int i = 0; i < 12; ++i) {
@@ -312,6 +314,72 @@ void startupTimingTests()
     CHECK(!late.accept(false, color, late.lastRead));
     late.attempted(start + 12s + 32ms);
     CHECK(late.accept(false, color, late.lastRead));
+}
+
+void coldStartupTests()
+{
+    using Clock = TitlebarTintState::Clock;
+    const auto start = Clock::time_point{} + 1s;
+    const QColor placeholder(0, 0, 0), titlebar(240, 240, 240);
+    TitlebarTintState state;
+    const auto observe = [&](const QColor &color, Clock::time_point at) {
+        state.attempted(at);
+        return state.accept(color.lightness() < 128, color, at);
+    };
+    CHECK(!observe(placeholder, start));
+    CHECK(observe(placeholder, start + 32ms));
+    auto capturedAt = start + 32ms;
+    for (int i = 0; i < 8; ++i) {
+        capturedAt += state.interval();
+        observe(placeholder, capturedAt);
+    }
+    CHECK(state.known && state.color == placeholder && state.interval() == 1000ms);
+    CHECK(state.lastRead < start + 4s && state.lastRead + state.interval() > start + 4s);
+
+    // An Electron-style cold start presents a stable clear color before it
+    // creates the titlebar. Having a validated tint does not end startup.
+    const auto lastRead = state.lastRead;
+    state.contentChanged(start + 4s);
+    CHECK(state.color == placeholder); // Keep controls while refreshing.
+    CHECK(state.interval() == 32ms);
+    CHECK(state.lastRead == lastRead); // Still throttle client damage.
+    CHECK(state.lastRead + state.interval() <= start + 4s); // Capture is due now.
+    CHECK(!observe(titlebar, start + 4s));
+    CHECK(observe(titlebar, start + 4s + 32ms));
+    CHECK(state.color == titlebar);
+
+    // Damage during a transfer still needs a newer capture, even if the
+    // completed read agrees with the displayed color.
+    state.attempted(start + 4100ms);
+    state.contentChanged(start + 4104ms);
+    CHECK(!state.accept(false, titlebar, state.lastRead));
+    CHECK(!state.pending && state.needsFollowup());
+    CHECK(state.interval() == 32ms && state.color == titlebar);
+
+    // Startup is a fixed budget, not an indefinitely renewed fast poll for
+    // video/scrolling. Focus and geometry refreshes cannot restart its clock.
+    for (int i = 0; i < 12; ++i) observe(titlebar, start + 4200ms + i * 32ms);
+    CHECK(state.interval() == 1000ms);
+    state.contentChanged(start + TitlebarTintState::StartupDuration);
+    CHECK(state.interval() == 1000ms);
+    CHECK(!state.startingUp(start + TitlebarTintState::StartupDuration));
+    state.requestRefresh();
+    CHECK(!state.startingUp(start + TitlebarTintState::StartupDuration));
+
+    // Continuously changing startup content must not starve confirmation:
+    // never discard every read merely because another damage event arrived.
+    TitlebarTintState first;
+    first.attempted(start);
+    first.contentChanged(start + 4ms);
+    CHECK(!first.accept(false, titlebar, first.lastRead));
+    CHECK(!first.known && first.pending && first.needsFollowup());
+    first.attempted(start + 32ms);
+    first.contentChanged(start + 36ms);
+    CHECK(first.accept(false, titlebar, first.lastRead));
+    CHECK(first.known && first.needsFollowup());
+    first.attempted(start + 64ms);
+    CHECK(!first.accept(false, titlebar, first.lastRead));
+    CHECK(!first.refreshRequested);
 }
 
 void timingTests()
@@ -410,6 +478,7 @@ int main(int argc, char **argv)
     startupPixelsTests();
     paintTransformTests();
     startupTimingTests();
+    coldStartupTests();
     geometryTests();
     neighboringWidgetTests();
     toolbarGutterTests();

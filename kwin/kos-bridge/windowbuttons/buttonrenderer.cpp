@@ -1585,6 +1585,10 @@ QJsonObject ButtonRenderer::controlDiagnostics(KWin::EffectWindow *window) const
     if (cached != m_cache.constEnd()) {
         result.insert("tintKnown", cached->known);
         result.insert("tintColor", cached->color.name());
+        result.insert("tintStartingUp", cached->startingUp(Clock::now()));
+        result.insert("tintIntervalMs", int(cached->interval().count()));
+        result.insert("tintReadbackPending", cached->sampler->pending());
+        result.insert("tintChangePending", cached->pending);
         result.insert("backgroundBottom", cached->backgroundBottom);
     }
     const auto it = m_hits.constFind(window);
