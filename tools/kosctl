@@ -2182,6 +2182,12 @@ deploy_shell() {
         rm -rf "$shell_config/Kos/SurfaceShape"
         cp -rL --no-preserve=mode "$build_dir/qml/Kos/SurfaceShape" "$shell_config/Kos/"
     fi
+    if [[ -d "$prefix/share/kos/settings" ]]; then
+        cp -rL --no-preserve=mode "$project_dir/apps/settings/pages" "$prefix/share/kos/settings/"
+    fi
+    if [[ -d "$prefix/share/shared/qml" ]]; then
+        cp -rL --no-preserve=mode "$shared_qml_src/." "$prefix/share/shared/qml/"
+    fi
 }
 
 case "${1:-}" in
