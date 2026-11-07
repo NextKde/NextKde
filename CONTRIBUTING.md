@@ -78,3 +78,6 @@ When implementing features that depend on compositor protocols (such as Wayland 
    - **Settings Surface**: Expose a clear troubleshooting card or diagnostic row in `apps/settings` (such as the Integration Status page) detailing the underlying cause, recommended flags/variables, and a direct button to the guide.
    - **Authoritative Docs**: Provide bilingual integration and troubleshooting documentation under `docs/`, linked from `docs/README.md`.
    - **PR Changelog**: Explicitly document third-party compatibility, affected application matrices, and known manual workarounds in the pull request description.
+3. **Hierarchy and Convergence Principle (Prevent Flat Bloat)**:
+   - In settings troubleshooting cards, top-level rows must represent the **feature/issue domain** (e.g. Input Method Candidate Styling, Window Blur Effects).
+   - Specific application workarounds, environment overrides, and startup flags must be nested as **collapsible child details** under that issue, never flattened as peer top-level rows, keeping the settings interface compact, scalable, and structured.
