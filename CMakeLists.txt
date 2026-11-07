@@ -598,6 +598,22 @@ if(BUILD_TESTING)
     find_program(KOS_INTERACTION_QMLTEST NAMES qmltestrunner qmltestrunner6
         HINTS /usr/lib/qt6/bin)
     find_program(KOS_INTERACTION_QUICKSHELL NAMES quickshell)
+    if(KOS_NODE_EXECUTABLE AND KOS_INTERACTION_QMLTEST)
+        add_test(NAME kos-shell.inputmethod-motion
+            COMMAND ${KOS_NODE_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/inputmethod/run.mjs
+                ${KOS_INTERACTION_QMLTEST})
+        set_tests_properties(kos-shell.inputmethod-motion PROPERTIES LABELS "ui;headless" TIMEOUT 20)
+    endif()
+    if(KOS_NODE_EXECUTABLE)
+        add_test(NAME kos-shell.inputmethod-placement
+            COMMAND ${KOS_NODE_EXECUTABLE}
+                ${CMAKE_CURRENT_SOURCE_DIR}/shell/desktop/modules/inputmethod/test_inputmethod_placement.mjs)
+        add_test(NAME kos-shell.inputmethod-status
+            COMMAND ${KOS_NODE_EXECUTABLE}
+                ${CMAKE_CURRENT_SOURCE_DIR}/shell/desktop/modules/inputmethod/test_inputmethod_status_dismissal.mjs)
+        set_tests_properties(kos-shell.inputmethod-placement kos-shell.inputmethod-status
+            PROPERTIES LABELS logic TIMEOUT 10)
+    endif()
     find_program(KOS_TEST_KWIN NAMES kwin_wayland)
     find_program(KOS_TEST_DBUS_RUN NAMES dbus-run-session)
     if(KOS_PYTHON_EXECUTABLE AND KOS_INTERACTION_QUICKSHELL AND KOS_TEST_KWIN AND KOS_TEST_DBUS_RUN)

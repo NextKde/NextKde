@@ -44,22 +44,22 @@ Scope {
                         && globalAnchor.y < (scrGeom.y + scrGeom.height);
                 }
 
-                readonly property bool shouldShow: InputMethodService.visible
-                    && InputMethodService.enabled
-                    && isTargetScreen
-                    && (InputMethodService.lookupVisible || InputMethodService.preeditVisible || InputMethodService.auxVisible)
+                function syncPresentation() {
+                    presentation.update(InputMethodService.popupState, globalAnchor, isTargetScreen)
+                }
+                onGlobalAnchorChanged: syncPresentation()
+                onIsTargetScreenChanged: syncPresentation()
+                Component.onCompleted: syncPresentation()
 
-                property real openProgress: shouldShow ? 1.0 : 0.0
-
-                Behavior on openProgress {
-                    NumberAnimation {
-                        duration: window.shouldShow ? 50 : 40
-                        easing.type: window.shouldShow ? Easing.OutCubic : Easing.InQuad
-                    }
+                Connections {
+                    target: InputMethodService
+                    function onPopupStateChanged() { window.syncPresentation() }
                 }
 
-                visible: shouldShow || openProgress > 0.001
-                mask: (shouldShow && openProgress > 0.1) ? cardInputRegion : emptyRegion
+                InputMethodPresentation { id: presentation }
+
+                visible: presentation.mapped
+                mask: presentation.interactive ? cardInputRegion : emptyRegion
 
                 Region { id: emptyRegion }
                 Region { id: cardInputRegion; item: cardContainer }
@@ -70,11 +70,10 @@ Scope {
                 Item {
                     id: cardContainer
 
-                    readonly property bool isOnlyTip: !InputMethodService.lookupVisible
-                        || InputMethodService.candidates.length === 0
+                    readonly property bool isOnlyTip: presentation.isOnlyTip
 
                     readonly property string cleanTipText: {
-                        const raw = InputMethodService.auxText || InputMethodService.preeditText;
+                        const raw = presentation.state.auxText || presentation.state.preeditText;
                         return raw ? raw.replace(/\|/g, "").trim() : "";
                     }
 
@@ -88,9 +87,9 @@ Scope {
 
                     readonly property var placement: Placement.placeCandidatePopup(
                         window.scrGeom,
-                        window.globalAnchor,
-                        cardW,
-                        cardH,
+                        presentation.anchor,
+                        width,
+                        height,
                         8
                     )
 
@@ -99,7 +98,21 @@ Scope {
                     width: cardW
                     height: cardH
 
-                    opacity: window.openProgress
+                    // A tiny contraction toward the caret; no sliding text.
+                    opacity: presentation.progress
+                    scale: presentation.scale
+                    transformOrigin: presentation.anchor && placement.y < presentation.anchor.y
+                        ? Item.BottomLeft : Item.TopLeft
+                    enabled: presentation.interactive
+
+                    Behavior on width {
+                        enabled: presentation.interactive && presentation.progress > 0.99
+                        NumberAnimation { duration: 100; easing.type: Easing.OutCubic }
+                    }
+                    Behavior on height {
+                        enabled: presentation.interactive && presentation.progress > 0.99
+                        NumberAnimation { duration: 100; easing.type: Easing.OutCubic }
+                    }
 
                     KosCardShadow {
                         cardWidth: glassPanel.width
@@ -121,6 +134,8 @@ Scope {
                         radius: cardContainer.isOnlyTip ? Math.round(cardContainer.cardH / 2) : 14
                         cornerExponent: cardContainer.isOnlyTip ? 2.0 : AppearanceTokens.shape.cornerExponent
                         blurAnchor: cardContainer
+                        backdropScale: cardContainer.scale
+                        effectOpacity: presentation.progress
                         useKwinEffect: AppearanceTokens.surface.usesKwinBlur
                         blurOverrideEnabled: true
                         blurStrength: AppearanceConfigService.globalBlurStrength
@@ -154,13 +169,16 @@ Scope {
 
                         Column {
                             id: contentColumn
-                            anchors.centerIn: parent
+                            anchors.left: parent.left
+                            anchors.top: parent.top
+                            anchors.leftMargin: cardContainer.isOnlyTip ? 6 : 12
+                            anchors.topMargin: cardContainer.isOnlyTip ? 3 : 8
                             spacing: cardContainer.isOnlyTip ? 0 : 6
 
                             // 1. Preedit & Aux row
                             Row {
                                 id: preeditRow
-                                visible: InputMethodService.preeditVisible || InputMethodService.auxVisible
+                                visible: presentation.state.preeditVisible || presentation.state.auxVisible
                                 spacing: 4
                                 anchors.horizontalCenter: cardContainer.isOnlyTip ? parent.horizontalCenter : undefined
 
@@ -168,9 +186,9 @@ Scope {
                                     id: preeditLabel
                                     text: cardContainer.isOnlyTip
                                         ? cardContainer.cleanTipText
-                                        : (InputMethodService.auxText
-                                            ? InputMethodService.auxText
-                                            : InputMethodService.preeditText)
+                                        : (presentation.state.auxText
+                                            ? presentation.state.auxText
+                                            : presentation.state.preeditText)
                                     font.pixelSize: cardContainer.isOnlyTip ? 13 : 14
                                     font.weight: cardContainer.isOnlyTip ? Font.Bold : Font.Medium
                                     color: ThemeService.foregroundColor
@@ -188,13 +206,13 @@ Scope {
                             // 2. Candidate items (horizontal row or vertical column)
                             Item {
                                 id: candidateArea
-                                visible: InputMethodService.lookupVisible && InputMethodService.candidates.length > 0
+                                visible: presentation.state.lookupVisible && presentation.state.candidates.length > 0
                                 width: implicitWidth
                                 height: implicitHeight
                                 implicitWidth: isVertical ? verticalCol.implicitWidth : horizontalRow.implicitWidth
                                 implicitHeight: isVertical ? verticalCol.implicitHeight : horizontalRow.implicitHeight
 
-                                readonly property bool isVertical: InputMethodService.layout === 1
+                                readonly property bool isVertical: presentation.state.layout === 1
 
                                 // Horizontal candidate row (default & Rime standard)
                                 Row {
@@ -203,11 +221,11 @@ Scope {
                                     spacing: 12
 
                                     Repeater {
-                                        model: InputMethodService.candidates
+                                        model: presentation.state.candidates
 
                                         delegate: Item {
                                             id: candItem
-                                            readonly property bool isSelected: index === InputMethodService.cursorIndex
+                                            readonly property bool isSelected: index === presentation.state.cursorIndex
                                             readonly property var dataItem: modelData
 
                                             width: implicitWidth
@@ -273,13 +291,13 @@ Scope {
 
                                     // Paging indicators
                                     Row {
-                                        visible: InputMethodService.hasPrev || InputMethodService.hasNext
+                                        visible: presentation.state.hasPrev || presentation.state.hasNext
                                         spacing: 4
                                         anchors.verticalCenter: parent.verticalCenter
 
                                         GlassText {
                                             text: "<"
-                                            visible: InputMethodService.hasPrev
+                                            visible: presentation.state.hasPrev
                                             color: ThemeService.secondaryForegroundColor
                                             opacity: prevMouse.containsMouse ? 0.9 : 0.45
                                             font.pixelSize: 12
@@ -294,7 +312,7 @@ Scope {
 
                                         GlassText {
                                             text: ">"
-                                            visible: InputMethodService.hasNext
+                                            visible: presentation.state.hasNext
                                             color: ThemeService.secondaryForegroundColor
                                             opacity: nextMouse.containsMouse ? 0.9 : 0.45
                                             font.pixelSize: 12
@@ -316,10 +334,10 @@ Scope {
                                     spacing: 4
 
                                     Repeater {
-                                        model: InputMethodService.candidates
+                                        model: presentation.state.candidates
 
                                         delegate: Item {
-                                            readonly property bool isSelected: index === InputMethodService.cursorIndex
+                                            readonly property bool isSelected: index === presentation.state.cursorIndex
                                             readonly property var dataItem: modelData
 
                                             width: implicitWidth

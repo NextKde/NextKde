@@ -25,6 +25,8 @@
   ],
   "logic": [
     "kos-ui.system-font-policy",
+    "kos-shell.inputmethod-placement",
+    "kos-shell.inputmethod-status",
     "kos-shell.appmenu-refresh",
     "kos-window.gtk-buttons-install",
     "kos-window.firefox-buttons-install",
@@ -86,6 +88,7 @@
   "headless": [
     "kos-settings.fonts",
     "kos-shell.system-font",
+    "kos-shell.inputmethod-motion",
     "kos-shell.weather-refresh",
     "kos-shell.stage-visibility-qml",
     "kos-shell.dock-native-target",
