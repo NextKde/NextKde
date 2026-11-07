@@ -35,10 +35,14 @@ PanelWindow {
     // 会被同在 DesktopLayer 的 Plasma 桌面表面盖住——实测重登后组件全部
     // 消失。与台前调度条带的层内先后由 KWin 脚本重排，见
     // kwin/window-bridge.js。
-    // KWin excludes Desktop windows from active-window close/move shortcuts.
-    // Bottom remains the compositor layer; the desktop stack script orders
-    // the separate wallpaper below this keyboard-interactive desktop surface.
-    WlrLayershell.namespace: "desktop"
+    // KWin protects both Desktop and Dock windows from ordinary close/move
+    // shortcuts and Show Desktop hiding. Only the wallpaper may be Desktop:
+    // native Overview's DesktopBackground captures one Desktop window, so
+    // typing this transparent widget surface as Desktop loses the wallpaper.
+    // Bottom still puts widgets below applications; the bridge orders them
+    // above the separate wallpaper. Native Overview fades Dock thumbnails;
+    // Glass supplies the composed desktop texture so widgets scale with it.
+    WlrLayershell.namespace: "dock"
     WlrLayershell.layer: WlrLayer.Bottom
     // A desktop needs shortcuts only after the user explicitly clicks it.
     // OnDemand keeps active applications' Ctrl+C/V untouched otherwise.

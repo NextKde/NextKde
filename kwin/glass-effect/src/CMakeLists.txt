@@ -83,8 +83,10 @@ kconfig_add_kcfg_files(glass_SOURCES
 )
 
 if(GLASS_WAYLAND)
-    add_library(glass MODULE ${glass_SOURCES})
+    find_package(Qt6 ${QT_MIN_VERSION} CONFIG REQUIRED COMPONENTS Quick)
+    add_library(glass MODULE ${glass_SOURCES} overviewpreview.cpp)
     target_link_libraries(glass PRIVATE
+        Qt6::Quick
         KDecoration3::KDecoration
         KF6::ConfigGui
         KWin::kwin

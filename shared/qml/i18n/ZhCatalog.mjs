@@ -1336,6 +1336,8 @@ export const catalog = {
     "KOS window appearance": "KOS 窗口外观",
     "Corner radius": "圆角幅度",
     "Window shadow": "窗口阴影",
+    "Independent button cover": "独立调整按钮覆盖背景",
+    "Buttons use the standard KOS size (14 px). Right-click the cover and drag its edges to resize only the background. Button size and spacing adjustments are disabled.": "按钮统一使用 KOS 标准大小（14 像素）。右键背景后拖动边缘，仅调整背景覆盖范围；按钮大小和间距调整已禁用。",
     "Window button icons": "窗口按钮图标",
     "macOS (on hover)": "macOS 模式（悬停显示）",
     "Turning off KOS window appearance restores the original decorator. Radius and shadow apply immediately; decorator switches take effect on next login.": "关闭 KOS 窗口外观会恢复原装饰器。圆角与阴影即时生效，装饰器切换在下次登录生效。",
