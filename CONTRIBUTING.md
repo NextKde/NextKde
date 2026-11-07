@@ -68,3 +68,13 @@ same change. Release notes and installation/release/development entry points are
 Keep detailed topic documentation in one place and link it; avoid copying commands and mutable
 release status across several guides. VERSION and immutable tags identify code; Release evidence
 identifies actual validation. Historical results must retain their original scope.
+
+## Feature delivery and manual adaptation closure
+
+When implementing features that depend on compositor protocols (such as Wayland `text-input-v3`, KWin effect extensions, or session D-Bus contracts) or require manual application-level adaptations (such as startup flags or environment variables for Electron or bundled Qt runtimes):
+
+1. **Anti-invisibility**: End-users rarely browse code comments or technical markdown docs when encountering issues; workarounds must not remain buried in documentation alone.
+2. **Triad closure requirement**:
+   - **Settings Surface**: Expose a clear troubleshooting card or diagnostic row in `apps/settings` (such as the Integration Status page) detailing the underlying cause, recommended flags/variables, and a direct button to the guide.
+   - **Authoritative Docs**: Provide bilingual integration and troubleshooting documentation under `docs/`, linked from `docs/README.md`.
+   - **PR Changelog**: Explicitly document third-party compatibility, affected application matrices, and known manual workarounds in the pull request description.
