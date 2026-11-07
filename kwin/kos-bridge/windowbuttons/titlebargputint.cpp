@@ -22,6 +22,11 @@ uniform int gutterWidth;
 uniform int gutterHeight;
 out vec4 fragColor;
 int luma(ivec3 rgb) { return (54 * rgb.r + 183 * rgb.g + 19 * rgb.b) >> 8; }
+ivec3 straightRgb(ivec4 p)
+{
+    if (p.a == 255) return p.rgb;
+    return min(ivec3(255), (p.rgb * 255 + ivec3(p.a / 2)) / p.a);
+}
 void main()
 {
     int bins[256];
@@ -30,8 +35,8 @@ void main()
     for (int y = 0; y < gutterHeight; ++y) {
         for (int x = 0; x < gutterWidth; ++x) {
             ivec4 p = ivec4(round(texelFetch(sampler, ivec2(x, y), 0) * 255.0));
-            if (p.a != 255) continue;
-            ++bins[luma(p.rgb)];
+            if (p.a < KOS_MIN_OPAQUE_ALPHA) continue;
+            ++bins[luma(straightRgb(p))];
             ++count;
         }
     }
@@ -50,8 +55,10 @@ void main()
     for (int y = 0; y < gutterHeight; ++y) {
         for (int x = 0; x < gutterWidth; ++x) {
             ivec4 p = ivec4(round(texelFetch(sampler, ivec2(x, y), 0) * 255.0));
-            if (p.a == 255 && abs(luma(p.rgb) - median) <= 3) {
-                sum += p.rgb;
+            if (p.a < KOS_MIN_OPAQUE_ALPHA) continue;
+            ivec3 rgb = straightRgb(p);
+            if (abs(luma(rgb) - median) <= 3) {
+                sum += rgb;
                 ++cluster;
             }
         }
@@ -163,7 +170,9 @@ bool TitlebarGpuTint::initialize()
         ? QByteArrayLiteral("#version 140\n")
         : QByteArrayLiteral("#version 300 es\nprecision highp float;\nprecision highp int;\n");
     auto *manager = KWin::ShaderManager::instance();
-    m_reduceShader = manager->loadShaderFromCode(header + Vertex, header + ReduceFragment);
+    const QByteArray alphaPolicy = QByteArrayLiteral("#define KOS_MIN_OPAQUE_ALPHA ")
+        + QByteArray::number(TintHistogram::MinOpaqueAlpha) + '\n';
+    m_reduceShader = manager->loadShaderFromCode(header + Vertex, header + alphaPolicy + ReduceFragment);
     m_panelShader = manager->loadShaderFromCode(header + Vertex, header + PanelFragment);
     if (!m_reduceShader || !m_reduceShader->link() || !m_panelShader || !m_panelShader->link()) {
         qWarning() << "KOS: same-frame titlebar shader unavailable; retaining asynchronous tint";

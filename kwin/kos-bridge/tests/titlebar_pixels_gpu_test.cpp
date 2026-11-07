@@ -234,6 +234,26 @@ int main(int argc, char **argv)
         for (qsizetype i = 0; i + 4 <= pixels.size(); i += 4)
             translucent.add(reinterpret_cast<const uchar *>(pixels.constData()) + i);
         check(!translucent.tint(&dark, &color), "premultiplied fade cannot supply dark RGB");
+        for (int alpha : {253, 254, 255}) {
+            auto nearOpaque = opaqueBlack;
+            for (int i = 0; i < int(nearOpaque.size()); i += 4) {
+                nearOpaque[i] = nearOpaque[i + 1] = nearOpaque[i + 2] = 223;
+                nearOpaque[i + 3] = uchar(alpha);
+            }
+            glBindTexture(GL_TEXTURE_2D, sampleTexture);
+            glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, 8, 8, 0, GL_RGBA, GL_UNSIGNED_BYTE, nearOpaque.data());
+            check(readback.enqueue(sampleFbo, QSize(8, 8), QRect(0, 0, 8, 8)), "queue near-opaque titlebar read");
+            check(take(pixels), "near-opaque titlebar read completes");
+            KOS::TintHistogram histogram;
+            for (qsizetype i = 0; i + 4 <= pixels.size(); i += 4)
+                histogram.add(reinterpret_cast<const uchar *>(pixels.constData()) + i);
+            const bool usable = histogram.tint(&dark, &color);
+            check(usable == (alpha >= 254), "one-level alpha tolerance, not a fade");
+            if (usable) {
+                const int straight = alpha == 254 ? 224 : 223;
+                check(!dark && color == QColor(straight, straight, straight), "near-opaque RGB normalized");
+            }
+        }
         check(glGetError() == GL_NO_ERROR, "no leftover readback errors");
     }
     glBindFramebuffer(GL_FRAMEBUFFER, 0);

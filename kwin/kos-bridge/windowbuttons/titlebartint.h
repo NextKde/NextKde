@@ -14,6 +14,9 @@ class TintHistogram
 {
 public:
     static constexpr int MinSamples = 64;
+    // WeChat and other CSD clients can lose one alpha level during rendering.
+    // Accept only that near-opaque case, never actual premultiplied fade frames.
+    static constexpr int MinOpaqueAlpha = 254;
     void add(const uchar *rgba);
     bool tint(bool *dark, QColor *color, quint64 minimumSamples = MinSamples) const;
 
