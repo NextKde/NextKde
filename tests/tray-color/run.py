@@ -15,6 +15,7 @@ REPO = Path(__file__).resolve().parents[2]
 # Straight-colour stripes in the generated tray test icon.
 STRIPES = [(0, 0, 0), (255, 0, 0), (0, 255, 0)]
 TINT = (255, 0, 0)
+APPLICATION_COLORS = [(225, 140, 105), (74, 142, 214)]
 
 
 def luminance(color):
@@ -54,7 +55,7 @@ def main():
         shutil.copy(REPO / "tests/status-area/PlatformFixture.qml", platform / "PlatformClient.qml")
         shutil.copy(Path(__file__).with_name("shell.qml"), root / "shell.qml")
         (common / "IconThemeReloadService.qml").write_text(
-            "pragma Singleton\nimport QtQuick\nQtObject { property bool pixmapCacheAllowed: true }\n")
+            "pragma Singleton\nimport QtQuick\nQtObject { property bool pixmapCacheAllowed: true; property int revision: 0 }\n")
         # Only the transport is stubbed; the real service serializes/reloads its preference.
         (platform / "JsonConfigStore.qml").write_text(
             "pragma Singleton\nimport QtQuick\nQtObject {\n"
@@ -66,8 +67,26 @@ def main():
                 (0, 255, 0, 255), (255, 255, 255, 128)]):
             icon.paste(color, (index * 8, 0, index * 8 + 8, 24))
         icon.save(root / "icon.png")
+        # The installed desktop icons have color even though the live tray
+        # pixels are dark silhouettes. Use real DesktopEntries in a private XDG
+        # catalogue, with distinct colors to catch swapped application matches.
+        applications = root / "data/applications"
+        applications.mkdir(parents=True)
+        for index, (name, shade, desktop_id) in enumerate([
+                ("mono", 0, "com.anthropic.Claude"), ("gray", 31, "magpie")]):
+            for suffix, color in [("", (shade, shade, shade)), ("-color", APPLICATION_COLORS[index])]:
+                artwork = Image.new("RGBA", (24, 24))
+                artwork.paste((*color, 255), (2, 2, 14, 22))
+                artwork.paste((*color, 128), (14, 2, 22, 22))
+                artwork.paste((0, 0, 0, 0), (6, 8, 10, 16))
+                artwork.save(root / f"{name}{suffix}.png")
+            (applications / f"{desktop_id}.desktop").write_text(
+                f"[Desktop Entry]\nType=Application\nName={desktop_id}\n"
+                f"Exec=/bin/true\nIcon={root / (name + '-color.png')}\n")
         env = dict(os.environ, QT_QPA_PLATFORM="wayland", QSG_RHI_BACKEND="opengl",
             LIBGL_ALWAYS_SOFTWARE="1", CAPTURE_DIR=str(root), TRAY_TEST_ICON=(root / "icon.png").as_uri(),
+            TRAY_TEST_MONO_ICON=(root / "mono.png").as_uri(), TRAY_TEST_GRAY_ICON=(root / "gray.png").as_uri(),
+            TRAY_TEST_MISSING_ICON=(root / "missing-application-icon.png").as_uri(),
             XDG_STATE_HOME=str(root / "state"), XDG_CONFIG_HOME=str(root / "config"),
             XDG_CACHE_HOME=str(root / "cache"), XDG_DATA_HOME=str(root / "data"),
             KOS_PLATFORM_SOCKET=str(root / "no-platform.sock"), KOS_DATA_SOCKET=str(root / "no-data.sock"),
@@ -117,8 +136,11 @@ def main():
             for path in root.glob("*.png"):
                 shutil.copy(path, qa / path.name)
         assert result.returncode == 0 and "TRAY_COLOR_PASS" in output, output
+        # A deliberately missing override exercises deferred image-error fallback.
+        checked_output = "\n".join(line for line in output.splitlines()
+            if "missing-application-icon.png" not in line)
         assert not re.search(r"TRAY_COLOR_FAIL|ReferenceError|TypeError|Binding loop|Cannot assign|Unable to assign|"
-            r"Failed to (create|compile)|Cannot open|Shader.*error|is not a type", output), output
+            r"Failed to (create|compile)|Cannot open|Shader.*error|is not a type", checked_output), output
         frames = {name: Image.open(root / f"{name}.png").convert("RGB")
             for name in ["original", "white", "black", "restored", "reloaded", "tinted", "color"]}
         # Tray artwork follows the Dock's icon mode: color keeps the source,
@@ -152,6 +174,26 @@ def main():
             for x, width in [(160, 24), (200, 24), (240, 24), (280, 24)]:
                 crop = frame.crop((int(x * scale), int(4 * scale), int((x + width) * scale), int(28 * scale)))
                 assert sum(count for count, color in crop.getcolors(crop.width * crop.height) if color == ink) > 8, (name, x, "missing opaque ink")
+        for name in frames:
+            gallery = Image.open(root / f"applications-{name}.png").convert("RGB")
+            scale = gallery.width / 320
+            background = (240, 240, 240) if name in ["black", "restored"] else (22, 54, 113)
+            def gallery_pixel(x, y):
+                return gallery.getpixel((int(x * scale), int(y * scale)))
+            for index, x in enumerate([40, 72]):
+                color = expected_for[name](APPLICATION_COLORS[index])
+                actual = gallery_pixel(x + 4, 16)
+                assert all(abs(a - b) <= 2 for a, b in zip(actual, color)), (name, x, "application color", actual, color)
+                assert gallery_pixel(x + 8, 16) == background, (name, x, "transparent hole")
+                edge = tuple(round(fg * 128 / 255 + bg * 127 / 255) for fg, bg in zip(color, background))
+                actual = gallery_pixel(x + 18, 16)
+                assert all(abs(a - b) <= 2 for a, b in zip(actual, edge)), (name, x, "alpha edge", actual, edge)
+                # Attention and unqualified Chromium items retain even black
+                # source pixels instead of turning into an opaque ink badge.
+                assert gallery_pixel(x + 3, 48) == (0, 0, 0), (name, x, "original artwork")
+                expected = expected_for[name]((255, 0, 0))
+                actual = gallery_pixel(x + 8, 48)
+                assert all(abs(a - b) <= 2 for a, b in zip(actual, expected)), (name, x, "color artwork", actual, expected)
         assert frames["original"].crop((0, 0, 80, 32)).tobytes() == frames["restored"].crop((0, 0, 80, 32)).tobytes()
         # The two synthetic "101°" labels are appearance references, not tray
         # artwork. On CI their glyph rasterization changes after a light/dark
@@ -163,7 +205,7 @@ def main():
             for box in [(104, 4, 146, 28), (104, 44, 146, 68)]:
                 difference.paste((0, 0, 0), tuple(int(value * scale) for value in box))
             assert difference.getbbox() is None, (name, "tray artwork changed", difference.getbbox())
-        print("PASS: tray artwork follows the Dock's color/grayscale/tint modes; settings round-trip")
+        print("PASS: Claude/Magpie use installed color icons with alpha preserved; live attention and other tray artwork stay intact; settings round-trip")
 
 
 if __name__ == "__main__":
