@@ -99,7 +99,6 @@ Scope {
                     height: cardH
 
                     // A tiny contraction toward the caret; no sliding text.
-                    opacity: presentation.progress
                     scale: presentation.scale
                     transformOrigin: presentation.anchor && placement.y < presentation.anchor.y
                         ? Item.BottomLeft : Item.TopLeft
@@ -125,12 +124,16 @@ Scope {
                         offsetY: cardContainer.isOnlyTip ? 2 : 6
                         softness: cardContainer.isOnlyTip ? 8 : 20
                         spread: cardContainer.isOnlyTip ? 0 : 2
-                        opacity: AppearanceTokens.isDarkTheme ? 0.45 : 0.22
+                        opacity: (AppearanceTokens.isDarkTheme ? 0.45 : 0.22) * presentation.progress
                     }
 
                     LiquidGlassPanel {
                         id: glassPanel
                         anchors.fill: parent
+                        // Fade QML paint here, while the compositor targets
+                        // the opaque wrapper. SurfaceShape multiplies target
+                        // ancestor opacity, so fading that too would square it.
+                        opacity: presentation.progress
                         radius: cardContainer.isOnlyTip ? Math.round(cardContainer.cardH / 2) : 14
                         cornerExponent: cardContainer.isOnlyTip ? 2.0 : AppearanceTokens.shape.cornerExponent
                         blurAnchor: cardContainer
