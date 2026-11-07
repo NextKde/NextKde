@@ -35,5 +35,6 @@ candidate layouts, and screen-edge placement with the installed Shell.
 
 The dedicated `input method motion` workflow runs these checks on candidate
 branches. CTest also registers them in the logic and headless groups.
+For application compatibility patterns and troubleshooting (e.g. Wayland text-input requirements and bundled toolkit workarounds), see the [Input Method Integration Guide](../../docs/InputMethodIntegration.md).
 
 [中文](README.zh-CN.md)

@@ -26,6 +26,6 @@ node shell/desktop/modules/inputmethod/test_inputmethod_status_dismissal.mjs
 候选布局、屏幕边缘定位，并使用安装后的 Shell。
 
 专用 `input method motion` 工作流在候选分支运行这些检查；CTest 也将其纳入
-logic 和 headless 测试组。
+logic 和 headless 测试组。关于应用程序兼容性分类与排障方法（例如 Wayland 文本输入协议要求及独立打包运行时的适配规避方案），请参阅[输入法集成与应用兼容性指南](../../docs/InputMethodIntegration.zh-CN.md)。
 
 [English](README.md)
