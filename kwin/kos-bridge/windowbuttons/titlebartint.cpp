@@ -17,14 +17,24 @@ bool sameColor(const QColor &a, const QColor &b)
 
 void TintHistogram::add(const uchar *p)
 {
-    // Only opaque pixels carry the titlebar's actual RGB. Translucent source
-    // pixels are premultiplied and would turn a fade-in into a dark tint.
-    if (p[3] != 255) return;
-    auto &bin = m_bins[(54 * p[0] + 183 * p[1] + 19 * p[2]) >> 8];
+    // A one-level alpha loss (e.g. WeChat's 254/255 titlebar) is not a fade.
+    // Restore its premultiplied RGB before both luma and cluster accumulation.
+    // Fully opaque pixels keep the original fast path and exact RGB.
+    if (p[3] < MinOpaqueAlpha) return;
+    int red = p[0], green = p[1], blue = p[2];
+    if (p[3] != 255) {
+        const auto straight = [alpha = p[3]](int channel) {
+            return std::min(255, (channel * 255 + alpha / 2) / alpha);
+        };
+        red = straight(red);
+        green = straight(green);
+        blue = straight(blue);
+    }
+    auto &bin = m_bins[(54 * red + 183 * green + 19 * blue) >> 8];
     ++bin.count;
-    bin.red += p[0];
-    bin.green += p[1];
-    bin.blue += p[2];
+    bin.red += red;
+    bin.green += green;
+    bin.blue += blue;
     ++m_count;
 }
 

@@ -104,10 +104,13 @@ legacy overlay windows (excluding native KOS decorations):
   fast retry loop alive indefinitely.
 - RGB sampling stays near the window top, while exclusion uses the entire
   expanded cover. Enlarging it cannot sample the cover itself.
-  Require at least 75% visible strip coverage and 75% opaque pixel coverage;
+  Require at least 75% visible strip coverage and 75% near-opaque pixel coverage;
   sparse damaged glyphs cannot stand in for an undrawn/occluded background.
-  Partially transparent pixels are rejected rather than mistaking their
-  premultiplied RGB for a darker titlebar during a client-side fade-in.
+  Both CPU and GPU accept alpha 254–255: some CSD clients, such as WeChat,
+  render a nominally opaque titlebar at 254/255. That one-level loss is
+  unpremultiplied before luma and RGB accumulation, with fully opaque RGB
+  unchanged. Alpha 253 or lower is still rejected rather than mistaking a
+  client-side fade-in for a darker titlebar.
 - **A median, not a mean.** A fixed 256-bin luma histogram averages RGB within
   ±3 of the median, rejecting transparent pixels, glyphs and antialiased edges
   without allocating, copying and sorting per-pixel sample vectors.

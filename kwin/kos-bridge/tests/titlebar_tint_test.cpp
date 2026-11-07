@@ -5,6 +5,7 @@
 
 #include <algorithm>
 #include <array>
+#include <cmath>
 #include <cstdio>
 #include <random>
 #include <vector>
@@ -37,8 +38,27 @@ void histogramTests()
     // transparent/undrawn strip. Sampling requires representative coverage.
     CHECK(!empty.tint(&dark, &color, 128));
 
-    // Equivalence to the old sort+median+cluster algorithm, including alpha
-    // rejection, the upper median for even counts, and clamped +/-3 bins.
+    // WeChat's titlebar is RGBA(223,223,223,254), not fully opaque. Allow
+    // that one-level alpha loss, but normalize premultiplied RGB before luma.
+    for (const auto &rgba : {std::array<uchar, 4>{223, 223, 223, 254},
+                            std::array<uchar, 4>{127, 0, 254, 254},
+                            std::array<uchar, 4>{0, 0, 0, 254}}) {
+        TintHistogram nearOpaque;
+        for (int i = 0; i < 96; ++i) nearOpaque.add(rgba.data());
+        CHECK(nearOpaque.tint(&dark, &color));
+        const QColor expected = rgba[0] == 223 ? QColor(224, 224, 224)
+            : rgba[0] == 127 ? QColor(128, 0, 255) : QColor(0, 0, 0);
+        CHECK(color == expected);
+    }
+    TintHistogram mixed;
+    const uchar wechat[] = {223, 223, 223, 254};
+    const uchar opaqueEquivalent[] = {224, 224, 224, 255};
+    for (int i = 0; i < 64; ++i) { mixed.add(wechat); mixed.add(opaqueEquivalent); }
+    CHECK(mixed.tint(&dark, &color) && !dark && color == QColor(224, 224, 224));
+    CHECK(!mixed.tint(&dark, &color, 129));
+
+    // Equivalence to a sort+median+cluster reference, including alpha rejection
+    // and RGB normalization, the upper median, and clamped +/-3 bins.
     std::mt19937 random(42);
     for (int trial = 0; trial < 300; ++trial) {
         TintHistogram histogram;
@@ -51,7 +71,13 @@ void histogramTests()
                 extreme ? value : uchar(random() % 256), extreme ? value : uchar(random() % 256),
                 uchar(i % 2 ? 255 : random() % 255)};
             histogram.add(p.data());
-            if (p[3] == 255) reference.push_back({p[0], p[1], p[2], (54*p[0]+183*p[1]+19*p[2]) >> 8});
+            if (p[3] >= 254) {
+                const auto straight = [&](int c) {
+                    return std::min(255, int(std::round(p[c] * 255.0 / p[3])));
+                };
+                const int r = straight(0), g = straight(1), b = straight(2);
+                reference.push_back({r, g, b, (54*r+183*g+19*b) >> 8});
+            }
         }
         std::sort(reference.begin(), reference.end(), [](auto a, auto b) { return a.luma < b.luma; });
         const int median = reference[reference.size()/2].luma;
@@ -69,7 +95,7 @@ void startupPixelsTests()
 {
     bool dark = false;
     QColor color;
-    for (int alpha : {0, 64, 127, 128, 200, 254}) {
+    for (int alpha : {0, 64, 127, 128, 200, 253}) {
         TintHistogram histogram;
         const uchar faded[] = {uchar(alpha / 2), uchar(alpha / 2), uchar(alpha / 2), uchar(alpha)};
         for (int i = 0; i < 96; ++i) histogram.add(faded);

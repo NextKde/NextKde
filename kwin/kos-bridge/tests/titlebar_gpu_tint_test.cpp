@@ -13,6 +13,7 @@
 #include <opengl/gltexture.h>
 #include <QCoreApplication>
 #include <QElapsedTimer>
+#include <algorithm>
 #include <array>
 #include <cstdio>
 #include <vector>
@@ -111,17 +112,21 @@ int main(int argc, char **argv)
         source->setContentTransform(transform);
         KWin::GLFramebuffer fbo(source.get());
         KWin::RenderTarget target(&fbo);
-        for (int frame = 0; frame < 3; ++frame) {
+        for (int frame = 0; frame < 4; ++frame) {
             std::vector<uchar> pixels(size.width() * size.height() * 4, 255);
             for (int y = 0; y < size.height(); ++y) for (int x = 0; x < size.width(); ++x) {
                 auto *p = pixels.data() + (y * size.width() + x) * 4;
-                // Black initial content, then a light titlebar, then a colored
-                // titlebar. Glyph outliers must not replace the median RGB.
-                const int base = frame == 0 ? 0 : frame == 1 ? 230 : 42;
+                // Black, light, colored and WeChat-like near-opaque titlebars.
+                // Glyph outliers must not replace the median RGB.
+                const int base = frame == 0 ? 0 : frame == 1 ? 230 : frame == 2 ? 42 : 223;
                 p[0] = uchar(base + (x % 3));
                 p[1] = uchar(base + (y % 3));
                 p[2] = uchar(base + (frame == 2 ? 25 : 0));
                 if ((x + y * 3) % 7 == 0) p[0] = p[1] = p[2] = 255;
+                if (frame == 3) {
+                    p[3] = 254;
+                    for (int c = 0; c < 3; ++c) p[c] = std::min(p[c], uchar(254));
+                }
             }
             glActiveTexture(GL_TEXTURE0);
             source->bind();
@@ -225,6 +230,24 @@ int main(int argc, char **argv)
     CHECK(paintPanel(tint, false, Qt::transparent) == QColor(Qt::red));
     CHECK(paintPanel(tint, true, Qt::transparent, 128) == QColor(0, 0, 0, 128));
     CHECK(paintPanel(tint, false, Qt::transparent, 128) == QColor(128, 0, 0, 128));
+
+    // WeChat's measured RGBA(223,223,223,254) must produce an opaque 224 tint
+    // and visible lights. A second level of alpha loss still fails closed.
+    for (int alpha : {253, 254, 255}) {
+        glBindFramebuffer(GL_FRAMEBUFFER, emptyFbo.handle());
+        glDisable(GL_SCISSOR_TEST);
+        const GLfloat nearOpaque[4] = {223.0f / 255, 223.0f / 255, 223.0f / 255, alpha / 255.0f};
+        glClearBufferfv(GL_COLOR, 0, nearOpaque);
+        CHECK(tint.update(emptyTarget, QRect(0, 0, 32, 4)));
+        const QColor expected = alpha == 253 ? QColor(0, 0, 0, 0)
+            : alpha == 254 ? QColor(224, 224, 224) : QColor(223, 223, 223);
+        CHECK(paintPanel(tint, true, Qt::transparent) == expected);
+        CHECK(paintPanel(tint, false, Qt::transparent)
+              == (alpha == 253 ? QColor(0, 0, 0, 0) : QColor(Qt::red)));
+    }
+    glBindFramebuffer(GL_FRAMEBUFFER, emptyFbo.handle());
+    glClearBufferfv(GL_COLOR, 0, black);
+    CHECK(tint.update(emptyTarget, QRect(0, 0, 32, 4)));
 
     // Multiple windows reuse one scratch color. Queue both panels before any
     // CPU read to prove a later window cannot recolor an earlier draw.
