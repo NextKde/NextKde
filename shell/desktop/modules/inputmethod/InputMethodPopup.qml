@@ -49,19 +49,13 @@ Scope {
                     && isTargetScreen
                     && (InputMethodService.lookupVisible || InputMethodService.preeditVisible || InputMethodService.auxVisible)
 
-                property real openProgress: 0.0
+                property real openProgress: shouldShow ? 1.0 : 0.0
 
-                NumberAnimation {
-                    id: openAnim
-                    target: window
-                    property: "openProgress"
-                    duration: window.shouldShow ? 100 : 80
-                    to: window.shouldShow ? 1.0 : 0.0
-                    easing.type: window.shouldShow ? Easing.OutCubic : Easing.InQuad
-                }
-
-                onShouldShowChanged: {
-                    openAnim.restart();
+                Behavior on openProgress {
+                    NumberAnimation {
+                        duration: window.shouldShow ? 100 : 80
+                        easing.type: window.shouldShow ? Easing.OutCubic : Easing.InQuad
+                    }
                 }
 
                 visible: shouldShow || openProgress > 0.001
@@ -143,7 +137,7 @@ Scope {
                         // Inner plate for text contrast protection
                         Rectangle {
                             anchors.fill: parent
-                            radius: glassPanel.radius
+                            radius: glassPanel.contentRadius
                             color: ThemeService.isDark ? Qt.rgba(0, 0, 0, 0.22) : Qt.rgba(1, 1, 1, 0.28)
                         }
 
@@ -193,6 +187,8 @@ Scope {
                             Item {
                                 id: candidateArea
                                 visible: InputMethodService.lookupVisible && InputMethodService.candidates.length > 0
+                                width: implicitWidth
+                                height: implicitHeight
                                 implicitWidth: isVertical ? verticalCol.implicitWidth : horizontalRow.implicitWidth
                                 implicitHeight: isVertical ? verticalCol.implicitHeight : horizontalRow.implicitHeight
 
@@ -212,6 +208,8 @@ Scope {
                                             readonly property bool isSelected: index === InputMethodService.cursorIndex
                                             readonly property var dataItem: modelData
 
+                                            width: implicitWidth
+                                            height: implicitHeight
                                             implicitWidth: candRow.implicitWidth + 12
                                             implicitHeight: candRow.implicitHeight + 6
 
@@ -237,7 +235,8 @@ Scope {
                                                 GlassText {
                                                     text: String(dataItem.label || (index + 1) + ".")
                                                     font.pixelSize: 13
-                                                    opacity: isSelected ? 0.85 : 0.55
+                                                    color: ThemeService.secondaryForegroundColor
+                                                    opacity: isSelected ? 0.95 : 0.65
                                                     anchors.baseline: mainText.baseline
                                                 }
 
@@ -245,6 +244,7 @@ Scope {
                                                     id: mainText
                                                     text: String(dataItem.text || "")
                                                     font.pixelSize: 15
+                                                    color: ThemeService.foregroundColor
                                                     font.weight: isSelected ? Font.DemiBold : Font.Normal
                                                 }
 
@@ -252,7 +252,8 @@ Scope {
                                                     visible: !!dataItem.comment
                                                     text: String(dataItem.comment || "")
                                                     font.pixelSize: 12
-                                                    opacity: 0.50
+                                                    color: ThemeService.tertiaryForegroundColor
+                                                    opacity: 0.65
                                                     anchors.baseline: mainText.baseline
                                                 }
                                             }
@@ -276,6 +277,7 @@ Scope {
                                         GlassText {
                                             text: "<"
                                             visible: InputMethodService.hasPrev
+                                            color: ThemeService.secondaryForegroundColor
                                             opacity: prevMouse.containsMouse ? 0.9 : 0.45
                                             font.pixelSize: 12
                                             MouseArea {
@@ -290,6 +292,7 @@ Scope {
                                         GlassText {
                                             text: ">"
                                             visible: InputMethodService.hasNext
+                                            color: ThemeService.secondaryForegroundColor
                                             opacity: nextMouse.containsMouse ? 0.9 : 0.45
                                             font.pixelSize: 12
                                             MouseArea {
@@ -316,6 +319,8 @@ Scope {
                                             readonly property bool isSelected: index === InputMethodService.cursorIndex
                                             readonly property var dataItem: modelData
 
+                                            width: implicitWidth
+                                            height: implicitHeight
                                             implicitWidth: vCandRow.implicitWidth + 16
                                             implicitHeight: vCandRow.implicitHeight + 4
 
@@ -339,7 +344,8 @@ Scope {
                                                 GlassText {
                                                     text: String(dataItem.label || (index + 1) + ".")
                                                     font.pixelSize: 13
-                                                    opacity: isSelected ? 0.85 : 0.55
+                                                    color: ThemeService.secondaryForegroundColor
+                                                    opacity: isSelected ? 0.95 : 0.65
                                                     anchors.baseline: vMainText.baseline
                                                 }
 
@@ -347,6 +353,7 @@ Scope {
                                                     id: vMainText
                                                     text: String(dataItem.text || "")
                                                     font.pixelSize: 15
+                                                    color: ThemeService.foregroundColor
                                                     font.weight: isSelected ? Font.DemiBold : Font.Normal
                                                 }
 
@@ -354,7 +361,8 @@ Scope {
                                                     visible: !!dataItem.comment
                                                     text: String(dataItem.comment || "")
                                                     font.pixelSize: 12
-                                                    opacity: 0.50
+                                                    color: ThemeService.tertiaryForegroundColor
+                                                    opacity: 0.65
                                                     anchors.baseline: vMainText.baseline
                                                 }
                                             }
