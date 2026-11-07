@@ -67,7 +67,7 @@ Scope {
                 Region { id: emptyRegion }
                 Region { id: cardInputRegion; item: cardContainer }
 
-                BackgroundEffect.blurRegion: (window.visible && AppearanceTokens.surface.usesKwinBlur)
+                BackgroundEffect.blurRegion: (window.visible && presentation.mapped && AppearanceTokens.surface.usesKwinBlur)
                     ? glassPanel.blurRegion : null
 
                 Item {
