@@ -90,6 +90,7 @@ ColumnLayout {
         statusRow("G", "#64d2ff", I18n.tr("Glass effects"), !!snapshot.glassLoaded, I18n.tr("Loaded"), I18n.tr("KWin blur and liquid glass effects")), statusRow("A", "#ff375f", I18n.tr("Dock window animation"), !!snapshot.dockAnimationLoaded, I18n.tr("Loaded"), I18n.tr("KWin Dock opening / scaling animation")), statusRow("I", "#bf5af2", I18n.tr("Desktop input bridge"), !!snapshot.contextMenuInputLoaded, I18n.tr("Loaded"), I18n.tr("Global clicks and menu dismiss events"))]
 
     Demo.SettingsGroup {
+        title: I18n.tr("System Services & Bridges")
         backgroundColor: colors.card
         Demo.SettingsItem {
             title: snapshot.updatedAt ? I18n.tr("Last checked ") + snapshot.updatedAt : I18n.tr("Reading live state…")
@@ -113,6 +114,38 @@ ColumnLayout {
                     font.pixelSize: 11
                 }
             }
+        }
+    }
+
+    Demo.SettingsGroup {
+        title: I18n.tr("Application Compatibility & Troubleshooting")
+        backgroundColor: colors.card
+
+        Demo.SettingsItem {
+            title: I18n.tr("Input Method Candidate Styling")
+            description: I18n.tr("NextKde renders liquid glass popups via Wayland text-input-v3. If an app shows classic square popups, see the integration guide.")
+            Demo.LiquidActionButton {
+                text: I18n.tr("View Guide")
+                materialForm: true
+                implicitHeight: 24
+                cornerRadius: 6
+                onClicked: Qt.openUrlExternally("https://github.com/SuceV587/NextKde/blob/main/docs/InputMethodIntegration.zh-CN.md")
+            }
+        }
+
+        Demo.SettingsItem {
+            title: I18n.tr("Chromium & Electron (Chrome, VS Code)")
+            description: I18n.tr("Add startup flags: --enable-wayland-ime --wayland-text-input-version=3")
+        }
+
+        Demo.SettingsItem {
+            title: I18n.tr("Bundled Qt Applications (WeChat RPM, WPS)")
+            description: I18n.tr("Launch with environment variable: QT_IM_MODULE=text-input-unstable-v3")
+        }
+
+        Demo.SettingsItem {
+            title: I18n.tr("Firefox & Native Desktop Apps")
+            description: I18n.tr("Leave GTK_IM_MODULE and QT_IM_MODULE empty to enable compositor takeover.")
         }
     }
     Text {
