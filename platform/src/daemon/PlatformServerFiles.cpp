@@ -3,6 +3,7 @@
 #include "PlatformPaths.h"
 #include "PlatformProcess.h"
 
+#include <KApplicationTrader>
 #include <KService>
 #include <QByteArray>
 #include <QDBusConnection>
@@ -326,6 +327,29 @@ bool PlatformServer::handleFileOperation(QLocalSocket *socket, const QJsonObject
         return true;
     }
     if (op == QStringLiteral("file.open-trash")) {
+        const QString finderId = FormaIntegration::finderDesktopId();
+        const auto defaultManager = KApplicationTrader::preferredService(QStringLiteral("inode/directory"));
+        const bool useFinder = m_formaIntegration.preferredDesktopId(QStringLiteral("finder")) == finderId
+            || (defaultManager && defaultManager->storageId() == finderId);
+        const auto finder = useFinder ? KService::serviceByStorageId(finderId) : KService::Ptr{};
+        if (finder && finder->isApplication()) {
+            const QString root = freedesktopTrashRoot();
+            const QString files = root + QStringLiteral("/files");
+            const QFileInfo rootInfo(root);
+            const QFileInfo filesInfo(files);
+            if (root.isEmpty() || rootInfo.isSymLink() || filesInfo.isSymLink()
+                || (rootInfo.exists() && !rootInfo.isDir())
+                || (filesInfo.exists() && !filesInfo.isDir()) || !QDir().mkpath(files)) {
+                respond(socket, request, false, {}, QStringLiteral("trash-unavailable"),
+                        QStringLiteral("回收站路径不可用"), false);
+                return true;
+            }
+            // Finder identifies this exact local path as its native Trash view.
+            // Its desktop entry uses %f: KIO expands a local URL to argv[1]'s
+            // filesystem path, not KDE's unsupported trash: pseudo-URL.
+            launchDesktopService(socket, request, finder, {QUrl::fromLocalFile(files)});
+            return true;
+        }
         const QString dolphin = QStandardPaths::findExecutable(QStringLiteral("dolphin"));
         if (dolphin.isEmpty()) {
             respond(socket, request, false, {}, QStringLiteral("trash-unavailable"),

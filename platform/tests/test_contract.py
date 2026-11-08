@@ -92,6 +92,26 @@ def test_application_launch_uses_kde_launcher_without_arbitrary_commands() -> No
     assert "PlatformServer::~PlatformServer()" in (DAEMON / "PlatformServer.cpp").read_text()
 
 
+def test_forma_preferences_stay_in_the_daemon() -> None:
+    applications = (DAEMON / "PlatformServerApplications.cpp").read_text()
+    files = (DAEMON / "PlatformServerFiles.cpp").read_text()
+    for operation in ("integration.forma.get", "integration.forma.set"):
+        assert f'QStringLiteral("{operation}")' in applications
+    assert "m_formaIntegration.setEnabled" in applications
+    trash = files[files.index('if (op == QStringLiteral("file.open-trash"))'):]
+    trash = trash[:trash.index('if (op == QStringLiteral("file.rename"))')]
+    assert "KApplicationTrader::preferredService" in trash
+    assert "QUrl::fromLocalFile(files)" in trash
+    assert "isSymLink()" in trash
+    assert "launchDesktopService" in trash
+    service = (ROOT / "shell/desktop/modules/common/FormaIntegrationService.qml").read_text()
+    assert 'PlatformClient.request("integration.forma.set"' in service
+    assert "execDetached" not in service and "mimeapps.list" not in service
+    page = (ROOT / "apps/settings/pages/FormaIntegrationSection.qml").read_text()
+    assert "bridge.setFormaIntegrationEnabled" in page
+    assert "Process" not in page and "Quickshell" not in page
+
+
 def test_theme_toggle_uses_the_safe_palette_path() -> None:
     source = (DAEMON / "PlatformServerTheme.cpp").read_text()
     toggle = source[source.index('if (op == QStringLiteral("theme.toggle"))'):]
