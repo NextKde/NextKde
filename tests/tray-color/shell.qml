@@ -1,5 +1,6 @@
 import QtQuick
 import Quickshell
+import Quickshell.Services.SystemTray
 import qs.desktop.modules.common
 import qs.desktop.modules.bar
 import qs.desktop.modules.dock
@@ -13,6 +14,30 @@ ShellRoot {
     QtObject {
         id: mockTrayItem
         property string icon: Quickshell.env("TRAY_TEST_ICON")
+    }
+    QtObject {
+        id: claudeTrayItem
+        property string id: "Claude_status_icon_1"
+        property string icon: Quickshell.env("TRAY_TEST_MONO_ICON")
+        property var status: SystemTrayItem.Active
+    }
+    QtObject {
+        id: magpieTrayItem
+        property string id: "magpie"
+        property string icon: Quickshell.env("TRAY_TEST_GRAY_ICON")
+        property var status: SystemTrayItem.Active
+    }
+    QtObject {
+        id: attentionTrayItem
+        property string id: "Claude_status_icon_1"
+        property string icon: Quickshell.env("TRAY_TEST_ICON")
+        property var status: SystemTrayItem.NeedsAttention
+    }
+    QtObject {
+        id: sharedIdTrayItem
+        property string id: "chrome_status_icon_1"
+        property string icon: Quickshell.env("TRAY_TEST_ICON")
+        property var status: SystemTrayItem.Active
     }
     Component.onCompleted: {
         test.check(!IconAppearanceService.monochrome, "tray defaults to the dock's color mode")
@@ -28,16 +53,11 @@ ShellRoot {
         capturePending = true
         scene.grabToImage(result => {
             check(result.saveToFile(Quickshell.env("CAPTURE_DIR") + "/" + name + ".png"), "capture " + name)
-            if (name === "white" || name === "black") {
-                applicationGallery.grabToImage(gallery => {
-                    check(gallery.saveToFile(Quickshell.env("CAPTURE_DIR") + "/applications-" + name + ".png"), "application capture")
-                    test.capturePending = false
-                    test.stage++
-                })
-            } else {
+            applicationGallery.grabToImage(gallery => {
+                check(gallery.saveToFile(Quickshell.env("CAPTURE_DIR") + "/applications-" + name + ".png"), "application capture")
                 test.capturePending = false
                 test.stage++
-            }
+            })
         })
     }
     FloatingWindow {
@@ -83,6 +103,26 @@ ShellRoot {
                     x: 4; y: 4; width: 24; height: 24
                     entry: mockTrayItem
                 }
+                TrayIcon {
+                    id: claudeEntry
+                    x: 40; y: 4; width: 24; height: 24
+                    entry: claudeTrayItem
+                }
+                TrayIcon {
+                    id: magpieEntry
+                    x: 72; y: 4; width: 24; height: 24
+                    entry: magpieTrayItem
+                }
+                TrayIcon {
+                    id: attentionEntry
+                    x: 40; y: 36; width: 24; height: 24
+                    entry: attentionTrayItem
+                }
+                TrayIcon {
+                    id: sharedIdEntry
+                    x: 72; y: 36; width: 24; height: 24
+                    entry: sharedIdTrayItem
+                }
                 Text {
                     x: 104; y: 4; width: 42; height: 24
                     text: "101°"; font.pixelSize: 16
@@ -105,6 +145,16 @@ ShellRoot {
                     test.check(IconAppearanceService.ready, "config loads")
                     test.check(trayIcon.imageStatus === Image.Ready, "test icon loads")
                     test.check(!IconAppearanceService.monochrome, "color mode preserves artwork")
+                    test.check(claudeEntry.imageStatus === Image.Ready && magpieEntry.imageStatus === Image.Ready,
+                        "installed application icons load")
+                    test.check(claudeEntry.source !== claudeEntry.originalSource
+                        && magpieEntry.source !== magpieEntry.originalSource,
+                        "Claude and Magpie use installed color artwork")
+                    test.check(!claudeEntry.recolorEnabled && !magpieEntry.recolorEnabled,
+                        "application artwork is not flattened to bar ink")
+                    test.check(attentionEntry.source === attentionEntry.originalSource
+                        && sharedIdEntry.source === sharedIdEntry.originalSource,
+                        "attention artwork and shared Electron IDs keep their pixels")
                     test.capture("original")
                     break
                 case 1:
@@ -157,6 +207,40 @@ ShellRoot {
                 case 14:
                     if (IconAppearanceService.saveTimer.running) break
                     test.check(JSON.parse(JsonConfigStore.texts[IconAppearanceService.configPath]).mode === "color", "color mode is saved")
+                    claudeTrayItem.status = SystemTrayItem.NeedsAttention
+                    test.check(claudeEntry.source === claudeEntry.originalSource,
+                        "attention switches back to live tray artwork")
+                    claudeTrayItem.status = SystemTrayItem.Active
+                    test.check(claudeEntry.source === claudeEntry.applicationSource,
+                        "normal artwork restores installed color icon")
+                    claudeTrayItem.id = "com.anthropic.Claude"
+                    test.check(claudeEntry.source !== claudeEntry.originalSource,
+                        "desktop application ID uses installed icon")
+                    claudeTrayItem.id = "chrome_status_icon_1"
+                    test.check(claudeEntry.source === claudeEntry.originalSource,
+                        "shared ID never inherits an application's icon")
+                    const overrideIcon = Quickshell.env("TRAY_TEST_ICON")
+                    AppPresentationService.setOverrides({"magpie.desktop": {icon: overrideIcon}})
+                    test.check(magpieEntry.applicationSource === AppPresentationService.iconSource(overrideIcon),
+                        "tray honors the shared application icon override")
+                    AppPresentationService.setOverrides({})
+                    test.check(magpieEntry.source !== magpieEntry.originalSource,
+                        "clearing the override restores the installed icon")
+                    AppPresentationService.setOverrides({"magpie.desktop": {
+                        icon: Quickshell.env("TRAY_TEST_MISSING_ICON")}})
+                    test.stage++
+                    break
+                case 15:
+                    test.check(magpieEntry.applicationIconFailed && magpieEntry.imageStatus === Image.Ready
+                        && magpieEntry.source === magpieEntry.originalSource,
+                        "failed installed icon falls back to live tray pixels")
+                    AppPresentationService.setOverrides({})
+                    test.stage++
+                    break
+                case 16:
+                    test.check(!magpieEntry.applicationIconFailed && magpieEntry.imageStatus === Image.Ready
+                        && magpieEntry.source !== magpieEntry.originalSource,
+                        "a valid icon source recovers after fallback")
                     console.log("TRAY_COLOR_PASS")
                     Qt.quit()
                 }
