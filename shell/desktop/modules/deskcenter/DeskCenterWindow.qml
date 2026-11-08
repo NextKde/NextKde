@@ -636,41 +636,66 @@ PanelWindow {
         objectName: "widget-drop-preview"
         z: 110
         readonly property var dragged: root.activeDragCard
-        readonly property bool allowed: dragged?.dropAllowed ?? false
-        // The target cell is where the magnet is pulling, so it glides to the
-        // new cell and fades in and out instead of teleporting as the pointer
-        // crosses a cell boundary.
-        opacity: dragged !== null ? 1 : 0
-        visible: opacity > 0
-        Behavior on opacity {
-            enabled: !AppTheme.reduceMotion
-            NumberAnimation { duration: AppearanceTokens.motion.fastDuration; easing.type: Easing.OutCubic }
-        }
-        x: root.leftInset + (dragged?.dropPosition.column ?? 0) * (root.cellSize + root.gap)
-        y: root.topInset + (dragged?.dropPosition.row ?? 0) * (root.cellSize + root.gap)
-        width: root.spanSize(dragged?.displayColumns ?? 1)
-        height: root.spanSize(dragged?.displayRows ?? 1)
+        // The highlight marks the cell the pointer is over, so it jumps from
+        // cell to cell: only ever one cell is lit. Sliding it across the cells
+        // in between read as several cells lighting up in a row.
+        // Its position and colour are held by the Bindings below while the drag
+        // is gone, so a fade-out cannot drift the rectangle to the origin or
+        // turn it red on the last frame.
+        property bool allowed: false
         radius: AppearanceTokens.widget.radius
         color: allowed ? "#2434c759" : "#30ff453a"
         border.width: 2
         border.color: allowed ? "#34c759" : "#ff453a"
-        Behavior on x {
+        opacity: dragged !== null ? 1 : 0
+        visible: opacity > 0
+        Behavior on opacity {
             enabled: !AppTheme.reduceMotion
-            SpringAnimation {
-                spring: AppearanceTokens.motion.widgetMoveSpring
-                damping: AppearanceTokens.motion.widgetMoveDamping
-                mass: AppearanceTokens.motion.widgetMoveMass
-                epsilon: AppearanceTokens.motion.widgetMoveEpsilon
+            NumberAnimation {
+                // Appear promptly, leave a little faster: the highlight should
+                // never trail the card that is landing.
+                duration: widgetDropPreview.dragged !== null
+                    ? AppearanceTokens.motion.fastDuration
+                    : AppearanceTokens.motion.fastDuration * 0.6
+                easing.type: Easing.OutCubic
             }
         }
-        Behavior on y {
-            enabled: !AppTheme.reduceMotion
-            SpringAnimation {
-                spring: AppearanceTokens.motion.widgetMoveSpring
-                damping: AppearanceTokens.motion.widgetMoveDamping
-                mass: AppearanceTokens.motion.widgetMoveMass
-                epsilon: AppearanceTokens.motion.widgetMoveEpsilon
-            }
+        Binding {
+            target: widgetDropPreview
+            property: "x"
+            when: widgetDropPreview.dragged !== null
+            // Null-safe: when the drag ends, the Binding re-evaluates value in
+            // the same turn that it disables itself, and reading through a gone
+            // drag card would throw.
+            value: root.leftInset
+                + (widgetDropPreview.dragged?.dropPosition.column ?? 0)
+                    * (root.cellSize + root.gap)
+        }
+        Binding {
+            target: widgetDropPreview
+            property: "y"
+            when: widgetDropPreview.dragged !== null
+            value: root.topInset
+                + (widgetDropPreview.dragged?.dropPosition.row ?? 0)
+                    * (root.cellSize + root.gap)
+        }
+        Binding {
+            target: widgetDropPreview
+            property: "width"
+            when: widgetDropPreview.dragged !== null
+            value: root.spanSize(widgetDropPreview.dragged?.displayColumns ?? 1)
+        }
+        Binding {
+            target: widgetDropPreview
+            property: "height"
+            when: widgetDropPreview.dragged !== null
+            value: root.spanSize(widgetDropPreview.dragged?.displayRows ?? 1)
+        }
+        Binding {
+            target: widgetDropPreview
+            property: "allowed"
+            when: widgetDropPreview.dragged !== null
+            value: widgetDropPreview.dragged?.dropAllowed ?? false
         }
     }
 
