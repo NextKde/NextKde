@@ -62,7 +62,7 @@
         </entry>
         <entry name="ShapeTrace" type="Bool">
             <default>false</default>
-            <whatsthis>Log every kos-surface-shape-v1 draw decision (declared shapes, their native boxes and the blur region they are clipped against) to the journal. Debug aid for the protocol path; also enabled by the KOS_GLASS_TRACE environment variable, which a running compositor cannot pick up.</whatsthis>
+            <whatsthis>Log every kos-surface-shape-v1 draw decision at debug level in the kwin_effect_blur category (enable with QT_LOGGING_RULES=kwin_effect_blur.debug=true). KOS_GLASS_TRACE overrides this setting when it is an integer: 0 disables tracing and nonzero enables it; unset or invalid values use this setting. Environment changes require restarting the compositor.</whatsthis>
         </entry>
         <entry name="UseDeclaredCornerRadius" type="Bool">
             <default>false</default>
