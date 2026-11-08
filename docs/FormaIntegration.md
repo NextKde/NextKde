@@ -56,6 +56,8 @@ not flipped optimistically on failure or disconnection.
   the switch. Disabling returns to the original pins; explicit unpin/reorder
   operations continue to target the corresponding saved entry. Running KDE
   windows and explicit application-launcher choices retain their identities.
+  Explicit Forma, KOS and KDE Settings pins are never substituted in either mode;
+  preserving KOS's system-menu Settings action does not replace a user's pinned app.
 - `screenshot.capture` prefers the installed Forma Screenshot desktop entry in
   Forma mode, retaining the original tool fallback otherwise.
 - Dock click and context-menu **Open** both use `file.open-trash`. The daemon

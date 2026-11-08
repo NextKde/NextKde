@@ -25,8 +25,9 @@ before adding Dock, Alt+Tab, preview, workspace, or app-menu behavior.
 rewriting the pin data merely when the switch changes. Identity, running-window
 membership, unpinning and drag slots use the projected desktop ID, while an
 explicit reorder/unpin is applied to its saved source entry. Existing KDE windows
-retain their identity; duplicate projected pins are rendered once. The Settings
-pin remains KOS, never Forma Settings. Both Trash click and context-menu Open
+retain their identity; duplicate projected pins are rendered once. Explicit
+Forma, KOS and KDE Settings pins retain their own IDs in both modes; KOS's
+system-menu Settings action is separate. Both Trash click and context-menu Open
 use the daemon's `file.open-trash`, whose Finder branch supplies its native local
 Trash directory rather than Dolphin's `trash:` pseudo-URL.
 
