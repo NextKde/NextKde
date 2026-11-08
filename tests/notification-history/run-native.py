@@ -104,6 +104,7 @@ exec quickshell --path "$KOS_QA_STAGE" --no-color
                QML_IMPORT_PATH=str(args.build_dir / 'qml'), QML2_IMPORT_PATH=str(args.build_dir / 'qml'),
                QT_QPA_PLATFORM='offscreen', QT_FORCE_STDERR_LOGGING='1', LIBGL_ALWAYS_SOFTWARE='1',
                KOS_GLASS_TRACE='1', QS_DISABLE_FILE_WATCHER='1', KOS_QA_SOCKET=socket,
+               QT_LOGGING_RULES=os.environ.get('QT_LOGGING_RULES', '') + ';kwin_effect_blur.debug=true',
                KOS_QA_STAGE=str(stage), KOS_QA_OUTPUT=str(args.output_dir.resolve()),
                KOS_QA_SCREENSHOTS='1' if args.screenshots else '0')
     command = ['dbus-run-session', '--', 'kwin_wayland', '--virtual', '--width', str(args.width),
