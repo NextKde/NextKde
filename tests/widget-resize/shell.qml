@@ -17,6 +17,7 @@ ShellRoot {
     }
     property int stage: 0
     property int resizeIndex: 0
+    property var committedBeforeResize: [1, 1]
     property int renderIndex: 0
     property var renderSpans: [[1, 1], [1, 2], [2, 2], [2, 1]]
     property var spans: [[2, 1], [2, 2], [1, 2], [1, 1], [1, 2]]
@@ -325,19 +326,64 @@ ShellRoot {
                 if (stage === 1) {
                     const start = pointer.mapToItem(desktop.contentItem, pointer.width / 2, pointer.height / 2)
                     const step = desktop.cellSize + desktop.gap
-                    releasePoint = Qt.point(start.x + (target[0] - card.displayColumns) * step,
-                        start.y + (target[1] - card.displayRows) * step)
+                    const committedColumns = card.displayColumns
+                    const committedRows = card.displayRows
+                    test.committedBeforeResize = [committedColumns, committedRows]
+                    // Let go just past the halfway line: the magnet has already
+                    // committed the next cell there, while the corner itself is
+                    // still held short of it -- the gap is what the release
+                    // spring has to travel.
+                    const travel = 0.55
+                    releasePoint = Qt.point(start.x + (target[0] - committedColumns) * step * travel,
+                        start.y + (target[1] - committedRows) * step * travel)
                     events.mousePress(pointer, pointer.width / 2, pointer.height / 2, Qt.LeftButton, Qt.NoModifier, 5)
                     check(handle.resizing, "corner press starts resize " + target)
+                    check(handle.previewColumns === committedColumns && handle.previewRows === committedRows,
+                        "corner press starts from the committed span")
                     events.mouseMove(desktop.contentItem, releasePoint.x, releasePoint.y, 20, Qt.LeftButton, Qt.NoModifier)
                     check(handle.resizing, "corner move keeps resize " + target)
+                    check(handle.previewColumns === target[0] && handle.previewRows === target[1],
+                        "past halfway the magnet commits the new span " + target)
+                    // The magnet bends the drag instead of jumping the card: the
+                    // corner sits between the two cell sizes, closer to the one
+                    // it is held by.
+                    if (target[0] !== committedColumns) {
+                        const corner = card.width
+                        const low = Math.min(desktop.spanSize(committedColumns), desktop.spanSize(target[0]))
+                        const high = Math.max(desktop.spanSize(committedColumns), desktop.spanSize(target[0]))
+                        check(corner > low + 1 && corner < high - 1,
+                            "dragged corner sits between the two cell sizes " + target)
+                    }
+                    if (target[1] !== committedRows) {
+                        const corner = card.height
+                        const low = Math.min(desktop.spanSize(committedRows), desktop.spanSize(target[1]))
+                        const high = Math.max(desktop.spanSize(committedRows), desktop.spanSize(target[1]))
+                        check(corner > low + 1 && corner < high - 1,
+                            "dragged corner sits between the two cell heights " + target)
+                    }
                     stage = 2
                     return
                 }
                 if (stage === 2) {
                     check(handle.resizing, "corner drag retains pointer grab")
                     check(handle.previewColumns === target[0] && handle.previewRows === target[1], "drag previews requested span")
+                    const widthBeforeRelease = card.width
+                    const heightBeforeRelease = card.height
                     events.mouseRelease(desktop.contentItem, releasePoint.x, releasePoint.y, Qt.LeftButton, Qt.NoModifier, 5)
+                    check(!handle.resizing, "release ends resizing")
+                    // No frame has run yet: an unchanged corner means the spring
+                    // has taken over instead of the size jumping to the cell.
+                    const changedColumns = target[0] !== test.committedBeforeResize[0]
+                    const changedRows = target[1] !== test.committedBeforeResize[1]
+                    if (changedColumns)
+                        check(Math.abs(card.width - widthBeforeRelease) < 1,
+                            "release does not resize the card instantaneously " + target)
+                    if (changedRows)
+                        check(Math.abs(card.height - heightBeforeRelease) < 1,
+                            "release does not resize the card instantaneously " + target)
+                    check((changedColumns && Math.abs(card.width - desktop.spanSize(target[0])) > 1)
+                        || (changedRows && Math.abs(card.height - desktop.spanSize(target[1])) > 1),
+                        "release springs the corner onto the cell " + target)
                     stage = 3
                     return
                 }

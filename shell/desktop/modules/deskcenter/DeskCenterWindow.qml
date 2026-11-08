@@ -736,8 +736,13 @@ PanelWindow {
                 ? resizeHandle.previewColumns : (placement?.columns ?? 1)
             readonly property int displayRows: resizeHandle.resizing
                 ? resizeHandle.previewRows : (placement?.rows ?? 1)
-            width: root.spanSize(displayColumns)
-            height: root.spanSize(displayRows)
+            // While the corner is held, the card follows the magnetised
+            // pointer position; the moment it is released the size switches to
+            // the committed cell and the spring below takes it there.
+            width: resizeHandle.resizing ? resizeHandle.previewWidth
+                : root.spanSize(displayColumns)
+            height: resizeHandle.resizing ? resizeHandle.previewHeight
+                : root.spanSize(displayRows)
             Behavior on x {
                 enabled: !card.moving
                 NumberAnimation { duration: AppearanceTokens.motion.normalDuration; easing.type: AppearanceTokens.motion.standardEasing }
@@ -746,13 +751,28 @@ PanelWindow {
                 enabled: !card.moving
                 NumberAnimation { duration: AppearanceTokens.motion.normalDuration; easing.type: AppearanceTokens.motion.standardEasing }
             }
+            // Size is the one change that moves a lot of pixels at once, so it
+            // settles instead of jumping: the drag itself tracks the pointer
+            // one-to-one, and releasing hands the corner to this spring, which
+            // lands it on the grid with a little weight. Reduced motion still
+            // gets the new size, just without the travel.
             Behavior on width {
-                enabled: !resizeHandle.resizing
-                NumberAnimation { duration: AppearanceTokens.motion.normalDuration; easing.type: AppearanceTokens.motion.standardEasing }
+                enabled: !resizeHandle.resizing && !AppTheme.reduceMotion
+                SpringAnimation {
+                    spring: AppearanceTokens.motion.widgetResizeSpring
+                    damping: AppearanceTokens.motion.widgetResizeDamping
+                    mass: AppearanceTokens.motion.widgetResizeMass
+                    epsilon: AppearanceTokens.motion.widgetResizeEpsilon
+                }
             }
             Behavior on height {
-                enabled: !resizeHandle.resizing
-                NumberAnimation { duration: AppearanceTokens.motion.normalDuration; easing.type: AppearanceTokens.motion.standardEasing }
+                enabled: !resizeHandle.resizing && !AppTheme.reduceMotion
+                SpringAnimation {
+                    spring: AppearanceTokens.motion.widgetResizeSpring
+                    damping: AppearanceTokens.motion.widgetResizeDamping
+                    mass: AppearanceTokens.motion.widgetResizeMass
+                    epsilon: AppearanceTokens.motion.widgetResizeEpsilon
+                }
             }
             Behavior on scale { NumberAnimation { duration: 120; easing.type: Easing.OutCubic } }
 
@@ -850,6 +870,7 @@ PanelWindow {
                 anchors { right: parent.right; bottom: parent.bottom; margins: 5 }
                 cellSize: root.cellSize
                 gap: root.gap
+                animate: !AppTheme.reduceMotion
                 previewAllowed: card.placement !== null && WidgetLayout.canPlace(
                     root.placements, card.modelData.id, card.placement.column, card.placement.row,
                     previewColumns, previewRows, root.maximumWidgetColumns, root.usableRows)
@@ -866,6 +887,13 @@ PanelWindow {
                 height: 32
                 radius: 12
                 color: resizeHandle.previewAllowed ? "#b0000000" : "#c0a02020"
+                // The readout lands with the grab instead of blinking on, so the
+                // eye is already on the corner when the size starts to change.
+                scale: visible ? 1.0 : 0.86
+                Behavior on scale {
+                    enabled: !AppTheme.reduceMotion
+                    SpringAnimation { spring: 5; damping: 0.35; mass: 1; epsilon: 0.005 }
+                }
                 Text {
                     id: resizePreview
                     anchors.centerIn: parent
