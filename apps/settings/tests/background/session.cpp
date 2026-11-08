@@ -156,6 +156,8 @@ for line in sys.stdin:
         QFile::setPermissions(root + "/runtime", QFile::ReadOwner | QFile::WriteOwner | QFile::ExeOwner);
         auto env = QProcessEnvironment::systemEnvironment();
         env.insert("QT_QPA_PLATFORM", qEnvironmentVariable("QT_QPA_PLATFORM", "offscreen")); env.insert("QT_QUICK_BACKEND", "software");
+        // qml console.log only reaches the pipe when Qt logs to stderr.
+        env.insert("QT_FORCE_STDERR_LOGGING", "1");
         env.insert("PATH", root + "/bin:" + env.value("PATH"));
         env.insert("LANG", "C.UTF-8"); env.insert("LC_ALL", "C.UTF-8"); env.insert("LANGUAGE", "en");
         env.insert("XDG_RUNTIME_DIR", root + "/runtime");
@@ -173,7 +175,14 @@ for line in sys.stdin:
             output += owner.readAll();
             return output.contains(text);
         };
-        QTRY_VERIFY_WITH_TIMEOUT(contains("CLOSED:false:true") || owner.state() == QProcess::NotRunning, 10000);
+        // Drain the child pipe while waiting: a bare QTRY cadence can miss the
+        // console.log lines when the child writes them in one burst.
+        QElapsedTimer wait;
+        wait.start();
+        while (!contains("CLOSED:false:true") && owner.state() != QProcess::NotRunning
+               && wait.elapsed() < 15000) {
+            owner.waitForReadyRead(50);
+        }
         QVERIFY2(contains("CLOSED:false:true"), output.constData());
         QCOMPARE(owner.state(), QProcess::Running);
         QCOMPARE(notifications.summaries.size(), 0);

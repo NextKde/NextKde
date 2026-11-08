@@ -28,7 +28,7 @@ with tempfile.TemporaryDirectory(prefix='kos-fixed-glass-') as directory:
            'QML_IMPORT_PATH': str(build / 'qml'), 'QML2_IMPORT_PATH': str(build / 'qml'),
            'KOS_GLASS_TRACE': '1', 'QS_DISABLE_FILE_WATCHER': '1',
            'LIBGL_ALWAYS_SOFTWARE': '1', 'QT_FORCE_STDERR_LOGGING': '1',
-           'QT_LOGGING_RULES': '*.warning=true;kwin_core.info=true;kwin_scene_opengl.info=true'}
+           'QT_LOGGING_RULES': '*.warning=true;kwin_core.info=true;kwin_scene_opengl.info=true;kwin_effect_blur.debug=true'}
     command = ['dbus-run-session', '--', 'kwin_wayland', '--virtual',
                '--width', '960', '--height', '640', '--socket', 'kos-fixed-' + str(os.getpid()),
                '--no-lockscreen', '--no-global-shortcuts', '--no-kactivities',
