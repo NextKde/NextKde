@@ -126,6 +126,20 @@ void SettingsBridge::handleReply(RequestKind kind, const QString& payload)
     case RequestKind::Integration:
         startIntegrationProbe(integrationSnapshotFromReply(payload));
         break;
+    case RequestKind::FormaIntegration: {
+        m_formaRequestPending = false;
+        const auto state = formaIntegrationSnapshotFromReply(payload);
+        if (m_formaQueuedEnabled && (state.value(QStringLiteral("ready")).toBool()
+            || state.value(QStringLiteral("available")).toBool())) {
+            const bool enabled = *m_formaQueuedEnabled;
+            m_formaQueuedEnabled.reset();
+            setFormaIntegrationEnabled(enabled);
+        } else {
+            m_formaQueuedEnabled.reset();
+            emit formaIntegrationSnapshotChanged(state);
+        }
+        break;
+    }
     case RequestKind::GlassDebug:
         appearanceSnapshotFromReply(payload);
         emit glassDebugSnapshotChanged(glassDebugSpecs(), glassPresetStyle());
@@ -217,6 +231,17 @@ void SettingsBridge::failKind(RequestKind kind)
     case RequestKind::Integration:
         startIntegrationProbe(integrationSnapshotFromReply({ }));
         break;
+    case RequestKind::FormaIntegration: {
+        m_formaRequestPending = false;
+        m_formaQueuedEnabled.reset();
+        QVariantMap state = m_lastFormaSnapshot;
+        state.insert(QStringLiteral("ready"), false);
+        state.insert(QStringLiteral("available"), false);
+        state.insert(QStringLiteral("busy"), false);
+        state.insert(QStringLiteral("error"), m_lastError);
+        emit formaIntegrationSnapshotChanged(state);
+        break;
+    }
     case RequestKind::GlassDebug:
         emit glassDebugSnapshotChanged(glassDebugSpecs(), glassPresetStyle());
         break;

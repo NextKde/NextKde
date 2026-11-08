@@ -173,6 +173,50 @@ void SettingsBridge::integrationSnapshot()
         QStringLiteral("Integration status request failed"), RequestKind::Integration);
 }
 
+void SettingsBridge::formaIntegrationSnapshot()
+{
+    if (m_formaRequestPending)
+        return;
+    m_formaRequestPending = true;
+    callShell(QStringLiteral("forma-integration"), { QStringLiteral("snapshot") },
+        QStringLiteral("Forma integration request failed"), RequestKind::FormaIntegration);
+}
+
+void SettingsBridge::setFormaIntegrationEnabled(bool enabled)
+{
+    if (m_formaRequestPending) {
+        m_formaQueuedEnabled = enabled;
+        return;
+    }
+    m_formaRequestPending = true;
+    callShell(QStringLiteral("forma-integration"),
+        { QStringLiteral("setEnabled"), enabled ? QStringLiteral("true") : QStringLiteral("false") },
+        QStringLiteral("Forma integration request failed"), RequestKind::FormaIntegration);
+}
+
+QVariantMap SettingsBridge::formaIntegrationSnapshotFromReply(const QString& payload)
+{
+    QJsonParseError error;
+    const QJsonDocument document = QJsonDocument::fromJson(payload.toUtf8(), &error);
+    const QJsonObject object = document.object();
+    if (error.error != QJsonParseError::NoError || !document.isObject()
+        || !object.value(QStringLiteral("ready")).isBool()
+        || !object.value(QStringLiteral("enabled")).isBool()
+        || !object.value(QStringLiteral("busy")).isBool()
+        || !object.value(QStringLiteral("applications")).isArray()) {
+        setLastError(QStringLiteral("The desktop environment returned invalid Forma preferences"));
+        QVariantMap state = m_lastFormaSnapshot;
+        state.insert(QStringLiteral("ready"), false);
+        state.insert(QStringLiteral("available"), false);
+        state.insert(QStringLiteral("busy"), false);
+        state.insert(QStringLiteral("error"), m_lastError);
+        return state;
+    }
+    m_lastFormaSnapshot = object.toVariantMap();
+    setLastError(object.value(QStringLiteral("error")).toString());
+    return m_lastFormaSnapshot;
+}
+
 void SettingsBridge::i18nSnapshot() { callI18n({ QStringLiteral("snapshot") }); }
 
 void SettingsBridge::updateLanguage(const QString& language)

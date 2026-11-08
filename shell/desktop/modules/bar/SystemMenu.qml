@@ -20,7 +20,7 @@ Item {
 
     function installedId(candidates) {
         for (const id of candidates) {
-            if (AppPresentationService.entryFor(id))
+            if (id && AppPresentationService.entryFor(id))
                 return id
         }
         return ""
@@ -28,7 +28,8 @@ Item {
 
     function openMenu() {
         const aboutId = installedId(["org.kde.kinfocenter.desktop", "kinfocenter.desktop"])
-        const storeId = installedId(["org.kde.discover.desktop"])
+        const storeId = installedId([FormaIntegrationService.preferredId("appstore"), "org.kde.discover.desktop"])
+        const taskManagerId = installedId([FormaIntegrationService.preferredId("taskmanager")])
         const sessionReady = !ControlCenterService.sessionActionInProgress
         const missing = " " + I18n.tr("(Not installed)")
         const unsupported = " " + I18n.tr("(Not supported yet)")
@@ -42,7 +43,8 @@ Item {
             { separator: true },
             { label: I18n.tr("Recent Items") + unsupported, enabled: false },
             { separator: true },
-            { label: I18n.tr("Force Quit…") + unsupported, enabled: false },
+            { label: I18n.tr("Force Quit…") + (taskManagerId ? "" : unsupported),
+              cmd: "launch", desktopId: taskManagerId, enabled: taskManagerId.length > 0 },
             { separator: true },
             { label: I18n.tr("Sleep"), cmd: "suspend",
               enabled: sessionReady && ControlCenterService.canSuspend },

@@ -3,6 +3,20 @@
 // 规则：值必须与改造前界面上的中文逐字一致（含空格、间隔符与省略号），
 // 改动文案时同步更新对应键，不要只改一边。
 export const catalog = {
+    "Restore previous preferences": "恢复之前的首选项",
+    "A previous change did not finish. Restore it before applying Forma again.": "之前的修改未完成，请先恢复，再重新应用 Forma。",
+    "Forma Terminal opens from the Dock. Command-line apps keep their existing terminal because Forma does not yet support command execution.": "Dock 可打开 Forma Terminal。由于 Forma 尚不支持执行命令，命令行应用继续使用原有终端。",
+    "Forma applications": "Forma 应用",
+    "Enable Forma": "启用 Forma",
+    "Use installed Forma apps for files, media and desktop actions. KOS Settings stays unchanged.": "使用已安装的 Forma 应用处理文件、媒体和桌面操作，保留 Kos 系统设置。",
+    "Available Forma apps: %1": "可用的 Forma 应用：%1",
+    "Applying application preferences…": "正在应用首选应用…",
+    "Missing apps are skipped. No software is installed or removed.": "跳过未安装的应用，不安装或卸载任何软件。",
+    "Apply again": "重新应用",
+    "Not installed: %1": "未安装：%1",
+    "Turning Forma off restores preferences still owned by Forma. Later manual changes are kept.": "关闭后恢复仍由 Forma 接管的首选项，保留你后来手动修改的选择。",
+    "Forma integration request failed": "Forma 接入请求失败",
+    "The desktop environment returned invalid Forma preferences": "桌面环境返回了无效的 Forma 首选项",
     "The optional Flatpak backend is unavailable. Install it and its distribution dependencies, then recheck.": "可选 Flatpak 后端不可用。请安装后端及其发行版依赖，然后重新检查。",
     "The optional Flatpak backend timed out. Installed state is unknown; recheck before retrying.": "可选 Flatpak 后端已超时，安装状态未知。请重新检查后再重试。",
     "Review Flatpak plan": "审阅 Flatpak 安装计划",

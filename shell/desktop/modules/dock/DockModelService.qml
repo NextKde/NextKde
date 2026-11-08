@@ -102,7 +102,10 @@ QtObject {
             const dockItem = dockItems[i];
 
             if (dockItem.type === "app") {
-                const identity = AppIdentityService.resolve(dockItem.appId);
+                const desktopId = FormaIntegrationService.resolvePinnedId(dockItem.appId);
+                const identity = AppIdentityService.resolve(desktopId);
+                if (items.some(item => item.appId === identity.desktopId))
+                    continue;
                 const windows = WindowService.windowsForApp(identity.desktopId);
                 // In separate mode: a running pinned application is represented by its live
                 // window tasks in the right-hand section.
@@ -338,6 +341,11 @@ QtObject {
         }
     }
 
+    property Connections _formaConnections: Connections {
+        target: FormaIntegrationService
+        function onStateChanged() { svc._refreshPresentation(); }
+    }
+
     property Connections _identityConnections: Connections {
         target: AppIdentityService
         function onRevisionChanged() {
@@ -474,6 +482,8 @@ QtObject {
 
     function pinApp(appId) {
         const identity = AppIdentityService.resolve(appId);
+        if (svc.isAppPinned(identity.desktopId))
+            return;
         if (!ConfigService.addAppItem(identity.desktopId))
             return;
         console.log("[DockModel] pin app=" + identity.desktopId
@@ -488,7 +498,7 @@ QtObject {
         const wanted = AppIdentityService.canonicalId(appId);
         const pinnedIds = ConfigService.pinnedAppIds || [];
         for (let i = 0; i < pinnedIds.length; i++) {
-            if (AppIdentityService.sameApp(pinnedIds[i], wanted))
+            if (AppIdentityService.sameApp(FormaIntegrationService.resolvePinnedId(pinnedIds[i]), wanted))
                 return true;
         }
         return false;
@@ -505,7 +515,7 @@ QtObject {
     function unpinApp(appId) {
         const items = ConfigService.dockItems || [];
         const remaining = items.filter(item => item.type !== "app"
-            || !AppIdentityService.sameApp(item.appId, appId));
+            || !AppIdentityService.sameApp(FormaIntegrationService.resolvePinnedId(item.appId), appId));
         if (remaining.length === items.length || !ConfigService.setDockItems(remaining))
             return;
         ConfigService.scheduleSave();
@@ -527,7 +537,7 @@ QtObject {
             const targetAppId = visible[visibleIndex].appId
             for (let i = 0; i < dockItems.length; i++) {
                 const item = dockItems[i]
-                if (item.type === "app" && item.appId === targetAppId)
+                if (item.type === "app" && FormaIntegrationService.resolvePinnedId(item.appId) === targetAppId)
                     return i
             }
         }
@@ -535,6 +545,14 @@ QtObject {
     }
 
     function movePinnedItem(type, key, targetIndex) {
+        // The visible Forma icon can represent a persisted KDE pin. Keep its
+        // original identity/order on disk so disabling Forma is reversible.
+        if (type === "app") {
+            const original = (ConfigService.dockItems || []).find(item => item.type === "app"
+                && AppIdentityService.sameApp(FormaIntegrationService.resolvePinnedId(item.appId), key));
+            if (original)
+                key = original.appId;
+        }
         if (!ConfigService.moveDockItem(type, key,
                 _visibleSlotToDockIndex(type, targetIndex)))
             return

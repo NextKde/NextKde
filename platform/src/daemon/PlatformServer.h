@@ -4,6 +4,8 @@
 #include "../ai/AiWorkerClient.h"
 #endif
 
+#include "FormaIntegration.h"
+
 #include <QObject>
 #include <KService>
 #include <QUrl>
@@ -189,6 +191,7 @@ private:
     void runClipboardPinnedCopy(QLocalSocket *socket, const QJsonObject &request,
                                 const QString &pinId);
 
+    FormaIntegration m_formaIntegration;
     QLocalServer m_server;
     QString m_socketPath;
     QHash<QLocalSocket *, QByteArray> m_buffers;

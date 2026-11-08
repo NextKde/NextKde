@@ -317,6 +317,12 @@ bool PlatformServer::handleDesktopOperation(QLocalSocket *socket, const QJsonObj
         return true;
     }
     if (op == QStringLiteral("screenshot.capture")) {
+        const auto formaId = m_formaIntegration.preferredDesktopId(QStringLiteral("screenshot"));
+        const auto forma = formaId.isEmpty() ? KService::Ptr{} : KService::serviceByStorageId(formaId);
+        if (forma && forma->isApplication()) {
+            launchDesktopService(socket, request, forma, {});
+            return true;
+        }
         const QStringList candidates{QStringLiteral("mark-shot"), QStringLiteral("markshot"),
                                      QStringLiteral("flameshot"), QStringLiteral("ksnip"),
                                      QStringLiteral("spectacle"), QStringLiteral("grimblast")};

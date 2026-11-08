@@ -24,6 +24,7 @@ BundledIcon 1.0 BundledIcon.qml
 singleton ContextMenuCoordinator 1.0 ContextMenuCoordinator.qml
 singleton AppPresentationService 1.0 AppPresentationService.qml
 singleton AppActionService 1.0 AppActionService.qml
+singleton FormaIntegrationService 1.0 FormaIntegrationService.qml
 singleton IndependentAppWidgetService 1.0 IndependentAppWidgetService.qml
 singleton MetricsService 1.0 MetricsService.qml
 singleton IconThemeReloadService 1.0 IconThemeReloadService.qml

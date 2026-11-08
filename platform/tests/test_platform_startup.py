@@ -103,7 +103,7 @@ def main():
         capabilities = reply.get("result", {}).get("capabilities", [])
         for capability in ("input.clipboard-anchor", "wallpaper.preview.desktop",
                            "wallpaper.plasma.proxy",
-                           "wallpaper.plasma.restore"):
+                           "wallpaper.plasma.restore", "integration.forma"):
             if capability not in capabilities:
                 fail("platform.ping missing capability " + capability + ": "
                      + buf.decode().strip(), output)
@@ -121,6 +121,8 @@ def main():
             ("theme.sync-dock-animation", {"style": "unsupported"}, "invalid-style"),
             ("kwin.layout.update", {}, "invalid-payload"),
             ("application.launch", {}, "invalid-desktop-id"),
+            ("integration.forma.set", {}, "invalid-payload"),
+            ("integration.forma.set", {"enabled": "true"}, "invalid-payload"),
             ("file.copy", {}, "invalid-path"),
             ("state.read", {}, "invalid-state-path"),
             ("clipboard.set", {}, "invalid-clipboard-request"),
