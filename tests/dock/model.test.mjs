@@ -202,8 +202,8 @@ test("Forma pins preserve user data and missing applications", () => {
     assert.equal(resolvePinnedId(state, "org.kde.dolphin.desktop"), finder);
     assert.equal(resolvePinnedId(state, "org.kde.elisa.desktop"), "org.kde.elisa.desktop");
     assert.equal(resolvePinnedId(state, "firefox.desktop"), "firefox.desktop");
-    assert.equal(resolvePinnedId(state, "io.github.egely1337.Mayonnaise.Settings.desktop"), "kos-settings.desktop");
-    assert.equal(resolvePinnedId({enabled: false}, "io.github.egely1337.Mayonnaise.Settings.desktop"), "kos-settings.desktop");
+    assert.equal(resolvePinnedId(state, "io.github.egely1337.Mayonnaise.Settings.desktop"), "io.github.egely1337.Mayonnaise.Settings.desktop");
+    assert.equal(resolvePinnedId({enabled: false}, "io.github.egely1337.Mayonnaise.Settings.desktop"), "io.github.egely1337.Mayonnaise.Settings.desktop");
     assert.equal(resolvePinnedId({...state, enabled: false}, "org.kde.dolphin.desktop"), "org.kde.dolphin.desktop");
 
     const source = readFileSync(new URL("../../shell/desktop/modules/dock/DockModelService.qml", import.meta.url), "utf8");
@@ -218,6 +218,35 @@ test("Forma pins preserve user data and missing applications", () => {
     vm.runInContext(unpin, context);
     context.unpinApp(finder);
     assert.deepEqual(Array.from(config.dockItems, item => item.appId), ["firefox.desktop"]);
+});
+
+test("explicit Settings pins keep separate identities in both Forma modes", () => {
+    const ids = ["io.github.egely1337.Mayonnaise.Settings.desktop", "kos-settings.desktop",
+        "systemsettings.desktop", "kdesystemsettings.desktop"];
+    const state = {enabled: true, applications: []};
+    const source = readFileSync(new URL("../../shell/desktop/modules/dock/DockModelService.qml", import.meta.url), "utf8");
+    const refresh = source.match(/^    function _refreshPinned\(\) \{[^]*?^    \}/m)[0];
+    const unpin = source.match(/^    function unpinApp\(appId\) \{[^]*?^    \}/m)[0];
+    for (const enabled of [false, true]) {
+        state.enabled = enabled;
+        for (const id of ids)
+            assert.equal(resolvePinnedId(state, id), id);
+        const config = {windowGrouping: "grouped", dockItems: ids.map(appId => ({type: "app", appId})),
+            setDockItems(items) { this.dockItems = items; return true; }, scheduleSave() {}};
+        const svc = {pinnedItems: [], pinnedCount: 0, _refreshPresentation() {}};
+        const context = vm.createContext({svc, ConfigService: config,
+            FormaIntegrationService: {resolvePinnedId: id => resolvePinnedId(state, id)},
+            AppIdentityService: {sameApp: (a, b) => a === b,
+                resolve: id => ({desktopId: id, name: id, iconSource: id})},
+            WindowService: {windowsForApp: () => []},
+            TrayAttentionService: {needsAttention: () => false}});
+        vm.runInContext(refresh + "\n" + unpin, context);
+        context._refreshPinned();
+        assert.deepEqual(Array.from(svc.pinnedItems, item => item.appId), ids);
+        context.unpinApp(ids[0]);
+        assert.deepEqual(Array.from(config.dockItems, item => item.appId), ids.slice(1),
+            "unpinning Forma Settings must not remove KOS or KDE Settings");
+    }
 });
 
 test("Forma projected pins deduplicate and reorder their saved entries", () => {
