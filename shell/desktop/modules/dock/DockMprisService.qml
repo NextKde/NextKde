@@ -172,11 +172,23 @@ QtObject {
     Component.onCompleted: startupRefreshTimer.start()
 
     // ── Select the best active player ──
-    // Priority: playing > paused > any > none
+    // Priority stays "what you hear is what you see": playing > paused > any.
+    // Only the tie-break changes. An application can register more than one
+    // MPRIS surface for the same session — a real player plus, for example, an
+    // Electron media session whose CanControl is false. Both report the same
+    // state, so the previous name-only ordering could pick the one the shell
+    // cannot drive and render transport buttons that do nothing. Among equals,
+    // prefer the player we can actually control.
     function _updateActivePlayer() {
-        // Stable service-name ordering gives the lock screen the same tie-break.
-        const refs = svc._playerRefs.slice().sort((a, b) =>
-            String(a?.dbusName ?? "").localeCompare(String(b?.dbusName ?? "")))
+        // Controllable first, then stable service-name ordering so the lock
+        // screen sees the same tie-break.
+        const refs = svc._playerRefs.slice().sort((a, b) => {
+            const controllability = (a?.canControl !== false ? 0 : 1)
+                - (b?.canControl !== false ? 0 : 1)
+            if (controllability !== 0)
+                return controllability
+            return String(a?.dbusName ?? "").localeCompare(String(b?.dbusName ?? ""))
+        })
         if (!refs || refs.length === 0) {
             activePlayer = null
             hasPlayingPlayer = false
