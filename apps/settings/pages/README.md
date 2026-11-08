@@ -16,6 +16,12 @@ No registry, dependency container or second IPC protocol is introduced.
   `theme` id. `materialForm` is a presentation input where applicable.
 - About takes `colors` and an optional application-owned `cache`, with no Shell bridge. Isolated consumers can set
   `loadContributors: false` before creation to suppress automatic GitHub requests.
+- IntegrationStatusPage composes FormaIntegrationSection. Its opt-in switch uses
+  `bridge.formaIntegrationSnapshot()` / `setFormaIntegrationEnabled(bool)` and
+  `formaIntegrationSnapshotChanged(state)`. The daemon's confirmed `enabled`,
+  `busy`, `restorePending`, `applications` and `error` remain authoritative;
+  failed or disconnected writes do not flip the switch optimistically. See
+  [Forma integration](../../../docs/FormaIntegration.md) for ownership and recovery.
 - `bridge` is the existing SettingsBridge interface, explicitly injected by the
   root; `null` means unavailable. Pages retain their existing method and snapshot
   signal contracts. The window appearance page instead receives `backend`, the

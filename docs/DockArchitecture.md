@@ -18,6 +18,18 @@ before adding Dock, Alt+Tab, preview, workspace, or app-menu behavior.
 6. Hyprland metadata may be added as an adapter, but must not replace the
    provider-neutral `desktopId` contract.
 
+## Opt-in Forma application presentation
+
+[Forma integration](FormaIntegration.md) owns the optional desktop defaults.
+`DockModelService` projects persisted KDE pins to installed Forma roles without
+rewriting the pin data merely when the switch changes. Identity, running-window
+membership, unpinning and drag slots use the projected desktop ID, while an
+explicit reorder/unpin is applied to its saved source entry. Existing KDE windows
+retain their identity; duplicate projected pins are rendered once. The Settings
+pin remains KOS, never Forma Settings. Both Trash click and context-menu Open
+use the daemon's `file.open-trash`, whose Finder branch supplies its native local
+Trash directory rather than Dolphin's `trash:` pseudo-URL.
+
 ## Pointer magnification
 
 `DockContainer` measures pointer distance from untransformed layout slots in
