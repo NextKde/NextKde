@@ -31,6 +31,7 @@ ownership; they are not chronological work logs or proof that a feature passed r
 | --- | --- |
 | Runtime products and service boundaries | [Project architecture](ProjectArchitecture.md) |
 | Platform adapters and IPC | [Platform architecture](PlatformArchitecture.md), [wire contract](../shared/contracts/platform.v1.md) |
+| Opt-in Forma defaults and Dock entries | [Forma integration](FormaIntegration.md) |
 | Durable data, sockets and concurrency | [Data service](DataServiceArchitecture.md) |
 | Appearance, tokens and icons | [Appearance](AppearanceArchitecture.md), [desktop icons](DesktopIcons.md) |
 | Window clipping, shadows, resource limits and VM review | [Window appearance](WindowAppearance.md) |

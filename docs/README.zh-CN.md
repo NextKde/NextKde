@@ -24,6 +24,7 @@
 | --- | --- |
 | 运行产品、服务边界 | [项目架构](ProjectArchitecture.md) |
 | 平台接入与 IPC | [平台架构](PlatformArchitecture.md)、[通信契约](../shared/contracts/platform.v1.md) |
+| 可选 Forma 默认应用与 Dock 入口 | [Forma 接入](FormaIntegration.zh-CN.md) |
 | 持久数据、socket 与并发 | [数据服务](DataServiceArchitecture.md) |
 | 外观、Token、图标 | [外观](AppearanceArchitecture.zh-CN.md)、[桌面图标](DesktopIcons.zh-CN.md) |
 | 窗口裁剪、阴影、资源限制及 VM 审阅 | [窗口外观](WindowAppearance.zh-CN.md) |
