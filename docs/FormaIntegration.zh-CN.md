@@ -45,6 +45,8 @@ schema-1 所有权记录。
 - `DockModelService` 将既有 KDE 固定项呈现为已安装的 Forma 对应应用。
   单纯启用不改写持久化固定项 ID/顺序；关闭恢复原呈现。用户明确取消固定或拖动时，
   操作对应的原始记录。正在运行的 KDE 窗口和应用启动器中的明确选择不被冒充或劫持。
+  无论开关状态，明确固定的 Forma、Kos、KDE 设置都保持各自身份；保留 Kos 的系统菜单
+  设置入口，不代表替换用户固定的设置应用。
 - `screenshot.capture` 在 Forma 模式下优先使用其 Screenshot 桌面入口，否则保留旧工具回退。
 - Dock 回收站点击和右键 **打开** 都调用 `file.open-trash`。启用且已装 Finder，
   或者当前目录默认处理程序本来就是 Finder 时，平台将本地
