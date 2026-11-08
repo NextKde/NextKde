@@ -113,7 +113,7 @@ def run(base_env=None):
                 # Each launch must render its own frames, not reuse the first run.
                 for capture in (root / "captures").glob("*.png"):
                     capture.unlink()
-                print(f"PASS: {expected} load, empty desktop recovery, gestures, 18 appearance combinations, countdown colour pixels, persistence")
+                print(f"PASS: {expected} load, empty desktop recovery, gestures, edit-mode dismissal, 18 appearance combinations, countdown colour pixels, persistence")
             server.shutdown()
 
 
