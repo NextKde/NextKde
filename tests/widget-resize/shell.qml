@@ -243,8 +243,17 @@ ShellRoot {
                         }
                         const start = card.mapToItem(desktop.contentItem, card.width / 2, card.height / 2)
                         const step = desktop.cellSize + desktop.gap
-                        releasePoint = Qt.point(start.x + (target.column - card.placement.column) * step,
-                            start.y + (target.row - card.placement.row) * step)
+                        // Let go a fifth of a cell short of the destination: the
+                        // rounded drop still commits that cell, and the remaining
+                        // fifth is the distance the release spring travels.
+                        const settle = 0.2
+                        const deltaX = target.column - card.placement.column
+                        const deltaY = target.row - card.placement.row
+                        releasePoint = Qt.point(
+                            start.x + (deltaX === 0 ? 0
+                                : (Math.abs(deltaX) - settle) * Math.sign(deltaX)) * step,
+                            start.y + (deltaY === 0 ? 0
+                                : (Math.abs(deltaY) - settle) * Math.sign(deltaY)) * step)
                         events.mousePress(card, card.width / 2, card.height / 2, Qt.LeftButton, Qt.NoModifier, 5)
                         events.mouseMove(desktop.contentItem, start.x + 25, start.y, 10, Qt.LeftButton, Qt.NoModifier)
                         stage = 7
@@ -276,7 +285,19 @@ ShellRoot {
                             "blur region follows the dragged and scaled content")
                         const preview = find(desktop.contentItem, "widget-drop-preview")
                         check(preview.visible && preview.allowed === target.allowed, "drop preview distinguishes empty and occupied cells")
+                        const xBeforeRelease = card.x
+                        const yBeforeRelease = card.y
                         events.mouseRelease(desktop.contentItem, releasePoint.x, releasePoint.y, Qt.LeftButton, Qt.NoModifier, 5)
+                        // No frame has run yet: the card is still where the pointer
+                        // let go. A jump here would mean the drop is not animated.
+                        if (target.column !== card.placement.column)
+                            check(Math.abs(card.x - xBeforeRelease) < 1 && Math.abs(card.x
+                                - (desktop.leftInset + target.column * step)) > 1,
+                                "release springs the card towards its cell instead of snapping")
+                        if (target.row !== card.placement.row)
+                            check(Math.abs(card.y - yBeforeRelease) < 1 && Math.abs(card.y
+                                - (desktop.topInset + target.row * step)) > 1,
+                                "release springs the card towards its row instead of snapping")
                         stage = 9
                         return
                     }

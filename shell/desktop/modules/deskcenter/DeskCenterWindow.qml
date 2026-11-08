@@ -635,9 +635,17 @@ PanelWindow {
         id: widgetDropPreview
         objectName: "widget-drop-preview"
         z: 110
-        visible: root.activeDragCard !== null
         readonly property var dragged: root.activeDragCard
         readonly property bool allowed: dragged?.dropAllowed ?? false
+        // The target cell is where the magnet is pulling, so it glides to the
+        // new cell and fades in and out instead of teleporting as the pointer
+        // crosses a cell boundary.
+        opacity: dragged !== null ? 1 : 0
+        visible: opacity > 0
+        Behavior on opacity {
+            enabled: !AppTheme.reduceMotion
+            NumberAnimation { duration: AppearanceTokens.motion.fastDuration; easing.type: Easing.OutCubic }
+        }
         x: root.leftInset + (dragged?.dropPosition.column ?? 0) * (root.cellSize + root.gap)
         y: root.topInset + (dragged?.dropPosition.row ?? 0) * (root.cellSize + root.gap)
         width: root.spanSize(dragged?.displayColumns ?? 1)
@@ -646,6 +654,24 @@ PanelWindow {
         color: allowed ? "#2434c759" : "#30ff453a"
         border.width: 2
         border.color: allowed ? "#34c759" : "#ff453a"
+        Behavior on x {
+            enabled: !AppTheme.reduceMotion
+            SpringAnimation {
+                spring: AppearanceTokens.motion.widgetMoveSpring
+                damping: AppearanceTokens.motion.widgetMoveDamping
+                mass: AppearanceTokens.motion.widgetMoveMass
+                epsilon: AppearanceTokens.motion.widgetMoveEpsilon
+            }
+        }
+        Behavior on y {
+            enabled: !AppTheme.reduceMotion
+            SpringAnimation {
+                spring: AppearanceTokens.motion.widgetMoveSpring
+                damping: AppearanceTokens.motion.widgetMoveDamping
+                mass: AppearanceTokens.motion.widgetMoveMass
+                epsilon: AppearanceTokens.motion.widgetMoveEpsilon
+            }
+        }
     }
 
     // Position/size saves replace widgetDefinitions. Keep delegate identity
@@ -707,6 +733,13 @@ PanelWindow {
             // 2026-10-18 用户改判：台前调度与桌面组件共存（台前调度在
             // 组件之上），组件不再随台前调度开启而隐藏
             readonly property bool moving: widgetDrag.active
+            // A Behavior gated on `moving` cannot see the end of the drag: the
+            // DragHandler's release handler runs before the binding to active is
+            // invalidated, so the release writes (offset reset, committed cell)
+            // would go straight through a disabled Behavior and the card would
+            // jump. This flag is assigned by that handler itself, so it is
+            // already exact when the writes happen.
+            property bool pointerHeld: false
             readonly property var dropPosition: WidgetLayout.snappedPosition(
                 x - root.leftInset, y - root.topInset,
                 displayColumns, displayRows, root.cellSize, root.gap,
@@ -746,13 +779,27 @@ PanelWindow {
                 : root.spanSize(displayColumns)
             height: resizeHandle.resizing ? resizeHandle.previewHeight
                 : root.spanSize(displayRows)
+            // A released card lands on its cell instead of sliding there: the
+            // old fixed cubic stopped dead at the destination, which is what
+            // made the snap read as abrupt. The spring carries the release into
+            // the cell and settles with a few pixels of weight.
             Behavior on x {
-                enabled: !card.moving
-                NumberAnimation { duration: AppearanceTokens.motion.normalDuration; easing.type: AppearanceTokens.motion.standardEasing }
+                enabled: !card.pointerHeld && !AppTheme.reduceMotion
+                SpringAnimation {
+                    spring: AppearanceTokens.motion.widgetMoveSpring
+                    damping: AppearanceTokens.motion.widgetMoveDamping
+                    mass: AppearanceTokens.motion.widgetMoveMass
+                    epsilon: AppearanceTokens.motion.widgetMoveEpsilon
+                }
             }
             Behavior on y {
-                enabled: !card.moving
-                NumberAnimation { duration: AppearanceTokens.motion.normalDuration; easing.type: AppearanceTokens.motion.standardEasing }
+                enabled: !card.pointerHeld && !AppTheme.reduceMotion
+                SpringAnimation {
+                    spring: AppearanceTokens.motion.widgetMoveSpring
+                    damping: AppearanceTokens.motion.widgetMoveDamping
+                    mass: AppearanceTokens.motion.widgetMoveMass
+                    epsilon: AppearanceTokens.motion.widgetMoveEpsilon
+                }
             }
             // Size is the one change that moves a lot of pixels at once, so it
             // settles instead of jumping: the drag itself tracks the pointer
@@ -777,7 +824,17 @@ PanelWindow {
                     epsilon: AppearanceTokens.motion.widgetResizeEpsilon
                 }
             }
-            Behavior on scale { NumberAnimation { duration: 120; easing.type: Easing.OutCubic } }
+            // The lift belongs to the same motion family as the drop, so the
+            // card does not land while it is still shrinking on another curve.
+            Behavior on scale {
+                enabled: !AppTheme.reduceMotion
+                SpringAnimation {
+                    spring: AppearanceTokens.motion.widgetMoveSpring
+                    damping: AppearanceTokens.motion.widgetMoveDamping
+                    mass: AppearanceTokens.motion.widgetMoveMass
+                    epsilon: AppearanceTokens.motion.widgetMoveEpsilon
+                }
+            }
 
             // A right click is how a card enters editing, so a second right
             // click has to leave it again. Toggling keeps one gesture as the
@@ -802,9 +859,11 @@ PanelWindow {
                 }
                 onActiveChanged: {
                     if (active) {
+                        card.pointerHeld = true
                         root.activeDragCard = card
                         return
                     }
+                    card.pointerHeld = false
                     const allowed = root.editMode && card.dropAllowed
                     const destination = card.dropPosition
                     const id = card.modelData.id
