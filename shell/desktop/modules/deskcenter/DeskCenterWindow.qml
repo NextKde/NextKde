@@ -910,6 +910,12 @@ PanelWindow {
                 id: widgetContentLayer
                 objectName: "widget-content-layer"
                 anchors.fill: parent
+                // Editing is spatial: while widgets are being arranged their
+                // contents must not answer clicks. A live content layer turned a
+                // drag or a stray click on the music card into a launch of the
+                // app it was showing, and a second copy of a running player is
+                // what crashed QQ Music (two instances share one profile).
+                enabled: !root.editMode
                 // The clock resolves monochrome ink in its face. Keep its text
                 // out of the extra saturation texture so it renders at the
                 // window's resolution. Other glass artwork is desaturated.
@@ -2019,17 +2025,29 @@ PanelWindow {
                         // Raise the displayed player; ListenFree owns the
                         // music entry when no MPRIS session is available.
                         const player = MediaService.activePlayer
-                        if (player) {
-                            if (player.canRaise) {
-                                player.raise()
-                                return
-                            }
-                            if (player.desktopEntry && AppActionService.launchById(player.desktopEntry, []))
-                                return
-                            // Do not start a different app for the displayed track.
+                        if (!player) {
+                            AppActionService.launchById("listenfree", [])
                             return
                         }
-                        AppActionService.launchById("listenfree", [])
+                        if (player.canRaise) {
+                            player.raise()
+                            return
+                        }
+                        // Not every player offers Raise (the QQ Music bridge
+                        // reports CanRaise=false), so bring up the window that
+                        // already exists. Launching from here started a second
+                        // copy of a running app, and two QQ Music instances
+                        // share one profile and crash each other.
+                        const windows = player.desktopEntry
+                            ? WindowService.windowsForApp(player.desktopEntry) : []
+                        if (windows.length > 0) {
+                            WindowService.activateWindow(windows[0].windowId)
+                            return
+                        }
+                        if (player.desktopEntry
+                                && AppActionService.launchById(player.desktopEntry, []))
+                            return
+                        // Do not start a different app for the displayed track.
                     }
                 }
 
