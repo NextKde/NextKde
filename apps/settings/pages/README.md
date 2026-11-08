@@ -15,7 +15,10 @@ No registry, dependency container or second IPC protocol is introduced.
   root; `null` means unavailable. Pages retain their existing method and snapshot
   signal contracts. The window appearance page instead receives `backend`, the
   existing WindowSettings object. Neither dependency is discovered from context
-  properties inside extracted pages.
+  properties inside extracted pages. The window appearance page also receives
+  `bridge` for on-demand running-app discovery through `fgSchedRunningApps()`;
+  its per-app button exclusions use the raw KWin app ID and retain a manual
+  exact-class fallback when Shell IPC is unavailable. It does not poll.
 - `glassStyles` provides `options`, `indexOf(id)` and `labelOf(id)` to appearance
   views. This catalog stays owned by the composition root.
 - `shellStyleObserved(style)` and `materialSeedObserved(seed)` report confirmed

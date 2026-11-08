@@ -15,7 +15,18 @@ ColumnLayout {
     objectName: "windowAppearancePage"
     spacing: 12
     property var backend: null
+    property var bridge: null
+    property var runningApps: []
     readonly property var snapshot: backend ? backend.state : ({})
+    readonly property var availableRunningApps: {
+        const excluded = snapshot.buttonExclusions ?? [];
+        const apps = [];
+        for (const app of runningApps) {
+            if (app.appId && excluded.indexOf(app.appId) < 0)
+                apps.push({appId: app.appId, label: app.name && app.name !== app.appId ? app.name + " · " + app.appId : app.appId});
+        }
+        return apps;
+    }
     readonly property var radiusStops: [0, 8, 12, 20, 28, 36]
     readonly property var radiusLabels: [I18n.tr("Square corner"), I18n.tr("Slight round"), I18n.tr("Small"), I18n.tr("Standard"), I18n.tr("Large"), I18n.tr("Larger")]
     property int previewRadius: -1
@@ -26,9 +37,24 @@ ColumnLayout {
                 best = i;
         return best;
     }
+    function addManualExclusion() {
+        if (!backend || manualExclusionInput.text.trim().length === 0)
+            return;
+        if (backend.setButtonExclusion(manualExclusionInput.text, true))
+            manualExclusionInput.text = "";
+    }
+    Connections {
+        target: windowPage.bridge
+        enabled: windowPage.bridge !== null
+        function onFgSchedRunningAppsChanged(apps) {
+            windowPage.runningApps = apps || [];
+        }
+    }
     Component.onCompleted: {
         if (backend)
             backend.refresh();
+        if (bridge)
+            bridge.fgSchedRunningApps();
     }
 
     Demo.SettingsGroup {
@@ -116,6 +142,98 @@ ColumnLayout {
                 onSelectionChanged: function (index) {
                     windowPage.backend.setButtonGlyphMode(model[index].id);
                 }
+            }
+        }
+    }
+
+    Demo.SettingsGroup {
+        id: buttonExclusionRows
+        title: I18n.tr("Per-app window buttons")
+        backgroundColor: colors.card
+
+        Demo.SettingsItem {
+            description: I18n.tr("Hide the floating minimize, maximize, and close buttons for selected apps. Removing an app restores its default behavior.")
+        }
+        Repeater {
+            model: windowPage.snapshot.buttonExclusions ?? []
+            delegate: Demo.SettingsItem {
+                id: exclusionRow
+                required property string modelData
+                objectName: "windowButtonExclusionRow_" + modelData
+                title: modelData
+                Demo.LiquidActionButton {
+                    objectName: "removeWindowButtonExclusion"
+                    text: I18n.tr("Remove")
+                    materialForm: true
+                    implicitHeight: 24
+                    cornerRadius: 6
+                    enabled: windowPage.backend !== null
+                    onClicked: windowPage.backend.setButtonExclusion(exclusionRow.modelData, false)
+                }
+            }
+        }
+        Demo.SettingsItem {
+            objectName: "windowButtonExclusionsEmpty"
+            visible: (windowPage.snapshot.buttonExclusions ?? []).length === 0
+            description: I18n.tr("No apps are excluded. Floating buttons follow the default behavior.")
+        }
+        Demo.SettingsItem {
+            description: windowPage.availableRunningApps.length === 0 ? I18n.tr("No running apps available. Refresh or enter an application class below.") : ""
+            Controls.SettingsSelect {
+                id: runningAppsBox
+                objectName: "windowButtonRunningApps"
+                colors: windowPage.colors
+                materialForm: windowPage.materialForm
+                implicitWidth: 180
+                implicitHeight: 24
+                Layout.minimumWidth: 80
+                Layout.preferredWidth: 180
+                model: windowPage.availableRunningApps
+                textRole: "label"
+                enabled: windowPage.bridge !== null && model.length > 0
+                property int selectedIndex: 0
+                currentIndex: Math.min(selectedIndex, Math.max(0, model.length - 1))
+                onActivated: function (index) {
+                    selectedIndex = index;
+                }
+            }
+            Demo.LiquidActionButton {
+                objectName: "addRunningWindowButtonExclusion"
+                text: windowPage.availableRunningApps.length > 0 ? I18n.tr("Add") : I18n.tr("Refresh")
+                materialForm: true
+                implicitHeight: 24
+                cornerRadius: 6
+                enabled: windowPage.backend !== null && windowPage.bridge !== null && (windowPage.availableRunningApps.length === 0 || !!windowPage.availableRunningApps[runningAppsBox.currentIndex]?.appId)
+                onClicked: {
+                    if (windowPage.availableRunningApps.length === 0) {
+                        windowPage.bridge.fgSchedRunningApps();
+                    } else {
+                        const app = windowPage.availableRunningApps[runningAppsBox.currentIndex];
+                        if (app && app.appId)
+                            windowPage.backend.setButtonExclusion(app.appId, true);
+                    }
+                }
+            }
+        }
+        Demo.SettingsItem {
+            Demo.LiquidTextField {
+                id: manualExclusionInput
+                objectName: "windowButtonExclusionInput"
+                implicitWidth: 180
+                implicitHeight: 24
+                Layout.minimumWidth: 80
+                Layout.preferredWidth: 180
+                placeholderText: I18n.tr("Application class, e.g. md.obsidian.Obsidian")
+                onAccepted: windowPage.addManualExclusion()
+            }
+            Demo.LiquidActionButton {
+                objectName: "addManualWindowButtonExclusion"
+                text: I18n.tr("Add")
+                materialForm: true
+                implicitHeight: 24
+                cornerRadius: 6
+                enabled: windowPage.backend !== null && manualExclusionInput.text.trim().length > 0
+                onClicked: windowPage.addManualExclusion()
             }
         }
     }
