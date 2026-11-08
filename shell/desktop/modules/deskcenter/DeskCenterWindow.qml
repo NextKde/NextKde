@@ -732,10 +732,13 @@ PanelWindow {
             // the QML content publish the same position on every drag frame.
             x: root.leftInset + (placement?.column ?? 0) * (root.cellSize + root.gap) + dragOffsetX
             y: root.topInset + (placement?.row ?? 0) * (root.cellSize + root.gap) + dragOffsetY
-            readonly property int displayColumns: resizeHandle.resizing
-                ? resizeHandle.previewColumns : (placement?.columns ?? 1)
-            readonly property int displayRows: resizeHandle.resizing
-                ? resizeHandle.previewRows : (placement?.rows ?? 1)
+            // The card and every widget inside it lay themselves out for the
+            // cell size they have committed to, never for the mid-drag preview:
+            // switching a widget to its other layout at the halfway point made
+            // the contents jump while the corner was still moving. The preview
+            // span only drives the resize readout and the corner itself.
+            readonly property int displayColumns: placement?.columns ?? 1
+            readonly property int displayRows: placement?.rows ?? 1
             // While the corner is held, the card follows the magnetised
             // pointer position; the moment it is released the size switches to
             // the committed cell and the spring below takes it there.
@@ -897,7 +900,7 @@ PanelWindow {
                 Text {
                     id: resizePreview
                     anchors.centerIn: parent
-                    text: card.displayColumns + " × " + card.displayRows
+                    text: resizeHandle.previewColumns + " × " + resizeHandle.previewRows
                     color: "white"
                     font { pixelSize: 13; weight: Font.DemiBold }
                 }
@@ -2158,8 +2161,16 @@ PanelWindow {
 	                                visible: musicContent.hasPlayer
                                 source: musicContent.artworkSource
                                 fillMode: Image.PreserveAspectCrop
-                                sourceSize.width: Math.max(1, Math.ceil(width * 2))
-                                sourceSize.height: Math.max(1, Math.ceil(height * 2))
+                                // Decode once at a size the layout can never
+                                // exceed. Binding sourceSize to the animated
+                                // width re-decoded the cover on every frame of a
+                                // resize and left it not-Ready for most of them
+                                // (measured: 29 of 31 frames), which reads as the
+                                // cover flickering while the card grows.
+                                readonly property int decodeSize: Math.max(1,
+                                    Math.ceil(root.cellSize * 2))
+                                sourceSize.width: decodeSize
+                                sourceSize.height: decodeSize
                                 asynchronous: true
                                 cache: false
                                 smooth: true
