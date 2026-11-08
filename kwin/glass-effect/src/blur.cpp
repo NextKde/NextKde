@@ -109,6 +109,14 @@ bool BlurEffect::shapeTraceEnabled() const
     return enabled && KWIN_BLUR().isDebugEnabled();
 }
 
+static QDebug shapeTraceLog()
+{
+    // Release builds define QT_NO_DEBUG_OUTPUT. Keep this explicit opt-in
+    // diagnostic available while respecting shapeTraceEnabled() and its
+    // logging-category gate, rather than using the compiled-out qCDebug macro.
+    return QMessageLogger(__FILE__, __LINE__, Q_FUNC_INFO).debug(KWIN_BLUR());
+}
+
 #if !defined(GLASS_X11) && !defined(GLASS_KWIN_67)
 BlurManagerInterface *BlurEffect::s_blurManager = nullptr;
 QTimer *BlurEffect::s_blurManagerRemoveTimer = nullptr;
@@ -841,7 +849,7 @@ void BlurEffect::slotWindowClosed(EffectWindow *w)
     // without waiting for windowDeleted or the wl_surface destruction order.
     effects->addRepaintFull();
     if (shapeTraceEnabled()) {
-        qCDebug(KWIN_BLUR) << "glass trace: retired closed shape window" << w->frameGeometry();
+        shapeTraceLog() << "glass trace: retired closed shape window" << w->frameGeometry();
     }
 #else
     Q_UNUSED(w)
@@ -1727,7 +1735,7 @@ void BlurEffect::blur(const RenderTarget &renderTarget, const RenderViewport &vi
             surfaceShapeDraws.append(draw);
             if (shapeTraceEnabled()) {
                 // Per-shape diagnostics retained from issue #214.
-                qCDebug(KWIN_BLUR) << "  declared shape" << shape.id
+                shapeTraceLog() << "  declared shape" << shape.id
                     << "geom" << shape.geometry << "capture" << surfaceCaptureBounds(shape)
                     << "radius" << shape.radius << "exponent" << shape.exponent
                     << "enabled" << shape.enabled;
@@ -1794,7 +1802,7 @@ void BlurEffect::blur(const RenderTarget &renderTarget, const RenderViewport &vi
 
     if (renderInfo.framebuffers.size() != (m_maxIterationCount + 1) || renderInfo.textures[0]->size() != backgroundRect.size() || renderInfo.textures[0]->internalFormat() != textureFormat) {
         if (shapeTraceEnabled()) {
-            qCDebug(KWIN_BLUR) << "glass trace: allocating capture chain" << backgroundRect.size();
+            shapeTraceLog() << "glass trace: allocating capture chain" << backgroundRect.size();
         }
         renderInfo.framebuffers.clear();
         renderInfo.textures.clear();
@@ -2300,7 +2308,7 @@ void BlurEffect::blur(const RenderTarget &renderTarget, const RenderViewport &vi
         // it". `box` is the field the SDF is evaluated in, native to the blur
         // texture; each draw's nativeBox has to contain its rects for the
         // gate in onscreen_rounded.glsl to let anything through.
-        qCDebug(KWIN_BLUR)
+        shapeTraceLog()
             << "glass trace:" << (isQuickshellSurface ? "quickshell" : "other")
             << "path" << (surfaceShapeDraws.isEmpty() ? "region" : "shapes")
             << "declared" << declaredSurfaceShapes.size()
@@ -2316,7 +2324,7 @@ void BlurEffect::blur(const RenderTarget &renderTarget, const RenderViewport &vi
             for (const auto &rect : draw.rects) {
                 rectBounds = rectBounds.united(rect);
             }
-            qCDebug(KWIN_BLUR)
+            shapeTraceLog()
                 << "  shape" << draw.shape.id
                 << "geom" << draw.shape.geometry
                 << "radius" << draw.shape.radius
