@@ -24,13 +24,9 @@ export function preferredId(state, role) {
 
 export function resolvePinnedId(state, desktopId) {
     const id = String(desktopId || "");
-    // KOS's settings entry is never replaced by the optional Forma suite,
-    // including a pre-existing Forma Settings pin left by an older setup.
-    if (id === "io.github.egely1337.Mayonnaise.Settings.desktop")
-        return "kos-settings.desktop";
+    // Settings applications are deliberately absent from legacyRoles. Keeping
+    // KOS's own Settings action must not replace an explicitly pinned app.
     if (state?.enabled !== true)
         return id;
-    if (id === "systemsettings.desktop" || id === "kdesystemsettings.desktop")
-        return "kos-settings.desktop";
     return preferredId(state, legacyRoles[id]) || id;
 }
