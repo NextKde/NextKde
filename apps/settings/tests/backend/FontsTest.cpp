@@ -139,7 +139,9 @@ private slots:
         QCOMPARE(settings.rendering()->property("dpi").isValid(), settings.dpiAvailable());
         QCOMPARE(settings.rendering()->property("dpi").toInt(), canSetDpi ? 120 : initialDpi);
         QTRY_VERIFY(settings.needsSave());
+        const int beforeSave = refreshCount;
         QVERIFY2(settings.apply(), qPrintable(settings.error()));
+        QTRY_COMPARE(refreshCount, beforeSave + 1);
         settings.reset();
         for (const auto &role : roles) {
             const auto font = settings.fonts()->property(role.toUtf8().constData()).value<QFont>();
@@ -170,7 +172,9 @@ private slots:
         if (canSetDpi) {
             settings.setRendering(QStringLiteral("dpi"), 0);
             QTRY_VERIFY(settings.needsSave());
+            const int beforeDpiSave = refreshCount;
             QVERIFY2(settings.apply(), qPrintable(settings.error()));
+            QTRY_COMPARE(refreshCount, beforeDpiSave + 1);
             settings.reset();
             QCOMPARE(settings.rendering()->property("dpi").toInt(), 0);
         }
@@ -205,6 +209,7 @@ private slots:
     {
         QQmlEngine engine;
         QFont chosen;
+        const int beforeSave = refreshCount;
         {
             FontSettings settings(&engine);
             settings.refresh();
@@ -217,6 +222,8 @@ private slots:
             settings.setFont(QStringLiteral("menuFont"), chosen);
             // No wait after the edit: exiting during debounce must still persist.
         }
+        // Consume this save's asynchronous D-Bus notification in its own test.
+        QTRY_COMPARE(refreshCount, beforeSave + 1);
         KConfig persisted(QStringLiteral("kdeglobals"));
         QCOMPARE(KConfigGroup(&persisted, "General").readEntry("menuFont", QFont()).pointSizeF(), chosen.pointSizeF());
     }
@@ -287,7 +294,14 @@ private slots:
         QVERIFY(QMetaObject::invokeMethod(picker, "reject"));
         QTRY_VERIFY(!picker->property("visible").toBool());
         const auto previewSource = preview->property("source");
-        window.hide();
+        // Hiding a window need not change focus on the offscreen platform.
+        // Activate another top-level window to exercise an actual focus change.
+        QQuickWindow otherWindow;
+        otherWindow.resize(100, 100);
+        otherWindow.show();
+        QVERIFY(QTest::qWaitForWindowExposed(&otherWindow));
+        otherWindow.requestActivate();
+        QTRY_VERIFY(otherWindow.isActive());
         QTRY_VERIFY(!window.isActive());
         QCOMPARE(preview->property("source"), previewSource);
         QCOMPARE(preview->property("status").toInt(), 1);
