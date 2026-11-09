@@ -105,7 +105,8 @@ def run(base_env=None):
                 assert not re.search(r"WIDGET_EXPERIENCE_FAIL|ReferenceError|TypeError|Cannot assign|Unable to assign|is not a type", output), output
                 check_bell_pixels(root / "captures")
                 saved = json.loads(state["appearance/config.json"])
-                assert saved["version"] == 30 and saved["widgetStyle"] == "color", saved
+                assert saved["version"] == 31 and saved["widgetStyle"] == "color", saved
+                assert saved["useSystemFont"] is False, saved
                 assert set(saved["hiddenDeskCenterWidgets"]) == set(WIDGETS) - {"clock"}, saved
                 assert json.loads(state["appearance/icon-appearance.json"])["mode"] == "grayscale"
                 # Each launch must render its own frames, not reuse the first run.

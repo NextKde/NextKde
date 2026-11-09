@@ -2,11 +2,19 @@
 
 #include <QDir>
 #include <QFile>
+#include <QFileInfo>
 #include <QFontInfo>
 #include <QGuiApplication>
+#include <QImage>
+#include <QQmlComponent>
 #include <QQmlEngine>
+#include <QQuickItem>
+#include <QQuickWindow>
 #include <QTemporaryDir>
 #include <QTest>
+#include <QtQml/qqmlextensionplugin.h>
+
+Q_IMPORT_QML_PLUGIN(Kos_DemoPlugin)
 
 class FontsTest : public QObject {
     Q_OBJECT
@@ -63,6 +71,38 @@ private slots:
         QTRY_VERIFY(settings.needsSave());
         settings.reset();
         QTRY_VERIFY(!settings.needsSave());
+
+        // Load the production form against the actual plugin properties, not a
+        // mock: private KCM property/type changes must fail before shipping.
+        QStringList warnings;
+        connect(&engine, &QQmlEngine::warnings, this, [&warnings](const QList<QQmlError> &errors) {
+            for (const auto &error : errors) warnings.append(error.toString());
+        });
+        QQmlComponent component(&engine, QUrl::fromLocalFile(QStringLiteral(FONT_SETTINGS_PAGE)));
+        QVERIFY2(component.isReady(), qPrintable(component.errorString()));
+        const QVariantMap colors{{"primaryText", "#1c1c1e"}, {"secondaryText", "#6d6d72"},
+            {"card", "#ffffff"}, {"accent", "#0a84ff"}, {"dark", false}};
+        QQuickWindow window;
+        window.setColor(QColor("#eff0f1"));
+        window.resize(550, 1500);
+        auto page = qobject_cast<QQuickItem *>(component.createWithInitialProperties(
+            {{"colors", colors}, {"backend", QVariant::fromValue(&settings)}}));
+        QVERIFY2(page, qPrintable(component.errorString()));
+        page->setParent(&window);
+        page->setParentItem(window.contentItem());
+        page->setX(15);
+        page->setY(15);
+        page->setWidth(520);
+        QTRY_VERIFY(page->property("ready").toBool());
+        window.show();
+        QVERIFY(QTest::qWaitForWindowExposed(&window));
+        QTest::qWait(250);
+        const auto screenshot = qEnvironmentVariable("KOS_FONT_SCREENSHOT");
+        if (!screenshot.isEmpty()) {
+            QDir().mkpath(QFileInfo(screenshot).absolutePath());
+            QVERIFY(window.grabWindow().save(screenshot));
+        }
+        QVERIFY2(warnings.isEmpty(), qPrintable(warnings.join('\n')));
     }
 };
 

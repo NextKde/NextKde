@@ -971,7 +971,12 @@ ApplicationWindow {
                             materialForm: window.materialForm
                             bridge: typeof settingsBridge !== "undefined" ? settingsBridge : null
                             backend: typeof fontSettings !== "undefined" ? fontSettings : null
-                            onBackRequested: window.currentPage = 1
+                            onBackRequested: {
+                                if (window.canGoBack && window.pageHistory[window.historyIndex - 1] === 1)
+                                    window.navigateHistory(-1)
+                                else
+                                    window.currentPage = 1
+                            }
                         }
                     }
 

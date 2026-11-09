@@ -270,7 +270,6 @@ ColumnLayout {
 
     Flow {
         Layout.fillWidth: true
-        implicitHeight: childrenRect.height
         spacing: 8
         Demo.LiquidActionButton {
             text: I18n.tr("Restore defaults")

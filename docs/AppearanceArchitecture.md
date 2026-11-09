@@ -131,7 +131,8 @@ remain active on the secondary page. `FontSettingsPage.qml` receives an explicit
 `FontSettings` backend and the existing appearance bridge.
 
 `FontSettings` loads Plasma's `kcm_fonts` backend through `KF6::KCMUtilsQuick` in
-the Settings QML engine, without creating the KDE page or launching System Settings.
+the Settings QML engine, without launching System Settings. KCMUtils' host item is
+initialized once, detached and hidden, to establish the preview-provider context.
 The native NextKde form exposes general, fixed-width, small, toolbar, menu and
 window-title fonts, family/style/size selection and previews, selective adjustment
 of all fonts, anti-aliasing and its excluded size range, sub-pixel rendering,

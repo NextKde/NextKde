@@ -8,6 +8,7 @@
 #include <QFontInfo>
 #include <QGuiApplication>
 #include <QQmlEngine>
+#include <QQuickItem>
 #include <memory>
 
 namespace {
@@ -65,8 +66,7 @@ void FontSettings::refresh()
             emit changed();
             return;
         }
-        // The host owns this engine and outlives this adapter. Do not instantiate
-        // the KCM's mainUi: the NextKde page supplies the entire form.
+        // The host owns this engine and outlives this adapter.
         const auto result = KQuickConfigModuleLoader::loadModule(metadata, this, {},
             std::shared_ptr<QQmlEngine>(m_engine, [](QQmlEngine *) {}));
         if (!result) {
@@ -85,6 +85,19 @@ void FontSettings::refresh()
             return;
         }
         connect(m_module, &KQuickConfigModule::needsSaveChanged, this, &FontSettings::changed);
+        // KFonts::load() uses engine() for its preview provider. KCMUtils only
+        // initializes that engine wrapper in mainUi(), even with an explicitly
+        // supplied engine. Keep KDE's host item detached and hidden; the user
+        // interacts exclusively with FontSettingsPage, never a KDE window.
+        auto host = m_module->mainUi();
+        if (!host) {
+            m_error = QStringLiteral("Could not initialize KDE font settings: %1").arg(m_module->errorString());
+            delete m_module;
+            m_module = nullptr;
+            emit changed();
+            return;
+        }
+        host->setVisible(false);
     }
     m_module->load();
     emit changed();
