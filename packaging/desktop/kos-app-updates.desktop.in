@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=NextKde application updates
+Name[zh_CN]=NextKde 应用更新检查
+Name[pt_BR]=Atualizações de aplicativos do NextKde
+Exec=@CMAKE_INSTALL_PREFIX@/bin/kos-app-update-agent
+TryExec=@CMAKE_INSTALL_PREFIX@/bin/kos-app-update-agent
+NoDisplay=true
+X-KDE-autostart-phase=2
