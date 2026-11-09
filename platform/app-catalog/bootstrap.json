@@ -1,0 +1,117 @@
+{
+  "schemaVersion": 1,
+  "sourceId": "nextkde",
+  "sequence": 0,
+  "apps": [
+    {
+      "key": "kmusic",
+      "appId": "org.nextkde.KMusic",
+      "format": "flatpak",
+      "name": {
+        "en": "KMusic",
+        "zh-CN": "KMusic",
+        "pt-BR": "KMusic"
+      },
+      "description": {
+        "en": "Discover and listen to music",
+        "zh-CN": "浏览与播放音乐",
+        "pt-BR": "Explore e reproduza músicas"
+      },
+      "repository": "NextKde/NkMusic",
+      "manifest": "flatpak-release.json",
+      "status": "active",
+      "publisher": {
+        "fingerprint": "3751DC833ED4BC7E797A9766ADF7411B531A56B4",
+        "publicKey": "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"
+      }
+    },
+    {
+      "key": "calendar",
+      "appId": "org.nextks.calendar",
+      "format": "flatpak",
+      "name": {
+        "en": "Calendar",
+        "zh-CN": "日历",
+        "pt-BR": "Calendário"
+      },
+      "description": {
+        "en": "Plan your days and events",
+        "zh-CN": "安排日程与活动",
+        "pt-BR": "Organize seus dias e eventos"
+      },
+      "repository": "NextKde/kos-apps",
+      "manifest": "org.nextks.calendar.flatpak-release.json",
+      "status": "active",
+      "publisher": {
+        "fingerprint": "3751DC833ED4BC7E797A9766ADF7411B531A56B4",
+        "publicKey": "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"
+      }
+    },
+    {
+      "key": "calculator",
+      "appId": "org.nextks.calculator",
+      "format": "flatpak",
+      "name": {
+        "en": "Calculator",
+        "zh-CN": "计算器",
+        "pt-BR": "Calculadora"
+      },
+      "description": {
+        "en": "Everyday calculations, made simple",
+        "zh-CN": "进行日常计算",
+        "pt-BR": "Faça cálculos do dia a dia"
+      },
+      "repository": "NextKde/kos-apps",
+      "manifest": "org.nextks.calculator.flatpak-release.json",
+      "status": "active",
+      "publisher": {
+        "fingerprint": "3751DC833ED4BC7E797A9766ADF7411B531A56B4",
+        "publicKey": "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"
+      }
+    },
+    {
+      "key": "weather",
+      "appId": "org.nextks.weather",
+      "format": "flatpak",
+      "name": {
+        "en": "Weather",
+        "zh-CN": "天气",
+        "pt-BR": "Clima"
+      },
+      "description": {
+        "en": "Forecasts for your favorite places",
+        "zh-CN": "查看天气与预报",
+        "pt-BR": "Veja o clima e a previsão"
+      },
+      "repository": "NextKde/kos-apps",
+      "manifest": "org.nextks.weather.flatpak-release.json",
+      "status": "active",
+      "publisher": {
+        "fingerprint": "3751DC833ED4BC7E797A9766ADF7411B531A56B4",
+        "publicKey": "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"
+      }
+    },
+    {
+      "key": "listenfree",
+      "appId": "org.nextkde.ListenFree",
+      "format": "flatpak",
+      "name": {
+        "en": "ListenFree",
+        "zh-CN": "ListenFree",
+        "pt-BR": "ListenFree"
+      },
+      "description": {
+        "en": "Discover and listen to music",
+        "zh-CN": "探索与聆听音乐",
+        "pt-BR": "Descubra e ouça músicas"
+      },
+      "repository": "NextKde/ListenFree",
+      "manifest": "flatpak-release.json",
+      "status": "active",
+      "publisher": {
+        "fingerprint": "3751DC833ED4BC7E797A9766ADF7411B531A56B4",
+        "publicKey": "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"
+      }
+    }
+  ]
+}

@@ -76,8 +76,8 @@ bool persistPlan(const QString& appId, const QVariantMap& plan)
 
 void loadPersistedPlans()
 {
-    for (const auto& entry : IndependentAppRegistry::apps) {
-        const auto appId = QString::fromLatin1(entry.appId);
+    for (const auto& entry : IndependentAppRegistry::apps()) {
+        const auto appId = entry.appId;
         QFile file(planPath(appId));
         if (!file.open(QIODevice::ReadOnly) || file.size() > 1024 * 1024) {
             removePersistedPlan(appId);
@@ -110,11 +110,11 @@ QJsonObject response(const QString& type, const QJsonObject& payload = {})
 QJsonObject inventoryResult(FlatpakApps& backend)
 {
     QJsonObject apps;
-    for (const auto& entry : IndependentAppRegistry::apps) {
-        const auto id = QString::fromLatin1(entry.appId);
+    for (const auto& entry : IndependentAppRegistry::apps()) {
+        const auto id = entry.appId;
         apps.insert(id, QJsonObject::fromVariantMap(backend.state(id)));
     }
-    const auto first = backend.state(QString::fromLatin1(IndependentAppRegistry::apps[0].appId));
+    const auto first = backend.state((IndependentAppRegistry::apps().isEmpty() ? QString() : IndependentAppRegistry::apps().first().appId));
     return {{"known", first.value("known").toBool()}, {"error", first.value("error").toString()},
         {"apps", apps}};
 }
@@ -128,11 +128,11 @@ int inventoryOnce(int argc, char** argv)
     QObject::connect(&poll, &QTimer::timeout, &application, [&] {
         if (backend.querying()) return;
         QJsonObject apps;
-        for (const auto& entry : IndependentAppRegistry::apps) {
-            const auto id = QString::fromLatin1(entry.appId);
+        for (const auto& entry : IndependentAppRegistry::apps()) {
+            const auto id = entry.appId;
             apps.insert(id, QJsonObject::fromVariantMap(backend.state(id)));
         }
-        const auto first = backend.state(QString::fromLatin1(IndependentAppRegistry::apps[0].appId));
+        const auto first = backend.state((IndependentAppRegistry::apps().isEmpty() ? QString() : IndependentAppRegistry::apps().first().appId));
         send({{"schemaVersion", 1}, {"type", "inventory"}, {"known", first.value("known").toBool()},
             {"error", first.value("error").toString()}, {"apps", apps}});
         application.exit(first.value("known").toBool() ? 0 : 2);
@@ -174,7 +174,7 @@ bool dispatch(FlatpakApps& backend, const QJsonObject& request)
         backend.refresh();
         return true;
     }
-    const auto* app = IndependentAppRegistry::find(appId);
+    const auto app = IndependentAppRegistry::find(appId);
     if (!app || !QStringList{"check-update", "install", "update", "uninstall", "prepare-install", "prepare-update", "confirm-plan"}.contains(action)) {
         finishRequest(backend, "INVALID_REQUEST", "Unsupported Flatpak worker action or application.");
         return true;

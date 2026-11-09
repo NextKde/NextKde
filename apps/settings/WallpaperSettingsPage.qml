@@ -748,7 +748,7 @@ ColumnLayout {
         Layout.fillWidth: true
         Layout.leftMargin: 16
         visible: page.spatialBusy || page.spatialPreparing || page.modelsChecking
-        text: page.modelsChecking ? I18n.tr("Checking the spatial wallpaper model…") : I18n.tr("Preparing spatial wallpaper; cancel from the preview or Extensions and services…")
+        text: page.modelsChecking ? I18n.tr("Checking the spatial wallpaper model…") : I18n.tr("Preparing spatial wallpaper; cancel from the preview or Applications and services…")
         color: page.colors.secondaryText
         font.pixelSize: 12
     }

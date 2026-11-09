@@ -9,10 +9,18 @@
 #include <QTimer>
 #include <QVariantMap>
 #include "IndependentApps.h"
+#include <QFutureWatcher>
 
 // One process owns each operation, independently of the lifetime of its QML page.
 class AppStore final : public QObject {
     Q_OBJECT
+    Q_PROPERTY(QVariantList sources READ sources NOTIFY changed)
+    Q_PROPERTY(QString catalogError READ catalogError NOTIFY changed)
+    Q_PROPERTY(bool catalogBusy READ catalogBusy NOTIFY changed)
+    Q_PROPERTY(bool automaticUpdates READ automaticUpdates WRITE setAutomaticUpdates NOTIFY changed)
+    Q_PROPERTY(bool updateNotifications READ updateNotifications WRITE setUpdateNotifications NOTIFY changed)
+    Q_PROPERTY(QVariantMap updateStatus READ updateStatus NOTIFY changed)
+    Q_PROPERTY(int updateCount READ updateCount NOTIFY changed)
     Q_PROPERTY(QVariantMap music READ music NOTIFY changed)
     Q_PROPERTY(QVariantList apps READ apps NOTIFY changed)
     Q_PROPERTY(bool anyBusy READ anyBusy NOTIFY changed)
@@ -20,6 +28,19 @@ class AppStore final : public QObject {
 public:
     explicit AppStore(const QString& resourcesDirectory, QObject* parent = nullptr);
     ~AppStore() override;
+    QVariantList sources() const;
+    QString catalogError() const { return m_catalogError; }
+    bool catalogBusy() const { return m_catalogRefresh.isRunning(); }
+    bool automaticUpdates() const;
+    void setAutomaticUpdates(bool enabled);
+    bool updateNotifications() const;
+    void setUpdateNotifications(bool enabled);
+    QVariantMap updateStatus() const;
+    int updateCount() const;
+    Q_INVOKABLE void refreshCatalog();
+    Q_INVOKABLE QString addSource(const QString& id, const QString& repository, const QString& fingerprint, const QString& publicKeyFile);
+    Q_INVOKABLE QString removeSource(const QString& id);
+    Q_INVOKABLE void checkAllUpdates();
     QVariantMap music() const;
     Q_INVOKABLE void refresh();
     Q_INVOKABLE void install();
@@ -47,4 +68,6 @@ signals:
     void taskFinished(const QString& name, const QString& code);
 private:
     IndependentApps m_independent;
+    QFutureWatcher<QString> m_catalogRefresh;
+    QString m_catalogError;
 };

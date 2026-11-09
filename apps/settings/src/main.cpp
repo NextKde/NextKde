@@ -13,6 +13,7 @@
 #include <QLocalServer>
 #include <QLocalSocket>
 #include <QPointer>
+#include <QProcess>
 #include <QLockFile>
 #include <QDir>
 #include <QStandardPaths>
@@ -138,6 +139,7 @@ int main(int argc, char* argv[])
                              entry.checkoutRoot.isEmpty() ? QString()
                                                           : QStringLiteral(", reloads on change"));
     AppStore appStore(QFileInfo(entry.qmlPath).absolutePath());
+    QProcess::startDetached(QCoreApplication::applicationDirPath() + "/kos-app-update-agent", QStringList{});
     engine.rootContext()->setContextProperty(QStringLiteral("appStore"), &appStore);
     const QUrl entrypoint = QUrl::fromLocalFile(entry.qmlPath);
     engine.load(entrypoint);

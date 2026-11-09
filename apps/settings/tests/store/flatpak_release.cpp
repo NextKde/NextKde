@@ -75,7 +75,7 @@ private slots:
         ReleaseHttpsFixture server(certificate, privateKey);
         QVERIFY(server.isListening());
         server.responses = {{status, "fixture", headers}};
-        Download download("kos-apps", [] { return false; }, [](const QString&, int) {}, 4000);
+        Download download("NextKde/kos-apps", [] { return false; }, [](const QString&, int) {}, 4000);
         QString actual;
         try { QCOMPARE(download.fetch(QUrl("https://api.github.com/repos/NextKde/kos-apps/releases/latest"), 64), QByteArray("fixture")); }
         catch (const Failure& failure) { actual = failure.code; }
@@ -113,7 +113,7 @@ private slots:
         ReleaseHttpsFixture server(certificate, privateKey);
         QVERIFY(server.isListening());
         server.responses = {{503, {}, {}, false, disconnect}, {200, "recovered", {}}};
-        Download download("kos-apps", [] { return false; }, [](const QString&, int) {}, 5000);
+        Download download("NextKde/kos-apps", [] { return false; }, [](const QString&, int) {}, 5000);
         try { QCOMPARE(download.fetch(QUrl("https://api.github.com/repos/NextKde/kos-apps/releases/latest"), 64), QByteArray("recovered")); }
         catch (const Failure& failure) { QFAIL(qPrintable(failure.code + ": " + failure.message)); }
         QCOMPARE(server.requests, 2);
@@ -133,7 +133,7 @@ private slots:
         QVERIFY(server.isListening());
         server.responses = {{backoff ? 503 : 200, {}, {}, !backoff}};
         QElapsedTimer elapsed; elapsed.start();
-        Download download("kos-apps", [&] { return cancel && elapsed.elapsed() >= 300; },
+        Download download("NextKde/kos-apps", [&] { return cancel && elapsed.elapsed() >= 300; },
             [](const QString&, int) {}, cancel ? 4000 : 350);
         try { download.fetch(QUrl("https://api.github.com/repos/NextKde/kos-apps/releases/latest"), 64); QFAIL("Unfinished download succeeded"); }
         catch (const Failure& failure) { QCOMPARE(failure.code, cancel ? QString("CANCELLED") : QString("NETWORK_TIMEOUT")); }
@@ -145,7 +145,7 @@ private slots:
         ReleaseHttpsFixture server(certificate, privateKey);
         QVERIFY(server.isListening());
         server.responses = {{503, {}, {}}};
-        Download download("kos-apps", [] { return false; }, [](const QString&, int) {}, 10000);
+        Download download("NextKde/kos-apps", [] { return false; }, [](const QString&, int) {}, 10000);
         try { download.fetch(QUrl("https://api.github.com/repos/NextKde/kos-apps/releases/latest"), 64); QFAIL("Persistent server error succeeded"); }
         catch (const Failure& failure) { QCOMPARE(failure.code, QString("DOWNLOAD_FAILED")); }
         QCOMPARE(server.requests, 3);
@@ -158,7 +158,7 @@ private slots:
         const auto trusted = ssl;
         ssl.setCaCertificates({});
         QSslConfiguration::setDefaultConfiguration(ssl);
-        Download download("kos-apps", [] { return false; }, [](const QString&, int) {}, 4000);
+        Download download("NextKde/kos-apps", [] { return false; }, [](const QString&, int) {}, 4000);
         QString code;
         try { download.fetch(QUrl("https://api.github.com/repos/NextKde/kos-apps/releases/latest"), 64); }
         catch (const Failure& failure) { code = failure.code; }
@@ -174,7 +174,7 @@ private slots:
         server.responses = {{200, "short", {}}};
         QTemporaryDir temporary(QDir::currentPath() + "/tmp/release-short-XXXXXX");
         QVERIFY(temporary.isValid());
-        Download download("kos-apps", [] { return false; }, [](const QString&, int) {}, 4000);
+        Download download("NextKde/kos-apps", [] { return false; }, [](const QString&, int) {}, 4000);
         try { download.fetch(QUrl("https://github.com/NextKde/kos-apps/releases/download/v0.2.0/app.flatpak"), 64, temporary.filePath("bundle.flatpak"), 12); QFAIL("Wrong signed length accepted"); }
         catch (const Failure& failure) { QCOMPARE(failure.code, QString("RESPONSE_TOO_LARGE")); }
         QVERIFY(QDir(temporary.path()).entryList(QDir::Files | QDir::Hidden | QDir::NoDotAndDotDot).isEmpty());
@@ -188,7 +188,7 @@ private slots:
         QTemporaryDir temporary(QDir::currentPath() + "/tmp/release-size-XXXXXX");
         QVERIFY(temporary.isValid());
         const auto path = temporary.filePath("bundle.flatpak");
-        Download download("kos-apps", [] { return false; }, [](const QString&, int) {}, 4000);
+        Download download("NextKde/kos-apps", [] { return false; }, [](const QString&, int) {}, 4000);
         try { download.fetch(QUrl("https://github.com/NextKde/kos-apps/releases/download/v0.2.0/app.flatpak"), 4, path, 4); QFAIL("Oversized response accepted"); }
         catch (const Failure& failure) { QCOMPARE(failure.code, QString("RESPONSE_TOO_LARGE")); }
         QVERIFY(QDir(temporary.path()).entryList(QDir::Files | QDir::Hidden | QDir::NoDotAndDotDot).isEmpty());
@@ -215,9 +215,9 @@ private slots:
     }
     void fixedRepositoryUrls()
     {
-        QVERIFY(validUrl(QUrl("https://api.github.com/repos/NextKde/kos-apps/releases/latest"), "kos-apps", false));
-        QVERIFY(validUrl(QUrl("https://github.com/NextKde/kos-apps/releases/download/v0.2.0/asset.flatpak"), "kos-apps", false));
-        QVERIFY(validUrl(QUrl("https://release-assets.githubusercontent.com/asset?token=fixture"), "kos-apps", true));
+        QVERIFY(validUrl(QUrl("https://api.github.com/repos/NextKde/kos-apps/releases/latest"), "NextKde/kos-apps", false));
+        QVERIFY(validUrl(QUrl("https://github.com/NextKde/kos-apps/releases/download/v0.2.0/asset.flatpak"), "NextKde/kos-apps", false));
+        QVERIFY(validUrl(QUrl("https://release-assets.githubusercontent.com/asset?token=fixture"), "NextKde/kos-apps", true));
         for (const auto &url : {
                  "http://github.com/NextKde/kos-apps/releases/download/v0.2.0/a",
                  "https://user@github.com/NextKde/kos-apps/releases/download/v0.2.0/a",
@@ -226,10 +226,10 @@ private slots:
                  "https://github.com/NextKde/kos-calendar/releases/download/v0.2.0/a",
                  "https://github.com/NextKde/kos-apps-evil/releases/download/v0.2.0/a",
                  "https://127.0.0.1/asset", "https://example.com/asset"}) {
-            QVERIFY2(!validUrl(QUrl(url), "kos-apps", true), url);
+            QVERIFY2(!validUrl(QUrl(url), "NextKde/kos-apps", true), url);
         }
-        QVERIFY(!validUrl(QUrl("https://release-assets.githubusercontent.com/a"), "kos-apps", false));
-        QVERIFY(!validUrl(QUrl("https://api.github.com/repos/NextKde/kos-apps/releases/latest?other=1"), "kos-apps", false));
+        QVERIFY(!validUrl(QUrl("https://release-assets.githubusercontent.com/a"), "NextKde/kos-apps", false));
+        QVERIFY(!validUrl(QUrl("https://api.github.com/repos/NextKde/kos-apps/releases/latest?other=1"), "NextKde/kos-apps", false));
     }
     void manifestIdentityAndArchitecture()
     {
@@ -329,7 +329,9 @@ private slots:
         QCOMPARE(server.requests, 3);
         QTemporaryDir temporary(QDir::currentPath() + "/tmp/release-digest-XXXXXX");
         QVERIFY(temporary.isValid());
-        const QVariantMap selected{{"manifest", bytes.toBase64()}, {"signature", signature.toBase64()}, {"arch", "x86_64"}};
+        const QVariantMap selected{{"manifest", bytes.toBase64()}, {"signature", signature.toBase64()}, {"arch", "x86_64"},
+            {"catalogEntryDigest", AppCatalog::entryDigest(AppCatalog::find("org.nextks.calculator"))},
+            {"manifestSha256", QString::fromLatin1(QCryptographicHash::hash(bytes, QCryptographicHash::Sha256).toHex())}};
         const auto downloaded = FlatpakRelease::download("org.nextks.calculator", selected, temporary.path(),
             [] { return false; }, [](const QString&, int) {});
         QCOMPARE(downloaded.value("code").toString(), QString("INVALID_RELEASE"));
@@ -351,7 +353,8 @@ private slots:
         QVERIFY(!verify(appId, manifest(), {}, [] { return false; }));
         QVERIFY(!verify("unknown", manifest(), "fake", [] { return false; }));
         const auto result = FlatpakRelease::download(appId, {{"manifest", manifest().toBase64()},
-            {"signature", QByteArray("fake").toBase64()}, {"arch", "x86_64"}},
+            {"signature", QByteArray("fake").toBase64()}, {"arch", "x86_64"},
+            {"catalogEntryDigest", AppCatalog::entryDigest(AppCatalog::find(appId))}},
             QDir::currentPath() + "/tmp", [] { return false; }, [](const QString &, int) {});
         QCOMPARE(result["code"].toString(), "FLATPAK_UNTRUSTED");
     }
