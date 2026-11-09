@@ -136,6 +136,7 @@ bool AdjustSession::commit()
 
     const QString windowClass = m_query.windowClass;
     const PanelGeometry geometry = m_geometry;
+    const WindowMatcher matcher = adjustmentMatcher(m_query);
     const bool changed = !sameGeometry(m_base, geometry);
 
     // Ended before the write, so that a write that fails leaves the panel
@@ -152,12 +153,6 @@ bool AdjustSession::commit()
         return true;
     }
 
-    WindowMatcher matcher;
-    // The class alone. A title changes as the window is used, a role does not
-    // exist on Wayland, and the type would only be a second way of saying what
-    // the class already says -- while the class is the one thing about a window
-    // that is the same now and the next time the application starts.
-    matcher.className = windowClass;
     return m_commit(matcher, geometry);
 }
 

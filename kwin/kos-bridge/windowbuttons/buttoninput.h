@@ -46,6 +46,7 @@ class ButtonInput final : public KWin::InputEventFilter
 public:
     ButtonInput(ButtonRenderer *renderer, ButtonConfig *config);
     ~ButtonInput() override;
+    void cancelAdjustment();
 
     bool pointerButton(KWin::PointerButtonEvent *event) override;
     bool pointerMotion(KWin::PointerMotionEvent *event) override;

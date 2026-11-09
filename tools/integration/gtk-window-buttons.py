@@ -22,7 +22,10 @@ END = '/* NextKde native GTK buttons: end */'
 ENV_BEGIN = '# NextKde native GTK module: begin'
 ENV_END = '# NextKde native GTK module: end'
 OWNER = 'nextkde-native-gtk'
-LAYOUT = ':maximize,minimize,close'
+# Chromium consumes this GTK setting too. Keep original right-side layouts,
+# and use the normal right-side layout when no suitable original exists.
+LAYOUT = ':minimize,maximize,close'
+LEGACY_LAYOUT = 'close,minimize,maximize:'
 SCHEMA = 'org.gnome.desktop.wm.preferences'
 KEY = 'button-layout'
 
@@ -104,11 +107,40 @@ def glyph_css(version, mode):
             + ',\n'.join(s + ':hover > image' for s in selectors) + ' { -gtk-icon-filter: none; }\n')
 
 
+def layout_for_install(config, state):
+    # Earlier versions forcibly installed a left layout. Recover the original
+    # right layout from their backup without replacing that recovery record.
+    candidates = [state.get('gsettings')]
+    for version in ('3.0', '4.0'):
+        path = config / f'gtk-{version}/settings.ini'
+        entry = state.get('files', {}).get(str(path))
+        line = entry.get('layout') if entry else layout_setting(read(path))
+        if line:
+            candidates.append(line.split('=', 1)[1].strip())
+    controls = {'close', 'minimize', 'maximize'}
+    for candidate in candidates:
+        if not isinstance(candidate, str):
+            continue
+        candidate = candidate.strip("'")
+        if candidate.count(':') != 1:
+            continue
+        leading, trailing = candidate.split(':')
+        if not controls.intersection(leading.split(',')) and controls.issubset(trailing.split(',')):
+            return candidate
+    return LAYOUT
+
+
 def install(config, glyph_mode='always', gtk3_module=None):
     if gtk3_module and not Path(gtk3_module).is_file():
         raise ValueError(f'GTK detection module is missing: {gtk3_module}')
     state_path = config / 'kos/gtk-buttons-state.json'
     state = json_read(state_path, {'files': {}, 'gsettings': None})
+    if shutil.which('gsettings') and state['gsettings'] is None:
+        try:
+            state['gsettings'] = gsettings('get', SCHEMA, KEY)
+        except subprocess.CalledProcessError:
+            pass  # settings.ini remains the fallback without this schema.
+    installed_layout = layout_for_install(config, state)
     updates = []
     for version in ('3.0', '4.0'):
         css_path = config / f'gtk-{version}/gtk.css'
@@ -124,7 +156,7 @@ def install(config, glyph_mode='always', gtk3_module=None):
         asset = (ROOT / f'shared/gtk/gtk-{version}.css').read_text() + glyph_css(version, glyph_mode)
         updated = clean + ('\n' if clean and not clean.endswith('\n') else '') + BEGIN + '\n' + asset + END + '\n'
         state['files'][str(ini_path)].setdefault('layout', layout_setting(ini))
-        updated_ini = layout_setting(ini, f'gtk-decoration-layout={LAYOUT}\n', write=True)
+        updated_ini = layout_setting(ini, f'gtk-decoration-layout={installed_layout}\n', write=True)
         entry = state['files'][str(ini_path)]
         if version == '3.0' and gtk3_module:
             line = layout_setting(ini, key='gtk-modules')
@@ -159,12 +191,13 @@ def install(config, glyph_mode='always', gtk3_module=None):
             state['gsettings'] = gsettings('get', SCHEMA, KEY)
         except subprocess.CalledProcessError:
             pass  # settings.ini remains the fallback on desktops without this schema.
-    state['gsettings_installed'] = repr(LAYOUT)
+    state['installedLayout'] = installed_layout
+    state['gsettings_installed'] = repr(installed_layout)
     json_write(state_path, state)
     for path, updated in updates:
         atomic_write(path, updated)
     if state['gsettings'] is not None:
-        gsettings('set', SCHEMA, KEY, LAYOUT)
+        gsettings('set', SCHEMA, KEY, installed_layout)
 
 
 def rules(config, app=None, title=None, remove=False):
@@ -221,7 +254,7 @@ def restore_styles(config):
                     current = layout_setting(current, 'gtk-modules=' + ':'.join(modules) + '\n' if any(modules) else None, write=True, key='gtk-modules')
             atomic_write(path, current)
     if state['gsettings'] is not None and shutil.which('gsettings'):
-        if gsettings('get', SCHEMA, KEY) == state.get('gsettings_installed', repr('close,minimize,maximize:')):
+        if gsettings('get', SCHEMA, KEY) == state.get('gsettings_installed', repr(state.get('installedLayout', LEGACY_LAYOUT))):
             gsettings('set', SCHEMA, KEY, state['gsettings'])
     state_path.unlink()
 
@@ -246,7 +279,7 @@ def reload_bridge():
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     sub = parser.add_subparsers(dest='action', required=True)
-    sub.add_parser('install', help='Install styles and native close/minimize/maximize layout')
+    sub.add_parser('install', help='Install styles and right-side window-button layout')
     sub.add_parser('uninstall', help='Restore settings and remove managed adaptation rules')
     sync = sub.add_parser('sync', help='Internal: apply the shared WindowSettings switch and icon mode')
     sync.add_argument('--enabled', choices=['true', 'false'], required=True)

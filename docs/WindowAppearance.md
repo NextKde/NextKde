@@ -37,6 +37,36 @@ While either effect is active, Bridge releases continuous captures and restores 
 thumbnail capture, including previously hidden continuous windows. Normal painting resumes continuous
 corners after the effect exits; Slide keeps its output clipping.
 
+Glass owns `overviewpreview.cpp`: from the same `WorkspaceScene::preFrameRender`
+hook used by native window thumbnails, it composes Desktop surfaces and Quickshell
+Docks in stacking order into one GPU framebuffer per output. It renders bounded
+Glass against the captured wallpaper before the client content. Applications are
+excluded and keep KWin's own layout and z order. A Qt Quick texture provider feeds
+native desktop background consumers, including grid/bar previews, so wallpaper, widgets and
+Dock scale together. Redirect native ShadowedTexture/FastBlur `source` properties
+to the composed texture provider: those effects sample a provider directly, so a
+child overlay beneath the original background does not replace their input.
+Publish texture revisions before Qt Quick synchronization even when the source
+item is invisible. Restore original consumer sources before releasing providers.
+Project redundant panel thumbnails only on outputs with connected consumers;
+log missing consumer connections and retain native rendering on failure.
+Redundant panel thumbnail items temporarily use a transparent
+visual parent, preserving their native QML opacity bindings. Client visibility,
+focus and desktop membership are untouched.
+
+Share textures using Qt's native OpenGL import and GPU fences, without CPU readback.
+Desktop/panel damage, geometry, opacity and shape changes invalidate capture;
+unchanged frames reuse the last texture. Preview RGBA8 buffers have a 128 MiB total
+admission limit across outputs (Glass scratch buffers and native thumbnails are
+additional). Allocation/render failure retains native previews for that activation;
+software Qt Quick also falls back. Restore thumbnail visual parents and remove preview
+items on exit, lock and effect teardown. Release the isolated Glass capture cache
+on exit. VM acceptance must cover enter/exit and gesture cancellation, repeated
+activation, multi-output changes, moving widget content and actual material continuity.
+`kos-glass.overview-panel-projection` checks native opacity binding continuity,
+typed/variant texture source redirection, preservation of newer native sources,
+repeated projection, restoration and item/effect teardown with real Qt Quick items.
+
 ## Configuration
 
 `~/.config/kos/window-appearance.json` uses schema 2; the parser accepts schema 1 migration.
@@ -51,6 +81,51 @@ maximized behavior follows configuration. Restore normal appearance on leaving f
 Clipping does not implement content-protection padding. Settings exposes selected appearance
 controls; the parser/example remains the reference for detailed rules. Palette-derived appearance and explicit per-app overrides do not
 sample wallpaper or recover content already removed by the client.
+
+## Independent window-button cover
+
+Settings → Window appearance → **Independent button cover** writes the global
+`independentButtonBackground` boolean in `~/.config/kos/window-buttons.json`
+(default false). Fallback CSD overlays then use 14 logical-pixel circles and
+14 logical-pixel gaps, matching Settings, Calendar, Weather and native KOS
+controls. Application overrides and saved adjustments cannot change this size.
+The shared application control defaults use the same diameter and pitch.
+Native/cooperative controls retain their input/layout ownership and receive no
+additional cover.
+
+Right-click a fallback overlay to adjust it. Drag each edge to grow/shrink its
+background independently; buttons stay at their existing positions. Plain and
+Shift+wheel cannot resize buttons or spacing while enabled; Ctrl+wheel changes
+all four cover margins. Moving/nudging moves the cover and buttons together.
+The existing title-bar tint policy supplies the opaque background. Pointer
+interception expands with the cover and remains clipped to its window, as does
+painting. The independent cover uses a 4 px corner radius to cover the original
+controls near its corners.
+
+The per-application adjustment file stores four bounded `geometry.coverage`
+margins (`left`, `top`, `right`, `bottom`, 0–200 logical px). Its original button
+size/spacing and padding are preserved; disabling the switch ignores the margins
+and restores that layout. Re-enabling restores the saved cover. Configuration
+reload cancels an unfinished adjustment so a draft cannot retain the old mode.
+
+CI checks geometry anchoring, disabled size/spacing gestures, global precedence,
+coverage round-trips, restoration, atomic settings updates and the real Settings
+switch. VM graphical acceptance must additionally check native hover/tooltips,
+background color matching, overlap/resize and mixed output scales.
+
+Fallback button-cover tint refreshes use two consistent valid samples at least
+32 ms apart, a four-attempt 32 ms warm-up, and a 125 ms steady active cadence.
+Focus changes refresh both active/inactive titlebars; client damage requests
+bounded inactive refreshes without discarding newer damage during a GPU transfer.
+Expanded covers are excluded in full while sampling rows remain on the controls.
+The preferred strip stays within 32 device pixels of the cover seam to reduce
+contamination from adjacent filled toolbar widgets; unavailable local
+pixels fall back to a strip of up to 160 pixels at the opposite titlebar end.
+Keep validated RGB on failed reads, reject incomplete targets, and initialize
+transfer storage transparently so failed/uninitialized reads cannot create black
+blocks. Real black remains a valid color after confirmation. The configured
+intervals are not measured presentation latency; VM acceptance must exercise
+focus, theme changes, resizing, covered windows and real GL drivers.
 
 ## Surface-shape protocol
 

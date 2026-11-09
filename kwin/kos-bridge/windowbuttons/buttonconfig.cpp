@@ -10,14 +10,41 @@
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QStandardPaths>
+#include <QStringView>
 
 #include <algorithm>
+#include <iterator>
 
 namespace KOS
 {
 
 namespace
 {
+
+bool hasFormaControls(const QString &windowClass)
+{
+    // Forma/Mayonnaise draws and hit-tests its own TrafficLightsView. Match
+    // verified desktop IDs, never a title, executable name or broad prefix.
+    // For X11 use the WM_CLASS class token, not the user-selected instance.
+    const auto trimmed = QStringView(windowClass).trimmed();
+    const auto appId = trimmed.mid(trimmed.lastIndexOf(QLatin1Char(' ')) + 1);
+    static constexpr QLatin1StringView ids[] = {
+        QLatin1StringView("io.github.egely1337.Mayonnaise.Calculator"),
+        QLatin1StringView("io.github.egely1337.Mayonnaise.Finder"),
+        QLatin1StringView("io.github.egely1337.Mayonnaise.Music"),
+        QLatin1StringView("io.github.egely1337.Mayonnaise.Photos"),
+        QLatin1StringView("io.github.egely1337.Mayonnaise.Settings"),
+        QLatin1StringView("io.github.egely1337.Mayonnaise.TaskManager"),
+        QLatin1StringView("io.github.egely1337.Mayonnaise.Terminal"),
+        QLatin1StringView("io.github.egely1337.Mayonnaise.TextEditor"),
+        QLatin1StringView("io.github.egely1337.Mayonnaise.VideoPlayer"),
+        QLatin1StringView("io.github.skjsbsnq.Forma.AppStore"),
+        QLatin1StringView("io.github.skjsbsnq.Forma.Mail"),
+        QLatin1StringView("io.github.skjsbsnq.Forma.PolkitAgent"),
+        QLatin1StringView("io.github.skjsbsnq.Forma.Screenshot"),
+    };
+    return std::any_of(std::begin(ids), std::end(ids), [appId](auto id) { return appId == id; });
+}
 
 // Reads one JSON object over the config it is given and reports which keys it
 // named. Shared by `default`, `apps` and the hand-written `rules`, so the three
@@ -151,6 +178,7 @@ void ButtonConfig::load()
     m_store.load();
 
     m_default = AppConfig();
+    m_independentButtonBackground = false;
     m_apps.clear();
     m_rules.clear();
 
@@ -172,6 +200,7 @@ void ButtonConfig::load()
     }
 
     const QJsonObject root = document.object();
+    m_independentButtonBackground = root.value("independentButtonBackground").toBool(false);
 
     if (root.contains("default")) {
         applyFields(m_default, root["default"].toObject());
@@ -251,6 +280,10 @@ AppConfig ButtonConfig::getAppConfig(const WindowQuery &query) const
         config.geometry = geometry;
     }
 
+    // Global policy is applied after every app and machine rule. Rules cannot
+    // re-enable button resizing or override the standard size in this mode.
+    config.nativeAppControls = hasFormaControls(query.windowClass);
+    config.geometry.independentBackground = m_independentButtonBackground;
     config.kosDecorationSelected = m_kosDecorationSelected;
     config.drawOnDecoratedWindows =
         config.decoratedWindows == DecoratedWindows::Always ? true

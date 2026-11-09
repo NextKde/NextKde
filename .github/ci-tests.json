@@ -18,11 +18,13 @@
     "kos-platform.contracts",
     "kos-glass.legacy-blur-region",
     "kos-glass.desktop-blur",
+    "kos-glass.overview-panel-projection",
     "kos-platform.status-panel-data",
     "kos-platform.status-panel-operations",
     "kos-app.dependency-migration"
   ],
   "logic": [
+    "kos-ui.system-font-policy",
     "kos-shell.appmenu-refresh",
     "kos-window.gtk-buttons-install",
     "kos-window.firefox-buttons-install",
@@ -77,10 +79,13 @@
     "kos-settings.power-config"
   ],
   "widgets": [
+    "kos-ui.desktop-overview",
     "kos-ui.widget-experience",
     "kos-ui.widget-resize"
   ],
   "headless": [
+    "kos-settings.fonts",
+    "kos-shell.system-font",
     "kos-shell.weather-refresh",
     "kos-shell.stage-visibility-qml",
     "kos-shell.dock-native-target",

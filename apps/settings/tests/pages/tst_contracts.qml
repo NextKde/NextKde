@@ -59,7 +59,7 @@ Item {
         }
         function test_isolated_load_data() {
             return ["FgSchedSettingsPage", "IntegrationStatusPage", "DockSettingsPage",
-                    "DisplaySettingsPage", "GlassDebugPage", "WidgetAppearanceSection",
+                    "DisplaySettingsPage", "FontSettingsPage", "GlassDebugPage", "WidgetAppearanceSection",
                     "IconAppearanceSection", "WindowAnimationSettingsPage", "ThemeSettingsPage",
                     "BarSettingsPage", "ShortcutsSettingsPage", "LauncherSettingsPage",
                     "ResourceSchedulingSettings"]
@@ -82,7 +82,7 @@ Item {
             return items
         }
         function test_trailing_alignment_data() {
-            const pages = ["ThemeSettingsPage", "DisplaySettingsPage", "DockSettingsPage",
+            const pages = ["ThemeSettingsPage", "DisplaySettingsPage", "FontSettingsPage", "DockSettingsPage",
                 "BarSettingsPage", "LauncherSettingsPage", "WindowAnimationSettingsPage",
                 "IconAppearanceSection", "WidgetAppearanceSection", "GlassDebugPage",
                 "FgSchedSettingsPage", "ResourceSchedulingSettings", "ShortcutsSettingsPage",
@@ -182,6 +182,57 @@ Item {
             page.applyState({shellStyle: "macos", materialColorSwatches: "broken-json"})
             compare(seedSpy.signalArguments[1][0], "")
         }
+        function test_fonts_are_a_theme_subpage() {
+            const component = Qt.createComponent("../../main.qml")
+            compare(component.status, Component.Ready, component.errorString())
+            const app = createTemporaryObject(component, harness, {currentPage: 1})
+            const themeLoader = findChild(app.contentItem, "ThemeSettingsPageLoader")
+            tryVerify(() => themeLoader.item !== null)
+            const entry = findChild(themeLoader.item, "theme-fonts-entry")
+            verify(entry !== null)
+            verify(waitForRendering(themeLoader.item))
+            const language = findChild(themeLoader.item, "theme-language-entry")
+            verify(language !== null)
+            verify(entry.mapToItem(themeLoader.item, 0, 0).y > language.mapToItem(themeLoader.item, 0, 0).y,
+                "Fonts follows the other Theme configuration rows")
+            const scroll = findChild(app.contentItem, "settings-page-scroll")
+            verify(scroll !== null)
+            scroll.contentY = Math.max(0, scroll.contentHeight - scroll.height)
+            verify(waitForRendering(entry))
+            const position = entry.mapToItem(app.contentItem, 0, 0)
+            verify(position.y >= 0 && position.y + entry.height < app.height,
+                "Fonts entry is reachable at the bottom of Theme")
+            const chevron = findChild(entry, "theme-fonts-chevron")
+            verify(chevron !== null && chevron.width > 0)
+            const chevronPosition = chevron.mapToItem(entry, 0, 0)
+            verify(chevronPosition.x + chevron.width <= entry.width,
+                "the trailing chevron stays inside its clickable row")
+            mouseClick(entry, entry.width / 2, entry.height / 2)
+            tryCompare(app, "currentPage", 14)
+            compare(app.navigationPage, 1, "Fonts retains Theme's sidebar selection")
+            tryCompare(app, "displayedPage", 14)
+            const fontsLoader = findChild(app.contentItem, "FontSettingsPageLoader")
+            tryVerify(() => fontsLoader.item !== null)
+            compare(fontsLoader.item.fontRoles.length, 6)
+            app.navigateHistory(-1)
+            compare(app.currentPage, 1)
+            app.navigateHistory(1)
+            compare(app.currentPage, 14)
+        }
+
+        function test_direct_fonts_entry_has_parent_navigation() {
+            const component = Qt.createComponent("../../main.qml")
+            compare(component.status, Component.Ready, component.errorString())
+            const app = createTemporaryObject(component, harness, {currentPage: 14})
+            verify(app.canGoBack, "direct font entry can return through the existing toolbar")
+            const actions = findChild(app.contentItem, "settingsHistoryNavigation")
+            verify(actions !== null)
+            actions.triggered(0)
+            compare(app.currentPage, 1)
+            actions.triggered(1)
+            compare(app.currentPage, 14)
+        }
+
         function test_history_toolbar_navigation() {
             const component = Qt.createComponent("../../main.qml")
             compare(component.status, Component.Ready, component.errorString())

@@ -18,6 +18,9 @@ NextKDE 的桌面体验也延伸到一套持续完善的配套应用：日历（
 
 使用 Plasma 6 Wayland、KWin 6.6+、Quickshell 0.3.x、Qt 6.6+ 和匹配开发依赖。
 
+内置字体设置支持 Plasma **6.6–6.8**。具体版本覆盖、跨版本检查和验证边界见
+[字体兼容性说明](docs/AppearanceArchitecture.md#font-backend-compatibility)。
+
 ### 1. 准备依赖
 
 选择源码还需要 **Git** 和 **Python 3.9+**。先按[安装指南](docs/GettingStarted.zh-CN.md)

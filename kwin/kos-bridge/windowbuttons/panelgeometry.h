@@ -5,6 +5,7 @@
 #include <QPointF>
 #include <QRectF>
 #include <QSizeF>
+#include <QMarginsF>
 
 #include <optional>
 
@@ -25,7 +26,7 @@ struct AppOffset {
 
 // Everything about where the panel is and how big it is -- and nothing else.
 //
-// These six values are the whole of what the adjust gesture changes and the
+// The persistent values below are what the adjust gesture changes and the
 // whole of what a machine-written rule stores (see WindowRuleStore): a window
 // whose panel has been dragged keeps the geometry that was dragged into place,
 // and a hand-written offset in window-buttons.json stops reaching it. Everything
@@ -40,7 +41,19 @@ struct PanelGeometry {
     qreal panelPadding = 4.5;
     // Horizontal padding. Negative means "same as panelPadding".
     qreal panelPaddingX = -1.0;
+    // Saved independently of the legacy button geometry. Ignored when the
+    // global switch is off, so disabling it restores the user's old layout.
+    QMarginsF coverage;
+    bool independentBackground = false; // runtime policy, never saved in a rule
 };
+
+// Settings, Calendar, Weather and native KOS decoration use 14 px circles
+// with a 28 px center-to-center pitch.
+inline constexpr qreal StandardButtonSize = 14.0;
+inline constexpr qreal StandardButtonSpacing = 14.0;
+inline constexpr qreal MaxCoverage = 200.0;
+qreal effectiveButtonSize(const PanelGeometry &);
+qreal effectiveButtonSpacing(const PanelGeometry &);
 
 // Bounds for the values above. They are enforced by the gesture and again on
 // every read, because the rules file is a text file a user may edit, and an
