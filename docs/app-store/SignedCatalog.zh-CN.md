@@ -50,6 +50,6 @@ Settings 和种子目录支持英文、简体中文、巴西葡语，目录缺�
 
 ## 发布与验收
 
-首次正式目录发布需要维护者配置 `catalog-release` environment 和与客户端公钥对应的签名 secret。发布序号必须递增，默认 30 天有效期到期前需重新签发，操作见[维护者说明](https://github.com/NextKde/appCatalog/blob/main/MAINTAINING.md)。仓库存在或条目已合并不等于客户端已经验收，也不等于应用已发布可安装包。
+发布目录需使用与客户端公钥对应的私钥，可在密钥保管机器签名后手工发布，或选择配置 `catalog-release` environment 及签名 secret。发布序号必须递增，默认 30 天有效期到期前需重新签发，操作见[维护者说明](https://github.com/NextKde/appCatalog/blob/main/MAINTAINING.md)。仓库存在或条目已合并不等于客户端已经验收，也不等于应用已发布可安装包。
 
 只在开发虚拟机或 CI 构建和测试，不在本机启动 Shell、图形验证或运行测试。目录用例位于 `apps/settings/tests/store/catalog.cpp`，同目录包含 Flatpak 发行校验测试。发布前应覆盖错误/缺失签名、回退和过期、SHA-256 不匹配、开发者签名失败、第三方源增删及冲突、无签名包安装记录、并发事务，以及关闭 Settings 后的自动检查和通知去重。真实包部署与桌面通知还需虚拟机验收。

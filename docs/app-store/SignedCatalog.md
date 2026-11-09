@@ -49,6 +49,6 @@ Settings and catalog seed metadata support English, Simplified Chinese and Brazi
 
 ## Release and acceptance
 
-The official source is `NextKde/appCatalog`. Publishing requires the matching private key in the `catalog-release` GitHub environment, a monotonically increasing sequence and renewal before the default 30-day expiry. See [maintainer instructions](https://github.com/NextKde/appCatalog/blob/main/MAINTAINING.md). A checked-in catalog or published repository is not evidence of end-to-end acceptance or of an available app Release.
+The official source is `NextKde/appCatalog`. Publishing requires the matching private key, a monotonically increasing sequence and renewal before the default 30-day expiry. Sign on the key-holding machine or configure the optional `catalog-release` GitHub environment. See [maintainer instructions](https://github.com/NextKde/appCatalog/blob/main/MAINTAINING.md). A checked-in catalog or published repository is not evidence of end-to-end acceptance or of an available app Release.
 
 Build and test only in a development VM or CI. Cover wrong/missing signatures, replay, expiry, SHA-256 mismatch, developer-signature failure, third-party add/remove/conflicts, unsigned receipts, concurrent transactions and update notification deduplication. Catalog logic tests live in `apps/settings/tests/store/catalog.cpp`; Flatpak release tests are alongside them. Real package deployment and desktop notifications also require VM acceptance before release.
