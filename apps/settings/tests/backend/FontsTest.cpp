@@ -130,6 +130,7 @@ private slots:
         settings.setRendering(QStringLiteral("dpi"), 120);
         QCOMPARE(settings.rendering()->property("dpi").isValid(), settings.dpiAvailable());
         QCOMPARE(settings.rendering()->property("dpi").toInt(), canSetDpi ? 120 : initialDpi);
+        QTRY_VERIFY(settings.needsSave()); // Same readiness gate as the Apply button.
         QVERIFY2(settings.apply(), qPrintable(settings.error()));
         settings.reset();
         for (const auto &role : roles) {
@@ -145,10 +146,22 @@ private slots:
         QCOMPARE(settings.rendering()->property("excludeTo").toInt(), 17);
         QCOMPARE(settings.rendering()->property("dpi").toInt(), canSetDpi ? 120 : initialDpi);
         KConfig persisted(QStringLiteral("kdeglobals"));
+        // Read independent KConfig data as well as the live KCM model. A model
+        // round trip alone could pass while changes have not reached disk.
+        persisted.reparseConfiguration();
+        for (const auto &role : roles) {
+            const auto group = role == QLatin1String("activeFont") ? "WM" : "General";
+            const auto font = KConfigGroup(&persisted, group).readEntry(role, QFont());
+            QCOMPARE(font.family(), chosen[role].family());
+            QCOMPARE(font.pointSizeF(), chosen[role].pointSizeF());
+            QCOMPARE(font.weight(), chosen[role].weight());
+            QCOMPARE(font.style(), chosen[role].style());
+        }
         QCOMPARE(KConfigGroup(&persisted, "General").readEntry("NextKdeUnknownFontOption", QString()),
             QStringLiteral("preserve-me"));
         if (canSetDpi) {
             settings.setRendering(QStringLiteral("dpi"), 0);
+            QTRY_VERIFY(settings.needsSave());
             QVERIFY2(settings.apply(), qPrintable(settings.error()));
             settings.reset();
             QCOMPARE(settings.rendering()->property("dpi").toInt(), 0);
