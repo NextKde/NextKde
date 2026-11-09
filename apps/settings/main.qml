@@ -53,8 +53,8 @@ ApplicationWindow {
     readonly property bool canGoBack: historyIndex > 0
     readonly property bool canGoForward: historyIndex < pageHistory.length - 1
     Component.onCompleted: {
-        pageHistory = [currentPage]
-        historyIndex = 0
+        pageHistory = currentPage === 14 ? [1, 14] : [currentPage]
+        historyIndex = pageHistory.length - 1
         navigationReady = true
     }
     onCurrentPageChanged: {
@@ -971,12 +971,6 @@ ApplicationWindow {
                             materialForm: window.materialForm
                             bridge: typeof settingsBridge !== "undefined" ? settingsBridge : null
                             backend: typeof fontSettings !== "undefined" ? fontSettings : null
-                            onBackRequested: {
-                                if (window.canGoBack && window.pageHistory[window.historyIndex - 1] === 1)
-                                    window.navigateHistory(-1)
-                                else
-                                    window.currentPage = 1
-                            }
                         }
                     }
 

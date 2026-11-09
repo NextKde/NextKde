@@ -224,6 +224,20 @@ private slots:
             QDir().mkpath(QFileInfo(screenshot).absolutePath());
             QVERIFY(window.grabWindow().save(screenshot));
         }
+        // The compact value row itself is the font picker affordance.
+        auto fontRow = page->findChild<QQuickItem *>(QStringLiteral("choose-font-font"));
+        auto picker = page->findChild<QObject *>(QStringLiteral("font-picker"));
+        QVERIFY(fontRow && picker);
+        QTest::mouseClick(&window, Qt::LeftButton, Qt::NoModifier,
+            fontRow->mapToScene(fontRow->boundingRect().center()).toPoint());
+        QTRY_VERIFY(picker->property("visible").toBool());
+        QVERIFY(QMetaObject::invokeMethod(picker, "reject"));
+        QTRY_VERIFY(!picker->property("visible").toBool());
+        const auto previewSource = preview->property("source");
+        window.hide();
+        QTRY_VERIFY(!window.isActive());
+        QCOMPARE(preview->property("source"), previewSource);
+        QCOMPARE(preview->property("status").toInt(), 1);
         QVERIFY2(warnings.isEmpty(), qPrintable(warnings.join('\n')));
     }
 };

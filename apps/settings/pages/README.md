@@ -18,7 +18,9 @@ No registry, dependency container or second IPC protocol is introduced.
   properties inside extracted pages.
 - `ThemeSettingsPage.fontsRequested()` opens route 14 under Theme. The font page
   receives the `FontSettings` native KCM adapter as `backend` and the Shell
-  appearance `bridge` separately, and emits `backRequested()` to return to Theme.
+  appearance `bridge` separately. The composition root's existing history toolbar
+  returns to Theme, including when Fonts is opened directly; pages add no second
+  back button. The font entry is the first visible row on Theme.
   KDE edits are staged in the long-lived adapter; loader destruction does not
   apply or discard them. Only the desktop-follow switch uses immediate IPC.
 - `glassStyles` provides `options`, `indexOf(id)` and `labelOf(id)` to appearance

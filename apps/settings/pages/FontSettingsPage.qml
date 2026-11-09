@@ -13,7 +13,6 @@ ColumnLayout {
     property bool materialForm: false
     property var backend: null
     property var bridge: null
-    signal backRequested()
     property bool useSystemFont: false
     property string systemFontFamily: ""
     property string statusText: ""
@@ -77,19 +76,6 @@ ColumnLayout {
         backgroundColor: page.colors.card
         titleColor: page.colors.primaryText
     }
-
-    Demo.LiquidActionButton {
-        text: I18n.tr("Back to Theme")
-        materialForm: true
-        onClicked: page.backRequested()
-    }
-    Text {
-        Layout.fillWidth: true
-        text: I18n.tr("Choose the fonts used by the system and applications.")
-        color: page.colors.secondaryText
-        wrapMode: Text.Wrap
-        font.pixelSize: 12
-    }
     Text {
         Layout.fillWidth: true
         visible: !page.ready || (page.backend && page.backend.error.length > 0)
@@ -100,9 +86,82 @@ ColumnLayout {
     }
 
     Section {
+        enabled: page.ready
+        Repeater {
+            model: page.fontRoles
+            delegate: Demo.SettingsItem {
+                id: fontRow
+                required property var modelData
+                objectName: "choose-font-" + modelData.key
+                readonly property font selectedFont: page.fonts ? page.fonts[modelData.key] : Qt.font({pointSize: 10})
+                title: modelData.label
+                enabled: page.ready && page.backend.fontEditable(modelData.key)
+                Accessible.description: selectedFont.family + ", " + selectedFont.pointSize + " pt"
+                minimumRowHeight: 36
+                allowStacking: false
+                titleColor: page.colors.primaryText
+                activeFocusOnTab: enabled
+                Accessible.role: Accessible.Button
+                Accessible.onPressAction: page.chooseFont(modelData.key)
+                Keys.onReturnPressed: page.chooseFont(modelData.key)
+                Keys.onEnterPressed: page.chooseFont(modelData.key)
+                Keys.onSpacePressed: page.chooseFont(modelData.key)
+                property Item pointer: MouseArea {
+                    parent: fontRow
+                    anchors.fill: parent
+                    cursorShape: Qt.PointingHandCursor
+                    onClicked: page.chooseFont(fontRow.modelData.key)
+                }
+                Text {
+                    text: fontRow.selectedFont.family
+                    font.family: fontRow.selectedFont.family
+                    font.pixelSize: 12
+                    color: page.colors.secondaryText
+                    Layout.maximumWidth: Math.min(280, fontRow.availableWidth * 0.45)
+                    elide: Text.ElideRight
+                }
+                Text {
+                    text: fontRow.selectedFont.pointSize + " pt"
+                    font.pixelSize: 12
+                    color: page.colors.secondaryText
+                }
+                Text {
+                    text: ">"
+                    font.pixelSize: 16
+                    color: page.colors.secondaryText
+                }
+            }
+        }
+        Demo.SettingsItem {
+            id: allFontsRow
+            objectName: "adjust-all-fonts"
+            title: I18n.tr("Adjust all fonts")
+            enabled: page.ready && page.fontRoles.some(role => page.backend.fontEditable(role.key))
+            minimumRowHeight: 36
+            titleColor: page.colors.primaryText
+            activeFocusOnTab: enabled
+            Accessible.role: Accessible.Button
+            Accessible.onPressAction: page.chooseFont("all")
+            Keys.onReturnPressed: page.chooseFont("all")
+            Keys.onEnterPressed: page.chooseFont("all")
+            Keys.onSpacePressed: page.chooseFont("all")
+            property Item pointer: MouseArea {
+                parent: allFontsRow
+                anchors.fill: parent
+                cursorShape: Qt.PointingHandCursor
+                onClicked: page.chooseFont("all")
+            }
+            Text {
+                text: ">"
+                font.pixelSize: 16
+                color: page.colors.secondaryText
+            }
+        }
+    }
+
+    Section {
         FormRow {
             label: I18n.tr("Desktop follows system font")
-            description: I18n.tr("Use the general font for the top bar, Dock and desktop controls. Desktop text sizes stay unchanged.")
             control: Controls.SettingsSwitch {
                 objectName: "use-system-font-switch"
                 enabled: page.bridge !== null
@@ -112,49 +171,6 @@ ColumnLayout {
                     if (checked !== page.useSystemFont)
                         page.bridge.updateUseSystemFont(checked);
                 }
-            }
-        }
-    }
-
-    Section {
-        title: I18n.tr("System fonts")
-        enabled: page.ready
-        Repeater {
-            model: page.fontRoles
-            delegate: Demo.SettingsItem {
-                id: fontRow
-                required property var modelData
-                readonly property font selectedFont: page.fonts ? page.fonts[modelData.key] : Qt.font({})
-                title: modelData.label
-                description: selectedFont.family + " · " + selectedFont.pointSize + " pt"
-                titleColor: page.colors.primaryText
-                descriptionColor: page.colors.secondaryText
-                Text {
-                    text: "Aa 字体"
-                    font: fontRow.selectedFont
-                    color: page.colors.primaryText
-                    Layout.maximumWidth: 90
-                    elide: Text.ElideRight
-                }
-                Demo.LiquidActionButton {
-                    objectName: "choose-font-" + fontRow.modelData.key
-                    text: I18n.tr("Choose…")
-                    materialForm: true
-                    implicitHeight: 24
-                    enabled: page.ready && page.backend.fontEditable(fontRow.modelData.key)
-                    onClicked: page.chooseFont(fontRow.modelData.key)
-                }
-            }
-        }
-        Demo.SettingsItem {
-            title: I18n.tr("Adjust all fonts")
-            titleColor: page.colors.primaryText
-            Demo.LiquidActionButton {
-                text: I18n.tr("Choose…")
-                materialForm: true
-                implicitHeight: 24
-                enabled: page.ready && page.fontRoles.some(role => page.backend.fontEditable(role.key))
-                onClicked: page.chooseFont("all")
             }
         }
     }
@@ -184,30 +200,32 @@ ColumnLayout {
         Demo.SettingsItem {
             title: I18n.tr("Excluded size range")
             titleColor: page.colors.primaryText
-            enabled: page.antiAliasing && page.rendering !== null && page.rendering.exclude
+            visible: page.antiAliasing && page.rendering !== null && page.rendering.exclude
             RowLayout {
-                SpinBox {
+                Demo.SettingsTextField {
                     objectName: "font-exclude-from"
-                    implicitWidth: 90
-                    from: 0
-                    to: page.rendering ? page.rendering.excludeTo : 99
-                    value: page.rendering ? page.rendering.excludeFrom : 8
-                    editable: true
+                    implicitWidth: 48
+                    filled: true
+                    horizontalAlignment: TextInput.AlignHCenter
+                    text: page.rendering ? String(page.rendering.excludeFrom) : "8"
+                    validator: IntValidator { bottom: 0; top: page.rendering ? page.rendering.excludeTo : 999 }
+                    inputMethodHints: Qt.ImhDigitsOnly
                     enabled: page.editable("excludeFrom")
-                    onValueModified: page.backend.setRendering("excludeFrom", value)
+                    onEditingFinished: if (acceptableInput) page.backend.setRendering("excludeFrom", Number(text))
                 }
-                Text { text: I18n.tr("to"); color: page.colors.secondaryText }
-                SpinBox {
+                Text { text: "–"; color: page.colors.secondaryText; font.pixelSize: 12 }
+                Demo.SettingsTextField {
                     objectName: "font-exclude-to"
-                    implicitWidth: 90
-                    from: page.rendering ? page.rendering.excludeFrom : 0
-                    to: 999
-                    value: page.rendering ? page.rendering.excludeTo : 15
-                    editable: true
+                    implicitWidth: 48
+                    filled: true
+                    horizontalAlignment: TextInput.AlignHCenter
+                    text: page.rendering ? String(page.rendering.excludeTo) : "15"
+                    validator: IntValidator { bottom: page.rendering ? page.rendering.excludeFrom : 0; top: 999 }
+                    inputMethodHints: Qt.ImhDigitsOnly
                     enabled: page.editable("excludeTo")
-                    onValueModified: page.backend.setRendering("excludeTo", value)
+                    onEditingFinished: if (acceptableInput) page.backend.setRendering("excludeTo", Number(text))
                 }
-                Text { text: "pt"; color: page.colors.secondaryText }
+                Text { text: "pt"; color: page.colors.secondaryText; font.pixelSize: 12 }
             }
         }
         FormRow {
@@ -238,14 +256,19 @@ ColumnLayout {
             titleColor: page.colors.primaryText
             visible: page.ready && page.antiAliasing && page.backend.previewAvailable
             Image {
+                id: renderingPreview
                 objectName: "font-rendering-preview"
                 // Newer Plasma includes DPR in the provider ID; older releases
                 // ignore that third field. Older providers also need a focused
                 // window, so never request an image while the page is hidden.
-                source: page.ready && page.antiAliasing && page.backend.previewAvailable && page.Window.active
-                    ? "image://preview/" + page.backend.module.subPixelCurrentIndex
-                        + "_" + page.backend.module.hintingCurrentIndex + "_" + Screen.devicePixelRatio
-                    : ""
+                Binding {
+                    target: renderingPreview
+                    property: "source"
+                    when: page.ready && page.antiAliasing && page.backend.previewAvailable && page.Window.active
+                    value: page.ready ? "image://preview/" + page.backend.module.subPixelCurrentIndex
+                        + "_" + page.backend.module.hintingCurrentIndex + "_" + Screen.devicePixelRatio : ""
+                    restoreMode: Binding.RestoreNone
+                }
                 Layout.preferredWidth: implicitWidth / Screen.devicePixelRatio
                 Layout.preferredHeight: implicitHeight / Screen.devicePixelRatio
                 Layout.maximumWidth: renderingPreviewRow.availableWidth
@@ -262,13 +285,15 @@ ColumnLayout {
             visible: page.ready && page.backend.dpiAvailable && Qt.platform.pluginName === "xcb"
             label: I18n.tr("Force font DPI")
             control: RowLayout {
-                SpinBox {
-                    from: 1
-                    to: 999
-                    value: page.rendering && page.rendering.dpi > 0 ? page.rendering.dpi : 96
-                    editable: true
+                Demo.SettingsTextField {
+                    implicitWidth: 48
+                    filled: true
+                    horizontalAlignment: TextInput.AlignHCenter
+                    text: page.rendering && page.rendering.dpi > 0 ? String(page.rendering.dpi) : "96"
+                    validator: IntValidator { bottom: 1; top: 999 }
+                    inputMethodHints: Qt.ImhDigitsOnly
                     enabled: page.editable("dpi") && page.rendering.dpi > 0
-                    onValueModified: page.backend.setRendering("dpi", value)
+                    onEditingFinished: if (acceptableInput) page.backend.setRendering("dpi", Number(text))
                 }
                 Controls.SettingsSwitch {
                     checked: page.rendering ? page.rendering.dpi > 0 : false
@@ -278,13 +303,16 @@ ColumnLayout {
                 }
             }
         }
-        Demo.SettingsItem {
-            description: I18n.tr("Rendering changes may require restarting applications.")
-            descriptionColor: page.colors.secondaryText
-        }
     }
 
-    Flow {
+    Text {
+        Layout.fillWidth: true
+        text: I18n.tr("Rendering changes may require restarting applications.")
+        color: page.colors.secondaryText
+        font.pixelSize: 11
+        wrapMode: Text.Wrap
+    }
+    RowLayout {
         Layout.fillWidth: true
         spacing: 8
         Demo.LiquidActionButton {
@@ -293,6 +321,7 @@ ColumnLayout {
             enabled: page.ready
             onClicked: { page.backend.defaults(); page.statusText = ""; }
         }
+        Item { Layout.fillWidth: true }
         Demo.LiquidActionButton {
             objectName: "font-reset-button"
             text: I18n.tr("Reset")
@@ -324,6 +353,7 @@ ColumnLayout {
 
     Dialogs.FontDialog {
         id: fontPicker
+        objectName: "font-picker"
         property string category: "font"
         title: I18n.tr("Choose a font")
         onAccepted: {

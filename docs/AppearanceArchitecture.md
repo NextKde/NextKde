@@ -126,7 +126,10 @@ check both settled text and moving text in glass and Material themes.
 ## System fonts
 
 Settings → Theme → Fonts is a secondary page (route 14); the Theme row has only
-its name and a trailing `>`. Navigation history and the Theme sidebar selection
+its name and a trailing `>` and appears first, before the appearance sections.
+The existing toolbar is the only back/forward control, including for a direct
+Fonts entry. Each font role is a clickable name/value row that opens its picker,
+without a second per-row action button. Navigation history and the Theme sidebar selection
 remain active on the secondary page. `FontSettingsPage.qml` receives an explicit
 `FontSettings` backend and the existing appearance bridge.
 

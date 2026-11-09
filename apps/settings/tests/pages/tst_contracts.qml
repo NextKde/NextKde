@@ -273,8 +273,17 @@ Item {
             tryVerify(() => themeLoader.item !== null)
             const entry = findChild(themeLoader.item, "theme-fonts-entry")
             verify(entry !== null)
-            themeLoader.item.fontsRequested()
-            compare(app.currentPage, 14)
+            verify(waitForRendering(entry))
+            const position = entry.mapToItem(app.contentItem, 0, 0)
+            verify(position.y >= 0 && position.y + entry.height < app.height,
+                "Fonts entry is visible without scrolling the initial Theme page")
+            const chevron = findChild(entry, "theme-fonts-chevron")
+            verify(chevron !== null && chevron.width > 0)
+            const chevronPosition = chevron.mapToItem(entry, 0, 0)
+            verify(chevronPosition.x + chevron.width <= entry.width,
+                "the trailing chevron stays inside its clickable row")
+            mouseClick(entry, entry.width / 2, entry.height / 2)
+            tryCompare(app, "currentPage", 14)
             compare(app.navigationPage, 1, "Fonts retains Theme's sidebar selection")
             tryCompare(app, "displayedPage", 14)
             const fontsLoader = findChild(app.contentItem, "FontSettingsPageLoader")
@@ -283,6 +292,19 @@ Item {
             app.navigateHistory(-1)
             compare(app.currentPage, 1)
             app.navigateHistory(1)
+            compare(app.currentPage, 14)
+        }
+
+        function test_direct_fonts_entry_has_parent_navigation() {
+            const component = Qt.createComponent("../../main.qml")
+            compare(component.status, Component.Ready, component.errorString())
+            const app = createTemporaryObject(component, harness, {currentPage: 14})
+            verify(app.canGoBack, "direct font entry can return through the existing toolbar")
+            const actions = findChild(app.contentItem, "settingsHistoryNavigation")
+            verify(actions !== null)
+            actions.triggered(0)
+            compare(app.currentPage, 1)
+            actions.triggered(1)
             compare(app.currentPage, 14)
         }
 
