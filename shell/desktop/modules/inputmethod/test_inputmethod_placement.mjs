@@ -48,12 +48,27 @@ assert.equal(resRel.y, 190); // 150 + 80 / 2
 assert.equal(resRel.width, 5);
 assert.equal(resRel.height, 10);
 
-// 3c. XWayland absolute spot
-const spotAbs = { mode: "absolute", x: 720, y: 600, width: 15, height: 25 };
-const resAbs = resolveGlobalSpotRect(spotAbs, null, null);
+// 3c. XWayland absolute spot (with production scale: 1.0 and non-null activeWindow)
+const spotAbs = { mode: "absolute", x: 720, y: 600, width: 15, height: 25, scale: 1.0 };
+const resAbs = resolveGlobalSpotRect(spotAbs, activeWin, null);
 assert.equal(resAbs.source, "absolute");
-assert.equal(resAbs.x, 720);
-assert.equal(resAbs.y, 600);
+assert.equal(resAbs.x, 720); // Must NOT add activeWin.x (100) -> 820
+assert.equal(resAbs.y, 600); // Must NOT add activeWin.y (150) -> 750
+
+// 3c-2. XWayland absolute spot on negative offset multi-display
+const spotAbsNeg = { mode: "absolute", x: -1400, y: 450, width: 10, height: 20, scale: 1.0 };
+const resAbsNeg = resolveGlobalSpotRect(spotAbsNeg, activeWin, null);
+assert.equal(resAbsNeg.source, "absolute");
+assert.equal(resAbsNeg.x, -1400);
+assert.equal(resAbsNeg.y, 450);
+
+// 3c-3. Active spot precedence over cached KWin caret during ongoing typing
+const activeSpot = { mode: "relative", x: 80, y: 120, width: 10, height: 20, scale: 1.0 };
+const cachedCaret = { available: true, source: "caret", x: 450, y: 320, width: 2, height: 22 };
+const resActive = resolveGlobalSpotRect(activeSpot, activeWin, cachedCaret);
+assert.equal(resActive.source, "window-relative");
+assert.equal(resActive.x, 180); // 100 + 80
+assert.equal(resActive.y, 270); // 150 + 120
 
 // 3d. KWin pointer anchor fallback when spot coordinates are zero
 const spotZero = { mode: "relative", x: 0, y: 0 };

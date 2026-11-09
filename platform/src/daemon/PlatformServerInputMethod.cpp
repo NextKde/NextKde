@@ -36,7 +36,7 @@ void PlatformServer::initKimpanelBridge()
         }
     });
 
-    m_kimpanelBridge->initialize();
+    m_kimpanelBridge->syncTakeoverState();
 }
 
 bool PlatformServer::handleInputMethodOperation(QLocalSocket *socket, const QJsonObject &request)
@@ -52,6 +52,7 @@ bool PlatformServer::handleInputMethodOperation(QLocalSocket *socket, const QJso
 
     if (op == QStringLiteral("inputmethod.subscribe")) {
         m_inputMethodSubscribers.insert(socket);
+        m_kimpanelBridge->setShellConnected(true);
         respond(socket, request, true, QJsonObject{{QStringLiteral("subscribed"), true}});
         // Immediately reply with current state snapshot so client doesn't wait
         QJsonObject event{
@@ -68,9 +69,12 @@ bool PlatformServer::handleInputMethodOperation(QLocalSocket *socket, const QJso
     }
 
     if (op == QStringLiteral("inputmethod.set-enabled")) {
-        const bool enabled = payload.value(QStringLiteral("enabled")).toBool(true);
-        m_kimpanelBridge->setEnabled(enabled);
-        respond(socket, request, true, QJsonObject{{QStringLiteral("enabled"), enabled}});
+        const bool enabled = payload.value(QStringLiteral("enabled")).toBool(false);
+        const bool ok = m_kimpanelBridge->setUserEnabled(enabled);
+        respond(socket, request, ok, QJsonObject{
+            {QStringLiteral("enabled"), m_kimpanelBridge->isUserEnabled()},
+            {QStringLiteral("active"), m_kimpanelBridge->isTakeoverActive()}
+        });
         return true;
     }
 

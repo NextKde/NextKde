@@ -36,20 +36,9 @@ export function resolveGlobalSpotRect(spot, activeWindow, kwinCaret, fallbackScr
     // undefined !== 0 used to bypass the real pointer/window fallback.
     const hasSpot = spot && Number.isFinite(spot.x) && Number.isFinite(spot.y)
         && (spot.x !== 0 || spot.y !== 0);
-    // 1. If KWin compositor returned a valid global text-input caret (e.g. VS Code, Antigravity, Obsidian)
-    if (kwinCaret && kwinCaret.available && kwinCaret.source === "caret") {
-        return {
-            x: Number(kwinCaret.x) || 0,
-            y: Number(kwinCaret.y) || 0,
-            width: Number(kwinCaret.width) || 0,
-            height: Number(kwinCaret.height) || 20,
-            source: "kwin-caret"
-        };
-    }
-
-    // 2. If spot mode is relative with non-zero coordinates (Wayland dbus clients: Konsole, Firefox, KRunner)
-    if (hasSpot && (spot.mode === "relative" || spot.scale > 0)) {
-        const scale = spot.scale > 0 ? spot.scale : 1.0;
+    // 1. If spot mode is explicitly relative (Wayland dbus clients: Konsole, Firefox, KRunner)
+    if (hasSpot && spot.mode === "relative") {
+        const scale = (spot.scale && spot.scale > 0) ? spot.scale : 1.0;
         const winContent = (activeWindow && activeWindow.contentGeometry)
             || (activeWindow && activeWindow.geometry)
             || { x: 0, y: 0, width: 800, height: 600 };
@@ -62,14 +51,25 @@ export function resolveGlobalSpotRect(spot, activeWindow, kwinCaret, fallbackScr
         };
     }
 
-    // 3. If spot mode is absolute and non-zero (XWayland clients)
-    if (hasSpot) {
+    // 2. If spot mode is absolute and non-zero (XWayland clients)
+    if (hasSpot && (spot.mode === "absolute" || !spot.mode)) {
         return {
             x: Number(spot.x) || 0,
             y: Number(spot.y) || 0,
             width: Number(spot.width) || 0,
             height: Number(spot.height) || 20,
             source: "absolute"
+        };
+    }
+
+    // 3. Fallback: if KWin compositor returned a valid global text-input caret (e.g. VS Code, Antigravity, Obsidian)
+    if (kwinCaret && kwinCaret.available && kwinCaret.source === "caret") {
+        return {
+            x: Number(kwinCaret.x) || 0,
+            y: Number(kwinCaret.y) || 0,
+            width: Number(kwinCaret.width) || 0,
+            height: Number(kwinCaret.height) || 20,
+            source: "kwin-caret"
         };
     }
 

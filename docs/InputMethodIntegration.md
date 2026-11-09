@@ -16,7 +16,7 @@ NextKde provides a native liquid glass input method popup (including candidate t
 2. **Session Environment Standards (Avoid Global IM Modules)**:
    - **Key Contract**: In Wayland sessions, `GTK_IM_MODULE` and `QT_IM_MODULE` should remain **empty** in the system environment; only `XMODIFIERS=@im=fcitx` is retained for XWayland/X11 compatibility.
    - **Reason**: Setting `QT_IM_MODULE=fcitx` or `GTK_IM_MODULE=fcitx` forces applications to load client-side toolkit plugins that declare `CapabilityFlag::ClientSideInputPanel`. When this capability flag is active, Fcitx5 stops broadcasting candidate events to Kimpanel and delegates candidate rendering to the application window, falling back to a legacy rectangular popup and bypassing NextKde's liquid glass interface.
-   - `kos-platform` enforces this contract on startup by issuing `systemctl --user set-environment GTK_IM_MODULE= QT_IM_MODULE=`.
+   - **Zero Global Session Pollution**: NextKde does not mutate user systemd or D-Bus environment variables at runtime, preserving user system defaults. The feature is experimental and disabled by default; users can enable "Enable NextKde Input Method Popups (Experimental)" in the Settings app under System Services & Integration. When disabled or upon Shell termination, NextKde automatically releases the Kimpanel takeover and cleanly restores the original Fcitx5 addon state.
 
 ---
 

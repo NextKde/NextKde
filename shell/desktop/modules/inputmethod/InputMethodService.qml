@@ -10,7 +10,9 @@ QtObject {
     id: svc
 
     property bool available: PlatformClient.supports("inputmethod.kimpanel")
-    property bool enabled: true
+    property bool userEnabled: false
+    property bool takeoverActive: false
+    property bool enabled: false
     property bool visible: false
     property bool lookupVisible: false
     property bool preeditVisible: false
@@ -45,7 +47,7 @@ QtObject {
         if (!activeId) return null;
         const records = WindowService.records;
         for (let i = 0; i < records.length; ++i) {
-            if (records[i].id === activeId) return records[i];
+            if (records[i].handleId === activeId || records[i].windowId === activeId) return records[i];
         }
         return null;
     }
@@ -56,6 +58,17 @@ QtObject {
         _openingCaret,
         Quickshell.screens && Quickshell.screens.length > 0 ? Quickshell.screens[0] : null
     )
+
+    property Connections _windowWatch: Connections {
+        target: WindowService
+        function onKwinActiveIdChanged() {
+            svc._openingCaret = ({});
+            if (svc._popupSessionOpen) {
+                svc._endPopupSession();
+                svc._publishPopupState();
+            }
+        }
+    }
 
     property Connections _platformEvents: Connections {
         target: PlatformClient
@@ -97,7 +110,9 @@ QtObject {
     }
 
     function _applyState(state) {
-        svc.enabled = state.enabled !== false;
+        svc.userEnabled = !!state.userEnabled;
+        svc.takeoverActive = !!state.takeoverActive;
+        svc.enabled = !!state.enabled;
         svc.visible = !!state.visible;
         svc.lookupVisible = !!state.lookupVisible;
         svc.preeditVisible = !!state.preeditVisible;
@@ -117,7 +132,8 @@ QtObject {
         svc.spot = state.spot || ({});
         svc.kwinCaret = state.caret || ({});
         if (svc._popupSessionOpen && !svc._anchorPending
-                && svc.kwinCaret.available && svc.kwinCaret.source === "caret")
+                && svc.kwinCaret.available && svc.kwinCaret.source === "caret"
+                && (!svc.kwinCaret.windowId || svc.kwinCaret.windowId === WindowService.kwinActiveId))
             svc._openingCaret = svc.kwinCaret;
         if (state.imLabel) svc.imLabel = String(state.imLabel);
         if (state.imIcon) svc.imIcon = String(state.imIcon);

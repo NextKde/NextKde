@@ -16,7 +16,7 @@ NextKde 为桌面环境提供基于 Fcitx5 与 Kimpanel 协议的原生液态玻
 2. **环境变量规范（禁止全局设置客户端 IM 模块）**：
    - **关键原则**：在 Wayland 会话中，系统环境应**保持 `GTK_IM_MODULE` 与 `QT_IM_MODULE` 为空**，仅保留 `XMODIFIERS=@im=fcitx`。
    - **原因**：若全局设置 `QT_IM_MODULE=fcitx` 或 `GTK_IM_MODULE=fcitx`，客户端应用会加载本地输入法插件并向 Fcitx5 声明 `CapabilityFlag::ClientSideInputPanel`（客户端自绘）。这会导致 Fcitx5 停止向 Kimpanel 派发事件，改为由应用在窗口内自绘传统矩形小方框，从而绕过 NextKde 的液态玻璃渲染。
-   - `kos-platform` 会在启动时通过 `systemctl --user set-environment` 确保用户会话的 `GTK_IM_MODULE` 与 `QT_IM_MODULE` 置空。
+   - **无全局环境污染原则**：NextKde 不会在后台静默改写或注入用户 systemd / D-Bus 会话环境变量，完全尊重用户原生配置；该功能默认保持关闭，用户可在设置中心（「系统状态与疑难排错」卡片）中手动启用「使用 NextKde 输入法候选框（实验性）」。关闭或 Shell 退出时会自动释放接管并还原 Fcitx5 原始扩展配置。
 
 ---
 

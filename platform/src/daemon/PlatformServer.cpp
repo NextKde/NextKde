@@ -231,6 +231,9 @@ void PlatformServer::clientDisconnected()
     delete m_keepAwakeLeases.take(socket);
     m_windowSubscribers.remove(socket);
     m_inputMethodSubscribers.remove(socket);
+    if (m_inputMethodSubscribers.isEmpty() && m_kimpanelBridge) {
+        m_kimpanelBridge->setShellConnected(false);
+    }
     m_buffers.remove(socket);
     for (auto it = m_inFlightReplies.begin(); it != m_inFlightReplies.end(); ++it) {
         auto &pending = it.value();

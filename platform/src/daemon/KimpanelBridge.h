@@ -58,9 +58,16 @@ public:
     explicit KimpanelBridge(QObject *parent = nullptr);
     ~KimpanelBridge() override;
 
-    bool initialize();
-    void setEnabled(bool enabled);
-    bool isEnabled() const { return m_enabled; }
+    bool isUserEnabled() const { return m_userEnabled; }
+    bool isTakeoverActive() const { return m_takeoverActive; }
+    bool setUserEnabled(bool enabled);
+    void setShellConnected(bool connected);
+    void syncTakeoverState();
+    void reassertTakeover();
+
+    static QString configPath();
+    static bool loadPersistedEnabled();
+    static bool savePersistedEnabled(bool enabled);
 
     QJsonObject currentState() const;
 
@@ -72,7 +79,7 @@ public:
     void configure();
     void reloadConfig();
 
-    void setActiveWindowId(const QString &windowId) { m_activeWindowId = windowId; }
+    void setActiveWindowId(const QString &windowId);
 
 signals:
     void stateChanged(const QJsonObject &state);
@@ -108,17 +115,28 @@ private slots:
 private:
     void setupDbusListeners();
     void teardownDbusListeners();
-    void manageFcitxClassicUi(bool disable);
     void queryKWinCaret();
     void notifyState();
     void parseAndStoreProperty(const QString &prop);
 
+    bool acquireTakeover();
+    void releaseTakeover();
+    void backupOriginalFcitxAddons();
+    bool setFcitxAddons(bool classicUi, bool kimpanel);
+
     ImpanelAdaptor *m_adaptor = nullptr;
     Impanel2Adaptor *m_adaptor2 = nullptr;
 
-    bool m_enabled = true;
+    bool m_userEnabled = false;
+    bool m_shellConnected = false;
+    bool m_takeoverActive = false;
     bool m_registeredBus = false;
-    bool m_disabledClassicUi = false;
+
+    bool m_hasOriginalAddonState = false;
+    bool m_origClassicUiEnabled = true;
+    bool m_origKimpanelEnabled = false;
+
+    quint64 m_kwinCaretSerial = 0;
 
     // State cache
     bool m_imEnabled = true;
