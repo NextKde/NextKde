@@ -13,6 +13,8 @@
     "kos-platform.media-feedback",
     "kos-platform.file-copy",
     "kos-platform.independent-app-widgets",
+    "kos-platform.forma-integration",
+    "kos-platform.forma-trash",
     "kos-platform.window-placement",
     "kos-platform.jsonl-client",
     "kos-platform.contracts",

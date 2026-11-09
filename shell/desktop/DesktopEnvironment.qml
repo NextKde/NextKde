@@ -710,6 +710,24 @@ Item {
         }
     }
 
+    IpcHandler {
+        target: "forma-integration"
+
+        function snapshot(): string {
+            // Return the last confirmed state before asking the asynchronous
+            // platform client to refresh it. A settle poll can then observe
+            // completion instead of creating an endless busy cycle.
+            const state = FormaIntegrationService.snapshot()
+            FormaIntegrationService.refresh()
+            return JSON.stringify(state)
+        }
+
+        function setEnabled(enabled: bool): string {
+            FormaIntegrationService.setEnabled(enabled)
+            return JSON.stringify(FormaIntegrationService.snapshot())
+        }
+    }
+
     // Read-only health snapshot for the standalone Settings app. Keep these
     // values sourced from the live Shell connections so the UI reports what
     // is actually connected, not merely which units were installed.

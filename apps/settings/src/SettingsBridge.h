@@ -8,6 +8,7 @@
 #include <QObject>
 #include <QVariantMap>
 #include <functional>
+#include <optional>
 
 // Stable QML facade. Feature implementations live in SettingsBridge*.cpp;
 // IPC and local image resources are owned by the concrete modules below.
@@ -132,6 +133,8 @@ public:
     Q_INVOKABLE void resetLauncherLayoutProfile(const QString& mode);
     Q_INVOKABLE void applySystemAppearance(bool dark);
     Q_INVOKABLE void integrationSnapshot();
+    Q_INVOKABLE void formaIntegrationSnapshot();
+    Q_INVOKABLE void setFormaIntegrationEnabled(bool enabled);
     Q_INVOKABLE void i18nSnapshot();
     Q_INVOKABLE void updateLanguage(const QString& language);
 
@@ -154,6 +157,7 @@ signals:
     void shortcutsSnapshotChanged(const QVariantMap& snapshot);
     void glassDebugSnapshotChanged(const QVariantList& controls, const QString& presetStyle);
     void integrationSnapshotChanged(const QVariantMap& snapshot);
+    void formaIntegrationSnapshotChanged(const QVariantMap& snapshot);
     void systemAppearanceApplied(bool accepted);
     // 后台缩略图生成完毕;页面收到后重新求值瓦片缩略图绑定,下次直接命中缓存。
     void wallpaperThumbnailChanged();
@@ -177,6 +181,7 @@ private:
         Launcher,
         Shortcuts,
         Integration,
+        FormaIntegration,
         GlassDebug,
         ApplySystemAppearance,
         FgSchedApps,
@@ -204,6 +209,7 @@ private:
     QVariantMap appearanceSnapshotFromReply(const QString& payload);
     QVariantMap launcherSnapshotFromReply(const QString& payload);
     QVariantMap integrationSnapshotFromReply(const QString& payload);
+    QVariantMap formaIntegrationSnapshotFromReply(const QString& payload);
     QVariantMap shortcutsSnapshotFromReply(const QString& payload);
     QVariantList glassDebugSpecs() const;
     QString glassPresetStyle() const;
@@ -253,6 +259,9 @@ private:
     // The integration probe is a worker thread: while one is running the 5s
     // page poll must not pile up another.
     bool m_integrationPending = false;
+    bool m_formaRequestPending = false;
+    std::optional<bool> m_formaQueuedEnabled;
+    QVariantMap m_lastFormaSnapshot;
     bool m_modelInspectionPending = false;
 
     // Last-good stage config snapshot. Void IPCs routed through this request

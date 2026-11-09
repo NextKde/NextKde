@@ -26,6 +26,27 @@ Item {
         indexOf: function(value) { return this.options.findIndex(x => x.id === value) },
         labelOf: function(value) { return String(value) }
     })
+    Component {
+        id: formaBridgeComponent
+        QtObject {
+            property string lastError: ""
+            property int applyCount: 0
+            property bool requestedEnabled: false
+            signal integrationSnapshotChanged(var snapshot)
+            signal formaIntegrationSnapshotChanged(var snapshot)
+            function integrationSnapshot() {}
+            function formaIntegrationSnapshot() {
+                formaIntegrationSnapshotChanged({ready: true, enabled: false, busy: false, applications: [
+                    {role: "finder", name: "Finder", installed: true},
+                    {role: "music", name: "Music", installed: false}
+                ], error: ""});
+            }
+            function setFormaIntegrationEnabled(enabled) {
+                requestedEnabled = enabled;
+                applyCount++;
+            }
+        }
+    }
     SignalSpy { id: styleSpy; signalName: "shellStyleObserved" }
     SignalSpy { id: seedSpy; signalName: "materialSeedObserved" }
     SignalSpy { id: settingSpy; signalName: "settingRequested" }
@@ -167,6 +188,48 @@ Item {
             compare(picker.sheetColor, "#f0f0f1")
             compare(picker.height, 24)
             compare(picker.textRole, "label")
+        }
+        function test_forma_toggle_waits_for_confirmation() {
+            const page = makePage("IntegrationStatusPage")
+            const bridge = createTemporaryObject(formaBridgeComponent, harness)
+            page.bridge = bridge
+            const section = findChild(page, "formaIntegrationSection")
+            const toggle = findChild(page, "enableFormaSwitch")
+            const apply = findChild(page, "reapplyFormaButton")
+            verify(section !== null && toggle !== null && apply !== null)
+            section.refresh()
+            verify(toggle.enabled)
+            verify(!toggle.checked)
+            verify(!apply.enabled)
+            compare(section.availableApps.length, 1)
+            compare(section.missingApps.length, 1)
+            section.requestEnabled(true)
+            compare(bridge.applyCount, 1)
+            verify(bridge.requestedEnabled)
+            verify(section.requestPending)
+            verify(!toggle.enabled)
+            verify(!toggle.checked, "do not show enabled before a platform confirmation")
+            bridge.formaIntegrationSnapshotChanged({ready: true, enabled: true, busy: false,
+                applications: [], error: ""})
+            verify(toggle.checked)
+            verify(apply.enabled)
+            section.requestEnabled(false)
+            verify(!bridge.requestedEnabled)
+            bridge.formaIntegrationSnapshotChanged({ready: true, enabled: true, busy: false,
+                applications: [], error: "Could not restore preferences"})
+            verify(toggle.checked, "a failed restore retains the confirmed enabled state")
+            verify(section.errorText.length > 0)
+            bridge.formaIntegrationSnapshotChanged({available: true, ready: false, enabled: false, busy: false,
+                restorePending: true, applications: [], error: "Recovery required"})
+            const restore = findChild(page, "restoreFormaButton")
+            verify(restore !== null && restore.enabled)
+            verify(!apply.enabled)
+            section.requestEnabled(false)
+            verify(!bridge.requestedEnabled, "failed first enable can be recovered while the toggle is off")
+            bridge.formaIntegrationSnapshotChanged({ready: false, enabled: true, busy: false,
+                applications: [], error: "Platform service is disconnected"})
+            verify(!toggle.enabled)
+            verify(toggle.checked, "disconnection must not reset the saved preference")
         }
         function test_theme_reports_confirmed_state() {
             const page = makePage("ThemeSettingsPage")

@@ -18,6 +18,7 @@ The wire contract remains [platform.v1](../shared/contracts/platform.v1.md).
 | Files under `platform/src/daemon/` | Responsibility |
 | --- | --- |
 | `PlatformServerApplications.cpp`, `PlatformServerFiles.cpp` | KDE application launch and file operations |
+| `FormaIntegration.*` | Explicit Forma defaults, installed-app roles and conditional restoration; see [Forma integration](FormaIntegration.md) |
 | `PlatformServerWindows.cpp`, `PlatformServerAppMenu.cpp` | KWin commands, input bridge and application menus |
 | `PlatformServerClipboard.cpp`, `PlatformServerClipboardPins.cpp` | Clipboard/history/preview requests and persistent pins |
 | `PlatformServerNetwork.cpp` | Network payload validation, cache keys and worker completion |

@@ -3,6 +3,20 @@
 // Keys mirror ZhCatalog.mjs; when an English source string changes, update
 // the key here too. Date patterns use Qt format strings (quote literals).
 export const catalog = {
+    "Restore previous preferences": "Restaurar preferências anteriores",
+    "A previous change did not finish. Restore it before applying Forma again.": "Uma alteração anterior não foi concluída. Restaure antes de aplicar Forma novamente.",
+    "Forma Terminal opens from the Dock. Command-line apps keep their existing terminal because Forma does not yet support command execution.": "O Dock abre o Forma Terminal. Aplicativos de linha de comando mantêm o terminal existente porque Forma ainda não suporta a execução de comandos.",
+    "Forma applications": "Aplicativos Forma",
+    "Enable Forma": "Ativar Forma",
+    "Use installed Forma apps for files, media and desktop actions. KOS Settings stays unchanged.": "Use os aplicativos Forma instalados para arquivos, mídia e ações da área de trabalho. As Configurações KOS permanecem inalteradas.",
+    "Available Forma apps: %1": "Aplicativos Forma disponíveis: %1",
+    "Applying application preferences…": "Aplicando preferências de aplicativos…",
+    "Missing apps are skipped. No software is installed or removed.": "Aplicativos ausentes são ignorados. Nenhum programa é instalado ou removido.",
+    "Apply again": "Aplicar novamente",
+    "Not installed: %1": "Não instalados: %1",
+    "Turning Forma off restores preferences still owned by Forma. Later manual changes are kept.": "Desativar Forma restaura as preferências ainda controladas pelo Forma. Alterações manuais posteriores são preservadas.",
+    "Forma integration request failed": "Falha na solicitação de integração do Forma",
+    "The desktop environment returned invalid Forma preferences": "O ambiente de trabalho retornou preferências Forma inválidas",
     "Application task completed": "Tarefa de aplicativo concluída",
     "Application task cancelled": "Tarefa de aplicativo cancelada",
     "Application task failed": "Falha na tarefa de aplicativo",

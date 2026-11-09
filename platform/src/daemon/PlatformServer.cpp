@@ -538,6 +538,7 @@ void PlatformServer::handleRequest(QLocalSocket *socket, const QJsonObject &requ
                 QStringLiteral("input.clipboard-anchor"),
                 QStringLiteral("application.widget-snapshot"),
                 QStringLiteral("application.widget-open"),
+                QStringLiteral("integration.forma"),
                 QStringLiteral("lockscreen.weather-publish"),
                 QStringLiteral("wallpaper.plasma.proxy"),
                 QStringLiteral("wallpaper.plasma.restore"),

@@ -9,6 +9,7 @@ set(CMAKE_AUTOMOC ON)
 find_package(Qt6 6.5 REQUIRED COMPONENTS Core Concurrent DBus Gui Network)
 find_package(KF6CoreAddons REQUIRED)
 find_package(KF6Config REQUIRED)
+find_package(KF6Service REQUIRED)
 find_package(KF6IconThemes REQUIRED)
 find_package(KF6GlobalAccel REQUIRED)
 find_package(KF6KIO REQUIRED)
@@ -41,6 +42,8 @@ set(kos_platform_sources
     src/daemon/PlatformServerApplications.cpp
     src/daemon/IndependentAppWidgets.cpp
     src/daemon/IndependentAppWidgets.h
+    src/daemon/FormaIntegration.cpp
+    src/daemon/FormaIntegration.h
     src/daemon/PlatformServerAudio.cpp
     src/daemon/PlatformServerBluetooth.cpp
     src/daemon/PlatformServerClipboard.cpp
@@ -82,6 +85,17 @@ endif()
 
 if(BUILD_TESTING)
     find_package(Qt6 REQUIRED COMPONENTS Test)
+    qt_add_executable(kos-forma-integration-test
+        tests/test_forma_integration.cpp
+        src/daemon/FormaIntegration.cpp
+        src/daemon/FormaIntegration.h)
+    target_include_directories(kos-forma-integration-test PRIVATE src/daemon)
+    target_link_libraries(kos-forma-integration-test PRIVATE
+        Qt6::Core Qt6::Test KF6::ConfigCore KF6::Service)
+    add_test(NAME kos-platform.forma-integration COMMAND kos-forma-integration-test)
+    set_tests_properties(kos-platform.forma-integration PROPERTIES
+        LABELS "platform;data" TIMEOUT 30)
+
     qt_add_executable(kos-independent-app-widgets-test
         tests/test_independent_app_widgets.cpp src/daemon/IndependentAppWidgets.cpp)
     target_include_directories(kos-independent-app-widgets-test PRIVATE src/daemon)
@@ -126,6 +140,7 @@ target_link_libraries(kos-platform PRIVATE
     Qt6::Network
     KF6::CoreAddons
     KF6::ConfigCore
+    KF6::Service
     KF6::IconThemes
     KF6::GlobalAccel
     KF6::KIOGui
@@ -187,6 +202,15 @@ if(BUILD_TESTING)
         find_program(KOS_PYTHON_EXECUTABLE NAMES python3 python)
     endif()
     find_program(DBUS_RUN_SESSION_EXECUTABLE dbus-run-session)
+    find_package(Python3 QUIET COMPONENTS Interpreter)
+    find_program(KBUILD_SYCOCA_EXECUTABLE NAMES kbuildsycoca6)
+    if(Python3_EXECUTABLE AND DBUS_RUN_SESSION_EXECUTABLE AND KBUILD_SYCOCA_EXECUTABLE)
+        add_test(NAME kos-platform.forma-trash
+            COMMAND ${Python3_EXECUTABLE}
+                ${CMAKE_CURRENT_SOURCE_DIR}/tests/test_forma_trash.py
+                $<TARGET_FILE:kos-platform> ${KBUILD_SYCOCA_EXECUTABLE})
+        set_tests_properties(kos-platform.forma-trash PROPERTIES LABELS platform TIMEOUT 60)
+    endif()
     if(DBUS_RUN_SESSION_EXECUTABLE)
         qt_add_executable(kos-desktop-transition-test
             tests/test_desktop_transition.cpp

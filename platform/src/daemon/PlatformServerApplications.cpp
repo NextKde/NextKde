@@ -21,6 +21,23 @@ bool PlatformServer::handleApplication(QLocalSocket *socket,
                                        const QJsonObject &request)
 {
     const QString op = operation(request);
+    if (op == QStringLiteral("integration.forma.get") || op == QStringLiteral("integration.forma.set")) {
+        if (op.endsWith(QLatin1String(".get"))) {
+            respond(socket, request, true, m_formaIntegration.snapshot());
+            return true;
+        }
+        const auto enabled = request.value(QStringLiteral("payload")).toObject()
+                                 .value(QStringLiteral("enabled"));
+        if (!enabled.isBool()) {
+            respond(socket, request, false, {}, QStringLiteral("invalid-payload"),
+                    QStringLiteral("enabled must be a boolean"), false);
+            return true;
+        }
+        // The state includes recoverable partial-write errors. Never hide the
+        // persisted ownership journal behind a transport-only failure.
+        respond(socket, request, true, m_formaIntegration.setEnabled(enabled.toBool()));
+        return true;
+    }
     if (op == QLatin1String("application.widget-snapshot") || op == QLatin1String("application.widget-open")) {
         const QJsonObject payload = request.value(QStringLiteral("payload")).toObject();
         const QString key = payload.value(QStringLiteral("app")).toString();

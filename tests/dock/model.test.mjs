@@ -7,6 +7,7 @@ import { toArray } from "../../shell/desktop/modules/dock/PayloadArray.mjs";
 import { indexAt, parse } from "../../shell/desktop/modules/dock/TimedLyrics.mjs";
 import { nextWindowToActivate, pendingWindowIdFor } from "../../shell/desktop/modules/dock/WindowCycle.mjs";
 import { test } from "node:test";
+import { preferredId, resolvePinnedId } from "../../shell/desktop/modules/common/FormaApplications.mjs";
 
 test("process identity", async () => {
     // The normaliser is shared with the rest of the shell, so the test runs the real
@@ -177,6 +178,7 @@ test("unpin identity", async () => {
         setDockItems(items){this.dockItems=items;return true;},scheduleSave(){saves++;}};
     const normalize=id=>['Code','code.desktop','com.microsoft.VSCode.desktop'].includes(id)?'vscode':id;
     const context=vm.createContext({ConfigService:config,
+        FormaIntegrationService:{resolvePinnedId:id=>id},
         AppIdentityService:{sameApp:(a,b)=>normalize(a)===normalize(b)},
         svc:{_refreshPresentation(){refreshes++;}}});
     vm.runInContext(unpin,context);
@@ -186,6 +188,99 @@ test("unpin identity", async () => {
     context.unpinApp('missing.desktop');
     assert.equal(saves,1);assert.equal(refreshes,1);
     console.log('Unpin: removes all aliases, preserves unrelated items, saves and refreshes once');
+});
+
+test("Forma pins preserve user data and missing applications", () => {
+    const finder = "io.github.egely1337.Mayonnaise.Finder.desktop";
+    const music = "io.github.egely1337.Mayonnaise.Music.desktop";
+    const state = {enabled: true, applications: [
+        {role: "finder", installed: true, desktopId: finder},
+        {role: "music", installed: false, desktopId: music}
+    ]};
+    assert.equal(preferredId(state, "finder"), finder);
+    assert.equal(preferredId(state, "music"), "");
+    assert.equal(resolvePinnedId(state, "org.kde.dolphin.desktop"), finder);
+    assert.equal(resolvePinnedId(state, "org.kde.elisa.desktop"), "org.kde.elisa.desktop");
+    assert.equal(resolvePinnedId(state, "firefox.desktop"), "firefox.desktop");
+    assert.equal(resolvePinnedId(state, "io.github.egely1337.Mayonnaise.Settings.desktop"), "io.github.egely1337.Mayonnaise.Settings.desktop");
+    assert.equal(resolvePinnedId({enabled: false}, "io.github.egely1337.Mayonnaise.Settings.desktop"), "io.github.egely1337.Mayonnaise.Settings.desktop");
+    assert.equal(resolvePinnedId({...state, enabled: false}, "org.kde.dolphin.desktop"), "org.kde.dolphin.desktop");
+
+    const source = readFileSync(new URL("../../shell/desktop/modules/dock/DockModelService.qml", import.meta.url), "utf8");
+    const unpin = source.match(/^    function unpinApp\(appId\) \{[^]*?^    \}/m)[0];
+    const config = {dockItems: [
+        {type: "app", appId: "org.kde.dolphin.desktop"},
+        {type: "app", appId: finder}, {type: "app", appId: "firefox.desktop"}
+    ], setDockItems(items) { this.dockItems = items; return true; }, scheduleSave() {}};
+    const context = vm.createContext({ConfigService: config,
+        FormaIntegrationService: {resolvePinnedId: id => resolvePinnedId(state, id)},
+        AppIdentityService: {sameApp: (a, b) => a === b}, svc: {_refreshPresentation() {}}});
+    vm.runInContext(unpin, context);
+    context.unpinApp(finder);
+    assert.deepEqual(Array.from(config.dockItems, item => item.appId), ["firefox.desktop"]);
+});
+
+test("explicit Settings pins keep separate identities in both Forma modes", () => {
+    const ids = ["io.github.egely1337.Mayonnaise.Settings.desktop", "kos-settings.desktop",
+        "systemsettings.desktop", "kdesystemsettings.desktop"];
+    const state = {enabled: true, applications: []};
+    const source = readFileSync(new URL("../../shell/desktop/modules/dock/DockModelService.qml", import.meta.url), "utf8");
+    const refresh = source.match(/^    function _refreshPinned\(\) \{[^]*?^    \}/m)[0];
+    const unpin = source.match(/^    function unpinApp\(appId\) \{[^]*?^    \}/m)[0];
+    for (const enabled of [false, true]) {
+        state.enabled = enabled;
+        for (const id of ids)
+            assert.equal(resolvePinnedId(state, id), id);
+        const config = {windowGrouping: "grouped", dockItems: ids.map(appId => ({type: "app", appId})),
+            setDockItems(items) { this.dockItems = items; return true; }, scheduleSave() {}};
+        const svc = {pinnedItems: [], pinnedCount: 0, _refreshPresentation() {}};
+        const context = vm.createContext({svc, ConfigService: config,
+            FormaIntegrationService: {resolvePinnedId: id => resolvePinnedId(state, id)},
+            AppIdentityService: {sameApp: (a, b) => a === b,
+                resolve: id => ({desktopId: id, name: id, iconSource: id})},
+            WindowService: {windowsForApp: () => []},
+            TrayAttentionService: {needsAttention: () => false}});
+        vm.runInContext(refresh + "\n" + unpin, context);
+        context._refreshPinned();
+        assert.deepEqual(Array.from(svc.pinnedItems, item => item.appId), ids);
+        context.unpinApp(ids[0]);
+        assert.deepEqual(Array.from(config.dockItems, item => item.appId), ids.slice(1),
+            "unpinning Forma Settings must not remove KOS or KDE Settings");
+    }
+});
+
+test("Forma projected pins deduplicate and reorder their saved entries", () => {
+    const finder = "io.github.egely1337.Mayonnaise.Finder.desktop";
+    const text = "io.github.egely1337.Mayonnaise.TextEditor.desktop";
+    const state = {enabled: true, applications: [
+        {role: "finder", installed: true, desktopId: finder},
+        {role: "text", installed: true, desktopId: text}
+    ]};
+    const rawItems = [{type: "app", appId: "org.kde.dolphin.desktop"},
+        {type: "app", appId: finder}, {type: "app", appId: "org.kde.kate.desktop"}];
+    const moves = [];
+    const config = {dockItems: rawItems, windowGrouping: "grouped",
+        moveDockItem(...args) { moves.push(args); return true; }};
+    const svc = {pinnedItems: [], pinnedCount: 0};
+    const context = vm.createContext({svc, ConfigService: config,
+        FormaIntegrationService: {resolvePinnedId: id => resolvePinnedId(state, id)},
+        AppIdentityService: {sameApp: (a, b) => a === b,
+            resolve: id => ({desktopId: id, name: id, iconSource: id})},
+        WindowService: {windowsForApp: () => []},
+        TrayAttentionService: {needsAttention: () => false}, console});
+    const source = readFileSync(new URL("../../shell/desktop/modules/dock/DockModelService.qml", import.meta.url), "utf8");
+    for (const name of ["_refreshPinned", "_visibleSlotToDockIndex", "movePinnedItem"]) {
+        vm.runInContext(source.match(new RegExp(`^    function ${name}\\([^]*?^    \\}`, "m"))[0], context);
+        svc[name] = context[name];
+    }
+    svc._refreshPinned();
+    assert.deepEqual(Array.from(svc.pinnedItems, item => item.appId), [finder, text]);
+    svc.movePinnedItem("app", finder, 1);
+    assert.deepEqual(moves, [["app", "org.kde.dolphin.desktop", 2]]);
+    assert.equal(config.dockItems, rawItems, "projection does not rewrite persisted pins");
+    state.enabled = false;
+    svc._refreshPinned();
+    assert.deepEqual(Array.from(svc.pinnedItems, item => item.appId), rawItems.map(item => item.appId));
 });
 
 test("window record index", async () => {

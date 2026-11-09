@@ -24,6 +24,25 @@ Current operation groups are:
 
 - `application.launch` (KDE-native desktop-entry launch; accepts a desktop ID
   and optional URLs, never an arbitrary command)
+- `integration.forma.get` (read) and `integration.forma.set` (write; payload
+  `{enabled: boolean}`; non-boolean values return `invalid-payload`). The
+  `integration.forma` capability advertises both. Results contain `ready`,
+  confirmed `enabled`, `available` (valid state can be retried/restored even
+  when `ready:false` reports a previous write failure), `busy`, `applications` (`role/name/desktopId/installed`),
+  `restorePending` and `error`. Fixed roles select installed Forma file/media
+  defaults; Music is preferred for audio and Video is its optional fallback.
+  No caller-supplied paths, MIME tables, executable or settings identity is accepted.
+  Missing apps are skipped; browser, KOS Settings, package/service lifecycle and
+  incompatible terminal-command preferences are unchanged. Schema-1 ownership
+  state under `$XDG_STATE_HOME/quickshell/kos/forma-integration.json` is persisted
+  before default writes. Reapply preserves original backups; disabling only
+  restores keys still holding the owned value, including removal of initially
+  absent overrides. Damaged state is rejected; recoverable partial writes return
+  their state and non-empty `error`, without an optimistic enable/disable.
+  `restorePending` requires restoration before another takeover. A successful
+  wire response means the state was reported, not that a configuration write
+  necessarily succeeded; consumers must inspect `ready/error/restorePending`.
+  See [Forma integration](../../docs/FormaIntegration.md).
 - `application.widget-snapshot`, `application.widget-open` (fixed Calendar/Weather
   identity-bound summaries and navigation; see [widget contract](../../docs/app-store/WidgetIntegration.md).
   No arbitrary paths/commands; stale installation tokens fail without fallback.)
@@ -52,7 +71,12 @@ Current operation groups are:
 - `file.open`, `file.copy`, `file.launch`, `file.rename`, `file.create-folder`,
   `file.create-file`, `file.transfer`, `file.trash`, `file.trash-state`,
   `file.empty-trash`, `file.open-trash`, `file.open-with`, `file.set-default`,
-  `file.open-kde`
+  `file.open-kde`. `file.open-trash` selects the installed Forma Finder when
+  Forma is enabled or Finder is already the user's default directory handler;
+  its `%f` entry receives the native local home-trash `Trash/files` path, not a
+  `trash:` CLI URL. Empty home-trash directories are prepared and symlink
+  destinations rejected. Otherwise the existing Dolphin `trash:` route remains.
+  Trash state and emptying retain their existing home-trash scope.
 - `kwin.subscribe`, `kwin.command`, `kwin.layout.update`
 - `kwin.animation.update-targets`, `kwin.animation.prepare-launch`
 - `wallpaper.plasma.proxy` (replace every screen's Plasma wallpaper with a KOS
