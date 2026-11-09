@@ -160,7 +160,7 @@ KWin 插件及桌面接管需注销登录/重启。浅版本切换不下载旧�
 
 日历、计算器、天气合用独立 `NextKde/kos-apps` 仓库／版本／Release，各自仍是
 `org.nextks.<app>` 独立包，目录为 `apps/org.nextks.<app>`；ListenFree 保持独立。
-源码已公开，签名新身份包尚未发行；旧 Flatpak ID 报告冲突，不自动改名、卸载或迁移数据。
+源码已公开；实际安装包可用性请查看对应正式 Release。旧 Flatpak ID 不自动改名、卸载或迁移数据。
 
 ```sh
 ./tools/kosctl install apps
@@ -171,9 +171,14 @@ KWin 插件及桌面接管需注销登录/重启。浅版本切换不下载旧�
 
 分发入口默认经 `kos-apps` 使用与 Settings 相同的用户级 Flatpak 后端。
 默认选择日历（含待办）、计算器和天气；ListenFree 必须显式选择。修改操作要求终端确认或 `--yes`。
-采用 GitHub Release 签名包，无需自建应用源；本地已接入专用发布者公钥，但 runtime 策略仍为空且无正式签名 Release，新安装／更新仍不可用；不自动添加在线源，也不回退源码构建。
-唯一用户级 Flatpak 支持状态查询／卸载，普通卸载保留数据。GitHub 更新由 Settings 发现，不承诺 Discover 自动发现。
-runtime 源须单独配置／认可；libflatpak 可能建立无在线 URL 的本地 bundle origin。
+应用包通过 GitHub Releases 发布，由签名目录提供列表。SHA-256 必须校验；目录配置 publisher 时才要求开发者签名。
+明确安装／更新时可为缺失依赖准备已批准的 Flathub runtime 源，应用本身仍来自 GitHub，不必上架 Flathub。
+安装需要真实兼容的正式 Release，不会静默回退源码构建。普通卸载保留数据。libflatpak 可能建立无在线 URL
+的本地 bundle origin，取消安装后已准备的运行库源也可能保留。
+
+Settings → 应用与服务可以管理第三方目录来源、手动检查、自动检查与更新提示。后台只检查元数据，不自动安装。
+不承诺 Discover 发现这些 GitHub 包更新。详见[目录与更新机制](app-store/SignedCatalog.zh-CN.md)及
+[上架、Qt runtime 打包指南](https://github.com/NextKde/appCatalog/blob/main/README.zh-CN.md)。
 
 显式 `--backend=source` 保留历史兼容／开发用源码 Release 本地构建；这些不是 Discover 管理的软件包。
 开发依赖及自定义 SDK/视频构建见各独立仓库，包含 [ListenFree](https://github.com/NextKde/ListenFree)。

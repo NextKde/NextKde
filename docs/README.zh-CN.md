@@ -8,6 +8,7 @@
 
 | 主题 | 权威入口 |
 | --- | --- |
+| 签名目录、第三方源、更新提示与应用上架 | [应用与服务](app-store/SignedCatalog.zh-CN.md)、[appCatalog / Qt runtime](https://github.com/NextKde/appCatalog/blob/main/README.zh-CN.md) |
 | 依赖、安装、更新、卸载 | [开始使用](GettingStarted.zh-CN.md) |
 | NixOS 声明式安装 | [NixOS](nixos-quickstart.zh-CN.md) |
 | 窗口动画选择、原生神灯及回退 | [窗口动画](WindowAnimations.zh-CN.md) |

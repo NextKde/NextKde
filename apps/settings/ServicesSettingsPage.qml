@@ -97,6 +97,7 @@ GridLayout {
                 height: 38
                 Accessible.name: text
                 contentItem: Text {
+                    textFormat: Text.PlainText
                     text: categoryTab.text
                     color: categoryTab.checked ? page.colors.accent : page.colors.secondaryText
                     font.pixelSize: 12
@@ -119,6 +120,187 @@ GridLayout {
                 }
             }
         }
+    }
+
+    function catalogMessage(message) {
+        return String(message || "").split("\n").map(function(line) {
+            const separator = line.indexOf(": ");
+            if (separator > 0)
+                return line.slice(0, separator + 2) + I18n.tr(line.slice(separator + 2));
+            return I18n.tr(line);
+        }).join("\n");
+    }
+
+    function localText(values, fallback) {
+        return values ? (values[I18n.language] || values.en || fallback || "") : (fallback || "");
+    }
+
+    RowLayout {
+        visible: page.selectedCategory === 0
+        Layout.columnSpan: 2
+        Layout.fillWidth: true
+        Text {
+            textFormat: Text.PlainText
+            Layout.fillWidth: true
+            text: page.store && page.store.updateCount ? I18n.tr("%1 apps have updates").arg(page.store.updateCount) : I18n.tr("Applications")
+            color: page.colors.primaryText
+            font.pixelSize: 13
+        }
+        WallpaperTextButton {
+            label: page.store && page.store.updateStatus && page.store.updateStatus.running ? I18n.tr("Checking for updates…") : I18n.tr("Check all updates")
+            colors: page.colors
+            enabled: !!page.store && !(page.store.updateStatus && page.store.updateStatus.running)
+            onClicked: page.store.checkAllUpdates()
+        }
+        WallpaperTextButton {
+            label: I18n.tr("Manage app sources")
+            colors: page.colors
+            onClicked: sourceDialog.open()
+        }
+    }
+    Text {
+        textFormat: Text.PlainText
+        visible: page.selectedCategory === 0 && text.length > 0
+        Layout.columnSpan: 2
+        Layout.fillWidth: true
+        text: page.catalogMessage(page.store ? (page.store.catalogError || (page.store.updateStatus || {}).error || "") : "")
+        color: page.colors.secondaryText
+        font.pixelSize: 11
+        wrapMode: Text.Wrap
+    }
+    Dialog {
+        id: sourceDialog
+        parent: Overlay.overlay
+        anchors.centerIn: parent
+        width: Math.min(640, parent ? parent.width - 32 : 640)
+        height: Math.min(700, parent ? parent.height - 32 : 700)
+        modal: true
+        title: I18n.tr("Manage app sources")
+        footer: DialogButtonBox {
+            Button { text: I18n.tr("Close"); DialogButtonBox.buttonRole: DialogButtonBox.RejectRole }
+            onRejected: sourceDialog.reject()
+        }
+        contentItem: Flickable {
+            clip: true
+            contentWidth: width
+            contentHeight: sourceContent.implicitHeight
+            boundsBehavior: Flickable.StopAtBounds
+            ScrollBar.vertical: ScrollBar {}
+            ColumnLayout {
+                id: sourceContent
+                width: parent.width
+                spacing: 12
+                Basic.CheckBox {
+                    text: I18n.tr("Automatically check for updates")
+                    checked: page.store ? !!page.store.automaticUpdates : true
+                    onToggled: if (page.store) page.store.automaticUpdates = checked
+                }
+                Basic.CheckBox {
+                    text: I18n.tr("Show update notifications")
+                    checked: page.store ? !!page.store.updateNotifications : true
+                    onToggled: if (page.store) page.store.updateNotifications = checked
+                }
+                Repeater {
+                    model: page.store && page.store.sources ? page.store.sources : []
+                    delegate: ColumnLayout {
+                        required property var modelData
+                        Layout.fillWidth: true
+                        Text {
+                            textFormat: Text.PlainText
+                            Layout.fillWidth: true
+                            text: modelData.id + " · " + modelData.repository + "\n" + modelData.fingerprint
+                            color: page.colors.primaryText
+                            wrapMode: Text.WrapAnywhere
+                        }
+                        Text {
+                            textFormat: Text.PlainText
+                            Layout.fillWidth: true
+                            text: page.catalogMessage(modelData.error)
+                            visible: text.length > 0
+                            color: page.colors.secondaryText
+                            wrapMode: Text.Wrap
+                        }
+                        WallpaperTextButton {
+                            label: I18n.tr("Remove source")
+                            colors: page.colors
+                            enabled: !!page.store && !page.store.catalogBusy && !page.store.hasActiveMutation
+                            onClicked: { removeSourceDialog.sourceId = modelData.id; removeSourceDialog.open(); }
+                        }
+                    }
+                }
+                WallpaperTextButton {
+                    label: page.store && page.store.catalogBusy ? I18n.tr("Checking…") : I18n.tr("Refresh app sources")
+                    colors: page.colors
+                    enabled: !!page.store && !page.store.catalogBusy && !page.store.hasActiveMutation
+                    onClicked: page.store.refreshCatalog()
+                }
+                Text {
+                    textFormat: Text.PlainText
+                    Layout.fillWidth: true
+                    text: I18n.tr("Add a signed GitHub Release catalog. Verify the full key fingerprint with the source maintainer before trusting it.")
+                    color: page.colors.primaryText
+                    wrapMode: Text.Wrap
+                }
+                Basic.TextField { id: sourceIdField; Layout.fillWidth: true; placeholderText: I18n.tr("Source ID (lowercase letters and hyphens)") }
+                Basic.TextField { id: sourceRepoField; Layout.fillWidth: true; placeholderText: I18n.tr("GitHub owner/repository") }
+                Basic.TextField { id: sourceFingerprintField; Layout.fillWidth: true; placeholderText: I18n.tr("Full signing key fingerprint") }
+                Basic.TextField { id: sourceKeyField; Layout.fillWidth: true; placeholderText: I18n.tr("Local path to exported public key (.gpg)") }
+                Basic.CheckBox {
+                    id: sourceTrust
+                    Layout.fillWidth: true
+                    text: I18n.tr("I trust this source to choose applications and release repositories")
+                    contentItem: Text {
+                        text: sourceTrust.text
+                        font: sourceTrust.font
+                        color: page.colors.primaryText
+                        leftPadding: sourceTrust.indicator.width + sourceTrust.spacing
+                        verticalAlignment: Text.AlignVCenter
+                        wrapMode: Text.Wrap
+                    }
+                }
+                Text {
+                    textFormat: Text.PlainText
+                    id: sourceError
+                    property string message: ""
+                    text: page.catalogMessage(message)
+                    Layout.fillWidth: true
+                    color: page.colors.primaryText
+                    wrapMode: Text.Wrap
+                }
+                WallpaperTextButton {
+                    label: I18n.tr("Add source")
+                    colors: page.colors
+                    enabled: !!page.store && sourceTrust.checked && !page.store.catalogBusy && !page.store.hasActiveMutation
+                        && !!sourceIdField.text && !!sourceRepoField.text && !!sourceFingerprintField.text && !!sourceKeyField.text
+                    onClicked: {
+                        sourceError.message = page.store.addSource(sourceIdField.text, sourceRepoField.text, sourceFingerprintField.text, sourceKeyField.text);
+                        if (!sourceError.message) { sourceTrust.checked = false; sourceIdField.clear(); sourceRepoField.clear(); sourceFingerprintField.clear(); sourceKeyField.clear(); }
+                    }
+                }
+            }
+        }
+    }
+    Dialog {
+        id: removeSourceDialog
+        property string sourceId: ""
+        parent: Overlay.overlay
+        anchors.centerIn: parent
+        width: Math.min(400, parent ? parent.width - 32 : 400)
+        modal: true
+        title: I18n.tr("Remove source")
+        footer: DialogButtonBox {
+            Button { text: I18n.tr("Cancel"); DialogButtonBox.buttonRole: DialogButtonBox.RejectRole }
+            Button { text: I18n.tr("Remove source"); DialogButtonBox.buttonRole: DialogButtonBox.AcceptRole }
+            onAccepted: removeSourceDialog.accept()
+            onRejected: removeSourceDialog.reject()
+        }
+        contentItem: Text {
+            textFormat: Text.PlainText
+            text: I18n.tr("Installed applications are kept. Updates from this source will stop.")
+            color: page.colors.primaryText
+            wrapMode: Text.Wrap
+        }
+        onAccepted: sourceError.message = page.store.removeSource(sourceId)
     }
 
     function refresh() {
@@ -190,6 +372,7 @@ GridLayout {
                     page.colors.secondaryText.b, 0.15)
             }
             Text {
+                textFormat: Text.PlainText
                 objectName: "spatialServiceStatus"
                 visible: !page.available || page.checking || !!page.resources.busy
                 Layout.fillWidth: true
@@ -234,6 +417,7 @@ GridLayout {
                 }
             }
             Text {
+                textFormat: Text.PlainText
                 objectName: "spatialServiceError"
                 Layout.fillWidth: true
                 visible: page.errorText.length > 0
@@ -272,7 +456,7 @@ GridLayout {
         }
     }
 
-    // All five cards describe Flatpak state only. Native installations may coexist
+    // Catalog cards use the installed backend state. Native installations may coexist
     // and never change Install/Open/Uninstall availability.
     Repeater {
         id: appEntries
@@ -293,11 +477,11 @@ GridLayout {
             Layout.minimumWidth: 0
             Layout.alignment: Qt.AlignTop
             colors: page.colors
-            title: I18n.tr(app.name)
+            title: page.localText(app.nameLocales, I18n.tr(app.name))
             category: I18n.tr("App")
-            description: I18n.tr(app.description || "")
+            description: (app.updateAvailable ? I18n.tr("Update available") + " · " : "") + page.localText(app.descriptionLocales, I18n.tr(app.description || ""))
             iconName: app.iconName || "grid"
-            iconSource: Qt.resolvedUrl("icons/" + app.id + (app.id === "listenfree" ? ".png" : ".svg"))
+            iconSource: app.iconFile ? Qt.resolvedUrl("icons/" + app.iconFile) : ""
             iconInset: app.id === "calendar" ? 8 / 128 : app.id === "listenfree" ? 0 : 10 / 128
             actionObjectName: app.id + "Action"
             actionText: app.busy && app.stage !== "status" ? I18n.tr("Working…") : app.installed ? I18n.tr("Open") : I18n.tr("Install")
@@ -319,11 +503,9 @@ GridLayout {
                     + bottomPadding + footer.implicitHeight + spacing * 2
                 height: Math.min(implicitHeight, parent ? parent.height - 32 : implicitHeight)
                 modal: true
-                title: I18n.tr("%1: %2").arg(I18n.tr(appCard.app.name)).arg(I18n.tr("Details"))
+                title: I18n.tr("%1: %2").arg(appCard.title).arg(I18n.tr("Details"))
                 closePolicy: Popup.CloseOnEscape
-                // The status query never reports a candidate version, so the
-                // version line stays hidden until a release check runs. Ask
-                // GitHub once on open, when the row has nothing to show yet.
+                // Reuse background discovery; check GitHub if no candidate is cached.
                 onOpened: {
                     const target = appCard.app;
                     const canCheck = !appCard.blocked && target.backend !== "flatpak-unavailable"
@@ -406,6 +588,7 @@ GridLayout {
                                 Layout.minimumWidth: 0
                                 spacing: 3
                                 Text {
+                                    textFormat: Text.PlainText
                                     Layout.fillWidth: true
                                     text: appCard.title
                                     color: page.colors.primaryText
@@ -414,6 +597,7 @@ GridLayout {
                                     elide: Text.ElideRight
                                 }
                                 Text {
+                                    textFormat: Text.PlainText
                                     Layout.fillWidth: true
                                     text: appCard.description
                                     color: page.colors.secondaryText
@@ -442,6 +626,7 @@ GridLayout {
                                     else page.requestPlan(appCard.app, false);
                                 }
                                 contentItem: Text {
+                                    textFormat: Text.PlainText
                                     id: detailsActionLabel
                                     text: detailsAction.text
                                     color: appCard.actionAvailable ? "#0085ff" : page.colors.secondaryText
@@ -467,6 +652,7 @@ GridLayout {
 
                         // Status paragraph.
                         Text {
+                            textFormat: Text.PlainText
                             Layout.fillWidth: true
                             Layout.topMargin: 14
                             text: I18n.tr("STATUS")
@@ -476,16 +662,18 @@ GridLayout {
                             font.letterSpacing: 0.6
                         }
                         Text {
+                            textFormat: Text.PlainText
                             objectName: appCard.app.id + "Status"
                             Layout.fillWidth: true
                             Layout.topMargin: 5
-                            text: page.appEnvironmentError(appCard.app) || (appCard.app.busy ? page.appStage(appCard.app.stage) : !appCard.app.statusKnown ? I18n.tr("Checking installation status…") : appCard.app.backend === "flatpak-unavailable" ? (appCard.app.flatpak && appCard.app.flatpak.error ? appCard.app.flatpak.error : I18n.tr("Flatpak bundles are unavailable: no reviewed publisher key is included in this core version.")) : appCard.app.backend === "flatpak-ready" ? I18n.tr("Check GitHub for a signed Flatpak bundle before installing.") : appCard.app.backend === "flatpak" ? I18n.tr("Managed by Flatpak. Settings checks GitHub for bundle updates; external Flatpak tools can remove the same installation.") : appCard.app.installed && !appCard.app.managed ? I18n.tr("Installed outside Settings. Open is available; updates and removal stay with its installer.") : appCard.app.available === false ? I18n.tr("No stable release is available yet") : I18n.tr("Builds from source; development dependencies are required"))
+                            text: (appCard.app.catalogActive === false ? I18n.tr("This app is unavailable from its source. Installed copies are kept.") : appCard.app.format && appCard.app.format !== "flatpak" ? I18n.tr("This package format is not supported yet") : "") || page.appEnvironmentError(appCard.app) || (appCard.app.busy ? page.appStage(appCard.app.stage) : !appCard.app.statusKnown ? I18n.tr("Checking installation status…") : appCard.app.backend === "flatpak-unavailable" ? (appCard.app.flatpak && appCard.app.flatpak.error ? appCard.app.flatpak.error : I18n.tr("The application is unavailable in the current trusted catalog. Refresh app sources.")) : appCard.app.backend === "flatpak-ready" ? I18n.tr("Install a Flatpak bundle from the catalogued GitHub Release.") : appCard.app.backend === "flatpak" ? I18n.tr("Managed by Flatpak. Settings checks GitHub for bundle updates; external Flatpak tools can remove the same installation.") : appCard.app.installed && !appCard.app.managed ? I18n.tr("Installed outside Settings. Open is available; updates and removal stay with its installer.") : appCard.app.available === false ? I18n.tr("No stable release is available yet") : I18n.tr("Builds from source; development dependencies are required"))
                             color: page.colors.secondaryText
                             font.pixelSize: 12
                             lineHeight: 1.15
                             wrapMode: Text.Wrap
                         }
                         Text {
+                            textFormat: Text.PlainText
                             objectName: appCard.app.id + "Version"
                             Layout.fillWidth: true
                             Layout.topMargin: 6
@@ -496,8 +684,20 @@ GridLayout {
                             wrapMode: Text.Wrap
                         }
 
+                        Text {
+                            textFormat: Text.PlainText
+                            Layout.fillWidth: true
+                            Layout.topMargin: 4
+                            visible: !!appCard.app.lastChecked
+                            text: I18n.tr("Last checked: %1").arg(appCard.app.lastChecked || "")
+                            color: page.colors.secondaryText
+                            font.pixelSize: 11
+                            wrapMode: Text.Wrap
+                        }
+
                         // Flatpak provenance block.
                         Text {
+                            textFormat: Text.PlainText
                             Layout.fillWidth: true
                             Layout.topMargin: 12
                             visible: appCard.app.backend === "flatpak"
@@ -508,6 +708,7 @@ GridLayout {
                             font.letterSpacing: 0.6
                         }
                         Text {
+                            textFormat: Text.PlainText
                             Layout.fillWidth: true
                             Layout.topMargin: 5
                             visible: appCard.app.backend === "flatpak"
@@ -517,10 +718,11 @@ GridLayout {
                             wrapMode: Text.Wrap
                         }
                         Text {
+                            textFormat: Text.PlainText
                             Layout.fillWidth: true
                             Layout.topMargin: 4
                             visible: appCard.app.backend === "flatpak"
-                            text: appCard.app.bundleManaged ? I18n.tr("Verified standalone bundle; no hosted app source is required.") : I18n.tr("Publisher or local bundle origin could not be verified. Settings will not update this installation.")
+                            text: appCard.app.bundleManaged ? (appCard.app.developerSignature ? I18n.tr("Developer signature and SHA-256 verification") : I18n.tr("Trusted GitHub repository and SHA-256 verification")) : I18n.tr("This installation could not be associated with its application source. Settings will not update it.")
                             color: page.colors.secondaryText
                             font.pixelSize: 11
                             wrapMode: Text.Wrap
@@ -528,6 +730,7 @@ GridLayout {
 
                         // Update note.
                         Text {
+                            textFormat: Text.PlainText
                             Layout.fillWidth: true
                             Layout.topMargin: 12
                             visible: appCard.app.backend === "flatpak" && !!appCard.app.flatpakUpdate && !!appCard.app.flatpakUpdate.commit
@@ -538,12 +741,13 @@ GridLayout {
                             font.letterSpacing: 0.6
                         }
                         Text {
+                            textFormat: Text.PlainText
                             Layout.fillWidth: true
                             Layout.topMargin: 5
                             visible: appCard.app.backend === "flatpak" && !!appCard.app.flatpakUpdate && !!appCard.app.flatpakUpdate.commit
                             text: appCard.app.flatpakUpdate && appCard.app.flatpakUpdate.available
-                                ? I18n.tr("A signed bundle update is available. Use Update to download and deploy it.")
-                                : I18n.tr("The installed Flatpak commit matches the signed GitHub release.")
+                                ? I18n.tr("An update is available. Review and confirm to install it.")
+                                : I18n.tr("The installed version matches the GitHub release.")
                             color: page.colors.secondaryText
                             font.pixelSize: 11
                             wrapMode: Text.Wrap
@@ -556,6 +760,7 @@ GridLayout {
                             visible: !!appCard.app.busy
                             spacing: 6
                             Text {
+                                textFormat: Text.PlainText
                                 Layout.fillWidth: true
                                 text: I18n.tr("PROGRESS")
                                 color: page.colors.secondaryText
@@ -569,6 +774,7 @@ GridLayout {
                                 value: Math.max(0, Math.min(1, appCard.app.progress || 0))
                             }
                             Text {
+                                textFormat: Text.PlainText
                                 Layout.fillWidth: true
                                 text: I18n.tr("Elapsed: %1").arg(Math.floor((appCard.app.elapsedSeconds || 0) / 60) + ":" + ("0" + ((appCard.app.elapsedSeconds || 0) % 60)).slice(-2))
                                     + " · " + I18n.tr("Tasks continue in the background after closing this window.")
@@ -577,6 +783,7 @@ GridLayout {
                                 wrapMode: Text.Wrap
                             }
                             Text {
+                                textFormat: Text.PlainText
                                 Layout.fillWidth: true
                                 visible: !!appCard.app.transactionStatus
                                 text: I18n.tr(appCard.app.transactionStatus || "")
@@ -588,6 +795,7 @@ GridLayout {
 
                         // Error.
                         Text {
+                            textFormat: Text.PlainText
                             objectName: appCard.app.id + "Error"
                             Layout.fillWidth: true
                             Layout.topMargin: 14
@@ -600,6 +808,7 @@ GridLayout {
 
                         // Dependencies.
                         Text {
+                            textFormat: Text.PlainText
                             Layout.fillWidth: true
                             Layout.topMargin: 14
                             visible: (appCard.app.dependencies || []).length > 0
@@ -612,6 +821,7 @@ GridLayout {
                         Repeater {
                             model: appCard.app.dependencies || []
                             delegate: Text {
+                                textFormat: Text.PlainText
                                 required property var modelData
                                 Layout.fillWidth: true
                                 Layout.topMargin: 4
@@ -744,6 +954,7 @@ GridLayout {
             page.store.cleanupProgram(appId, action);
         }
         contentItem: Text {
+            textFormat: Text.PlainText
             text: programActionDialog.detail
             color: page.colors.primaryText
             wrapMode: Text.WrapAnywhere
@@ -786,6 +997,7 @@ GridLayout {
         header: Item {
             implicitHeight: 48
             Text {
+                textFormat: Text.PlainText
                 anchors { left: parent.left; right: parent.right; top: parent.top; leftMargin: 24; rightMargin: 24; topMargin: 22 }
                 text: planDialog.title
                 color: page.colors.primaryText
@@ -811,8 +1023,7 @@ GridLayout {
                     Image {
                         Layout.preferredWidth: 44
                         Layout.preferredHeight: 44
-                        source: page.planAppId ? Qt.resolvedUrl("icons/" + page.planAppId
-                            + (page.planAppId === "listenfree" ? ".png" : ".svg")) : ""
+                        source: planDialog.app.iconFile ? Qt.resolvedUrl("icons/" + planDialog.app.iconFile) : ""
                         sourceSize: Qt.size(88, 88)
                         fillMode: Image.PreserveAspectFit
                         smooth: true
@@ -821,6 +1032,7 @@ GridLayout {
                         Layout.fillWidth: true
                         spacing: 4
                         Text {
+                            textFormat: Text.PlainText
                             Layout.fillWidth: true
                             text: I18n.tr(planDialog.app.name || page.planAppId)
                             color: page.colors.primaryText
@@ -829,6 +1041,7 @@ GridLayout {
                             wrapMode: Text.Wrap
                         }
                         Text {
+                            textFormat: Text.PlainText
                             Layout.fillWidth: true
                             text: I18n.tr("Version %1").arg(planDialog.plan.version || I18n.tr("Unknown version"))
                             color: page.colors.secondaryText
@@ -852,6 +1065,7 @@ GridLayout {
                             Layout.fillWidth: true
                             spacing: 12
                             Text {
+                                textFormat: Text.PlainText
                                 Layout.fillWidth: true
                                 text: modelData.role === "application" ? I18n.tr("App download")
                                     : modelData.role === "runtime" ? I18n.tr("Shared app components") : I18n.tr("Additional app components")
@@ -860,6 +1074,7 @@ GridLayout {
                                 wrapMode: Text.Wrap
                             }
                             Text {
+                                textFormat: Text.PlainText
                                 Layout.maximumWidth: planContent.width * 0.5
                                 text: modelData.action === "reuse" ? I18n.tr("Already installed")
                                     : modelData.sizeKnown === false ? I18n.tr("Unknown") : page.formatBytes(modelData.downloadBytes)
@@ -881,12 +1096,14 @@ GridLayout {
                         anchors.margins: 12
                         spacing: 12
                         Text {
+                            textFormat: Text.PlainText
                             Layout.fillWidth: true
                             text: I18n.tr("Total download")
                             color: page.colors.primaryText
                             font.pixelSize: 12
                         }
                         Text {
+                            textFormat: Text.PlainText
                             text: page.formatBytes(page.planDownloadBytes(planDialog.plan))
                             color: page.colors.primaryText
                             font.pixelSize: 15
@@ -895,6 +1112,7 @@ GridLayout {
                     }
                 }
                 Text {
+                    textFormat: Text.PlainText
                     Layout.fillWidth: true
                     text: I18n.tr("Installed components are reused. Only missing components are downloaded.")
                     color: page.colors.secondaryText
@@ -950,6 +1168,7 @@ GridLayout {
         modal: true
         title: I18n.tr("Uninstall %1?").arg(appName)
         header: Text {
+            textFormat: Text.PlainText
             text: appUninstallDialog.title
             color: page.colors.primaryText
             font.pixelSize: 16
@@ -966,6 +1185,7 @@ GridLayout {
         standardButtons: Dialog.Ok | Dialog.Cancel
         onAccepted: if (page.store) page.store.uninstall(appId)
         contentItem: Text {
+            textFormat: Text.PlainText
             text: I18n.tr("Only the Flatpak version will be uninstalled. Your personal data, preferences and any native version will be kept.")
             color: page.colors.primaryText
             wrapMode: Text.Wrap
@@ -1035,6 +1255,8 @@ GridLayout {
     }
     function appError(code) {
         switch (code) {
+        case "CATALOG_CHANGED": return I18n.tr("The app source changed. Refresh and prepare a new installation plan.");
+        case "RECEIPT_WRITE_FAILED": return I18n.tr("The app was deployed but its source record could not be saved. Check the log before retrying.");
         case "RELEASE_UNAVAILABLE": case "NO_RELEASE": return I18n.tr("No stable release is available yet");
         case "NETWORK_ERROR": case "TLS_ERROR": case "DOWNLOAD_FAILED": return I18n.tr("Network request failed. Check your connection and try again.");
         case "RATE_LIMITED": case "RATE_LIMIT": return I18n.tr("GitHub request limit reached. Try again later.");
@@ -1042,13 +1264,13 @@ GridLayout {
         case "OPERATION_TIMEOUT": case "DOWNLOAD_TIMEOUT": case "NETWORK_TIMEOUT": case "TIMED_OUT": return I18n.tr("The operation timed out and was stopped. View the log before trying again.");
         case "CANCELLED": return I18n.tr("Operation cancelled");
         case "OPEN_FAILED": return I18n.tr("The app could not be opened. Check the installation and try again.");
-        case "BUNDLE_KEY_MISSING": return I18n.tr("Flatpak bundles are unavailable: no reviewed publisher key is included in this core version.");
+        case "BUNDLE_KEY_MISSING": return I18n.tr("The application is unavailable in the current trusted catalog. Refresh app sources.");
         case "ARCH_UNAVAILABLE": return I18n.tr("No Flatpak bundle has been published for this architecture.");
         case "VERSION_CONFLICT": return I18n.tr("The signed release would downgrade or replace an existing version. Deployment was refused.");
         case "BUNDLE_METADATA_MISMATCH": return I18n.tr("The app package metadata does not match its signed release information. Installation stopped. Please wait for a corrected release.");
         case "BUNDLE_INSTALLED_SIZE_MISMATCH": return I18n.tr("The app package size does not match its signed release information. Installation stopped. Please wait for a corrected release.");
         case "INVALID_RELEASE": case "INTEGRITY_FAILED": case "UNTRUSTED_URL": case "RESPONSE_TOO_LARGE": return I18n.tr("The release metadata or bundle failed validation. Nothing was deployed.");
-        case "FLATPAK_UNAVAILABLE": return I18n.tr("No approved signed bundle is available. Check publisher trust and installation conflicts, then check for updates.");
+        case "FLATPAK_UNAVAILABLE": return I18n.tr("No eligible release is available. Refresh app sources and check the installation status.");
         case "PLAN_REQUIRED": return I18n.tr("Review and confirm the Flatpak dependency plan before downloading.");
         case "RUNTIME_SOURCE_MISSING": return I18n.tr("Could not prepare the components needed for installation. Please try installing again.");
         case "RUNTIME_SETUP_FAILED": return I18n.tr("Could not prepare the components needed for installation. Please try installing again.");

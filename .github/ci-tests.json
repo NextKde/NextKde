@@ -66,6 +66,8 @@
     "kos-settings.native-genie-upgrade",
     "kos-settings.backend-modules",
     "kos-settings.independent-apps",
+    "kos-settings.app-catalog",
+    "kos-settings.app-updates",
     "kos-settings.flatpak-release",
     "kos-settings.flatpak-compatibility",
     "kos-settings.flatpak-process",

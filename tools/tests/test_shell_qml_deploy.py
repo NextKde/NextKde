@@ -117,6 +117,7 @@ class ShellDeployment(unittest.TestCase):
         build = self.root / 'build'
         for name in ('platform/kos-platform', 'bin/kos-data-service', 'apps/settings/kos-settings',
                      'apps/settings/kos-apps', 'apps/settings/kos-flatpak-worker',
+                     'apps/settings/kos-app-update-agent',
                      'apps/settings/gtk-module/libkos-gtk-window-controls.so'):
             path = build / name
             path.parent.mkdir(parents=True, exist_ok=True)

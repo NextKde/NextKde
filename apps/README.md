@@ -44,10 +44,12 @@ The default selection is Calendar (including tasks), Calculator and Weather;
 ListenFree requires explicit selection. `--app todo` aliases Calendar.
 `--update` and `--uninstall` are aliases for the matching lifecycle actions.
 Mutations require terminal confirmation or `--yes`. The default backend is the
-shared `kos-apps` user-Flatpak backend using signed GitHub Release bundles; it
-never adds online sources and needs no hosted NextKde app repository. The
-local publisher key is configured, but runtime policy remains empty and no signed
-Release exists; installation/update remains unavailable without a source fallback.
+shared `kos-apps` user-Flatpak backend using GitHub Release bundles. Signed catalogs
+from [appCatalog](https://github.com/NextKde/appCatalog) supply application entries;
+SHA-256 is required, developer signatures are optional unless pinned by the entry.
+Explicit Install/Update can prepare the approved Flathub runtime source for missing
+dependencies. Catalogs do not authorize arbitrary runtime sources, and no application
+needs a Flathub listing. Availability depends on its real compatible Release.
 Use `--backend=source` for legacy/developer source installation explicitly;
 `--app APP --version X.Y.Z` and build-dependency `check` are source-only.
 `--with-listenfree-video` is rejected: use the independent ListenFree build guide
@@ -56,8 +58,7 @@ for custom video features, rather than overriding a stable Release manifest.
 Flatpak owns its installation records; external Flatpak tools can remove the same
 ref. Settings/CLI discovers signed GitHub bundle updates, not Discover or
 `flatpak update` for URL-less app origins. Libflatpak may create a local origin/key
-record even if a transaction is later refused. Runtime distribution still requires
-separately approved existing sources. No production signed bundle is published yet.
+record even if a transaction is later refused. Runtime distribution uses the separately pinned runtime source.
 Status and uninstall of an unambiguous user Flatpak work without publisher approval;
 normal uninstall preserves data. No automatic legacy migration occurs.
 
@@ -65,6 +66,8 @@ The explicit source backend downloads stable **source** Releases from the fixed
 NextKde repositories and builds locally. Its private ownership records are not
 Discover packages. Neither backend falls back to this checkout or a development
 branch. A batch stops at the first failure, retaining completed operations.
+For submissions, third-party sources, updates and Qt runtime packaging, see the
+[signed catalog guide](../docs/app-store/SignedCatalog.md).
 See the [lifecycle and trust contract](../docs/app-store/IndependentApps.md).
 
 Core `services/data-service` remains a Shell dependency, including shared weather

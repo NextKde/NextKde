@@ -1,0 +1,5 @@
+find_package(Qt6 6.5 REQUIRED COMPONENTS Core Network)
+add_library(kos-app-catalog STATIC AppCatalog.cpp AppCatalog.h CatalogTrust.h)
+qt_add_resources(kos-app-catalog catalog PREFIX "/kos/catalog" FILES bootstrap.json)
+target_include_directories(kos-app-catalog PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
+target_link_libraries(kos-app-catalog PUBLIC Qt6::Core PRIVATE Qt6::Network)

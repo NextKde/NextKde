@@ -1,5 +1,7 @@
 # Independent NextKde applications
 
+The current signed catalog, third-party sources and background updater are described in [signed catalogs](SignedCatalog.md). The lifecycle boundaries and historical release/acceptance records below remain available for context.
+
 **Installation boundary:** Native and Flatpak versions may coexist. Settings uses
 only current Flatpak inventory for Install/Open/Uninstall; native executables,
 desktop entries and source ownership never block discovery, planning or deployment.
@@ -29,8 +31,7 @@ purge handles verified old Calendar/Todo artifacts.
 
 The last column lists executable commands. New native and Flatpak desktop files
 for the first three apps use their application ID, e.g. `org.nextks.calendar.desktop`.
-Old desktop identities are not launch fallbacks; ListenFree native naming is unchanged. No repository URL, executable name, shell command or installation root is
-accepted from a store entry.
+Old desktop identities are not launch fallbacks; ListenFree native naming is unchanged. Signed entries supply a GitHub owner/repository; executable names, shell commands, arbitrary download URLs and installation roots are not accepted.
 
 The first three apps use one VERSION/commit/Release but separate packages, source
 manifests and `-DKOS_APPS=<app>` builds. Old `org.nextkde.Calendar`,
@@ -79,16 +80,16 @@ seconds, and normal user uninstall is offline, retains data and leaves runtimes.
 System or ambiguous installations require explicit resolution outside Settings.
 
 `<appId>.flatpak-release.json` (ListenFree: `flatpak-release.json`) is separate
-from the source manifest. Each app has a unique attachment in the shared Release. Schema 1 names
+from the source manifest. Each app has a unique attachment in the shared Release. Schema 2 names
 an exact app ID, stable numeric `X.Y.Z`, immutable source revision and architecture
-map. Each bundle pins `ref`, OSTree `commit`, asset filename, byte `size` and
-`sha256`. A detached signature named by appending `.sig` signs the original bytes; the
-bundle's OSTree commit must also be signed. Reviewed binary public keys and full
-primary fingerprints ship in core's `FlatpakTrustPolicy.h`, never from the same
-Release or from the bundle. The dedicated development publisher key is now embedded
-for all four app IDs, fingerprint `3751DC833ED4BC7E797A9766ADF7411B531A56B4`;
-no signed production bundle has been published. The key was generated locally
-but is not a CI secret or published trust release. The runtime-only policy now
+map. Bundles pin `ref`, OSTree `commit`, asset filename, byte `size`, `sha256`, exact
+metadata and its digest, installed size, runtime and required extensions. Developer
+signatures are optional unless the signed catalog entry specifies `publisher`; then
+the original manifest bytes and the bundle's OSTree commit must both verify.
+Publisher keys now belong to signed catalog entries, not a fixed application array
+in core. The five seed entries retain the existing primary fingerprint
+`3751DC833ED4BC7E797A9766ADF7411B531A56B4`; do not infer package availability from a seed.
+The runtime-only policy now
 accepts `https://dl.flathub.org/repo/` with primary fingerprint
 `6E5C05D979C76DAF93C081354184DD4D907A7CAE`, reviewed on 2026-11-05 against the
 [official setup documentation](https://docs.flathub.org/docs/for-users/installation)
@@ -99,7 +100,7 @@ request automatically prepares the pinned runtime source only if dependencies ar
 missing. No configuration dialog or terminal step is required. Inventory and
 standalone update discovery do not change sources. Runtime acceptance remains pending.
 
-Explicit update checks contact only the fixed repository's latest stable GitHub
+Explicit update checks contact only the catalog-authorized repository's latest stable GitHub
 Release, validate unique attachments, signatures, tag/version and native stable
 ref. Metadata is bounded to 256 KiB, signatures to 64 KiB and bundles to 2 GiB.
 Downloads permit only fixed GitHub HTTPS endpoints and attachment CDNs, at most
@@ -114,10 +115,10 @@ in memory, and revalidated against the signed manifest before deployment.
 Discovery is bound to the actual installation snapshot. Signed versions below the
 installed AppStream version, invalid version baselines, and same-version/different
 commit replacements are refused. Without a previous installation there is no
-claim of complete old-signature replay prevention. Existing apps must have a
-verified publisher-signed commit and a URL-less, verifying local bundle origin;
+claim of complete old-signature replay prevention. Existing apps require either the configured publisher signature or a matching
+client installation receipt for an entry without a publisher, plus a URL-less bundle origin;
 Settings never adopts a third-party online-origin installation for bundle updates.
-New installs refuse legacy executable/desktop/ownership conflicts. Duplicate,
+Native executable/desktop/ownership records do not block new Flatpak installs. Duplicate,
 system, other-branch/architecture and concurrent changes are not silently resolved.
 
 Before downloading a bundle, the backend checks signed-bundle transaction cleanup

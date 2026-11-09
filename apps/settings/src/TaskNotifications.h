@@ -8,6 +8,14 @@
 class TaskNotifications final : public QObject {
     Q_OBJECT
 public:
-    using QObject::QObject;
+    explicit TaskNotifications(QObject* parent = nullptr);
+    void sendUpdates(int count);
+signals:
+    void updatesDelivered();
+private slots:
+    void notificationAction(uint id, const QString& action);
+public:
     Q_INVOKABLE void send(const QString& summary, const QString& body);
+private:
+    uint m_updateNotification = 0;
 };

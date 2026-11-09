@@ -54,7 +54,7 @@ cd NextKde
 ### 可选应用与后续设置
 
 独立应用另装：`./tools/kosctl install apps` 默认使用用户级 Flatpak 后端，选择日历（含待办）、计算器、天气。
-采用 GitHub Release 签名 Flatpak 单文件包，无需自建应用源。签名发行尚未上线，新安装暂不可用；历史源码构建需显式 `--backend=source`。
+应用包来自 GitHub Releases；目录改造支持签名可更新列表、第三方来源和自动更新提示，包 SHA-256 必须校验，开发者签名可选。实际可用性取决于兼容客户端和应用正式 Release。见[应用目录架构](docs/app-store/SignedCatalog.zh-CN.md)与[上架、Qt runtime 打包指南](https://github.com/NextKde/appCatalog/blob/main/README.zh-CN.md)。历史源码构建需显式 `--backend=source`。
 ListenFree 需显式 `./tools/kosctl install apps --with-listenfree`。
 核心 Settings 属于核心安装。锁屏可选；安装、桌面接管、更新、备份/回退、卸载及各发行版依赖统一见安装指南。
 

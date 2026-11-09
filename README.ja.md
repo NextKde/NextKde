@@ -181,3 +181,7 @@ GitHub のコントリビューションから [contrib.rocks](https://contrib.r
 
 プロジェクトのライセンスは [LICENSE](LICENSE) を参照してください。
 同梱の Glass エフェクトには独自の[ライセンス](kwin/glass-effect/LICENSE)があります。
+
+## アプリケーションとサービス
+
+署名付きカタログ、サードパーティの配布元、更新通知の設計は[カタログガイド](docs/app-store/SignedCatalog.md)を参照してください。アプリは GitHub Releases で配布し、SHA-256 を検証します。開発者署名は任意です。[投稿と Qt runtime の手順](https://github.com/NextKde/appCatalog)も用意しています。利用には対応クライアントと公開済みアプリが必要です。

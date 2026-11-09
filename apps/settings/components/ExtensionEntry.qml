@@ -90,6 +90,7 @@ Item {
                 contentItem: ColumnLayout {
                     spacing: 2
                     Text {
+                        textFormat: Text.PlainText
                         Layout.fillWidth: true
                         text: entry.title
                         color: entry.colors.primaryText
@@ -98,6 +99,7 @@ Item {
                         elide: Text.ElideRight
                     }
                     Text {
+                        textFormat: Text.PlainText
                         Layout.fillWidth: true
                         text: entry.description
                         color: entry.colors.secondaryText
@@ -120,6 +122,7 @@ Item {
                 Accessible.name: entry.title + ": " + text
                 onClicked: entry.activated()
                 contentItem: Text {
+                    textFormat: Text.PlainText
                     id: actionLabel
                     text: action.text
                     color: entry.actionAvailable ? "#0085ff" : entry.colors.secondaryText

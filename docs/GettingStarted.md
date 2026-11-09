@@ -184,7 +184,7 @@ Shallow source selection avoids historical process assets; an existing full clon
 Calendar, Calculator and Weather share the independent `NextKde/kos-apps`
 repository/version/Release with separate `org.nextks.<app>` packages and
 `apps/org.nextks.<app>` source directories. ListenFree stays independent. The
-source is published, but signed new-ID packages are not yet released. Old Flatpak
+source is published; check the application Release for compatible package availability. Old Flatpak
 IDs are reported as conflicts, never automatically renamed, removed or migrated.
 
 ```sh
@@ -197,14 +197,20 @@ IDs are reported as conflicts, never automatically renamed, removed or migrated.
 The dispatcher defaults to `kos-apps`, the same user-Flatpak backend as Settings.
 Default selection is Calendar (including tasks), Calculator and Weather; ListenFree
 requires explicit selection. Mutations require terminal confirmation or `--yes`.
-The route uses signed GitHub Release bundles, with no hosted NextKde app source.
-The local core publisher policy now includes the dedicated release public key,
-but runtime trust approval and signed Releases are still pending, so new
-installations/updates remain unavailable. No online software source is added and no
-source-build fallback occurs. Status and uninstall support an unambiguous user
-Flatpak; normal uninstall preserves app data. Settings discovers GitHub bundle
-updates; Discover is not promised to discover them. Runtime sources are separately
-configured/approved. Libflatpak may create a local URL-less bundle origin record.
+The route uses GitHub Release bundles listed in a signed application catalog.
+SHA-256 is required; developer signatures are optional unless specified by the
+catalog entry. Explicit Install/Update may prepare the approved Flathub runtime
+source for missing dependencies. Applications themselves stay on GitHub Releases;
+no Flathub app listing or hosted NextKde Flatpak repository is required.
+Installation still requires a real compatible stable Release. There is no silent
+source-build fallback. Normal uninstall preserves app data. Libflatpak may create
+a URL-less bundle origin, and a prepared runtime source can remain after cancellation.
+
+Settings → Applications and services manages third-party catalog sources, manual
+checks, automatic checks and notifications. The background agent checks metadata;
+it does not install updates automatically. Discover is not promised to detect these
+GitHub bundle updates. See [catalog and update behavior](app-store/SignedCatalog.md)
+and [submission / Qt runtime instructions](https://github.com/NextKde/appCatalog).
 
 Explicit `--backend=source` retains legacy/developer source Releases and local
 builds; these are not Discover-managed packages. Build dependencies and custom

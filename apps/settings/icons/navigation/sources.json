@@ -14,12 +14,12 @@
     "Launcher": "spotlight",
     "Shortcuts": "keyboard",
     "Integration status": "network",
-    "Extensions and services": "general",
+    "Applications and services": "general",
     "Glass debugging": "appearance",
     "Stage scheduling": "desktop-dock",
     "KDE System Settings": "system-settings"
   },
-  "mapping_note": "KOS-specific pages use the closest macOS category: windows and Stage Manager belong to Desktop & Dock; glass uses Appearance; launcher uses Spotlight; integration uses Network; extensions uses General. These are semantic counterparts, not claims of identical macOS pages.",
+  "mapping_note": "KOS-specific pages use the closest macOS category: windows and Stage Manager belong to Desktop & Dock; glass uses Appearance; launcher uses Spotlight; integration uses Network; applications and services uses General. These are semantic counterparts, not claims of identical macOS pages.",
   "assets": [
     {
       "file": "appearance.png",

@@ -13,6 +13,7 @@
 #include <QDateTime>
 #include <QUuid>
 #include <QSet>
+#include <QLockFile>
 #include <QStorageInfo>
 #include <sys/stat.h>
 #include <limits>
@@ -306,14 +307,24 @@ bool approvedBundleInstallation(FlatpakInstallation* installation, FlatpakInstal
 {
     const auto appId = QString::fromUtf8(flatpak_ref_get_name(FLATPAK_REF(installed)));
     const auto keys = FlatpakRelease::publicKeys(appId);
-    if (keys.isEmpty() || QString::fromUtf8(flatpak_ref_get_branch(FLATPAK_REF(installed))) != "stable"
+    if (QString::fromUtf8(flatpak_ref_get_branch(FLATPAK_REF(installed))) != "stable"
         || QString::fromUtf8(flatpak_ref_get_arch(FLATPAK_REF(installed))) != QString::fromUtf8(flatpak_get_default_arch())) return false;
     auto* remote = flatpak_installation_get_remote_by_name(installation, flatpak_installed_ref_get_origin(installed), cancellation, nullptr);
     if (!remote) return false;
     auto* url = flatpak_remote_get_url(remote);
-    const bool local = (!url || !*url) && flatpak_remote_get_gpg_verify(remote);
+    const bool local = (!url || !*url) && (keys.isEmpty() || flatpak_remote_get_gpg_verify(remote));
     g_free(url); g_object_unref(remote);
     if (!local) return false;
+    if (keys.isEmpty()) {
+        const auto record = AppCatalog::receipt(appId);
+        const auto entry = AppCatalog::find(appId);
+        return record.value("sourceId") == entry.value("sourceId")
+            && record.value("repository") == entry.value("repository")
+            && record.value("commit").toString() == QString::fromUtf8(flatpak_ref_get_commit(FLATPAK_REF(installed)))
+            && record.value("arch").toString() == QString::fromUtf8(flatpak_ref_get_arch(FLATPAK_REF(installed)))
+            && record.value("origin").toString() == QString::fromUtf8(flatpak_installed_ref_get_origin(installed))
+            && record.value("sha256").toString().size() == 64;
+    }
     const auto cache = qEnvironmentVariable("XDG_CACHE_HOME", QDir::homePath() + "/.cache") + "/kos-settings/flatpak";
     if (!QDir::isAbsolutePath(cache) || !QDir().mkpath(cache)) return false;
     QTemporaryDir temporary(cache + "/installed-XXXXXX");
@@ -415,7 +426,8 @@ struct DeploymentGuard {
 
     bool ready(FlatpakTransaction* transaction)
     {
-        if (!localUnchanged() || !FlatpakRelease::configured(appId)) {
+        if (!localUnchanged() || !FlatpakRelease::configured(appId)
+            || authorizedPlan.value("catalogEntryDigest").toString() != AppCatalog::entryDigest(AppCatalog::find(appId))) {
             refusal = "The installation or publisher trust changed. Refresh before retrying.";
             return false;
         }
@@ -446,7 +458,7 @@ struct DeploymentGuard {
                 targetSeen = true;
                 auto* source = flatpak_installation_get_remote_by_name(installation, remote.toUtf8().constData(), cancellation, nullptr);
                 auto* url = source ? flatpak_remote_get_url(source) : nullptr;
-                valid &= type == expectedType && source && (!url || !*url) && flatpak_remote_get_gpg_verify(source)
+                valid &= type == expectedType && source && (!url || !*url) && (FlatpakRelease::publicKeys(appId).isEmpty() || flatpak_remote_get_gpg_verify(source))
                     && (installing || remote == origin) && expectedCommit == commit
                     && QString::fromUtf8(flatpak_transaction_operation_get_commit(operation)) == commit;
                 g_free(url);
@@ -524,7 +536,7 @@ struct FlatpakApps::Cancellation {
 QVariantMap FlatpakApps::executeRemoval(const QVariantMap& request, const std::shared_ptr<Cancellation>& cancellation)
 {
     const auto appId = request.value("appId").toString();
-    const auto* app = IndependentAppRegistry::find(appId);
+    const auto app = IndependentAppRegistry::find(appId);
     if (!app || request.value("action").toString() != "uninstall") return {{"code", "RESULT_UNKNOWN"}};
     const auto selectedId = appId;
     const auto selected = request.value("selected").toMap();
@@ -596,6 +608,23 @@ QVariantMap FlatpakApps::executeRemoval(const QVariantMap& request, const std::s
     } else if (!installed || (!transaction && result.isEmpty())) {
         result["code"] = "RESULT_UNKNOWN";
     }
+    // Drop ownership only after a successful removal and a fresh inventory.
+    // Keep the receipt on any ambiguous result so withdrawn apps remain manageable.
+    if (result.isEmpty() && transaction) {
+        auto* refs = flatpak_installation_list_installed_refs_by_kind(installation,
+            FLATPAK_REF_KIND_APP, cancellation->value, &error);
+        bool absent = refs != nullptr;
+        if (refs) {
+            for (guint i = 0; i < refs->len; ++i)
+                absent &= appId != QString::fromUtf8(flatpak_ref_get_name(FLATPAK_REF(g_ptr_array_index(refs, i))));
+            g_ptr_array_unref(refs);
+        }
+        if (!absent || !AppCatalog::forgetInstallation(appId)) {
+            result["code"] = "RESULT_UNKNOWN";
+            if (error) result["message"] = QString::fromUtf8(error->message);
+        }
+        g_clear_error(&error);
+    }
     if (transaction) g_object_unref(transaction);
     if (installed) g_object_unref(installed);
     if (installation) g_object_unref(installation);
@@ -613,6 +642,7 @@ QVariantMap FlatpakApps::executeDeployment(const QVariantMap& request, const std
     if (authorizedPlan.value("appId").toString() != appId
         || authorizedPlan.value("operation").toString() != request.value("action").toString()
         || authorizedPlan.value("selected") != selected
+        || authorizedPlan.value("catalogEntryDigest") != discovery.value("catalogEntryDigest")
         || authorizedPlan.value("bundleDigest") != discovery.value("sha256")
         || authorizedPlan.value("metadataSha256") != discovery.value("metadataSha256")
         || authorizedPlan.value("bundleCommit") != discovery.value("commit"))
@@ -622,6 +652,9 @@ QVariantMap FlatpakApps::executeDeployment(const QVariantMap& request, const std
     result = FlatpakRelease::validateDownloaded(appId, discovery, path,
         [cancellation] { return bool(g_cancellable_is_cancelled(cancellation->value)); });
     if (!result.isEmpty()) return result;
+    const auto catalogEntry = AppCatalog::find(appId);
+    if (AppCatalog::entryDigest(catalogEntry) != discovery.value("catalogEntryDigest").toString())
+        return {{"code", "CATALOG_CHANGED"}};
     const auto target = discovery.value("commit").toString();
     bool valid = false;
     const int order = installing ? 1 : FlatpakRelease::compareVersions(discovery.value("version").toString(), selected.value("version").toString(), &valid);
@@ -687,10 +720,10 @@ QVariantMap FlatpakApps::executeDeployment(const QVariantMap& request, const std
                 return selected;
             }), &guard);
             const auto bytes = FlatpakRelease::publicKeys(appId);
-            auto* keys = g_bytes_new(bytes.constData(), bytes.size());
-            const bool added = dependenciesAdded && !bytes.isEmpty() && flatpak_transaction_add_install_bundle(transaction, file, keys, &error);
-            g_bytes_unref(keys);
-            { std::lock_guard lock(cancellation->mutex); cancellation->status = "Resolving and deploying signed Flatpak bundle"; cancellation->progress = -1; }
+            auto* keys = bytes.isEmpty() ? nullptr : g_bytes_new(bytes.constData(), bytes.size());
+            const bool added = dependenciesAdded && flatpak_transaction_add_install_bundle(transaction, file, keys, &error);
+            if (keys) g_bytes_unref(keys);
+            { std::lock_guard lock(cancellation->mutex); cancellation->status = "Resolving and deploying Flatpak bundle"; cancellation->progress = -1; }
             if (!added || !flatpak_transaction_run(transaction, cancellation->value, &error)) result["code"] = "FLATPAK_FAILED";
         }
     } else if (result.isEmpty() && !error) result["code"] = "RESULT_UNKNOWN";
@@ -702,6 +735,20 @@ QVariantMap FlatpakApps::executeDeployment(const QVariantMap& request, const std
     if (!guard.refusal.isEmpty()) {
         result["code"] = "FLATPAK_UNTRUSTED";
         result["message"] = guard.refusal;
+    }
+    if (result.isEmpty() && installation) {
+        auto* deployed = flatpak_installation_get_installed_ref(installation, FLATPAK_REF_KIND_APP,
+            appId.toUtf8().constData(), selected.value("arch").toString().toUtf8().constData(), "stable", nullptr, nullptr);
+        if (!deployed || QString::fromUtf8(flatpak_ref_get_commit(FLATPAK_REF(deployed))) != target) {
+            result["code"] = "RESULT_UNKNOWN";
+        } else {
+            const auto entry = catalogEntry;
+            if (!AppCatalog::recordInstallation(appId, {{"entry", entry}, {"sourceId", entry.value("sourceId")},
+                {"repository", entry.value("repository")}, {"commit", target}, {"sha256", discovery.value("sha256")},
+                {"arch", selected.value("arch")}, {"origin", QString::fromUtf8(flatpak_installed_ref_get_origin(deployed))}}))
+                result["code"] = "RECEIPT_WRITE_FAILED";
+        }
+        if (deployed) g_object_unref(deployed);
     }
     if (transaction) g_object_unref(transaction);
     if (installation) g_object_unref(installation);
@@ -726,7 +773,13 @@ int FlatpakTransactionProcess::helperMain()
     if (bytes.size() > 65536 || error.error != QJsonParseError::NoError || !document.isObject()) return 2;
     const auto request = document.object().toVariantMap();
     const auto action = request.value("action").toString();
-    const auto* app = IndependentAppRegistry::find(request.value("appId").toString());
+    QDir().mkpath(AppCatalog::stateDirectory());
+    QLockFile mutationLock(AppCatalog::stateDirectory() + "/flatpak-mutation.lock");
+    if (!mutationLock.tryLock(0)) {
+        const auto bytes = QJsonDocument(QJsonObject{{"type", "result"}, {"result", QJsonObject{{"code", "BUSY"}}}}).toJson(QJsonDocument::Compact);
+        std::puts(bytes.constData()); return 0;
+    }
+    const auto app = IndependentAppRegistry::find(request.value("appId").toString());
     if (!app || !QStringList{"install", "update", "uninstall"}.contains(action)) return 2;
     const auto cancellation = std::make_shared<FlatpakApps::Cancellation>();
     QTimer timer;
@@ -921,7 +974,7 @@ QVariantMap FlatpakApps::state(const QString& appId) const
     const bool installed = installations.size() == 1
         && update.value("installation").toMap() == installations.first().toMap();
     if (!m_inventory.error.isEmpty() || (!candidate && !installed)) update.clear();
-    const bool known = m_inventory.error.isEmpty() && !m_inventory.apps.isEmpty();
+    const bool known = m_inventory.error.isEmpty() && !querying();
     const bool canDiscover = known && FlatpakRelease::configured(appId)
         && (installations.isEmpty()
             || (installations.size() == 1 && installations.first().toMap().value("bundleManaged").toBool()));
@@ -969,6 +1022,9 @@ bool FlatpakApps::setupRuntimeSource(const QString& appId)
     if (!beginOperation(appId, "setup-runtime-source", 30000)) return false;
     const auto cancellation = m_transactionCancellation;
     m_transaction.setFuture(QtConcurrent::run([cancellation]() -> QVariantMap {
+        QDir().mkpath(AppCatalog::stateDirectory());
+        QLockFile mutationLock(AppCatalog::stateDirectory() + "/flatpak-mutation.lock");
+        if (!mutationLock.tryLock(0)) return {{"code", "BUSY"}};
         GError* error = nullptr;
         auto* installation = flatpak_installation_new_user(cancellation->value, &error);
         if (!installation) {
@@ -1087,6 +1143,7 @@ QVariantMap FlatpakApps::makePlan(const QString& appId, bool installing, QVarian
     const auto operationDigest = QString::fromLatin1(QCryptographicHash::hash(operationJson, QCryptographicHash::Sha256).toHex());
     const auto installedSize = discovery.value("installedSize");
     return {{"operation", installing ? "install" : "update"}, {"appId", appId},
+        {"catalogEntryDigest", discovery.value("catalogEntryDigest")},
         {"version", discovery.value("version")}, {"revision", discovery.value("revision")},
         {"arch", discovery.value("arch")}, {"branch", discovery.value("branch")},
         {"bundleRef", discovery.value("ref")}, {"bundleCommit", discovery.value("commit")},
@@ -1106,7 +1163,8 @@ bool FlatpakApps::confirmPlan(const QString& appId, const QVariantMap& plan)
     const auto expiry = QDateTime::fromString(plan.value("expiresAt").toString(), Qt::ISODateWithMs);
     if (!expiry.isValid() || expiry <= QDateTime::currentDateTimeUtc()) return false;
     const auto fresh = makePlan(appId, plan.value("operation").toString() == "install");
-    if (fresh.isEmpty() || fresh.value("bundleDigest") != plan.value("bundleDigest")
+    if (fresh.isEmpty() || fresh.value("catalogEntryDigest") != plan.value("catalogEntryDigest")
+        || fresh.value("bundleDigest") != plan.value("bundleDigest")
         || fresh.value("metadataSha256") != plan.value("metadataSha256")
         || fresh.value("inventorySnapshot") != plan.value("inventorySnapshot")
         || fresh.value("operationSetDigest") != plan.value("operationSetDigest")
@@ -1200,8 +1258,8 @@ void FlatpakApps::refresh()
     m_watcher.setFuture(QtConcurrent::run([cancellation] {
         Inventory result;
         QStringList ids;
-        for (const auto& app : IndependentAppRegistry::apps) {
-            ids.append(QString::fromLatin1(app.appId));
+        for (const auto& app : IndependentAppRegistry::apps()) {
+            ids.append(app.appId);
         }
         for (const auto& id : ids) result.apps[id] = QVariantList{};
         GError* error = nullptr;
@@ -1276,6 +1334,17 @@ void FlatpakApps::refresh()
                     {"version", QString::fromUtf8(flatpak_installed_ref_get_appdata_version(installed))},
                     {"origin", origin}, {"source", source},
                     {"bundleManaged", isUser && approvedBundleInstallation(installation, installed, cancellation->value)}});
+                if (isUser && AppCatalog::receipt(id).isEmpty()) {
+                    const auto entry = AppCatalog::find(id);
+                    // Remember only the listing identity for pre-existing installs.
+                    // No SHA-256 proof is invented: unsigned external installs are
+                    // still ineligible for updates, but remain visible if delisted.
+                    if (entry.value("active").toBool())
+                        AppCatalog::recordInstallation(id, {{"entry", entry}, {"sourceId", entry.value("sourceId")},
+                            {"repository", entry.value("repository")}, {"observed", true},
+                            {"commit", QString::fromUtf8(flatpak_ref_get_commit(ref))},
+                            {"arch", QString::fromUtf8(flatpak_ref_get_arch(ref))}, {"origin", origin}});
+                }
                 result.apps[id] = entries;
             }
             g_ptr_array_unref(refs);

@@ -1,4 +1,6 @@
 #include "IndependentApps.h"
+#include "AppCatalog.h"
+#include <QDateTime>
 
 #include <QDesktopServices>
 #include <QDir>
@@ -12,28 +14,13 @@
 
 namespace {
 constexpr qint64 maximumOutput = 1024 * 1024;
-struct Entry { const char* key; const char* name; const char* appId; const char* repository; const char* icon; const char* description; };
-const Entry registry[] = {
-    {"kmusic", "KMusic", "org.nextkde.KMusic", "KMusic", "waves", "Discover and listen to music"},
-    {"calendar", "Calendar", "org.nextks.calendar", "kos-apps", "panel", "Plan your days and events"},
-    {"calculator", "Calculator", "org.nextks.calculator", "kos-apps", "grid", "Everyday calculations, made simple"},
-    {"weather", "Weather", "org.nextks.weather", "kos-apps", "circle", "Forecasts for your favorite places"},
-    {"listenfree", "ListenFree", "org.nextkde.ListenFree", "ListenFree", "waves", "Discover and listen to music"},
-};
 }
 
 IndependentApps::IndependentApps(const QString& resources, QObject* parent)
     : QObject(parent), m_script(resources + QStringLiteral("/app-store/installer.py"))
 {
-    for (const auto& entry : registry) {
-        m_apps.append(QVariantMap{{"id", entry.key}, {"name", entry.name}, {"appId", entry.appId},
-            {"repository", QStringLiteral("https://github.com/NextKde/") + entry.repository},
-            {"iconName", entry.icon}, {"description", entry.description}, {"busy", false},
-            {"installed", false}, {"managed", false}, {"available", true}, {"statusKnown", false},
-            {"version", ""}, {"latestVersion", ""}, {"updateAvailable", false}, {"code", ""},
-            {"stage", ""}, {"logPath", ""}, {"dependencies", QVariantList{}}});
-    }
-    connect(&m_flatpak, &FlatpakAppsClient::changed, this, &IndependentApps::changed);
+    syncCatalog();
+    connect(&m_flatpak, &FlatpakAppsClient::changed, this, [this] { syncCatalog(); emit changed(); });
     connect(&m_flatpak, &FlatpakAppsClient::operationFinished, this,
         [this](const QString& appId, const QString& code, const QString& message) {
             m_flatpakResults[appId] = QVariantMap{{"code", code}, {"message", message},
@@ -99,6 +86,37 @@ IndependentApps::~IndependentApps()
     }
 }
 
+void IndependentApps::syncCatalog()
+{
+    if (m_active >= 0) return;
+    QVariantList next;
+    for (const auto& value : AppCatalog::apps()) {
+        const auto entry = value.toMap();
+        const auto appId = entry.value("appId").toString();
+        const auto key = entry.value("key").toString();
+        const auto id = entry.value("sourceId").toString() == "nextkde" ? key : appId;
+        QVariantMap state;
+        for (const auto& previous : m_apps) if (previous.toMap().value("appId").toString() == appId) state = previous.toMap();
+        state["id"] = id; state["appId"] = appId;
+        state["name"] = entry.value("name").toMap().value("en");
+        state["nameLocales"] = entry.value("name");
+        state["description"] = entry.value("description").toMap().value("en");
+        state["descriptionLocales"] = entry.value("description");
+        state["repository"] = "https://github.com/" + entry.value("repository").toString();
+        state["sourceId"] = entry.value("sourceId");
+        state["catalogActive"] = entry.value("active");
+        state["catalogError"] = entry.value("error");
+        state["format"] = entry.value("format");
+        state["developerSignature"] = !entry.value("publisher").toMap().isEmpty();
+        state["iconName"] = "grid";
+        const QStringList builtin{"kmusic", "calendar", "calculator", "weather", "listenfree"};
+        state["iconFile"] = entry.value("sourceId").toString() == "nextkde" && builtin.contains(key)
+            ? key + (key == "listenfree" ? ".png" : ".svg") : QString();
+        next.append(state);
+    }
+    m_apps = next;
+}
+
 QVariantList IndependentApps::apps() const
 {
     auto result = m_apps;
@@ -161,7 +179,7 @@ QVariantList IndependentApps::apps() const
             state["canCheckUpdates"] = !inventory.value("querying").toBool() && inventory.value("canDiscover").toBool();
             state["flatpakUpdate"] = inventory.value("update");
             state["latestVersion"] = inventory.value("update").toMap().value("version");
-            state["updateAvailable"] = state.value("canCheckUpdates").toBool() && state.value("managed").toBool()
+            state["updateAvailable"] = inventory.value("canDiscover").toBool() && state.value("managed").toBool()
                 && inventory.value("update").toMap().value("available").toBool();
             state["dependencies"] = QVariantList{};
         } else {
@@ -176,9 +194,21 @@ QVariantList IndependentApps::apps() const
                 state["busy"] = true; state["stage"] = progress.value("cancelling").toBool() ? QVariant("cancelling") : inventory.value("stage");
             }
         }
+        state["available"] = state.value("available").toBool() && state.value("catalogActive").toBool()
+            && state.value("format").toString() == "flatpak";
+        state["canCheckUpdates"] = state.value("canCheckUpdates").toBool() && state.value("catalogActive").toBool();
+        state["updateAvailable"] = state.value("updateAvailable").toBool() && state.value("catalogActive").toBool();
+        const auto updateRecord = AppCatalog::readState("update-" + state.value("appId").toString());
+        state["lastChecked"] = updateRecord.value("checkedAt");
         result[i] = state;
     }
-    return result;
+    QVariantList visible;
+    for (const auto& value : result) {
+        const auto state = value.toMap();
+        if (state.value("catalogActive").toBool() || state.value("installed").toBool()
+            || !state.value("catalogError").toString().isEmpty()) visible.append(state);
+    }
+    return visible;
 }
 int IndependentApps::indexOf(const QString& id) const
 {
@@ -189,6 +219,7 @@ int IndependentApps::indexOf(const QString& id) const
 
 void IndependentApps::refresh()
 {
+    syncCatalog();
     m_flatpak.refresh();
     // Source lifecycle remains an explicit CLI operation, never a fallback
     // for the Flatpak application catalogue.
@@ -203,7 +234,10 @@ void IndependentApps::perform(const QString& id, const QString& action)
     const int index = indexOf(id);
     if (index < 0 || busy()) return;
     if (action != "install" && action != "update" && action != "uninstall" && action != "check-update") return;
-    const auto appId = m_apps[index].toMap().value("appId").toString();
+    const auto descriptor = m_apps[index].toMap();
+    const auto appId = descriptor.value("appId").toString();
+    if (descriptor.value("format").toString() != "flatpak") return;
+    if (action != "uninstall" && !descriptor.value("catalogActive").toBool()) return;
     m_flatpakResults.remove(appId);
     const auto flatpak = m_flatpak.state(appId);
     if (action == "install" || action == "update") {
@@ -451,7 +485,8 @@ void IndependentApps::openLog(const QString& id)
 {
     const int index = indexOf(id); if (index < 0) return;
     const auto stateHome = qEnvironmentVariable("XDG_STATE_HOME", QDir::homePath() + "/.local/state");
-    const auto state = apps()[index].toMap();
+    QVariantMap state;
+    for (const auto& item : apps()) if (item.toMap().value("id").toString() == id) state = item.toMap();
     const auto namespaceId = id == "listenfree" ? id : state.value("appId").toString();
     const auto engineRoot = QFileInfo(stateHome + "/nextkde-apps/" + namespaceId).canonicalFilePath();
     const auto enginePath = QFileInfo(state.value("engineLogPath").toString()).canonicalFilePath();

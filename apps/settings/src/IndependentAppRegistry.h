@@ -1,28 +1,33 @@
 #pragma once
+#include "AppCatalog.h"
+#include <optional>
 
-#include <QString>
-#include <array>
-
+// Compatibility facade for the Flatpak adapter. Catalog entries and source trust
+// are shared with Settings, the CLI and the background updater.
 namespace IndependentAppRegistry {
 struct App {
-    const char* key;
-    const char* appId;
-    const char* executable;
-    const char* desktop;
-    const char* repository;
-    const char* manifest;
+    QString key, appId, executable, desktop, repository, manifest;
+    QVariantMap entry;
 };
-inline constexpr std::array apps{
-    App{"kmusic", "org.nextkde.KMusic", "kmusic", "kmusic.desktop", "KMusic", "flatpak-release.json"},
-    App{"calendar", "org.nextks.calendar", "kos-calendar", "org.nextks.calendar.desktop", "kos-apps", "org.nextks.calendar.flatpak-release.json"},
-    App{"calculator", "org.nextks.calculator", "kos-calculator", "org.nextks.calculator.desktop", "kos-apps", "org.nextks.calculator.flatpak-release.json"},
-    App{"weather", "org.nextks.weather", "kos-weather", "org.nextks.weather.desktop", "kos-apps", "org.nextks.weather.flatpak-release.json"},
-    App{"listenfree", "org.nextkde.ListenFree", "listenfree", "listenfree.desktop", "ListenFree", "flatpak-release.json"},
-};
-inline const App* find(const QString& id)
+inline App convert(const QVariantMap& entry)
 {
-    for (const auto& app : apps)
-        if (id == app.appId || id == app.key) return &app;
-    return nullptr;
+    const auto id = entry.value("appId").toString();
+    return {entry.value("key").toString(), id, {}, id + ".desktop",
+        entry.value("repository").toString(), entry.value("manifest").toString(), entry};
+}
+inline QList<App> apps()
+{
+    QList<App> result;
+    for (const auto& item : AppCatalog::apps()) {
+        const auto entry = item.toMap();
+        if (entry.value("format").toString() == "flatpak") result.append(convert(entry));
+    }
+    return result;
+}
+inline std::optional<App> find(const QString& id)
+{
+    const auto entry = AppCatalog::find(id);
+    if (entry.isEmpty() || entry.value("format").toString() != "flatpak") return std::nullopt;
+    return convert(entry);
 }
 }

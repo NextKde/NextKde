@@ -897,10 +897,10 @@ deploy_artifacts() {
     local required
     local -a required_files
     if [[ "$nix_artifact" == true ]]; then
-        required_files=(libexec/kos-platform libexec/kos-data-service bin/kos-settings bin/kos-apps bin/kos-flatpak-worker lib/gtk-3.0/modules/libkos-gtk-window-controls.so)
+        required_files=(libexec/kos-platform libexec/kos-data-service bin/kos-settings bin/kos-apps bin/kos-flatpak-worker bin/kos-app-update-agent lib/gtk-3.0/modules/libkos-gtk-window-controls.so)
         spatial_requested && required_files+=(libexec/kos-ai-worker)
     else
-        required_files=(platform/kos-platform bin/kos-data-service apps/settings/kos-settings apps/settings/kos-apps apps/settings/kos-flatpak-worker apps/settings/gtk-module/libkos-gtk-window-controls.so)
+        required_files=(platform/kos-platform bin/kos-data-service apps/settings/kos-settings apps/settings/kos-apps apps/settings/kos-flatpak-worker apps/settings/kos-app-update-agent apps/settings/gtk-module/libkos-gtk-window-controls.so)
         spatial_built && required_files+=(platform/kos-ai-worker)
     fi
     for required in "${required_files[@]}"; do
@@ -939,7 +939,7 @@ deploy_artifacts() {
     fi
     # --- Binaries ---
     rm -f "$prefix/libexec/kos-platform" "$prefix/libexec/kos-ai-worker" \
-        "$prefix/libexec/kos-data-service" "$prefix/bin/kos-settings" "$prefix/bin/kos-apps" "$prefix/bin/kos-flatpak-worker"
+        "$prefix/libexec/kos-data-service" "$prefix/bin/kos-settings" "$prefix/bin/kos-apps" "$prefix/bin/kos-flatpak-worker" "$prefix/bin/kos-app-update-agent"
     if [[ "$nix_artifact" == true ]]; then
         ln -s "$artifact_root/libexec/kos-platform"    "$prefix/libexec/kos-platform"
         spatial_requested && ln -s "$artifact_root/libexec/kos-ai-worker" \
@@ -948,6 +948,7 @@ deploy_artifacts() {
         ln -s "$artifact_root/bin/kos-settings"          "$prefix/bin/kos-settings"
         ln -s "$artifact_root/bin/kos-apps"              "$prefix/bin/kos-apps"
         ln -s "$artifact_root/bin/kos-flatpak-worker"     "$prefix/bin/kos-flatpak-worker"
+        ln -s "$artifact_root/bin/kos-app-update-agent"   "$prefix/bin/kos-app-update-agent"
     else
         install -m 0755 "$artifact_root/platform/kos-platform"    "$prefix/libexec/kos-platform"
         if spatial_built; then
@@ -975,6 +976,7 @@ deploy_artifacts() {
         install -m 0755 "$artifact_root/apps/settings/kos-settings" "$prefix/bin/kos-settings"
         install -m 0755 "$artifact_root/apps/settings/kos-apps"     "$prefix/bin/kos-apps"
         install -m 0755 "$artifact_root/apps/settings/kos-flatpak-worker" "$prefix/bin/kos-flatpak-worker"
+        install -m 0755 "$artifact_root/apps/settings/kos-app-update-agent" "$prefix/bin/kos-app-update-agent"
         if command -v patchelf >/dev/null 2>&1; then
             patchelf --set-rpath '$ORIGIN/../lib' "$prefix/libexec/kos-platform"
             if spatial_built; then
@@ -1090,6 +1092,12 @@ deploy_artifacts() {
     chmod 0644 "$runtime_unit_dir/kos-platform.service" \
         "$runtime_unit_dir/kos-data.service" \
         "$runtime_unit_dir/kos-shell.service"
+
+    # Session updater owns metadata checks independently of the Settings window.
+    mkdir -p "${XDG_CONFIG_HOME:-$HOME/.config}/autostart"
+    sed "s|@CMAKE_INSTALL_PREFIX@|$prefix|g" \
+        "$project_dir/packaging/desktop/kos-app-updates.desktop.in" \
+        > "${XDG_CONFIG_HOME:-$HOME/.config}/autostart/kos-app-updates.desktop"
 
     # --- Desktop entries ---
     if [[ "$nix_artifact" == true ]]; then
@@ -2051,12 +2059,13 @@ uninstall() {
     rm -f "$prefix/lib/gtk-3.0/modules/libkos-gtk-window-controls.so"
     rm -f "$prefix/share/kos/release.json"
     rm -f "$prefix/libexec/kos-platform" "$prefix/libexec/kos-ai-worker" \
-        "$prefix/libexec/kos-data-service" "$prefix/bin/kos-settings" "$prefix/bin/kos-apps" "$prefix/bin/kos-flatpak-worker"
+        "$prefix/libexec/kos-data-service" "$prefix/bin/kos-settings" "$prefix/bin/kos-apps" "$prefix/bin/kos-flatpak-worker" "$prefix/bin/kos-app-update-agent"
     rm -f "$prefix/lib/libonnxruntime.so" "$prefix/lib/libonnxruntime.so.1" \
         "$prefix/lib/libonnxruntime.so.1.30.0" \
         "$prefix/lib/libonnxruntime_providers_shared.so"
     rm -f "$prefix/share/kos/platform/kwin/window-bridge.js" \
         "$prefix/share/kos/settings/main.qml" \
+        "${XDG_CONFIG_HOME:-$HOME/.config}/autostart/kos-app-updates.desktop" \
         "$prefix/share/applications/kos-settings.desktop" \
         "$prefix/share/applications/org.kos.Platform.desktop" \
         "$prefix/share/applications/org.kos.Shell.desktop" \

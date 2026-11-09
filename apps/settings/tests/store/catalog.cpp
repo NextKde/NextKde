@@ -1,0 +1,166 @@
+#include "AppCatalog.h"
+#include <QtTest>
+#include <QDir>
+#include <QFile>
+#include <QJsonDocument>
+#include <QJsonObject>
+#include <QDateTime>
+#include <QFileInfo>
+#include <QProcess>
+#include <QTemporaryDir>
+
+class CatalogTest : public QObject {
+    Q_OBJECT
+    QTemporaryDir root;
+    QString fingerprint;
+    QByteArray publicKey;
+    QByteArray gpg(const QStringList& args, const QByteArray& input = {})
+    {
+        QProcess process;
+        process.setProgram("gpg");
+        process.setArguments(QStringList{"--homedir", root.filePath("gnupg"), "--batch", "--yes", "--pinentry-mode", "loopback", "--passphrase", ""} + args);
+        process.start();
+        if (!process.waitForStarted(5000)) return {};
+        process.write(input); process.closeWriteChannel();
+        if (!process.waitForFinished(20000)) { process.kill(); process.waitForFinished(); return {}; }
+        return process.exitCode() == 0 ? process.readAllStandardOutput() : QByteArray{};
+    }
+    bool write(const QString& path, const QByteArray& bytes)
+    {
+        QDir().mkpath(QFileInfo(path).absolutePath()); QFile file(path);
+        return file.open(QIODevice::WriteOnly) && file.write(bytes) == bytes.size();
+    }
+    QVariantMap catalog(int sequence = 1) const
+    {
+        const auto now = QDateTime::currentDateTimeUtc();
+        return {{"schemaVersion", 1}, {"sourceId", "fixture"}, {"sequence", sequence},
+            {"issuedAt", now.addSecs(-60).toString(Qt::ISODate)}, {"expiresAt", now.addDays(1).toString(Qt::ISODate)},
+            {"apps", QVariantList{QVariantMap{{"appId", "org.example.Notes"}, {"key", "notes"}, {"format", "flatpak"},
+                {"name", QVariantMap{{"en", "Notes"}}}, {"description", QVariantMap{{"en", "A notes app"}}}, {"repository", "Example/Notes"},
+                {"manifest", "flatpak-release.json"}, {"status", "active"}}}}};
+    }
+    QByteArray signature(const QByteArray& bytes) { return gpg({"--armor", "--detach-sign", "--output", "-"}, bytes); }
+    bool snapshot(const QVariantMap& value)
+    {
+        const auto bytes = QJsonDocument::fromVariant(value).toJson();
+        const auto sig = signature(bytes);
+        return !sig.isEmpty() && write(AppCatalog::stateDirectory() + "/catalogs/fixture.json",
+            QJsonDocument::fromVariant(QVariantMap{{"catalog", bytes.toBase64()}, {"signature", sig.toBase64()}}).toJson());
+    }
+private slots:
+    void initTestCase()
+    {
+        QVERIFY(root.isValid());
+        qputenv("XDG_CONFIG_HOME", root.filePath("config").toUtf8());
+        qputenv("XDG_STATE_HOME", root.filePath("state").toUtf8());
+        QVERIFY(QDir().mkpath(root.filePath("gnupg")));
+        QVERIFY(QFile::setPermissions(root.filePath("gnupg"), QFileDevice::ReadOwner | QFileDevice::WriteOwner | QFileDevice::ExeOwner));
+        gpg({"--quick-generate-key", "Catalog Test <test@example.invalid>", "ed25519", "sign", "1d"});
+        const auto listing = gpg({"--with-colons", "--list-keys"});
+        for (const auto& line : listing.split('\n')) if (line.startsWith("fpr:")) { fingerprint = QString::fromLatin1(line.split(':').value(9)); break; }
+        QVERIFY2(!fingerprint.isEmpty(), "The VM test environment requires gpg and gpgv");
+        publicKey = gpg({"--export", fingerprint});
+        QVERIFY(!publicKey.isEmpty());
+        QVERIFY(write(root.filePath("public.gpg"), publicKey));
+        QCOMPARE(AppCatalog::addSource("fixture", "Example/catalog", fingerprint, root.filePath("public.gpg")), QString());
+    }
+    void githubBoundaries()
+    {
+        QVERIFY(AppCatalog::githubRepository("third-party/notes"));
+        QVERIFY(!AppCatalog::githubRepository("https://github.com/third-party/notes"));
+        QVERIFY(!AppCatalog::githubRepository("../notes"));
+        QVERIFY(AppCatalog::githubUrl(QUrl("https://github.com/third-party/notes/releases/download/v1.0.0/app.flatpak"), "third-party/notes", false));
+        QVERIFY(!AppCatalog::githubUrl(QUrl("https://github.com/attacker/notes/releases/download/v1.0.0/app.flatpak"), "third-party/notes", false));
+        QVERIFY(!AppCatalog::githubUrl(QUrl("https://raw.githubusercontent.com/third-party/notes/main/app.flatpak"), "third-party/notes", false));
+        QVERIFY(!AppCatalog::githubUrl(QUrl("https://release-assets.githubusercontent.com/file"), "third-party/notes", false));
+        QVERIFY(AppCatalog::githubUrl(QUrl("https://release-assets.githubusercontent.com/file"), "third-party/notes", true));
+    }
+    void signatureIsMandatoryForDirectory()
+    {
+        const QByteArray bytes = "a directory";
+        const auto sig = signature(bytes);
+        QVERIFY(AppCatalog::verify(bytes, sig, publicKey, fingerprint));
+        QVERIFY(!AppCatalog::verify(bytes + "tampered", sig, publicKey, fingerprint));
+        QVERIFY(!AppCatalog::verify(bytes, {}, publicKey, fingerprint));
+        QVERIFY(!AppCatalog::verify(bytes, sig, publicKey, QString(40, '0')));
+    }
+    void rollbackAndExpiry()
+    {
+        const auto first = catalog(2);
+        QVERIFY(AppCatalog::validateUpdate(first, {}, "fixture").isEmpty());
+        QVERIFY(AppCatalog::validateUpdate(first, first, "fixture").isEmpty());
+        QVERIFY(!AppCatalog::validateUpdate(catalog(1), first, "fixture").isEmpty());
+        auto changed = first; changed["apps"] = QVariantList{};
+        QVERIFY(!AppCatalog::validateUpdate(changed, first, "fixture").isEmpty());
+        auto expired = catalog(3); expired["issuedAt"] = QDateTime::currentDateTimeUtc().addDays(-2).toString(Qt::ISODate);
+        expired["expiresAt"] = QDateTime::currentDateTimeUtc().addDays(-1).toString(Qt::ISODate);
+        QVERIFY(!AppCatalog::validateUpdate(expired, first, "fixture").isEmpty());
+    }
+    void signedDirectoryAddsUnsignedDeveloperEntry()
+    {
+        QVERIFY(snapshot(catalog()));
+        const auto app = AppCatalog::find("org.example.Notes");
+        QVERIFY(app.value("active").toBool());
+        QVERIFY(app.value("publisher").toMap().isEmpty());
+        QCOMPARE(app.value("repository").toString(), QString("Example/Notes"));
+    }
+    void malformedLocalizationAndCommands()
+    {
+        for (const auto& change : QVariantList{
+                 QVariantMap{{"name", QVariantMap{{"zh-CN", "笔记"}}}},
+                 QVariantMap{{"description", QVariantMap{{"en", 42}}}},
+                 QVariantMap{{"name", QVariantMap{{"en", "bad\nname"}}}},
+                 QVariantMap{{"command", "sh installer"}},
+                 QVariantMap{{"publisher", "invalid"}}}) {
+            auto value = catalog();
+            auto entry = value.value("apps").toList().first().toMap();
+            entry.insert(change.toMap());
+            value["apps"] = QVariantList{entry};
+            QVERIFY(!AppCatalog::validateUpdate(value, {}, "fixture").isEmpty());
+        }
+    }
+    void withdrawalKeepsReceiptWithoutAuthorizingUpdate()
+    {
+        QVERIFY(snapshot(catalog()));
+        const auto entry = AppCatalog::find("org.example.Notes");
+        QVERIFY(AppCatalog::recordInstallation("org.example.Notes", {{"entry", entry}, {"sourceId", "fixture"}, {"commit", QString(64, 'a')}}));
+        auto next = catalog(2); next["apps"] = QVariantList{};
+        QVERIFY(snapshot(next));
+        const auto withdrawn = AppCatalog::find("org.example.Notes");
+        QVERIFY(!withdrawn.isEmpty());
+        QVERIFY(!withdrawn.value("active").toBool());
+        QCOMPARE(withdrawn.value("status").toString(), QString("withdrawn"));
+    }
+    void uninstallForgetsOwnershipButKeepsCatalogHistory()
+    {
+        QVERIFY(snapshot(catalog(2)));
+        const auto path = AppCatalog::stateDirectory() + "/catalogs/fixture.json";
+        QFile file(path); QVERIFY(file.open(QIODevice::ReadOnly));
+        const auto history = file.readAll(); file.close();
+        QVERIFY(!AppCatalog::receipt("org.example.Notes").isEmpty());
+        QCOMPARE(AppCatalog::removeSource("fixture"), QString());
+        QVERIFY(!AppCatalog::find("org.example.Notes").value("active").toBool());
+        QVERIFY(!AppCatalog::forgetInstallation("../invalid"));
+        QVERIFY(AppCatalog::forgetInstallation("org.example.Notes"));
+        QVERIFY(AppCatalog::receipt("org.example.Notes").isEmpty());
+        QVERIFY(AppCatalog::find("org.example.Notes").isEmpty());
+        QVERIFY(file.open(QIODevice::ReadOnly));
+        QCOMPARE(file.readAll(), history); file.close();
+        QVERIFY(AppCatalog::forgetInstallation("org.example.Notes"));
+        QCOMPARE(AppCatalog::addSource("fixture", "Example/catalog", fingerprint, root.filePath("public.gpg")), QString());
+        QVERIFY(AppCatalog::find("org.example.Notes").value("active").toBool());
+    }
+    void tamperedCacheCannotAuthorizeInstall()
+    {
+        QVERIFY(snapshot(catalog(3)));
+        const auto path = AppCatalog::stateDirectory() + "/catalogs/fixture.json";
+        QFile file(path); QVERIFY(file.open(QIODevice::ReadOnly));
+        auto envelope = QJsonDocument::fromJson(file.readAll()).object().toVariantMap(); file.close();
+        auto changed = catalog(4); changed["sourceId"] = "attacker";
+        envelope["catalog"] = QJsonDocument::fromVariant(changed).toJson().toBase64();
+        QVERIFY(write(path, QJsonDocument::fromVariant(envelope).toJson()));
+        QVERIFY(!AppCatalog::find("org.example.Notes").value("active").toBool());
+    }
+};
+QTEST_GUILESS_MAIN(CatalogTest)
+#include "catalog.moc"

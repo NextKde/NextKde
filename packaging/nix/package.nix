@@ -86,6 +86,12 @@ stdenv.mkDerivation {
     mkdir -p $out/bin
     ln -s ${kos-settings}/bin/kos-settings $out/bin/kos-settings
     ln -s ${kos-settings}/bin/kos-apps $out/bin/kos-apps
+    ln -s ${kos-settings}/bin/kos-app-update-agent $out/bin/kos-app-update-agent
+    if [ -x ${kos-settings}/bin/kos-flatpak-worker ]; then
+      ln -s ${kos-settings}/bin/kos-flatpak-worker $out/bin/kos-flatpak-worker
+    fi
+    mkdir -p $out/etc/xdg/autostart
+    cp ${kos-settings}/etc/xdg/autostart/kos-app-updates.desktop $out/etc/xdg/autostart/
     mkdir -p $out/lib/gtk-3.0/modules
     ln -s ${kos-settings}/lib/gtk-3.0/modules/libkos-gtk-window-controls.so $out/lib/gtk-3.0/modules/libkos-gtk-window-controls.so
 

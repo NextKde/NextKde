@@ -182,3 +182,7 @@ Generado automáticamente a partir de las contribuciones de GitHub con [contrib.
 
 Consulta [LICENSE](LICENSE) para la licencia del proyecto. El efecto Glass
 incluido tiene su propia [licencia](kwin/glass-effect/LICENSE).
+
+## Aplicaciones y servicios
+
+El [catálogo firmado](docs/app-store/SignedCatalog.md) permite añadir aplicaciones, fuentes de terceros y avisos de actualización. Los paquetes se publican en GitHub Releases y se verifican con SHA-256; la firma del desarrollador es opcional. Consulta las [instrucciones de publicación y runtime Qt](https://github.com/NextKde/appCatalog). Su uso requiere un cliente compatible y un Release de la aplicación disponible.
