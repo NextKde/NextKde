@@ -2,6 +2,7 @@
 #include "../../src/FlatpakRelease.cpp"
 #include <QtTest>
 #include "https_fixture.h"
+#include <qscopeguard.h>
 
 class FlatpakReleaseTest : public QObject {
     Q_OBJECT
@@ -202,6 +203,84 @@ private slots:
         QCOMPARE(QByteArray(remote.primaryFingerprint), "6E5C05D979C76DAF93C081354184DD4D907A7CAE");
         QVERIFY(remote.runtimes);
         QVERIFY(!remote.applications);
+    }
+    void signedCatalogAllowsOptionalDeveloperSignatureButRequiresDigest()
+    {
+        QTemporaryDir root;
+        QVERIFY(root.isValid());
+        const auto oldConfig = qgetenv("XDG_CONFIG_HOME"), oldState = qgetenv("XDG_STATE_HOME");
+        const auto restore = qScopeGuard([&] {
+            if (oldConfig.isNull()) qunsetenv("XDG_CONFIG_HOME"); else qputenv("XDG_CONFIG_HOME", oldConfig);
+            if (oldState.isNull()) qunsetenv("XDG_STATE_HOME"); else qputenv("XDG_STATE_HOME", oldState);
+        });
+        qputenv("XDG_CONFIG_HOME", root.filePath("config").toUtf8());
+        qputenv("XDG_STATE_HOME", root.filePath("state").toUtf8());
+        const auto home = root.filePath("gnupg");
+        QVERIFY(QDir().mkpath(home));
+        QVERIFY(QFile::setPermissions(home, QFileDevice::ReadOwner | QFileDevice::WriteOwner | QFileDevice::ExeOwner));
+        const auto gpg = [&](const QStringList& args, const QByteArray& input = QByteArray()) {
+            QProcess process;
+            process.start("gpg", QStringList{"--homedir", home, "--batch", "--yes", "--pinentry-mode", "loopback", "--passphrase", ""} + args);
+            if (!process.waitForStarted(5000)) return QByteArray();
+            process.write(input); process.closeWriteChannel();
+            if (!process.waitForFinished(15000)) { process.kill(); process.waitForFinished(); return QByteArray(); }
+            return process.exitCode() == 0 ? process.readAllStandardOutput() : QByteArray();
+        };
+        gpg({"--quick-generate-key", "Catalog fixture <test@example.invalid>", "ed25519", "sign", "1d"});
+        QString fingerprint;
+        for (const auto& line : gpg({"--with-colons", "--list-keys"}).split('\n'))
+            if (line.startsWith("fpr:")) { fingerprint = QString::fromLatin1(line.split(':').value(9)); break; }
+        QVERIFY(!fingerprint.isEmpty());
+        const auto publicKey = gpg({"--export", fingerprint});
+        QFile keyFile(root.filePath("key.gpg")); QVERIFY(keyFile.open(QIODevice::WriteOnly));
+        QCOMPARE(keyFile.write(publicKey), publicKey.size()); keyFile.close();
+        QCOMPARE(AppCatalog::addSource("fixture", "Example/catalog", fingerprint, keyFile.fileName()), QString());
+        const QString notes = "org.example.Notes";
+        QVariantMap entry{{"appId", notes}, {"key", "notes"}, {"format", "flatpak"},
+            {"name", QVariantMap{{"en", "Notes"}}}, {"description", QVariantMap{{"en", "Notes app"}}},
+            {"repository", "Example/Notes"}, {"manifest", "flatpak-release.json"}};
+        const auto cache = [&](int sequence) {
+            const auto now = QDateTime::currentDateTimeUtc();
+            const auto bytes = QJsonDocument::fromVariant(QVariantMap{{"schemaVersion", 1}, {"sourceId", "fixture"},
+                {"sequence", sequence}, {"issuedAt", now.addSecs(-60).toString(Qt::ISODate)},
+                {"expiresAt", now.addDays(1).toString(Qt::ISODate)}, {"apps", QVariantList{entry}}}).toJson();
+            const auto signature = gpg({"--armor", "--detach-sign", "--output", "-"}, bytes);
+            if (signature.isEmpty()) return false;
+            QDir().mkpath(AppCatalog::stateDirectory() + "/catalogs");
+            QFile file(AppCatalog::stateDirectory() + "/catalogs/fixture.json");
+            const auto envelope = QJsonDocument::fromVariant(QVariantMap{{"catalog", bytes.toBase64()}, {"signature", signature.toBase64()}}).toJson();
+            return file.open(QIODevice::WriteOnly) && file.write(envelope) == envelope.size();
+        };
+        QVERIFY(cache(1));
+        QVERIFY(FlatpakRelease::configured(notes));
+        QVERIFY(FlatpakRelease::publicKeys(notes).isEmpty());
+        auto document = QJsonDocument::fromJson(manifest().replace(appId.toUtf8(), notes.toUtf8())).object();
+        auto bundles = document.value("bundles").toObject(); auto bundle = bundles.value("x86_64").toObject();
+        const auto metadata = QByteArray::fromBase64(bundle.value("metadata").toString().toLatin1()).replace(appId.toUtf8(), notes.toUtf8());
+        bundle["metadata"] = QString::fromLatin1(metadata.toBase64());
+        bundle["metadataSha256"] = QString::fromLatin1(QCryptographicHash::hash(metadata, QCryptographicHash::Sha256).toHex());
+        bundles["x86_64"] = bundle; document["bundles"] = bundles;
+        const auto releaseManifest = QJsonDocument(document).toJson();
+        QJsonArray assets;
+        for (const auto& name : {QString("flatpak-release.json"), bundle.value("asset").toString()})
+            assets.append(QJsonObject{{"name", name}, {"browser_download_url", "https://github.com/Example/Notes/releases/download/v0.2.0/" + name}});
+        const auto release = QJsonDocument(QJsonObject{{"tag_name", "v0.2.0"}, {"draft", false}, {"prerelease", false}, {"assets", assets}}).toJson();
+        ReleaseHttpsFixture server(certificate, privateKey);
+        QVERIFY(server.isListening());
+        server.responses = {{200, release, {}}, {200, releaseManifest, {}}};
+        const auto candidate = FlatpakRelease::discover(notes, "x86_64", [] { return false; }, [](const QString&, int) {});
+        QVERIFY2(candidate.value("code").toString().isEmpty(), qPrintable(candidate.value("message").toString()));
+        QVERIFY(!candidate.value("developerVerified").toBool());
+        QCOMPARE(server.requests, 2); // No developer-signature request.
+        server.responses = {{200, QByteArray(1234, 'x'), {}}};
+        const auto downloaded = FlatpakRelease::download(notes, candidate, root.path(), [] { return false; }, [](const QString&, int) {});
+        QCOMPARE(downloaded.value("code").toString(), QString("INTEGRITY_FAILED"));
+        entry["publisher"] = QVariantMap{{"fingerprint", fingerprint}, {"publicKey", publicKey.toBase64()}};
+        QVERIFY(cache(2));
+        server.requests = 0;
+        server.responses = {{200, release, {}}, {200, releaseManifest, {}}};
+        const auto pinned = FlatpakRelease::discover(notes, "x86_64", [] { return false; }, [](const QString&, int) {});
+        QCOMPARE(pinned.value("code").toString(), QString("RELEASE_UNAVAILABLE")); // A pinned key must not downgrade when .sig is absent.
     }
     void versionComparison()
     {
