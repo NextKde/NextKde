@@ -176,7 +176,10 @@ GridLayout {
         height: Math.min(700, parent ? parent.height - 32 : 700)
         modal: true
         title: I18n.tr("Manage app sources")
-        standardButtons: Dialog.Close
+        footer: DialogButtonBox {
+            Button { text: I18n.tr("Close"); DialogButtonBox.buttonRole: DialogButtonBox.RejectRole }
+            onRejected: sourceDialog.reject()
+        }
         contentItem: Flickable {
             clip: true
             contentWidth: width
@@ -244,7 +247,16 @@ GridLayout {
                 Basic.TextField { id: sourceKeyField; Layout.fillWidth: true; placeholderText: I18n.tr("Local path to exported public key (.gpg)") }
                 Basic.CheckBox {
                     id: sourceTrust
+                    Layout.fillWidth: true
                     text: I18n.tr("I trust this source to choose applications and release repositories")
+                    contentItem: Text {
+                        text: sourceTrust.text
+                        font: sourceTrust.font
+                        color: page.colors.primaryText
+                        leftPadding: sourceTrust.indicator.width + sourceTrust.spacing
+                        verticalAlignment: Text.AlignVCenter
+                        wrapMode: Text.Wrap
+                    }
                 }
                 Text {
                     textFormat: Text.PlainText
@@ -276,7 +288,12 @@ GridLayout {
         width: Math.min(400, parent ? parent.width - 32 : 400)
         modal: true
         title: I18n.tr("Remove source")
-        standardButtons: Dialog.Ok | Dialog.Cancel
+        footer: DialogButtonBox {
+            Button { text: I18n.tr("Cancel"); DialogButtonBox.buttonRole: DialogButtonBox.RejectRole }
+            Button { text: I18n.tr("Remove source"); DialogButtonBox.buttonRole: DialogButtonBox.AcceptRole }
+            onAccepted: removeSourceDialog.accept()
+            onRejected: removeSourceDialog.reject()
+        }
         contentItem: Text {
             textFormat: Text.PlainText
             text: I18n.tr("Installed applications are kept. Updates from this source will stop.")
