@@ -235,17 +235,6 @@ void SettingsBridge::updateDockWindowAnimationStyle(const QString& style)
     callAppearance({ QStringLiteral("updateDockWindowAnimationStyle"), style });
 }
 
-// 使用系统字体. One write, because one process owns the answer: the Shell draws
-// every surface this option is about (Bar, Dock, launcher, desk widgets, menus,
-// quick search), and the standalone applications never needed it -- they name no
-// family and already draw with whatever Qt's platform theme applied, which the
-// KDE platform theme fills from the same kdeglobals entry.
-void SettingsBridge::updateUseSystemFont(bool enabled)
-{
-    callAppearance({ QStringLiteral("updateUseSystemFont"),
-        enabled ? QStringLiteral("true") : QStringLiteral("false") });
-}
-
 void SettingsBridge::resetAppearanceStrengths()
 {
     callAppearance({ QStringLiteral("resetStrengths") });
@@ -364,8 +353,6 @@ QVariantMap SettingsBridge::appearanceSnapshotFromReply(const QString& payload)
         // A shell older than this page has neither key; "off" and an empty
         // family are exactly what such a shell draws with, so the row is
         // present but names no family instead of inventing one.
-        { QStringLiteral("useSystemFont"),
-            object.value(QStringLiteral("useSystemFont")).toBool(false) },
         { QStringLiteral("systemFontFamily"),
             object.value(QStringLiteral("systemFontFamily")).toString() },
         { QStringLiteral("tokenVersion"), object.value(QStringLiteral("tokenVersion")).toInt() },

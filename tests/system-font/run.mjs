@@ -5,18 +5,7 @@ import { join } from "node:path";
 import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 
-// 使用系统字体, read where the shell actually resolves it.
-//
-// The option is a chain of four links -- AppearanceConfigService.useSystemFont →
-// SystemFontService (kdeglobals) → AppearanceTokens.typography.* → the string
-// each Text item binds -- and every link fails *silently*: a Text that keeps its
-// designed family still renders a plausible interface, just not the user's font.
-// This fixture loads the shipping modules and reads the resolved `font.family`
-// off representative Text items in both states of the option, so the chain is
-// exercised the way the shell evaluates it.
-//
-// It needs the real module tree (the singletons reach across qs.desktop.modules.*
-// and Kos.Ui), so it symlinks it instead of copying, the way tests/glass-ink does.
+// Load the production modules and check default/live General font bindings.
 const repository = fileURLToPath(new URL("../..", import.meta.url));
 const shell = join(repository, "shell");
 
@@ -63,8 +52,7 @@ try {
     assert.doesNotMatch(output,
         /is not a type|is not a function|Cannot assign|Unable to assign|ReferenceError|TypeError/,
         output);
-    console.log("system font: off keeps the designed families, on resolves every "
-        + "surface to the family kdeglobals names");
+    console.log("system font: all surfaces follow General font by default and on reload");
 } finally {
     try {
         rmSync(directory, { recursive: true, force: true });

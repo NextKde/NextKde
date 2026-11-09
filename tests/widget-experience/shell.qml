@@ -57,9 +57,10 @@ ShellRoot {
         repeat: true
         onTriggered: {
             try {
-                if (!AppearanceConfigService.ready || !IconAppearanceService.ready) return
+                if (!AppearanceConfigService.ready || !IconAppearanceService.ready || !SystemFontService.loaded) return
                 switch (test.stage++) {
                 case 0:
+                    check(AppearanceTokens.typography.textFamily === "Inter", "legacy font opt-out is ignored")
                     check(AppearanceConfigService.widgetStyle === Quickshell.env("EXPECTED_WIDGET_STYLE"), "persisted or migrated widget style")
                     ScreenLifecycle.activeScreen = desktop.screen
                     test.background = find(desktop.contentItem, "desktop-background-selection")

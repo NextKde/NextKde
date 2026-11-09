@@ -291,8 +291,38 @@ private slots:
         QTest::mouseClick(&window, Qt::LeftButton, Qt::NoModifier,
             fontRow->mapToScene(fontRow->boundingRect().center()).toPoint());
         QTRY_VERIFY(picker->property("visible").toBool());
+        auto sizeInput = visualItem(window.contentItem(), QStringLiteral("font-size-input"));
+        auto confirm = visualItem(window.contentItem(), QStringLiteral("font-picker-confirm"));
+        QVERIFY(sizeInput);
+        QVERIFY(confirm);
+        const auto original = settings.fonts()->property("font").value<QFont>();
+        const QString chosenSize = QString::number(original.pointSizeF() + 2);
+        sizeInput->setProperty("text", chosenSize);
+        QVERIFY(QMetaObject::invokeMethod(sizeInput, "textEdited"));
+        QCOMPARE(picker->property("selectedFont").value<QFont>().pointSizeF(), chosenSize.toDouble());
+        QCOMPARE(settings.fonts()->property("font").value<QFont>(), original);
+        if (!screenshot.isEmpty()) {
+            QTest::qWait(250);
+            QVERIFY(window.grabWindow().save(screenshot + QStringLiteral(".picker.png")));
+        }
         QVERIFY(QMetaObject::invokeMethod(picker, "reject"));
         QTRY_VERIFY(!picker->property("visible").toBool());
+        QCOMPARE(settings.fonts()->property("font").value<QFont>(), original);
+        QTest::qWait(250); // Finish the close animation before reopening.
+        QTest::mouseClick(&window, Qt::LeftButton, Qt::NoModifier,
+            fontRow->mapToScene(fontRow->boundingRect().center()).toPoint());
+        QTRY_VERIFY(picker->property("visible").toBool());
+        sizeInput->setProperty("text", chosenSize);
+        QVERIFY(QMetaObject::invokeMethod(sizeInput, "textEdited"));
+        QTest::qWait(250);
+        QTest::mouseClick(&window, Qt::LeftButton, Qt::NoModifier,
+            confirm->mapToScene(confirm->boundingRect().center()).toPoint());
+        QTRY_VERIFY(!picker->property("visible").toBool());
+        QTRY_COMPARE(settings.fonts()->property("font").value<QFont>().pointSizeF(), chosenSize.toDouble());
+        QTest::qWait(450);
+        KConfig persisted(QStringLiteral("kdeglobals"));
+        persisted.reparseConfiguration();
+        QCOMPARE(KConfigGroup(&persisted, "General").readEntry("font", QFont()).pointSizeF(), chosenSize.toDouble());
         const auto previewSource = preview->property("source");
         // Hiding a window need not change focus on the offscreen platform.
         // Activate another top-level window to exercise an actual focus change.

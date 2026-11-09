@@ -2,7 +2,6 @@ import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
 import QtQuick.Window
-import QtQuick.Dialogs as Dialogs
 import Kos.Demo as Demo
 import "../../../shared/qml/i18n"
 import "../components" as Controls
@@ -13,8 +12,6 @@ ColumnLayout {
     property bool materialForm: false
     property var backend: null
     property var bridge: null
-    property bool useSystemFont: false
-    property string systemFontFamily: ""
     readonly property var fonts: backend && backend.available ? backend.fonts : null
     readonly property var rendering: backend && backend.available ? backend.rendering : null
     readonly property bool ready: fonts !== null && rendering !== null
@@ -30,30 +27,16 @@ ColumnLayout {
     Layout.fillWidth: true
     spacing: 12
 
-    function applyState(state) {
-        if (!state) return;
-        useSystemFont = !!state.useSystemFont;
-        systemFontFamily = String(state.systemFontFamily || "");
-    }
     function refresh() {
         if (backend) backend.refresh();
-        if (bridge) bridge.appearanceSnapshot();
     }
     function editable(setting) {
         return ready && backend.renderingEditable(setting);
     }
     function chooseFont(category) {
-        fontPicker.category = category;
-        fontPicker.selectedFont = fonts[category === "all" ? "font" : category];
-        fontPicker.options = Dialogs.FontDialog.DontUseNativeDialog
-            | (category === "fixed" ? Dialogs.FontDialog.MonospacedFonts : 0);
-        fontPicker.open();
+        fontPicker.choose(category, fonts[category === "all" ? "font" : category]);
     }
     Component.onCompleted: refresh()
-    Connections {
-        target: page.bridge
-        function onAppearanceSnapshotChanged(state) { page.applyState(state); }
-    }
     Connections {
         target: Qt.application
         function onStateChanged() {
@@ -156,22 +139,6 @@ ColumnLayout {
                 rotation: -90
                 size: 14
                 color: page.colors.secondaryText
-            }
-        }
-    }
-
-    Section {
-        FormRow {
-            label: I18n.tr("Desktop follows system font")
-            control: Controls.SettingsSwitch {
-                objectName: "use-system-font-switch"
-                enabled: page.bridge !== null
-                checked: page.useSystemFont
-                accentColor: page.colors.accent
-                onToggled: checked => {
-                    if (checked !== page.useSystemFont)
-                        page.bridge.updateUseSystemFont(checked);
-                }
             }
         }
     }
@@ -313,35 +280,16 @@ ColumnLayout {
         font.pixelSize: 11
         wrapMode: Text.Wrap
     }
-    Dialogs.FontDialog {
+    FontPickerDialog {
         id: fontPicker
         objectName: "font-picker"
-        property string category: "font"
-        title: I18n.tr("Choose a font")
+        backend: page.backend
+        colors: page.colors
         onAccepted: {
-            if (category === "all") allOptions.open();
-            else page.backend.setFont(category, selectedFont);
+            if (category === "all")
+                page.backend.adjustAllFonts(selectedFont, applyFamily, applyStyle, applySize);
+            else
+                page.backend.setFont(category, selectedFont);
         }
-    }
-    Demo.LiquidDialog {
-        id: allOptions
-        parent: Overlay.overlay
-        anchors.centerIn: parent
-        width: Math.min(360, parent ? parent.width - 32 : 360)
-        title: I18n.tr("Adjust all fonts")
-        standardButtons: Dialog.Ok | Dialog.Cancel
-        contentItem: ColumnLayout {
-            CheckBox { id: applyFamily; text: I18n.tr("Font family"); checked: true }
-            CheckBox { id: applyStyle; text: I18n.tr("Font style"); checked: true }
-            CheckBox { id: applySize; text: I18n.tr("Font size"); checked: true }
-            Text {
-                Layout.fillWidth: true
-                text: I18n.tr("Fixed-width text keeps a monospaced family. Small text stays smaller.")
-                color: page.colors.secondaryText
-                wrapMode: Text.Wrap
-            }
-        }
-        onAccepted: page.backend.adjustAllFonts(fontPicker.selectedFont,
-            applyFamily.checked, applyStyle.checked, applySize.checked)
     }
 }

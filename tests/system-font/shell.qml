@@ -4,19 +4,7 @@ import qs.desktop.modules.common
 import qs.desktop.modules.dock
 import qs.desktop.modules.bar
 
-// 使用系统字体, read where the shell resolves it. Loaded offscreen by run.mjs.
-//
-// The option is a chain -- AppearanceConfigService.useSystemFont →
-// SystemFontService (kdeglobals) → AppearanceTokens.typography.* → the string
-// each Text item binds -- and every link fails *silently*: a Text that keeps its
-// designed family still renders a plausible interface, just not the user's font.
-// This fixture reads the resolved `font.family` off representative Text items in
-// both states, so the chain is exercised the way the shell evaluates it.
-//
-// It does not wait for AppearanceConfigService.ready: that gates on state.read
-// through the platform daemon, which this harness deliberately does not run. The
-// option is a plain property, so assigning it is exactly what a snapshot load
-// does.
+// Verify the default and live General font bindings without an opt-in.
 Item {
     id: root
 
@@ -51,74 +39,24 @@ Item {
             if (!SystemFontService.loaded)
                 return
             root.stage++
-            if (root.stage === 1) {
-                root.check("kdeglobals names a family",
-                    SystemFontService.family === "Maple Mono NF CN",
-                    SystemFontService.family)
-                // Branches only: no update* call, so no state file is written
-                // through the daemon this harness does not run.
-                AppearanceConfigService.useSystemFont = false
-                return
-            }
-            if (root.stage === 2) {
-                root.check("off keeps the designed text family",
-                    textRole.font.family === "Noto Sans CJK SC", textRole.font.family)
-                // The designed display face is only named when it is installed;
-                // otherwise the role is empty, which delegates to the platform
-                // font. That is the behaviour every one of these sites had with
-                // the literal before the token existed.
-                root.check("off keeps the designed display family",
-                    displayRole.font.family === (AppearanceTokens.typography
-                        .hasRecommendedDisplayFamily ? "SF Pro Display" : ""),
-                    displayRole.font.family)
-                root.check("off keeps the designed chain",
-                    chainRole.font.family === "SF Pro Display, Noto Sans CJK SC, sans-serif",
-                    chainRole.font.family)
-                root.check("emoji never follow the interface font",
-                    emojiRole.font.family === "Noto Color Emoji", emojiRole.font.family)
-                root.check("the token agrees with the option",
-                    AppearanceTokens.typography.followsSystemFont === false,
-                    AppearanceTokens.typography.followsSystemFont)
-                AppearanceConfigService.useSystemFont = true
-                return
-            }
-            if (root.stage === 3) {
-                const expected = "Maple Mono NF CN"
-                root.check("the token follows the option",
-                    AppearanceTokens.typography.followsSystemFont === true,
-                    AppearanceTokens.typography.followsSystemFont)
-                root.check("text follows the system font",
-                    textRole.font.family === expected, textRole.font.family)
-                root.check("display type follows the system font",
-                    displayRole.font.family === expected, displayRole.font.family)
-                root.check("a surface that asked for a chain resolves to one family",
-                    chainRole.font.family === expected, chainRole.font.family)
-                root.check("emoji still do not follow it",
-                    emojiRole.font.family === "Noto Color Emoji", emojiRole.font.family)
+            if (root.stage === 1 || root.stage === 2) {
+                const expected = root.stage === 1 ? "Maple Mono NF CN" : "Inter"
+                root.check("text follows General font by default", textRole.font.family === expected, textRole.font.family)
+                root.check("display follows General font", displayRole.font.family === expected, displayRole.font.family)
+                root.check("chain follows General font", chainRole.font.family === expected, chainRole.font.family)
+                root.check("emoji stays independent", emojiRole.font.family === "Noto Color Emoji", emojiRole.font.family)
                 function checkText(item) {
                     if (item.text !== undefined && item.font !== undefined)
-                        root.check("UsageRing text follows the selected family",
-                            item.font.family === expected, item.font.family)
+                        root.check("UsageRing follows General font", item.font.family === expected, item.font.family)
                     for (const child of item.children || []) checkText(child)
                 }
                 checkText(ring)
-                // Round trip: the option, not a restart, is what moved every
-                // family, so turning it back off has to restore the designed
-                // ones.
-                AppearanceConfigService.useSystemFont = false
+                SystemFontService.applyConfig(root.stage === 1 ? "[General]\nfont=Inter,10\n" : "[General]\n")
                 return
             }
-            if (root.stage >= 4) {
-                root.check("turning it off restores the designed text family",
-                    textRole.font.family === "Noto Sans CJK SC", textRole.font.family)
-                root.check("turning it off restores the designed display family",
-                    displayRole.font.family === (AppearanceTokens.typography
-                        .hasRecommendedDisplayFamily ? "SF Pro Display" : ""),
-                    displayRole.font.family)
-                SystemFontService.applyConfig("[General]\nfont=Inter,10\n")
-                root.check("reload reads a replacement font", SystemFontService.fontSpec === "Inter,10")
-                SystemFontService.applyConfig("[General]\n")
+            if (root.stage >= 3) {
                 root.check("removing font clears the stale family", SystemFontService.fontSpec === "")
+                root.check("missing font uses Qt fallback", textRole.font.family === Qt.application.font.family, textRole.font.family)
                 if (root.failures.length > 0)
                     console.error("FONT_FAIL: " + root.failures.join("; "))
                 else

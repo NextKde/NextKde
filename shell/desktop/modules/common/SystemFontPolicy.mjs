@@ -1,8 +1,7 @@
 // Parsing rules for the desktop's own interface font.
 //
-// 使用系统字体 (AppearanceConfigService.useSystemFont) makes every shell surface
-// render with the font KDE is configured with instead of the families the shell
-// was designed around. The value lives in kdeglobals:
+// Every shell surface follows KDE General font by default.
+// The value lives in kdeglobals:
 //
 //     [General]
 //     font=Maple Mono NF CN,10

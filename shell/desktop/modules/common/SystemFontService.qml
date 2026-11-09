@@ -7,9 +7,8 @@ import "SystemFontPolicy.mjs" as FontPolicy
 
 // KDE's own interface font, as configured in kdeglobals.
 //
-// 使用系统字体 (AppearanceConfigService.useSystemFont) makes every shell surface
-// draw with the family KDE is set to instead of the families the shell was
-// designed around. Qt already applies that font to the process through the KDE
+// Every shell surface follows the KDE General font family by default.
+// Qt already applies that font to the process through the KDE
 // platform theme, but the shell cannot simply read Qt.application.font: the
 // property is not observable from QML (binding to it never re-evaluates), and a
 // session started without the platform theme -- a plain `qs -p shell` under
@@ -20,7 +19,7 @@ import "SystemFontPolicy.mjs" as FontPolicy
 //
 // Only the family is taken. Size stays owned by each surface: the shell's
 // layout is tuned for its own pixel sizes, and KDE's point size would reflow the
-// Bar and Dock rather than restyle them. The toggle exists for the *face*.
+// Bar and Dock rather than restyle them.
 QtObject {
     id: service
 

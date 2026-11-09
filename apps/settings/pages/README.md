@@ -25,7 +25,8 @@ No registry, dependency container or second IPC protocol is introduced.
   KDE edits automatically save after 350 ms without further input. The timer
   belongs to the long-lived adapter, so page navigation does not discard edits;
   application shutdown flushes a pending change. There is no apply/reset footer.
-  Only the desktop-follow switch uses immediate IPC.
+  The desktop always follows General font; there is no separate toggle.
+  FontPickerDialog uses shared NextKde controls and Qt font database choices.
 - `glassStyles` provides `options`, `indexOf(id)` and `labelOf(id)` to appearance
   views. This catalog stays owned by the composition root.
 - `shellStyleObserved(style)` and `materialSeedObserved(seed)` report confirmed

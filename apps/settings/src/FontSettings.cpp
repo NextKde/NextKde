@@ -7,6 +7,7 @@
 #include <KQuickConfigModuleLoader>
 #include <QAbstractItemModel>
 #include <QFontInfo>
+#include <QFontDatabase>
 #include <QGuiApplication>
 #include <QMetaProperty>
 #include <QQmlEngine>
@@ -91,6 +92,37 @@ QObject *FontSettings::rendering() const
 }
 QStringList FontSettings::subPixelOptions() const { return options(m_module, "subPixelOptionsModel"); }
 QStringList FontSettings::hintingOptions() const { return options(m_module, "hintingOptionsModel"); }
+
+QStringList FontSettings::fontFamilies(bool monospacedOnly) const
+{
+    QStringList families;
+    for (const auto &family : QFontDatabase::families()) {
+        if (!QFontDatabase::isPrivateFamily(family)
+            && (!monospacedOnly || QFontDatabase::isFixedPitch(family)))
+            families.append(family);
+    }
+    return families;
+}
+
+QStringList FontSettings::fontStyles(const QString &family) const
+{
+    return QFontDatabase::styles(family);
+}
+
+QString FontSettings::fontStyleName(const QFont &font) const
+{
+    return QFontDatabase::styleString(font);
+}
+
+QFont FontSettings::selectionFont(const QFont &original, const QString &family,
+    const QString &style, double pointSize) const
+{
+    QFont font = QFontDatabase::font(family, style, qRound(qBound(4.0, pointSize, 512.0)));
+    font.setPointSizeF(qBound(4.0, pointSize, 512.0));
+    font.setUnderline(original.underline());
+    font.setStrikeOut(original.strikeOut());
+    return font;
+}
 
 void FontSettings::refresh()
 {

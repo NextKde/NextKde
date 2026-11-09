@@ -200,17 +200,23 @@ Wayland compositor test. Actual application uptake, font-picker interactions and
 Wayland session behavior still require a VM graphical acceptance run. Applications
 that cache fonts may require restarting or logging out, following KDE behavior.
 
-The independent “Desktop follows system font” switch uses `appearance-settings`
-IPC and persists as `useSystemFont` (default false) in appearance schema 31.
-`SystemFontService` watches `kdeglobals`; `AppearanceTokens.typography` projects
-the selected general family into Shell text/display roles. Desktop pixel sizes
-stay per-surface and the emoji role stays `Noto Color Emoji`. Successful reads
-without `font=` clear the previous family; failed reads preserve the last value.
+The desktop always follows the KDE General font family. There is no opt-in or
+separate font state: appearance schema 32 drops the old `useSystemFont` flag,
+including profiles that previously saved `false`. `SystemFontService` watches
+`kdeglobals`; `AppearanceTokens.typography` projects that family into Shell roles.
+Desktop pixel sizes stay per-surface and emoji stay `Noto Color Emoji`.
+Successful reads without `font=` clear the previous family; failed reads retain it.
+
+The font picker uses a NextKde `LiquidDialog` inside the Settings window, shared
+inputs/buttons, a searchable family list and a live preview. Qt's font database
+provides installed families/styles and filters the fixed-width role; Qt's stock
+FontDialog is not used. Picker edits stay local until confirmation; Cancel and
+Escape discard them. Apply-to-all scope is selected in the same dialog.
 
 Regression coverage: `kos-settings.fonts` loads the real KDE backend with isolated
 user roots, a private D-Bus session and Xvfb for KDE's Xft previews (test builds
 require `xvfb-run` and `xauth`), `kos-settings.page-contracts` covers the
-secondary route and asynchronous Shell switch, and `kos-ui.system-font-policy`
+secondary route, and `kos-ui.system-font-policy`
 plus `kos-shell.system-font` cover parsing and resolved Shell families. All are
 registered in the CI inventory. Runtime and visual acceptance must run in a VM
 or hosted CI, never on the maintainer workstation.

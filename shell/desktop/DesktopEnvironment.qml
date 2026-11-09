@@ -491,7 +491,6 @@ Item {
                 barMacTint: AppearanceConfigService.barMacTint,
                 dockWindowAnimationStyle:
                     AppearanceConfigService.dockWindowAnimationStyle,
-                useSystemFont: AppearanceConfigService.useSystemFont,
                 // The family the desktop would draw with, so the Settings page
                 // can name it instead of describing the option in the abstract.
                 // This is kdeglobals' [General] font= family, resolved.
@@ -620,16 +619,7 @@ Item {
             return snapshot()
         }
 
-        // 使用系统字体. The family itself is not written here: it is KDE's, read
-        // live from kdeglobals by SystemFontService, so the page only toggles
-        // which of the two families the desktop draws with.
-        function updateUseSystemFont(enabled: bool): string {
-            AppearanceConfigService.updateUseSystemFont(enabled)
-            return snapshot()
-        }
 
-        // Per-surface visibility. `visible` is the wanted state, so the switch
-        // in the Settings page holds the same value it displays.
         function updateDeskCenterWidgetVisibility(id: string, visible: bool): string {
             AppearanceConfigService.setDeskCenterWidgetVisible(id, visible)
             return snapshot()

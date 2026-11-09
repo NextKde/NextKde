@@ -49,6 +49,11 @@ public:
     Q_INVOKABLE void setRendering(const QString &setting, const QVariant &value);
     Q_INVOKABLE void setSubPixel(int index);
     Q_INVOKABLE void setHinting(int index);
+    Q_INVOKABLE QStringList fontFamilies(bool monospacedOnly = false) const;
+    Q_INVOKABLE QStringList fontStyles(const QString &family) const;
+    Q_INVOKABLE QString fontStyleName(const QFont &font) const;
+    Q_INVOKABLE QFont selectionFont(const QFont &original, const QString &family,
+        const QString &style, double pointSize) const;
 
 signals:
     void changed();
