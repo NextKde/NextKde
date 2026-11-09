@@ -1,5 +1,6 @@
 import QtQuick
 import qs.desktop.modules.dock
+import qs.desktop.modules.common
 
 Item {
     id: root
@@ -47,7 +48,7 @@ Item {
             anchors.centerIn: parent
             text: Math.round(root.value * 100) + "%"
             color: ThemeService.foregroundColor
-            font { family: "SF Pro Display"; pixelSize: 15; weight: Font.DemiBold }
+            font { family: AppearanceTokens.typography.displayFamily; pixelSize: 15; weight: Font.DemiBold }
         }
     }
 
@@ -57,14 +58,14 @@ Item {
         Text {
             text: root.label
             color: ThemeService.foregroundColor
-            font { family: "Noto Sans CJK SC"; pixelSize: 13; weight: Font.DemiBold }
+            font { family: AppearanceTokens.typography.textFamily; pixelSize: 13; weight: Font.DemiBold }
         }
         Text {
             width: parent.width
             text: root.detail
             elide: Text.ElideRight
             color: Qt.rgba(ThemeService.foregroundColor.r, ThemeService.foregroundColor.g, ThemeService.foregroundColor.b, 0.62)
-            font { family: "SF Pro Display"; pixelSize: 10 }
+            font { family: AppearanceTokens.typography.displayFamily; pixelSize: 10 }
         }
     }
 }

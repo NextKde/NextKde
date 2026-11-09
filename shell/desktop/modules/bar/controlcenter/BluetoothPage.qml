@@ -21,13 +21,13 @@ Item {
                 anchors.horizontalCenter: parent.horizontalCenter
                 text: I18n.tr("Bluetooth is off")
                 color: AppearanceTokens.content.glassInk()
-                font { pixelSize: 13; weight: Font.Bold; family: "Noto Sans CJK SC" }
+                font { pixelSize: 13; weight: Font.Bold; family: AppearanceTokens.typography.textFamily }
             }
             GlassText {
                 anchors.horizontalCenter: parent.horizontalCenter
                 text: I18n.tr("Turn on the switch above to connect devices")
                 color: AppearanceTokens.content.glassInk()
-                font { pixelSize: 11; family: "Noto Sans CJK SC" }
+                font { pixelSize: 11; family: AppearanceTokens.typography.textFamily }
             }
         }
     }
@@ -51,7 +51,7 @@ Item {
                 anchors { left: parent.left; verticalCenter: parent.verticalCenter }
                 text: I18n.tr("Devices")
                 color: AppearanceTokens.content.glassInk()
-                font { pixelSize: 10; weight: Font.DemiBold; family: "Noto Sans CJK SC" }
+                font { pixelSize: 10; weight: Font.DemiBold; family: AppearanceTokens.typography.textFamily }
             }
 
             GlassText {
@@ -59,7 +59,7 @@ Item {
                 visible: bluetoothSubmenuView.service.bluetoothDevicesRefreshInProgress
                 text: I18n.tr("Refreshing…")
                 color: AppearanceTokens.content.glassInk()
-                font { pixelSize: 9; family: "Noto Sans CJK SC" }
+                font { pixelSize: 9; family: AppearanceTokens.typography.textFamily }
             }
         }
 
@@ -149,13 +149,13 @@ Item {
                         text: modelData.name || I18n.tr("Unknown device")
                         elide: Text.ElideRight
                         color: AppearanceTokens.content.glassInk()
-                        font { pixelSize: 11; weight: modelData.connected ? Font.DemiBold : Font.Normal; family: "Noto Sans CJK SC" }
+                        font { pixelSize: 11; weight: modelData.connected ? Font.DemiBold : Font.Normal; family: AppearanceTokens.typography.textFamily }
                     }
 
                     GlassText {
                         text: modelData.connected ? I18n.tr("Connected") : I18n.tr("Not connected")
                         color: AppearanceTokens.content.glassInk()
-                        font { pixelSize: 9; family: "Noto Sans CJK SC" }
+                        font { pixelSize: 9; family: AppearanceTokens.typography.textFamily }
                     }
                 }
 
@@ -171,7 +171,7 @@ Item {
                         anchors.centerIn: parent
                         text: (modelData.battery || 0) + "%"
                         color: AppearanceTokens.content.glassInk()
-                        font { pixelSize: 10; family: "Noto Sans CJK SC" }
+                        font { pixelSize: 10; family: AppearanceTokens.typography.textFamily }
                     }
                 }
 
@@ -195,7 +195,7 @@ Item {
                 visible: submenuBtList.count === 0 && !bluetoothSubmenuView.service.bluetoothDevicesRefreshInProgress
                 text: I18n.tr("No paired devices found")
                 color: AppearanceTokens.content.glassInk()
-                font { pixelSize: 11; family: "Noto Sans CJK SC" }
+                font { pixelSize: 11; family: AppearanceTokens.typography.textFamily }
             }
 
             KosKineticScroll { flickable: submenuBtList }
@@ -217,7 +217,7 @@ Item {
             anchors { left: parent.left; leftMargin: 16; verticalCenter: parent.verticalCenter }
             text: I18n.tr("Bluetooth settings…")
             color: AppearanceTokens.content.glassInk()
-            font { pixelSize: 11; weight: Font.DemiBold; family: "Noto Sans CJK SC" }
+            font { pixelSize: 11; weight: Font.DemiBold; family: AppearanceTokens.typography.textFamily }
         }
 
         GlassText {

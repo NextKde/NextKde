@@ -90,7 +90,7 @@ ControlCenterCard {
                 : (submenuCard.page === "brightness" ? I18n.tr("Display Brightness")
                 : (submenuCard.page === "sound" ? I18n.tr("Sound") : "")))
             color: AppearanceTokens.content.glassInk()
-            font { pixelSize: 13; weight: Font.Bold; family: "Noto Sans CJK SC" }
+            font { pixelSize: 13; weight: Font.Bold; family: AppearanceTokens.typography.textFamily }
         }
 
         // Right toggle switch for Wi-Fi and Bluetooth

@@ -46,7 +46,7 @@ ControlCenterCard {
         text: I18n.tr("Keep Awake")
         elide: Text.ElideRight
         color: ThemeService.foregroundColor
-        font { pixelSize: 12; weight: Font.Medium; family: "Noto Sans CJK SC" }
+        font { pixelSize: 12; weight: Font.Medium; family: AppearanceTokens.typography.textFamily }
     }
     GlassText {
         anchors { left: keepAwakeDisc.right; leftMargin: 8; right: parent.right; rightMargin: 8; bottom: parent.bottom; bottomMargin: 7 }
@@ -58,7 +58,7 @@ ControlCenterCard {
         color: keepAwakeCard.service.keepAwakeEnabled
             ? ThemeService.tileActiveGlyph : ThemeService.foregroundColor
         opacity: keepAwakeCard.service.keepAwakeEnabled ? 0.9 : 0.5
-        font { pixelSize: 11; family: "Noto Sans CJK SC" }
+        font { pixelSize: 11; family: AppearanceTokens.typography.textFamily }
     }
     ToolTip.visible: keepAwakePointer.containsMouse
     ToolTip.delay: 500

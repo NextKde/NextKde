@@ -51,7 +51,7 @@ ControlCenterCard {
             text: mediaCard.player?.trackTitle || I18n.tr("Not playing")
             elide: Text.ElideRight
             color: ThemeService.foregroundColor
-            font { pixelSize: 12; weight: Font.Bold; family: "Noto Sans CJK SC" }
+            font { pixelSize: 12; weight: Font.Bold; family: AppearanceTokens.typography.textFamily }
         }
         GlassText {
             width: parent.width
@@ -60,7 +60,7 @@ ControlCenterCard {
             elide: Text.ElideRight
             color: ThemeService.foregroundColor
             opacity: 0.70
-            font { pixelSize: 10; family: "Noto Sans CJK SC" }
+            font { pixelSize: 10; family: AppearanceTokens.typography.textFamily }
         }
     }
     Row {

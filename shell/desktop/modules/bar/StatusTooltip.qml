@@ -60,14 +60,14 @@ AnimatedPopupWindow {
                 anchors.horizontalCenter: parent.horizontalCenter
                 text: root.primaryText
                 color: tooltipSurface.foregroundColor
-                font { family: "Noto Sans CJK SC"; pixelSize: 12; weight: Font.DemiBold }
+                font { family: AppearanceTokens.typography.textFamily; pixelSize: 12; weight: Font.DemiBold }
             }
             Text {
                 anchors.horizontalCenter: parent.horizontalCenter
                 visible: root.secondaryText.length > 0
                 text: root.secondaryText
                 color: tooltipSurface.secondaryForegroundColor
-                font { family: "Noto Sans CJK SC"; pixelSize: 10; weight: Font.Medium }
+                font { family: AppearanceTokens.typography.textFamily; pixelSize: 10; weight: Font.Medium }
             }
         }
     }

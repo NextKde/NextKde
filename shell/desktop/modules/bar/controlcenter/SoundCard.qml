@@ -24,7 +24,7 @@ ControlCenterCard {
         GlassText {
             text: I18n.tr("Sound")
             color: ThemeService.foregroundColor
-            font { pixelSize: 11; weight: Font.DemiBold; family: "Noto Sans CJK SC" }
+            font { pixelSize: 11; weight: Font.DemiBold; family: AppearanceTokens.typography.textFamily }
         }
     }
     GlassText {
@@ -32,7 +32,7 @@ ControlCenterCard {
         text: Math.round(slotCard7.volumePreview) + "%"
         color: ThemeService.foregroundColor
         opacity: 0.50
-        font { pixelSize: 9; family: "Noto Sans CJK SC" }
+        font { pixelSize: 9; family: AppearanceTokens.typography.textFamily }
     }
     GlassText {
         anchors { right: parent.right; top: parent.top; rightMargin: 13; topMargin: 5 }

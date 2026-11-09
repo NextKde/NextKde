@@ -1235,7 +1235,7 @@ Item {
                             && !!delegateRoot.folderCustom.emoji
                         text: visible ? delegateRoot.folderCustom.emoji : ""
                         font {
-                            family: "Noto Color Emoji"
+                            family: AppearanceTokens.typography.emojiFamily
                             pixelSize: root.iconVisualSize * 0.36
                         }
                     }
@@ -1263,7 +1263,7 @@ Item {
                             - width - 2)
                         text: delegateRoot.fileTitleIcon
                         font {
-                            family: "Noto Color Emoji"
+                            family: AppearanceTokens.typography.emojiFamily
                             pixelSize: Math.max(9, Math.round(
                                 fileTitleText.font.pixelSize * 0.75))
                         }

@@ -30,7 +30,7 @@ stdenv.mkDerivation {
         kdePackages.wrapQtAppsHook
     ];
 
-    buildInputs = [ flatpak ostree gtk3 wayland kdePackages.kconfig kdePackages.kio kdePackages.kservice kdePackages.qtbase kdePackages.qtdeclarative
+    buildInputs = [ flatpak ostree gtk3 wayland kdePackages.kconfig kdePackages.kcmutils kdePackages.plasma-workspace kdePackages.kio kdePackages.kservice kdePackages.qtbase kdePackages.qtdeclarative
                     kdePackages.qtsvg kdePackages.qtimageformats kdePackages.qt5compat ];
 
     preFixup = ''

@@ -159,7 +159,7 @@ AnimatedPopupWindow {
                     text: popup.title
                     color: ThemeService.foregroundColor
                     font {
-                        family: "Noto Sans CJK SC"
+                        family: AppearanceTokens.typography.textFamily
                         pixelSize: 14
                         weight: Font.DemiBold
                     }
@@ -171,7 +171,7 @@ AnimatedPopupWindow {
                     color: ThemeService.foregroundColor
                     opacity: 0.62
                     font {
-                        family: "Noto Sans CJK SC"
+                        family: AppearanceTokens.typography.textFamily
                         pixelSize: 11
                         weight: Font.Medium
                     }
@@ -200,7 +200,7 @@ AnimatedPopupWindow {
                         color: ThemeService.foregroundColor
                         opacity: 0.62
                         font {
-                            family: "Noto Sans CJK SC"
+                            family: AppearanceTokens.typography.textFamily
                             pixelSize: 12
                             weight: Font.Medium
                         }
@@ -210,7 +210,7 @@ AnimatedPopupWindow {
                         text: modelData.value
                         color: ThemeService.foregroundColor
                         font {
-                            family: "Noto Sans CJK SC"
+                            family: AppearanceTokens.typography.textFamily
                             pixelSize: 13
                             weight: Font.DemiBold
                         }

@@ -76,7 +76,7 @@ Item {
                 color: ThemeService.foregroundColor
                 opacity: 0.72
                 font {
-                    family: "Noto Sans CJK SC"
+                    family: AppearanceTokens.typography.textFamily
                     pixelSize: Math.max(8, Math.round(widget.iconSize * 0.18))
                     weight: Font.Medium
                 }
@@ -86,7 +86,7 @@ Item {
                 color: ThemeService.foregroundColor
                 opacity: value === "--:--" ? 0.48 : 0.92
                 font {
-                    family: "SF Pro Display"
+                    family: AppearanceTokens.typography.displayFamily
                     pixelSize: Math.max(8, Math.round(widget.iconSize * 0.19))
                     weight: Font.DemiBold
                 }
@@ -224,7 +224,7 @@ Item {
                     fontSizeMode: Text.HorizontalFit
                     minimumPixelSize: 13
                     font {
-                        family: "SF Pro Display"
+                        family: AppearanceTokens.typography.displayFamily
                         pixelSize: Math.max(16, Math.round(widget.iconSize * 0.43))
                         weight: Font.DemiBold
                         letterSpacing: 0.6
@@ -244,7 +244,7 @@ Item {
                 fontSizeMode: Text.HorizontalFit
                 minimumPixelSize: 7
                 font {
-                    family: "Noto Sans CJK SC"
+                    family: AppearanceTokens.typography.textFamily
                     pixelSize: Math.max(9, Math.round(widget.iconSize * 0.21))
                     weight: Font.Medium
                 }
@@ -290,7 +290,7 @@ Item {
             color: "white"
             anchors.verticalCenter: parent.verticalCenter
             font {
-                family: "SF Pro Display"
+                family: AppearanceTokens.typography.displayFamily
                 pixelSize: Math.max(9, Math.round(widget.iconSize * 0.52))
                 weight: Font.DemiBold
             }
@@ -301,7 +301,7 @@ Item {
             opacity: 0.68
             anchors.verticalCenter: parent.verticalCenter
             font {
-                family: "Noto Sans CJK SC"
+                family: AppearanceTokens.typography.textFamily
                 pixelSize: Math.max(6, Math.round(widget.iconSize * 0.28))
                 weight: Font.Medium
             }

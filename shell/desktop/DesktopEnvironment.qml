@@ -248,6 +248,10 @@ Item {
     // publishes again once its config is ready and the transport reconnects.
     Component.onCompleted: {
         IconThemeReloadService.initialize()
+        // Watch kdeglobals so 使用系统字体 follows a font changed in System
+        // Settings without restarting the shell, and so the first value is
+        // available before any surface binds its family.
+        SystemFontService.initialize()
         ShortcutsService.applyToPlatform()
         // Warm the theme pack scan at startup: a persisted pack themeId is
         // validated against installed packs on every shell start, and the
@@ -487,6 +491,11 @@ Item {
                 barMacTint: AppearanceConfigService.barMacTint,
                 dockWindowAnimationStyle:
                     AppearanceConfigService.dockWindowAnimationStyle,
+                // The family the desktop would draw with, so the Settings page
+                // can name it instead of describing the option in the abstract.
+                // This is kdeglobals' [General] font= family, resolved.
+                systemFontFamily: SystemFontService.family,
+                desktopFontFamily: AppearanceConfigService.desktopFontFamily,
                 // Same reason as materialColorSwatches above: these are arrays,
                 // and a plain JSON string crosses the hand-written C++ whitelist
                 // with no conversion left to get wrong. They carry the *hidden*
@@ -611,8 +620,12 @@ Item {
             return snapshot()
         }
 
-        // Per-surface visibility. `visible` is the wanted state, so the switch
-        // in the Settings page holds the same value it displays.
+        function updateDesktopFontFamily(family: string): string {
+            AppearanceConfigService.updateDesktopFontFamily(family)
+            return snapshot()
+        }
+
+
         function updateDeskCenterWidgetVisibility(id: string, visible: bool): string {
             AppearanceConfigService.setDeskCenterWidgetVisible(id, visible)
             return snapshot()

@@ -12,6 +12,7 @@ if(NOT TARGET kos_demo_ui)
 endif()
 
 find_package(KF6Config REQUIRED)
+find_package(KF6KCMUtils REQUIRED)
 find_package(KF6KIO REQUIRED)
 find_package(KF6Service REQUIRED)
 find_package(Qt6 6.5 REQUIRED COMPONENTS Concurrent)
@@ -74,6 +75,8 @@ qt_add_executable(kos-settings
     src/WallpaperLibrary.cpp
     src/SettingsRuntime.cpp
     src/CacheMaintenance.cpp
+    src/FontSettings.cpp
+    src/FontSettings.h
     src/PowerSettings.cpp
     src/PowerSettings.h
     src/WindowSettings.cpp
@@ -99,6 +102,7 @@ target_link_libraries(kos-settings PRIVATE
     Qt6::Qml
     Qt6::Quick
     KF6::ConfigCore
+    KF6::KCMUtilsQuick
     KF6::KIOGui
     KF6::Service
     Qt6::Network
@@ -126,6 +130,17 @@ install(DIRECTORY pages components DESTINATION share/kos/settings
 if(BUILD_TESTING)
     find_package(Qt6 6.5 REQUIRED COMPONENTS Test)
     find_program(DBUS_RUN_SESSION_EXECUTABLE dbus-run-session REQUIRED)
+    find_program(XVFB_RUN_EXECUTABLE xvfb-run REQUIRED)
+    add_executable(kos-settings-fonts-test tests/backend/FontsTest.cpp src/FontSettings.cpp src/FontSettings.h)
+    target_include_directories(kos-settings-fonts-test PRIVATE src)
+    target_link_libraries(kos-settings-fonts-test PRIVATE Qt6::Gui Qt6::Qml Qt6::Quick Qt6::Test Qt6::DBus
+        KF6::KCMUtilsQuick kos_demo_ui kos_demo_ui_plugin)
+    target_compile_definitions(kos-settings-fonts-test PRIVATE
+        FONT_SETTINGS_PAGE="${CMAKE_CURRENT_SOURCE_DIR}/pages/FontSettingsPage.qml")
+    add_test(NAME kos-settings.fonts
+        COMMAND ${XVFB_RUN_EXECUTABLE} -a ${DBUS_RUN_SESSION_EXECUTABLE} -- $<TARGET_FILE:kos-settings-fonts-test>)
+    set_tests_properties(kos-settings.fonts PROPERTIES LABELS headless TIMEOUT 30
+        ENVIRONMENT "KOS_FONT_SCREENSHOT=${CMAKE_BINARY_DIR}/test-results/fonts.png")
     add_executable(kos-settings-background-test tests/background/session.cpp)
     target_link_libraries(kos-settings-background-test PRIVATE Qt6::Core Qt6::DBus Qt6::Test)
     target_compile_definitions(kos-settings-background-test PRIVATE

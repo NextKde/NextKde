@@ -122,7 +122,7 @@ Item {
         ShellText {
             text: row.label
             elide: Text.ElideRight
-            font.family: "SF Pro Display, Noto Sans CJK SC, sans-serif"
+            font.family: AppearanceTokens.typography.displayChain
             font.pixelSize: 13
             font.weight: Font.DemiBold
             color: row.foregroundColor
