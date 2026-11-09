@@ -82,6 +82,14 @@ Item {
     }
     TestCase {
         name: "InteractionControls"; when: windowShown
+        function test_standard_window_button_layout() {
+            const controls = createTemporaryObject(windowControlsFactory, harness)
+            verify(controls !== null)
+            compare(controls.circleSize, 14)
+            tryVerify(() => controls.buttonLayout.length === 3)
+            for (const button of controls.buttonLayout) compare(button.width, 14)
+            compare(controls.buttonLayout[1].x - controls.buttonLayout[0].x, 28)
+        }
         function test_window_actions_keyboard_data() {
             const rows = []
             for (const action of ["maximize", "minimize", "close"])

@@ -1,5 +1,7 @@
 // Real GPU regression test for the production title-bar readback helper.
 #include "../windowbuttons/titlebarmetrics.h"
+#include "../windowbuttons/titlebartint.h"
+#include <array>
 #include <core/rendertarget.h>
 #include <core/renderviewport.h>
 #include <opengl/eglcontext.h>
@@ -158,6 +160,105 @@ int main(int argc, char **argv)
         }
         KWin::GLFramebuffer::popFramebuffer();
     }
+    // Production failure handling: undefined PBO storage must not become an
+    // opaque black panel, while a genuine black titlebar remains usable.
+    const auto check = [&](bool ok, const char *label) {
+        ++checks;
+        if (!ok) { ++failures; std::fprintf(stderr, "FAIL %s\n", label); }
+    };
+    GLuint sampleFbo = 0, sampleTexture = 0;
+    glGenFramebuffers(1, &sampleFbo);
+    glGenTextures(1, &sampleTexture);
+    {
+        KOS::TitlebarReadback readback;
+        glBindFramebuffer(GL_READ_FRAMEBUFFER, 0);
+        check(!readback.enqueue(sampleFbo, QSize(8, 8), QRect(0, 0, 8, 8))
+              && !readback.pending(), "incomplete framebuffer rejected");
+        glBindTexture(GL_TEXTURE_2D, sampleTexture);
+        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8UI, 8, 8, 0, GL_RGBA_INTEGER, GL_UNSIGNED_BYTE, nullptr);
+        glBindFramebuffer(GL_FRAMEBUFFER, sampleFbo);
+        glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, sampleTexture, 0);
+        check(glCheckFramebufferStatus(GL_FRAMEBUFFER) == GL_FRAMEBUFFER_COMPLETE, "integer target ready");
+        glBindFramebuffer(GL_READ_FRAMEBUFFER, 0);
+        check(readback.enqueue(sampleFbo, QSize(8, 8), QRect(0, 0, 8, 8)), "queue failing integer read");
+        check(glGetError() == GL_INVALID_OPERATION, "integer target rejects noninteger pixel format");
+        const auto take = [&](QByteArray &pixels) {
+            for (int i = 0; i < 1000; ++i) {
+                if (readback.take(pixels)) return true;
+                QThread::msleep(1); // Test only; production never waits.
+            }
+            return false;
+        };
+        QByteArray pixels;
+        check(take(pixels), "failed read fence completes");
+        KOS::TintHistogram failed;
+        for (qsizetype i = 0; i + 4 <= pixels.size(); i += 4)
+            failed.add(reinterpret_cast<const uchar *>(pixels.constData()) + i);
+        bool dark = false;
+        QColor color;
+        check(!failed.tint(&dark, &color), "failed read cannot supply black RGB");
+
+        std::array<uchar, 8 * 8 * 4> opaqueBlack{};
+        for (int i = 3; i < int(opaqueBlack.size()); i += 4) opaqueBlack[i] = 255;
+        glBindTexture(GL_TEXTURE_2D, sampleTexture);
+        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, 8, 8, 0, GL_RGBA, GL_UNSIGNED_BYTE, opaqueBlack.data());
+        glBindFramebuffer(GL_READ_FRAMEBUFFER, sampleFbo);
+        glReadBuffer(GL_NONE);
+        glBindFramebuffer(GL_READ_FRAMEBUFFER, 0);
+        check(readback.enqueue(sampleFbo, QSize(8, 8), QRect(0, 0, 8, 8)), "select source color attachment");
+        GLint binding = -1, readBuffer = -1;
+        glGetIntegerv(GL_READ_FRAMEBUFFER_BINDING, &binding);
+        check(binding == 0, "caller read framebuffer preserved");
+        glBindFramebuffer(GL_READ_FRAMEBUFFER, sampleFbo);
+        glGetIntegerv(GL_READ_BUFFER, &readBuffer);
+        check(readBuffer == GL_NONE, "source read-buffer selection restored");
+        glBindFramebuffer(GL_READ_FRAMEBUFFER, 0);
+        check(take(pixels), "valid black read completes");
+        KOS::TintHistogram valid;
+        for (qsizetype i = 0; i + 4 <= pixels.size(); i += 4)
+            valid.add(reinterpret_cast<const uchar *>(pixels.constData()) + i);
+        check(valid.tint(&dark, &color) && dark && color == QColor(0, 0, 0), "real opaque black supported");
+
+        // A raw capture can also contain the client's own fade-in. Its
+        // premultiplied pixels must not confirm a temporarily dark background.
+        auto faded = opaqueBlack;
+        for (int i = 0; i < int(faded.size()); i += 4) {
+            faded[i] = faded[i + 1] = faded[i + 2] = 120;
+            faded[i + 3] = 128;
+        }
+        glBindTexture(GL_TEXTURE_2D, sampleTexture);
+        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, 8, 8, 0, GL_RGBA, GL_UNSIGNED_BYTE, faded.data());
+        check(readback.enqueue(sampleFbo, QSize(8, 8), QRect(0, 0, 8, 8)), "queue faded titlebar read");
+        check(take(pixels), "faded titlebar read completes");
+        KOS::TintHistogram translucent;
+        for (qsizetype i = 0; i + 4 <= pixels.size(); i += 4)
+            translucent.add(reinterpret_cast<const uchar *>(pixels.constData()) + i);
+        check(!translucent.tint(&dark, &color), "premultiplied fade cannot supply dark RGB");
+        for (int alpha : {253, 254, 255}) {
+            auto nearOpaque = opaqueBlack;
+            for (int i = 0; i < int(nearOpaque.size()); i += 4) {
+                nearOpaque[i] = nearOpaque[i + 1] = nearOpaque[i + 2] = 223;
+                nearOpaque[i + 3] = uchar(alpha);
+            }
+            glBindTexture(GL_TEXTURE_2D, sampleTexture);
+            glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, 8, 8, 0, GL_RGBA, GL_UNSIGNED_BYTE, nearOpaque.data());
+            check(readback.enqueue(sampleFbo, QSize(8, 8), QRect(0, 0, 8, 8)), "queue near-opaque titlebar read");
+            check(take(pixels), "near-opaque titlebar read completes");
+            KOS::TintHistogram histogram;
+            for (qsizetype i = 0; i + 4 <= pixels.size(); i += 4)
+                histogram.add(reinterpret_cast<const uchar *>(pixels.constData()) + i);
+            const bool usable = histogram.tint(&dark, &color);
+            check(usable == (alpha >= 254), "one-level alpha tolerance, not a fade");
+            if (usable) {
+                const int straight = alpha == 254 ? 224 : 223;
+                check(!dark && color == QColor(straight, straight, straight), "near-opaque RGB normalized");
+            }
+        }
+        check(glGetError() == GL_NO_ERROR, "no leftover readback errors");
+    }
+    glBindFramebuffer(GL_FRAMEBUFFER, 0);
+    glDeleteFramebuffers(1, &sampleFbo);
+    glDeleteTextures(1, &sampleTexture);
     glDeleteBuffers(1, &vbo);
     glDeleteVertexArrays(1, &vao);
     glDeleteProgram(program);

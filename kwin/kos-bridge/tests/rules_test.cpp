@@ -811,6 +811,41 @@ void testNativeGtkControls()
     removeRulesFile();
 }
 
+void testFormaControls()
+{
+    removeRulesFile();
+    writeKwinrc("kos_decoration");
+    writeUserConfig(R"({"default":{"showButtons":true,"decoratedWindows":"always",
+                                  "nativeGtkControls":false},
+                        "independentButtonBackground":true})");
+    ButtonConfig config;
+    for (const auto id : {"io.github.egely1337.Mayonnaise.Calculator",
+                          "io.github.egely1337.Mayonnaise.Finder",
+                          "io.github.egely1337.Mayonnaise.Terminal",
+                          "io.github.skjsbsnq.Forma.AppStore",
+                          "io.github.skjsbsnq.Forma.Mail"}) {
+        const QString appId = QString::fromLatin1(id);
+        const auto csd = config.getAppConfig(query(appId));
+        CHECK(csd.usesClientControls(false));
+        CHECK(!csd.usesNativeGtkControls(false)); // Forma uses OpenGL, not GTK.
+        CHECK(!csd.usesClientControls(true)); // Never suppress an SSD's controls.
+        CHECK(config.getAppConfig(query(QStringLiteral("instance ") + appId)).usesClientControls(false));
+        CHECK(config.getAppConfig(query(appId, {}, 5)).usesClientControls(false));
+        // Old adjustments and forced-paint policy must not bring back a second
+        // set of lights or change their input ownership.
+        CHECK(config.storeGeometry(classMatcher(appId), PanelGeometry{}));
+        CHECK(config.getAppConfig(query(appId)).usesClientControls(false));
+    }
+    for (const auto other : {"finder", "forma-terminal", "org.example.Forma",
+                             "io.github.egely1337.Mayonnaise.Finder.Other",
+                             "io.github.skjsbsnq.Forma.Unknown",
+                             "io.github.egely1337.Mayonnaise.Finder unrelated.Class",
+                             "google-chrome", "qq QQ"}) {
+        CHECK(!config.getAppConfig(query(QString::fromLatin1(other))).usesClientControls(false));
+    }
+    removeRulesFile();
+}
+
 void testResolution()
 {
     removeRulesFile();
@@ -863,6 +898,9 @@ void testResolution()
     CHECK(chrome.background == PanelBackground::Custom);
     CHECK(chrome.customBackground == QColor("#202124"));
     CHECK(chrome.glyphMode == GlyphMode::Always);
+    CHECK(chrome.geometry.position == ButtonPosition::Right);
+    CHECK(chrome.showButtons);
+    CHECK(!chrome.usesNativeGtkControls(false)); // Keep the right-side overlay.
 
     // 3. The hand-written rules, by the first that matches.
     const AppConfig dialog =
@@ -1045,10 +1083,90 @@ void testStore()
     CHECK(!writing.store(WindowMatcher{}, written));
 }
 
+void testIndependentBackground()
+{
+    PanelGeometry base;
+    base.buttonSize = 32;
+    base.buttonSpacing = 30;
+    base.offset = {100, 80};
+    base.independentBackground = true;
+    const QSizeF window(1200, 700);
+    CHECK(near(effectiveButtonSize(base), 14));
+    CHECK(near(effectiveButtonSpacing(base), 14));
+    CHECK(sameGeometry(resized(base, GeometryField::DotSize, 20), base));
+    CHECK(sameGeometry(resized(base, GeometryField::Spacing, -20), base));
+    auto dotOnWindow = [&](const PanelGeometry &g, int i) {
+        const auto box = panelRectUnclipped(g, window);
+        return dotRect(box.size(), g, i).translated(box.topLeft());
+    };
+    for (auto side : {ButtonPosition::Left, ButtonPosition::Right}) {
+        base.position = side;
+        for (auto edge : {PanelEdge::Left, PanelEdge::Right, PanelEdge::Top, PanelEdge::Bottom}) {
+            const QPointF delta = edge == PanelEdge::Left ? QPointF(-35, 0)
+                : edge == PanelEdge::Right ? QPointF(35, 0)
+                : edge == PanelEdge::Top ? QPointF(0, -25) : QPointF(0, 25);
+            const auto grown = resizedByEdge(base, edge, delta);
+            CHECK(!sameGeometry(grown, base));
+            for (int i = 0; i < 3; ++i) CHECK(dotOnWindow(base, i) == dotOnWindow(grown, i));
+            const auto box = panelRectUnclipped(grown, window);
+            CHECK(gripAt(grown, gripRect(grown, edge).center()) == edge);
+            CHECK(sameGeometry(panelGeometryFromTopLeft(grown, window, box.topLeft()), grown));
+            const auto moved = nudged(grown, window, QPointF(10, 10));
+            CHECK(dotOnWindow(moved, 0) == dotOnWindow(grown, 0).translated(10, 10));
+        }
+    }
+    const auto all = resized(base, GeometryField::Padding, 20);
+    CHECK(all.coverage == QMarginsF(20, 20, 20, 20));
+    CHECK(dotOnWindow(all, 0) == dotOnWindow(base, 0));
+    const auto bounded = clamped(resizedByEdge(all, PanelEdge::Bottom, QPointF(0, 10000)));
+    CHECK(near(bounded.coverage.bottom(), MaxCoverage));
+    // A cover that reaches outside a window is clipped without moving lights.
+    auto outside = base;
+    outside.offset = {2, 2};
+    outside.coverage = QMarginsF(80, 80, 80, 80);
+    CHECK(QRectF(QPointF(), window).contains(panelRect(outside, window)));
+    CHECK(near(dotOnWindow(outside, 0).width(), 14));
+
+    removeRulesFile();
+    writeUserConfig(R"({"independentButtonBackground":true,
+        "apps":{"covered":{"buttonSize":40,"buttonSpacing":40,"independentButtonBackground":false}}})");
+    ButtonConfig config;
+    auto saved = base;
+    saved.coverage = QMarginsF(35, 25, 30, 20);
+    CHECK(config.storeGeometry(classMatcher(QStringLiteral("covered")), saved));
+    config.load();
+    auto resolved = config.getAppConfig(query(QStringLiteral("covered"))).geometry;
+    CHECK(resolved.independentBackground);
+    CHECK(near(effectiveButtonSize(resolved), 14));
+    CHECK(near(effectiveButtonSpacing(resolved), 14));
+    CHECK(resolved.coverage == saved.coverage);
+    CHECK(near(resolved.buttonSize, 32)); // Original custom size was not overwritten.
+    CHECK(near(effectiveButtonSize(config.getAppConfig(query(QStringLiteral("other"))).geometry), 14));
+    writeUserConfig(R"({"independentButtonBackground":false})");
+    config.load();
+    resolved = config.getAppConfig(query(QStringLiteral("covered"))).geometry;
+    CHECK(!resolved.independentBackground);
+    CHECK(near(effectiveButtonSize(resolved), 32));
+    CHECK(near(effectiveButtonSpacing(resolved), 30));
+    CHECK(resolved.coverage == saved.coverage); // Reactivating restores the cover.
+}
+
 } // namespace
 
 int main(int argc, char **argv)
 {
+    {
+        const auto main = query(QStringLiteral("qq"), QStringLiteral("QQ"), 0);
+        const auto image = query(QStringLiteral("qq"), QStringLiteral("Image viewer"), 0);
+        const auto matcher = adjustmentMatcher(main);
+        CHECK(matcher.matches(main));
+        CHECK(!matcher.matches(image));
+        const auto roled = adjustmentMatcher(query(QStringLiteral("qq"), {}, 0, QStringLiteral("main")));
+        CHECK(roled.matches(query(QStringLiteral("qq"), QStringLiteral("New caption"), 0, QStringLiteral("main"))));
+        CHECK(!roled.matches(query(QStringLiteral("qq"), {}, 0, QStringLiteral("viewer"))));
+        CHECK(!roled.matches(query(QStringLiteral("qq"), {}, 5, QStringLiteral("main"))));
+    }
+
     QTemporaryDir dir;
     if (!dir.isValid()) {
         std::fprintf(stderr, "FAIL could not create a temporary directory\n");
@@ -1074,7 +1192,9 @@ int main(int argc, char **argv)
     testTileMenu();
     testResolution();
     testNativeGtkControls();
+    testFormaControls();
     testStore();
+    testIndependentBackground();
 
     std::printf("%d checks, %d failures\n", g_checks, g_failures);
     return g_failures == 0 ? 0 : 1;

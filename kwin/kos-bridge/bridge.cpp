@@ -128,16 +128,26 @@ BridgeEffect::BridgeEffect()
         }
     });
 
-    const auto watchFullscreen = [this](KWin::EffectWindow *window) {
+    const auto watchWindowState = [this](KWin::EffectWindow *window) {
+        connect(window, &KWin::EffectWindow::windowDamaged, this,
+                [this, window] { m_renderer->contentChanged(window); });
+        connect(window, &KWin::EffectWindow::minimizedChanged, this,
+                [this, window] {
+                    // Let the minimize animation capture its validated controls,
+                    // then release this hidden window's CPU/GPU sample buffers.
+                    QTimer::singleShot(500, this, [this, guarded = QPointer<KWin::EffectWindow>(window)] {
+                        if (guarded && guarded->isMinimized()) m_renderer->dropSamplingCache(guarded);
+                    });
+                });
         connect(window, &KWin::EffectWindow::windowFullScreenChanged,
                 this, [this](KWin::EffectWindow *changed) {
                     m_input->fullscreenChanged(changed);
                 });
     };
     connect(KWin::effects, &KWin::EffectsHandler::windowAdded,
-            this, watchFullscreen);
+            this, watchWindowState);
     for (auto *window : KWin::effects->stackingOrder()) {
-        watchFullscreen(window);
+        watchWindowState(window);
     }
 
     connect(KWin::effects, &KWin::EffectsHandler::windowDeleted, this,
@@ -219,6 +229,8 @@ BridgeEffect::~BridgeEffect()
 void BridgeEffect::reconfigure(ReconfigureFlags flags)
 {
     Q_UNUSED(flags)
+    // An in-flight draft must not retain the previous geometry policy.
+    if (m_input) m_input->cancelAdjustment();
     if (m_config) {
         m_config->load();
     }
@@ -254,7 +266,8 @@ QString BridgeEffect::debug(const QString &parameter) const
         const bool declared = m_cooperative && m_cooperative->configureWindow(window, config);
         auto entry = m_renderer->controlDiagnostics(window);
         entry.insert("declared", declared);
-        entry.insert("nativeControls", !window->hasDecoration() && (m_gtkNativeWindows.contains(window) || config.nativeGtkControls));
+        entry.insert("nativeControls", config.usesClientControls(window->hasDecoration())
+            || (!window->hasDecoration() && !config.cooperativeControls && m_gtkNativeWindows.contains(window)));
         entry.insert("windowClass", window->windowClass());
         entry.insert("decorated", window->hasDecoration());
         auto *decoration = window->window()->decoration();
@@ -272,6 +285,8 @@ QString BridgeEffect::debug(const QString &parameter) const
         entry.insert("id", window->window()->internalId().toString());
         entry.insert("minimized", window->isMinimized());
         entry.insert("caption", window->caption());
+        entry.insert("role", window->windowRole());
+        entry.insert("type", window->windowTypeInt());
         windows.append(entry);
     }
     return QString::fromUtf8(QJsonDocument(QJsonObject{{"windows", windows},
@@ -366,7 +381,7 @@ BridgeEffect::drawWindow(const KWin::RenderTarget &renderTarget,
 #else
     Effect::drawWindow(renderTarget, viewport, window, mask, deviceRegion, data);
 #endif
-    paintButtons(renderTarget, viewport, window, deviceRegion, data, capture);
+    paintButtons(renderTarget, viewport, window, mask, deviceRegion, data, capture);
     if (capture)
         m_renderer->clearHits(window);
 #ifdef KOS_KWIN_PAINT_RESULT_API
@@ -400,7 +415,7 @@ bool BridgeEffect::drawSharedWindow(const KWin::RenderTarget &target,
 #ifdef KOS_KWIN_PAINT_RESULT_API
             if (painted)
 #endif
-                paintButtons(sourceTarget, sourceViewport, window, KWin::Region::infinite(), sourceData, true);
+                paintButtons(sourceTarget, sourceViewport, window, 0, KWin::Region::infinite(), sourceData, true);
             window->setData(WindowSourceCaptureRole, previous);
 #ifdef KOS_KWIN_PAINT_RESULT_API
             return painted;
@@ -450,7 +465,7 @@ void BridgeEffect::refreshGtkNativeControls(KWin::EffectWindow *window)
 }
 
 void BridgeEffect::paintButtons(const KWin::RenderTarget &renderTarget,
-    const KWin::RenderViewport &viewport, KWin::EffectWindow *window,
+    const KWin::RenderViewport &viewport, KWin::EffectWindow *window, int mask,
     const KWin::Region &deviceRegion, const KWin::WindowPaintData &data, bool sourceCapture)
 {
     if (!window || !m_config || !m_renderer) {
@@ -495,8 +510,15 @@ void BridgeEffect::paintButtons(const KWin::RenderTarget &renderTarget,
     // to know what an effect window is.
     AppConfig config = m_config->getAppConfig(windowQueryFor(window));
     if (m_cooperative) m_cooperative->configureWindow(window, config);
-    if (!config.showButtons || config.usesNativeGtkControls(window->hasDecoration())
+    if (config.usesClientControls(window->hasDecoration())
         || (!window->hasDecoration() && !config.cooperativeControls && m_gtkNativeWindows.contains(window))) {
+        // A previous overlay rule may still have live input/tint state. Give
+        // ownership back completely, including the sampling timer and PBO.
+        m_input->forgetWindow(window);
+        m_renderer->forget(window);
+        return;
+    }
+    if (!config.showButtons) {
         m_renderer->clearHits(window, sourceCapture);
         return;
     }
@@ -520,6 +542,11 @@ void BridgeEffect::paintButtons(const KWin::RenderTarget &renderTarget,
                           .xTranslate = data.xTranslation(),
                           .yTranslate = data.yTranslation(),
                           .opacity = data.opacity(),
+                          .brightness = data.brightness(),
+                          .saturation = data.saturation(),
+                          // Captures deliberately set TRANSFORMED to draw the
+                          // raw source; their actual paint data must stay neutral.
+                          .transformed = !sourceCapture && (mask & PAINT_WINDOW_TRANSFORMED),
                       }, sourceCapture);
 }
 

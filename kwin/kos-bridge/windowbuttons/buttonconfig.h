@@ -68,6 +68,9 @@ struct AppConfig {
     bool showButtons = true;
     // Explicitly qualified GTK CSD windows only. SSD still needs our panel.
     bool nativeGtkControls = false;
+    // Runtime policy for qualified self-drawn apps, independent of GTK or
+    // saved overlay geometry. Cooperative surface negotiation supersedes it.
+    bool nativeAppControls = false;
     // Runtime-only, negotiated per wl_surface. Never read from app-ID rules.
     bool cooperativeControls = false;
     QRectF cooperativeRect;
@@ -75,6 +78,10 @@ struct AppConfig {
     bool usesNativeGtkControls(bool hasDecoration) const
     {
         return nativeGtkControls && !hasDecoration;
+    }
+    bool usesClientControls(bool hasDecoration) const
+    {
+        return (nativeGtkControls || nativeAppControls) && !hasDecoration;
     }
     GlyphMode glyphMode = GlyphMode::Always;
     // Where the panel is and how big it is: the part of this struct an adjust
@@ -163,6 +170,7 @@ private:
     QString m_configPath;
     QString m_kwinrcPath;
     bool m_kosDecorationSelected = false;
+    bool m_independentButtonBackground = false;
     bool m_watchingKwinrc = false;
 
     // The watchers below are connected with this as the context object, so the

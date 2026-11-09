@@ -408,16 +408,18 @@ function installDesktopStack(workspace) {
     // All three KOS surfaces share KWin's Below layer. Their window types and
     // keyboard modes distinguish wallpaper < desktop widgets < Stage strip:
     //   Wallpaper: Desktop + keyboardFocus None
-    //   Widgets:   Desktop + keyboardFocus OnDemand
+    //   Widgets:   Dock    + keyboardFocus OnDemand
     //   Strip:     Normal  + keyboardFocus None
-    // Desktop typing keeps widgets/files on every virtual desktop and excludes
-    // them from ordinary close/move shortcuts. It does not impose a same-layer
+    // Dock typing protects widgets/files from close/move and Show Desktop while
+    // excluding the transparent surface from native Overview's wallpaper choice.
+    // Layer-shell keeps them on every virtual desktop. Types do not impose a same-layer
     // order: desktop activation or a late wallpaper map can still cover widgets.
     // This script only orders existing surfaces; it never changes their visibility
     // or desktop membership and never creates/reopens a window.
     const BELOW_LAYER = 1
     const NORMAL_WINDOW = 0
     const DESKTOP_WINDOW = 1
+    const DOCK_WINDOW = 2
     const WALLPAPER = 0
     const WIDGETS = 1
     const STRIP = 2
@@ -429,7 +431,11 @@ function installDesktopStack(workspace) {
                 || (window.resourceClass !== "quickshell" && window.resourceClass !== "org.quickshell"))
             return -1
         if (window.windowType === DESKTOP_WINDOW)
-            return window.wantsInput ? WIDGETS : WALLPAPER
+            return WALLPAPER
+        // wantsInput can still be false before the first buffer is ready.
+        // Watch and order the widget surface from its initial map onward.
+        if (window.windowType === DOCK_WINDOW)
+            return WIDGETS
         if (window.windowType === NORMAL_WINDOW && !window.wantsInput)
             return STRIP
         return -1

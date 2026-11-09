@@ -688,6 +688,8 @@ if(BUILD_TESTING)
             COMMAND ${KOS_PYTHON_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/widget-experience/run.py --private-compositor)
         add_test(NAME kos-ui.widget-resize
             COMMAND ${KOS_PYTHON_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/widget-resize/run.py --private-compositor)
+        add_test(NAME kos-ui.desktop-overview
+            COMMAND ${KOS_PYTHON_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/desktop-overview/run.py --private-compositor)
         add_test(NAME kos-ui.popup-motion
             COMMAND ${KOS_PYTHON_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/popup-motion/run.py)
         if(KOS_BUILD_KWIN_PLUGINS)
@@ -704,6 +706,9 @@ if(BUILD_TESTING)
             ENVIRONMENT "QML_IMPORT_PATH=${CMAKE_BINARY_DIR}/qml;QML2_IMPORT_PATH=${CMAKE_BINARY_DIR}/qml")
         set_tests_properties(kos-ui.widget-experience PROPERTIES
             LABELS "ui;widgets" TIMEOUT 90
+            ENVIRONMENT "QML_IMPORT_PATH=${CMAKE_BINARY_DIR}/qml;QML2_IMPORT_PATH=${CMAKE_BINARY_DIR}/qml")
+        set_tests_properties(kos-ui.desktop-overview PROPERTIES
+            LABELS "ui;widgets" TIMEOUT 60 RUN_SERIAL TRUE
             ENVIRONMENT "QML_IMPORT_PATH=${CMAKE_BINARY_DIR}/qml;QML2_IMPORT_PATH=${CMAKE_BINARY_DIR}/qml")
     endif()
     if(KOS_PYTHON_EXECUTABLE)
@@ -793,6 +798,13 @@ if(BUILD_TESTING)
     target_link_libraries(kos-desktop-glass-blur-test PRIVATE Qt6::Core Qt6::Gui)
     add_test(NAME kos-glass.desktop-blur COMMAND kos-desktop-glass-blur-test)
     set_tests_properties(kos-glass.desktop-blur PROPERTIES LABELS platform TIMEOUT 10)
+    qt_add_executable(kos-overview-panel-projection-test
+        kwin/glass-effect/tests/test_overview_panel_projection.cpp)
+    target_link_libraries(kos-overview-panel-projection-test PRIVATE Qt6::Quick)
+    add_test(NAME kos-glass.overview-panel-projection COMMAND kos-overview-panel-projection-test)
+    set_tests_properties(kos-glass.overview-panel-projection PROPERTIES
+        LABELS platform TIMEOUT 10
+        ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_QUICK_BACKEND=software")
 endif()
 
 qt_standard_project_setup(REQUIRES 6.5)

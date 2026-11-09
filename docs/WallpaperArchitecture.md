@@ -15,6 +15,9 @@ owns the theme host contract. This document owns runtime orchestration.
   cancels. Keep confirmed state separate from preview playlists, colors and frequency.
 - `SpatialWallpaperService.qml` requests prepared assets; `DepthWallpaperLayer.qml` renders them.
   Preparation failure leaves the ordinary wallpaper usable.
+  The wallpaper keeps the `desktop` layer-shell scope; the separate widget surface
+  uses `dock` so native Overview captures wallpaper rather than transparent widgets.
+  Keep both on Bottom; see [desktop surface ownership](DesktopIcons.md#desktop-surface-ownership).
 - `WallpaperColorSource.qml` extracts the original palette; `PlasmaWallpaperAdapter` owns Plasma
   integration and accent metadata. Settings uses `wallpaper-settings` IPC, then platform operations
   `wallpaper.plasma.*` and `wallpaper.preview.desktop`. QML never calls Plasma D-Bus or inference directly.

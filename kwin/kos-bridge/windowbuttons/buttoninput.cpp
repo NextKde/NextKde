@@ -339,6 +339,12 @@ bool ButtonInput::sessionPress(KWin::PointerButtonEvent *event,
     return true;
 }
 
+void ButtonInput::cancelAdjustment()
+{
+    m_session->cancel();
+    m_renderer->closeTileMenu();
+}
+
 bool ButtonInput::pointerAxis(KWin::PointerAxisEvent *event)
 {
     if (!event || !m_renderer) {

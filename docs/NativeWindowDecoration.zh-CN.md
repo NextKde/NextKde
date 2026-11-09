@@ -13,3 +13,12 @@ Bridge 根据装饰器的 `_kos_native_decoration_controls` 能力标记退出�
 日历、天气、kos-settings 继续使用[协作式按钮](CooperativeWindowControls.zh-CN.md)，无需装饰器；Firefox 使用[浏览器自身按钮](FirefoxWindowButtons.zh-CN.md)；其他未适配的自绘标题栏应用保留浮层回退。
 
 自动验证只在虚拟机进行，见[原生装饰器验收](../tests/native-decoration/README.md)。
+
+Forma/Mayonnaise 应用使用 OpenGL 自绘三色按钮并处理点击。Bridge 对已确认的
+Mayonnaise 应用 ID（Calculator、Finder、Music、Photos、Settings、TaskManager、
+Terminal、TextEditor、VideoPlayer）和 Forma 应用 ID（AppStore、Mail、PolkitAgent、
+Screenshot）的客户端装饰窗口保留这些按钮。识别精确匹配 Wayland 应用 ID 或
+X11 的 class 字段，不按标题、可执行文件名或命名空间前缀猜测。旧浮层尺寸或
+强制绘制规则不能覆盖该归属；Bridge 会清理旧点击区域、调整会话和取色缓存，
+这些窗口不再承担浮层取样开销。服务端装饰窗口继续保留装饰器按钮；窗口显式
+协商的协作式按钮仍优先于应用级策略。

@@ -11,6 +11,8 @@
   不为局部动画强制全局 Qt 渲染循环。
 - `WallpaperPreviewService.qml` 管多输出可取消草稿：Enter 确认，Esc/关闭取消；与已确认状态隔离。
 - `SpatialWallpaperService.qml` 请求素材，`DepthWallpaperLayer.qml` 显示；失败保留普通壁纸。
+  壁纸保留 `desktop` layer-shell scope，独立组件表面使用 `dock`，让原生概览捕获壁纸而非透明组件。
+  两者保持 Bottom 层，见[桌面表面归属](DesktopIcons.zh-CN.md#桌面表面归属)。
 - `WallpaperColorSource.qml` 取原图调色，`PlasmaWallpaperAdapter` 管 Plasma 和强调色元数据。
   Settings 经 `wallpaper-settings` → 平台 `wallpaper.plasma.*`、`wallpaper.preview.desktop`；QML 不直调 Plasma D-Bus/推理。
 

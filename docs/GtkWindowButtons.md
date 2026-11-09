@@ -27,9 +27,14 @@ preserving a saved opt-out or an externally selected non-KOS decoration.
 path. The internal sync operation never reloads a compositor during installation.
 
 Styles are appended as one marked block in `gtk-3.0/gtk.css` and `gtk-4.0/gtk.css`
-under `$XDG_CONFIG_HOME`. Layout is `:maximize,minimize,close` in `settings.ini`
-and, when available, `org.gnome.desktop.wm.preferences button-layout`. This is a
-desktop-wide native layout; applications may override it. Recovery data lives in
+under `$XDG_CONFIG_HOME`. Buttons default to the right (`:minimize,maximize,close`)
+in `settings.ini` and, when available, `org.gnome.desktop.wm.preferences button-layout`.
+An existing right-side layout is retained, including its menu placement and button
+order. Upgrades recover the original right-side layout from earlier integration
+backups instead of retaining the previously forced left layout. This is a
+desktop-wide native layout; applications may override it. Chromium consumes this
+setting for its own controls and continues to use the right-side KOS fallback
+overlay; it is not excluded or moved to a native-only path. Recovery data lives in
 `kos/gtk-buttons-state.json`. Disabling restores original bytes if unchanged;
 otherwise it removes only the managed CSS block and restores the managed layout
 only if it still has NextKde's value. Later unrelated user changes are preserved.

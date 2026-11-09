@@ -41,10 +41,11 @@ jobs:
           mkdir -p .build/native-genie-settings/test-results
           ctest --test-dir .build/native-genie-settings -R '^kos-settings.fonts$' --output-on-failure \
             --output-log "$GITHUB_WORKSPACE/.build/native-genie-settings/test-results/fonts.log"
-      - name: Build Settings and check native animation transitions
+      - name: Build Settings and check native animation and window controls
         run: |
-          cmake --build .build/native-genie-settings --target kos-window-settings-test kos-native-genie-test kos-animation-async-test kos-settings --parallel 2
-          ctest --test-dir .build/native-genie-settings -R '^kos-settings.(window-config|native-genie-upgrade|animation-async)$' --output-on-failure
+          cmake --build .build/native-genie-settings --target kos-window-settings-test kos-native-genie-test kos-animation-async-test kos-settings kos-settings-qml-tests --parallel 2
+          ctest --test-dir .build/native-genie-settings -R '^kos-settings.(window-config|window-interactions|native-genie-upgrade|animation-async)$' --output-on-failure
+          python3 tools/tests/test_gtk_window_buttons.py
       - name: Upload native font page diagnostics
         if: always()
         uses: actions/upload-artifact@v7

@@ -42,6 +42,7 @@ add_library(kos_bridge MODULE
     windowbuttons/panelgeometry.cpp
     windowbuttons/tilemenu.cpp
     windowbuttons/titlebarmetrics.cpp
+    windowbuttons/titlebargputint.cpp
     windowbuttons/titlebarreadback.cpp
     windowbuttons/titlebartint.cpp
     windowbuttons/windowrules.cpp
@@ -188,6 +189,17 @@ if(KOS_BRIDGE_BUILD_GPU_TESTS)
     target_link_libraries(titlebar_pixels_gpu_test PRIVATE Qt6::Gui KWin::kwin)
     add_test(NAME titlebar_pixels_gpu_test COMMAND titlebar_pixels_gpu_test)
     set_tests_properties(titlebar_pixels_gpu_test PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 30)
+
+    add_executable(titlebar_gpu_tint_test
+        tests/titlebar_gpu_tint_test.cpp
+        windowbuttons/titlebargputint.cpp
+        windowbuttons/titlebarmetrics.cpp
+        windowbuttons/titlebarreadback.cpp
+        windowbuttons/titlebartint.cpp
+    )
+    target_link_libraries(titlebar_gpu_tint_test PRIVATE Qt6::Gui KWin::kwin)
+    add_test(NAME titlebar_gpu_tint_test COMMAND titlebar_gpu_tint_test)
+    set_tests_properties(titlebar_gpu_tint_test PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 30)
 endif()
 
 # KWin 6.8 propagates paint success through the effect chain. Detect the

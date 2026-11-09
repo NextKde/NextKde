@@ -34,7 +34,14 @@ private:
     QRect m_rect;
     QRect m_bufferRect;
     QPoint m_origin, m_stepX, m_stepY;
+    QByteArray m_rawPixels;
 };
+
+// Fully visible, top-down target coordinates for same-frame GPU tinting. Empty
+// when neither gutter can be copied without including occlusion/undrawn damage.
+QRect visibleTitlebarGutter(const KWin::RenderTarget &, const KWin::RenderViewport &,
+                            const QRectF &frame, const KWin::Region &deviceClip,
+                            const QRectF &panel, const QRectF &cover);
 
 // Per-window, bounded asynchronous readback. The panel's position remains
 // configuration-driven; only its tint is measured, never inferred controls.
@@ -45,16 +52,24 @@ public:
     bool enqueue(const KWin::RenderTarget &renderTarget,
                  const KWin::RenderViewport &viewport,
                  KWin::EffectWindow *window, const KWin::Region &deviceClip,
-                 const QRectF &panel);
+                 const QRectF &panel, const QRectF &cover);
     bool take(bool *dark, QColor *color);
     bool pending() const { return m_readback.pending(); }
     void discard() { m_readback.discard(); }
+    qreal backgroundBottom() const { return m_backgroundBottom; }
+    QRectF probeRect() const { return m_probeRect; }
 
 private:
     TitlebarPixelReadback m_readback;
     QRect m_rect;
     QRegion m_visible;
     bool m_fallback = false;
+    QRect m_tintRect;
+    qreal m_deviceScale = 1;
+    qreal m_probeTop = 0;
+    qreal m_backgroundBottom = -1;
+    QRectF m_probeRect;
+    QByteArray m_pixels;
 };
 
 } // namespace KOS

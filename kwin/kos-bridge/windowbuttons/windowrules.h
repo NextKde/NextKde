@@ -59,6 +59,10 @@ struct WindowMatcher {
     static WindowMatcher fromJson(const QJsonObject &, bool *ok);
 };
 
+// Keep adjustments local to a window kind; titles are the fallback when the
+// application exposes no role (notably Wayland).
+WindowMatcher adjustmentMatcher(const WindowQuery &query);
+
 // More matcher fields first. The sort is stable, so rules with the same number
 // of fields keep the order they were written in -- which for the machine-written
 // file is newest first.
