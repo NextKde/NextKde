@@ -364,9 +364,32 @@ PanelWindow {
                 const notification = card.notification
                 if (!notification)
                     return false
-                const desktopId = Activation.desktopIdOf(notification)
-                const windows = desktopId ? WindowService.windowsForApp(desktopId) : []
-                const plan = Activation.planClick(notification, windows)
+                // Every tracked window is a candidate. Notification identity is
+                // unreliable (Electron apps such as QQ send only an app name,
+                // some daemons send just an icon name), and a click that fails to
+                // recognise the running app falls back to launching a second
+                // copy. The decision module matches whatever evidence the
+                // notification carries against all windows first.
+                const windows = WindowService.records.map(record => ({
+                    windowId: record.windowId,
+                    desktopId: record.identity?.desktopId || "",
+                    rawAppId: record.identity?.rawAppId || "",
+                    name: record.identity?.name || "",
+                    title: record.title || "",
+                    minimized: record.toplevel?.minimized === true
+                }))
+                // Only a real desktop-entry may name a launch target; resolving
+                // an empty string could pick an unrelated entry.
+                let resolvedDesktopId = ""
+                const entryHint = String(notification.desktopEntry || "").trim()
+                if (entryHint) {
+                    try {
+                        resolvedDesktopId = AppIdentityService.resolve(entryHint).desktopId || ""
+                    } catch (error) {
+                        resolvedDesktopId = ""
+                    }
+                }
+                const plan = Activation.planClick(notification, windows, resolvedDesktopId)
                 if (plan.kind === "activate") {
                     // Restored windows keep their previous geometry. A minimized
                     // window also asks the compositor to replay its reveal
@@ -375,7 +398,7 @@ PanelWindow {
                     // it for a frame.
                     const target = windows.find(window => String(window.windowId) === plan.windowId)
                     WindowService.activateWindow(plan.windowId, {
-                        forceAnim: target?.toplevel?.minimized === true
+                        forceAnim: target?.minimized === true
                     })
                     return true
                 }
