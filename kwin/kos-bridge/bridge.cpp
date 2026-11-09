@@ -208,7 +208,19 @@ BridgeEffect::BridgeEffect()
     });
     connect(KWin::effects, &KWin::EffectsHandler::activeFullScreenEffectChanged,
             this, &BridgeEffect::updateNativeThumbnails);
+    connect(KWin::effects, &KWin::EffectsHandler::activeFullScreenEffectChanged,
+            this, &BridgeEffect::preserveDesktopStack);
+    // Slide elevates all Dock windows while preparing a switch. Run after
+    // its signal handlers too: another output, a gesture, or a newly mapped
+    // surface can be elevated without changing the active effect.
+    connect(KWin::effects, &KWin::EffectsHandler::desktopChanged,
+            this, &BridgeEffect::preserveDesktopStack, Qt::QueuedConnection);
+    connect(KWin::effects, &KWin::EffectsHandler::desktopChanging,
+            this, &BridgeEffect::preserveDesktopStack, Qt::QueuedConnection);
+    connect(KWin::effects, &KWin::EffectsHandler::windowAdded,
+            this, &BridgeEffect::preserveDesktopStack, Qt::QueuedConnection);
     updateNativeThumbnails();
+    preserveDesktopStack();
 }
 
 BridgeEffect::~BridgeEffect()
@@ -292,6 +304,22 @@ QString BridgeEffect::debug(const QString &parameter) const
     return QString::fromUtf8(QJsonDocument(QJsonObject{{"windows", windows},
         {"samplingWindows", m_renderer->samplingWindowCount()},
         {"cursor", QJsonArray{KWin::effects->cursorPos().x(), KWin::effects->cursorPos().y()}}}).toJson(QJsonDocument::Compact));
+}
+
+void BridgeEffect::preserveDesktopStack()
+{
+    const auto *effect = KWin::effects->activeFullScreenEffect();
+    if (!effect || !effect->inherits("KWin::SlideEffect")) return;
+    for (auto *window : KWin::effects->stackingOrder()) {
+        const auto *native = window->window();
+        if (native && native->isDock() && native->layer() == KWin::BelowLayer
+            && (native->resourceClass() == QLatin1String("quickshell")
+                || native->resourceClass() == QLatin1String("org.quickshell"))) {
+            // DeskCenter is a Dock for Overview/shortcut protection, but it
+            // remains desktop content even while Slide elevates real panels.
+            KWin::effects->setElevatedWindow(window, false);
+        }
+    }
 }
 
 void BridgeEffect::updateNativeThumbnails()

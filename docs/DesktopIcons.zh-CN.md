@@ -8,6 +8,9 @@
 `dock` layer-shell namespace，让 KWin 的普通窗口关闭、移动快捷键和显示桌面隐藏逻辑排除桌面组件，
 同时避免透明组件层被当成壁纸。原生概览只捕获一个 Desktop 窗口，因此只有壁纸表面使用
 `desktop`。Glass 将壁纸、组件和 Dock 合成为原生概览的桌面背景，让它们一起随桌面预览缩放。
+原生 Slide 切换虚拟桌面时，Bridge 仅取消 Below 层 Quickshell Dock 表面的特效置顶，
+让桌面内容始终位于应用下方；Top/Overlay 面板保留正常置顶，不修改概览类型或桌面归属。
+`tests/desktop-slide/run-vm.py` 用真实 DeskCenter、覆盖它的应用及正常面板检查连续切换。
 仅在完整预览可用时抑制重复的原生面板缩略图。
 保留 Bottom 层，降到 Background 可能被 Plasma 盖住。平台托管的
 `kwin/window-bridge.js` 中，`installDesktopStack()` 将已有 Below 层表面固定为
