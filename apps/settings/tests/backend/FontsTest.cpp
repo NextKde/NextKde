@@ -119,6 +119,10 @@ private slots:
         auto preview = page->findChild<QQuickItem *>(QStringLiteral("font-rendering-preview"));
         QVERIFY(preview);
         QTRY_COMPARE(preview->property("status").toInt(), 1); // Image.Ready
+        QTRY_VERIFY(preview->width() > 10 && preview->height() > 5);
+        // Wait for the form's layout polish and toggle transition before the
+        // screenshot; Image.Ready can precede the first painted preview frame.
+        QTest::qWait(400);
         const auto screenshot = qEnvironmentVariable("KOS_FONT_SCREENSHOT");
         if (!screenshot.isEmpty()) {
             QDir().mkpath(QFileInfo(screenshot).absolutePath());
