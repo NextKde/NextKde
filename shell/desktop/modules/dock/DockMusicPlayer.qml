@@ -8,7 +8,7 @@ import "../../../Kos/Ui"
 // ────────────────────────────────────────────────────────────────
 // DockMusicPlayer — Music player widget sized in icon-width units.
 //
-// Binds to DockMprisService.activePlayer reactively.  Two modes:
+// Binds to MediaService.activePlayer reactively.  Two modes:
 //   - Compact (iconSize < 36):  album art, title and a play/pause overlay
 //   - Full (iconSize ≥ 36):     art + track title/artist + prev/play/next buttons
 //
@@ -36,9 +36,9 @@ Item {
     readonly property bool monochrome: IconAppearanceService.mode !== "color"
 
     // ── Player reference ──
-    readonly property var player: DockMprisService.activePlayer
+    readonly property var player: MediaService.activePlayer
     readonly property url artworkSource: {
-        const revision = DockMprisService.metadataRevision
+        const revision = MediaService.metadataRevision
         return player?.trackArtUrl
             ? player.trackArtUrl : BundledIcons.source("default-cover")
     }
@@ -212,8 +212,8 @@ Item {
                 iconName: widget.player?.isPlaying ? "media-pause" : "media-play"
                 text: widget.player?.isPlaying ? I18n.tr("Pause") : I18n.tr("Play")
                 enabled: widget.player?.canTogglePlaying ?? false
-                busy: DockMprisService.loading
-                onClicked: DockMprisService.togglePlayPause()
+                busy: MediaService.loading
+                onClicked: MediaService.togglePlayPause()
             }
 
         }
@@ -407,7 +407,7 @@ Item {
     component DockPrevBtn: DockControlButton {
         iconName: "media-previous"
         text: I18n.tr("Previous")
-        onClicked: DockMprisService.previous()
+        onClicked: MediaService.previous()
     }
 
     component DockPlayBtn: DockControlButton {
@@ -415,13 +415,13 @@ Item {
         primary: true
         iconName: isPlaying ? "media-pause" : "media-play"
         text: isPlaying ? I18n.tr("Pause") : I18n.tr("Play")
-        busy: DockMprisService.loading
-        onClicked: DockMprisService.togglePlayPause()
+        busy: MediaService.loading
+        onClicked: MediaService.togglePlayPause()
     }
 
     component DockNextBtn: DockControlButton {
         iconName: "media-next"
         text: I18n.tr("Next")
-        onClicked: DockMprisService.next()
+        onClicked: MediaService.next()
     }
 }

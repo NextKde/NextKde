@@ -815,7 +815,12 @@ stores normalized coordinates, and Done restores click-through behaviour outside
 position survives restarts and is bounded to the active output after resizing.
 The placement preview works even when no player supplies lyrics.
 
-`DockMprisService` prefers KOS live lyric metadata (including intentional empty
+`MediaService` in `qs.desktop.modules.common` owns the shared player selection,
+metadata and controls used by the Dock, control center and desktop music widget.
+Its lyric parser lives alongside the service; consumers do not select their own
+players. The KDE lock screen runs separately and reads MPRIS over D-Bus.
+
+`MediaService` prefers KOS live lyric metadata (including intentional empty
 lines). Otherwise it parses LRC in `xesam:asText`, reads the current MPRIS
 position every 500 ms only while playing with timed lyrics actually enabled
 (MPRIS position is lazy; the poll is skipped entirely for live lyrics and
