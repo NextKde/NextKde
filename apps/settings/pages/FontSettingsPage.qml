@@ -233,6 +233,7 @@ ColumnLayout {
             }
         }
         Demo.SettingsItem {
+            id: renderingPreviewRow
             title: I18n.tr("Rendering preview")
             titleColor: page.colors.primaryText
             visible: page.ready && page.antiAliasing && page.backend.previewAvailable
@@ -247,7 +248,7 @@ ColumnLayout {
                     : ""
                 Layout.preferredWidth: implicitWidth / Screen.devicePixelRatio
                 Layout.preferredHeight: implicitHeight / Screen.devicePixelRatio
-                Layout.maximumWidth: parent.width
+                Layout.maximumWidth: renderingPreviewRow.availableWidth
                 fillMode: Image.PreserveAspectFit
             }
         }

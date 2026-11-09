@@ -216,6 +216,9 @@ private slots:
         // Wait for the form's layout polish and toggle transition before the
         // screenshot; Image.Ready can precede the first painted preview frame.
         QTest::qWait(400);
+        QVERIFY(preview->isVisible());
+        const QRectF previewBounds = preview->mapRectToItem(page, preview->boundingRect());
+        QVERIFY(previewBounds.left() >= 0 && previewBounds.right() <= page->width());
         const auto screenshot = qEnvironmentVariable("KOS_FONT_SCREENSHOT");
         if (!screenshot.isEmpty()) {
             QDir().mkpath(QFileInfo(screenshot).absolutePath());
