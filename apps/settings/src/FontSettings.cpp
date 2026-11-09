@@ -111,7 +111,19 @@ QStringList FontSettings::fontStyles(const QString &family) const
 
 QString FontSettings::fontStyleName(const QFont &font) const
 {
-    return QFontDatabase::styleString(font);
+    const auto styles = QFontDatabase::styles(font.family());
+    if (styles.contains(font.styleName())) return font.styleName();
+    const auto resolved = QFontInfo(font).styleName();
+    if (styles.contains(resolved)) return resolved;
+    // KConfig can discard the named Regular style. Qt's styleString may then
+    // return Normal while the installed family's catalogue calls it Regular.
+    for (const auto &style : styles) {
+        const auto candidate = QFontDatabase::font(font.family(), style, 10);
+        if (candidate.weight() == font.weight() && candidate.style() == font.style()
+            && (font.stretch() == 0 || candidate.stretch() == font.stretch()))
+            return style;
+    }
+    return styles.isEmpty() ? QString() : styles.first();
 }
 
 QFont FontSettings::selectionFont(const QFont &original, const QString &family,

@@ -239,7 +239,17 @@ private slots:
         QStringList warnings;
         QObject warningScope;
         connect(&engine, &QQmlEngine::warnings, &warningScope, [&warnings](const QList<QQmlError> &errors) {
-            for (const auto &error : errors) warnings.append(error.toString());
+            for (const auto &error : errors) {
+                // Plasma 6.6/6.7's hidden KCM assigns Array.find() to its bool
+                // usingDisplayFont property. No match produces undefined each
+                // time a font changes. Keep the upstream warning in Qt's log,
+                // but do not mistake it for a warning from our picker.
+                if (error.url() == QUrl(QStringLiteral("qrc:/kcm/kcm_fonts/main.qml"))
+                    && error.line() == 33
+                    && error.description() == QLatin1String("Unable to assign [undefined] to bool"))
+                    continue;
+                warnings.append(error.toString());
+            }
         });
         QQmlComponent component(&engine, QUrl::fromLocalFile(QStringLiteral(FONT_SETTINGS_PAGE)));
         QVERIFY2(component.isReady(), qPrintable(component.errorString()));
@@ -300,6 +310,8 @@ private slots:
         sizeInput->setProperty("text", chosenSize);
         QVERIFY(QMetaObject::invokeMethod(sizeInput, "textEdited"));
         QCOMPARE(picker->property("selectedFont").value<QFont>().pointSizeF(), chosenSize.toDouble());
+        QCOMPARE(picker->property("selectedFont").value<QFont>().weight(), original.weight());
+        QCOMPARE(picker->property("selectedFont").value<QFont>().style(), original.style());
         QCOMPARE(settings.fonts()->property("font").value<QFont>(), original);
         if (!screenshot.isEmpty()) {
             QTest::qWait(250);
