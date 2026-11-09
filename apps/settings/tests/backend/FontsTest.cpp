@@ -108,9 +108,14 @@ private slots:
         page->setY(15);
         page->setWidth(520);
         QTRY_VERIFY(page->property("ready").toBool());
+        settings.setRendering(QStringLiteral("antiAliasing"), true);
         window.show();
+        window.requestActivate();
         QVERIFY(QTest::qWaitForWindowExposed(&window));
-        QTest::qWait(250);
+        QTRY_VERIFY(window.isActive());
+        auto preview = page->findChild<QQuickItem *>(QStringLiteral("font-rendering-preview"));
+        QVERIFY(preview);
+        QTRY_COMPARE(preview->property("status").toInt(), 1); // Image.Ready
         const auto screenshot = qEnvironmentVariable("KOS_FONT_SCREENSHOT");
         if (!screenshot.isEmpty()) {
             QDir().mkpath(QFileInfo(screenshot).absolutePath());

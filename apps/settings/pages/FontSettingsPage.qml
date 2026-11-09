@@ -237,9 +237,17 @@ ColumnLayout {
             titleColor: page.colors.primaryText
             visible: page.ready && page.antiAliasing
             Image {
-                source: page.ready ? "image://preview/" + page.backend.module.subPixelCurrentIndex
-                    + "_" + page.backend.module.hintingCurrentIndex + ".png" : ""
+                objectName: "font-rendering-preview"
+                // Newer Plasma includes DPR in the provider ID; older releases
+                // ignore that third field. Older providers also need a focused
+                // window, so never request an image while the page is hidden.
+                source: page.ready && page.antiAliasing && page.Window.active
+                    ? "image://preview/" + page.backend.module.subPixelCurrentIndex
+                        + "_" + page.backend.module.hintingCurrentIndex + "_" + Screen.devicePixelRatio
+                    : ""
                 sourceSize: Qt.size(1, 1)
+                Layout.maximumWidth: parent.width
+                fillMode: Image.PreserveAspectFit
             }
         }
         FormRow {
