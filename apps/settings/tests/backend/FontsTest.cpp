@@ -75,7 +75,8 @@ private slots:
         // Load the production form against the actual plugin properties, not a
         // mock: private KCM property/type changes must fail before shipping.
         QStringList warnings;
-        connect(&engine, &QQmlEngine::warnings, this, [&warnings](const QList<QQmlError> &errors) {
+        QObject warningScope;
+        connect(&engine, &QQmlEngine::warnings, &warningScope, [&warnings](const QList<QQmlError> &errors) {
             for (const auto &error : errors) warnings.append(error.toString());
         });
         QQmlComponent component(&engine, QUrl::fromLocalFile(QStringLiteral(FONT_SETTINGS_PAGE)));

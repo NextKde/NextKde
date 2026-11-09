@@ -1,6 +1,7 @@
 #include "FontSettings.h"
 
 #include <KCoreConfigSkeleton>
+#include <KConfig>
 #include <KPluginMetaData>
 #include <KQuickConfigModule>
 #include <KQuickConfigModuleLoader>
@@ -124,8 +125,14 @@ bool FontSettings::apply()
     // KDE saves every font role and renderer setting, then exports GTK/Xft and
     // sends refreshFonts. Writing kdeglobals alone misses those side effects.
     m_module->save();
-    if (needsSave())
-        m_error = QStringLiteral("Could not save all font settings. Check that your configuration is writable.");
+    for (QObject *object : {fonts(), rendering()}) {
+        const auto skeleton = qobject_cast<KCoreConfigSkeleton *>(object);
+        if (skeleton && skeleton->config()->isDirty())
+            m_error = QStringLiteral("Could not save all font settings. Check that your configuration is writable.");
+    }
+    // As in KDE's KCModuleQml host, save() does not clear the module's dirty
+    // flag itself. needsSave is UI state, not a save failure return value.
+    if (m_error.isEmpty()) m_module->setNeedsSave(false);
     emit changed();
     return m_error.isEmpty();
 }
