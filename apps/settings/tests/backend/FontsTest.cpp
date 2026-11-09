@@ -122,10 +122,14 @@ private slots:
         settings.setRendering(QStringLiteral("excludeFrom"), 9);
         settings.setRendering(QStringLiteral("excludeTo"), 17);
         const bool x11 = QGuiApplication::platformName() == QLatin1String("xcb");
-        QCOMPARE(settings.renderingEditable(QStringLiteral("dpi")), x11);
+        if (qEnvironmentVariableIsSet("KOS_EXPECT_FONT_DPI"))
+            QCOMPARE(settings.dpiAvailable(), qEnvironmentVariableIntValue("KOS_EXPECT_FONT_DPI") == 1);
+        const bool canSetDpi = x11 && settings.dpiAvailable();
+        QCOMPARE(settings.renderingEditable(QStringLiteral("dpi")), canSetDpi);
         const int initialDpi = settings.rendering()->property("dpi").toInt();
         settings.setRendering(QStringLiteral("dpi"), 120);
-        QCOMPARE(settings.rendering()->property("dpi").toInt(), x11 ? 120 : initialDpi);
+        QCOMPARE(settings.rendering()->property("dpi").isValid(), settings.dpiAvailable());
+        QCOMPARE(settings.rendering()->property("dpi").toInt(), canSetDpi ? 120 : initialDpi);
         QVERIFY2(settings.apply(), qPrintable(settings.error()));
         settings.reset();
         for (const auto &role : roles) {
@@ -139,11 +143,11 @@ private slots:
         QCOMPARE(settings.rendering()->property("exclude").toBool(), true);
         QCOMPARE(settings.rendering()->property("excludeFrom").toInt(), 9);
         QCOMPARE(settings.rendering()->property("excludeTo").toInt(), 17);
-        QCOMPARE(settings.rendering()->property("dpi").toInt(), x11 ? 120 : initialDpi);
+        QCOMPARE(settings.rendering()->property("dpi").toInt(), canSetDpi ? 120 : initialDpi);
         KConfig persisted(QStringLiteral("kdeglobals"));
         QCOMPARE(KConfigGroup(&persisted, "General").readEntry("NextKdeUnknownFontOption", QString()),
             QStringLiteral("preserve-me"));
-        if (x11) {
+        if (canSetDpi) {
             settings.setRendering(QStringLiteral("dpi"), 0);
             QVERIFY2(settings.apply(), qPrintable(settings.error()));
             settings.reset();
@@ -185,6 +189,9 @@ private slots:
         window.requestActivate();
         QVERIFY(QTest::qWaitForWindowExposed(&window));
         QTRY_VERIFY(window.isActive());
+        auto dpiRow = page->findChild<QQuickItem *>(QStringLiteral("font-dpi-row"));
+        QVERIFY(dpiRow);
+        QCOMPARE(dpiRow->isVisible(), settings.dpiAvailable() && QGuiApplication::platformName() == QLatin1String("xcb"));
         // Application activation refreshes the form. Stage the edit afterwards,
         // as a real interaction does, rather than racing that initial reload.
         settings.setRendering(QStringLiteral("antiAliasing"), true);

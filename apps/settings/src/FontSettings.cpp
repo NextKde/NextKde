@@ -57,6 +57,12 @@ FontSettings::FontSettings(QQmlEngine *engine, QObject *parent)
 
 bool FontSettings::needsSave() const { return m_module && m_module->needsSave(); }
 bool FontSettings::previewAvailable() const { return !qEnvironmentVariableIsEmpty("DISPLAY"); }
+bool FontSettings::dpiAvailable() const
+{
+    const auto skeleton = qobject_cast<KCoreConfigSkeleton *>(rendering());
+    return skeleton && skeleton->findItem(QStringLiteral("forceFontDPI"))
+        && writableProperties(rendering(), {QStringLiteral("dpi")}, QMetaType::fromType<int>());
+}
 QObject *FontSettings::module() const { return m_module; }
 QObject *FontSettings::fonts() const
 {
@@ -99,8 +105,8 @@ void FontSettings::refresh()
             || !writableProperties(fonts(), categories, QMetaType::fromType<QFont>())
             || !writableProperties(rendering(), {QStringLiteral("antiAliasing"), QStringLiteral("exclude")},
                 QMetaType::fromType<bool>())
-            || !writableProperties(rendering(), {QStringLiteral("excludeFrom"), QStringLiteral("excludeTo"),
-                QStringLiteral("dpi")}, QMetaType::fromType<int>())
+            || !writableProperties(rendering(), {QStringLiteral("excludeFrom"), QStringLiteral("excludeTo")},
+                QMetaType::fromType<int>())
             || !writableProperties(rendering(), {QStringLiteral("subPixel"), QStringLiteral("hinting")})
             || rendering()->metaObject()->indexOfProperty("isAaImmutable") < 0
             || !writableProperties(m_module, {QStringLiteral("subPixelCurrentIndex"), QStringLiteral("hintingCurrentIndex")},
@@ -175,7 +181,7 @@ bool FontSettings::fontEditable(const QString &category) const
 bool FontSettings::renderingEditable(const QString &setting) const
 {
     if (!rendering() || rendering()->property("isAaImmutable").toBool()) return false;
-    if (setting == QLatin1String("dpi") && QGuiApplication::platformName() != QLatin1String("xcb"))
+    if (setting == QLatin1String("dpi") && (!dpiAvailable() || QGuiApplication::platformName() != QLatin1String("xcb")))
         return false;
     return editable(rendering(), setting == QLatin1String("dpi") ? QStringLiteral("forceFontDPI") : setting);
 }

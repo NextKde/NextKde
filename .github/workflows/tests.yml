@@ -63,10 +63,15 @@ jobs:
         include:
           - series: '6.6'
             snapshot: '2026/05/15'
+            font_dpi: '1'
           - series: '6.7'
             snapshot: '2026/10/01'
+            font_dpi: '1'
           - series: '6.8'
             snapshot: '2026/10/18'
+            font_dpi: '0'
+    env:
+      KOS_EXPECT_FONT_DPI: ${{ matrix.font_dpi }}
     container: archlinux:base-devel
     steps:
       # Pin the entire Qt/KF/Plasma runtime, not just headers or a mocked KCM.

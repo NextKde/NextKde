@@ -257,7 +257,8 @@ ColumnLayout {
             descriptionColor: page.colors.secondaryText
         }
         FormRow {
-            visible: Qt.platform.pluginName === "xcb"
+            objectName: "font-dpi-row"
+            visible: page.ready && page.backend.dpiAvailable && Qt.platform.pluginName === "xcb"
             label: I18n.tr("Force font DPI")
             control: RowLayout {
                 SpinBox {

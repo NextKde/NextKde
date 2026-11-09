@@ -136,7 +136,8 @@ initialized once, detached and hidden, to establish the preview-provider context
 The native NextKde form exposes general, fixed-width, small, toolbar, menu and
 window-title fonts, family/style/size selection and previews, selective adjustment
 of all fonts, anti-aliasing and its excluded size range, sub-pixel rendering,
-hinting and X11-only forced font DPI. KDE owns defaults, immutable settings,
+hinting and forced font DPI where KDE exposes it (Plasma 6.6/6.7, X11 only).
+Plasma 6.8 removed the public DPI property, so that row is hidden. KDE owns defaults, immutable settings,
 fontconfig persistence, GTK/Xft exports and application refresh notifications.
 KDE's Xft preview requires XWayland/X11; without DISPLAY, the form explains that
 the rendering preview is unavailable while retaining all applicable settings.
@@ -155,11 +156,11 @@ or distribution has been tested. The `KDE fonts Plasma <series>` CI jobs qualify
 these complete Arch Linux Archive runtime snapshots and publish their exact
 package versions, logs and form screenshots:
 
-| Plasma series | Archive snapshot | Runtime checks |
-| --- | --- | --- |
-| 6.6 | 2026-05-15 | Real KCM, offscreen Qt + Xft, X11 |
-| 6.7 | 2026-10-01 | Real KCM, offscreen Qt + Xft, X11 |
-| 6.8 | 2026-10-18 | Real KCM, offscreen Qt + Xft, X11 |
+| Plasma series | Archive snapshot | Runtime checks | Font DPI capability |
+| --- | --- | --- | --- |
+| 6.6 | 2026-05-15 | Real KCM, offscreen Qt + Xft, X11 | Editable on X11 |
+| 6.7 | 2026-10-01 | Real KCM, offscreen Qt + Xft, X11 | Editable on X11 |
+| 6.8 | 2026-10-18 | Real KCM, offscreen Qt + Xft, X11 | Absent; row hidden |
 
 The current rolling Arch job additionally detects changes beyond the pinned
 snapshots. A series enters the supported range only after its font runtime job
@@ -178,6 +179,10 @@ Unknown configuration entries are left to KDE and preserved by the tested save
 path. New KDE options do not automatically appear in our form: add their mapping
 and controls only after checking availability on every supported series, hiding
 options absent on older versions rather than inventing equivalent behavior.
+The optional `dpiAvailable` capability also handles removal of an option: tests
+assert DPI exists on 6.6/6.7 and is absent on 6.8, that unavailable writes are ignored,
+and that the native form hides the row. The 6.8 X11 test is a Qt/Xft backend test,
+not a claim that Plasma 6.8 ships an X11 desktop session.
 
 The runtime test covers all six font roles, anti-aliasing and its excluded range,
 sub-pixel/hinting, X11 DPI enable/reset, reset/defaults, retained draft values,

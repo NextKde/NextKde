@@ -14,6 +14,7 @@ class FontSettings final : public QObject {
     Q_OBJECT
     Q_PROPERTY(bool available READ available NOTIFY changed)
     Q_PROPERTY(bool previewAvailable READ previewAvailable CONSTANT)
+    Q_PROPERTY(bool dpiAvailable READ dpiAvailable NOTIFY changed)
     Q_PROPERTY(QString error READ error NOTIFY changed)
     Q_PROPERTY(bool needsSave READ needsSave NOTIFY changed)
     Q_PROPERTY(QObject *module READ module NOTIFY changed)
@@ -26,6 +27,7 @@ public:
     explicit FontSettings(QQmlEngine *engine, QObject *parent = nullptr);
     bool available() const { return m_module != nullptr; }
     bool previewAvailable() const;
+    bool dpiAvailable() const;
     QString error() const { return m_error; }
     bool needsSave() const;
     QObject *module() const;
