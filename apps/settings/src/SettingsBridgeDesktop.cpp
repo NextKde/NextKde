@@ -173,6 +173,13 @@ void SettingsBridge::integrationSnapshot()
         QStringLiteral("Integration status request failed"), RequestKind::Integration);
 }
 
+void SettingsBridge::setInputMethodEnabled(bool enabled)
+{
+    callShell(QStringLiteral("inputmethod-settings"),
+        { QStringLiteral("setEnabled"), enabled ? QStringLiteral("true") : QStringLiteral("false") },
+        QStringLiteral("Input method settings request failed"), RequestKind::Integration);
+}
+
 void SettingsBridge::i18nSnapshot() { callI18n({ QStringLiteral("snapshot") }); }
 
 void SettingsBridge::updateLanguage(const QString& language)
@@ -468,6 +475,17 @@ void SettingsBridge::startIntegrationProbe(const QVariantMap& replyMap)
                 loadedEffects.contains(QStringLiteral("kos_dock_window_animation")));
             result.insert(QStringLiteral("contextMenuInputLoaded"),
                 loadedEffects.contains(QStringLiteral("kos_context_menu_input")));
+            if (!result.contains(QStringLiteral("inputMethodEnabled"))) {
+                const QString configPath = QStandardPaths::writableLocation(QStandardPaths::GenericConfigLocation)
+                    + QStringLiteral("/kos/inputmethod.json");
+                QFile file(configPath);
+                bool enabled = false;
+                if (file.open(QIODevice::ReadOnly)) {
+                    const auto doc = QJsonDocument::fromJson(file.readAll());
+                    enabled = doc.object().value(QStringLiteral("enabled")).toBool(false);
+                }
+                result.insert(QStringLiteral("inputMethodEnabled"), enabled);
+            }
             result.insert(QStringLiteral("updatedAt"),
                 QDateTime::currentDateTime().toString(QStringLiteral("HH:mm:ss")));
 

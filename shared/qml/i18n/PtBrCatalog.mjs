@@ -1372,4 +1372,7 @@ export const catalog = {
     "Launch with environment variable: QT_IM_MODULE=text-input-unstable-v3": "Iniciar com variável de ambiente: QT_IM_MODULE=text-input-unstable-v3",
     "Firefox & Native Desktop Apps": "Firefox e aplicativos nativos de desktop",
     "Leave GTK_IM_MODULE and QT_IM_MODULE empty to enable compositor takeover.": "Mantenha GTK_IM_MODULE e QT_IM_MODULE vazios para permitir que o compositor assuma o controle.",
+    "Enable NextKde Input Method Popups": "Ativar janelas do método de entrada do NextKde (experimental)",
+    "Render candidates and tips with liquid glass. When disabled, Fcitx5 native candidate windows are preserved.": "Renderiza candidatos e dicas com vidro líquido. Quando desativado, as janelas nativas do Fcitx5 são mantidas.",
+    "Candidate Styling & App Compatibility": "Estilo de candidatos e compatibilidade de aplicativos",
 }

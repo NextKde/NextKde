@@ -31,6 +31,12 @@ ColumnLayout {
         bridge.integrationSnapshot();
     }
 
+    function setInputMethodEnabled(checked) {
+        if (!bridge) return;
+        bridge.setInputMethodEnabled(checked);
+        snapshot.inputMethodEnabled = checked;
+    }
+
     Connections {
         target: integrationPage.bridge
         enabled: integrationPage.bridge !== null
@@ -123,7 +129,22 @@ ColumnLayout {
         backgroundColor: colors.card
 
         Demo.SettingsItem {
-            title: I18n.tr("Input Method Candidate Styling")
+            title: I18n.tr("Enable NextKde Input Method Popups")
+            description: I18n.tr("Render candidates and tips with liquid glass. When disabled, Fcitx5 native candidate windows are preserved.")
+
+            Controls.SettingsSwitch {
+                objectName: "inputMethodTakeoverSwitch"
+                checked: !!integrationPage.snapshot.inputMethodEnabled
+                accentColor: colors.accent
+                trackColor: colors.divider
+                onToggled: function(checked) {
+                    integrationPage.setInputMethodEnabled(checked);
+                }
+            }
+        }
+
+        Demo.SettingsItem {
+            title: I18n.tr("Candidate Styling & App Compatibility")
             description: I18n.tr("NextKde renders liquid glass popups via Wayland text-input-v3. Expand to view per-app adaptation flags and environment settings.")
             Demo.LiquidActionButton {
                 text: integrationPage.inputMethodExpanded ? I18n.tr("Hide Solutions ▴") : I18n.tr("App Solutions ▾")

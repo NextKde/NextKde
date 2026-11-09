@@ -729,7 +729,17 @@ Item {
                 barExpected: !shell.barIntegratedWithDock,
                 barVisible: desktopBar.windowVisible,
                 dockVisible: desktopDock.windowVisible,
+                inputMethodEnabled: InputMethodService.userEnabled,
             })
+        }
+    }
+
+    IpcHandler {
+        target: "inputmethod-settings"
+
+        function setEnabled(enabled: bool): string {
+            InputMethodService.setEnabled(enabled)
+            return JSON.stringify({ enabled: InputMethodService.userEnabled })
         }
     }
 

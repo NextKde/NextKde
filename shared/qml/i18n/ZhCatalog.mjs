@@ -1580,4 +1580,7 @@ export const catalog = {
     "Launch with environment variable: QT_IM_MODULE=text-input-unstable-v3": "启动环境变量指定：QT_IM_MODULE=text-input-unstable-v3",
     "Firefox & Native Desktop Apps": "Firefox 与原生桌面应用",
     "Leave GTK_IM_MODULE and QT_IM_MODULE empty to enable compositor takeover.": "全局环境保持留空 GTK_IM_MODULE 与 QT_IM_MODULE，由桌面合成器接管原生液态渲染。",
+    "Enable NextKde Input Method Popups": "使用 NextKde 输入法候选框（实验性）",
+    "Render candidates and tips with liquid glass. When disabled, Fcitx5 native candidate windows are preserved.": "使用液态玻璃材质呈现候选框与语言提示胶囊。关闭后保留 Fcitx5 原生候选框。",
+    "Candidate Styling & App Compatibility": "候选框样式与应用兼容性",
 }
