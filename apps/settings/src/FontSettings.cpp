@@ -127,7 +127,10 @@ bool FontSettings::apply()
     m_module->save();
     for (QObject *object : {fonts(), rendering()}) {
         const auto skeleton = qobject_cast<KCoreConfigSkeleton *>(object);
-        if (skeleton && skeleton->config()->isDirty())
+        // FontsAASettings adds Xft keys to the shared kdeglobals after the font
+        // skeleton saved. Flush those pending writes; dirty alone is not an
+        // error, and the long-lived Settings process must not defer them to exit.
+        if (skeleton && !skeleton->config()->sync())
             m_error = QStringLiteral("Could not save all font settings. Check that your configuration is writable.");
     }
     // As in KDE's KCModuleQml host, save() does not clear the module's dirty

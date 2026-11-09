@@ -26,7 +26,7 @@ jobs:
       image: archlinux:base-devel
     steps:
       - name: Install fixture dependencies
-        run: pacman -Sy --noconfirm --needed git nodejs qt6-base qt6-declarative cmake ninja kconfig kcmutils kio kservice dbus gtk3 wayland pkgconf flatpak ostree
+        run: pacman -Sy --noconfirm --needed git nodejs qt6-base qt6-declarative cmake ninja kconfig kcmutils plasma-workspace kio kservice dbus gtk3 wayland pkgconf flatpak ostree
       - uses: actions/checkout@v7
       - name: Run native target identity and publication regressions
         env:
@@ -34,11 +34,24 @@ jobs:
         run: |
           node tests/dock/native-target.test.mjs
           node tests/dock/runtime.mjs native-target /usr/lib/qt6/bin/qmltestrunner
-      - name: Build Settings and check native animation transitions
+      - name: Build and exercise the native KDE font adapter
         run: |
           cmake -S apps/settings -B .build/native-genie-settings -G Ninja -DBUILD_TESTING=ON
+          cmake --build .build/native-genie-settings --target kos-settings-fonts-test --parallel 2
+          mkdir -p .build/native-genie-settings/test-results
+          ctest --test-dir .build/native-genie-settings -R '^kos-settings.fonts$' --output-on-failure \
+            --output-log "$GITHUB_WORKSPACE/.build/native-genie-settings/test-results/fonts.log"
+      - name: Build Settings and check native animation transitions
+        run: |
           cmake --build .build/native-genie-settings --target kos-window-settings-test kos-native-genie-test kos-animation-async-test kos-settings --parallel 2
           ctest --test-dir .build/native-genie-settings -R '^kos-settings.(window-config|native-genie-upgrade|animation-async)$' --output-on-failure
+      - name: Upload native font page diagnostics
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: native-font-settings
+          path: .build/native-genie-settings/test-results/
+          if-no-files-found: ignore
 
   fedora-dependencies:
     name: Fedora 44 dependency packages
