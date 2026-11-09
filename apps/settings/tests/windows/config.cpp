@@ -35,7 +35,7 @@ int main(int argc, char **argv) {
     const QString filename = temporary.path() + "/kos/window-appearance.json";
     auto put = [&](const QByteArray &bytes) { QFile f(filename); CHECK(f.open(QIODevice::WriteOnly)); CHECK(f.write(bytes)==bytes.size()); };
     auto get = [&]() { QFile f(filename); CHECK(f.open(QIODevice::ReadOnly)); return f.readAll(); };
-    put(R"({"version":2,"revision":7,"extra":"keep","apps":{"demo":{"enabled":false}},"defaults":{"corners":{"radius":20,"extra":42}}})");
+    put(R"({"version":2,"revision":7,"extra":"keep","apps":{"demo":{"enabled":false}},"defaults":{"corners":{"radius":20,"extra":42},"states":{"fullscreen":"off","tiled":"square","extra":42}}})");
     WindowSettings settings;
     CHECK(settings.setRadius(28));
     CHECK(settings.setShadow(false));
@@ -45,6 +45,21 @@ int main(int argc, char **argv) {
     CHECK(json["defaults"].toObject()["corners"].toObject()["extra"].toInt()==42);
     CHECK(settings.state()["radius"].toInt()==28);
     CHECK(!settings.state()["shadow"].toBool());
+    CHECK(!settings.state()["squareMaximized"].toBool());
+    CHECK(settings.setSquareMaximized(true));
+    CHECK(settings.state()["squareMaximized"].toBool());
+    json=QJsonDocument::fromJson(get()).object();
+    const auto states=json["defaults"].toObject()["states"].toObject();
+    CHECK(states["maximized"]=="square");
+    CHECK(states["fullscreen"]=="off"); CHECK(states["tiled"]=="square");
+    CHECK(states["extra"].toInt()==42);
+    CHECK(settings.state()["radius"].toInt()==28);
+    CHECK(!settings.state()["shadow"].toBool());
+    CHECK(json["extra"]=="keep"); CHECK(json["apps"].toObject().contains("demo"));
+    CHECK(settings.setSquareMaximized(false));
+    CHECK(!settings.state()["squareMaximized"].toBool());
+    CHECK(QJsonDocument::fromJson(get()).object()["defaults"].toObject()["states"].toObject()["maximized"]=="inherit");
+    CHECK(settings.setSquareMaximized(true));
     auto config=KSharedConfig::openConfig("kwinrc");
     KConfigGroup decoration(config,"org.kde.kdecoration2");
     decoration.writeEntry("library", "third_party"); decoration.writeEntry("theme", "theme-a"); CHECK(config->sync());
@@ -142,13 +157,16 @@ int main(int argc, char **argv) {
     CHECK(persisted["hideAnimation"]=="none"); CHECK(persisted["closeAnimation"]=="fade");
     CHECK(persisted["buttonGlyphMode"]=="hover");
     CHECK(persisted["radius"].toInt()==28); CHECK(!persisted["shadow"].toBool());
+    CHECK(persisted["squareMaximized"].toBool());
     CHECK(!persisted["enabled"].toBool()); CHECK(persisted["decoration"]=="changed_externally");
     const auto saved=get();
     CHECK(!settings.setRadius(-1)); CHECK(!settings.setRadius(201)); CHECK(get()==saved);
     { QLockFile lock(filename+".lock"); CHECK(lock.tryLock(0)); CHECK(!settings.setShadow(true)); CHECK(get()==saved); }
+    { QLockFile lock(filename+".lock"); CHECK(lock.tryLock(0)); CHECK(!settings.setSquareMaximized(false)); CHECK(get()==saved); }
     CHECK(!settings.setAnimation("close", "genie"));
     CHECK(settings.state()["closeAnimation"]=="fade");
     put("malformed"); CHECK(!settings.setRadius(12)); CHECK(get()=="malformed");
+    CHECK(!settings.setSquareMaximized(true)); CHECK(get()=="malformed");
     put(R"({"version":1,"defaults":{"stroke":{"width":1}}})");
     CHECK(settings.setRadius(8)); json=QJsonDocument::fromJson(get()).object();
     CHECK(json["version"].toInt()==1);

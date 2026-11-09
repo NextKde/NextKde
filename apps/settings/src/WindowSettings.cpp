@@ -112,6 +112,7 @@ QVariantMap WindowSettings::state() const {
     const QString buttonGlyphMode = buttonsDefault.value(QStringLiteral("glyphMode")).toString(QStringLiteral("always"));
     return {{"enabled", doc.value("enabled").toBool(true)},
             {"radius", defaults.value("corners").toObject().value("radius").toInt(20)},
+            {"squareMaximized", defaults.value("states").toObject().value("maximized").toString() == QLatin1String("square")},
             {"shadow", defaults.value("shadow").toObject().value("enabled").toBool(true)},
             {"hideAnimation", hide},
             {"nativeGenieFallback", animation.readEntry("NativeGenieFallback", QString())},
@@ -156,6 +157,10 @@ bool WindowSettings::setRadius(int radius) {
 }
 bool WindowSettings::setShadow(bool enabled) {
     return patchAppearance("shadow", "enabled", enabled);
+}
+bool WindowSettings::setSquareMaximized(bool enabled) {
+    return patchAppearance("states", "maximized",
+        enabled ? QStringLiteral("square") : QStringLiteral("inherit"));
 }
 bool WindowSettings::setTakeover(bool enabled) {
     m_error.clear();
