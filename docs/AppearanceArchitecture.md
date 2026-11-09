@@ -126,7 +126,7 @@ check both settled text and moving text in glass and Material themes.
 ## System fonts
 
 Settings → Theme → Fonts is a secondary page (route 14); the Theme row has only
-its name and a trailing `>` and appears first, before the appearance sections.
+its name and the shared right-chevron vector icon and follows the other Theme settings.
 The existing toolbar is the only back/forward control, including for a direct
 Fonts entry. Each font role is a clickable name/value row that opens its picker,
 without a second per-row action button. Navigation history and the Theme sidebar selection
@@ -146,8 +146,12 @@ KDE's Xft preview requires XWayland/X11; without DISPLAY, the form explains that
 the rendering preview is unavailable while retaining all applicable settings.
 This is an in-process KCM adapter, not a new command-execution or IPC path.
 The runtime requires the Plasma workspace font KCM; missing/incompatible modules
-show an unavailable state. Pending edits survive page navigation and are saved
-with Apply, discarded with Reset, or replaced with KDE defaults before applying.
+show an unavailable state. Changes save automatically through KDE after a 350 ms
+debounce; the page has no apply/reset/defaults footer. The timer belongs to the
+long-lived adapter, pending edits survive page navigation, and shutdown flushes
+the last edit. Only accepted font-picker selections and valid numeric edits are
+written; opening or cancelling a picker does not change settings. Save errors
+remain visible in the page instead of reporting success.
 
 ### Font backend compatibility
 
@@ -188,7 +192,8 @@ and that the native form hides the row. The 6.8 X11 test is a Qt/Xft backend tes
 not a claim that Plasma 6.8 ships an X11 desktop session.
 
 The runtime test covers all six font roles, anti-aliasing and its excluded range,
-sub-pixel/hinting, X11 DPI enable/reset, reset/defaults, retained draft values,
+sub-pixel/hinting, X11 DPI enable/reset, backend reset/defaults, coalesced automatic
+saves and shutdown persistence,
 unrelated-key preservation, KDE's actual D-Bus `refreshFonts` signal, and native
 form/preview rendering. Offscreen Qt exercises the non-X11 policy; it is **not** a
 Wayland compositor test. Actual application uptake, font-picker interactions and

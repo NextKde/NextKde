@@ -3,6 +3,7 @@
 #include <QFont>
 #include <QObject>
 #include <QStringList>
+#include <QTimer>
 #include <QVariant>
 
 class QQmlEngine;
@@ -25,6 +26,7 @@ class FontSettings final : public QObject {
 
 public:
     explicit FontSettings(QQmlEngine *engine, QObject *parent = nullptr);
+    ~FontSettings() override;
     bool available() const { return m_module != nullptr; }
     bool previewAvailable() const;
     bool dpiAvailable() const;
@@ -52,7 +54,9 @@ signals:
     void changed();
 
 private:
+    void scheduleSave();
     QQmlEngine *m_engine;
     KQuickConfigModule *m_module = nullptr;
     QString m_error;
+    QTimer m_saveTimer;
 };

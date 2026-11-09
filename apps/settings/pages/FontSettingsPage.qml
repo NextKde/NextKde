@@ -15,7 +15,6 @@ ColumnLayout {
     property var bridge: null
     property bool useSystemFont: false
     property string systemFontFamily: ""
-    property string statusText: ""
     readonly property var fonts: backend && backend.available ? backend.fonts : null
     readonly property var rendering: backend && backend.available ? backend.rendering : null
     readonly property bool ready: fonts !== null && rendering !== null
@@ -125,9 +124,10 @@ ColumnLayout {
                     font.pixelSize: 12
                     color: page.colors.secondaryText
                 }
-                Text {
-                    text: ">"
-                    font.pixelSize: 16
+                Demo.VectorIcon {
+                    name: "chevron"
+                    rotation: -90
+                    size: 14
                     color: page.colors.secondaryText
                 }
             }
@@ -151,9 +151,10 @@ ColumnLayout {
                 cursorShape: Qt.PointingHandCursor
                 onClicked: page.chooseFont("all")
             }
-            Text {
-                text: ">"
-                font.pixelSize: 16
+            Demo.VectorIcon {
+                name: "chevron"
+                rotation: -90
+                size: 14
                 color: page.colors.secondaryText
             }
         }
@@ -211,7 +212,7 @@ ColumnLayout {
                     validator: IntValidator { bottom: 0; top: page.rendering ? page.rendering.excludeTo : 999 }
                     inputMethodHints: Qt.ImhDigitsOnly
                     enabled: page.editable("excludeFrom")
-                    onEditingFinished: if (acceptableInput) page.backend.setRendering("excludeFrom", Number(text))
+                    onTextEdited: if (acceptableInput) page.backend.setRendering("excludeFrom", Number(text))
                 }
                 Text { text: "–"; color: page.colors.secondaryText; font.pixelSize: 12 }
                 Demo.SettingsTextField {
@@ -223,7 +224,7 @@ ColumnLayout {
                     validator: IntValidator { bottom: page.rendering ? page.rendering.excludeFrom : 0; top: 999 }
                     inputMethodHints: Qt.ImhDigitsOnly
                     enabled: page.editable("excludeTo")
-                    onEditingFinished: if (acceptableInput) page.backend.setRendering("excludeTo", Number(text))
+                    onTextEdited: if (acceptableInput) page.backend.setRendering("excludeTo", Number(text))
                 }
                 Text { text: "pt"; color: page.colors.secondaryText; font.pixelSize: 12 }
             }
@@ -293,7 +294,7 @@ ColumnLayout {
                     validator: IntValidator { bottom: 1; top: 999 }
                     inputMethodHints: Qt.ImhDigitsOnly
                     enabled: page.editable("dpi") && page.rendering.dpi > 0
-                    onEditingFinished: if (acceptableInput) page.backend.setRendering("dpi", Number(text))
+                    onTextEdited: if (acceptableInput) page.backend.setRendering("dpi", Number(text))
                 }
                 Controls.SettingsSwitch {
                     checked: page.rendering ? page.rendering.dpi > 0 : false
@@ -312,45 +313,6 @@ ColumnLayout {
         font.pixelSize: 11
         wrapMode: Text.Wrap
     }
-    RowLayout {
-        Layout.fillWidth: true
-        spacing: 8
-        Demo.LiquidActionButton {
-            text: I18n.tr("Restore defaults")
-            materialForm: true
-            enabled: page.ready
-            onClicked: { page.backend.defaults(); page.statusText = ""; }
-        }
-        Item { Layout.fillWidth: true }
-        Demo.LiquidActionButton {
-            objectName: "font-reset-button"
-            text: I18n.tr("Reset")
-            materialForm: true
-            enabled: page.ready && page.backend.needsSave
-            onClicked: { page.backend.reset(); page.statusText = ""; }
-        }
-        Demo.LiquidActionButton {
-            objectName: "font-apply-button"
-            text: I18n.tr("Apply")
-            materialForm: true
-            highlighted: true
-            enabled: page.ready && page.backend.needsSave
-            onClicked: {
-                page.statusText = page.backend.apply() ? I18n.tr("Font settings applied.") : "";
-                if (page.bridge) page.bridge.appearanceSnapshot();
-            }
-        }
-    }
-    Text {
-        Layout.fillWidth: true
-        visible: text.length > 0
-        text: page.backend && page.backend.needsSave
-            ? I18n.tr("You have unapplied font changes.") : page.statusText
-        color: page.colors.secondaryText
-        font.pixelSize: 12
-        wrapMode: Text.Wrap
-    }
-
     Dialogs.FontDialog {
         id: fontPicker
         objectName: "font-picker"
@@ -359,7 +321,6 @@ ColumnLayout {
         onAccepted: {
             if (category === "all") allOptions.open();
             else page.backend.setFont(category, selectedFont);
-            page.statusText = "";
         }
     }
     Demo.LiquidDialog {

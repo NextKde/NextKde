@@ -20,6 +20,14 @@
 
 Q_IMPORT_QML_PLUGIN(Kos_DemoPlugin)
 
+static QQuickItem *visualItem(QQuickItem *root, const QString &name)
+{
+    if (root->objectName() == name) return root;
+    for (auto *child : root->childItems())
+        if (auto *found = visualItem(child, name)) return found;
+    return nullptr;
+}
+
 class FontsTest : public QObject {
     Q_OBJECT
     int refreshCount = 0;
@@ -130,7 +138,7 @@ private slots:
         settings.setRendering(QStringLiteral("dpi"), 120);
         QCOMPARE(settings.rendering()->property("dpi").isValid(), settings.dpiAvailable());
         QCOMPARE(settings.rendering()->property("dpi").toInt(), canSetDpi ? 120 : initialDpi);
-        QTRY_VERIFY(settings.needsSave()); // Same readiness gate as the Apply button.
+        QTRY_VERIFY(settings.needsSave());
         QVERIFY2(settings.apply(), qPrintable(settings.error()));
         settings.reset();
         for (const auto &role : roles) {
@@ -167,6 +175,50 @@ private slots:
             QCOMPARE(settings.rendering()->property("dpi").toInt(), 0);
         }
         QTRY_VERIFY(!settings.needsSave());
+    }
+
+    void debouncedSave()
+    {
+        QQmlEngine engine;
+        FontSettings settings(&engine);
+        settings.refresh();
+        QVERIFY2(settings.available(), qPrintable(settings.error()));
+        auto font = settings.fonts()->property("font").value<QFont>();
+        const int beforeSave = refreshCount;
+        font.setPointSizeF(font.pointSizeF() + 1);
+        settings.setFont(QStringLiteral("font"), font);
+        QTest::qWait(80);
+        QCOMPARE(refreshCount, beforeSave);
+        font.setPointSizeF(font.pointSizeF() + 1);
+        settings.setFont(QStringLiteral("font"), font);
+        settings.refresh(); // Page activation must not reload over pending edits.
+        QCOMPARE(settings.fonts()->property("font").value<QFont>(), font);
+        QTRY_COMPARE_WITH_TIMEOUT(refreshCount, beforeSave + 1, 3000);
+        QTRY_VERIFY(!settings.needsSave());
+        QTest::qWait(450);
+        QCOMPARE(refreshCount, beforeSave + 1); // One KDE refresh for the burst.
+        KConfig persisted(QStringLiteral("kdeglobals"));
+        QCOMPARE(KConfigGroup(&persisted, "General").readEntry("font", QFont()).pointSizeF(), font.pointSizeF());
+    }
+
+    void flushPendingEditOnExit()
+    {
+        QQmlEngine engine;
+        QFont chosen;
+        {
+            FontSettings settings(&engine);
+            settings.refresh();
+            QVERIFY2(settings.available(), qPrintable(settings.error()));
+            // KDE registers its settings on the next event-loop turn; a real
+            // user reaches the controls only after the first frame is shown.
+            QTest::qWait(1);
+            chosen = settings.fonts()->property("menuFont").value<QFont>();
+            chosen.setPointSizeF(chosen.pointSizeF() + 1);
+            settings.setFont(QStringLiteral("menuFont"), chosen);
+            // No wait after the edit: exiting during debounce must still persist.
+        }
+        KConfig persisted(QStringLiteral("kdeglobals"));
+        QCOMPARE(KConfigGroup(&persisted, "General").readEntry("menuFont", QFont()).pointSizeF(), chosen.pointSizeF());
     }
 
     void nativePage()
@@ -225,9 +277,10 @@ private slots:
             QVERIFY(window.grabWindow().save(screenshot));
         }
         // The compact value row itself is the font picker affordance.
-        auto fontRow = page->findChild<QQuickItem *>(QStringLiteral("choose-font-font"));
+        auto fontRow = visualItem(page, QStringLiteral("choose-font-font"));
         auto picker = page->findChild<QObject *>(QStringLiteral("font-picker"));
-        QVERIFY(fontRow && picker);
+        QVERIFY(fontRow);
+        QVERIFY(picker);
         QTest::mouseClick(&window, Qt::LeftButton, Qt::NoModifier,
             fontRow->mapToScene(fontRow->boundingRect().center()).toPoint());
         QTRY_VERIFY(picker->property("visible").toBool());

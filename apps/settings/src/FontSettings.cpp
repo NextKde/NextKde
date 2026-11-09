@@ -53,6 +53,23 @@ bool writableProperties(QObject *object, const QStringList &names, QMetaType typ
 FontSettings::FontSettings(QQmlEngine *engine, QObject *parent)
     : QObject(parent), m_engine(engine)
 {
+    m_saveTimer.setSingleShot(true);
+    m_saveTimer.setInterval(350);
+    connect(&m_saveTimer, &QTimer::timeout, this, [this] { if (needsSave()) apply(); });
+}
+
+FontSettings::~FontSettings()
+{
+    // The adapter outlives page loaders. A real application exit must not lose
+    // the last edit just because the debounce interval has not elapsed yet.
+    if (m_saveTimer.isActive()) apply();
+}
+
+void FontSettings::scheduleSave()
+{
+    m_error.clear();
+    m_saveTimer.start();
+    emit changed();
 }
 
 bool FontSettings::needsSave() const { return m_module && m_module->needsSave(); }
@@ -77,8 +94,8 @@ QStringList FontSettings::hintingOptions() const { return options(m_module, "hin
 
 void FontSettings::refresh()
 {
-    // Retain edits when navigating away and back. Reset is the explicit discard.
-    if (needsSave()) return;
+    // Activation/navigation must not reload over an edit awaiting its save.
+    if (m_saveTimer.isActive() || needsSave()) return;
     m_error.clear();
     if (!m_module) {
         const auto metadata = KPluginMetaData::findPluginById(
@@ -139,6 +156,7 @@ void FontSettings::refresh()
 
 void FontSettings::reset()
 {
+    m_saveTimer.stop();
     m_error.clear();
     if (m_module) m_module->load();
     emit changed();
@@ -148,11 +166,13 @@ void FontSettings::defaults()
 {
     m_error.clear();
     if (m_module) m_module->defaults();
+    if (needsSave()) scheduleSave();
     emit changed();
 }
 
 bool FontSettings::apply()
 {
+    m_saveTimer.stop();
     if (!m_module) return false;
     m_error.clear();
     // KDE saves every font role and renderer setting, then exports GTK/Xft and
@@ -190,7 +210,10 @@ void FontSettings::setFont(const QString &category, QFont font)
 {
     if (!fontEditable(category) || font.family().isEmpty()) return;
     font.setPointSizeF(qMax(4.0, font.pointSizeF()));
-    fonts()->setProperty(category.toUtf8().constData(), font);
+    const auto key = category.toUtf8();
+    if (fonts()->property(key.constData()).value<QFont>() == font) return;
+    fonts()->setProperty(key.constData(), font);
+    scheduleSave();
 }
 
 void FontSettings::adjustAllFonts(const QFont &font, bool family, bool style, bool size)
@@ -223,17 +246,26 @@ void FontSettings::setRendering(const QString &setting, const QVariant &value)
     if (setting == QLatin1String("dpi") && (value.toInt() < 0 || value.toInt() > 999)) return;
     if ((setting == QLatin1String("excludeFrom") || setting == QLatin1String("excludeTo"))
         && (value.toInt() < 0 || value.toInt() > 999)) return;
-    rendering()->setProperty(setting.toUtf8().constData(), value);
+    const auto key = setting.toUtf8();
+    if (rendering()->property(key.constData()) == value) return;
+    rendering()->setProperty(key.constData(), value);
+    scheduleSave();
 }
 
 void FontSettings::setSubPixel(int index)
 {
-    if (renderingEditable(QStringLiteral("subPixel")) && index >= 0 && index < subPixelOptions().size())
+    if (renderingEditable(QStringLiteral("subPixel")) && index >= 0 && index < subPixelOptions().size()
+        && m_module->property("subPixelCurrentIndex").toInt() != index) {
         m_module->setProperty("subPixelCurrentIndex", index);
+        scheduleSave();
+    }
 }
 
 void FontSettings::setHinting(int index)
 {
-    if (renderingEditable(QStringLiteral("hinting")) && index >= 0 && index < hintingOptions().size())
+    if (renderingEditable(QStringLiteral("hinting")) && index >= 0 && index < hintingOptions().size()
+        && m_module->property("hintingCurrentIndex").toInt() != index) {
         m_module->setProperty("hintingCurrentIndex", index);
+        scheduleSave();
+    }
 }
