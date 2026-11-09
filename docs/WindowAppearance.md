@@ -78,6 +78,10 @@ Preserve physical versus logical outline-width semantics and schema-1 conversion
 values are sigma in logical pixels, not total extent. Focus transitions reserve enough cache margin
 for both states; bounded repaint timers stop when idle. Fullscreen always disables KOS corners/outlines/shadows/controls to cover the output;
 maximized behavior follows configuration. Restore normal appearance on leaving fullscreen.
+Settings → Window appearance exposes **Square corners when maximized** below Corner radius.
+It writes `defaults.states.maximized` as `square` when enabled and `inherit` when disabled,
+preserving the normal-window radius and other appearance settings. Existing configurations
+keep their current behavior; fullscreen remains square regardless of this switch.
 Clipping does not implement content-protection padding. Settings exposes selected appearance
 controls; the parser/example remains the reference for detailed rules. Palette-derived appearance and explicit per-app overrides do not
 sample wallpaper or recover content already removed by the client.

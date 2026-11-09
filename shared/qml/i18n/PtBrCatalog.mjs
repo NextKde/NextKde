@@ -1197,6 +1197,8 @@ export const catalog = {
     "Window appearance": "Aparência das janelas",
     "KOS window appearance": "Aparência de janelas do KOS",
     "Corner radius": "Raio dos cantos",
+    "Square corners when maximized": "Cantos retos ao maximizar",
+    "Fullscreen windows always use square corners. Restoring a window brings back its configured radius.": "Janelas em tela cheia sempre usam cantos retos. Ao restaurar a janela, o raio configurado é recuperado.",
     "Window shadow": "Sombra da janela",
     "Independent button cover": "Fundo independente dos botões",
     "Buttons use the standard KOS size (14 px). Right-click the cover and drag its edges to resize only the background. Button size and spacing adjustments are disabled.": "Os botões usam o tamanho padrão do KOS (14 px). Clique com o botão direito no fundo e arraste suas bordas para redimensionar apenas o fundo. O ajuste de tamanho e espaçamento dos botões fica desativado.",
