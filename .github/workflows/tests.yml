@@ -53,6 +53,84 @@ jobs:
           path: .build/native-genie-settings/test-results/
           if-no-files-found: ignore
 
+  kde-fonts:
+    name: KDE fonts Plasma ${{ matrix.series }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - series: '6.6'
+            snapshot: '2026/05/15'
+          - series: '6.7'
+            snapshot: '2026/10/01'
+          - series: '6.8'
+            snapshot: '2026/10/18'
+    container: archlinux:base-devel
+    steps:
+      # Pin the entire Qt/KF/Plasma runtime, not just headers or a mocked KCM.
+      - name: Select the Plasma ${{ matrix.series }} runtime snapshot
+        env:
+          ARCH_SNAPSHOT: ${{ matrix.snapshot }}
+        run: |
+          printf 'Server = https://archive.archlinux.org/repos/%s/$repo/os/$arch\n' \
+            "$ARCH_SNAPSHOT" > /etc/pacman.d/mirrorlist
+          for attempt in 1 2 3; do
+            if pacman -Syyuu --noconfirm --disable-download-timeout \
+                --ignore archlinux-keyring git; then
+              break
+            fi
+            test "$attempt" -lt 3 || exit 1
+            sleep 5
+          done
+      - uses: actions/checkout@v7
+      - name: Install KDE font runtime and build dependencies
+        run: |
+          pacman -S --noconfirm --needed --disable-download-timeout \
+            cmake ninja gcc qt6-base qt6-declarative kconfig kcmutils \
+            plasma-workspace kio kservice dbus gtk3 wayland pkgconf \
+            flatpak ostree xorg-server-xvfb xorg-xauth
+      - name: Assert Plasma series and record the actual runtime
+        env:
+          PLASMA_SERIES: ${{ matrix.series }}
+        run: |
+          mkdir -p .build/kde-fonts/test-results
+          pacman -Q plasma-workspace kcmutils kconfig qt6-base qt6-declarative \
+            > .build/kde-fonts/test-results/packages.txt
+          cat .build/kde-fonts/test-results/packages.txt
+          version=$(pacman -Q plasma-workspace | cut -d ' ' -f2)
+          case "$version" in
+            "$PLASMA_SERIES".*) ;;
+            *) echo "Expected Plasma $PLASMA_SERIES, got $version" >&2; exit 1 ;;
+          esac
+      - name: Build the production font adapter and native form test
+        run: |
+          cmake -S apps/settings -B .build/kde-fonts -G Ninja -DBUILD_TESTING=ON
+          cmake --build .build/kde-fonts --target kos-settings-fonts-test --parallel 2
+      - name: Verify KDE persistence, refresh signal and the native form
+        run: |
+          ctest --test-dir .build/kde-fonts -R '^kos-settings.fonts$' --verbose \
+            --output-log "$GITHUB_WORKSPACE/.build/kde-fonts/test-results/offscreen.log"
+          mv .build/kde-fonts/test-results/fonts.png .build/kde-fonts/test-results/offscreen.png
+      - name: Verify X11 DPI and the same KDE save path
+        env:
+          KOS_FONT_TEST_PLATFORM: xcb
+        run: |
+          ctest --test-dir .build/kde-fonts -R '^kos-settings.fonts$' --verbose \
+            --output-log "$GITHUB_WORKSPACE/.build/kde-fonts/test-results/x11.log"
+          mv .build/kde-fonts/test-results/fonts.png .build/kde-fonts/test-results/x11.png
+      - name: Upload font compatibility evidence
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: kde-fonts-${{ matrix.series }}
+          include-hidden-files: true
+          path: |
+            .build/kde-fonts/test-results/
+            .build/kde-fonts/Testing/Temporary/
+            .build/kde-fonts/CMakeFiles/CMakeConfigureLog.yaml
+
   fedora-dependencies:
     name: Fedora 44 dependency packages
     runs-on: ubuntu-24.04

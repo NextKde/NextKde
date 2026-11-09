@@ -1,11 +1,15 @@
 #include "FontSettings.h"
 
+#include <KConfig>
+#include <KConfigGroup>
+#include <QDBusConnection>
 #include <QDir>
 #include <QFile>
 #include <QFileInfo>
 #include <QFontInfo>
 #include <QGuiApplication>
 #include <QImage>
+#include <QMap>
 #include <QQmlComponent>
 #include <QQmlEngine>
 #include <QQuickItem>
@@ -18,7 +22,22 @@ Q_IMPORT_QML_PLUGIN(Kos_DemoPlugin)
 
 class FontsTest : public QObject {
     Q_OBJECT
+    int refreshCount = 0;
+public slots:
+    void fontRefreshReceived() { ++refreshCount; }
 private slots:
+    void initTestCase()
+    {
+        // Listen on CTest's private bus: save must delegate to KDE's real
+        // refresh path, not merely make our own UI appear up to date.
+        QVERIFY(QDBusConnection::sessionBus().connect(QString(), QStringLiteral("/KDEPlatformTheme"),
+            QStringLiteral("org.kde.KDEPlatformTheme"), QStringLiteral("refreshFonts"),
+            this, SLOT(fontRefreshReceived())));
+        KConfig config(QStringLiteral("kdeglobals"));
+        KConfigGroup(&config, "General").writeEntry("NextKdeUnknownFontOption", "preserve-me");
+        QVERIFY(config.sync());
+    }
+
     void kdeRoundTrip()
     {
         QQmlEngine engine;
@@ -47,7 +66,9 @@ private slots:
         settings.setSubPixel(2);
         settings.setHinting(3);
         QTRY_VERIFY(settings.needsSave());
+        const int beforeSave = refreshCount;
         QVERIFY2(settings.apply(), qPrintable(settings.error()));
+        QTRY_VERIFY(refreshCount > beforeSave);
         settings.reset();
         // KConfig normalizes a named "Regular" style to an empty styleName on
         // reload. Compare the actual font selection, not that serialization hint.
@@ -76,6 +97,58 @@ private slots:
         settings.defaults();
         QTRY_VERIFY(settings.needsSave());
         settings.reset();
+        QTRY_VERIFY(!settings.needsSave());
+    }
+
+    void allRolesAndRenderingRoundTrip()
+    {
+        QQmlEngine engine;
+        FontSettings settings(&engine);
+        settings.refresh();
+        QVERIFY2(settings.available(), qPrintable(settings.error()));
+        const QStringList roles{QStringLiteral("font"), QStringLiteral("fixed"),
+            QStringLiteral("smallestReadableFont"), QStringLiteral("toolBarFont"),
+            QStringLiteral("menuFont"), QStringLiteral("activeFont")};
+        QMap<QString, QFont> chosen;
+        for (const auto &role : roles) {
+            QVERIFY(settings.fontEditable(role));
+            auto font = settings.fonts()->property(role.toUtf8().constData()).value<QFont>();
+            font.setPointSizeF(font.pointSizeF() + 1);
+            chosen.insert(role, font);
+            settings.setFont(role, font);
+        }
+        settings.setRendering(QStringLiteral("antiAliasing"), true);
+        settings.setRendering(QStringLiteral("exclude"), true);
+        settings.setRendering(QStringLiteral("excludeFrom"), 9);
+        settings.setRendering(QStringLiteral("excludeTo"), 17);
+        const bool x11 = QGuiApplication::platformName() == QLatin1String("xcb");
+        QCOMPARE(settings.renderingEditable(QStringLiteral("dpi")), x11);
+        const int initialDpi = settings.rendering()->property("dpi").toInt();
+        settings.setRendering(QStringLiteral("dpi"), 120);
+        QCOMPARE(settings.rendering()->property("dpi").toInt(), x11 ? 120 : initialDpi);
+        QVERIFY2(settings.apply(), qPrintable(settings.error()));
+        settings.reset();
+        for (const auto &role : roles) {
+            const auto font = settings.fonts()->property(role.toUtf8().constData()).value<QFont>();
+            QCOMPARE(font.family(), chosen[role].family());
+            QCOMPARE(font.pointSizeF(), chosen[role].pointSizeF());
+            QCOMPARE(font.weight(), chosen[role].weight());
+            QCOMPARE(font.style(), chosen[role].style());
+        }
+        QCOMPARE(settings.rendering()->property("antiAliasing").toBool(), true);
+        QCOMPARE(settings.rendering()->property("exclude").toBool(), true);
+        QCOMPARE(settings.rendering()->property("excludeFrom").toInt(), 9);
+        QCOMPARE(settings.rendering()->property("excludeTo").toInt(), 17);
+        QCOMPARE(settings.rendering()->property("dpi").toInt(), x11 ? 120 : initialDpi);
+        KConfig persisted(QStringLiteral("kdeglobals"));
+        QCOMPARE(KConfigGroup(&persisted, "General").readEntry("NextKdeUnknownFontOption", QString()),
+            QStringLiteral("preserve-me"));
+        if (x11) {
+            settings.setRendering(QStringLiteral("dpi"), 0);
+            QVERIFY2(settings.apply(), qPrintable(settings.error()));
+            settings.reset();
+            QCOMPARE(settings.rendering()->property("dpi").toInt(), 0);
+        }
         QTRY_VERIFY(!settings.needsSave());
     }
 
@@ -145,8 +218,10 @@ int main(int argc, char **argv)
         QFile::setPermissions(path, QFile::ReadOwner | QFile::WriteOwner | QFile::ExeOwner);
         qputenv(entry, path.toUtf8());
     }
-    qputenv("QT_QPA_PLATFORM", "offscreen");
+    qputenv("QT_QPA_PLATFORM", qgetenv("KOS_FONT_TEST_PLATFORM").isEmpty()
+        ? QByteArray("offscreen") : qgetenv("KOS_FONT_TEST_PLATFORM"));
     qputenv("QT_QUICK_BACKEND", "software");
+    qputenv("KDE_FULL_SESSION", "true");
     // CTest provides a private Xvfb: KDE's font preview uses Xft even when Qt
     // itself renders offscreen. Keep DISPLAY for that provider and xrdb export.
     qunsetenv("WAYLAND_DISPLAY");

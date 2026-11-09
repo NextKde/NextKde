@@ -8,6 +8,7 @@
 #include <QAbstractItemModel>
 #include <QFontInfo>
 #include <QGuiApplication>
+#include <QMetaProperty>
 #include <QQmlEngine>
 #include <QQuickItem>
 #include <memory>
@@ -33,6 +34,19 @@ bool editable(QObject *object, const QString &name)
 {
     const auto skeleton = qobject_cast<KCoreConfigSkeleton *>(object);
     return skeleton && skeleton->findItem(name) && !skeleton->isImmutable(name);
+}
+
+bool writableProperties(QObject *object, const QStringList &names, QMetaType type = {})
+{
+    if (!object) return false;
+    for (const auto &name : names) {
+        const int index = object->metaObject()->indexOfProperty(name.toUtf8().constData());
+        if (index < 0) return false;
+        const auto property = object->metaObject()->property(index);
+        if (!property.isReadable() || !property.isWritable()) return false;
+        if (type.isValid() && property.metaType() != type) return false;
+    }
+    return true;
 }
 }
 
@@ -77,9 +91,21 @@ void FontSettings::refresh()
             return;
         }
         m_module = result.plugin;
-        if (!fonts() || !rendering()
-            || m_module->metaObject()->indexOfProperty("subPixelCurrentIndex") < 0
-            || m_module->metaObject()->indexOfProperty("hintingCurrentIndex") < 0) {
+        // These are the font KCM's properties, not a universal KDE settings
+        // API. Check the complete form contract before exposing the backend.
+        // Never fall back to guessing config keys on an incompatible version.
+        if (!qobject_cast<KCoreConfigSkeleton *>(fonts())
+            || !qobject_cast<KCoreConfigSkeleton *>(rendering())
+            || !writableProperties(fonts(), categories, QMetaType::fromType<QFont>())
+            || !writableProperties(rendering(), {QStringLiteral("antiAliasing"), QStringLiteral("exclude")},
+                QMetaType::fromType<bool>())
+            || !writableProperties(rendering(), {QStringLiteral("excludeFrom"), QStringLiteral("excludeTo"),
+                QStringLiteral("dpi")}, QMetaType::fromType<int>())
+            || !writableProperties(rendering(), {QStringLiteral("subPixel"), QStringLiteral("hinting")})
+            || rendering()->metaObject()->indexOfProperty("isAaImmutable") < 0
+            || !writableProperties(m_module, {QStringLiteral("subPixelCurrentIndex"), QStringLiteral("hintingCurrentIndex")},
+                QMetaType::fromType<int>())
+            || subPixelOptions().isEmpty() || hintingOptions().isEmpty()) {
             delete m_module;
             m_module = nullptr;
             m_error = QStringLiteral("This KDE font settings module is not supported.");
