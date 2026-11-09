@@ -54,7 +54,15 @@ Item {
                     check(root.wallpaper.width === output.geometry.width
                         && root.wallpaper.height === output.geometry.height,
                         "wallpaper must cover the output")
-                    root.background = backgroundComponent.createObject(root, {outputName: output.name})
+                    // The isolated compositor runs with --no-kactivities.
+                    // An empty activity asks DesktopBackground to dereference
+                    // Workspace::activities(), which is null in that mode.
+                    // Both shell surfaces belong to every activity, so an
+                    // explicit activity still exercises the native selector.
+                    root.background = backgroundComponent.createObject(root, {
+                        outputName: output.name,
+                        activity: "00000000-0000-0000-0000-000000000000"
+                    })
                     check(root.background && root.background.client === root.wallpaper,
                         "native DesktopBackground selected transparent widgets instead of wallpaper")
                     KW.Workspace.activeWindow = root.widget

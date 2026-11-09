@@ -75,13 +75,18 @@ def run(base_env):
                                 raise AssertionError(output + "\n" + (root / "shell.log").read_text())
                             print(f"PASS: native wallpaper selection, close/move, Show Desktop; widgets-first={order}")
                         finally:
-                            scripting.unloadScript(plugin)
-                            shell.terminate()
                             try:
-                                shell.wait(timeout=3)
-                            except subprocess.TimeoutExpired:
-                                shell.kill()
-                                shell.wait()
+                                if bus.name_has_owner("org.kde.KWin"):
+                                    scripting.unloadScript(plugin)
+                            finally:
+                                # A compositor crash must not prevent client
+                                # cleanup or hide the original test failure.
+                                shell.terminate()
+                                try:
+                                    shell.wait(timeout=3)
+                                except subprocess.TimeoutExpired:
+                                    shell.kill()
+                                    shell.wait()
             finally:
                 server.shutdown()
 
