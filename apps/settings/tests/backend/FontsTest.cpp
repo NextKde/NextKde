@@ -108,11 +108,14 @@ private slots:
         page->setY(15);
         page->setWidth(520);
         QTRY_VERIFY(page->property("ready").toBool());
-        settings.setRendering(QStringLiteral("antiAliasing"), true);
         window.show();
         window.requestActivate();
         QVERIFY(QTest::qWaitForWindowExposed(&window));
         QTRY_VERIFY(window.isActive());
+        // Application activation refreshes the form. Stage the edit afterwards,
+        // as a real interaction does, rather than racing that initial reload.
+        settings.setRendering(QStringLiteral("antiAliasing"), true);
+        QTRY_VERIFY(page->property("antiAliasing").toBool());
         auto preview = page->findChild<QQuickItem *>(QStringLiteral("font-rendering-preview"));
         QVERIFY(preview);
         QTRY_COMPARE(preview->property("status").toInt(), 1); // Image.Ready
