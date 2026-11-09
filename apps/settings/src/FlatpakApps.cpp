@@ -608,6 +608,23 @@ QVariantMap FlatpakApps::executeRemoval(const QVariantMap& request, const std::s
     } else if (!installed || (!transaction && result.isEmpty())) {
         result["code"] = "RESULT_UNKNOWN";
     }
+    // Drop ownership only after a successful removal and a fresh inventory.
+    // Keep the receipt on any ambiguous result so withdrawn apps remain manageable.
+    if (result.isEmpty() && transaction) {
+        auto* refs = flatpak_installation_list_installed_refs_by_kind(installation,
+            FLATPAK_REF_KIND_APP, cancellation->value, &error);
+        bool absent = refs != nullptr;
+        if (refs) {
+            for (guint i = 0; i < refs->len; ++i)
+                absent &= appId != QString::fromUtf8(flatpak_ref_get_name(FLATPAK_REF(g_ptr_array_index(refs, i))));
+            g_ptr_array_unref(refs);
+        }
+        if (!absent || !AppCatalog::forgetInstallation(appId)) {
+            result["code"] = "RESULT_UNKNOWN";
+            if (error) result["message"] = QString::fromUtf8(error->message);
+        }
+        g_clear_error(&error);
+    }
     if (transaction) g_object_unref(transaction);
     if (installed) g_object_unref(installed);
     if (installation) g_object_unref(installation);

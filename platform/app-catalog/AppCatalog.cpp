@@ -182,6 +182,14 @@ bool recordInstallation(const QString& appId, const QVariantMap& installation)
     if (installation.value("observed").toBool() && !receipt(appId).isEmpty()) return true;
     return writeState("installed-" + appId, installation);
 }
+bool forgetInstallation(const QString& appId)
+{
+    if (!appIdentifier(appId) || !QDir().mkpath(stateDirectory())) return false;
+    QLockFile lock(stateDirectory() + "/receipt-" + appId + ".lock");
+    if (!lock.tryLock(1000)) return false;
+    const auto path = stateDirectory() + "/installed-" + appId + ".json";
+    return !QFile::exists(path) || QFile::remove(path);
+}
 QString entryDigest(const QVariantMap& app)
 {
     auto identity = app;

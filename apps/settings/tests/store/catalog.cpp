@@ -131,6 +131,25 @@ private slots:
         QVERIFY(!withdrawn.value("active").toBool());
         QCOMPARE(withdrawn.value("status").toString(), QString("withdrawn"));
     }
+    void uninstallForgetsOwnershipButKeepsCatalogHistory()
+    {
+        QVERIFY(snapshot(catalog(2)));
+        const auto path = AppCatalog::stateDirectory() + "/catalogs/fixture.json";
+        QFile file(path); QVERIFY(file.open(QIODevice::ReadOnly));
+        const auto history = file.readAll(); file.close();
+        QVERIFY(!AppCatalog::receipt("org.example.Notes").isEmpty());
+        QCOMPARE(AppCatalog::removeSource("fixture"), QString());
+        QVERIFY(!AppCatalog::find("org.example.Notes").value("active").toBool());
+        QVERIFY(!AppCatalog::forgetInstallation("../invalid"));
+        QVERIFY(AppCatalog::forgetInstallation("org.example.Notes"));
+        QVERIFY(AppCatalog::receipt("org.example.Notes").isEmpty());
+        QVERIFY(AppCatalog::find("org.example.Notes").isEmpty());
+        QVERIFY(file.open(QIODevice::ReadOnly));
+        QCOMPARE(file.readAll(), history); file.close();
+        QVERIFY(AppCatalog::forgetInstallation("org.example.Notes"));
+        QCOMPARE(AppCatalog::addSource("fixture", "Example/catalog", fingerprint, root.filePath("public.gpg")), QString());
+        QVERIFY(AppCatalog::find("org.example.Notes").value("active").toBool());
+    }
     void tamperedCacheCannotAuthorizeInstall()
     {
         QVERIFY(snapshot(catalog(3)));

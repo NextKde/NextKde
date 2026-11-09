@@ -29,6 +29,7 @@ QVariantMap readState(const QString& name);
 bool writeState(const QString& name, const QVariantMap& value);
 QVariantMap receipt(const QString& appId);
 bool recordInstallation(const QString& appId, const QVariantMap& installation);
+bool forgetInstallation(const QString& appId);
 QString stateDirectory();
 QString entryDigest(const QVariantMap& app);
 }
