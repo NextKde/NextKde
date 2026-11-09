@@ -119,6 +119,7 @@ QtObject {
                 target: delegate.player
                 ignoreUnknownSignals: true
                 function onPlaybackStateChanged() { svc._updateActivePlayer() }
+                function onCanControlChanged() { svc._updateActivePlayer() }
                 function onMetadataChanged() {
                     svc._updateActivePlayer()
                     svc.refreshMetadata()
