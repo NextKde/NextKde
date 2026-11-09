@@ -262,7 +262,7 @@ if(BUILD_TESTING)
     set_tests_properties(kos-settings.native-genie-upgrade PROPERTIES LABELS logic TIMEOUT 15)
     add_test(NAME kos-settings.window-page COMMAND kos-settings --smoke-test-windows)
     set_tests_properties(kos-settings.window-page PROPERTIES
-        ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_QUICK_BACKEND=software"
+        ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_QUICK_BACKEND=software;QML_IMPORT_PATH=${CMAKE_BINARY_DIR}/qml;QML2_IMPORT_PATH=${CMAKE_BINARY_DIR}/qml"
         LABELS ui TIMEOUT 15)
     # The settings window ships in the core configuration, so it is not built
     # through kos_add_application and its smoke test lives here. --smoke-test
@@ -272,7 +272,7 @@ if(BUILD_TESTING)
     add_test(NAME kos-settings.qml-smoke COMMAND kos-settings --smoke-test)
     set_tests_properties(kos-settings.qml-smoke PROPERTIES
         ENVIRONMENT
-            "QT_QPA_PLATFORM=offscreen;QT_QUICK_BACKEND=software;QSG_RHI_BACKEND=software"
+            "QT_QPA_PLATFORM=offscreen;QT_QUICK_BACKEND=software;QSG_RHI_BACKEND=software;QML_IMPORT_PATH=${CMAKE_BINARY_DIR}/qml;QML2_IMPORT_PATH=${CMAKE_BINARY_DIR}/qml"
         LABELS ui
         TIMEOUT 15
     )

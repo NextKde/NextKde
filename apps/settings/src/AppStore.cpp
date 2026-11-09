@@ -86,9 +86,20 @@ QString AppStore::removeSource(const QString& id)
     const auto error = AppCatalog::removeSource(id);
     m_independent.refresh(); emit changed(); return error;
 }
+bool AppStore::startUpdateAgent(bool checkNow)
+{
+    QProcess process;
+    process.setProgram(QCoreApplication::applicationDirPath() + "/kos-app-update-agent");
+    if (checkNow) process.setArguments({"--check-now"});
+    // A detached session service must not keep its launcher's capture pipes open.
+    process.setStandardInputFile(QProcess::nullDevice());
+    process.setStandardOutputFile(QProcess::nullDevice());
+    process.setStandardErrorFile(QProcess::nullDevice());
+    return process.startDetached();
+}
 void AppStore::checkAllUpdates()
 {
-    if (!QProcess::startDetached(QCoreApplication::applicationDirPath() + "/kos-app-update-agent", {"--check-now"})) {
+    if (!startUpdateAgent(true)) {
         m_catalogError = "Could not start the application update service"; emit changed();
     }
 }

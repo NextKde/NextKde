@@ -28,6 +28,7 @@ class AppStore final : public QObject {
 public:
     explicit AppStore(const QString& resourcesDirectory, QObject* parent = nullptr);
     ~AppStore() override;
+    bool startUpdateAgent(bool checkNow = false);
     QVariantList sources() const;
     QString catalogError() const { return m_catalogError; }
     bool catalogBusy() const { return m_catalogRefresh.isRunning(); }
