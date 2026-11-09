@@ -762,7 +762,11 @@ QtObject {
         requestThumbnail(windowId)   // 立刻补拍，不等侧栏 1.5s 重试拍
     }
 
-    function activateWindow(windowId) {
+    // `options.forceAnim` asks the compositor to replay its reveal animation
+    // even when the window is already on screen. A notification click uses it:
+    // the window is being summoned from another surface, so it should arrive
+    // with the same animation a Dock click gets.
+    function activateWindow(windowId, options) {
         const record = windowById(windowId);
         if (!record) {
             console.warn("[WindowService] activate missing windowId=" + windowId);
@@ -770,7 +774,8 @@ QtObject {
         }
         activationRequested(windowId);
         if (record.provider === "kwin") {
-            _enqueueKwinCommand({ action: "activate", id: record.handleId });
+            _enqueueKwinCommand({ action: "activate", id: record.handleId,
+                forceAnim: options?.forceAnim === true });
             return;
         }
         try { record.toplevel.activate(); } catch (e) {}

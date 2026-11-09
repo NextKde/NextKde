@@ -551,6 +551,11 @@ if(BUILD_TESTING)
                 ${CMAKE_CURRENT_SOURCE_DIR}/shell/desktop/modules/deskcenter/test_desktop_outputs.mjs
         )
         set_tests_properties(kos-deskcenter.desktop-outputs PROPERTIES TIMEOUT 10)
+        add_test(NAME kos-notifications.activation
+            COMMAND ${KOS_NODE_EXECUTABLE}
+                ${CMAKE_CURRENT_SOURCE_DIR}/shell/desktop/modules/notifications/test_notification_activation.mjs
+        )
+        set_tests_properties(kos-notifications.activation PROPERTIES LABELS logic TIMEOUT 10)
         add_test(NAME kos-deskcenter.desktop-stack
             COMMAND ${KOS_NODE_EXECUTABLE}
                 ${CMAKE_CURRENT_SOURCE_DIR}/platform/tests/test_desktop_stack.mjs

@@ -8,6 +8,7 @@ import "../../../shared/qml/i18n"
 import qs.desktop.modules.common
 import qs.desktop.modules.dock
 import qs.desktop.modules.notifications
+import "NotificationActivation.mjs" as Activation
 import "../../../Kos/Ui"
 
 // Top-right notification popup. One card per app group (newest on top).
@@ -29,6 +30,9 @@ PanelWindow {
 
     required property var groupService
     property int exitDuration: 200
+    // Fading in place when a click opens the app is quicker than the slide-out
+    // used for expiry, so the card never lingers over the window it raised.
+    property int handoffDuration: 140
 
     // Global ceiling on popup auto-expire, in ms. Apps may request longer
     // (Fcitx requests 60000 for its "Wayland 诊断" notice), but no popup is
@@ -105,28 +109,62 @@ PanelWindow {
             // Clickable outline, independent of the blur transport above.
             readonly property var notificationInputRegion: cardInput
             property bool removing: false
+            // True when the card is leaving because its app is being raised:
+            // the exit fades in place instead of sliding out.
+            property bool handoff: false
             enabled: !removing
             ListView.onRemove: {
                 removing = true
                 ListView.delayRemove = true
-                exitAnimation.start()
+                card.startExit()
             }
 
             Timer {
                 id: removingSafetyTimer
                 interval: root.exitDuration + 300
-                running: card.removing && !exitAnimation.running
-                onTriggered: exitAnimation.start()
+                running: card.removing && !card.exiting
+                onTriggered: card.startExit()
             }
 
+            // Expiry slides the card out.
             NumberAnimation {
-                id: exitAnimation
+                id: slideAnimation
                 target: card
                 property: "x"
                 to: notificationList.width + 44
                 duration: root.exitDuration
                 easing.type: Easing.InCubic
                 onFinished: card.ListView.delayRemove = false
+            }
+            // Opening the app fades the card away in place and lifts it a touch,
+            // so the click reads as handing the notification over to the window
+            // that is arriving. Separate from the slide: binding an animation's
+            // `property` is not evaluated reliably before start, and a property-
+            // less animation finishes immediately and drops the delegate.
+            ParallelAnimation {
+                id: handoffAnimation
+                NumberAnimation {
+                    target: card
+                    property: "opacity"
+                    to: 0
+                    duration: root.handoffDuration
+                    easing.type: Easing.OutCubic
+                }
+                NumberAnimation {
+                    target: card
+                    property: "scale"
+                    to: 1.04
+                    duration: root.handoffDuration
+                    easing.type: Easing.OutCubic
+                }
+                onFinished: card.ListView.delayRemove = false
+            }
+            readonly property bool exiting: slideAnimation.running || handoffAnimation.running
+            function startExit() {
+                if (card.handoff)
+                    handoffAnimation.start()
+                else
+                    slideAnimation.start()
             }
 
             readonly property string groupKey: modelData.groupKey
@@ -232,6 +270,24 @@ PanelWindow {
                 radius: card.radius
             }
 
+            // Clicking the card opens the app that sent it. Declared before the
+            // card's visual children so the action buttons, inline reply, close
+            // button and group header keep their own clicks; the list can still
+            // steal the pointer for scrolling.
+            MouseArea {
+                objectName: "notification-open-area"
+                anchors.fill: parent
+                cursorShape: Qt.PointingHandCursor
+                onClicked: {
+                    if (!card.openApp())
+                        return
+                    if (!(card.notification?.resident ?? false)) {
+                        card.handoff = true
+                        card.close(false)
+                    }
+                }
+            }
+
             // ---- backgrounds ----
             // Frosted liquid glass backdrop adapting to theme. The urgency
             // tints and the edge accents sit inside it so that the corner mask
@@ -299,6 +355,45 @@ PanelWindow {
                     root.groupService.expireGroupByKey(card.groupKey)
                 else
                     root.groupService.dismissGroupByKey(card.groupKey)
+            }
+
+            // Raise the window this notification came from. Returns false when
+            // there is nothing to open, so the card stays put instead of
+            // disappearing with no effect.
+            function openApp() {
+                const notification = card.notification
+                if (!notification)
+                    return false
+                const desktopId = Activation.desktopIdOf(notification)
+                const windows = desktopId ? WindowService.windowsForApp(desktopId) : []
+                const plan = Activation.planClick(notification, windows)
+                if (plan.kind === "activate") {
+                    // Restored windows keep their previous geometry. A minimized
+                    // window also asks the compositor to replay its reveal
+                    // animation; a window that is merely behind others is only
+                    // raised, because replaying the reveal would hide and regrow
+                    // it for a frame.
+                    const target = windows.find(window => String(window.windowId) === plan.windowId)
+                    WindowService.activateWindow(plan.windowId, {
+                        forceAnim: target?.toplevel?.minimized === true
+                    })
+                    return true
+                }
+                if (plan.kind === "launch") {
+                    // Reuse the Dock's launch path: it keeps the launch ticket,
+                    // so a newly started window still animates in.
+                    DockModelService.activateApp(plan.desktopId)
+                    return true
+                }
+                if (plan.kind === "defaultAction") {
+                    const action = (notification.actions || [])
+                        .find(item => item?.identifier === "default")
+                    if (action) {
+                        action.invoke()
+                        return true
+                    }
+                }
+                return false
             }
 
             // ---- countdown bar ----
