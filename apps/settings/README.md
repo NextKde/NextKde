@@ -111,3 +111,14 @@ component serves the sidebar, the KDE action and the back/forward group. Sidebar
 show their full text when elided; fully visible names never repeat themselves.
 The KDE action uses an action-oriented hint. Do not use attached Qt `ToolTip`
 properties or a page-specific bubble style. See nextkdeAppDemo `docs/Tooltips.md`.
+
+## Applications and services
+
+The page reads a signed, refreshable catalog instead of a compiled application list.
+See [architecture, sources and automatic checks](../../docs/app-store/SignedCatalog.md)
+([简体中文](../../docs/app-store/SignedCatalog.zh-CN.md)) and the
+[submission / Qt runtime guide](https://github.com/NextKde/appCatalog).
+`kos-app-update-agent` is installed alongside Settings and starts in the user session;
+checks do not install updates. Catalog metadata and UI strings support English,
+Simplified Chinese and Brazilian Portuguese. Perform builds, tests and GUI acceptance
+only in a development VM or CI, not on the host workstation.

@@ -10,6 +10,7 @@ The root README introduces the desktop in [English](../README.md), [简体中文
 
 | Topic | Canonical guide |
 | --- | --- |
+| Signed catalogs, third-party sources, update notifications and app submissions | [Applications and services](app-store/SignedCatalog.md), [appCatalog / Qt runtime](https://github.com/NextKde/appCatalog) |
 | Dependencies, install, update, uninstall | [Getting started](GettingStarted.md) |
 | NixOS declarative installation | [NixOS](nixos-quickstart.md) |
 | Window animation choices, native Genie and fallback | [Window animations](WindowAnimations.md) |

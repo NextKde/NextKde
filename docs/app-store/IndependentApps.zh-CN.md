@@ -1,5 +1,7 @@
 # 独立 NextKde 应用
 
+当前应用目录、第三方来源及后台更新机制见 [签名目录说明](SignedCatalog.zh-CN.md)。下文保留安装边界与历史发行/验收记录。
+
 **安装边界：原生版与 Flatpak 版允许共存。** Settings 的“安装／打开／卸载”只看当前
 Flatpak 库存；原生程序、桌面入口、源码安装记录均不得阻止查询、计划或安装。
 旧原生清理是独立可选操作，绝不是安装 Flatpak 的前置条件。
@@ -24,7 +26,7 @@ Todo 已整合进 Calendar 的提醒事项视图，不再提供独立启动入�
 
 最后一列是可执行命令；前三款新版原生和 Flatpak 桌面文件均用应用 ID，例如
 `org.nextks.calendar.desktop`；旧桌面身份不作为启动后备，ListenFree 原生命名不变。
-商店条目不能指定仓库 URL、任意命令、可执行文件名或安装根目录。
+签名目录可指定 GitHub owner/repository，不能指定任意下载 URL、命令、可执行文件名或安装根目录。
 
 前三款共用 VERSION／commit／Release，但各有独立包和源码清单，构建时只选
 `-DKOS_APPS=<app>`。旧 `org.nextkde.Calendar`、`org.nextkde.Calculator`、
@@ -61,13 +63,11 @@ GitHub 包更新。Flatpak 管理文件及 ref，外部 Flatpak 工具能卸载�
 复查本地状态。唯一用户级安装可离线卸载，普通卸载保留数据与 runtime；系统级或多份安装须先消除歧义。
 
 前三款使用 `<appId>.flatpak-release.json`，ListenFree 保留 `flatpak-release.json`；
-每个应用在同一 Release 中有独立附件，不改变源码清单 schema。schema 1 包含固定 appId、稳定数字版本 X.Y.Z、
-源码 revision 与架构表；每个包锁定 ref、OSTree commit、附件名、字节大小和 SHA256。
-对应清单名加 `.sig` 签原始清单字节，包内 OSTree commit 也必须签名。
-公钥与完整主密钥指纹通过经过审核的 core 版本内置在 `FlatpakTrustPolicy.h`，不从同一 Release
-或包内建立信任。运行依赖增加 `gpgv`。当前已在 core 策略中为五款应用嵌入专用发布者公钥，
-主指纹为 `3751DC833ED4BC7E797A9766ADF7411B531A56B4`；尚无正式签名 Release。
-密钥在本机专用目录生成，不是 CI secret，也尚未通过受信 core 版本发行。
+每个应用在同一 Release 中有独立附件。schema 2 包含 appId、稳定数字版本 X.Y.Z、源码 revision
+和架构表；每个包锁定 ref、OSTree commit、附件名、字节大小、SHA-256、原始 metadata 及其摘要、
+安装大小、runtime 和必需扩展。开发者签名可选；目录指定 publisher 时，清单原始字节和包内
+OSTree commit 均必须验签，失败不降级。应用发布者公钥由签名目录条目提供，不再是 core 的固定应用数组。
+五款种子条目保留主指纹 `3751DC833ED4BC7E797A9766ADF7411B531A56B4`，种子存在不代表包已发布。
 runtime 专用策略于 2026-11-05 按[官方安装文档](https://docs.flathub.org/docs/for-users/installation)
 及其 HTTPS 仓库文件审核，接受 `https://dl.flathub.org/repo/` 与完整主指纹
 `6E5C05D979C76DAF93C081354184DD4D907A7CAE`，主密钥于 2027-06-14 到期。
@@ -75,7 +75,7 @@ runtime 专用策略于 2026-11-05 按[官方安装文档](https://docs.flathub.
 用户点击安装／更新后，缺少依赖来源时由 Settings 自动准备，不弹配置窗口、不要求终端操作。
 仅查询库存或检查更新不改来源；正常下载确认仍保留，签名包安装／更新仍待人工验收。
 
-显式检查更新只查固定仓库最新稳定 Release，校验唯一附件、签名、tag／版本和本机架构 stable ref。
+显式检查更新只查目录授权仓库最新稳定 Release，校验唯一附件、签名、tag／版本和本机架构 stable ref。
 元数据上限 256 KiB、签名 64 KiB、包 2 GiB；下载只允许固定 GitHub HTTPS 端点与附件 CDN，
 最多五次重定向，不接受任意地址或凭据。元数据单次 30 秒、发现总预算 90 秒；包下载空闲 30 秒、
 单次十分钟、最多三次、下载总预算三十分钟。仅瞬时网络／5xx 有限退避重试，签名／散列／TLS／404／
@@ -83,8 +83,8 @@ runtime 专用策略于 2026-11-05 按[官方安装文档](https://docs.flathub.
 日志不记录带签名参数的 CDN 地址。
 
 候选绑定真实本地安装快照。低于已装 AppStream 版本、无法解析已装版本、同版本不同 commit 均拒绝；
-首次安装没有历史基准，不声称完全防止旧签名重放。更新要求现有 commit 的发布者签名通过核验，
-且 origin 为开启校验、没有在线 URL 的本地 bundle 来源，不能接管第三方在线源安装。
+首次安装没有历史基准，不声称完全防止旧签名重放。更新要求现有 commit 的已配置发布者签名通过核验，或无发布者条目匹配本客户端安装记录；
+origin 必须是没有在线 URL 的本地 bundle 来源，不能接管第三方在线源安装。
 新安装不检查原生可执行文件／桌面入口／ownership，也不迁移原生资料；Flatpak 系统级／多份／其他分支或架构／
 并发状态变化都不会静默解决。
 
