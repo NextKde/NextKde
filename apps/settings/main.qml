@@ -41,6 +41,7 @@ ApplicationWindow {
     flags: Qt.Window | Qt.FramelessWindowHint
 
     property int currentPage: 1
+    readonly property int navigationPage: currentPage === 14 ? 1 : currentPage
     property string requestedApp: ""
     function revealRequestedApp() {
         if (servicesPage.item) servicesPage.item.requestReveal()
@@ -52,8 +53,8 @@ ApplicationWindow {
     readonly property bool canGoBack: historyIndex > 0
     readonly property bool canGoForward: historyIndex < pageHistory.length - 1
     Component.onCompleted: {
-        pageHistory = [currentPage]
-        historyIndex = 0
+        pageHistory = currentPage === 14 ? [1, 14] : [currentPage]
+        historyIndex = pageHistory.length - 1
         navigationReady = true
     }
     onCurrentPageChanged: {
@@ -277,7 +278,8 @@ ApplicationWindow {
         },
         { subtitle: I18n.tr("Windows and animations") },
         { subtitle: I18n.tr("Notifications") },
-        { subtitle: I18n.tr("Power") }
+        { subtitle: I18n.tr("Power") },
+        { subtitle: I18n.tr("Fonts") }
     ]
 
     // Shown only while a development session drives this window. Every value on
@@ -400,7 +402,7 @@ ApplicationWindow {
         }
         leftPadding: 10
         rightPadding: 10
-        highlighted: !launchOnly && window.currentPage === pageIndex
+        highlighted: !launchOnly && window.navigationPage === pageIndex
         hoverEnabled: !launchOnly
         visible: window.searchText.length === 0
             || label.toLowerCase().indexOf(window.searchText.toLowerCase()) >= 0
@@ -428,7 +430,7 @@ ApplicationWindow {
                 iconName: navIcon
                 symbol: navSymbol
                 tint: navTint
-                highlighted: window.currentPage === pageIndex
+                highlighted: window.navigationPage === pageIndex
             }
             Text {
                 id: sidebarLabel
@@ -437,7 +439,7 @@ ApplicationWindow {
                 anchors.right: parent.right
                 anchors.verticalCenter: parent.verticalCenter
                 text: label
-                color: window.currentPage === pageIndex
+                color: window.navigationPage === pageIndex
                     ? theme.selectedForeground : theme.primaryText
                 font.pixelSize: 13
                 font.weight: Font.Normal
@@ -960,11 +962,25 @@ ApplicationWindow {
                     }
 
                     Loader {
+                        objectName: "FontSettingsPageLoader"
+                        Layout.fillWidth: true
+                        active: window.displayedPage === 14
+                        visible: active
+                        sourceComponent: Pages.FontSettingsPage {
+                            colors: window.notificationTheme
+                            materialForm: window.materialForm
+                            bridge: typeof settingsBridge !== "undefined" ? settingsBridge : null
+                            backend: typeof fontSettings !== "undefined" ? fontSettings : null
+                        }
+                    }
+
+                    Loader {
                         objectName: "ThemeSettingsPageLoader"
                         Layout.fillWidth: true
                         active: window.displayedPage === 1
                         visible: active
                         sourceComponent: Pages.ThemeSettingsPage {
+                            onFontsRequested: window.currentPage = 14
                             colors: window.notificationTheme
                             materialForm: window.materialForm
                             bridge: typeof settingsBridge !== "undefined" ? settingsBridge : null

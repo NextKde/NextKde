@@ -67,7 +67,7 @@ Rectangle {
         text: label.targetIcon ? label.targetIcon.displayName : ""
         color: ThemeService.foregroundColor
         elide: Text.ElideRight
-        font.family: "Noto Sans CJK SC, sans-serif"
+        font.family: AppearanceTokens.typography.textChain
         font.pixelSize: 11
         font.weight: Font.DemiBold
     }

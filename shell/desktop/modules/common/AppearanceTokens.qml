@@ -8,7 +8,7 @@ import "../../../Kos/Ui"
 QtObject {
     id: tokens
 
-    readonly property int version: 9
+    readonly property int version: 10
     readonly property string style: AppearanceConfigService.shellStyle
     readonly property bool isWindows12: style === "windows12"
     readonly property bool isMacos: style === "macos"
@@ -394,12 +394,21 @@ QtObject {
     }
 
     readonly property QtObject typography: QtObject {
-        readonly property string recommendedDisplayFamily: "SF Pro Display"
-        readonly property bool hasRecommendedDisplayFamily:
-            Qt.fontFamilies().indexOf(recommendedDisplayFamily) >= 0
-        // An empty family delegates fallback to the user's Qt/KDE font setup.
-        readonly property string displayFamily: hasRecommendedDisplayFamily
-            ? recommendedDisplayFamily : ""
+        // General font is the default. A desktop override changes family only.
+        // Surface pixel sizes remain owned by their layouts; emoji are separate.
+        readonly property string systemFamily: SystemFontService.family
+        readonly property string desktopFamily: AppearanceConfigService.desktopFontFamily.length > 0
+            && Qt.fontFamilies().indexOf(AppearanceConfigService.desktopFontFamily) >= 0
+            ? AppearanceConfigService.desktopFontFamily : systemFamily
+        readonly property string textFamily: desktopFamily
+        readonly property string displayFamily: desktopFamily
+        readonly property string displayChain: desktopFamily
+        readonly property string textChain: desktopFamily
+        readonly property string monospaceFamily: desktopFamily
+        // Colour emoji are not interface type: a reference to the emoji font
+        // must never be replaced by the interface font, or the desktop would
+        // draw tofu wherever it draws an emoji glyph.
+        readonly property string emojiFamily: "Noto Color Emoji"
     }
 
     readonly property QtObject dock: QtObject {
