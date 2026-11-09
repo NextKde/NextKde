@@ -200,12 +200,17 @@ Wayland compositor test. Actual application uptake, font-picker interactions and
 Wayland session behavior still require a VM graphical acceptance run. Applications
 that cache fonts may require restarting or logging out, following KDE behavior.
 
-The desktop always follows the KDE General font family. There is no opt-in or
-separate font state: appearance schema 32 drops the old `useSystemFont` flag,
-including profiles that previously saved `false`. `SystemFontService` watches
-`kdeglobals`; `AppearanceTokens.typography` projects that family into Shell roles.
-Desktop pixel sizes stay per-surface and emoji stay `Noto Color Emoji`.
-Successful reads without `font=` clear the previous family; failed reads retain it.
+“Desktop font” configures the Shell's family separately from KDE's six font roles.
+Its default is “Follow system”, represented by an empty `desktopFontFamily` in
+appearance schema 33. A selected family overrides only the Shell; clearing it
+resumes following the current General font. Older profiles and the removed
+`useSystemFont` flag migrate to follow-system. Uninstalled overrides fall back to
+General font without discarding the stored choice. The picker exposes only
+families and a preview in this mode, never size or style. Desktop pixel sizes and
+weights stay per-surface and emoji stay `Noto Color Emoji`. Shell changes use the
+appearance IPC and persist independently, never writing `kdeglobals`.
+`SystemFontService` watches General font; successful reads without `font=` clear
+the previous family, while failed reads retain it.
 
 The font picker uses a NextKde `LiquidDialog` inside the Settings window, shared
 inputs/buttons, a searchable family list and a live preview. Qt's font database

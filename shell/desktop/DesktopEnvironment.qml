@@ -495,6 +495,7 @@ Item {
                 // can name it instead of describing the option in the abstract.
                 // This is kdeglobals' [General] font= family, resolved.
                 systemFontFamily: SystemFontService.family,
+                desktopFontFamily: AppearanceConfigService.desktopFontFamily,
                 // Same reason as materialColorSwatches above: these are arrays,
                 // and a plain JSON string crosses the hand-written C++ whitelist
                 // with no conversion left to get wrong. They carry the *hidden*
@@ -616,6 +617,11 @@ Item {
 
         function updateDockWindowAnimationStyle(style: string): string {
             AppearanceConfigService.updateDockWindowAnimationStyle(style)
+            return snapshot()
+        }
+
+        function updateDesktopFontFamily(family: string): string {
+            AppearanceConfigService.updateDesktopFontFamily(family)
             return snapshot()
         }
 

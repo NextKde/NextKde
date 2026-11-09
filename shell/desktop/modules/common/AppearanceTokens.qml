@@ -394,14 +394,17 @@ QtObject {
     }
 
     readonly property QtObject typography: QtObject {
-        // General font is the desktop's default, including existing profiles.
+        // General font is the default. A desktop override changes family only.
         // Surface pixel sizes remain owned by their layouts; emoji are separate.
         readonly property string systemFamily: SystemFontService.family
-        readonly property string textFamily: systemFamily
-        readonly property string displayFamily: systemFamily
-        readonly property string displayChain: systemFamily
-        readonly property string textChain: systemFamily
-        readonly property string monospaceFamily: systemFamily
+        readonly property string desktopFamily: AppearanceConfigService.desktopFontFamily.length > 0
+            && Qt.fontFamilies().indexOf(AppearanceConfigService.desktopFontFamily) >= 0
+            ? AppearanceConfigService.desktopFontFamily : systemFamily
+        readonly property string textFamily: desktopFamily
+        readonly property string displayFamily: desktopFamily
+        readonly property string displayChain: desktopFamily
+        readonly property string textChain: desktopFamily
+        readonly property string monospaceFamily: desktopFamily
         // Colour emoji are not interface type: a reference to the emoji font
         // must never be replaced by the interface font, or the desktop would
         // draw tofu wherever it draws an emoji glyph.

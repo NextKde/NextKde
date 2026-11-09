@@ -28,6 +28,23 @@ static QQuickItem *visualItem(QQuickItem *root, const QString &name)
     return nullptr;
 }
 
+class DesktopFontBridge : public QObject {
+    Q_OBJECT
+public:
+    QString family;
+    Q_INVOKABLE void appearanceSnapshot()
+    {
+        emit appearanceSnapshotChanged({{"desktopFontAvailable", true},
+            {"desktopFontFamily", family}, {"systemFontFamily", "Noto Sans"}});
+    }
+    Q_INVOKABLE void updateDesktopFontFamily(const QString &value)
+    {
+        QTimer::singleShot(10, this, [this, value] { family = value; appearanceSnapshot(); });
+    }
+signals:
+    void appearanceSnapshotChanged(const QVariantMap &state);
+};
+
 class FontsTest : public QObject {
     Q_OBJECT
     int refreshCount = 0;
@@ -256,10 +273,12 @@ private slots:
         const QVariantMap colors{{"primaryText", "#1c1c1e"}, {"secondaryText", "#6d6d72"},
             {"card", "#ffffff"}, {"accent", "#0a84ff"}, {"dark", false}};
         QQuickWindow window;
+        DesktopFontBridge desktopBridge;
         window.setColor(QColor("#eff0f1"));
         window.resize(550, 1500);
         auto page = qobject_cast<QQuickItem *>(component.createWithInitialProperties(
-            {{"colors", colors}, {"backend", QVariant::fromValue(&settings)}}));
+            {{"colors", colors}, {"backend", QVariant::fromValue(&settings)},
+                {"bridge", QVariant::fromValue(&desktopBridge)}}));
         QVERIFY2(page, qPrintable(component.errorString()));
         page->setParent(&window);
         page->setParentItem(window.contentItem());
@@ -333,6 +352,48 @@ private slots:
         QTRY_COMPARE(settings.fonts()->property("font").value<QFont>().pointSizeF(), chosenSize.toDouble());
         QTest::qWait(450);
         KConfig persisted(QStringLiteral("kdeglobals"));
+        persisted.reparseConfiguration();
+        QCOMPARE(KConfigGroup(&persisted, "General").readEntry("font", QFont()).pointSizeF(), chosenSize.toDouble());
+        QTest::qWait(250);
+        auto desktopRow = visualItem(page, QStringLiteral("choose-desktop-font"));
+        QVERIFY(desktopRow);
+        const auto kdeFont = settings.fonts()->property("font").value<QFont>();
+        QTest::mouseClick(&window, Qt::LeftButton, Qt::NoModifier,
+            desktopRow->mapToScene(desktopRow->boundingRect().center()).toPoint());
+        QTRY_VERIFY(picker->property("visible").toBool());
+        QVERIFY(picker->property("familyOnly").toBool());
+        QVERIFY(!sizeInput->isVisible());
+        auto styleSelect = visualItem(window.contentItem(), QStringLiteral("font-style-select"));
+        QVERIFY(styleSelect && !styleSelect->isVisible());
+        const auto customFamily = settings.fontFamilies().first();
+        QVERIFY(QMetaObject::invokeMethod(picker, "selectFamily", Q_ARG(QVariant, QVariant(customFamily))));
+        QVERIFY(QMetaObject::invokeMethod(picker, "reject"));
+        QTRY_VERIFY(!picker->property("visible").toBool());
+        QCOMPARE(desktopBridge.family, QString());
+        QTest::qWait(250);
+        QTest::mouseClick(&window, Qt::LeftButton, Qt::NoModifier,
+            desktopRow->mapToScene(desktopRow->boundingRect().center()).toPoint());
+        QTRY_VERIFY(picker->property("visible").toBool());
+        QVERIFY(QMetaObject::invokeMethod(picker, "selectFamily", Q_ARG(QVariant, QVariant(customFamily))));
+        QTest::qWait(250);
+        if (!screenshot.isEmpty())
+            QVERIFY(window.grabWindow().save(screenshot + QStringLiteral(".desktop-picker.png")));
+        QTest::mouseClick(&window, Qt::LeftButton, Qt::NoModifier,
+            confirm->mapToScene(confirm->boundingRect().center()).toPoint());
+        QTRY_COMPARE(page->property("desktopFontFamily").toString(), customFamily);
+        QTest::qWait(250);
+        QTest::mouseClick(&window, Qt::LeftButton, Qt::NoModifier,
+            desktopRow->mapToScene(desktopRow->boundingRect().center()).toPoint());
+        QTRY_VERIFY(picker->property("visible").toBool());
+        auto followSystem = visualItem(window.contentItem(), QStringLiteral("font-follow-system"));
+        QVERIFY(followSystem && followSystem->isVisible());
+        QTest::qWait(250);
+        QTest::mouseClick(&window, Qt::LeftButton, Qt::NoModifier,
+            followSystem->mapToScene(followSystem->boundingRect().center()).toPoint());
+        QTest::mouseClick(&window, Qt::LeftButton, Qt::NoModifier,
+            confirm->mapToScene(confirm->boundingRect().center()).toPoint());
+        QTRY_COMPARE(page->property("desktopFontFamily").toString(), QString());
+        QCOMPARE(settings.fonts()->property("font").value<QFont>(), kdeFont);
         persisted.reparseConfiguration();
         QCOMPARE(KConfigGroup(&persisted, "General").readEntry("font", QFont()).pointSizeF(), chosenSize.toDouble());
         const auto previewSource = preview->property("source");

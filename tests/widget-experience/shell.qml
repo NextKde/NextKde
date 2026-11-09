@@ -60,7 +60,13 @@ ShellRoot {
                 if (!AppearanceConfigService.ready || !IconAppearanceService.ready || !SystemFontService.loaded) return
                 switch (test.stage++) {
                 case 0:
-                    check(AppearanceTokens.typography.textFamily === "Inter", "legacy font opt-out is ignored")
+                    if (Quickshell.env("EXPECTED_WIDGET_STYLE") === "glass") {
+                        check(AppearanceTokens.typography.textFamily === "Inter", "legacy font opt-out is ignored")
+                        check(AppearanceConfigService.desktopFontFamily === "", "old profile follows system")
+                    } else {
+                        check(AppearanceConfigService.desktopFontFamily === Qt.fontFamilies()[0], "desktop family survives restart")
+                        check(AppearanceTokens.typography.textFamily === Qt.fontFamilies()[0], "restored family reaches desktop")
+                    }
                     check(AppearanceConfigService.widgetStyle === Quickshell.env("EXPECTED_WIDGET_STYLE"), "persisted or migrated widget style")
                     ScreenLifecycle.activeScreen = desktop.screen
                     test.background = find(desktop.contentItem, "desktop-background-selection")
@@ -181,6 +187,7 @@ ShellRoot {
                     // The runner restarts this same fixture with the saved colour
                     // style and the old grayscale icon setting to prove independence.
                     AppearanceConfigService.updateWidgetStyle("color")
+                    AppearanceConfigService.updateDesktopFontFamily(Qt.fontFamilies()[0])
                     console.log("WIDGET_EXPERIENCE_PASS")
                     running = false
                     finish.start()

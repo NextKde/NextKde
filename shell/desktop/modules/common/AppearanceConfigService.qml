@@ -177,6 +177,8 @@ QtObject {
     property bool barMacStyle: false
     property real barMacTint: 0.30
     property string dockWindowAnimationStyle: "scale"
+    // Empty means follow KDE General font; this override changes only family.
+    property string desktopFontFamily: ""
     // Which individual surfaces are shown. Both lists hold the ids that are
     // *hidden*; an absent id is visible, so a newly added widget or StatusArea
     // cell appears by default and an upgrade never silently removes one.
@@ -586,6 +588,17 @@ QtObject {
         return true
     }
 
+    function updateDesktopFontFamily(rawFamily) {
+        const family = String(rawFamily ?? "").trim()
+        if (family !== "" && Qt.fontFamilies().indexOf(family) < 0)
+            return false
+        if (desktopFontFamily === family)
+            return false
+        desktopFontFamily = family
+        saveTimer.restart()
+        return true
+    }
+
     function resetStrengths() {
         const globalBlurChanged = Math.abs(globalBlurStrength - 0.42) > 0.001
         const globalLiquidChanged = Math.abs(globalLiquidStrength - 1.0) > 0.001
@@ -644,7 +657,7 @@ QtObject {
         if (!service._widgetStyleResolved)
             return // Migration will restart the save timer once icons are loaded.
         const payload = JSON.stringify({
-            version: 32,
+            version: 33,
             globalBlurStrength: service.globalBlurStrength,
             globalLiquidStrength: service.globalLiquidStrength,
             materialPresetBlurStrength: service.materialPresetBlurStrength,
@@ -691,6 +704,7 @@ QtObject {
             barMacStyle: service.barMacStyle,
             barMacTint: service.barMacTint,
             dockWindowAnimationStyle: service.dockWindowAnimationStyle,
+            desktopFontFamily: service.desktopFontFamily,
             // Sorted before writing so a reorder in the UI never produces a
             // spurious diff, and so the file stays readable by hand.
             hiddenDeskCenterWidgets: service.hiddenDeskCenterWidgets.slice().sort(),
@@ -776,7 +790,10 @@ QtObject {
                         && Number.isFinite(Number(object.barMacTint))
                     const animationStyle = String(object.dockWindowAnimationStyle ?? "")
                     // v32 removes the font opt-in: old true/false values are
-                    // ignored and dropped on save. KDE General font always wins.
+                    // ignored and dropped on save. v33 adds an optional family
+                    // override; older profiles still follow KDE General font.
+                    service.desktopFontFamily = typeof object.desktopFontFamily === "string"
+                        ? object.desktopFontFamily.trim() : ""
                     // v28 adds per-surface visibility. Files written before it
                     // carry neither key, and the empty arrays they fall back to
                     // mean "everything visible" -- the behaviour those
@@ -946,7 +963,7 @@ QtObject {
                     service.globalLiquidStrength = service.activePresetLiquidStrength
                     service.liquidStrength = service.activePresetLiquidStrength
 
-                    if (Number(object.version) !== 32
+                    if (Number(object.version) !== 33
                             || !service.isValidWidgetStyle(widgetStyle)
                             || !service.isValidShellStyle(style)
                             || !service.isValidThemeMode(themeMode)

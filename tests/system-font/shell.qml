@@ -13,6 +13,7 @@ Item {
 
     property var failures: []
     property int stage: 0
+    readonly property string customFamily: Qt.fontFamilies()[0]
 
     function check(name, condition, actual) {
         if (condition)
@@ -21,7 +22,7 @@ Item {
     }
 
     // One representative of each role the shell binds.
-    Text { id: textRole; font.family: AppearanceTokens.typography.textFamily; text: "x" }
+    Text { id: textRole; font.pixelSize: 13; font.weight: Font.DemiBold; font.family: AppearanceTokens.typography.textFamily; text: "x" }
     Text { id: displayRole; font.family: AppearanceTokens.typography.displayFamily; text: "1" }
     Text { id: chainRole; font.family: AppearanceTokens.typography.displayChain; text: "y" }
     Text { id: emojiRole; font.family: AppearanceTokens.typography.emojiFamily; text: "z" }
@@ -54,9 +55,32 @@ Item {
                 SystemFontService.applyConfig(root.stage === 1 ? "[General]\nfont=Inter,10\n" : "[General]\n")
                 return
             }
-            if (root.stage >= 3) {
+            if (root.stage === 3) {
                 root.check("removing font clears the stale family", SystemFontService.fontSpec === "")
                 root.check("missing font uses Qt fallback", textRole.font.family === Qt.application.font.family, textRole.font.family)
+                AppearanceConfigService.desktopFontFamily = root.customFamily
+                return
+            }
+            if (root.stage === 4) {
+                root.check("desktop override is applied", textRole.font.family === root.customFamily, textRole.font.family)
+                root.check("override preserves size", textRole.font.pixelSize === 13)
+                root.check("override preserves weight", textRole.font.weight === Font.DemiBold)
+                SystemFontService.applyConfig("[General]\nfont=Inter,18\n")
+                return
+            }
+            if (root.stage === 5) {
+                root.check("system changes do not replace a desktop override", textRole.font.family === root.customFamily)
+                AppearanceConfigService.desktopFontFamily = ""
+                return
+            }
+            if (root.stage === 6) {
+                root.check("clearing override follows the latest General font", textRole.font.family === "Inter")
+                AppearanceConfigService.desktopFontFamily = "NextKde definitely missing font 987654"
+                return
+            }
+            if (root.stage >= 7) {
+                root.check("uninstalled override falls back", textRole.font.family === "Inter", textRole.font.family)
+                root.check("emoji stays independent of overrides", emojiRole.font.family === "Noto Color Emoji")
                 if (root.failures.length > 0)
                     console.error("FONT_FAIL: " + root.failures.join("; "))
                 else

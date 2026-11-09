@@ -12,6 +12,10 @@ ColumnLayout {
     property bool materialForm: false
     property var backend: null
     property var bridge: null
+    property string desktopFontFamily: ""
+    property string systemFontFamily: ""
+    property bool desktopFontAvailable: false
+    readonly property string currentSystemFamily: fonts ? fonts.font.family : systemFontFamily
     readonly property var fonts: backend && backend.available ? backend.fonts : null
     readonly property var rendering: backend && backend.available ? backend.rendering : null
     readonly property bool ready: fonts !== null && rendering !== null
@@ -29,6 +33,16 @@ ColumnLayout {
 
     function refresh() {
         if (backend) backend.refresh();
+        if (bridge) bridge.appearanceSnapshot();
+    }
+    function applyState(state) {
+        if (!state) return;
+        desktopFontAvailable = state.desktopFontAvailable === true;
+        desktopFontFamily = String(state.desktopFontFamily || "");
+        systemFontFamily = String(state.systemFontFamily || "");
+    }
+    function chooseDesktopFont() {
+        fontPicker.chooseDesktop(desktopFontFamily, currentSystemFamily);
     }
     function editable(setting) {
         return ready && backend.renderingEditable(setting);
@@ -37,6 +51,10 @@ ColumnLayout {
         fontPicker.choose(category, fonts[category === "all" ? "font" : category]);
     }
     Component.onCompleted: refresh()
+    Connections {
+        target: page.bridge
+        function onAppearanceSnapshotChanged(state) { page.applyState(state); }
+    }
     Connections {
         target: Qt.application
         function onStateChanged() {
@@ -68,6 +86,43 @@ ColumnLayout {
     }
 
     Section {
+        Demo.SettingsItem {
+            id: desktopFontRow
+            objectName: "choose-desktop-font"
+            title: I18n.tr("Desktop font")
+            description: I18n.tr("Used by the top bar, Dock and desktop controls. Size and weight follow the interface layout.")
+            titleColor: page.colors.primaryText
+            descriptionColor: page.colors.secondaryText
+            enabled: page.backend !== null && page.bridge !== null && page.desktopFontAvailable
+            activeFocusOnTab: enabled
+            Accessible.role: Accessible.Button
+            Accessible.onPressAction: page.chooseDesktopFont()
+            Keys.onReturnPressed: page.chooseDesktopFont()
+            Keys.onEnterPressed: page.chooseDesktopFont()
+            Keys.onSpacePressed: page.chooseDesktopFont()
+            property Item pointer: MouseArea {
+                parent: desktopFontRow
+                anchors.fill: parent
+                cursorShape: Qt.PointingHandCursor
+                onClicked: page.chooseDesktopFont()
+            }
+            Text {
+                text: page.desktopFontFamily || I18n.tr("Follow system (%1)").arg(page.currentSystemFamily)
+                color: page.colors.secondaryText
+                font.pixelSize: 12
+                Layout.maximumWidth: Math.min(280, desktopFontRow.availableWidth * 0.5)
+                elide: Text.ElideRight
+            }
+            Demo.VectorIcon {
+                name: "chevron"
+                rotation: -90
+                size: 14
+                color: page.colors.secondaryText
+            }
+        }
+    }
+    Section {
+        title: I18n.tr("System fonts")
         enabled: page.ready
         Repeater {
             model: page.fontRoles
@@ -286,7 +341,9 @@ ColumnLayout {
         backend: page.backend
         colors: page.colors
         onAccepted: {
-            if (category === "all")
+            if (category === "desktop")
+                page.bridge.updateDesktopFontFamily(desktopFamily);
+            else if (category === "all")
                 page.backend.adjustAllFonts(selectedFont, applyFamily, applyStyle, applySize);
             else
                 page.backend.setFont(category, selectedFont);

@@ -10,6 +10,10 @@ Demo.LiquidDialog {
     required property var colors
     property var backend: null
     property string category: "font"
+    readonly property bool familyOnly: category === "desktop"
+    property bool followSystem: false
+    property string systemFamily: ""
+    readonly property string desktopFamily: followSystem ? "" : selectedFamily
     property font originalFont: Qt.font({pointSize: 10})
     property font selectedFont: originalFont
     property string selectedFamily: ""
@@ -21,23 +25,29 @@ Demo.LiquidDialog {
     property bool applyFamily: true
     property bool applyStyle: true
     property bool applySize: true
-    readonly property bool validSelection: families.indexOf(selectedFamily) >= 0
-        && styles.indexOf(selectedStyle) >= 0 && sizeInput.acceptableInput
-        && (category !== "all" || applyFamily || applyStyle || applySize)
+    readonly property bool validSelection: familyOnly
+        ? followSystem || families.indexOf(selectedFamily) >= 0
+        : families.indexOf(selectedFamily) >= 0 && styles.indexOf(selectedStyle) >= 0
+            && sizeInput.acceptableInput && (category !== "all" || applyFamily || applyStyle || applySize)
 
     parent: Overlay.overlay
     anchors.centerIn: parent
     width: Math.min(560, parent ? parent.width - 24 : 560)
     height: Math.min(implicitHeight, parent ? parent.height - 24 : implicitHeight)
-    title: I18n.tr(category === "all" ? "Adjust all fonts" : "Choose a font")
+    title: I18n.tr(familyOnly ? "Desktop font" : category === "all" ? "Adjust all fonts" : "Choose a font")
     standardButtons: Dialog.NoButton
 
     function updateSelection() {
+        if (familyOnly) {
+            selectedFont = Qt.font({family: followSystem ? systemFamily : selectedFamily, pixelSize: 18});
+            return;
+        }
         if (backend && selectedFamily && selectedStyle && sizeInput.acceptableInput)
             selectedFont = backend.selectionFont(originalFont, selectedFamily,
                 selectedStyle, Number(sizeInput.text));
     }
     function selectFamily(name) {
+        followSystem = false;
         selectedFamily = name;
         if (styles.indexOf(selectedStyle) < 0)
             selectedStyle = styles.length > 0 ? styles[0] : "";
@@ -45,6 +55,7 @@ Demo.LiquidDialog {
     }
     function choose(role, font) {
         category = role;
+        followSystem = false;
         originalFont = font;
         families = backend ? backend.fontFamilies(role === "fixed") : [];
         search.text = "";
@@ -64,6 +75,12 @@ Demo.LiquidDialog {
             search.forceActiveFocus();
         });
     }
+    function chooseDesktop(family, currentSystemFamily) {
+        systemFamily = currentSystemFamily;
+        choose("desktop", Qt.font({family: family || currentSystemFamily, pointSize: 12}));
+        followSystem = family.length === 0;
+        updateSelection();
+    }
 
     contentItem: ScrollView {
         implicitHeight: form.implicitHeight
@@ -74,6 +91,19 @@ Demo.LiquidDialog {
             id: form
             width: parent.width
             spacing: 12
+            Demo.LiquidActionButton {
+                objectName: "font-follow-system"
+                Layout.fillWidth: true
+                visible: picker.familyOnly
+                materialForm: true
+                implicitHeight: 30
+                text: I18n.tr("Follow system (%1)").arg(picker.systemFamily)
+                highlighted: picker.followSystem
+                onClicked: {
+                    picker.followSystem = true;
+                    picker.updateSelection();
+                }
+            }
             Demo.SettingsTextField {
                 id: search
                 objectName: "font-family-search"
@@ -116,7 +146,7 @@ Demo.LiquidDialog {
                         width: ListView.view.width - 12
                         height: 30
                         text: modelData
-                        highlighted: picker.selectedFamily === modelData
+                        highlighted: !picker.followSystem && picker.selectedFamily === modelData
                         onClicked: {
                             familyList.currentIndex = index;
                             picker.selectFamily(modelData);
@@ -146,6 +176,7 @@ Demo.LiquidDialog {
             }
             Demo.SettingsGroup {
                 Layout.fillWidth: true
+                visible: !picker.familyOnly
                 backgroundColor: picker.colors.card
                 Demo.SettingsItem {
                     title: I18n.tr("Font style")
