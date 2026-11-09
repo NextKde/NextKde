@@ -21,7 +21,7 @@ from PIL import Image
 REPO = Path(__file__).resolve().parents[2]
 WIDGETS = ["clock", "weather", "calendar", "todo", "system", "activity", "music"]
 state = {
-    "appearance/config.json": json.dumps({"version": 28, "shellStyle": "macos"}),
+    "appearance/config.json": json.dumps({"version": 28, "shellStyle": "macos", "useSystemFont": False}),
     "appearance/icon-appearance.json": json.dumps({"version": 1, "mode": "grayscale"}),
 }
 
@@ -72,6 +72,7 @@ def run(base_env=None):
         for name in ["config", "state", "runtime"]:
             (root / name).mkdir(mode=0o700)
         (root / "captures").mkdir()
+        (root / "config/kdeglobals").write_text("[General]\nfont=Inter,10\n")
         (root / "runtime" / wayland).symlink_to(runtime / wayland)
         for name in ["desktop", "Kos", "shared"]:
             (root / name).symlink_to(REPO / "shell" / name, target_is_directory=True)
@@ -105,7 +106,8 @@ def run(base_env=None):
                 assert not re.search(r"WIDGET_EXPERIENCE_FAIL|ReferenceError|TypeError|Cannot assign|Unable to assign|is not a type", output), output
                 check_bell_pixels(root / "captures")
                 saved = json.loads(state["appearance/config.json"])
-                assert saved["version"] == 30 and saved["widgetStyle"] == "color", saved
+                assert saved["version"] == 33 and saved["widgetStyle"] == "color", saved
+                assert "useSystemFont" not in saved and isinstance(saved["desktopFontFamily"], str) and saved["desktopFontFamily"], saved
                 assert set(saved["hiddenDeskCenterWidgets"]) == set(WIDGETS) - {"clock"}, saved
                 assert json.loads(state["appearance/icon-appearance.json"])["mode"] == "grayscale"
                 # Each launch must render its own frames, not reuse the first run.

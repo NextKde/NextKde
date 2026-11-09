@@ -29,7 +29,7 @@ Item {
             anchors { left: parent.left; top: parent.top; topMargin: 2 }
             text: I18n.tr("Master Volume")
             color: ThemeService.foregroundColor
-            font { pixelSize: 11; weight: Font.DemiBold; family: "Noto Sans CJK SC" }
+            font { pixelSize: 11; weight: Font.DemiBold; family: AppearanceTokens.typography.textFamily }
         }
 
         GlassText {
@@ -37,7 +37,7 @@ Item {
             text: Math.round(soundSubmenuView.volumePreview) + "%"
             color: ThemeService.foregroundColor
             opacity: 0.65
-            font { pixelSize: 10; family: "Noto Sans CJK SC" }
+            font { pixelSize: 10; family: AppearanceTokens.typography.textFamily }
         }
 
         Canvas {
@@ -254,7 +254,7 @@ Item {
             text: I18n.tr("Application Volume")
             color: ThemeService.foregroundColor
             opacity: 0.60
-            font { pixelSize: 10; weight: Font.DemiBold; family: "Noto Sans CJK SC" }
+            font { pixelSize: 10; weight: Font.DemiBold; family: AppearanceTokens.typography.textFamily }
         }
 
         GlassText {
@@ -265,7 +265,7 @@ Item {
                 ? I18n.tr("Reading…") : I18n.tr("No active audio applications")
             color: ThemeService.foregroundColor
             opacity: 0.45
-            font { pixelSize: 10; family: "Noto Sans CJK SC" }
+            font { pixelSize: 10; family: AppearanceTokens.typography.textFamily }
         }
 
         Column {
@@ -340,7 +340,7 @@ Item {
                         text: appVolumeRow.modelData.name || I18n.tr("Audio application")
                         elide: Text.ElideRight
                         color: ThemeService.foregroundColor
-                        font { pixelSize: 10; weight: Font.DemiBold; family: "Noto Sans CJK SC" }
+                        font { pixelSize: 10; weight: Font.DemiBold; family: AppearanceTokens.typography.textFamily }
                     }
 
                     GlassText {
@@ -349,7 +349,7 @@ Item {
                         text: Math.round(appVolumeRow.volumePreview) + "%"
                         color: ThemeService.foregroundColor
                         opacity: 0.55
-                        font { pixelSize: 9; family: "Noto Sans CJK SC" }
+                        font { pixelSize: 9; family: AppearanceTokens.typography.textFamily }
                     }
 
                     ControlCenterSlider {
@@ -402,7 +402,7 @@ Item {
             anchors { left: parent.left; leftMargin: 16; verticalCenter: parent.verticalCenter }
             text: I18n.tr("Sound settings…")
             color: soundSettingsMouse.containsMouse ? "#0a84ff" : ThemeService.foregroundColor
-            font { pixelSize: 11; weight: Font.DemiBold; family: "Noto Sans CJK SC" }
+            font { pixelSize: 11; weight: Font.DemiBold; family: AppearanceTokens.typography.textFamily }
         }
 
         GlassText {

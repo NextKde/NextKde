@@ -84,7 +84,7 @@ is_nixos() {
 arch_core_build_packages=(
     git python quickshell cmake ninja gcc qt6-base qt6-declarative qt6-tools qt6-translations qt6-quick3d qt6-svg qt6-imageformats qt6-5compat qt6-wayland go curl
     extra-cmake-modules wayland gtk3 pkgconf flatpak ostree gnupg
-    kwindowsystem kiconthemes kglobalaccel kio patchelf
+    kwindowsystem kiconthemes kglobalaccel kio kcmutils patchelf
 )
 # The depth engine and 3D wallpaper plugin follow KOS_BUILD_SPATIAL.
 # AUTO enables them when their build dependencies are available.
@@ -92,7 +92,7 @@ arch_spatial_build_packages=(
     opencv
 )
 arch_kwin_build_packages=(
-    kwin kconfig ki18n kguiaddons kcmutils
+    kwin kconfig ki18n kguiaddons
     kcoreaddons kdecoration gettext libxcb vulkan-headers
 )
 arch_optional_runtime_packages=(
@@ -116,7 +116,7 @@ debian_core_build_packages=(
     qml6-module-qtqml-models qml6-module-qtqml-workerscript
     qml6-module-qt5compat-graphicaleffects
     libkf6windowsystem-dev libkf6iconthemes-dev libkf6globalaccel-dev
-    libkf6kio-dev libkf6calendarcore-dev
+    libkf6kio-dev libkf6kcmutils-dev libkf6calendarcore-dev
 )
 debian_spatial_build_packages=(
     libopencv-dev
@@ -124,7 +124,7 @@ debian_spatial_build_packages=(
 debian_kwin_build_packages=(
     kwin-dev libdrm-dev libgbm-dev libepoxy-dev
     libxkbcommon-x11-dev
-    libkf6config-dev libkf6i18n-dev libkf6guiaddons-dev libkf6kcmutils-dev
+    libkf6config-dev libkf6i18n-dev libkf6guiaddons-dev
     libkf6coreaddons-dev libkdecorations3-dev libplasma-dev
     gettext libvulkan-dev zlib1g-dev
     libxcb1-dev libxcb-composite0-dev libxcb-randr0-dev libxcb-res0-dev
@@ -159,14 +159,14 @@ fedora_core_build_packages=(
     qt6-qttranslations qt6-qtquick3d-devel qt6-qtsvg-devel qt6-qtwayland-devel
     qt6-qtimageformats qt6-qt5compat-devel
     kf6-kwindowsystem-devel kf6-kiconthemes-devel kf6-kglobalaccel-devel
-    kf6-kio-devel kf6-kcalendarcore-devel
+    kf6-kio-devel kf6-kcmutils-devel kf6-kcalendarcore-devel
 )
 fedora_spatial_build_packages=(
     opencv-devel
 )
 fedora_kwin_build_packages=(
     kwin-devel libdrm-devel mesa-libgbm-devel libepoxy-devel
-    kf6-kconfig-devel kf6-ki18n-devel kf6-kguiaddons-devel kf6-kcmutils-devel
+    kf6-kconfig-devel kf6-ki18n-devel kf6-kguiaddons-devel
     kf6-kcoreaddons-devel kdecoration-devel libplasma-devel
     gettext vulkan-headers vulkan-loader-devel zlib-devel libxcb-devel
 )

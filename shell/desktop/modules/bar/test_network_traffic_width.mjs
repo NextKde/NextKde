@@ -60,7 +60,7 @@ for (const [name, measurement, description] of [
 // value, so the FontMetrics that reserves the columns and the cells that render
 // them can never measure different fonts.
 assert.match(traffic,
-    /readonly property font rateFont: \{\s*const spec = Qt\.font\(\{\s*family: "SF Pro Display",\s*pixelSize: 9,\s*weight: Font\.DemiBold\s*\}\)/,
+    /readonly property font rateFont: \{\s*const spec = Qt\.font\(\{\s*family: AppearanceTokens\.typography\.displayFamily,\s*pixelSize: 9,\s*weight: Font\.DemiBold\s*\}\)/,
     "the readout declares its font once, through Qt.font")
 assert.match(traffic,
     /FontMetrics \{\s*id: rateMetrics\s*font: root\.rateFont/,

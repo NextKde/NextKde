@@ -11,7 +11,7 @@ This is the current design, not a runtime acceptance report.
 | Owner | Contract |
 | --- | --- |
 | `shell/desktop/modules/common/AppearanceConfigService.qml` | Validated Shell appearance settings, migrations and snapshots |
-| `AppearanceTokens.qml` in the same directory | Derived visual tokens, version 9; consumers use tokens rather than duplicate style branches |
+| `AppearanceTokens.qml` in the same directory | Derived visual tokens, version 10; consumers use tokens rather than duplicate style branches |
 | `IconAppearanceService.qml`, `BundledIcons.qml`, `BundledIcon.qml`, `SystemIconResolver.qml` | Icon mode/persistence, named bundled assets and centralized system-theme fallback |
 | `shell/desktop/DesktopEnvironment.qml` | `appearance-settings` IPC endpoint |
 | `apps/settings/` | Separate process; edits through IPC, never imports Shell internals |
@@ -26,7 +26,7 @@ Standalone app preferences remain separate; see [project context](../PROJECT_CON
 
 ## Persistence and IPC
 
-`Quickshell.stateDir/appearance/config.json` is currently written with schema **30**; source
+`Quickshell.stateDir/appearance/config.json` is currently written with schema **31**; source
 `serialize()`/load migrations are authoritative for the full field set. Do not copy a partial
 JSON example over a user's whole file. Keep old-version migration, per-preset optical values,
 validation and range clamping. Unsupported style values must not become unvalidated runtime state.
@@ -122,3 +122,106 @@ For text changes, compare Chinese/Latin labels and inputs at 100%, 125%, 150%
 and 200% output scales, including moving between outputs. Exercise menu reveal,
 submenus/scrolling, launcher search/folders/edit/drag and open/close reversal;
 check both settled text and moving text in glass and Material themes.
+
+## System fonts
+
+Settings → Theme → Fonts is a secondary page (route 14); the Theme row has only
+its name and the shared right-chevron vector icon and follows the other Theme settings.
+The existing toolbar is the only back/forward control, including for a direct
+Fonts entry. Each font role is a clickable name/value row that opens its picker,
+without a second per-row action button. Navigation history and the Theme sidebar selection
+remain active on the secondary page. `FontSettingsPage.qml` receives an explicit
+`FontSettings` backend and the existing appearance bridge.
+
+`FontSettings` loads Plasma's `kcm_fonts` backend through `KF6::KCMUtilsQuick` in
+the Settings QML engine, without launching System Settings. KCMUtils' host item is
+initialized once, detached and hidden, to establish the preview-provider context.
+The native NextKde form exposes general, fixed-width, small, toolbar, menu and
+window-title fonts, family/style/size selection and previews, selective adjustment
+of all fonts, anti-aliasing and its excluded size range, sub-pixel rendering,
+hinting and forced font DPI where KDE exposes it (Plasma 6.6/6.7, X11 only).
+Plasma 6.8 removed the public DPI property, so that row is hidden. KDE owns defaults, immutable settings,
+fontconfig persistence, GTK/Xft exports and application refresh notifications.
+KDE's Xft preview requires XWayland/X11; without DISPLAY, the form explains that
+the rendering preview is unavailable while retaining all applicable settings.
+This is an in-process KCM adapter, not a new command-execution or IPC path.
+The runtime requires the Plasma workspace font KCM; missing/incompatible modules
+show an unavailable state. Changes save automatically through KDE after a 350 ms
+debounce; the page has no apply/reset/defaults footer. The timer belongs to the
+long-lived adapter, pending edits survive page navigation, and shutdown flushes
+the last edit. Only accepted font-picker selections and valid numeric edits are
+written; opening or cancelling a picker does not change settings. Save errors
+remain visible in the page instead of reporting success.
+
+### Font backend compatibility
+
+The supported baseline is **Plasma 6.6.x, 6.7.x and 6.8.x**, with the matching
+distribution-provided Qt, KDE Frameworks and `plasma-workspace` packages. Plasma 5,
+6.0–6.5, future minor series and mixed-version package installations are outside
+this support claim. This is a support range, not a claim that every patch release
+or distribution has been tested. The `KDE fonts Plasma <series>` CI jobs qualify
+these complete Arch Linux Archive runtime snapshots and publish their exact
+package versions, logs and form screenshots:
+
+| Plasma series | Archive snapshot | Runtime checks | Font DPI capability |
+| --- | --- | --- | --- |
+| 6.6 | 2026-05-15 | Real KCM, offscreen Qt + Xft, X11 | Editable on X11 |
+| 6.7 | 2026-10-01 | Real KCM, offscreen Qt + Xft, X11 | Editable on X11 |
+| 6.8 | 2026-10-18 | Real KCM, offscreen Qt + Xft, X11 | Absent; row hidden |
+
+The current rolling Arch job additionally detects changes beyond the pinned
+snapshots. A series enters the supported range only after its font runtime job
+passes; KWin plugin builds alone do not qualify font support. All three font jobs
+must pass on a font-affecting PR before merge. Refresh the snapshots periodically
+and record the actual tested patch versions in the PR; do not infer them from the
+snapshot date.
+
+NextKde owns the form and a bounded mapping to existing KCM properties. KDE owns
+the defaults, configuration format, save side effects and application notification.
+`FontSettings` checks the required property names, types, writability and option
+models before exposing the backend. A missing/incompatible module disables the
+form with an error; there is no guessed-config-file fallback. A newer unqualified
+version can pass these checks, but that is not a cross-version support guarantee.
+Unknown configuration entries are left to KDE and preserved by the tested save
+path. New KDE options do not automatically appear in our form: add their mapping
+and controls only after checking availability on every supported series, hiding
+options absent on older versions rather than inventing equivalent behavior.
+The optional `dpiAvailable` capability also handles removal of an option: tests
+assert DPI exists on 6.6/6.7 and is absent on 6.8, that unavailable writes are ignored,
+and that the native form hides the row. The 6.8 X11 test is a Qt/Xft backend test,
+not a claim that Plasma 6.8 ships an X11 desktop session.
+
+The runtime test covers all six font roles, anti-aliasing and its excluded range,
+sub-pixel/hinting, X11 DPI enable/reset, backend reset/defaults, coalesced automatic
+saves and shutdown persistence,
+unrelated-key preservation, KDE's actual D-Bus `refreshFonts` signal, and native
+form/preview rendering. Offscreen Qt exercises the non-X11 policy; it is **not** a
+Wayland compositor test. Actual application uptake, font-picker interactions and
+Wayland session behavior still require a VM graphical acceptance run. Applications
+that cache fonts may require restarting or logging out, following KDE behavior.
+
+“Desktop font” configures the Shell's family separately from KDE's six font roles.
+Its default is “Follow system”, represented by an empty `desktopFontFamily` in
+appearance schema 33. A selected family overrides only the Shell; clearing it
+resumes following the current General font. Older profiles and the removed
+`useSystemFont` flag migrate to follow-system. Uninstalled overrides fall back to
+General font without discarding the stored choice. The picker exposes only
+families and a preview in this mode, never size or style. Desktop pixel sizes and
+weights stay per-surface and emoji stay `Noto Color Emoji`. Shell changes use the
+appearance IPC and persist independently, never writing `kdeglobals`.
+`SystemFontService` watches General font; successful reads without `font=` clear
+the previous family, while failed reads retain it.
+
+The font picker uses a NextKde `LiquidDialog` inside the Settings window, shared
+inputs/buttons, a searchable family list and a live preview. Qt's font database
+provides installed families/styles and filters the fixed-width role; Qt's stock
+FontDialog is not used. Picker edits stay local until confirmation; Cancel and
+Escape discard them. Apply-to-all scope is selected in the same dialog.
+
+Regression coverage: `kos-settings.fonts` loads the real KDE backend with isolated
+user roots, a private D-Bus session and Xvfb for KDE's Xft previews (test builds
+require `xvfb-run` and `xauth`), `kos-settings.page-contracts` covers the
+secondary route, and `kos-ui.system-font-policy`
+plus `kos-shell.system-font` cover parsing and resolved Shell families. All are
+registered in the CI inventory. Runtime and visual acceptance must run in a VM
+or hosted CI, never on the maintainer workstation.
