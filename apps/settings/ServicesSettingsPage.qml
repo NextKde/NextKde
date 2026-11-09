@@ -151,81 +151,97 @@ GridLayout {
         onTriggered: page.refresh()
     }
 
-    Controls.ExtensionEntry {
-        id: spatialEntry
+    ColumnLayout {
+        id: spatialCard
+        property bool detailsExpanded: false
         visible: page.selectedCategory === 1
         Layout.fillWidth: true
         Layout.preferredWidth: page.entryWidth
         Layout.minimumWidth: 0
         Layout.alignment: Qt.AlignTop
-        attentionRequired: !!page.resources.busy
-        category: I18n.tr("Service")
-        colors: page.colors
-        title: I18n.tr("Spatial wallpaper")
-        description: I18n.tr("Add depth and motion to your wallpaper")
-        iconSource: Qt.resolvedUrl("icons/spatial-wallpaper.svg")
-        actionObjectName: "spatialServiceAction"
-        actionText: !page.available ? I18n.tr("Unavailable") : page.resources.busy ? I18n.tr("Preparing…") : page.checking ? I18n.tr("Checking…") : page.resources.enabled ? I18n.tr("Disable") : page.resources.ready ? I18n.tr("Enable") : I18n.tr("Get")
-        actionEnabled: page.available && !page.resources.busy && !page.checking
-        onActivated: {
-            if (page.resources.enabled)
-                page.bridge.disableSpatialService();
-            else
-                page.bridge.initializeSpatialService();
-        }
-
-        Text {
-            objectName: "spatialServiceStatus"
-            visible: !page.available || page.checking || !!page.resources.busy
+        spacing: 12
+        Controls.ExtensionEntry {
+            id: spatialEntry
             Layout.fillWidth: true
-            text: !page.compatible ? I18n.tr("The Settings bridge has not been built") : page.resources.available === false ? I18n.tr("This build does not include the spatial wallpaper component") : page.resources.busy ? (page.resources.stage || I18n.tr("Preparing…")) + (Number(page.resources.progress) >= 0 ? " · " + Math.round(Number(page.resources.progress) * 100) + "%" : "") : page.checking ? I18n.tr("Checking resources…") : page.resources.enabled ? I18n.tr("Enabled") : page.resources.ready ? I18n.tr("Ready to enable") : I18n.tr("Required resources are downloaded on first enablement")
-            color: page.colors.secondaryText
-            font.pixelSize: 11
-            wrapMode: Text.Wrap
-        }
-        ProgressBar {
-            id: downloadProgress
-            objectName: "spatialServiceProgress"
-            Layout.fillWidth: true
-            visible: !!page.resources.busy
-            indeterminate: !(Number(page.resources.progress) >= 0)
-            value: Math.max(0, Math.min(1, Number(page.resources.progress) || 0))
-            implicitHeight: 4
-            background: Rectangle {
-                radius: 2
-                color: Qt.rgba(page.colors.accent.r, page.colors.accent.g, page.colors.accent.b, 0.1)
+            category: I18n.tr("Service")
+            colors: page.colors
+            title: I18n.tr("Spatial wallpaper")
+            description: I18n.tr("Add depth and motion to your wallpaper")
+            iconSource: Qt.resolvedUrl("icons/spatial-wallpaper.svg")
+            actionObjectName: "spatialServiceAction"
+            actionText: !page.available ? I18n.tr("Unavailable") : page.resources.busy ? I18n.tr("Preparing…") : page.checking ? I18n.tr("Checking…") : page.resources.enabled ? I18n.tr("Disable") : page.resources.ready ? I18n.tr("Enable") : I18n.tr("Get")
+            actionEnabled: page.available && !page.resources.busy && !page.checking
+            onDetailsRequested: spatialCard.detailsExpanded = !spatialCard.detailsExpanded
+            onActivated: {
+                if (page.resources.enabled)
+                    page.bridge.disableSpatialService();
+                else
+                    page.bridge.initializeSpatialService();
             }
-            contentItem: Item {
-                Rectangle {
-                    width: parent.width * (page.resources.progress >= 0 ? downloadProgress.position : 0.3)
-                    height: parent.height
+        }
+        ColumnLayout {
+            Layout.fillWidth: true
+            visible: spatialCard.detailsExpanded || !!page.resources.busy || page.errorText.length > 0
+            spacing: 8
+            Rectangle {
+                Layout.fillWidth: true
+                implicitHeight: 1
+                color: Qt.rgba(page.colors.secondaryText.r, page.colors.secondaryText.g,
+                    page.colors.secondaryText.b, 0.15)
+            }
+            Text {
+                objectName: "spatialServiceStatus"
+                visible: !page.available || page.checking || !!page.resources.busy
+                Layout.fillWidth: true
+                text: !page.compatible ? I18n.tr("The Settings bridge has not been built") : page.resources.available === false ? I18n.tr("This build does not include the spatial wallpaper component") : page.resources.busy ? (page.resources.stage || I18n.tr("Preparing…")) + (Number(page.resources.progress) >= 0 ? " · " + Math.round(Number(page.resources.progress) * 100) + "%" : "") : page.checking ? I18n.tr("Checking resources…") : page.resources.enabled ? I18n.tr("Enabled") : page.resources.ready ? I18n.tr("Ready to enable") : I18n.tr("Required resources are downloaded on first enablement")
+                color: page.colors.secondaryText
+                font.pixelSize: 11
+                wrapMode: Text.Wrap
+            }
+            ProgressBar {
+                id: downloadProgress
+                objectName: "spatialServiceProgress"
+                Layout.fillWidth: true
+                visible: !!page.resources.busy
+                indeterminate: !(Number(page.resources.progress) >= 0)
+                value: Math.max(0, Math.min(1, Number(page.resources.progress) || 0))
+                implicitHeight: 4
+                background: Rectangle {
                     radius: 2
-                    color: page.colors.accent
-                    SequentialAnimation on opacity {
-                        running: !!page.resources.busy && !(Number(page.resources.progress) >= 0)
-                        loops: Animation.Infinite
-                        NumberAnimation {
-                            from: 0.4
-                            to: 1
-                            duration: 650
-                        }
-                        NumberAnimation {
-                            from: 1
-                            to: 0.4
-                            duration: 650
+                    color: Qt.rgba(page.colors.accent.r, page.colors.accent.g, page.colors.accent.b, 0.1)
+                }
+                contentItem: Item {
+                    Rectangle {
+                        width: parent.width * (page.resources.progress >= 0 ? downloadProgress.position : 0.3)
+                        height: parent.height
+                        radius: 2
+                        color: page.colors.accent
+                        SequentialAnimation on opacity {
+                            running: !!page.resources.busy && !(Number(page.resources.progress) >= 0)
+                            loops: Animation.Infinite
+                            NumberAnimation {
+                                from: 0.4
+                                to: 1
+                                duration: 650
+                            }
+                            NumberAnimation {
+                                from: 1
+                                to: 0.4
+                                duration: 650
+                            }
                         }
                     }
                 }
             }
-        }
-        Text {
-            objectName: "spatialServiceError"
-            Layout.fillWidth: true
-            visible: page.errorText.length > 0
-            text: page.errorText
-            wrapMode: Text.Wrap
-            color: page.colors.primaryText
-            font.pixelSize: 12
+            Text {
+                objectName: "spatialServiceError"
+                Layout.fillWidth: true
+                visible: page.errorText.length > 0
+                text: page.errorText
+                wrapMode: Text.Wrap
+                color: page.colors.primaryText
+                font.pixelSize: 12
+            }
         }
     }
     Connections {
@@ -276,8 +292,6 @@ GridLayout {
             Layout.preferredWidth: page.entryWidth
             Layout.minimumWidth: 0
             Layout.alignment: Qt.AlignTop
-            attentionRequired: (!!app.busy && app.stage !== "status") || (!!app.code && app.code !== "EXTERNALLY_MANAGED")
-                || !!page.appEnvironmentError(app)
             colors: page.colors
             title: I18n.tr(app.name)
             category: I18n.tr("App")
@@ -290,157 +304,426 @@ GridLayout {
             actionEnabled: !blocked && !!app.statusKnown && (!!app.installed || app.available !== false)
             actionAvailable: !!page.store && !page.store.hasActiveMutation
                 && !!app.statusKnown && (!!app.installed || app.available !== false)
-            secondaryText: app.busy ? I18n.tr("Cancel") : app.installed && app.managed ? I18n.tr("Uninstall") : ""
-            secondaryEnabled: app.stage !== "cancelling" && (!!app.busy || !blocked)
             onActivated: {
                 if (app.installed) page.store.open(app.id);
                 else page.requestPlan(app, false);
             }
-            onSecondaryActivated: {
-                if (app.busy) page.store.cancel(app.id);
-                else { appUninstallDialog.appId = app.id; appUninstallDialog.appName = app.name; appUninstallDialog.open(); }
-            }
-            Text {
-                objectName: appCard.app.id + "Status"
-                Layout.fillWidth: true
-                text: page.appEnvironmentError(appCard.app) || (appCard.app.busy ? page.appStage(appCard.app.stage) : !appCard.app.statusKnown ? I18n.tr("Checking installation status…") : appCard.app.backend === "flatpak-unavailable" ? (appCard.app.flatpak && appCard.app.flatpak.error ? appCard.app.flatpak.error : I18n.tr("Flatpak bundles are unavailable: no reviewed publisher key is included in this core version.")) : appCard.app.backend === "flatpak-ready" ? I18n.tr("Check GitHub for a signed Flatpak bundle before installing.") : appCard.app.backend === "flatpak" ? I18n.tr("Managed by Flatpak. Settings checks GitHub for bundle updates; external Flatpak tools can remove the same installation.") : appCard.app.installed && !appCard.app.managed ? I18n.tr("Installed outside Settings. Open is available; updates and removal stay with its installer.") : appCard.app.available === false ? I18n.tr("No stable release is available yet") : I18n.tr("Builds from source; development dependencies are required"))
-                color: page.colors.secondaryText
-                font.pixelSize: 11
-                wrapMode: Text.Wrap
-            }
-            Text {
-                Layout.fillWidth: true
-                visible: appCard.app.backend === "flatpak"
-                text: "Flatpak · " + (appCard.app.scope || "") + " · " + (appCard.app.origin || "")
-                color: page.colors.secondaryText
-                font.pixelSize: 11
-                wrapMode: Text.Wrap
-            }
-            Text {
-                Layout.fillWidth: true
-                visible: appCard.app.backend === "flatpak"
-                text: appCard.app.bundleManaged ? I18n.tr("Verified standalone bundle; no hosted app source is required.") : I18n.tr("Publisher or local bundle origin could not be verified. Settings will not update this installation.")
-                color: page.colors.secondaryText
-                font.pixelSize: 11
-                wrapMode: Text.Wrap
-            }
-            Text {
-                objectName: appCard.app.id + "Version"
-                Layout.fillWidth: true
-                visible: !!appCard.app.version || !!appCard.app.latestVersion
-                text: I18n.tr("Installed: %1 · Latest: %2").arg(appCard.app.version || I18n.tr("Not installed")).arg(appCard.app.latestVersion || I18n.tr("Not checked"))
-                color: page.colors.secondaryText
-                font.pixelSize: 11
-                wrapMode: Text.Wrap
-            }
-            Text {
-                Layout.fillWidth: true
-                visible: appCard.app.backend === "flatpak" && !!appCard.app.flatpakUpdate && !!appCard.app.flatpakUpdate.commit
-                text: appCard.app.flatpakUpdate && appCard.app.flatpakUpdate.available
-                    ? I18n.tr("A signed bundle update is available. Use Update to download and deploy it.")
-                    : I18n.tr("The installed Flatpak commit matches the signed GitHub release.")
-                color: page.colors.secondaryText
-                font.pixelSize: 11
-                wrapMode: Text.Wrap
-            }
-            Basic.ProgressBar {
-                Layout.fillWidth: true
-                visible: !!appCard.app.busy
-                indeterminate: !(appCard.app.progress >= 0)
-                value: Math.max(0, Math.min(1, appCard.app.progress || 0))
-            }
-            Text {
-                Layout.fillWidth: true
-                visible: !!appCard.app.busy
-                text: I18n.tr("Tasks continue in the background after closing this window. Return anytime to view progress or cancel.") + " · " + I18n.tr("Elapsed: %1").arg(Math.floor((appCard.app.elapsedSeconds || 0) / 60) + ":" + ("0" + ((appCard.app.elapsedSeconds || 0) % 60)).slice(-2))
-                color: page.colors.secondaryText
-                font.pixelSize: 11
-                wrapMode: Text.Wrap
-            }
-            Text {
-                Layout.fillWidth: true
-                visible: !!appCard.app.busy && !!appCard.app.transactionStatus
-                text: I18n.tr(appCard.app.transactionStatus || "")
-                color: page.colors.secondaryText
-                font.pixelSize: 11
-                wrapMode: Text.Wrap
-            }
-            Text {
-                objectName: appCard.app.id + "Error"
-                Layout.fillWidth: true
-                visible: !!appCard.app.code && appCard.app.code !== "EXTERNALLY_MANAGED"
-                text: page.appFailureText(appCard.app)
-                color: page.colors.primaryText
-                font.pixelSize: 12
-                wrapMode: Text.Wrap
-            }
-            Repeater {
-                model: appCard.app.dependencies || []
-                delegate: Text {
-                    required property var modelData
-                    Layout.fillWidth: true
-                    text: typeof modelData === "string" ? modelData : (modelData.id || modelData.name || "") + " " + (modelData.required || "")
-                    color: page.colors.secondaryText
-                    font.pixelSize: 11
-                    wrapMode: Text.Wrap
+            onDetailsRequested: appDetailsDialog.open()
+            property Dialog detailsDialog: Dialog {
+                id: appDetailsDialog
+                objectName: appCard.app.id + "DetailsDialog"
+                parent: Overlay.overlay
+                anchors.centerIn: parent
+                width: Math.min(520, parent ? parent.width - 32 : 520)
+                implicitHeight: header.implicitHeight + topPadding + appDetailsContent.childrenRect.height + 40
+                    + bottomPadding + footer.implicitHeight + spacing * 2
+                height: Math.min(implicitHeight, parent ? parent.height - 32 : implicitHeight)
+                modal: true
+                title: I18n.tr("%1: %2").arg(I18n.tr(appCard.app.name)).arg(I18n.tr("Details"))
+                closePolicy: Popup.CloseOnEscape
+                // The status query never reports a candidate version, so the
+                // version line stays hidden until a release check runs. Ask
+                // GitHub once on open, when the row has nothing to show yet.
+                onOpened: {
+                    const target = appCard.app;
+                    const canCheck = !appCard.blocked && target.backend !== "flatpak-unavailable"
+                        && (target.backend !== "flatpak" && target.backend !== "flatpak-ready" || !!target.canCheckUpdates);
+                    if (page.store && canCheck && !target.latestVersion && !target.busy)
+                        page.store.checkUpdates(appCard.app.id);
                 }
-            }
-            Flow {
-                Layout.fillWidth: true
-                spacing: 8
-                WallpaperTextButton {
-                    objectName: appCard.app.id + "RecheckEnvironment"
-                    visible: !!page.appEnvironmentError(appCard.app)
-                    enabled: !appCard.blocked && !(appCard.app.flatpak || {}).querying
-                    label: I18n.tr("Check again")
-                    colors: page.colors
-                    onClicked: page.store.refresh()
-                }
-                WallpaperTextButton {
-                    objectName: appCard.app.id + "CheckUpdates"
-                    label: I18n.tr("Check for updates")
-                    colors: page.colors
-                    enabled: !appCard.blocked && appCard.app.backend !== "flatpak-unavailable" && (appCard.app.backend !== "flatpak" && appCard.app.backend !== "flatpak-ready" || !!appCard.app.canCheckUpdates)
-                    onClicked: page.store.checkUpdates(appCard.app.id)
-                }
-                WallpaperTextButton {
-                    objectName: appCard.app.id + "Update"
-                    visible: !!appCard.app.installed && !!appCard.app.managed && !!appCard.app.updateAvailable
-                    enabled: !appCard.blocked
-                    label: I18n.tr("Update")
-                    colors: page.colors
-                    onClicked: page.requestPlan(appCard.app, true)
-                }
-                WallpaperTextButton {
-                    visible: !!appCard.app.installed && !!appCard.app.managed && appCard.app.backend !== "flatpak"
-                    enabled: !appCard.blocked
-                    label: I18n.tr("Preview old program versions")
-                    colors: page.colors
-                    onClicked: page.store.cleanupProgram(appCard.app.id, "cleanup-plan")
-                }
-                WallpaperTextButton {
-                    visible: !!appCard.app.cleanupPlan && !!appCard.app.cleanupPlan.removedRevisions && appCard.app.cleanupPlan.removedRevisions.length > 0
-                    enabled: !appCard.blocked
-                    label: I18n.tr("Clean old program versions…")
-                    colors: page.colors
-                    onClicked: {
-                        programActionDialog.appId = appCard.app.id;
-                        programActionDialog.action = "prune";
-                        programActionDialog.detail = I18n.tr("Keep the current program and one rollback version. Remove only these installer-owned revisions; personal data and backups are kept.")
-                            + "\n" + appCard.app.cleanupPlan.removedRevisions.join("\n");
-                        programActionDialog.open();
+                Connections {
+                    target: page
+                    function onVisibleChanged() {
+                        if (!page.visible) appDetailsDialog.close();
                     }
                 }
-                WallpaperTextButton {
-                    label: I18n.tr("Repository")
-                    colors: page.colors
-                    onClicked: page.store.openRepository(appCard.app.id)
+                header: Item {}
+                background: Rectangle {
+                    radius: 22
+                    color: page.colors.dark ? "#ed25282e" : "#f8f9fbfd"
+                    border.width: 1
+                    border.color: page.colors.dark ? "#62ffffff" : "#aaffffff"
                 }
-                WallpaperTextButton {
-                    visible: !!appCard.app.logPath
-                    label: I18n.tr("View log")
-                    colors: page.colors
-                    onClicked: page.store.openLog(appCard.app.id)
+                footer: Item {
+                    implicitHeight: 58
+                    WallpaperTextButton {
+                        objectName: appCard.app.id + "DetailsClose"
+                        anchors {
+                            right: parent.right
+                            bottom: parent.bottom
+                            rightMargin: 24
+                            bottomMargin: 20
+                        }
+                        label: I18n.tr("Close")
+                        colors: page.colors
+                        implicitHeight: 30
+                        cornerRadius: 15
+                        onClicked: appDetailsDialog.close()
+                    }
+                }
+                contentItem: Flickable {
+                    implicitHeight: appDetailsContent.childrenRect.height + 40
+                    contentWidth: width
+                    contentHeight: appDetailsContent.childrenRect.height + 40
+                    clip: true
+                    boundsBehavior: Flickable.StopAtBounds
+                    ScrollBar.vertical: ScrollBar { policy: ScrollBar.AsNeeded }
+                    ColumnLayout {
+                        id: appDetailsContent
+                        readonly property color divider: Qt.rgba(page.colors.secondaryText.r,
+                            page.colors.secondaryText.g, page.colors.secondaryText.b, 0.16)
+                        x: 20
+                        y: 18
+                        width: parent.width - 40
+                        spacing: 0
+
+                        // Header: artwork, identity, subtitle.
+                        RowLayout {
+                            Layout.fillWidth: true
+                            Layout.bottomMargin: 16
+                            spacing: 14
+                            Item {
+                                Layout.preferredWidth: 60
+                                Layout.preferredHeight: 60
+                                Image {
+                                    anchors.centerIn: parent
+                                    width: parent.width / (1 - 2 * appCard.iconInset)
+                                    height: width
+                                    source: appCard.iconSource
+                                    sourceSize: Qt.size(132, 132)
+                                    fillMode: Image.PreserveAspectFit
+                                    smooth: true
+                                }
+                                Rectangle {
+                                    visible: !appCard.iconSource.toString().length
+                                    anchors.fill: parent
+                                    radius: 14
+                                    color: appCard.iconColor
+                                }
+                            }
+                            ColumnLayout {
+                                Layout.fillWidth: true
+                                Layout.minimumWidth: 0
+                                spacing: 3
+                                Text {
+                                    Layout.fillWidth: true
+                                    text: appCard.title
+                                    color: page.colors.primaryText
+                                    font.pixelSize: 17
+                                    font.weight: Font.Bold
+                                    elide: Text.ElideRight
+                                }
+                                Text {
+                                    Layout.fillWidth: true
+                                    text: appCard.description
+                                    color: page.colors.secondaryText
+                                    font.pixelSize: 12
+                                    wrapMode: Text.Wrap
+                                    maximumLineCount: 2
+                                    elide: Text.ElideRight
+                                }
+                            }
+                            // Same capsule action as the list row, so the dialog offers the
+                            // identical Install / Open entry point at the same spot.
+                            Basic.Button {
+                                id: detailsAction
+                                Layout.alignment: Qt.AlignVCenter
+                                Layout.leftMargin: 12
+                                Layout.preferredWidth: Math.max(50, detailsActionLabel.implicitWidth + 20)
+                                implicitHeight: 24
+                                padding: 0
+                                objectName: appCard.app.id + "DetailsAction"
+                                text: appCard.actionText
+                                enabled: appCard.actionEnabled
+                                hoverEnabled: true
+                                Accessible.name: appCard.title + ": " + text
+                                onClicked: {
+                                    if (appCard.app.installed) page.store.open(appCard.app.id);
+                                    else page.requestPlan(appCard.app, false);
+                                }
+                                contentItem: Text {
+                                    id: detailsActionLabel
+                                    text: detailsAction.text
+                                    color: appCard.actionAvailable ? "#0085ff" : page.colors.secondaryText
+                                    font.pixelSize: 11
+                                    font.weight: Font.DemiBold
+                                    horizontalAlignment: Text.AlignHCenter
+                                    verticalAlignment: Text.AlignVCenter
+                                }
+                                background: Rectangle {
+                                    radius: height / 2
+                                    color: detailsAction.down ? "#d4e3f5" : "#e6edf7"
+                                    border.width: detailsAction.visualFocus ? 2 : 0
+                                    border.color: "#0085ff"
+                                }
+                            }
+                        }
+
+                        Rectangle {
+                            Layout.fillWidth: true
+                            implicitHeight: 1
+                            color: appDetailsContent.divider
+                        }
+
+                        // Status paragraph.
+                        Text {
+                            Layout.fillWidth: true
+                            Layout.topMargin: 14
+                            text: I18n.tr("STATUS")
+                            color: page.colors.secondaryText
+                            font.pixelSize: 10
+                            font.weight: Font.DemiBold
+                            font.letterSpacing: 0.6
+                        }
+                        Text {
+                            objectName: appCard.app.id + "Status"
+                            Layout.fillWidth: true
+                            Layout.topMargin: 5
+                            text: page.appEnvironmentError(appCard.app) || (appCard.app.busy ? page.appStage(appCard.app.stage) : !appCard.app.statusKnown ? I18n.tr("Checking installation status…") : appCard.app.backend === "flatpak-unavailable" ? (appCard.app.flatpak && appCard.app.flatpak.error ? appCard.app.flatpak.error : I18n.tr("Flatpak bundles are unavailable: no reviewed publisher key is included in this core version.")) : appCard.app.backend === "flatpak-ready" ? I18n.tr("Check GitHub for a signed Flatpak bundle before installing.") : appCard.app.backend === "flatpak" ? I18n.tr("Managed by Flatpak. Settings checks GitHub for bundle updates; external Flatpak tools can remove the same installation.") : appCard.app.installed && !appCard.app.managed ? I18n.tr("Installed outside Settings. Open is available; updates and removal stay with its installer.") : appCard.app.available === false ? I18n.tr("No stable release is available yet") : I18n.tr("Builds from source; development dependencies are required"))
+                            color: page.colors.secondaryText
+                            font.pixelSize: 12
+                            lineHeight: 1.15
+                            wrapMode: Text.Wrap
+                        }
+                        Text {
+                            objectName: appCard.app.id + "Version"
+                            Layout.fillWidth: true
+                            Layout.topMargin: 6
+                            visible: !!appCard.app.version || !!appCard.app.latestVersion
+                            text: I18n.tr("Installed: %1 · Latest: %2").arg(appCard.app.version || I18n.tr("Not installed")).arg(appCard.app.latestVersion || I18n.tr("Not checked"))
+                            color: page.colors.secondaryText
+                            font.pixelSize: 11
+                            wrapMode: Text.Wrap
+                        }
+
+                        // Flatpak provenance block.
+                        Text {
+                            Layout.fillWidth: true
+                            Layout.topMargin: 12
+                            visible: appCard.app.backend === "flatpak"
+                            text: I18n.tr("SOURCE")
+                            color: page.colors.secondaryText
+                            font.pixelSize: 10
+                            font.weight: Font.DemiBold
+                            font.letterSpacing: 0.6
+                        }
+                        Text {
+                            Layout.fillWidth: true
+                            Layout.topMargin: 5
+                            visible: appCard.app.backend === "flatpak"
+                            text: I18n.tr("Flatpak · %1 · %2").arg(appCard.app.scope || "").arg(appCard.app.origin || "")
+                            color: page.colors.primaryText
+                            font.pixelSize: 12
+                            wrapMode: Text.Wrap
+                        }
+                        Text {
+                            Layout.fillWidth: true
+                            Layout.topMargin: 4
+                            visible: appCard.app.backend === "flatpak"
+                            text: appCard.app.bundleManaged ? I18n.tr("Verified standalone bundle; no hosted app source is required.") : I18n.tr("Publisher or local bundle origin could not be verified. Settings will not update this installation.")
+                            color: page.colors.secondaryText
+                            font.pixelSize: 11
+                            wrapMode: Text.Wrap
+                        }
+
+                        // Update note.
+                        Text {
+                            Layout.fillWidth: true
+                            Layout.topMargin: 12
+                            visible: appCard.app.backend === "flatpak" && !!appCard.app.flatpakUpdate && !!appCard.app.flatpakUpdate.commit
+                            text: I18n.tr("WHAT'S NEW")
+                            color: page.colors.secondaryText
+                            font.pixelSize: 10
+                            font.weight: Font.DemiBold
+                            font.letterSpacing: 0.6
+                        }
+                        Text {
+                            Layout.fillWidth: true
+                            Layout.topMargin: 5
+                            visible: appCard.app.backend === "flatpak" && !!appCard.app.flatpakUpdate && !!appCard.app.flatpakUpdate.commit
+                            text: appCard.app.flatpakUpdate && appCard.app.flatpakUpdate.available
+                                ? I18n.tr("A signed bundle update is available. Use Update to download and deploy it.")
+                                : I18n.tr("The installed Flatpak commit matches the signed GitHub release.")
+                            color: page.colors.secondaryText
+                            font.pixelSize: 11
+                            wrapMode: Text.Wrap
+                        }
+
+                        // Live progress while a task runs.
+                        ColumnLayout {
+                            Layout.fillWidth: true
+                            Layout.topMargin: 14
+                            visible: !!appCard.app.busy
+                            spacing: 6
+                            Text {
+                                Layout.fillWidth: true
+                                text: I18n.tr("PROGRESS")
+                                color: page.colors.secondaryText
+                                font.pixelSize: 10
+                                font.weight: Font.DemiBold
+                                font.letterSpacing: 0.6
+                            }
+                            Basic.ProgressBar {
+                                Layout.fillWidth: true
+                                indeterminate: !(appCard.app.progress >= 0)
+                                value: Math.max(0, Math.min(1, appCard.app.progress || 0))
+                            }
+                            Text {
+                                Layout.fillWidth: true
+                                text: I18n.tr("Elapsed: %1").arg(Math.floor((appCard.app.elapsedSeconds || 0) / 60) + ":" + ("0" + ((appCard.app.elapsedSeconds || 0) % 60)).slice(-2))
+                                    + " · " + I18n.tr("Tasks continue in the background after closing this window.")
+                                color: page.colors.secondaryText
+                                font.pixelSize: 11
+                                wrapMode: Text.Wrap
+                            }
+                            Text {
+                                Layout.fillWidth: true
+                                visible: !!appCard.app.transactionStatus
+                                text: I18n.tr(appCard.app.transactionStatus || "")
+                                color: page.colors.secondaryText
+                                font.pixelSize: 11
+                                wrapMode: Text.Wrap
+                            }
+                        }
+
+                        // Error.
+                        Text {
+                            objectName: appCard.app.id + "Error"
+                            Layout.fillWidth: true
+                            Layout.topMargin: 14
+                            visible: !!appCard.app.code && appCard.app.code !== "EXTERNALLY_MANAGED"
+                            text: page.appFailureText(appCard.app)
+                            color: page.colors.primaryText
+                            font.pixelSize: 12
+                            wrapMode: Text.Wrap
+                        }
+
+                        // Dependencies.
+                        Text {
+                            Layout.fillWidth: true
+                            Layout.topMargin: 14
+                            visible: (appCard.app.dependencies || []).length > 0
+                            text: I18n.tr("REQUIRES")
+                            color: page.colors.secondaryText
+                            font.pixelSize: 10
+                            font.weight: Font.DemiBold
+                            font.letterSpacing: 0.6
+                        }
+                        Repeater {
+                            model: appCard.app.dependencies || []
+                            delegate: Text {
+                                required property var modelData
+                                Layout.fillWidth: true
+                                Layout.topMargin: 4
+                                text: typeof modelData === "string" ? modelData : (modelData.id || modelData.name || "") + " " + (modelData.required || "")
+                                color: page.colors.secondaryText
+                                font.pixelSize: 11
+                                wrapMode: Text.Wrap
+                            }
+                        }
+
+                        Rectangle {
+                            Layout.fillWidth: true
+                            Layout.topMargin: 16
+                            implicitHeight: 1
+                            color: appDetailsContent.divider
+                        }
+
+                        // Actions.
+                        Flow {
+                            Layout.fillWidth: true
+                            Layout.topMargin: 12
+                            spacing: 8
+                            WallpaperTextButton {
+                                implicitHeight: 28
+                                cornerRadius: 14
+                                objectName: appCard.app.id + "RecheckEnvironment"
+                                visible: !!page.appEnvironmentError(appCard.app)
+                                enabled: !appCard.blocked && !(appCard.app.flatpak || {}).querying
+                                label: I18n.tr("Check again")
+                                colors: page.colors
+                                onClicked: page.store.refresh()
+                            }
+                            WallpaperTextButton {
+                                implicitHeight: 28
+                                cornerRadius: 14
+                                objectName: appCard.app.id + "CheckUpdates"
+                                label: I18n.tr("Check for updates")
+                                colors: page.colors
+                                enabled: !appCard.blocked && appCard.app.backend !== "flatpak-unavailable" && (appCard.app.backend !== "flatpak" && appCard.app.backend !== "flatpak-ready" || !!appCard.app.canCheckUpdates)
+                                onClicked: page.store.checkUpdates(appCard.app.id)
+                            }
+                            WallpaperTextButton {
+                                implicitHeight: 28
+                                cornerRadius: 14
+                                objectName: appCard.app.id + "Update"
+                                visible: !!appCard.app.installed && !!appCard.app.managed && !!appCard.app.updateAvailable
+                                enabled: !appCard.blocked
+                                label: I18n.tr("Update")
+                                colors: page.colors
+                                onClicked: page.requestPlan(appCard.app, true)
+                            }
+                            WallpaperTextButton {
+                                implicitHeight: 28
+                                cornerRadius: 14
+                                visible: !!appCard.app.installed && !!appCard.app.managed && appCard.app.backend !== "flatpak"
+                                enabled: !appCard.blocked
+                                label: I18n.tr("Preview old program versions")
+                                colors: page.colors
+                                onClicked: page.store.cleanupProgram(appCard.app.id, "cleanup-plan")
+                            }
+                            WallpaperTextButton {
+                                implicitHeight: 28
+                                cornerRadius: 14
+                                visible: !!appCard.app.cleanupPlan && !!appCard.app.cleanupPlan.removedRevisions && appCard.app.cleanupPlan.removedRevisions.length > 0
+                                enabled: !appCard.blocked
+                                label: I18n.tr("Clean old program versions…")
+                                colors: page.colors
+                                onClicked: {
+                                    programActionDialog.appId = appCard.app.id;
+                                    programActionDialog.action = "prune";
+                                    programActionDialog.detail = I18n.tr("Keep the current program and one rollback version. Remove only these installer-owned revisions; personal data and backups are kept.")
+                                        + "\n" + appCard.app.cleanupPlan.removedRevisions.join("\n");
+                                    programActionDialog.open();
+                                }
+                            }
+                            WallpaperTextButton {
+                                implicitHeight: 28
+                                cornerRadius: 14
+                                label: I18n.tr("Repository")
+                                colors: page.colors
+                                onClicked: page.store.openRepository(appCard.app.id)
+                            }
+                            WallpaperTextButton {
+                                implicitHeight: 28
+                                cornerRadius: 14
+                                visible: !!appCard.app.logPath
+                                label: I18n.tr("View log")
+                                colors: page.colors
+                                onClicked: page.store.openLog(appCard.app.id)
+                            }
+                        }
+
+                        // Destructive / cancel action, kept apart from the rest.
+                        WallpaperTextButton {
+                            implicitHeight: 28
+                            cornerRadius: 14
+                            objectName: appCard.app.id + "ActionSecondary"
+                            Layout.topMargin: 10
+                            visible: appCard.app.busy || (!!appCard.app.installed && !!appCard.app.managed)
+                            enabled: appCard.app.stage !== "cancelling" && (!!appCard.app.busy || !appCard.blocked)
+                            label: appCard.app.busy ? I18n.tr("Cancel") : I18n.tr("Uninstall")
+                            colors: page.colors
+                            onClicked: {
+                                if (appCard.app.busy) page.store.cancel(appCard.app.id);
+                                else {
+                                    appUninstallDialog.appId = appCard.app.id;
+                                    appUninstallDialog.appName = appCard.app.name;
+                                    appUninstallDialog.open();
+                                }
+                            }
+                        }
+                    }
                 }
             }
         }
