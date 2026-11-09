@@ -240,6 +240,11 @@ void SettingsBridge::resetAppearanceStrengths()
     callAppearance({ QStringLiteral("resetStrengths") });
 }
 
+void SettingsBridge::updateDesktopFontFamily(const QString& family)
+{
+    callAppearance({ QStringLiteral("updateDesktopFontFamily"), family });
+}
+
 void SettingsBridge::applySystemAppearance(bool dark)
 {
     callShell(QStringLiteral("appearance-settings"),
@@ -350,6 +355,10 @@ QVariantMap SettingsBridge::appearanceSnapshotFromReply(const QString& payload)
         { QStringLiteral("barMacTint"), object.value(QStringLiteral("barMacTint")).toDouble(0.30) },
         { QStringLiteral("dockWindowAnimationStyle"),
             object.value(QStringLiteral("dockWindowAnimationStyle")).toString() },
+        { QStringLiteral("desktopFontAvailable"), object.contains(QStringLiteral("desktopFontFamily")) },
+        { QStringLiteral("desktopFontFamily"), object.value(QStringLiteral("desktopFontFamily")).toString() },
+        { QStringLiteral("systemFontFamily"),
+            object.value(QStringLiteral("systemFontFamily")).toString() },
         { QStringLiteral("tokenVersion"), object.value(QStringLiteral("tokenVersion")).toInt() },
     };
 }

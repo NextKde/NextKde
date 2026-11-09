@@ -144,6 +144,32 @@ ColumnLayout {
                 }
             }
         }
+
+        Demo.SettingsItem {
+            enabled: windowPage.backend !== null && windowPage.snapshot.enabled !== false
+            title: I18n.tr("Independent button cover")
+
+            Controls.SettingsSwitch {
+                objectName: "windowIndependentButtonBackground"
+                enabled: windowPage.backend !== null && windowPage.snapshot.enabled !== false
+                checked: windowPage.snapshot.independentButtonBackground === true
+                accentColor: colors.accent
+                trackColor: colors.divider
+                onToggled: function (checked) {
+                    windowPage.backend.setIndependentButtonBackground(checked);
+                }
+            }
+        }
+    }
+    Text {
+        Layout.fillWidth: true
+        Layout.leftMargin: 13
+        Layout.rightMargin: 13
+        visible: windowPage.snapshot.independentButtonBackground === true
+        text: I18n.tr("Buttons use the standard KOS size (14 px). Right-click the cover and drag its edges to resize only the background. Button size and spacing adjustments are disabled.")
+        color: colors.secondaryText
+        font.pixelSize: 11
+        wrapMode: Text.Wrap
     }
 
     Demo.SettingsGroup {

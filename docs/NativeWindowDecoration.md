@@ -27,3 +27,14 @@ Calendar, Weather and Settings retain [cooperative controls](CooperativeWindowCo
 Firefox retains its [own chrome buttons](FirefoxWindowButtons.md). Unadapted CSD
 applications retain overlay fallback. All automated validation is VM-only; see
 [acceptance instructions](../tests/native-decoration/README.md).
+
+Forma/Mayonnaise applications draw and hit-test their own OpenGL traffic lights.
+Bridge preserves those controls on CSD windows identified by the verified
+Mayonnaise desktop IDs (Calculator, Finder, Music, Photos, Settings, TaskManager,
+Terminal, TextEditor, VideoPlayer) and Forma IDs (AppStore, Mail, PolkitAgent,
+Screenshot). Matching uses the exact Wayland app ID or X11 class token, not a
+title, executable name or namespace prefix. Overlay geometry and forced-paint
+rules do not override that ownership. Bridge clears old overlay hit regions,
+adjust sessions and tint caches, so these windows incur no overlay sampling.
+Server-decorated windows retain their decoration's controls. Explicit cooperative
+surface negotiation continues to take precedence over this application policy.

@@ -51,6 +51,13 @@ and check official API headers. Missing GL contexts can skip GPU readback in con
 checks in the VM and record the result. Build compatibility is separate from real desktop loading.
 Record actual test counts instead of copying a historical count from an old report.
 
+The separate `KDE fonts Plasma 6.6 / 6.7 / 6.8` jobs load the real font KCM from
+each pinned runtime and exercise persistence, KDE refresh notification and native
+form rendering, including X11 DPI under private Xvfb. They must all pass for font
+changes; their artifacts record the exact Qt/KF/Plasma packages. See the
+[font compatibility contract](AppearanceArchitecture.md#font-backend-compatibility)
+for the supported range and the remaining VM-only acceptance coverage.
+
 ## Optional apps
 
 Application development and runtime suites now belong to

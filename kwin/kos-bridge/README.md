@@ -39,11 +39,15 @@ controls use their respective native paths instead.
   *cover* the application's own controls rather than float above them.
 - Client-side decorated windows take their tint from the title bar's own
   pixels. Native KOS decorations are excluded before sampling begins.
-- **Fails closed, on the tint only.** If the title bar cannot be read yet —
-  the window has not painted, or it is covered — no panel is drawn on that
-  frame and the read is retried. The panel never appears with a guessed tint.
-- Skips frames where the window is being animated
-  (`PAINT_WINDOW_TRANSFORMED`), and only touches normal windows / dialogs.
+- **Same-frame tint, without a guessed first color.** A fully visible titlebar
+  gutter is copied and reduced to a median color on the GPU before drawing the
+  panel in that same paint. The first cover need not wait for CPU readback.
+  Unusable pixels hide both layers unless a previously validated fallback exists;
+  input stays with the client until CPU confirmation, avoiding invisible hit areas.
+- Skips screen-space panels and sampling while the window is transformed,
+  faded, dimmed or desaturated: those pixels are not its unmodified title bar.
+  Neutral offscreen source captures still include the controls during animations.
+  Only touches normal windows / dialogs.
   Popups, context menus, tooltips, OSDs, notifications, docks, the Quickshell
   bar, the Plasma desktop and input-method surfaces are ignored.
 - **Skips internal windows**, which is every window KWin makes for itself: its
@@ -57,35 +61,112 @@ controls use their respective native paths instead.
 `windowbuttons/titlebarmetrics.cpp` samples the title bar's rendered pixels for
 legacy overlay windows (excluding native KOS decorations):
 
-- **Local neighborhood priority.** Read the strip immediately beside the panel,
-  at most **160 × 64 device pixels** (40 KiB), independent of window width and
-  output scale. Taller bands use their central rows. If the local strip is
-  obscured or unpainted, retry at the opposite end outside the caption's middle
-  third. Never sample the panel's own columns or pixels outside the visible
-  region.
+- **Top-anchored background gutter.** RGB comes from a narrow strip immediately
+  beside the cover, starting two logical pixels below the window top. It does
+  not follow the controls' vertical offset into avatars or lower toolbars. The
+  preferred RGB strip is at most 32 device pixels wide; the fallback is at the
+  opposite end outside the caption's middle third, at most 160 pixels wide.
+  Neither includes the cover's own columns.
+- **GPU visual tint.** `titlebargputint.cpp` copies only a fully visible gutter
+  (at most 160 × 8 pixels) into separate scratch storage, then computes the same
+  integer luma histogram/median cluster as the CPU sampler into one RGBA texel.
+  The panel samples that texel immediately; GPU ordering replaces the former
+  first-frame wait without `glReadPixels`, fence polling or a CPU/GPU stall.
+  Copying first avoids sampling from the framebuffer being painted. Output
+  rotations only reorder the histogram's pixels. This also follows late titlebar
+  changes beyond the five-second CPU warm-up, rather than switching back to an
+  older tint after an arbitrary deadline. It adds one bounded copy and one
+  single-pixel reduction per eligible paint, not another scheduled repaint.
+  Incomplete/integer targets, partial gutter visibility and shader/allocation
+  failures retain the asynchronous path. Invalid alpha yields transparent output,
+  never an uninitialized black fallback. GPU storage is one reusable 100 KiB
+  scratch texture plus a color texel for the renderer, not per window.
+- **Per-window vertical boundary.** One asynchronous read captures a strip of
+  at most **160 × 192 device pixels** (120 KiB), shared by RGB and boundary
+  detection. Eight horizontal groups form robust row profiles. Median colors
+  above and below a candidate edge are compared against their local median
+  deviation, rather than a fixed 12-level RGB threshold: coherent flat steps
+  as small as two channel levels can qualify. At least 3/4 of the columns must
+  support the direction of the change. The strongest local row step places
+  the edge, and two consistent observations confirm it before trimming.
+  Icons, isolated lines and gradual gradients do not trim it. The controls retain their
+  configured positions. Boundary detection requires a completely visible
+  probe; unavailable evidence leaves the configured cover extent in place.
 - **Non-blocking readback.** Transfer into a per-window pixel-pack buffer and
   inspect its fence on a later paint. Only signalled buffers are mapped; paint
-  hooks never wait on a GPU fence. Preserve the read framebuffer, pixel-pack
-  buffer and pack layout. Preserve the render target's content transform
+  hooks never wait on a GPU fence. Preserve the read framebuffer, source read-buffer selection, pixel-pack
+  buffer and pack layout. Reject incomplete/missing-color targets and initialize
+  orphaned transfer storage to transparent zeros: a failed read cannot turn
+  undefined buffer bytes into an opaque black panel. Preserve the render target's content transform
   (including DRM FlipY and output rotation), then normalize the completed
   pixels to top-down viewport coordinates. Failed/occluded reads count against the sampling
   cadence, and a busy transfer is abandoned after 250 ms rather than keeping a
   fast retry loop alive indefinitely.
+- RGB sampling stays near the window top, while exclusion uses the entire
+  expanded cover. Enlarging it cannot sample the cover itself.
+  Require at least 75% visible strip coverage and 75% near-opaque pixel coverage;
+  sparse damaged glyphs cannot stand in for an undrawn/occluded background.
+  Both CPU and GPU accept alpha 254–255: some CSD clients, such as WeChat,
+  render a nominally opaque titlebar at 254/255. That one-level loss is
+  unpremultiplied before luma and RGB accumulation, with fully opaque RGB
+  unchanged. Alpha 253 or lower is still rejected rather than mistaking a
+  client-side fade-in for a darker titlebar.
 - **A median, not a mean.** A fixed 256-bin luma histogram averages RGB within
   ±3 of the median, rejecting transparent pixels, glyphs and antialiased edges
   without allocating, copying and sorting per-pixel sample vectors.
-- **Prompt confirmation without flicker.** The first usable tint appears
-  immediately. Four warm-up attempts run at 250 ms intervals; the active window
-  is then checked every 750 ms. A changed color returns to the 250 ms cadence
-  and must hold for 500 ms before replacing the displayed color. Near-equal
-  readings (up to two levels per RGB channel) do not change the cached color.
-  Inactive windows get one initial read and otherwise reuse their cached tint.
+- **CPU fallback confirmation.** Cached fallback RGB and initial input readiness
+  require two consistent usable captures at least 32 ms apart. The GPU visual
+  path does not wait for this confirmation. The interval is measured at capture rather
+  than GPU completion so polling jitter cannot force an unnecessary third read.
+  Startup/change confirmation polls the fence every 4 ms for the first 32 ms of
+  a transfer, then returns to the regular 16 ms poll; neither path waits on the GPU.
+  Four warm-up attempts run at 32 ms intervals; steady active-window checks back
+  off from 125 ms through 250/500 ms to 1000 ms as observations stay unchanged.
+  During the first five seconds after sampling starts, client damage restarts
+  warm-up even with a known tint: a cold-start placeholder is not evidence that
+  the application's titlebar has finished loading. This deadline is not extended
+  by damage, focus or resize. Afterwards, known windows retain their document/video
+  backoff; observed RGB changes still return to 32 ms confirmation. Before the
+  first tint, client damage also restarts warm-up after failed reads. Damage does
+  not reset the last-attempt time, and a static startup window still backs off;
+  this is not unconditional 32 ms polling for five seconds. New damage during a
+  transfer requests a newer capture without discarding every usable observation,
+  which would starve confirmation in a continuously repainting startup window.
+  Failed observations also back off after warm-up. These are scheduling intervals,
+  not measured end-to-end latency. Focus changes
+  restart the fast phase for both windows while retaining validated RGB. Client
+  damage also requests a throttled refresh for inactive windows; damage during
+  an in-flight transfer remains outstanding until a newer capture completes.
+  Invalid observations break confirmation, and failed inactive refreshes stop
+  after the bounded warm-up budget. Near-equal readings (up to two levels per
+  RGB channel) do not change the cached color.
+- **Bounded reusable storage.** The scan uses fixed stack arrays, without
+  per-pixel heap allocations. CPU pixel arrays are reused. The common GL row
+  flip normalizes in place, avoiding a second full pixel array; rotated/mirrored
+  outputs retain a reusable scratch array. A signalled, consumed PBO is reused;
+  canceled or timed-out transfers orphan storage to avoid GPU waits. The RGBA
+  payload is capped at 120 KiB per buffer (360 KiB for three CPU buffers and
+  120 KiB for one PBO in the general transform path, excluding driver overhead).
+  Minimized windows stop scheduled sampling and release sample caches after
+  a 500 ms animation grace period; closing windows releases them immediately.
+  Periodic repaint requests cover the bounded probe instead of the whole
+  window-width band after the first observation.
 - **No texture upload on RGB changes.** A cached white rounded background mask
-  is tinted with a premultiplied shader uniform; buttons, hover rings and
-  adjustment marks live in a separate reusable transparent texture. New RGB
+  is tinted by the GPU color texel, or a premultiplied uniform on the fallback
+  path; buttons, hover rings and adjustment marks live in a separate reusable
+  transparent texture. New RGB
   values do not churn the panel texture cache. Explicit `dark`, `light` and
   custom-color settings still bypass sampling.
 - Legacy server decorations without the native capability marker retain their palette fallback for upgrade compatibility.
+
+The effect's `window-controls` debug payload includes `tintSameFrame`,
+`tintStartingUp`, `tintIntervalMs`, `tintReadbackPending` and `tintChangePending`
+alongside the CPU-validated fallback RGB. These distinguish the GPU visual path
+from startup backoff, a busy readback or a fallback color awaiting confirmation;
+the GPU color itself is not synchronously read for diagnostics.
+
+Optional CPU-only maximum-probe microbenchmark (excludes GPU/readback/repaint):
+`./.build/kos-bridge/titlebar_tint_test --benchmark`.
 
 Offline regressions (no plugin installation or compositor restart):
 
@@ -96,12 +177,19 @@ ctest --test-dir .build/kos-bridge --output-on-failure
 ```
 
 `titlebar_tint_test` checks histogram equivalence, bounded sampling geometry,
-noise rejection and confirmation timing. `titlebar_readback_test` exercises the
+neighboring filled toolbar widgets on both sides, noise rejection and confirmation
+timing. `titlebar_readback_test` exercises the
 real PBO/fence path, row orientation, buffer reuse and GL-state restoration on
 an offscreen context; CTest reports it as skipped if no GL context is available.
 With `-DKOS_BRIDGE_BUILD_GPU_TESTS=ON`, `titlebar_pixels_gpu_test` also covers
 the asynchronous path across all eight output transforms, fractional scale,
-non-zero viewport origins and target clipping (64 cases, no pre-read `glFinish`).
+non-zero viewport origins and target clipping, plus incomplete/integer-target
+failures, transparent failure pixels, valid black titlebars and source read-buffer
+restoration (no pre-read `glFinish`). `titlebar_gpu_tint_test` draws the final
+panel in the same command stream as changing titlebar content, before any CPU
+read or additional frame. It checks CPU/GPU histogram equivalence across all
+output transforms, gutter visibility, GL-state restoration, valid black,
+transparent failure, premultiplied mask edges and fallback compositing.
 These tests do not replace checking the installed effect's appearance in a new
 KWin session; do not hot-load a replaced plugin into the running compositor.
 
@@ -178,6 +266,12 @@ panel on the window: see **Adjusting a panel** below.
 App keys match the window class exactly, or its first whitespace-separated token
 (`"code code"` matches `"code"`).
 
+Qualified Forma/Mayonnaise CSD apps retain their own OpenGL controls, without
+overlay painting, input interception or tint sampling. Saved overlay geometry
+and forced-paint rules cannot add a duplicate cluster. This policy uses verified
+desktop IDs and leaves SSD controls and cooperative surface negotiation intact;
+see [control ownership](../../docs/NativeWindowDecoration.md).
+
 ### Which configuration a window gets
 
 1. `default` — every key.
@@ -241,6 +335,12 @@ qdbus6 org.kde.KWin /Effects org.kde.kwin.Effects.reconfigureEffect kos_bridge
 
 ## Adjusting a panel
 
+Settings' **Independent button cover** switch locks all fallback overlay circles
+and gaps to 14 logical pixels. In that mode the edge grips change separately
+saved cover margins without moving the buttons; plain/Shift wheel size changes
+are disabled, and Ctrl+wheel changes only the cover. Turning it off restores the
+original button geometry. See [ownership, persistence and validation](../../docs/WindowAppearance.md#independent-window-button-cover).
+
 Right-click a panel. A blue ring appears around it, a grip appears on each of its
 four edges, and the panel is now being positioned:
 
@@ -274,10 +374,13 @@ continuously there, so dragging across the middle of a window changes the side
 without a jump. The wheel leaves `offset` alone, so the panel grows away from the
 edge it is pinned to rather than away from its own middle.
 
-Saving writes a rule matched on the **window class** alone — the one thing about
-a window that is the same now and the next time the application starts — so a
-window with no class cannot be adjusted at all. A `title`, `titleRegex` or `type`
-matcher is something to write in `rules` by hand.
+Saving matches the **window class and type**, plus the window role when one
+is available. Without a role (including Wayland), the exact caption is used as
+a fallback, so a QQ image viewer need not inherit the main window's cover size.
+A caption-based adjustment must be saved again if the caption changes; use a
+hand-written `titleRegex` for changing document titles when appropriate. Old
+class-only rules remain compatible as fallbacks; adjust and save the secondary
+window once to override them. A window with no class cannot be adjusted.
 
 Every session ends in a line in the journal, because the file is the only readout
 an adjustment has:

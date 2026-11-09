@@ -19,6 +19,19 @@ No registry, dependency container or second IPC protocol is introduced.
   `bridge` for on-demand running-app discovery through `fgSchedRunningApps()`;
   its per-app button exclusions use the raw KWin app ID and retain a manual
   exact-class fallback when Shell IPC is unavailable. It does not poll.
+- `ThemeSettingsPage.fontsRequested()` opens route 14 under Theme. The font page
+  receives the `FontSettings` native KCM adapter as `backend` and the Shell
+  appearance `bridge` separately. The composition root's existing history toolbar
+  returns to Theme, including when Fonts is opened directly; pages add no second
+  back button. The font entry follows the other configuration groups on Theme,
+  with the shared chevron vector icon.
+  KDE edits automatically save after 350 ms without further input. The timer
+  belongs to the long-lived adapter, so page navigation does not discard edits;
+  application shutdown flushes a pending change. There is no apply/reset footer.
+  Desktop font defaults to General font, with an optional Shell-only family
+  override via appearance IPC; its picker hides size and style. Empty resets
+  to follow-system, and confirmed Shell snapshots update the displayed value.
+  FontPickerDialog uses shared NextKde controls and Qt font database choices.
 - `glassStyles` provides `options`, `indexOf(id)` and `labelOf(id)` to appearance
   views. This catalog stays owned by the composition root.
 - `shellStyleObserved(style)` and `materialSeedObserved(seed)` report confirmed

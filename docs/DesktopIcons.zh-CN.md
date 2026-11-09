@@ -5,15 +5,24 @@
 ## 桌面表面归属
 
 `DeskCenterWindow.qml` 在各输出上承载组件、图标及其右键菜单。它使用
-`desktop` layer-shell namespace，让 KWin 的普通窗口关闭、移动快捷键排除桌面。
+`dock` layer-shell namespace，让 KWin 的普通窗口关闭、移动快捷键和显示桌面隐藏逻辑排除桌面组件，
+同时避免透明组件层被当成壁纸。原生概览只捕获一个 Desktop 窗口，因此只有壁纸表面使用
+`desktop`。Glass 将壁纸、组件和 Dock 合成为原生概览的桌面背景，让它们一起随桌面预览缩放。
+仅在完整预览可用时抑制重复的原生面板缩略图。
 保留 Bottom 层，降到 Background 可能被 Plasma 盖住。平台托管的
 `kwin/window-bridge.js` 中，`installDesktopStack()` 将已有 Below 层表面固定为
 壁纸 < 组件 < 台前调度条，不依赖台前调度开关或映射先后。它不修改可见性、
 虚拟桌面归属，也不重建窗口。
 
-玻璃特效只接受明确声明了非空内容区域的 Quickshell 桌面表面，继续排除壁纸和
-旧协议中表示整窗模糊的空区域。`kos-deskcenter.desktop-stack` 覆盖映射排列和
-重入层序信号，`kos-glass.desktop-blur` 覆盖这一显式声明边界。
+玻璃特效只接受明确声明了非空内容区域的 Desktop 类型 Quickshell 表面及 Below 层 Quickshell Dock，继续排除壁纸和
+旧协议中表示整窗模糊的空区域。DeskCenter 保持桌面内容材质，Top/Overlay 面板保持 Dock 材质。
+`kos-deskcenter.desktop-stack` 覆盖映射排列、重入层序信号、首帧就绪前层序及概览壁纸候选；
+`kos-glass.desktop-blur` 覆盖表面分类和显式声明边界。
+`kos-ui.desktop-overview` 在私有 KWin 中加载两个真实 Shell 表面，检查两种映射顺序下原生
+`DesktopBackground` 的选择，并操作桌面关闭/移动及显示桌面；它不能替代概览视觉验收。
+
+在 VM 验收 Plasma 和 Shell 各自管理的壁纸、原生概览/桌面网格、多输出、显示桌面、
+桌面关闭/移动快捷键，以及概览退出前后的组件玻璃。源码/SDK 检查不能证明视觉验收通过。
 
 ## 组件定位与缩放
 

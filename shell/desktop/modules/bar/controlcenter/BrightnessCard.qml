@@ -24,7 +24,7 @@ ControlCenterCard {
         GlassText {
             text: I18n.tr("Display Brightness")
             color: ThemeService.foregroundColor
-            font { pixelSize: 11; weight: Font.DemiBold; family: "Noto Sans CJK SC" }
+            font { pixelSize: 11; weight: Font.DemiBold; family: AppearanceTokens.typography.textFamily }
         }
     }
     GlassText {
@@ -33,7 +33,7 @@ ControlCenterCard {
             ? Math.round(slotCard6.brightnessPreview) + "%" : I18n.tr("No brightness device")
         color: ThemeService.foregroundColor
         opacity: 0.50
-        font { pixelSize: 9; family: "Noto Sans CJK SC" }
+        font { pixelSize: 9; family: AppearanceTokens.typography.textFamily }
     }
     GlassText {
         anchors { right: parent.right; top: parent.top; rightMargin: 13; topMargin: 5 }

@@ -15,6 +15,7 @@ ColumnLayout {
     required property var glassStyles
     signal shellStyleObserved(string style)
     signal materialSeedObserved(string seed)
+    signal fontsRequested()
 
     Layout.fillWidth: true
     spacing: 12
@@ -186,6 +187,7 @@ ColumnLayout {
         onShellStyleObserved: style => themePage.shellStyleObserved(style)
     }
 
+
     Demo.SettingsGroup {
         title: I18n.tr("Interface shape")
         backgroundColor: colors.card
@@ -329,6 +331,7 @@ ColumnLayout {
         showSpatialWallpaper: false
         onShellStyleObserved: style => themePage.shellStyleObserved(style)
     }
+
     WidgetAppearanceSection {
         colors: themePage.colors
         materialForm: themePage.materialForm
@@ -338,6 +341,7 @@ ColumnLayout {
     Demo.SettingsGroup {
         backgroundColor: colors.card
         Demo.SettingsItem {
+            objectName: "theme-language-entry"
             title: I18n.tr("Language")
             description: I18n.tr("Switch the interface language; applies live.")
             Controls.SettingsSelect {
@@ -356,6 +360,39 @@ ColumnLayout {
                 onSelectionChanged: function(index) {
                     themePage.setLanguage(model[index].id)
                 }
+            }
+        }
+    }
+    Demo.SettingsGroup {
+        backgroundColor: themePage.colors.card
+        Demo.SettingsItem {
+            id: fontsEntry
+            minimumRowHeight: 36
+            allowStacking: false
+            objectName: "theme-fonts-entry"
+            title: I18n.tr("Fonts")
+            titleColor: themePage.colors.primaryText
+            activeFocusOnTab: true
+            Accessible.role: Accessible.Button
+            Accessible.onPressAction: themePage.fontsRequested()
+            Keys.onReturnPressed: themePage.fontsRequested()
+            Keys.onEnterPressed: themePage.fontsRequested()
+            Keys.onSpacePressed: themePage.fontsRequested()
+            property Item pointer: MouseArea {
+                parent: fontsEntry
+                anchors.fill: parent
+                cursorShape: Qt.PointingHandCursor
+                onClicked: themePage.fontsRequested()
+            }
+            Demo.VectorIcon {
+                objectName: "theme-fonts-chevron"
+                name: "chevron"
+                rotation: -90
+                size: 14
+                color: themePage.colors.secondaryText
+                Layout.minimumWidth: 16
+                Layout.preferredWidth: 16
+                Layout.preferredHeight: 16
             }
         }
     }

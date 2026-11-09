@@ -15,7 +15,7 @@ Item {
     }
     QtObject {
         id: backend
-        property var state: ({enabled:true, radius:20, shadow:true, hideAnimation:"scale", closeAnimation:"scale", buttonGlyphMode:"always", buttonExclusions:[]})
+        property var state: ({enabled:true, radius:20, shadow:true, hideAnimation:"scale", closeAnimation:"scale", buttonGlyphMode:"always", buttonExclusions:[], independentButtonBackground:false})
         property bool animationBusy: false
         property string error: ""
         property var calls: []
@@ -28,6 +28,7 @@ Item {
         function setShadow(value) { change("shadow", value); return true }
         function setTakeover(value) { change("enabled", value); return true }
         function requestAnimation(kind, value) { change(kind + "Animation", value); return true }
+        function setIndependentButtonBackground(value) { change("independentButtonBackground", value); return true }
         function setButtonGlyphMode(value) { change("buttonGlyphMode", value); return true }
         function setButtonExclusion(value, excluded) {
             const klass = value.trim()
@@ -45,7 +46,7 @@ Item {
         property var app: null
         function init() {
             backend.calls = []
-            backend.state = {enabled:true, radius:20, shadow:true, hideAnimation:"scale", closeAnimation:"scale", buttonGlyphMode:"always", buttonExclusions:[]}
+            backend.state = {enabled:true, radius:20, shadow:true, hideAnimation:"scale", closeAnimation:"scale", buttonGlyphMode:"always", buttonExclusions:[], independentButtonBackground:false}
             bridgeBackend.apps = [{name:"Firefox", appId:"firefox"}, {name:"Obsidian", appId:"md.obsidian.Obsidian"}]
             bridgeBackend.runningAppsRequests = 0
             const component = Qt.createComponent("../../main.qml")
@@ -54,18 +55,12 @@ Item {
             verify(app !== null)
             tryVerify(() => findChild(app.contentItem, "windowAppearancePage") !== null)
             tryVerify(() => bridgeBackend.runningAppsRequests === 1)
+            verify(waitForRendering(app.contentItem))
         }
         function cleanup() { app.destroy(); app = null }
         function control(name) {
             const item = findChild(app.contentItem, name)
             verify(item !== null, name)
-            const scroll = findChild(app.contentItem, "settings-page-scroll")
-            if (scroll) {
-                const top = item.mapToItem(scroll.contentItem, 0, 0).y
-                scroll.contentY = Math.max(0, Math.min(top - (scroll.height - item.height) / 2,
-                    scroll.contentHeight - scroll.height))
-            }
-            verify(waitForRendering(item))
             return item
         }
         function test_switches() {
@@ -150,6 +145,18 @@ Item {
             const input = control("windowButtonExclusionInput")
             input.text = "md.obsidian.Obsidian"
             verify(control("addManualWindowButtonExclusion").enabled)
+        }
+        function test_independent_cover() {
+            const toggle = control("windowIndependentButtonBackground")
+            mouseClick(toggle, toggle.width/2, toggle.height/2)
+            compare(backend.state.independentButtonBackground, true)
+            mouseClick(toggle, toggle.width/2, toggle.height/2)
+            compare(backend.state.independentButtonBackground, false)
+            backend.state = Object.assign({}, backend.state, {enabled:false})
+            tryCompare(toggle, "enabled", false)
+            const count = backend.calls.length
+            mouseClick(toggle, toggle.width/2, toggle.height/2)
+            compare(backend.calls.length, count, "disabled cover switch cannot save")
         }
         function test_button_glyph_mode() {
             const picker = control("windowButtonGlyphMode")

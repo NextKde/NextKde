@@ -11,7 +11,7 @@ namespace KOS
 //
 // `windowRole()` is empty on Wayland -- KWin's Wayland backend has no window
 // role to report (`waylandwindow.cpp`) -- which is why a rule that sets a role
-// simply never matches here and why the adjust gesture never writes one.
+// simply never matches here and why adjustments use the caption as a fallback.
 inline WindowQuery windowQueryFor(const KWin::EffectWindow *window)
 {
     WindowQuery query;

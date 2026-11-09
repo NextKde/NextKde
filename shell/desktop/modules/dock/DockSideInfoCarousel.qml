@@ -373,7 +373,7 @@ Item {
                             fontSizeMode: Text.HorizontalFit
                             minimumPixelSize: 5
                             font {
-                                family: "SF Pro Display"
+                                family: AppearanceTokens.typography.displayFamily
                                 pixelSize: Math.max(8,
                                     Math.round(carousel.iconSize * 0.42))
                                 weight: Font.DemiBold

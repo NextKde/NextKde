@@ -5,7 +5,7 @@ import QtQuick.Window
 Row {
     id: root
     required property var targetWindow
-    property int circleSize: 18
+    property int circleSize: 14
     property int buttonWidth: 22
     property int buttonHeight: 32
     property bool maximizeMode: false
@@ -33,7 +33,7 @@ Row {
     readonly property bool hoverGlyphs: compositorLoader.item && compositorLoader.item.supported
         ? compositorLoader.item.hoverGlyphs : true
     objectName: "windowControls"
-    spacing: 10
+    spacing: 6
     // Keep delegates in the Row layout while takeover hides only their opacity.
     Loader {
         id: compositorLoader

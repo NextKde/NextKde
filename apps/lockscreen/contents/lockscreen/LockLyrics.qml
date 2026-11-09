@@ -24,7 +24,8 @@ Item {
     }
 
     // Discover all MPRIS services, including per-instance names. Both the
-    // Dock and lock screen use Playing > Paused > other, then service name.
+    // Dock and lock screen use Playing > Paused > other, then controllability
+    // and finally service name to break ties within the same playback state.
     property var serviceNames: []
     property var playerSources: []
     property int playerRevision: 0
@@ -49,7 +50,11 @@ Item {
     readonly property var activeSource: {
         const revision = playerRevision
         const sources = playerSources.filter(source => source && source.available)
-            .sort((a, b) => a.serviceName.localeCompare(b.serviceName))
+            .sort((a, b) => {
+                const controllability = (a.canControl !== false ? 0 : 1)
+                    - (b.canControl !== false ? 0 : 1)
+                return controllability || a.serviceName.localeCompare(b.serviceName)
+            })
         return sources.find(source => source.playbackStatus === "Playing")
             || sources.find(source => source.playbackStatus === "Paused") || sources[0] || null
     }
@@ -85,6 +90,10 @@ Item {
             return available && properties.properties ? String(root.unwrap(properties.properties["PlaybackStatus"]) || "") : ""
         }
         readonly property bool playing: playbackStatus === "Playing"
+        readonly property bool canControl: {
+            const current = revision
+            return root.unwrap(properties.properties?.["CanControl"]) !== false
+        }
         onRevisionChanged: root.playerRevision++
         Component.onCompleted: root.playerSources = root.playerSources.concat([source])
         Component.onDestruction: root.playerSources = root.playerSources.filter(item => item !== source)
@@ -111,6 +120,7 @@ Item {
             onPropertiesChanged: function(interfaceName, changedProperties, invalidatedProperties) {
                 if (changedProperties && changedProperties["Metadata"] !== undefined) update("Metadata")
                 if (changedProperties && changedProperties["PlaybackStatus"] !== undefined) update("PlaybackStatus")
+                if (changedProperties && changedProperties["CanControl"] !== undefined) update("CanControl")
                 refreshTimer.restart()
             }
             onRefreshed: source.revision++

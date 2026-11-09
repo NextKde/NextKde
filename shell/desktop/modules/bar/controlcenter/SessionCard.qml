@@ -74,7 +74,7 @@ ControlCenterCard {
                     anchors.verticalCenter: parent.verticalCenter
                     text: sessionCard.service.currentUserName
                     color: ThemeService.foregroundColor
-                    font { pixelSize: 12; weight: Font.Bold; family: "Noto Sans CJK SC" }
+                    font { pixelSize: 12; weight: Font.Bold; family: AppearanceTokens.typography.textFamily }
                 }
 
                 Rectangle {
@@ -191,7 +191,7 @@ ControlCenterCard {
                             text: modelData.label
                             color: modelData.danger
                                 ? "#ff3b30" : ThemeService.foregroundColor
-                            font { pixelSize: 13; weight: Font.Medium; family: "Noto Sans CJK SC" }
+                            font { pixelSize: 13; weight: Font.Medium; family: AppearanceTokens.typography.textFamily }
                         }
                     }
 
@@ -220,7 +220,7 @@ ControlCenterCard {
             visible: sessionCard.service.lastSessionError.length > 0
             text: "⚠ " + sessionCard.service.lastSessionError
             color: "#ff453a"
-            font { pixelSize: 10; weight: Font.Medium; family: "Noto Sans CJK SC" }
+            font { pixelSize: 10; weight: Font.Medium; family: AppearanceTokens.typography.textFamily }
         }
     }
 }

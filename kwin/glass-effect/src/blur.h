@@ -25,6 +25,7 @@
 namespace KWin
 {
 class SurfaceShapeManager;
+class OverviewPreview;
 
 #if !defined(GLASS_X11) && !defined(GLASS_KWIN_67)
 class BlurManagerInterface;
@@ -270,6 +271,8 @@ private:
     BlurSettings m_settings;
 #ifndef GLASS_X11
     std::unique_ptr<SurfaceShapeManager> m_surfaceShapeManager;
+    std::unique_ptr<OverviewPreview> m_overviewPreview;
+    bool m_overviewCapture = false;
 #endif
     bool m_valid = false;
 #ifdef GLASS_KWIN_67

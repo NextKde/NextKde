@@ -1,4 +1,5 @@
 {
+    "independentButtonBackground": false,
     "default": {
         "position": "right",
         "offset": { "x": 10, "y": 6 },
