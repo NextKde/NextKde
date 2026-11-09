@@ -49,7 +49,13 @@ private slots:
         QTRY_VERIFY(settings.needsSave());
         QVERIFY2(settings.apply(), qPrintable(settings.error()));
         settings.reset();
-        QCOMPARE(settings.fonts()->property("font").value<QFont>(), chosen);
+        // KConfig normalizes a named "Regular" style to an empty styleName on
+        // reload. Compare the actual font selection, not that serialization hint.
+        const QFont restored = settings.fonts()->property("font").value<QFont>();
+        QCOMPARE(restored.family(), chosen.family());
+        QCOMPARE(restored.pointSizeF(), chosen.pointSizeF());
+        QCOMPARE(restored.weight(), chosen.weight());
+        QCOMPARE(restored.style(), chosen.style());
         QCOMPARE(settings.rendering()->property("antiAliasing").toBool(), false);
         QCOMPARE(settings.module()->property("subPixelCurrentIndex").toInt(), 2);
         QCOMPARE(settings.module()->property("hintingCurrentIndex").toInt(), 3);
@@ -71,7 +77,14 @@ private slots:
         QTRY_VERIFY(settings.needsSave());
         settings.reset();
         QTRY_VERIFY(!settings.needsSave());
+    }
 
+    void nativePage()
+    {
+        QQmlEngine engine;
+        FontSettings settings(&engine);
+        settings.refresh();
+        QVERIFY2(settings.available(), qPrintable(settings.error()));
         // Load the production form against the actual plugin properties, not a
         // mock: private KCM property/type changes must fail before shipping.
         QStringList warnings;
