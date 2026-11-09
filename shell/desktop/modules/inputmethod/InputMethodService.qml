@@ -63,10 +63,6 @@ QtObject {
         target: WindowService
         function onKwinActiveIdChanged() {
             svc._openingCaret = ({});
-            if (svc._popupSessionOpen) {
-                svc._endPopupSession();
-                svc._publishPopupState();
-            }
         }
     }
 
@@ -132,7 +128,7 @@ QtObject {
         svc.spot = state.spot || ({});
         svc.kwinCaret = state.caret || ({});
         if (svc._popupSessionOpen && !svc._anchorPending
-                && svc.kwinCaret.available && svc.kwinCaret.source === "caret"
+                && svc.kwinCaret.available
                 && (!svc.kwinCaret.windowId || svc.kwinCaret.windowId === WindowService.kwinActiveId))
             svc._openingCaret = svc.kwinCaret;
         if (state.imLabel) svc.imLabel = String(state.imLabel);
@@ -162,16 +158,37 @@ QtObject {
 
     function _beginPopupSession() {
         svc._popupSessionOpen = true;
+        const windowId = WindowService.kwinActiveId;
+
+        // If a fresh caret/pointer anchor is already available from the daemon for this window,
+        // use it immediately to avoid blank frame latency.
+        if (svc.kwinCaret.available
+                && (!svc.kwinCaret.windowId || svc.kwinCaret.windowId === windowId)) {
+            svc._openingCaret = svc.kwinCaret;
+            svc._anchorPending = false;
+            svc._anchorDeadline.stop();
+            return;
+        }
+
+        // Also if explicit spot rect is provided by the client, no need to wait for KWin
+        const hasSpot = svc.spot && Number.isFinite(svc.spot.x) && Number.isFinite(svc.spot.y)
+            && (svc.spot.x !== 0 || svc.spot.y !== 0);
+        if (hasSpot) {
+            svc._openingCaret = ({});
+            svc._anchorPending = false;
+            svc._anchorDeadline.stop();
+            return;
+        }
+
         svc._openingCaret = ({});
         svc._anchorPending = true;
         const serial = ++svc._anchorSerial;
-        const windowId = WindowService.kwinActiveId;
         svc._anchorDeadline.restart();
         PlatformClient.request("input.clipboard-anchor", { expectedWindowId: windowId }, function(response) {
             if (serial !== svc._anchorSerial || !svc._anchorPending)
                 return;
             // A response for an old focused window must never move this panel.
-            if (WindowService.kwinActiveId === windowId && response?.ok)
+            if ((!windowId || WindowService.kwinActiveId === windowId) && response?.ok && response?.result?.available)
                 svc._openingCaret = response.result || ({});
             svc._anchorDeadline.stop();
             svc._anchorPending = false;

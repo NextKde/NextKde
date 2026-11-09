@@ -39,7 +39,9 @@ export function resolveGlobalSpotRect(spot, activeWindow, kwinCaret, fallbackScr
     // 1. If spot mode is explicitly relative (Wayland dbus clients: Konsole, Firefox, KRunner)
     if (hasSpot && spot.mode === "relative") {
         const scale = (spot.scale && spot.scale > 0) ? spot.scale : 1.0;
-        const winContent = (activeWindow && activeWindow.contentGeometry)
+        const winContent = (activeWindow && activeWindow.toplevel && activeWindow.toplevel.contentGeometry)
+            || (activeWindow && activeWindow.contentGeometry)
+            || (activeWindow && activeWindow.toplevel && activeWindow.toplevel.geometry)
             || (activeWindow && activeWindow.geometry)
             || { x: 0, y: 0, width: 800, height: 600 };
         return {

@@ -376,10 +376,9 @@ void KimpanelBridge::handleSetSpotRect(int x, int y, int w, int h)
     m_spotScale = 1.0;
     m_spotMode = QStringLiteral("absolute");
 
+    notifyState();
     if (x == 0 && y == 0 && w == 0 && h == 0) {
         queryKWinCaret();
-    } else {
-        notifyState();
     }
 }
 
@@ -436,10 +435,12 @@ void KimpanelBridge::handleSetLookupTable(const QStringList &labels, const QStri
     m_candidates = candidates;
     m_lookupVisible = !m_candidates.isEmpty();
 
+    // Always push candidate updates immediately so the shell never starves,
+    // while querying a fresh KWin caret in parallel if needed.
+    notifyState();
+
     if (m_spotX == 0 && m_spotY == 0 && m_spotWidth == 0 && m_spotHeight == 0) {
         queryKWinCaret();
-    } else {
-        notifyState();
     }
 }
 
@@ -459,7 +460,6 @@ void KimpanelBridge::setActiveWindowId(const QString &windowId)
 void KimpanelBridge::queryKWinCaret()
 {
     if (m_activeWindowId.isEmpty()) {
-        notifyState();
         return;
     }
 
@@ -478,23 +478,25 @@ void KimpanelBridge::queryKWinCaret()
             [this, watcher, requestId, targetWindowId] {
         const QDBusMessage reply = watcher->reply();
         watcher->deleteLater();
-        if (requestId != m_kwinCaretSerial || m_activeWindowId != targetWindowId) {
+        if (m_activeWindowId != targetWindowId) {
             return;
         }
-        if (reply.type() != QDBusMessage::ErrorMessage && !reply.arguments().isEmpty()) {
-            QJsonObject caret = QJsonObject::fromVariantMap(
-                Detail::variantMapFromDbusValue(reply.arguments().first()));
-            caret.insert(QStringLiteral("windowId"), targetWindowId);
-            caret.insert(QStringLiteral("serial"), static_cast<double>(requestId));
-            m_kwinCaret = caret;
-        } else {
-            m_kwinCaret = QJsonObject{
-                {QStringLiteral("available"), false},
-                {QStringLiteral("windowId"), targetWindowId},
-                {QStringLiteral("serial"), static_cast<double>(requestId)}
-            };
+        if (requestId == m_kwinCaretSerial) {
+            if (reply.type() != QDBusMessage::ErrorMessage && !reply.arguments().isEmpty()) {
+                QJsonObject caret = QJsonObject::fromVariantMap(
+                    Detail::variantMapFromDbusValue(reply.arguments().first()));
+                caret.insert(QStringLiteral("windowId"), targetWindowId);
+                caret.insert(QStringLiteral("serial"), static_cast<double>(requestId));
+                m_kwinCaret = caret;
+            } else {
+                m_kwinCaret = QJsonObject{
+                    {QStringLiteral("available"), false},
+                    {QStringLiteral("windowId"), targetWindowId},
+                    {QStringLiteral("serial"), static_cast<double>(requestId)}
+                };
+            }
+            notifyState();
         }
-        notifyState();
     });
 }
 
@@ -507,20 +509,18 @@ void KimpanelBridge::onShowAux(bool visible)
 void KimpanelBridge::onShowPreedit(bool visible)
 {
     m_preeditVisible = visible;
+    notifyState();
     if (visible && m_spotX == 0 && m_spotY == 0) {
         queryKWinCaret();
-    } else {
-        notifyState();
     }
 }
 
 void KimpanelBridge::onShowLookupTable(bool visible)
 {
     m_lookupVisible = visible;
+    notifyState();
     if (visible && m_spotX == 0 && m_spotY == 0) {
         queryKWinCaret();
-    } else {
-        notifyState();
     }
 }
 
