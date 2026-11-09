@@ -4,7 +4,7 @@ import { readFileSync } from "node:fs";
 import { matchEntryByHints, parseProbeOutput, probeCommand } from "../../shell/desktop/modules/dock/ProcessIdentity.mjs";
 import { indexWindowRecords } from "../../shell/desktop/modules/dock/WindowRecordIndex.mjs";
 import { toArray } from "../../shell/desktop/modules/dock/PayloadArray.mjs";
-import { indexAt, parse } from "../../shell/desktop/modules/dock/TimedLyrics.mjs";
+import { indexAt, parse } from "../../shell/desktop/modules/common/TimedLyrics.mjs";
 import { nextWindowToActivate, pendingWindowIdFor } from "../../shell/desktop/modules/dock/WindowCycle.mjs";
 import { test } from "node:test";
 

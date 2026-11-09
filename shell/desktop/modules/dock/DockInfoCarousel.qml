@@ -1,4 +1,5 @@
 import QtQuick
+import qs.desktop.modules.common
 import qs.desktop.modules.weather
 
 // One Dock slot shared by music, weather, clock and metrics.
@@ -50,7 +51,7 @@ Item {
     property bool expanded: false
     property bool autoRotate: true
 
-    readonly property bool hasMusic: DockMprisService.hasPlayer
+    readonly property bool hasMusic: MediaService.hasPlayer
     readonly property bool hasWeather: WeatherService.available
     readonly property real cardGap: iconSize * 0.2
     // Visible seam between neighbouring expanded cards. Each card's painted

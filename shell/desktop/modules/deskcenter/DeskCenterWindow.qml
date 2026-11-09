@@ -1927,10 +1927,10 @@ PanelWindow {
                     Item {
                 id: musicContent
                 anchors.fill: parent
-                readonly property var player: DockMprisService.activePlayer
+                readonly property var player: MediaService.activePlayer
                 readonly property bool hasPlayer: player !== null
                 readonly property url artworkSource: {
-                    const revision = DockMprisService.metadataRevision
+                    const revision = MediaService.metadataRevision
                     return player?.trackArtUrl
                         ? player.trackArtUrl : BundledIcons.source("default-cover")
                 }
@@ -1945,7 +1945,7 @@ PanelWindow {
                     onClicked: {
                         // Raise the displayed player; ListenFree owns the
                         // music entry when no MPRIS session is available.
-                        const player = DockMprisService.activePlayer
+                        const player = MediaService.activePlayer
                         if (player) {
                             if (player.canRaise) {
                                 player.raise()
@@ -2124,7 +2124,7 @@ PanelWindow {
                         KosLyricLine {
                             id: musicLyric
                             anchors { left: parent.left; right: parent.right; top: musicArtist.bottom; topMargin: 5 }
-                            text: DockMprisService.loading ? DockMprisService.playbackStatus : DockMprisService.currentLyric
+                            text: MediaService.loading ? MediaService.playbackStatus : MediaService.currentLyric
                             visible: !musicBody.compact && text.length > 0
                             elide: Text.ElideRight
                             horizontalAlignment: Text.AlignHCenter
@@ -2200,23 +2200,23 @@ PanelWindow {
                                 model: 4
                                 delegate: DeskMediaButton {
                                     required property int index
-                                    visible: index !== 3 || DockMprisService.lyricsAvailable
+                                    visible: index !== 3 || MediaService.lyricsAvailable
                                     primary: index === 1
-                                    busy: index === 1 && DockMprisService.loading
+                                    busy: index === 1 && MediaService.loading
                                     checkable: index === 3
                                     checked: index === 3
                                         && DeskCenterConfigService.desktopLyricsEnabled
-                                        && DockMprisService.desktopLyricsAllowed
+                                        && MediaService.desktopLyricsAllowed
                                     iconName: index === 0 ? "media-previous"
                                         : index === 2 ? "media-next"
                                         : index === 3 ? "media-lyrics"
                                         : musicContent.player?.isPlaying ? "media-pause" : "media-play"
                                     text: index === 0 ? I18n.tr("Previous")
                                         : index === 2 ? I18n.tr("Next")
-                                        : index === 3 ? (DockMprisService.desktopLyricsAllowed
+                                        : index === 3 ? (MediaService.desktopLyricsAllowed
                                             ? I18n.tr("Desktop Lyrics") : I18n.tr("Player has desktop lyrics off"))
                                         : musicContent.player?.isPlaying ? I18n.tr("Pause") : I18n.tr("Play")
-                                    enabled: index === 3 ? DockMprisService.desktopLyricsAllowed : (musicContent.hasPlayer
+                                    enabled: index === 3 ? MediaService.desktopLyricsAllowed : (musicContent.hasPlayer
                                         && (index === 0 ? (musicContent.player?.canGoPrevious ?? false)
                                             : index === 2 ? (musicContent.player?.canGoNext ?? false)
                                             : (musicContent.player?.canTogglePlaying ?? false)))
@@ -2225,9 +2225,9 @@ PanelWindow {
                                         ? IconAppearanceService.glassContentColor(0.88)
                                         : Qt.rgba(1, 1, 1, 0.88)
                                     onClicked: {
-                                        if (index === 0) DockMprisService.previous()
-                                        else if (index === 1) DockMprisService.togglePlayPause()
-                                        else if (index === 2) DockMprisService.next()
+                                        if (index === 0) MediaService.previous()
+                                        else if (index === 1) MediaService.togglePlayPause()
+                                        else if (index === 2) MediaService.next()
                                         else DeskCenterConfigService.updateDesktopLyricsEnabled(
                                             !DeskCenterConfigService.desktopLyricsEnabled)
                                     }
@@ -2273,7 +2273,7 @@ PanelWindow {
                                     else if (modelData.id === "refresh")
                                         WeatherService.refresh()
                                     else
-                                        DockMprisService.togglePlayPause()
+                                        MediaService.togglePlayPause()
                                 }
                             }
                         }

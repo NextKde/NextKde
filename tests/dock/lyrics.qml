@@ -10,8 +10,8 @@ TestCase {
         otherPlayer.canControl = true
     }
     function cleanup() {
-        DockMprisService._playerRefs = []
-        DockMprisService._updateActivePlayer()
+        MediaService._playerRefs = []
+        MediaService._updateActivePlayer()
     }
     function test_controllability_data() {
         return [
@@ -34,14 +34,14 @@ TestCase {
         player.canControl = data.ca
         otherPlayer.canControl = data.cb
         for (const refs of [[otherPlayer, player], [player, otherPlayer]]) {
-            DockMprisService._playerRefs = refs
-            DockMprisService._updateActivePlayer()
-            compare(DockMprisService.activePlayer, data.expected === 0 ? player : otherPlayer)
-            compare(DockMprisService.hasPlayingPlayer, data.a === 1 || data.b === 1)
+            MediaService._playerRefs = refs
+            MediaService._updateActivePlayer()
+            compare(MediaService.activePlayer, data.expected === 0 ? player : otherPlayer)
+            compare(MediaService.hasPlayingPlayer, data.a === 1 || data.b === 1)
         }
-        DockMprisService._playerRefs = [player]
-        DockMprisService._updateActivePlayer()
-        compare(DockMprisService.activePlayer, player)
+        MediaService._playerRefs = [player]
+        MediaService._updateActivePlayer()
+        compare(MediaService.activePlayer, player)
     }
     function test_selectionOrder() {
         player.dbusName = "org.mpris.MediaPlayer2.a"
@@ -49,50 +49,50 @@ TestCase {
         otherPlayer.isPlaying = true
         player.playbackState = 2
         otherPlayer.playbackState = 1
-        DockMprisService._playerRefs = [otherPlayer, player]
-        DockMprisService._updateActivePlayer()
-        compare(DockMprisService.activePlayer, otherPlayer)
+        MediaService._playerRefs = [otherPlayer, player]
+        MediaService._updateActivePlayer()
+        compare(MediaService.activePlayer, otherPlayer)
         otherPlayer.isPlaying = false
         otherPlayer.playbackState = 2
-        DockMprisService._updateActivePlayer()
-        compare(DockMprisService.activePlayer, player)
+        MediaService._updateActivePlayer()
+        compare(MediaService.activePlayer, player)
         player.playbackState = 0
-        DockMprisService._updateActivePlayer()
-        compare(DockMprisService.activePlayer, otherPlayer)
+        MediaService._updateActivePlayer()
+        compare(MediaService.activePlayer, otherPlayer)
         otherPlayer.playbackState = 0
-        DockMprisService._updateActivePlayer()
-        compare(DockMprisService.activePlayer, player)
-        DockMprisService._playerRefs = []
-        DockMprisService._updateActivePlayer()
+        MediaService._updateActivePlayer()
+        compare(MediaService.activePlayer, player)
+        MediaService._playerRefs = []
+        MediaService._updateActivePlayer()
     }
     SignalSpy { id: positions; target: player; signalName: "positionChanged" }
     function test_perPlayerDesktopSwitch() {
-        DockMprisService.activePlayer = player
+        MediaService.activePlayer = player
         player.position = 0
         player.metadata = ({"xesam:asText":"[00:00]first", "kos:desktopLyricsEnabled":false})
         player.isPlaying = true
-        compare(DockMprisService.desktopLyricsAllowed, false)
-        compare(DockMprisService.currentLyric, "first")
+        compare(MediaService.desktopLyricsAllowed, false)
+        compare(MediaService.currentLyric, "first")
         positions.clear()
         wait(550)
         compare(positions.count, 0)
         player.metadata = ({"xesam:asText":"[00:00]first", "kos:desktopLyricsEnabled":true})
-        compare(DockMprisService.desktopLyricsAllowed, true)
+        compare(MediaService.desktopLyricsAllowed, true)
         tryVerify(() => positions.count > 0, 1000)
         player.metadata = ({"kos:desktopLyricsEnabled": {value:false}})
-        compare(DockMprisService.desktopLyricsAllowed, false)
+        compare(MediaService.desktopLyricsAllowed, false)
         player.isPlaying = false
         player.metadata = ({})
-        compare(DockMprisService.desktopLyricsAllowed, true)
-        DockMprisService.activePlayer = null
+        compare(MediaService.desktopLyricsAllowed, true)
+        MediaService.activePlayer = null
     }
     function test_playback() {
-        DockMprisService.activePlayer = player
+        MediaService.activePlayer = player
         player.metadata = ({"xesam:asText":"[00:01]first\n[00:03]\n[00:05]last"})
-        compare(DockMprisService.currentLyric, "")
-        compare(DockMprisService.nextLyric, "first")
+        compare(MediaService.currentLyric, "")
+        compare(MediaService.nextLyric, "first")
         player.position = 1.5
-        compare(DockMprisService.currentLyric, "first")
+        compare(MediaService.currentLyric, "first")
         player.isPlaying = true
         positions.clear()
         tryVerify(function() { return positions.count > 0 }, 1000)
@@ -101,19 +101,19 @@ TestCase {
         wait(250)
         compare(positions.count, 0)
         player.position = 3
-        compare(DockMprisService.currentLyric, "")
-        compare(DockMprisService.nextLyric, "last")
+        compare(MediaService.currentLyric, "")
+        compare(MediaService.nextLyric, "last")
         player.position = 8
-        compare(DockMprisService.currentLyric, "last")
+        compare(MediaService.currentLyric, "last")
         player.position = 2
-        compare(DockMprisService.currentLyric, "first")
+        compare(MediaService.currentLyric, "first")
         player.metadata = ({"xesam:asText":"[00:00]fallback", "kos:currentLyric":"", "kos:nextLyric":"live next"})
-        compare(DockMprisService.currentLyric, "")
-        compare(DockMprisService.nextLyric, "live next")
+        compare(MediaService.currentLyric, "")
+        compare(MediaService.nextLyric, "live next")
         player.metadata = ({"xesam:asText":"plain lyrics"})
-        compare(DockMprisService.currentLyric, "plain lyrics")
-        compare(DockMprisService.nextLyric, "")
-        DockMprisService.activePlayer = null
-        compare(DockMprisService.currentLyric, "")
+        compare(MediaService.currentLyric, "plain lyrics")
+        compare(MediaService.nextLyric, "")
+        MediaService.activePlayer = null
+        compare(MediaService.currentLyric, "")
     }
 }

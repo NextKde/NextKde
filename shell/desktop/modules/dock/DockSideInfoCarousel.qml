@@ -46,11 +46,11 @@ Item {
     property bool showTemperature: true
     property bool expanded: false
     property bool autoRotate: true
-    readonly property bool hasMusic: DockMprisService.hasPlayer
+    readonly property bool hasMusic: MediaService.hasPlayer
     readonly property bool hasWeather: WeatherService.available
-    readonly property var player: DockMprisService.activePlayer
+    readonly property var player: MediaService.activePlayer
     readonly property url artworkSource: {
-        const revision = DockMprisService.metadataRevision
+        const revision = MediaService.metadataRevision
         return player?.trackArtUrl ? player.trackArtUrl
             : BundledIcons.source("default-cover")
     }

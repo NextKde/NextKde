@@ -764,15 +764,15 @@ QtObject { readonly property real effectiveHoverScale: 1.1 }
     "lyrics": async () => {
         const dir=mkdtempSync(join(tmpdir(),'kos-lyrics-'));
         try {
-            const source=new URL('../../shell/desktop/modules/dock/',import.meta.url);
+            const source=new URL('../../shell/desktop/modules/common/',import.meta.url);
             // Keep the production service and timers, replace only the D-Bus model
             // and the deskcenter module import (stubbed locally below).
-            writeFileSync(join(dir,'DockMprisService.qml'),readFileSync(new URL('DockMprisService.qml',source),'utf8')
+            writeFileSync(join(dir,'MediaService.qml'),readFileSync(new URL('MediaService.qml',source),'utf8')
                 .replace('import Quickshell.Services.Mpris','import "."')
                 .replace("import qs.desktop.modules.deskcenter\n",""));
             copyFileSync(new URL('TimedLyrics.mjs',source),join(dir,'TimedLyrics.mjs'));
             copyFileSync(new URL('lyrics.qml',import.meta.url),join(dir,'tst_lyrics.qml'));
-            writeFileSync(join(dir,'qmldir'),'singleton DockMprisService 1.0 DockMprisService.qml\nsingleton DeskCenterConfigService 1.0 DeskCenterConfigService.qml\nsingleton Mpris 1.0 Mpris.qml\nsingleton MprisPlaybackState 1.0 MprisPlaybackState.qml\nMprisPlayer 1.0 MprisPlayer.qml\n');
+            writeFileSync(join(dir,'qmldir'),'singleton MediaService 1.0 MediaService.qml\nsingleton DeskCenterConfigService 1.0 DeskCenterConfigService.qml\nsingleton Mpris 1.0 Mpris.qml\nsingleton MprisPlaybackState 1.0 MprisPlaybackState.qml\nMprisPlayer 1.0 MprisPlayer.qml\n');
             writeFileSync(join(dir,'DeskCenterConfigService.qml'),'pragma Singleton\nimport QtQuick\nQtObject { readonly property bool desktopLyricsActive: true }\n');
             writeFileSync(join(dir,'Mpris.qml'),'pragma Singleton\nimport QtQuick\nQtObject { property var players: [] }\n');
             writeFileSync(join(dir,'MprisPlaybackState.qml'),'pragma Singleton\nimport QtQuick\nQtObject { readonly property int paused: 2; enum State { Stopped, Playing, Paused } }\n');

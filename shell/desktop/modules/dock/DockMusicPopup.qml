@@ -13,9 +13,9 @@ AnimatedPopupWindow {
     id: popup
 
     property Item anchorItem: null
-    property var player: DockMprisService.activePlayer
+    property var player: MediaService.activePlayer
     readonly property url artworkSource: {
-        const revision = DockMprisService.metadataRevision
+        const revision = MediaService.metadataRevision
         return player?.trackArtUrl
             ? player.trackArtUrl : BundledIcons.source("default-cover")
     }
@@ -200,7 +200,7 @@ AnimatedPopupWindow {
                 }
                 Text {
                     width: parent.width
-                    text: DockMprisService.playbackStatus || popup.player?.trackAlbum || popup.player?.identity || "MPRIS Player"
+                    text: MediaService.playbackStatus || popup.player?.trackAlbum || popup.player?.identity || "MPRIS Player"
                     color: ThemeService.foregroundColor
                     opacity: 0.48
                     elide: Text.ElideRight
@@ -349,16 +349,16 @@ AnimatedPopupWindow {
                 iconName: "media-previous"
                 text: I18n.tr("Previous")
                 enabled: popup.player?.canGoPrevious ?? false
-                onClicked: DockMprisService.previous()
+                onClicked: MediaService.previous()
             }
             MusicButton {
                 anchors.centerIn: parent
                 primary: true
                 iconName: popup.player?.isPlaying ? "media-pause" : "media-play"
                 text: popup.player?.isPlaying ? I18n.tr("Pause") : I18n.tr("Play")
-                busy: DockMprisService.loading
+                busy: MediaService.loading
                 enabled: popup.player?.canTogglePlaying ?? false
-                onClicked: DockMprisService.togglePlayPause()
+                onClicked: MediaService.togglePlayPause()
             }
             MusicButton {
                 x: 109.5
@@ -366,7 +366,7 @@ AnimatedPopupWindow {
                 iconName: "media-next"
                 text: I18n.tr("Next")
                 enabled: popup.player?.canGoNext ?? false
-                onClicked: DockMprisService.next()
+                onClicked: MediaService.next()
             }
         }
     }
