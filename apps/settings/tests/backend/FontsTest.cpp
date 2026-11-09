@@ -143,7 +143,8 @@ int main(int argc, char **argv)
     }
     qputenv("QT_QPA_PLATFORM", "offscreen");
     qputenv("QT_QUICK_BACKEND", "software");
-    qunsetenv("DISPLAY");
+    // CTest provides a private Xvfb: KDE's font preview uses Xft even when Qt
+    // itself renders offscreen. Keep DISPLAY for that provider and xrdb export.
     qunsetenv("WAYLAND_DISPLAY");
     QGuiApplication app(argc, argv);
     FontsTest test;

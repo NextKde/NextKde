@@ -26,7 +26,7 @@ jobs:
       image: archlinux:base-devel
     steps:
       - name: Install fixture dependencies
-        run: pacman -Sy --noconfirm --needed git nodejs qt6-base qt6-declarative cmake ninja kconfig kcmutils plasma-workspace kio kservice dbus gtk3 wayland pkgconf flatpak ostree
+        run: pacman -Sy --noconfirm --needed git nodejs qt6-base qt6-declarative cmake ninja kconfig kcmutils plasma-workspace kio kservice dbus gtk3 wayland pkgconf flatpak ostree xorg-server-xvfb xorg-xauth
       - uses: actions/checkout@v7
       - name: Run native target identity and publication regressions
         env:
@@ -156,7 +156,7 @@ jobs:
             qt6-base qt6-declarative qt6-wayland qt6-tools qt6-translations qt6-5compat \
             extra-cmake-modules wayland plasma-workspace libplasma kpackage \
             kwindowsystem kiconthemes kglobalaccel kio kconfig \
-            go dbus nodejs python opencv onnxruntime-cpu \
+            go dbus nodejs python opencv onnxruntime-cpu xorg-server-xvfb xorg-xauth \
             quickshell kwin python-pillow python-dbus python-gobject mesa vulkan-swrast libcap
 
       # Arch gives KWin CAP_SYS_NICE, which Docker's default capability

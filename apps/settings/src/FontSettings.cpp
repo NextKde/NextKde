@@ -42,6 +42,7 @@ FontSettings::FontSettings(QQmlEngine *engine, QObject *parent)
 }
 
 bool FontSettings::needsSave() const { return m_module && m_module->needsSave(); }
+bool FontSettings::previewAvailable() const { return !qEnvironmentVariableIsEmpty("DISPLAY"); }
 QObject *FontSettings::module() const { return m_module; }
 QObject *FontSettings::fonts() const
 {

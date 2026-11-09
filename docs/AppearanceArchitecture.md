@@ -138,6 +138,8 @@ window-title fonts, family/style/size selection and previews, selective adjustme
 of all fonts, anti-aliasing and its excluded size range, sub-pixel rendering,
 hinting and X11-only forced font DPI. KDE owns defaults, immutable settings,
 fontconfig persistence, GTK/Xft exports and application refresh notifications.
+KDE's Xft preview requires XWayland/X11; without DISPLAY, the form explains that
+the rendering preview is unavailable while retaining all applicable settings.
 This is an in-process KCM adapter, not a new command-execution or IPC path.
 The runtime requires the Plasma workspace font KCM; missing/incompatible modules
 show an unavailable state. Pending edits survive page navigation and are saved
@@ -151,7 +153,8 @@ stay per-surface and the emoji role stays `Noto Color Emoji`. Successful reads
 without `font=` clear the previous family; failed reads preserve the last value.
 
 Regression coverage: `kos-settings.fonts` loads the real KDE backend with isolated
-user roots and a private D-Bus session, `kos-settings.page-contracts` covers the
+user roots, a private D-Bus session and Xvfb for KDE's Xft previews (test builds
+require `xvfb-run` and `xauth`), `kos-settings.page-contracts` covers the
 secondary route and asynchronous Shell switch, and `kos-ui.system-font-policy`
 plus `kos-shell.system-font` cover parsing and resolved Shell families. All are
 registered in the CI inventory. Runtime and visual acceptance must run in a VM

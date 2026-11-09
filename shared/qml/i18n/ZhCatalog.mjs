@@ -1108,6 +1108,7 @@ export const catalog = {
     "Sub-pixel rendering": "子像素渲染",
     "Hinting": "微调",
     "Rendering preview": "渲染预览",
+    "Rendering preview requires XWayland or X11.": "渲染预览需要 XWayland 或 X11。",
     "Force font DPI": "强制字体 DPI",
     "Rendering changes may require restarting applications.": "部分渲染设置需要重新启动应用后生效。",
     "Font settings applied.": "字体设置已应用。",

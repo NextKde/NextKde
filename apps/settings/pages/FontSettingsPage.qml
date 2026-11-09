@@ -235,20 +235,26 @@ ColumnLayout {
         Demo.SettingsItem {
             title: I18n.tr("Rendering preview")
             titleColor: page.colors.primaryText
-            visible: page.ready && page.antiAliasing
+            visible: page.ready && page.antiAliasing && page.backend.previewAvailable
             Image {
                 objectName: "font-rendering-preview"
                 // Newer Plasma includes DPR in the provider ID; older releases
                 // ignore that third field. Older providers also need a focused
                 // window, so never request an image while the page is hidden.
-                source: page.ready && page.antiAliasing && page.Window.active
+                source: page.ready && page.antiAliasing && page.backend.previewAvailable && page.Window.active
                     ? "image://preview/" + page.backend.module.subPixelCurrentIndex
                         + "_" + page.backend.module.hintingCurrentIndex + "_" + Screen.devicePixelRatio
                     : ""
-                sourceSize: Qt.size(1, 1)
+                Layout.preferredWidth: implicitWidth / Screen.devicePixelRatio
+                Layout.preferredHeight: implicitHeight / Screen.devicePixelRatio
                 Layout.maximumWidth: parent.width
                 fillMode: Image.PreserveAspectFit
             }
+        }
+        Demo.SettingsItem {
+            visible: page.ready && page.antiAliasing && !page.backend.previewAvailable
+            description: I18n.tr("Rendering preview requires XWayland or X11.")
+            descriptionColor: page.colors.secondaryText
         }
         FormRow {
             visible: Qt.platform.pluginName === "xcb"
