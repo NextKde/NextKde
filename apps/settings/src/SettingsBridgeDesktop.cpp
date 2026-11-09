@@ -15,6 +15,7 @@
 #include <QFile>
 #include <QJsonArray>
 #include <QJsonDocument>
+#include <QStandardPaths>
 
 void SettingsBridge::launchSystemSettings()
 {
