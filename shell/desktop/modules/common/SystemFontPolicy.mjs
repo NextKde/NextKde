@@ -18,8 +18,7 @@
 const GENERAL_GROUP = "[General]";
 
 // Returns the raw `font=` value of kdeglobals' General group, or "" when the
-// group or the key is absent. Group names are matched case-insensitively
-// because KConfig preserves whatever spelling the writer used, and the key is
+// group or the key is absent. KConfig names are case-sensitive. The key is
 // split at the first separator rather than matched as a prefix: `fontSize=`,
 // `menuFont=` and `fixed=` are different settings that a prefix match would
 // happily return.
@@ -29,7 +28,7 @@ export function fontSpecFromConfig(text) {
     for (const rawLine of lines) {
         const line = rawLine.trim();
         if (line.startsWith("[") && line.endsWith("]")) {
-            inGeneral = line.toLowerCase() === GENERAL_GROUP.toLowerCase();
+            inGeneral = line.replace(/\[\$i\]$/, "") === GENERAL_GROUP;
             continue;
         }
         if (!inGeneral)
@@ -37,7 +36,7 @@ export function fontSpecFromConfig(text) {
         const separator = line.indexOf("=");
         if (separator < 0)
             continue;
-        if (line.slice(0, separator).trim().toLowerCase() !== "font")
+        if (line.slice(0, separator).trim().replace(/\[\$i\]$/, "") !== "font")
             continue;
         return line.slice(separator + 1).trim();
     }
@@ -51,8 +50,6 @@ export function parseFontSpec(spec) {
     if (value.length === 0)
         return { family: "", pointSize: 0 };
     const fields = value.split(",");
-    // A specification that starts with a digit is Qt's own serialisation
-    // without a family, which carries no usable name.
     const family = fields.length > 0 ? fields[0].trim() : "";
     const pointSize = fields.length > 1 ? Number(fields[1].trim()) : NaN;
     return {

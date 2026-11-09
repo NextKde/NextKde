@@ -119,24 +119,7 @@ QtObject {
         }
     }
 
-    // 层内重排交给 KWin：同层没有固定层级，激活或新映射都会把桌面组件窗
-    // 抬到条带之上，而 Wayland 客户端无法重排自己。KWin 脚本监听层序并
-    // 把条带抬回，见 kwin-stage-stack.js。脚本随 shell 配置分发，这里只
-    // 负责加载（KWin 重启后需重新加载；isScriptLoaded 防止热重载重复注册）。
-    function _ensureStageStackScript() {
-        const script = StageEffects.shellQuote(Quickshell.shellDir
-            + "/desktop/modules/stage/kwin-stage-stack.js")
-        const dbus = "qdbus6 org.kde.KWin /Scripting org.kde.kwin.Scripting"
-        const cmd = "if [ \"$(" + dbus + ".isScriptLoaded kos-stage-stack)\" != \"true\" ];"
-            + " then " + dbus + ".loadScript " + script + " kos-stage-stack"
-            + " && " + dbus + ".start; fi"
-        const loader = _procFactory.createObject(svc, { command: ["bash", "-c", cmd] })
-        loader.exited.connect(function() { loader.destroy() })
-        loader.running = true
-    }
-
     Component.onCompleted: {
-        _ensureStageStackScript()
         StageConfigService.sideChanged.connect(svc._onSideChanged)
         // 边距改动（设置页「距离屏幕边缘」）同样重投影回退矩形：TargetX
         // 停在旧值会让 targets 未命中时的回落动画横向飞错位

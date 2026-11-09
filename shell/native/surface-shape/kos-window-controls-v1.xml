@@ -1,0 +1,64 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<protocol name="kos_window_controls_v1">
+  <copyright>SPDX-License-Identifier: MIT</copyright>
+  <interface name="kos_window_controls_manager_v1" version="2">
+    <description summary="cooperative, surface-local window controls">
+      A client continues to draw its own controls until configure grants takeover.
+      Only one controls object per surface is supported. Declaration also opts
+      the surface out of legacy overlay placement, including while inactive.
+    </description>
+    <request name="get_controls">
+      <arg name="id" type="new_id" interface="kos_window_controls_v1"/>
+      <arg name="surface" type="object" interface="wl_surface"/>
+    </request>
+    <request name="destroy" type="destructor"/>
+  </interface>
+  <interface name="kos_window_controls_v1" version="2">
+    <request name="set_region">
+      <description summary="pending layout in surface logical coordinates">
+        Position, size, diameter and gap apply on the next wl_surface.commit.
+        Order is maximize, minimize, close from left to right. The compositor
+        draws no background. enabled=0 retains the declaration but requests
+        self drawing. Out-of-bounds or unsupported layouts are not accepted.
+      </description>
+      <arg name="x" type="fixed"/><arg name="y" type="fixed"/>
+      <arg name="width" type="fixed"/><arg name="height" type="fixed"/>
+      <arg name="diameter" type="fixed"/><arg name="gap" type="fixed"/>
+      <arg name="enabled" type="uint"/>
+    </request>
+    <request name="ack_configure">
+      <description summary="synchronize drawing ownership with client content">
+        Acknowledge the latest configure after switching client drawing. Ownership
+        changes on the next wl_surface.commit. A stale serial is ignored.
+      </description>
+      <arg name="serial" type="uint"/>
+    </request>
+    <request name="destroy" type="destructor"/>
+    <event name="configure">
+      <description summary="takeover and shared icon policy">
+        active=1 asks the client to hide its controls; active=0 asks it to draw
+        them. glyph_mode is 0 for always, 1 for hover, including during fallback.
+        The client must ack this serial and commit a frame even when active has
+        not changed. Loss of the manager requires immediate client fallback.
+      </description>
+      <arg name="serial" type="uint"/><arg name="active" type="uint"/>
+      <arg name="glyph_mode" type="uint"/>
+    </event>
+    <request name="set_buttons" since="2">
+      <description summary="replace the complete button list atomically">
+        Each entry is five native-endian 32-bit words: action (0=maximize/restore,
+        1=minimize, 2=close), then signed 24.8 fixed x, y, width, height in surface
+        logical coordinates. Rectangles describe visible circular buttons: width
+        and height must match, between 6 and 40. At most one of each action, no
+        overlaps. Array order does not determine position. Empty lists draw and
+        intercept nothing. A list replaces the entire previous layout on surface
+        commit; omitted buttons disappear. Invalid lists request client fallback.
+        enabled=0 retains declaration but requests client drawing. Version 1
+        set_region remains supported; new clients use set_buttons exclusively.
+      </description>
+      <arg name="buttons" type="array"/>
+      <arg name="enabled" type="uint"/>
+    </request>
+
+  </interface>
+</protocol>

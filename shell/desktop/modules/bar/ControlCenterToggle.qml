@@ -40,15 +40,9 @@ Item {
         width: root.iconSize
         height: root.iconSize
         name: "control-center"
-        color: IconAppearanceService.mode === "tint"
-            ? IconAppearanceService.styledSymbolicColor()
-            : ThemeService.barInk
-        opacity: IconAppearanceService.mode !== "color"
-            ? IconAppearanceService.opacity * (root.panelOpen ? 1.0 : 0.88)
-            : (root.panelOpen ? 1.0 : 0.88)
+        color: ThemeService.barInk
         scale: hoverArea.pressed ? 0.90 : hoverArea.containsMouse ? 1.06 : 1
         Behavior on scale { NumberAnimation { duration: AppearanceTokens.motion.fastDuration; easing.type: Easing.OutCubic } }
-        Behavior on opacity { NumberAnimation { duration: AppearanceTokens.motion.fastDuration } }
     }
     MouseArea {
         id: hoverArea

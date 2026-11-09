@@ -13,6 +13,7 @@ ShellRoot {
     property real savedProgress: 0
     property int stableGlassChecks: 0
     property int launcherVariant: 0
+    property real launcherClosedAt: 0
     property var launcherFrame: null
     property var launcherLayout: null
     property real stableLayoutWidth: 0
@@ -59,7 +60,7 @@ ShellRoot {
     }
     ContextMenu { id: menu; anchorItem: anchorItem }
     DockInfoPopup { id: info; anchorItem: anchorItem; page: 2 }
-    AppLauncherWindow { id: launcher; outputAvailable: false }
+    AppLauncherWindow { id: launcher; outputAvailable: true }
 
     QtObject {
         id: notificationGroups
@@ -114,13 +115,23 @@ ShellRoot {
         function onPageProgressChanged() { Qt.callLater(test.checkPersistentGlass) }
     }
 
+    // Shipping cards are reparented into the scrolling panel canvas. Walk
+    // that actual hierarchy rather than assuming direct contentItem children.
+    function visibleCards(item) {
+        let cards = []
+        for (const child of item.children || []) {
+            if (child.isControlCenterCard && child.visible) cards.push(child)
+            else cards = cards.concat(visibleCards(child))
+        }
+        return cards
+    }
+
     function checkPersistentGlass() {
         if (!center.isOpen || center.revealProgress !== 1 || center.pageProgress === 1
                 || center.displayedSubmenu === "confirm")
             return
         try {
-            const cards = center.contentItem.children.filter(child =>
-                child.isControlCenterCard && child.visible)
+            const cards = visibleCards(center.contentItem)
             check(cards.length > 0, "a page transition always retains a glass surface")
             check(center.BackgroundEffect.blurRegion !== null,
                 "a page transition never clears the window blur region")
@@ -128,8 +139,9 @@ ShellRoot {
                 // Crossfade: the outgoing page's glass and content fade
                 // together while the incoming page fades in -- a card never
                 // leaves a bare glass shell hanging over the next page.
-                check(Math.abs(card.opacity - card.contentOpacity) < 0.001,
-                    "glass and content fade together during navigation")
+                check(card.contentOpacity === 1
+                    && Math.abs(card.glassOpacity - card.opacity * center.revealProgress) < 0.001,
+                    "the card fades content once and drives glass with the same page opacity")
                 check(card.opacity >= 0 && card.opacity <= 1,
                     "a transitioning card stays inside the fade range")
             }
@@ -355,6 +367,12 @@ ShellRoot {
                     interval = 400
                     break
                 case 14:
+                    // Exercise a populated, scrolling catalog without depending on
+                    // the applications installed in the VM.
+                    launcher.applications = Array.from({length: 80}, (_, i) => ({
+                        id: "motion-" + i + ".desktop", name: "Motion " + i, icon: ""
+                    }))
+                    launcher.applicationsDirty = false
                     check(menu.displayedPage.items[0].label === "Child", "menu page animation settles")
                     menu.hide()
                     menu.show()
@@ -424,11 +442,19 @@ ShellRoot {
                     check(launcherFrame.width === stableLayoutWidth
                         && launcherFrame.height === stableLayoutHeight, "reopening restores full panel size")
                     launcher.open = false
+                    launcherClosedAt = Date.now()
                     interval = 350
                     break
                 case 23:
+                    // VM render-thread jobs can start later than GUI timers.
+                    // Keep a finite deadline while checking the actual lifetime.
+                    if (launcher.panelVisible && Date.now() - launcherClosedAt < 2000) {
+                        test.stage = 23
+                        interval = 50
+                        break
+                    }
                     check(!launcherFrame.visible && launcher.BackgroundEffect.blurRegion === null,
-                        "panel and blur retire after the closing tile animations finish")
+                        "panel and blur retire after the closing tile animations finish: " + launcher.inspectGlass())
                     launcherVariant++
                     if (launcherVariant < launcherVariants.length) {
                         test.stage = 18

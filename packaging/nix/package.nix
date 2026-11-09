@@ -23,7 +23,16 @@ let
   kwin-kos-bridge = pkgs.callPackage ./kwin-kos-bridge.nix { inherit src; };
   kosctl = pkgs.callPackage ./kosctl.nix { inherit src; };
   kwin-kos-decoration = pkgs.callPackage ./kwin-kos-decoration.nix { inherit src; };
-  kos-weather = if buildWeather then pkgs.callPackage ./kos-weather.nix { inherit src; } else null;
+  # Independent application archive: this is a flat download hash, not a
+  # fetchFromGitHub unpacked-source hash. Never reuse core src as app source.
+  kos-weather = if buildWeather then pkgs.callPackage ./kos-weather.nix {
+    version = "0.2.0";
+    src = pkgs.fetchurl {
+      name = "kos-apps-76068d787af68a1d5f759146787c00e8a71a8d1c.tar.gz";
+      url = "https://codeload.github.com/NextKde/kos-apps/tar.gz/76068d787af68a1d5f759146787c00e8a71a8d1c";
+      hash = "sha256-viGWmVEV0+7xUeD+erUn+LEH8TYxlFrdNWV/Su+WQGE=";
+    };
+  } else null;
 
   qs_bin = if quickshell != null then "${quickshell}/bin/quickshell" else "/run/current-system/sw/bin/quickshell";
 
@@ -60,7 +69,7 @@ let
 in
 stdenv.mkDerivation {
   pname = "kos-desktop";
-  version = "unstable";
+  version = lib.removeSuffix "\n" (builtins.readFile "${src}/VERSION");
   inherit src;
 
   dontBuild = true;
@@ -76,11 +85,14 @@ stdenv.mkDerivation {
 
     mkdir -p $out/bin
     ln -s ${kos-settings}/bin/kos-settings $out/bin/kos-settings
+    ln -s ${kos-settings}/bin/kos-apps $out/bin/kos-apps
+    mkdir -p $out/lib/gtk-3.0/modules
+    ln -s ${kos-settings}/lib/gtk-3.0/modules/libkos-gtk-window-controls.so $out/lib/gtk-3.0/modules/libkos-gtk-window-controls.so
 
     # --- Weather app (optional) ---
-    if [ -n "${if buildWeather then "1" else ""}" ]; then
+    ${lib.optionalString buildWeather ''
       ln -s ${kos-weather}/bin/kos-weather $out/bin/kos-weather
-    fi
+    ''}
 
     # --- Shared QML / Shell ---
     mkdir -p $out/share/kos-desktop
@@ -121,6 +133,11 @@ stdenv.mkDerivation {
     substitute packaging/desktop/org.kos.Platform.desktop.in \
       $out/share/applications/org.kos.Platform.desktop \
       --replace-fail '@KOS_PLATFORM_EXEC@' "${kos-platform}/libexec/kos-platform"
+    # KWin compares Exec's canonical path to the running executable.
+    kos_shell_exec=$(readlink -f ${qs_bin})
+    substitute packaging/desktop/org.kos.Shell.desktop.in \
+      $out/share/applications/org.kos.Shell.desktop \
+      --replace-fail '@KOS_SHELL_EXEC@' "$kos_shell_exec"
 
     # --- Systemd user services ---
     mkdir -p $out/lib/systemd/user
@@ -130,6 +147,16 @@ stdenv.mkDerivation {
       $out/lib/systemd/user/
     cp ${patched-shell-service}/lib/systemd/user/kos-shell.service \
       $out/lib/systemd/user/
+
+    mkdir -p $out/share/kos
+    cat > $out/share/kos/release.json <<'RELEASE_JSON'
+    ${builtins.toJSON {
+      version = lib.removeSuffix "\n" (builtins.readFile "${src}/VERSION");
+      revision = if builtins.isAttrs src then src.rev or (src.dirtyRev or "unknown") else "unknown";
+      dirty = if !builtins.isAttrs src then null else if src ? rev then false else if src ? dirtyRev then true else null;
+      tag = "";
+    }}
+    RELEASE_JSON
 
     runHook postInstall
   '';

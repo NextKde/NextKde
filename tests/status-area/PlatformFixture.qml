@@ -13,13 +13,29 @@ QtObject {
     signal eventReceived(string eventName, var payload)
     signal transportChanged(bool connected)
     property int applicationRequests: 0
+    property int batteryRequests: 0
     property string powerMode: "balanced"
+    // Deliberately exceed a panel-test tick: profile assertions must wait for
+    // write/readback completion instead of depending on one fast event loop.
+    property Timer profileReply: Timer {
+        interval: 220
+        property var replies: []
+        onTriggered: {
+            const pending = replies
+            replies = []
+            for (const reply of pending) reply()
+        }
+    }
     function request(operation, payload, callback) {
         let result = {available:false}
         switch (operation) {
         case "network.applications": applicationRequests++; result={sockets:[{id:"1",name:"browser",pid:1,rxBytes:100*applicationRequests,txBytes:20*applicationRequests}]}; break
         case "power.profiles": result={profiles:["power-saver","balanced","performance"],activeProfile:powerMode,degraded:""}; break
         case "power.profile.set": powerMode=payload.profile; result={}; break
+        case "power.battery": batteryRequests++; result={available:true,complete:true,
+            batteries:[{name:"BAT0",chargeFullMah:4500,chargeDesignMah:5000,
+                voltage:12,currentMa:0,powerWatts:0,cycles:193,temperature:32}],
+            adapters:[{name:"AC"},{name:"USB",powerWatts:12.29,ratedPowerWatts:65,currentMa:614.5,voltage:20}]}; break
         case "state.read": result={exists:false,data:""}; break
         case "state.write": result={}; break
         case "audio.get": result={available:true,percent:45,muted:false}; break
@@ -34,7 +50,13 @@ QtObject {
         case "keepawake.get": result={available:true,enabled:false}; break
         case "kwin.subscribe": case "kwin.command": result={}; break
         }
-        if (callback) Qt.callLater(function() { callback({ok:true,result:result}) })
+        if (callback) {
+            const reply = function() { callback({ok:true,result:result}) }
+            if (operation === "power.profiles" || operation === "power.profile.set") {
+                profileReply.replies = profileReply.replies.concat([reply])
+                profileReply.start()
+            } else Qt.callLater(reply)
+        }
         return "fixture"
     }
 }

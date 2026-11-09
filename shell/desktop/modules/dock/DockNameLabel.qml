@@ -60,7 +60,7 @@ Rectangle {
     }
     onPointerPositionChanged: updateGeometry()
     onWidthChanged: updateGeometry()
-    Text {
+    ShellText {
         id: labelText
         anchors.centerIn: parent
         width: Math.min(implicitWidth, label.width - 16)

@@ -1,6 +1,7 @@
 cmake_minimum_required(VERSION 3.21)
 
 project(kos-bridge LANGUAGES CXX)
+enable_language(C)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -22,8 +23,15 @@ find_package(KDecoration3 REQUIRED)
 # To read which decoration KWin is configured to use out of kwinrc. Nothing else
 # in the plugin uses KConfig.
 find_package(KF6 REQUIRED COMPONENTS Config)
+find_package(WaylandScanner REQUIRED)
+find_package(Wayland REQUIRED COMPONENTS Server)
+ecm_add_wayland_server_protocol(controls_protocol
+    PROTOCOL "${CMAKE_CURRENT_SOURCE_DIR}/../../shell/native/surface-shape/kos-window-controls-v1.xml"
+    BASENAME kos-window-controls-v1)
 
 add_library(kos_bridge MODULE
+    ${controls_protocol}
+    windowbuttons/cooperativecontrols.cpp
     bridge.cpp
     main.cpp
     windowbuttons/adjustsession.cpp
@@ -45,12 +53,15 @@ add_library(kos_bridge MODULE
 )
 
 target_link_libraries(kos_bridge PRIVATE
+    Wayland::Server
+    xcb
     Qt6::Core
     Qt6::DBus
     KF6::ConfigCore
     KWin::kwin
     KDecoration3::KDecoration
 )
+target_include_directories(kos_bridge PRIVATE ${CMAKE_CURRENT_BINARY_DIR})
 
 # Detect signatures from the installed headers, including distro backports.
 get_target_property(_kos_kwin_include_dirs KWin::kwin INTERFACE_INCLUDE_DIRECTORIES)
@@ -90,12 +101,16 @@ if(KOS_BRIDGE_BUILD_PREVIEW)
         preview/glyph_preview.cpp
         windowbuttons/buttonglyph.cpp
         windowbuttons/panelgeometry.cpp
+        windowappearance/contour.cpp
     )
     # Qt6::Gui and nothing else: no KWin, no KF6, no DBus. If this target ever
     # needs one of those, the light drawing has picked up a dependency it should
     # not have and the preview has stopped being able to answer the question it
     # exists to answer.
     target_link_libraries(glyph_preview PRIVATE Qt6::Gui)
+    add_executable(cooperative_light_preview
+        preview/cooperative_light_preview.cpp windowbuttons/buttonglyph.cpp)
+    target_link_libraries(cooperative_light_preview PRIVATE Qt6::Gui)
 endif()
 
 # Offline harness for the title-bar scan. The scan is pure geometry over a
@@ -117,6 +132,7 @@ if(KOS_BRIDGE_BUILD_TESTS)
     add_executable(rules_test
         tests/rules_test.cpp
         windowbuttons/panelgeometry.cpp
+        windowappearance/contour.cpp
         windowbuttons/tilemenu.cpp
         windowbuttons/windowrules.cpp
         windowbuttons/buttonconfig.cpp

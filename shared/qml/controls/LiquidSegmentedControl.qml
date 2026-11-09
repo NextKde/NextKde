@@ -17,6 +17,7 @@ Item {
     property color selectionColor: AppTheme.cardHover
     property color textColor: AppTheme.text
     property color mutedTextColor: AppTheme.mutedText
+    property color focusColor: AppTheme.accent
     // A tonal host draws the Material 3 segmented button: a full-radius outline
     // container with a filled, shadowless selection. The liquid lens below
     // (shadow, gradient, hairline rim) is the glass finish this form must not
@@ -84,7 +85,7 @@ Item {
 
     Rectangle {
         anchors.fill: parent
-        radius: root.materialForm ? height / 2 : height * 0.38
+        radius: root.materialForm ? height / 2 : height * 0.48
         color: root.backgroundColor
         border.width: 1
         border.color: AppTheme.border
@@ -114,11 +115,11 @@ Item {
 
     Rectangle {
         id: lens
-        x: 2 + root._visualIndex * root.segmentWidth
+        x: 4 + root._visualIndex * root.segmentWidth
         y: 2
-        width: root.segmentWidth
+        width: root.segmentWidth - 4
         height: root.height - 4
-        radius: root.materialForm ? height / 2 : height * 0.42
+        radius: root.materialForm ? height / 2 : height * 0.48
         color: root.selectionColor
         border.width: root.materialForm ? 0 : 1
         border.color: Qt.rgba(1, 1, 1, 0.16)
@@ -218,7 +219,7 @@ Item {
                 radius: Math.max(3, height * 0.34)
                 color: "transparent"
                 border.width: 2
-                border.color: AppTheme.accent
+                border.color: root.focusColor
                 visible: segmentDelegate.activeFocus
             }
         }

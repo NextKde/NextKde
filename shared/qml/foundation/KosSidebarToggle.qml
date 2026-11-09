@@ -4,6 +4,8 @@ import QtQuick.Controls
 KosToolButton {
     id: root
     property var targetWindow: null
+    property color glyphColor: AppTheme.text
+    property color glyphPaneColor: root.targetWindow && root.targetWindow.sidebarExpanded ? AppTheme.accent : AppTheme.mutedText
     objectName: "sidebarToggle"
     implicitWidth: AppTheme.controlHeight
     implicitHeight: AppTheme.controlHeight
@@ -12,15 +14,8 @@ KosToolButton {
     ToolTip.text: Accessible.name
     ToolTip.delay: 500
     onClicked: if (targetWindow) targetWindow.sidebarExpanded = !targetWindow.sidebarExpanded
-    contentItem: Item {
-        Rectangle {
-            anchors.centerIn: parent
-            width: 18; height: 15; radius: 4
-            color: "transparent"; border.width: 1.4; border.color: AppTheme.text
-            Rectangle {
-                x: 4; y: 3; width: 3; height: 9; radius: 1.5
-                color: root.targetWindow && root.targetWindow.sidebarExpanded ? AppTheme.accent : AppTheme.mutedText
-            }
-        }
+    contentItem: KosSidebarGlyph {
+        glyphColor: root.glyphColor
+        paneColor: root.glyphPaneColor
     }
 }

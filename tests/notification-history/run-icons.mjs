@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { copyFileSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { copyFileSync, mkdirSync, readFileSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { spawnSync } from "node:child_process";
@@ -11,7 +11,8 @@ try {
     stageIcons(directory);
     copyFileSync(new URL(process.argv.includes("--stacks") ? "mac-stacks.qml" : "icons.qml", import.meta.url), join(directory, "shell.qml"));
     for (const name of ["NotificationHistoryGroup", "NotificationHistoryEntry"])
-        copyFileSync(new URL(`../../shell/desktop/modules/bar/${name}.qml`, import.meta.url), join(directory, `${name}.qml`));
+        writeFileSync(join(directory, `${name}.qml`), readFileSync(new URL(`../../shell/desktop/modules/bar/${name}.qml`, import.meta.url), "utf8")
+            .replaceAll('"../../../shared/qml/i18n"', '"./shared/qml/i18n"'));
     writeFileSync(join(directory, "qmldir"), "NotificationSourceIcon 1.0 NotificationSourceIcon.qml\nNotificationHistoryGroup 1.0 NotificationHistoryGroup.qml\nNotificationHistoryEntry 1.0 NotificationHistoryEntry.qml\n");
     const data = join(directory, "data");
     mkdirSync(join(data, "applications"), {recursive: true});

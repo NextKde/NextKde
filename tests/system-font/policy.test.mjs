@@ -53,10 +53,10 @@ assert.equal(fontSpecFromConfig("[Icons]\nfont=Wrong\n"), "",
     "[Icons] font= is a theme key, not the interface font");
 assert.equal(fontSpecFromConfig("[KDE]\nfont=Wrong\n"), "",
     "only [General] owns the interface font");
-assert.equal(fontSpecFromConfig("[general]\nfont=Inter,10\n"), "Inter,10",
-    "KConfig group spelling is case-insensitive");
-assert.equal(fontSpecFromConfig("[General]\nFont=Inter,10\n"), "Inter,10",
-    "KConfig key spelling is case-insensitive");
+assert.equal(fontSpecFromConfig("[general]\nfont=Inter,10\n"), "",
+    "KConfig group spelling is case-sensitive");
+assert.equal(fontSpecFromConfig("[General]\nFont=Inter,10\n"), "",
+    "KConfig key spelling is case-sensitive");
 assert.equal(fontSpecFromConfig("[General]\nmenuFont=Other,10\n"), "",
     "the menu font is a different setting");
 assert.equal(fontSpecFromConfig("[General]\nfont =Inter,10\n"), "Inter,10",
@@ -75,3 +75,5 @@ assert.equal(resolveFamily("Inter,10", "Sans Serif"), "Inter",
     "the point size is not part of the family");
 
 console.log("system font policy: kdeglobals font= parsing and family resolution passed");
+
+assert.equal(fontSpecFromConfig("[General][$i]\nfont[$i]=Inter,10\n"), "Inter,10");

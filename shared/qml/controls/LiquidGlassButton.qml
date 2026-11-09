@@ -1,9 +1,19 @@
 import QtQuick
+import QtQuick.Effects
+import "../foundation" as Foundation
 
 // iOS-style liquid glass button with pure QML rendering.
 // No external texture needed - uses mathematical gradients to simulate refraction.
 Item {
     id: root
+    // §4.2 焦点：外环 2px accent，偏移 2；§5 Focus「圆角 +2」。
+    activeFocusOnTab: true
+    Keys.onPressed: (event) => {
+        if (event.key === Qt.Key_Space || event.key === Qt.Key_Return || event.key === Qt.Key_Enter) {
+            if (root.enabled) root.triggered()
+            event.accepted = true
+        }
+    }
 
     // Public API
     property string symbol: ""
@@ -17,15 +27,19 @@ Item {
     property bool _pressed: false
     property bool _hovered: false
 
-    // Size
-    implicitWidth: primary ? 52 : 40
+    // Size（§4.2 Icon-only：视觉 28/34，「同组同尺寸」——主次只靠变体区分不靠尺寸；
+    // 取 lg=34，§3 control.lg。原 demo 52/40 不在 24/28/34/44 档且按变体分尺寸。）
+    implicitWidth: 34
     implicitHeight: implicitWidth
 
     // Expansion animation (0 = rest, 1 = fully expanded glass)
     property real _expansion: _pressed ? 1.0 : (_hovered ? 0.3 : 0.0)
     Behavior on _expansion {
         NumberAnimation {
-            duration: _pressed ? 200 : 350
+            // §3 motion.duration：按下 instant=100 / 其余过渡 fast=150（原 demo 200/350
+            // 均不在 §3 五档内；§4.1「过渡 150ms；按下 100ms」）
+            // §2.12 减动态：reduceMotion 时一步到位。
+            duration: Foundation.AppTheme.reduceMotion ? 0 : (_pressed ? 100 : 150)
             easing.type: _pressed ? Easing.OutBack : Easing.OutQuint
             easing.overshoot: _pressed ? 1.4 : 1.0
         }
@@ -36,17 +50,26 @@ Item {
     SequentialAnimation on _stretch {
         id: wobbleAnim
         running: false
-        NumberAnimation { to: 0.15; duration: 80; easing.type: Easing.OutQuad }
-        NumberAnimation { to: -0.06; duration: 120; easing.type: Easing.InOutQuad }
+        // §2.11 / §3 motion.duration：只允许 100/150/220/320/400 五档
+        // （原 demo 80/120/100/80 中 80/120 不在档）。
+        NumberAnimation { to: 0.15; duration: 100; easing.type: Easing.OutQuad }
+        NumberAnimation { to: -0.06; duration: 150; easing.type: Easing.InOutQuad }
         NumberAnimation { to: 0.03; duration: 100; easing.type: Easing.InOutQuad }
-        NumberAnimation { to: 0.0; duration: 80; easing.type: Easing.OutQuad }
+        NumberAnimation { to: 0.0; duration: 100; easing.type: Easing.OutQuad }
     }
 
-    opacity: enabled ? 1.0 : 0.5
-    scale: _pressed ? 0.92 : (_hovered ? 1.05 : 1.0)
-    Behavior on scale { NumberAnimation { duration: 150; easing.type: Easing.OutCubic } }
+    // §5 Disabled：整体 α .38（原 demo 0.5）；§4.2「禁用：α .38，无高光/阴影/hover」
+    opacity: enabled ? 1.0 : 0.38
+    // §5 Pressed：scale .96（§3 motion.pressScale）；Hover 只改背景，不加缩放
+    // （原 demo 按压 .92 / hover 1.05）
+    scale: _pressed ? 0.96 : 1.0
+    Behavior on scale {
+        // §2.12 减动态：reduceMotion 时不走过渡。
+        NumberAnimation { duration: Foundation.AppTheme.reduceMotion ? 0 : (_pressed ? 100 : 150); easing.type: Easing.OutCubic }
+    }
 
-    // Drop shadow (fades out as glass expands)
+    // Drop shadow — §3 elevation.E1 `0 2 8 rgba(0,0,0,0.14)`（原 demo 无 blur 的
+    // 0.25 实色椭圆且随 hover 淡出；§4.1「hover 只改背景」→ 阴影恒 E1、不随展开变化）。
     Rectangle {
         id: shadow
         anchors.centerIn: parent
@@ -54,10 +77,13 @@ Item {
         width: parent.width * 0.9
         height: parent.height * 0.9
         radius: width / 2
-        color: Qt.rgba(0, 0, 0, 0.25)
-        opacity: (1 - root._expansion) * 0.6
-        visible: opacity > 0.01
-        Behavior on opacity { NumberAnimation { duration: 200 } }
+        color: Qt.rgba(0, 0, 0, 0.14)
+        layer.enabled: true
+        layer.effect: MultiEffect {
+            blurEnabled: true
+            blurMax: 8
+            blur: 1.0
+        }
     }
 
     // Glass body - multi-layer gradients simulate refraction
@@ -162,14 +188,19 @@ Item {
         style: (root.iconColor === "#ffffff" || root.iconColor === "white" || String(root.iconColor).toLowerCase() === "#ffffffff")
             ? Text.Outline : Text.Normal
         styleColor: Qt.rgba(0, 0, 0, 0.45)
-        font.pixelSize: root.primary ? 16 : 12
+        // §4.2 lg 档「图标 18」+ §4.3「按钮内 14–20」；原 demo 16/12（12 越下限）
+        font.pixelSize: 18
         font.weight: Font.Medium
     }
 
     // Interaction
     MouseArea {
         id: mouseArea
-        anchors.fill: parent
+        // §3 control.hit.touch=44 / §4.2「图标按钮：视觉 28/34，热区 ≥ 28（指针）/ 44（触控）」：
+        // 视觉 34 不变，命中区向外扩到 ≥44×44（原 demo 与视觉同尺寸 34×34）。
+        anchors.centerIn: parent
+        width: Math.max(parent.width, 44)
+        height: Math.max(parent.height, 44)
         enabled: root.enabled
         hoverEnabled: true
         cursorShape: enabled ? Qt.PointingHandCursor : Qt.ArrowCursor
@@ -179,7 +210,9 @@ Item {
 
         onPressed: {
             root._pressed = true
-            wobbleAnim.restart()
+            root.forceActiveFocus()
+            // §2.12 减动态：reduceMotion 时不播放挤压回弹。
+            if (!Foundation.AppTheme.reduceMotion) wobbleAnim.restart()
         }
 
         onReleased: {
@@ -191,5 +224,20 @@ Item {
         onCanceled: {
             root._pressed = false
         }
+    }
+
+    // §4.2 焦点外环：2px accent、距按钮外缘偏移 2（rect 外扩 4 + 2px 边 → 内缘留 2px）；
+    // §5「圆角 +2」在圆形控件上取同心圆（环 rect 半径 = 宽/2）；§3 color.focusFallback 取色。
+    // 失焦或禁用即移除。
+    Rectangle {
+        id: focusRing
+        anchors.fill: parent
+        anchors.margins: -4
+        radius: width / 2
+        color: "transparent"
+        border.width: 2
+        border.color: LiquidStyle.focusColor(root.accentColor)
+        visible: root.activeFocus && root.enabled
+        z: 10
     }
 }

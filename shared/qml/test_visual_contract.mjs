@@ -92,12 +92,14 @@ for (const mode of ["dark", "light"]) {
         `${mode} dock indicator reaches AA contrast against dock background`);
 }
 const glassTextSource = read("../../shell/desktop/modules/common/GlassText.qml");
-// GlassText keeps the root type Text so every Text property passes through
+// GlassText inherits Text through ShellText so every Text property passes through
 // natively. Readability is now a two-way contract driven by the appearance
 // token: dark appearance keeps white type over a soft area backdrop; light
 // appearance uses clean dark type. Neither branch adds a glyph outline.
-assert.match(glassTextSource, /^Text \{/m,
-    "glass text stays a Text so callers keep native Text properties");
+assert.match(glassTextSource, /^ShellText \{/m,
+    "glass text shares Shell text rendering while retaining Text properties");
+assert.match(read("../../shell/desktop/modules/common/ShellText.qml"), /^Text \{/m,
+    "shared Shell text retains Text layout and elision properties");
 assert.match(glassTextSource,
     /color:[\s\S]*AppearanceTokens\.isDarkTheme[\s\S]*"#ffffff"[\s\S]*"#000000"/,
     "glass text picks black-or-white ink from the appearance token");
@@ -148,40 +150,15 @@ assert.match(pageCacheSource, /asynchronous:[\s\S]*index\s*!==\s*root\.currentIn
     "inactive page construction cannot block the selected page");
 
 const collapsibleSidebar = read("./foundation/KosSidebar.qml");
-assert.match(collapsibleSidebar, /color:\s*AppTheme\.sidebarSurface/,
-    "collapsible sidebars retain the adaptive semantic material");
+assert.match(collapsibleSidebar, /property color surfaceColor:\s*AppTheme\.sidebarSurface/,
+    "collapsible sidebars default to the adaptive semantic material");
+assert.match(collapsibleSidebar, /color:\s*root\.surfaceColor/,
+    "collapsible sidebars render the selected semantic material");
 assert.doesNotMatch(collapsibleSidebar, /withAlpha\(AppTheme\.sidebar/,
     "collapsible sidebars do not expose desktop content");
 assert.match(collapsibleSidebar, /enabled:\s*expanded/,
     "collapsed navigation cannot take keyboard focus");
-for (const app of ["calendar", "todo", "weather", "music"]) {
-    const source = read(`../../apps/${app}/qml/Main.qml`);
-    if (app === "music") {
-        assert.match(source, /color:\s*AppTheme\.sidebarSurface/,
-            `${app} has an adaptive semantic sidebar material`);
-    } else {
-        assert.match(source, /KosSidebar\s*\{[\s\S]*expanded:\s*root\.sidebarExpanded/,
-            `${app} uses the adaptive collapsible sidebar`);
-        assert.match(source, /KosSidebarToggle\s*\{[\s\S]*targetWindow:\s*root/,
-            `${app} provides a way to restore collapsed navigation`);
-        assert.match(source, /KosWindowControls\s*\{\s*targetWindow:\s*root/,
-            `${app} exposes its frameless window controls`);
-    }
-    assert.doesNotMatch(source, /withAlpha\(AppTheme\.sidebar/,
-        `${app} sidebar does not expose desktop content`);
-    assert.doesNotMatch(source, /\b(?:Button|ToolButton|RoundButton)\s*\{/,
-        `${app} uses the shared rounded button controls`);
-    assert.match(source, /KosSettingsDialog\s*\{/,
-        `${app} exposes the shared settings panel`);
-    assert.match(source, /Accessible\.name:\s*qsTr\(".*settings"\)/,
-        `${app} settings entry has an accessible label`);
-    assert.match(source, /function handleActivation\(activationArgs, workingDirectory\)/,
-        `${app} accepts normalized reuse context from the shared runner`);
-    assert.doesNotMatch(source,
-        /function [A-Za-z0-9_]+\([^)]*\barguments\b/,
-        `${app} does not shadow JavaScript's implicit arguments object`);
-}
-
+// Application integration assertions moved with their independent repositories.
 const settingsDialog = read("./foundation/KosSettingsDialog.qml");
 for (const option of ["appearanceMode", "materialMode", "materialOpacity",
                       "accentName", "reduceTransparency", "reduceMotion"])
@@ -200,45 +177,26 @@ assert.match(settingsDialog, /Accessible\.RadioButton[\s\S]*Accessible\.checked/
 // style. Under Material the liquid-only controls are absent, and each card's
 // height has to shrink by exactly the rows it drops -- a height that ignores
 // the hidden rows leaves a blank band where they used to be.
+// The settings app is built from the shared compact form: Demo.SettingsGroup
+// and Demo.SettingsItem size themselves from their rows, so hiding a row
+// shrinks the card. The tripwire is therefore that the glass-follows row stays
+// a conditional item inside such a group, and that no page reintroduces a
+// hardcoded Material-conditional card height -- the old way to leave a blank
+// band where the hidden rows used to be.
 const settingsApp = read("../../apps/settings/main.qml");
 const displaySettingsPage = read("../../apps/settings/pages/DisplaySettingsPage.qml");
 const themeSettingsPage = read("../../apps/settings/pages/ThemeSettingsPage.qml");
 assert.match(displaySettingsPage,
-    /implicitHeight:\s*displayPage\.isMaterialDesign\s*\?\s*54\s*:\s*109/,
-    "the appearance card drops the glass-follows-mode row under Material");
-assert.match(displaySettingsPage,
-    /implicitHeight:\s*displayPage\.isMaterialDesign\s*\?\s*48\s*:\s*145/,
-    "the glass card keeps only the blur row under Material");
-// Both glass-follows-mode rows (the row and its separator) must hide together:
-// hiding only the row leaves a stray rule under the appearance-mode switch.
-const glassFollowsLabel = displaySettingsPage.indexOf(
-    'text: I18n.tr("Liquid glass follows the appearance mode")');
-assert.ok(glassFollowsLabel > 0, "the translated glass-follows-mode row exists");
-const appearanceCardStart = displaySettingsPage.indexOf(
-    "implicitHeight: displayPage.isMaterialDesign ? 54 : 109");
-assert.ok(appearanceCardStart > 0 && appearanceCardStart < glassFollowsLabel,
-    "the glass-follows-mode row belongs to the appearance card");
-const glassFollowsSlice = displaySettingsPage.slice(appearanceCardStart, glassFollowsLabel);
-assert.ok((glassFollowsSlice.match(/visible:\s*!displayPage\.isMaterialDesign/g)
-    || []).length >= 2,
-    "the glass-follows-mode row hides with its separator under Material");
+    /Demo\.SettingsGroup\s*\{[\s\S]{0,3000}?Demo\.SettingsItem\s*\{[\s\S]{0,400}?visible:\s*!displayPage\.isMaterialDesign/,
+    "the glass-follows-mode row is a conditional item in a content-sized group");
 assert.match(displaySettingsPage, /function saveGlassFollowsAppearanceMode/,
     "the glass-follows-mode preference stays wired for non-Material styles");
-// The card that hosts the gallery and those controls must measure itself from
-// its contents. A literal height sized for the macOS layout leaves a dead band
-// under Material, where the embedded page is ~150px shorter.
-//
-// The gap between the gallery term and the Material term is left generous on
-// purpose: the sum legitimately grows as the card gains conditionally-visible
-// rows (the Material colour-source control is one), and a tight bound turned
-// that into a false failure. What the assertion actually guards is that both
-// terms are *present in the same expression* — the hardcoded height is caught
-// by the `doesNotMatch` below.
+assert.doesNotMatch(displaySettingsPage,
+    /implicitHeight:\s*[\w.]*[Pp]age\.isMaterialDesign\s*\?/,
+    "the appearance cards no longer hardcode a Material-conditional height");
 assert.match(themeSettingsPage,
-    /implicitHeight:\s*16\s*\+\s*styleGallery\.height[\s\S]{0,400}?themeMaterialSettings\.implicitHeight/,
-    "the theme card derives its height from the gallery and the embedded page");
-assert.match(themeSettingsPage, /Layout\.preferredHeight:\s*implicitHeight/,
-    "the theme card feeds that derived height into the layout");
+    /Demo\.SettingsGroup\s*\{[\s\S]{0,4000}?Demo\.SettingsAppearancePreview/,
+    "the theme shape gallery lives in a content-sized settings group");
 assert.doesNotMatch(themeSettingsPage, /Layout\.preferredHeight:\s*550\b/,
     "the theme card no longer hardcodes the macOS-only height");
 
@@ -274,13 +232,15 @@ assert.match(read("../../shell/desktop/modules/bar/NetworkTraffic.qml"),
     "the Bar traffic arrow repaints when the ink it strokes with moves");
 for (const [path, description] of [
     ["../../shell/desktop/modules/bar/controlcenter/SubmenuCard.qml", "Control Centre chrome"],
-    ["../../shell/desktop/modules/bar/NetworkTraffic.qml", "Bar traffic arrow"],
     ["../../shell/desktop/modules/bar/WifiSignalIcon.qml", "shared Wi-Fi glyph"],
     ["../../shell/desktop/modules/quicksearch/QuickSearchWindow.qml", "Quick Search chrome"],
 ]) {
     assert.match(read(path), /content\.glassInk\(/,
         `${description} takes the glass ink instead of a white literal`);
 }
+assert.match(read("../../shell/desktop/modules/bar/NetworkTraffic.qml"),
+    /readonly property color glyphInk:\s*ThemeService\.barInk/,
+    "the Bar traffic arrow shares the status labels' opaque appearance ink");
 // NetworkPanel now delegates ink to the surface, which resolves the same
 // glass roles. Assert both ends of that delegation rather than requiring the
 // older direct AppearanceTokens call in every consumer.
@@ -315,54 +275,6 @@ assert.match(segmentedSource,
     /onCurrentIndexChanged:[\s\S]{0,320}_visualIndex = clampedIndex\(currentIndex\)/,
     "segmented choices immediately mirror externally changed state");
 
-const calendar = read("../../apps/calendar/qml/Main.qml");
-assert.match(calendar,
-    /KosPageCache[\s\S]{0,320}cacheLimit:\s*2[\s\S]{0,220}monthPage[\s\S]{0,100}weekPage[\s\S]{0,100}dayPage/,
-    "Calendar keeps its active and recent date views without retaining every page");
-assert.match(calendar, /model:\s*42/, "calendar mini-month contains six complete weeks");
-assert.doesNotMatch(calendar, /\bCheckBox\s*\{/,
-    "calendar uses custom rounded toggles instead of native checkboxes");
-assert.match(calendar, /property date now[\s\S]*interval:\s*60000/,
-    "calendar refreshes date and time-dependent UI while it remains open");
-assert.match(calendar, /Qt\.locale\(\)\.firstDayOfWeek/,
-    "calendar follows the locale's first weekday");
-assert.match(calendar, /date\.getDay\(\) - localeFirstDayOfWeek \+ 7/,
-    "calendar date offsets support both Sunday- and Monday-first locales");
-for (const calendarView of ["CalendarMonthView.qml", "CalendarScheduleView.qml"]) {
-    const source = read(`../../apps/calendar/qml/${calendarView}`);
-    assert.match(source, /required property date currentTime/,
-        `${calendarView} receives the observable application clock`);
-    assert.doesNotMatch(source, /new Date\(\)/,
-        `${calendarView} does not freeze an unobservable current time in bindings`);
-}
-const calendarMonth = read("../../apps/calendar/qml/CalendarMonthView.qml");
-assert.doesNotMatch(calendarMonth, /"✓ "/,
-    "completed calendar items use shape and typography instead of checkmark text");
-assert.doesNotMatch(calendarMonth, /\b(?:Button|ToolButton|RoundButton)\s*\{/,
-    "the full calendar month view uses rounded shared or custom controls");
-
-const todo = read("../../apps/todo/qml/Main.qml");
-assert.match(todo, /property date now[\s\S]*interval:\s*60000/,
-    "Todo refreshes today and overdue state while it remains open");
-assert.doesNotMatch(todo, /function todayKey\(\)[\s\S]{0,80}new Date\(\)/,
-    "Todo date filters depend on its observable application clock");
-assert.match(todo, /pendingItemId[\s\S]*onSnapshotChanged:\s*root\.openPendingItem/,
-    "Todo retains widget item deep links until its async snapshot arrives");
-
-const music = read("../../apps/music/qml/Main.qml");
-assert.match(music,
-    /KosPageCache[\s\S]{0,220}cacheLimit:\s*3[\s\S]{0,120}pinnedIndexes:\s*\[0\]/,
-    "Music uses a bounded cache and retains the primary library page");
-assert.match(music, /function activationUri[\s\S]*workingDirectory/,
-    "reused Music instances resolve relative files in the caller's directory");
-assert.match(music,
-    /ButtonGroup \{ id: navigationGroup \}[\s\S]*ButtonGroup\.group: navigationGroup[\s\S]*ButtonGroup\.group: navigationGroup/,
-    "Music navigation stays exclusively selected when its active item is clicked again");
-
-const weather = read("../../apps/weather/qml/Main.qml");
-assert.match(weather, /ButtonGroup \{ id: unitsGroup \}[\s\S]*ButtonGroup\.group: unitsGroup[\s\S]*ButtonGroup\.group: unitsGroup/,
-    "Weather unit choices form one exclusive accessible group");
-
 // LiquidTextField is shell-owned: it is directory-imported by the Quickshell
 // surfaces where the AppTheme singleton is not in scope, so it keeps the
 // shell's own fixed motion policy. The AppTheme-backed foundation controls
@@ -372,26 +284,6 @@ for (const control of ["KosButton", "KosRoundButton", "KosSlider", "KosSwitch"])
     assert.doesNotMatch(source, /duration:\s*(?:130|150)/,
         `${control} honors the reduce-motion duration tokens`);
 }
-
-const preferences = read("../../apps/common/src/ApplicationPreferences.cpp");
-assert.match(preferences, /KosApplications/,
-    "appearance preferences share one store across all applications");
-assert.match(preferences, /setInterval\(1000\)/,
-    "appearance preferences refresh across running application processes");
-
-const runner = read("../../apps/common/src/ApplicationRunner.cpp");
-assert.match(runner, /KWindowEffects::enableBlurBehind/,
-    "application windows request KDE native blur when it is available");
-assert.match(runner, /QQuickWindow::setDefaultAlphaBuffer\(true\)/,
-    "application windows allocate an alpha-capable framebuffer before creation");
-assert.match(runner, /isolatedTestRun[\s\S]*!isolatedTestRun/,
-    "smoke and screenshot runs cannot be short-circuited by a primary instance");
-
-const activation = read("../../apps/common/src/ApplicationActivation.cpp");
-assert.match(activation, /XDG_ACTIVATION_TOKEN[\s\S]*setCurrentXdgActivationToken/,
-    "secondary launches forward the Wayland activation token to the primary window");
-assert.match(activation, /AcquireResult::Error/,
-    "a failed single-instance hand-off is not reported as a successful launch");
 
 const glassEffect = read("../../kwin/glass-effect/src/blur.cpp");
 assert.match(glassEffect, /hasExplicitBlurRequest[\s\S]*explicitlyRequestedBlur/,
@@ -405,15 +297,14 @@ assert.match(glassEffect, /if \(m_valid\)[\s\S]*stackingOrder\(\)[\s\S]*updateBl
 const deskCenter = read("../../shell/desktop/modules/deskcenter/DeskCenterWindow.qml");
 assert.doesNotMatch(deskCenter, /#101010|#17151c|#170f14/,
     "desktop widget palette avoids near-black blocks");
-for (const [widget, desktopId] of [
-    ["Weather", "kos-weather"],
-    ["Calendar", "kos-calendar"],
-    ["Todo", "kos-todo"],
-    ["Music", "listenfree"]
-]) {
-    assert.match(deskCenter, new RegExp(`launchById\\("${desktopId}"`),
-        `${widget} widget launches its matching installed application`);
+for (const app of ["weather", "calendar"]) {
+    assert.match(deskCenter, new RegExp(`IndependentAppWidgetService\\.open\\("${app}"`),
+        `${app} widgets open their inspected installation through the identity-bound service`);
+    assert.doesNotMatch(deskCenter, new RegExp(`launchById\\("kos-${app}"`),
+        `${app} widgets never fall back to a different desktop identity`);
 }
+assert.match(deskCenter, /launchById\("listenfree"/,
+    "Music retains its independent player launch behavior");
 
 const appActions = read("../../shell/desktop/modules/common/AppActionService.qml");
 assert.doesNotMatch(appActions,

@@ -46,12 +46,9 @@ QtObject {
 
     function applyConfig(text) {
         const spec = FontPolicy.fontSpecFromConfig(text)
-        // KConfig rewrites kdeglobals atomically; a read that lands between the
-        // unlink and the rename is empty. Only a settled read replaces the
-        // value, so a transient empty file cannot flip the shell back to Qt's
-        // default for a frame.
-        if (spec.length === 0 && loaded)
-            return
+        // Successful reads without font= are meaningful (for example, resetting
+        // KDE to defaults). Only failed reads retain the previous configuration;
+        // the file watcher already debounces atomic replacements below.
         fontSpec = spec
         loaded = true
     }
@@ -67,6 +64,11 @@ QtObject {
         // Delay the read until KConfig's atomic write has settled.
         onFileChanged: settleTimer.restart()
         onLoaded: service.applyConfig(text())
+        onLoadFailed: {
+            // A missing initial file must not leave clients waiting forever.
+            // Later transient failures retain the last successfully read font.
+            service.loaded = true
+        }
     }
 
     property Timer _settleTimer: Timer {

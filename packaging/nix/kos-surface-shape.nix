@@ -1,7 +1,7 @@
 { lib, stdenv, cmake, pkg-config, kdePackages, wayland, wayland-scanner, src }:
 stdenv.mkDerivation {
   pname = "kos-surface-shape";
-  version = "unstable";
+  version = lib.removeSuffix "\n" (builtins.readFile "${src}/VERSION");
   src = "${src}/shell/native/surface-shape";
   nativeBuildInputs = [ cmake pkg-config kdePackages.extra-cmake-modules wayland-scanner ];
   buildInputs = [ kdePackages.qtbase kdePackages.qtdeclarative kdePackages.qtwayland wayland ];

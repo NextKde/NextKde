@@ -397,6 +397,63 @@ New UI components should prefer `AppIdentityService`, `WindowService`, and
 `AppGroupService` directly. Do not add new identity or window tracking logic
 to `DockModelService`.
 
+## Native minimize targets
+
+KWin restricts `org_kde_plasma_window_management`. Installation renders
+`packaging/desktop/org.kos.Shell.desktop.in` with the canonical Quickshell
+executable in `Exec` and that interface in `X-KDE-Wayland-Interfaces`, then
+refreshes the desktop service cache. After changing this declaration, restart
+the Shell connection: KWin caches requested interfaces per Wayland client.
+Without it, libtaskmanager reports that PlasmaWindowManagement did not activate
+and cannot publish targets. Do not disable KWin's permission checks.
+
+`DockWindowAnimationTargetService` publishes the stable icon slot to both the
+private KOS animation effect and Plasma's taskbar protocol. Its ungrouped
+`org.kde.taskmanager.TasksModel` is a protocol adapter only; `WindowService`
+retains ownership of application identity and window actions. Match the exact
+KWin UUID first, then the canonical/raw app ID of a grouped launcher. Never use
+the synthetic `window-N` handle or another window's separate icon as a fallback.
+
+Plasma's Wayland backend ignores the explicit rectangle passed to
+`requestPublishDelegateGeometry`: it reads a real `QQuickItem` and that item's
+window surface. The adapter therefore creates a non-rendering rectangle directly
+under the Dock surface's content item, subtracts the surface origin from the
+global target and publishes integer logical pixels. This avoids hover transforms,
+side-Dock rotation and double-counting secondary-output offsets or pixel scale.
+Auto-hidden slots retain their along-edge position and clip to the permanently
+mapped surface edge, including negative outward offsets on a left Dock.
+Missing/invalid slots invalidate their published rectangle; destroying
+the Dock surface removes its geometries in KWin. Native publication is independent
+of the private effect's availability, payload cache and retry delay.
+
+With KOS **Hide and restore → None**, the enabled KWin minimize effect (for
+example Magic Lamp) reads `Window::iconGeometry()` from that protocol target for
+titlebar, shortcut and Dock actions. KOS does not claim those animations or change
+the user's enabled native effects. The Scale style uses the private KOS target. Genie now selects KWin's native
+Magic Lamp; the old water-drop mesh has been removed. `HideAnimationSelection`
+stores the user's choice while `HideAnimation=none` prevents even an older
+resident KOS effect from running its deformation. Settings and the legacy theme
+adapter share `platform/src/windowanimation/NativeGenie.h` for this transition.
+Legacy and saved `genie` are reconciled at daemon/Settings startup. Explicit
+None and Scale are preserved. The adapter saves/restores the presence and values
+of Magic Lamp and Squash plugin keys while it owns minimize effects.
+Missing/unsupported Magic Lamp, a disconnected compositor, or a failed native
+load configures the project-provided Scale fallback and persists a visible reason
+under `NativeGenieFallback`. `HideAnimationSelection=genie` retains intent;
+`HideAnimation=scale` selects the fallback. A later startup can recover native
+Genie automatically. The adapter checks actual loaded effects after switching;
+if exclusivity or the project effect fails, it restores config and runtime state
+and reports any remaining need to restart the session. Never report fallback as
+the native effect running. `kos-settings.native-genie-upgrade` covers these
+upgrade/failure branches through an injectable runtime, without depending on
+the test host's enabled effects.
+Close/open animation settings remain independent. `tests/dock/native-target.test.mjs`
+covers identity precedence and coordinate conversion, while the offscreen
+`native-target` runtime case loads the production service to exercise publication,
+effect failure, heartbeat retries, surface replacement and icon removal. Real VM acceptance must
+also exercise titlebar minimize and Dock restore, grouped/separate windows,
+hidden/side Docks and secondary outputs at fractional scale.
+
 ## Application launcher module boundary
 
 Files: `shell/desktop/modules/applauncher/AppLauncher.qml`,
@@ -418,6 +475,9 @@ AppLauncherService.toggle()
 Dock has one strictly presentation-only responsibility: it calls
 `setDockPresentation(width, height, position, background, primary, secondary,
 foreground, barHeight)` whenever its adaptive layout or material changes. The
+width it publishes is the resting Dock length: the live hover spread must never
+reach the launcher, because the launcher re-solves its icon grid from that
+width and would reflow every tile while the pointer slides along the Dock. The
 launcher independently selects the same preferred output policy as Dock.
 Passing geometry and material values through this API is intentional:
 `shell/desktop/modules/applauncher` must not import `qs.desktop.modules.dock`,
@@ -429,6 +489,20 @@ Bottom mode follows Dock geometry with a screen-relative minimum width and a
 mode fills the selected output. Each mode owns a semantic icon-size, density,
 and font-weight profile. Do not put application search, shortcut registration,
 or grid state back into `DockContainer.qml`.
+
+Card presentations keep the search header outside the scrolling app grid: the
+grid viewport starts below the header, so a scrolled row is clipped at that
+boundary instead of painting over the search field.
+
+`LauncherIconMotion.qml` drives tile position and scale from one animated
+progress value, with a separate 200 ms opacity track alongside the 300 ms
+spread. Both use GUI-thread `NumberAnimation`, as does the stationary glass
+fade in `LauncherMotion.qml`. Keep opacity at its current value when starting
+or reversing: forcing it to 1 to prewarm render-thread Animators can expose a
+fully visible tile before the fade starts. Hidden neighbor pages snap without
+holding the controller open; cold delegates start at the contracted pose and
+follow their resolved grid offsets. `tests/interaction-controls/tst_motion.qml`
+covers the entrance, reversal, cold delegates and hidden-page lifecycle.
 
 Launcher persistence is separate at
 `Quickshell.stateDir + "/applauncher/config.json"`. Schema version 3 owns
@@ -679,6 +753,52 @@ Use `AppGroupService` for grouping and add provider-specific workspace data
 as optional runtime metadata. Do not put Hyprland workspace IDs into the
 canonical app identity or persisted pinned records.
 
+The Stage drawer checks overlap and fullscreen windows on
+`WindowService.currentDesktopId`, including windows on all desktops. Windows
+on other desktops, hidden windows and minimized windows do not retract it.
+Both checks observe `placementRevision` because geometry and visibility can
+update in place without a presentation revision. Changing only the current
+desktop must also recompute overlap, cancel pending retraction and release
+an existing yield when the strip is clear. The overlap thresholds remain
+above 60% to retract (after 400ms) and below 50% to release. The production drawer
+checks and overlap release handler have regressions in `test_stage_visibility.mjs`.
+`tests/stage-visibility/run.mjs` also runs the production bindings and timers in
+Qt Quick Test with fixture window records. Full Shell rendering and real
+compositor desktop switching still require graphical VM validation.
+
+`StageDesktopTransition` keeps the displayed card model and the drawer's
+horizontal position unchanged while `WindowService.desktopTransitionActive`
+is true. Desktop navigation does not animate the whole strip's opacity or
+add a horizontal offset. After switching settles, it commits only the latest
+desktop; cards created by that commit start opaque. Input is suspended during
+the switch. Rapid switches, returning to the original desktop and disabling
+Stage cancel or supersede pending commits. Fullscreen/overlap drawer rules
+are applied after the switch, so a new desktop cannot move the old strip.
+
+The platform bridge supplies the bounded switch lifetime through
+`desktops.transitionActive` (see the [platform contract](../shared/contracts/platform.v1.md)).
+The live-card payload identifies the **displayed** model with top-level
+`desktopId`. A changed nonempty desktop ID replaces absent compositor cards
+immediately and starts the incoming cards opaque, bypassing ordinary
+missing-card grace and entrance fading for this handoff. Older payloads
+without that field retain the usual lifecycle behavior.
+
+Stage's post-scene compositor overlay continues painting in fixed screen
+coordinates during KWin's `slide`, `cubeslide` and `fadedesktop` effects. Other
+fullscreen effects, including Overview, remain exclusive; screen lock always
+suppresses the overlay. This native change requires the newly installed KWin
+plugin and a new login session; restarting only Shell cannot enable it.
+
+The Qt Quick fixtures run the production controller, integration handlers and
+drawer bindings, covering model/position retention, fullscreen destinations,
+rapid switches and cancellation. `kos-platform.desktop-transition` covers
+bounded native effect polling on a private bus; `kos-stage.desktop-policy`
+covers fullscreen/lock exclusivity. The optional graphical
+`kos-stage.static-desktop-compositor` test loads the built plugin into an
+isolated virtual KWin and verifies that opaque cards stay at fixed coordinates
+and keep painting during a real slide, then replace without ghost cards.
+See the [Stage test guide](../tests/stage-visibility/README.md).
+
 ### Desktop lyrics
 
 Desktop lyrics are an accessory of the desktop music widget, not a Dock
@@ -734,3 +854,11 @@ and `kos-dock.motion`; existing runtime test names and dependency gates remain.
 The launch-feedback scene and Wayland sweep can also be selected manually in
 that VM. Test counts refer to suites after consolidation, rather than one CTest
 entry per small file.
+
+## Timing and input review invariants
+
+Evaluate pointer and window events with bounded scheduling; repeatedly restarting a debounce must
+not postpone hide/reveal indefinitely. Keep tooltip and interactive popup input masks distinct.
+Use actual popup readiness signals instead of an assumed one-frame delay. Intentional hover/preview
+and naming delays are separate policies: do not set every timer to zero to hide latency.
+Measure input-to-frame behavior in the VM; animation duration arithmetic is not a latency measurement.

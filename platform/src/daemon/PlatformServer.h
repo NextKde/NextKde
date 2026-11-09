@@ -58,11 +58,12 @@ private slots:
                                      const QStringList &invalidated);
 
 private:
+    bool m_animationSyncPending = false;
     void handleRequest(QLocalSocket *socket, const QJsonObject &request);
     void respond(QLocalSocket *socket, const QJsonObject &request,
                  bool ok, const QJsonObject &result = {},
                  const QString &code = {}, const QString &message = {},
-                 bool retryable = false);
+                 bool retryable = false, const QJsonObject &details = {});
     // Drops a peer whose write backlog (kMaxClientWriteBytes) shows it is no
     // longer draining. Deferred: the abort lands after the current dispatch
     // returns, so callers iterating subscribers or parsing the same socket's
@@ -73,9 +74,11 @@ private:
                     const QString &program, const QStringList &arguments,
                     std::function<QJsonObject(const QByteArray &, int)> parser = {},
                     int timeoutMs = -1,
-                    const QString &cacheKey = QString(), int cacheTtlMs = 0);
+                    const QString &cacheKey = QString(), int cacheTtlMs = 0,
+                    std::function<void()> failedToStart = {});
     void launchDesktopService(QLocalSocket *socket, const QJsonObject &request,
-                              const KService::Ptr &service, const QList<QUrl> &urls);
+                              const KService::Ptr &service, const QList<QUrl> &urls,
+                              const QString &widgetKey = {});
     void runAudioOutputs(QLocalSocket *socket, const QJsonObject &request);
     void applySystemTheme(QLocalSocket *socket, const QJsonObject &request,
                           bool dark);
@@ -142,6 +145,9 @@ private:
 
     bool handleClipboard(QLocalSocket *socket, const QJsonObject &request);
     bool handleApplication(QLocalSocket *socket, const QJsonObject &request);
+    QSet<QString> m_widgetOpening;
+    QSet<QString> m_widgetQueries;
+    QSet<QString> m_widgetTimedOut;
     bool handleFileOperation(QLocalSocket *socket, const QJsonObject &request);
     // Copy/transfer admission: bounds the m_copyPool queue the way
     // queueIfInFlight bounds the reply cache, answering busy(retryable) over

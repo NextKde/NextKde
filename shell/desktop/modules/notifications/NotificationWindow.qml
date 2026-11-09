@@ -58,10 +58,13 @@ PanelWindow {
     BackgroundEffect.blurRegion: (root.visible && root.visibleCards.length > 0
         && AppearanceTokens.surface.usesKwinBlur) ? notificationBlur : null
 
+    // Input geometry is its own declaration. The panel's blurRegion is legacy
+    // transport and is null whenever v8 owns the surface (or KWin blur is off),
+    // so deriving the mask from it leaves the whole popup click-through.
     Region {
         id: notificationInput
         regions: root.visibleCards.filter(card => !card.removing)
-            .map(card => card.notificationBlurRegion)
+            .map(card => card.notificationInputRegion)
     }
 
     mask: notificationInput
@@ -99,6 +102,8 @@ PanelWindow {
             required property var modelData
             required property int index
             readonly property var notificationBlurRegion: panel.blurRegion
+            // Clickable outline, independent of the blur transport above.
+            readonly property var notificationInputRegion: cardInput
             property bool removing: false
             enabled: !removing
             ListView.onRemove: {
@@ -216,6 +221,16 @@ PanelWindow {
             // it, along with the child-radius plumbing it needed -- two masks
             // would round the card twice, and the plumbing only existed because
             // a Rectangle could not switch its own circular paint off.
+
+            // Input geometry for this card. It must not come from the glass
+            // panel's blurRegion: that is legacy transport and goes null once
+            // v8 declares the surface itself, which would leave the popup with
+            // an empty mask and no pointer input at all.
+            RoundedBlurRegion {
+                id: cardInput
+                item: card
+                radius: card.radius
+            }
 
             // ---- backgrounds ----
             // Frosted liquid glass backdrop adapting to theme. The urgency

@@ -16,6 +16,7 @@
 #include "settings.h"
 
 #include <QList>
+#include <QSet>
 #include <QStringList>
 
 #include <unordered_map>
@@ -66,6 +67,8 @@ struct BlurRenderData
         QSize size;
     };
     std::unordered_map<uint, BlurOverrideScratch> blurOverrideScratch;
+    BlurOverrideScratch gaussianTemp;
+    std::unordered_map<uint, BlurOverrideScratch> gaussianScratch;
 };
 
 struct BlurEffectData
@@ -74,6 +77,8 @@ struct BlurEffectData
     /// Forced-blur policy must not masquerade as an application request,
     /// otherwise class filters cannot distinguish the two paths.
     bool hasExplicitBlurRequest = false;
+    // Survives wl_surface destruction while KWin fades a deleted popup.
+    bool surfaceShapeOwned = false;
 
     /// The region that should be blurred behind the window
     std::optional<BlurRegion> content;
@@ -153,6 +158,7 @@ public:
 
 public Q_SLOTS:
     void slotWindowAdded(KWin::EffectWindow *w);
+    void slotWindowClosed(KWin::EffectWindow *w);
     void slotWindowDeleted(KWin::EffectWindow *w);
     void slotOutputRemoved(KWin::BlurOutput *output);
 #if KWIN_BUILD_X11
@@ -216,6 +222,8 @@ private:
         int materialSoftnessLocation;
         int materialReflectionStrengthLocation;
 
+        int tintLocation;
+        int liquidEnabledLocation;
         int scrimModeLocation;
         int scrimCapLocation;
         int scrimDecayLocation;
@@ -230,6 +238,11 @@ private:
         int offsetLocation;
         int halfpixelLocation;
     } m_downsamplePass;
+
+    struct {
+        std::unique_ptr<GLShader> shader;
+        int mvp, direction, kernel, count;
+    } m_gaussianPass;
 
     struct
     {
@@ -305,6 +318,8 @@ private:
     QMap<EffectWindow *, QMetaObject::Connection> windowDecorationChangedConnections;
     QMap<EffectWindow *, QMetaObject::Connection> decorationBlurChangedConnections;
     std::unordered_map<EffectWindow *, BlurEffectData> m_windows;
+    // Closed popup snapshots may outlive both wl_surface and shape resources.
+    QSet<EffectWindow *> m_closedShapeWindows;
 
 #if !defined(GLASS_X11) && !defined(GLASS_KWIN_67)
     static BlurManagerInterface *s_blurManager;

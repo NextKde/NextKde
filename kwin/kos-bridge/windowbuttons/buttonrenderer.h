@@ -3,6 +3,7 @@
 #include <QColor>
 #include <QHash>
 #include <QImage>
+#include <QJsonObject>
 #include <QObject>
 #include <QPointer>
 #include <QRectF>
@@ -172,6 +173,9 @@ public:
     // Drop every cached tint. Called when the configuration changes, since the
     // configuration decides which band is sampled.
     void invalidateAll();
+    bool cooperativeControls(KWin::EffectWindow *) const;
+    QJsonObject controlDiagnostics(KWin::EffectWindow *) const;
+    int samplingWindowCount() const { return m_cache.size(); }
 
 Q_SIGNALS:
     void sourceRepaint(const QRectF &region);
@@ -229,14 +233,16 @@ private:
     // handler has been crashing KWin, and a panel is a small fixed rectangle.
     static void repaintRect(const QRectF &globalRect);
 
-    KWin::GLTexture *backgroundTexture(const QSizeF &panelSize, qreal scale);
+    KWin::GLTexture *backgroundTexture(const QSizeF &panelSize, qreal scale,
+                                       const PanelGeometry &geometry, const PanelWindowContour &contour);
     KWin::GLTexture *panelTexture(const QSizeF &panelSize, qreal scale, bool active,
                                   bool dark, const PanelGeometry &geometry,
-                                  Action hovered, bool adjusting, bool maximized, bool showGlyphs);
+                                  Action hovered, bool adjusting, bool maximized, bool showGlyphs, const PanelWindowContour &contour);
+    KWin::GLTexture *cooperativeTexture(const QSizeF &, qreal, Type, bool, bool, bool, bool);
     KWin::GLTexture *cacheTexture(const QString &key, QImage image);
     QImage buildPanel(const QSizeF &panelSize, qreal scale, bool active, bool dark,
                       const PanelGeometry &geometry, Action hovered,
-                      bool adjusting, bool maximized, bool showGlyphs) const;
+                      bool adjusting, bool maximized, bool showGlyphs, const PanelWindowContour &contour) const;
 
     KWin::GLTexture *tileMenuTexture(qreal scale, bool dark, std::optional<TilePreset> hovered);
     QImage buildTileMenu(qreal scale, bool dark, std::optional<TilePreset> hovered) const;
@@ -276,6 +282,7 @@ private:
     quint64 m_nextSampleToken = 0;
 
     struct HitRects {
+        bool cooperative = false;
         QPointF windowOrigin;
         // The drawn panel, and the pointer area it claims: the panel expanded
         // by the intercept margin, never beyond the window's own edge.

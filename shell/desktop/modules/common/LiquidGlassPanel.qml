@@ -1,4 +1,5 @@
 import QtQuick
+import Kos.SurfaceShape 1.0
 
 // A surface-shaped content panel. KWin Glass owns the visual glass finish.
 //
@@ -28,6 +29,20 @@ import QtQuick
 Item {
     id: root
 
+    // Stable v8 controls. -1 inherits the global/legacy override strength.
+    // Sigma is logical pixels; tint never fades the filtered backdrop.
+    property real blurSigma: -1
+    property int effectType: SurfaceShape.Liquid
+    property color tintColor: "black"
+    property real tintOpacity: 0
+    property real effectOpacity: 1.0
+    property string readability: "inherit"
+    readonly property string _effectiveReadability: readability === "inherit" ? scrimLevel : readability
+    readonly property bool continuousBlurSupported: surfaceRegion.continuousBlurSupported
+    readonly property real effectiveBlurSigma: Math.max(0, Math.min(32,
+        blurSigma >= 0 ? blurSigma : 32 * (blurOverrideEnabled
+            ? blurStrength : AppearanceConfigService.globalBlurStrength)))
+
     // ---- shape ----------------------------------------------------------
 
     property real radius: 0
@@ -35,6 +50,8 @@ Item {
     // coordinates. Hosts that scale the whole surface forward that scale here.
     property real backdropScale: 1
     property real backdropRadius: radius
+    // Inset content can draw directly into the window. The QML body still
+    // needs its own corner mask when the whole-subtree mask is disabled.
     property bool maskContent: true
 
     // Corner continuity, not corner size. 2.0 is the circular arc the shell has
@@ -45,12 +62,22 @@ Item {
     property real cornerExponent: 2.0
     readonly property bool continuousCorners: cornerExponent > 2.0
 
-    // The exact compositor declaration for this surface. A window that owns a
-    // BackgroundEffect publishes this object (or combines several of them);
-    // the panel itself remains unaware of window-level effect policy. It is
-    // null when the panel falls back to its own QML liquid, so a host binding
-    // `BackgroundEffect.blurRegion: panel.blurRegion` publishes nothing.
-    readonly property var blurRegion: root.useKwinEffect ? surfaceRegion : null
+    // Legacy transport only. v8 derives capture from this panel's declaration;
+    // older compositors still need a window-owned BackgroundEffect region.
+    readonly property var blurRegion: root.useKwinEffect && !continuousBlurSupported ? surfaceRegion : null
+
+    // Diagnostics read the declaration directly; blurRegion is legacy transport.
+    function inspectGlass() {
+        const shape = surfaceRegion.surfaceShape;
+        return {
+            continuousBlurSupported: root.continuousBlurSupported,
+            shapeActive: shape ? shape.active : false,
+            shapeEnabled: shape ? shape.enabled : false,
+            materialOpacity: shape ? shape.materialOpacity : null,
+            blurSigma: root.effectiveBlurSigma
+        };
+    }
+
     // Item whose x/y already are this panel's position in the surface. A panel
     // that fills a positioned wrapper (the Dock's capsule, the launcher card)
     // anchors to it, so its own x/y read 0 wherever the glass sits; point this
@@ -59,8 +86,13 @@ Item {
     // Optional fixed capture bounds, independent of the animated blurAnchor outline.
     property Item captureAnchor: null
     readonly property bool fixedCaptureSupported: surfaceRegion.fixedCaptureSupported
-    // Opacity of the compositor finish, independent of QML content opacity.
-    property real materialOpacity: 1.0
+    // Compatibility name for the complete-effect fade, never tint opacity.
+    property alias materialOpacity: root.effectOpacity
+    // G10e/G11 — in-scene backdrop for the QML fallback. Defaults to the host's
+    // scene sample so every panel samples without per-call wiring; popup windows
+    // override it with their own screen-aligned hidden copy. Null keeps every
+    // existing panel on its previous path (production sets no GlassBackdrop).
+    property Item backdropItem: GlassBackdrop.sourceItem
     readonly property bool materialOpacitySupported: surfaceRegion.materialOpacitySupported
 
     property bool compositorRevealEnabled: false
@@ -72,12 +104,12 @@ Item {
     // ---- KWin vs QML rendering ------------------------------------------
 
     // True: KWin Glass owns blur, refraction and highlights; this panel
-    // publishes a compositor blur region + SurfaceShape and paints no material.
+    // publishes SurfaceShape (plus a region on older servers) and paints no material.
     // False: the panel falls back to its own QML liquid finish through
     // LiquidGlassSurface and publishes nothing to the compositor. Item-level
     // glass inside a shared surface -- the desk-center widgets -- uses this,
     // because per-item compositor blur is not present on that surface.
-    property bool useKwinEffect: true
+    property bool useKwinEffect: AppearanceTokens.surface.usesKwinBlur
     // Set by a host that wants the compositor's plain frost rather than this
     // panel's liquid finish. Withholding the shape declaration -- the geometry
     // KWin draws refraction, glints and liquid noise from -- leaves only the
@@ -160,25 +192,18 @@ Item {
     property bool scrimPearl: false
     readonly property int scrimTint: scrimTintOverride >= 0
         ? scrimTintOverride
-        : (AppearanceConfigService.glassFollowsAppearanceMode
-            ? (AppearanceTokens.isDarkTheme ? 0 : 1)
-            : 0) // 0 = black, 1 = white
+        : GlassBackdrop.defaultScrimTint // 0 = black, 1 = white
 
     // Named presets concretize the readability/transparency tradeoff as one
     // ceiling (cap) plus a per-surface calm factor (decay). "custom" ignores
-    // these and takes the explicit scrimCap/scrimDecay verbatim.
-    readonly property real _presetCap: scrimLevel === "readable" ? 0.72
-        : scrimLevel === "balanced" ? 0.47
-        : scrimLevel === "transparent" ? 0.22
-        : scrimLevel === "subtle" ? 0.15 : 0.5
-    readonly property real _presetDecay: scrimLevel === "readable" ? 1.0
-        : scrimLevel === "balanced" ? 0.75
-        : scrimLevel === "transparent" ? 0.5
-        : scrimLevel === "subtle" ? 0.45 : 1.0
+    // these and takes the explicit scrimCap/scrimDecay verbatim. The table
+    // lives on GlassBackdrop so the QML fallback resolves the same numbers.
+    readonly property real _presetCap: GlassBackdrop.scrimCap(_effectiveReadability)
+    readonly property real _presetDecay: GlassBackdrop.scrimDecay(_effectiveReadability)
     readonly property real _effectiveScrimCap:
-        scrimLevel === "custom" ? scrimCap : _presetCap
+        _effectiveReadability === "custom" ? scrimCap : _presetCap
     readonly property real _effectiveScrimDecay:
-        scrimLevel === "custom" ? scrimDecay : _presetDecay
+        _effectiveReadability === "custom" ? scrimDecay : _presetDecay
 
     property bool bottomEdgeVisible: true
     property bool bottomShadeVisible: true
@@ -212,31 +237,36 @@ Item {
     // fill, leaving a sliver of untinted glass at each corner.
     readonly property real contentRadius: continuousCorners ? 0 : radius
 
-    // Keep the approximate integer blur mask and exact compositor shape in
-    // lockstep. Consumers only need `panel.blurRegion`; they never duplicate
-    // radius, exponent, or a SurfaceShape declaration beside the panel.
+    // One panel owns the v8 declaration and the legacy transport adapter.
+    // Geometry, continuous filtering, tint and effect fade are resolved here.
     KosRoundedBlurRegion {
         id: surfaceRegion
+        protocolEnabled: root.useKwinEffect
         item: root.captureAnchor && fixedCaptureSupported && !root.tonal ? root.captureAnchor : root.blurAnchor
         shapeItem: root.blurAnchor
         radius: root.captureAnchor && fixedCaptureSupported && !root.tonal ? 0 : root.radius * root.backdropScale
-        shapeRadius: root.backdropRadius * root.backdropScale
-        materialOpacity: root.materialOpacity
+        shapeRadius: root.backdropRadius * (continuousBlurSupported ? 1 : root.backdropScale)
+        blurSigma: root.effectiveBlurSigma
+        effectType: root.tonal || root.frostOnly ? SurfaceShape.Frosted : root.effectType
+        materialProfile: root.material === "clear" ? SurfaceShape.Clear
+            : root.material === "thick" ? SurfaceShape.Thick : SurfaceShape.Regular
+        tintMode: root.scrimPearl ? SurfaceShape.Pearl : root.scrimGraphite ? SurfaceShape.Graphite
+            : root.scrimFixed || root.tintOpacity > 0 ? SurfaceShape.Fixed : SurfaceShape.NoTint
+        tintColor: root.scrimFixed ? (root.scrimTint === 1 ? "white" : "black") : root.tintColor
+        tintOpacity: root.scrimFixed || root.scrimGraphite || root.scrimPearl
+            ? root._effectiveScrimCap * root.scrimOpacity : root.tintOpacity
+        materialOpacity: root.effectOpacity
         revealEnabled: root.compositorRevealEnabled && root.useKwinEffect && !root.tonal
         revealOpened: root.compositorRevealOpened
         revealDuration: root.compositorRevealDuration
         onRevealFinished: function(opened) { root.compositorRevealFinished(opened) }
         exponent: root.cornerExponent
-        // A tonal form publishes no SurfaceShape. The declaration can only
-        // describe a rectangle with rounded corners, and KWin paints a surface's
-        // material from it -- so leaving it on hands a self-painted card the
-        // liquid finish it exists without. Dropping it leaves only the blur
-        // region above, which is exactly the frost a tonal card asks for.
-        // `frostOnly` reaches the same place on purpose: a panel that asks for
-        // the blurred plate alone declares nothing either.
-        shapeEnabled: root.visible && root.useKwinEffect && !root.tonal
-            && !root.frostOnly
-        scrimEnabled: root.scrimEnabled
+        // v8 declares Frosted explicitly. Older servers retain the legacy
+        // region-only tonal/frost contract through the internal adapter.
+        shapeEnabled: root.visible && root.useKwinEffect
+            && (continuousBlurSupported || (!root.tonal && !root.frostOnly))
+        scrimEnabled: (root.readability !== "inherit" ? root.readability !== "none" : root.scrimEnabled)
+            && (!continuousBlurSupported || (!root.scrimFixed && !root.scrimGraphite && !root.scrimPearl))
         scrimTint: root.scrimTint
         scrimCap: root._effectiveScrimCap * Math.max(0, Math.min(1, root.scrimOpacity))
         scrimDecay: root.scrimPearl ? 4.0
@@ -246,8 +276,8 @@ Item {
             )
         // Per-surface blur strength (protocol v4 set_blur). Silent unless the host
         // opts in, which is why every existing caller renders unchanged.
-        blurEnabled: root.blurOverrideEnabled && root.useKwinEffect
-        blurLevel: AppearanceConfigService.compositorBlurLevel(root.blurStrength)
+        blurEnabled: (root.blurOverrideEnabled || root.blurSigma >= 0) && root.useKwinEffect
+        blurLevel: AppearanceConfigService.compositorBlurLevel(root.blurSigma >= 0 ? root.effectiveBlurSigma / 32 : root.blurStrength)
     }
 
     LiquidGlassSurface {
@@ -263,6 +293,13 @@ Item {
         // rounding the fill as well would round it twice -- near the corner the
         // two arcs disagree and the fill pokes out of its own silhouette.
         radius: root.continuousCorners ? 0 : root.radius
+        layer.enabled: root.continuousCorners && !root.maskContent
+        layer.effect: SquircleMask {
+            cornerRadius: root.radius
+            cornerExponent: root.cornerExponent
+            maskWidth: root.width
+            maskHeight: root.height
+        }
         // Those two inset lines still need the visual radius, which radius no
         // longer carries once the mask is on.
         cornerInset: root.radius
@@ -271,6 +308,7 @@ Item {
         border.width: 0
         border.color: "transparent"
 
+        backdropItem: root.backdropItem
         baseColor: root.baseColor
         ambientPrimary: root.ambientPrimary
         ambientSecondary: root.ambientSecondary
@@ -281,6 +319,13 @@ Item {
         surfaceOpacity: root.surfaceOpacity
         tonalOpacity: root.tonalOpacity
         adaptiveDarkScrim: root.adaptiveDarkScrim
+        // The QML fallback's in-scene scrim uses the same preset values the
+        // compositor path publishes above, so the two finishes agree on how
+        // strongly a backdrop is compressed.
+        scrimEnabled: root.scrimEnabled && !root.useKwinEffect
+        scrimCap: root._effectiveScrimCap * Math.max(0, Math.min(1, root.scrimOpacity))
+        scrimDecay: root._effectiveScrimDecay * Math.max(0, Math.min(1, root.scrimOpacity))
+        scrimTint: root.scrimTint
         bottomEdgeVisible: root.bottomEdgeVisible
         bottomShadeVisible: root.bottomShadeVisible
 

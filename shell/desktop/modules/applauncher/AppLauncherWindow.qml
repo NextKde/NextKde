@@ -1,4 +1,5 @@
 import QtQuick
+import QtQuick.Effects
 import QtQuick.Dialogs
 import Quickshell
 import Quickshell.Wayland
@@ -101,18 +102,22 @@ PanelWindow {
     readonly property bool dockAtRight: AppLauncherService.dockPosition === "right"
 
     function inspectGlass() {
-        const region = launcherSurface.blurRegion;
-        const shape = region ? region.surfaceShape : null;
+        const glass = launcherSurface.inspectGlass();
+        const legacyBlurDeclared = BackgroundEffect.blurRegion !== null;
         return JSON.stringify({
             screen: root.screen ? root.screen.name : null,
             open: root.open, outputAvailable: root.outputAvailable,
             visible: root.visible, panelVisible: root.panelVisible,
             glassOpacity: popupMotion.glassOpacity, pendingIcons: popupMotion.pendingIcons,
             settledOpen: popupMotion.settledOpen,
-            blurDeclared: BackgroundEffect.blurRegion !== null,
-            shapeActive: shape ? shape.active : false,
-            shapeEnabled: shape ? shape.enabled : false,
-            materialOpacity: shape ? shape.materialOpacity : null,
+            blurDeclared: glass.continuousBlurSupported
+                ? glass.shapeActive && glass.shapeEnabled : legacyBlurDeclared,
+            legacyBlurRegionDeclared: legacyBlurDeclared,
+            continuousBlurSupported: glass.continuousBlurSupported,
+            shapeActive: glass.shapeActive,
+            shapeEnabled: glass.shapeEnabled,
+            materialOpacity: glass.materialOpacity,
+            blurSigma: glass.blurSigma,
             geometry: {x: background.x, y: background.y, width: background.width, height: background.height}
         });
     }
@@ -264,6 +269,13 @@ PanelWindow {
     // the live persistence target; `displayedFolder` is only presentation.
     property var displayedFolder: null
     property bool folderDialogOpen: false
+    property real folderBlurProgress: folderDialogOpen ? 1 : 0
+    Behavior on folderBlurProgress {
+        NumberAnimation {
+            duration: 220
+            easing.type: Easing.OutCubic
+        }
+    }
     property bool folderRenameActive: false
     property string folderRenameText: ""
     property var editingApplication: null
@@ -439,7 +451,10 @@ PanelWindow {
         appContextMenu.clear()
         appContextMenu.addItem("application-open", I18n.tr("Open app"), "open")
         appContextMenu.addItem("edit-rename", I18n.tr("Edit app"), "edit")
-        appContextMenu.addItem("pin", I18n.tr("Pin to Dock"), "pin")
+        const pinned = DockModelService.isAppPinned(app.id)
+        appContextMenu.addItem(pinned ? "unpin" : "pin",
+            pinned ? I18n.tr("Unpin from Dock") : I18n.tr("Pin to Dock"),
+            pinned ? "unpin" : "pin")
         appContextMenu.show()
     }
 
@@ -1090,6 +1105,8 @@ PanelWindow {
                 AppActionService.edit(app);
             else if (name === "pin")
                 AppActionService.pin(app.id);
+            else if (name === "unpin")
+                AppActionService.unpin(app.id);
         }
     }
 
@@ -1260,9 +1277,11 @@ PanelWindow {
                     radius: Math.min(background.radius, width / 2, height / 2)
                     layer.enabled: fallbackEnabled && continuousCorners
                     cornerExponent: 2.35
-                    // Keep a light backdrop blur on the large launcher surface.
-                    blurOverrideEnabled: !tonal
-                    blurStrength: Math.max(0.2, AppearanceConfigService.effectiveDockBlur)
+                    // Keep a softer blur so more backdrop detail remains visible.
+                    // Legacy compositors receive the panel's sigma-to-level adapter.
+                    blurSigma: tonal ? -1 : Math.max(6,
+                        18 * AppearanceConfigService.effectiveLauncherBlur,
+                        20 * root.folderBlurProgress)
                     scrimEnabled: AppearanceTokens.surface.usesBackdrop
                     // Adaptive tint, one preset above the Dock's subtle level.
                     scrimLevel: "transparent"
@@ -1359,6 +1378,16 @@ PanelWindow {
 
                     Item {
                         id: launcherContentArea
+                        objectName: "launcher-root-content"
+                        // Filter only the root page; folder contents are outside this subtree
+                        // and retain their sharp icons and labels.
+                        layer.enabled: root.displayedFolder !== null || root.folderBlurProgress > 0
+                        layer.effect: MultiEffect {
+                            blurEnabled: true
+                            blurMax: 32
+                            blur: root.folderBlurProgress
+                            autoPaddingEnabled: false
+                        }
                         anchors.horizontalCenter: parent.horizontalCenter
                         anchors.top: parent.top
                         anchors.bottom: parent.bottom
@@ -1416,6 +1445,8 @@ PanelWindow {
 
                                     LiquidControls.LiquidTextField {
                                         id: searchBar
+                                        renderType: searchEntrance.scale === 1
+                                            ? TextInput.NativeRendering : TextInput.QtRendering
                                         anchors.fill: parent
                                         // Entrance motion belongs to the wrapper; focus
                                         // must not start a second scale animation.
@@ -1558,7 +1589,7 @@ PanelWindow {
                                 }
                                 color: Qt.rgba(0.027, 0.753, 0.376, 1.0)
 
-                                Text {
+                                ShellText {
                                     anchors.centerIn: parent
                                     text: I18n.tr("Done")
                                     color: "white"
@@ -1616,8 +1647,14 @@ PanelWindow {
                             readonly property int fullscreenRowCount: root.isFullscreenMode
                                 ? Math.max(1, Math.min(5,
                                     Math.floor(fullscreenAvailableHeight / cellHeight))) : 0
+                            // Card presentations start the scrolling viewport
+                            // below the search header, so a scrolled row can
+                            // never paint over or behind the field.
+                            readonly property real cardGridTop:
+                                header.y + header.height + 8
                             height: root.isFullscreenMode
-                                ? fullscreenRowCount * cellHeight : parent.height - 32
+                                ? fullscreenRowCount * cellHeight
+                                : parent.height - cardGridTop - 18
                             x: Math.round((parent.width - width) / 2)
                             y: root.isFullscreenMode
                                 // Keep Launchpad content visually connected to
@@ -1626,17 +1663,13 @@ PanelWindow {
                                 // short grid in all remaining vertical space.
                                 ? fullscreenTopClearance + Math.round(Math.min(24,
                                     Math.max(0, fullscreenAvailableHeight - height) * 0.20))
-                                : 14
+                                : cardGridTop
                             clip: true
                             interactive: !root.isFullscreenMode
                             boundsBehavior: Flickable.StopAtBounds
-                            // Reserve the search header in the resting
-                            // layout without moving the viewport itself. The
-                            // first row therefore never crowds the input, but
-                            // scrolling tiles can still travel behind the
-                            // header and emerge naturally below it.
-                            topMargin: root.isFullscreenMode ? 0
-                                : header.height + 8
+                            // The viewport already begins below the header;
+                            // no extra top inset is needed for card modes.
+                            topMargin: 0
                             // The visible card and grid cell share one source
                             // of truth. Density supplies the desired gap; cell
                             // width is then evenly divided across the usable
@@ -2223,27 +2256,16 @@ PanelWindow {
                     // membership/order mutations isolated from root ordering.
                     Item {
                         id: folderPage
+                        objectName: "launcher-folder-page"
                         anchors.fill: parent
                         z: 100
                         visible: root.displayedFolder !== null
                         enabled: root.folderDialogOpen && root.editingApplication === null
 
-                        Rectangle {
+                        MouseArea {
                             anchors.fill: parent
-                            // The backdrop dims as the folder opens, focusing attention
-                            // on the scattered icons, then lifts as they collapse back.
-                            color: Qt.rgba(0, 0, 0, 0.20)
-                            opacity: root.folderDialogOpen ? 1.0 : 0.0
-                            Behavior on opacity {
-                                NumberAnimation {
-                                    duration: 220
-                                    easing.type: Easing.OutCubic
-                                }
-                            }
-                            MouseArea {
-                                anchors.fill: parent
-                                onClicked: root.closeFolder()
-                            }
+                            // Dismiss without painting a dark overlay over the blur.
+                            onClicked: root.closeFolder()
                         }
 
                         Rectangle {
@@ -2311,7 +2333,7 @@ PanelWindow {
                                     }
                                 }
 
-                                Text {
+                                ShellText {
                                     id: folderTitle
                                     anchors.centerIn: parent
                                     visible: !root.folderRenameActive
@@ -2334,6 +2356,8 @@ PanelWindow {
 
                                 TextInput {
                                     id: folderNameInput
+                                    renderType: folderDialog.scale === 1
+                                        ? TextInput.NativeRendering : TextInput.QtRendering
                                     anchors.centerIn: parent
                                     visible: root.folderRenameActive
                                     width: Math.min(180, parent.width - 100)
@@ -2374,7 +2398,7 @@ PanelWindow {
                                         ThemeService.foregroundColor.b, 0.68)
                                 }
 
-                                Text {
+                                ShellText {
                                     anchors {
                                         right: parent.right
                                         verticalCenter: parent.verticalCenter
@@ -2605,7 +2629,7 @@ PanelWindow {
                                                 rightMargin: -5
                                             }
                                             color: Qt.rgba(0.95, 0.27, 0.25, 0.96)
-                                            Text {
+                                            ShellText {
                                                 anchors.centerIn: parent
                                                 text: "−"
                                                 color: "white"
@@ -2740,7 +2764,7 @@ PanelWindow {
                                 Item {
                                     width: parent.width
                                     height: 30
-                                    Text {
+                                    ShellText {
                                         anchors {
                                             left: parent.left
                                             verticalCenter: parent.verticalCenter
@@ -2879,6 +2903,7 @@ PanelWindow {
                                     clip: true
                                     TextInput {
                                         id: appEditorNameInput
+                                        renderType: TextInput.NativeRendering
                                         anchors.fill: parent
                                         anchors.leftMargin: 10
                                         anchors.rightMargin: 10
@@ -2922,6 +2947,7 @@ PanelWindow {
                                         selectedTextColor: AppLauncherService.dockForegroundColor
                                         selectByMouse: true
                                         text: root.editorIcon
+                                        renderType: TextInput.NativeRendering
                                         onTextEdited: root.editorIcon = text
 
                                         HoverHandler {

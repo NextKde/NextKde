@@ -43,6 +43,7 @@ Item {
 
     property var failures: []
     property int stage: 0
+    readonly property color appearanceInk: AppearanceTokens.isDarkTheme ? "#ffffff" : "#000000"
 
     function rgba(color) {
         if (color === undefined)
@@ -110,10 +111,10 @@ Item {
                     AppearanceTokens.bar.macStyle === false)
                 root.check("the default style keeps the theme ink",
                     root.sameColor(ThemeService.barInk,
-                        ThemeService.foregroundColor),
+                        root.appearanceInk),
                     root.rgba(ThemeService.barInk))
-                root.check("the default style keeps the readability outline",
-                    label.style === Text.Outline, label.style)
+                root.check("the default style keeps the readability backdrop",
+                    label.style === Text.Normal && label.shadowEnabled, label.style)
                 // The selector turns the style on; the remembered tint comes
                 // with it. A dark wallpaper at a low tint: strip still dark.
                 AppearanceConfigService.barMacStyle = true
@@ -136,8 +137,8 @@ Item {
                 root.check("the ink on it is white",
                     root.isWhite(ThemeService.barInk),
                     root.rgba(ThemeService.barInk))
-                root.check("white type drops the readability outline",
-                    label.style === Text.Normal, label.style)
+                root.check("mac style drops the additional readability backdrop",
+                    label.style === Text.Normal && !label.shadowEnabled, label.style)
                 // Raise the tint past the crossover: the same wallpaper, now
                 // under a mostly-opaque light plate.
                 AppearanceConfigService.barMacTint = 0.80
@@ -191,10 +192,10 @@ Item {
                     AppearanceTokens.bar.macStyle === false)
                 root.check("an integrated Bar keeps the theme ink",
                     root.sameColor(ThemeService.barInk,
-                        ThemeService.foregroundColor),
+                        root.appearanceInk),
                     root.rgba(ThemeService.barInk))
-                root.check("an integrated Bar keeps its outline",
-                    label.style === Text.Outline, label.style)
+                root.check("an integrated Bar keeps its readability backdrop",
+                    label.style === Text.Normal && label.shadowEnabled, label.style)
                 // Back to a standalone Bar. The style is a switch and the
                 // tint survives it: this is what the disabled slider showing
                 // its value means.
@@ -218,7 +219,7 @@ Item {
                     AppearanceTokens.bar.macStyle === false)
                 root.check("turning the style off restores the theme ink",
                     root.sameColor(ThemeService.barInk,
-                        ThemeService.foregroundColor),
+                        root.appearanceInk),
                     root.rgba(ThemeService.barInk))
                 if (root.failures.length > 0)
                     console.error("BAR_MAC_STYLE_FAIL: " + root.failures.join("; "))

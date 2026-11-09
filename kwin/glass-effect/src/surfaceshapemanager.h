@@ -7,6 +7,7 @@
 #include <QObject>
 #include <QRectF>
 #include <QVector>
+#include <QVector4D>
 #include <wayland-server-core.h>
 
 struct wl_global;
@@ -20,6 +21,12 @@ class SurfaceInterface;
 struct SurfaceShape
 {
     quint64 id = 0;
+    bool transactional = false;
+    uint effect = 0; // liquid=0, frosted=1
+    uint material = 1; // clear=0, regular=1, thick=2
+    qreal blurSigma = -1; // -1: legacy Kawase; v8: 0..32 logical px
+    uint tintMode = 0; // none/fixed/graphite/pearl
+    QVector4D tint = QVector4D(0, 0, 0, 0);
     QRectF geometry;
     QRectF captureGeometry;
     qreal materialOpacity = 1.0;
@@ -73,6 +80,7 @@ public:
 
     QVector<SurfaceShape> shapesFor(const SurfaceInterface *surface) const;
     std::optional<SurfaceReveal> revealFor(const SurfaceInterface *surface) const;
+    bool ownsGeometry(const SurfaceInterface *surface) const;
     void advanceAnimations();
     void completeAnimations();
 
@@ -108,11 +116,21 @@ public: // Wayland C dispatch table callbacks.
     static void setReveal(wl_client *client, wl_resource *resource,
                           uint32_t enabled, uint32_t opened, uint32_t duration, uint32_t serial);
     static void destroyShape(wl_client *client, wl_resource *resource);
+    static void commit(wl_client *, wl_resource *, wl_resource *surface);
+    static void setMaterial(wl_client *, wl_resource *, uint32_t effect, uint32_t profile);
+    static void setBlurSigma(wl_client *, wl_resource *, wl_fixed_t sigma);
+    static void setTint(wl_client *, wl_resource *, uint32_t mode,
+                        wl_fixed_t red, wl_fixed_t green, wl_fixed_t blue, wl_fixed_t opacity);
 
 private:
     void changed(ShapeResource *shape);
+    void applyCommit(const SurfaceInterface *surface);
+    void applyReveal(ShapeResource *shape, uint32_t enabled, uint32_t opened,
+                     uint32_t duration, uint32_t serial);
     void remove(ShapeResource *shape);
 
+    QSet<const SurfaceInterface *> m_transactionSurfaces;
+    QSet<const SurfaceInterface *> m_ownedSurfaces;
     QElapsedTimer m_clock;
     wl_global *m_global = nullptr;
     QSet<wl_resource *> m_managerResources;

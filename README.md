@@ -13,8 +13,14 @@ Liquid glass, a floating dock, and a workspace you can make your own.</p>
 <p align="center">
   <a href="#get-started">Get started</a> ·
   <a href="#the-desktop">Explore</a> ·
-  <a href="docs/Development.md">Develop</a> ·
-  <a href="README.zh-CN.md">简体中文</a>
+  <a href="docs/Development.md">Develop</a>
+</p>
+
+<p align="center">
+  <strong>English</strong> ·
+  <a href="README.zh-CN.md">简体中文</a> ·
+  <a href="README.ja.md">日本語</a> ·
+  <a href="README.es.md">Español</a>
 </p>
 
 <p align="center"><code>Plasma 6 / Wayland</code> &nbsp; <code>Quickshell 0.3.x</code> &nbsp; <code>Qt 6</code></p>
@@ -22,6 +28,13 @@ Liquid glass, a floating dock, and a workspace you can make your own.</p>
 ![NextKDE desktop with the top bar, floating dock, desktop widgets, and appearance settings](docs/images/desktop.png)
 
 <p align="center"><sub>The NextKDE desktop · macOS appearance · Theme settings</sub></p>
+
+NextKDE's desktop experience extends to a growing family of companion apps:
+Calendar (including tasks), Weather and Calculator are available as optional apps, while
+[KMusic](https://github.com/NextKde/KMusic) brings music into the mix. Mail and
+File Manager are planned for the future.
+
+![The NextKDE App Suite: Calendar, KMusic, and Weather in slim tablet frames](docs/images/apps-showcase.webp)
 
 ---
 
@@ -40,9 +53,13 @@ KWin, NetworkManager, PipeWire, BlueZ, and systemd.
 - **Desktop files** — open, rename, copy, move, delete, and choose an application.
 - **Settings & motion** — configure the bar, dock, launcher, shortcuts, window decoration, and animations.
 
-Calendar, Todo, Weather, and ListenFree are available as
-[optional standalone applications](apps/README.md). The default application
-bundle, including ListenFree, requires Qt 6.10+ and its additional audio dependencies;
+Calendar (including tasks), Calculator and Weather are available as
+[optional standalone applications](apps/README.md). `./tools/kosctl install apps`
+now uses signed GitHub Release Flatpak bundles, with no hosted NextKde app source.
+Signed distribution is not yet available,
+so new installations remain disabled. Legacy source builds require explicit
+`--backend=source`. ListenFree requires an explicit
+`./tools/kosctl install apps --with-listenfree`;
 see the [application installation guide](docs/GettingStarted.md#optional-standalone-applications).
 
 ## Get started
@@ -51,15 +68,10 @@ Use a **KDE Plasma 6 Wayland** session with **KWin 6.6+**, **Quickshell 0.3.x**,
 and **Qt 6.6+**. Installation builds the platform service, Settings, KWin effects,
 and window decoration.
 
-After preparing the dependencies for your distribution:
+### 1. Prepare dependencies
 
-```sh
-git clone https://github.com/SuceV587/NextKde.git
-cd NextKde
-./tools/kosctl doctor
-./tools/kosctl install
-./tools/kosctl start
-```
+Source selection also requires **Git** and **Python 3.9+**. Follow the guide for
+your distribution before running the installation commands:
 
 | Distribution | Installation guide |
 | :--- | :--- |
@@ -67,7 +79,36 @@ cd NextKde
 | Debian 13 | [Installer and manual setup](docs/GettingStarted.md#debian-13-trixie) |
 | Ubuntu 26.04 | [Packages and setup](docs/GettingStarted.md#ubuntu-2604-resolute) |
 | Fedora 44 | [Packages and setup](docs/GettingStarted.md#fedora-44-community-contributed) |
+| openSUSE Tumbleweed | [zypper packages and setup](docs/GettingStarted.md#opensuse-tumbleweed-community-contributed) |
 | NixOS | [Flake quick start](docs/nixos-quickstart.md) |
+
+### 2. Select a release and install
+
+For NixOS, follow the flake guide above. For the other distributions, once the
+dependencies are ready:
+
+```sh
+git clone --depth 1 https://github.com/SuceV587/NextKde.git
+cd NextKde
+./tools/kosctl update &&
+./tools/kosctl doctor &&
+./tools/kosctl install &&
+./tools/kosctl start
+```
+
+`update` selects source, `doctor` checks dependencies, `install` deploys the
+desktop, and `start` starts or restarts its services. Selecting source alone
+does not install or restart the desktop.
+
+### Version selection
+
+By default, `update` selects the [latest official release](https://github.com/SuceV587/NextKde/releases/latest)
+and stops if none is available. Only the latest official release is maintained;
+see the [release policy](docs/Releasing.md).
+
+To try the development branch, use `./tools/kosctl update main`
+(or `--version main` for the Debian installer). `./tools/kosctl version` reports
+installed files and source separately.
 
 Read the [installation guide](docs/GettingStarted.md) for desktop takeover,
 optional lock screen setup, first-login notes, updating, and uninstalling.
@@ -78,8 +119,8 @@ optional lock screen setup, first-login notes, updating, and uninstalling.
 Update and apply:
 
 ```sh
-git pull
-./tools/kosctl install
+./tools/kosctl update &&
+./tools/kosctl install &&
 ./tools/kosctl start
 ```
 
@@ -99,6 +140,8 @@ Updated KWin effect binaries load after your next logout/login or reboot.
 See the [daily-use guide](docs/GettingStarted.md#daily-use) for details.
 
 </details>
+
+Read the [documentation index](docs/README.md) for canonical guides and AI contributor references.
 
 ## Under the surface
 
@@ -121,6 +164,16 @@ Next steps include per-screen layouts, consistent widgets across displays,
 expanded settings and applications, and better keyboard navigation and accessibility.
 
 ---
+
+## Contributors
+
+Thank you to everyone who contributes to NextKDE!
+
+<a href="https://github.com/NextKde/NextKde/graphs/contributors">
+  <img src="https://contrib.rocks/image?repo=NextKde/NextKde&amp;max=1000" alt="NextKDE contributor avatars" />
+</a>
+
+Automatically generated from GitHub contributions with [contrib.rocks](https://contrib.rocks).
 
 ## License
 

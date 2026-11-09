@@ -9,7 +9,7 @@
 let
   go-service = buildGoModule {
     pname = "shell-data-service";
-    version = "unstable";
+    version = lib.removeSuffix "\n" (builtins.readFile "${src}/VERSION");
     src = "${src}/services/data-service";
     vendorHash = "sha256-Gt+D69n3xUiZDkV6yClL3mJFIAELl9JWPF49JYTdLH0=";
     subPackages = [ "." ];
@@ -37,7 +37,7 @@ let
 in
 stdenv.mkDerivation {
   pname = "kos-shell-data-service";
-  version = "unstable";
+  version = lib.removeSuffix "\n" (builtins.readFile "${src}/VERSION");
   dontUnpack = true;
 
   installPhase = ''

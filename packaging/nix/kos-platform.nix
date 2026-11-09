@@ -2,6 +2,8 @@
     lib,
     stdenv,
     cmake,
+    pkg-config,
+    flatpak,
     kdePackages,
     opencv,
     onnxruntime,
@@ -10,26 +12,30 @@
 
 stdenv.mkDerivation {
     pname = "kos-platform";
-    version = "unstable";
+    version = lib.removeSuffix "\n" (builtins.readFile "${src}/VERSION");
     src = "${src}/platform";
 
     # The standalone AI library lives at `services/ai/` in the source
     # tree, while this derivation builds the platform subdirectory alone.
     postPatch = ''
+      mkdir -p services
       cp -r ${src}/services/ai services/ai
     '';
 
     nativeBuildInputs = [
         cmake
+        pkg-config
         kdePackages.extra-cmake-modules
     ];
 
     buildInputs = [
+        flatpak
         kdePackages.qtbase
         kdePackages.qtdeclarative
         kdePackages.kiconthemes
         kdePackages.kglobalaccel
         kdePackages.kio
+        kdePackages.kconfig
         opencv
         onnxruntime
     ];

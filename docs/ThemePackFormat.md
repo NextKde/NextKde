@@ -1,38 +1,24 @@
-# 主题包格式(Theme Pack Format)
+# Wallpaper theme pack format
 
-主题包是主题市场的分发单位:一个自包含的目录,含清单、入口 QML 和全部资源。
-第三方包不 import shell 的任何模块,只依赖一份稳定的属性契约。
+[简体中文](ThemePackFormat.zh-CN.md)
 
-**内置主题与包同构**:`shared/qml/wallpapers/themes/<id>/` 下的 5 个内置主题
-就是随壳发布的同结构目录(唯一区别是没有 `manifest.json`,id 由宿主
-`sceneUrl()` 硬编码)。"内置"只是发布渠道不同,契约与布局完全一致。
+A pack is a self-contained directory of QML, manifest and assets. It does not import Shell
+modules: input comes through the stable host object below. Built-ins under
+`shared/qml/wallpapers/themes/<id>/` use the same runtime contract, with IDs registered in source
+instead of a manifest. Packs are side-loaded code; this is not a sandboxed public marketplace.
 
-## 目录结构
+## Layout and discovery
 
-```
-<pack-id>/
-├── manifest.json     # 必需,清单
-├── main.qml          # 必需,入口场景(可用 manifest.entry 改名)
-├── preview.png       # 推荐,设置网格/市场卡片缩略图
-├── shaders/          # 预编译 .qsb(相对 main.qml 解析)
-└── assets/           # 图片等资源
-```
-
-## 安装位置
-
-- 用户包:`~/.local/share/kos/wallpaper-themes/<pack-id>/`
-- 环境变量 `KOS_WALLPAPER_PACKS` 可覆盖扫描目录(开发用)。
-- 壳每 30 秒重扫一次;也可调用 `ThemePackService.rescan()` 立即刷新。
-- 官方主题不再以包形式单独分发:内置主题随壳发布在 `themes/` 下,第三方
-  主题包由用户自行安装。
-
-## manifest.json
+Install under `~/.local/share/kos/wallpaper-themes/<id>/`; `KOS_WALLPAPER_PACKS` overrides the scan
+root for development. `ThemePackService` rescans every 30 seconds or on explicit `rescan()`.
+The directory contains `manifest.json`, `main.qml`, optional `preview.png`, shaders and assets.
+Relative shader/assets URLs resolve from the entry QML. Preserve shader/Qt version compatibility.
 
 ```json
 {
   "id": "forest",
-  "name": "萤火森林",
-  "detail": "月光薄雾、层叠树影与近景萤火",
+  "name": "Forest",
+  "detail": "Layered trees and fireflies",
   "accent": "#B5CE75",
   "version": 1,
   "entry": "main.qml",
@@ -40,85 +26,49 @@
 }
 ```
 
-| 字段 | 必需 | 说明 |
-|---|---|---|
-| `id` | 否(缺省用目录名) | `[A-Za-z0-9_-]+`;与内置主题同 id 时覆盖内置渲染 |
-| `name` / `detail` | 否 | UI 文案,缺省用 id |
-| `accent` | 否 | `#RRGGBB`,喂给系统配色与 Plasma 占位图;缺省回退壳默认色 |
-| `version` | 否 | 整数,缺省 1 |
-| `entry` | 否 | 入口 QML 文件名,缺省 `main.qml`;不允许路径分隔符 |
-| `preview` | 否 | 缩略图文件名,缺省无;不允许路径分隔符 |
+All manifest fields are optional after a valid manifest is parsed: ID falls back to directory
+name and must match `[A-Za-z0-9_-]+`; name falls back to ID, detail to empty text; accent uses the Shell fallback;
+version defaults to 1; entry defaults to `main.qml`; preview may be absent. Entry/preview are file
+names without `/` or `..`; an invalid preview is cleared. Invalid manifests are skipped without breaking other packs.
+An installed ID overrides the same built-in ID; unavailable scenes fall back to Starfield.
 
-清单解析失败的包会被静默跳过,不影响其他包。
-
-## 根 Item 契约
-
-`entry` 指向的 QML 的**根 Item** 必须声明:
-
-```qml
-Item {
-    property var host: null      // 宿主由壳在加载后一次性注入,不换对象
-    signal frameReady()          // 渲染出一帧可呈现画面时发出
-}
-```
-
-其余输入一律从 `host.*` 读取(与内置场景的 ThemeSceneContract 相同):
-
-| 属性 | 类型 | 含义 |
-|---|---|---|
-| `themeId` | string | 主题 id(包场景固定为自己) |
-| `phase` | real | 全局动画时钟(秒) |
-| `foreground` | bool | true = 前景遍(窗口上方的粒子/视差层),false = 背景遍 |
-| `economical` | bool | 省电模式(降粒子数/降分辨率) |
-| `particleCount` | int | 期望粒子数 |
-| `widgetRects` | list | 桌面卡片矩形(x/y/width/height,表面坐标,最多 8 个) |
-| `pointer` | vector4d | (x, y, inside, 0) — x/y 为 UV 坐标 |
-| `clickPulse` | vector4d | (x, y, clickPhase, 0) — 点击脉冲,UV 坐标 |
-| `weatherCode` | int | WMO 天气码,0 表示无天气数据 |
-| `windStrength` / `windDirection` | real | 风(0-1 / 度) |
-| `isDay` | bool | 白昼 |
-| `weatherAvailable` | bool | 天气服务是否可用 |
-| `temperature` | string | 温度文案 |
-| `city` | string | 城市文案 |
-
-行为约定:
-
-- 主题切换 = 整个包组件重建(旧实例销毁),不要依赖跨切换的内部状态。
-- 被遮挡/离屏/锁屏时壳停止推进 `phase`,场景保留最后一帧即可。
-- 桌面空闲(无可见窗口)前壳不推进 `phase`,首帧仍应渲染。
-- frameReady 主要供背景遍上报;前景遍不发也可以(与内置一致)。
-- **不要在 `Component.onCompleted` 里同步 emit frameReady**——那会早于宿主
-  建立信号连接而丢失;用 `Qt.callLater(() => root.frameReady())`。
-
-## 最小示例
+## Root contract
 
 ```qml
 import QtQuick
-
 Item {
     id: root
     property var host: null
     signal frameReady()
-
     Rectangle {
         anchors.fill: parent
-        // 省电模式给纯色,正常模式做一点随时间的渐变。
-        color: host && host.economical ? "#101820"
-            : Qt.hsla(0.6, 0.4, 0.08 + 0.03 * Math.sin((host ? host.phase : 0)))
+        color: root.host && root.host.economical ? "#101820" : "#182638"
     }
     Component.onCompleted: Qt.callLater(() => root.frameReady())
 }
 ```
 
-## 解析优先级
+The Shell injects the stable `host` after creation. Emit first-frame readiness asynchronously
+so the signal is not lost before the host connects. Background scenes report readiness; foreground
+scenes may omit it. Read all input through host:
 
-已安装包 > 内置场景(同 id 时包覆盖内置,如官方 forest 包覆盖内置
-`NatureScene`)> 兜底 `StarfieldScene`。壳侧校验
-(`WallpaperService`/`ThemeWallpaperService`)同时接受内置 id 与已安装包 id。
+| Field | Type / meaning |
+| --- | --- |
+| `themeId` | string; scene ID |
+| `phase` | real; shared animation time in seconds |
+| `foreground` | bool; foreground pass above windows vs background |
+| `economical`, `particleCount` | bool/int; resource policy and requested particle count |
+| `widgetRects` | list of up to 8 surface-coordinate x/y/width/height rectangles |
+| `pointer` | vector4d: x/y UV, inside, 0 |
+| `clickPulse` | vector4d: x/y UV, click phase, 0 |
+| `weatherCode` | int WMO code; 0 when unavailable; also check availability |
+| `windStrength`, `windDirection` | real, normalized 0–1 / degrees |
+| `isDay`, `weatherAvailable` | bool |
+| `temperature`, `city` | display strings |
 
-## 已知限制(上架市场前的既定方向)
-
-- 包内 QML 是任意代码:V1 只面向自建/侧载分发,公开市场需要审核或
-  收紧为声明式格式后再开放。
-- `.qsb` 按 Qt 版本烘焙;Qt 大版本升级后旧包可能失效,后续在 manifest
-  加引擎版本要求。
+Switching themes destroys the old instance; do not depend on retained internal state.
+Hidden/offscreen/locked scenes retain their frame while phase is paused. Normal desktop animation
+waits for idle policy, so render a first frame without requiring a ticking clock. See
+[wallpaper ownership](WallpaperArchitecture.md) for preview and playback policy.
+Arbitrary pack QML requires trusted side-loading; public distribution would need review or a more
+restricted declarative format. Old `.qsb` files may need rebuilding for another Qt version.

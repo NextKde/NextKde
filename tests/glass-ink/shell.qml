@@ -96,8 +96,9 @@ Item {
                     root.rgba(panel.secondaryForegroundColor))
                 root.check("dark glass text is white",
                     root.isWhite(label.color), root.rgba(label.color))
-                root.check("white type keeps the readability outline",
-                    label.style === Text.Outline, label.style)
+                root.check("white type uses a readability backdrop without a glyph outline",
+                    label.style === Text.Normal && label.shadowEnabled
+                        && label.readabilityBackdropOpacity > 0, label.style)
                 root.check("the dock's ink role is white on the dark glass",
                     root.isWhite(ThemeService.foregroundColor),
                     root.rgba(ThemeService.foregroundColor))
@@ -116,8 +117,8 @@ Item {
                     root.rgba(panel.secondaryForegroundColor))
                 root.check("light glass text is dark",
                     root.isDark(label.color), root.rgba(label.color))
-                root.check("black type drops the readability outline",
-                    label.style === Text.Normal, label.style)
+                root.check("black type drops the readability backdrop and glyph outline",
+                    label.style === Text.Normal && !label.shadowEnabled, label.style)
                 root.check("the dock's ink role turns dark with the glass",
                     root.isDark(ThemeService.foregroundColor),
                     root.rgba(ThemeService.foregroundColor))

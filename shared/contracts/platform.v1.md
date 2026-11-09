@@ -24,6 +24,9 @@ Current operation groups are:
 
 - `application.launch` (KDE-native desktop-entry launch; accepts a desktop ID
   and optional URLs, never an arbitrary command)
+- `application.widget-snapshot`, `application.widget-open` (fixed Calendar/Weather
+  identity-bound summaries and navigation; see [widget contract](../../docs/app-store/WidgetIntegration.md).
+  No arbitrary paths/commands; stale installation tokens fail without fallback.)
 - `clipboard.set`, `clipboard.read`, `clipboard.save-image`,
   `clipboard.history.watch-images`,
   `clipboard.history.list`, `clipboard.history.copy`,
@@ -80,10 +83,16 @@ Current operation groups are:
   capability, which is what keeps the Shell's spatial wallpaper switched off.)
 - `settings.open` (allow-listed KDE System Settings modules) and
   `settings.launch` (launch the `kos-settings` app with a fixed argv; the
-  only accepted payload field is `shellDir`, an optional absolute path that
-  must canonicalise to an existing directory and is exported to the child as
-  `KOS_SHELL_DIR` so a development Settings session reconnects to the Shell
-  that launched it; no caller-supplied arguments)
+  optional `shellDir` must canonicalise to an existing absolute directory and
+  is exported as `KOS_SHELL_DIR` so a development Settings session reconnects to
+  its Shell. Optional `app` is restricted to `calendar` or `weather`: navigate
+  an existing session-scoped window first, otherwise attempt one detached spawn,
+  then await its local navigation acknowledgement for at most 20 seconds.
+  Success returns `started:true,navigated:true`; failure reports
+  `settings-navigation-failed`. Acknowledgement means the loaded QML root
+  accepted the destination, not that rendering or installation succeeded.
+  Without `app`, success retains process-start-only semantics.
+  No arbitrary caller-supplied arguments are accepted.)
 - `state.read`, `state.write` (bounded read/write of UTF-8 state files under
   `$XDG_STATE_HOME/quickshell`; payload `{dir, file[, data]}` where `dir` is a
   relative sub-path -- or an absolute path that must stay under the state root
@@ -92,6 +101,30 @@ Current operation groups are:
   escapes are rejected); payloads are capped at 1 MiB. `state.write` commits
   rename. `state.read` returns `{data, exists}` and reports `exists:false`
   with an empty `data` for a missing file)
+- Widget inspection (`application.widget-snapshot`, `application.widget-open`)
+  has one worker slot per fixed app, shared between reads and launch preflight.
+  Same-key reads coalesce under the bounded reply queue. At 15 seconds the daemon
+  responds `widget-query-timeout`, requests cooperative libflatpak cancellation,
+  drops late results and retains the slot until actual completion. Conflicting
+  or still-cancelling work returns `widget-query-busy`; no replacement worker is
+  queued. Non-cancellable filesystem/library stalls may outlive the deadline or
+  delay shutdown. This deadline excludes the subsequent KIO launch job.
+  Widget open rechecks canonical desktop path/content hash around KService loading
+  and Flatpak current/active deployment links; changes or unsupported layouts
+  fail with `source-changed`. This is not an atomic lock against external managers
+  after the last check and does not pin executable bytes or a running instance.
+- `lockscreen.weather-publish` (fixed lockscreen weather output; payload contains
+  exactly six string fields: `weatherSymbol`, `weatherTemperature`, `weatherCity`,
+  `weatherCondition`, `weatherApparent`, `weatherHumidity`, each <=256 UTF-16 units.
+  No QML, paths or executable input. The daemon emits escaped data-only QML to
+  GenericDataLocation/plasma/shells/org.kos.desktop/contents/lockscreen/LockFeed.qml.
+  Requires the existing current-user directory and regular LockScreen.qml; missing
+  theme returns `published:false,reason:theme-unavailable` without creating it.
+  Directory-relative atomic rename pins the destination inode; no async copy work.
+  Writes are ordered by platform dispatch, not multi-shell source timestamps.
+  Errors: `invalid-lockscreen-weather`, `lockscreen-weather-publish-failed`.
+  A timeout does not undo a committed write; local filesystem calls have no hard
+  time limit. No generic-copy fallback or full uninstall transaction is provided.)
 - `notify` (freedesktop notification; payload `{summary, body?, icon?,
   appName?, urgency?}` with `urgency` one of `low`/`normal`/`critical` and
   `appName` (<=128 chars) the notification's grouping/app label, defaulting
@@ -131,6 +164,12 @@ Current operation groups are:
   per-application PipeWire/PulseAudio sink-input control), `bluetooth.*`, `display.*`, `session.*`,
   `theme.*`, and `screenshot.*`
 
+`network.details {device}` includes `macAddress` from NetworkManager's device
+properties alongside `ipv4`, `ssid`, `connectionName` and `signalStrength`.
+An unavailable hardware address is an empty string. `network.traffic` counters
+are interface lifetime bytes, not per-process totals; a UI may subtract a local
+reset baseline without changing the counters or network configuration.
+
 KWin events are sent to subscribers as `window.snapshot`, `desktops`,
 `thumbnail`, `animation.started`, and related event names. KWin's internal script-to-daemon channel
 continues to use the session D-Bus service `org.kos.Platform` at `/Platform`;
@@ -150,6 +189,18 @@ meets the Bar/Dock safe edges directly and does not create an invisible gap.
 On `kwin.subscribe`, the daemon replays both its latest `window.snapshot` and
 latest `desktops` event when available. Consumers may explicitly request a
 fresh desktop event with `kwin.command {action: "desktops"}` during startup.
+
+The optional `desktops.transitionActive` boolean marks desktop navigation while
+KWin's `slide`, `cubeslide`, or `fadedesktop` effect is active. The daemon sets
+it before publishing a changed `current` desktop and republishes the latest
+desktop snapshot with `transitionActive: false` when the effect finishes.
+Initial snapshots do not start a transition. The bridge polls asynchronously
+only during a change (32ms between replies, 250ms per-call timeout), allows
+80ms for effect startup, and releases after at most 5 seconds. Query errors
+and compositor disconnection also release the gate. Rapid changes supersede
+older replies. Missing fields from older daemons mean `false`; Shell clears
+the gate when its platform connection drops. Replayed snapshots carry the
+latest gate value.
 
 Platform adapters validate all paths and operation names before executing a
 system action. Existing paths are canonicalized and new targets are resolved
@@ -179,6 +230,19 @@ color scheme when that tool is available; applying a complete Look-and-Feel
 package is a compatibility fallback, because replacing icons and workspace
 defaults is outside the light/dark toggle contract.
 
+`theme.sync-dock-animation` accepts `{style:"scale"|"genie"}` as a legacy
+appearance preference. It preserves an explicit window-page choice. A legacy
+`genie` without a saved choice migrates to KWin Magic Lamp, with
+`HideAnimationSelection=genie` and `HideAnimation=none`. The shared
+`platform/src/windowanimation/NativeGenie.h` adapter checks support, manages
+Magic Lamp/Squash exclusivity, and preserves previous plugin-key values and
+presence for restoration when the user chooses None. Missing/unsupported or
+load-failed Genie retains the selected `genie` preference and configures
+`HideAnimation=scale` with a `NativeGenieFallback` reason. Saved Genie is
+rechecked on startup, so support returning recovers the native backend. Explicit
+None is not migrated. Failed exclusivity/project-effect changes restore both
+configuration and runtime state; rollback failure is reported explicitly.
+
 ### Audio output selection
 
 - `audio.outputs` takes `{}` and returns `{available: true, outputs: [{name,
@@ -200,7 +264,66 @@ reported through the common response envelope.
 ### Status panel operations
 
 - `network.applications` (read): returns `{scope: "user-tcp", sockets: [{id, name, pid, rxBytes, txBytes}]}` from `ss -tinpeOH`. Visible-owner TCP counters are sampled per socket before grouping by process name. Local proxy connections may count the same traffic twice. UDP/QUIC, inaccessible owners, and connections closed between samples are excluded. These totals are independent of interface totals.
-- `power.profiles` (read): returns `{profiles, activeProfile, degraded}` from `powerprofilesctl list`.
-- `power.profile.set` (write): accepts `{profile: "power-saver" | "balanced" | "performance"}`. System authorization is retained; success is followed by a readback before confirming the selected profile.
+- `power.profiles` (read): returns `{profiles, activeProfile, degraded}`.
+  When `powerprofilesctl` is on `PATH`, the daemon runs `powerprofilesctl list`
+  and parses its text. If absent or unable to start (not a nonzero exit), it reads the system D-Bus PowerProfiles
+  service, trying `org.freedesktop.UPower.PowerProfiles` at
+  `/org/freedesktop/UPower/PowerProfiles` and then `net.hadess.PowerProfiles`
+  at `/net/hadess/PowerProfiles`. `Profiles`, `ActiveProfile` and
+  `PerformanceDegraded` are read with `org.freedesktop.DBus.Properties.Get`.
+  Only `power-saver`, `balanced` and `performance` are returned.
+  `PerformanceDegraded` of `no` or an empty string becomes an empty
+  `degraded`. If the helper is missing and neither name answers, the
+  operation fails with `command-unavailable`.
+- `power.battery` (read): takes `{}` and returns `{available, complete, batteries, adapters}`
+  from bounded reads of `/sys/class/power_supply/*/uevent` (at most 64 devices,
+  16 KiB each). `complete` is false if enumeration is unavailable, exceeds the
+  device limit, or any device read fails, is empty/oversized, or lacks a type.
+  Incomplete samples must not be used for whole-system battery aggregation or
+  pack-specific fields; the Shell falls back to UPower capacity/health instead.
+  All online adapter nodes are displayed separately, including nodes without
+  telemetry. No helper, system mutation, or caller-supplied path. `batteries`
+  contains present system packs with `name`, `model` and optional `energyFullWh`,
+  `energyDesignWh`, `chargeFullMah`, `chargeDesignMah`, `powerWatts`, `currentMa`,
+  `voltage`, `cycles`, `temperature` (°C). Charge-based energy conversion uses
+  design voltage. `adapters` contains online Mains/USB supplies with `name` and
+  optional `powerWatts`, `ratedPowerWatts`, `currentMa`, `voltage`. Missing or
+  invalid attributes are omitted; zero is a valid measured value. Adapter power
+  is never inferred from battery power. The Shell reads on open and every ten
+  seconds while open, drops stale replies after close/disconnect, and otherwise
+  continues using UPower's event-driven charge/state/time/health data. Multiple
+  battery capacities are combined in Wh only; pack-specific voltage, current,
+  cycle and temperature fields are unavailable for a combined display.
+- `power.profile.set` (write): accepts `{profile: "power-saver" | "balanced" | "performance"}`.
+  The same helper-or-D-Bus choice applies. A D-Bus write sets `ActiveProfile`
+  with `org.freedesktop.DBus.Properties.Set` on the service that answered the
+  read. Reads and writes are asynchronous on both clients, with whole-operation
+  deadlines of 2s for reads and 12s for writes (including discovery). No second
+  endpoint lookup occurs before Set. System authorization is retained. A helper or D-Bus failure is
+  `command-failed`. Success is followed by a readback before the client
+  confirms the selected profile.
 
-The optional `ss` and `powerprofilesctl` helpers must be installed for these operations. Missing helpers report unavailable states. The independent Power settings page also uses `powerprofilesctl` and observes system D-Bus profile changes; it is available without a battery or running shell.
+The optional `ss` helper must be installed for application traffic. Power
+profiles use `powerprofilesctl` when it is on `PATH`, and the PowerProfiles
+D-Bus API otherwise. Fedora's `tuned-ppd` owns both bus names and does not
+ship the helper, so that installation takes the D-Bus path. Missing both the
+helper and the service reports an unavailable state. Battery telemetry needs
+neither helper; an unavailable or older platform daemon leaves extra metrics
+as `—` while UPower charge/state, available capacity, time and health continue
+to update. The independent Power settings page uses the same helper-or-D-Bus
+choice and observes system D-Bus profile changes on both names; it is
+available without a battery or running shell.
+
+### Brightness write outcomes
+
+`display.brightness.set` accepts `payload.percent` (clamped to 0–100) and an
+optional `payload.displayId`. The top-level `percent` is accepted for compatibility
+only when the payload omits it. Explicit display IDs never fall back to another
+backend/device. Without an ID, available KDE displays are written in parallel.
+Success includes `result.percent`; KDE multi-display writes additionally return
+`result.displays`, an array of `{displayId, ok}` outcomes. If some displays fail,
+`ok` is false with code `brightness-partial-failure`; if all fail, the code is
+`brightness-display-set-failed`. Those errors include the outcomes in
+`error.details.displays` and do not claim that the requested percent was applied
+universally. Legacy backend fallback occurs only when no KDE display is available,
+not after an advertised display fails. Solid is used before brightnessctl/logind.

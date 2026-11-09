@@ -15,6 +15,17 @@
 #include <epoxy/gl.h>
 
 namespace {
+template<typename Display>
+auto createDisplay(EGLDisplay handle)
+{
+    // 6.6 accepts an optional ownership flag; 6.7+ requires a DrmDevice*.
+    if constexpr (requires { Display::create(handle, nullptr); }) {
+        return Display::create(handle, nullptr);
+    } else {
+        return Display::create(handle);
+    }
+}
+
 GLuint compileShader(GLenum type, const char *source)
 {
     const GLuint shader = glCreateShader(type);
@@ -35,8 +46,8 @@ GLuint compileShader(GLenum type, const char *source)
 int main(int argc, char **argv)
 {
     QCoreApplication application(argc, argv);
-    auto display = KWin::EglDisplay::create(
-        eglGetPlatformDisplayEXT(EGL_PLATFORM_SURFACELESS_MESA, EGL_DEFAULT_DISPLAY, nullptr), nullptr);
+    auto display = createDisplay<KWin::EglDisplay>(
+        eglGetPlatformDisplayEXT(EGL_PLATFORM_SURFACELESS_MESA, EGL_DEFAULT_DISPLAY, nullptr));
     if (!display) return 77;
     auto context = KWin::EglContext::create(display.get(), EGL_NO_CONFIG_KHR, nullptr);
     if (!context || !context->makeCurrent()) return 77;

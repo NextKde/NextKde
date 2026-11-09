@@ -45,10 +45,18 @@ Scope {
     IpcHandler {
         target:"preview"
         function theme(mode:string):void { AppearanceConfigService.glassFollowsAppearanceMode=true; AppearanceConfigService.themeMode=mode }
-        function sample():void {
+        function ready():bool { return true }
+        function open():void { if (!center.isOpen) center.toggle(anchor) }
+        function sample():bool {
             const list=test.find(center.contentItem,"notification-history-list")
-            test.identities=[0,1,2].map(i=>list.itemAtIndex(i).cardItem)
+            // Delegates do not exist while the popup is closed, and ListView
+            // may instantiate them on a later frame after it opens.
+            if (!center.isOpen || center.revealProgress < 1 || !list) return false
+            const cards=[0,1,2].map(i=>list.itemAtIndex(i)?.cardItem)
+            if (cards.some(card=>!card)) return false
+            test.identities=cards
             test.frameTimes=[]; test.sampling=true
+            return true
         }
         function expand(value:bool):void { test.find(center.contentItem,"notification-history-pane").requestExpanded(value) }
         function stats():string {
@@ -61,7 +69,7 @@ Scope {
                 capture:pane.captureAnchor!==null,
                 fixedCapture:list.itemAtIndex(0)?.cardItem?.fixedCaptureSupported ?? false,
                 keys:[0,1,2].map(i=>list.itemAtIndex(i)?.cardItem?.historyKey ?? -1),
-                retained:test.identities.length===3 && test.identities.every((card,i)=>list.itemAtIndex(i)?.cardItem===card),
+                retained:test.identities.length===3 && test.identities.every((card,i)=>card && list.itemAtIndex(i)?.cardItem===card),
                 frames:test.frameTimes})
         }
         function outerScroll():void {
@@ -92,5 +100,4 @@ Scope {
                 appIcon:row[3],summary:row[1],body:row[2],timestamp:Date.now()-i*60000,urgency:1})
         }
     }
-    Timer {running:true;interval:1600;onTriggered:center.toggle(anchor)}
 }

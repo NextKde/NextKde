@@ -5,6 +5,7 @@ Item {
     QtObject {
         id: backend
         property var state: ({enabled:true, radius:20, shadow:true, hideAnimation:"scale", closeAnimation:"scale", buttonGlyphMode:"always"})
+        property bool animationBusy: false
         property string error: ""
         property var calls: []
         function refresh() {}
@@ -15,7 +16,7 @@ Item {
         function setRadius(value) { change("radius", value); return true }
         function setShadow(value) { change("shadow", value); return true }
         function setTakeover(value) { change("enabled", value); return true }
-        function setAnimation(kind, value) { change(kind + "Animation", value); return true }
+        function requestAnimation(kind, value) { change(kind + "Animation", value); return true }
         function setButtonGlyphMode(value) { change("buttonGlyphMode", value); return true }
     }
     TestCase {
@@ -66,7 +67,12 @@ Item {
                 const picker=control(kind === "hide" ? "windowHideAnimation" : "windowCloseAnimation")
                 const styles=kind === "hide" ? ["none","scale","genie"] : ["none","fade","scale"]
                 for (let i=0;i<3;++i) {
-                    mouseClick(picker, picker.width * (i+0.5)/3, picker.height/2)
+                    mouseClick(picker, picker.width / 2, picker.height / 2)
+                    tryVerify(() => picker.popupOpened)
+                    keyClick(Qt.Key_Home)
+                    for (let next = 0; next < i; ++next) keyClick(Qt.Key_Down)
+                    keyClick(Qt.Key_Return)
+                    tryVerify(() => !picker.popupOpened)
                     compare(backend.state[kind+"Animation"], styles[i])
                 }
             }

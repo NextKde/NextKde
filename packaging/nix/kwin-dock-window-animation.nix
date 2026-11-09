@@ -8,8 +8,10 @@
 
 stdenv.mkDerivation {
   pname = "kwin-dock-window-animation";
-  version = "unstable";
-  src = "${src}/kwin/dock-window-animation";
+  version = lib.removeSuffix "\n" (builtins.readFile "${src}/VERSION");
+  # Keep the sibling kos-bridge sources used by this plugin available.
+  inherit src;
+  sourceRoot = "source/kwin/dock-window-animation";
 
   nativeBuildInputs = [
     cmake

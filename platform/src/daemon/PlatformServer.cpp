@@ -3,6 +3,8 @@
 #include "KeepAwakeLease.h"
 #include "PlatformProcess.h"
 #include "PlatformDbus.h"
+#include "../windowanimation/NativeGenie.h"
+#include "../windowanimation/AnimationTask.h"
 
 #include <QByteArray>
 #include <QClipboard>
@@ -70,6 +72,13 @@ PlatformServer::PlatformServer(QObject *parent)
     : QObject(parent), m_socketPath(runtimeSocketPath())
 {
     qDBusRegisterMetaType<NmSettings>();
+    new KOS::WindowAnimation::AnimationTask(this, [] {
+        QString error;
+        const bool saved = KOS::WindowAnimation::migrate(error);
+        return KOS::WindowAnimation::AnimationTask::Result{saved, error};
+    }, [](const auto &result) {
+        if (!result.first) qWarning().noquote() << "Dock animation migration:" << result.second;
+    });
     // KDED starts the AppMenu registrar only while a menu view exists. Plasma's
     // applet normally owns this queueable marker service; own it here so the
     // Bar can receive menus without running a separate Plasma panel applet.
@@ -277,15 +286,18 @@ bool PlatformServer::writeClientMessage(QLocalSocket *socket, const QJsonObject 
 void PlatformServer::respond(QLocalSocket *socket, const QJsonObject &request,
                               bool ok, const QJsonObject &result,
                               const QString &code, const QString &message,
-                              bool retryable)
+                              bool retryable, const QJsonObject &details)
 {
     QJsonObject response{{QStringLiteral("version"), kProtocolVersion},
                          {QStringLiteral("requestId"), requestId(request)},
                          {QStringLiteral("ok"), ok}};
     if (ok)
         response.insert(QStringLiteral("result"), result);
-    else
-        response.insert(QStringLiteral("error"), errorObject(code, message, retryable));
+    else {
+        auto error = errorObject(code, message, retryable);
+        if (!details.isEmpty()) error.insert(QStringLiteral("details"), details);
+        response.insert(QStringLiteral("error"), error);
+    }
     writeClientMessage(socket, response);
 }
 
@@ -316,7 +328,8 @@ void PlatformServer::broadcastKWinEvent(const QJsonObject &event)
 void PlatformServer::runCommand(QLocalSocket *socket, const QJsonObject &request,
                                 const QString &program, const QStringList &arguments,
                                 std::function<QJsonObject(const QByteArray &, int)> parser,
-                                int timeoutMs, const QString &cacheKey, int cacheTtlMs)
+                                int timeoutMs, const QString &cacheKey, int cacheTtlMs,
+                                std::function<void()> failedToStart)
 {
     // With a cacheKey the response is shared: a poll that lands while the
     // same operation is still running queues onto it instead of spawning a
@@ -379,10 +392,15 @@ void PlatformServer::runCommand(QLocalSocket *socket, const QJsonObject &request
     });
     connect(process, &QProcess::errorOccurred, this,
             [this, guardedSocket, request, process, replied, timedOut,
-             cacheKey, cacheTtlMs](QProcess::ProcessError) {
+             cacheKey, cacheTtlMs, failedToStart](QProcess::ProcessError error) {
         if (*replied)
             return;
         *replied = true;
+        if (error == QProcess::FailedToStart && failedToStart && cacheKey.isEmpty()) {
+            process->deleteLater();
+            failedToStart();
+            return;
+        }
         // A watchdog kill arrives here as Crashed, ahead of finished() --
         // surface the timeout instead of a generic failure.
         const QString code = *timedOut ? QStringLiteral("command-timeout")
@@ -518,6 +536,9 @@ void PlatformServer::handleRequest(QLocalSocket *socket, const QJsonObject &requ
             {QStringLiteral("ready"), true},
             {QStringLiteral("capabilities"), QJsonArray{
                 QStringLiteral("input.clipboard-anchor"),
+                QStringLiteral("application.widget-snapshot"),
+                QStringLiteral("application.widget-open"),
+                QStringLiteral("lockscreen.weather-publish"),
                 QStringLiteral("wallpaper.plasma.proxy"),
                 QStringLiteral("wallpaper.plasma.restore"),
                 QStringLiteral("wallpaper.preview.desktop"),

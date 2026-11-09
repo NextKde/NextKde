@@ -33,8 +33,11 @@ const dockWindow = readFileSync(
 const dockPill = dockWindow.match(
     /LiquidGlassPanel \{\n\s*id: pill\n([\s\S]*?)\n {8}\}/);
 assert.ok(dockPill, "the Dock's base pill is a LiquidGlassPanel named pill");
-assert.match(dockPill[1], /\n\s*radius: root\.stretched \? 0 : dockContainer\.pillRadius/,
-    "the Dock pill keeps its own radius");
+assert.match(dockPill[1], /\n\s*radius: dockContainer\.surfaceRadius/,
+    "the Dock pill uses the container's stretched-aware radius");
+const dockContainer = readFileSync(join(shell, "desktop/modules/dock/DockContainer.qml"), "utf8");
+assert.match(dockContainer, /surfaceRadius: stretched \? 0 : pillRadius/,
+    "the container removes the capsule radius only when stretched");
 assert.match(dockPill[1],
     /\n\s*cornerExponent: 2\.35/,
     "the Dock pill keeps its capsule corner profile");
@@ -53,6 +56,7 @@ try {
     // session; without the second one the failure is a bare "module
     // ../../../Kos/Ui is not installed" six frames down the type chain.
     symlinkSync(join(shell, "desktop"), join(directory, "desktop"), "dir");
+    symlinkSync(join(shell, "shared"), join(directory, "shared"), "dir");
     symlinkSync(join(shell, "Kos"), join(directory, "Kos"), "dir");
 
     const result = spawnSync(process.argv[2] || "quickshell",

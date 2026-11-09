@@ -47,6 +47,7 @@ JsonlClient {
     timeoutName: "platform"
     readOperations: ({
         "session.visibility": true,
+        "application.widget-snapshot": true,
         "appmenu.active": true,
         "appmenu.layout": true,
         "audio.applications": true,
@@ -67,6 +68,7 @@ JsonlClient {
         "network.traffic": true,
         "network.applications": true,
         "power.profiles": true,
+        "power.battery": true,
         "nightlight.get": true,
         "keepawake.get": true,
         "platform.ping": true,

@@ -76,9 +76,12 @@ PopupWindow {
         enabled: root.visible && (!root.macosPopupMotion || popupMotion.requestedOpen)
     }
 
-    function setItems(items) {
+    function setItems(items, immediate) {
         root.rootItems = items || []
         root.page = ({ items: root.rootItems, parents: [] })
+        // A DBusMenu owner may release its entries immediately. Do not retain
+        // that page through the ordinary navigation crossfade.
+        if (immediate === true) pageMotion.reset(root.page)
     }
     function clear() { root.setItems([]) }
     function addItem(icon, label, cmd, enabled) {
@@ -309,8 +312,12 @@ PopupWindow {
         anchors.fill: parent
         blurAnchor: revealFrame.morphing ? revealFrame : glass
         captureAnchor: revealFrame.morphing ? captureFrame : null
-        // The content corner mask still needs a client layer. Reuse its final
-        // texture allocation instead of resizing the FBO on every animation frame.
+        // The growing capsule and partially scrolled rows need corner clipping.
+        // A settled menu that fits draws text without the extra texture pass.
+        maskContent: view.overflowing
+            || (revealFrame.morphing && revealFrame.progress < 1)
+        // During the reveal, reuse the final texture allocation instead of
+        // resizing the FBO on every animation frame.
         // Explicit texture sizes are physical pixels; Qt only applies the window's
         // device pixel ratio automatically when textureSize is left empty.
         layer.textureSize: revealFrame.morphing

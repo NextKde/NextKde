@@ -51,15 +51,15 @@ singleton AppearanceTokens 1.0 AppearanceTokens.qml
     const display = process.env.WAYLAND_DISPLAY;
     const socket = display && (isAbsolute(display) ? display : join(process.env.XDG_RUNTIME_DIR || "", display));
     if (!socket || !existsSync(socket)) {
-        console.log("SKIP: unmapped shipping-surface checks require a Wayland compositor");
+        console.log("SKIP: shipping-surface checks require a Wayland compositor");
     } else {
-        // Both production windows stay unmapped. Connect only for PanelWindow's
-        // backend; no pointer/keyboard events or desktop actions are synthesized.
+        // Map the launcher so render-thread Animator jobs can settle and
+        // release its input gate. No pointer/keyboard events are synthesized.
         symlinkSync(socket, join(runtime, "runtime", basename(display)));
         const output = run(process.argv[3] || "quickshell", ["-p", runtime, "--no-color"], {
             XDG_CONFIG_HOME: join(runtime, "config"), XDG_STATE_HOME: join(runtime, "state"),
             XDG_RUNTIME_DIR: join(runtime, "runtime"), WAYLAND_DISPLAY: basename(display),
-            QT_QPA_PLATFORM: "wayland",
+            QT_QPA_PLATFORM: "wayland", QT_QUICK_BACKEND: "",
             DBUS_SESSION_BUS_ADDRESS: "unix:path=" + join(runtime, "runtime/no-bus"),
         });
         assert.match(output, /SELECTION_SURFACES_PASS/, output);

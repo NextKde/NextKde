@@ -18,8 +18,7 @@ Item {
     // disagree. The ink follows the glass, so while 液态玻璃跟随外观模式 is off
     // the arrow still strokes exactly the white it stroked before. With the
     // mac-style ground on, both halves take the strip's own ink instead.
-    readonly property color glyphInk: AppearanceTokens.bar.macStyle
-        ? ThemeService.barInk : AppearanceTokens.content.glassInk()
+    readonly property color glyphInk: ThemeService.barInk
     // The arrow's readability edge. It keeps the exact condition it had before
     // and is dropped while the ground paints a plate under the mark. The two
     // labels take the same condition (see the Texts below), where the edge was

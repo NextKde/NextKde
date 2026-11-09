@@ -1,6 +1,7 @@
 #pragma once
 
 #include <QList>
+#include <QColor>
 #include <QMetaObject>
 #include <QObject>
 #include <QPointer>
@@ -14,6 +15,13 @@ struct wl_surface;
 class SurfaceShape : public QObject
 {
     Q_OBJECT
+    Q_PROPERTY(bool continuousBlurSupported READ continuousBlurSupported NOTIFY activeChanged)
+    Q_PROPERTY(qreal blurSigma READ blurSigma WRITE setBlurSigma NOTIFY finishChanged)
+    Q_PROPERTY(int effectType READ effectType WRITE setEffectType NOTIFY finishChanged)
+    Q_PROPERTY(int material READ material WRITE setMaterial NOTIFY finishChanged)
+    Q_PROPERTY(int tintMode READ tintMode WRITE setTintMode NOTIFY finishChanged)
+    Q_PROPERTY(QColor tintColor READ tintColor WRITE setTintColor NOTIFY finishChanged)
+    Q_PROPERTY(qreal tintOpacity READ tintOpacity WRITE setTintOpacity NOTIFY finishChanged)
     Q_PROPERTY(QQuickItem *target READ target WRITE setTarget NOTIFY targetChanged)
     Q_PROPERTY(qreal radius READ radius WRITE setRadius NOTIFY radiusChanged)
     Q_PROPERTY(qreal exponent READ exponent WRITE setExponent NOTIFY exponentChanged)
@@ -40,7 +48,23 @@ class SurfaceShape : public QObject
     Q_PROPERTY(int blurLevel READ blurLevel WRITE setBlurLevel NOTIFY blurLevelChanged)
 
 public:
+    enum Effect { Liquid, Frosted }; Q_ENUM(Effect)
+    enum Material { Clear, Regular, Thick }; Q_ENUM(Material)
+    enum TintMode { NoTint, Fixed, Graphite, Pearl }; Q_ENUM(TintMode)
     explicit SurfaceShape(QObject *parent = nullptr);
+    bool continuousBlurSupported() const;
+    qreal blurSigma() const { return m_blurSigma; }
+    int effectType() const { return m_effectType; }
+    int material() const { return m_material; }
+    int tintMode() const { return m_tintMode; }
+    QColor tintColor() const { return m_tintColor; }
+    qreal tintOpacity() const { return m_tintOpacity; }
+    void setBlurSigma(qreal value);
+    void setEffectType(int value);
+    void setMaterial(int value);
+    void setTintMode(int value);
+    void setTintColor(const QColor &value);
+    void setTintOpacity(qreal value);
     ~SurfaceShape() override;
 
     QQuickItem *target() const { return m_target; }
@@ -79,6 +103,7 @@ public:
     void setBlurLevel(int level);
 
 Q_SIGNALS:
+    void finishChanged();
     void targetChanged();
     void radiusChanged();
     void exponentChanged();
@@ -113,6 +138,12 @@ private:
     QPointer<QQuickItem> m_syncItem;
     kos_surface_shape_v1 *m_shape = nullptr;
     wl_surface *m_surface = nullptr;
+    qreal m_blurSigma = 12;
+    int m_effectType = Liquid;
+    int m_material = Regular;
+    int m_tintMode = NoTint;
+    QColor m_tintColor = Qt::black;
+    qreal m_tintOpacity = 0;
     qreal m_radius = 0.0;
     QRectF m_captureGeometry;
     qreal m_materialOpacity = 1.0;

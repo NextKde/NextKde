@@ -18,7 +18,10 @@
     "provider": { "const": "open-meteo" },
     "status": { "enum": ["idle", "loading", "ready", "error"] },
     "units": { "enum": ["metric", "imperial"] },
-    "location": { "$ref": "#/$defs/location" },
+    "location": { "oneOf": [
+      { "$ref": "#/$defs/location" },
+      { "$ref": "#/$defs/emptyLocation" }
+    ] },
     "locations": {
       "type": "array",
       "maxItems": 20,
@@ -30,6 +33,7 @@
     "lastAttemptAt": { "type": "integer", "minimum": 0 },
     "error": { "type": "string", "maxLength": 240 },
     "current": { "$ref": "#/$defs/current" },
+    "airQuality": { "$ref": "#/$defs/airQuality" },
     "hourly": {
       "type": "array",
       "maxItems": 48,
@@ -42,7 +46,29 @@
     }
   },
   "additionalProperties": true,
+  "allOf": [{
+    "if": { "properties": { "locations": { "maxItems": 0 } } },
+    "then": {
+      "properties": {
+        "location": { "$ref": "#/$defs/emptyLocation" },
+        "status": { "const": "idle" },
+        "hourly": { "maxItems": 0 },
+        "daily": { "maxItems": 0 }
+      },
+      "not": { "required": ["current"] }
+    },
+    "else": { "properties": { "location": { "$ref": "#/$defs/location" } } }
+  }],
   "$defs": {
+    "emptyLocation": {
+      "type": "object",
+      "required": ["id", "name", "latitude", "longitude"],
+      "properties": {
+        "id": { "const": "" }, "name": { "const": "" },
+        "latitude": { "const": 0 }, "longitude": { "const": 0 }
+      },
+      "additionalProperties": false
+    },
     "location": {
       "type": "object",
       "required": ["id", "name", "latitude", "longitude"],
@@ -54,7 +80,19 @@
         "countryCode": { "type": "string" },
         "latitude": { "type": "number", "minimum": -90, "maximum": 90 },
         "longitude": { "type": "number", "minimum": -180, "maximum": 180 },
-        "timezone": { "type": "string" }
+        "timezone": { "type": "string" },
+        "summary": {
+          "type": "object",
+          "properties": {
+            "time": { "type": "string" },
+            "temperature": { "type": "number" },
+            "weatherCode": { "type": "integer" },
+            "isDay": { "type": "boolean" },
+            "tempHigh": { "type": "number" },
+            "tempLow": { "type": "number" }
+          },
+          "additionalProperties": true
+        }
       },
       "additionalProperties": true
     },
@@ -78,7 +116,23 @@
         "isDay": { "type": "boolean" },
         "weatherCode": { "type": "integer" },
         "windSpeed": { "type": "number", "minimum": 0 },
-        "windDirection": { "type": "number", "minimum": 0, "maximum": 360 }
+        "windDirection": { "type": "number", "minimum": 0, "maximum": 360 },
+        "windGust": { "type": ["number", "null"], "minimum": 0 },
+        "uvIndex": { "type": ["number", "null"], "minimum": 0 },
+        "visibility": { "type": ["number", "null"], "minimum": 0 },
+        "pressure": { "type": ["number", "null"], "minimum": 0 },
+        "moonPhase": { "type": ["number", "null"], "minimum": 0, "maximum": 1 },
+        "moonIllumination": { "type": ["number", "null"], "minimum": 0, "maximum": 100 }
+      },
+      "additionalProperties": true
+    },
+    "airQuality": {
+      "type": "object",
+      "required": ["time"],
+      "properties": {
+        "time": { "type": "string" },
+        "usAqi": { "type": ["number", "null"], "minimum": 0 },
+        "category": { "type": "string" }
       },
       "additionalProperties": true
     },

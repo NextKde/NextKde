@@ -18,11 +18,15 @@ parser = argparse.ArgumentParser()
 parser.add_argument('--build-dir', type=Path, default=repo / '.build/kosctl')
 parser.add_argument('--output-dir', type=Path, default=repo / '.build/qa/notification-history')
 parser.add_argument('--screenshots', action='store_true')
+parser.add_argument('--close', action='store_true', help='Exercise notification-history teardown with KWin popup fading enabled')
+parser.add_argument('--plugin', type=Path, help='Use a specific Glass binary for before/after comparison in the isolated compositor')
 parser.add_argument('--width', type=int, default=1120)
 parser.add_argument('--height', type=int, default=1080)
 args = parser.parse_args()
+if args.close and args.screenshots:
+    parser.error('--close and --screenshots are separate QA modes')
 args.output_dir.mkdir(parents=True, exist_ok=True)
-plugin = args.build_dir / 'kwin-effects-glass/src/glass.so'
+plugin = args.plugin or args.build_dir / 'kwin-effects-glass/src/glass.so'
 if not plugin.is_file():
     raise SystemExit(f'Build the glass effect first, or pass --build-dir: {plugin}')
 with tempfile.TemporaryDirectory(prefix='kos-notification-native-') as directory:
@@ -42,7 +46,7 @@ with tempfile.TemporaryDirectory(prefix='kos-notification-native-') as directory
     for entry in (repo / 'shell/desktop/modules/platform').iterdir():
         if entry.name != 'PlatformClient.qml': (platform / entry.name).symlink_to(entry)
     shutil.copy2(Path(__file__).with_name('NativePlatformFixture.qml'), platform / 'PlatformClient.qml')
-    shutil.copy2(Path(__file__).with_name('native.qml'), stage / 'shell.qml')
+    shutil.copy2(Path(__file__).with_name('close.qml' if args.close else 'native.qml'), stage / 'shell.qml')
     plugins = stage / 'plugins/kwin/effects/plugins'
     plugins.mkdir(parents=True)
     (plugins / 'glass.so').symlink_to(plugin.resolve())
@@ -50,18 +54,39 @@ with tempfile.TemporaryDirectory(prefix='kos-notification-native-') as directory
     config.mkdir()
     (config / 'kwinrc').write_text('[Plugins]\nglassEnabled=true\nblurEnabled=false\nscaleEnabled=false\nfadeEnabled=false\nfadingpopupsEnabled=false\nslidingpopupsEnabled=false\nsquashEnabled=false\n[Effect-glass]\nBlurStrength=6\nLiquidStrength=10\n')
     (config / 'kdeglobals').write_text('[KDE]\nAnimationDurationFactor=0\n')
+    if args.close:
+        kwinrc = config / 'kwinrc'
+        kwinrc.write_text(kwinrc.read_text().replace('fadingpopupsEnabled=false', 'fadingpopupsEnabled=true'))
+        (config / 'kdeglobals').write_text('[KDE]\nAnimationDurationFactor=1\n')
     socket = f'kos-notification-native-{os.getpid()}'
     session = stage / 'session.sh'
     # Paths are passed as argv/env, never interpolated as shell code.
     session.write_text('''#!/bin/sh
+set -eu
 export QT_QPA_PLATFORM=wayland
 export WAYLAND_DISPLAY="$KOS_QA_SOCKET"
 quickshell --path "$KOS_QA_STAGE" --no-color &
 qa_pid=$!
-sleep 4
+trap 'kill "$qa_pid" 2>/dev/null || true' EXIT
+wait_for_preview() {
+    attempts=0
+    while [ "$attempts" -lt 50 ]; do
+        if [ "$(quickshell --path "$KOS_QA_STAGE" ipc call preview "$1" 2>/dev/null)" = true ]; then
+            return 0
+        fi
+        attempts=$((attempts + 1))
+        sleep 0.1
+    done
+    echo "HISTORY_NATIVE_FAIL: timed out waiting for preview $1" >&2
+    return 1
+}
+wait_for_preview ready
+# Regression: sampling a closed popup must refuse without dereferencing a
+# missing delegate or recording null identities as a successful sample.
+[ "$(quickshell --path "$KOS_QA_STAGE" ipc call preview sample)" = false ]
+quickshell --path "$KOS_QA_STAGE" ipc call preview open
+wait_for_preview sample
 quickshell --path "$KOS_QA_STAGE" ipc call preview outerScroll
-sleep 0.3
-quickshell --path "$KOS_QA_STAGE" ipc call preview sample
 quickshell --path "$KOS_QA_STAGE" ipc call preview stats
 if [ "$KOS_QA_SCREENSHOTS" = 1 ]; then
     timeout 5s spectacle -b -n -f -o "$KOS_QA_OUTPUT/dark-collapsed.png"
@@ -83,19 +108,27 @@ if [ "$KOS_QA_SCREENSHOTS" = 1 ]; then
     timeout 5s spectacle -b -n -f -o "$KOS_QA_OUTPUT/light-collapsed.png"
 fi
 kill "$qa_pid"
-wait "$qa_pid"
+wait "$qa_pid" || true
+trap - EXIT
 ''')
     session.chmod(0o755)
+    if args.close:
+        session.write_text('''#!/bin/sh
+export QT_QPA_PLATFORM=wayland
+export WAYLAND_DISPLAY="$KOS_QA_SOCKET"
+exec quickshell --path "$KOS_QA_STAGE" --no-color
+''')
     env = dict(os.environ, XDG_CONFIG_HOME=str(config), QT_PLUGIN_PATH=str(stage / 'plugins'),
                QML_IMPORT_PATH=str(args.build_dir / 'qml'), QML2_IMPORT_PATH=str(args.build_dir / 'qml'),
                QT_QPA_PLATFORM='offscreen', QT_FORCE_STDERR_LOGGING='1', LIBGL_ALWAYS_SOFTWARE='1',
                KOS_GLASS_TRACE='1', QS_DISABLE_FILE_WATCHER='1', KOS_QA_SOCKET=socket,
+               QT_LOGGING_RULES=os.environ.get('QT_LOGGING_RULES', '') + ';kwin_effect_blur.debug=true',
                KOS_QA_STAGE=str(stage), KOS_QA_OUTPUT=str(args.output_dir.resolve()),
                KOS_QA_SCREENSHOTS='1' if args.screenshots else '0')
     command = ['dbus-run-session', '--', 'kwin_wayland', '--virtual', '--width', str(args.width),
                '--height', str(args.height), '--scale', '1', '--socket', socket, '--no-lockscreen',
                '--no-global-shortcuts', '--no-kactivities', '--exit-with-session', str(session)]
-    log = args.output_dir / ('screenshots.log' if args.screenshots else 'capture.log')
+    log = args.output_dir / ('close.log' if args.close else 'screenshots.log' if args.screenshots else 'capture.log')
     with log.open('w') as output:
         process = subprocess.Popen(command, env=env, stdout=output, stderr=subprocess.STDOUT, start_new_session=True)
         try:
@@ -105,10 +138,21 @@ wait "$qa_pid"
                 os.killpg(process.pid, signal.SIGTERM)
                 process.wait(timeout=5)
     text = log.read_text(errors='replace')
+    assert 'HISTORY_NATIVE_FAIL' not in text, log
     assert not re.search(r'ReferenceError|TypeError|Binding loop|Unable to assign|Failed to load configuration|does not match the blur region', text), log
+    if args.close:
+        assert 'HISTORY_CLOSE_PASS' in text and 'HISTORY_CLOSE_FAIL' not in text, log
+        assert re.search(r'path shapes declared [1-9]', text), ('native glass was not exercised', log)
+        # A history popup reserves a tall capture even for two cards. Once its
+        # declarations retire, that allocation must never become a glass slab.
+        fallbacks = re.findall(r'declared 0 effectShape .*?\((-?\d+),(-?\d+) (\d+)x(\d+)\)', text)
+        assert not any(int(w) >= 300 and int(h) >= 300 for _, _, w, h in fallbacks), (fallbacks, log)
+        print(f'Notification history: close, reversal, empty state and compositor teardown passed; {log}')
+        raise SystemExit(0)
     snapshots = [json.loads(line) for line in text.splitlines() if line.startswith('{"open":')]
     assert len(snapshots) == 3 and all(item['open'] and item['scale'] == 1 for item in snapshots), (snapshots, log)
     assert all(item['fixedCapture'] for item in snapshots), (snapshots, log)
+    assert all(key > 0 for item in snapshots for key in item['keys']), (snapshots, log)
     assert snapshots[0]['retained'] and snapshots[1]['retained'], (snapshots, log)
     assert snapshots[0]['keys'] == snapshots[-1]['keys'], (snapshots, log)
     assert [item['preview'] for item in snapshots] == [3, 8, 3], (snapshots, log)

@@ -18,6 +18,7 @@ KosToolButton 1.0 KosToolButton.qml
 KosLyricLine 1.0 KosLyricLine.qml
 KosSidebar 1.0 KosSidebar.qml
 KosSidebarToggle 1.0 KosSidebarToggle.qml
+KosSidebarGlyph 1.0 KosSidebarGlyph.qml
 KosCheckBox 1.0 KosCheckBox.qml
 KosComboBox 1.0 KosComboBox.qml
 KosTextArea 1.0 KosTextArea.qml

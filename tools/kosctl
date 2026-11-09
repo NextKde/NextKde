@@ -2,6 +2,31 @@
 set -euo pipefail
 
 project_dir=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
+# These commands must not create build directories or probe desktop processes.
+case "${1:-}" in
+    firefox-buttons)
+        shift
+        exec python3 "$project_dir/tools/integration/firefox_buttons.py" "$@"
+        ;;
+    gtk-buttons)
+        shift
+        exec python3 "$project_dir/tools/integration/gtk-window-buttons.py" "$@"
+        ;;
+    update|version)
+        command -v python3 >/dev/null 2>&1 || { echo "python3 is required" >&2; exit 1; }
+        if [[ "$1" == update ]]; then
+            if [[ "$project_dir" == /nix/store/* ]]; then
+                echo "Update the NextKDE flake input/tag and rebuild NixOS; Nix store sources are immutable." >&2
+                exit 1
+            fi
+            (( $# <= 2 )) || { echo "Usage: kosctl update [stable|main|vX.Y.Z[-rc.N]]" >&2; exit 2; }
+            exec python3 "$project_dir/tools/release/source-release.py" --root "$project_dir" select "${2:-stable}"
+        fi
+        (( $# == 1 )) || { echo "Usage: kosctl version" >&2; exit 2; }
+        exec python3 "$project_dir/tools/release/source-release.py" --root "$project_dir" version \
+            --installed "${KOS_RELEASE_RECORD:-${KOS_PREFIX:-$HOME/.local}/share/kos/release.json}"
+        ;;
+esac
 build_dir=${KOS_BUILD_DIR:-"$project_dir/.build/kosctl"}
 prefix=${KOS_PREFIX:-"$HOME/.local"}
 config_dir=${XDG_CONFIG_HOME:-"$HOME/.config"}
@@ -57,8 +82,8 @@ is_nixos() {
 # installation, and the README describe the same default build. The KWin list
 # is needed only while compositor plugins are enabled.
 arch_core_build_packages=(
-    quickshell cmake ninja gcc qt6-base qt6-declarative qt6-tools qt6-translations qt6-quick3d qt6-svg qt6-imageformats qt6-5compat qt6-wayland go curl
-    extra-cmake-modules wayland
+    git python quickshell cmake ninja gcc qt6-base qt6-declarative qt6-tools qt6-translations qt6-quick3d qt6-svg qt6-imageformats qt6-5compat qt6-wayland go curl
+    extra-cmake-modules wayland gtk3 pkgconf flatpak ostree gnupg
     kwindowsystem kiconthemes kglobalaccel kio patchelf
 )
 # The depth engine and 3D wallpaper plugin follow KOS_BUILD_SPATIAL.
@@ -81,9 +106,9 @@ arch_optional_runtime_packages=(
 # "Could NOT find Libdrm". The xcb extension headers are the same story:
 # kwin-dev does not pull them and the KWinX11 export needs them.
 debian_core_build_packages=(
-    git cmake ninja-build g++ golang-go curl patchelf pkg-config
+    git python3 cmake ninja-build g++ golang-go curl patchelf pkg-config libflatpak-dev libostree-dev flatpak gpgv
     quickshell
-    extra-cmake-modules libwayland-dev wayland-protocols libxkbcommon-dev
+    extra-cmake-modules libwayland-dev wayland-protocols libxkbcommon-dev libgtk-3-dev
     qt6-base-dev qt6-declarative-dev qt6-tools-dev qt6-l10n-tools qt6-translations-l10n qt6-quick3d-dev qt6-svg-dev qt6-wayland-dev
     qt6-image-formats-plugins qt6-5compat-dev libqt6svg6
     qml6-module-qtquick qml6-module-qtquick-controls qml6-module-qtquick-layouts
@@ -120,6 +145,39 @@ debian_optional_runtime_packages=(
     "libglib2.0-0t64 libglib2.0-0"
     libqt6sql6-sqlite
 )
+
+# Fedora names for the same default build, checked against Fedora 44. Qt keeps
+# QPA private headers in qt6-qtbase-private-devel and QuickPrivate in
+# qt6-qtdeclarative-devel. zlib-devel is a virtual
+# name provided by zlib-ng-compat-devel, which is why checks go through
+# `rpm -q --whatprovides` instead of plain `rpm -q`.
+fedora_core_build_packages=(
+    git python3 cmake ninja-build gcc-c++ golang curl patchelf pkgconf-pkg-config
+    quickshell
+    extra-cmake-modules wayland-devel wayland-protocols-devel libxkbcommon-devel gtk3-devel flatpak-devel ostree-devel flatpak gnupg2
+    qt6-qtbase-devel qt6-qtbase-private-devel qt6-qtdeclarative-devel qt6-qttools-devel
+    qt6-qttranslations qt6-qtquick3d-devel qt6-qtsvg-devel qt6-qtwayland-devel
+    qt6-qtimageformats qt6-qt5compat-devel
+    kf6-kwindowsystem-devel kf6-kiconthemes-devel kf6-kglobalaccel-devel
+    kf6-kio-devel kf6-kcalendarcore-devel
+)
+fedora_spatial_build_packages=(
+    opencv-devel
+)
+fedora_kwin_build_packages=(
+    kwin-devel libdrm-devel mesa-libgbm-devel libepoxy-devel
+    kf6-kconfig-devel kf6-ki18n-devel kf6-kguiaddons-devel kf6-kcmutils-devel
+    kf6-kcoreaddons-devel kdecoration-devel libplasma-devel
+    gettext vulkan-headers vulkan-loader-devel zlib-devel libxcb-devel
+)
+fedora_optional_runtime_packages=(
+    NetworkManager wireplumber bluez brightnessctl
+    wl-clipboard cliphist glib2 xdg-utils spectacle
+)
+
+fedora_package_installed() {
+    rpm -q --whatprovides "$1" >/dev/null 2>&1
+}
 
 # Prints the first name apt actually knows about. Pass the array element
 # unquoted so a multi-name element expands into its alternatives.
@@ -240,16 +298,34 @@ record_kwin_plugin_api_version() {
 
 usage() {
     cat <<'EOF'
-Usage: ./tools/kosctl <doctor|build|install [lockscreen|apps]|start|dev [shell|settings]|run|uninstall [lockscreen]|glass-settings|nix [build|install|start|shell]|nix-status|shortcuts install|shortcuts uninstall>
+Usage: ./tools/kosctl <update [stable|main|vX.Y.Z[-rc.N]]|version|doctor|build|install [lockscreen|apps]|start|dev [shell|settings]|run|uninstall [lockscreen]|glass-settings|nix [build|install|start|shell]|nix-status|shortcuts install|shortcuts uninstall>
 
 NixOS remote install:
-  git clone <repo> && cd Nextkde
+  git clone <repo> && cd NextKde
   ./tools/kosctl nix install      # build + deploy systemd services
   ./tools/kosctl start            # apply now
 
+Source selection (does not install or restart anything):
+  ./tools/kosctl update             # latest official release; fails if none exists
+  ./tools/kosctl update main        # explicitly choose development
+  ./tools/kosctl update v0.1.0      # explicitly choose a version tag
+  ./tools/kosctl version            # deployed files and source checkout separately
+
+GTK compatibility rules (styles follow the common Window appearance switch):
+  ./tools/kosctl gtk-buttons adapt APP_ID [--title TITLE]
+  ./tools/kosctl gtk-buttons fallback APP_ID [--title TITLE]
+
+Firefox native buttons (one-time profile registration, then the common switch):
+  ./tools/kosctl firefox-buttons install [--profile PATH]
+  ./tools/kosctl firefox-buttons uninstall
+
 Optional components are installed by naming them:
   ./tools/kosctl install lockscreen   # lock screen (user level, no root)
-  ./tools/kosctl install apps         # standalone apps (tools/install-apps.sh)
+  ./tools/kosctl install apps         # independent user Flatpaks: Calendar, Calculator, Weather
+  ./tools/kosctl install apps --app calendar # one independent app; also calculator/weather/listenfree
+  ./tools/kosctl install apps --with-listenfree # explicitly include ListenFree
+  ./tools/kosctl install apps status --app calendar # also update/check-update/uninstall
+  # --with-listenfree-video is unsupported; use NextKde/ListenFree for video builds.
   ./tools/kosctl uninstall lockscreen
 
 Plain `install` / `uninstall` cover the core desktop only -- no apps, no lock
@@ -258,16 +334,16 @@ greeter integration is being reworked; see the README for the status.
 
 Environment overrides: KOS_BUILD_DIR, KOS_PREFIX, KOS_BUILD_TYPE, KOS_BUILD_KWIN_PLUGINS, KOS_BUILD_SPATIAL, GOPROXY
 
-The KOS window decoration is installed with the KWin plugins but is not
-selected by anything here. Choose it in System Settings > Window Decorations;
-the window buttons belong to it and are drawn only while it is selected.
+The first core install selects KOS window decoration and saves the previous choice.
+Later decoration choices are preserved. Change it in Settings > Window and animations;
+window buttons belong to KOS decoration and are drawn only while it is selected.
 EOF
 }
 
 doctor() {
     local failed=0
     local nixos_hint=0
-    for command_name in cmake ninja c++ go; do
+    for command_name in cmake ninja c++ go python3; do
         if command -v "$command_name" >/dev/null 2>&1; then
             printf 'ok   %-12s %s\n' "$command_name" "$(command -v "$command_name")"
         else
@@ -386,8 +462,30 @@ doctor() {
                 debian_quickshell_hint
             fi
         fi
+    elif command -v dnf >/dev/null 2>&1; then
+        local package
+        local -a required_packages=("${fedora_core_build_packages[@]}")
+        if kwin_plugins_enabled; then
+            required_packages+=("${fedora_kwin_build_packages[@]}")
+        fi
+        if spatial_requested; then
+            required_packages+=("${fedora_spatial_build_packages[@]}")
+        fi
+        for package in "${required_packages[@]}"; do
+            if fedora_package_installed "$package"; then
+                printf 'ok   pkg:%-8s installed\n' "$package"
+            else
+                printf 'miss pkg:%-8s required to build the default configuration\n' "$package"
+                failed=1
+            fi
+        done
+        for package in "${fedora_optional_runtime_packages[@]}"; do
+            if ! fedora_package_installed "$package"; then
+                printf 'warn pkg:%-8s optional runtime integration unavailable\n' "$package"
+            fi
+        done
     else
-        printf 'info %-12s library/package checks are currently available on Arch, Debian and NixOS only\n' packages
+        printf 'info %-12s library/package checks are currently available on Arch, Debian, Fedora and NixOS only\n' packages
     fi
     if [[ -n "${WAYLAND_DISPLAY:-}" || -n "${DISPLAY:-}" ]]; then
         printf 'ok   %-12s graphical session detected\n' session
@@ -465,11 +563,16 @@ configure_build() {
     #   - the KWin plugin components are governed by KOS_BUILD_KWIN_PLUGINS,
     #     not BUILD_TESTING, so `cmake --install --component kwin_plugins`
     #     still finds its binaries;
-    #   - `kosctl install apps` builds from its own .build/apps-release tree
-    #     (tools/install-apps.sh), so nothing here feeds that path.
+    #   - `kosctl install apps` dispatches to kos-apps through tools/install-apps.sh
+    #     (Flatpak by default; explicit legacy source mode), not core app targets.
     # Tests now have one owner: ./tools/run-tests.sh, which keeps its own
     # .build/tests directory.
+    # Core upgrades may reuse a cache that previously enabled bundled apps.
+    # Clear only retired app entries; direct root CMake still rejects old ON flags.
+    # These arguments also change configure_if_needed's input stamp on upgrade.
     configure_if_needed "$project_dir" "$build_dir" \
+        -U KOS_BUILD_CALENDAR -U KOS_BUILD_TODO -U KOS_BUILD_WEATHER \
+        -U KOS_BUILD_LISTENFREE -U KOS_BUILD_CALCULATOR \
         -DCMAKE_BUILD_TYPE="$build_type" \
         -DCMAKE_INSTALL_PREFIX="$kwin_system_prefix" \
         "${spatial_flags[@]}" \
@@ -661,6 +764,26 @@ ensure_build_dependencies() {
                 sudo env DEBIAN_FRONTEND=noninteractive apt-get install -y "${missing_packages[@]}"
             fi
         fi
+    elif command -v dnf >/dev/null 2>&1; then
+        local package
+        local -a missing_packages=()
+        local -a required_packages=("${fedora_core_build_packages[@]}")
+        if kwin_plugins_enabled; then
+            required_packages+=("${fedora_kwin_build_packages[@]}")
+        fi
+        if spatial_requested; then
+            required_packages+=("${fedora_spatial_build_packages[@]}")
+        fi
+        for package in "${required_packages[@]}"; do
+            if ! fedora_package_installed "$package"; then
+                missing_packages+=("$package")
+            fi
+        done
+        if (( ${#missing_packages[@]} > 0 )); then
+            printf 'KOS build dependencies require administrator permission:\n'
+            printf '  %s\n' "${missing_packages[*]}"
+            sudo dnf install -y "${missing_packages[@]}"
+        fi
     fi
 }
 
@@ -699,6 +822,15 @@ build_kwin_glass() {
 
 build() {
     detect_kwin_plugin_api_version
+    if (( kwin_plugin_rebuild_required )); then
+        # A KWin package upgrade changes the imported library's absolute path
+        # (for example libkwin.so.6.8.0 -> libkwin.so.6.8.1). Cleaning object
+        # files alone leaves Ninja holding the old path as a generated-file
+        # dependency. Drop both configure stamps so CMake regenerates the link
+        # rules before the clean rebuild.
+        rm -f -- "$build_dir/kos-configure-inputs" \
+            "$glass_build_dir/kos-configure-inputs"
+    fi
     configure_build
     if (( kwin_plugin_rebuild_required )); then
         cmake --build "$build_dir" --target clean
@@ -720,44 +852,7 @@ build() {
             go build -trimpath -buildvcs=false \
                 -o "$build_dir/bin/kos-data-service" .
     )
-}
-
-# materialize_kos_ui — turn the repo's source-level Kos.Ui alias into real
-# files under the installed shell config.
-#
-# In the checkout, shell/Kos/Ui/{colorize,foundation,controls} are symlinks
-# into shared/qml so `qs -p shell` resolves `import "../../../Kos/Ui"` with no
-# build step and no environment variables. `cp -a` preserves those symlinks,
-# and their ../../../shared targets do not exist under
-# ~/.config/quickshell/kos, so the installed copy would dangle. This replaces
-# the alias with real copies of the same files.
-#
-#   $1: installed shell config dir
-#   $2: qmldir source (checkout or Nix store path)
-#   $3: the directory that directly contains colorize/, foundation/ and
-#       controls/ — the checkout's shared/qml, or
-#       $out/share/kos-desktop/shared/qml in a built Nix derivation. Do not
-#       pass the parent: package.nix copies shared/ wholesale, so the QML
-#       files sit one level deeper in the store than in the checkout.
-materialize_kos_ui() {
-    local shell_config="$1" qmldir_src="$2" qml_root="$3"
-    if [[ ! -f "$qmldir_src" ]]; then
-        printf 'Kos.Ui alias qmldir not found: %s\n' "$qmldir_src" >&2
-        return 1
-    fi
-    local dir
-    for dir in colorize foundation controls wallpapers i18n; do
-        if [[ ! -d "$qml_root/$dir" ]]; then
-            printf 'Kos.Ui source dir not found: %s\n' "$qml_root/$dir" >&2
-            return 1
-        fi
-    done
-    rm -rf "$shell_config/Kos/Ui"
-    mkdir -p "$shell_config/Kos/Ui"
-    install -m 0644 "$qmldir_src" "$shell_config/Kos/Ui/qmldir"
-    for dir in colorize foundation controls wallpapers i18n; do
-        cp -rL --no-preserve=mode "$qml_root/$dir" "$shell_config/Kos/Ui/"
-    done
+    python3 "$project_dir/tools/release/source-release.py" --root "$project_dir" stamp "$build_dir/release.json"
 }
 
 # Unit names whose process is still running an executable that was replaced
@@ -802,10 +897,10 @@ deploy_artifacts() {
     local required
     local -a required_files
     if [[ "$nix_artifact" == true ]]; then
-        required_files=(libexec/kos-platform libexec/kos-data-service bin/kos-settings)
+        required_files=(libexec/kos-platform libexec/kos-data-service bin/kos-settings bin/kos-apps bin/kos-flatpak-worker lib/gtk-3.0/modules/libkos-gtk-window-controls.so)
         spatial_requested && required_files+=(libexec/kos-ai-worker)
     else
-        required_files=(platform/kos-platform bin/kos-data-service apps/settings/kos-settings)
+        required_files=(platform/kos-platform bin/kos-data-service apps/settings/kos-settings apps/settings/kos-apps apps/settings/kos-flatpak-worker apps/settings/gtk-module/libkos-gtk-window-controls.so)
         spatial_built && required_files+=(platform/kos-ai-worker)
     fi
     for required in "${required_files[@]}"; do
@@ -815,19 +910,44 @@ deploy_artifacts() {
         }
     done
 
+    # Validate canonical content before backing up/removing a working runtime.
+    # Checkout aliases may have become empty directories or link-text files.
+    local shell_qml_src="$project_dir/shell"
+    local shared_qml_src="$project_dir/shared/qml"
+    if [[ "$nix_artifact" == true ]]; then
+        shell_qml_src="$artifact_root/share/kos-desktop/shell"
+        shared_qml_src="$artifact_root/share/shared/qml"
+    fi
+    python3 "$project_dir/tools/deploy/deploy-shell-qml.py" check \
+        --shell "$shell_qml_src" --shared "$shared_qml_src" || return 1
+
+    # Replace managed runtime trees rather than overlaying versions. Back up
+    # local runtime edits and kos settings before removing stale QML/plugins.
+    python3 "$project_dir/tools/deploy/deploy-runtime.py" \
+        --prefix "$prefix" --config "$config_dir" \
+        --state "${XDG_STATE_HOME:-$HOME/.local/state}"
     mkdir -p "$prefix/libexec" "$prefix/bin" "$prefix/lib" \
         "$prefix/share/kos/platform/kwin" "$prefix/share/kos/settings" \
         "$prefix/share/shared/qml" "$prefix/share/applications"
-
+    mkdir -p "$prefix/lib/gtk-3.0/modules"
+    if [[ "$nix_artifact" == true ]]; then
+        ln -sfn "$artifact_root/lib/gtk-3.0/modules/libkos-gtk-window-controls.so" "$prefix/lib/gtk-3.0/modules/libkos-gtk-window-controls.so"
+    else
+        # Replace the directory entry, never overwrite a library mapped by GTK.
+        install -m 0755 "$artifact_root/apps/settings/gtk-module/libkos-gtk-window-controls.so" "$prefix/lib/gtk-3.0/modules/.libkos-gtk-window-controls.so.new"
+        mv -f "$prefix/lib/gtk-3.0/modules/.libkos-gtk-window-controls.so.new" "$prefix/lib/gtk-3.0/modules/libkos-gtk-window-controls.so"
+    fi
     # --- Binaries ---
     rm -f "$prefix/libexec/kos-platform" "$prefix/libexec/kos-ai-worker" \
-        "$prefix/libexec/kos-data-service" "$prefix/bin/kos-settings"
+        "$prefix/libexec/kos-data-service" "$prefix/bin/kos-settings" "$prefix/bin/kos-apps" "$prefix/bin/kos-flatpak-worker"
     if [[ "$nix_artifact" == true ]]; then
         ln -s "$artifact_root/libexec/kos-platform"    "$prefix/libexec/kos-platform"
         spatial_requested && ln -s "$artifact_root/libexec/kos-ai-worker" \
             "$prefix/libexec/kos-ai-worker"
         ln -s "$artifact_root/libexec/kos-data-service" "$prefix/libexec/kos-data-service"
         ln -s "$artifact_root/bin/kos-settings"          "$prefix/bin/kos-settings"
+        ln -s "$artifact_root/bin/kos-apps"              "$prefix/bin/kos-apps"
+        ln -s "$artifact_root/bin/kos-flatpak-worker"     "$prefix/bin/kos-flatpak-worker"
     else
         install -m 0755 "$artifact_root/platform/kos-platform"    "$prefix/libexec/kos-platform"
         if spatial_built; then
@@ -853,6 +973,8 @@ deploy_artifacts() {
         fi
         install -m 0755 "$artifact_root/bin/kos-data-service"     "$prefix/libexec/kos-data-service"
         install -m 0755 "$artifact_root/apps/settings/kos-settings" "$prefix/bin/kos-settings"
+        install -m 0755 "$artifact_root/apps/settings/kos-apps"     "$prefix/bin/kos-apps"
+        install -m 0755 "$artifact_root/apps/settings/kos-flatpak-worker" "$prefix/bin/kos-flatpak-worker"
         if command -v patchelf >/dev/null 2>&1; then
             patchelf --set-rpath '$ORIGIN/../lib' "$prefix/libexec/kos-platform"
             if spatial_built; then
@@ -902,10 +1024,6 @@ deploy_artifacts() {
     # and the window died inside QQmlApplicationEngine before it was shown —
     # clicking Settings simply did nothing. Copy the whole tree so a new
     # subdirectory never needs another edit here.
-    local shared_qml_src="$project_dir/shared/qml"
-    if [[ "$nix_artifact" == true ]] && [[ -d "$artifact_root/share/shared/qml" ]]; then
-        shared_qml_src="$artifact_root/share/shared/qml"
-    fi
     if [[ -d "$prefix/share/shared/qml" ]]; then
         find "$prefix/share/shared/qml" -type d -exec chmod u+w {} +
     fi
@@ -921,43 +1039,9 @@ deploy_artifacts() {
 
     # --- Shell QML → ~/.config/quickshell/kos ---
     local shell_config="$config_dir/quickshell/kos"
-    mkdir -p "$shell_config"
-    find "$shell_config" -type d -exec chmod u+w {} +
-    find "$shell_config" -type f -exec chmod u+w {} +
-    # These source entries are symlinks in the checkout, but older releases
-    # installed them as directories. Remove only those known legacy targets
-    # before copying the shell tree; otherwise cp refuses to replace a
-    # directory with the symlink and the install aborts before materializing
-    # Kos.Ui below.
-    rm -rf "$shell_config/Kos/Ui/colorize" \
-           "$shell_config/Kos/Ui/foundation" \
-           "$shell_config/Kos/Ui/controls" \
-           "$shell_config/Kos/Ui/wallpapers"
-    rm -rf "$shell_config/shared/qml/controls"
-    if [[ "$nix_artifact" == true ]]; then
-        cp -rL --no-preserve=mode "$artifact_root/share/kos-desktop/shell/." "$shell_config/"
-    else
-        cp -rL --no-preserve=mode "$project_dir/shell/." "$shell_config/"
-    fi
-    mkdir -p "$shell_config/shared/qml"
-    rm -rf "$shell_config/shared/qml/controls"
-    if [[ "$nix_artifact" == true ]]; then
-        cp -rL --no-preserve=mode "$artifact_root/share/shared/qml/controls" "$shell_config/shared/qml/"
-    else
-        cp -rL --no-preserve=mode "$project_dir/shared/qml/controls" "$shell_config/shared/qml/"
-    fi
-    # Kos.Ui alias: replace the checkout's symlinks with real files (see
-    # materialize_kos_ui above for why the symlinks cannot survive the copy).
-    # Nix sources live alongside the packaged shell; CMake deployments use
-    # the checkout. In both cases the installed aliases contain real files.
-    if [[ "$nix_artifact" == true ]] && [[ -f "$artifact_root/share/kos-desktop/shell/Kos/Ui/qmldir" ]]; then
-        materialize_kos_ui "$shell_config" \
-            "$artifact_root/share/kos-desktop/shell/Kos/Ui/qmldir" \
-            "$artifact_root/share/kos-desktop/shared/qml"
-    else
-        materialize_kos_ui "$shell_config" \
-            "$project_dir/shell/Kos/Ui/qmldir" "$project_dir/shared/qml"
-    fi
+    python3 "$project_dir/tools/deploy/deploy-shell-qml.py" deploy \
+        --shell "$shell_qml_src" --shared "$shared_qml_src" \
+        --destination "$shell_config" || return 1
 
     # SurfaceShape native QML plugin: copy from build dir to user shell config
     # so Quickshell finds `import Kos.SurfaceShape 1.0` without requiring root install to /usr
@@ -1011,6 +1095,7 @@ deploy_artifacts() {
     if [[ "$nix_artifact" == true ]]; then
         install -m 0644 "$artifact_root/share/applications/kos-settings.desktop"   "$prefix/share/applications/"
         install -m 0644 "$artifact_root/share/applications/org.kos.Platform.desktop" "$prefix/share/applications/"
+        install -m 0644 "$artifact_root/share/applications/org.kos.Shell.desktop" "$prefix/share/applications/"
     else
         sed "s|^Exec=.*|Exec=$prefix/bin/kos-settings|" \
             "$project_dir/packaging/desktop/kos-settings.desktop.in" \
@@ -1019,6 +1104,13 @@ deploy_artifacts() {
         sed "s|@KOS_PLATFORM_EXEC@|$prefix/libexec/kos-platform|g" \
             "$project_dir/packaging/desktop/org.kos.Platform.desktop.in" \
             > "$prefix/share/applications/org.kos.Platform.desktop"
+        # KWin matches the canonical /proc/<pid>/exe to desktop Exec. A
+        # distro's generic Quickshell entry may have no Exec or declaration.
+        local qs_real_exec
+        qs_real_exec=$(readlink -f "$qs_bin_now")
+        sed "s|@KOS_SHELL_EXEC@|$qs_real_exec|g" \
+            "$project_dir/packaging/desktop/org.kos.Shell.desktop.in" \
+            > "$prefix/share/applications/org.kos.Shell.desktop"
     fi
     if command -v kbuildsycoca6 >/dev/null 2>&1; then
         kbuildsycoca6 --noincremental >/dev/null
@@ -1029,11 +1121,8 @@ deploy_artifacts() {
         local -a kos_units=(
             kos-platform.service kos-data.service kos-shell.service
         )
-        # kos-pim-service is deliberately not enabled. It is D-Bus activated
-        # on demand (org.nextkde.Kos.Pim1.service) and tools/install-apps.sh
-        # keeps it non-resident; enabling it from the core install fought
-        # that policy -- which one won depended on the order the two
-        # installs happened to run in.
+        # PIM belongs to the independent Calendar application. Core installation
+        # owns only the units above and does not manage external app lifecycle.
         # install is non-disruptive: it registers the units for the next
         # session (and login autostart) but leaves the running session alone.
         # In-place updates of executables and QML only take effect after the
@@ -1194,9 +1283,8 @@ start_all() {
     local -a kos_units=(
         kos-platform.service kos-data.service kos-shell.service
     )
-    # kos-pim-service is D-Bus activated on demand and is deliberately kept
-    # non-resident (see deploy_artifacts). It must not be enabled or restarted
-    # from `start` either, or `install apps`'s disable keeps fighting this.
+    # PIM belongs to the independent Calendar application; core start does not
+    # enable, disable or restart its service.
     # Replace a manually launched `kos` instance so systemd becomes its sole
     # supervisor; the unit's --no-duplicate would otherwise exit repeatedly
     # while that instance is alive.
@@ -1794,7 +1882,7 @@ remove_lockscreen() {
 # pull heavy optional dependencies. Naming them keeps that cost out of the
 # default install.
 install_apps() {
-    "$project_dir/tools/install-apps.sh"
+    PATH="$prefix/bin:$PATH" "$project_dir/tools/install-apps.sh" "$@"
 }
 
 install_all() {
@@ -1804,12 +1892,16 @@ install_all() {
     fi
     ensure_build_dependencies
     build
+    # Keep this a simple command: an || guard would disable errexit inside
+    # the entire deployment function, allowing failed copies to be ignored.
     deploy_artifacts "$build_dir"
     if ! is_nixos; then
         install_kwin_plugins
     fi
     take_over_plasma_desktop
     warn_notification_claimers
+    python3 "$project_dir/tools/release/source-release.py" stamp "$prefix/share/kos/release.json" \
+        --from-file "$build_dir/release.json"
     print_install_summary
 }
 
@@ -1956,8 +2048,10 @@ uninstall() {
     if command -v systemctl >/dev/null 2>&1; then
         systemctl --user daemon-reload || true
     fi
+    rm -f "$prefix/lib/gtk-3.0/modules/libkos-gtk-window-controls.so"
+    rm -f "$prefix/share/kos/release.json"
     rm -f "$prefix/libexec/kos-platform" "$prefix/libexec/kos-ai-worker" \
-        "$prefix/libexec/kos-data-service" "$prefix/bin/kos-settings"
+        "$prefix/libexec/kos-data-service" "$prefix/bin/kos-settings" "$prefix/bin/kos-apps" "$prefix/bin/kos-flatpak-worker"
     rm -f "$prefix/lib/libonnxruntime.so" "$prefix/lib/libonnxruntime.so.1" \
         "$prefix/lib/libonnxruntime.so.1.30.0" \
         "$prefix/lib/libonnxruntime_providers_shared.so"
@@ -1965,6 +2059,7 @@ uninstall() {
         "$prefix/share/kos/settings/main.qml" \
         "$prefix/share/applications/kos-settings.desktop" \
         "$prefix/share/applications/org.kos.Platform.desktop" \
+        "$prefix/share/applications/org.kos.Shell.desktop" \
         "$prefix/share/applications/kos-platform.desktop"
     rm -rf "$prefix/share/kos/settings" "$prefix/share/shared/qml"
     rm -rf "$config_dir/quickshell/kos"
@@ -1995,6 +2090,7 @@ nix_deploy_artifacts() {
         return 1
     fi
     deploy_artifacts "$result_dir"
+    install -m 0644 "$result_dir/share/kos/release.json" "$prefix/share/kos/release.json"
 }
 
 nix_install() {
@@ -2081,7 +2177,7 @@ case "${1:-}" in
         case "${2:-}" in
             "") install_all ;;
             lockscreen) install_lockscreen ;;
-            apps) install_apps ;;
+            apps) install_apps "${@:3}" ;;
             *) usage >&2; exit 2 ;;
         esac ;;
     start) start_all ;;

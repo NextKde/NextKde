@@ -3,10 +3,10 @@ pragma Singleton
 import QtQuick
 import "../../../shared/qml/i18n"
 import qs.desktop.modules.platform
+import qs.desktop.modules.common
 
-// Weather network, location, unit and cache state is owned by
-// kos-data-service. This adapter keeps the established shell-facing API while
-// consuming the shared versioned JSONL protocol.
+// Keep one shell-facing weather source: core data when the app is absent,
+// otherwise the uniquely installed app's validated summary.
 QtObject {
     id: service
 
@@ -15,6 +15,7 @@ QtObject {
     property var current: null
     property var hourly: []
     property var daily: []
+    property var airQuality: null
     property string units: "metric"
     property string status: "idle"
     property string errorMessage: ""
@@ -23,13 +24,64 @@ QtObject {
     property real nextRefreshAt: 0
     property real clockNow: Date.now()
     property bool ready: false
+    readonly property var appSource: IndependentAppWidgetService.weather
+    readonly property bool coreMode: appSource.state === "not-installed"
+    readonly property string sourceMessage: IndependentAppWidgetService.feedback("weather")
+    property int sourceGeneration: 0
+    property string weatherSourceKey: ""
+    property bool snapshotPending: false
+    property bool snapshotQueued: false
+    onAppSourceChanged: {
+        sourceGeneration++
+        snapshotPending = false
+        snapshotQueued = false
+        // Poll results are new objects even when the source is unchanged.
+        // Keep the last forecast through inspection failures and reconnects;
+        // only a confirmed different source invalidates its data.
+        // Read the source directly: coreMode's dependent binding may not
+        // have reevaluated yet inside this change handler.
+        const sourceKey = appSource.state === "not-installed" ? "core"
+            : (appSource.sourceToken ? "app:" + appSource.sourceToken : "")
+        if (sourceKey !== "") {
+            if (weatherSourceKey !== sourceKey)
+                clearWeather()
+            weatherSourceKey = sourceKey
+        } else if (appSource.state === "ambiguous" || appSource.state === "unsupported") {
+            weatherSourceKey = ""
+            clearWeather()
+        }
+        if (appSource.state === "not-installed") reload()
+        else if (appSource.state === "ready" || appSource.state === "stale")
+            applyWeather(appSource.payload || {})
+        else {
+            status = appSource.state === "loading" ? "loading" : "error"
+            errorMessage = IndependentAppWidgetService.feedback("weather")
+        }
+    }
+
+    function clearWeather() {
+        location = ({})
+        locations = []
+        current = null
+        hourly = []
+        daily = []
+        airQuality = null
+        ready = false
+        status = "idle"
+        errorMessage = ""
+        fetchedAt = new Date(0)
+        staleAt = 0
+        nextRefreshAt = 0
+    }
 
     readonly property string cityName: String(location?.name ?? "--")
     readonly property real latitude: Number(location?.latitude ?? 0)
     readonly property real longitude: Number(location?.longitude ?? 0)
     readonly property bool loading: status === "loading"
     readonly property bool available: current !== null
-    readonly property bool stale: available && staleAt > 0 && clockNow >= staleAt
+    readonly property bool stale: available && (status === "loading" || status === "error"
+        || (!coreMode && appSource.state !== "ready")
+        || (staleAt > 0 && clockNow >= staleAt))
     readonly property string temperature: available
         ? Math.round(Number(current.temperature)) + "°" : "--°"
     readonly property string apparentTemperature: available
@@ -43,6 +95,16 @@ QtObject {
         : "--"
     readonly property string windDirection: available
         ? Math.round(Number(current.windDirection)) + "°" : "--"
+    readonly property string windGust: available && Number.isFinite(Number(current.windGust))
+        ? Math.round(Number(current.windGust)) + (units === "imperial" ? " mph" : " km/h")
+        : ""
+    readonly property string uvIndex: available && Number.isFinite(Number(current.uvIndex))
+        ? String(Math.round(Number(current.uvIndex))) : ""
+    readonly property string visibility: available && Number.isFinite(Number(current.visibility))
+        ? Math.round(Number(current.visibility) / (units === "imperial" ? 1609.344 : 1000))
+          + (units === "imperial" ? " mi" : " km") : ""
+    readonly property string moonPhase: available && Number.isFinite(Number(current.moonPhase))
+        ? moonPhaseName(Number(current.moonPhase)) : ""
     readonly property string sunriseTime: dailyTime("sunrise")
     readonly property string sunsetTime: dailyTime("sunset")
     readonly property var forecastDays: {
@@ -65,6 +127,13 @@ QtObject {
             return "--:--"
         const match = String(daily[0]?.[field] ?? "").match(/T(\d{2}:\d{2})/)
         return match ? match[1] : "--:--"
+    }
+
+    function moonPhaseName(phase) {
+        const names = [I18n.tr("New Moon"), I18n.tr("Waxing Crescent"), I18n.tr("First Quarter"),
+            I18n.tr("Waxing Gibbous"), I18n.tr("Full Moon"), I18n.tr("Waning Gibbous"),
+            I18n.tr("Last Quarter"), I18n.tr("Waning Crescent")]
+        return names[Math.round(((phase % 1) + 1) % 1 * 8) % 8] ?? ""
     }
 
     function conditionText(code) {
@@ -106,10 +175,24 @@ QtObject {
     }
 
     function reload() {
+        if (appSource.state !== "not-installed") return
+        if (snapshotPending) {
+            snapshotQueued = true
+            return
+        }
+        snapshotPending = true
+        const epoch = sourceGeneration
         DataClient.request("weather.snapshot", {}, function(response) {
+            if (!service.coreMode || epoch !== service.sourceGeneration) return
+            service.snapshotPending = false
+            if (service.snapshotQueued) {
+                service.snapshotQueued = false
+                service.reload()
+                return
+            }
             if (!response.ok) {
-                if (!available)
-                    errorMessage = String(response.error?.message ?? I18n.tr("Weather data service is not ready"))
+                status = "error"
+                errorMessage = String(response.error?.message ?? I18n.tr("Weather data service is not ready"))
                 return
             }
             applyWeather(response.result?.weather ?? {})
@@ -119,13 +202,34 @@ QtObject {
     function applyWeather(weather) {
         if (Number(weather.schemaVersion) !== 1)
             return
+        const nextUnits = weather.units === "imperial" ? "imperial" : "metric"
+        const nextStatus = String(weather.status ?? "idle")
+        // A backend may publish an empty reading while it reloads. Retain
+        // data only for the same city and units; an explicit empty/idle
+        // selection or a changed configuration must still replace it.
+        if (available && !weather.current
+                && (nextStatus === "loading" || nextStatus === "error")
+                && String(weather.location?.id ?? "") !== ""
+                && weather.location.id === location.id && nextUnits === units) {
+            status = nextStatus
+            errorMessage = String(weather.error ?? "")
+            nextRefreshAt = Number(weather.nextRefreshAt ?? 0)
+            return
+        }
         location = weather.location ?? ({})
         locations = Array.isArray(weather.locations) ? weather.locations : []
         current = weather.current ?? null
-        hourly = Array.isArray(weather.hourly) ? weather.hourly : []
-        daily = Array.isArray(weather.daily) ? weather.daily : []
-        units = weather.units === "imperial" ? "imperial" : "metric"
-        status = String(weather.status ?? "idle")
+        // Array models recreate their delegates on assignment. Polling the
+        // same forecast must not rebuild the desktop's seven-day row.
+        const nextHourly = Array.isArray(weather.hourly) ? weather.hourly : []
+        const nextDaily = Array.isArray(weather.daily) ? weather.daily : []
+        if (JSON.stringify(hourly) !== JSON.stringify(nextHourly))
+            hourly = nextHourly
+        if (JSON.stringify(daily) !== JSON.stringify(nextDaily))
+            daily = nextDaily
+        airQuality = weather.airQuality ?? null
+        units = nextUnits
+        status = nextStatus
         errorMessage = String(weather.error ?? "")
         fetchedAt = new Date(Number(weather.fetchedAt ?? 0))
         staleAt = Number(weather.staleAt ?? 0)
@@ -134,9 +238,18 @@ QtObject {
     }
 
     function refresh() {
+        if (!coreMode) {
+            IndependentAppWidgetService.reload("weather")
+            IndependentAppWidgetService.open("weather", {})
+            return
+        }
+        const epoch = sourceGeneration
         DataClient.request("weather.refresh", {}, function(response) {
-            if (!response.ok)
+            if (!service.coreMode || epoch !== service.sourceGeneration) return
+            if (!response.ok) {
+                status = "error"
                 errorMessage = String(response.error?.message ?? I18n.tr("Weather refresh failed"))
+            }
         })
     }
 
@@ -147,8 +260,15 @@ QtObject {
                 service.reload()
         }
         function onTransportChanged(connected) {
-            if (connected)
-                service.reload()
+            if (service.coreMode) {
+                service.sourceGeneration++
+                service.snapshotPending = false
+                service.snapshotQueued = false
+                service.status = connected ? "loading" : "error"
+                service.errorMessage = connected ? ""
+                    : I18n.tr("Weather data service is not ready")
+                if (connected) service.reload()
+            }
         }
     }
 

@@ -22,6 +22,7 @@ try {
     copyFileSync(new URL("shell.qml", import.meta.url),
         join(directory, "shell.qml"));
     symlinkSync(join(shell, "desktop"), join(directory, "desktop"), "dir");
+    symlinkSync(join(shell, "shared"), join(directory, "shared"), "dir");
     symlinkSync(join(shell, "Kos"), join(directory, "Kos"), "dir");
 
     const result = spawnSync(process.argv[2] || "quickshell",

@@ -3,13 +3,20 @@ import QtQuick
 
 // One compositor-facing declaration for a shaped shell surface.
 //
-// RoundedBlurRegion supplies KWin's integer backdrop mask; SurfaceShape
-// supplies the exact radius and superellipse exponent used by Glass. Keeping
-// them together makes it impossible for a panel's blur and liquid outline to
-// quietly diverge.
+// v8 sends a single surface state; the compositor derives its capture region.
+// RoundedBlurRegion is retained only as the legacy background-effect transport.
 RoundedBlurRegion {
     id: root
 
+    // v8 is one committed declaration; the Region base is legacy transport only.
+    readonly property bool continuousBlurSupported: surfaceShape.continuousBlurSupported
+    property bool protocolEnabled: true
+    property real blurSigma: 12
+    property int effectType: SurfaceShape.Liquid
+    property int materialProfile: SurfaceShape.Regular
+    property int tintMode: SurfaceShape.NoTint
+    property color tintColor: "black"
+    property real tintOpacity: 0
     property real exponent: 2.0
     property bool shapeEnabled: true
     // The blur/capture mask can stay fixed while this item's outline expands.
@@ -70,7 +77,13 @@ RoundedBlurRegion {
     // This object must not be placed in Region's default `regions` list: it
     // is protocol state, not an additional geometric primitive.
     property var surfaceShape: SurfaceShape {
-        target: root.shapeItem
+        target: root.protocolEnabled ? root.shapeItem : null
+        blurSigma: root.blurSigma
+        effectType: root.effectType
+        material: root.materialProfile
+        tintMode: root.tintMode
+        tintColor: root.tintColor
+        tintOpacity: root.tintOpacity
         radius: root.shapeRadius
         exponent: root.exponent
         enabled: root.shapeEnabled

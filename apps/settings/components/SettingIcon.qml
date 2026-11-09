@@ -13,10 +13,7 @@ Rectangle {
     required property string symbol
     required property color tint
     property bool highlighted: false
-    // Content-page icons keep the designed 29px; the sidebar hands in 18 so
-    // the chip matches the 13px label's line height instead of towering
-    // over it. Radius and glyph scale off the size so both stay proportioned.
-    property int size: 29
+    property int size: 22
     readonly property bool flat: root.materialForm
     width: size
     height: size

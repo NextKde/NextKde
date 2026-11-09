@@ -1,4 +1,5 @@
 #include "PowerSettings.h"
+#include "../../../platform/src/daemon/PowerProfilesBus.h"
 #include "../../../platform/src/daemon/StatusPanelData.h"
 #include <QDBusConnection>
 #include <QJsonArray>
@@ -9,10 +10,15 @@ PowerSettings::PowerSettings(QObject *parent) : QObject(parent)
     m_timeout.setInterval(12000);
     connect(&m_timeout, &QTimer::timeout, this, [this] { m_process.kill(); });
     connect(&m_process, &QProcess::finished, this, [this](int code, QProcess::ExitStatus status) {
+        if (m_busAttempted)
+            return;
         complete(status == QProcess::NormalExit && code == 0);
     });
     connect(&m_process, &QProcess::errorOccurred, this, [this](QProcess::ProcessError error) {
-        if (error == QProcess::FailedToStart) complete(false);
+        // A missing helper must not be reported as "no power modes" when the
+        // PowerProfiles service is already on the system bus.
+        if (error == QProcess::FailedToStart)
+            finishFromBus();
     });
     // Both service names are in use across distribution versions. Signals only
     // update/read state; they never perform a write or launch a polling helper.
@@ -77,10 +83,59 @@ void PowerSettings::start(const QStringList &arguments, bool writing)
     m_busy = true;
     m_writing = writing;
     m_readRevision = m_revision;
+    m_arguments = arguments;
+    m_busAttempted = false;
     m_error.clear();
     emit changed();
+    if (!KosPlatform::powerProfilesCommandAvailable()) {
+        finishFromBus();
+        return;
+    }
     m_process.start(QStringLiteral("powerprofilesctl"), arguments);
+    // FailedToStart is delivered from inside start() and already took the
+    // D-Bus path. Starting the watchdog after that would outlive the request.
+    if (m_busAttempted)
+        return;
     m_timeout.start();
+}
+
+void PowerSettings::finishFromBus()
+{
+    if (!m_busy || m_busAttempted)
+        return;
+    m_busAttempted = true;
+    m_timeout.stop();
+    const bool writing = m_writing;
+    KosPlatform::requestPowerProfiles(QDBusConnection::systemBus(), this,
+        [this, writing](const KosPlatform::PowerProfileSnapshot &snapshot) {
+            if (!snapshot.ok || writing) {
+                // Successful writes use the existing readback before confirming.
+                complete(snapshot.ok);
+                return;
+            }
+            m_busy = false;
+            applyParsed(KosPlatform::powerProfileObject(snapshot));
+        }, writing ? m_arguments.value(1) : QString());
+}
+
+void PowerSettings::applyParsed(const QJsonObject &parsed)
+{
+    m_profiles.clear();
+    for (const auto &value : parsed.value(QStringLiteral("profiles")).toArray())
+        m_profiles.append(value.toString());
+    if (m_revision == m_readRevision)
+        m_active = parsed.value(QStringLiteral("activeProfile")).toString();
+    m_degraded = parsed.value(QStringLiteral("degraded")).toString();
+    if (m_profiles.isEmpty())
+        m_error = QStringLiteral("Power modes are not available on this system");
+    else if (!m_pending.isEmpty() && m_active != m_pending)
+        m_error = QStringLiteral("The system did not keep the requested power mode.");
+    m_pending.clear();
+    emit changed();
+    if (m_refreshQueued) {
+        m_refreshQueued = false;
+        refresh();
+    }
 }
 
 void PowerSettings::complete(bool ok)
@@ -105,17 +160,5 @@ void PowerSettings::complete(bool ok)
         refresh();
         return;
     }
-    const auto parsed = KosPlatform::parsePowerProfiles(m_process.readAllStandardOutput());
-    m_profiles.clear();
-    for (const auto &value : parsed.value(QStringLiteral("profiles")).toArray())
-        m_profiles.append(value.toString());
-    if (m_revision == m_readRevision)
-        m_active = parsed.value(QStringLiteral("activeProfile")).toString();
-    m_degraded = parsed.value(QStringLiteral("degraded")).toString();
-    if (m_profiles.isEmpty()) m_error = QStringLiteral("Power modes are not available on this system");
-    else if (!m_pending.isEmpty() && m_active != m_pending)
-        m_error = QStringLiteral("The system did not keep the requested power mode.");
-    m_pending.clear();
-    emit changed();
-    if (m_refreshQueued) { m_refreshQueued = false; refresh(); }
+    applyParsed(KosPlatform::parsePowerProfiles(m_process.readAllStandardOutput()));
 }

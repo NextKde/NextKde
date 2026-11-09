@@ -1,0 +1,91 @@
+{
+  "copyright": "Apple Inc. Original Apple Support image assets; no license grant is implied by inclusion.",
+  "retrieved": "2026-10-27",
+  "transformations": "None. Original PNG bytes, scaled only by QML at display time.",
+  "scope": "macOS-style kos-settings sidebar only. Material mode retains its existing monochrome icons.",
+  "mapping": {
+    "Theme": "appearance",
+    "Windows and animations": "desktop-dock",
+    "Wallpaper": "wallpaper",
+    "Top bar": "menu-bar",
+    "Dock": "desktop-dock",
+    "Power": "battery",
+    "Notifications": "notifications",
+    "Launcher": "spotlight",
+    "Shortcuts": "keyboard",
+    "Integration status": "network",
+    "Extensions and services": "general",
+    "Glass debugging": "appearance",
+    "Stage scheduling": "desktop-dock",
+    "KDE System Settings": "system-settings"
+  },
+  "mapping_note": "KOS-specific pages use the closest macOS category: windows and Stage Manager belong to Desktop & Dock; glass uses Appearance; launcher uses Spotlight; integration uses Network; extensions uses General. These are semantic counterparts, not claims of identical macOS pages.",
+  "assets": [
+    {
+      "file": "appearance.png",
+      "source_page": "https://support.apple.com/en-gb/guide/mac-help/mchlp1225/27/mac/27",
+      "asset_url": "https://ipcdn-web.apple.com/assets/v2/web/1f26ae2f-2a27-4b90-b404-8cc56c683721",
+      "sha256": "293ceb5cecd96fcce9db26aa2ed2d2ef22e3e78bc6526d4a28a30a37ab9c817d"
+    },
+    {
+      "file": "desktop-dock.png",
+      "source_page": "https://support.apple.com/guide/mac-help/mchlp1119/mac",
+      "asset_url": "https://ipcdn-web.apple.com/assets/v2/web/8c1b9d62-1206-4deb-b6c2-33c229e367d7",
+      "sha256": "e9ea237efaf332f27b8311fa1bc9d778c69942cc61528692ad6d5617676bf2ac"
+    },
+    {
+      "file": "notifications.png",
+      "source_page": "https://support.apple.com/en-mt/guide/mac-help/mchl205da693/mac",
+      "asset_url": "https://ipcdn-web.apple.com/assets/v2/web/c55cb391-14de-4da8-9c71-156341d3410b",
+      "sha256": "6fb31254d579fd7f2fedc0502fb4425937908ff381d7ccf2885734b0fe7cbfa5"
+    },
+    {
+      "file": "keyboard.png",
+      "source_page": "https://support.apple.com/guide/mac-help/kbdm162/mac",
+      "asset_url": "https://ipcdn-web.apple.com/assets/v2/web/030d93c6-5941-42b7-8fab-aaa4149ef600",
+      "sha256": "1e1c8707a9adf487034120074e0c3b328e7e5858ea7bdee12da7dedae6398b83"
+    },
+    {
+      "file": "menu-bar.png",
+      "source_page": "https://support.apple.com/en-euro/guide/mac-help/mchlad96d366/27/mac/27",
+      "asset_url": "https://ipcdn-web.apple.com/assets/v2/web/e503e6e7-4db6-4dcc-8949-85099fdd4a40",
+      "sha256": "2949c8fc402008e5a4f88beb9917dcb2687636dd00df4c0fe0d1eeddfaf7f311"
+    },
+    {
+      "file": "battery.png",
+      "source_page": "https://support.apple.com/en-euro/guide/mac-help/mchlfc3b7879/27/mac/27",
+      "asset_url": "https://ipcdn-web.apple.com/assets/v2/web/8bf3e98f-173d-4ec5-8f33-2a68807d263b",
+      "sha256": "32138d3d4f9ff029ff28648ae9abcca4da72f7021e21ba22bdc068910916c4d5"
+    },
+    {
+      "file": "wallpaper.png",
+      "source_page": "https://support.apple.com/en-euro/guide/mac-help/mchlp1103/27/mac/27",
+      "asset_url": "https://ipcdn-web.apple.com/assets/v2/web/5606941e-3489-4098-94ff-01f3120a8dfb",
+      "sha256": "a14ddc36dc818d487909014f47b49a262eb8c7c04c1e4501b1a986d4c668b220"
+    },
+    {
+      "file": "general.png",
+      "source_page": "https://support.apple.com/en-gb/guide/mac-help/-mtusr003/mac",
+      "asset_url": "https://ipcdn-web.apple.com/assets/v2/web/e391b65f-02cd-4603-bc38-caf804e039d4",
+      "sha256": "69773203d61c5b3846d637efea91c21295bba5c01ee107fd94ceb0f94f0c5742"
+    },
+    {
+      "file": "network.png",
+      "source_page": "https://support.apple.com/guide/mac-help/change-network-settings-mh11939/mac",
+      "asset_url": "https://ipcdn-web.apple.com/assets/v2/web/c87c547a-616d-4a1d-b919-8eec34d5643a",
+      "sha256": "5ce28c22e04c42b9bc563cc2b74860c073ae4dff9b0ab9f246057ea757375d39"
+    },
+    {
+      "file": "system-settings.png",
+      "source_page": "https://support.apple.com/en-mt/guide/mac-help/mchl205da693/mac",
+      "asset_url": "https://ipcdn-web.apple.com/assets/v2/web/b52f2b9d-b538-4a45-89f1-68902e373999",
+      "sha256": "e5d6ebd52e07b6dca4e91a8f4426ab837c4f0a2d6991896c037cd35e7f43acd2"
+    },
+    {
+      "file": "spotlight.png",
+      "source_page": "https://support.apple.com/en-mt/guide/mac-help/mchl54d95e8a/27/mac/27",
+      "asset_url": "https://ipcdn-web.apple.com/assets/v2/web/0cdb1b02-b702-4112-a36a-f918eac3b94e",
+      "sha256": "d613e497509791633e4c431a78cc506e473e43d0d65614b72bebc3e5949f7795"
+    }
+  ]
+}

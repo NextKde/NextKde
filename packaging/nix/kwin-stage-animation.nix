@@ -8,7 +8,7 @@
 
 stdenv.mkDerivation {
   pname = "kwin-stage-animation";
-  version = "unstable";
+  version = lib.removeSuffix "\n" (builtins.readFile "${src}/VERSION");
   src = "${src}/kwin/kwin-effects-stageanim";
 
   nativeBuildInputs = [

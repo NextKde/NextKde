@@ -325,6 +325,65 @@ void testGeometry()
     CHECK(near(close.center().y(), panelSize.height() / 2.0));
     CHECK(close.left() < close.right());
     CHECK(close.right() <= maximize.left());
+
+    const QRectF box(0, 0, 100, 34);
+    PanelGeometry shape;
+    shape.buttonSize = 20;
+    shape.buttonSpacing = 10;
+    shape.panelPadding = 7;
+    shape.panelPaddingX = 10;
+    const PanelWindowContour rounded{QSizeF(500, 300), {18, 18, 18, 18}};
+    const PanelWindowContour square{rounded.size, {}};
+    for (auto side : {ButtonPosition::Left, ButtonPosition::Right}) {
+        shape.position = side;
+        shape.offset = AppOffset{40, 40};
+        const auto floating = panelBackgroundPath(box, shape, rounded);
+        for (const QPointF p : {QPointF(1, 1), QPointF(99, 1),
+                                QPointF(1, 33), QPointF(99, 33)})
+            CHECK(!floating.contains(p));
+        CHECK(floating.contains(box.center()));
+        CHECK(panelFlushMask(shape) == 0);
+
+        const int sideMask = side == ButtonPosition::Left ? PanelFlushLeft : PanelFlushRight;
+        // Single-edge contact is not a window corner. No artificial cutout.
+        shape.offset = AppOffset{0, 40};
+        CHECK(panelFlushMask(shape) == sideMask);
+        const auto sideOnly = panelBackgroundPath(box, shape, rounded);
+        shape.offset = AppOffset{40, 0};
+        CHECK(panelFlushMask(shape) == PanelFlushTop);
+        const auto topOnly = panelBackgroundPath(box, shape, rounded);
+        for (const QPointF p : {QPointF(1, 1), QPointF(99, 1),
+                                QPointF(1, 33), QPointF(99, 33)}) {
+            CHECK(sideOnly.contains(p));
+            CHECK(topOnly.contains(p));
+        }
+        // A side-only panel near the top follows the translated window arc,
+        // not a fresh quarter circle at the panel's own top corner.
+        shape.offset = AppOffset{0, 4};
+        const QPointF shiftedCorner(side == ButtonPosition::Left ? 9 : 91, 1);
+        CHECK(panelBackgroundPath(box, shape, rounded).contains(shiftedCorner));
+        shape.offset = AppOffset{0, 0};
+        CHECK(panelFlushMask(shape) == (PanelFlushTop | sideMask));
+        const QPointF outer(side == ButtonPosition::Left ? 1 : 99, 1);
+        CHECK(!panelBackgroundPath(box, shape, rounded).contains(outer));
+        // A square/maximized native contour must leave no circular gap.
+        CHECK(panelBackgroundPath(box, shape, square).contains(outer));
+        const PanelWindowContour smallRadius{rounded.size, {6, 6, 6, 6}};
+        const QPointF nearCorner(side == ButtonPosition::Left ? 5 : 95, 1);
+        CHECK(panelBackgroundPath(box, shape, smallRadius).contains(nearCorner));
+        CHECK(!panelBackgroundPath(box, shape, rounded).contains(nearCorner));
+        CHECK(panelBackgroundKey(shape, rounded) != panelBackgroundKey(shape, square));
+        const auto originalKey = panelBackgroundKey(shape, rounded);
+        // Even within the same edge mask, offset changes the true intersection.
+        shape.offset.y = 0.5;
+        CHECK(panelBackgroundKey(shape, rounded) != originalKey);
+        shape.offset = AppOffset{1, 1};
+        CHECK(panelFlushMask(shape) == (PanelFlushTop | sideMask));
+        shape.offset = AppOffset{1.01, 1.01};
+        CHECK(panelFlushMask(shape) == 0);
+    }
+    CHECK(panelBackgroundPath(QRectF(), shape, rounded).isEmpty());
+
 }
 
 // ---------------------------------------------------------------------------
@@ -721,6 +780,37 @@ void testTileMenu()
 // Which configuration a window gets
 // ---------------------------------------------------------------------------
 
+void testNativeGtkControls()
+{
+    removeRulesFile();
+    writeKwinrc("kos_decoration");
+    writeUserConfig(R"({"rules": [
+        {"match": {"class": "org.example.Gtk", "type": "normal"},
+         "nativeGtkControls": true},
+        {"match": {"class": "org.example.Gtk", "title": "Custom", "type": "normal"},
+         "nativeGtkControls": false}
+    ]})");
+    ButtonConfig config;
+    const auto native = config.getAppConfig(query(QStringLiteral("org.example.Gtk")));
+    CHECK(native.usesNativeGtkControls(false));
+    CHECK(!native.usesNativeGtkControls(true)); // SSD must keep its only controls.
+    CHECK(native.showButtons);
+    CHECK(config.getAppConfig(query(QStringLiteral("instance org.example.Gtk")))
+              .usesNativeGtkControls(false));
+    CHECK(!config.getAppConfig(query(QStringLiteral("org.example.Gtk"), {}, 5))
+               .usesNativeGtkControls(false)); // Dialogs are separately qualified.
+    CHECK(!config.getAppConfig(query(QStringLiteral("org.example.Gtk"), QStringLiteral("Custom")))
+               .usesNativeGtkControls(false));
+    CHECK(!config.getAppConfig(query(QStringLiteral("org.example.Unknown")))
+               .usesNativeGtkControls(false));
+    CHECK(config.storeGeometry(classMatcher(QStringLiteral("org.example.Gtk")), PanelGeometry{}));
+    CHECK(config.getAppConfig(query(QStringLiteral("org.example.Gtk"))).usesNativeGtkControls(false));
+    writeUserConfig(R"({"apps":{"org.example.Gtk":{"nativeGtkControls":"true"}}})");
+    config.load();
+    CHECK(!config.getAppConfig(query(QStringLiteral("org.example.Gtk"))).usesNativeGtkControls(false));
+    removeRulesFile();
+}
+
 void testResolution()
 {
     removeRulesFile();
@@ -983,6 +1073,7 @@ int main(int argc, char **argv)
     testEdgeResize();
     testTileMenu();
     testResolution();
+    testNativeGtkControls();
     testStore();
 
     std::printf("%d checks, %d failures\n", g_checks, g_failures);

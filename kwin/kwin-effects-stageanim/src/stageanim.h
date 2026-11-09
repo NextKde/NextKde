@@ -37,6 +37,9 @@
 #else
 #define STAGE_LIVE_CONTENT_RENDER 0
 #endif
+#ifndef STAGE_LIVE_CONTENT_RENDER_67
+#define STAGE_LIVE_CONTENT_RENDER_67 0
+#endif
 
 #include <QFileSystemWatcher>
 #include <QPointer>
@@ -224,6 +227,7 @@ public:
                      int mask, const Region &deviceRegion, LogicalOutput *screen) override;
     void postPaintScreen() override;
     bool isActive() const override;
+    QString debug(const QString &parameter) const override;
 
     int requestedEffectChainPosition() const override
     {
@@ -279,6 +283,7 @@ private:
                           LiveCard &card, quint32 &paintable);
     void writeLiveStatus();
     bool liveCardPaintable(const LiveCard &card) const;
+    bool liveOverlayAllowed() const;
     static LiveCardPose lerpPose(const LiveCardPose &a, const LiveCardPose &b, qreal t);
     static LiveCardPose currentPose(const LiveCard &card);
     // 卡面铭牌（标题/关闭钮）光栅化；键（标题/计数/尺寸）变才重绘
@@ -286,6 +291,7 @@ private:
 
     QString m_livePath;
     QString m_liveStatusPath;
+    QString m_liveDesktopId;
     QFileSystemWatcher *m_liveWatcher = nullptr;
     QTimer m_liveReloadTimer;   // Restarted by both watcher signals; one reload per burst.
     QTimer m_liveStatusTimer;   // 周期刷 status 文件（shell 据此让位快照）
@@ -297,6 +303,7 @@ private:
     qint64 m_shaderLastFailMs = 0;    // 最近一次编译失败时刻（steady ms）
     QHash<QString, QSharedPointer<LiveCard>> m_liveCards; // 含 dying 退场卡（统一绘制管线）
     QSet<QString> m_liveWanted; // 最近一次发布在册的 id（缺席踢除的对照基准）
+    QSet<QString> m_livePendingOpaque; // Desktop handoff: retain until registration succeeds.
     QSet<QString> m_livePending; // 文件里有、窗口还没出现（等 windowAdded）
     QSet<QString> m_liveAcknowledged; // Only cards with rendered, painted content own QML visuals.
     quint32 m_liveFeedTick = 0;  // 帧投喂分级节拍

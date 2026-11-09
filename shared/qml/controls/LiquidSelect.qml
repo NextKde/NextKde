@@ -2,6 +2,7 @@ pragma ComponentBehavior: Bound
 
 import QtQuick
 import QtQuick.Controls
+import "../foundation" as Foundation
 
 // A plain rounded select dropdown, shared by the settings apps. Deliberately
 // not a platform-styled ComboBox and not a glass material: a flat rounded
@@ -14,12 +15,13 @@ Item {
     // Width follows the content: left pad + label + gap + glyph + right pad.
     // The floor keeps a placeholder-only field from collapsing.
     implicitWidth: Math.max(72, 13 + label.implicitWidth + 9 + chevron.implicitWidth + 12)
-    implicitHeight: 36
+    implicitHeight: 34
 
     property var model: []
     property string textRole: ""
     property int currentIndex: 0
     property string placeholder: ""
+    property string appearanceMode: "system"
     // App accent for the selection highlight; bind it at the call site, like
     // LiquidGlassSwitch. SystemPalette.highlight would follow the desktop
     // colour scheme (often pink) instead of the app's accent.
@@ -40,17 +42,22 @@ Item {
     // arrives (same contract as LiquidSegmentedControl).
     signal activated(int index)
 
-    SystemPalette {
-        id: controlPalette
-        colorGroup: SystemPalette.Active
-    }
-
     readonly property bool darkAppearance: {
-        const color = controlPalette.window
-        return color.r * 0.2126 + color.g * 0.7152 + color.b * 0.0722 < 0.5
+        if (root.appearanceMode === "dark") return true
+        if (root.appearanceMode === "light") return false
+        // Same dark decision as the rest of the family (LiquidSurface,
+        // LiquidTextField, …): the app-wide AppTheme.dark, which also falls
+        // back to light when the system palette itself is unusable.
+        return Foundation.AppTheme.dark
     }
 
     property bool _hovered: false
+    // §5 Disabled：整体 α .38；hover/按键由 MouseArea（enabled 绑定）与 openMenu 关断。
+    opacity: enabled ? 1 : 0.38
+    // §4.1 输入框：Hover=边框 α .14，不改填充（液态 rim 的 hover 另行外推记账）。
+    readonly property color _fieldBorder: root._hovered
+        ? Qt.rgba(root.outlineColor.r, root.outlineColor.g, root.outlineColor.b, 0.14)
+        : root.outlineColor
     // Optimistic visual selection, confirmed or rolled back by
     // confirmationTimer once the owner's async write lands (or doesn't).
     property int _visualIndex: 0
@@ -142,7 +149,7 @@ Item {
             GradientStop {
                 position: 0
                 color: root.materialForm
-                    ? (root.activeFocus || menu.opened ? root.accentColor : root.outlineColor)
+                    ? (root.menu.opened ? root.accentColor : root._fieldBorder)
                     : (root.darkAppearance
                        ? Qt.rgba(1, 1, 1, root._hovered || menu.opened ? 0.75 : 0.65)
                        : Qt.rgba(1, 1, 1, 1.0))
@@ -150,21 +157,21 @@ Item {
             GradientStop {
                 position: 1
                 color: root.materialForm
-                    ? (root.activeFocus || menu.opened ? root.accentColor : root.outlineColor)
+                    ? (root.menu.opened ? root.accentColor : root._fieldBorder)
                     : (root.darkAppearance ? Qt.rgba(0, 0, 0, 0.35) : Qt.rgba(0, 0, 0, 0.18))
             }
         }
 
         // Translucent grey fill, one pixel inside the rim, deliberately flat --
         // all the highlight lives on the edge, so the pill's silhouette stays
-        // readable. Hover and open deepen it slightly.
+        // readable. §4.1：hover 不加深填充（只动边框）；menu.opened 深化为弹层开合态。
         Rectangle {
             anchors.fill: parent
             anchors.margins: 1
             radius: root.fieldRadius - 1
             color: root.darkAppearance
-                ? Qt.rgba(1, 1, 1, root._hovered || menu.opened ? 0.12 : 0.08)
-                : Qt.rgba(0, 0, 0, root._hovered || menu.opened ? 0.08 : 0.05)
+                ? Qt.rgba(1, 1, 1, menu.opened ? 0.12 : 0.06)
+                : Qt.rgba(0, 0, 0, menu.opened ? 0.08 : 0.04)
             Behavior on color { ColorAnimation { duration: 150; easing.type: Easing.OutCubic } }
         }
 
@@ -224,6 +231,18 @@ Item {
         onClicked: root.toggleMenu()
     }
 
+    // §5 Focus：仅一层外环，2px accent、距外缘留白 2（margins -4 扣除描边 2），
+    // 圆角 = 基准 +2；accent 无彩/明度越界时回退 focusFallback。
+    Rectangle {
+        anchors.fill: parent
+        anchors.margins: -4
+        radius: root.fieldRadius + 2
+        border.width: 2
+        border.color: LiquidStyle.focusColor(root.accentColor)
+        color: "transparent"
+        visible: root.activeFocus && root.enabled
+    }
+
     // ── Choice sheet ─────────────────────────────────────────────────────
 
     Popup {
@@ -240,7 +259,8 @@ Item {
         onOpened: scroller.focusCurrent()
         enter: Transition {
             ParallelAnimation {
-                NumberAnimation { property: "opacity"; from: 0; to: 1; duration: 140; easing.type: Easing.OutCubic }
+                // §3 motion.duration.fast=150 / §2.11 只允许五档（原 demo 140 不在档）。
+                NumberAnimation { property: "opacity"; from: 0; to: 1; duration: 150; easing.type: Easing.OutCubic }
                 NumberAnimation { property: "scale"; from: 0.97; to: 1; duration: 150; easing.type: Easing.OutCubic }
             }
         }
@@ -276,7 +296,7 @@ Item {
                         required property var modelData
                         required property int index
                         width: menu.width - 12
-                        height: 36
+                        height: 28
                         enabled: root.enabled
                         activeFocusOnTab: false
 
@@ -328,9 +348,10 @@ Item {
                                 ? Qt.rgba(root.accentColor.r, root.accentColor.g,
                                           root.accentColor.b, root.darkAppearance ? 0.22 : 0.13)
                                 : (hit.containsMouse
-                                   ? (root.darkAppearance ? Qt.rgba(1, 1, 1, 0.07) : Qt.rgba(0, 0, 0, 0.05))
+                                   ? (root.darkAppearance ? Qt.rgba(1, 1, 1, 0.08) : Qt.rgba(0, 0, 0, 0.06))
                                    : "transparent")
-                            Behavior on color { ColorAnimation { duration: 120 } }
+                            // §4.1「过渡 150ms」/ §3 motion.duration.fast=150（原 demo 120 不在档）。
+                            Behavior on color { ColorAnimation { duration: 150 } }
                         }
                         Text {
                             anchors.left: parent.left

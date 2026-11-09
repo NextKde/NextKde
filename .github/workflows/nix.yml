@@ -1,0 +1,59 @@
+name: nix packaging
+
+on:
+  pull_request:
+    paths:
+      - 'flake.nix'
+      - 'flake.lock'
+      - 'VERSION'
+      - 'packaging/nix/**'
+      - '.github/workflows/nix.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'flake.nix'
+      - 'flake.lock'
+      - 'VERSION'
+      - 'packaging/nix/**'
+      - '.github/workflows/nix.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: nix-packaging-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  packaging:
+    name: NixOS module (weather=${{ matrix.weather }})
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    strategy:
+      fail-fast: false
+      matrix:
+        weather: ['false', 'true']
+    env:
+      NIX_WEATHER: ${{ matrix.weather }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: cachix/install-nix-action@v31
+        with:
+          github_access_token: ${{ secrets.GITHUB_TOKEN }}
+      - name: Evaluate default package and non-x86 module
+        run: |
+          nix eval --raw .#packages.x86_64-linux.kos-desktop.drvPath
+          nix eval --raw --impure --expr \
+            "(import ./packaging/nix/check.nix {
+              flake = builtins.getFlake (toString ./.);
+              system = \"aarch64-linux\";
+              buildWeather = $NIX_WEATHER;
+            }).drvPath"
+      - name: Build module packages and check deployment
+        run: |
+          nix build --no-link --print-build-logs --impure --expr \
+            "import ./packaging/nix/check.nix {
+              flake = builtins.getFlake (toString ./.);
+              buildWeather = $NIX_WEATHER;
+            }"

@@ -2,7 +2,7 @@
 
 `main.cpp` only creates the application, composes the backends and QML runtime,
 and handles application command-line entry points. The QML context still exposes
-`settingsBridge` and `windowSettings`; this refactor preserves all 101 existing
+`settingsBridge` and `windowSettings`; preserve the existing
 SettingsBridge invokable signatures and their default arguments.
 
 ## Modules
@@ -62,16 +62,29 @@ retry/fallback, diagnostic replies, failed start/exit, watchdog responsiveness,
 local gallery deduplication/name collisions, managed deletion boundaries, and
 asynchronous thumbnail caching with rounded alpha.
 
-Existing tests continue to exercise the compiled facade through actual QML,
-including notification IPC round trips, color image generation, installed entry
-selection, hot reload, pages and controls. Host execution was explicitly
-permitted for this work; all runtime data is isolated from user configuration.
+Existing tests exercise the compiled facade through actual QML, including notification IPC,
+color generation, installed entry selection, hot reload, pages and controls. Lifecycle tests cover
+completion on the owning thread and destruction with both probes running, with no stale callback.
+Run all verification only in the VM/hosted CI per [Development](../../../docs/Development.md).
+Do not treat a historical refactoring report as evidence for the current source.
 
-2026-10-15 validation: current sources built successfully; all 16 settings CTest
-groups passed, including 14 checks in backend-modules. The source review also
-confirmed that 130 unchanged feature method bodies retain their original logic.
+## Window and background task lifetime
 
-Follow-up lifecycle validation adds two deterministic checks: completion is
-returned to the owning thread, and destroying an owner with both probes running
-joins both workers without delivering a stale callback. Backend-modules now has
-16 passing checks.
+Settings is a session-scoped single instance. Closing its window leaves the
+process and application operations running, including final installation-state
+verification. Launching Settings again activates that owner; when a mutation is
+active, ordinary launch opens application management with the existing progress.
+Explicit page and Calendar/Weather navigation still take precedence. Cancellation
+is only performed through the application's existing task controls.
+
+The process stays resident after completion to retain its task state. Mutation
+completion emits one desktop notification after verification; read-only inventory
+and update queries do not notify. Notification delivery is asynchronous and a
+missing notification service does not change the task result. This is window-close
+continuation within the login session, not task recovery after logout, reboot, or
+process termination.
+
+`kos-settings.close-policy` launches the real Settings binary with an isolated
+installer fixture and notification bus, closes and relaunches it mid-operation,
+and checks success, installer failure, and final-verification failure while hidden.
+The builtin QML suite also closes and reopens the real Settings window while busy.

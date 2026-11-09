@@ -12,8 +12,9 @@ Scope {
     id: root
 
     readonly property var targetScreen: ScreenLifecycle.activeScreen
+    readonly property var soundService: typeof NotificationSoundService !== "undefined" ? NotificationSoundService : null
 
-    function recordNotification(notification) {
+    function recordNotification(notification, firstArrival) {
         if (!NotificationPolicyService.ready) return
         NotificationPolicyService.remember(notification)
         if (NotificationPolicyService.isBlocked(notification)) {
@@ -21,6 +22,8 @@ Scope {
             return
         }
         notification.tracked = !ControlCenterService.doNotDisturbEnabled && NotificationPolicyService.bannersEnabled
+        // Metadata/replacement updates still refresh history, but do not chime.
+        if (firstArrival && soundService) soundService.play(notification)
         AppNotificationService.recordNotification({
             desktopEntry: notification.desktopEntry || "",
             appName: notification.appName || "",

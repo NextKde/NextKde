@@ -25,7 +25,11 @@ ShellRoot {
         color: "transparent"
         mask: Region { width: 0; height: 0 }
         property real progress: 0
-        BackgroundEffect.blurRegion: Region { x: 64; y: 44; width: 832; height: 532 }
+        readonly property rect captureBounds: Qt.rect(64, 44, 832, 532)
+        BackgroundEffect.blurRegion: Region {
+            x: panel.captureBounds.x; y: panel.captureBounds.y
+            width: panel.captureBounds.width; height: panel.captureBounds.height
+        }
         Item {
             id: outline
             width: 800 * (0.22 + 0.78 * panel.progress)
@@ -36,7 +40,8 @@ ShellRoot {
         SurfaceShape {
             id: shape
             target: outline
-            captureGeometry: Qt.rect(64, 44, 832, 532)
+            captureGeometry: panel.captureBounds
+            blurSigma: 12
             radius: Math.min(28, outline.height / 2)
             exponent: 2.35
             scrimEnabled: true
@@ -55,6 +60,11 @@ ShellRoot {
                 if (!shape.fixedCaptureSupported) {
                     console.error("FIXED_CAPTURE_FAIL: protocol v5 unavailable");
                 } else {
+                    console.log("FIXED_CAPTURE_CONFIG " + JSON.stringify({
+                        x: panel.captureBounds.x, y: panel.captureBounds.y,
+                        width: panel.captureBounds.width, height: panel.captureBounds.height,
+                        sigma: shape.blurSigma, continuous: shape.continuousBlurSupported
+                    }));
                     console.log("FIXED_CAPTURE_PASS");
                 }
                 Qt.quit();

@@ -1,15 +1,68 @@
 cmake_minimum_required(VERSION 3.21)
 project(kos-settings LANGUAGES CXX)
+include(CTest)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_AUTOMOC ON)
 
-find_package(Qt6 6.5 REQUIRED COMPONENTS Core DBus Gui Qml Quick)
+find_package(Qt6 6.5 REQUIRED COMPONENTS Core DBus Gui Qml Quick QuickControls2 Network)
+if(NOT TARGET kos_demo_ui)
+    add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/../../shared/demo-ui ${CMAKE_CURRENT_BINARY_DIR}/demo-ui)
+endif()
+
 find_package(KF6Config REQUIRED)
+find_package(KF6KCMUtils REQUIRED)
+find_package(KF6KIO REQUIRED)
+find_package(KF6Service REQUIRED)
+find_package(Qt6 6.5 REQUIRED COMPONENTS Concurrent)
+if(NOT TARGET kos-flatpak-client)
+    add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/../../platform/flatpak-client ${CMAKE_CURRENT_BINARY_DIR}/flatpak-client)
+endif()
+if(NOT KOS_FLATPAK_SUPPORT STREQUAL "OFF")
+    find_package(PkgConfig QUIET)
+    if(PkgConfig_FOUND)
+        pkg_check_modules(FLATPAK QUIET IMPORTED_TARGET flatpak>=1.12 ostree-1>=2021.4)
+    endif()
+    if(FLATPAK_FOUND)
+        add_library(kos-flatpak-apps STATIC src/FlatpakApps.cpp src/FlatpakApps.h src/FlatpakRelease.cpp src/FlatpakRelease.h
+            src/FlatpakCompatibility.cpp src/FlatpakCompatibility.h
+            src/FlatpakTransactionProcess.cpp src/FlatpakTransactionProcess.h)
+        target_link_libraries(kos-flatpak-apps PUBLIC Qt6::Core Qt6::Concurrent PRIVATE Qt6::Network PkgConfig::FLATPAK)
+        add_executable(kos-flatpak-worker src/FlatpakWorkerMain.cpp)
+        target_link_libraries(kos-flatpak-worker PRIVATE kos-flatpak-apps)
+        target_compile_definitions(kos-flatpak-worker PRIVATE KOS_FLATPAK_NATIVE_HELPERS)
+        target_compile_definitions(kos-flatpak-client PRIVATE KOS_FLATPAK_WORKER_BUILD_PATH="$<TARGET_FILE:kos-flatpak-worker>")
+        add_dependencies(kos-flatpak-client kos-flatpak-worker)
+        install(TARGETS kos-flatpak-worker RUNTIME DESTINATION bin)
+    elseif(KOS_FLATPAK_SUPPORT STREQUAL "ON")
+        message(FATAL_ERROR "KOS_FLATPAK_SUPPORT=ON requires flatpak>=1.12 and ostree-1>=2021.4 development libraries")
+    else()
+        message(STATUS "Optional Flatpak backend not built; Settings, platform and kos-apps remain available")
+    endif()
+endif()
+add_executable(kos-apps src/FlatpakAppsCli.cpp)
+if(TARGET kos-flatpak-apps)
+    target_link_libraries(kos-apps PRIVATE kos-flatpak-apps kos-flatpak-client)
+    target_compile_definitions(kos-apps PRIVATE KOS_FLATPAK_NATIVE_HELPERS)
+else()
+    target_link_libraries(kos-apps PRIVATE kos-flatpak-client)
+endif()
+install(TARGETS kos-apps RUNTIME DESTINATION bin)
+
+add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/../../shared/gtk/module ${CMAKE_CURRENT_BINARY_DIR}/gtk-module)
+
+# Embed the GTK adapter and assets: installed Settings must work without a checkout.
+qt_add_resources(KOS_GTK_RESOURCES ../../shared/gtk/integration.qrc)
 
 qt_add_executable(kos-settings
     src/main.cpp
+    src/TaskNotifications.cpp
+    src/TaskNotifications.h
+    src/AppStore.cpp
+    src/AppStore.h
+    src/IndependentApps.cpp
+    src/IndependentApps.h
     src/SettingsBridge.h
     src/SettingsBridge.cpp
     src/SettingsBridgeDesktop.cpp
@@ -22,20 +75,37 @@ qt_add_executable(kos-settings
     src/WallpaperLibrary.cpp
     src/SettingsRuntime.cpp
     src/CacheMaintenance.cpp
+    src/FontSettings.cpp
+    src/FontSettings.h
     src/PowerSettings.cpp
     src/PowerSettings.h
     src/WindowSettings.cpp
+    ${KOS_GTK_RESOURCES}
+    ../../platform/src/daemon/PlatformDbus.cpp
+    ../../platform/src/daemon/PowerProfilesBus.cpp
 )
+add_dependencies(kos-settings kos-gtk-window-controls)
+target_compile_definitions(kos-settings PRIVATE
+    KOS_GTK_MODULE_BUILD_PATH="$<TARGET_FILE:kos-gtk-window-controls>"
+    KOS_SETTINGS_BUILD_DIR="${CMAKE_CURRENT_BINARY_DIR}")
 target_include_directories(kos-settings PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/../../services/ai/include)
 
+add_dependencies(kos-settings kos-apps)
 target_link_libraries(kos-settings PRIVATE
+    kos_demo_ui
+    kos_demo_ui_plugin
+    kos-flatpak-client
     Qt6::Core
     Qt6::DBus
     Qt6::Gui
     Qt6::Qml
     Qt6::Quick
     KF6::ConfigCore
+    KF6::KCMUtilsQuick
+    KF6::KIOGui
+    KF6::Service
+    Qt6::Network
 )
 
 # Development host: released packages will embed or install this QML tree.
@@ -53,12 +123,64 @@ target_compile_definitions(kos-settings PRIVATE
 install(TARGETS kos-settings RUNTIME DESTINATION bin)
 file(GLOB SETTINGS_RUNTIME_QML CONFIGURE_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/*.qml")
 install(FILES ${SETTINGS_RUNTIME_QML} DESTINATION share/kos/settings)
-install(DIRECTORY icons DESTINATION share/kos/settings)
+install(DIRECTORY icons app-store DESTINATION share/kos/settings)
 install(DIRECTORY pages components DESTINATION share/kos/settings
     FILES_MATCHING PATTERN "*.qml")
 
 if(BUILD_TESTING)
     find_package(Qt6 6.5 REQUIRED COMPONENTS Test)
+    find_program(DBUS_RUN_SESSION_EXECUTABLE dbus-run-session REQUIRED)
+    add_executable(kos-settings-fonts-test tests/backend/FontsTest.cpp src/FontSettings.cpp src/FontSettings.h)
+    target_include_directories(kos-settings-fonts-test PRIVATE src)
+    target_link_libraries(kos-settings-fonts-test PRIVATE Qt6::Gui Qt6::Qml Qt6::Test KF6::KCMUtilsQuick)
+    add_test(NAME kos-settings.fonts
+        COMMAND ${DBUS_RUN_SESSION_EXECUTABLE} -- $<TARGET_FILE:kos-settings-fonts-test>)
+    set_tests_properties(kos-settings.fonts PROPERTIES LABELS headless TIMEOUT 30)
+    add_executable(kos-settings-background-test tests/background/session.cpp)
+    target_link_libraries(kos-settings-background-test PRIVATE Qt6::Core Qt6::DBus Qt6::Test)
+    target_compile_definitions(kos-settings-background-test PRIVATE
+        SETTINGS_EXECUTABLE="$<TARGET_FILE:kos-settings>"
+        SETTINGS_COMPONENTS="${CMAKE_CURRENT_SOURCE_DIR}/components")
+    add_dependencies(kos-settings-background-test kos-settings)
+    add_test(NAME kos-settings.close-policy
+        COMMAND ${DBUS_RUN_SESSION_EXECUTABLE} -- $<TARGET_FILE:kos-settings-background-test>)
+    set_tests_properties(kos-settings.close-policy PROPERTIES
+        ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_QUICK_BACKEND=software"
+        LABELS "headless" TIMEOUT 60)
+    find_package(Qt6 6.5 QUIET COMPONENTS QuickTest)
+    add_executable(kos-flatpak-process-test tests/store/flatpak_process.cpp src/FlatpakTransactionProcess.cpp)
+    target_include_directories(kos-flatpak-process-test PRIVATE src)
+    target_link_libraries(kos-flatpak-process-test PRIVATE Qt6::Core Qt6::Test)
+    add_test(NAME kos-settings.flatpak-process COMMAND kos-flatpak-process-test)
+    set_tests_properties(kos-settings.flatpak-process PROPERTIES
+        WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/../.. LABELS logic TIMEOUT 20)
+    if(TARGET kos-flatpak-apps)
+    add_executable(kos-flatpak-compatibility-test tests/store/flatpak_compatibility.cpp)
+    target_include_directories(kos-flatpak-compatibility-test PRIVATE src)
+    target_link_libraries(kos-flatpak-compatibility-test PRIVATE kos-flatpak-apps Qt6::Test)
+    add_dependencies(kos-flatpak-compatibility-test kos-apps)
+    add_test(NAME kos-settings.flatpak-compatibility COMMAND kos-flatpak-compatibility-test)
+    set_tests_properties(kos-settings.flatpak-compatibility PROPERTIES
+        WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/../.. LABELS logic TIMEOUT 20)
+    endif()
+    if(TARGET kos-flatpak-apps)
+        add_executable(kos-flatpak-release-test tests/store/flatpak_release.cpp)
+        target_include_directories(kos-flatpak-release-test PRIVATE src)
+        target_link_libraries(kos-flatpak-release-test PRIVATE Qt6::Core Qt6::Network Qt6::Test PkgConfig::FLATPAK)
+        add_test(NAME kos-settings.flatpak-release COMMAND kos-flatpak-release-test)
+        set_tests_properties(kos-settings.flatpak-release PROPERTIES
+            WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/../.. LABELS logic TIMEOUT 30)
+    endif()
+    # Native KMusic controller was removed; catalogue behavior is covered by independent-apps.
+
+    add_executable(kos-independent-apps-test tests/store/independent.cpp src/AppStore.cpp src/IndependentApps.cpp)
+    target_include_directories(kos-independent-apps-test PRIVATE src)
+    target_link_libraries(kos-independent-apps-test PRIVATE Qt6::Core Qt6::Gui Qt6::Network
+        Qt6::Test KF6::KIOGui KF6::Service kos-flatpak-client)
+    add_test(NAME kos-settings.independent-apps COMMAND kos-independent-apps-test)
+    set_tests_properties(kos-settings.independent-apps PROPERTIES
+        WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/../.. LABELS logic TIMEOUT 30)
+
     add_executable(kos-settings-backend-test
         tests/backend/ModulesTest.cpp
         src/SettingsProbeTasks.cpp
@@ -72,17 +194,48 @@ if(BUILD_TESTING)
     add_test(NAME kos-settings.backend-modules COMMAND kos-settings-backend-test)
     set_tests_properties(kos-settings.backend-modules PROPERTIES LABELS logic TIMEOUT 20)
 
-    add_executable(kos-power-settings-test tests/power/backend.cpp src/PowerSettings.cpp src/PowerSettings.h)
+    add_executable(kos-power-settings-test
+        tests/power/backend.cpp
+        src/PowerSettings.cpp
+        src/PowerSettings.h
+        ../../platform/src/daemon/PlatformDbus.cpp
+        ../../platform/src/daemon/PowerProfilesBus.cpp)
     target_include_directories(kos-power-settings-test PRIVATE src)
     target_link_libraries(kos-power-settings-test PRIVATE Qt6::Core Qt6::DBus)
     add_test(NAME kos-settings.power-config COMMAND kos-power-settings-test)
     set_tests_properties(kos-settings.power-config PROPERTIES LABELS logic TIMEOUT 20)
 
-    add_executable(kos-window-settings-test tests/windows/config.cpp src/WindowSettings.cpp)
+    add_executable(kos-power-settings-bus-test
+        tests/power/bus.cpp
+        src/PowerSettings.cpp
+        src/PowerSettings.h
+        ../../platform/src/daemon/PlatformDbus.cpp
+        ../../platform/src/daemon/PowerProfilesBus.cpp)
+    target_include_directories(kos-power-settings-bus-test PRIVATE src)
+    target_link_libraries(kos-power-settings-bus-test PRIVATE Qt6::Core Qt6::DBus)
+    if(NOT DBUS_DAEMON_EXECUTABLE)
+        find_program(DBUS_DAEMON_EXECUTABLE dbus-daemon)
+    endif()
+    if(DBUS_DAEMON_EXECUTABLE)
+        add_test(NAME kos-settings.power-bus COMMAND kos-power-settings-bus-test)
+        set_tests_properties(kos-settings.power-bus PROPERTIES LABELS logic TIMEOUT 20)
+    endif()
+
+    add_executable(kos-window-settings-test tests/windows/config.cpp src/WindowSettings.cpp ${KOS_GTK_RESOURCES})
     target_include_directories(kos-window-settings-test PRIVATE src)
     target_link_libraries(kos-window-settings-test PRIVATE Qt6::Core Qt6::DBus KF6::ConfigCore)
     add_test(NAME kos-settings.window-config COMMAND kos-window-settings-test)
     set_tests_properties(kos-settings.window-config PROPERTIES LABELS logic TIMEOUT 15)
+    add_executable(kos-animation-async-test tests/windows/async.cpp src/WindowSettings.cpp ${KOS_GTK_RESOURCES})
+    target_include_directories(kos-animation-async-test PRIVATE src)
+    target_link_libraries(kos-animation-async-test PRIVATE Qt6::Core Qt6::DBus KF6::ConfigCore)
+    add_test(NAME kos-settings.animation-async COMMAND dbus-run-session -- $<TARGET_FILE:kos-animation-async-test>)
+    set_tests_properties(kos-settings.animation-async PROPERTIES LABELS logic TIMEOUT 20)
+
+    add_executable(kos-native-genie-test tests/windows/native-genie.cpp)
+    target_link_libraries(kos-native-genie-test PRIVATE Qt6::Core Qt6::DBus KF6::ConfigCore)
+    add_test(NAME kos-settings.native-genie-upgrade COMMAND kos-native-genie-test)
+    set_tests_properties(kos-settings.native-genie-upgrade PROPERTIES LABELS logic TIMEOUT 15)
     add_test(NAME kos-settings.window-page COMMAND kos-settings --smoke-test-windows)
     set_tests_properties(kos-settings.window-page PROPERTIES
         ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_QUICK_BACKEND=software"
@@ -100,8 +253,15 @@ if(BUILD_TESTING)
         TIMEOUT 15
     )
 
-    find_program(KOS_QMLTESTRUNNER_EXECUTABLE NAMES qmltestrunner6 qmltestrunner
-        HINTS "${QT6_INSTALL_PREFIX}/${QT6_INSTALL_BINS}" /usr/lib/qt6/bin)
+    # The settings QML imports the same static Demo module as the application.
+    # A dedicated QuickTest host registers that module without installing it.
+    set(KOS_QMLTESTRUNNER_EXECUTABLE "")
+    if(TARGET Qt6::QuickTest)
+        qt_add_executable(kos-settings-qml-tests tests/QmlTestMain.cpp)
+        target_link_libraries(kos-settings-qml-tests PRIVATE Qt6::QuickTest
+            kos_demo_ui kos_demo_ui_plugin)
+        set(KOS_QMLTESTRUNNER_EXECUTABLE "$<TARGET_FILE:kos-settings-qml-tests>")
+    endif()
     if(KOS_QMLTESTRUNNER_EXECUTABLE)
         add_test(NAME kos-settings.page-contracts
             COMMAND ${KOS_QMLTESTRUNNER_EXECUTABLE}
@@ -174,7 +334,7 @@ if(BUILD_TESTING)
         endif()
         add_test(NAME kos-settings.window-install
             COMMAND ${KOS_NODE_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/windows/installed.mjs
-                $<TARGET_FILE:kos-settings>)
+                $<TARGET_FILE:kos-settings> $<TARGET_FILE:kos-gtk-window-controls>)
         set_tests_properties(kos-settings.window-install PROPERTIES LABELS ui TIMEOUT 25)
         add_test(NAME kos-settings.wallpaper-colors
             COMMAND ${KOS_NODE_EXECUTABLE}

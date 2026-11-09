@@ -2,100 +2,73 @@
 
 **[English](README.md) | [中文](README.zh-CN.md)**
 
-Every direct child is a standalone Qt Quick application and a separate
-process. Applications may import `shared/`, communicate with `services/`
-through documented contracts, and must never import `shell/desktop/`.
+The core `apps/` source tree contains `settings/`, `lockscreen/` and the retained
+`sddm/` theme (no supported SDDM installer).
+Calendar (including tasks), Calculator and Weather share the independent kos-apps
+repository, version and Release, with separate install/update/uninstall. ListenFree remains separate:
 
-The application workspace is configured from the repository root. Five build
-options and matching CMake presets keep the new applications independently
-manageable:
+| Application | Source, releases and application tests |
+| --- | --- |
+| Calendar with integrated tasks | [NextKde/kos-apps](https://github.com/NextKde/kos-apps) |
+| Calculator | [NextKde/kos-apps](https://github.com/NextKde/kos-apps) |
+| Weather | [NextKde/kos-apps](https://github.com/NextKde/kos-apps) |
+| ListenFree | [NextKde/ListenFree](https://github.com/NextKde/ListenFree) |
 
-| Application | Target | Configure preset |
-| --- | --- | --- |
-| Calendar | `kos-calendar` | `calendar-dev` |
-| Todo | `kos-todo` | `todo-dev` |
-| Weather | `kos-weather` | `weather-dev` |
-| Music (legacy, retained) | `kos-music` | `music-dev` |
-| KOS ListenFree (default music player) | `listenfree` | `listenfree-dev` |
+The root build no longer compiles these applications, their private runtime or PIM
+service. App CMake presets are removed. Enabling a former `KOS_BUILD_CALENDAR`,
+`KOS_BUILD_TODO`, `KOS_BUILD_CALCULATOR`, `KOS_BUILD_WEATHER` or
+`KOS_BUILD_LISTENFREE` option fails with migration guidance. Build and contribute
+in the corresponding independent repository. Source directories retained during
+cutover are not an alternative build/install path and must not be deleted until
+the independent gates have been validated.
 
-Use `apps-dev` to build all five. Each application owns its executable, QML
-module, desktop entry, tests, and bilingual documentation. `apps/common/` is a
-small application runtime rather than a feature layer; applications do not
-import one another. The Weather preset additionally builds and installs its Go
-data service, which the application starts on demand.
+The first three source directories/IDs are `apps/org.nextks.calendar`,
+`apps/org.nextks.calculator` and `apps/org.nextks.weather` (IDs omit `apps/`).
+The new remote is not created/pushed; old repositories retain history. Old
+`org.nextkde.*` Flatpaks are not automatically renamed, uninstalled or migrated.
 
-## Development: QML hot reload
-
-The four apps using `apps/common` can load their QML from a source tree and hot reload it, so QML
-edits need neither a rebuild nor a restart:
-
-```bash
-.build/music-dev/apps/music/kos-music --watch-qml apps/music/qml
-# or skip the argument via the environment
-KOS_APP_QML_DIR=apps/music/qml .build/music-dev/apps/music/kos-music
-```
-
-The path names the directory holding `Main.qml` (or the entry file itself).
-`*.qml`/`*.mjs` files in the tree are watched and the window is rebuilt after a
-300 ms debounce; the new code is fully compiled on a throwaway engine first
-(including referenced siblings), and text that does not compile reports its
-errors and keeps the current window. Controllers created in C++ and injected
-into QML through initial properties (such as music's `music`) survive a reload:
-playback, the queue, the database connection, and the MPRIS registration keep
-running. QML-owned state (the current page, open dialogs) resets.
-`shared/qml` (Kos.Ui) is compiled into the binary and still needs a rebuild.
-
-A watch run is an isolated development instance: it never displaces the
-single-instance activation of the running application. C++ edits still need a
-rebuild; only QML/JS edits go through hot reload.
-
-For a persistent per-user installation on Plasma, run:
+## Installation and lifecycle
 
 ```sh
-./tools/install-apps.sh
+./tools/kosctl install apps
+./tools/kosctl install apps --app calendar
+./tools/kosctl install apps --with-listenfree
+./tools/kosctl install apps check-update --app weather
+./tools/kosctl install apps update --app weather
+./tools/kosctl install apps status --app calendar
+./tools/kosctl install apps uninstall --app calculator
 ```
 
-`./tools/kosctl install apps` (or `install-apps.sh`) builds Calendar, Todo,
-Weather and ListenFree. It first checks system dependencies and reports missing
-packages with Arch `pacman` or Ubuntu `apt` commands. Install the reported
-packages and rerun the same command; it does not automatically run sudo.
+`tools/install-apps.sh` is the compatibility dispatcher for the same commands.
+The default selection is Calendar (including tasks), Calculator and Weather;
+ListenFree requires explicit selection. `--app todo` aliases Calendar.
+`--update` and `--uninstall` are aliases for the matching lifecycle actions.
+Mutations require terminal confirmation or `--yes`. The default backend is the
+shared `kos-apps` user-Flatpak backend using signed GitHub Release bundles; it
+never adds online sources and needs no hosted NextKde app repository. The
+local publisher key is configured, but runtime policy remains empty and no signed
+Release exists; installation/update remains unavailable without a source fallback.
+Use `--backend=source` for legacy/developer source installation explicitly;
+`--app APP --version X.Y.Z` and build-dependency `check` are source-only.
+`--with-listenfree-video` is rejected: use the independent ListenFree build guide
+for custom video features, rather than overriding a stable Release manifest.
 
-Arch rolling releases and Ubuntu 26.04+ provide the required Qt 6.10+.
-Ubuntu 22.04/24.04/25.10 stock Qt is too old; those releases need a complete
-compatible Qt/KF6 toolchain. Go 1.26+ is also required by the data service.
-The checker verifies QML runtime modules and the SQLite driver as well as
-headers and build tools. Run `python3 tools/check-apps-dependencies.py` for
-just the preflight check.
+Flatpak owns its installation records; external Flatpak tools can remove the same
+ref. Settings/CLI discovers signed GitHub bundle updates, not Discover or
+`flatpak update` for URL-less app origins. Libflatpak may create a local origin/key
+record even if a transaction is later refused. Runtime distribution still requires
+separately approved existing sources. No production signed bundle is published yet.
+Status and uninstall of an unambiguous user Flatpak work without publisher approval;
+normal uninstall preserves data. No automatic legacy migration occurs.
 
-The installer downloads checksum-verified QuickJS-ng and Qmmp sources, applies
-the included audio patches and builds a private SDK under
-`.build/listenfree-sdk`. If system TagLib is older than 2.3.1, it builds that
-privately too. The first installation needs internet access and takes longer;
-later installations reuse the SDK while its build fingerprint matches.
-No manually prepared SDK is required. `KOS_LISTENFREE_SDK=/path/to/sdk` remains
-available for an existing compatible SDK. System packages and CPU architecture
-are discovered on the target device; the builder uses no host-specific paths.
+The explicit source backend downloads stable **source** Releases from the fixed
+NextKde repositories and builds locally. Its private ownership records are not
+Discover packages. Neither backend falls back to this checkout or a development
+branch. A batch stops at the first failure, retaining completed operations.
+See the [lifecycle and trust contract](../docs/app-store/IndependentApps.md).
 
-This performs a Release build, installs the binaries under
-`~/.local`, registers desktop entries, hicolor icons and AppStream metadata,
-enables the core `kos-data.service`, registers the D-Bus-activated PIM service,
-and refreshes Plasma's application cache. The desktop entries contain absolute executable paths, so
-the applications remain available after login without a source-tree build.
-Re-run the same command to perform an in-place upgrade.
-
-Each application exposes the same appearance settings with the platform Preferences shortcut
-(typically `Ctrl+,`): system,
-light or dark appearance; automatic, glass or solid material; opacity; accent
-colour; reduced transparency; and reduced motion. Preferences use one shared
-store and propagate to other running KOS applications. On KDE Plasma the app
-runtime uses `KWindowEffects` for native blur and background contrast when the
-compositor advertises them, with a readable solid fallback everywhere else.
-
-`settings` predates this workspace and remains on its existing build path
-until its source-path-dependent QML loader is migrated separately.
-
-## Default applications
-
-Todo, Calendar and Weather update their existing directories and desktop IDs, retaining their services and data. ListenFree replaces legacy KOS Music in the installed bundle; the old source remains in the repository for now. The music widget raises the current MPRIS player, or opens ListenFree when no session exists.
-
-Run `./tools/kosctl install apps`; see the [Linux build instructions](listenfree/packaging/linux/README.md) for the private SDK layout and manual builds. Dependencies and compilation are checked before deployment. After the new player passes its runtime check, registration removes and backs up the legacy binaries, desktop entry, icon and AppStream metadata. User data is retained. Existing defaults for other music players and later user choices remain unchanged.
+Core `services/data-service` remains a Shell dependency, including shared weather
+and its Go coverage. Calendar PIM and application-specific tests belong to their
+independent repositories. Core CI checks the independent installer and release
+contracts, not obsolete monorepo application directories. See
+[Development](../docs/Development.md) for the remaining core verification gates.

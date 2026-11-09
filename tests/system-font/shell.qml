@@ -95,8 +95,13 @@ Item {
                     chainRole.font.family === expected, chainRole.font.family)
                 root.check("emoji still do not follow it",
                     emojiRole.font.family === "Noto Color Emoji", emojiRole.font.family)
-                root.check("a shipping consumer still loads", ring.label === "CPU",
-                    ring.label)
+                function checkText(item) {
+                    if (item.text !== undefined && item.font !== undefined)
+                        root.check("UsageRing text follows the selected family",
+                            item.font.family === expected, item.font.family)
+                    for (const child of item.children || []) checkText(child)
+                }
+                checkText(ring)
                 // Round trip: the option, not a restart, is what moved every
                 // family, so turning it back off has to restore the designed
                 // ones.
@@ -110,6 +115,10 @@ Item {
                     displayRole.font.family === (AppearanceTokens.typography
                         .hasRecommendedDisplayFamily ? "SF Pro Display" : ""),
                     displayRole.font.family)
+                SystemFontService.applyConfig("[General]\nfont=Inter,10\n")
+                root.check("reload reads a replacement font", SystemFontService.fontSpec === "Inter,10")
+                SystemFontService.applyConfig("[General]\n")
+                root.check("removing font clears the stale family", SystemFontService.fontSpec === "")
                 if (root.failures.length > 0)
                     console.error("FONT_FAIL: " + root.failures.join("; "))
                 else

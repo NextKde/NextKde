@@ -16,6 +16,11 @@ No registry, dependency container or second IPC protocol is introduced.
   signal contracts. The window appearance page instead receives `backend`, the
   existing WindowSettings object. Neither dependency is discovered from context
   properties inside extracted pages.
+- `ThemeSettingsPage.fontsRequested()` opens route 14 under Theme. The font page
+  receives the `FontSettings` native KCM adapter as `backend` and the Shell
+  appearance `bridge` separately, and emits `backRequested()` to return to Theme.
+  KDE edits are staged in the long-lived adapter; loader destruction does not
+  apply or discard them. Only the desktop-follow switch uses immediate IPC.
 - `glassStyles` provides `options`, `indexOf(id)` and `labelOf(id)` to appearance
   views. This catalog stays owned by the composition root.
 - `shellStyleObserved(style)` and `materialSeedObserved(seed)` report confirmed
@@ -35,6 +40,16 @@ coherent responsibility, not to satisfy an arbitrary line count. New controls
 must receive their palette explicitly; do not pass the whole application window
 or introduce dependencies on sibling page ids.
 
+## Form composition
+
+Use `Kos.Demo.SettingsGroup` and `SettingsItem` for every settings form. The shared
+components own the title/name/description hierarchy, borderless ordinary surface,
+compact spacing, separators and the right-aligned trailing slot. Never reconstruct
+those visuals in a feature page. `SettingsNavBar`, `SettingsSwitch` and
+`SettingsSlider` only adapt the canonical 24 px settings-control geometry and the
+existing application state/signals. Narrow rows stack their controls with the same
+16 px right inset. Catalogue artwork and wallpaper previews remain content.
+
 ## Regression coverage
 
 `kos-settings.page-contracts` creates every extracted page without main.qml or
@@ -48,19 +63,6 @@ ctest --test-dir <vm-build-directory> -R '^kos-settings\.' --output-on-failure
 ```
 
 Installation must include both `pages/` and `components/`. The existing recursive
-QML watcher discovers these directories for development reloads. Runtime tests
-default to the VM unless the user explicitly authorizes a host run.
-
-### 2026-10-15 authorized host run
-
-Built kos-settings and kos-window-settings-test from current sources in
-`tmp/settings-modules/build`. All 15 settings CTest groups passed (16.55 seconds),
-including 19 passing checks in page-contracts. The first contract run exposed an
-incorrect test assumption: resource controls intentionally have zero height when
-the scheduler is unavailable. The test now covers both unavailable and available
-states. No production fix was needed for that failure.
-
-A CMake install into `tmp/settings-modules/stage` included all extracted QML
-modules, and the staged binary passed `--smoke-test-windows`. Tests used the
-offscreen software backend and isolated configuration/cache/state directories;
-these results do not establish visual correctness in a live compositor session.
+QML watcher discovers these directories for development reloads. Run verification only in a VM or hosted CI, as required by
+[Development](../../../docs/Development.md). Store run-specific logs and screenshots
+outside the source tree; this contract is not an acceptance report.

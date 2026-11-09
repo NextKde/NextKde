@@ -64,9 +64,9 @@ PopupWindow {
         edges: tooltip.dockEdge === "bottom" ? Edges.Top
             : tooltip.dockEdge === "left" ? Edges.Right : Edges.Left
         gravity: tooltip.anchor.edges
-        margins.top: tooltip.dockEdge === "bottom" ? -6 : 0
-        margins.left: tooltip.dockEdge === "right" ? -6 : 0
-        margins.right: tooltip.dockEdge === "left" ? -6 : 0
+        margins.top: tooltip.dockEdge === "bottom" ? 4 : 0
+        margins.left: tooltip.dockEdge === "right" ? 4 : 0
+        margins.right: tooltip.dockEdge === "left" ? 4 : 0
     }
     Rectangle {
         anchors.fill: parent

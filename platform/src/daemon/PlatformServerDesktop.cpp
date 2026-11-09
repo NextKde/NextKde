@@ -3,6 +3,9 @@
 #include "PlatformDbus.h"
 #include "PlatformPaths.h"
 
+#include <QCryptographicHash>
+#include <QDir>
+#include <QTimer>
 #include <QDBusConnection>
 #include <QDBusMessage>
 #include <QDBusPendingCall>
@@ -15,6 +18,7 @@
 #include <QStandardPaths>
 #include <QStringList>
 #include <QVariant>
+#include <memory>
 
 namespace KosPlatform {
 using namespace Detail;
@@ -59,7 +63,7 @@ bool PlatformServer::handleDesktopOperation(QLocalSocket *socket, const QJsonObj
         // a shell just to resolve kos-settings on PATH, and no caller-supplied
         // argument can turn it into arbitrary command execution.
         //
-        // The only tunable is the environment: Settings talks back to its
+        // The optional app destination is restricted below. Settings talks to its
         // Shell over Quickshell IPC, so a development Shell passes its
         // Quickshell.shellDir through `shellDir` and the child reconnects to
         // that same session instead of the installed `kos` configuration.
@@ -95,15 +99,82 @@ bool PlatformServer::handleDesktopOperation(QLocalSocket *socket, const QJsonObj
                     QStringLiteral("KOS 设置应用不可用"), true);
             return true;
         }
-        QProcess process;
-        process.setProgram(executable);
-        if (!shellDir.isEmpty()) {
-            QProcessEnvironment environment = QProcessEnvironment::systemEnvironment();
-            environment.insert(QStringLiteral("KOS_SHELL_DIR"), shellDir);
-            process.setProcessEnvironment(environment);
+        const QString app = payload.value(QStringLiteral("app")).toString();
+        if (payload.contains(QStringLiteral("app")) && app != QLatin1String("calendar") && app != QLatin1String("weather")) {
+            respond(socket, request, false, {}, QStringLiteral("invalid-widget-app"), QStringLiteral("Unsupported application Settings destination"), false);
+            return true;
         }
-        const bool started = process.startDetached();
-        respond(socket, request, started, {{QStringLiteral("started"), started}});
+        QProcessEnvironment environment = QProcessEnvironment::systemEnvironment();
+        if (!shellDir.isEmpty())
+            environment.insert(QStringLiteral("KOS_SHELL_DIR"), shellDir);
+        if (app.isEmpty()) {
+            QProcess process;
+            process.setProgram(executable);
+            process.setProcessEnvironment(environment);
+            const bool started = process.startDetached();
+            respond(socket, request, started, {{QStringLiteral("started"), started}});
+            return true;
+        }
+
+        // Navigate an existing window first. A new process is started at most
+        // once, and success requires the window's acknowledgement, not spawn.
+        const QByteArray session = QCryptographicHash::hash(
+            environment.value(QStringLiteral("KOS_SHELL_DIR")).toUtf8(),
+            QCryptographicHash::Sha256).toHex().left(16);
+        const QString navigationPath = QDir(QStandardPaths::writableLocation(QStandardPaths::RuntimeLocation))
+            .filePath(QStringLiteral("kos-settings-navigation-") + QString::fromLatin1(session));
+        auto *navigation = new QLocalSocket(this);
+        navigation->setReadBufferSize(64);
+        auto *retry = new QTimer(navigation);
+        retry->setInterval(200);
+        const QPointer<QLocalSocket> peer(socket);
+        auto finished = std::make_shared<bool>(false);
+        auto spawned = std::make_shared<bool>(false);
+        auto reply = std::make_shared<QByteArray>();
+        const auto finish = [this, navigation, retry, peer, request, finished](bool ok, const QString &message) {
+            if (*finished) return;
+            *finished = true;
+            retry->stop();
+            respond(peer.data(), request, ok,
+                    ok ? QJsonObject{{QStringLiteral("started"), true}, {QStringLiteral("navigated"), true}} : QJsonObject{},
+                    ok ? QString() : QStringLiteral("settings-navigation-failed"), message, !ok);
+            navigation->abort();
+            navigation->deleteLater();
+        };
+        connect(navigation, &QLocalSocket::connected, navigation, [navigation, app, reply] {
+            reply->clear();
+            navigation->write(app.toUtf8() + '\n');
+        });
+        connect(navigation, &QLocalSocket::readyRead, navigation, [navigation, reply, finish] {
+            reply->append(navigation->readAll());
+            if (*reply == "ok\n") finish(true, {});
+            else if (reply->size() >= 64 || reply->contains('\n'))
+                finish(false, QStringLiteral("Settings returned an invalid navigation acknowledgement"));
+        });
+        connect(navigation, &QLocalSocket::errorOccurred, navigation,
+                [navigation, executable, environment, app, spawned, finished, finish](QLocalSocket::LocalSocketError) {
+            if (*finished || *spawned) return;
+            *spawned = true;
+            QProcess process;
+            process.setProgram(executable);
+            process.setArguments({QStringLiteral("--app=") + app});
+            process.setProcessEnvironment(environment);
+            if (!process.startDetached())
+                finish(false, QStringLiteral("Could not start application Settings"));
+        });
+        connect(retry, &QTimer::timeout, navigation, [navigation, navigationPath, peer, finish] {
+            if (!peer || peer->state() != QLocalSocket::ConnectedState) {
+                finish(false, QStringLiteral("Settings navigation requester disconnected"));
+                return;
+            }
+            if (navigation->state() == QLocalSocket::UnconnectedState)
+                navigation->connectToServer(navigationPath);
+        });
+        QTimer::singleShot(20000, navigation, [finish] {
+            finish(false, QStringLiteral("Settings did not acknowledge the application page within 20 seconds; try again"));
+        });
+        retry->start();
+        navigation->connectToServer(navigationPath);
         return true;
     }
     if (op == QStringLiteral("notify")) {

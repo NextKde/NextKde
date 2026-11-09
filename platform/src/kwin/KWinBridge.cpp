@@ -1,4 +1,5 @@
 #include "KWinBridge.h"
+#include "DesktopTransitionMonitor.h"
 
 #include <QDBusConnection>
 #include <QDBusError>
@@ -129,6 +130,11 @@ public slots:
             decorateSnapshotIcons(event);
             return;
         }
+        if (event.value(QStringLiteral("type")) == QStringLiteral("desktops")) {
+            event.insert(QStringLiteral("transitionActive"),
+                m_desktopTransition.observeDesktop(event.value(QStringLiteral("current")).toString()));
+            m_lastDesktopEvent = event;
+        }
         publishEvent(event);
     }
 
@@ -231,8 +237,15 @@ public slots:
 
 public:
     explicit Bridge(QObject *parent = nullptr)
-        : QObject(parent)
+        : QObject(parent), m_desktopTransition(QDBusConnection::sessionBus(), this)
     {
+        connect(&m_desktopTransition, &DesktopTransitionMonitor::settled, this,
+                [this](const QString &desktopId) {
+            if (m_lastDesktopEvent.value(QStringLiteral("current")).toString() != desktopId)
+                return;
+            m_lastDesktopEvent.insert(QStringLiteral("transitionActive"), false);
+            publishEvent(m_lastDesktopEvent);
+        });
         // All icon work — the desktop-file index, KIconLoader lookups and the
         // full directory fallback scan — lives on this single worker thread.
         // One thread means the caches below need no locking and KIconLoader
@@ -254,6 +267,8 @@ public:
                 self->ensureDesktopIndex();
         });
     }
+
+    void resetDesktopTransition() { m_desktopTransition.reset(); }
 
 private:
     void publishEvent(const QJsonObject &event)
@@ -769,6 +784,8 @@ private:
     }
 
     QQueue<QString> m_commands;
+    DesktopTransitionMonitor m_desktopTransition;
+    QJsonObject m_lastDesktopEvent;
     QHash<QString, QString> m_desktopIcons;
     QHash<QString, QString> m_appIconName;
     QHash<QString, QString> m_iconCache;
@@ -837,6 +854,7 @@ bool startKWinBridge(const KWinEventHandler &handler)
     QObject::connect(kwinWatcher, &QDBusServiceWatcher::serviceOwnerChanged,
                      scriptLoader, [scriptLoader, attempts](const QString &,
                                      const QString &, const QString &newOwner) {
+        g_bridge->resetDesktopTransition();
         scriptLoader->stop();
         if (!newOwner.isEmpty()) {
             *attempts = 0;
@@ -870,11 +888,16 @@ bool startKWinBridge(const KWinEventHandler &handler)
             return;
         }
         const QString script = qEnvironmentVariable("KOS_PLATFORM_KWIN_SCRIPT");
+        scripting.setTimeout(1500);
         if (script.isEmpty() || !QFileInfo(script).isReadable()) {
             reportFailure(QStringLiteral("KOS_PLATFORM_KWIN_SCRIPT is missing or unreadable: ") + script);
             scriptLoader->stop();
             return;
         }
+        // Desktop stacking now belongs to the platform bridge. Retire the
+        // former Shell-owned scripts before installing its single owner.
+        scripting.call(QStringLiteral("unloadScript"), QStringLiteral("kos-stage-stack"));
+        scripting.call(QStringLiteral("unloadScript"), QStringLiteral("kos-desktop-stack-v1"));
         scripting.call(QStringLiteral("unloadScript"),
                        QStringLiteral("kos-window-bridge"));
         const QDBusReply<int> loaded = scripting.call(QStringLiteral("loadScript"),

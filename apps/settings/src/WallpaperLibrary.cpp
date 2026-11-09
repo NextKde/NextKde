@@ -17,6 +17,7 @@
 #include <QStandardPaths>
 #include <QUrl>
 #include <algorithm>
+#include <memory>
 
 namespace {
 static QString galleryDirPath()
@@ -47,7 +48,8 @@ WallpaperLibrary::WallpaperLibrary(QObject* parent)
 WallpaperLibrary::~WallpaperLibrary()
 {
     if (m_galleryImportThread) {
-        m_galleryImportThread->quit();
+        disconnect(m_galleryImportThread, nullptr, this, nullptr);
+        m_galleryImportThread->requestInterruption();
         m_galleryImportThread->wait();
     }
     m_thumbnailPool.clear();
@@ -313,6 +315,9 @@ QString WallpaperLibrary::importGalleryImage(const QString& urlOrPath)
     const QByteArray candidateMd5 = payload.isEmpty()
         ? QByteArray { }
         : QCryptographicHash::hash(payload, QCryptographicHash::Md5);
+    // Single-image imports share the gallery with the folder worker. Keep
+    // deduplication, filename selection and writes in one transaction.
+    QMutexLocker galleryLock(&m_galleryMutex);
     for (const QFileInfo& entry : dir.entryInfoList(QDir::Files)) {
         if (entry.size() != info.size()
             && (payload.isEmpty() || entry.size() != qsizetype(payload.size())))
@@ -370,36 +375,32 @@ int WallpaperLibrary::importGalleryFolder(const QString& urlOrPath)
             sources.append(entry.absoluteFilePath());
     }
 
-    auto* thread = new QThread(this);
-    m_galleryImportThread = thread;
-    const QPointer<WallpaperLibrary> self(this);
-    QObject::connect(thread, &QThread::started, thread, [this, self, sources] {
-        constexpr int kMaxFolderImages = 200;
-        int imported = 0;
+    auto imported = std::make_shared<int>(0);
+    auto* worker = QThread::create([this, sources, imported] {
         for (const QString& source : sources) {
-            if (imported >= kMaxFolderImages)
+            if (QThread::currentThread()->isInterruptionRequested())
                 break;
             if (!importGalleryImage(source).isEmpty()) {
-                ++imported;
-                if (self)
-                    emit self->galleryImportProgress(imported);
+                ++*imported;
+                emit galleryImportProgress(*imported);
             }
         }
-        if (self)
-            emit self->galleryImportFinished(imported);
     });
-    QObject::connect(thread, &QThread::finished, thread,
-        [this, thread] {
-            thread->deleteLater();
-            if (m_galleryImportThread == thread)
-                m_galleryImportThread = nullptr;
+    worker->setParent(this);
+    m_galleryImportThread = worker;
+    QObject::connect(worker, &QThread::finished, this,
+        [this, worker, imported] {
+            m_galleryImportThread = nullptr;
+            worker->deleteLater();
+            emit galleryImportFinished(*imported);
         });
-    thread->start();
+    worker->start();
     return 0;
 }
 
 bool WallpaperLibrary::deleteGalleryImage(const QString& urlOrPath)
 {
+    QMutexLocker galleryLock(&m_galleryMutex);
     const QString path
         = urlOrPath.startsWith(QStringLiteral("file:")) ? QUrl(urlOrPath).toLocalFile() : urlOrPath;
     const QString canonical = QFileInfo(path).canonicalFilePath();

@@ -25,6 +25,7 @@ QtObject {
     property string ssid: ""
     property int signalStrength: -1
     property string ipv4: ""
+    property string macAddress: ""
     property var nearbyWifi: []
     property bool wifiScanInProgress: false
     property int wifiScanRevision: 0
@@ -51,6 +52,8 @@ QtObject {
     signal trafficSampled(string device, real download, real upload)
     property real downloadBytesPerSecond: 0
     property real uploadBytesPerSecond: 0
+    property real totalRxBytes: -1
+    property real totalTxBytes: -1
     property string _trafficDevice: ""
     property real _previousRx: -1
     property real _previousTx: -1
@@ -88,6 +91,7 @@ QtObject {
             _refreshDetails()
         } else {
             ipv4 = ""
+            macAddress = ""
             signalStrength = -1
             resetTraffic("")
         }
@@ -110,6 +114,7 @@ QtObject {
             if (result.connectionName)
                 connectionName = String(result.connectionName)
             ipv4 = String(result.ipv4 || "").replace(/\/\d+$/, "")
+            macAddress = String(result.macAddress || "")
             if (connectionType === "wifi" && result.ssid)
                 ssid = String(result.ssid)
             if (connectionType === "wifi" && result.signalStrength !== undefined)
@@ -135,6 +140,8 @@ QtObject {
         _previousTimestamp = 0
         downloadBytesPerSecond = 0
         uploadBytesPerSecond = 0
+        totalRxBytes = -1
+        totalTxBytes = -1
         _trafficSamplePending = false
     }
 
@@ -160,6 +167,8 @@ QtObject {
             const tx = Number(result.txBytes)
             const now = Date.now()
             if (response?.ok && Number.isFinite(rx) && Number.isFinite(tx)) {
+                totalRxBytes = rx
+                totalTxBytes = tx
                 if (_previousTimestamp > 0 && rx >= _previousRx && tx >= _previousTx) {
                     const seconds = Math.max(0.25, (now - _previousTimestamp) / 1000)
                     downloadBytesPerSecond = (rx - _previousRx) / seconds

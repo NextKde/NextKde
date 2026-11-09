@@ -1,3 +1,4 @@
+import Kos.Demo as Demo
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
@@ -8,14 +9,14 @@ import "../../../shared/qml/i18n"
 import "../components" as Controls
 
 ColumnLayout {
+    id: displayPage
     required property var colors
     property bool materialForm: false
     required property var glassStyles
     signal shellStyleObserved(string style)
-    id: displayPage
 
     Layout.fillWidth: true
-    spacing: 7
+    spacing: 12
 
     property bool showSystemAppearance: true
     property bool showGlassMaterial: true
@@ -28,51 +29,38 @@ ColumnLayout {
     property string glassStyle: "liquid"
     property string shellStyle: "macos"
     readonly property bool isMaterialDesign: shellStyle === "material"
+    readonly property bool narrowLayout: width < 430
     property bool glassFollowsAppearanceMode: false
     property bool spatialWallpaperEnabled: false
-    // 使用系统字体: the saved option, and the family it resolves to. The family
-    // comes from the Shell because this window is not allowed to read
-    // kdeglobals: a separate process with its own settings file, and the Shell
-    // already watches that file.
-    property bool useSystemFont: false
-    property string systemFontFamily: ""
     property bool blurDirty: false
     property bool liquidDirty: false
     property string errorText: ""
 
     function percentage(value) {
-        return Math.round(value * 100) + "%"
+        return Math.round(value * 100) + "%";
     }
 
     function applyState(state) {
         if (!state)
-            return
-        const rawBlur = state.globalBlurStrength !== undefined
-            ? state.globalBlurStrength : state.blurStrength
-        const rawLiquid = state.globalLiquidStrength !== undefined
-            ? state.globalLiquidStrength : state.liquidStrength
+            return;
+        const rawBlur = state.globalBlurStrength !== undefined ? state.globalBlurStrength : state.blurStrength;
+        const rawLiquid = state.globalLiquidStrength !== undefined ? state.globalLiquidStrength : state.liquidStrength;
         if (rawBlur === undefined || rawLiquid === undefined)
-            return
-        blurStrength = Math.max(0, Math.min(1, Number(rawBlur)))
-        liquidStrength = Math.max(0, Math.min(1, Number(rawLiquid)))
-        const styleIndex = glassStyles.indexOf(state.glassStyle)
-        glassStyle = styleIndex >= 0 ? String(state.glassStyle) : "liquid"
-        shellStyle = String(state.shellStyle || "macos")
-        LiquidControls.ControlForm.materialForm = isMaterialDesign
-                    // The window palette follows the same style.
-        displayPage.shellStyleObserved(shellStyle)
+            return;
+        blurStrength = Math.max(0, Math.min(1, Number(rawBlur)));
+        liquidStrength = Math.max(0, Math.min(1, Number(rawLiquid)));
+        const styleIndex = glassStyles.indexOf(state.glassStyle);
+        glassStyle = styleIndex >= 0 ? String(state.glassStyle) : "liquid";
+        shellStyle = String(state.shellStyle || "macos");
+        LiquidControls.ControlForm.materialForm = isMaterialDesign;
+        // The window palette follows the same style.
+        displayPage.shellStyleObserved(shellStyle);
         if (state.glassFollowsAppearanceMode !== undefined)
-            glassFollowsAppearanceMode = !!state.glassFollowsAppearanceMode
-        if (state.useSystemFont !== undefined)
-            useSystemFont = !!state.useSystemFont
-        // Only present on a Shell that knows the option; an older one leaves
-        // the row naming no family instead of claiming the wrong one.
-        if (state.systemFontFamily !== undefined)
-            systemFontFamily = String(state.systemFontFamily || "")
-        spatialWallpaperEnabled = !!state.spatialWallpaperEnabled
-        blurDirty = false
-        liquidDirty = false
-        errorText = ""
+            glassFollowsAppearanceMode = !!state.glassFollowsAppearanceMode;
+        spatialWallpaperEnabled = !!state.spatialWallpaperEnabled;
+        blurDirty = false;
+        liquidDirty = false;
+        errorText = "";
     }
 
     // A composing page (ThemeSettingsPage embeds two instances) requests one
@@ -81,10 +69,10 @@ ColumnLayout {
 
     function refresh() {
         if (!bridge) {
-            errorText = I18n.tr("The Settings bridge has not been built")
-            return
+            errorText = I18n.tr("The Settings bridge has not been built");
+            return;
         }
-        bridge.appearanceSnapshot()
+        bridge.appearanceSnapshot();
     }
 
     Timer {
@@ -93,7 +81,7 @@ ColumnLayout {
         repeat: false
         onTriggered: {
             if (displayPage.bridge && displayPage.blurDirty) {
-                displayPage.bridge.updateGlobalBlurStrength(displayPage.blurStrength)
+                displayPage.bridge.updateGlobalBlurStrength(displayPage.blurStrength);
             }
         }
     }
@@ -104,535 +92,237 @@ ColumnLayout {
         repeat: false
         onTriggered: {
             if (displayPage.bridge && displayPage.liquidDirty) {
-                displayPage.bridge.updateGlobalLiquidStrength(displayPage.liquidStrength)
+                displayPage.bridge.updateGlobalLiquidStrength(displayPage.liquidStrength);
             }
         }
     }
 
     function previewBlur(value) {
-        const clamped = Math.max(0, Math.min(1, value))
+        const clamped = Math.max(0, Math.min(1, value));
         if (Math.abs(blurStrength - clamped) < 0.005)
-            return
-        blurStrength = clamped
-        blurDirty = true
-        liveBlurDebounce.restart()
+            return;
+        blurStrength = clamped;
+        blurDirty = true;
+        liveBlurDebounce.restart();
     }
 
     function commitBlur() {
-        liveBlurDebounce.stop()
+        liveBlurDebounce.stop();
         if (!blurDirty || !bridge)
-            return
-        blurDirty = false
-        bridge.updateGlobalBlurStrength(blurStrength)
+            return;
+        blurDirty = false;
+        bridge.updateGlobalBlurStrength(blurStrength);
     }
 
     function previewLiquid(value) {
-        const clamped = Math.max(0, Math.min(1, value))
+        const clamped = Math.max(0, Math.min(1, value));
         if (Math.abs(liquidStrength - clamped) < 0.005)
-            return
-        liquidStrength = clamped
-        liquidDirty = true
-        liveLiquidDebounce.restart()
+            return;
+        liquidStrength = clamped;
+        liquidDirty = true;
+        liveLiquidDebounce.restart();
     }
 
     function commitLiquid() {
-        liveLiquidDebounce.stop()
+        liveLiquidDebounce.stop();
         if (!liquidDirty || !bridge)
-            return
-        liquidDirty = false
-        bridge.updateGlobalLiquidStrength(liquidStrength)
+            return;
+        liquidDirty = false;
+        bridge.updateGlobalLiquidStrength(liquidStrength);
     }
 
     function setSystemAppearance(index) {
         if (!bridge) {
-            errorText = I18n.tr("The Settings bridge has not been built")
-            return
+            errorText = I18n.tr("The Settings bridge has not been built");
+            return;
         }
-        bridge.applySystemAppearance(index === 1)
+        bridge.applySystemAppearance(index === 1);
     }
 
     function setGlassStyle(index) {
         if (!bridge)
-            return
-        const option = glassStyles.options[index]
+            return;
+        const option = glassStyles.options[index];
         if (!option)
-            return
-        bridge.updateGlassStyle(option.id)
+            return;
+        bridge.updateGlassStyle(option.id);
     }
 
     function saveGlassFollowsAppearanceMode(checked) {
         if (!bridge)
-            return
-        bridge.updateGlassFollowsAppearanceMode(checked)
-    }
-
-    function saveUseSystemFont(checked) {
-        if (!bridge)
-            return
-        bridge.updateUseSystemFont(checked)
+            return;
+        bridge.updateGlassFollowsAppearanceMode(checked);
     }
 
     Connections {
         target: displayPage.bridge
         enabled: displayPage.bridge !== null
         function onAppearanceSnapshotChanged(state) {
-            displayPage.applyState(state)
+            displayPage.applyState(state);
             if (displayPage.bridge.lastError)
-                displayPage.errorText = I18n.tr(displayPage.bridge.lastError)
+                displayPage.errorText = I18n.tr(displayPage.bridge.lastError);
         }
         function onSystemAppearanceApplied(accepted) {
             if (accepted)
-                displayPage.errorText = ""
+                displayPage.errorText = "";
             else if (displayPage.bridge.lastError)
-                displayPage.errorText = I18n.tr(displayPage.bridge.lastError)
+                displayPage.errorText = I18n.tr(displayPage.bridge.lastError);
         }
     }
 
-    Component.onCompleted: if (!suppressInitialRequest) refresh()
+    Component.onCompleted: if (!suppressInitialRequest)
+        refresh()
 
-    Text {
+    Demo.SettingsGroup {
         visible: displayPage.showSystemAppearance
-        text: I18n.tr("System appearance").toUpperCase()
-        color: colors.secondaryText
-        font.pixelSize: 12
-        font.weight: Font.DemiBold
-        Layout.leftMargin: 13
-    }
+        title: I18n.tr("System appearance")
+        backgroundColor: colors.card
 
-    Rectangle {
-        visible: displayPage.showSystemAppearance
-        Layout.fillWidth: true
-        // The glass-follows-appearance row is a liquid-glass control and is
-        // absent under Material, so the card collapses to just the
-        // appearance-mode row instead of leaving a gap behind it.
-        implicitHeight: displayPage.isMaterialDesign ? 54 : 109
-        radius: 18
-        color: colors.card
+        Demo.SettingsItem {
+            title: I18n.tr("Appearance mode")
 
-        Column {
-            anchors.fill: parent
-
-            Item {
-                width: parent.width
-                height: 54
-
-                RowLayout {
-                    anchors.fill: parent
-                    anchors.leftMargin: 16
-                    anchors.rightMargin: 16
-                    spacing: 12
-
-                    Controls.SettingIcon {
-                        colors: displayPage.colors
-                        materialForm: displayPage.materialForm
-                        symbol: "◐"
-                        tint: "#5ac8fa"
-                    }
-                    Text {
-                        text: I18n.tr("Appearance mode")
-                        color: colors.primaryText
-                        font.pixelSize: 15
-                        font.weight: Font.DemiBold
-                    }
-                    Item { Layout.fillWidth: true }
-                    Controls.SettingsNavBar {
-                        colors: displayPage.colors
-                        materialForm: displayPage.materialForm
-                        id: systemAppearanceNavBar
-                        model: [
-                            { id: "light", label: I18n.tr("Light") },
-                            { id: "dark", label: I18n.tr("Dark") }
-                        ]
-                        currentIndex: colors.dark ? 1 : 0
-                        onSelectionChanged: function(index) {
-                            displayPage.setSystemAppearance(index)
-                        }
-                    }
-                }
-            }
-
-            Rectangle {
-                anchors.left: parent.left
-                anchors.right: parent.right
-                anchors.leftMargin: 53
-                height: 1
-                // Hidden together with the row below it: a separator with
-                // no second row would draw a stray line under the mode
-                // switch once the card collapses under Material.
-                visible: !displayPage.isMaterialDesign
-                color: colors.separator
-            }
-
-            Item {
-                width: parent.width
-                height: 54
-                // Liquid glass only. Material has no liquid blur to follow
-                // the appearance mode with, so the row is dropped rather
-                // than shown disabled.
-                visible: !displayPage.isMaterialDesign
-
-                RowLayout {
-                    anchors.fill: parent
-                    anchors.leftMargin: 16
-                    anchors.rightMargin: 16
-                    spacing: 12
-
-                    Controls.SettingIcon {
-                        colors: displayPage.colors
-                        materialForm: displayPage.materialForm
-                        symbol: "◈"
-                        tint: "#64d2ff"
-                    }
-                    Text {
-                        text: I18n.tr("Liquid glass follows the appearance mode")
-                        color: colors.primaryText
-                        font.pixelSize: 14
-                    }
-                    Item { Layout.fillWidth: true }
-                    LiquidControls.LiquidGlassSwitch {
-                        id: glassFollowsAppearanceModeSwitch
-                        width: 64
-                        height: 25
-                        checked: displayPage.glassFollowsAppearanceMode
-                        // The shared controls carry the host's palette, so the
-                        // Material form hands them the Material accent: their
-                        // own default is the iPadOS blue this window was
-                        // designed with.
-                        accentColor: colors.accent
-                        trackColor: colors.divider
-                        onToggled: function(checked) {
-                            displayPage.saveGlassFollowsAppearanceMode(checked)
-                        }
-                    }
-                }
-            }
-        }
-    }
-
-    // ── 使用系统字体 ────────────────────────────────────────────────────────
-    // The Shell names its designed families explicitly (SF Pro Display / Noto
-    // Sans CJK SC) on ~110 Text items, so it ignores the KDE font unless this is
-    // on. With it on every Shell surface -- Bar, Dock, launcher, desk widgets,
-    // quick search, the menus -- draws with the family KDE is configured with,
-    // which is what a user who installs their own font expects to see.
-    //
-    // Applications are not mentioned in this row because they do not need it:
-    // they name no family and have always drawn with the platform font, so they
-    // already follow KDE.
-    //
-    // The row never offers a file picker: the font is KDE's, chosen in System
-    // Settings, and the Shell watches kdeglobals so a change there follows
-    // without coming back to this page. The resolved family is shown instead,
-    // so the option is never an abstract promise.
-    Text {
-        visible: displayPage.showSystemAppearance
-        text: I18n.tr("Interface font").toUpperCase()
-        color: colors.secondaryText
-        font.pixelSize: 12
-        font.weight: Font.DemiBold
-        Layout.leftMargin: 13
-        Layout.topMargin: 10
-    }
-
-    Rectangle {
-        visible: displayPage.showSystemAppearance
-        Layout.fillWidth: true
-        implicitHeight: interfaceFontRow.implicitHeight + 24
-        radius: 18
-        color: colors.card
-
-        RowLayout {
-            id: interfaceFontRow
-            anchors.fill: parent
-            anchors.margins: 12
-            anchors.leftMargin: 16
-            anchors.rightMargin: 16
-            spacing: 12
-
-            Controls.SettingIcon {
+            Controls.SettingsNavBar {
+                id: systemAppearanceNavBar
                 colors: displayPage.colors
                 materialForm: displayPage.materialForm
-                // "B" is the bold-glyph entry in VectorIcon's symbol table; "文"
-                // is not registered there and would fall back to a gear.
-                symbol: "B"
-                tint: "#5e5ce6"
-            }
-
-            ColumnLayout {
-                Layout.fillWidth: true
-                spacing: 3
-                Text {
-                    text: I18n.tr("Use the system font")
-                    color: colors.primaryText
-                    font.pixelSize: 14
-                    font.weight: Font.DemiBold
-                }
-                Text {
-                    Layout.fillWidth: true
-                    text: displayPage.useSystemFont
-                        ? I18n.tr("Every part of the desktop draws with %1.").arg(
-                            displayPage.systemFontFamily.length > 0
-                                ? displayPage.systemFontFamily
-                                : I18n.tr("the system font"))
-                        : I18n.tr("The desktop uses its own font. Turn this on to draw every part of it with the font chosen in KDE System Settings.")
-                    color: colors.secondaryText
-                    font.pixelSize: 11
-                    wrapMode: Text.Wrap
+                model: [
+                    {
+                        id: "light",
+                        label: I18n.tr("Light")
+                    },
+                    {
+                        id: "dark",
+                        label: I18n.tr("Dark")
+                    }
+                ]
+                currentIndex: colors.dark ? 1 : 0
+                onSelectionChanged: function (index) {
+                    displayPage.setSystemAppearance(index);
                 }
             }
+        }
 
-            LiquidControls.LiquidGlassSwitch {
-                id: useSystemFontSwitch
-                width: 64
-                height: 25
-                objectName: "use-system-font-switch"
-                // The snapshot is the authority: this binding is never assigned
-                // to, so the switch settles on whatever the Shell confirms. An
-                // assignment here would destroy the binding for good (QML does
-                // not restore it), and the switch would then keep showing a
-                // value the Shell had already rejected -- the "needs several
-                // clicks" failure.
-                checked: displayPage.useSystemFont
+        Demo.SettingsItem {
+            visible: !displayPage.isMaterialDesign
+            title: I18n.tr("Liquid glass follows the appearance mode")
+
+            Controls.SettingsSwitch {
+                id: glassFollowsAppearanceModeSwitch
+                checked: displayPage.glassFollowsAppearanceMode
+                // The shared controls carry the host's palette, so the
+                // Material form hands them the Material accent: their
+                // own default is the iPadOS blue this window was
+                // designed with.
                 accentColor: colors.accent
                 trackColor: colors.divider
-                onToggled: function(checked) {
-                    if (checked !== displayPage.useSystemFont)
-                        displayPage.saveUseSystemFont(checked)
+                onToggled: function (checked) {
+                    displayPage.saveGlassFollowsAppearanceMode(checked);
                 }
             }
         }
     }
 
-    Text {
+    Demo.SettingsGroup {
         visible: displayPage.showSpatialWallpaper
-        text: I18n.tr("Spatial wallpaper")
-        color: colors.secondaryText
-        font.pixelSize: 12
-        font.weight: Font.DemiBold
-        Layout.leftMargin: 13
-        Layout.topMargin: 10
-    }
+        title: I18n.tr("Spatial wallpaper")
+        backgroundColor: colors.card
 
-    Rectangle {
-        visible: displayPage.showSpatialWallpaper
-        Layout.fillWidth: true
-        implicitHeight: spatialWallpaperRow.implicitHeight + 20
-        radius: 18
-        color: colors.card
+        Demo.SettingsItem {
+            visible: displayPage.showSpatialWallpaper
+            title: I18n.tr("Enable spatial wallpaper parallax")
+            description: I18n.tr("The model runs locally only. First enablement downloads it and generates the depth cache on CPU; afterwards only wallpaper changes are reprocessed.")
 
-        RowLayout {
-            id: spatialWallpaperRow
-            anchors.fill: parent
-            anchors.margins: 12
-            spacing: 12
-
-            Controls.SettingIcon {
-                colors: displayPage.colors
-                materialForm: displayPage.materialForm
-                symbol: "◉"
-                tint: "#64d2ff"
-            }
-
-            ColumnLayout {
-                Layout.fillWidth: true
-                spacing: 3
-                Text {
-                    text: I18n.tr("Enable spatial wallpaper parallax")
-                    color: colors.primaryText
-                    font.pixelSize: 14
-                    font.weight: Font.DemiBold
-                }
-                Text {
-                    Layout.fillWidth: true
-                    text: I18n.tr("The model runs locally only. First enablement downloads it and generates the depth cache on CPU; afterwards only wallpaper changes are reprocessed.")
-                    color: colors.secondaryText
-                    font.pixelSize: 11
-                    wrapMode: Text.Wrap
-                }
-            }
-
-            LiquidControls.LiquidGlassSwitch {
+            Controls.SettingsSwitch {
                 id: spatialWallpaperSwitch
-                width: 64
-                height: 25
                 checked: displayPage.spatialWallpaperEnabled
                 accentColor: colors.accent
                 trackColor: colors.divider
-                onToggled: function(checked) {
+                onToggled: function (checked) {
                     if (displayPage.bridge)
-                        displayPage.bridge.updateSpatialWallpaperEnabled(checked)
-                    spatialWallpaperSwitch.checked =
-                        displayPage.spatialWallpaperEnabled
+                        displayPage.bridge.updateSpatialWallpaperEnabled(checked);
+                    spatialWallpaperSwitch.checked = displayPage.spatialWallpaperEnabled;
                 }
             }
         }
     }
 
-    Text {
+    Demo.SettingsGroup {
         visible: displayPage.showGlassMaterial
-        text: (displayPage.isMaterialDesign ? I18n.tr("Background blur") : I18n.tr("Glass material")).toUpperCase()
-        color: colors.secondaryText
-        font.pixelSize: 12
-        font.weight: Font.DemiBold
-        Layout.leftMargin: 13
-    }
+        title: (displayPage.isMaterialDesign ? I18n.tr("Background blur") : I18n.tr("Glass material"))
+        backgroundColor: colors.card
 
-    Rectangle {
-        visible: displayPage.showGlassMaterial
-        Layout.fillWidth: true
-        implicitHeight: displayPage.isMaterialDesign ? 48 : 145
-        radius: 18
-        color: colors.card
+        Demo.SettingsItem {
+            visible: !displayPage.isMaterialDesign
+            title: I18n.tr("Material style")
 
-        Column {
-            anchors.fill: parent
+            Controls.SettingsSelect {
+                objectName: "displayMaterialStyleSelect"
+                textRole: "label"
+                colors: displayPage.colors
+                materialForm: displayPage.materialForm
 
-            Item {
-                width: parent.width
-                height: 48
-                visible: !displayPage.isMaterialDesign
-
-                RowLayout {
-                    anchors.fill: parent
-                    anchors.leftMargin: 16
-                    anchors.rightMargin: 16
-                    spacing: 12
-                    Controls.SettingIcon {
-                        colors: displayPage.colors
-                        materialForm: displayPage.materialForm
-                        symbol: "◇"
-                        tint: "#64d2ff"
-                    }
-                    Text {
-                        text: I18n.tr("Material style")
-                        color: colors.primaryText
-                        font.pixelSize: 14
-                    }
-                    Item { Layout.fillWidth: true }
-                    Controls.SettingsNavBar {
-                        colors: displayPage.colors
-                        materialForm: displayPage.materialForm
-                        Layout.preferredWidth: 264
-                        itemWidthOverride: 88
-                        model: glassStyles.options
-                        currentIndex: Math.max(0,
-                            glassStyles.indexOf(displayPage.glassStyle))
-                        onSelectionChanged: function(index) {
-                            displayPage.setGlassStyle(index)
-                        }
-                    }
+                model: glassStyles.options
+                currentIndex: Math.max(0, glassStyles.indexOf(displayPage.glassStyle))
+                onSelectionChanged: function (index) {
+                    displayPage.setGlassStyle(index);
                 }
             }
+        }
 
-            Rectangle {
-                anchors.left: parent.left
-                anchors.right: parent.right
-                anchors.leftMargin: 53
-                height: 1
-                visible: !displayPage.isMaterialDesign
-                color: colors.separator
+        Demo.SettingsItem {
+            title: I18n.tr("Blur strength")
+
+            Text {
+                text: displayPage.percentage(displayPage.blurStrength)
+                color: colors.secondaryText
+                font.pixelSize: 12
+                horizontalAlignment: Text.AlignRight
             }
-
-            Item {
-                width: parent.width
-                height: 48
-
-                RowLayout {
-                    anchors.fill: parent
-                    anchors.leftMargin: 16
-                    anchors.rightMargin: 16
-                    spacing: 12
-
-                    Controls.SettingIcon {
-                        colors: displayPage.colors
-                        materialForm: displayPage.materialForm
-                        symbol: "◌"
-                        tint: "#5ac8fa"
-                    }
-                    Text {
-                        text: I18n.tr("Blur strength")
-                        color: colors.primaryText
-                        font.pixelSize: 14
-                    }
-                    Item { Layout.fillWidth: true }
-                    Text {
-                        text: displayPage.percentage(displayPage.blurStrength)
-                        color: colors.secondaryText
-                        font.pixelSize: 12
-                        Layout.preferredWidth: 38
-                        horizontalAlignment: Text.AlignRight
-                    }
-                    LiquidControls.LiquidSlider {
-                        // The shared controls carry the host's palette, so the
-                        // Material form has to hand them the Material accent: their own
-                        // default is the iPadOS blue this window was designed with.
-                        accentColor: colors.accent
-                        Layout.preferredWidth: 190
-                        value: displayPage.blurStrength
-                        trackColor: colors.divider
-                        onPreviewChanged: function(position) {
-                            displayPage.previewBlur(position)
-                        }
-                        onCanceled: { liveBlurDebounce.stop(); displayPage.blurDirty = false; displayPage.refresh() }
-                        onCommitRequested: displayPage.commitBlur()
-                    }
+            Controls.SettingsSlider {
+                // The shared controls carry the host's palette, so the
+                // Material form has to hand them the Material accent: their own
+                // default is the iPadOS blue this window was designed with.
+                accentColor: colors.accent
+                value: displayPage.blurStrength
+                trackColor: colors.divider
+                onPreviewChanged: function (position) {
+                    displayPage.previewBlur(position);
                 }
-            }
-
-            Rectangle {
-                anchors.left: parent.left
-                anchors.right: parent.right
-                anchors.leftMargin: 53
-                height: 1
-                visible: !displayPage.isMaterialDesign
-                color: colors.separator
-            }
-
-            Item {
-                width: parent.width
-                height: 48
-                visible: !displayPage.isMaterialDesign
-
-                RowLayout {
-                    anchors.fill: parent
-                    anchors.leftMargin: 16
-                    anchors.rightMargin: 16
-                    spacing: 12
-
-                    Controls.SettingIcon {
-                        colors: displayPage.colors
-                        materialForm: displayPage.materialForm
-                        symbol: "≈"
-                        tint: "#af52de"
-                    }
-                    Text {
-                        text: I18n.tr("Liquid strength")
-                        color: colors.primaryText
-                        font.pixelSize: 14
-                    }
-                    Item { Layout.fillWidth: true }
-                    Text {
-                        text: displayPage.percentage(displayPage.liquidStrength)
-                        color: colors.secondaryText
-                        font.pixelSize: 12
-                        Layout.preferredWidth: 38
-                        horizontalAlignment: Text.AlignRight
-                    }
-                    LiquidControls.LiquidSlider {
-                        // The shared controls carry the host's palette, so the
-                        // Material form has to hand them the Material accent: their own
-                        // default is the iPadOS blue this window was designed with.
-                        accentColor: colors.accent
-                        Layout.preferredWidth: 190
-                        value: displayPage.liquidStrength
-                        trackColor: colors.divider
-                        onPreviewChanged: function(position) {
-                            displayPage.previewLiquid(position)
-                        }
-                        onCanceled: { liveLiquidDebounce.stop(); displayPage.liquidDirty = false; displayPage.refresh() }
-                        onCommitRequested: displayPage.commitLiquid()
-                    }
+                onCanceled: {
+                    liveBlurDebounce.stop();
+                    displayPage.blurDirty = false;
+                    displayPage.refresh();
                 }
+                onCommitRequested: displayPage.commitBlur()
+            }
+        }
+
+        Demo.SettingsItem {
+            visible: !displayPage.isMaterialDesign
+            title: I18n.tr("Liquid strength")
+
+            Text {
+                text: displayPage.percentage(displayPage.liquidStrength)
+                color: colors.secondaryText
+                font.pixelSize: 12
+                horizontalAlignment: Text.AlignRight
+            }
+            Controls.SettingsSlider {
+                // The shared controls carry the host's palette, so the
+                // Material form has to hand them the Material accent: their own
+                // default is the iPadOS blue this window was designed with.
+                accentColor: colors.accent
+                value: displayPage.liquidStrength
+                trackColor: colors.divider
+                onPreviewChanged: function (position) {
+                    displayPage.previewLiquid(position);
+                }
+                onCanceled: {
+                    liveLiquidDebounce.stop();
+                    displayPage.liquidDirty = false;
+                    displayPage.refresh();
+                }
+                onCommitRequested: displayPage.commitLiquid()
             }
         }
     }

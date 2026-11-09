@@ -1,0 +1,372 @@
+# File containing translation for base plugin.
+# Copyright (C) 2026 This file is copyright:
+# This file is distributed under the same license as the kwin-effects-glass package.
+# lucasrbsouza, 2026.
+#
+msgid ""
+msgstr ""
+"Project-Id-Version: kwin-effects-glass\n"
+"Report-Msgid-Bugs-To: https://github.com/4v3ngR/kwin-effects-glass\n"
+"POT-Creation-Date: 2026-05-31 09:00+0800\n"
+"PO-Revision-Date: 2026-10-27 17:00-0300\n"
+"Last-Translator: lucasrbsouza\n"
+"Language-Team: Brazilian Portuguese\n"
+"Language: pt_BR\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=2; plural=(n > 1);\n"
+
+#: src/kcm/blur_config.cpp:34
+msgid "Glass"
+msgstr "Vidro"
+
+#: src/kcm/blur_config.cpp:67
+#, kde-format
+msgid ""
+"<p>Specify one window class per line.</p><p>Use <code>$blank</code> to match "
+"empty window classes.<br/>Use <code>$$</code> for literal dollar sign.</p>"
+msgstr "<p>Especifique uma classe de janela por linha.</p><p>Use <code>$blank</code> para corresponder a classes de janela vazias.<br/>Use <code>$$</code> para um cifrão literal.</p>"
+
+#. i18n: ectx: attribute (title), widget (QWidget, widget)
+#: src/kcm/blur_config.ui:21
+#, kde-format
+msgid "General"
+msgstr "Geral"
+
+#. i18n: ectx: property (title), widget (QGroupBox, groupBoxContentBlur)
+#: src/kcm/blur_config.ui:27
+#, kde-format
+msgid "Content blur"
+msgstr "Desfoque do conteúdo"
+
+#. i18n: ectx: property (text), widget (QLabel, labelContentBlur)
+#. i18n: ectx: property (text), widget (QLabel, labelDecorationBlur)
+#. i18n: ectx: property (text), widget (QLabel, labelDockBlur)
+#: src/kcm/blur_config.ui:35 src/kcm/blur_config.ui:141 src/kcm/blur_config.ui:247
+#, kde-format
+msgid "Blur"
+msgstr "Desfoque"
+
+#. i18n: ectx: property (text), widget (QLabel, labelConstantBlurLight)
+#. i18n: ectx: property (text), widget (QLabel, labelConstantNoiseLight)
+#. i18n: ectx: property (text), widget (QLabel, labelDecorationBlurLight)
+#. i18n: ectx: property (text), widget (QLabel, labelDecorationNoiseLight)
+#. i18n: ectx: property (text), widget (QLabel, labelDockBlurLight)
+#. i18n: ectx: property (text), widget (QLabel, labelDockNoiseLight)
+#: src/kcm/blur_config.ui:42 src/kcm/blur_config.ui:92 src/kcm/blur_config.ui:148 src/kcm/blur_config.ui:198
+#: src/kcm/blur_config.ui:254 src/kcm/blur_config.ui:304
+#, kde-format
+msgid "Light"
+msgstr "Leve"
+
+#. i18n: ectx: property (text), widget (QLabel, labelConstantBlurStrong)
+#. i18n: ectx: property (text), widget (QLabel, labelConstantNoiseStrong)
+#. i18n: ectx: property (text), widget (QLabel, labelDecorationBlurStrong)
+#. i18n: ectx: property (text), widget (QLabel, labelDecorationNoiseStrong)
+#. i18n: ectx: property (text), widget (QLabel, labelDockBlurStrong)
+#. i18n: ectx: property (text), widget (QLabel, labelDockNoiseStrong)
+#. i18n: ectx: property (text), widget (QLabel, labelRefractionStrengthStrong)
+#. i18n: ectx: property (text), widget (QLabel, labelRefractionRGBFringingStrong)
+#: src/kcm/blur_config.ui:74 src/kcm/blur_config.ui:121
+#: src/kcm/blur_config.ui:180 src/kcm/blur_config.ui:227
+#: src/kcm/blur_config.ui:286 src/kcm/blur_config.ui:333
+#: src/kcm/blur_config.ui:611 src/kcm/blur_config.ui:809
+#, kde-format
+msgid "Strong"
+msgstr "Forte"
+
+#. i18n: ectx: property (text), widget (QLabel, labelContentNoise)
+#. i18n: ectx: property (text), widget (QLabel, labelDecorationNoise)
+#. i18n: ectx: property (text), widget (QLabel, labelDockNoise)
+#: src/kcm/blur_config.ui:85 src/kcm/blur_config.ui:191 src/kcm/blur_config.ui:297
+#, kde-format
+msgid "Noise"
+msgstr "Ruído"
+
+#. i18n: ectx: property (title), widget (QGroupBox, groupBoxDecorationBlur)
+#: src/kcm/blur_config.ui:133
+#, kde-format
+msgid "Decorations blur"
+msgstr "Desfoque das decorações"
+
+#. i18n: ectx: property (title), widget (QGroupBox, groupBoxDockBlur)
+#: src/kcm/blur_config.ui:239
+#, kde-format
+msgid "Docks blur"
+msgstr "Desfoque das docks"
+
+#. i18n: ectx: property (text), widget (QLabel, label)
+#: src/kcm/blur_config.ui:264
+#, kde-format
+msgid "Brightness"
+msgstr "Brilho"
+
+#. i18n: ectx: property (text), widget (QLabel, label)
+#: src/kcm/blur_config.ui:285
+#, kde-format
+msgid "Saturation"
+msgstr "Saturação"
+
+#. i18n: ectx: property (text), widget (QLabel, label)
+#: src/kcm/blur_config.ui:306
+#, kde-format
+msgid "Contrast"
+msgstr "Contraste"
+
+#. i18n: ectx: property (text), widget (QLabel, labelTintColor)
+#: src/kcm/blur_config.ui:327
+#, kde-format
+msgid "Tint color"
+msgstr "Cor do tingimento"
+
+#. i18n: ectx: property (toolTip), widget (QLineEdit, kcfg_TintColor)
+#: src/kcm/blur_config.ui:340
+#, kde-format
+msgid ""
+"Enter a color in #AARRGGBB format. The A (alpha) channel sets tint strength."
+msgstr "Digite uma cor no formato #AARRGGBB. O canal A (alfa) define a intensidade do tingimento."
+
+#. i18n: ectx: property (text), widget (QCheckBox, kcfg_AutoTintAlpha)
+#: src/kcm/blur_config.ui:545
+#, kde-format
+msgid "Automatically adjust tint strength"
+msgstr "Ajustar automaticamente a intensidade do tingimento"
+
+#. i18n: ectx: property (toolTip), widget (QCheckBox, kcfg_AutoTintAlpha)
+#: src/kcm/blur_config.ui:548
+#, kde-format
+msgid ""
+"Scales tint strength by comparing the average background color with the text "
+"color."
+msgstr "Ajusta a intensidade do tingimento comparando a cor média do fundo com a cor do texto."
+
+#. i18n: ectx: property (text), widget (QLabel, labelGlowColor)
+#: src/kcm/blur_config.ui:351
+#, kde-format
+msgid "Glow color"
+msgstr "Cor do brilho"
+
+#. i18n: ectx: property (toolTip), widget (QLineEdit, kcfg_GlowColor)
+#: src/kcm/blur_config.ui:364
+#, kde-format
+msgid ""
+"Enter a color in #AARRGGBB format. The A (alpha) channel sets glow strength."
+msgstr "Digite uma cor no formato #AARRGGBB. O canal A (alfa) define a intensidade do brilho."
+
+#. i18n: ectx: property (text), widget (QCheckBox, kcfg_EdgeLighting)
+#: src/kcm/blur_config.ui:380
+#, kde-format
+msgid "Make the window edges brighter"
+msgstr "Deixar as bordas das janelas mais claras"
+
+#. i18n: ectx: property (text), widget (QCheckBox, kcfg_ExcludeDocks)
+#: src/kcm/blur_config.ui:400
+#, kde-format
+msgid "Don't apply tint to docks"
+msgstr "Não aplicar tingimento às docks"
+
+#. i18n: ectx: property (text), widget (QCheckBox, kcfg_ExcludeDecorations)
+#: src/kcm/blur_config.ui:410
+#, kde-format
+msgid "Don't apply tint to decorations"
+msgstr "Não aplicar tingimento às decorações"
+
+#. i18n: ectx: property (text), widget (QCheckBox, kcfg_ExcludeTooltips)
+#: src/kcm/blur_config.ui:420
+#, kde-format
+msgid "Don't apply tint to tooltips"
+msgstr "Não aplicar tingimento às dicas de ferramenta"
+
+#. i18n: ectx: property (text), widget (QCheckBox, kcfg_EdgeLightingDock)
+#: src/kcm/blur_config.ui:432
+#, kde-format
+msgid "Don't apply brighter to dock"
+msgstr "Não clarear a dock"
+
+#. i18n: ectx: property (text), widget (QCheckBox, kcfg_EdgeLightingTooltip)
+#: src/kcm/blur_config.ui:442
+#, kde-format
+msgid "Don't apply brighter to tooltip"
+msgstr "Não clarear as dicas de ferramenta"
+
+#. i18n: ectx: attribute (title), widget (QWidget, widget)
+#: src/kcm/blur_config.ui:469
+#, kde-format
+msgid "Force blur"
+msgstr "Forçar desfoque"
+
+#. i18n: ectx: property (text), widget (QLabel, windowClassesBriefDescription)
+#: src/kcm/blur_config.ui:485
+#, kde-format
+msgid "Classes of windows to force blur:"
+msgstr "Classes de janelas com desfoque forçado:"
+
+#. i18n: ectx: property (text), widget (QRadioButton, kcfg_BlurMatching)
+#: src/kcm/blur_config.ui:507
+#, kde-format
+msgid "Blur only matching"
+msgstr "Desfocar apenas as correspondentes"
+
+#. i18n: ectx: property (text), widget (QRadioButton, kcfg_BlurNonMatching)
+#: src/kcm/blur_config.ui:514
+#, kde-format
+msgid "Blur all except matching"
+msgstr "Desfocar todas, exceto as correspondentes"
+
+#. i18n: ectx: property (text), widget (QCheckBox, kcfg_BlurDecorations)
+#: src/kcm/blur_config.ui:526
+#, kde-format
+msgid "Apply effects to window decorations as well"
+msgstr "Aplicar os efeitos também às decorações das janelas"
+
+#. i18n: ectx: property (text), widget (QCheckBox, kcfg_BlurMenus)
+#: src/kcm/blur_config.ui:535
+#, kde-format
+msgid "Blur menus"
+msgstr "Desfocar menus"
+
+#. i18n: ectx: property (text), widget (QCheckBox, kcfg_BlurDocks)
+#: src/kcm/blur_config.ui:542
+#, kde-format
+msgid "Blur docks"
+msgstr "Desfocar docks"
+
+#. i18n: ectx: attribute (title), widget (QWidget, widget)
+#: src/kcm/blur_config.ui:551
+#, kde-format
+msgid "Refraction"
+msgstr "Refração"
+
+#. i18n: ectx: property (text), widget (QLabel, labelRefractionNote)
+#: src/kcm/blur_config.ui:557
+#, kde-format
+msgid "Refraction does not work when using static blur."
+msgstr "A refração não funciona com o desfoque estático."
+
+#. i18n: ectx: property (text), widget (QLabel, labelRefractionStrength)
+#: src/kcm/blur_config.ui:564
+#, kde-format
+msgid "Refraction Strength:"
+msgstr "Intensidade da refração:"
+
+#. i18n: ectx: property (text), widget (QLabel, labelRefractionStrengthOff)
+#. i18n: ectx: property (text), widget (QLabel, labelRefractionRGBFringingOff)
+#: src/kcm/blur_config.ui:589 src/kcm/blur_config.ui:787
+#, kde-format
+msgid "Off"
+msgstr "Desligado"
+
+#. i18n: ectx: property (text), widget (QLabel, labelRefractionEdgeSize)
+#: src/kcm/blur_config.ui:620
+#, kde-format
+msgid "Refraction Edge Size:"
+msgstr "Tamanho da borda de refração:"
+
+#. i18n: ectx: property (text), widget (QLabel, labelRefractionEdgeSizeSmall)
+#: src/kcm/blur_config.ui:645
+#, kde-format
+msgid "Small"
+msgstr "Pequeno"
+
+#. i18n: ectx: property (text), widget (QLabel, labelRefractionEdgeSizeWide)
+#: src/kcm/blur_config.ui:677
+#, kde-format
+msgid "Wide"
+msgstr "Amplo"
+
+#. i18n: ectx: property (text), widget (QLabel, labelRefractionNormalPow)
+#: src/kcm/blur_config.ui:686
+#, kde-format
+msgid "Refraction Falloff:"
+msgstr "Atenuação da refração:"
+
+#. i18n: ectx: property (text), widget (QLabel, labelRefractionNormalPowLinear)
+#: src/kcm/blur_config.ui:637
+#, kde-format
+msgid "Linear"
+msgstr "Linear"
+
+#. i18n: ectx: property (text), widget (QLabel, labelRefractionNormalPowRound)
+#: src/kcm/blur_config.ui:669
+#, kde-format
+msgid "Round"
+msgstr "Arredondada"
+
+#. i18n: ectx: property (text), widget (QLabel, labelRefractionRGBFringing)
+#: src/kcm/blur_config.ui:678
+#, kde-format
+msgid "RGB Fringing Strength:"
+msgstr "Intensidade da franja RGB:"
+
+#. i18n: ectx: attribute (title), widget (QWidget, widget)
+#: src/kcm/blur_config.ui:758
+#, kde-format
+msgid "Rounded corners"
+msgstr "Cantos arredondados"
+
+#. i18n: ectx: property (text), widget (QLabel, label)
+#: src/kcm/blur_config.ui:764
+#, kde-format
+msgid "The corner radius only applies to the blur region."
+msgstr "O raio dos cantos se aplica apenas à região de desfoque."
+
+#. i18n: ectx: property (text), widget (QLabel, label)
+#: src/kcm/blur_config.ui:825
+#, kde-format
+msgid "Menu corner radius"
+msgstr "Raio dos cantos dos menus"
+
+#. i18n: ectx: property (text), widget (QLabel, label)
+#: src/kcm/blur_config.ui:843
+#, kde-format
+msgid "Dock corner radius"
+msgstr "Raio dos cantos da dock"
+
+#. i18n: ectx: property (text), widget (QCheckBox, kcfg_UseDeclaredCornerRadius)
+#: src/kcm/blur_config.ui:1062
+#, kde-format
+msgid "Use declared corner radius"
+msgstr "Usar o raio de canto declarado"
+
+#. i18n: ectx: property (text), widget (QCheckBox, kcfg_IgnoreContentBlurRegion)
+#: src/kcm/blur_config.ui:1069
+#, kde-format
+msgid "Ignore content blur region"
+msgstr "Ignorar a região de desfoque do conteúdo"
+
+#. i18n: ectx: property (text), widget (QCheckBox, kcfg_DynamicCorners)
+#: src/kcm/blur_config.ui:866
+#, kde-format
+msgid "Dynamic corner radius"
+msgstr "Raio de canto dinâmico"
+
+#. i18n: ectx: property (text), widget (QCheckBox, kcfg_DynamicCornersExcludeDocks)
+#: src/kcm/blur_config.ui:1171
+#, kde-format
+msgid "Exclude docks"
+msgstr "Excluir docks"
+
+#. i18n: ectx: property (text), widget (QCheckBox, kcfg_DynamicCornersExcludeTooltips)
+#: src/kcm/blur_config.ui:1198
+#, kde-format
+msgid "Exclude tooltips"
+msgstr "Excluir dicas de ferramenta"
+
+#. i18n: ectx: property (text), widget (QCheckBox, kcfg_DynamicCornersExcludeMenus)
+#: src/kcm/blur_config.ui:1225
+#, kde-format
+msgid "Exclude menus"
+msgstr "Excluir menus"
+
+#. i18n: ectx: attribute (title), widget (QWidget, widget)
+#: src/kcm/blur_config.ui:884
+#, kde-format
+msgid "About"
+msgstr "Sobre"
+
+#. i18n: ectx: property (text), widget (QTextBrowser, aboutText)
+#: src/kcm/blur_config.ui:896
+#, kde-format
+msgid "Failed to load about.html"
+msgstr "Falha ao carregar o about.html"

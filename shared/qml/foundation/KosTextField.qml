@@ -6,7 +6,6 @@ LiquidTextField {
     // live system appearance changes keep text and focus affordances legible.
     glassColor: AppTheme.fieldSurface
     outlineColor: AppTheme.border
-    focusedOutlineColor: AppTheme.focusRing
     textColor: AppTheme.text
     mutedTextColor: AppTheme.mutedText
     materialForm: true

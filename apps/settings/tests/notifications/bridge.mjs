@@ -17,16 +17,18 @@ import Quickshell.Io
 Scope {
     id: fixture
     property bool badges: true
+    property bool sound: false
     property bool blocked: false
     IpcHandler {
         id: handler
         target: "notification-settings"
         function snapshot(): string { return JSON.stringify({ready:true,
             sources:[{key:"desktop:mail", appName:"邮件"}], blockedKeys:fixture.blocked ? ["desktop:mail"] : [],
-            showNotificationBadges:fixture.badges, bannersEnabled:true, showPreview:true, saveError:""}) }
+            showNotificationBadges:fixture.badges, soundEnabled:fixture.sound, bannersEnabled:true, showPreview:true, saveError:""}) }
         function setPreference(key: string, value: bool): string {
             if (key === "invalid") return "invalid JSON"
-            fixture.badges = value
+            if (key === "soundEnabled") fixture.sound = value
+            else fixture.badges = value
             return snapshot()
         }
         function setBlocked(key: string, value: bool): string { fixture.blocked=value; return snapshot() }
@@ -49,9 +51,14 @@ ApplicationWindow {
                 settingsBridge.setNotificationPreference("showNotificationBadges", false)
             } else if (step === 1) {
                 assert(!state.showNotificationBadges, "preference round trip")
+                assert(!state.soundEnabled, "sound defaults off")
+                step++
+                settingsBridge.setNotificationPreference("soundEnabled", true)
+            } else if (step === 2) {
+                assert(state.soundEnabled, "sound preference round trip")
                 step++
                 settingsBridge.setNotificationBlocked("desktop:mail", true)
-            } else if (step === 2) {
+            } else if (step === 3) {
                 assert(state.blockedKeys[0] === "desktop:mail", "application policy round trip")
                 step++
                 settingsBridge.setNotificationPreference("invalid", false)

@@ -6,7 +6,7 @@ import "../../../shared/qml/i18n"
 import qs.desktop.modules.dock
 import qs.desktop.modules.common
 
-// Compact battery indicator with charging-state colours and hover details.
+// Compact battery indicator using the same monochrome ink as other status cells.
 Item {
     id: root
 
@@ -17,27 +17,17 @@ Item {
     property bool verticalDock: false
     property real iconSize: 18
     rotation: verticalDock ? -90 : 0
-    readonly property bool tintActive: IconAppearanceService.mode === "tint"
-    readonly property color dockTintColor: tintActive
-        ? IconAppearanceService.styledSymbolicColor()
-        : ThemeService.barInk
-    opacity: tintActive ? IconAppearanceService.opacity : 1.0
+    readonly property color dockTintColor: ThemeService.barInk
     // The bar text carries a Text.Outline edge so it holds over a bright
     // backdrop; the battery is drawn from QML rectangles, which have no text
-    // style, so the same edge comes from a shadow layer instead. Tint mode
-    // keeps the stronger drop shadow it always had. The mac-style ground
+    // style, so the same edge comes from a shadow layer instead. The mac-style ground
     // paints a plate under the glyph, so the edge is dropped there.
-    readonly property bool iconOutlined: !tintActive
-        && AppearanceTokens.isDarkTheme && !AppearanceTokens.bar.macStyle
-    layer.enabled: tintActive || iconOutlined
+    readonly property bool iconOutlined: AppearanceTokens.isDarkTheme && !AppearanceTokens.bar.macStyle
+    layer.enabled: iconOutlined
     layer.effect: MultiEffect {
         shadowEnabled: true
-        shadowColor: tintActive
-            ? Qt.rgba(0, 0, 0, 0.82) : Qt.rgba(0, 0, 0, 0.40)
-        shadowOpacity: tintActive ? 0.62 : 1.0
-        shadowBlur: tintActive ? 0.32 : 0.22
-        shadowVerticalOffset: tintActive ? 0.7 : 0.0
-        shadowScale: tintActive ? 1.04 : 1.0
+        shadowColor: Qt.rgba(0, 0, 0, 0.40)
+        shadowBlur: 0.22
     }
 
     implicitWidth: iconSize
@@ -73,6 +63,7 @@ Item {
     }
 
     Rectangle {
+        visible: !root.isCharging
         anchors {
             left: outline.left
             verticalCenter: outline.verticalCenter
@@ -86,13 +77,13 @@ Item {
         color: root.fillColor
     }
 
-    Text {
+    BundledIcon {
         anchors.centerIn: outline
         visible: root.isCharging
-        text: "⚡"
+        name: "status-battery-charging"
         color: root.boltColor
-        font.pixelSize: Math.max(7, root.iconSize * 0.44)
-        font.bold: true
+        width: Math.max(7, root.iconSize * 0.44)
+        height: width
     }
 
     MouseArea {
@@ -121,15 +112,6 @@ Item {
     readonly property bool isCharging: batteryDevice.ready
         && (batteryDevice.state === UPowerDeviceState.Charging
             || batteryDevice.state === UPowerDeviceState.PendingCharge)
-    readonly property color fillColor: tintActive ? dockTintColor
-        : percent > 95
-        ? "#30d158"
-        : percent >= 50
-            ? ThemeService.barInk
-            : percent >= 15
-                ? "#ff9f0a"
-                : "#ff453a"
-    readonly property color boltColor: tintActive ? dockTintColor
-        : percent >= 50 && percent <= 95
-        ? "#ff9f0a" : ThemeService.barInk
+    readonly property color fillColor: ThemeService.barInk
+    readonly property color boltColor: ThemeService.barInk
 }

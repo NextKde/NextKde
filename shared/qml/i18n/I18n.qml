@@ -2,10 +2,11 @@ pragma Singleton
 
 import QtQuick
 import "ZhCatalog.mjs" as ZhCN
+import "PtBrCatalog.mjs" as PtBR
 import "SystemLanguage.mjs" as LanguagePolicy
 
 // UI 翻译单例。源语言是英文：代码里一律写 I18n.tr("English text")，
-// 词典按 "英文源串 -> 译文" 映射；zh-CN 激活时查 ZhCN.catalog，
+// 词典按 "英文源串 -> 译文" 映射；zh-CN / pt-BR 激活时查对应词典，
 // en 激活时英文源串原样通过（无需词典）。
 //
 // 本文件被 shell(quickshell) 与 apps/settings(纯 Qt Quick) 以相对路径
@@ -20,7 +21,7 @@ import "SystemLanguage.mjs" as LanguagePolicy
 QtObject {
     id: root
 
-    // 生效语言：只接受 "zh-CN" / "en"。"auto" 由 shell 侧 I18nService 解析
+    // 生效语言：只接受 "zh-CN" / "pt-BR" / "en"。"auto" 由 shell 侧 I18nService 解析
     // 后写入，绝不能直接落进这里（否则 tr() 查不到词典目录会全部回退英文）。
     // 默认按系统语言解析：覆盖 I18nService 异步加载持久值之前的启动窗口，
     // 让英文系统的用户从第一帧起就是英文。
@@ -29,7 +30,7 @@ QtObject {
     property string language: systemDefault()
 
     // 系统语言解析的唯一实现（I18nService 与 settings 的本地兜底都走这里）：
-    // 只看首选语言：zh/zh-* -> zh-CN，其余（含空列表）为 en。
+    // 只看首选语言：zh/zh-* -> zh-CN，pt/pt-* -> pt-BR，其余（含空列表）为 en。
     // 与 shared/i18n/SystemLanguage.h 保持一致，不用后续备用语言覆盖首选项。
     function systemDefault() {
         return LanguagePolicy.systemLanguage(Qt.locale().uiLanguages)
@@ -37,12 +38,14 @@ QtObject {
 
     readonly property var _catalogs: ({
         "en": ({}),
-        "zh-CN": ZhCN.catalog
+        "zh-CN": ZhCN.catalog,
+        "pt-BR": PtBR.catalog
     })
 
     readonly property var _localeNames: ({
         "en": "en_US",
-        "zh-CN": "zh_CN"
+        "zh-CN": "zh_CN",
+        "pt-BR": "pt_BR"
     })
 
     function tr(source) {

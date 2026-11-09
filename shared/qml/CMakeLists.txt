@@ -2,6 +2,7 @@ set_source_files_properties(
     foundation/AppTheme.qml
     i18n/I18n.qml
     controls/ControlForm.qml
+    controls/LiquidStyle.qml
     PROPERTIES QT_QML_SINGLETON_TYPE TRUE
 )
 
@@ -16,6 +17,7 @@ qt_add_qml_module(kos_ui
         foundation/AppTheme.qml
         foundation/KosSidebar.qml
         foundation/KosSidebarToggle.qml
+        foundation/KosSidebarGlyph.qml
         foundation/KosCheckBox.qml
         foundation/KosComboBox.qml
         foundation/KosTextArea.qml
@@ -45,10 +47,33 @@ qt_add_qml_module(kos_ui
         controls/ControlForm.qml
         controls/LiquidTextField.qml
         controls/LiquidSegmentedControl.qml
+        controls/LiquidStyle.qml
+        controls/LiquidBackdrop.qml
+        controls/LiquidSurface.qml
+        controls/LiquidGlassNumber.qml
+        controls/LiquidCompactSurface.qml
+        controls/SelectionHighlight.qml
     RESOURCES
+        foundation/KosCompositorControls.qml
+        controls/shaders/liquid_number.vert.qsb
+        controls/shaders/liquid_number.frag.qsb
         i18n/qmldir
         i18n/ZhCatalog.mjs
+        i18n/PtBrCatalog.mjs
         i18n/SystemLanguage.mjs
+        controls/shaders/liquid_compact_surface.frag.qsb
+        controls/shaders/liquid_compact_surface.vert.qsb
+        controls/shaders/liquid_convex.frag.qsb
+        controls/shaders/liquid_convex.vert.qsb
+        controls/shaders/liquid_diffuse.frag.qsb
+        controls/shaders/liquid_diffuse.vert.qsb
+        controls/shaders/liquid_highlight_full_extended.frag.qsb
+        controls/shaders/liquid_highlight_full_extended_fallback.frag.qsb
+        controls/shaders/liquid_highlight_tint.vert.qsb
+        controls/shaders/liquid_highlight_topbottom_wider.frag.qsb
+        controls/shaders/liquid_highlight_topbottom_wider_fallback.frag.qsb
+        controls/shaders/liquid_surface.vert.qsb
+        controls/shaders/liquid_surface.frag.qsb
 )
 
 add_library(Kos::Ui ALIAS kos_ui)

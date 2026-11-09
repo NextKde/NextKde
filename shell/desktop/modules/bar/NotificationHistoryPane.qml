@@ -50,6 +50,10 @@ Item {
     readonly property alias blurRegion: glassRegions
     property int historyExitCount: 0
     property bool historyEmptyReady: true
+    // Once the last delegate retires, fade a fixed-size empty card while the
+    // deck contracts. Waiting for both animations leaves a conspicuous gap.
+    readonly property bool emptyStateReady: showEmptyState && NotificationHistoryService.count === 0
+        && historyEmptyReady && historyExitCount === 0
     property var historyClearDelays: ({})
     property SceneBounds listBounds: SceneBounds { item: historyList }
     property SceneBounds outerBounds: SceneBounds { item: pane.outerViewport }
@@ -131,7 +135,10 @@ Item {
         } else expanded = false
     }
     function beginHistoryExit() { historyExitCount++ }
-    function endHistoryExit() { historyExitCount = Math.max(0, historyExitCount - 1) }
+    function endHistoryExit() {
+        historyExitCount = Math.max(0, historyExitCount - 1)
+        if (historyExitCount === 0 && !emptySettlement.running) historyEmptyReady = true
+    }
     function historyGroupVisible(item) {
         return active && item.y + item.height > historyList.contentY
             && item.y < historyList.contentY + historyList.height
@@ -151,7 +158,9 @@ Item {
         AppNotificationService.clearAll()
         reset()
     }
-    Timer { id: emptySettlement; interval: 340; onTriggered: pane.historyEmptyReady = true }
+    // Defer until ListView has registered removals. Visible delegates release
+    // the layout themselves; an offscreen removal has no exit to wait for.
+    Timer { id: emptySettlement; interval: 0; onTriggered: if (pane.historyExitCount === 0) pane.historyEmptyReady = true }
     Timer { interval: 60000; repeat: true; running: pane.active; onTriggered: pane.clockNow = Date.now() }
     Behavior on height {
         enabled: pane.active && pane.glassOpacity > 0.999 && !AppTheme.reduceMotion
@@ -168,12 +177,12 @@ Item {
         onFinished: { historyList.positionViewAtBeginning(); pane.folding = false; pane.expanded = false }
     }
     onActiveChanged: if (!active) { historyList.cancelFlick(); scrollHome.stop(); folding = false }
-    Region {
-        id: glassRegions
-        regions: pane.paintedCards.map(card => card.blurRegion).filter(region => region !== null)
-            .concat(footerButton.visible && footerButton.backdropVisible && footerButton.blurRegion ? [footerButton.blurRegion] : [])
-            .concat(emptyGlass.visible && emptyGlass.blurRegion ? [emptyGlass.blurRegion] : [])
-    }
+    // Region.regions has no change notification; keep the source list bindable
+    // so the host also updates when cards switch to the independent v8 path.
+    readonly property var legacyBlurRegions: pane.paintedCards.map(card => card.blurRegion).filter(region => region !== null)
+        .concat(footerButton.visible && footerButton.backdropVisible && footerButton.blurRegion ? [footerButton.blurRegion] : [])
+        .concat(emptyGlass.visible && emptyGlass.blurRegion ? [emptyGlass.blurRegion] : [])
+    Region { id: glassRegions; regions: pane.legacyBlurRegions }
     component DeckButton: AbstractButton {
         id: button
         property bool glassButton: false
@@ -364,7 +373,7 @@ Item {
     property SceneBounds emptyBounds: SceneBounds { item: emptyGlass }
     readonly property rect emptyRect: {
         const r = emptyBounds.rect
-        if (!outerViewport || r.width <= 0 || r.height <= 0) return Qt.rect(0, 36, width, Math.max(0, height - 36))
+        if (!outerViewport || r.width <= 0 || r.height <= 0) return Qt.rect(0, 36, emptyGlass.width, emptyGlass.height)
         const v = outerBounds.rect
         const x = Math.max(r.x, v.x), y = Math.max(r.y, v.y)
         return Qt.rect((x - r.x) * width / r.width, 36 + (y - r.y) * emptyGlass.height / r.height,
@@ -374,16 +383,22 @@ Item {
     Item { id: emptyOutline; x: pane.emptyRect.x; y: pane.emptyRect.y; width: pane.emptyRect.width; height: pane.emptyRect.height }
     ControlCenterGlass {
         id: emptyGlass
-        x: 0; y: 36; width: pane.width; height: Math.max(0, pane.height - 36)
-        visible: pane.showEmptyState && NotificationHistoryService.count === 0 && pane.historyEmptyReady && pane.historyExitCount === 0
+        objectName: "notification-history-empty"
+        x: 0; y: 36; width: pane.width; height: Math.max(0, pane.previewHeight - 36)
+        opacity: pane.emptyStateReady ? 1 : 0
+        visible: pane.emptyStateReady && opacity > 0
             && emptyOutline.width > 0 && emptyOutline.height > 0
+        Behavior on opacity {
+            enabled: pane.active && !AppTheme.reduceMotion
+            NumberAnimation { duration: 360; easing.type: Easing.InOutSine }
+        }
         radius: 24
         blurAnchor: emptyOutline
         backdropRadius: Math.min(radius, emptyOutline.width / 2, emptyOutline.height / 2)
         useKwinEffect: pane.compositorGlass
         captureAnchor: pane.captureAnchor
         backdropScale: pane.backdropScale
-        scrimOpacity: pane.glassOpacity; materialOpacity: pane.glassOpacity
+        scrimOpacity: pane.glassOpacity * opacity; materialOpacity: pane.glassOpacity * opacity
         GlassText { anchors.centerIn: parent; text: I18n.tr("No notifications yet"); color: pane.ink; opacity: 0.85; font.pixelSize: 12 }
     }
     Item {

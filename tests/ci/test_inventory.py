@@ -5,7 +5,7 @@ import tempfile
 import unittest
 
 spec = importlib.util.spec_from_file_location(
-    "ci_tests", Path(__file__).resolve().parents[2] / "tools/ci_tests.py")
+    "ci_tests", Path(__file__).resolve().parents[2] / "tools/ci/ci_tests.py")
 ci = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(ci)
 
@@ -19,8 +19,10 @@ def test_entry(name, label, **properties):
 class InventoryTests(unittest.TestCase):
     def setUp(self):
         self.entries = [test_entry("data", "data"), test_entry("logic", "logic"),
+                        test_entry("widget", "widgets"), test_entry("installed", "installed"),
                         test_entry("ui", "headless")]
-        self.required = {"data-platform": ["data"], "logic": ["logic"], "headless": ["ui"]}
+        self.required = {"data-platform": ["data"], "logic": ["logic"],
+                         "widgets": ["widget"], "installed": ["installed"], "headless": ["ui"]}
 
     def test_missing_registration_and_changed_label(self):
         self.entries.pop()
@@ -73,6 +75,19 @@ class InventoryTests(unittest.TestCase):
             errors = ci.results(report, directory)[1]
             self.assertIn("Failed in logic: logic", errors)
             self.assertTrue(any(error.startswith("Invalid headless report:") for error in errors))
+
+    def test_widget_regression_must_run_and_report(self):
+        report = ci.inventory(self.entries, self.required)
+        self.assertNotIn("widget", report["excluded"])
+        with tempfile.TemporaryDirectory() as temporary:
+            directory = Path(temporary)
+            errors = ci.results(report, directory)[1]
+            self.assertIn("No result in widgets: widget", errors)
+
+    def test_installed_startup_cannot_silently_disappear(self):
+        self.entries = [entry for entry in self.entries if entry['name'] != 'installed']
+        errors = ci.inventory(self.entries, self.required)['errors']
+        self.assertIn('Required test not registered: installed', errors)
 
 
 if __name__ == "__main__":

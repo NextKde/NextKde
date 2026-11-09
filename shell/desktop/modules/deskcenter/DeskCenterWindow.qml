@@ -1,4 +1,5 @@
 import QtQuick
+import QtQuick.Window
 import QtQuick.Controls as Controls
 import QtQuick.Effects
 import QtQml.Models
@@ -19,6 +20,7 @@ import qs.desktop.modules.stage
 import qs.desktop.modules.weather
 import "../../../Kos/Ui"
 import "WidgetLayout.mjs" as WidgetLayout
+import "DesktopGridMetrics.mjs" as DesktopGridMetrics
 
 // iPadOS-inspired desktop widgets. Stays on the Bottom layer: Plasma's desktop
 // surface shares the Desktop/Background layer and would cover it if moved down.
@@ -32,7 +34,11 @@ PanelWindow {
     // 2026-10-18 层序：留在 Bottom。降到 Background（KWin DesktopLayer）
     // 会被同在 DesktopLayer 的 Plasma 桌面表面盖住——实测重登后组件全部
     // 消失。与台前调度条带的层内先后由 KWin 脚本重排，见
-    // kwin-stage-stack.js。
+    // kwin/window-bridge.js。
+    // KWin excludes Desktop windows from active-window close/move shortcuts.
+    // Bottom remains the compositor layer; the desktop stack script orders
+    // the separate wallpaper below this keyboard-interactive desktop surface.
+    WlrLayershell.namespace: "desktop"
     WlrLayershell.layer: WlrLayer.Bottom
     // A desktop needs shortcuts only after the user explicitly clicks it.
     // OnDemand keeps active applications' Ctrl+C/V untouched otherwise.
@@ -105,7 +111,7 @@ PanelWindow {
     // widget uses integer spans, giving desktop cards the intentional, large
     // iPadOS scale rather than a collection of small floating macOS tiles.
     readonly property int columns: 10
-    readonly property int widgetColumns: Math.min(4, columns)
+    readonly property int widgetColumns: widgetLayout.columns
     readonly property real sideMargin: 20
     // Keep card sizing tied to the original grid metrics. The larger visual
     // insets should consume the flexible desktop-file field on the right,
@@ -146,6 +152,7 @@ PanelWindow {
     property bool timerView: false
     property bool editMode: false
     property bool widgetLibraryOpen: false
+    property var activeDragCard: null
 
     function enterWidgetEditMode(openLibrary) {
         desktopFileGrid.clearDesktopSelection()
@@ -209,7 +216,8 @@ PanelWindow {
     function lunarDate(date) {
         try {
             // 农历数字部分两种语言都读得懂，但月份名要跟语言走。
-            return new Intl.DateTimeFormat(I18n.language === "en" ? "en-US-u-ca-chinese" : "zh-CN-u-ca-chinese", {
+            return new Intl.DateTimeFormat(I18n.language === "en" ? "en-US-u-ca-chinese"
+                : I18n.language === "pt-BR" ? "pt-BR-u-ca-chinese" : "zh-CN-u-ca-chinese", {
                 month: "long",
                 day: "numeric"
             }).format(date)
@@ -292,11 +300,12 @@ PanelWindow {
         })
     }
 
-    // Higher priority widgets win when a short display cannot accommodate all
-    // rows. The desktop never scrolls and cards never shrink their type.
+    // Saved grid positions are per output; unpositioned cards fill free cells.
     function configuredWidget(id, priority, startColor, endColor) {
         const span = DeskCenterConfigService.spanFor(id)
+        const position = DeskCenterConfigService.displayPositionsForOutput(desktopOutput, widgetGeometry)[id]
         return { id: id, title: "", columns: span[0], rows: span[1],
+            column: position?.column, row: position?.row,
             priority: priority, startColor: startColor, endColor: endColor,
             surface: false }
     }
@@ -332,7 +341,33 @@ PanelWindow {
         return WidgetLayout.packWidgets(definitions, columnCount, rowCount)
     }
 
-    readonly property var placements: packWidgets(widgetDefinitions, widgetColumns, usableRows)
+    FontMetrics { id: desktopFileFontMetrics }
+    readonly property var reservedFileMetrics: DesktopGridMetrics.metrics(
+        desktopFiles.layout.iconSize + 72, desktopFiles.layout.iconSize + 58,
+        desktopFiles.layout.iconSize + 12, desktopFiles.layout.iconSpacing, desktopFileFontMetrics.height)
+    readonly property int maximumWidgetColumns: WidgetLayout.widgetColumnLimit(
+        width - leftInset - rightInset, cellSize, gap,
+        reservedFileMetrics.cellWidth + reservedFileMetrics.gap,
+        desktopFiles.entriesForOutput(desktopOutput).length,
+        Math.floor((height - topInset - bottomInset + reservedFileMetrics.gap)
+            / (reservedFileMetrics.cellHeight + reservedFileMetrics.gap)))
+    readonly property string widgetGeometry: maximumWidgetColumns + ":" + usableRows
+
+    readonly property var widgetLayout: WidgetLayout.fitWidgets(
+        widgetDefinitions, 4, maximumWidgetColumns, usableRows)
+    readonly property var placements: widgetLayout.placements
+    function resizeWidget(widgetId, columns, rows) {
+        const placement = placementFor(widgetId)
+        if (![1, 2].includes(columns) || ![1, 2].includes(rows)
+                || !placement || !WidgetLayout.canPlace(placements, widgetId,
+                placement.column, placement.row, columns, rows,
+                maximumWidgetColumns, usableRows)) return false
+        DeskCenterConfigService.savePosition(desktopOutput, placements,
+            widgetId, placement.column, placement.row, widgetGeometry)
+        DeskCenterConfigService.setSpan(widgetId, columns, rows)
+        return true
+    }
+
     function placementFor(widgetId) {
         for (let i = 0; i < placements.length; i++)
             if (placements[i].id === widgetId)
@@ -551,22 +586,91 @@ PanelWindow {
         }
     }
 
+    Rectangle {
+        id: widgetDropPreview
+        objectName: "widget-drop-preview"
+        z: 110
+        visible: root.activeDragCard !== null
+        readonly property var dragged: root.activeDragCard
+        readonly property bool allowed: dragged?.dropAllowed ?? false
+        x: root.leftInset + (dragged?.dropPosition.column ?? 0) * (root.cellSize + root.gap)
+        y: root.topInset + (dragged?.dropPosition.row ?? 0) * (root.cellSize + root.gap)
+        width: root.spanSize(dragged?.displayColumns ?? 1)
+        height: root.spanSize(dragged?.displayRows ?? 1)
+        radius: AppearanceTokens.widget.radius
+        color: allowed ? "#2434c759" : "#30ff453a"
+        border.width: 2
+        border.color: allowed ? "#34c759" : "#ff453a"
+    }
+
+    // Position/size saves replace widgetDefinitions. Keep delegate identity
+    // separate from those snapshots so an unrelated move cannot recreate the
+    // clock face, reset content state or replay every card's size animation.
+    readonly property var visibleWidgetIds:
+        root.screen?.name === ScreenLifecycle.activeScreen?.name
+            ? root.widgetDefinitions.map(widget => widget.id) : []
+    onVisibleWidgetIdsChanged: syncWidgetModel()
+
+    ListModel {
+        id: desktopWidgetModel
+        Component.onCompleted: root.syncWidgetModel()
+    }
+
+    function syncWidgetModel() {
+        if (!desktopWidgetModel) return
+        const ids = root.visibleWidgetIds
+        for (let index = desktopWidgetModel.count - 1; index >= 0; --index) {
+            if (ids.indexOf(desktopWidgetModel.get(index).widgetId) < 0)
+                desktopWidgetModel.remove(index)
+        }
+        for (let target = 0; target < ids.length; ++target) {
+            let current = -1
+            for (let index = target; index < desktopWidgetModel.count; ++index) {
+                if (desktopWidgetModel.get(index).widgetId === ids[target]) {
+                    current = index
+                    break
+                }
+            }
+            if (current < 0)
+                desktopWidgetModel.insert(target, { widgetId: ids[target] })
+            else if (current !== target)
+                desktopWidgetModel.move(current, target, 1)
+        }
+    }
+
     Repeater {
         id: widgetRepeater
         objectName: "desktop-widget-repeater"
-        model: root.screen?.name === ScreenLifecycle.activeScreen?.name ? root.widgetDefinitions : []
+        model: desktopWidgetModel
 
         delegate: DeskWidgetCard {
             id: card
-            required property var modelData
+            objectName: "desktop-widget-" + modelData.id
+            required property string widgetId
+            readonly property var modelData: {
+                for (const widget of root.widgetDefinitions) {
+                    if (widget.id === widgetId) return widget
+                }
+                // A visibility change can invalidate the definition before
+                // the keyed model removes its delegate in the same update.
+                return { id: widgetId, title: "", startColor: "transparent",
+                    endColor: "transparent", surface: false }
+            }
             property real dragOffsetX: 0
             property real dragOffsetY: 0
             readonly property var placement: root.placementFor(modelData.id)
             // 2026-10-18 用户改判：台前调度与桌面组件共存（台前调度在
             // 组件之上），组件不再随台前调度开启而隐藏
+            readonly property bool moving: widgetDrag.active
+            readonly property var dropPosition: WidgetLayout.snappedPosition(
+                x - root.leftInset, y - root.topInset,
+                displayColumns, displayRows, root.cellSize, root.gap,
+                root.maximumWidgetColumns, root.usableRows)
+            readonly property bool dropAllowed: WidgetLayout.canPlace(root.placements,
+                modelData.id, dropPosition.column, dropPosition.row,
+                displayColumns, displayRows, root.maximumWidgetColumns, root.usableRows)
             visible: placement !== null
-            z: widgetDrag.active ? 120 : (root.editMode ? 20 : 1)
-            transform: Translate { x: card.dragOffsetX; y: card.dragOffsetY }
+            z: widgetDrag.active || resizeHandle.resizing ? 120 : (root.editMode ? 20 : 1)
             scale: widgetDrag.active ? 1.035 : 1
             // The clock is the one card whose glass outline is a shape rather
             // than a rectangle: it draws MaterialFlower, so its surface has to
@@ -578,14 +682,33 @@ PanelWindow {
             startColor: modelData.id === "weather" ? root.weatherTheme.primary : modelData.startColor
             endColor: modelData.id === "weather" ? root.weatherTheme.secondary : modelData.endColor
             showSurface: modelData.surface
-            x: root.leftInset + (placement?.column ?? 0) * (root.cellSize + root.gap)
-            y: root.topInset + (placement?.row ?? 0) * (root.cellSize + root.gap)
-            width: root.spanSize(placement?.columns ?? 1)
-            height: root.spanSize(placement?.rows ?? 1)
-            Behavior on x { NumberAnimation { duration: AppearanceTokens.motion.normalDuration; easing.type: AppearanceTokens.motion.standardEasing } }
-            Behavior on y { NumberAnimation { duration: AppearanceTokens.motion.normalDuration; easing.type: AppearanceTokens.motion.standardEasing } }
-            Behavior on width { NumberAnimation { duration: AppearanceTokens.motion.normalDuration; easing.type: AppearanceTokens.motion.standardEasing } }
-            Behavior on height { NumberAnimation { duration: AppearanceTokens.motion.normalDuration; easing.type: AppearanceTokens.motion.standardEasing } }
+            // SurfaceShape listens to Item geometry and scale changes, not
+            // Translate.x/y. Move the anchor itself so the native glass and
+            // the QML content publish the same position on every drag frame.
+            x: root.leftInset + (placement?.column ?? 0) * (root.cellSize + root.gap) + dragOffsetX
+            y: root.topInset + (placement?.row ?? 0) * (root.cellSize + root.gap) + dragOffsetY
+            readonly property int displayColumns: resizeHandle.resizing
+                ? resizeHandle.previewColumns : (placement?.columns ?? 1)
+            readonly property int displayRows: resizeHandle.resizing
+                ? resizeHandle.previewRows : (placement?.rows ?? 1)
+            width: root.spanSize(displayColumns)
+            height: root.spanSize(displayRows)
+            Behavior on x {
+                enabled: !card.moving
+                NumberAnimation { duration: AppearanceTokens.motion.normalDuration; easing.type: AppearanceTokens.motion.standardEasing }
+            }
+            Behavior on y {
+                enabled: !card.moving
+                NumberAnimation { duration: AppearanceTokens.motion.normalDuration; easing.type: AppearanceTokens.motion.standardEasing }
+            }
+            Behavior on width {
+                enabled: !resizeHandle.resizing
+                NumberAnimation { duration: AppearanceTokens.motion.normalDuration; easing.type: AppearanceTokens.motion.standardEasing }
+            }
+            Behavior on height {
+                enabled: !resizeHandle.resizing
+                NumberAnimation { duration: AppearanceTokens.motion.normalDuration; easing.type: AppearanceTokens.motion.standardEasing }
+            }
             Behavior on scale { NumberAnimation { duration: 120; easing.type: Easing.OutCubic } }
 
             TapHandler {
@@ -597,37 +720,29 @@ PanelWindow {
             DragHandler {
                 id: widgetDrag
                 target: null
-                enabled: root.editMode
+                enabled: root.editMode && !resizeHandle.resizing
                 acceptedButtons: Qt.LeftButton
-                onTranslationChanged: {
+                onActiveTranslationChanged: {
                     if (!active)
                         return
-                    card.dragOffsetX = translation.x
-                    card.dragOffsetY = translation.y
+                    card.dragOffsetX = activeTranslation.x
+                    card.dragOffsetY = activeTranslation.y
                 }
                 onActiveChanged: {
-                    if (active)
+                    if (active) {
+                        root.activeDragCard = card
                         return
-                    const centerX = card.x + card.width / 2 + card.dragOffsetX
-                    const centerY = card.y + card.height / 2 + card.dragOffsetY
-                    let nearestId = card.modelData.id
-                    let nearestDistance = Number.POSITIVE_INFINITY
-                    for (let i = 0; i < widgetRepeater.count; ++i) {
-                        const candidate = widgetRepeater.itemAt(i)
-                        if (!candidate)
-                            continue
-                        const dx = centerX - (candidate.x + candidate.width / 2)
-                        const dy = centerY - (candidate.y + candidate.height / 2)
-                        const distance = dx * dx + dy * dy
-                        if (distance < nearestDistance) {
-                            nearestDistance = distance
-                            nearestId = candidate.modelData.id
-                        }
                     }
-                    const targetIndex = DeskCenterConfigService.orderedIds().indexOf(nearestId)
-                    DeskCenterConfigService.moveWidget(card.modelData.id, targetIndex)
+                    const allowed = root.editMode && card.dropAllowed
+                    const destination = card.dropPosition
+                    const id = card.modelData.id
+                    const placements = root.placements
+                    root.activeDragCard = null
                     card.dragOffsetX = 0
                     card.dragOffsetY = 0
+                    if (allowed)
+                        DeskCenterConfigService.savePosition(root.desktopOutput, placements,
+                            id, destination.column, destination.row, root.widgetGeometry)
                 }
             }
 
@@ -637,20 +752,27 @@ PanelWindow {
                 z: 50
                 visible: widgetHover.hovered && !root.editMode
                 anchors { right: parent.right; bottom: parent.bottom; margins: 8 }
-                width: sizeLabel.implicitWidth + 14
-                height: 24
+                width: Math.min(sizeLabelMetrics.advanceWidth + 14, parent.width - 16)
+                height: Math.max(24, sizeLabel.implicitHeight + 10)
                 radius: 12
                 color: AppearanceTokens.surface.pick(AppearanceTokens.colors.layer4, Qt.rgba(0, 0, 0, 0.52))
                 border.width: 1
                 border.color: AppearanceTokens.surface.pick(AppearanceTokens.colors.outlineVariant, Qt.rgba(1, 1, 1, 0.18))
+                TextMetrics {
+                    id: sizeLabelMetrics
+                    font: sizeLabel.font
+                    text: sizeLabel.text
+                }
                 Text {
                     id: sizeLabel
                     anchors.centerIn: parent
-                    text: ({ small: I18n.tr("Small"), medium: I18n.tr("Medium"), large: I18n.tr("Large") })[
-                        DeskCenterConfigService.sizeFor(card.modelData.id)]
+                    width: parent.width - 14
+                    text: card.displayColumns + "×" + card.displayRows
                         + " · " + I18n.tr("Right-click to edit")
                     color: AppearanceTokens.surface.pick(AppearanceTokens.colors.surfaceForeground, "white")
                     font { pixelSize: 9; weight: Font.DemiBold }
+                    horizontalAlignment: Text.AlignHCenter
+                    wrapMode: Text.WordWrap
                 }
             }
 
@@ -672,27 +794,35 @@ PanelWindow {
                 }
             }
 
-            Rectangle {
+            WidgetResizeHandle {
+                id: resizeHandle
                 z: 80
                 visible: root.editMode
-                anchors { right: parent.right; bottom: parent.bottom; margins: 8 }
-                width: editSizeText.implicitWidth + 16
-                height: 26
-                radius: AppearanceTokens.isMaterial ? 13 : 9
-                color: AppearanceTokens.surface.pick(
-                    AppearanceTokens.colors.primaryContainer,
-                    Qt.rgba(0, 0, 0, 0.56))
-                Text {
-                    id: editSizeText
-                    anchors.centerIn: parent
-                    text: ({ small: I18n.tr("Small"), medium: I18n.tr("Medium"), large: I18n.tr("Large") })[
-                        DeskCenterConfigService.sizeFor(card.modelData.id)]
-                    color: AppearanceTokens.surface.pick(
-                        AppearanceTokens.colors.primaryContainerForeground, "white")
-                    font { pixelSize: 10; weight: Font.DemiBold }
+                anchors { right: parent.right; bottom: parent.bottom; margins: 5 }
+                cellSize: root.cellSize
+                gap: root.gap
+                previewAllowed: card.placement !== null && WidgetLayout.canPlace(
+                    root.placements, card.modelData.id, card.placement.column, card.placement.row,
+                    previewColumns, previewRows, root.maximumWidgetColumns, root.usableRows)
+                onCommitted: function(columns, rows) {
+                    root.resizeWidget(card.modelData.id, columns, rows)
                 }
-                TapHandler {
-                    onTapped: DeskCenterConfigService.cycleSize(card.modelData.id)
+            }
+
+            Rectangle {
+                z: 81
+                visible: resizeHandle.resizing
+                anchors.centerIn: parent
+                width: resizePreview.implicitWidth + 24
+                height: 32
+                radius: 12
+                color: resizeHandle.previewAllowed ? "#b0000000" : "#c0a02020"
+                Text {
+                    id: resizePreview
+                    anchors.centerIn: parent
+                    text: card.displayColumns + " × " + card.displayRows
+                    color: "white"
+                    font { pixelSize: 13; weight: Font.DemiBold }
                 }
             }
 
@@ -703,9 +833,11 @@ PanelWindow {
                 id: widgetContentLayer
                 objectName: "widget-content-layer"
                 anchors.fill: parent
-                // Glass widgets use monochrome content independently of the
-                // application icons. Colour cards retain their own artwork.
+                // The clock resolves monochrome ink in its face. Keep its text
+                // out of the extra saturation texture so it renders at the
+                // window's resolution. Other glass artwork is desaturated.
                 layer.enabled: AppearanceConfigService.widgetStyle === "glass"
+                    && card.modelData.id !== "clock"
 	                layer.effect: MultiEffect {
 	                    saturation: -1.0
 	                    colorization: 0.0
@@ -716,15 +848,23 @@ PanelWindow {
                 active: card.visible && card.modelData.id === "clock"
                 sourceComponent: Component {
 	                    Item {
+	                id: clockPages
+	                objectName: "desktop-clock-pages"
 	                anchors.fill: parent
                 clip: true
+                // Animate the selected page, not its pixel position. Geometry
+                // changes must keep the hidden timer exactly below the face,
+                // including while a newly loaded card grows from zero height.
+                property real pageProgress: root.timerView ? 1 : 0
+                Behavior on pageProgress {
+                    NumberAnimation { duration: 240; easing.type: Easing.OutCubic }
+                }
 
                 Item {
                     id: clockPage
                     width: parent.width
                     height: parent.height
-                    y: root.timerView ? -height : 0
-                    Behavior on y { NumberAnimation { duration: 240; easing.type: Easing.OutCubic } }
+                    y: -height * clockPages.pageProgress
 
                 // The flower itself is not drawn here: this card is a regular
                 // Material card whose outline happens to be the flower, so its
@@ -733,86 +873,27 @@ PanelWindow {
                 // different surface -- its own colour, its own opacity, its own
                 // outline. The clock only adds its face below.
 
-                Canvas {
+                DeskClockFace {
                     id: analogClock
+                    objectName: "desktop-clock-face"
                     anchors.fill: parent
                     anchors.margins: 14
-                    onPaint: {
-                        const ctx = getContext("2d")
-                        const size = Math.min(width, height)
-                        const center = size / 2
-                        const radius = Math.max(0, size / 2 - 3)
-                        if (radius <= 0)
-                            return
-                        const date = clock.date
-                        ctx.reset()
-                        ctx.translate((width - size) / 2 + center, (height - size) / 2 + center)
-                        // In the shared glass modes the card material is the
-                        // face: do not paint a second opaque white disc.
-                        if (!AppearanceTokens.content.onBackdrop) {
-                            ctx.fillStyle = "#fafafa"
-                            ctx.beginPath(); ctx.arc(0, 0, radius, 0, Math.PI * 2); ctx.fill()
-                        }
-                        if (!AppearanceTokens.isMaterial) {
-                            ctx.strokeStyle = AppearanceTokens.content.ink("#dedede", 0.42).toString()
-                            ctx.lineWidth = 1
-                            ctx.beginPath(); ctx.arc(0, 0, radius, 0, Math.PI * 2); ctx.stroke()
-                        }
-	                        ctx.strokeStyle = AppearanceTokens.content.ink("#171717").toString()
-                        ctx.lineCap = "round"
-                        for (let mark = 0; mark < 12; mark++) {
-                            const angle = mark * Math.PI / 6
-                            ctx.lineWidth = mark % 3 === 0 ? 1.8 : 0.8
-                            ctx.beginPath()
-                            ctx.moveTo(Math.sin(angle) * (radius - 4), -Math.cos(angle) * (radius - 4))
-                            ctx.lineTo(Math.sin(angle) * (radius - (mark % 3 === 0 ? 10 : 7)), -Math.cos(angle) * (radius - (mark % 3 === 0 ? 10 : 7)))
-                            ctx.stroke()
-                        }
-                        // Full hour numerals make the small analogue clock
-                        // readable at a glance, rather than relying on ticks
-                        // alone. Their radius leaves a clear channel for the
-                        // hands in this one-cell tile.
-	                        ctx.fillStyle = AppearanceTokens.content.ink("#242126").toString()
-                        ctx.font = "bold " + Math.max(7, Math.round(radius * 0.18)) + "px sans-serif"
-                        ctx.textAlign = "center"
-                        ctx.textBaseline = "middle"
-                        for (let number = 1; number <= 12; number++) {
-                            const angle = number * Math.PI / 6
-                            const numberRadius = radius * 0.68
-                            ctx.fillText(String(number),
-                                Math.sin(angle) * numberRadius,
-                                -Math.cos(angle) * numberRadius)
-                        }
-                        const hour = (date.getHours() % 12 + date.getMinutes() / 60) * Math.PI / 6
-                        const minute = date.getMinutes() * Math.PI / 30
-                        const second = date.getSeconds() * Math.PI / 30
-                        if (AppearanceTokens.isMaterial)
-                            ctx.strokeStyle = AppearanceTokens.colors.primary.toString()
-                        ctx.lineWidth = 2.5; ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(Math.sin(hour) * radius * 0.48, -Math.cos(hour) * radius * 0.48); ctx.stroke()
-                        if (AppearanceTokens.isMaterial)
-                            ctx.strokeStyle = AppearanceTokens.colors.tertiary.toString()
-                        ctx.lineWidth = 1.8; ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(Math.sin(minute) * radius * 0.70, -Math.cos(minute) * radius * 0.70); ctx.stroke()
-	                        ctx.strokeStyle = AppearanceTokens.content.accent(AppearanceTokens.colors.secondary.toString(), "#ee7659").toString(); ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(Math.sin(second) * radius * 0.76, -Math.cos(second) * radius * 0.76); ctx.stroke()
-	                        ctx.fillStyle = AppearanceTokens.content.accent(AppearanceTokens.colors.primary.toString(), "#ee7659").toString(); ctx.beginPath(); ctx.arc(0, 0, 2.2, 0, Math.PI * 2); ctx.fill()
-                    }
-                    Connections { target: clock; function onDateChanged() { analogClock.requestPaint() } }
-                    // A Canvas reads the scheme only when it paints, so a
-                    // shell-style switch (material -> macos) or a colour-source
-                    // switch has to ask for a repaint explicitly, independently
-                    // of both the date tick and the widget surface switch.
-                    Connections {
-                        target: AppearanceTokens
-                        function onColorRevisionChanged() { analogClock.requestPaint() }
-                        function onIsMaterialChanged() { analogClock.requestPaint() }
-                    }
-	                    Connections {
-	                        target: AppearanceTokens.content
-	                        function onOnBackdropChanged() { analogClock.requestPaint() }
-                    }
+                    date: clock.date
+                    monochrome: AppearanceConfigService.widgetStyle === "glass"
+                    faceColor: AppearanceTokens.content.onBackdrop ? "transparent" : "#fafafa"
+                    rimColor: AppearanceTokens.isMaterial ? "transparent"
+                        : AppearanceTokens.content.ink("#dedede", 0.42)
+                    numeralColor: AppearanceTokens.content.ink("#242126")
+                    markColor: AppearanceTokens.content.ink("#171717")
+                    hourColor: AppearanceTokens.isMaterial ? AppearanceTokens.colors.primary : markColor
+                    minuteColor: AppearanceTokens.isMaterial ? AppearanceTokens.colors.tertiary : markColor
+                    secondColor: AppearanceTokens.content.accent(AppearanceTokens.colors.secondary, "#ee7659")
+                    hubColor: AppearanceTokens.content.accent(AppearanceTokens.colors.primary, "#ee7659")
                 }
 
 	                Rectangle {
                     id: timerButton
+                    objectName: "clock-timer-button"
                     width: 21
                     height: 21
                     radius: width / 2
@@ -842,10 +923,10 @@ PanelWindow {
 
                 Item {
                     id: timerPage
+                    objectName: "desktop-clock-timer-page"
                     width: parent.width
                     height: parent.height
-                    y: root.timerView ? 0 : height
-                    Behavior on y { NumberAnimation { duration: 240; easing.type: Easing.OutCubic } }
+                    y: height * (1 - clockPages.pageProgress)
                     Item {
                         id: timerDial
                         width: Math.min(parent.width - 28, parent.height - 45)
@@ -898,11 +979,18 @@ PanelWindow {
                         y: timerDial.y + timerTimeText.y - height - 2
                         spacing: 5
                         Canvas {
+                            id: timerBell
+                            objectName: "timer-end-bell"
                             width: 14
                             height: 16
+                            readonly property color strokeColor: AppearanceTokens.content.onBackdrop
+                                ? "#ffffff" : "#ffb028"
+                            // The clock bypasses the ancestor saturation layer.
+                            // Invalidate this cached artwork when its ink changes.
+                            onStrokeColorChanged: requestPaint()
                             onPaint: {
                                 const ctx = getContext("2d")
-	                                ctx.reset(); ctx.strokeStyle = AppearanceTokens.content.onBackdrop ? "#ffffff" : "#ffb028"; ctx.lineWidth = 1.3; ctx.lineCap = "round"
+	                                ctx.reset(); ctx.strokeStyle = timerBell.strokeColor.toString(); ctx.lineWidth = 1.3; ctx.lineCap = "round"
                                 ctx.beginPath(); ctx.moveTo(3, 10); ctx.quadraticCurveTo(4, 8.7, 4, 6.4)
                                 ctx.quadraticCurveTo(4, 3.8, 7, 3.8); ctx.quadraticCurveTo(10, 3.8, 10, 6.4)
                                 ctx.quadraticCurveTo(10, 8.7, 11, 10); ctx.lineTo(3, 10); ctx.stroke()
@@ -1242,13 +1330,14 @@ PanelWindow {
                     id: weeklyForecast
                     anchors { left: parent.left; right: parent.right; bottom: parent.bottom; leftMargin: 10; rightMargin: 10; bottomMargin: 8 }
                     height: Math.min(62, parent.height * 0.46)
+                    readonly property int dayCount: card.displayColumns === 1 ? 3 : 7
                     Repeater {
-                        model: WeatherService.forecastDays
+                        model: WeatherService.forecastDays.slice(0, weeklyForecast.dayCount)
                         delegate: Item {
                             required property var modelData
                             required property int index
-                            x: index * weeklyForecast.width / 7
-                            width: weeklyForecast.width / 7
+                            x: index * weeklyForecast.width / weeklyForecast.dayCount
+                            width: weeklyForecast.width / weeklyForecast.dayCount
                             height: weeklyForecast.height
                             Text {
                                 anchors { horizontalCenter: parent.horizontalCenter; top: parent.top }
@@ -1273,7 +1362,13 @@ PanelWindow {
                     Text {
                         anchors.centerIn: parent
                         visible: WeatherService.forecastDays.length === 0
-                        text: WeatherService.loading ? I18n.tr("Loading 7-day forecast…") : I18n.tr("No 7-day forecast")
+                        width: Math.max(0, parent.width - 12)
+                        horizontalAlignment: Text.AlignHCenter
+                        wrapMode: Text.Wrap
+                        maximumLineCount: 3
+                        elide: Text.ElideRight
+                        text: (!WeatherService.coreMode ? WeatherService.sourceMessage : "") || WeatherService.errorMessage
+                            || (WeatherService.loading ? I18n.tr("Loading 7-day forecast…") : I18n.tr("No 7-day forecast"))
 	                        color: AppearanceTokens.content.ink(Qt.rgba(1, 1, 1, 0.65), 0.65)
                         font.pixelSize: 11
                     }
@@ -1283,8 +1378,8 @@ PanelWindow {
                     cursorShape: Qt.PointingHandCursor
                     onClicked: {
                         const locationId = String(WeatherService.location?.id ?? "")
-                        AppActionService.launchById("kos-weather",
-                            locationId ? ["--location", locationId] : [])
+                        IndependentAppWidgetService.open("weather",
+                            locationId ? { location: locationId } : {})
                     }
                 }
             }
@@ -1937,6 +2032,8 @@ PanelWindow {
                 Item {
                     id: musicBody
                     anchors { fill: parent; margins: 16 }
+                    readonly property bool narrow: card.displayColumns === 1
+                    readonly property bool compact: narrow && card.displayRows === 1
                     readonly property real splitGap: 20
                     z: 1
 
@@ -1944,8 +2041,10 @@ PanelWindow {
                         id: musicCoverPane
                         x: 0
                         y: 0
-                        width: (musicBody.width - musicBody.splitGap) * 0.3
-                        height: musicBody.height
+                        width: musicBody.narrow ? musicBody.width
+                            : (musicBody.width - musicBody.splitGap) * 0.3
+                        height: musicBody.narrow ? Math.min(musicBody.width * 0.72,
+                            musicBody.height * 0.4) : musicBody.height
                         Rectangle {
                             id: musicArtwork
                             anchors.centerIn: parent
@@ -1995,10 +2094,10 @@ PanelWindow {
 
                     Item {
                         id: musicDetailsPane
-                        x: musicCoverPane.width + musicBody.splitGap
-                        y: 0
+                        x: musicBody.narrow ? 0 : musicCoverPane.width + musicBody.splitGap
+                        y: musicBody.narrow ? musicCoverPane.height + 8 : 0
                         width: musicBody.width - x
-                        height: musicBody.height
+                        height: musicBody.height - y
                         Text {
                             id: musicTitle
                             anchors { left: parent.left; right: parent.right; verticalCenter: parent.verticalCenter; verticalCenterOffset: -22 }
@@ -2010,6 +2109,7 @@ PanelWindow {
                         }
                         Text {
                             id: musicArtist
+                            visible: !musicBody.compact
                             anchors { left: parent.left; right: parent.right; top: musicTitle.bottom; topMargin: 3 }
                             text: musicContent.player?.trackArtist || ""
                             elide: Text.ElideRight
@@ -2021,7 +2121,7 @@ PanelWindow {
                             id: musicLyric
                             anchors { left: parent.left; right: parent.right; top: musicArtist.bottom; topMargin: 5 }
                             text: DockMprisService.loading ? DockMprisService.playbackStatus : DockMprisService.currentLyric
-                            visible: text.length > 0
+                            visible: !musicBody.compact && text.length > 0
                             elide: Text.ElideRight
                             horizontalAlignment: Text.AlignHCenter
                             color: AppearanceTokens.content.ink(Qt.rgba(1, 1, 1, 0.86), 0.86)
@@ -2036,7 +2136,7 @@ PanelWindow {
                                 topMargin: musicLyric.visible ? 7 : 12
                             }
                             height: 5
-                            visible: musicContent.safeLength > 0
+                            visible: !musicBody.compact && musicContent.safeLength > 0
                             WavyProgress {
                                 anchors.fill: parent
                                 anchors.topMargin: -3
@@ -2090,7 +2190,7 @@ PanelWindow {
                                 bottomMargin: 2
                             }
                             height: 36
-                            spacing: 10
+                            spacing: musicBody.narrow ? 4 : 10
                             Repeater {
                                 // Keep delegates alive when play/pause changes.
                                 model: 4
@@ -2186,8 +2286,8 @@ PanelWindow {
                     Item {
                         id: todoContent
                         anchors.fill: parent
-                        readonly property string widgetSize:
-                            DeskCenterConfigService.sizeFor("todo")
+                        readonly property string widgetSize: card.displayRows > 1 ? "large"
+                            : card.displayColumns > 1 ? "medium" : "small"
                         readonly property int itemLimit: widgetSize === "large" ? 6
                             : widgetSize === "medium" ? 3 : 0
                         readonly property var tasks:
@@ -2200,8 +2300,7 @@ PanelWindow {
                         MouseArea {
                             anchors.fill: parent
                             cursorShape: Qt.PointingHandCursor
-                            onClicked: AppActionService.launchById(
-                                "kos-todo", ["--view", "today"])
+                            onClicked: IndependentAppWidgetService.open("calendar", { view: "today" })
                         }
 
                         // A parent Item's `clip` is rectangular, not rounded.
@@ -2297,25 +2396,27 @@ PanelWindow {
                                     MouseArea {
                                         anchors.fill: parent
                                         cursorShape: Qt.PointingHandCursor
-                                        onClicked: AppActionService.launchById("kos-todo", [
-                                            "--item", String(PimWidgetService.value(parent.modelData,
+                                        onClicked: IndependentAppWidgetService.open("calendar", {
+                                            view: "reminders", item: String(PimWidgetService.value(parent.modelData,
                                                 "id", PimWidgetService.value(parent.modelData, "seriesId", "")))
-                                        ])
+                                        })
                                     }
                                 }
                             }
                             Text {
                                 visible: todoContent.tasks.length === 0
+                                    && PimWidgetService.state !== "not-installed"
                                 anchors.horizontalCenter: parent.horizontalCenter
-                                // Distinguish a starting service from one
-                                // that never produced data (uninstalled or
-                                // not yet activated); tapping the card
-                                // launches the app, whose PIM client
-                                // activates the service on demand.
+                                // Only a ready snapshot can mean all tasks are done.
+                                // App installation is handled when the card is opened.
                                 text: PimWidgetService.ready
                                     ? I18n.tr("All done for today")
-                                    : (PimWidgetService.state === PimWidgetService.stateLoading
-                                       ? I18n.tr("Loading todos…") : I18n.tr("Todo service not connected"))
+                                    : (PimWidgetService.errorMessage || I18n.tr("Todo service not connected"))
+                                width: Math.max(0, parent.width - 16)
+                                horizontalAlignment: Text.AlignHCenter
+                                wrapMode: Text.Wrap
+                                maximumLineCount: 3
+                                elide: Text.ElideRight
                                 color: AppearanceTokens.content.ink("#6c6c75", 0.6)
                                 font.pixelSize: 11
                             }
@@ -2341,17 +2442,18 @@ PanelWindow {
                 // the whole panel height instead of ending with a blank band.
                 readonly property int weekCount: Math.ceil((firstWeekday + daysInMonth) / 7)
                 readonly property int headerHeight: 38
-                readonly property string widgetSize:
-                    DeskCenterConfigService.sizeFor("calendar")
+                readonly property bool narrow: card.displayColumns === 1
+                readonly property string widgetSize: card.displayRows > 1 ? "large"
+                    : card.displayColumns > 1 ? "medium" : "small"
                 readonly property var todayEvents: PimWidgetService.eventsForToday(
                     widgetSize === "large" ? 3 : 1)
 
                 MouseArea {
                     anchors.fill: parent
                     cursorShape: Qt.PointingHandCursor
-                    onClicked: AppActionService.launchById("kos-calendar", [
-                        "--date", Qt.formatDate(clock.date, "yyyy-MM-dd")
-                    ])
+                    onClicked: IndependentAppWidgetService.open("calendar", {
+                        date: Qt.formatDate(clock.date, "yyyy-MM-dd")
+                    })
                 }
 
                 Rectangle {
@@ -2391,6 +2493,7 @@ PanelWindow {
                 }
                 Rectangle {
                     anchors { left: parent.left; top: parent.top; bottom: parent.bottom; leftMargin: parent.width * 0.42; topMargin: calendarContent.headerHeight; bottomMargin: 8 }
+                    visible: !calendarContent.narrow
                     width: 1
 	                    color: AppearanceTokens.content.accent(AppearanceTokens.colors.outlineVariant, Qt.rgba(0, 0, 0, 0.10), 0.28)
                 }
@@ -2416,7 +2519,7 @@ PanelWindow {
                 }
                 Column {
                     visible: calendarContent.widgetSize !== "small"
-                        && calendarContent.todayEvents.length > 0
+                        && !calendarContent.narrow
                     anchors { left: parent.left; right: monthGrid.left; bottom: parent.bottom; leftMargin: 16; rightMargin: 8; bottomMargin: 10 }
                     spacing: 3
                     Repeater {
@@ -2432,9 +2535,12 @@ PanelWindow {
                         }
                     }
                     Text {
-                        visible: calendarContent.todayEvents.length === 0
-                            && PimWidgetService.state === PimWidgetService.stateUnavailable
-                        text: I18n.tr("Calendar service not connected")
+                        visible: PimWidgetService.state !== "not-installed"
+                            && (!PimWidgetService.ready || !!IndependentAppWidgetService.launchErrors.calendar)
+                        width: parent.width
+                        text: PimWidgetService.errorMessage
+                        maximumLineCount: 2
+                        wrapMode: Text.Wrap
                         color: AppearanceTokens.content.ink("#9a9aa2", 0.55)
                         elide: Text.ElideRight
                         font.pixelSize: 9
@@ -2442,7 +2548,8 @@ PanelWindow {
                 }
                 Item {
                     id: monthGrid
-                    anchors { left: parent.left; right: parent.right; top: parent.top; bottom: parent.bottom; leftMargin: parent.width * 0.42 + 10; rightMargin: 10; topMargin: calendarContent.headerHeight + 6; bottomMargin: 7 }
+                    visible: !calendarContent.narrow || card.displayRows > 1
+                    anchors { left: parent.left; right: parent.right; top: parent.top; bottom: parent.bottom; leftMargin: calendarContent.narrow ? 10 : parent.width * 0.42 + 10; rightMargin: 10; topMargin: calendarContent.narrow ? 130 : calendarContent.headerHeight + 6; bottomMargin: 7 }
                     Row {
                         width: parent.width
                         height: 15
@@ -2515,9 +2622,9 @@ PanelWindow {
         // Files and their labels always stay above wallpaper subjects, even
         // while a widget or file is being rearranged near the shared boundary.
         z: 3
-        x: root.leftInset + (root.screen?.name === ScreenLifecycle.activeScreen?.name && root.placements.length > 0 ? 4 * (root.cellSize + root.gap) : 0)
+        x: root.leftInset + (root.screen?.name === ScreenLifecycle.activeScreen?.name && root.placements.length > 0 ? root.widgetColumns * (root.cellSize + root.gap) : 0)
         y: root.topInset
-        width: root.width - x - root.rightInset
+        width: Math.max(0, root.width - x - root.rightInset)
         height: root.height - y - root.bottomInset
         clip: false
         readonly property int iconSize: desktopLayout.iconSize
@@ -3746,6 +3853,12 @@ PanelWindow {
                         anchors.fill: parent
                         source: modelData.kind === "launcher"
                             ? AppPresentationService.iconSource(modelData.icon) : ""
+                        // Provider icons already scale with the display; raw
+                        // bundled artwork must request physical pixel sizes.
+                        readonly property int rasterSize: Math.max(1, Math.ceil(
+                            actualSize * (String(source).startsWith("image://")
+                                ? 1 : Math.max(1, Screen.devicePixelRatio))))
+                        backer.sourceSize: Qt.size(rasterSize, rasterSize)
                         // Theme icon: synchronous, see AppIcon.qml.
                         asynchronous: false
                         visible: source !== "" && status === Image.Ready
@@ -4096,7 +4209,7 @@ PanelWindow {
             validY: desktopFileGrid.y
             validWidth: desktopFileGrid.width
             validHeight: desktopFileGrid.height
-            baseCellWidth: desktopFileGrid.itemWidth
+            baseCellWidth: desktopFileGrid.preferredItemWidth
             baseCellHeight: desktopFileGrid.itemHeight
             density: desktopFileGrid.desktopLayout.iconSpacing
             iconVisualSize: desktopFileGrid.iconSize + 12

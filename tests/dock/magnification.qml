@@ -139,37 +139,39 @@ Item {
     function checkBottomGeometry() {
         const item = rep.itemAt(1)
         const oldScale = ConfigService.hoverScale
-        const oldLift = ConfigService.hoverLift
         for (const s of [1, 1.2, 2]) {
-            for (const lift of [0, 0.08, 0.3]) {
-                ConfigService.hoverScale = s
-                ConfigService.hoverLift = lift
-                for (const progress of [0, 0.25, 1]) {
-                    item._magnificationProgress = progress
-                    const outerY = edge === "right" ? 0 : item.height
-                    const bottom = item.mapToItem(item.parent, item.width / 2, outerY)
-                    const expected = item.y + outerY
-                        - item._hoverDirection * item.iconSize * lift * progress
-                    check(Math.abs(bottom.y - expected) < 0.001,
-                        "bottom edge must follow lift alone at scale=" + s + " lift=" + lift)
-                    const hoverScale = item._magnificationScale
-                    for (const plate of [childNamed(item, "dock-selection-highlight"),
-                            childNamed(item, "dock-legacy-active-background")]) {
-                        const gap = (plate.width - item.iconSize) * hoverScale / 2
-                        const radius = (plate.cornerRadius ?? plate.radius) * hoverScale
-                        check(Math.abs(gap - item.activeBackgroundGap) < 0.001,
-                            "hover must not magnify the active plate padding")
-                        // Check the worst-case square artwork corner against
-                        // the rounded arc, including the original clearance.
-                        const arcDistance = Math.SQRT2 * Math.max(0, radius - gap)
-                        check(arcDistance <= radius - item.iconSize * 0.1 + 0.001,
-                            "hover plate must retain clearance at artwork corners")
-                    }
+            ConfigService.hoverScale = s
+            const lift = ConfigService.effectiveHoverLift
+            check(Math.abs(lift - 0.2 * (ConfigService.effectiveHoverScale - 1)) < 1e-9,
+                "lift follows the configured magnification scale")
+            for (const progress of [0, 0.25, 1]) {
+                item._magnificationProgress = progress
+                const outerY = edge === "right" ? 0 : item.height
+                const bottom = item.mapToItem(item.parent, item.width / 2, outerY)
+                const expected = item.y + outerY
+                    - item._hoverDirection * item.iconSize * lift * progress
+                check(Math.abs(bottom.y - expected) < 0.001,
+                    "bottom edge must follow lift alone at scale=" + s + " lift=" + lift)
+                const hoverScale = item._plateHoverScale
+                for (const plate of [childNamed(item, "dock-selection-highlight"),
+                        childNamed(item, "dock-legacy-active-background")]) {
+                    const gap = (plate.width - item.iconSize) * hoverScale / 2
+                    const radius = (plate.cornerRadius ?? plate.radius) * hoverScale
+                    const expectedGap = item.activeBackgroundGap
+                        - item.hoverGapReduction * item.magnificationProgress
+                    check(Math.abs(gap - expectedGap) < 0.001,
+                        "hover tightens breathing room without magnifying plate padding")
+                    // Check the worst-case square artwork corner against
+                    // the rounded arc, including the original clearance.
+                    const arcDistance = Math.SQRT2 * Math.max(0, radius - gap)
+                    const minimumClearance = item.iconSize * 0.035
+                        * (1 - 0.25 * item.magnificationProgress)
+                    check(arcDistance <= radius - minimumClearance + 0.001,
+                        "hover plate must retain clearance at artwork corners")
                 }
             }
         }
         ConfigService.hoverScale = oldScale
-        ConfigService.hoverLift = oldLift
         item._magnificationProgress = 0
         console.log("REPORT " + edge + " bottom-edge geometry passed at scales 1/1.2/2")
     }
@@ -180,10 +182,10 @@ Item {
     }
     function samplePhase() {
         const scaleProgress = (target.scale - 1)
-            / (AppearanceTokens.dock.magnificationMaxScale - 1)
+            / (ConfigService.effectiveHoverScale - 1)
         const liftProgress = -(target.transform[0].y * target._hoverDirection
             + target.height / 2 * (target.scale - 1))
-            / (target.iconSize * AppearanceTokens.dock.magnificationLiftRatio)
+            / (target.iconSize * ConfigService.effectiveHoverLift)
         const outerY = edge === "right" ? 0 : target.height
         const bottom = target.mapToItem(target.parent, target.width / 2, outerY)
         check((bottom.y - target.y - outerY) * target._hoverDirection <= 0.001,

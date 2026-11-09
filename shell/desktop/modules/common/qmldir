@@ -4,6 +4,7 @@ PageMotion 1.0 PageMotion.qml
 SceneBounds 1.0 SceneBounds.qml
 DateProjection 1.0 DateProjection.qml
 GlassText 1.0 GlassText.qml
+ShellText 1.0 ShellText.qml
 MaterialFlower 1.0 MaterialFlower.qml
 WavyProgress 1.0 WavyProgress.qml
 MaterialCardSurface 1.0 MaterialCardSurface.qml
@@ -23,6 +24,7 @@ BundledIcon 1.0 BundledIcon.qml
 singleton ContextMenuCoordinator 1.0 ContextMenuCoordinator.qml
 singleton AppPresentationService 1.0 AppPresentationService.qml
 singleton AppActionService 1.0 AppActionService.qml
+singleton IndependentAppWidgetService 1.0 IndependentAppWidgetService.qml
 singleton MetricsService 1.0 MetricsService.qml
 singleton IconThemeReloadService 1.0 IconThemeReloadService.qml
 singleton SystemFontService 1.0 SystemFontService.qml
@@ -33,6 +35,7 @@ singleton AppNotificationService 1.0 AppNotificationService.qml
 singleton AppearanceConfigService 1.0 AppearanceConfigService.qml
 singleton IconAppearanceService 1.0 IconAppearanceService.qml
 singleton AppearanceTokens 1.0 AppearanceTokens.qml
+singleton GlassBackdrop 1.0 GlassBackdrop.qml
 singleton ScreenLifecycle 1.0 ScreenLifecycle.qml
 
 MediaControlButton 1.0 MediaControlButton.qml

@@ -423,12 +423,10 @@ Item {
     onDockWidthChanged: ctl._scheduleEvaluate()
     onDockHeightChanged: ctl._scheduleEvaluate()
     onEdgeMarginChanged: ctl._scheduleEvaluate()
-    onPointerInsideDockChanged: ctl._evaluateInteraction()
-    on_HandleHoveredChanged: ctl._evaluateInteraction()
-    onEditingChanged: ctl._evaluateInteraction()
-    onDraggingChanged: ctl._evaluateInteraction()
-    onPopupOpenChanged: ctl._evaluateInteraction()
-    onLauncherOpenChanged: ctl._evaluateInteraction()
+    // Evaluate after the aggregate binding changes. Individual input signals
+    // can fire before hasInhibitor updates, leaving a Held dock stuck after
+    // both the handle and the dock have lost hover.
+    onHasInhibitorChanged: ctl._evaluateInteraction()
     onConfigReadyChanged: ctl._tryResolveBoot(false)
     onWindowDataReadyChanged: { ctl._recomputeConflict(); ctl._scheduleEvaluate() }
 

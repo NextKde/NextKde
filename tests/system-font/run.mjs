@@ -47,7 +47,8 @@ try {
             XDG_CONFIG_HOME: join(directory, "config"),
             XDG_STATE_HOME: join(directory, "state"),
             XDG_RUNTIME_DIR: join(directory, "runtime"),
-            QML2_IMPORT_PATH: directory,
+            QML_IMPORT_PATH: [directory, process.env.QML_IMPORT_PATH].filter(Boolean).join(":"),
+            QML2_IMPORT_PATH: [directory, process.env.QML2_IMPORT_PATH].filter(Boolean).join(":"),
         },
     });
 

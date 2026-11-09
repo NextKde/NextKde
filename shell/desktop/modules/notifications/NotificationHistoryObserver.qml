@@ -9,13 +9,17 @@ QtObject {
     property bool ready: true
     onReadyChanged: if (ready) schedule()
     required property var record
+    property bool recorded: false
     property Timer updateTimer: Timer {
         interval: 0
         onTriggered: observer.snapshot()
     }
     function snapshot() {
-        if (notification && ready)
-            record(notification)
+        if (notification && ready) {
+            const firstArrival = !recorded
+            recorded = true
+            record(notification, firstArrival)
+        }
     }
     function schedule() { updateTimer.restart() }
     property Connections updates: Connections {

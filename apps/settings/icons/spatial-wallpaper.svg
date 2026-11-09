@@ -1,0 +1,35 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 64 64" fill="none">
+  <defs>
+    <linearGradient id="sky" x1="12" y1="0" x2="48" y2="64" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#8EACDA"/>
+      <stop offset=".52" stop-color="#526DAA"/>
+      <stop offset="1" stop-color="#243B70"/>
+    </linearGradient>
+    <radialGradient id="light" cx="0" cy="0" r="1" gradientTransform="translate(43 18) rotate(90) scale(28)" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#FFE6BD" stop-opacity=".36"/>
+      <stop offset="1" stop-color="#FFE6BD" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="far" x1="17" y1="24" x2="40" y2="53" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#CCD7ED"/>
+      <stop offset="1" stop-color="#809CCB"/>
+    </linearGradient>
+    <linearGradient id="near" x1="50" y1="34" x2="24" y2="67" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#7FD1D0"/>
+      <stop offset="1" stop-color="#276E93"/>
+    </linearGradient>
+    <linearGradient id="edge" x1="14" y1="0" x2="50" y2="64" gradientUnits="userSpaceOnUse">
+      <stop stop-color="white" stop-opacity=".45"/>
+      <stop offset="1" stop-color="white" stop-opacity=".06"/>
+    </linearGradient>
+  </defs>
+  <!-- All contours stay within the rounded silhouette. Qt SVG renderers that
+       omit clipPath still render transparent corners correctly. -->
+  <rect width="64" height="64" rx="15" fill="url(#sky)"/>
+  <rect width="64" height="64" rx="15" fill="url(#light)"/>
+  <circle cx="44" cy="18" r="6" fill="#FFF0D5"/>
+  <path d="M0 46 19 25a4 4 0 0 1 6 0l31 37.3A15 15 0 0 1 49 64H15A15 15 0 0 1 0 49Z" fill="url(#far)"/>
+  <path d="m.6 45.5 18.4-20.5a4 4 0 0 1 6 0l15 18" stroke="white" stroke-opacity=".36" stroke-width="1.2"/>
+  <path d="M2 56.5 38 39a6 6 0 0 1 7 0l17.5 16.5C60 60.7 55 64 49 64H15C9 64 4.5 61 2 56.5Z" fill="url(#near)"/>
+  <path d="m2.5 56.3 35.5-17.3a6 6 0 0 1 7 0l16.8 15.8" stroke="#CAEFEB" stroke-opacity=".5" stroke-width="1.2"/>
+  <rect x=".5" y=".5" width="63" height="63" rx="14.5" stroke="url(#edge)"/>
+</svg>

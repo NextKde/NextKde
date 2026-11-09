@@ -5,16 +5,16 @@ import Quickshell.Services.SystemTray
 import "../../../shared/qml/i18n"
 import qs.desktop.modules.platform
 
-// Bridges system tray item attention signals into desktop notifications.
-// When a tray icon starts flashing (status becomes NeedsAttention) or its
-// tooltip/icon changes, we emit a freedesktop notification so the user sees
-// it in the Quickshell notification center.
+// Only an explicit NeedsAttention transition is a notification request.
+// Icon badges and tooltips are ordinary state updates; converting them into
+// banners duplicates native app notifications and bypasses app-level opt-outs.
 QtObject {
     id: root
 
     // How long to suppress repeated notifications with identical content
     // from the same tray item.
     property int dedupeIntervalMs: 5000
+    property var trayModel: SystemTray.items
 
     // last notification key -> timestamp
     property var _lastSent: ({})
@@ -83,15 +83,13 @@ QtObject {
     // parent and Qt emits stackBefore/stackAfter warnings. Instantiator owns
     // the same delegate lifecycle without attempting visual stacking.
     property Instantiator _trayRepeater: Instantiator {
-        model: SystemTray.items
+        model: root.trayModel
         delegate: Item {
             id: trayItemDelegate
             required property var modelData
 
-            property int _lastStatus: modelData.status
-            property string _lastIcon: modelData.icon
-            property string _lastTooltipTitle: modelData.tooltipTitle
-            property string _lastTooltipDescription: modelData.tooltipDescription
+            property int _lastStatus: -1
+            Component.onCompleted: _lastStatus = modelData.status
 
             Connections {
                 target: modelData
@@ -106,28 +104,6 @@ QtObject {
                     }
                 }
 
-                function onIconChanged() {
-                    if (modelData.icon !== trayItemDelegate._lastIcon) {
-                        trayItemDelegate._lastIcon = modelData.icon
-                        // Some apps flash by toggling the icon without changing status.
-                        if (modelData.status !== SystemTrayItem.NeedsAttention)
-                            root._notify(modelData)
-                    }
-                }
-
-                function onTooltipTitleChanged() {
-                    if (modelData.tooltipTitle !== trayItemDelegate._lastTooltipTitle) {
-                        trayItemDelegate._lastTooltipTitle = modelData.tooltipTitle
-                        root._notify(modelData)
-                    }
-                }
-
-                function onTooltipDescriptionChanged() {
-                    if (modelData.tooltipDescription !== trayItemDelegate._lastTooltipDescription) {
-                        trayItemDelegate._lastTooltipDescription = modelData.tooltipDescription
-                        root._notify(modelData)
-                    }
-                }
             }
         }
     }
