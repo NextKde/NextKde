@@ -15,6 +15,11 @@ window close/move shortcuts and Show Desktop hiding without making its transpare
 surface a wallpaper candidate. Native Overview captures a single Desktop window;
 only wallpaper surfaces use `desktop`. Glass composes wallpaper, widgets and Dock
 into native Overview's desktop backgrounds, so all scale with the desktop preview.
+During native Slide desktop switching, Bridge cancels effect elevation only for
+Below-layer Quickshell Dock surfaces. Their desktop content stays behind apps;
+Top/Overlay panels retain native elevation. This does not change Overview typing
+or virtual-desktop membership. `tests/desktop-slide/run-vm.py` checks repeated
+switches with real DeskCenter content, a covering application and a normal panel.
 Redundant native panel thumbnails are suppressed only while this composed preview
 is available. Keep its Bottom layer: moving it to Background can
 put it behind Plasma. `installDesktopStack()` in the platform-owned
