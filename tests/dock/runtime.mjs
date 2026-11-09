@@ -779,6 +779,7 @@ QtObject { readonly property real effectiveHoverScale: 1.1 }
             writeFileSync(join(dir,'MprisPlayer.qml'),`import QtQuick
         QtObject {
             property string dbusName: ""
+            property bool canControl: true
             property var metadata: ({})
             property bool isPlaying: false
             property bool positionSupported: true

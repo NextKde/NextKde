@@ -5,6 +5,44 @@ TestCase {
     name: "DesktopLyrics"
     MprisPlayer { id: player }
     MprisPlayer { id: otherPlayer; dbusName: "org.mpris.MediaPlayer2.z" }
+    function init() {
+        player.canControl = true
+        otherPlayer.canControl = true
+    }
+    function cleanup() {
+        DockMprisService._playerRefs = []
+        DockMprisService._updateActivePlayer()
+    }
+    function test_controllability_data() {
+        return [
+            { tag: "playing-controllable", a: 1, b: 1, ca: false, cb: true, expected: 1 },
+            { tag: "paused-controllable", a: 2, b: 2, ca: false, cb: true, expected: 1 },
+            { tag: "stopped-controllable", a: 0, b: 0, ca: false, cb: true, expected: 1 },
+            { tag: "playing-before-controllable-paused", a: 1, b: 2, ca: false, cb: true, expected: 0 },
+            { tag: "paused-before-controllable-stopped", a: 2, b: 0, ca: false, cb: true, expected: 0 },
+            { tag: "both-controllable-stable-name", a: 1, b: 1, ca: true, cb: true, expected: 0 },
+            { tag: "both-readonly-stable-name", a: 1, b: 1, ca: false, cb: false, expected: 0 },
+            { tag: "controllable-name-first", a: 1, b: 1, ca: true, cb: false, expected: 0 }
+        ]
+    }
+    function test_controllability(data) {
+        player.dbusName = "org.mpris.MediaPlayer2.a"
+        player.playbackState = data.a
+        otherPlayer.playbackState = data.b
+        player.isPlaying = data.a === 1
+        otherPlayer.isPlaying = data.b === 1
+        player.canControl = data.ca
+        otherPlayer.canControl = data.cb
+        for (const refs of [[otherPlayer, player], [player, otherPlayer]]) {
+            DockMprisService._playerRefs = refs
+            DockMprisService._updateActivePlayer()
+            compare(DockMprisService.activePlayer, data.expected === 0 ? player : otherPlayer)
+            compare(DockMprisService.hasPlayingPlayer, data.a === 1 || data.b === 1)
+        }
+        DockMprisService._playerRefs = [player]
+        DockMprisService._updateActivePlayer()
+        compare(DockMprisService.activePlayer, player)
+    }
     function test_selectionOrder() {
         player.dbusName = "org.mpris.MediaPlayer2.a"
         player.isPlaying = false
