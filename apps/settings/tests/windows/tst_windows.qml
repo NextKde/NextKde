@@ -25,6 +25,7 @@ Item {
             state = Object.assign({}, state, {[key]:value})
         }
         function setRadius(value) { change("radius", value); return true }
+        function setSquareMaximized(value) { change("squareMaximized", value); return true }
         function setShadow(value) { change("shadow", value); return true }
         function setTakeover(value) { change("enabled", value); return true }
         function requestAnimation(kind, value) { change(kind + "Animation", value); return true }
@@ -85,6 +86,22 @@ Item {
             compare(backend.calls.length, count, "preview does not save")
             slider.canceled()
             compare(backend.state.radius, 36, "cancel preserves saved radius")
+        }
+        function test_square_maximized() {
+            const toggle = control("windowSquareMaximizedSwitch")
+            compare(toggle.checked, false, "older snapshots keep the existing rounded behavior")
+            mouseClick(toggle, toggle.width/2, toggle.height/2)
+            compare(backend.state.squareMaximized, true)
+            compare(backend.state.radius, 20, "normal-window radius is preserved")
+            mouseClick(toggle, toggle.width/2, toggle.height/2)
+            compare(backend.state.squareMaximized, false)
+            backend.state = Object.assign({}, backend.state, {squareMaximized:true})
+            tryCompare(toggle, "checked", true, 1000, "show the confirmed backend preference")
+            backend.state = Object.assign({}, backend.state, {enabled:false})
+            tryCompare(toggle, "enabled", false)
+            const count = backend.calls.length
+            mouseClick(toggle, toggle.width/2, toggle.height/2)
+            compare(backend.calls.length, count, "disabled appearance cannot save")
         }
         function test_animation_choices() {
             for (const kind of ["hide", "close"]) {

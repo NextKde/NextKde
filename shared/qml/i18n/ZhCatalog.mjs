@@ -1385,6 +1385,8 @@ export const catalog = {
     "Window appearance": "窗口外观",
     "KOS window appearance": "KOS 窗口外观",
     "Corner radius": "圆角幅度",
+    "Square corners when maximized": "最大化时取消圆角",
+    "Fullscreen windows always use square corners. Restoring a window brings back its configured radius.": "全屏窗口始终使用直角；窗口还原后恢复设定的圆角幅度。",
     "Window shadow": "窗口阴影",
     "Independent button cover": "独立调整按钮覆盖背景",
     "Buttons use the standard KOS size (14 px). Right-click the cover and drag its edges to resize only the background. Button size and spacing adjustments are disabled.": "按钮统一使用 KOS 标准大小（14 像素）。右键背景后拖动边缘，仅调整背景覆盖范围；按钮大小和间距调整已禁用。",

@@ -62,7 +62,7 @@ PopupWindow {
     property real volumePreview: ControlCenterService.volumePercent
     property bool draggingVolume: false
     property real brightnessPreview: ControlCenterService.brightnessPercent
-    readonly property var player: DockMprisService.activePlayer
+    readonly property var player: MediaService.activePlayer
     property bool draggingBrightness: false
     property bool sessionModalVisible: false
     // Reveal progress of the auto-hiding Bar this panel hangs off (1 when the
@@ -735,7 +735,7 @@ PopupWindow {
         cardHeight: 127
         blurStrength: panel.effectiveBlur
         liquidStrength: panel.effectiveLiquid
-        media: DockMprisService
+        media: MediaService
         player: panel.player
     }
 

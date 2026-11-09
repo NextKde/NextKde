@@ -5,7 +5,8 @@ import "TimedLyrics.mjs" as TimedLyrics
 import Quickshell.Services.Mpris
 
 // ────────────────────────────────────────────────────────────────
-// DockMprisService — Wraps MPRIS2 players.
+// MediaService — Shared MPRIS player selection, metadata and controls.
+// Used by the Dock, control center, desktop music widget and desktop lyrics.
 //
 // Uses a hidden Repeater to capture MprisPlayer references since
 // Quickshell's UntypedObjectModel doesn't support .get(index).

@@ -106,6 +106,23 @@ ColumnLayout {
 
         Demo.SettingsItem {
             enabled: windowPage.backend !== null && windowPage.snapshot.enabled !== false
+            title: I18n.tr("Square corners when maximized")
+            description: I18n.tr("Fullscreen windows always use square corners. Restoring a window brings back its configured radius.")
+
+            Controls.SettingsSwitch {
+                objectName: "windowSquareMaximizedSwitch"
+                enabled: windowPage.backend !== null && windowPage.snapshot.enabled !== false
+                checked: windowPage.snapshot.squareMaximized === true
+                accentColor: colors.accent
+                trackColor: colors.divider
+                onToggled: function (checked) {
+                    windowPage.backend.setSquareMaximized(checked);
+                }
+            }
+        }
+
+        Demo.SettingsItem {
+            enabled: windowPage.backend !== null && windowPage.snapshot.enabled !== false
             title: I18n.tr("Window shadow")
 
             Controls.SettingsSwitch {
