@@ -138,7 +138,8 @@ def main():
             XDG_CONFIG_HOME=str(root / "config"), XDG_STATE_HOME=str(root / "state"),
             XDG_CACHE_HOME=str(root / "cache"), XDG_DATA_HOME=str(root / "data"),
             WAYLAND_DISPLAY="widget-experience-test", DISPLAY="",
-            QSG_RHI_BACKEND="opengl", LIBGL_ALWAYS_SOFTWARE="1")
+            QSG_RHI_BACKEND="opengl", LIBGL_ALWAYS_SOFTWARE="1",
+            KOS_TEST_KWIN_LOG=str(root / "kwin.log"))
         env.pop("QT_QUICK_BACKEND", None)
         with (root / "kwin.log").open("w+") as log:
             compositor = subprocess.Popen(["kwin_wayland", "--virtual", "--width", "1920",

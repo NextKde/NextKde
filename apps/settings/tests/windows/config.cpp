@@ -52,6 +52,25 @@ int main(int argc, char **argv) {
     CHECK(settings.state()["decoration"]=="kos_decoration");
     CHECK(gtkStyle().contains("kos_native_controls"));
     CHECK(gtkStyle().contains("personal GTK style"));
+    // Exercise the embedded installer, not a source-only mock. It must not
+    // send Chromium/GTK originals to the opposite side of KOS overlays.
+    for (const auto &version : {"3.0", "4.0"}) {
+        QFile ini(temporary.path() + "/gtk-" + QString::fromLatin1(version) + "/settings.ini");
+        CHECK(ini.open(QIODevice::ReadOnly));
+        const auto lines = QString::fromUtf8(ini.readAll()).split('\n');
+        bool found = false;
+        for (const auto &line : lines) if (line.startsWith("gtk-decoration-layout=")) {
+            found = true;
+            const auto parts = line.section('=', 1).split(':');
+            CHECK(parts.size() == 2);
+            for (const auto &action : {"close", "minimize", "maximize"}) {
+                CHECK(!parts[0].split(',').contains(QString::fromLatin1(action)));
+                CHECK(parts[1].split(',').contains(QString::fromLatin1(action)));
+            }
+        }
+        CHECK(found);
+    }
+
     CHECK(settings.setButtonGlyphMode("hover"));
     CHECK(gtkStyle().contains("opacity: 0"));
     CHECK(settings.setButtonGlyphMode("always"));
@@ -142,5 +161,27 @@ int main(int argc, char **argv) {
     CHECK(!settings.setTakeover(true));
     CHECK(get()==beforeGtkFailure);
     CHECK(gtkStyle()=="managed externally");
+    const QString buttonsPath = temporary.path() + "/kos/window-buttons.json";
+    auto putButtons = [&](const QByteArray &data) { QFile file(buttonsPath); CHECK(file.open(QIODevice::WriteOnly)); CHECK(file.write(data) == data.size()); };
+    auto getButtons = [&]() { QFile file(buttonsPath); CHECK(file.open(QIODevice::ReadOnly)); return file.readAll(); };
+    putButtons(R"({"extra":42,"default":{"buttonSize":30},"apps":{"demo":{"buttonSize":24}},"rules":[{"match":{"class":"demo"},"buttonSize":26}]})");
+    CHECK(!settings.state()["independentButtonBackground"].toBool());
+    CHECK(settings.setIndependentButtonBackground(true));
+    CHECK(settings.state()["independentButtonBackground"].toBool());
+    const auto coverDoc = QJsonDocument::fromJson(getButtons()).object();
+    CHECK(coverDoc["extra"].toInt() == 42);
+    CHECK(coverDoc["default"].toObject()["buttonSize"].toInt() == 30);
+    CHECK(coverDoc["apps"].toObject()["demo"].toObject()["buttonSize"].toInt() == 24);
+    CHECK(coverDoc["rules"].isArray());
+    WindowSettings reread;
+    CHECK(reread.state()["independentButtonBackground"].toBool());
+    CHECK(settings.setIndependentButtonBackground(false));
+    CHECK(!settings.state()["independentButtonBackground"].toBool());
+    const auto beforeCoverFailure = getButtons();
+    { QLockFile lock(buttonsPath + ".lock"); CHECK(lock.tryLock(0)); CHECK(!settings.setIndependentButtonBackground(true)); }
+    CHECK(getButtons() == beforeCoverFailure);
+    putButtons("malformed");
+    CHECK(!settings.setIndependentButtonBackground(true));
+    CHECK(getButtons() == "malformed");
     qInfo("Window settings configuration checks passed");
 }

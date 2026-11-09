@@ -10,17 +10,31 @@ using actual font height. The preference is `DesktopFiles/iconSpacing` in
 ## Desktop surface ownership
 
 `DeskCenterWindow.qml` hosts widgets, icons and their context menu on each output.
-Its layer-shell namespace is `desktop`, which makes KWin exclude it from ordinary
-window close/move shortcuts. Keep its Bottom layer: moving it to Background can
+Its layer-shell namespace is `dock`, which makes KWin exclude it from ordinary
+window close/move shortcuts and Show Desktop hiding without making its transparent
+surface a wallpaper candidate. Native Overview captures a single Desktop window;
+only wallpaper surfaces use `desktop`. Glass composes wallpaper, widgets and Dock
+into native Overview's desktop backgrounds, so all scale with the desktop preview.
+Redundant native panel thumbnails are suppressed only while this composed preview
+is available. Keep its Bottom layer: moving it to Background can
 put it behind Plasma. `installDesktopStack()` in the platform-owned
 `kwin/window-bridge.js` orders existing Below-layer surfaces as wallpaper < widgets
 < Stage strip, independently of Stage mode and mapping order. It never changes
 visibility or virtual-desktop membership and never recreates a surface.
 
-Glass accepts Desktop-typed Quickshell surfaces only when they explicitly declare
+Glass accepts Desktop-typed Quickshell surfaces and Below-layer Quickshell Docks only when they explicitly declare
 a nonempty content region. Wallpapers and legacy empty-region whole-window blur
-remain excluded. `kos-deskcenter.desktop-stack` covers mapping permutations and
-reentrant stacking signals; `kos-glass.desktop-blur` covers this opt-in boundary.
+remain excluded. DeskCenter keeps the desktop content material; Top/Overlay panels
+keep the Dock material. `kos-deskcenter.desktop-stack` covers mapping permutations,
+reentrant stacking signals, first-buffer readiness and Overview wallpaper candidates;
+`kos-glass.desktop-blur` covers the surface classification and opt-in boundary.
+`kos-ui.desktop-overview` loads both real Shell surfaces in a private KWin, checks
+the actual `DesktopBackground` choice in both mapping orders, and exercises desktop
+close/move and Show Desktop. It does not replace visual Overview acceptance.
+
+In a VM, verify native Overview and desktop grid with Plasma-owned and Shell-owned
+wallpapers, multiple outputs, Show Desktop, desktop close/move shortcuts, and widget
+glass before and after leaving Overview. Source/SDK checks do not establish visual acceptance.
 
 ## Widget placement and resizing
 

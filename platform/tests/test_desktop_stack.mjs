@@ -8,6 +8,17 @@ import vm from "node:vm";
 const bridge = readFileSync(new URL("../../kwin/window-bridge.js", import.meta.url), "utf8");
 const source = bridge.slice(0, bridge.indexOf("// Runtime-dependent bridge helpers"))
     + "\ninstallDesktopStack(workspace);";
+// Use the shipped scopes rather than a fixture-only role: a regression to
+// Desktop typing must fail even if the stacking algorithm still orders it.
+const scopeTypes = { desktop: 1, dock: 2 };
+function surfaceType(path) {
+    const qml = readFileSync(new URL(path, import.meta.url), "utf8");
+    const scope = qml.match(/WlrLayershell\.namespace:\s*"([^"]+)"/)[1];
+    assert(scope in scopeTypes, `unrecognized layer-shell scope: ${scope}`);
+    return scopeTypes[scope];
+}
+const wallpaperType = surfaceType("../../shell/desktop/modules/wallpaper/SpatialWallpaperWindow.qml");
+const widgetType = surfaceType("../../shell/desktop/modules/deskcenter/DeskCenterWindow.qml");
 let checks = 0;
 
 class Signal {
@@ -19,7 +30,7 @@ class Signal {
 function surface(id, role, overrides = {}) {
     const properties = {
         id, resourceClass: "quickshell", layer: 1,
-        windowType: role === "strip" ? 0 : 1,
+        windowType: role === "strip" ? 0 : role === "widgets" ? widgetType : wallpaperType,
         wantsInput: role === "widgets", stackingOrderChanged: new Signal(),
         ...overrides,
     };
@@ -140,6 +151,34 @@ for (const arrangement of [["widgets", "wallpaper"], ["wallpaper"], ["widgets"]]
     load(workspace);
     expectOrder(workspace, [wallpaper], [widgets]);
     assert(workspace.raised.every(id => id === "widgets"), "ignore other windows and shell overlays");
+}
+
+// KWin 6.6-6.8 DesktopBackgroundItem chooses a single Desktop candidate,
+// preferring an output-sized window. It does not composite transparent desktop
+// windows with the wallpaper below them. Exercise both mapping orders and
+// both wallpaper owners against the real scopes, including a second output.
+for (const owner of ["plasmashell", "quickshell"]) {
+    for (const reversed of [false, true]) {
+        const wallpaper = surface("wallpaper", "wallpaper", { resourceClass: owner, output: "primary" });
+        const widgets = surface("widgets", "widgets", { output: "primary" });
+        const otherOutput = surface("other-output", "wallpaper", { output: "secondary" });
+        const windows = reversed ? [widgets, wallpaper, otherOutput] : [wallpaper, widgets, otherOutput];
+        const candidates = windows.filter(w => w.windowType === 1 && w.output === "primary");
+        assert.equal(candidates.at(-1), wallpaper, "native Overview must capture wallpaper, not transparent widgets");
+        assert.equal(widgetType, 2, "widgets retain KWin's Dock close/move and Show Desktop protection");
+        checks++;
+    }
+}
+
+{
+    const widgets = surface("not-ready-widgets", "widgets", { wantsInput: false });
+    const wallpaper = surface("wallpaper", "wallpaper");
+    const workspace = workspaceFor([widgets, wallpaper]);
+    load(workspace);
+    expectOrder(workspace, [wallpaper], [widgets]);
+    widgets.wantsInput = true;
+    workspace.raiseWindow(wallpaper);
+    expectOrder(workspace, [wallpaper], [widgets]);
 }
 
 console.log(`DESKTOP_STACK_PASS: ${checks} ordering scenarios`);

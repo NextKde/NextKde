@@ -18,8 +18,10 @@
 #include "buttonglyph.h"
 #include "buttonconfig.h"
 #include "titlebarmetrics.h"
+#include "titlebargputint.h"
 #include "titlebartint.h"
 #include "tilemenu.h"
+#include "painttransform.h"
 
 namespace KWin
 {
@@ -32,17 +34,6 @@ class GLTexture;
 
 namespace KOS
 {
-
-// Animation state copied from the window's WindowPaintData, so the panel moves,
-// scales and fades together with the window instead of appearing at its final
-// place before the window gets there.
-struct PaintTransform {
-    qreal xScale = 1.0;
-    qreal yScale = 1.0;
-    qreal xTranslate = 0.0;
-    qreal yTranslate = 0.0;
-    qreal opacity = 1.0;
-};
 
 // Draws an iPadOS-style rounded panel behind three traffic-light buttons,
 // covering the window controls that a client-side decorated application drew
@@ -94,6 +85,7 @@ public:
     // this a panel shows the colours of the window that used to be active until
     // something else happens to repaint it.
     void repaintPanels(KWin::EffectWindow *a, KWin::EffectWindow *b);
+    void contentChanged(KWin::EffectWindow *window);
 
     // ---- the tiling menu --------------------------------------------------
     //
@@ -162,6 +154,7 @@ public:
 
     // Drop cached geometry for a window that has gone away.
     void forget(KWin::EffectWindow *window);
+    void dropSamplingCache(KWin::EffectWindow *window);
 
     // Drop the hit rects of a window whose panel is not on screen this frame,
     // keeping its cached tint. A panel that is not drawn must not take the
@@ -194,8 +187,8 @@ private:
     // light is, this says what it does.
     static Action actionFor(Type type);
 
-    // Read the active window's title bar and reuse the last tint while it is
-    // inactive. Returns false until the first successful reading.
+    // Sample visible titlebars and preserve validated RGB between observations.
+    // Returns false until two consistent usable readings confirm the first tint.
     //
     // Reading is easy; deciding when a reading is the bar rather than something
     // that happens to be under the panel for a moment is not, and is what most
@@ -204,16 +197,17 @@ private:
                  const KWin::RenderViewport &viewport,
                  KWin::EffectWindow *window,
                  const QRectF &panel,
+                 const QRectF &cover,
                  const KWin::Region &deviceRegion,
                  bool *dark,
                  QColor *color = nullptr);
 
     // Poll in-flight reads without repainting; request a fresh capture at the
     // next sampling deadline. The timer is
-    // cancelled with this renderer. Inactive windows only finish an initial
-    // in-flight read; deleted windows are always skipped.
+    // cancelled with this renderer. Inactive windows finish bounded refreshes
+    // after focus/damage; deleted windows are always skipped.
     void scheduleSample(KWin::EffectWindow *window);
-    static void requestSample(KWin::EffectWindow *window, const QRectF &panel);
+    static void requestSample(KWin::EffectWindow *window, const QRectF &panel, const QRectF &probe = {});
 
     // The geometry the window's panel is drawn with: the draft while one is
     // being adjusted, otherwise the configuration's.
@@ -251,9 +245,10 @@ private:
     // to the part of the window that is actually being painted. The panel and
     // the tile menu both come through here, so the shader setup, the blend
     // state and its restoration exist once.
-    static void blit(const KWin::RenderViewport &viewport, const KWin::Region &clip,
-                     const QRectF &logicalRect, KWin::GLTexture *texture,
-                     const QColor &modulation = Qt::white);
+    void blit(const KWin::RenderViewport &viewport, const KWin::Region &clip,
+              const QRectF &logicalRect, KWin::GLTexture *texture,
+              const QColor &modulation = Qt::white,
+              bool sameFrameTint = false, bool tintBackground = true);
 
     // The light that opens the tiling menu: the one that performs Action::Maximize.
     // Found through typeAt() so that reordering the panel moves the menu's
@@ -262,6 +257,7 @@ private:
 
     std::map<QString, std::unique_ptr<KWin::GLTexture>> m_textures;
     qsizetype m_textureBytes = 0;
+    TitlebarGpuTint m_gpuTint;
 
     // Times are read against this clock, which does not jump when the wall
     // clock does.
@@ -276,6 +272,20 @@ private:
         // without restarting the fast sampling phase.
         QSizeF windowSize;
         QRectF panel;
+        QRectF cover;
+        bool resetReadback = false;
+        bool sameFrameTint = false;
+        qreal backgroundBottom = -1;
+        qreal pendingBottom = -1;
+        int bottomVotes = 0;
+        int bottomAttempts = 0;
+        bool needsFollowup() const {
+            return TitlebarTintState::needsFollowup() || (bottomVotes == 1 && bottomAttempts < WarmupReads);
+        }
+        std::chrono::milliseconds interval() const {
+            return bottomVotes == 1 && bottomAttempts < WarmupReads
+                ? WarmupInterval : TitlebarTintState::interval();
+        }
     };
     static bool consumeSample(CacheEntry &entry, Clock::time_point now);
     QHash<KWin::EffectWindow *, CacheEntry> m_cache;
