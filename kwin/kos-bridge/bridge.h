@@ -59,6 +59,7 @@ public:
                           KWin::WindowPaintData &, const WindowSourceMorph &) override;
 
 private:
+    void preserveDesktopStack();
     void updateNativeThumbnails();
     void refreshGtkNativeControls(KWin::EffectWindow *);
     QSet<KWin::EffectWindow *> m_gtkNativeWindows;
