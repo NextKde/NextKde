@@ -37,6 +37,8 @@ In **Manage application sources**, enter a unique source ID, GitHub `owner/repos
 
 Duplicate app IDs across sources are conflicts, not replacements. Removing a source preserves installed-app receipts and rollback history. Re-adding the same trust identity can reuse that history. Automatic root-key rotation is not implemented; a replacement third-party key needs a new source ID and explicit trust.
 
+A successful uninstall removes the installation receipt after confirming that no user installation remains. Failed or uncertain removals retain it. Catalog rollback history is retained, so uninstalling cannot reset a source's sequence checks.
+
 Configuration: `XDG_CONFIG_HOME/kos-settings/app-sources.json`. Snapshots, receipts and update state: `XDG_STATE_HOME/kos-settings/app-catalog` (defaults to `~/.local/state/kos-settings/app-catalog`).
 
 ## Update checks and languages
