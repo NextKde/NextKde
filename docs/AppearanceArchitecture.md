@@ -145,6 +145,48 @@ The runtime requires the Plasma workspace font KCM; missing/incompatible modules
 show an unavailable state. Pending edits survive page navigation and are saved
 with Apply, discarded with Reset, or replaced with KDE defaults before applying.
 
+### Font backend compatibility
+
+The supported baseline is **Plasma 6.6.x, 6.7.x and 6.8.x**, with the matching
+distribution-provided Qt, KDE Frameworks and `plasma-workspace` packages. Plasma 5,
+6.0–6.5, future minor series and mixed-version package installations are outside
+this support claim. This is a support range, not a claim that every patch release
+or distribution has been tested. The `KDE fonts Plasma <series>` CI jobs qualify
+these complete Arch Linux Archive runtime snapshots and publish their exact
+package versions, logs and form screenshots:
+
+| Plasma series | Archive snapshot | Runtime checks |
+| --- | --- | --- |
+| 6.6 | 2026-05-15 | Real KCM, offscreen Qt + Xft, X11 |
+| 6.7 | 2026-10-01 | Real KCM, offscreen Qt + Xft, X11 |
+| 6.8 | 2026-10-18 | Real KCM, offscreen Qt + Xft, X11 |
+
+The current rolling Arch job additionally detects changes beyond the pinned
+snapshots. A series enters the supported range only after its font runtime job
+passes; KWin plugin builds alone do not qualify font support. All three font jobs
+must pass on a font-affecting PR before merge. Refresh the snapshots periodically
+and record the actual tested patch versions in the PR; do not infer them from the
+snapshot date.
+
+NextKde owns the form and a bounded mapping to existing KCM properties. KDE owns
+the defaults, configuration format, save side effects and application notification.
+`FontSettings` checks the required property names, types, writability and option
+models before exposing the backend. A missing/incompatible module disables the
+form with an error; there is no guessed-config-file fallback. A newer unqualified
+version can pass these checks, but that is not a cross-version support guarantee.
+Unknown configuration entries are left to KDE and preserved by the tested save
+path. New KDE options do not automatically appear in our form: add their mapping
+and controls only after checking availability on every supported series, hiding
+options absent on older versions rather than inventing equivalent behavior.
+
+The runtime test covers all six font roles, anti-aliasing and its excluded range,
+sub-pixel/hinting, X11 DPI enable/reset, reset/defaults, retained draft values,
+unrelated-key preservation, KDE's actual D-Bus `refreshFonts` signal, and native
+form/preview rendering. Offscreen Qt exercises the non-X11 policy; it is **not** a
+Wayland compositor test. Actual application uptake, font-picker interactions and
+Wayland session behavior still require a VM graphical acceptance run. Applications
+that cache fonts may require restarting or logging out, following KDE behavior.
+
 The independent “Desktop follows system font” switch uses `appearance-settings`
 IPC and persists as `useSystemFont` (default false) in appearance schema 31.
 `SystemFontService` watches `kdeglobals`; `AppearanceTokens.typography` projects

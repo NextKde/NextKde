@@ -68,6 +68,9 @@ Use a **KDE Plasma 6 Wayland** session with **KWin 6.6+**, **Quickshell 0.3.x**,
 and **Qt 6.6+**. Installation builds the platform service, Settings, KWin effects,
 and window decoration.
 
+The integrated font settings support Plasma **6.6–6.8**; see the
+[version coverage and validation limits](docs/AppearanceArchitecture.md#font-backend-compatibility).
+
 ### 1. Prepare dependencies
 
 Source selection also requires **Git** and **Python 3.9+**. Follow the guide for
