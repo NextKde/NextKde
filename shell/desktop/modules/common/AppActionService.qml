@@ -60,13 +60,15 @@ QtObject {
     // catalogue item). The entry is resolved here, at call time: it must never
     // be stored on the caller's side, because DesktopEntries destroys and
     // replaces entries on every catalogue rescan.
-    function launch(application) {
+    // onFinished reports launch acceptance/failure, not window activation.
+    function launch(application, onFinished) {
         const provided = application && typeof application.execute === "function"
             ? application : null
         const appId = String(provided?.id ?? application?.desktopId
             ?? application?.id ?? application?.rawAppId ?? "")
         if (!appId) {
             console.warn("[AppAction] cannot launch without an app id")
+            if (onFinished) onFinished(false)
             return false
         }
         const entry = provided ?? AppPresentationService.entryFor(appId)
@@ -80,18 +82,21 @@ QtObject {
             if (!entry || entry.runInTerminal) {
                 console.warn("[AppAction] launch needs the platform daemon, "
                              + "no TTY fallback exists app=" + appId)
+                if (onFinished) onFinished(false)
                 return false
             }
-            return _executeDirect(entry, appId, "platform-unavailable")
+            const accepted = _executeDirect(entry, appId, "platform-unavailable")
+            if (onFinished) onFinished(accepted)
+            return accepted
         }
-        return _requestDaemonLaunch(appId)
+        return _requestDaemonLaunch(appId, onFinished)
     }
 
     // The daemon op accepts only {desktopId, urls}, so it still works when the
     // entry could not be resolved -- for example it was uninstalled between the
     // catalogue snapshot and the click. Only the direct argv fallback needs a
     // live entry.
-    function _requestDaemonLaunch(appId) {
+    function _requestDaemonLaunch(appId, onFinished) {
         PlatformClient.request("application.launch", {
             desktopId: appId,
             urls: []
@@ -107,11 +112,16 @@ QtObject {
                     service.launchFailed(appId)
                     console.warn("[AppAction] launch failed, no direct fallback "
                                  + "exists app=" + appId)
+                    if (onFinished) onFinished(false)
                     return
                 }
-                if (!service._executeDirect(entry, appId, "platform-launch"))
+                const accepted = service._executeDirect(entry, appId, "platform-launch")
+                if (!accepted)
                     service.launchFailed(appId)
+                if (onFinished) onFinished(accepted)
+                return
             }
+            if (onFinished) onFinished(true)
         })
         console.log("[AppAction] platform launch app=" + appId)
         return true
