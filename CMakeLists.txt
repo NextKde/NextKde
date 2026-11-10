@@ -551,6 +551,11 @@ if(BUILD_TESTING)
                 ${CMAKE_CURRENT_SOURCE_DIR}/shell/desktop/modules/deskcenter/test_desktop_outputs.mjs
         )
         set_tests_properties(kos-deskcenter.desktop-outputs PROPERTIES TIMEOUT 10)
+        add_test(NAME kos-notifications.activation
+            COMMAND ${KOS_NODE_EXECUTABLE}
+                ${CMAKE_CURRENT_SOURCE_DIR}/shell/desktop/modules/notifications/test_notification_activation.mjs
+        )
+        set_tests_properties(kos-notifications.activation PROPERTIES LABELS logic TIMEOUT 10)
         add_test(NAME kos-deskcenter.desktop-stack
             COMMAND ${KOS_NODE_EXECUTABLE}
                 ${CMAKE_CURRENT_SOURCE_DIR}/platform/tests/test_desktop_stack.mjs
@@ -623,6 +628,23 @@ if(BUILD_TESTING)
         set_tests_properties(kos-ui.clipboard-placement PROPERTIES LABELS ui TIMEOUT 40)
     endif()
     if(KOS_INTERACTION_QMLTEST)
+        # Exercise the shipping controller without importing Quickshell-only
+        # notification singletons into the plain Qt QuickTest runner.
+        set(kos_notification_test_module "${CMAKE_BINARY_DIR}/tests/qml/Kos/Test/NotificationOpen")
+        foreach(component NotificationOpenController.qml NotificationActivation.mjs)
+            configure_file(
+                "${CMAKE_CURRENT_SOURCE_DIR}/shell/desktop/modules/notifications/${component}"
+                "${kos_notification_test_module}/${component}" COPYONLY)
+        endforeach()
+        file(WRITE "${kos_notification_test_module}/qmldir"
+            "module Kos.Test.NotificationOpen\nNotificationOpenController 1.0 NotificationOpenController.qml\n")
+        add_test(NAME kos-shell.notification-open
+            COMMAND ${KOS_INTERACTION_QMLTEST}
+                -import "${CMAKE_BINARY_DIR}/tests/qml"
+                -input ${CMAKE_CURRENT_SOURCE_DIR}/tests/notification-open/tst_open.qml)
+        set_tests_properties(kos-shell.notification-open PROPERTIES
+            ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_QUICK_BACKEND=software"
+            LABELS "ui;headless" TIMEOUT 20)
         add_test(NAME kos-ui.interaction-controls
             COMMAND ${KOS_INTERACTION_QMLTEST}
                 -input ${CMAKE_CURRENT_SOURCE_DIR}/tests/interaction-controls/tst_controls.qml)

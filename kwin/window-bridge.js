@@ -666,6 +666,9 @@ function snapshot() {
             // Normalized against the authoritative activeId above: one frame
             // must never mix a stale window.active with fresh minimized.
             activated: windowId(window) === activeId,
+            // Confirmation consumers must not mistake the animation lag
+            // guard above for focus that KWin has actually granted.
+            focusConfirmed: windowId(window) === liveActiveId,
             minimized: !!window.minimized,
             fullscreen: !!window.fullScreen,
             // KWin's authoritative _NET_WM_STATE_DEMANDS_ATTENTION state.
