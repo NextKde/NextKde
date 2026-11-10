@@ -360,17 +360,7 @@ QtObject {
 
         if (windows.length === 0) {
             svc._clearPendingCycle();
-            if (DockLaunchService.isLaunching(identity.desktopId))
-                return;
-            DockLaunchService.begin(identity.desktopId);
-            console.log("[DockModel] launch app=" + identity.desktopId);
-            // KWin must receive the Dock launch ticket before the client can
-            // map its first window. Otherwise the real window may be painted
-            // once and only then jump back to the Dock animation origin.
-            DockWindowAnimationTargetService.prepareLaunch(identity, function() {
-                if (!AppActionService.launch(identity))
-                    DockLaunchService.finish(identity.desktopId);
-            });
+            launchApp(identity.desktopId);
             return;
         }
 
@@ -407,6 +397,29 @@ QtObject {
                         + " app=" + identity.desktopId);
             activateWindow(target.windowId);
         }
+    }
+
+    // Non-toggle launch for notification clicks. Keep the animation origin,
+    // but leave notification counts intact until the caller confirms focus.
+    function launchApp(appId, onFinished, isCurrent) {
+        const identity = AppIdentityService.resolve(appId);
+        if (DockLaunchService.isLaunching(identity.desktopId))
+            return true;
+        DockLaunchService.begin(identity.desktopId);
+        // Prepare the compositor before the client maps its first window.
+        DockWindowAnimationTargetService.prepareLaunch(identity, function() {
+            if (isCurrent && !isCurrent()) {
+                DockLaunchService.finish(identity.desktopId);
+                return;
+            }
+            AppActionService.launch(identity, function(accepted) {
+                if (!accepted)
+                    DockLaunchService.finish(identity.desktopId);
+                if (onFinished)
+                    onFinished(accepted);
+            });
+        });
+        return true;
     }
 
     function launchNewWindow(appId) {

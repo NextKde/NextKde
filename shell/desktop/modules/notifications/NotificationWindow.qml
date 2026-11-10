@@ -29,6 +29,9 @@ PanelWindow {
 
     required property var groupService
     property int exitDuration: 200
+    // Fading in place when a click opens the app is quicker than the slide-out
+    // used for expiry, so the card never lingers over the window it raised.
+    property int handoffDuration: 140
 
     // Global ceiling on popup auto-expire, in ms. Apps may request longer
     // (Fcitx requests 60000 for its "Wayland 诊断" notice), but no popup is
@@ -105,22 +108,26 @@ PanelWindow {
             // Clickable outline, independent of the blur transport above.
             readonly property var notificationInputRegion: cardInput
             property bool removing: false
+            // True when the card is leaving because its app is being raised:
+            // the exit fades in place instead of sliding out.
+            property bool handoff: false
             enabled: !removing
             ListView.onRemove: {
                 removing = true
                 ListView.delayRemove = true
-                exitAnimation.start()
+                card.startExit()
             }
 
             Timer {
                 id: removingSafetyTimer
                 interval: root.exitDuration + 300
-                running: card.removing && !exitAnimation.running
-                onTriggered: exitAnimation.start()
+                running: card.removing && !card.exiting
+                onTriggered: card.startExit()
             }
 
+            // Expiry slides the card out.
             NumberAnimation {
-                id: exitAnimation
+                id: slideAnimation
                 target: card
                 property: "x"
                 to: notificationList.width + 44
@@ -128,9 +135,40 @@ PanelWindow {
                 easing.type: Easing.InCubic
                 onFinished: card.ListView.delayRemove = false
             }
+            // Opening the app fades the card away in place and lifts it a touch,
+            // so the click reads as handing the notification over to the window
+            // that is arriving. Separate from the slide: binding an animation's
+            // `property` is not evaluated reliably before start, and a property-
+            // less animation finishes immediately and drops the delegate.
+            ParallelAnimation {
+                id: handoffAnimation
+                NumberAnimation {
+                    target: card
+                    property: "opacity"
+                    to: 0
+                    duration: root.handoffDuration
+                    easing.type: Easing.OutCubic
+                }
+                NumberAnimation {
+                    target: card
+                    property: "scale"
+                    to: 1.04
+                    duration: root.handoffDuration
+                    easing.type: Easing.OutCubic
+                }
+                onFinished: card.ListView.delayRemove = false
+            }
+            readonly property bool exiting: slideAnimation.running || handoffAnimation.running
+            function startExit() {
+                if (card.handoff)
+                    handoffAnimation.start()
+                else
+                    slideAnimation.start()
+            }
 
             readonly property string groupKey: modelData.groupKey
             readonly property int groupCount: modelData.count
+            onGroupCountChanged: opener.cancel()
             readonly property bool groupCollapsed: modelData.collapsed
             // Live newest Notification for this group. Depends on
             // sidecarRevision so it re-evaluates when the service rebuilds.
@@ -232,6 +270,18 @@ PanelWindow {
                 radius: card.radius
             }
 
+            // Clicking the card opens the app that sent it. Declared before the
+            // card's visual children so the action buttons, inline reply, close
+            // button and group header keep their own clicks; the list can still
+            // steal the pointer for scrolling.
+            MouseArea {
+                objectName: "notification-open-area"
+                anchors.fill: parent
+                cursorShape: Qt.PointingHandCursor
+                enabled: !opener.busy
+                onClicked: opener.open()
+            }
+
             // ---- backgrounds ----
             // Frosted liquid glass backdrop adapting to theme. The urgency
             // tints and the edge accents sit inside it so that the corner mask
@@ -294,11 +344,33 @@ PanelWindow {
             function close(expired) {
                 if (removing)
                     return
+                opener.cancel()
                 removing = true
                 if (expired)
                     root.groupService.expireGroupByKey(card.groupKey)
                 else
                     root.groupService.dismissGroupByKey(card.groupKey)
+            }
+
+            NotificationOpenController {
+                id: opener
+                notification: card.notification
+                windowService: WindowService
+                launcher: DockModelService
+                lookupEntry: function(hint) { return AppPresentationService.entryFor(hint) }
+                onBusyChanged: card._lastTickAt = 0
+                onFinished: function(source, success) {
+                    if (source !== card.notification || card.removing)
+                        return
+                    // Give failures a fresh countdown so the notice remains
+                    // available for another action instead of expiring at once.
+                    card._elapsedMs = 0
+                    card._lastTickAt = 0
+                    if (success && !(source?.resident ?? false)) {
+                        card.handoff = true
+                        card.close(false)
+                    }
+                }
             }
 
             // ---- countdown bar ----
@@ -360,7 +432,7 @@ PanelWindow {
                 id: expireTicker
                 interval: 50
                 repeat: true
-                running: card.notification !== null && card.expireMs > 0 && !card.hovered
+                running: card.notification !== null && card.expireMs > 0 && !card.hovered && !opener.busy
                 onTriggered: {
                     const now = Date.now()
                     if (card._lastTickAt > 0)
@@ -586,6 +658,7 @@ PanelWindow {
                                 hoverEnabled: true
                                 cursorShape: Qt.PointingHandCursor
                                 onClicked: {
+                                    opener.cancel()
                                     const resident = card.notification?.resident ?? false
                                     modelData.invoke()
                                     if (!resident)
@@ -624,6 +697,7 @@ PanelWindow {
                         onAccepted: {
                             if (text.length > 0 && card.notification) {
                                 const resident = card.notification.resident
+                                opener.cancel()
                                 card.notification.sendInlineReply(text)
                                 text = ""
                                 if (!resident)
