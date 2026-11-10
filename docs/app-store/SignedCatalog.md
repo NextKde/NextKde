@@ -2,7 +2,7 @@
 
 [简体中文](SignedCatalog.zh-CN.md)
 
-Settings → **Applications and services** reads application identities from [NextKde/appCatalog](https://github.com/NextKde/appCatalog). Additions and removals are catalog changes, not Settings code changes. Both catalogs and application packages use stable **GitHub Releases**. App versions use `vX.Y.Z`; catalog releases use increasing sequence numbers.
+Settings → **Applications and services** reads application identities from [NextKde/appCatalog](https://github.com/NextKde/appCatalog). Additions and removals are catalog changes, not Settings code changes. In normal mode, both catalogs and application packages use stable **GitHub Releases**. App versions use `vX.Y.Z`; catalog releases use increasing sequence numbers.
 
 ## Contributing and packaging
 
@@ -54,3 +54,7 @@ Settings and catalog seed metadata support English, Simplified Chinese and Brazi
 The official source is `NextKde/appCatalog`. Publishing requires the matching private key, a monotonically increasing sequence and renewal before the default 30-day expiry. Sign on the key-holding machine or configure the optional `catalog-release` GitHub environment. See [maintainer instructions](https://github.com/NextKde/appCatalog/blob/main/MAINTAINING.md). A checked-in catalog or published repository is not evidence of end-to-end acceptance or of an available app Release.
 
 Build and test only in a development VM or CI. Cover wrong/missing signatures, replay, expiry, SHA-256 mismatch, developer-signature failure, third-party add/remove/conflicts, unsigned receipts, concurrent transactions and update notification deduplication. Catalog logic tests live in `apps/settings/tests/store/catalog.cpp`; Flatpak release tests are alongside them. Real package deployment and desktop notifications also require VM acceptance before release.
+
+## Developer testing
+
+[Developer test mode](DeveloperTesting.md) provides separate source/cache configuration and explicit published GitHub Release selection, including prereleases. App IDs, installations and data remain shared; exit never restores or uninstalls applications. Normal mode continues to use latest stable Releases.

@@ -11,6 +11,13 @@
 // about installation plans, runtime dependencies and OSTree commits.
 namespace AppCatalog {
 using Cancelled = std::function<bool()>;
+bool testMode();
+QString contextToken();
+QString setTestMode(bool enabled);
+QString selectSourceRelease(const QString& id, const QString& repository, const QString& tag);
+QString selectAppRelease(const QString& appId, const QString& repository, const QString& tag);
+QVariantMap releaseChoices(const QString& repository);
+bool releaseTag(const QString& tag);
 QString validateUpdate(const QVariantMap& candidate, const QVariantMap& previous, const QString& sourceId);
 QVariantList apps();
 QVariantMap find(const QString& id);

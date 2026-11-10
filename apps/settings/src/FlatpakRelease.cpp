@@ -42,15 +42,23 @@ bool matches(const QString& pattern, const QString& value)
 }
 bool versionParts(const QString& version, QList<qulonglong>& parts)
 {
-    if (!matches("^(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)$", version)) return false;
-    for (const auto& part : version.split('.')) {
-        bool ok = false;
-        const auto number = part.toULongLong(&ok);
+    if (version.size() > 100 || !matches("^(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)(-[0-9A-Za-z-]+(\\.[0-9A-Za-z-]+)*)?$", version)) return false;
+    for (const auto& part : version.section('-', 0, 0).split('.')) {
+        bool ok = false; const auto number = part.toULongLong(&ok);
         if (!ok) return false;
         parts.append(number);
     }
+    const auto separator = version.indexOf('-');
+    if (separator >= 0) for (const auto& part : version.mid(separator + 1).split('.'))
+        if (matches("^[0-9]+$", part) && part.size() > 1 && part.startsWith('0')) return false;
     return true;
 }
+QStringList prereleaseParts(const QString& version)
+{
+    const auto separator = version.indexOf('-');
+    return separator < 0 ? QStringList{} : version.mid(separator + 1).split('.');
+}
+
 bool validUrl(const QUrl& url, const QString& repo, bool redirected)
 {
     return AppCatalog::githubUrl(url, repo, redirected);
@@ -322,7 +330,16 @@ int compareVersions(const QString& left, const QString& right, bool* valid)
     if (valid) *valid = ok;
     if (!ok) return 0;
     for (int i = 0; i < 3; ++i) { if (a[i] < b[i]) return -1; if (a[i] > b[i]) return 1; }
-    return 0;
+    const auto ap = prereleaseParts(left), bp = prereleaseParts(right);
+    if (ap.isEmpty() != bp.isEmpty()) return ap.isEmpty() ? 1 : -1;
+    for (int i = 0; i < qMin(ap.size(), bp.size()); ++i) {
+        if (ap[i] == bp[i]) continue;
+        const bool an = matches("^[0-9]+$", ap[i]), bn = matches("^[0-9]+$", bp[i]);
+        if (an != bn) return an ? -1 : 1;
+        if (an && ap[i].size() != bp[i].size()) return ap[i].size() < bp[i].size() ? -1 : 1;
+        return ap[i] < bp[i] ? -1 : 1;
+    }
+    return ap.size() == bp.size() ? 0 : ap.size() < bp.size() ? -1 : 1;
 }
 QVariantMap discover(const QString& appId, const QString& arch, const Cancelled& cancelled, const Progress& progress)
 {
@@ -330,14 +347,18 @@ QVariantMap discover(const QString& appId, const QString& arch, const Cancelled&
         const auto app = IndependentAppRegistry::find(appId);
         if (!app || !configured(appId)) fail("BUNDLE_KEY_MISSING", "The application is unavailable in the current trusted catalog.");
         Download client(app->repository, cancelled, progress, 90000);
-        const auto response = client.fetch(QUrl("https://api.github.com/repos/" + client.repo + "/releases/latest"), metadataLimit);
+        const auto selectedTag = AppCatalog::testMode() ? app->entry.value("releaseTag").toString() : QString();
+        const auto endpoint = selectedTag.isEmpty() ? "/releases/latest" : "/releases/tags/" + selectedTag;
+        const auto response = client.fetch(QUrl("https://api.github.com/repos/" + client.repo + endpoint), metadataLimit);
         QJsonParseError error;
         const auto release = QJsonDocument::fromJson(response, &error).object();
         const auto tag = release.value("tag_name").toString();
         QList<qulonglong> parts;
         if (error.error != QJsonParseError::NoError || release.value("draft").toBool(true)
-            || release.value("prerelease").toBool(true) || !tag.startsWith('v') || !versionParts(tag.mid(1), parts))
-            fail("INVALID_RELEASE", "Expected a published stable vX.Y.Z GitHub release.");
+            || (selectedTag.isEmpty() && (release.value("prerelease").toBool(true) || tag.contains('-')))
+            || (!selectedTag.isEmpty() && tag != selectedTag)
+            || !tag.startsWith('v') || !versionParts(tag.mid(1), parts))
+            fail("INVALID_RELEASE", "Expected a published vX.Y.Z GitHub release, or a selected test prerelease.");
         const auto attachment = [&](const QString& name) {
             QJsonObject found;
             int count = 0;
@@ -347,7 +368,7 @@ QVariantMap discover(const QString& appId, const QString& arch, const Cancelled&
             }
             const auto expected = "https://github.com/" + client.repo + "/releases/download/" + tag + '/' + name;
             if (count != 1 || found.value("browser_download_url").toString() != expected)
-                fail("RELEASE_UNAVAILABLE", "The stable release is missing a unique required Flatpak attachment.");
+                fail("RELEASE_UNAVAILABLE", "The release is missing a unique required Flatpak attachment.");
             return QUrl(expected);
         };
         const auto manifestName = app->manifest;

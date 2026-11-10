@@ -89,6 +89,8 @@ IndependentApps::~IndependentApps()
 void IndependentApps::syncCatalog()
 {
     if (m_active >= 0) return;
+    const auto context = AppCatalog::contextToken();
+    if (context != m_catalogContext) { m_apps.clear(); m_flatpakResults.clear(); m_catalogContext = context; }
     QVariantList next;
     for (const auto& value : AppCatalog::apps()) {
         const auto entry = value.toMap();
@@ -107,6 +109,8 @@ void IndependentApps::syncCatalog()
         state["catalogActive"] = entry.value("active");
         state["catalogError"] = entry.value("error");
         state["format"] = entry.value("format");
+        state["releaseTag"] = entry.value("releaseTag");
+        state["testInstalled"] = AppCatalog::receipt(appId).value("entry").toMap().value("testMode").toBool();
         state["developerSignature"] = !entry.value("publisher").toMap().isEmpty();
         state["iconName"] = "grid";
         const QStringList builtin{"kmusic", "calendar", "calculator", "weather", "listenfree"};

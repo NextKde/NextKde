@@ -41,7 +41,7 @@ QHash<QString, QVariantMap> plans;
 QString planDirectory()
 {
     return qEnvironmentVariable("XDG_STATE_HOME", QDir::homePath() + "/.local/state")
-        + "/kos-settings/flatpak-plans";
+        + (AppCatalog::testMode() ? "/kos-settings/flatpak-plans-test" : "/kos-settings/flatpak-plans");
 }
 
 QString planPath(const QString& appId)

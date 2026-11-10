@@ -8,6 +8,7 @@
 #include <QVariantMap>
 #include <QElapsedTimer>
 #include <QFile>
+#include <QLockFile>
 #include <memory>
 #include "FlatpakTransactionProcess.h"
 
@@ -35,6 +36,7 @@ signals:
     void mutationFinished(const QString& appId, const QString& code);
     void operationFinished(const QString& appId, const QString& code, const QString& message);
 private:
+    std::shared_ptr<QLockFile> m_contextLock;
     struct Cancellation;
     friend class FlatpakCompatibilityTest;
     friend int FlatpakTransactionProcess::helperMain();

@@ -161,7 +161,7 @@ if(BUILD_TESTING)
     set_tests_properties(kos-settings.fonts PROPERTIES LABELS headless TIMEOUT 30
         ENVIRONMENT "KOS_FONT_SCREENSHOT=${CMAKE_BINARY_DIR}/test-results/fonts.png")
     add_executable(kos-settings-background-test tests/background/session.cpp)
-    target_link_libraries(kos-settings-background-test PRIVATE Qt6::Core Qt6::DBus Qt6::Test)
+    target_link_libraries(kos-settings-background-test PRIVATE Qt6::Core Qt6::DBus Qt6::Test kos-app-catalog)
     target_compile_definitions(kos-settings-background-test PRIVATE
         SETTINGS_EXECUTABLE="$<TARGET_FILE:kos-settings>"
         SETTINGS_COMPONENTS="${CMAKE_CURRENT_SOURCE_DIR}/components")

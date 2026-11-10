@@ -35,6 +35,36 @@ class AppUpdateAgentTest final : public QObject {
                 {"installation", installation}, {"catalogEntryDigest", AppCatalog::entryDigest(AppCatalog::find(id))}}}};
     }
 private slots:
+    void modeChangeClearsClientPlan() {
+        AppUpdateAgent agent;
+        candidate(agent);
+        QVERIFY(!agent.m_client.state(id).contains("plan"));
+        auto state = agent.m_client.m_states[id].toMap();
+        state["plan"] = QVariantMap{{"planId", "fixture"},
+            {"catalogEntryDigest", AppCatalog::entryDigest(AppCatalog::find(id))}};
+        agent.m_client.m_states[id] = state;
+        QCOMPARE(agent.m_client.state(id).value("plan").toMap().value("planId").toString(), QString("fixture"));
+        QCOMPARE(AppCatalog::setTestMode(true), QString());
+        QVERIFY(!agent.m_client.state(id).contains("plan"));
+        QCOMPARE(AppCatalog::setTestMode(false), QString());
+        QVERIFY(!agent.m_client.state(id).contains("plan"));
+    }
+    void testModePausesScheduledChecks() {
+        QCOMPARE(AppCatalog::setTestMode(true), QString());
+        QVERIFY(AppCatalog::writeState("check-request", {{"timestamp", 123}}));
+        QCOMPARE(AppCatalog::setTestMode(false), QString());
+        AppUpdateAgent agent;
+        QCOMPARE(AppCatalog::setTestMode(true), QString());
+        agent.m_nextCheck = 0;
+        agent.tick();
+        QVERIFY(!agent.m_running);
+        QCOMPARE(AppCatalog::readState("check-request").value("timestamp").toInt(), 0);
+        agent.requestCheck();
+        QVERIFY(agent.m_running);
+        QTRY_VERIFY_WITH_TIMEOUT(!agent.m_running, 15000);
+        QVERIFY(!AppCatalog::readState("update-status").value("finishedAt").toString().isEmpty());
+        QCOMPARE(AppCatalog::setTestMode(false), QString());
+    }
     void initTestCase() {
         QVERIFY(profile.isValid());
         qputenv("XDG_CONFIG_HOME", profile.filePath("config").toUtf8());

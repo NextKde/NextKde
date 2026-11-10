@@ -1,4 +1,5 @@
 #include <QCryptographicHash>
+#include "AppCatalog.h"
 #include <QDBusConnection>
 #include <QDBusMessage>
 #include <QDBusVirtualObject>
@@ -131,7 +132,7 @@ for line in sys.stdin:
     if action == 'inventory':
         response['result'] = dict(apps={app: state() for app in ids})
     elif action == 'prepare-install':
-        response['result'] = dict(state(), plan=dict(planId='background-plan', operation='install'), code='', message='')
+        response['result'] = dict(state(), plan=dict(planId='background-plan', operation='install', catalogEntryDigest=os.environ['BACKGROUND_ENTRY_DIGEST']), code='', message='')
     elif action == 'confirm-plan':
         progress = dict(response, type='progress', status='Installing fixture', progress=10)
         print(json.dumps(progress), flush=True)
@@ -165,6 +166,9 @@ for line in sys.stdin:
         env.insert("XDG_CONFIG_HOME", root + "/config"); env.insert("XDG_STATE_HOME", root + "/state");
         env.insert("KOS_SHELL_DIR", root + "/shell");
         env.insert("BACKGROUND_FIXTURE", root); env.insert("BACKGROUND_OUTCOME", outcome);
+        qputenv("XDG_CONFIG_HOME", (root + "/config").toUtf8());
+        qputenv("XDG_STATE_HOME", (root + "/state").toUtf8());
+        env.insert("BACKGROUND_ENTRY_DIGEST", AppCatalog::entryDigest(AppCatalog::find("org.nextkde.KMusic")));
         QProcess owner;
         owner.setProcessEnvironment(env); owner.setProcessChannelMode(QProcess::MergedChannels);
         owner.start(binary, {});

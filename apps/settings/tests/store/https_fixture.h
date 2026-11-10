@@ -19,7 +19,7 @@ public:
         bool disconnect = false;
     };
     QList<Response> responses;
-    QStringList targets;
+    QStringList targets, requestLines;
     int requests = 0;
 
     ReleaseHttpsFixture(const QSslCertificate& certificate, const QSslKey& key)
@@ -54,6 +54,7 @@ protected:
                     return;
                 }
                 handled = true;
+                requestLines.append(QString::fromLatin1(bytes.split('\n').first().trimmed()));
                 const auto response = responses.value(qMin(requests++, qMax(0, int(responses.size()) - 1)));
                 if (response.stall) return;
                 if (response.disconnect) { socket->abort(); return; }

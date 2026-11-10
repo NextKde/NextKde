@@ -7,6 +7,7 @@
 
 AppUpdateAgent::AppUpdateAgent(QObject* parent) : QObject(parent)
 {
+    m_scanContext = AppCatalog::contextToken();
     auto previousStatus = AppCatalog::readState("update-status");
     previousStatus["running"] = false;
     AppCatalog::writeState("update-status", previousStatus);
@@ -18,6 +19,7 @@ AppUpdateAgent::AppUpdateAgent(QObject* parent) : QObject(parent)
     m_timer.setInterval(15000);
     connect(&m_timer, &QTimer::timeout, this, &AppUpdateAgent::tick);
     connect(&m_refresh, &QFutureWatcher<QString>::finished, this, [this] {
+        if (m_scanContext != AppCatalog::contextToken()) { finish(); return; }
         if (!m_refresh.result().isEmpty()) m_errors.append(m_refresh.result());
         m_waitingInventory = true;
         m_client.refresh();
@@ -25,6 +27,7 @@ AppUpdateAgent::AppUpdateAgent(QObject* parent) : QObject(parent)
     connect(&m_client, &FlatpakAppsClient::changed, this, [this] {
         if (m_running && m_waitingInventory && !m_client.querying()) {
             m_waitingInventory = false;
+            if (m_scanContext != AppCatalog::contextToken()) { finish(); return; }
             for (const auto& item : AppCatalog::apps()) {
                 const auto entry = item.toMap();
                 const auto id = entry.value("appId").toString();
@@ -46,6 +49,7 @@ AppUpdateAgent::AppUpdateAgent(QObject* parent) : QObject(parent)
             QTimer::singleShot(0, this, &AppUpdateAgent::next);
         });
     connect(&m_notifications, &TaskNotifications::updatesDelivered, this, [this] {
+        if (m_scanContext != AppCatalog::contextToken()) { m_notificationCandidates.clear(); return; }
         for (auto it = m_notificationCandidates.begin(); it != m_notificationCandidates.end(); ++it) m_notified[it.key()] = it.value();
         AppCatalog::writeState("notified", m_notified);
         m_notificationCandidates.clear();
@@ -55,16 +59,24 @@ AppUpdateAgent::AppUpdateAgent(QObject* parent) : QObject(parent)
 void AppUpdateAgent::requestCheck() { m_manual = true; tick(); }
 void AppUpdateAgent::tick()
 {
+    if (!m_running && !m_scanContext.isEmpty() && m_scanContext != AppCatalog::contextToken()) {
+        m_scanContext = AppCatalog::contextToken();
+        m_lastRequest = 0; m_manual = false; m_notificationCandidates.clear();
+        const auto last = QDateTime::fromString(AppCatalog::readState("update-status").value("finishedAt").toString(), Qt::ISODate).toSecsSinceEpoch();
+        m_nextCheck = qMax(QDateTime::currentSecsSinceEpoch() + 120, last + 6 * 3600);
+    }
     const auto request = AppCatalog::readState("check-request").value("timestamp").toLongLong();
     if (request > m_lastRequest) { m_lastRequest = request; m_manual = true; }
     if (m_running) return;
     const auto preferences = AppCatalog::readState("preferences");
-    if (m_manual || (preferences.value("automaticUpdates", true).toBool() && QDateTime::currentSecsSinceEpoch() >= m_nextCheck)) start();
+    if (m_manual || (!AppCatalog::testMode() && preferences.value("automaticUpdates", true).toBool() && QDateTime::currentSecsSinceEpoch() >= m_nextCheck)) start();
 }
 void AppUpdateAgent::start()
 {
     QLockFile mutationLock(AppCatalog::stateDirectory() + "/flatpak-mutation.lock");
     if (!mutationLock.tryLock(0)) return; // Retry on the next tick after a foreground transaction.
+    m_scanContext = AppCatalog::contextToken();
+    m_notified = AppCatalog::readState("notified"); m_notificationCandidates.clear();
     m_running = true; m_manual = false; m_errors.clear(); m_pending.clear();
     m_lastRequest = AppCatalog::readState("check-request").value("timestamp").toLongLong();
     AppCatalog::writeState("update-status", {{"running", true}, {"startedAt", QDateTime::currentDateTimeUtc().toString(Qt::ISODate)}});
@@ -74,7 +86,7 @@ void AppUpdateAgent::next()
 {
     if (!m_running || !m_active.isEmpty()) return;
     if (m_client.querying()) { QTimer::singleShot(500, this, &AppUpdateAgent::next); return; }
-    if (m_pending.isEmpty()) { finish(); return; }
+    if (m_pending.isEmpty() || m_scanContext != AppCatalog::contextToken()) { finish(); return; }
     m_active = m_pending.takeFirst();
     if (!m_client.checkUpdates(m_active)) {
         m_errors.append(m_active + ": check unavailable"); m_active.clear();
@@ -83,6 +95,12 @@ void AppUpdateAgent::next()
 }
 void AppUpdateAgent::finish()
 {
+    if (!m_scanContext.isEmpty() && m_scanContext != AppCatalog::contextToken()) {
+        m_running = false; m_waitingInventory = false; m_manual = false;
+        m_pending.clear(); m_notificationCandidates.clear(); m_client.releaseIdleWorker();
+        m_lastRequest = AppCatalog::readState("check-request").value("timestamp").toLongLong();
+        return;
+    }
     int count = 0;
     for (const auto& item : AppCatalog::apps()) {
         const auto app = item.toMap(); const auto id = app.value("appId").toString();
@@ -93,7 +111,7 @@ void AppUpdateAgent::finish()
     }
     AppCatalog::writeState("update-status", {{"running", false}, {"finishedAt", QDateTime::currentDateTimeUtc().toString(Qt::ISODate)},
         {"error", m_errors.join('\n')}});
-    if (count && AppCatalog::readState("preferences").value("updateNotifications", true).toBool())
+    if (count && !AppCatalog::testMode() && AppCatalog::readState("preferences").value("updateNotifications", true).toBool())
         m_notifications.sendUpdates(count);
     else m_notificationCandidates.clear();
     m_client.releaseIdleWorker();

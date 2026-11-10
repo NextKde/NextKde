@@ -15,6 +15,10 @@ AppStore::AppStore(const QString& directory, QObject* parent)
         m_catalogError = m_catalogRefresh.result();
         m_independent.refresh(); emit changed();
     });
+    connect(&m_releases, &QFutureWatcher<QVariantMap>::finished, this, [this] {
+        m_releaseResult = m_releaseContext == AppCatalog::contextToken() ? m_releases.result() : QVariantMap{};
+        emit changed();
+    });
     refresh();
 }
 AppStore::~AppStore() = default;
@@ -48,12 +52,42 @@ void AppStore::openRepository(const QString& id) { m_independent.openRepository(
 void AppStore::cleanupProgram(const QString&, const QString&) {}
 
 
+bool AppStore::testMode() const { return AppCatalog::testMode(); }
+QString AppStore::setTestMode(bool enabled)
+{
+    if (anyBusy() || catalogBusy() || releasesBusy()) return "BUSY";
+    const auto error = AppCatalog::setTestMode(enabled);
+    if (error.isEmpty()) { m_catalogError.clear(); m_releaseResult.clear(); m_independent.refresh(); }
+    emit changed(); return error;
+}
+void AppStore::loadReleases(const QString& repository)
+{
+    if (!testMode() || releasesBusy()) return;
+    m_releaseResult.clear(); m_releaseContext = AppCatalog::contextToken();
+    m_releases.setFuture(QtConcurrent::run([repository] { return AppCatalog::releaseChoices(repository); }));
+    emit changed();
+}
+QString AppStore::selectSourceRelease(const QString& id, const QString& repository, const QString& tag)
+{
+    if (anyBusy() || catalogBusy()) return "BUSY";
+    const auto error = AppCatalog::selectSourceRelease(id, repository, tag.trimmed());
+    if (error.isEmpty()) refreshCatalog();
+    emit changed(); return error;
+}
+QString AppStore::selectAppRelease(const QString& id, const QString& repository, const QString& tag)
+{
+    if (anyBusy() || catalogBusy()) return "BUSY";
+    const auto error = AppCatalog::selectAppRelease(id, repository, tag.trimmed());
+    if (error.isEmpty()) m_independent.refresh();
+    emit changed(); return error;
+}
 QVariantList AppStore::sources() const { return AppCatalog::sources(); }
 QVariantMap AppStore::updateStatus() const { return AppCatalog::readState("update-status"); }
-bool AppStore::automaticUpdates() const { return AppCatalog::readState("preferences").value("automaticUpdates", true).toBool(); }
+bool AppStore::automaticUpdates() const { return !testMode() && AppCatalog::readState("preferences").value("automaticUpdates", true).toBool(); }
 bool AppStore::updateNotifications() const { return AppCatalog::readState("preferences").value("updateNotifications", true).toBool(); }
 void AppStore::setAutomaticUpdates(bool enabled)
 {
+    if (testMode()) return;
     auto preferences = AppCatalog::readState("preferences"); preferences["automaticUpdates"] = enabled;
     AppCatalog::writeState("preferences", preferences); emit changed();
 }
