@@ -43,9 +43,11 @@ public:
     Q_INVOKABLE void revealWallpaperImage(const QString& urlOrPath);
     Q_INVOKABLE void chooseWallpaperImage(const QString& urlOrPath);
     Q_INVOKABLE void previewWallpaperImage(const QString& urlOrPath, const QStringList& images);
-    Q_INVOKABLE QString wallpaperColorImage(const QString& start, const QString& end, int angle);
+    Q_INVOKABLE QString wallpaperColorImage(const QString& start, const QString& end, int angle,
+        const QStringList& colors = QStringList());
     Q_INVOKABLE void chooseWallpaperColor(const QString& hex);
-    Q_INVOKABLE void chooseWallpaperGradient(const QString& start, const QString& end, int angle);
+    Q_INVOKABLE void chooseWallpaperGradient(const QString& start, const QString& end, int angle,
+        const QStringList& colors = QStringList());
     Q_INVOKABLE QString wallpaperCustomColors();
     Q_INVOKABLE void saveWallpaperCustomColors(const QString& json);
     Q_INVOKABLE void pickWallpaperColor();

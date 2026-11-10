@@ -88,7 +88,7 @@ sample wallpaper or recover content already removed by the client.
 
 ## Independent window-button cover
 
-Settings → Window appearance → **Independent button cover** writes the global
+Settings → Window appearance → **Resize button background separately** writes the global
 `independentButtonBackground` boolean in `~/.config/kos/window-buttons.json`
 (default false). Fallback CSD overlays then use 14 logical-pixel circles and
 14 logical-pixel gaps, matching Settings, Calendar, Weather and native KOS

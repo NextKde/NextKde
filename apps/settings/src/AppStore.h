@@ -80,7 +80,7 @@ signals:
 private:
     IndependentApps m_independent;
     QFutureWatcher<QString> m_catalogRefresh;
-    QString m_catalogError, m_releaseContext;
+    QString m_catalogError, m_releaseContext, m_checkAfterRefresh;
     QFutureWatcher<QVariantMap> m_releases;
     QVariantMap m_releaseResult;
 };

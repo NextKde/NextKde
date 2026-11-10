@@ -357,21 +357,37 @@ Item {
                 }
             }
         }
-        Text {
+        // Fit short hints without reserving empty lines. Only the card's lower
+        // edge follows this height: the content above and the mode buttons
+        // retain their positions, and BatteryPanel keeps its Wayland size fixed.
+        // Cap long backend errors/translations at three lines with scrolling.
+        Flickable {
+            id: modeStatusViewport
+            objectName: "battery-mode-status-viewport"
             width: parent.width
-            topPadding: 8; bottomPadding: 2
-            text: PowerProfileService.changing || PowerProfileService.pendingProfile ? I18n.tr("Changing power mode…")
-                : PowerProfileService.loading && !PowerProfileService.profiles.length ? I18n.tr("Loading power modes…")
-                : PowerProfileService.error || body.modeDescription
-            wrapMode: Text.Wrap
-            color: PowerProfileService.error ? "#ff6961" : body.mutedInk
-            font.pixelSize: 10
-        }
-        Text {
-            width: parent.width
-            visible: PowerProfileService.degraded.length > 0
-            text: I18n.tr("Performance is limited: %1").arg(PowerProfileService.degraded)
-            wrapMode: Text.Wrap; color: body.mutedInk; font.pixelSize: 10
+            height: Math.min(modeStatus.implicitHeight, Math.ceil(modeStatusMetrics.height) * 3 + 10)
+            contentWidth: width
+            contentHeight: modeStatus.implicitHeight
+            clip: true
+            interactive: contentHeight > height
+            boundsBehavior: Flickable.StopAtBounds
+            FontMetrics { id: modeStatusMetrics; font: modeStatus.font }
+            Text {
+                id: modeStatus
+                objectName: "battery-mode-status"
+                width: modeStatusViewport.width
+                topPadding: 8; bottomPadding: 2
+                text: PowerProfileService.changing || PowerProfileService.pendingProfile ? I18n.tr("Changing power mode…")
+                    : PowerProfileService.loading && !PowerProfileService.profiles.length ? I18n.tr("Loading power modes…")
+                    : PowerProfileService.error ? PowerProfileService.error
+                    : PowerProfileService.degraded.length > 0 ? I18n.tr("Performance is limited: %1").arg(PowerProfileService.degraded)
+                    : body.modeDescription
+                textFormat: Text.PlainText
+                wrapMode: Text.Wrap
+                color: PowerProfileService.error ? "#ff6961" : body.mutedInk
+                font.pixelSize: 10
+                onTextChanged: modeStatusViewport.contentY = 0
+            }
         }
     }
 }
