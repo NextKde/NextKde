@@ -22,7 +22,7 @@ private:
     QTimer m_timer;
     QStringList m_pending, m_errors;
     QVariantMap m_notified, m_notificationCandidates;
-    QString m_active;
+    QString m_active, m_scanContext;
     bool m_running = false, m_waitingInventory = false, m_manual = false;
     qint64 m_nextCheck = 0, m_lastRequest = 0;
 };

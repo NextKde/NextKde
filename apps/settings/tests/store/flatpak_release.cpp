@@ -246,8 +246,9 @@ private slots:
                 {"expiresAt", now.addDays(1).toString(Qt::ISODate)}, {"apps", QVariantList{entry}}}).toJson();
             const auto signature = gpg({"--armor", "--detach-sign", "--output", "-"}, bytes);
             if (signature.isEmpty()) return false;
-            QDir().mkpath(AppCatalog::stateDirectory() + "/catalogs");
-            QFile file(AppCatalog::stateDirectory() + "/catalogs/fixture.json");
+            const auto folder = AppCatalog::stateDirectory() + (AppCatalog::testMode() ? "/test/catalogs" : "/catalogs");
+            QDir().mkpath(folder);
+            QFile file(folder + "/fixture.json");
             const auto envelope = QJsonDocument::fromVariant(QVariantMap{{"catalog", bytes.toBase64()}, {"signature", signature.toBase64()}}).toJson();
             return file.open(QIODevice::WriteOnly) && file.write(envelope) == envelope.size();
         };
@@ -275,6 +276,56 @@ private slots:
         server.responses = {{200, QByteArray(1234, 'x'), {}}};
         const auto downloaded = FlatpakRelease::download(notes, candidate, root.path(), [] { return false; }, [](const QString&, int) {});
         QCOMPARE(downloaded.value("code").toString(), QString("INTEGRITY_FAILED"));
+        QCOMPARE(AppCatalog::setTestMode(true), QString());
+        QCOMPARE(AppCatalog::addSource("fixture", "Example/catalog", fingerprint, keyFile.fileName()), QString());
+        QVERIFY(cache(1));
+        QFile envelopeFile(AppCatalog::stateDirectory() + "/test/catalogs/fixture.json");
+        QVERIFY(envelopeFile.open(QIODevice::ReadOnly));
+        const auto envelope = QJsonDocument::fromJson(envelopeFile.readAll()).object();
+        QJsonArray catalogAssets;
+        for (const auto& name : {QString("catalog.json"), QString("catalog.json.sig")})
+            catalogAssets.append(QJsonObject{{"name", name}, {"browser_download_url", "https://github.com/Example/catalog/releases/download/catalog-preview/" + name}});
+        const auto catalogRelease = QJsonDocument(QJsonObject{{"tag_name", "catalog-preview"}, {"draft", false},
+            {"prerelease", true}, {"assets", catalogAssets}}).toJson();
+        QCOMPARE(AppCatalog::selectSourceRelease("fixture", "Example/catalog", "catalog-preview"), QString());
+        server.requests = 0;
+        server.responses = {{200, catalogRelease, {}},
+            {200, QByteArray::fromBase64(envelope.value("catalog").toString().toLatin1()), {}},
+            {200, QByteArray::fromBase64(envelope.value("signature").toString().toLatin1()), {}}};
+        QCOMPARE(AppCatalog::refresh(), QString());
+        QVERIFY(AppCatalog::find(notes).value("active").toBool());
+        QVERIFY(server.requestLines.join('\n').contains("/releases/tags/catalog-preview"));
+        server.requests = 0;
+        server.responses = {{200, R"([{"tag_name":"v1.0.0","draft":false,"prerelease":false},{"tag_name":"v1.1.0-rc.1","draft":false,"prerelease":true},{"tag_name":"v2.0.0","draft":true,"prerelease":false}])", {}}};
+        const auto choices = AppCatalog::releaseChoices("Example/Notes");
+        QVERIFY(choices.value("error").toString().isEmpty());
+        QCOMPARE(choices.value("releases").toList().size(), 2);
+        QCOMPARE(AppCatalog::selectAppRelease(notes, "Example/Notes", "v0.2.0-rc.1"), QString());
+        auto prerelease = QJsonDocument::fromJson(release).object();
+        prerelease["tag_name"] = "v0.2.0-rc.1"; prerelease["prerelease"] = true;
+        auto testAssets = assets;
+        for (int i = 0; i < testAssets.size(); ++i) {
+            auto asset = testAssets[i].toObject();
+            asset["browser_download_url"] = asset["browser_download_url"].toString().replace("/v0.2.0/", "/v0.2.0-rc.1/");
+            testAssets[i] = asset;
+        }
+        prerelease["assets"] = testAssets;
+        auto testDocument = document; testDocument["version"] = "0.2.0-rc.1";
+        server.requests = 0;
+        server.responses = {{200, QJsonDocument(prerelease).toJson(), {}}, {200, QJsonDocument(testDocument).toJson(), {}}};
+        const auto preview = FlatpakRelease::discover(notes, "x86_64", [] { return false; }, [](const QString&, int) {});
+        QVERIFY2(!preview.contains("code"), qPrintable(preview.value("message").toString()));
+        QCOMPARE(preview.value("version").toString(), QString("0.2.0-rc.1"));
+        QVERIFY(server.requestLines.join('\n').contains("/releases/tags/v0.2.0-rc.1"));
+        QCOMPARE(AppCatalog::selectAppRelease(notes, "Example/Notes", "v0.2.0-rc.2"), QString());
+        QCOMPARE(FlatpakRelease::download(notes, preview, root.path(), [] { return false; }, [](const QString&, int) {}).value("code").toString(), QString("CATALOG_CHANGED"));
+        server.requests = 0;
+        server.responses = {{200, QJsonDocument(prerelease).toJson(), {}}};
+        QCOMPARE(FlatpakRelease::discover(notes, "x86_64", [] { return false; }, [](const QString&, int) {}).value("code").toString(), QString("INVALID_RELEASE"));
+        QCOMPARE(AppCatalog::setTestMode(false), QString());
+        server.requests = 0;
+        server.responses = {{200, QJsonDocument(prerelease).toJson(), {}}};
+        QCOMPARE(FlatpakRelease::discover(notes, "x86_64", [] { return false; }, [](const QString&, int) {}).value("code").toString(), QString("INVALID_RELEASE"));
         entry["publisher"] = QVariantMap{{"fingerprint", fingerprint}, {"publicKey", publicKey.toBase64()}};
         QVERIFY(cache(2));
         server.requests = 0;
@@ -284,11 +335,16 @@ private slots:
     }
     void versionComparison()
     {
+        bool prereleaseValid = false;
+        QVERIFY(FlatpakRelease::compareVersions("1.0.0-rc.2", "1.0.0-rc.10", &prereleaseValid) < 0);
+        QVERIFY(prereleaseValid);
+        QVERIFY(FlatpakRelease::compareVersions("1.0.0-rc.10", "1.0.0", &prereleaseValid) < 0);
+        QVERIFY(prereleaseValid);
         bool valid = false;
         QCOMPARE(FlatpakRelease::compareVersions("0.2.0", "0.1.9", &valid), 1); QVERIFY(valid);
         QCOMPARE(FlatpakRelease::compareVersions("1.0.0", "1.0.0", &valid), 0); QVERIFY(valid);
         QCOMPARE(FlatpakRelease::compareVersions("1.0.0", "2.0.0", &valid), -1); QVERIFY(valid);
-        for (const auto &version : {"01.2.0", "v0.2.0", "0.2", "0.2.0-beta", "-1.2.0", "18446744073709551616.0.0"}) {
+        for (const auto &version : {"01.2.0", "v0.2.0", "0.2", "0.2.0-01", "-1.2.0", "18446744073709551616.0.0"}) {
             FlatpakRelease::compareVersions(version, "0.2.0", &valid); QVERIFY(!valid);
         }
     }
