@@ -17,6 +17,14 @@ ColumnLayout {
     property var backend: null
     property var bridge: null
     property var runningApps: []
+    property var appIcons: ({})
+    function appIcon(appId) {
+        if (Object.prototype.hasOwnProperty.call(appIcons, appId))
+            return appIcons[appId];
+        const source = bridge && typeof bridge.applicationIcon === "function" ? bridge.applicationIcon(appId) : "";
+        appIcons[appId] = source;
+        return source;
+    }
     readonly property var snapshot: backend ? backend.state : ({})
     readonly property var availableRunningApps: {
         const excluded = snapshot.buttonExclusions ?? [];
@@ -203,15 +211,35 @@ ColumnLayout {
                 id: exclusionRow
                 required property string modelData
                 objectName: "windowButtonExclusionRow_" + modelData
-                title: modelData
-                Demo.LiquidActionButton {
-                    objectName: "removeWindowButtonExclusion"
-                    text: I18n.tr("Remove")
-                    materialForm: true
-                    implicitHeight: 24
-                    cornerRadius: 6
-                    enabled: windowPage.backend !== null
-                    onClicked: windowPage.backend.setButtonExclusion(exclusionRow.modelData, false)
+                allowStacking: false
+                minimumLabelWidth: 0
+                controlSpacing: 0
+                Accessible.name: modelData
+                RowLayout {
+                    implicitWidth: exclusionRow.availableWidth
+                    Layout.fillWidth: true
+                    spacing: 8
+                    Controls.ApplicationIcon {
+                        objectName: "windowButtonExclusionIcon_" + exclusionRow.modelData
+                        source: windowPage.appIcon(exclusionRow.modelData)
+                        fallbackColor: windowPage.colors.secondaryText
+                    }
+                    Text {
+                        Layout.fillWidth: true
+                        Layout.minimumWidth: 0
+                        text: exclusionRow.modelData
+                        textFormat: Text.PlainText
+                        font.pixelSize: 12
+                        color: windowPage.colors.primaryText
+                        elide: Text.ElideRight
+                    }
+                    Controls.WindowButtonAction {
+                        objectName: "removeWindowButtonExclusion"
+                        text: I18n.tr("Remove")
+                        iconName: "close"
+                        enabled: windowPage.backend !== null
+                        onClicked: windowPage.backend.setButtonExclusion(exclusionRow.modelData, false)
+                    }
                 }
             }
         }
@@ -222,6 +250,11 @@ ColumnLayout {
         }
         Demo.SettingsItem {
             description: windowPage.availableRunningApps.length === 0 ? I18n.tr("No running apps available. Refresh or enter an application class below.") : ""
+            Controls.ApplicationIcon {
+                objectName: "windowButtonSelectedAppIcon"
+                source: windowPage.appIcon(windowPage.availableRunningApps[runningAppsBox.currentIndex]?.appId || "")
+                fallbackColor: windowPage.colors.secondaryText
+            }
             Controls.SettingsSelect {
                 id: runningAppsBox
                 objectName: "windowButtonRunningApps"
@@ -234,27 +267,31 @@ ColumnLayout {
                 model: windowPage.availableRunningApps
                 textRole: "label"
                 enabled: windowPage.bridge !== null && model.length > 0
-                property int selectedIndex: 0
-                currentIndex: Math.min(selectedIndex, Math.max(0, model.length - 1))
+                property string selectedAppId: ""
+                currentIndex: Math.max(0, model.findIndex(app => app.appId === selectedAppId))
                 onActivated: function (index) {
-                    selectedIndex = index;
+                    selectedAppId = model[index].appId;
                 }
             }
-            Demo.LiquidActionButton {
-                objectName: "addRunningWindowButtonExclusion"
-                text: windowPage.availableRunningApps.length > 0 ? I18n.tr("Add") : I18n.tr("Refresh")
-                materialForm: true
-                implicitHeight: 24
-                cornerRadius: 6
-                enabled: windowPage.backend !== null && windowPage.bridge !== null && (windowPage.availableRunningApps.length === 0 || !!windowPage.availableRunningApps[runningAppsBox.currentIndex]?.appId)
+            Controls.WindowButtonAction {
+                objectName: "refreshWindowButtonRunningApps"
+                text: I18n.tr("Refresh")
+                iconName: "refreshRounded"
+                enabled: windowPage.bridge !== null
                 onClicked: {
-                    if (windowPage.availableRunningApps.length === 0) {
-                        windowPage.bridge.fgSchedRunningApps();
-                    } else {
-                        const app = windowPage.availableRunningApps[runningAppsBox.currentIndex];
-                        if (app && app.appId)
-                            windowPage.backend.setButtonExclusion(app.appId, true);
-                    }
+                    windowPage.appIcons = ({});
+                    windowPage.bridge.fgSchedRunningApps();
+                }
+            }
+            Controls.WindowButtonAction {
+                objectName: "addRunningWindowButtonExclusion"
+                text: I18n.tr("Add")
+                iconName: "plus"
+                enabled: windowPage.backend !== null && !!windowPage.availableRunningApps[runningAppsBox.currentIndex]?.appId
+                onClicked: {
+                    const app = windowPage.availableRunningApps[runningAppsBox.currentIndex];
+                    if (app && app.appId)
+                        windowPage.backend.setButtonExclusion(app.appId, true);
                 }
             }
         }
@@ -269,12 +306,10 @@ ColumnLayout {
                 placeholderText: I18n.tr("Application class, e.g. md.obsidian.Obsidian")
                 onAccepted: windowPage.addManualExclusion()
             }
-            Demo.LiquidActionButton {
+            Controls.WindowButtonAction {
                 objectName: "addManualWindowButtonExclusion"
                 text: I18n.tr("Add")
-                materialForm: true
-                implicitHeight: 24
-                cornerRadius: 6
+                iconName: "plus"
                 enabled: windowPage.backend !== null && manualExclusionInput.text.trim().length > 0
                 onClicked: windowPage.addManualExclusion()
             }

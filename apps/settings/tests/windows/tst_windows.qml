@@ -155,13 +155,35 @@ Item {
             const picker = control("windowButtonRunningApps")
             compare(picker.model.length, 0)
             verify(!picker.enabled)
-            const refresh = control("addRunningWindowButtonExclusion")
+            verify(!control("addRunningWindowButtonExclusion").enabled)
+            const refresh = control("refreshWindowButtonRunningApps")
             const requests = bridgeBackend.runningAppsRequests
             mouseClick(refresh, refresh.width / 2, refresh.height / 2)
             compare(bridgeBackend.runningAppsRequests, requests + 1)
             const input = control("windowButtonExclusionInput")
             input.text = "md.obsidian.Obsidian"
             verify(control("addManualWindowButtonExclusion").enabled)
+        }
+        function test_refresh_nonempty_running_apps_preserves_selection() {
+            const picker = control("windowButtonRunningApps")
+            picker.activated(1)
+            compare(picker.model[picker.currentIndex].appId, "md.obsidian.Obsidian")
+            bridgeBackend.apps = [
+                {name:"Kate", appId:"org.kde.kate"},
+                {name:"Firefox", appId:"firefox"},
+                {name:"Obsidian", appId:"md.obsidian.Obsidian"}
+            ]
+            const requests = bridgeBackend.runningAppsRequests
+            const refresh = control("refreshWindowButtonRunningApps")
+            mouseClick(refresh, refresh.width / 2, refresh.height / 2)
+            compare(bridgeBackend.runningAppsRequests, requests + 1)
+            compare(picker.model.length, 3)
+            compare(picker.model[picker.currentIndex].appId, "md.obsidian.Obsidian")
+            const add = control("addRunningWindowButtonExclusion")
+            mouseClick(add, add.width / 2, add.height / 2)
+            compare(backend.state.buttonExclusions, ["md.obsidian.Obsidian"])
+            compare(picker.model[picker.currentIndex].appId, "org.kde.kate")
+            verify(control("windowButtonExclusionIcon_md.obsidian.Obsidian").visible)
         }
         function test_independent_cover() {
             const toggle = control("windowIndependentButtonBackground")
