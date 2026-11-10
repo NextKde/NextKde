@@ -36,6 +36,7 @@ AnimatedPopupWindow {
         edges: !panel.dockHosted ? Edges.Bottom : panel.dockEdge === "left" ? Edges.Right : panel.dockEdge === "right" ? Edges.Left : Edges.Top
         gravity: !panel.dockHosted ? Edges.Bottom : panel.dockEdge === "left" ? Edges.Right : panel.dockEdge === "right" ? Edges.Left : Edges.Top
         adjustment: PopupAdjustment.Slide
+        margins.bottom: panel.dockHosted ? 0 : -8
     }
     BackgroundEffect.blurRegion: panel.visible && panel.revealProgress > 0
         && AppearanceTokens.surface.usesBackdrop ? surface.blurRegion : null
