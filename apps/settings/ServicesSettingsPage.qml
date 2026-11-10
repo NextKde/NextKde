@@ -140,6 +140,132 @@ GridLayout {
         Layout.columnSpan: 2
         Layout.fillWidth: true
         Text {
+            objectName: "catalogTestModeBanner"
+            textFormat: Text.PlainText
+            Layout.fillWidth: true
+            text: page.store && page.store.testMode
+                ? I18n.tr("Test mode: original app IDs and application data are shared. Uninstall test versions yourself.")
+                : I18n.tr("Developer testing")
+            color: page.store && page.store.testMode ? page.colors.accent : page.colors.secondaryText
+            wrapMode: Text.Wrap
+            font.pixelSize: 12
+        }
+        WallpaperTextButton {
+            objectName: "catalogTestModeButton"
+            label: page.store && page.store.testMode ? I18n.tr("Exit test mode") : I18n.tr("Enter test mode")
+            colors: page.colors
+            enabled: !!page.store && !page.store.anyBusy && !page.store.catalogBusy && !page.store.releasesBusy
+            onClicked: { modeError.text = ""; testModeDialog.open(); }
+        }
+    }
+    Dialog {
+        id: testModeDialog
+        objectName: "catalogTestModeDialog"
+        parent: Overlay.overlay
+        anchors.centerIn: parent
+        width: Math.min(480, parent ? parent.width - 32 : 480)
+        modal: true
+        title: page.store && page.store.testMode ? I18n.tr("Exit test mode") : I18n.tr("Enter test mode")
+        contentItem: ColumnLayout {
+            Text {
+                Layout.fillWidth: true
+                textFormat: Text.PlainText
+                text: I18n.tr("Test mode changes application sources, not application IDs. A test package may replace an installed app and use its existing data. Exiting restores normal sources without uninstalling or restoring applications. Uninstall test versions yourself before reinstalling a normal release.")
+                color: page.colors.primaryText
+                wrapMode: Text.Wrap
+            }
+            Text { id: modeError; Layout.fillWidth: true; textFormat: Text.PlainText; color: page.colors.primaryText; wrapMode: Text.Wrap }
+        }
+        footer: DialogButtonBox {
+            Button { text: I18n.tr("Cancel"); DialogButtonBox.buttonRole: DialogButtonBox.RejectRole }
+            Button { objectName: "catalogTestModeConfirm"; text: I18n.tr("Continue"); DialogButtonBox.buttonRole: DialogButtonBox.ActionRole
+                onClicked: {
+                    const error = page.store.setTestMode(!page.store.testMode);
+                    modeError.text = page.catalogMessage(error);
+                    if (!error) { page.pendingPlanRequest = null; planDialog.close(); testModeDialog.close(); }
+                }
+            }
+            onRejected: testModeDialog.reject()
+        }
+    }
+    function chooseRelease(kind, id, repository, tag) {
+        releaseDialog.kind = kind;
+        releaseDialog.targetId = id;
+        releaseDialog.repository = repository;
+        releaseTagField.text = tag || "";
+        releaseError.text = "";
+        releaseDialog.open();
+        page.store.loadReleases(repository);
+    }
+    Dialog {
+        id: releaseDialog
+        objectName: "catalogReleaseDialog"
+        property string kind: ""
+        property string targetId: ""
+        property string repository: ""
+        parent: Overlay.overlay
+        anchors.centerIn: parent
+        width: Math.min(560, parent ? parent.width - 32 : 560)
+        height: Math.min(560, parent ? parent.height - 32 : 560)
+        modal: true
+        title: I18n.tr("Select Release")
+        contentItem: Flickable {
+            clip: true
+            contentWidth: width
+            contentHeight: releaseContent.implicitHeight
+            boundsBehavior: Flickable.StopAtBounds
+            ScrollBar.vertical: ScrollBar {}
+            ColumnLayout {
+                id: releaseContent
+                width: parent.width
+                spacing: 10
+                Text { Layout.fillWidth: true; textFormat: Text.PlainText; text: releaseDialog.repository; color: page.colors.primaryText; wrapMode: Text.WrapAnywhere }
+                Text {
+                    Layout.fillWidth: true
+                    textFormat: Text.PlainText
+                    text: I18n.tr("Choose a published Release, including prereleases, or enter its exact tag. Leave blank for the latest stable release. Drafts are not supported.")
+                    color: page.colors.secondaryText
+                    wrapMode: Text.Wrap
+                }
+                Basic.TextField { id: releaseTagField; objectName: "catalogReleaseTag"; Layout.fillWidth: true; placeholderText: I18n.tr("Release tag (blank = latest stable)") }
+                WallpaperTextButton { label: I18n.tr("Latest stable release"); colors: page.colors; onClicked: releaseTagField.text = "" }
+                Text { Layout.fillWidth: true; textFormat: Text.PlainText; visible: !!page.store && page.store.releasesBusy; text: I18n.tr("Loading releases…"); color: page.colors.secondaryText }
+                Repeater {
+                    model: page.store && page.store.releases ? (page.store.releases.releases || []) : []
+                    delegate: WallpaperTextButton {
+                        required property var modelData
+                        label: modelData.tag + (modelData.prerelease ? " · " + I18n.tr("Prerelease") : "")
+                        colors: page.colors
+                        onClicked: releaseTagField.text = modelData.tag
+                    }
+                }
+                Text { Layout.fillWidth: true; textFormat: Text.PlainText; text: page.catalogMessage(page.store && page.store.releases ? page.store.releases.error : ""); color: page.colors.secondaryText; wrapMode: Text.Wrap }
+                Text { id: releaseError; Layout.fillWidth: true; textFormat: Text.PlainText; color: page.colors.primaryText; wrapMode: Text.Wrap }
+            }
+        }
+        footer: DialogButtonBox {
+            Button { text: I18n.tr("Cancel"); DialogButtonBox.buttonRole: DialogButtonBox.RejectRole }
+            Button {
+                objectName: "catalogReleaseSave"
+                text: I18n.tr("Apply")
+                DialogButtonBox.buttonRole: DialogButtonBox.ActionRole
+                enabled: !!page.store && page.store.testMode && !page.store.anyBusy && !page.store.catalogBusy
+                onClicked: {
+                    const error = releaseDialog.kind === "source"
+                        ? page.store.selectSourceRelease(releaseDialog.targetId, releaseDialog.repository, releaseTagField.text)
+                        : page.store.selectAppRelease(releaseDialog.targetId, releaseDialog.repository, releaseTagField.text);
+                    releaseError.text = page.catalogMessage(error);
+                    if (!error) { page.pendingPlanRequest = null; planDialog.close(); releaseDialog.close(); }
+                }
+            }
+            onRejected: releaseDialog.reject()
+        }
+    }
+    RowLayout {
+        visible: page.selectedCategory === 0
+        Layout.columnSpan: 2
+        Layout.fillWidth: true
+        Text {
             textFormat: Text.PlainText
             Layout.fillWidth: true
             text: page.store && page.store.updateCount ? I18n.tr("%1 apps have updates").arg(page.store.updateCount) : I18n.tr("Applications")
@@ -191,11 +317,13 @@ GridLayout {
                 width: parent.width
                 spacing: 12
                 Basic.CheckBox {
-                    text: I18n.tr("Automatically check for updates")
+                    enabled: !!page.store && !page.store.testMode
+                    text: page.store && page.store.testMode ? I18n.tr("Scheduled checks are paused in test mode") : I18n.tr("Automatically check for updates")
                     checked: page.store ? !!page.store.automaticUpdates : true
                     onToggled: if (page.store) page.store.automaticUpdates = checked
                 }
                 Basic.CheckBox {
+                    enabled: !!page.store && !page.store.testMode
                     text: I18n.tr("Show update notifications")
                     checked: page.store ? !!page.store.updateNotifications : true
                     onToggled: if (page.store) page.store.updateNotifications = checked
@@ -219,6 +347,13 @@ GridLayout {
                             visible: text.length > 0
                             color: page.colors.secondaryText
                             wrapMode: Text.Wrap
+                        }
+                        WallpaperTextButton {
+                            visible: !!page.store && page.store.testMode
+                            label: I18n.tr("Catalog Release: %1").arg(modelData.releaseTag || I18n.tr("Latest stable release"))
+                            colors: page.colors
+                            enabled: !!page.store && !page.store.catalogBusy && !page.store.anyBusy && !page.store.releasesBusy
+                            onClicked: page.chooseRelease("source", modelData.id, modelData.repository, modelData.releaseTag)
                         }
                         WallpaperTextButton {
                             label: I18n.tr("Remove source")
@@ -898,6 +1033,21 @@ GridLayout {
                                 }
                             }
                             WallpaperTextButton {
+                                visible: !!page.store && page.store.testMode && appCard.app.catalogActive
+                                label: I18n.tr("App Release: %1").arg(appCard.app.releaseTag || I18n.tr("Latest stable release"))
+                                colors: page.colors
+                                enabled: !appCard.blocked && !page.store.releasesBusy && !page.store.catalogBusy
+                                onClicked: page.chooseRelease("app", appCard.app.appId, appCard.app.repository.replace("https://github.com/", ""), appCard.app.releaseTag)
+                            }
+                            Text {
+                                visible: !!appCard.app.testInstalled
+                                Layout.fillWidth: true
+                                textFormat: Text.PlainText
+                                text: I18n.tr("Test installation: uninstall it yourself before restoring a normal release.")
+                                color: page.colors.secondaryText
+                                wrapMode: Text.Wrap
+                            }
+                            WallpaperTextButton {
                                 implicitHeight: 28
                                 cornerRadius: 14
                                 label: I18n.tr("Repository")
@@ -1110,6 +1260,15 @@ GridLayout {
                             font.weight: Font.DemiBold
                         }
                     }
+                }
+                Text {
+                    visible: !!page.store && page.store.testMode
+                    objectName: "testInstallWarning"
+                    Layout.fillWidth: true
+                    textFormat: Text.PlainText
+                    text: I18n.tr("This test package keeps the original app ID. It may replace an installed app and share its data. Exiting test mode will not restore the previous version.")
+                    color: page.colors.primaryText
+                    wrapMode: Text.Wrap
                 }
                 Text {
                     textFormat: Text.PlainText
