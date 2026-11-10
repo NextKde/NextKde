@@ -3,6 +3,7 @@
 // Keys mirror ZhCatalog.mjs; when an English source string changes, update
 // the key here too. Date patterns use Qt format strings (quote literals).
 export const catalog = {
+    "Continue": "Continuar",
     "Refresh the selected catalog Release": "Atualize o Release de catálogo selecionado",
     "Developer testing": "Testes para desenvolvedores",
     "Enter test mode": "Entrar no modo de teste",

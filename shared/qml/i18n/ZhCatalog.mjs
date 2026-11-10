@@ -3,6 +3,7 @@
 // 规则：值必须与改造前界面上的中文逐字一致（含空格、间隔符与省略号），
 // 改动文案时同步更新对应键，不要只改一边。
 export const catalog = {
+    "Continue": "继续",
     "Refresh the selected catalog Release": "请刷新所选目录 Release",
     "Developer testing": "开发者测试",
     "Enter test mode": "进入测试模式",
