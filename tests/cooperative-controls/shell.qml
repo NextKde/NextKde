@@ -2,9 +2,43 @@ import QtQuick
 import QtQuick.Window
 import Quickshell
 import Quickshell.Io
+import Quickshell.Wayland
 import "../../shared/qml/foundation" as Foundation
 
 ShellRoot {
+    // Same layer/namespace and sliding input geometry as the standalone Bar.
+    // Keep the surface mapped when hidden to exercise its transparent space.
+    PanelWindow {
+        id: inputPanel
+        visible: false
+        anchors { top: true; left: true; right: true }
+        implicitHeight: 35
+        exclusiveZone: 0
+        color: "transparent"
+        WlrLayershell.namespace: "dock"
+        WlrLayershell.layer: WlrLayer.Top
+        WlrLayershell.keyboardFocus: WlrKeyboardFocus.None
+        property real slideY: 0
+        property int clicks: 0
+        property int wheels: 0
+        Rectangle {
+            id: panelContent
+            y: inputPanel.slideY
+            width: inputPanel.width; height: inputPanel.height
+            color: "#806080a0"
+            MouseArea {
+                anchors.fill: parent
+                acceptedButtons: Qt.AllButtons
+                onClicked: inputPanel.clicks++
+                onWheel: inputPanel.wheels++
+            }
+        }
+        Item { id: edge; width: inputPanel.width; height: inputPanel.slideY <= -35 ? 2 : 0 }
+        mask: Region {
+            Region { item: panelContent }
+            Region { item: edge }
+        }
+    }
     Window {
         id: first
         visible: true
@@ -46,8 +80,14 @@ ShellRoot {
             return JSON.stringify({a:controlsA.compositorActive, b:controlsB.compositorActive,
                 supported:controlsA.compositorSupported, ax:controlsA.x+4, ay:controlsA.y+4,
                 bx:controlsB.x+2, by:controlsB.y+7, aw:controlsA.width, ah:controlsA.height,
+                panelClicks:inputPanel.clicks, panelWheels:inputPanel.wheels,
                 backgroundClicks:first.backgroundClicks, actions:controlsA.actions, layout:controlsA.buttonLayout, hover:controlsA.hoverGlyphs, visibility:first.visibility});
         }
+        function maximize(): void { first.showMaximized(); }
+        function showPanel(): void { inputPanel.slideY = 0; inputPanel.visible = true; }
+        function partialPanel(): void { inputPanel.slideY = -8; }
+        function hidePanel(): void { inputPanel.slideY = -37; }
+        function removePanel(): void { inputPanel.visible = false; }
         function moveSlot(): void { first.inset = 96; controlsA.y = 54; }
         function closeOnly(): void { controlsA.actions = ["close"]; }
         function minimizeOnly(): void { controlsA.actions = ["minimize"]; }

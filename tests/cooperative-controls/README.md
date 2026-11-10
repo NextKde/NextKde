@@ -21,6 +21,15 @@ with `--without-service` to check self-rendering when Bridge is disabled.
 
 The list contract covers each single action, reordered pairs, empty lists, and removal of old hit rectangles. Pointer acceptance also clicks an obsolete maximize position after switching to close-only and checks that the client receives the click.
 
+With `--outer-x11` (requires Pillow for presented-frame checks), pointer acceptance
+also puts a Top-layer `dock` surface over
+a maximized client's close button. Left/middle/right clicks and wheel events must
+reach that surface, including a partially revealed strip. Sliding its input mask
+offscreen while leaving the surface mapped must restore access to the underlying
+maximize button. `shell-input-passed` records this regression separately. This
+fixture exercises compositor routing with Bar-like geometry; it does not replace
+real Shell auto-hide or KRunner/OSD lifecycle acceptance in the VM.
+
 Use `--installed-layout --apps .build/tests` to copy the native module into
 an isolated `config/quickshell/kos/Kos/SurfaceShape` deployment and resolve it
 via `QML2_IMPORT_PATH` alone, matching desktop launchers. The default build-tree
