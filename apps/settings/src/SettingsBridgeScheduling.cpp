@@ -1,10 +1,14 @@
 #include "SettingsBridge.h"
 
+#include <KService>
+#include <QBuffer>
 #include <QDir>
 #include <QFile>
 #include <QFileInfo>
 #include <QJsonArray>
 #include <QJsonDocument>
+#include <QIcon>
+#include <QPixmap>
 #include <QRegularExpression>
 #include <QSaveFile>
 #include <QStandardPaths>
@@ -43,6 +47,34 @@ void SettingsBridge::fgSchedRunningApps()
 {
     callShell(QStringLiteral("fg-sched"), { QStringLiteral("runningApps") },
         QStringLiteral("Running apps list request failed"), RequestKind::FgSchedApps);
+}
+
+QString SettingsBridge::applicationIcon(const QString& appId) const
+{
+    const QString id = appId.trimmed();
+    if (id.isEmpty()) return {};
+    auto service = KService::serviceByStorageId(id.endsWith(QLatin1String(".desktop"))
+        ? id : id + QStringLiteral(".desktop"));
+    if (!service) {
+        // Window classes can differ from desktop file IDs (including case).
+        // This lookup affects presentation only; exclusions keep the raw ID.
+        const auto services = KService::allServices();
+        for (const auto& candidate : services) {
+            if (candidate->desktopEntryName().compare(id, Qt::CaseInsensitive) == 0
+                || candidate->property<QString>(QStringLiteral("StartupWMClass")).compare(id, Qt::CaseInsensitive) == 0) {
+                service = candidate;
+                break;
+            }
+        }
+    }
+    const QString name = service && !service->icon().isEmpty() ? service->icon() : id;
+    const QIcon icon = QFileInfo(name).isAbsolute() ? QIcon(name) : QIcon::fromTheme(name);
+    if (icon.isNull()) return {};
+    // Settings is a standalone process and cannot use Quickshell's image provider.
+    QByteArray bytes;
+    QBuffer buffer(&bytes);
+    if (!buffer.open(QIODevice::WriteOnly) || !icon.pixmap(48, 48).save(&buffer, "PNG")) return {};
+    return QStringLiteral("data:image/png;base64,") + QString::fromLatin1(bytes.toBase64());
 }
 
 void SettingsBridge::fgSchedSnapshot()

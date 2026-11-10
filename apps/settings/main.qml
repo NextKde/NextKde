@@ -835,6 +835,7 @@ ApplicationWindow {
                             colors: window.notificationTheme
                             materialForm: window.materialForm
                             backend: typeof windowSettings !== "undefined" ? windowSettings : null
+                            bridge: typeof settingsBridge !== "undefined" ? settingsBridge : null
                         }
                     }
 

@@ -110,6 +110,13 @@ QVariantMap WindowSettings::state() const {
     const auto buttonsDoc = read(path(QStringLiteral("window-buttons.json")));
     const auto buttonsDefault = buttonsDoc.value(QStringLiteral("default")).toObject();
     const QString buttonGlyphMode = buttonsDefault.value(QStringLiteral("glyphMode")).toString(QStringLiteral("always"));
+    QStringList buttonExclusions;
+    const auto buttonApps = buttonsDoc.value(QStringLiteral("apps")).toObject();
+    for (auto it = buttonApps.constBegin(); it != buttonApps.constEnd(); ++it) {
+        const auto showButtons = it.value().toObject().value(QStringLiteral("showButtons"));
+        if (showButtons.isBool() && !showButtons.toBool()) buttonExclusions.append(it.key());
+    }
+    buttonExclusions.sort(Qt::CaseSensitive);
     return {{"enabled", doc.value("enabled").toBool(true)},
             {"radius", defaults.value("corners").toObject().value("radius").toInt(20)},
             {"squareMaximized", defaults.value("states").toObject().value("maximized").toString() == QLatin1String("square")},
@@ -119,6 +126,7 @@ QVariantMap WindowSettings::state() const {
             {"closeAnimation", animation.readEntry("CloseAnimation", QStringLiteral("scale"))},
             {"decoration", decoration.readEntry("library", QStringLiteral("org.kde.breeze"))},
             {"buttonGlyphMode", buttonGlyphMode},
+            {"buttonExclusions", buttonExclusions},
             {"independentButtonBackground", buttonsDoc.value("independentButtonBackground").toBool(false)}};
 }
 
@@ -283,6 +291,58 @@ bool WindowSettings::setButtonGlyphMode(const QString &mode) {
         QString ignored;
         syncGtkControls(gtkEnabled, current.value("buttonGlyphMode").toString(), ignored);
     }
+    if (saved) reconfigure(QStringLiteral("kos_bridge"));
+    emit changed();
+    return saved;
+}
+bool WindowSettings::setButtonExclusion(const QString &appClass, bool excluded) {
+    m_error.clear();
+    const QString klass = appClass.trimmed();
+    if (klass.isEmpty()) {
+        m_error = QStringLiteral("Application class cannot be empty");
+        emit changed();
+        return false;
+    }
+    const QString filename = path(QStringLiteral("window-buttons.json"));
+    QDir().mkpath(QFileInfo(filename).absolutePath());
+    QLockFile lock(filename + QStringLiteral(".lock"));
+    if (!lock.tryLock(0)) {
+        m_error = QStringLiteral("The configuration is being updated; please retry");
+        emit changed();
+        return false;
+    }
+    auto doc = read(filename, &m_error);
+    if (!m_error.isEmpty()) { emit changed(); return false; }
+    if (doc.contains(QStringLiteral("apps")) && !doc.value(QStringLiteral("apps")).isObject()) {
+        m_error = QStringLiteral("apps must be a configuration object");
+        emit changed();
+        return false;
+    }
+    auto apps = doc.value(QStringLiteral("apps")).toObject();
+    if (apps.contains(klass) && !apps.value(klass).isObject()) {
+        m_error = QStringLiteral("Application button override is malformed");
+        emit changed();
+        return false;
+    }
+    auto app = apps.value(klass).toObject();
+    const auto showButtons = app.value(QStringLiteral("showButtons"));
+    if (!showButtons.isUndefined() && !showButtons.isBool()) {
+        m_error = QStringLiteral("Application button override is malformed");
+        emit changed();
+        return false;
+    }
+    if ((excluded && showButtons.isBool() && !showButtons.toBool())
+        || (!excluded && (showButtons.isUndefined() || showButtons.toBool()))) {
+        emit changed();
+        return true;
+    }
+    if (excluded) app.insert(QStringLiteral("showButtons"), false);
+    else app.remove(QStringLiteral("showButtons"));
+    if (app.isEmpty()) apps.remove(klass);
+    else apps.insert(klass, app);
+    if (apps.isEmpty()) doc.remove(QStringLiteral("apps"));
+    else doc.insert(QStringLiteral("apps"), apps);
+    const bool saved = write(filename, doc, m_error);
     if (saved) reconfigure(QStringLiteral("kos_bridge"));
     emit changed();
     return saved;

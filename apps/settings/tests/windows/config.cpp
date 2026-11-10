@@ -4,6 +4,7 @@
 #include <QTemporaryDir>
 #include <QDir>
 #include <QFile>
+#include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <KSharedConfig>
@@ -179,9 +180,53 @@ int main(int argc, char **argv) {
     CHECK(!settings.setTakeover(true));
     CHECK(get()==beforeGtkFailure);
     CHECK(gtkStyle()=="managed externally");
-    const QString buttonsPath = temporary.path() + "/kos/window-buttons.json";
-    auto putButtons = [&](const QByteArray &data) { QFile file(buttonsPath); CHECK(file.open(QIODevice::WriteOnly)); CHECK(file.write(data) == data.size()); };
-    auto getButtons = [&]() { QFile file(buttonsPath); CHECK(file.open(QIODevice::ReadOnly)); return file.readAll(); };
+
+    const QString buttonsFilename = temporary.path() + "/kos/window-buttons.json";
+    auto putButtons = [&](const QByteArray &bytes) { QFile f(buttonsFilename); CHECK(f.open(QIODevice::WriteOnly)); CHECK(f.write(bytes)==bytes.size()); };
+    auto getButtons = [&]() { QFile f(buttonsFilename); CHECK(f.open(QIODevice::ReadOnly)); return f.readAll(); };
+    putButtons(R"({"default":{"glyphMode":"hover","background":"dark"},"extra":"keep","apps":{"keep.enabled":{"showButtons":true,"background":"dark"},"md.obsidian.Obsidian":{"showButtons":false,"background":"light"}},"rules":[{"match":{"class":"qq"},"showButtons":true}]})");
+    CHECK(settings.state()["buttonExclusions"].toStringList()==QStringList{"md.obsidian.Obsidian"});
+    CHECK(settings.setButtonExclusion(" firefox ", true));
+    CHECK(settings.state()["buttonExclusions"].toStringList()==QStringList({"firefox", "md.obsidian.Obsidian"}));
+    auto buttonsJson=QJsonDocument::fromJson(getButtons()).object();
+    CHECK(buttonsJson["extra"]=="keep");
+    CHECK(buttonsJson["default"].toObject()["glyphMode"]=="hover");
+    CHECK(buttonsJson["default"].toObject()["background"]=="dark");
+    CHECK(buttonsJson["apps"].toObject()["md.obsidian.Obsidian"].toObject()["background"]=="light");
+    CHECK(buttonsJson["rules"].toArray().size()==1);
+    const auto afterFirefoxAdd=getButtons();
+    CHECK(settings.setButtonExclusion("firefox", true));
+    CHECK(getButtons()==afterFirefoxAdd);
+    CHECK(settings.setButtonExclusion("md.obsidian.Obsidian", false));
+    buttonsJson=QJsonDocument::fromJson(getButtons()).object();
+    CHECK(!buttonsJson["apps"].toObject()["md.obsidian.Obsidian"].toObject().contains("showButtons"));
+    CHECK(buttonsJson["apps"].toObject()["md.obsidian.Obsidian"].toObject()["background"]=="light");
+    CHECK(settings.state()["buttonExclusions"].toStringList()==QStringList{"firefox"});
+    const auto afterObsidianRemove=getButtons();
+    CHECK(settings.setButtonExclusion("md.obsidian.Obsidian", false));
+    CHECK(getButtons()==afterObsidianRemove);
+    CHECK(settings.setButtonExclusion("keep.enabled", false));
+    CHECK(getButtons()==afterObsidianRemove);
+    CHECK(settings.setButtonExclusion("keep.enabled", true));
+    CHECK(settings.setButtonExclusion("keep.enabled", false));
+    buttonsJson=QJsonDocument::fromJson(getButtons()).object();
+    CHECK(!buttonsJson["apps"].toObject()["keep.enabled"].toObject().contains("showButtons"));
+    CHECK(buttonsJson["apps"].toObject()["keep.enabled"].toObject()["background"]=="dark");
+    CHECK(settings.setButtonExclusion("firefox", false));
+    buttonsJson=QJsonDocument::fromJson(getButtons()).object();
+    CHECK(!buttonsJson["apps"].toObject().contains("firefox"));
+    CHECK(settings.setButtonExclusion("firefox", true));
+    CHECK(settings.setButtonExclusion("firefox", false));
+    const auto beforeInvalidButtons=getButtons();
+    CHECK(!settings.setButtonExclusion("   ", true));
+    CHECK(!settings.error().isEmpty());
+    CHECK(getButtons()==beforeInvalidButtons);
+    { QLockFile lock(buttonsFilename+".lock"); CHECK(lock.tryLock(0)); CHECK(!settings.setButtonExclusion("firefox", true)); CHECK(getButtons()==beforeInvalidButtons); }
+    putButtons("malformed"); CHECK(!settings.setButtonExclusion("firefox", true)); CHECK(getButtons()=="malformed");
+    putButtons(R"({"apps":[]})"); CHECK(!settings.setButtonExclusion("firefox", true)); CHECK(getButtons()==R"({"apps":[]})");
+    putButtons(R"({"apps":{"firefox":true}})"); CHECK(!settings.setButtonExclusion("firefox", true)); CHECK(getButtons()==R"({"apps":{"firefox":true}})");
+    putButtons(R"({"apps":{"firefox":{"showButtons":"false"}}})"); CHECK(!settings.setButtonExclusion("firefox", true)); CHECK(getButtons()==R"({"apps":{"firefox":{"showButtons":"false"}}})");
+
     putButtons(R"({"extra":42,"default":{"buttonSize":30},"apps":{"demo":{"buttonSize":24}},"rules":[{"match":{"class":"demo"},"buttonSize":26}]})");
     CHECK(!settings.state()["independentButtonBackground"].toBool());
     CHECK(settings.setIndependentButtonBackground(true));
@@ -196,7 +241,7 @@ int main(int argc, char **argv) {
     CHECK(settings.setIndependentButtonBackground(false));
     CHECK(!settings.state()["independentButtonBackground"].toBool());
     const auto beforeCoverFailure = getButtons();
-    { QLockFile lock(buttonsPath + ".lock"); CHECK(lock.tryLock(0)); CHECK(!settings.setIndependentButtonBackground(true)); }
+    { QLockFile lock(buttonsFilename + ".lock"); CHECK(lock.tryLock(0)); CHECK(!settings.setIndependentButtonBackground(true)); }
     CHECK(getButtons() == beforeCoverFailure);
     putButtons("malformed");
     CHECK(!settings.setIndependentButtonBackground(true));
