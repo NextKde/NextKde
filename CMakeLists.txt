@@ -140,6 +140,13 @@ if(BUILD_TESTING)
                 ${CMAKE_CURRENT_SOURCE_DIR}/shell/desktop/modules/deskcenter/test_widget_layout.mjs
         )
         set_tests_properties(kos-deskcenter.widget-layout PROPERTIES TIMEOUT 10)
+        # Widget geometry must look identical at 60 and 240 Hz; the replaced
+        # SpringAnimation advanced in fixed 16 ms steps.
+        add_test(NAME kos-deskcenter.motion-spring
+            COMMAND ${KOS_NODE_EXECUTABLE}
+                ${CMAKE_CURRENT_SOURCE_DIR}/shell/desktop/modules/common/test_motion_spring.mjs
+        )
+        set_tests_properties(kos-deskcenter.motion-spring PROPERTIES LABELS logic TIMEOUT 10)
         add_test(NAME kos-ui.visual-contract
             COMMAND ${KOS_NODE_EXECUTABLE}
                 ${CMAKE_CURRENT_SOURCE_DIR}/shared/qml/test_visual_contract.mjs
