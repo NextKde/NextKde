@@ -46,6 +46,19 @@ and runs data/platform/logic/headless groups separately. `.github/ci-tests.json`
 registration and complete result reporting. Headless UI runs offscreen in CI; compositor flows
 still need a VM. Read [.github/workflows/tests.yml](../.github/workflows/tests.yml) for exact gates.
 
+CI retries recognised package-download errors at most twice (three attempts total),
+with 5/10-second delays. Rolling Arch jobs may add official fallback mirrors; dated
+SDK jobs retain their archive mirror and package versions. Dependency conflicts,
+signature errors and local filesystem failures stop immediately. Bootstrap performs
+a full upgrade; later installs do not separately refresh package databases. The shared
+Bash installer lives in the workflow environment because bootstrap precedes checkout.
+Builds and tests are not retried. The core test summary identifies the first unsuccessful
+stage and, when JUnit is available, its first failed case and assertion/timeout detail.
+Cancellation is distinguished from test failure; missing, skipped and malformed results
+still fail the coverage gate. Consult the failed step log and uploaded reports for detail.
+Run `python3 tools/tests/test_ci_reliability.py` in the VM/CI to exercise retry boundaries
+with a fake package manager and verify that reporting preserves failure exit codes.
+
 Three full SDK jobs build/link plugins and Glass for KWin 6.6, 6.7 and 6.8, run offline regressions,
 and check official API headers. Missing GL contexts can skip GPU readback in containers; run those
 checks in the VM and record the result. Build compatibility is separate from real desktop loading.
