@@ -2,6 +2,7 @@ module qs.desktop.modules.notifications
 
 NotificationCenter 1.0 NotificationCenter.qml
 NotificationWindow 1.0 NotificationWindow.qml
+NotificationOpenController 1.0 NotificationOpenController.qml
 NotificationGroupService 1.0 NotificationGroupService.qml
 singleton NotificationHistoryService 1.0 NotificationHistoryService.qml
 NotificationHistoryObserver 1.0 NotificationHistoryObserver.qml
