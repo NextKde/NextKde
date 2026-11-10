@@ -3,6 +3,7 @@ import QtTest
 import Quickshell
 import qs.desktop.modules.common
 import qs.desktop.modules.deskcenter
+import qs.desktop.modules.stage
 
 ShellRoot {
     id: test
@@ -20,6 +21,18 @@ ShellRoot {
     property real holdStartedAt: 0
     property int timerStage: 0
     property bool capturePending: false
+    property int gestureStage: 0
+    property var widgetCard: null
+    property var catcher: null
+    property int revealRequests: 0
+    property int revealRequestsBeforeEditing: 0
+
+    // Show-desktop is a signal, so the fixture counts it directly: leaving
+    // widget editing must never also toggle the stage.
+    Connections {
+        target: StageModeService
+        function onDeskRevealToggleRequested() { test.revealRequests++ }
+    }
 
     function captureBell(name) {
         if (capturePending) return
@@ -51,7 +64,84 @@ ShellRoot {
         check(events.mousePress(item, item.width / 2, item.height / 2, Qt.LeftButton, Qt.NoModifier, 0), "mouse press")
         check(events.mouseRelease(item, item.width / 2, item.height / 2, Qt.LeftButton, Qt.NoModifier, 0), "mouse release")
     }
+    function clickButton(item, button) {
+        check(events.mousePress(item, item.width / 2, item.height / 2, button, Qt.NoModifier, 0), "mouse press")
+        check(events.mouseRelease(item, item.width / 2, item.height / 2, button, Qt.NoModifier, 0), "mouse release")
+    }
+
+    // Widget editing must be escapable by gesture, not only by Escape or the
+    // Done button: the right click that entered editing has to leave it again,
+    // and a plain click on the bare desktop has to end the session. One stage
+    // per frame keeps a press and its release in separate dispatches, the same
+    // way the desktop file gestures above are driven.
+    function runWidgetEditGestureStage(stage) {
+        switch (stage) {
+        case 0:
+            driver.interval = 120
+            test.widgetCard = test.cards.itemAt(0)
+            check(!!test.widgetCard, "clock card present for the editing gesture checks")
+            check(!desktop.editMode, "editing gesture checks start outside editing")
+            test.revealRequestsBeforeEditing = test.revealRequests
+            clickButton(test.widgetCard, Qt.RightButton)
+            break
+        case 1:
+            check(desktop.editMode, "right click on a card enters widget editing")
+            clickButton(test.widgetCard, Qt.RightButton)
+            break
+        case 2:
+            check(!desktop.editMode, "right clicking the same card leaves widget editing")
+            desktop.enterWidgetEditMode(false)
+            events.mousePress(test.background, 100, 100, Qt.LeftButton, Qt.NoModifier, 0)
+            break
+        case 3:
+            events.mouseRelease(test.background, 100, 100, Qt.LeftButton, Qt.NoModifier, 0)
+            break
+        case 4:
+            check(!desktop.editMode, "plain click on the bare desktop leaves widget editing")
+            check(!desktop.widgetLibraryOpen, "leaving editing closes the widget library")
+            check(test.revealRequests === test.revealRequestsBeforeEditing,
+                "leaving editing must not toggle show-desktop")
+            desktop.enterWidgetEditMode(false)
+            events.mousePress(test.background, 100, 100, Qt.RightButton, Qt.NoModifier, 0)
+            break
+        case 5:
+            check(!desktop.editMode, "right click on the bare desktop leaves widget editing")
+            // Complete the gesture on the now non-editing desktop.
+            events.mouseRelease(test.background, 100, 100, Qt.RightButton, Qt.NoModifier, 0)
+            break
+        case 6:
+            // The fallback surface (window margins and the widget strip) has
+            // its own entry gesture; the release that completes the hold must
+            // not be read as a plain click and undo it.
+            test.catcher = find(desktop.contentItem, "desktop-background-catcher")
+            check(!!test.catcher, "background catcher found")
+            test.catcher.pressAndHoldInterval = 60
+            events.mousePress(test.catcher, 5, 5, Qt.LeftButton, Qt.NoModifier, 0)
+            break
+        case 7:
+            check(desktop.editMode, "long press on the background catcher enters editing")
+            events.mouseRelease(test.catcher, 5, 5, Qt.LeftButton, Qt.NoModifier, 0)
+            break
+        case 8:
+            check(desktop.editMode, "the release that entered editing must not leave it")
+            events.mousePress(test.catcher, 5, 5, Qt.LeftButton, Qt.NoModifier, 0)
+            events.mouseRelease(test.catcher, 5, 5, Qt.LeftButton, Qt.NoModifier, 0)
+            break
+        case 9:
+            check(!desktop.editMode, "plain click on the background catcher leaves editing")
+            // Positive control for the counter above: outside editing the same
+            // plain desktop click still toggles show-desktop.
+            events.mousePress(test.background, 100, 100, Qt.LeftButton, Qt.NoModifier, 0)
+            events.mouseRelease(test.background, 100, 100, Qt.LeftButton, Qt.NoModifier, 0)
+            break
+        case 10:
+            check(test.revealRequests === test.revealRequestsBeforeEditing + 1,
+                "plain desktop click outside editing still toggles show-desktop")
+            break
+        }
+    }
     Timer {
+        id: driver
         interval: 200
         running: true
         repeat: true
@@ -182,6 +272,10 @@ ShellRoot {
                     case 5:
                         check(desktop.timerView && desktop.timerRunning, "countdown survives colour restore")
                         captureBell("timer-restored")
+                        return
+                    }
+                    if (test.gestureStage < 11) {
+                        runWidgetEditGestureStage(test.gestureStage++)
                         return
                     }
                     // The runner restarts this same fixture with the saved colour

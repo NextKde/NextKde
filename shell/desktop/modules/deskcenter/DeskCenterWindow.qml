@@ -169,6 +169,17 @@ PanelWindow {
         root.widgetLibraryOpen = false
         root.editMode = false
     }
+
+    // Widget editing is modal: the gesture that entered it also leaves it.
+    // Nothing is ever pending at this point -- a moved card is persisted when
+    // its drag ends and a resized card when the handle commits -- so leaving
+    // only drops the editing chrome, it never has to flush state.
+    function toggleWidgetEditMode() {
+        if (root.editMode)
+            root.leaveWidgetEditMode()
+        else
+            root.enterWidgetEditMode(false)
+    }
     readonly property var widgetLabels: ({
         clock: I18n.tr("Clock"), weather: I18n.tr("Weather"),
         calendar: I18n.tr("Calendar"), todo: I18n.tr("To-Do"),
@@ -428,12 +439,27 @@ PanelWindow {
 
     MouseArea {
         id: globalDesktopBackgroundArea
+        objectName: "desktop-background-catcher"
         anchors.fill: parent
         z: 0
         acceptedButtons: Qt.LeftButton | Qt.RightButton
+        // A long press enters widget editing, and releasing it must not be read
+        // as a plain click: a plain click on this surface either toggles
+        // show-desktop or leaves editing, and neither may happen from the hold
+        // that just started editing.
+        property bool holdEnteredEditing: false
 
         onPressed: function(mouse) {
+            holdEnteredEditing = false
             if (mouse.button === Qt.RightButton) {
+                // While editing, bare desktop dismisses the session instead of
+                // opening the menu. That menu is the way *into* editing (Add
+                // Widgets / Edit Widgets), so it belongs to the non-editing
+                // desktop; outside editing the next right click opens it.
+                if (root.editMode) {
+                    root.leaveWidgetEditMode()
+                    return
+                }
                 desktopFileGrid.setSelectedPaths([])
                 desktopFileGrid.contextEntry = null
                 desktopFileGrid.showMenu(null,
@@ -442,21 +468,36 @@ PanelWindow {
             }
             desktopFileGrid.clearDesktopSelection()
         }
-        // 空桌面左键＝显示桌面开关：台前侧栏把桌面应用全部带动画收进
-        // 卡，再点一次整组放出来。⚠️ 不能在 onPressAndHold 里吞事件来
-        // 防误触——按住超 800ms 的"慢点击"会被一起吞掉（点击全部失效，
-        // 实测踩过）；改用 editMode 守卫：长按进了挂件编辑模式，release
-        // 的 clicked 自然跳过。
+        // 空桌面左键：编辑模式下退出编辑（改动先在各自手势里落盘，这里只
+        // 收尾），否则＝显示桌面开关：台前侧栏把桌面应用全部带动画收进卡，
+        // 再点一次整组放出来。⚠️ 不能在 onPressAndHold 里吞事件来防误触
+        // ——按住超 800ms 的"慢点击"会被一起吞掉（点击全部失效，实测踩
+        // 过）；改用 holdEnteredEditing 守卫：长按进了挂件编辑模式，
+        // release 的 clicked 自然跳过。
         onClicked: function(mouse) {
+            if (mouse.button !== Qt.LeftButton)
+                return
+            if (holdEnteredEditing) {
+                holdEnteredEditing = false
+                return
+            }
+            if (root.editMode) {
+                // Leaving is the click's job while a widget is being placed;
+                // modifier clicks stay selection-only, as below.
+                if (mouse.modifiers === Qt.NoModifier)
+                    root.leaveWidgetEditMode()
+                return
+            }
             // 修饰键守卫与网格入口（FreeSlotDesktopDemo）同款：Ctrl/Shift+
             // 点击是选择语义，不该翻转显示桌面
-            if (mouse.button === Qt.LeftButton && !root.editMode
-                    && mouse.modifiers === Qt.NoModifier)
+            if (mouse.modifiers === Qt.NoModifier)
                 StageModeService.deskRevealToggleRequested()
         }
         onPressAndHold: function(mouse) {
-            if (mouse.button === Qt.LeftButton && mouse.modifiers === Qt.NoModifier)
+            if (mouse.button === Qt.LeftButton && mouse.modifiers === Qt.NoModifier) {
+                holdEnteredEditing = true
                 root.enterWidgetEditMode(false)
+            }
         }
     }
 
@@ -715,10 +756,14 @@ PanelWindow {
             }
             Behavior on scale { NumberAnimation { duration: 120; easing.type: Easing.OutCubic } }
 
+            // A right click is how a card enters editing, so a second right
+            // click has to leave it again. Toggling keeps one gesture as the
+            // single way in and out instead of re-requesting the state the
+            // desktop is already in.
             TapHandler {
                 acceptedButtons: Qt.RightButton
                 gesturePolicy: TapHandler.ReleaseWithinBounds
-                onTapped: root.enterWidgetEditMode(false)
+                onTapped: root.toggleWidgetEditMode()
             }
 
             DragHandler {
@@ -4237,6 +4282,13 @@ PanelWindow {
                 desktopFileGrid.setSelectedPaths(selectedIds)
             }
             onContextMenuRequested: function(entry, pos) {
+                // Bare desktop while editing: dismiss the session instead of
+                // opening the menu that re-enters it. A file keeps its own
+                // menu, it acts on that file rather than on the desktop.
+                if (entry === null && root.editMode) {
+                    root.leaveWidgetEditMode()
+                    return
+                }
                 desktopFileGrid.setSelectedPaths(freeSlotDesktop.selectedIds)
                 desktopFileGrid.contextEntry = entry
                 // freeSlotDesktop is offset by (-gridX,-gridY); translate its
@@ -4249,10 +4301,13 @@ PanelWindow {
             }
             onActivityRequested: desktopFileGrid.activateKeyboard()
             onBackgroundPressAndHold: root.enterWidgetEditMode(false)
-            // 空桌面普通单击＝显示桌面开关（挂件编辑模式除外）。这个
-            // MouseArea 盖住绝大部分桌面，是比背景捕获器更主要的入口。
+            // 空桌面普通单击：编辑模式下退出编辑（只收尾，位置/尺寸各自
+            // 手势里已落盘），否则＝显示桌面开关。这个 MouseArea 盖住绝大
+            // 部分桌面，是比背景捕获器更主要的入口。
             onBackgroundPlainClicked: {
-                if (!root.editMode)
+                if (root.editMode)
+                    root.leaveWidgetEditMode()
+                else
                     StageModeService.deskRevealToggleRequested()
             }
             onExternalUrlsDropped: function(urls, action) {
