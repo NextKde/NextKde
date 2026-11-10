@@ -1,10 +1,5 @@
 import QtQuick
-import QtQuick.Controls
-import QtQuick.Layouts
-import QtQuick.Window
 import "../../../shared/qml/controls" as LiquidControls
-import "../../../shared/qml/foundation" as Foundation
-import "../../../shared/qml/i18n"
 
 Rectangle {
     required property var colors
@@ -19,6 +14,12 @@ Rectangle {
     height: size
     radius: flat ? 0 : size * 0.345
     color: flat ? "transparent" : tint
+    gradient: Gradient {
+        GradientStop { position: 0; color: root.flat ? "transparent" : Qt.lighter(root.tint, 1.16) }
+        GradientStop { position: 1; color: root.flat ? "transparent" : root.tint }
+    }
+    border.width: flat ? 0 : 0.5
+    border.color: Qt.darker(tint, 1.12)
     LiquidControls.VectorIcon {
         anchors.centerIn: parent
         size: Math.round(parent.size * 0.58)
@@ -31,7 +32,7 @@ Rectangle {
             "⇲":"resize", "↺":"undo", "B":"bold",
             "▢":"corners", "◧":"shadow", "↓":"minimize", "×":"close"})[parent.symbol] || "settings"
         color: parent.flat
-            ? (parent.highlighted ? colors.selectedForeground : colors.iconMuted)
-            : colors.iconForeground
+            ? (parent.highlighted ? root.colors.selectedForeground : root.colors.iconMuted)
+            : root.colors.iconForeground
     }
 }

@@ -1,9 +1,9 @@
 {
   "schemaVersion": 2,
   "sourceId": "nextkde",
-  "sequence": 3,
-  "issuedAt": "2026-11-10T05:46:50Z",
-  "expiresAt": "2026-12-10T05:46:50Z",
+  "sequence": 4,
+  "issuedAt": "2026-11-10T11:21:45Z",
+  "expiresAt": "2026-12-10T11:21:45Z",
   "apps": [
     {
       "key": "kmusic",
@@ -27,9 +27,9 @@
         "publicKey": "mQGNBGrq2vsBDACmUkc1VMlN+5usxtDGwFFB1cSgIrGHp7VIJLlnVhvNnJ1E5mbgt3R6cGTur+UY1pybDriZ9KaH9ZxNfwIoNK28v0ZrwuroZoJZuYw5YCv/g09rCBJ0JuJIrtxIqiNSjUaeIA4qPjZXBCyBq50Ay0OBKL+3rI3TECV1d43E8wbNMPRGlm99gyU2ArLwcMLcpJKEynZWL2Ym7/CSa0sBkInKMtnP8DlBZEuoZeJBTGWs8UAH47QhbGjh6Es1NG1ghP7y7o41QIR8YtToajYon0yWIcN+BV4KfV+jFs6MroryV8j7z231DiVA43ojDmgGLb2Ng9OR/eYpUi4Oeh2G6shS16n8jxj5GaH7TEMZP9tJ5yk91DXz8scjH8oqctYRPidQaLNmIuL3BqmZTGylTINWz7/9E8Yy2rmtw8HwLwTDIzJjV7zthyT1VoAHrF2VdnlynYrDVq2TIyyQvL0Y1UzSZRvY1Xh+LWu/FmXIltyYc2YoERMjwnCojjn4MFZYybEAEQEAAbQ1TmV4dEtkZSBGbGF0cGFrIFJlbGVhc2UgPGZsYXRwYWstcmVsZWFzZUBuZXh0a2RlLm9yZz6JAdQEEwEKAD4WIQQ3UdyDPtS8fnl6l2at90EbUxpWtAUCaura+wIbAQUJA8JnAAULCQgHAgYVCgkICwIEFgIDAQIeAQIXgAAKCRCt90EbUxpWtOmuC/9fu5aPvN3V5fyV8OA6bZgjp3Eo01ILG2ay1JcNjjawTZgkDatb2XN4L9h8XPmwolv8BYLgmx2P/8KnYP2l+BbHaOXI+jmjOjykQdi4L3yEU+Ii3UmTLQDkDs2Ul+PtjUMgVaNUEuoP7MjyZ0gM3WxVwUTMUhUmALsY9X2mQ4rBdLbo/eNYXjORaYH8vU5JStv4qA1aQbsZVljpIEVsmWFW5rrKMk4jJLbOGzl2yR6rBcNSVBcx/sSmdSwmZNpd1N89WQJJGyxeGpvKNqY3tfX3K9SvOfKRLeskv7xilBNSVrYmIAUqjOxvrFefn9Y9rXVgsCw1OSGfIjbBFUQPKJGwh/H+QHIaw8D/zv/mGWGSpESdg9th8tnnwpmynfcGW5MMOxk2FMEJT6vt/thUnCJ1Q0ZaZIgY0HtlrSK+nB0YxdK1C86zWwpVk778WpRIECnHqAJ1+QTrNbSugjms9bNtZ++wZMvk0eFwfPNltxRKFSemZulOzB0uq/C642maC125AY0Eaura+wEMANmJ8jkzWk/YiinJTnSNNsc1iQsGblmsDnnLlcYzcfIxEe8zWBxO7+5kWIhlMiaDTQmbwBDMdoqFCjrfIfHkReMsaCfMQYre8w62ExD1mRhoqhyoguRKRf4Unkf+QUzxfhzSpZRnJ4Ph2pyndKAmgof1WwdiRuKK75gQtEGOPSF9Z35s7xArjZ1HzRMdVRCJWkoHuHAHDSUR6fpoO+2FMWqyXZcBPv0t48l+wnC2VsrGJEbgqceyv/QN7QFS6F9FptBv+nRGwX7N0DkJxHOayWRwx7HJuNUAD+j6OQmQ45j8z6/lSsG1PpamohWKTz6ncg6Je3zxEwy1aXCesHmRFksMOnk14w39pO+sLhkFobtby0xr5cRD5RPEWY4Gvv7D6g7jBzcTb+PbU5/prLnBesVcecok2dltvo6wLXKNnMtetfHbBQi7whhVORwqYWpUgFQzcfZ1phaorjOW9wIDKPhrUIn2CFJH1Tg+K1jQFFpz+LSteiHFmVoorHkwvSaN5wARAQABiQNyBBgBCgAmFiEEN1Hcgz7UvH55epdmrfdBG1MaVrQFAmrq2vsCGwIFCQPCZwABwAkQrfdBG1MaVrTA9CAEGQEKAB0WIQRe4/h/6AP80Ue7NMFO7cSIXoyqEwUCaura+wAKCRBO7cSIXoyqE/3QDACjv7Ncn2QZgpVNyLn4HR0Q6TIEHLm7nvOdPU3Jji+xMQTzoJoQOye6moSGtK3+s8foVJSBbRxz76ePesuFYxkNGbdND1BzM0S7VgE3q0wV97ns8gS/fADI45UoLRWeo+jYrR5IIWzU7Q7K7DCLel0EsdUyonL0GFLYpPgy/Nfr1OEdoMpDWHAjgkKwzfvBNs44V/7OlPVg9sEVuC9kg/85J/ZlneHQl8nlTyOLgp3zJ6hqbCyz2O1eHlGJrdKdaI9cFAbQNXRKsT/dZ79VsjNHra8Z1586DUoTW5LeGG6xjYNVXmxya80kf3HeIg9mz43uf7sGt1/4sA9o/jRCHC0FzVGV+TJplwCdfwCsyaztfFekJz0s8K5KXr8QEMIsX/fv7HQd3L3FP2jvJ6ZmVR40IX+AxNSEw2r1TEeVaCLJZhN/OrS9IYgzcBgfx0ErNiSk7pLf7N2Nrl0plppbhZOjDvGKJd2pxEhslR4EbLjyi0b/QYF79ik2fBUljjstzON4HgwAncN5wtomQG4dS7GzKEkwXDFNYVg4yBCgpyuamPg6E8dKt546z04m/cKYAF5TZuG3hKREMfc1eDq6CzvlOYUnihZO9GQW4bmgwI20duxHK+cDUeS6WIdtz4lplgr5Kk5ABJ3unC2EFytyjtLrGqe4n7F91EpfuwL+KmJHvJTPoemTU41IUxqXXRrL9yvyRxRTvugXM686k2qDvGg1M9TU9rlbB/y/HGFRGtAqDOttnAx8b62W4/L1r4v5XWNFwRtEgMUCmdQoDsXYKK5Q81nnsmHEz91MsA3v3l7BjrhZA0dyO6jD9LTJ69ApW7PBN4tC/UESEJCUf+91VluzyoQmysXpAO6MWrD7NFznFRUpfqRlSwsm/NLQzKTuvJ3883nh374q4I3K+vnt5kJJE5s3UxmbQrYO+I9pFc/Wj4Urza2IYiJjuFYH5aESzCT6IZSYS2NDUQbCBz0/6q8AWjx1+1k5BiHrVWHeT13+qVlal73g4aJQ4oprRBUaxBCjFtD2"
       },
       "icon": {
-        "sha256": "a17b35ea0bb772e9d037d9b3de3ce1ee171f5d7e41014b2eb6856da5cd28f512",
-        "size": 8601,
-        "url": "https://raw.githubusercontent.com/NextKde/appCatalog/a0d7c23ef392084b26ad2aee9458e5b57c53cb4f/icons/org.nextkde.KMusic.png"
+        "sha256": "6c632b986f08e106b4f6866ef2b5e0d5153ac1e4f69fd75d0d6d9ce0ff5fbf98",
+        "size": 11156,
+        "url": "https://raw.githubusercontent.com/NextKde/appCatalog/d574270b6f6fb5d0f4c0204e3017029b24cae519/icons/org.nextkde.KMusic.png"
       },
       "release": null
     },
@@ -55,9 +55,9 @@
         "publicKey": "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"
       },
       "icon": {
-        "sha256": "6ec4956e9c74e072f41ae56f9011be153d2914b437e52849609e423d198e7282",
-        "size": 64042,
-        "url": "https://raw.githubusercontent.com/NextKde/appCatalog/a0d7c23ef392084b26ad2aee9458e5b57c53cb4f/icons/org.nextkde.ListenFree.png"
+        "sha256": "94696366403dd0959f707c122422aea1a3e5f332ad099a8e43b3c8b3e88c3829",
+        "size": 12505,
+        "url": "https://raw.githubusercontent.com/NextKde/appCatalog/d574270b6f6fb5d0f4c0204e3017029b24cae519/icons/org.nextkde.ListenFree.png"
       },
       "release": null
     },
@@ -79,9 +79,9 @@
       "manifest": "flatpak-release.json",
       "status": "active",
       "icon": {
-        "sha256": "e0fc9a7f84b421ee2b090477a9693df609d71ca46118034886532b40ea340430",
-        "size": 7389,
-        "url": "https://raw.githubusercontent.com/NextKde/appCatalog/a0d7c23ef392084b26ad2aee9458e5b57c53cb4f/icons/org.nextkde.NkMail.png"
+        "sha256": "8125a1378670c85d5a7127c35c0929165dea6a41f55d75989bdd517e20a78b6a",
+        "size": 13408,
+        "url": "https://raw.githubusercontent.com/NextKde/appCatalog/d574270b6f6fb5d0f4c0204e3017029b24cae519/icons/org.nextkde.NkMail.png"
       },
       "release": {
         "version": "0.1.0",
@@ -112,9 +112,9 @@
         "publicKey": "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"
       },
       "icon": {
-        "sha256": "4c0e9f0611d4e8d001cc179d761150c2b391a6ad8b28924ab9ee8b1432584df3",
-        "size": 6231,
-        "url": "https://raw.githubusercontent.com/NextKde/appCatalog/a0d7c23ef392084b26ad2aee9458e5b57c53cb4f/icons/org.nextks.calculator.png"
+        "sha256": "6066e6f131fbe8dc6c2b1d2377663eede59b5dbb040b7be0b8b0eaa995a5c446",
+        "size": 11384,
+        "url": "https://raw.githubusercontent.com/NextKde/appCatalog/d574270b6f6fb5d0f4c0204e3017029b24cae519/icons/org.nextks.calculator.png"
       },
       "release": {
         "version": "0.2.2",
@@ -145,9 +145,9 @@
         "publicKey": "mQGNBGrq2vsBDACmUkc1VMlN+5usxtDGwFFB1cSgIrGHp7VIJLlnVhvNnJ1E5mbgt3R6cGTur+UY1pybDriZ9KaH9ZxNfwIoNK28v0ZrwuroZoJZuYw5YCv/g09rCBJ0JuJIrtxIqiNSjUaeIA4qPjZXBCyBq50Ay0OBKL+3rI3TECV1d43E8wbNMPRGlm99gyU2ArLwcMLcpJKEynZWL2Ym7/CSa0sBkInKMtnP8DlBZEuoZeJBTGWs8UAH47QhbGjh6Es1NG1ghP7y7o41QIR8YtToajYon0yWIcN+BV4KfV+jFs6MroryV8j7z231DiVA43ojDmgGLb2Ng9OR/eYpUi4Oeh2G6shS16n8jxj5GaH7TEMZP9tJ5yk91DXz8scjH8oqctYRPidQaLNmIuL3BqmZTGylTINWz7/9E8Yy2rmtw8HwLwTDIzJjV7zthyT1VoAHrF2VdnlynYrDVq2TIyyQvL0Y1UzSZRvY1Xh+LWu/FmXIltyYc2YoERMjwnCojjn4MFZYybEAEQEAAbQ1TmV4dEtkZSBGbGF0cGFrIFJlbGVhc2UgPGZsYXRwYWstcmVsZWFzZUBuZXh0a2RlLm9yZz6JAdQEEwEKAD4WIQQ3UdyDPtS8fnl6l2at90EbUxpWtAUCaura+wIbAQUJA8JnAAULCQgHAgYVCgkICwIEFgIDAQIeAQIXgAAKCRCt90EbUxpWtOmuC/9fu5aPvN3V5fyV8OA6bZgjp3Eo01ILG2ay1JcNjjawTZgkDatb2XN4L9h8XPmwolv8BYLgmx2P/8KnYP2l+BbHaOXI+jmjOjykQdi4L3yEU+Ii3UmTLQDkDs2Ul+PtjUMgVaNUEuoP7MjyZ0gM3WxVwUTMUhUmALsY9X2mQ4rBdLbo/eNYXjORaYH8vU5JStv4qA1aQbsZVljpIEVsmWFW5rrKMk4jJLbOGzl2yR6rBcNSVBcx/sSmdSwmZNpd1N89WQJJGyxeGpvKNqY3tfX3K9SvOfKRLeskv7xilBNSVrYmIAUqjOxvrFefn9Y9rXVgsCw1OSGfIjbBFUQPKJGwh/H+QHIaw8D/zv/mGWGSpESdg9th8tnnwpmynfcGW5MMOxk2FMEJT6vt/thUnCJ1Q0ZaZIgY0HtlrSK+nB0YxdK1C86zWwpVk778WpRIECnHqAJ1+QTrNbSugjms9bNtZ++wZMvk0eFwfPNltxRKFSemZulOzB0uq/C642maC125AY0Eaura+wEMANmJ8jkzWk/YiinJTnSNNsc1iQsGblmsDnnLlcYzcfIxEe8zWBxO7+5kWIhlMiaDTQmbwBDMdoqFCjrfIfHkReMsaCfMQYre8w62ExD1mRhoqhyoguRKRf4Unkf+QUzxfhzSpZRnJ4Ph2pyndKAmgof1WwdiRuKK75gQtEGOPSF9Z35s7xArjZ1HzRMdVRCJWkoHuHAHDSUR6fpoO+2FMWqyXZcBPv0t48l+wnC2VsrGJEbgqceyv/QN7QFS6F9FptBv+nRGwX7N0DkJxHOayWRwx7HJuNUAD+j6OQmQ45j8z6/lSsG1PpamohWKTz6ncg6Je3zxEwy1aXCesHmRFksMOnk14w39pO+sLhkFobtby0xr5cRD5RPEWY4Gvv7D6g7jBzcTb+PbU5/prLnBesVcecok2dltvo6wLXKNnMtetfHbBQi7whhVORwqYWpUgFQzcfZ1phaorjOW9wIDKPhrUIn2CFJH1Tg+K1jQFFpz+LSteiHFmVoorHkwvSaN5wARAQABiQNyBBgBCgAmFiEEN1Hcgz7UvH55epdmrfdBG1MaVrQFAmrq2vsCGwIFCQPCZwABwAkQrfdBG1MaVrTA9CAEGQEKAB0WIQRe4/h/6AP80Ue7NMFO7cSIXoyqEwUCaura+wAKCRBO7cSIXoyqE/3QDACjv7Ncn2QZgpVNyLn4HR0Q6TIEHLm7nvOdPU3Jji+xMQTzoJoQOye6moSGtK3+s8foVJSBbRxz76ePesuFYxkNGbdND1BzM0S7VgE3q0wV97ns8gS/fADI45UoLRWeo+jYrR5IIWzU7Q7K7DCLel0EsdUyonL0GFLYpPgy/Nfr1OEdoMpDWHAjgkKwzfvBNs44V/7OlPVg9sEVuC9kg/85J/ZlneHQl8nlTyOLgp3zJ6hqbCyz2O1eHlGJrdKdaI9cFAbQNXRKsT/dZ79VsjNHra8Z1586DUoTW5LeGG6xjYNVXmxya80kf3HeIg9mz43uf7sGt1/4sA9o/jRCHC0FzVGV+TJplwCdfwCsyaztfFekJz0s8K5KXr8QEMIsX/fv7HQd3L3FP2jvJ6ZmVR40IX+AxNSEw2r1TEeVaCLJZhN/OrS9IYgzcBgfx0ErNiSk7pLf7N2Nrl0plppbhZOjDvGKJd2pxEhslR4EbLjyi0b/QYF79ik2fBUljjstzON4HgwAncN5wtomQG4dS7GzKEkwXDFNYVg4yBCgpyuamPg6E8dKt546z04m/cKYAF5TZuG3hKREMfc1eDq6CzvlOYUnihZO9GQW4bmgwI20duxHK+cDUeS6WIdtz4lplgr5Kk5ABJ3unC2EFytyjtLrGqe4n7F91EpfuwL+KmJHvJTPoemTU41IUxqXXRrL9yvyRxRTvugXM686k2qDvGg1M9TU9rlbB/y/HGFRGtAqDOttnAx8b62W4/L1r4v5XWNFwRtEgMUCmdQoDsXYKK5Q81nnsmHEz91MsA3v3l7BjrhZA0dyO6jD9LTJ69ApW7PBN4tC/UESEJCUf+91VluzyoQmysXpAO6MWrD7NFznFRUpfqRlSwsm/NLQzKTuvJ3883nh374q4I3K+vnt5kJJE5s3UxmbQrYO+I9pFc/Wj4Urza2IYiJjuFYH5aESzCT6IZSYS2NDUQbCBz0/6q8AWjx1+1k5BiHrVWHeT13+qVlal73g4aJQ4oprRBUaxBCjFtD2"
       },
       "icon": {
-        "sha256": "f91f7e66ca9c248a7c8ed0b130aac91d368c3ed4b7429747321b01bffdf60576",
-        "size": 8980,
-        "url": "https://raw.githubusercontent.com/NextKde/appCatalog/a0d7c23ef392084b26ad2aee9458e5b57c53cb4f/icons/org.nextks.calendar.png"
+        "sha256": "4ddd67a10ebcd66137520779d7fcd23685184c6ca45a6483600b6ad43a5468fc",
+        "size": 10639,
+        "url": "https://raw.githubusercontent.com/NextKde/appCatalog/d574270b6f6fb5d0f4c0204e3017029b24cae519/icons/org.nextks.calendar.png"
       },
       "release": {
         "version": "0.2.2",
@@ -174,9 +174,9 @@
       "manifest": "org.nextks.notes.flatpak-release.json",
       "status": "active",
       "icon": {
-        "sha256": "98b0765d6bb93bf6772d594094390bad7ed2d499c4a1682c126ca06e0c35caec",
-        "size": 3797,
-        "url": "https://raw.githubusercontent.com/NextKde/appCatalog/a0d7c23ef392084b26ad2aee9458e5b57c53cb4f/icons/org.nextks.notes.png"
+        "sha256": "46463262d1a6a09244d7e9bdef881c80dbc71359f674582698a4109da45d7e20",
+        "size": 7639,
+        "url": "https://raw.githubusercontent.com/NextKde/appCatalog/d574270b6f6fb5d0f4c0204e3017029b24cae519/icons/org.nextks.notes.png"
       },
       "release": {
         "version": "0.1.0",
@@ -207,9 +207,9 @@
         "publicKey": "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"
       },
       "icon": {
-        "sha256": "45f8a8cbadcaef82f4ef69d5d91df26325f98f097066e94bc60269e76b33f605",
-        "size": 7469,
-        "url": "https://raw.githubusercontent.com/NextKde/appCatalog/a0d7c23ef392084b26ad2aee9458e5b57c53cb4f/icons/org.nextks.weather.png"
+        "sha256": "24297d8f8292b611dc4483b0df8eaf2193e9914c870f29befb11197923db5dd0",
+        "size": 11685,
+        "url": "https://raw.githubusercontent.com/NextKde/appCatalog/d574270b6f6fb5d0f4c0204e3017029b24cae519/icons/org.nextks.weather.png"
       },
       "release": {
         "version": "0.2.2",
