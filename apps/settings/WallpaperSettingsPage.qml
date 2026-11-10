@@ -93,7 +93,7 @@ ColumnLayout {
                     title: item.title,
                     color: "",
                     palette: item,
-                    path: bridgeCompatible ? bridge.wallpaperColorImage(item.start, item.end, item.angle) : "",
+                    path: bridgeCompatible ? bridge.wallpaperColorImage(item.start, item.end, item.angle, item.colors || []) : "",
                     managed: item.custom === true
                 }));
         return items;
@@ -220,7 +220,7 @@ ColumnLayout {
         const hex = value.toString().toUpperCase();
         const item = WallpaperCatalog.colorGradient(hex, colorDepth);
         item.title = custom ? I18n.tr("Custom") : I18n.tr("Current color");
-        const path = bridge.wallpaperColorImage(item.start, item.end, item.angle);
+        const path = bridge.wallpaperColorImage(item.start, item.end, item.angle, item.colors || []);
         if (!path) {
             customDialog.errorMessage = bridge.lastError || I18n.tr("Could not generate a color");
             return;
@@ -228,7 +228,7 @@ ColumnLayout {
         selectedBaseColor = value;
         if (custom) {
             item.custom = true;
-            if (!customColors.some(value => value.start === item.start && value.end === item.end && value.angle === item.angle))
+            if (!customColors.some(value => value.start === item.start && value.end === item.end && value.angle === item.angle && JSON.stringify(value.colors || []) === JSON.stringify(item.colors || [])))
                 customColors = customColors.concat([item]);
             saveCustomColors();
         }
@@ -236,22 +236,22 @@ ColumnLayout {
         if (previewActive)
             beginPreview(path);
         else
-            bridge.chooseWallpaperGradient(item.start, item.end, item.angle);
+            bridge.chooseWallpaperGradient(item.start, item.end, item.angle, item.colors || []);
     }
     function saveCustomColors() {
         if (bridge && typeof bridge.saveWallpaperCustomColors === "function")
             bridge.saveWallpaperCustomColors(JSON.stringify(customColors));
     }
     function removeCustomColor(path) {
-        customColors = customColors.filter(item => bridge.wallpaperColorImage(item.start, item.end, item.angle) !== path);
+        customColors = customColors.filter(item => bridge.wallpaperColorImage(item.start, item.end, item.angle, item.colors || []) !== path);
         saveCustomColors();
     }
     function applyColorItem(item) {
         selectedBaseColor = item.base || item.start;
         if (previewActive)
-            beginPreview(bridge.wallpaperColorImage(item.start, item.end, item.angle));
+            beginPreview(bridge.wallpaperColorImage(item.start, item.end, item.angle, item.colors || []));
         else
-            bridge.chooseWallpaperGradient(item.start, item.end, item.angle);
+            bridge.chooseWallpaperGradient(item.start, item.end, item.angle, item.colors || []);
     }
     function choosePresetColor(index) {
         applyBaseColor(WallpaperCatalog.colorSwatches[index].color, false);
@@ -829,31 +829,11 @@ ColumnLayout {
             // 链接式文字（accent 色）而非按钮，表示可点击。
             Row {
                 id: importRow
-                visible: page.galleryCategory !== "themes"
+                visible: page.galleryCategory === "images" || page.galleryCategory === "slideshow"
                 anchors.right: parent.right
                 anchors.rightMargin: 12
                 height: 42
                 spacing: 14
-                Text {
-                    objectName: "addCustomColorButton"
-                    visible: page.galleryCategory === "colors"
-                    anchors.verticalCenter: parent.verticalCenter
-                    text: I18n.tr("Custom colors")
-                    color: page.bridgeCompatible ? page.colors.accent : page.colors.tertiaryText
-                    font.pixelSize: 12
-                    font.weight: Font.Medium
-                    opacity: page.bridgeCompatible ? 1 : 0.6
-                    MouseArea {
-                        anchors.fill: parent
-                        enabled: page.bridgeCompatible
-                        cursorShape: Qt.PointingHandCursor
-                        onClicked: {
-                            customDialog.errorMessage = "";
-                            customDialog.selectedColor = page.selectedBaseColor;
-                            customDialog.open();
-                        }
-                    }
-                }
                 Text {
                     objectName: "importImagesButton"
                     visible: page.galleryCategory !== "colors" && page.galleryCategory !== "themes"
@@ -988,6 +968,26 @@ ColumnLayout {
                     anchors.fill: parent
                     cursorShape: Qt.PointingHandCursor
                     onClicked: page.galleryExpanded = !page.galleryExpanded
+                }
+            }
+
+            WallpaperSettingsRow {
+                objectName: "moreWallpaperColorsRow"
+                visible: page.galleryCategory === "colors"
+                width: parent.width
+                colors: page.colors
+                label: I18n.tr("More colors")
+                separator: false
+                WallpaperTextButton {
+                    objectName: "addCustomColorButton"
+                    label: "+ " + I18n.tr("Custom colors")
+                    colors: page.colors
+                    enabled: page.bridgeCompatible
+                    onClicked: {
+                        customDialog.errorMessage = "";
+                        customDialog.selectedColor = page.selectedBaseColor;
+                        customDialog.open();
+                    }
                 }
             }
         }

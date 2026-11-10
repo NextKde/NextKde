@@ -68,6 +68,8 @@
     "kos-settings.backend-modules",
     "kos-settings.independent-apps",
     "kos-settings.app-catalog",
+    "kos-settings.wallpaper-gradient",
+    "kos-settings.wallpaper-palettes",
     "kos-settings.app-updates",
     "kos-settings.flatpak-release",
     "kos-settings.flatpak-compatibility",

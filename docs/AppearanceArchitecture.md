@@ -219,8 +219,9 @@ FontDialog is not used. Picker edits stay local until confirmation; Cancel and
 Escape discard them. Apply-to-all scope is selected in the same dialog.
 
 Regression coverage: `kos-settings.fonts` loads the real KDE backend with isolated
-user roots, a private D-Bus session and Xvfb for KDE's Xft previews (test builds
-require `xvfb-run` and `xauth`), `kos-settings.page-contracts` covers the
+user roots, a private D-Bus session and Xvfb for KDE's Xft previews (running this
+test requires `xvfb-run` and `xauth`; configuration skips it with a status message
+when `xvfb-run` is unavailable, keeping other tests enabled), `kos-settings.page-contracts` covers the
 secondary route, and `kos-ui.system-font-policy`
 plus `kos-shell.system-font` cover parsing and resolved Shell families. All are
 registered in the CI inventory. Runtime and visual acceptance must run in a VM

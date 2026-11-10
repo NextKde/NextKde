@@ -1394,6 +1394,7 @@ export const catalog = {
     "Switch interval": "切换频率",
     "Select all": "全选",
     "Plays automatically after 10 seconds without windows on the desktop and pauses when windows appear. The preview always plays.": "桌面无窗口持续 10 秒后自动播放，窗口出现即暂停。预览始终播放。",
+    "More colors": "更多色彩",
     "Custom colors": "自定义颜色",
     "Import images": "导入图片",
     "Import folder": "导入文件夹",

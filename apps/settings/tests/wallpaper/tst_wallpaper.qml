@@ -58,6 +58,7 @@ TestCase {
         property var sessionRequested: ({})
         property var playlistRequested: []
         property var gradientRequested: []
+        property var gradientColorsRequested: []
         property var optionsRequested: ({})
         property string lastError: ""
         property var importedImages: []
@@ -76,8 +77,8 @@ TestCase {
         function wallpaperSnapshot() {}
         function inspectWallpaperModels() {}
         function previewWallpaperImage(path, images) { previewRequested = path }
-        function wallpaperColorImage(start, end, angle) { return "/tmp/wallpaper-colors/" + start.slice(1) + "-" + end.slice(1) + "-" + angle + ".png" }
-        function chooseWallpaperGradient(start, end, angle) { gradientRequested = [start, end, angle] }
+        function wallpaperColorImage(start, end, angle, colors) { return "/tmp/wallpaper-colors/" + start.slice(1) + "-" + end.slice(1) + "-" + angle + ".png" }
+        function chooseWallpaperGradient(start, end, angle, colors) { gradientRequested = [start, end, angle]; gradientColorsRequested = colors || [] }
         function wallpaperThumbnail(path, width, height) { return "/tmp/cache/" + encodeURIComponent(path) + ".webp" }
         function updateWallpaperPreviewThumbnails(thumbnails) {}
         function previewWallpaperSession(path, session) { previewRequested = path; sessionRequested = session }
@@ -194,6 +195,7 @@ TestCase {
         compare(page.galleryItems.length, 18)
         page.choosePresetColor(7)
         compare(bridgeMock.gradientRequested.length, 3)
+        compare(bridgeMock.gradientColorsRequested.length, 3)
         verify(bridgeMock.gradientRequested[0] !== bridgeMock.gradientRequested[1])
         findChild(page, "customWallpaperColorDialog").selectedColor = "#A8C8F0"
         page.applyCustomColor()
