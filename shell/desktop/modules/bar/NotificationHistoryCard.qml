@@ -180,13 +180,11 @@ Item {
             color: card.ink
             opacity: closeButton.down ? 0.14 : closeButton.hovered || closeButton.activeFocus ? 0.08 : 0
         }
-        contentItem: GlassText {
-            text: "×"
+        contentItem: BundledIcon {
+            name: "xmark"
             color: card.ink
             opacity: closeButton.hovered || closeButton.activeFocus ? 0.85 : 0.4
-            font.pixelSize: 17
-            horizontalAlignment: Text.AlignHCenter
-            verticalAlignment: Text.AlignVCenter
+            size: 17
         }
         onClicked: card.removeRequested(card.historyKey)
     }

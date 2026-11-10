@@ -121,23 +121,19 @@ AnimatedPopupWindow {
                 radius: 11
                 color: devicePointer.containsMouse ? Qt.rgba(1, 1, 1, 0.12) : "transparent"
                 Behavior on color { ColorAnimation { duration: 110 } }
-                Canvas {
+                BundledIcon {
                     width: 18; height: 18
                     anchors { left: parent.left; leftMargin: 31; verticalCenter: parent.verticalCenter }
-                    onPaint: {
-                        const ctx = getContext("2d")
-                        ctx.reset(); ctx.strokeStyle = surface.foregroundColor; ctx.lineWidth = 1.8
-                        ctx.lineCap = "round"; ctx.lineJoin = "round"; ctx.scale(0.67, 0.67)
-                        ctx.beginPath(); ctx.moveTo(13.5, 2.5); ctx.lineTo(20, 9); ctx.lineTo(13.5, 15); ctx.lineTo(20, 21); ctx.lineTo(13.5, 26.5); ctx.lineTo(13.5, 2.5); ctx.moveTo(7, 8.5); ctx.lineTo(13.5, 15); ctx.lineTo(7, 21.5); ctx.stroke()
-                    }
+                    name: "bluetooth"
+                    color: surface.foregroundColor
                 }
-                Text {
+                BundledIcon {
                     visible: modelData.connected
                     anchors { left: parent.left; leftMargin: 8; verticalCenter: parent.verticalCenter }
-                    text: "✓"
+                    name: "checkmark"
                     color: surface.foregroundColor
-                    style: Text.Outline; styleColor: Qt.rgba(0, 0, 0, 0.50)
-                    font { pixelSize: 18; weight: Font.DemiBold }
+                    outlined: true; outlineColor: Qt.rgba(0, 0, 0, 0.50)
+                    size: 18
                 }
                 Text {
                     anchors { left: parent.left; right: parent.right; leftMargin: 58; rightMargin: 12; verticalCenter: parent.verticalCenter }

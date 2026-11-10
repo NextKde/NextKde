@@ -1039,6 +1039,12 @@ deploy_artifacts() {
     find "$prefix/share/shared/qml" \
         \( -name CMakeLists.txt -o -name 'test_*.mjs' \) -delete
 
+    # Interface fonts sit beside qml so source and compiled consumers share paths.
+    local shared_icons_src="$(dirname "$shared_qml_src")/Icons"
+    rm -rf "$prefix/share/shared/Icons"
+    cp -rL --no-preserve=mode "$shared_icons_src" "$prefix/share/shared/Icons"
+    rm -f "$prefix/share/shared/Icons/CMakeLists.txt"
+
     # --- Shell QML → ~/.config/quickshell/kos ---
     local shell_config="$config_dir/quickshell/kos"
     python3 "$project_dir/tools/deploy/deploy-shell-qml.py" deploy \
@@ -2070,7 +2076,7 @@ uninstall() {
         "$prefix/share/applications/org.kos.Platform.desktop" \
         "$prefix/share/applications/org.kos.Shell.desktop" \
         "$prefix/share/applications/kos-platform.desktop"
-    rm -rf "$prefix/share/kos/settings" "$prefix/share/shared/qml"
+    rm -rf "$prefix/share/kos/settings" "$prefix/share/shared/qml" "$prefix/share/shared/Icons"
     rm -rf "$config_dir/quickshell/kos"
     echo "Removed KOS binaries, units, and shell configuration; state data was preserved."
     if is_nixos; then

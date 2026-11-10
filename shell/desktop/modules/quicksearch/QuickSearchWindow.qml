@@ -185,6 +185,13 @@ PanelWindow {
     component ResultIcon: Item {
         id: resultIcon
         property string iconSource: ""
+        readonly property bool fontGlyph: iconSource.startsWith("kos-icon:")
+        BundledIcon {
+            anchors.fill: parent
+            visible: resultIcon.fontGlyph
+            name: resultIcon.fontGlyph ? resultIcon.iconSource.substring(9) : ""
+            color: ThemeService.foregroundColor
+        }
 
         // Color mode with no tint/desaturation renders the icon unchanged, so
         // draw it directly and skip the ShaderEffect pass entirely.
@@ -195,7 +202,7 @@ PanelWindow {
         IconImage {
             id: sourceImage
             anchors.fill: parent
-            source: resultIcon.iconSource
+            source: resultIcon.fontGlyph ? "" : resultIcon.iconSource
             smooth: true
             // Theme icon: synchronous, see AppIcon.qml.
             asynchronous: false
@@ -203,12 +210,12 @@ PanelWindow {
             // path, but leave the live ShaderEffect source uncached.
             backer.cache: !resultIcon.needsEffect
                 && IconThemeReloadService.pixmapCacheAllowed
-            visible: !resultIcon.needsEffect
+            visible: !resultIcon.fontGlyph && !resultIcon.needsEffect
         }
 
         ShaderEffect {
             anchors.fill: parent
-            visible: resultIcon.needsEffect
+            visible: !resultIcon.fontGlyph && resultIcon.needsEffect
             property variant source: sourceImage.backer
             property real opacityMult: IconAppearanceService.mode === "color"
                 ? 1.0 : IconAppearanceService.opacity
@@ -470,17 +477,17 @@ PanelWindow {
                 }
             }
 
-            GlassText {
+            BundledIcon {
                 anchors {
                     left: fieldPill.left
                     leftMargin: 14
                     verticalCenter: fieldPill.verticalCenter
                 }
-                text: "⌕"
+                name: "search"
                 color: AppearanceTokens.content.glassInk(0.72)
-                font.pixelSize: 20
-                style: ThemeService.isDark ? Text.Outline : Text.Normal
-                styleColor: dialog.textOutlineColor
+                size: 20
+                outlined: ThemeService.isDark
+                outlineColor: dialog.textOutlineColor
             }
 
             TextInput {
@@ -692,15 +699,15 @@ PanelWindow {
                             : "transparent"
                     }
 
-                    GlassText {
+                    BundledIcon {
                         anchors.centerIn: parent
-                        text: "⚙"
+                        name: "gear_alt"
                         color: root.clipboardSettingsOpen
                             ? (ThemeService.isDark ? "#64b5ff" : "#0066cc")
                             : AppearanceTokens.content.glassInk(0.70)
-                        font.pixelSize: 13
-                        style: ThemeService.isDark ? Text.Outline : Text.Normal
-                        styleColor: dialog.textOutlineColor
+                        size: 13
+                        outlined: ThemeService.isDark
+                        outlineColor: dialog.textOutlineColor
                     }
 
                     MouseArea {
@@ -810,14 +817,13 @@ PanelWindow {
                         style: ThemeService.isDark ? Text.Outline : Text.Normal
                         styleColor: dialog.textOutlineColor
                     }
-                    GlassText {
+                    BundledIcon {
                         width: 24
-                        horizontalAlignment: Text.AlignRight
-                        text: "×"
-                        font.pixelSize: 18
+                        name: "xmark"
+                        size: 18
                         color: AppearanceTokens.content.glassInk(0.60)
-                        style: ThemeService.isDark ? Text.Outline : Text.Normal
-                        styleColor: dialog.textOutlineColor
+                        outlined: ThemeService.isDark
+                        outlineColor: dialog.textOutlineColor
                         MouseArea {
                             anchors.fill: parent
                             anchors.margins: -4
@@ -973,12 +979,11 @@ PanelWindow {
                             style: ThemeService.isDark ? Text.Outline : Text.Normal
                             styleColor: dialog.textOutlineColor
                         }
-                        GlassText {
+                        BundledIcon {
                             width: 20
-                            horizontalAlignment: Text.AlignRight
                             anchors.verticalCenter: parent.verticalCenter
-                            text: "›"
-                            font.pixelSize: 16
+                            name: "chevron_right"
+                            size: 16
                         color: AppearanceTokens.content.glassInk(0.40)
                         }
                     }
@@ -1239,14 +1244,14 @@ PanelWindow {
                                 : "transparent"
                         }
 
-                        GlassText {
+                        BundledIcon {
                             anchors.centerIn: parent
-                            text: "×"
+                            name: "xmark"
                             color: deleteBtnMouse.containsMouse ? "#ff453a"
                                 : AppearanceTokens.content.glassInk(0.60)
-                            font.pixelSize: 16
-                            style: ThemeService.isDark ? Text.Outline : Text.Normal
-                            styleColor: dialog.textOutlineColor
+                            size: 16
+                            outlined: ThemeService.isDark
+                            outlineColor: dialog.textOutlineColor
                         }
 
                         MouseArea {
@@ -1388,14 +1393,14 @@ PanelWindow {
                             : (ThemeService.isDark ? Qt.rgba(0, 0, 0, 0.35) : Qt.rgba(1, 1, 1, 0.60))
                     }
 
-                    GlassText {
+                    BundledIcon {
                         anchors.centerIn: parent
-                        text: "×"
+                        name: "xmark"
                         color: gridDeleteMouse.containsMouse ? "#ff453a"
                             : AppearanceTokens.content.glassInk(0.80)
-                        font.pixelSize: 14
-                        style: ThemeService.isDark ? Text.Outline : Text.Normal
-                        styleColor: dialog.textOutlineColor
+                        size: 14
+                        outlined: ThemeService.isDark
+                        outlineColor: dialog.textOutlineColor
                     }
 
                     MouseArea {

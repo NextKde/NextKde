@@ -49,6 +49,7 @@ public:
     QVariantMap updateStatus() const;
     int updateCount() const;
     Q_INVOKABLE void refreshCatalog();
+    Q_INVOKABLE void ensureCatalogFresh();
     Q_INVOKABLE QString addSource(const QString& id, const QString& repository, const QString& fingerprint, const QString& publicKeyFile);
     Q_INVOKABLE QString removeSource(const QString& id);
     Q_INVOKABLE void checkAllUpdates();

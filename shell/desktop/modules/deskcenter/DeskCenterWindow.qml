@@ -831,11 +831,11 @@ PanelWindow {
                 anchors { top: parent.top; left: parent.left; margins: 8 }
                 width: 26; height: 26; radius: 13
                 color: "#ff453a"
-                Text {
+                BundledIcon {
                     anchors.centerIn: parent
-                    text: "−"
+                    name: "minus"
                     color: "white"
-                    font { pixelSize: 18; weight: Font.Bold }
+                    size: 18
                 }
                 TapHandler {
                     onTapped: AppearanceConfigService.setDeskCenterWidgetVisible(
@@ -949,16 +949,13 @@ PanelWindow {
                     anchors { right: parent.right; bottom: parent.bottom; rightMargin: 12; bottomMargin: 12 }
 	                    color: "transparent"
                     border.width: 0
-                    Image {
+                    BundledIcon {
                         anchors.centerIn: parent
                         anchors.verticalCenterOffset: -1
                         width: 17
                         height: 17
-                        source: BundledIcons.source("countdown")
-                        sourceSize.width: 26
-                        sourceSize.height: 26
-                        fillMode: Image.PreserveAspectFit
-                        smooth: true
+                        name: "countdown"
+
                     }
                     MouseArea {
                         id: timerPointer
@@ -1027,24 +1024,12 @@ PanelWindow {
                         anchors.horizontalCenter: parent.horizontalCenter
                         y: timerDial.y + timerTimeText.y - height - 2
                         spacing: 5
-                        Canvas {
+                        BundledIcon {
                             id: timerBell
                             objectName: "timer-end-bell"
-                            width: 14
-                            height: 16
-                            readonly property color strokeColor: AppearanceTokens.content.onBackdrop
-                                ? "#ffffff" : "#ffb028"
-                            // The clock bypasses the ancestor saturation layer.
-                            // Invalidate this cached artwork when its ink changes.
-                            onStrokeColorChanged: requestPaint()
-                            onPaint: {
-                                const ctx = getContext("2d")
-	                                ctx.reset(); ctx.strokeStyle = timerBell.strokeColor.toString(); ctx.lineWidth = 1.3; ctx.lineCap = "round"
-                                ctx.beginPath(); ctx.moveTo(3, 10); ctx.quadraticCurveTo(4, 8.7, 4, 6.4)
-                                ctx.quadraticCurveTo(4, 3.8, 7, 3.8); ctx.quadraticCurveTo(10, 3.8, 10, 6.4)
-                                ctx.quadraticCurveTo(10, 8.7, 11, 10); ctx.lineTo(3, 10); ctx.stroke()
-                                ctx.beginPath(); ctx.moveTo(5.3, 12); ctx.lineTo(8.7, 12); ctx.stroke()
-                            }
+                            width: 14; height: 16
+                            name: "bell"
+                            color: AppearanceTokens.content.onBackdrop ? "#ffffff" : "#ffb028"
                         }
                         Text {
                             text: I18n.tr("Ends at %1").arg(root.formattedTimerEndTime())
@@ -1128,11 +1113,11 @@ PanelWindow {
                             }
                         }
                     }
-                    Text {
+                    BundledIcon {
                         anchors { left: parent.left; top: parent.top; leftMargin: 10; topMargin: 7 }
-                        text: "×"
+                        name: "xmark"
                         color: Qt.rgba(1, 1, 1, 0.74)
-                        font { pixelSize: 18; weight: Font.Light }
+                        size: 18
                         MouseArea {
                             anchors.fill: parent
                             anchors.margins: -6
@@ -1233,35 +1218,25 @@ PanelWindow {
                         anchors.fill: parent
                         visible: WeatherTheme.category(WeatherService.weatherCode) === "partlyCloudy"
                             || WeatherTheme.category(WeatherService.weatherCode) === "overcast"
-                        Image {
+                        BundledIcon {
                             id: deskCloudBack
                             width: parent.width * 0.34
                             height: parent.height * 0.36
                             y: 2
                             x: -width
-                            source: BundledIcons.source("weather-cloud")
-                            fillMode: Image.PreserveAspectFit
-	                            smooth: true
-	                            layer.enabled: AppearanceConfigService.widgetStyle === "glass"
-	                            layer.effect: MultiEffect {
-                                saturation: -1.0
-                                colorization: 0
-	                            }
+                            name: "weather-cloud"
+
+	                            
                         }
-                        Image {
+                        BundledIcon {
                             id: deskCloudFront
                             width: parent.width * 0.30
                             height: parent.height * 0.29
                             y: parent.height * 0.18
                             x: parent.width
-                            source: BundledIcons.source("weather-cloud-wide")
-                            fillMode: Image.PreserveAspectFit
-	                            smooth: true
-	                            layer.enabled: AppearanceConfigService.widgetStyle === "glass"
-	                            layer.effect: MultiEffect {
-                                saturation: -1.0
-                                colorization: 0
-	                            }
+                            name: "weather-cloud-wide"
+
+	                            
                         }
                     }
 
@@ -1320,13 +1295,13 @@ PanelWindow {
                         }
                     }
 
-                    Text {
+                    BundledIcon {
                         anchors { right: parent.right; top: parent.top; rightMargin: 26; topMargin: 8 }
                         visible: WeatherTheme.isStorm(WeatherService.weatherCode)
-                        text: "ϟ"
+                        name: "bolt_fill"
 	                        color: AppearanceTokens.content.ink("#e0ccff", 0.68)
                         opacity: 0.68
-                        font { family: AppearanceTokens.typography.displayFamily; pixelSize: 42; weight: Font.DemiBold }
+                        size: 42
                     }
                 }
                 Text {
@@ -1876,7 +1851,7 @@ PanelWindow {
                                     required property var modelData
                                     width: activityRightPane.width
                                     height: 16
-                                    IconImage {
+                                    AppIcon {
                                         id: appUsageIcon
                                         width: 12
                                         height: 12
@@ -2131,12 +2106,12 @@ PanelWindow {
                                 visible: false
                                 layer.enabled: true
                             }
-                            Text {
+                            BundledIcon {
                                 anchors.centerIn: parent
 	                                visible: !musicContent.hasPlayer
-                                text: "♫"
+                                name: "music_note_2"
                                 color: Qt.rgba(1, 1, 1, 0.46)
-                                font { family: AppearanceTokens.typography.displayFamily; pixelSize: musicArtwork.width * 0.42 }
+                                size: musicArtwork.width * 0.42
                             }
                         }
                     }
@@ -3897,26 +3872,16 @@ PanelWindow {
                             maskSource: imageThumbnailMask
                         }
                     }
-                    IconImage {
+                    AppIcon {
                         id: launcherIcon
                         anchors.fill: parent
                         source: modelData.kind === "launcher"
                             ? AppPresentationService.iconSource(modelData.icon) : ""
-                        // Provider icons already scale with the display; raw
-                        // bundled artwork must request physical pixel sizes.
-                        readonly property int rasterSize: Math.max(1, Math.ceil(
-                            actualSize * (String(source).startsWith("image://")
-                                ? 1 : Math.max(1, Screen.devicePixelRatio))))
-                        backer.sourceSize: Qt.size(rasterSize, rasterSize)
                         // Theme icon: synchronous, see AppIcon.qml.
                         asynchronous: false
-                        visible: source !== "" && status === Image.Ready
+                        visible: source !== "" && imageStatus === Image.Ready
                     }
-                    // Folder icon: a unified Canvas-drawn folder shape used
-                    // for both default and customised folders. When a custom
-                    // color is set the folder is tinted with it; when an emoji
-                    // is set it is drawn centered inside the folder body so
-                    // both the folder and the symbol are visible.
+                    // Platform folder glyph; user colors and emoji remain custom artwork.
                     Item {
                         readonly property var folderCustom: modelData.kind === "folder"
                             ? desktopFileGrid.folderCustomFor(modelData.path) : null
@@ -3925,95 +3890,11 @@ PanelWindow {
                         height: desktopFileGrid.iconSize
                         visible: modelData.kind === "folder"
 
-                        Canvas {
-                            id: folderCanvas
+                        BundledIcon {
                             anchors.fill: parent
-                            readonly property color baseColor: {
-                                const c = parent.folderCustom
-                                if (c && c.color)
-                                    return c.color
-                                return "#70b6ff"
-                            }
-                            onBaseColorChanged: requestPaint()
-                            onWidthChanged: requestPaint()
-                            onHeightChanged: requestPaint()
-                            Component.onCompleted: requestPaint()
-
-                            function shade(hex, factor) {
-                                // Darken/lighten an rgba/hex color by factor
-                                // (0..1 = darker, >1 = lighter).
-                                const ctx = getContext("2d")
-                                const c = Qt.color(hex)
-                                const r = Math.max(0, Math.min(255, Math.round(c.r * 255 * factor)))
-                                const g = Math.max(0, Math.min(255, Math.round(c.g * 255 * factor)))
-                                const b = Math.max(0, Math.min(255, Math.round(c.b * 255 * factor)))
-                                return "rgba(" + r + "," + g + "," + b + "," + c.a + ")"
-                            }
-
-                            onPaint: {
-                                const ctx = getContext("2d")
-                                ctx.reset()
-                                const w = width
-                                const h = height
-                                const margin = w * 0.10
-                                const tabH = h * 0.14
-                                const bodyX = margin
-                                const bodyY = margin + tabH
-                                const bodyW = w - margin * 2
-                                const bodyH = h - margin - bodyY
-                                const r = Math.min(bodyW, bodyH) * 0.18
-
-                                // Back tab (folder flap) - darker shade for depth
-                                ctx.fillStyle = folderCanvas.shade(folderCanvas.baseColor, 0.72)
-                                ctx.globalAlpha = 0.92
-                                ctx.beginPath()
-                                ctx.moveTo(bodyX, bodyY)
-                                ctx.lineTo(bodyX + bodyW * 0.42, bodyY)
-                                ctx.lineTo(bodyX + bodyW * 0.42 + tabH * 0.7, bodyY - tabH)
-                                ctx.lineTo(bodyX + bodyW * 0.72, bodyY - tabH)
-                                ctx.arcTo(bodyX + bodyW * 0.72 + r, bodyY - tabH,
-                                          bodyX + bodyW * 0.72 + r, bodyY - tabH + r, r)
-                                ctx.lineTo(bodyX + bodyW * 0.72 + r, bodyY)
-                                ctx.closePath()
-                                ctx.fill()
-
-                                // Front body - base color fill
-                                ctx.fillStyle = folderCanvas.shade(folderCanvas.baseColor, 1.0)
-                                ctx.globalAlpha = 0.90
-                                roundRect(ctx, bodyX, bodyY, bodyW, bodyH, r)
-                                ctx.fill()
-
-                                // Top highlight strip on the front body
-                                ctx.fillStyle = "rgba(255,255,255,0.18)"
-                                ctx.globalAlpha = 1.0
-                                ctx.beginPath()
-                                ctx.moveTo(bodyX + r, bodyY)
-                                ctx.lineTo(bodyX + bodyW - r, bodyY)
-                                ctx.lineTo(bodyX + bodyW - r, bodyY + bodyH * 0.12)
-                                ctx.lineTo(bodyX + r, bodyY + bodyH * 0.12)
-                                ctx.closePath()
-                                ctx.fill()
-
-                                // Subtle inner border for definition
-                                ctx.strokeStyle = "rgba(0,0,0,0.16)"
-                                ctx.lineWidth = 1
-                                roundRect(ctx, bodyX, bodyY, bodyW, bodyH, r)
-                                ctx.stroke()
-                            }
-
-                            function roundRect(ctx, x, y, w, h, r) {
-                                ctx.beginPath()
-                                ctx.moveTo(x + r, y)
-                                ctx.lineTo(x + w - r, y)
-                                ctx.arcTo(x + w, y, x + w, y + r, r)
-                                ctx.lineTo(x + w, y + h - r)
-                                ctx.arcTo(x + w, y + h, x + w - r, y + h, r)
-                                ctx.lineTo(x + r, y + h)
-                                ctx.arcTo(x, y + h, x, y + h - r, r)
-                                ctx.lineTo(x, y + r)
-                                ctx.arcTo(x, y, x + r, y, r)
-                                ctx.closePath()
-                            }
+                            name: "folder_fill"
+                            color: parent.folderCustom && parent.folderCustom.color
+                                ? parent.folderCustom.color : "#70b6ff"
                         }
 
                         // Emoji centered inside the folder body.
@@ -4039,7 +3920,7 @@ PanelWindow {
                             [desktopFileGrid.iconFor(modelData.kind)], "text-x-generic")
                         visible: source !== "" && status === Image.Ready
                             && (modelData.kind !== "image" || imageThumbnail.status !== Image.Ready)
-                            && (modelData.kind !== "launcher" || launcherIcon.status !== Image.Ready)
+                            && (modelData.kind !== "launcher" || launcherIcon.imageStatus !== Image.Ready)
                             && modelData.kind !== "folder"
                     }
                     BundledIcon {
@@ -4050,7 +3931,7 @@ PanelWindow {
                         // 这个类型图标时才由这里接手。
                         visible: desktopThemeIcon.status !== Image.Ready
                             && (modelData.kind !== "image" || imageThumbnail.status !== Image.Ready)
-                            && (modelData.kind !== "launcher" || launcherIcon.status !== Image.Ready)
+                            && (modelData.kind !== "launcher" || launcherIcon.imageStatus !== Image.Ready)
                             && modelData.kind !== "folder"
                         name: desktopFileGrid.iconFor(modelData.kind)
                         color: Qt.rgba(1, 1, 1, 0.88)

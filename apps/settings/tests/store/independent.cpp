@@ -5,6 +5,11 @@
 #include <QFile>
 #include <QTemporaryDir>
 #include <QtTest>
+#include <QNetworkProxy>
+#include <QTcpServer>
+#include <QTcpSocket>
+#include <QTimer>
+#include <QScopeGuard>
 
 class IndependentAppsTest : public QObject {
     Q_OBJECT
@@ -26,6 +31,49 @@ class IndependentAppsTest : public QObject {
         return {};
     }
 private slots:
+    void pageRefreshDoesNotBlockOrDiscardCachedApps()
+    {
+        QTemporaryDir config;
+        const auto oldConfig = qgetenv("XDG_CONFIG_HOME");
+        const auto oldProxy = QNetworkProxy::applicationProxy();
+        const auto restore = qScopeGuard([&] {
+            if (oldConfig.isNull()) qunsetenv("XDG_CONFIG_HOME"); else qputenv("XDG_CONFIG_HOME", oldConfig);
+            QNetworkProxy::setApplicationProxy(oldProxy);
+        });
+        qputenv("XDG_CONFIG_HOME", config.path().toUtf8());
+        QTcpServer proxy;
+        QVERIFY(proxy.listen(QHostAddress::LocalHost));
+        QNetworkProxy::setApplicationProxy(QNetworkProxy(QNetworkProxy::HttpProxy, "127.0.0.1", proxy.serverPort()));
+        int requests = 0, heartbeats = 0;
+        connect(&proxy, &QTcpServer::newConnection, this, [&] {
+            auto socket = proxy.nextPendingConnection();
+            ++requests;
+            QTimer::singleShot(300, socket, [socket] {
+                socket->write("HTTP/1.1 502 Bad Gateway\r\nContent-Length: 0\r\nConnection: close\r\n\r\n");
+                socket->disconnectFromHost();
+            });
+        });
+        QTimer heartbeat;
+        heartbeat.setInterval(10);
+        connect(&heartbeat, &QTimer::timeout, this, [&] { ++heartbeats; });
+        heartbeat.start();
+        AppStore store(temporary.path());
+        const auto count = store.apps().size();
+        QVERIFY(count > 0);
+        QElapsedTimer elapsed; elapsed.start();
+        store.ensureCatalogFresh();
+        store.ensureCatalogFresh();
+        QVERIFY(elapsed.elapsed() < 100);
+        QTRY_VERIFY_WITH_TIMEOUT(requests > 0, 3000);
+        QTRY_VERIFY_WITH_TIMEOUT(!store.catalogBusy(), 5000);
+        QVERIFY(heartbeats >= 5);
+        QCOMPARE(store.apps().size(), count);
+        QVERIFY(!store.catalogError().isEmpty());
+        const auto firstRequests = requests;
+        store.ensureCatalogFresh();
+        QTRY_VERIFY_WITH_TIMEOUT(!store.catalogBusy(), 3000);
+        QCOMPARE(requests, firstRequests); // The page timer cannot cause a retry storm.
+    }
     void closePolicyKeepsMutationsAndVerificationProtected()
     {
         IndependentApps store(temporary.path());

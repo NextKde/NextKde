@@ -115,6 +115,13 @@ void AppStore::refreshCatalog()
     if (catalogBusy() || hasActiveMutation()) return;
     m_catalogRefresh.setFuture(QtConcurrent::run([] { return AppCatalog::refresh(); })); emit changed();
 }
+void AppStore::ensureCatalogFresh()
+{
+    if (catalogBusy() || hasActiveMutation()) return;
+    // Decide freshness and fetch data on a worker while the page keeps its inventory.
+    m_catalogRefresh.setFuture(QtConcurrent::run([] { return AppCatalog::refresh([] { return false; }, true); }));
+    emit changed();
+}
 QString AppStore::addSource(const QString& id, const QString& repository, const QString& fingerprint, const QString& file)
 {
     if (hasActiveMutation() || catalogBusy()) return "BUSY";

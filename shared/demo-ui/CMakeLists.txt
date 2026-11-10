@@ -1,3 +1,7 @@
+if(NOT TARGET kos_icons)
+    add_subdirectory(../Icons ${CMAKE_CURRENT_BINARY_DIR}/kos-icons)
+endif()
+
 # Canonical nextkdeAppDemo controls, isolated from the legacy Kos.Ui module.
 set_source_files_properties(foundation/AppTheme.qml i18n/I18n.qml
     controls/ControlForm.qml controls/LiquidStyle.qml PROPERTIES QT_QML_SINGLETON_TYPE TRUE)
@@ -78,4 +82,5 @@ qt_add_qml_module(kos_demo_ui URI Kos.Demo VERSION 1.0 STATIC
         controls/shaders/liquid_surface.vert
         foundation/qmldir
 )
-target_link_libraries(kos_demo_ui PUBLIC Qt6::Core Qt6::Gui Qt6::Qml Qt6::Quick Qt6::QuickControls2)
+target_link_libraries(kos_demo_ui PUBLIC
+    Kos::Icons Kos::IconsPlugin Qt6::Core Qt6::Gui Qt6::Qml Qt6::Quick Qt6::QuickControls2)

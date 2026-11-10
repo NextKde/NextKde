@@ -138,9 +138,13 @@ install(DIRECTORY pages components DESTINATION share/kos/settings
     FILES_MATCHING PATTERN "*.qml")
 
 if(BUILD_TESTING)
+    add_executable(kos-wallpaper-gradient-test tests/wallpaper/gradient.cpp)
+    target_link_libraries(kos-wallpaper-gradient-test PRIVATE Qt6::Core Qt6::Gui)
+    add_test(NAME kos-settings.wallpaper-gradient COMMAND kos-wallpaper-gradient-test)
+    set_tests_properties(kos-settings.wallpaper-gradient PROPERTIES LABELS logic TIMEOUT 20)
     find_package(Qt6 6.5 REQUIRED COMPONENTS Test)
     add_executable(kos-app-catalog-test tests/store/catalog.cpp)
-    target_link_libraries(kos-app-catalog-test PRIVATE kos-app-catalog Qt6::Test)
+    target_link_libraries(kos-app-catalog-test PRIVATE kos-app-catalog Qt6::Test Qt6::Network)
     add_test(NAME kos-settings.app-catalog COMMAND kos-app-catalog-test)
     set_tests_properties(kos-settings.app-catalog PROPERTIES LABELS logic TIMEOUT 120)
     find_program(DBUS_RUN_SESSION_EXECUTABLE dbus-run-session REQUIRED)
@@ -151,17 +155,21 @@ if(BUILD_TESTING)
     add_test(NAME kos-settings.app-updates
         COMMAND ${DBUS_RUN_SESSION_EXECUTABLE} -- $<TARGET_FILE:kos-app-update-agent-test>)
     set_tests_properties(kos-settings.app-updates PROPERTIES LABELS logic TIMEOUT 30)
-    find_program(XVFB_RUN_EXECUTABLE xvfb-run REQUIRED)
+    find_program(XVFB_RUN_EXECUTABLE xvfb-run)
     add_executable(kos-settings-fonts-test tests/backend/FontsTest.cpp src/FontSettings.cpp src/FontSettings.h)
     target_include_directories(kos-settings-fonts-test PRIVATE src)
     target_link_libraries(kos-settings-fonts-test PRIVATE Qt6::Gui Qt6::Qml Qt6::Quick Qt6::Test Qt6::DBus
         KF6::KCMUtilsQuick kos_demo_ui kos_demo_ui_plugin)
     target_compile_definitions(kos-settings-fonts-test PRIVATE
         FONT_SETTINGS_PAGE="${CMAKE_CURRENT_SOURCE_DIR}/pages/FontSettingsPage.qml")
-    add_test(NAME kos-settings.fonts
-        COMMAND ${XVFB_RUN_EXECUTABLE} -a ${DBUS_RUN_SESSION_EXECUTABLE} -- $<TARGET_FILE:kos-settings-fonts-test>)
-    set_tests_properties(kos-settings.fonts PROPERTIES LABELS headless TIMEOUT 30
-        ENVIRONMENT "KOS_FONT_SCREENSHOT=${CMAKE_BINARY_DIR}/test-results/fonts.png")
+    if(XVFB_RUN_EXECUTABLE)
+        add_test(NAME kos-settings.fonts
+            COMMAND ${XVFB_RUN_EXECUTABLE} -a ${DBUS_RUN_SESSION_EXECUTABLE} -- $<TARGET_FILE:kos-settings-fonts-test>)
+        set_tests_properties(kos-settings.fonts PROPERTIES LABELS headless TIMEOUT 30
+            ENVIRONMENT "KOS_FONT_SCREENSHOT=${CMAKE_BINARY_DIR}/test-results/fonts.png")
+    else()
+        message(STATUS "Skipping kos-settings.fonts: xvfb-run is unavailable (other tests remain enabled)")
+    endif()
     add_executable(kos-settings-background-test tests/background/session.cpp)
     target_link_libraries(kos-settings-background-test PRIVATE Qt6::Core Qt6::DBus Qt6::Test kos-app-catalog)
     target_compile_definitions(kos-settings-background-test PRIVATE
@@ -372,6 +380,9 @@ if(BUILD_TESTING)
                 ${CMAKE_CURRENT_SOURCE_DIR}/tests/wallpaper/bridge.mjs
                 $<TARGET_FILE:kos-settings>)
         set_tests_properties(kos-settings.wallpaper-colors PROPERTIES LABELS ui TIMEOUT 20)
+        add_test(NAME kos-settings.wallpaper-palettes
+            COMMAND ${KOS_NODE_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/wallpaper/palette.mjs)
+        set_tests_properties(kos-settings.wallpaper-palettes PROPERTIES LABELS logic TIMEOUT 20)
         # The smoke test above proves the pages load; this one proves the right
         # pages were chosen, which is a separate failure mode: an installed binary
         # serving a checkout Shell would open and render the installed copy, look

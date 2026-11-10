@@ -22,14 +22,7 @@ Rectangle {
     LiquidControls.VectorIcon {
         anchors.centerIn: parent
         size: Math.round(parent.size * 0.58)
-        name: ({"◈":"theme", "◇":"theme", "▧":"wallpaper", "⎍":"panel",
-            "▰":"dock", "▭":"dock", "▣":"panel", "▦":"grid", "❖":"grid",
-            "⌘":"keyboard", "✓":"check", "⚙":"settings", "♲":"trash",
-            "↔":"arrows", "◉":"circle", "◌":"circle", "●":"circle",
-            "◐":"contrast", "◔":"contrast", "◒":"contrast", "≈":"waves",
-            "≋":"waves", "⧉":"copy", "⌂":"home", "⌕":"search",
-            "⇲":"resize", "↺":"undo", "B":"bold",
-            "▢":"corners", "◧":"shadow", "↓":"minimize", "×":"close"})[parent.symbol] || "settings"
+        name: parent.symbol || "settings"
         color: parent.flat
             ? (parent.highlighted ? colors.selectedForeground : colors.iconMuted)
             : colors.iconForeground

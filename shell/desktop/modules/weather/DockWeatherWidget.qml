@@ -84,11 +84,10 @@ Item {
                 y: parent.height * 0.10
                 x: -width
                 opacity: 0.16
-                Image {
+                BundledIcon {
                     anchors.fill: parent
-                    source: BundledIcons.source("weather-cloud")
-                    fillMode: Image.PreserveAspectFit
-                    smooth: true
+                    name: "weather-cloud"
+
                 }
             }
             Item {
@@ -98,11 +97,10 @@ Item {
                 y: parent.height * 0.42
                 x: parent.width
                 opacity: 0.21
-                Image {
+                BundledIcon {
                     anchors.fill: parent
-                    source: BundledIcons.source("weather-cloud-wide")
-                    fillMode: Image.PreserveAspectFit
-                    smooth: true
+                    name: "weather-cloud-wide"
+
                 }
             }
         }

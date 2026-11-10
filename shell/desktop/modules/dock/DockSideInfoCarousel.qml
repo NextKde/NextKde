@@ -327,12 +327,12 @@ Item {
                             width: parent.width
                             height: parent.height * 0.50
 
-                            Text {
+                            BundledIcon {
                                 anchors.centerIn: parent
                                 visible: sideSlot.modelData === carousel.musicPage
-                                text: "♫"
+                                name: "music_note_2"
                                 color: "white"
-                                font.pixelSize: Math.max(10,
+                                size: Math.max(10,
                                     Math.round(carousel.iconSize * 0.54))
                             }
                             Text {

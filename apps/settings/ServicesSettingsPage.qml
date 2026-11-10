@@ -16,7 +16,14 @@ GridLayout {
             ? store.apps.map(app => app.id) : []
         if (JSON.stringify(ids) !== JSON.stringify(appIds)) appIds = ids
     }
-    onStoreChanged: syncAppIds()
+    function ensureCatalogFresh() {
+        if (visible && store && typeof store.ensureCatalogFresh === "function")
+            store.ensureCatalogFresh()
+    }
+    onStoreChanged: {
+        syncAppIds()
+        Qt.callLater(page.ensureCatalogFresh)
+    }
     property var colors
     property var resources: ({})
     property string errorText: ""
@@ -36,6 +43,7 @@ GridLayout {
         else store.install(app.id);
     }
     onVisibleChanged: {
+        if (visible) Qt.callLater(page.ensureCatalogFresh)
         if (!visible) {
             pendingPlanRequest = null;
             planDialog.close();
@@ -444,6 +452,7 @@ GridLayout {
     }
     Component.onCompleted: {
         syncAppIds()
+        Qt.callLater(page.ensureCatalogFresh)
         if (compatible)
             bridge.inspectSpatialService();
         refresh();
@@ -460,6 +469,12 @@ GridLayout {
             page.snapshotReceived = !!state.spatialResources;
             page.errorText = page.resources.error || "";
         }
+    }
+    Timer {
+        interval: 60000
+        running: page.visible && !!page.store
+        repeat: true
+        onTriggered: page.ensureCatalogFresh()
     }
     Timer {
         interval: 1000

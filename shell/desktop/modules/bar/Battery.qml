@@ -1,6 +1,7 @@
 import Quickshell
 import Quickshell.Services.UPower
 import QtQuick
+import "../../../shared/Icons" as Symbols
 import QtQuick.Effects
 import "../../../shared/qml/i18n"
 import qs.desktop.modules.dock
@@ -18,10 +19,7 @@ Item {
     property real iconSize: 18
     rotation: verticalDock ? -90 : 0
     readonly property color dockTintColor: ThemeService.barInk
-    // The bar text carries a Text.Outline edge so it holds over a bright
-    // backdrop; the battery is drawn from QML rectangles, which have no text
-    // style, so the same edge comes from a shadow layer instead. The mac-style ground
-    // paints a plate under the glyph, so the edge is dropped there.
+    // Keep the existing contrast treatment over the wallpaper.
     readonly property bool iconOutlined: AppearanceTokens.isDarkTheme && !AppearanceTokens.bar.macStyle
     layer.enabled: iconOutlined
     layer.effect: MultiEffect {
@@ -35,55 +33,13 @@ Item {
     width: implicitWidth
     height: implicitHeight
 
-    Rectangle {
-        id: outline
-        anchors {
-            left: parent.left
-            verticalCenter: parent.verticalCenter
-        }
-        width: Math.max(12, root.iconSize - 2)
-        height: Math.max(8, Math.round(root.iconSize * 0.56))
-        radius: 3
-        color: "transparent"
-        border {
-            width: 1.5
-            color: root.dockTintColor
-        }
-    }
-
-    Rectangle {
-        anchors {
-            left: outline.right
-            verticalCenter: outline.verticalCenter
-        }
-        width: Math.max(1.5, root.iconSize - outline.width)
-        height: Math.max(3, root.iconSize * 0.20)
-        radius: 1
+    Symbols.BatteryIcon {
+        anchors.fill: parent
+        level: root.batteryDevice.ready ? root.level : 0
+        charging: root.isCharging
         color: root.dockTintColor
-    }
-
-    Rectangle {
-        visible: !root.isCharging
-        anchors {
-            left: outline.left
-            verticalCenter: outline.verticalCenter
-            leftMargin: 2
-        }
-        width: batteryDevice.ready && root.percent > 0
-            ? Math.max(2, (outline.width - 4) * root.level)
-            : 0
-        height: outline.height - 4
-        radius: 2
-        color: root.fillColor
-    }
-
-    BundledIcon {
-        anchors.centerIn: outline
-        visible: root.isCharging
-        name: "status-battery-charging"
-        color: root.boltColor
-        width: Math.max(7, root.iconSize * 0.44)
-        height: width
+        fillColor: root.fillColor
+        chargeColor: root.boltColor
     }
 
     MouseArea {

@@ -1,4 +1,5 @@
 #include "SettingsBridge.h"
+#include "WallpaperGradient.h"
 
 #include <LiquidAI/ModelManager.h>
 #include <QColor>
@@ -15,15 +16,12 @@
 #include <QImage>
 #include <QJsonArray>
 #include <QJsonDocument>
-#include <QLinearGradient>
-#include <QPainter>
 #include <QRegularExpression>
 #include <QSaveFile>
 #include <QSettings>
 #include <QStandardPaths>
 #include <QThread>
 #include <QUrl>
-#include <cmath>
 
 namespace {
 
@@ -129,20 +127,29 @@ void SettingsBridge::previewWallpaperImage(const QString& urlOrPath, const QStri
         ipcStringArgument(listJson) });
 }
 
-QString SettingsBridge::wallpaperColorImage(const QString& start, const QString& end, int angle)
+QString SettingsBridge::wallpaperColorImage(const QString& start, const QString& end, int angle,
+    const QStringList& colors)
 {
     const QRegularExpression format(QStringLiteral("^#[0-9a-fA-F]{6}$"));
     if (!format.match(start).hasMatch() || !format.match(end).hasMatch()) {
         setLastError(QStringLiteral("Enter a valid six-digit hex color, e.g. #A8C8F0"));
         return { };
     }
+    if (!colors.isEmpty() && (colors.size() != 3
+            || std::any_of(colors.begin(), colors.end(), [&format](const QString& color) {
+                return !format.match(color).hasMatch();
+            }))) {
+        setLastError(QStringLiteral("A color palette needs three valid six-digit hex colors"));
+        return {};
+    }
     angle = ((angle % 360) + 360) % 360;
     const QString folder = QStandardPaths::writableLocation(QStandardPaths::GenericCacheLocation)
         + QStringLiteral("/kos/wallpaper-colors");
-    const QString key = start == end
+    const QString key = start == end && colors.isEmpty()
         ? start.mid(1).toLower()
-        : QStringLiteral("gradient-%1-%2-%3")
-              .arg(start.mid(1).toLower(), end.mid(1).toLower(), QString::number(angle));
+        : QStringLiteral("gradient-v3-%1-%2-%3-%4")
+              .arg(start.mid(1).toLower(), end.mid(1).toLower(), QString::number(angle),
+                  colors.isEmpty() ? QStringLiteral("plain") : colors.join(QLatin1Char('-')).remove(QLatin1Char('#')).toLower());
     const QString path = folder + QLatin1Char('/') + key + QStringLiteral(".png");
     if (QFileInfo::exists(path))
         return path;
@@ -150,21 +157,8 @@ QString SettingsBridge::wallpaperColorImage(const QString& start, const QString&
         setLastError(QStringLiteral("Could not create the color wallpaper cache"));
         return { };
     }
-    QImage image(start == end ? QSize(16, 16) : QSize(1920, 1080), QImage::Format_RGB32);
-    if (start == end)
-        image.fill(QColor(start));
-    else {
-        const double radians = angle * 3.14159265358979323846 / 180.0;
-        const QPointF direction(std::cos(radians), std::sin(radians));
-        const QPointF center(image.width() / 2.0, image.height() / 2.0);
-        const double extent = std::abs(direction.x()) * image.width() / 2.0
-            + std::abs(direction.y()) * image.height() / 2.0;
-        QLinearGradient gradient(center - direction * extent, center + direction * extent);
-        gradient.setColorAt(0, QColor(start));
-        gradient.setColorAt(1, QColor(end));
-        QPainter painter(&image);
-        painter.fillRect(image.rect(), gradient);
-    }
+    const QImage image = WallpaperGradient::render(QColor(start), QColor(end), angle,
+        start == end && colors.isEmpty() ? QSize(16, 16) : QSize(1920, 1080), colors);
     QSaveFile file(path);
     if (!file.open(QIODevice::WriteOnly) || !image.save(&file, "PNG") || !file.commit()) {
         setLastError(QStringLiteral("Could not generate the color wallpaper"));
@@ -179,9 +173,10 @@ void SettingsBridge::chooseWallpaperColor(const QString& hex)
     chooseWallpaperGradient(hex, hex, 0);
 }
 
-void SettingsBridge::chooseWallpaperGradient(const QString& start, const QString& end, int angle)
+void SettingsBridge::chooseWallpaperGradient(const QString& start, const QString& end, int angle,
+    const QStringList& colors)
 {
-    const QString path = wallpaperColorImage(start, end, angle);
+    const QString path = wallpaperColorImage(start, end, angle, colors);
     if (path.isEmpty()) {
         emit wallpaperSnapshotChanged({ });
         return;

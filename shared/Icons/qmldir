@@ -1,0 +1,6 @@
+module Kos.Icons
+Icon 1.0 Icon.qml
+singleton IconRegistry 1.0 IconRegistry.qml
+SignalIcon 1.0 SignalIcon.qml
+VolumeIcon 1.0 VolumeIcon.qml
+BatteryIcon 1.0 BatteryIcon.qml
