@@ -1,0 +1,24 @@
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="128" height="128" viewBox="0 0 128 128">
+  <title>Desktop and Dock</title>
+  <defs>
+    <linearGradient id="tileColor" x1="0" y1="10" x2="0" y2="114" gradientUnits="userSpaceOnUse"><stop stop-color="#9ebfdd"/><stop offset="1" stop-color="#648daf"/></linearGradient>
+    <linearGradient id="ivory" x1="0" y1="32" x2="0" y2="100" gradientUnits="userSpaceOnUse"><stop stop-color="#ffffff"/><stop offset="1" stop-color="#f1f0eb"/></linearGradient>
+    <path id="tile" d="M42 10H86C107 10 116 19 116 40V84C116 105 107 114 86 114H42C21 114 12 105 12 84V40C12 19 21 10 42 10Z"/>
+    
+  </defs>
+  <use xlink:href="#tile" transform="translate(0 4)" fill="#434047" opacity=".06"/>
+  <use xlink:href="#tile" transform="translate(0 2)" fill="#434047" opacity=".07"/>
+  <use xlink:href="#tile" fill="url(#tileColor)"/>
+  <g>
+    
+      <rect x="28" y="32" width="72" height="53" rx="5" fill="url(#ivory)"/>
+      <rect x="32" y="36" width="64" height="45" rx="2" fill="#93bad7"/>
+      <path d="M32 70L50 50L67 69L79 57L96 74V81H32Z" fill="#6694ad"/>
+      <rect x="43" y="73" width="42" height="12" rx="4" fill="#e7eae7"/>
+      <path d="M51 78V80M60 78V80M69 78V80M78 78V80" stroke="#7e9da7" stroke-width="4" stroke-linecap="round"/>
+      <path d="M59 86V94M69 86V94M49 95H79" stroke="#fff" stroke-width="3" stroke-linecap="round"/>
+    
+    <path d="M28 16C34 13 39 12 46 12H84C92 12 98 14 103 17" fill="none" stroke="#fff" stroke-opacity=".48" stroke-width="1.25" stroke-linecap="round"/>
+  </g>
+  <use xlink:href="#tile" fill="none" stroke="#434047" stroke-opacity=".14" stroke-width=".75"/>
+</svg>
