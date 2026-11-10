@@ -32,7 +32,8 @@ def main():
         for name in ['Kos', 'shared']:
             (root / name).symlink_to(REPO / 'shell' / name, target_is_directory=True)
         shutil.copytree(REPO / 'shell/desktop', root / 'desktop', symlinks=True)
-        shutil.copy(Path(__file__).with_name('panels.qml'), root / 'shell.qml')
+        fixture = 'battery-modes.qml' if '--battery-modes' in sys.argv else 'panels.qml'
+        shutil.copy(Path(__file__).with_name(fixture), root / 'shell.qml')
         shutil.copy(Path(__file__).with_name('PlatformFixture.qml'),
             root / 'desktop/modules/platform/PlatformClient.qml')
         qml_path = os.environ.get('QML_IMPORT_PATH', str(REPO / '.build/kosctl/qml'))
@@ -48,6 +49,8 @@ def main():
         env['QSG_RENDER_LOOP'] = 'threaded'
         if '--scale-2' in sys.argv:
             env['QT_SCALE_FACTOR'] = '2'
+        elif '--scale-105' in sys.argv:
+            env['QT_SCALE_FACTOR'] = '1.05'
         with (root / 'kwin.log').open('w+') as log:
             compositor = subprocess.Popen(['kwin_wayland', '--virtual', '--width', '1280',
                 '--height', '900', '--output-count', '2', '--no-lockscreen', '--no-global-shortcuts', '--no-kactivities',
@@ -76,12 +79,14 @@ def main():
                     compositor.kill()
                     compositor.wait()
         output = result.stdout + result.stderr
+        if os.environ.get('KOS_STATUS_CAPTURE_DIR'):
+            (Path(os.environ['KOS_STATUS_CAPTURE_DIR']) / (Path(fixture).stem + '.log')).write_text(output)
         assert result.returncode == 0 and 'STATUS_PANELS_PASS' in output, output
         assert not re.search(r'STATUS_PANELS_FAIL|ReferenceError|TypeError|'
             r'Cannot assign|Unable to assign|Binding loop|is not a type|is not a function', output), output
         count = re.search(r'STATUS_PANELS_PASS (\d+) checks', output).group(1)
         backend = 'Vulkan' if vulkan else 'OpenGL'
-        print(f'PASS ({backend}): {count} checks: traffic summary/details/collapse, battery dashboard/states/telemetry, stable surfaces, secondary-screen placement and all three power modes')
+        print(f'PASS ({backend}, {fixture}): {count} checks')
 
 
 if __name__ == '__main__':
