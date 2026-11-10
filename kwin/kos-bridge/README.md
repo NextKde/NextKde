@@ -47,7 +47,9 @@ controls use their respective native paths instead.
 - Skips screen-space panels and sampling while the window is transformed,
   faded, dimmed or desaturated: those pixels are not its unmodified title bar.
   Neutral offscreen source captures still include the controls during animations.
-  Only touches normal windows / dialogs.
+  Only touches standalone normal windows. Dialogs and other transient windows
+  keep their own chrome; applications that want compositor-drawn controls
+  declare them through the cooperative protocol.
   Popups, context menus, tooltips, OSDs, notifications, docks, the Quickshell
   bar, the Plasma desktop and input-method surfaces are ignored.
 - **Skips internal windows**, which is every window KWin makes for itself: its

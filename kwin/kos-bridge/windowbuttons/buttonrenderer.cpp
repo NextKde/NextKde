@@ -268,7 +268,20 @@ void ButtonRenderer::paint(const KWin::RenderTarget &renderTarget,
         return;
     }
 
-    // Only normal application windows and dialogs are candidates.
+    // Undecorated dialogs and other transients draw their own chrome: a GTK
+    // header bar, an application footer or a frameless dialog already carries
+    // the actions that belong there. A KOS panel pinned into a file chooser's
+    // header covers its Cancel/Save instead of replacing a missing control.
+    // Cooperative apps declare their controls explicitly, so they stay; a
+    // decorated transient still gets the panel only through the explicit
+    // `decoratedWindows: "always"` override below.
+    if (!config.cooperativeControls && !window->hasDecoration()
+        && (window->isDialog()
+            || (window->window() && window->window()->isTransient()))) {
+        return;
+    }
+
+    // Only standalone normal application windows are candidates now.
     if (!window->isNormalWindow() && !window->isDialog()) {
         return;
     }
