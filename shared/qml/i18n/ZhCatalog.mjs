@@ -3,6 +3,15 @@
 // 规则：值必须与改造前界面上的中文逐字一致（含空格、间隔符与省略号），
 // 改动文案时同步更新对应键，不要只改一边。
 export const catalog = {
+    "No version has been approved in this catalog.": "此目录尚未批准可安装版本。",
+    "Catalog version does not match its release manifest.": "目录版本与发行清单不符。",
+    "Release data does not match the approved catalog version.": "发行数据与目录批准版本不符。",
+    "Managed by Flatpak. Settings compares installed versions with the signed catalog; external Flatpak tools can remove the same installation.": "由 Flatpak 管理。设置会对比已安装版本与签名目录；外部 Flatpak 工具也可以卸载此安装。",
+    "The installed version matches the approved catalog release.": "已安装版本与目录批准的版本一致。",
+    "Missing catalog release selection": "目录缺少版本选择",
+    "Invalid catalog release selection": "目录版本选择无效",
+    "Invalid catalog icon": "目录图标无效",
+
     "About": "关于",
     "Official website": "官方网站",
     "GitHub repository": "GitHub 仓库",

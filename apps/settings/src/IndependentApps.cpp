@@ -113,9 +113,9 @@ void IndependentApps::syncCatalog()
         state["testInstalled"] = AppCatalog::receipt(appId).value("entry").toMap().value("testMode").toBool();
         state["developerSignature"] = !entry.value("publisher").toMap().isEmpty();
         state["iconName"] = "grid";
-        const QStringList builtin{"kmusic", "calendar", "calculator", "weather", "listenfree"};
-        state["iconFile"] = entry.value("sourceId").toString() == "nextkde" && builtin.contains(key)
-            ? key + (key == "listenfree" ? ".png" : ".svg") : QString();
+        state["iconSource"] = AppCatalog::iconFile(entry);
+        state["catalogVersion"] = entry.value("release").toMap().value("version");
+        state["catalogApproved"] = !entry.value("release").toMap().isEmpty();
         next.append(state);
     }
     m_apps = next;
