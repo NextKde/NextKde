@@ -72,6 +72,9 @@ ColumnLayout {
 
         Demo.SettingsItem {
             title: I18n.tr("KOS window appearance")
+            separator: false
+            verticalPadding: 4
+            description: I18n.tr("Radius and shadow apply now; turning KOS off restores the original decorator on next login.")
 
             Controls.SettingsSwitch {
                 enabled: windowPage.backend !== null
@@ -115,7 +118,9 @@ ColumnLayout {
         Demo.SettingsItem {
             enabled: windowPage.backend !== null && windowPage.snapshot.enabled !== false
             title: I18n.tr("Square corners when maximized")
-            description: I18n.tr("Fullscreen windows always use square corners. Restoring a window brings back its configured radius.")
+            separator: false
+            verticalPadding: 4
+            description: I18n.tr("Fullscreen uses square corners; restoring brings back the radius.")
 
             Controls.SettingsSwitch {
                 objectName: "windowSquareMaximizedSwitch"
@@ -142,6 +147,18 @@ ColumnLayout {
                     windowPage.backend.setShadow(checked);
                 }
             }
+        }
+    }
+    Demo.SettingsGroup {
+        id: windowButtonRows
+        objectName: "windowButtonsGroup"
+        title: I18n.tr("Window buttons")
+        backgroundColor: colors.card
+
+        Controls.WindowButtonPreview {
+            objectName: "windowButtonsPreview"
+            colors: windowPage.colors
+            materialForm: windowPage.materialForm
         }
 
         Demo.SettingsItem {
@@ -172,7 +189,9 @@ ColumnLayout {
 
         Demo.SettingsItem {
             enabled: windowPage.backend !== null && windowPage.snapshot.enabled !== false
-            title: I18n.tr("Independent button cover")
+            title: I18n.tr("Resize button background separately")
+            verticalPadding: 4
+            description: I18n.tr("Right-click and drag the background edges; buttons stay fixed.")
 
             Controls.SettingsSwitch {
                 objectName: "windowIndependentButtonBackground"
@@ -185,25 +204,11 @@ ColumnLayout {
                 }
             }
         }
-    }
-    Text {
-        Layout.fillWidth: true
-        Layout.leftMargin: 13
-        Layout.rightMargin: 13
-        visible: windowPage.snapshot.independentButtonBackground === true
-        text: I18n.tr("Buttons use the standard KOS size (14 px). Right-click the cover and drag its edges to resize only the background. Button size and spacing adjustments are disabled.")
-        color: colors.secondaryText
-        font.pixelSize: 11
-        wrapMode: Text.Wrap
-    }
-
-    Demo.SettingsGroup {
-        id: buttonExclusionRows
-        title: I18n.tr("Per-app window buttons")
-        backgroundColor: colors.card
-
         Demo.SettingsItem {
-            description: I18n.tr("Hide the floating minimize, maximize, and close buttons for selected apps. Removing an app restores its default behavior.")
+            title: I18n.tr("Hide KOS window buttons for selected apps")
+            separator: false
+            verticalPadding: 4
+            description: I18n.tr("Hide KOS buttons for listed apps; keep their original buttons.")
         }
         Repeater {
             model: windowPage.snapshot.buttonExclusions ?? []
@@ -244,12 +249,9 @@ ColumnLayout {
             }
         }
         Demo.SettingsItem {
-            objectName: "windowButtonExclusionsEmpty"
-            visible: (windowPage.snapshot.buttonExclusions ?? []).length === 0
-            description: I18n.tr("No apps are excluded. Floating buttons follow the default behavior.")
-        }
-        Demo.SettingsItem {
-            description: windowPage.availableRunningApps.length === 0 ? I18n.tr("No running apps available. Refresh or enter an application class below.") : ""
+            separator: false
+            verticalPadding: 4
+            description: windowPage.availableRunningApps.length === 0 ? I18n.tr("No apps available. Refresh or enter an app class below.") : ""
             Controls.ApplicationIcon {
                 objectName: "windowButtonSelectedAppIcon"
                 source: windowPage.appIcon(windowPage.availableRunningApps[runningAppsBox.currentIndex]?.appId || "")
@@ -314,15 +316,6 @@ ColumnLayout {
                 onClicked: windowPage.addManualExclusion()
             }
         }
-    }
-    Text {
-        Layout.fillWidth: true
-        Layout.leftMargin: 13
-        Layout.rightMargin: 13
-        text: I18n.tr("Turning off KOS window appearance restores the original decorator. Radius and shadow apply immediately; decorator switches take effect on next login.")
-        color: colors.secondaryText
-        font.pixelSize: 11
-        wrapMode: Text.Wrap
     }
 
     Demo.SettingsGroup {
