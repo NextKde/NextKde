@@ -21,7 +21,7 @@ void printState(const QString& appId, const QString& action, const QVariantMap& 
     const QString& code = {}, const QString& message = {})
 {
     const QJsonObject result{{"schemaVersion", 1}, {"appId", appId}, {"action", action},
-        {"code", code}, {"message", message}, {"success", code.isEmpty()},
+        {"code", code}, {"message", message}, {"success", code.isEmpty()}, {"testMode", AppCatalog::testMode()},
         {"state", QJsonObject::fromVariantMap(state)}};
     std::puts(QJsonDocument(result).toJson(QJsonDocument::Compact).constData());
 }

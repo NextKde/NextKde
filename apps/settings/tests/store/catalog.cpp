@@ -8,6 +8,7 @@
 #include <QFileInfo>
 #include <QProcess>
 #include <QTemporaryDir>
+#include <QLockFile>
 
 class CatalogTest : public QObject {
     Q_OBJECT
@@ -44,7 +45,7 @@ class CatalogTest : public QObject {
     {
         const auto bytes = QJsonDocument::fromVariant(value).toJson();
         const auto sig = signature(bytes);
-        return !sig.isEmpty() && write(AppCatalog::stateDirectory() + "/catalogs/fixture.json",
+        return !sig.isEmpty() && write(AppCatalog::stateDirectory() + (AppCatalog::testMode() ? "/test/catalogs/fixture.json" : "/catalogs/fixture.json"),
             QJsonDocument::fromVariant(QVariantMap{{"catalog", bytes.toBase64()}, {"signature", sig.toBase64()}}).toJson());
     }
 private slots:
@@ -160,6 +161,57 @@ private slots:
         envelope["catalog"] = QJsonDocument::fromVariant(changed).toJson().toBase64();
         QVERIFY(write(path, QJsonDocument::fromVariant(envelope).toJson()));
         QVERIFY(!AppCatalog::find("org.example.Notes").value("active").toBool());
+    }
+    void testModeSeparatesSourcesAndInvalidatesPlans()
+    {
+        QVERIFY(snapshot(catalog(5)));
+        const auto normal = AppCatalog::find("org.example.Notes");
+        const auto digest = AppCatalog::entryDigest(normal);
+        QVERIFY(AppCatalog::writeState("preferences", {{"automaticUpdates", false}}));
+        QVERIFY(AppCatalog::recordInstallation("org.example.Notes", {{"entry", normal}, {"sourceId", "fixture"}, {"commit", QString(64, 'a')}}));
+        QCOMPARE(AppCatalog::setTestMode(true), QString());
+        QVERIFY(AppCatalog::testMode());
+        QVERIFY(AppCatalog::sources().isEmpty());
+        QVERIFY(AppCatalog::readState("preferences").isEmpty());
+        QVERIFY(!AppCatalog::receipt("org.example.Notes").isEmpty());
+        QVERIFY(!AppCatalog::find("org.example.Notes").value("active").toBool());
+        QCOMPARE(AppCatalog::addSource("fixture", "Example/test-catalog", fingerprint, root.filePath("public.gpg")), QString());
+        QVERIFY(snapshot(catalog(1))); // Independent sequence history.
+        auto test = AppCatalog::find("org.example.Notes");
+        QVERIFY(test.value("active").toBool());
+        QCOMPARE(test.value("appId"), normal.value("appId"));
+        QVERIFY(test.value("testMode").toBool());
+        const auto before = AppCatalog::entryDigest(test);
+        QCOMPARE(AppCatalog::selectAppRelease("org.example.Notes", "Example/Notes", "v1.0.0-rc.1"), QString());
+        test = AppCatalog::find("org.example.Notes");
+        QCOMPARE(test.value("releaseTag").toString(), QString("v1.0.0-rc.1"));
+        QVERIFY(AppCatalog::entryDigest(test) != before);
+        QVERIFY(!AppCatalog::selectAppRelease("org.example.Notes", "Other/Notes", "v1.0.0").isEmpty());
+        QVERIFY(!AppCatalog::selectAppRelease("org.example.Notes", "Example/Notes", "../evil").isEmpty());
+        QVERIFY(AppCatalog::githubUrl(QUrl("https://api.github.com/repos/Example/Notes/releases/tags/v1.0.0-rc.1"), "Example/Notes", false));
+        QVERIFY(!AppCatalog::githubUrl(QUrl("https://api.github.com/repos/Other/Notes/releases/tags/v1.0.0"), "Example/Notes", false));
+        {
+            QLockFile operation(AppCatalog::stateDirectory() + "/context.lock"); QVERIFY(operation.tryLock(0));
+            QCOMPARE(AppCatalog::setTestMode(false), QString("BUSY"));
+            QCOMPARE(AppCatalog::selectAppRelease("org.example.Notes", "Example/Notes", "v1.0.1"), QString("BUSY"));
+        }
+        QVERIFY(AppCatalog::recordInstallation("org.example.Notes", {{"entry", test}, {"sourceId", "fixture"}, {"commit", QString(64, 'b')}}));
+        QCOMPARE(AppCatalog::setTestMode(false), QString());
+        for (const auto& source : AppCatalog::sources())
+            if (source.toMap().value("id").toString() == "fixture") QCOMPARE(source.toMap().value("sequence").toInt(), 5);
+        QCOMPARE(AppCatalog::readState("preferences").value("automaticUpdates").toBool(), false);
+        QVERIFY(AppCatalog::entryDigest(normal) != digest); // Even switching back invalidates old plans.
+        QVERIFY(!AppCatalog::find("org.example.Notes").value("active").toBool()); // Test installation is not adopted.
+        QVERIFY(!AppCatalog::receipt("org.example.Notes").isEmpty()); // No automatic uninstall.
+        QVERIFY(!AppCatalog::githubUrl(QUrl("https://api.github.com/repos/Example/Notes/releases/tags/v1.0.0"), "Example/Notes", false));
+        QVERIFY(!AppCatalog::selectAppRelease("org.example.Notes", "Example/Notes", "v1.0.0").isEmpty());
+        QVERIFY(AppCatalog::forgetInstallation("org.example.Notes"));
+        QVERIFY(AppCatalog::find("org.example.Notes").value("active").toBool());
+        QCOMPARE(AppCatalog::setTestMode(true), QString());
+        QCOMPARE(AppCatalog::sources().first().toMap().value("sequence").toInt(), 1);
+        QCOMPARE(AppCatalog::selectSourceRelease("fixture", "Example/test-catalog", "catalog-2"), QString());
+        QVERIFY(!AppCatalog::find("org.example.Notes").value("active").toBool()); // Await the selected signed directory.
+        QCOMPARE(AppCatalog::setTestMode(false), QString());
     }
 };
 QTEST_GUILESS_MAIN(CatalogTest)

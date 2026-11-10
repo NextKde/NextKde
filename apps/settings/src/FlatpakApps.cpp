@@ -318,7 +318,8 @@ bool approvedBundleInstallation(FlatpakInstallation* installation, FlatpakInstal
     if (keys.isEmpty()) {
         const auto record = AppCatalog::receipt(appId);
         const auto entry = AppCatalog::find(appId);
-        return record.value("sourceId") == entry.value("sourceId")
+        return record.value("entry").toMap().value("testMode").toBool() == entry.value("testMode").toBool()
+            && record.value("sourceId") == entry.value("sourceId")
             && record.value("repository") == entry.value("repository")
             && record.value("commit").toString() == QString::fromUtf8(flatpak_ref_get_commit(FLATPAK_REF(installed)))
             && record.value("arch").toString() == QString::fromUtf8(flatpak_ref_get_arch(FLATPAK_REF(installed)))
@@ -502,6 +503,7 @@ struct DeploymentGuard {
 }
 
 struct FlatpakApps::Cancellation {
+    std::shared_ptr<QLockFile> context;
     GCancellable* value = g_cancellable_new();
     std::mutex mutex;
     QString status;
@@ -878,6 +880,7 @@ FlatpakApps::FlatpakApps(QObject* parent) : QObject(parent)
             m_progress["status"] = "";
             const bool mutated = isAppMutation(m_action);
             m_activeId.clear(); m_action.clear(); m_verifying = false;
+            m_contextLock.reset();
             emit operationFinished(appId, code, message);
             if (mutated) emit mutationFinished(appId, code);
         }
@@ -928,6 +931,9 @@ FlatpakApps::~FlatpakApps()
 
 bool FlatpakApps::beginOperation(const QString& appId, const QString& action, int timeout)
 {
+    QDir().mkpath(AppCatalog::stateDirectory());
+    auto context = std::make_shared<QLockFile>(AppCatalog::stateDirectory() + "/context.lock");
+    if (!context->tryLock(0)) return false;
     const auto root = qEnvironmentVariable("XDG_STATE_HOME", QDir::homePath() + "/.local/state") + "/kos-settings/app-store";
     if (!QDir::isAbsolutePath(root) || !QDir().mkpath(root)) return false;
     m_logPath = root + '/' + QUuid::createUuid().toString(QUuid::WithoutBraces) + "-flatpak.log";
@@ -935,12 +941,14 @@ bool FlatpakApps::beginOperation(const QString& appId, const QString& action, in
     if (!m_log.open(QIODevice::WriteOnly | QIODevice::NewOnly,
         QFileDevice::ReadOwner | QFileDevice::WriteOwner)) return false;
     m_log.write((action + " " + appId + '\n').toUtf8());
+    m_contextLock = std::move(context);
     m_activeId = appId; m_action = action; m_logAppId = appId;
     m_progress = {{"progress", -1}, {"elapsedSeconds", 0}, {"cancelling", false}, {"status", ""}};
     m_lastStatus.clear();
     m_elapsed.start();
     m_verifying = false; m_timedOut = false;
     m_transactionCancellation = std::make_shared<Cancellation>();
+    m_transactionCancellation->context = m_contextLock;
     m_transactionDeadline.start(timeout);
     m_progressTimer.start();
     return true;
@@ -1253,10 +1261,15 @@ void FlatpakApps::refresh()
 {
     if (m_watcher.isRunning() || (busy() && !m_verifying)) return;
     m_cancellation = std::make_shared<Cancellation>();
+    m_cancellation->context = m_contextLock;
     const auto cancellation = m_cancellation;
     m_deadline.start();
-    m_watcher.setFuture(QtConcurrent::run([cancellation] {
+    const bool ownsContext = bool(m_contextLock);
+    m_watcher.setFuture(QtConcurrent::run([cancellation, ownsContext] {
         Inventory result;
+        QDir().mkpath(AppCatalog::stateDirectory());
+        QLockFile context(AppCatalog::stateDirectory() + "/context.lock");
+        if (!ownsContext && !context.tryLock(0)) { result.error = "Application source configuration is busy"; return result; }
         QStringList ids;
         for (const auto& app : IndependentAppRegistry::apps()) {
             ids.append(app.appId);

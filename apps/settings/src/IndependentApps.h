@@ -46,7 +46,7 @@ private:
     FlatpakAppsClient m_flatpak;
     QVariantList m_apps;
     QVariantMap m_flatpakResults;
-    QString m_script;
+    QString m_script, m_catalogContext;
     QProcess m_process;
     QTimer m_deadline, m_killTimer, m_elapsedTimer;
     QElapsedTimer m_elapsed;

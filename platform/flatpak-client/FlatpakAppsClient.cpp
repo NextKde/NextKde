@@ -201,6 +201,8 @@ QVariantMap FlatpakAppsClient::state(const QString& appId) const
     if (!matches(current)) current.clear();
     if (saved.value("known").toBool() && saved.value("installations") == result.value("installations") && matches(savedUpdate)) current = savedUpdate;
     result["update"] = current;
+    if (result.value("plan").toMap().value("catalogEntryDigest").toString() != AppCatalog::entryDigest(entry))
+        result["plan"] = QVariantMap{};
     result["canDiscover"] = result.value("canDiscover").toBool() && entry.value("active").toBool();
     result.insert("querying", querying());
     result.insert("busy", m_activeId == appId);
