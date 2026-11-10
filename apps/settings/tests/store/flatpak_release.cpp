@@ -84,24 +84,6 @@ private slots:
         QCOMPARE(server.requests, 1);
         QVERIFY(server.targets.first().startsWith("CONNECT api.github.com:443 "));
     }
-    void invalidDiscovery_data()
-    {
-        QTest::addColumn<QByteArray>("response"); QTest::addColumn<QString>("code");
-        QTest::newRow("malformed-json") << QByteArray("{broken") << QString("INVALID_RELEASE");
-        QTest::newRow("draft") << QByteArray(R"({"tag_name":"v0.2.0","draft":true,"prerelease":false})") << QString("INVALID_RELEASE");
-        QTest::newRow("prerelease") << QByteArray(R"({"tag_name":"v0.2.0","draft":false,"prerelease":true})") << QString("INVALID_RELEASE");
-        QTest::newRow("missing-assets") << QByteArray(R"({"tag_name":"v0.2.0","draft":false,"prerelease":false,"assets":[]})") << QString("RELEASE_UNAVAILABLE");
-    }
-    void invalidDiscovery()
-    {
-        QFETCH(QByteArray, response); QFETCH(QString, code);
-        ReleaseHttpsFixture server(certificate, privateKey);
-        QVERIFY(server.isListening());
-        server.responses = {{200, response, {}}};
-        const auto result = FlatpakRelease::discover(appId, "x86_64", [] { return false; }, [](const QString&, int) {});
-        QCOMPARE(result.value("code").toString(), code);
-        QCOMPARE(server.requests, 1);
-    }
     void transientFailuresRetry_data()
     {
         QTest::addColumn<bool>("disconnect");
@@ -269,10 +251,15 @@ private slots:
         ReleaseHttpsFixture server(certificate, privateKey);
         QVERIFY(server.isListening());
         server.responses = {{200, release, {}}, {200, releaseManifest, {}}};
+        entry["release"] = QVariantMap{{"version", "0.2.0"}, {"tag", "v0.2.0"}, {"manifest", releaseManifest.toBase64()}};
+        QVERIFY(cache(2));
         const auto candidate = FlatpakRelease::discover(notes, "x86_64", [] { return false; }, [](const QString&, int) {});
         QVERIFY2(candidate.value("code").toString().isEmpty(), qPrintable(candidate.value("message").toString()));
         QVERIFY(!candidate.value("developerVerified").toBool());
-        QCOMPARE(server.requests, 2); // No developer-signature request.
+        QCOMPARE(server.requests, 0); // The signed directory supplies the entire release, with no per-repository requests.
+        QCOMPARE(candidate.value("version").toString(), QString("0.2.0"));
+        auto replaced = candidate; replaced["manifest"] = QByteArray("replacement").toBase64();
+        QCOMPARE(FlatpakRelease::download(notes, replaced, root.path(), [] { return false; }, [](const QString&, int) {}).value("code").toString(), QString("CATALOG_CHANGED"));
         server.responses = {{200, QByteArray(1234, 'x'), {}}};
         const auto downloaded = FlatpakRelease::download(notes, candidate, root.path(), [] { return false; }, [](const QString&, int) {});
         QCOMPARE(downloaded.value("code").toString(), QString("INTEGRITY_FAILED"));
@@ -325,13 +312,18 @@ private slots:
         QCOMPARE(AppCatalog::setTestMode(false), QString());
         server.requests = 0;
         server.responses = {{200, QJsonDocument(prerelease).toJson(), {}}};
-        QCOMPARE(FlatpakRelease::discover(notes, "x86_64", [] { return false; }, [](const QString&, int) {}).value("code").toString(), QString("INVALID_RELEASE"));
+        QCOMPARE(FlatpakRelease::discover(notes, "x86_64", [] { return false; }, [](const QString&, int) {}).value("version").toString(), QString("0.2.0"));
+        QCOMPARE(server.requests, 0); // A newer upstream release does not override the approved version.
         entry["publisher"] = QVariantMap{{"fingerprint", fingerprint}, {"publicKey", publicKey.toBase64()}};
-        QVERIFY(cache(2));
+        auto approved = entry.value("release").toMap(); approved["signature"] = QByteArray("invalid").toBase64(); entry["release"] = approved;
+        QVERIFY(cache(3));
         server.requests = 0;
-        server.responses = {{200, release, {}}, {200, releaseManifest, {}}};
         const auto pinned = FlatpakRelease::discover(notes, "x86_64", [] { return false; }, [](const QString&, int) {});
-        QCOMPARE(pinned.value("code").toString(), QString("RELEASE_UNAVAILABLE")); // A pinned key must not downgrade when .sig is absent.
+        QCOMPARE(pinned.value("code").toString(), QString("FLATPAK_UNTRUSTED")); // A pinned key still requires a valid embedded developer signature.
+        QCOMPARE(server.requests, 0);
+        entry.remove("release"); entry.remove("publisher"); QVERIFY(cache(4));
+        QCOMPARE(FlatpakRelease::discover(notes, "x86_64", [] { return false; }, [](const QString&, int) {}).value("code").toString(), QString("RELEASE_UNAVAILABLE"));
+        QCOMPARE(server.requests, 0);
     }
     void versionComparison()
     {
@@ -446,22 +438,6 @@ private slots:
         QVERIFY(!verify("org.nextks.calculator", bytes, broken, [] { return false; }));
         QVERIFY(!verify("unknown", bytes, signature, [] { return false; }));
 
-        ReleaseHttpsFixture server(certificate, privateKey);
-        QVERIFY(server.isListening());
-        const auto metadata = QString("org.nextks.calculator.flatpak-release.json");
-        QJsonArray assets;
-        for (const auto& name : {metadata, metadata + ".sig", QString("org.nextks.calculator-0.2.0-x86_64.flatpak")})
-            assets.append(QJsonObject{{"name", name}, {"browser_download_url",
-                "https://github.com/NextKde/kos-apps/releases/download/v0.2.0/" + name}});
-        const auto release = QJsonDocument(QJsonObject{{"tag_name", "v0.2.0"}, {"draft", false},
-            {"prerelease", false}, {"assets", assets}}).toJson();
-        // The retained public specimen is genuine, but is not a published Latest.
-        server.responses = {{200, release, {}}, {200, bytes, {}}, {200, signature, {}},
-            {200, QByteArray(661776, 'x'), {}}};
-        const auto discovery = FlatpakRelease::discover("org.nextks.calculator", "x86_64",
-            [] { return false; }, [](const QString&, int) {});
-        QCOMPARE(discovery.value("code").toString(), "INVALID_RELEASE");
-        QCOMPARE(server.requests, 3);
         QTemporaryDir temporary(QDir::currentPath() + "/tmp/release-digest-XXXXXX");
         QVERIFY(temporary.isValid());
         const QVariantMap selected{{"manifest", bytes.toBase64()}, {"signature", signature.toBase64()}, {"arch", "x86_64"},
@@ -469,19 +445,17 @@ private slots:
             {"manifestSha256", QString::fromLatin1(QCryptographicHash::hash(bytes, QCryptographicHash::Sha256).toHex())}};
         const auto downloaded = FlatpakRelease::download("org.nextks.calculator", selected, temporary.path(),
             [] { return false; }, [](const QString&, int) {});
-        QCOMPARE(downloaded.value("code").toString(), QString("INVALID_RELEASE"));
-        QCOMPARE(server.requests, 3);
+        QCOMPARE(downloaded.value("code").toString(), QString("CATALOG_CHANGED"));
         const auto path = temporary.filePath("application.flatpak");
         QCOMPARE(FlatpakRelease::validateDownloaded("org.nextks.calculator", selected, path,
-            [] { return false; }).value("code").toString(), QString("INVALID_RELEASE"));
+            [] { return false; }).value("code").toString(), QString("CATALOG_CHANGED"));
         QVERIFY(!QFileInfo::exists(path));
         auto changed = selected;
         changed["signature"] = QByteArray("fake").toBase64();
         QCOMPARE(FlatpakRelease::validateDownloaded("org.nextks.calculator", changed, path,
-            [] { return false; }).value("code").toString(), QString("FLATPAK_UNTRUSTED"));
+            [] { return false; }).value("code").toString(), QString("CATALOG_CHANGED"));
         QCOMPARE(FlatpakRelease::validateDownloaded("org.nextks.calculator", selected, path,
             [] { return true; }).value("code").toString(), QString("CANCELLED"));
-        QCOMPARE(server.requests, 3);
     }
     void invalidSignatureCannotReachDownload()
     {
@@ -491,7 +465,7 @@ private slots:
             {"signature", QByteArray("fake").toBase64()}, {"arch", "x86_64"},
             {"catalogEntryDigest", AppCatalog::entryDigest(AppCatalog::find(appId))}},
             QDir::currentPath() + "/tmp", [] { return false; }, [](const QString &, int) {});
-        QCOMPARE(result["code"].toString(), "FLATPAK_UNTRUSTED");
+        QCOMPARE(result["code"].toString(), "CATALOG_CHANGED");
     }
     void cancellationStopsBeforeNetwork()
     {

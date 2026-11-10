@@ -3,6 +3,15 @@
 // Keys mirror ZhCatalog.mjs; when an English source string changes, update
 // the key here too. Date patterns use Qt format strings (quote literals).
 export const catalog = {
+    "No version has been approved in this catalog.": "Nenhuma versão foi aprovada neste catálogo.",
+    "Catalog version does not match its release manifest.": "A versão do catálogo não corresponde ao manifest.",
+    "Release data does not match the approved catalog version.": "Os dados não correspondem à versão aprovada no catálogo.",
+    "Managed by Flatpak. Settings compares installed versions with the signed catalog; external Flatpak tools can remove the same installation.": "Gerenciado pelo Flatpak. As Configurações comparam as versões instaladas com o catálogo assinado; ferramentas externas do Flatpak podem remover a mesma instalação.",
+    "The installed version matches the approved catalog release.": "A versão instalada corresponde à versão aprovada no catálogo.",
+    "Missing catalog release selection": "Seleção de versão ausente no catálogo",
+    "Invalid catalog release selection": "Seleção de versão inválida no catálogo",
+    "Invalid catalog icon": "Ícone do catálogo inválido",
+
     "About": "Sobre",
     "Official website": "Site oficial",
     "GitHub repository": "Repositório no GitHub",
