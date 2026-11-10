@@ -1,4 +1,5 @@
 #include "AppStore.h"
+#include "AboutCache.h"
 #include "TaskNotifications.h"
 #include "PowerSettings.h"
 #include "FontSettings.h"
@@ -83,8 +84,9 @@ int main(int argc, char* argv[])
             bool ok = false;
             const int page = argument.mid(7).toInt(&ok);
             if (argument == QLatin1String("--page=fonts")) navigationRequest = QStringLiteral("page:14");
+            else if (argument == QLatin1String("--page=about")) navigationRequest = QStringLiteral("page:15");
             else if (argument == QLatin1String("--page=windows")) navigationRequest = QStringLiteral("page:11");
-            else if (ok && page >= 0 && page <= 14) navigationRequest = QStringLiteral("page:%1").arg(page);
+            else if (ok && page >= 0 && page <= 15) navigationRequest = QStringLiteral("page:%1").arg(page);
         }
     }
     if (!navigationOwner) {
@@ -115,6 +117,7 @@ int main(int argc, char* argv[])
     SettingsBridge bridge;
     WindowSettings windowSettings;
     PowerSettings powerSettings;
+    AboutCache aboutCache;
     QQmlApplicationEngine engine;
     FontSettings fontSettings(&engine);
     engine.rootContext()->setContextProperty(QStringLiteral("fontSettings"), &fontSettings);
@@ -122,6 +125,7 @@ int main(int argc, char* argv[])
     engine.rootContext()->setContextProperty(QStringLiteral("taskNotifications"), &taskNotifications);
     engine.rootContext()->setContextProperty(QStringLiteral("windowSettings"), &windowSettings);
     engine.rootContext()->setContextProperty(QStringLiteral("powerSettings"), &powerSettings);
+    engine.rootContext()->setContextProperty(QStringLiteral("aboutCache"), &aboutCache);
 
     const SettingsEntry entry
         = chooseSettingsEntry(bridge.isDevelopmentSession(), bridge.sessionShellDir());
@@ -158,7 +162,7 @@ int main(int argc, char* argv[])
                 const QByteArray app = client->readLine(64).trimmed();
                 bool pageOk = false;
                 const int page = app.startsWith("page:") ? app.mid(5).toInt(&pageOk) : -1;
-                pageOk = pageOk && page >= 0 && page <= 14;
+                pageOk = pageOk && page >= 0 && page <= 15;
                 if (app != "show" && app != "calendar" && app != "weather" && !pageOk) {
                     client->disconnectFromServer();
                     return;
@@ -198,6 +202,8 @@ int main(int argc, char* argv[])
         if (argument == QStringLiteral("--app=calendar") || argument == QStringLiteral("--app=weather")) {
             engine.rootObjects().constFirst()->setProperty("requestedApp", argument.mid(6));
             engine.rootObjects().constFirst()->setProperty("currentPage", 9);
+        } else if (argument == QStringLiteral("--page=about")) {
+            engine.rootObjects().constFirst()->setProperty("currentPage", 15);
         } else if (argument == QStringLiteral("--page=fonts")) {
             engine.rootObjects().constFirst()->setProperty("currentPage", 14);
         } else if (argument == QStringLiteral("--page=windows")) {
@@ -205,7 +211,7 @@ int main(int argc, char* argv[])
         } else if (argument.startsWith(QStringLiteral("--page="))) {
             bool ok = false;
             const int page = argument.mid(7).toInt(&ok);
-            if (ok && page >= 0 && page <= 14)
+            if (ok && page >= 0 && page <= 15)
                 engine.rootObjects().constFirst()->setProperty("currentPage", page);
         }
     }

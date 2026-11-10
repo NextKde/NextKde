@@ -64,6 +64,8 @@ qt_add_resources(KOS_GTK_RESOURCES ../../shared/gtk/integration.qrc)
 
 qt_add_executable(kos-settings
     src/main.cpp
+    src/AboutCache.cpp
+    src/AboutCache.h
     src/TaskNotifications.cpp
     src/TaskNotifications.h
     src/AppStore.cpp
