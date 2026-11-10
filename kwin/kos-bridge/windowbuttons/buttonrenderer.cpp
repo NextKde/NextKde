@@ -272,12 +272,17 @@ void ButtonRenderer::paint(const KWin::RenderTarget &renderTarget,
     // header bar, an application footer or a frameless dialog already carries
     // the actions that belong there. A KOS panel pinned into a file chooser's
     // header covers its Cancel/Save instead of replacing a missing control.
+    // The same goes for a fixed-size splash/loading surface (Electron's intro
+    // animation, for one): KWin reports it as a normal toplevel, but it is
+    // neither resizable nor maximizable and has no title bar to cover.
     // Cooperative apps declare their controls explicitly, so they stay; a
     // decorated transient still gets the panel only through the explicit
     // `decoratedWindows: "always"` override below.
     if (!config.cooperativeControls && !window->hasDecoration()
         && (window->isDialog()
-            || (window->window() && window->window()->isTransient()))) {
+            || (window->window() && window->window()->isTransient())
+            || (window->window() && !window->window()->isResizable()
+                && !window->window()->isMaximizable()))) {
         return;
     }
 
