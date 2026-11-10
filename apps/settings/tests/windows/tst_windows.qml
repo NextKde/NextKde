@@ -64,12 +64,25 @@ Item {
             verify(item !== null, name)
             return item
         }
+        function clickControl(item, x, y) {
+            const scroll = control("settings-page-scroll")
+            scroll.cancelFlick()
+            const centerY = item.mapToItem(scroll.contentItem, 0, item.height / 2).y
+            scroll.contentY = Math.max(0, Math.min(
+                Math.max(0, scroll.contentHeight - scroll.height), centerY - scroll.height / 2))
+            verify(waitForRendering(app.contentItem))
+            const point = item.mapToItem(scroll, x, y)
+            verify(point.x >= 0 && point.x < scroll.width
+                && point.y >= 0 && point.y < scroll.height,
+                item.objectName + " must be inside the viewport before clicking")
+            mouseClick(item, x, y)
+        }
         function test_switches() {
             const shadow = control("windowShadowSwitch")
-            mouseClick(shadow, shadow.width/2, shadow.height/2)
+            clickControl(shadow, shadow.width/2, shadow.height/2)
             compare(backend.state.shadow, false)
             const takeover = control("windowTakeoverSwitch")
-            mouseClick(takeover, takeover.width/2, takeover.height/2)
+            clickControl(takeover, takeover.width/2, takeover.height/2)
             compare(backend.state.enabled, false)
             verify(!control("windowRadiusSlider").enabled)
             compare(backend.state.hideAnimation, "scale", "appearance switch leaves animations independent")
@@ -78,7 +91,7 @@ Item {
             const slider = control("windowRadiusSlider")
             const stops = [0,8,12,20,28,36]
             for (let i=0; i<stops.length; ++i) {
-                mouseClick(slider, slider.edgeInset + slider.travel * i/5, slider.height/2)
+                clickControl(slider, slider.edgeInset + slider.travel * i/5, slider.height/2)
                 compare(backend.state.radius, stops[i])
             }
             const count=backend.calls.length
@@ -90,17 +103,17 @@ Item {
         function test_square_maximized() {
             const toggle = control("windowSquareMaximizedSwitch")
             compare(toggle.checked, false, "older snapshots keep the existing rounded behavior")
-            mouseClick(toggle, toggle.width/2, toggle.height/2)
+            clickControl(toggle, toggle.width/2, toggle.height/2)
             compare(backend.state.squareMaximized, true)
             compare(backend.state.radius, 20, "normal-window radius is preserved")
-            mouseClick(toggle, toggle.width/2, toggle.height/2)
+            clickControl(toggle, toggle.width/2, toggle.height/2)
             compare(backend.state.squareMaximized, false)
             backend.state = Object.assign({}, backend.state, {squareMaximized:true})
             tryCompare(toggle, "checked", true, 1000, "show the confirmed backend preference")
             backend.state = Object.assign({}, backend.state, {enabled:false})
             tryCompare(toggle, "enabled", false)
             const count = backend.calls.length
-            mouseClick(toggle, toggle.width/2, toggle.height/2)
+            clickControl(toggle, toggle.width/2, toggle.height/2)
             compare(backend.calls.length, count, "disabled appearance cannot save")
         }
         function test_animation_choices() {
@@ -108,7 +121,7 @@ Item {
                 const picker=control(kind === "hide" ? "windowHideAnimation" : "windowCloseAnimation")
                 const styles=kind === "hide" ? ["none","scale","genie"] : ["none","fade","scale"]
                 for (let i=0;i<3;++i) {
-                    mouseClick(picker, picker.width / 2, picker.height / 2)
+                    clickControl(picker, picker.width / 2, picker.height / 2)
                     tryVerify(() => picker.popupOpened)
                     keyClick(Qt.Key_Home)
                     for (let next = 0; next < i; ++next) keyClick(Qt.Key_Down)
@@ -123,7 +136,7 @@ Item {
             tryVerify(() => picker.model.length === 2)
             compare(picker.model[0].appId, "firefox")
             const add = control("addRunningWindowButtonExclusion")
-            mouseClick(add, add.width / 2, add.height / 2)
+            clickControl(add, add.width / 2, add.height / 2)
             compare(backend.state.buttonExclusions, ["firefox"])
             tryVerify(() => picker.model.length === 1)
             compare(picker.model[0].appId, "md.obsidian.Obsidian", "excluded apps cannot be added twice")
@@ -136,16 +149,16 @@ Item {
             input.text = "   "
             verify(!add.enabled)
             input.text = " firefox "
-            mouseClick(add, add.width / 2, add.height / 2)
+            clickControl(add, add.width / 2, add.height / 2)
             compare(backend.state.buttonExclusions, ["firefox"])
             compare(input.text, "")
             input.text = "firefox"
-            mouseClick(add, add.width / 2, add.height / 2)
+            clickControl(add, add.width / 2, add.height / 2)
             compare(backend.state.buttonExclusions, ["firefox"], "duplicate manual entry remains one exclusion")
             const row = control("windowButtonExclusionRow_firefox")
             const remove = findChild(row, "removeWindowButtonExclusion")
             verify(remove !== null)
-            mouseClick(remove, remove.width / 2, remove.height / 2)
+            clickControl(remove, remove.width / 2, remove.height / 2)
             compare(backend.state.buttonExclusions, [])
             tryVerify(() => findChild(app.contentItem, "windowButtonExclusionRow_firefox") === null)
         }
@@ -158,7 +171,7 @@ Item {
             verify(!control("addRunningWindowButtonExclusion").enabled)
             const refresh = control("refreshWindowButtonRunningApps")
             const requests = bridgeBackend.runningAppsRequests
-            mouseClick(refresh, refresh.width / 2, refresh.height / 2)
+            clickControl(refresh, refresh.width / 2, refresh.height / 2)
             compare(bridgeBackend.runningAppsRequests, requests + 1)
             const input = control("windowButtonExclusionInput")
             input.text = "md.obsidian.Obsidian"
@@ -175,33 +188,33 @@ Item {
             ]
             const requests = bridgeBackend.runningAppsRequests
             const refresh = control("refreshWindowButtonRunningApps")
-            mouseClick(refresh, refresh.width / 2, refresh.height / 2)
+            clickControl(refresh, refresh.width / 2, refresh.height / 2)
             compare(bridgeBackend.runningAppsRequests, requests + 1)
             compare(picker.model.length, 3)
             compare(picker.model[picker.currentIndex].appId, "md.obsidian.Obsidian")
             const add = control("addRunningWindowButtonExclusion")
-            mouseClick(add, add.width / 2, add.height / 2)
+            clickControl(add, add.width / 2, add.height / 2)
             compare(backend.state.buttonExclusions, ["md.obsidian.Obsidian"])
             compare(picker.model[picker.currentIndex].appId, "org.kde.kate")
             verify(control("windowButtonExclusionIcon_md.obsidian.Obsidian").visible)
         }
         function test_independent_cover() {
             const toggle = control("windowIndependentButtonBackground")
-            mouseClick(toggle, toggle.width/2, toggle.height/2)
+            clickControl(toggle, toggle.width/2, toggle.height/2)
             compare(backend.state.independentButtonBackground, true)
-            mouseClick(toggle, toggle.width/2, toggle.height/2)
+            clickControl(toggle, toggle.width/2, toggle.height/2)
             compare(backend.state.independentButtonBackground, false)
             backend.state = Object.assign({}, backend.state, {enabled:false})
             tryCompare(toggle, "enabled", false)
             const count = backend.calls.length
-            mouseClick(toggle, toggle.width/2, toggle.height/2)
+            clickControl(toggle, toggle.width/2, toggle.height/2)
             compare(backend.calls.length, count, "disabled cover switch cannot save")
         }
         function test_button_glyph_mode() {
             const picker = control("windowButtonGlyphMode")
             const modes = ["always", "hover"]
             for (let i = 0; i < 2; ++i) {
-                mouseClick(picker, picker.width * (i + 0.5) / 2, picker.height / 2)
+                clickControl(picker, picker.width * (i + 0.5) / 2, picker.height / 2)
                 compare(backend.state.buttonGlyphMode, modes[i])
             }
         }
