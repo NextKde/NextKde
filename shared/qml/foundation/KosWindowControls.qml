@@ -11,7 +11,7 @@ Row {
     property bool maximizeMode: false
     property bool compositorIntegration: true
     // One entry per actual action; order is layout order, not action identity.
-    property var actions: ["maximize", "minimize", "close"]
+    property var actions: ["minimize", "maximize", "close"]
     property int layoutRevision: 0
     onPositioningComplete: layoutRevision++
     readonly property var buttonLayout: {

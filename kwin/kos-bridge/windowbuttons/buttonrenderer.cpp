@@ -1433,8 +1433,9 @@ Type ButtonRenderer::typeAt(int index)
 {
     // Which light sits in each of the three positions, left to right. The
     // colours, the glyphs, the hit-testing and the actions all follow this, so
-    // reordering the panel is this line and nothing else.
-    constexpr Type Order[TypeCount] = {Maximize, Minimize, Close};
+    // reordering the panel is this line and nothing else. Matches KDE's
+    // default decoration layout (IAX = minimize, maximize, close).
+    constexpr Type Order[TypeCount] = {Minimize, Maximize, Close};
 
     if (index < 0 || index >= TypeCount) {
         return Close;

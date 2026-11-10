@@ -396,7 +396,7 @@ Watch it with `journalctl --user -b -u plasma-kwin_wayland -f | grep KOS`.
 ## Interaction
 
 - Left-clicking a light performs that light's action. From left to right the
-  panel is **zoom** (green), **minimize** (yellow), **close** (red): the zoom
+  panel is **minimize** (yellow), **zoom** (green), **close** (red): the zoom
   light toggles between maximized and restored, the minimize light minimizes,
   the close light closes. The order lives in one table in `typeAt()`; the
   colours, the glyphs, the hit testing and the actions all follow it.

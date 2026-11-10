@@ -89,6 +89,10 @@ Item {
             tryVerify(() => controls.buttonLayout.length === 3)
             for (const button of controls.buttonLayout) compare(button.width, 14)
             compare(controls.buttonLayout[1].x - controls.buttonLayout[0].x, 28)
+            // Left to right: minimize (yellow), maximize (green), close (red),
+            // matching the native KOS decoration's KDE button layout.
+            compare(controls.buttonLayout.map(button => button.action).join(","),
+                "minimize,maximize,close")
         }
         function test_window_actions_keyboard_data() {
             const rows = []

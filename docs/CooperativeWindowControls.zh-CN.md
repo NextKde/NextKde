@@ -33,7 +33,7 @@ import Kos.Ui
 KosWindowControls {
     targetWindow: root
     maximizeMode: true
-    actions: ["maximize", "minimize", "close"]
+    actions: ["minimize", "maximize", "close"]
     circleSize: 14
     buttonWidth: 22
     buttonHeight: 22
