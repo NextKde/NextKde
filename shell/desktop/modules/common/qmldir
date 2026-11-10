@@ -16,6 +16,7 @@ KosCardShadow 1.0 KosCardShadow.qml
 LiquidGlassSurface 1.0 LiquidGlassSurface.qml
 LiquidGlassPanel 1.0 LiquidGlassPanel.qml
 PopupMotion 1.0 PopupMotion.qml
+MotionSpring 1.0 MotionSpring.qml
 AppIcon 1.0 AppIcon.qml
 ContextMenu 1.0 ContextMenu.qml
 MenuItemRow 1.0 MenuItemRow.qml
