@@ -2,9 +2,20 @@ import QtQuick
 import QtTest
 Item {
     property var windowSettings: backend
+    property var settingsBridge: bridgeBackend
+    QtObject {
+        id: bridgeBackend
+        property var apps: []
+        property int runningAppsRequests: 0
+        signal fgSchedRunningAppsChanged(var apps)
+        function fgSchedRunningApps() {
+            runningAppsRequests += 1
+            fgSchedRunningAppsChanged(apps)
+        }
+    }
     QtObject {
         id: backend
-        property var state: ({enabled:true, radius:20, shadow:true, hideAnimation:"scale", closeAnimation:"scale", buttonGlyphMode:"always", independentButtonBackground:false})
+        property var state: ({enabled:true, radius:20, shadow:true, hideAnimation:"scale", closeAnimation:"scale", buttonGlyphMode:"always", buttonExclusions:[], independentButtonBackground:false})
         property bool animationBusy: false
         property string error: ""
         property var calls: []
@@ -20,6 +31,15 @@ Item {
         function requestAnimation(kind, value) { change(kind + "Animation", value); return true }
         function setIndependentButtonBackground(value) { change("independentButtonBackground", value); return true }
         function setButtonGlyphMode(value) { change("buttonGlyphMode", value); return true }
+        function setButtonExclusion(value, excluded) {
+            const klass = value.trim()
+            if (!klass) return false
+            let exclusions = (state.buttonExclusions || []).filter(item => item !== klass)
+            if (excluded) exclusions.push(klass)
+            exclusions.sort()
+            change("buttonExclusions", exclusions)
+            return true
+        }
     }
     TestCase {
         name: "WindowSettingsInteractions"
@@ -27,18 +47,21 @@ Item {
         property var app: null
         function init() {
             backend.calls = []
-            backend.state = {enabled:true, radius:20, shadow:true, hideAnimation:"scale", closeAnimation:"scale", buttonGlyphMode:"always", independentButtonBackground:false}
+            backend.state = {enabled:true, radius:20, shadow:true, hideAnimation:"scale", closeAnimation:"scale", buttonGlyphMode:"always", buttonExclusions:[], independentButtonBackground:false}
+            bridgeBackend.apps = [{name:"Firefox", appId:"firefox"}, {name:"Obsidian", appId:"md.obsidian.Obsidian"}]
+            bridgeBackend.runningAppsRequests = 0
             const component = Qt.createComponent("../../main.qml")
             compare(component.status, Component.Ready, component.errorString())
             app = component.createObject(null, {currentPage:11})
             verify(app !== null)
             tryVerify(() => findChild(app.contentItem, "windowAppearancePage") !== null)
+            tryVerify(() => bridgeBackend.runningAppsRequests === 1)
+            verify(waitForRendering(app.contentItem))
         }
         function cleanup() { app.destroy(); app = null }
         function control(name) {
             const item = findChild(app.contentItem, name)
             verify(item !== null, name)
-            verify(waitForRendering(item))
             return item
         }
         function test_switches() {
@@ -94,6 +117,73 @@ Item {
                     compare(backend.state[kind+"Animation"], styles[i])
                 }
             }
+        }
+        function test_running_app_exclusion() {
+            const picker = control("windowButtonRunningApps")
+            tryVerify(() => picker.model.length === 2)
+            compare(picker.model[0].appId, "firefox")
+            const add = control("addRunningWindowButtonExclusion")
+            mouseClick(add, add.width / 2, add.height / 2)
+            compare(backend.state.buttonExclusions, ["firefox"])
+            tryVerify(() => picker.model.length === 1)
+            compare(picker.model[0].appId, "md.obsidian.Obsidian", "excluded apps cannot be added twice")
+            verify(findChild(app.contentItem, "windowButtonExclusionRow_firefox") !== null)
+        }
+        function test_manual_exclusion_and_removal() {
+            const input = control("windowButtonExclusionInput")
+            const add = control("addManualWindowButtonExclusion")
+            verify(!add.enabled)
+            input.text = "   "
+            verify(!add.enabled)
+            input.text = " firefox "
+            mouseClick(add, add.width / 2, add.height / 2)
+            compare(backend.state.buttonExclusions, ["firefox"])
+            compare(input.text, "")
+            input.text = "firefox"
+            mouseClick(add, add.width / 2, add.height / 2)
+            compare(backend.state.buttonExclusions, ["firefox"], "duplicate manual entry remains one exclusion")
+            const row = control("windowButtonExclusionRow_firefox")
+            const remove = findChild(row, "removeWindowButtonExclusion")
+            verify(remove !== null)
+            mouseClick(remove, remove.width / 2, remove.height / 2)
+            compare(backend.state.buttonExclusions, [])
+            verify(findChild(app.contentItem, "windowButtonExclusionsEmpty").visible)
+        }
+        function test_running_apps_refresh_keeps_manual_fallback() {
+            bridgeBackend.apps = []
+            bridgeBackend.fgSchedRunningApps()
+            const picker = control("windowButtonRunningApps")
+            compare(picker.model.length, 0)
+            verify(!picker.enabled)
+            verify(!control("addRunningWindowButtonExclusion").enabled)
+            const refresh = control("refreshWindowButtonRunningApps")
+            const requests = bridgeBackend.runningAppsRequests
+            mouseClick(refresh, refresh.width / 2, refresh.height / 2)
+            compare(bridgeBackend.runningAppsRequests, requests + 1)
+            const input = control("windowButtonExclusionInput")
+            input.text = "md.obsidian.Obsidian"
+            verify(control("addManualWindowButtonExclusion").enabled)
+        }
+        function test_refresh_nonempty_running_apps_preserves_selection() {
+            const picker = control("windowButtonRunningApps")
+            picker.activated(1)
+            compare(picker.model[picker.currentIndex].appId, "md.obsidian.Obsidian")
+            bridgeBackend.apps = [
+                {name:"Kate", appId:"org.kde.kate"},
+                {name:"Firefox", appId:"firefox"},
+                {name:"Obsidian", appId:"md.obsidian.Obsidian"}
+            ]
+            const requests = bridgeBackend.runningAppsRequests
+            const refresh = control("refreshWindowButtonRunningApps")
+            mouseClick(refresh, refresh.width / 2, refresh.height / 2)
+            compare(bridgeBackend.runningAppsRequests, requests + 1)
+            compare(picker.model.length, 3)
+            compare(picker.model[picker.currentIndex].appId, "md.obsidian.Obsidian")
+            const add = control("addRunningWindowButtonExclusion")
+            mouseClick(add, add.width / 2, add.height / 2)
+            compare(backend.state.buttonExclusions, ["md.obsidian.Obsidian"])
+            compare(picker.model[picker.currentIndex].appId, "org.kde.kate")
+            verify(control("windowButtonExclusionIcon_md.obsidian.Obsidian").visible)
         }
         function test_independent_cover() {
             const toggle = control("windowIndependentButtonBackground")
