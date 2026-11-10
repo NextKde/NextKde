@@ -268,122 +268,133 @@ Item {
             font { pixelSize: 10; family: AppearanceTokens.typography.textFamily }
         }
 
-        Column {
+        ListView {
+            id: audioApplicationsList
             anchors {
                 top: soundApplicationsTitle.bottom
                 topMargin: 5
                 left: parent.left
                 right: parent.right
+                bottom: parent.bottom
             }
+            // Keep application rows above the fixed settings footer.
+            clip: true
             spacing: 3
-
-            Repeater {
-                model: soundSubmenuView.service.audioApplications.slice(0, 3)
-
-                delegate: Item {
-                    id: appVolumeRow
-                    required property var modelData
-                    required property int index
-                    width: parent.width
-                    height: 58
-                    property int volumePreview: Number(modelData.percent || 0)
-                    property bool muted: !!modelData.muted
-
-                    Rectangle {
-                        anchors.fill: parent
-                        radius: 8
-                        color: appVolumeHover.hovered
-                            ? (AppearanceTokens.surface.pick(AppearanceTokens.colors.surfaceContainerHigh, ThemeService.isDark ? Qt.rgba(1, 1, 1, 0.10) : Qt.rgba(0, 0, 0, 0.055)))
-                            : "transparent"
-                        Behavior on color { ColorAnimation { duration: 100 } }
-                    }
-
-                    Rectangle {
-                        id: appMuteButton
-                        anchors { left: parent.left; leftMargin: 4; verticalCenter: parent.verticalCenter }
-                        width: 28
-                        height: 28
-                        radius: 8
-                        color: appVolumeRow.muted
-                            ? Qt.rgba(1.0, 0.27, 0.23, ThemeService.isDark ? 0.30 : 0.18)
-                            : (AppearanceTokens.surface.pick(AppearanceTokens.colors.surfaceContainerHigh, ThemeService.isDark ? Qt.rgba(1, 1, 1, 0.12) : Qt.rgba(0, 0, 0, 0.07)))
-
-                        GlassText {
-                            anchors.centerIn: parent
-                            text: appVolumeRow.muted ? "×" : "♪"
-                            color: appVolumeRow.muted ? "#ff453a" : ThemeService.foregroundColor
-                            font { pixelSize: appVolumeRow.muted ? 15 : 13; weight: Font.Bold }
-                        }
-
-                        MouseArea {
-                            anchors.fill: parent
-                            hoverEnabled: true
-                            cursorShape: Qt.PointingHandCursor
-                            onClicked: {
-                                appVolumeRow.muted = !appVolumeRow.muted
-                                soundSubmenuView.service.setApplicationMuted(appVolumeRow.modelData.id,
-                                    appVolumeRow.muted)
-                            }
-                        }
-                    }
-
-                    GlassText {
-                        id: appVolumeName
-                        anchors {
-                            left: appMuteButton.right
-                            leftMargin: 8
-                            right: appVolumePercent.left
-                            rightMargin: 6
-                            top: parent.top
-                            topMargin: 5
-                        }
-                        text: appVolumeRow.modelData.name || I18n.tr("Audio application")
-                        elide: Text.ElideRight
-                        color: ThemeService.foregroundColor
-                        font { pixelSize: 10; weight: Font.DemiBold; family: AppearanceTokens.typography.textFamily }
-                    }
-
-                    GlassText {
-                        id: appVolumePercent
-                        anchors { right: parent.right; rightMargin: 5; verticalCenter: appVolumeName.verticalCenter }
-                        text: Math.round(appVolumeRow.volumePreview) + "%"
-                        color: ThemeService.foregroundColor
-                        opacity: 0.55
-                        font { pixelSize: 9; family: AppearanceTokens.typography.textFamily }
-                    }
-
-                    ControlCenterSlider {
-                        anchors {
-                            left: appMuteButton.right
-                            leftMargin: 8
-                            right: parent.right
-                            rightMargin: 4
-                            bottom: parent.bottom
-                            bottomMargin: 3
-                        }
-                        height: 27
-                        value: Math.min(1, appVolumeRow.volumePreview / 150)
-                        accentColor: AppearanceTokens.content.glassInk(
-                            appVolumeRow.muted ? 0.25 : 0.42)
-                        onPreviewChanged: function(v) {
-                            appVolumeRow.volumePreview = Math.round(v * 150)
-                        }
-                        onCanceled: appVolumeRow.volumePreview = Qt.binding(function() {
-                            return Number(appVolumeRow.modelData.percent || 0)
-                        })
-                        onCommitRequested: function(v) {
-                            if (appVolumeRow.muted) {
-                                appVolumeRow.muted = false
-                                soundSubmenuView.service.setApplicationMuted(appVolumeRow.modelData.id, false)
-                            }
-                            soundSubmenuView.service.setApplicationVolume(appVolumeRow.modelData.id,
-                                Math.round(v * 150))
-                        }
-                    }
-
-                    HoverHandler { id: appVolumeHover }
+            model: soundSubmenuView.service.audioApplications
+            ScrollBar.vertical: ScrollBar {
+                policy: ScrollBar.AsNeeded
+                contentItem: Rectangle {
+                    implicitWidth: 3
+                    radius: 1.5
+                    color: ThemeService.foregroundColor
+                    opacity: 0.35
                 }
             }
+
+            delegate: Item {
+                id: appVolumeRow
+                required property var modelData
+                width: audioApplicationsList.width - 8
+                height: 58
+                property int volumePreview: Number(modelData.percent || 0)
+                property bool muted: !!modelData.muted
+
+                Rectangle {
+                    anchors.fill: parent
+                    radius: 8
+                    color: appVolumeHover.hovered
+                        ? (AppearanceTokens.surface.pick(AppearanceTokens.colors.surfaceContainerHigh, ThemeService.isDark ? Qt.rgba(1, 1, 1, 0.10) : Qt.rgba(0, 0, 0, 0.055)))
+                        : "transparent"
+                    Behavior on color { ColorAnimation { duration: 100 } }
+                }
+
+                Rectangle {
+                    id: appMuteButton
+                    anchors { left: parent.left; leftMargin: 4; verticalCenter: parent.verticalCenter }
+                    width: 28
+                    height: 28
+                    radius: 8
+                    color: appVolumeRow.muted
+                        ? Qt.rgba(1.0, 0.27, 0.23, ThemeService.isDark ? 0.30 : 0.18)
+                        : (AppearanceTokens.surface.pick(AppearanceTokens.colors.surfaceContainerHigh, ThemeService.isDark ? Qt.rgba(1, 1, 1, 0.12) : Qt.rgba(0, 0, 0, 0.07)))
+
+                    GlassText {
+                        anchors.centerIn: parent
+                        text: appVolumeRow.muted ? "×" : "♪"
+                        color: appVolumeRow.muted ? "#ff453a" : ThemeService.foregroundColor
+                        font { pixelSize: appVolumeRow.muted ? 15 : 13; weight: Font.Bold }
+                    }
+
+                    MouseArea {
+                        anchors.fill: parent
+                        hoverEnabled: true
+                        cursorShape: Qt.PointingHandCursor
+                        onClicked: {
+                            appVolumeRow.muted = !appVolumeRow.muted
+                            soundSubmenuView.service.setApplicationMuted(appVolumeRow.modelData.id,
+                                appVolumeRow.muted)
+                        }
+                    }
+                }
+
+                GlassText {
+                    id: appVolumeName
+                    anchors {
+                        left: appMuteButton.right
+                        leftMargin: 8
+                        right: appVolumePercent.left
+                        rightMargin: 6
+                        top: parent.top
+                        topMargin: 5
+                    }
+                    text: appVolumeRow.modelData.name || I18n.tr("Audio application")
+                    elide: Text.ElideRight
+                    color: ThemeService.foregroundColor
+                    font { pixelSize: 10; weight: Font.DemiBold; family: AppearanceTokens.typography.textFamily }
+                }
+
+                GlassText {
+                    id: appVolumePercent
+                    anchors { right: parent.right; rightMargin: 5; verticalCenter: appVolumeName.verticalCenter }
+                    text: Math.round(appVolumeRow.volumePreview) + "%"
+                    color: ThemeService.foregroundColor
+                    opacity: 0.55
+                    font { pixelSize: 9; family: AppearanceTokens.typography.textFamily }
+                }
+
+                ControlCenterSlider {
+                    anchors {
+                        left: appMuteButton.right
+                        leftMargin: 8
+                        right: parent.right
+                        rightMargin: 4
+                        bottom: parent.bottom
+                        bottomMargin: 3
+                    }
+                    height: 27
+                    value: Math.min(1, appVolumeRow.volumePreview / 150)
+                    accentColor: AppearanceTokens.content.glassInk(
+                        appVolumeRow.muted ? 0.25 : 0.42)
+                    onPreviewChanged: function(v) {
+                        appVolumeRow.volumePreview = Math.round(v * 150)
+                    }
+                    onCanceled: appVolumeRow.volumePreview = Qt.binding(function() {
+                        return Number(appVolumeRow.modelData.percent || 0)
+                    })
+                    onCommitRequested: function(v) {
+                        if (appVolumeRow.muted) {
+                            appVolumeRow.muted = false
+                            soundSubmenuView.service.setApplicationMuted(appVolumeRow.modelData.id, false)
+                        }
+                        soundSubmenuView.service.setApplicationVolume(appVolumeRow.modelData.id,
+                            Math.round(v * 150))
+                    }
+                }
+
+                HoverHandler { id: appVolumeHover }
+            }
+
+            KosKineticScroll { flickable: audioApplicationsList }
         }
     }
 

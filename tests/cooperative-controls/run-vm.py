@@ -228,6 +228,61 @@ def session(args, output):
             assert initial['ax'] != initial['bx'] and initial['aw'] == 78
             rendered_at(initial['ax'], initial['ay'])
             rendered_at(initial['bx'], initial['by'])
+            if args.outer_x11:
+                from x11_pointer import click
+                from PIL import Image
+                ipc('maximize')
+                wait_for(lambda state: state['visibility'] == 4 and state['a'])
+                time.sleep(.5)
+                state = json.loads(ipc('state'))
+                maximized = rendered_at(state['ax'], state['ay'])
+                close = maximized['buttons'][2]
+                closePoint = (close[0]+close[2]/2, close[1]+close[3]/2)
+                assert 2 < closePoint[1] < 27, maximized
+                # The nested VM output may present at a low frame rate. Wait
+                # for the mask's accompanying pixels, not a guessed delay.
+                capture = output/'shell-input.png'
+                click(args.outer_x11, capture_path=str(capture))
+                with Image.open(capture) as image:
+                    baselinePixels = [image.getpixel((550, y)) for y in [10, 30]]
+
+                def panel_presented(covered):
+                    deadline = time.monotonic() + 8
+                    while time.monotonic() < deadline:
+                        click(args.outer_x11, capture_path=str(capture))
+                        with Image.open(capture) as image:
+                            changed = [image.getpixel((550, y)) != pixel
+                                       for y, pixel in zip([10, 30], baselinePixels)]
+                        if changed == covered:
+                            return
+                        time.sleep(.1)
+                    raise AssertionError(f'Panel frame not presented: {changed}, expected {covered}')
+
+                ipc('showPanel')
+                panel_presented([True, True])
+                for button in [1, 2, 3]:
+                    before = json.loads(ipc('state'))['panelClicks']
+                    click(args.outer_x11, closePoint, button=button)
+                    wait_for(lambda state: state['panelClicks'] == before+1 and state['visibility'] == 4)
+                wheels = json.loads(ipc('state'))['panelWheels']
+                click(args.outer_x11, closePoint, button=4)
+                wait_for(lambda state: state['panelWheels'] > wheels and state['visibility'] == 4)
+                ipc('partialPanel')
+                panel_presented([True, False])
+                before = json.loads(ipc('state'))['panelClicks']
+                click(args.outer_x11, closePoint)
+                wait_for(lambda state: state['panelClicks'] == before+1 and state['visibility'] == 4)
+                # Hidden but still mapped: only the 2px reveal edge owns input.
+                ipc('hidePanel')
+                panel_presented([False, False])
+                maximize = maximized['buttons'][0]
+                click(args.outer_x11, (maximize[0]+maximize[2]/2, maximize[1]+maximize[3]/2))
+                wait_for(lambda state: state['visibility'] == 2 and state['a'])
+                ipc('removePanel')
+                (output/'shell-input-passed').write_text(
+                    'Shown/partially shown layer surface receives left/middle/right clicks and wheel; '
+                    'covered close never fires; hidden mapped surface permits underlying restore.\n')
+                initial = json.loads(ipc('state'))
             # Dynamic lists: absent actions must have neither drawn nor hit rectangles.
             originalId = rendered_at(initial['ax'], initial['ay'])['id']
             for method, indices in [('closeOnly', [2]), ('minimizeOnly', [1]), ('maximizeOnly', [0]), ('reversed', [2, 0])]:

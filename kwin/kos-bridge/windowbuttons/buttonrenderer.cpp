@@ -56,15 +56,11 @@ bool sameSize(const QSizeF &a, const QSizeF &b)
         && std::abs(a.height() - b.height()) <= SizeTolerance;
 }
 
-// Whether `point` (global logical) is on a part of `window` that no window
-// above it covers.
-//
-// This mirrors BridgeEffect::visibleRegionFor, which is what decides whether
-// the panel is painted at all, and it is asked at the moment of the click
-// rather than when the window was last painted: a panel hidden behind another
-// window is not on screen, so a pointer there belongs to whatever is above it.
-// Swallowing it would mean a click on an upper window doing something to a
-// lower one -- closing it, at worst.
+// Whether `point` (global logical) is available for this window's controls.
+// Unlike the paint clip in BridgeEffect::visibleRegionFor, input must respect
+// shell surfaces' actual input regions: a revealed Bar blocks its covered
+// controls, while the transparent space outside its mask remains pass-through.
+// Check at event time so a newly revealed surface cannot close a window below.
 bool exposedAt(KWin::EffectWindow *window, const QPointF &point)
 {
     if (!KWin::effects) {
@@ -80,12 +76,8 @@ bool exposedAt(KWin::EffectWindow *window, const QPointF &point)
         if (!above || !above->isVisible() || above->isDeleted() || above->isDesktop()) {
             continue;
         }
-        // Shell surfaces (dock, OSD, notification) may have large transparent frames
-        // or dedicated input routing that should not occlude underlying window buttons.
-        if (above->isSkipSwitcher() || above->isDock()
-            || above->isOnScreenDisplay() || above->isNotification()) {
-            continue;
-        }
+        const bool shellSurface = above->isSkipSwitcher() || above->isDock()
+            || above->isOnScreenDisplay() || above->isNotification();
         if (KWin::Window *w = above->window()) {
             // A window that has been closed but is still stacked only because an
             // effect keeps it alive for its close animation is not an input target.
@@ -97,7 +89,9 @@ bool exposedAt(KWin::EffectWindow *window, const QPointF &point)
             // be destroyed while the InternalWindow object remains in the stacking order;
             // calling InternalWindow::hitTest() dereferences m_handle->mask() and segfaults.
             if (w->isInternal()) {
-                if (!above->internalWindow()) {
+                // Preserve the internal shell-surface exemption: its frame
+                // alone cannot describe transparent or output-only areas.
+                if (shellSurface || !above->internalWindow()) {
                     continue;
                 }
                 if (above->frameGeometry().contains(point)) {
@@ -105,9 +99,16 @@ bool exposedAt(KWin::EffectWindow *window, const QPointF &point)
                 }
                 continue;
             }
+            // Live client surfaces publish their input masks to KWin. Do not
+            // exempt docks here: the Bar uses this path even in auto-hide mode.
             if (w->hitTest(point)) {
                 return false;
             }
+            continue;
+        }
+        // Without a backing window there is no input mask to consult. Keep
+        // shell surfaces out of this coarse rectangle-only fallback.
+        if (shellSurface) {
             continue;
         }
         if (above->frameGeometry().contains(point)) {
