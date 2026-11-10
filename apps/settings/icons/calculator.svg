@@ -1,11 +1,24 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128">
-  <defs><linearGradient id="k" x1="0" y1="0" x2="0" y2="1"><stop stop-color="#5a5a58"/><stop offset="1" stop-color="#3a3a38"/></linearGradient></defs>
-  <rect x="10" y="10" width="108" height="108" rx="25" fill="url(#k)"/>
-  <rect x="26" y="26" width="76" height="20" rx="6" fill="#1f1f1e"/>
-  <g fill="#f7f7fa">
-    <circle cx="37" cy="63" r="8"/><circle cx="55" cy="63" r="8"/><circle cx="73" cy="63" r="8"/>
-    <circle cx="37" cy="85" r="8"/><circle cx="55" cy="85" r="8"/><circle cx="73" cy="85" r="8"/>
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="128" height="128" viewBox="0 0 128 128">
+  <title>Calculator</title>
+  <defs>
+    <linearGradient id="tileColor" x1="0" y1="10" x2="0" y2="114" gradientUnits="userSpaceOnUse"><stop stop-color="#646c77"/><stop offset="1" stop-color="#3a424e"/></linearGradient>
+    <linearGradient id="ivory" x1="0" y1="32" x2="0" y2="100" gradientUnits="userSpaceOnUse"><stop stop-color="#ffffff"/><stop offset="1" stop-color="#f1f0eb"/></linearGradient>
+    <path id="tile" d="M42 10H86C107 10 116 19 116 40V84C116 105 107 114 86 114H42C21 114 12 105 12 84V40C12 19 21 10 42 10Z"/>
+    <linearGradient id="orange" x1="0" y1="57" x2="0" y2="101" gradientUnits="userSpaceOnUse"><stop stop-color="#ffc582"/><stop offset="1" stop-color="#eca45d"/></linearGradient>
+  </defs>
+  <use xlink:href="#tile" transform="translate(0 4)" fill="#252b35" opacity=".06"/>
+  <use xlink:href="#tile" transform="translate(0 2)" fill="#252b35" opacity=".07"/>
+  <use xlink:href="#tile" fill="url(#tileColor)"/>
+  <g>
+    
+    <rect x="28" y="28" width="72" height="21" rx="5" fill="#252f3b" opacity=".16"/>
+    <path d="M74 39H90" stroke="#e6ebe4" stroke-width="2.5" stroke-linecap="round"/>
+    <rect x="29" y="58" width="19" height="18" rx="5" fill="#242a32" opacity=".2"/><rect x="29" y="57" width="19" height="18" rx="5" fill="#777d85"/><rect x="54" y="58" width="19" height="18" rx="5" fill="#242a32" opacity=".2"/><rect x="54" y="57" width="19" height="18" rx="5" fill="#777d85"/><rect x="79" y="58" width="20" height="18" rx="5" fill="#242a32" opacity=".2"/><rect x="79" y="57" width="20" height="18" rx="5" fill="url(#orange)"/><rect x="29" y="82" width="19" height="18" rx="5" fill="#242a32" opacity=".2"/><rect x="29" y="81" width="19" height="18" rx="5" fill="#777d85"/><rect x="54" y="82" width="19" height="18" rx="5" fill="#242a32" opacity=".2"/><rect x="54" y="81" width="19" height="18" rx="5" fill="#777d85"/><rect x="79" y="82" width="20" height="18" rx="5" fill="#242a32" opacity=".2"/><rect x="79" y="81" width="20" height="18" rx="5" fill="url(#orange)"/>
+    <g fill="none" stroke="#fff" stroke-width="1.8" stroke-linecap="round">
+      <path d="M34 66H43M38.5 61.5V70.5M59 66H68M85 63L92 70M92 63L85 70M34 86L43 94M43 86L34 94M59 90H68M85 87H93M85 92H93"/>
+    </g>
+
+    <path d="M28 16C34 13 39 12 46 12H84C92 12 98 14 103 17" fill="none" stroke="#fff" stroke-opacity=".48" stroke-width="1.25" stroke-linecap="round"/>
   </g>
-  <circle cx="91" cy="63" r="8" fill="#ff9f0a"/>
-  <circle cx="91" cy="85" r="8" fill="#ff9f0a"/>
+  <use xlink:href="#tile" fill="none" stroke="#252b35" stroke-opacity=".14" stroke-width=".75"/>
 </svg>
