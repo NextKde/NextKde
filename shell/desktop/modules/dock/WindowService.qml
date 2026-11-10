@@ -254,6 +254,7 @@ QtObject {
             && left.pid === right.pid
             && !!left.isUrgent === !!right.isUrgent
             && !!left.toplevel.activated === !!right.toplevel.activated
+            && !!left.toplevel.focusConfirmed === !!right.toplevel.focusConfirmed
             && !!left.toplevel.minimized === !!right.toplevel.minimized
             && !!left.toplevel.fullscreen === !!right.toplevel.fullscreen
             && !!left.onAllDesktops === !!right.onAllDesktops
@@ -310,6 +311,7 @@ QtObject {
             const handleId = useKwin ? String(source.id) : "";
             const toplevel = useKwin ? {
                 activated: !!source.activated,
+                focusConfirmed: source.focusConfirmed === true,
                 minimized: !!source.minimized,
                 fullscreen: !!source.fullscreen,
                 pid: Number(source.pid || 0),

@@ -92,3 +92,28 @@ console.log("Notification activation: identity, matching and plan tests passed")
 assert.equal(planClick({ desktopEntry: "not.installed", actions: {
     0: { identifier: "default" }, length: 1
 } }, []).kind, "defaultAction");
+
+// Exercise the actual bridge snapshot during KWin's focus-pipeline gap. The
+// Stage animation hint must stay intact while confirmation remains false.
+const { readFileSync } = await import("node:fs");
+const vm = await import("node:vm");
+const bridge = readFileSync(new URL("../../../../kwin/window-bridge.js", import.meta.url), "utf8");
+const demoted = { internalId: "old", normalWindow: true, caption: "Old", active: true, minimized: true };
+const target = { internalId: "new", normalWindow: true, caption: "New", active: false, minimized: false };
+const snapshots = [];
+const context = vm.createContext({
+    workspace: { windowList: () => [demoted, target] },
+    callDBus: (service, path, iface, method, json) => snapshots.push(JSON.parse(json)),
+    print: () => {}
+});
+vm.runInContext(bridge.slice(0, bridge.indexOf("const snapshotTimer =")), context);
+context.setActiveWindow(target);
+context.snapshot();
+assert.equal(snapshots[0].windows[1].activated, true, "keep Stage's optimistic activation");
+assert.equal(snapshots[0].windows[1].focusConfirmed, false, "do not claim actual focus");
+demoted.active = false;
+target.active = true;
+context.snapshot();
+assert.equal(snapshots.length, 2, "confirmed focus must publish even when activated stays true");
+assert.equal(snapshots[1].windows[1].focusConfirmed, true);
+console.log("Notification activation: real KWin focus confirmation passed");

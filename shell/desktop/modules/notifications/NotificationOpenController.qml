@@ -79,7 +79,7 @@ QtObject {
             _fallback()
             return
         }
-        if (record.toplevel?.activated === true && !record.toplevel?.minimized) {
+        if (_isFocused(record)) {
             _finish(true)
             return
         }
@@ -103,6 +103,15 @@ QtObject {
             _observe()
     }
 
+    function _isFocused(record) {
+        // KWin's activated flag includes an optimistic animation lag guard.
+        // Older bridges without confirmation must time out, not claim focus.
+        const focused = record.provider === "kwin"
+            ? record.toplevel?.focusConfirmed === true
+            : record.toplevel?.activated === true
+        return focused && !record.toplevel?.minimized
+    }
+
     function _observe() {
         if (_phase === "launch") {
             const id = Activation.matchWindow(_windows(), {
@@ -115,7 +124,7 @@ QtObject {
             const record = windowService.windowById(_windowId)
             if (!record)
                 _fallback()
-            else if (record.toplevel?.activated === true && !record.toplevel?.minimized)
+            else if (_isFocused(record))
                 _finish(true)
         }
     }

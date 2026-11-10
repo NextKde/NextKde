@@ -52,8 +52,8 @@ TestCase {
         }
     }
     function record(active, minimized) {
-        return { windowId: "one", identity: { desktopId: "installed.desktop", name: "App" },
-            toplevel: { activated: active === true, minimized: minimized === true } }
+        return { windowId: "one", provider: "kwin", identity: { desktopId: "installed.desktop", name: "App" },
+            toplevel: { activated: active === true, focusConfirmed: active === true, minimized: minimized === true } }
     }
     function notice(withDefault) {
         return { desktopEntry: "installed", appName: "App", resident: false,
@@ -88,6 +88,10 @@ TestCase {
         windows.commandFinished("activate", ticket, true)
         windows.activeWindowId = "one"
         compare(results.length, 0, "receipt and optimistic active id are not actual focus")
+        const optimistic = record(true, false)
+        optimistic.toplevel.focusConfirmed = false
+        windows.publish([optimistic])
+        compare(results.length, 0, "KWin's animation lag guard is not actual focus")
         windows.publish([record(true, true)])
         compare(results.length, 0, "a minimized window is not a completed handoff")
         windows.publish([record(true, false)])
@@ -99,6 +103,16 @@ TestCase {
         windows.publish([record(true, false)])
         controller.open()
         compare(windows.requests.length, 0)
+        verify(results[0].success)
+    }
+    function test_foreign_provider_confirms_activated_state() {
+        const foreign = record(false, false)
+        foreign.provider = "foreign"
+        delete foreign.toplevel.focusConfirmed
+        windows.publish([foreign])
+        controller.open()
+        foreign.toplevel.activated = true
+        windows.publish([foreign])
         verify(results[0].success)
     }
     function test_activation_rejected_falls_back_once() {
