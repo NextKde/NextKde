@@ -279,7 +279,8 @@ ApplicationWindow {
         { subtitle: I18n.tr("Windows and animations") },
         { subtitle: I18n.tr("Notifications") },
         { subtitle: I18n.tr("Power") },
-        { subtitle: I18n.tr("Fonts") }
+        { subtitle: I18n.tr("Fonts") },
+        { subtitle: I18n.tr("About") }
     ]
 
     // Shown only while a development session drives this window. Every value on
@@ -738,6 +739,15 @@ ApplicationWindow {
                                     navSymbol: "⏵"
                                     navTint: "#ff9f0a"
                                 }
+
+                                SidebarEntry {
+                                    Layout.fillWidth: true
+                                    pageIndex: 15
+                                    label: I18n.tr("About")
+                                    navIcon: "general"
+                                    navSymbol: "ⓘ"
+                                    navTint: "#8e8e93"
+                                }
                             }
                         }
 
@@ -959,6 +969,17 @@ ApplicationWindow {
                             colors: window.notificationTheme
                             materialForm: window.materialForm
                             bridge: typeof settingsBridge !== "undefined" ? settingsBridge : null
+                        }
+                    }
+
+                    Loader {
+                        objectName: "AboutSettingsPageLoader"
+                        Layout.fillWidth: true
+                        active: window.displayedPage === 15
+                        visible: active
+                        sourceComponent: Pages.AboutSettingsPage {
+                            colors: window.notificationTheme
+                            cache: typeof aboutCache !== "undefined" ? aboutCache : null
                         }
                     }
 

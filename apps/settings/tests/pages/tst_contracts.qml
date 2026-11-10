@@ -53,6 +53,8 @@ Item {
                 ? {theme: harness.palette, width: 700} : {colors: harness.palette, width: 700}
             if (["ThemeSettingsPage", "DisplaySettingsPage", "GlassDebugPage"].indexOf(name) >= 0)
                 properties.glassStyles = harness.styles
+            if (name === "AboutSettingsPage")
+                properties.loadContributors = false
             const page = createTemporaryObject(component, harness, properties)
             verify(page !== null, component.errorString())
             return page
@@ -62,7 +64,7 @@ Item {
                     "DisplaySettingsPage", "FontSettingsPage", "GlassDebugPage", "WidgetAppearanceSection",
                     "IconAppearanceSection", "WindowAnimationSettingsPage", "ThemeSettingsPage",
                     "BarSettingsPage", "ShortcutsSettingsPage", "LauncherSettingsPage",
-                    "ResourceSchedulingSettings"]
+                    "ResourceSchedulingSettings", "AboutSettingsPage"]
                 .map(name => ({tag: name, name: name}))
         }
         function test_isolated_load(data) {
@@ -87,7 +89,7 @@ Item {
                 "IconAppearanceSection", "WidgetAppearanceSection", "GlassDebugPage",
                 "FgSchedSettingsPage", "ResourceSchedulingSettings", "ShortcutsSettingsPage",
                 "IntegrationStatusPage", "PowerSettingsPage", "NotificationsSettingsPage",
-                "WallpaperSettingsPage", "ServicesSettingsPage"]
+                "WallpaperSettingsPage", "ServicesSettingsPage", "AboutSettingsPage"]
             const cases = []
             for (const name of pages) {
                 for (const width of [560, 306]) cases.push({tag: name + "-" + width, name: name, width: width})
