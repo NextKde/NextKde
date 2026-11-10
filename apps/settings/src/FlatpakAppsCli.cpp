@@ -21,7 +21,7 @@ void printState(const QString& appId, const QString& action, const QVariantMap& 
     const QString& code = {}, const QString& message = {})
 {
     const QJsonObject result{{"schemaVersion", 1}, {"appId", appId}, {"action", action},
-        {"code", code}, {"message", message}, {"success", code.isEmpty()},
+        {"code", code}, {"message", message}, {"success", code.isEmpty()}, {"testMode", AppCatalog::testMode()},
         {"state", QJsonObject::fromVariantMap(state)}};
     std::puts(QJsonDocument(result).toJson(QJsonDocument::Compact).constData());
 }
@@ -38,20 +38,20 @@ int main(int argc, char** argv)
     QCoreApplication application(argc, argv);
     QCoreApplication::setApplicationName("kos-apps");
     QCommandLineParser parser;
-    parser.setApplicationDescription("Manage signed user Flatpaks. No automatic remote setup, legacy app management or personal-data deletion.");
+    parser.setApplicationDescription("Manage catalogued user Flatpaks. Missing runtimes use the approved source. Normal uninstall preserves personal data.");
     parser.addHelpOption();
-    parser.addOption({"app", "Application key: calendar, calculator, weather, listenfree", "app"});
+    parser.addOption({"app", "Application ID or unique key from the trusted catalog", "app"});
     parser.addOption({"yes", "Confirm a previously displayed plan without a terminal prompt"});
     parser.addOption({"plan-id", "Opaque plan ID returned by a prior plan operation", "plan-id"});
     parser.addPositionalArgument("action", "status, check-update, install, update or uninstall");
     parser.process(application);
-    const auto* entry = IndependentAppRegistry::find(parser.value("app"));
+    const auto entry = IndependentAppRegistry::find(parser.value("app"));
     const auto actions = parser.positionalArguments();
     const QStringList supported{"status", "check-update", "install", "update", "uninstall"};
     if (!entry || actions.size() != 1 || !supported.contains(actions.first())) parser.showHelp(2);
     const auto action = actions.first();
-    const QString appId = QString::fromLatin1(entry->appId);
-    if (action == "install" && QString::fromLatin1(entry->repository) == "kos-apps")
+    const QString appId = entry->appId;
+    if (action == "install" && entry->repository == "NextKde/kos-apps")
         std::fputs("This is a separate application: old program/data is not adopted or imported. Existing data for the new ID is kept. Legacy cleanup is a separate explicit operation.\n", stderr);
 
     FlatpakAppsClient backend;

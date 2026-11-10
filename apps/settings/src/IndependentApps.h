@@ -11,7 +11,7 @@
 #include <QTimer>
 #include <QVariantList>
 
-// Fixed registry + one bundled installer process; never accepts command paths from QML.
+// Signed catalog entries; executable installation behavior stays in compiled adapters.
 class IndependentApps final : public QObject {
     Q_OBJECT
 public:
@@ -32,6 +32,7 @@ signals:
     void taskFinished(const QString& name, const QString& code);
 private:
     friend class IndependentAppsTest;
+    void syncCatalog();
     int indexOf(const QString& id) const;
     void start(int index, const QString& action);
     void nextStatus();
@@ -45,7 +46,7 @@ private:
     FlatpakAppsClient m_flatpak;
     QVariantList m_apps;
     QVariantMap m_flatpakResults;
-    QString m_script;
+    QString m_script, m_catalogContext;
     QProcess m_process;
     QTimer m_deadline, m_killTimer, m_elapsedTimer;
     QElapsedTimer m_elapsed;

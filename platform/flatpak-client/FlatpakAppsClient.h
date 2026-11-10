@@ -19,9 +19,10 @@ inline bool isWorkerMutation(const QString& action)
 class FlatpakAppsClient final : public QObject {
     Q_OBJECT
 public:
-    explicit FlatpakAppsClient(QObject* parent = nullptr);
+    explicit FlatpakAppsClient(QObject* parent = nullptr, bool polling = true);
     ~FlatpakAppsClient() override;
     void refresh();
+    void releaseIdleWorker();
     QVariantMap state(const QString& appId) const;
     bool querying() const { return !m_requestId.isEmpty() || !m_queue.isEmpty(); }
     bool busy() const { return !m_activeId.isEmpty() && m_activeAction != "inventory"; }
@@ -42,6 +43,7 @@ signals:
     void mutationFinished(const QString& appId, const QString& code);
 private:
     friend class IndependentAppsTest;
+    friend class AppUpdateAgentTest;
     bool start(const QString& appId, const QString& action);
     bool ensureWorker();
     void startNext();

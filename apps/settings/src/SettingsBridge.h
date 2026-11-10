@@ -95,6 +95,7 @@ public:
     Q_INVOKABLE void updateGlassPresetParameter(const QString& name, double value);
     Q_INVOKABLE void resetGlassPreset(const QString& style);
     Q_INVOKABLE void fgSchedRunningApps();
+    Q_INVOKABLE QString applicationIcon(const QString& appId) const;
     Q_INVOKABLE void fgSchedSnapshot();
     Q_INVOKABLE void fgSchedSetFreeze(bool on);
     Q_INVOKABLE void fgSchedSetReclaim(const QString& mode);

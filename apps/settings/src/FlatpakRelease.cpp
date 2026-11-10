@@ -42,26 +42,26 @@ bool matches(const QString& pattern, const QString& value)
 }
 bool versionParts(const QString& version, QList<qulonglong>& parts)
 {
-    if (!matches("^(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)$", version)) return false;
-    for (const auto& part : version.split('.')) {
-        bool ok = false;
-        const auto number = part.toULongLong(&ok);
+    if (version.size() > 100 || !matches("^(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)(-[0-9A-Za-z-]+(\\.[0-9A-Za-z-]+)*)?$", version)) return false;
+    for (const auto& part : version.section('-', 0, 0).split('.')) {
+        bool ok = false; const auto number = part.toULongLong(&ok);
         if (!ok) return false;
         parts.append(number);
     }
+    const auto separator = version.indexOf('-');
+    if (separator >= 0) for (const auto& part : version.mid(separator + 1).split('.'))
+        if (matches("^[0-9]+$", part) && part.size() > 1 && part.startsWith('0')) return false;
     return true;
 }
+QStringList prereleaseParts(const QString& version)
+{
+    const auto separator = version.indexOf('-');
+    return separator < 0 ? QStringList{} : version.mid(separator + 1).split('.');
+}
+
 bool validUrl(const QUrl& url, const QString& repo, bool redirected)
 {
-    if (!url.isValid() || url.scheme() != "https" || !url.userInfo().isEmpty()
-        || url.port(443) != 443 || url.hasFragment()) return false;
-    const auto path = url.path();
-    if (path.contains("..") || path.contains('\\')) return false;
-    if (url.host() == "api.github.com")
-        return !url.hasQuery() && path == "/repos/NextKde/" + repo + "/releases/latest";
-    if (url.host() == "github.com")
-        return !url.hasQuery() && path.startsWith("/NextKde/" + repo + "/releases/download/");
-    return redirected && (url.host() == "release-assets.githubusercontent.com" || url.host() == "objects.githubusercontent.com");
+    return AppCatalog::githubUrl(url, repo, redirected);
 }
 
 // Runs only inside the QtConcurrent worker. The local event loop lets Qt's
@@ -250,7 +250,7 @@ QVariantMap parseManifest(const QString& appId, const QString& arch, const QByte
     if (error.error != QJsonParseError::NoError || object.value("schemaVersion").toInt() != 2
         || object.value("appId").toString() != appId || !versionParts(version, parts)
         || !matches("^[0-9a-f]{40}$", object.value("revision").toString()))
-        fail("INVALID_RELEASE", "Invalid signed Flatpak release identity or version; this release lacks an installation plan.");
+        fail("INVALID_RELEASE", "Invalid Flatpak release identity or version; this release lacks an installation plan.");
     const auto bundle = object.value("bundles").toObject().value(arch).toObject();
     if (bundle.isEmpty()) fail("ARCH_UNAVAILABLE", "No Flatpak bundle has been published for this architecture.");
     const auto name = bundle.value("asset").toString();
@@ -270,14 +270,14 @@ QVariantMap parseManifest(const QString& appId, const QString& arch, const QByte
         || QString::fromLatin1(QCryptographicHash::hash(metadata, QCryptographicHash::Sha256).toHex()) != metadataDigest
         || installedSize < 0 || installedSize > bundleLimit || double(qint64(installedSize)) != installedSize
         || !matches("^runtime/[A-Za-z0-9.\\-]+/[A-Za-z0-9_\\-]+/[A-Za-z0-9_.\\-]+$", runtime.value("ref").toString()))
-        fail("INVALID_RELEASE", "The signed Flatpak release has no valid application metadata or runtime plan.");
+        fail("INVALID_RELEASE", "The Flatpak release has no valid application metadata or runtime plan.");
     const auto extensions = bundle.value("requiredExtensions");
     if (!extensions.isArray() || extensions.toArray().size() > 128)
-        fail("INVALID_RELEASE", "The signed Flatpak release has an invalid extension plan.");
+        fail("INVALID_RELEASE", "The Flatpak release has an invalid extension plan.");
     for (const auto& item : extensions.toArray()) {
         const auto extension = item.toObject();
         if (!matches("^runtime/[A-Za-z0-9.\\-]+/[A-Za-z0-9_\\-]+/[A-Za-z0-9_.\\-]+$", extension.value("ref").toString()))
-            fail("INVALID_RELEASE", "The signed Flatpak release has an invalid extension reference.");
+            fail("INVALID_RELEASE", "The Flatpak release has an invalid extension reference.");
     }
     auto result = bundle.toVariantMap();
     result["schemaVersion"] = 2;
@@ -290,26 +290,39 @@ QVariantMap parseManifest(const QString& appId, const QString& arch, const QByte
 namespace FlatpakRelease {
 QStringList fingerprints(const QString& appId)
 {
-    QStringList result;
-    for (const auto& publisher : FlatpakTrustPolicy::bundlePublishers)
-        if (QString::fromLatin1(publisher.appId) == appId
-            && matches("^[0-9A-F]{40}([0-9A-F]{24})?$", QString::fromLatin1(publisher.primaryFingerprint)))
-            result.append(QString::fromLatin1(publisher.primaryFingerprint));
-    return result;
+    const auto publisher = AppCatalog::find(appId).value("publisher").toMap();
+    const auto fingerprint = publisher.value("fingerprint").toString();
+    return fingerprint.isEmpty() ? QStringList{} : QStringList{fingerprint};
 }
 QByteArray publicKeys(const QString& appId)
 {
-    QByteArray result;
-    for (const auto& publisher : FlatpakTrustPolicy::bundlePublishers) {
-        if (QString::fromLatin1(publisher.appId) != appId
-            || !fingerprints(appId).contains(QString::fromLatin1(publisher.primaryFingerprint))) continue;
-        const auto decoded = QByteArray::fromBase64Encoding(QByteArray(publisher.publicKeyBase64), QByteArray::AbortOnBase64DecodingErrors);
-        if (!decoded || decoded.decoded.isEmpty()) return {};
-        result.append(decoded.decoded);
-    }
-    return result;
+    return QByteArray::fromBase64(AppCatalog::find(appId).value("publisher").toMap().value("publicKey").toByteArray());
 }
-bool configured(const QString& appId) { return !publicKeys(appId).isEmpty(); }
+bool configured(const QString& appId)
+{
+    const auto app = AppCatalog::find(appId);
+    return app.value("active").toBool() && app.value("format").toString() == "flatpak"
+        && !app.value("conflict").toBool();
+}
+QVariantMap checkedDiscovery(const QString& appId, const QVariantMap& discovery, const Cancelled& cancelled)
+{
+    const auto entry = AppCatalog::find(appId);
+    if (!configured(appId) || AppCatalog::entryDigest(entry) != discovery.value("catalogEntryDigest").toString())
+        fail("CATALOG_CHANGED", "The application source or catalog authorization changed. Prepare a new plan.");
+    const auto manifest = QByteArray::fromBase64(discovery.value("manifest").toByteArray());
+    const auto signature = QByteArray::fromBase64(discovery.value("signature").toByteArray());
+    if (!publicKeys(appId).isEmpty() && !verify(appId, manifest, signature, cancelled))
+        fail("FLATPAK_UNTRUSTED", "The configured developer signature is invalid.");
+    if (QString::fromLatin1(QCryptographicHash::hash(manifest, QCryptographicHash::Sha256).toHex())
+        != discovery.value("manifestSha256").toString()) fail("INVALID_RELEASE", "Release manifest changed.");
+    const auto data = parseManifest(appId, discovery.value("arch").toString(), manifest);
+    for (auto it = data.begin(); it != data.end(); ++it)
+        if (discovery.value(it.key()) != it.value()) fail("INVALID_RELEASE", "Release metadata changed after discovery.");
+    const auto expected = "https://github.com/" + entry.value("repository").toString()
+        + "/releases/download/v" + data.value("version").toString() + '/' + data.value("asset").toString();
+    if (discovery.value("url").toString() != expected) fail("UNTRUSTED_URL", "Unexpected GitHub Release attachment.");
+    return data;
+}
 int compareVersions(const QString& left, const QString& right, bool* valid)
 {
     QList<qulonglong> a, b;
@@ -317,22 +330,35 @@ int compareVersions(const QString& left, const QString& right, bool* valid)
     if (valid) *valid = ok;
     if (!ok) return 0;
     for (int i = 0; i < 3; ++i) { if (a[i] < b[i]) return -1; if (a[i] > b[i]) return 1; }
-    return 0;
+    const auto ap = prereleaseParts(left), bp = prereleaseParts(right);
+    if (ap.isEmpty() != bp.isEmpty()) return ap.isEmpty() ? 1 : -1;
+    for (int i = 0; i < qMin(ap.size(), bp.size()); ++i) {
+        if (ap[i] == bp[i]) continue;
+        const bool an = matches("^[0-9]+$", ap[i]), bn = matches("^[0-9]+$", bp[i]);
+        if (an != bn) return an ? -1 : 1;
+        if (an && ap[i].size() != bp[i].size()) return ap[i].size() < bp[i].size() ? -1 : 1;
+        return ap[i] < bp[i] ? -1 : 1;
+    }
+    return ap.size() == bp.size() ? 0 : ap.size() < bp.size() ? -1 : 1;
 }
 QVariantMap discover(const QString& appId, const QString& arch, const Cancelled& cancelled, const Progress& progress)
 {
     try {
-        const auto* app = IndependentAppRegistry::find(appId);
-        if (!app || !configured(appId)) fail("BUNDLE_KEY_MISSING", "A reviewed Flatpak release public key has not been shipped with this core version.");
-        Download client(QString::fromLatin1(app->repository), cancelled, progress, 90000);
-        const auto response = client.fetch(QUrl("https://api.github.com/repos/NextKde/" + client.repo + "/releases/latest"), metadataLimit);
+        const auto app = IndependentAppRegistry::find(appId);
+        if (!app || !configured(appId)) fail("BUNDLE_KEY_MISSING", "The application is unavailable in the current trusted catalog.");
+        Download client(app->repository, cancelled, progress, 90000);
+        const auto selectedTag = AppCatalog::testMode() ? app->entry.value("releaseTag").toString() : QString();
+        const auto endpoint = selectedTag.isEmpty() ? "/releases/latest" : "/releases/tags/" + selectedTag;
+        const auto response = client.fetch(QUrl("https://api.github.com/repos/" + client.repo + endpoint), metadataLimit);
         QJsonParseError error;
         const auto release = QJsonDocument::fromJson(response, &error).object();
         const auto tag = release.value("tag_name").toString();
         QList<qulonglong> parts;
         if (error.error != QJsonParseError::NoError || release.value("draft").toBool(true)
-            || release.value("prerelease").toBool(true) || !tag.startsWith('v') || !versionParts(tag.mid(1), parts))
-            fail("INVALID_RELEASE", "Expected a published stable vX.Y.Z GitHub release.");
+            || (selectedTag.isEmpty() && (release.value("prerelease").toBool(true) || tag.contains('-')))
+            || (!selectedTag.isEmpty() && tag != selectedTag)
+            || !tag.startsWith('v') || !versionParts(tag.mid(1), parts))
+            fail("INVALID_RELEASE", "Expected a published vX.Y.Z GitHub release, or a selected test prerelease.");
         const auto attachment = [&](const QString& name) {
             QJsonObject found;
             int count = 0;
@@ -340,20 +366,28 @@ QVariantMap discover(const QString& appId, const QString& arch, const Cancelled&
                 const auto asset = value.toObject();
                 if (asset.value("name").toString() == name) { found = asset; ++count; }
             }
-            const auto expected = "https://github.com/NextKde/" + client.repo + "/releases/download/" + tag + '/' + name;
+            const auto expected = "https://github.com/" + client.repo + "/releases/download/" + tag + '/' + name;
             if (count != 1 || found.value("browser_download_url").toString() != expected)
-                fail("RELEASE_UNAVAILABLE", "The stable release is missing a unique required Flatpak attachment.");
+                fail("RELEASE_UNAVAILABLE", "The release is missing a unique required Flatpak attachment.");
             return QUrl(expected);
         };
-        const auto manifestName = QString::fromLatin1(app->manifest);
+        const auto manifestName = app->manifest;
         const auto manifest = client.fetch(attachment(manifestName), metadataLimit);
-        const auto signature = client.fetch(attachment(manifestName + ".sig"), 65536);
-        progress("Verifying Flatpak release signature", -1);
-        if (!verify(appId, manifest, signature, cancelled)) fail("FLATPAK_UNTRUSTED", "The Flatpak release manifest signature is invalid or its publisher is not approved.");
+        QByteArray signature;
+        if (!publicKeys(appId).isEmpty()) {
+            signature = client.fetch(attachment(manifestName + ".sig"), 65536);
+            progress("Verifying developer signature", -1);
+            if (!verify(appId, manifest, signature, cancelled))
+                fail("FLATPAK_UNTRUSTED", "The configured developer signature is invalid.");
+        }
         auto result = parseManifest(appId, arch, manifest);
-        if (result.value("version").toString() != tag.mid(1)) fail("INVALID_RELEASE", "Signed version does not match the GitHub release tag.");
+        if (result.value("version").toString() != tag.mid(1)) fail("INVALID_RELEASE", "Release version does not match the GitHub release tag.");
         result["url"] = attachment(result.value("asset").toString()).toString();
         result["manifest"] = manifest.toBase64(); result["signature"] = signature.toBase64();
+        result["manifestSha256"] = QString::fromLatin1(QCryptographicHash::hash(manifest, QCryptographicHash::Sha256).toHex());
+        result["catalogEntryDigest"] = AppCatalog::entryDigest(app->entry);
+        result["sourceId"] = app->entry.value("sourceId");
+        result["developerVerified"] = !signature.isEmpty();
         return result;
     } catch (const Failure& failure) { return {{"code", failure.code}, {"message", failure.message}}; }
 }
@@ -361,18 +395,13 @@ QVariantMap validateDownloaded(const QString& appId, const QVariantMap& discover
     const Cancelled& cancelled)
 {
     try {
-        const auto manifest = QByteArray::fromBase64(discovery.value("manifest").toByteArray());
-        const auto signature = QByteArray::fromBase64(discovery.value("signature").toByteArray());
-        if (!verify(appId, manifest, signature, cancelled)) fail("FLATPAK_UNTRUSTED", "Flatpak release signature validation failed before deployment.");
-        const auto signedData = parseManifest(appId, discovery.value("arch").toString(), manifest);
-        for (auto it = signedData.begin(); it != signedData.end(); ++it)
-            if (discovery.value(it.key()) != it.value()) fail("INVALID_RELEASE", "The selected release changed before deployment.");
+        const auto releaseData = checkedDiscovery(appId, discovery, cancelled);
         QFile file(path);
         if (!QDir::isAbsolutePath(path) || !file.open(QIODevice::ReadOnly)
-            || file.size() != signedData.value("size").toLongLong()) fail("INTEGRITY_FAILED", "Cannot read the complete downloaded bundle.");
+            || file.size() != releaseData.value("size").toLongLong()) fail("INTEGRITY_FAILED", "Cannot read the complete downloaded bundle.");
         QCryptographicHash hash(QCryptographicHash::Sha256);
         while (!file.atEnd()) { checkCancelled(cancelled); hash.addData(file.read(128 * 1024)); if (file.error() != QFileDevice::NoError) fail("INTEGRITY_FAILED", "Cannot read complete Flatpak bundle."); }
-        if (QString::fromLatin1(hash.result().toHex()) != signedData.value("sha256").toString()) fail("INTEGRITY_FAILED", "Flatpak bundle digest does not match its signed release.");
+        if (QString::fromLatin1(hash.result().toHex()) != releaseData.value("sha256").toString()) fail("INTEGRITY_FAILED", "Flatpak bundle digest does not match its GitHub release.");
         auto* bundleFile = g_file_new_for_path(path.toUtf8().constData());
         GError* bundleError = nullptr;
         auto* bundle = flatpak_bundle_ref_new(bundleFile, &bundleError);
@@ -391,18 +420,18 @@ QVariantMap validateDownloaded(const QString& appId, const QVariantMap& discover
         const auto actualDigest = QString::fromLatin1(
             QCryptographicHash::hash(actualMetadata, QCryptographicHash::Sha256).toHex());
         const auto actualSize = flatpak_bundle_ref_get_installed_size(bundle);
-        const auto expectedMetadata = QByteArray::fromBase64(signedData.value("metadata").toString().toLatin1());
-        const auto expectedDigest = signedData.value("metadataSha256").toString();
-        const auto expectedSize = signedData.value("installedSize").toULongLong();
+        const auto expectedMetadata = QByteArray::fromBase64(releaseData.value("metadata").toString().toLatin1());
+        const auto expectedDigest = releaseData.value("metadataSha256").toString();
+        const auto expectedSize = releaseData.value("installedSize").toULongLong();
         const bool metadataMatches = actualMetadata == expectedMetadata && actualDigest == expectedDigest;
         if (metadataBytes) g_bytes_unref(metadataBytes);
         g_object_unref(bundle);
         g_object_unref(bundleFile);
         if (!metadataMatches)
-            fail("BUNDLE_METADATA_MISMATCH", QString("Bundle metadata differs from signed plan: expected %1 bytes, SHA-256 %2; actual %3 bytes, SHA-256 %4.")
+            fail("BUNDLE_METADATA_MISMATCH", QString("Bundle metadata differs from release plan: expected %1 bytes, SHA-256 %2; actual %3 bytes, SHA-256 %4.")
                 .arg(expectedMetadata.size()).arg(expectedDigest).arg(actualMetadata.size()).arg(actualDigest));
         if (actualSize != expectedSize)
-            fail("BUNDLE_INSTALLED_SIZE_MISMATCH", QString("Bundle installed size differs from signed plan: expected %1 bytes; actual %2 bytes.")
+            fail("BUNDLE_INSTALLED_SIZE_MISMATCH", QString("Bundle installed size differs from release plan: expected %1 bytes; actual %2 bytes.")
                 .arg(expectedSize).arg(actualSize));
         return {};
     } catch (const Failure& failure) { return {{"code", failure.code}, {"message", failure.message}}; }
@@ -411,26 +440,21 @@ QVariantMap download(const QString& appId, const QVariantMap& discovery, const Q
     const Cancelled& cancelled, const Progress& progress)
 {
     try {
-        const auto* app = IndependentAppRegistry::find(appId);
+        const auto app = IndependentAppRegistry::find(appId);
         if (!app || !QDir::isAbsolutePath(directory)) fail("INVALID_RELEASE", "Invalid application or private download directory.");
-        const auto manifest = QByteArray::fromBase64(discovery.value("manifest").toByteArray());
-        const auto signature = QByteArray::fromBase64(discovery.value("signature").toByteArray());
-        if (!verify(appId, manifest, signature, cancelled)) fail("FLATPAK_UNTRUSTED", "Flatpak release signature validation failed before download.");
-        const auto signedData = parseManifest(appId, discovery.value("arch").toString(), manifest);
-        for (auto it = signedData.begin(); it != signedData.end(); ++it)
-            if (discovery.value(it.key()) != it.value()) fail("INVALID_RELEASE", "The selected release changed after discovery.");
-        const auto expectedUrl = "https://github.com/NextKde/" + QString::fromLatin1(app->repository)
-            + "/releases/download/v" + signedData.value("version").toString() + '/' + signedData.value("asset").toString();
+        const auto releaseData = checkedDiscovery(appId, discovery, cancelled);
+        const auto expectedUrl = "https://github.com/" + app->repository
+            + "/releases/download/v" + releaseData.value("version").toString() + '/' + releaseData.value("asset").toString();
         if (discovery.value("url").toString() != expectedUrl) fail("UNTRUSTED_URL", "Unexpected Flatpak attachment URL.");
-        Download client(QString::fromLatin1(app->repository), cancelled, progress, 30 * 60 * 1000);
+        Download client(app->repository, cancelled, progress, 30 * 60 * 1000);
         const auto path = directory + "/application.flatpak";
-        client.fetch(QUrl(expectedUrl), bundleLimit, path, signedData.value("size").toLongLong());
+        client.fetch(QUrl(expectedUrl), bundleLimit, path, releaseData.value("size").toLongLong());
         progress("Verifying Flatpak bundle digest", -1);
         QFile file(path);
         if (!file.open(QIODevice::ReadOnly)) fail("PERMISSION_DENIED", "Cannot read downloaded bundle.");
         QCryptographicHash hash(QCryptographicHash::Sha256);
         while (!file.atEnd()) { checkCancelled(cancelled); hash.addData(file.read(128 * 1024)); if (file.error() != QFileDevice::NoError) fail("INTEGRITY_FAILED", "Cannot read complete Flatpak bundle."); }
-        if (QString::fromLatin1(hash.result().toHex()) != signedData.value("sha256").toString()) fail("INTEGRITY_FAILED", "Flatpak bundle digest does not match its signed release.");
+        if (QString::fromLatin1(hash.result().toHex()) != releaseData.value("sha256").toString()) fail("INTEGRITY_FAILED", "Flatpak bundle digest does not match its GitHub release.");
         return {{"path", path}};
     } catch (const Failure& failure) { return {{"code", failure.code}, {"message", failure.message}}; }
 }

@@ -111,3 +111,36 @@ component serves the sidebar, the KDE action and the back/forward group. Sidebar
 show their full text when elided; fully visible names never repeat themselves.
 The KDE action uses an action-oriented hint. Do not use attached Qt `ToolTip`
 properties or a page-specific bubble style. See nextkdeAppDemo `docs/Tooltips.md`.
+
+## Applications and services
+
+The page reads a signed, refreshable catalog instead of a compiled application list.
+See [architecture, sources and automatic checks](../../docs/app-store/SignedCatalog.md)
+([简体中文](../../docs/app-store/SignedCatalog.zh-CN.md)) and the
+[submission / Qt runtime guide](https://github.com/NextKde/appCatalog).
+`kos-app-update-agent` is installed alongside Settings and starts in the user session;
+checks do not install updates. Catalog metadata and UI strings support English,
+Simplified Chinese and Brazilian Portuguese. Perform builds, tests and GUI acceptance
+only in a development VM or CI, not on the host workstation.
+
+[Developer test mode](../../docs/app-store/DeveloperTesting.md) keeps original app IDs while selecting a separate GitHub test catalog and published release. Test installations must be removed manually.
+
+## About
+
+The About sidebar entry (`--page=about` or `--page=15`) links to the official
+website, NextKde repository, new Issue chooser, Pull Request comparison, and the
+localized appCatalog submission guide. Links open in the default browser.
+Contributors load in pages of 100 with an explicit Load more action. Public GitHub
+responses and 72 px avatars persist in the application's cache directory under
+`about/` (normally `~/.cache/Quickshell/kos-settings/about`). Reopening Settings
+immediately displays cached pages and avatars. Lists older than one day and
+avatars older than seven days refresh lazily in the background when requested,
+retaining the cached content if refresh fails. There is no refresh button;
+failed background requests have a 15-minute retry cooldown within the process.
+Fresh cache entries need no network request. Avatar cache maintenance caps storage at
+16 MiB / 500 files; evicted or corrupt entries are downloaded again when needed.
+List requests time out after 15 seconds and are cancelled when the page is
+destroyed. Avatar downloads belong to the application so navigation does not
+discard in-progress cache writes. Failed requests can be retried; the full GitHub
+contributors link remains available offline or when rate limited. Avatars have
+an initial fallback, and each contributor links to their profile.
