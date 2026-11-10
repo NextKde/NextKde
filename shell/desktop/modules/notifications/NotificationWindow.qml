@@ -8,7 +8,6 @@ import "../../../shared/qml/i18n"
 import qs.desktop.modules.common
 import qs.desktop.modules.dock
 import qs.desktop.modules.notifications
-import "NotificationActivation.mjs" as Activation
 import "../../../Kos/Ui"
 
 // Top-right notification popup. One card per app group (newest on top).
@@ -169,6 +168,7 @@ PanelWindow {
 
             readonly property string groupKey: modelData.groupKey
             readonly property int groupCount: modelData.count
+            onGroupCountChanged: opener.cancel()
             readonly property bool groupCollapsed: modelData.collapsed
             // Live newest Notification for this group. Depends on
             // sidecarRevision so it re-evaluates when the service rebuilds.
@@ -278,14 +278,8 @@ PanelWindow {
                 objectName: "notification-open-area"
                 anchors.fill: parent
                 cursorShape: Qt.PointingHandCursor
-                onClicked: {
-                    if (!card.openApp())
-                        return
-                    if (!(card.notification?.resident ?? false)) {
-                        card.handoff = true
-                        card.close(false)
-                    }
-                }
+                enabled: !opener.busy
+                onClicked: opener.open()
             }
 
             // ---- backgrounds ----
@@ -350,6 +344,7 @@ PanelWindow {
             function close(expired) {
                 if (removing)
                     return
+                opener.cancel()
                 removing = true
                 if (expired)
                     root.groupService.expireGroupByKey(card.groupKey)
@@ -357,66 +352,25 @@ PanelWindow {
                     root.groupService.dismissGroupByKey(card.groupKey)
             }
 
-            // Raise the window this notification came from. Returns false when
-            // there is nothing to open, so the card stays put instead of
-            // disappearing with no effect.
-            function openApp() {
-                const notification = card.notification
-                if (!notification)
-                    return false
-                // Every tracked window is a candidate. Notification identity is
-                // unreliable (Electron apps such as QQ send only an app name,
-                // some daemons send just an icon name), and a click that fails to
-                // recognise the running app falls back to launching a second
-                // copy. The decision module matches whatever evidence the
-                // notification carries against all windows first.
-                const windows = WindowService.records.map(record => ({
-                    windowId: record.windowId,
-                    desktopId: record.identity?.desktopId || "",
-                    rawAppId: record.identity?.rawAppId || "",
-                    name: record.identity?.name || "",
-                    title: record.title || "",
-                    minimized: record.toplevel?.minimized === true
-                }))
-                // Only a real desktop-entry may name a launch target; resolving
-                // an empty string could pick an unrelated entry.
-                let resolvedDesktopId = ""
-                const entryHint = String(notification.desktopEntry || "").trim()
-                if (entryHint) {
-                    try {
-                        resolvedDesktopId = AppIdentityService.resolve(entryHint).desktopId || ""
-                    } catch (error) {
-                        resolvedDesktopId = ""
+            NotificationOpenController {
+                id: opener
+                notification: card.notification
+                windowService: WindowService
+                launcher: DockModelService
+                lookupEntry: function(hint) { return AppPresentationService.entryFor(hint) }
+                onBusyChanged: card._lastTickAt = 0
+                onFinished: function(source, success) {
+                    if (source !== card.notification || card.removing)
+                        return
+                    // Give failures a fresh countdown so the notice remains
+                    // available for another action instead of expiring at once.
+                    card._elapsedMs = 0
+                    card._lastTickAt = 0
+                    if (success && !(source?.resident ?? false)) {
+                        card.handoff = true
+                        card.close(false)
                     }
                 }
-                const plan = Activation.planClick(notification, windows, resolvedDesktopId)
-                if (plan.kind === "activate") {
-                    // Restored windows keep their previous geometry. A minimized
-                    // window also asks the compositor to replay its reveal
-                    // animation; a window that is merely behind others is only
-                    // raised, because replaying the reveal would hide and regrow
-                    // it for a frame.
-                    const target = windows.find(window => String(window.windowId) === plan.windowId)
-                    WindowService.activateWindow(plan.windowId, {
-                        forceAnim: target?.minimized === true
-                    })
-                    return true
-                }
-                if (plan.kind === "launch") {
-                    // Reuse the Dock's launch path: it keeps the launch ticket,
-                    // so a newly started window still animates in.
-                    DockModelService.activateApp(plan.desktopId)
-                    return true
-                }
-                if (plan.kind === "defaultAction") {
-                    const action = (notification.actions || [])
-                        .find(item => item?.identifier === "default")
-                    if (action) {
-                        action.invoke()
-                        return true
-                    }
-                }
-                return false
             }
 
             // ---- countdown bar ----
@@ -478,7 +432,7 @@ PanelWindow {
                 id: expireTicker
                 interval: 50
                 repeat: true
-                running: card.notification !== null && card.expireMs > 0 && !card.hovered
+                running: card.notification !== null && card.expireMs > 0 && !card.hovered && !opener.busy
                 onTriggered: {
                     const now = Date.now()
                     if (card._lastTickAt > 0)
@@ -704,6 +658,7 @@ PanelWindow {
                                 hoverEnabled: true
                                 cursorShape: Qt.PointingHandCursor
                                 onClicked: {
+                                    opener.cancel()
                                     const resident = card.notification?.resident ?? false
                                     modelData.invoke()
                                     if (!resident)
@@ -742,6 +697,7 @@ PanelWindow {
                         onAccepted: {
                             if (text.length > 0 && card.notification) {
                                 const resident = card.notification.resident
+                                opener.cancel()
                                 card.notification.sendInlineReply(text)
                                 text = ""
                                 if (!resident)

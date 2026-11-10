@@ -76,7 +76,7 @@ assert.deepEqual(
     { kind: "launch", desktopId: "qq.desktop", windowId: "" });
 assert.deepEqual(
     planClick({ desktopEntry: "org.kde.dolphin.desktop" }, []),
-    { kind: "launch", desktopId: "org.kde.dolphin", windowId: "" });
+    { kind: "none", desktopId: "", windowId: "" });
 
 // ── no app identity and no running window: let the notification act ──
 assert.deepEqual(
@@ -87,3 +87,8 @@ assert.deepEqual(planClick({ appName: "Some tray app", actions: [] }, []),
 assert.deepEqual(planClick(null, []), { kind: "none", desktopId: "", windowId: "" });
 
 console.log("Notification activation: identity, matching and plan tests passed");
+
+// Uninstalled/stale desktop ids must not hide a usable default action.
+assert.equal(planClick({ desktopEntry: "not.installed", actions: {
+    0: { identifier: "default" }, length: 1
+} }, []).kind, "defaultAction");

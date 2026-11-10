@@ -770,15 +770,20 @@ QtObject {
         const record = windowById(windowId);
         if (!record) {
             console.warn("[WindowService] activate missing windowId=" + windowId);
-            return;
+            return false;
         }
         activationRequested(windowId);
         if (record.provider === "kwin") {
             _enqueueKwinCommand({ action: "activate", id: record.handleId,
-                forceAnim: options?.forceAnim === true });
-            return;
+                forceAnim: options?.forceAnim === true, ticket: options?.ticket });
+            return true;
         }
-        try { record.toplevel.activate(); } catch (e) {}
+        try {
+            record.toplevel.activate();
+            return true;
+        } catch (e) {
+            return false;
+        }
     }
 
     // 整组一起展开（macOS 语义）：同应用全部窗口还原抬升、focusId 最后激活

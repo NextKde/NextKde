@@ -98,14 +98,29 @@ export function planClick(notification, windows, resolvedDesktopId = "") {
     const windowId = matchWindow(windows, notification);
     if (windowId)
         return { kind: "activate", desktopId: resolvedDesktopId, windowId };
-    const launchId = String(resolvedDesktopId || "").trim()
-        || desktopIdOf(notification);
+    // Only the caller's live DesktopEntry lookup authorizes a launch. An
+    // arbitrary notification hint (or a synthesized identity) is not an entry.
+    const launchId = String(resolvedDesktopId || "").trim();
     if (launchId)
         return { kind: "launch", desktopId: launchId, windowId: "" };
     // Some daemons send only an app name and nothing is installed under it.
     // Let the notification act for itself when it carries a default action.
-    const actions = Array.isArray(notification?.actions) ? notification.actions : [];
-    if (actions.some(action => action?.identifier === "default"))
+    if (defaultAction(notification))
         return { kind: "defaultAction", desktopId: "", windowId: "" };
     return { kind: "none", desktopId: "", windowId: "" };
+}
+
+export function defaultAction(notification) {
+    // Notification.actions is a QML sequence, not necessarily a JS Array.
+    const actions = notification?.actions;
+    for (let i = 0; i < (actions?.length || 0); ++i) {
+        if (actions[i]?.identifier === "default")
+            return actions[i];
+    }
+    return null;
+}
+
+let requestSequence = 0;
+export function nextTicket() {
+    return "notification-open-" + (++requestSequence);
 }
