@@ -8,20 +8,19 @@ To uninstall, click the app icon/name to expand details, then Uninstall and conf
 This removes only the selected user Flatpak, keeping personal data and native apps.
 System installations and ambiguous multiple Flatpak refs require their own manager.
 
-Calendar (including Todo), Calculator, Weather, ListenFree and KMusic are independent
-applications. The recommended Settings/`kos-apps` backend downloads signed
-GitHub Release Flatpak bundles, using structured libflatpak transactions. It does
-not require a hosted NextKde app repository or a Flathub listing. Signed manifests
-pin version/ref/commit/size/hash; reviewed public keys ship in core and are never
-trusted from the downloaded bundle. `gpgv` is a runtime dependency. The local
-bundle-publisher policy contains the dedicated public key for all five app IDs.
-The runtime-source policy approves only the reviewed Flathub runtime URL/key,
-not Flathub applications. Explicit Install/Update automatically prepares the pinned
-user runtime source only when a missing dependency requires it. See the
-[independent-app contract](../../../docs/app-store/IndependentApps.md) for the
-full primary fingerprint and review evidence. Release availability is determined
-from the signed publisher metadata at request time. No source-install fallback
-or automatic legacy migration occurs.
+Applications come from a signed, refreshable catalog maintained in
+[NextKde/appCatalog](https://github.com/NextKde/appCatalog). Settings and `kos-apps`
+share the user-Flatpak backend. Package SHA-256 is mandatory; developer signatures
+are optional unless the entry pins a publisher, in which case manifest and commit
+signatures are both mandatory. `gpgv` verifies the catalog using the trusted source
+key. Entries cannot supply scripts or arbitrary installer URLs.
+
+The runtime policy approves only the reviewed Flathub runtime URL/key, not Flathub
+applications. Explicit Install/Update prepares that source when needed. Applications
+remain GitHub Release bundles. See [catalog architecture](../../../docs/app-store/SignedCatalog.md)
+for source management, update notifications, localization and future adapter boundaries,
+and [Qt runtime packaging](https://github.com/NextKde/appCatalog/blob/main/docs/QtRuntime.md).
+
 Libflatpak may create a URL-less local origin/key record even before a refused or
 cancelled deployment; complete rollback is not claimed. An automatically prepared
 runtime source can also remain after cancelling the plan. Read-only inventory and ordinary offline user
@@ -46,7 +45,7 @@ installer-owned source desktop links are excluded from Settings inventory.
 ## KMusic
 
 KMusic uses the same Flatpak catalogue, plans, inventory and launch path as the
-other applications, with ID `org.nextkde.KMusic`, repository `NextKde/KMusic`, and
+other applications, with ID `org.nextkde.KMusic`, repository `NextKde/NkMusic`, and
 `flatpak-release.json` plus its signature. Its existing native `kmusic-app`
 installation is not counted as an installed Flatpak or opened as a fallback.
 The old source catalogue is not consumed by Settings. Publication of a signed

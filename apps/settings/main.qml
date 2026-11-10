@@ -271,7 +271,7 @@ ApplicationWindow {
             subtitle: I18n.tr("Wallpaper")
         },
         {
-            subtitle: I18n.tr("Extensions and services")
+            subtitle: I18n.tr("Applications and services")
         },
         {
             subtitle: I18n.tr("Stage scheduling")
@@ -715,7 +715,7 @@ ApplicationWindow {
                                 SidebarEntry {
                                     Layout.fillWidth: true
                                     pageIndex: 9
-                                    label: I18n.tr("Extensions and services")
+                                    label: I18n.tr("Applications and services")
                                     navIcon: "general"
                                     navSymbol: "◇"
                                     navTint: "#5ac8fa"
@@ -835,6 +835,7 @@ ApplicationWindow {
                             colors: window.notificationTheme
                             materialForm: window.materialForm
                             backend: typeof windowSettings !== "undefined" ? windowSettings : null
+                            bridge: typeof settingsBridge !== "undefined" ? settingsBridge : null
                         }
                     }
 

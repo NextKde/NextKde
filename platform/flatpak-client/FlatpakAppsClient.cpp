@@ -1,4 +1,6 @@
 #include "FlatpakAppsClient.h"
+#include "AppCatalog.h"
+#include <QDateTime>
 
 #include <QCoreApplication>
 #include <QFileInfo>
@@ -29,7 +31,7 @@ bool validState(const QJsonObject& state)
 }
 }
 
-FlatpakAppsClient::FlatpakAppsClient(QObject* parent) : QObject(parent)
+FlatpakAppsClient::FlatpakAppsClient(QObject* parent, bool polling) : QObject(parent)
 {
     m_process.setProcessChannelMode(QProcess::SeparateChannels);
     connect(&m_process, &QProcess::readyReadStandardOutput, this, [this] {
@@ -74,7 +76,7 @@ FlatpakAppsClient::FlatpakAppsClient(QObject* parent) : QObject(parent)
             }
             const auto result = object.value("result").toObject();
             if (m_activeAction == "inventory") {
-                if (!result.value("apps").isObject() || result.value("apps").toObject().isEmpty()) {
+                if (!result.value("apps").isObject()) {
                     failActive("PROTOCOL_ERROR", "Flatpak inventory response was invalid."); return;
                 }
                 const auto apps = result.value("apps").toObject();
@@ -105,6 +107,10 @@ FlatpakAppsClient::FlatpakAppsClient(QObject* parent) : QObject(parent)
                     state.insert("plan", state.value("plan").toMap());
                 }
                 m_states.insert(m_activeId, state);
+                if (m_activeAction == "check-update") {
+                    AppCatalog::writeState("update-" + m_activeId, {{"state", state},
+                        {"checkedAt", QDateTime::currentDateTimeUtc().toString(Qt::ISODate)}});
+                }
             }
             const auto id = m_activeId;
             const auto action = m_activeAction;
@@ -135,8 +141,10 @@ FlatpakAppsClient::FlatpakAppsClient(QObject* parent) : QObject(parent)
     connect(&m_killTimer, &QTimer::timeout, this, [this] { if (m_process.state() != QProcess::NotRunning) m_process.kill(); });
     m_refreshTimer.setInterval(5000);
     connect(&m_refreshTimer, &QTimer::timeout, this, &FlatpakAppsClient::refresh);
-    m_refreshTimer.start();
-    QTimer::singleShot(0, this, &FlatpakAppsClient::refresh);
+    if (polling) {
+        m_refreshTimer.start();
+        QTimer::singleShot(0, this, &FlatpakAppsClient::refresh);
+    }
 }
 
 FlatpakAppsClient::~FlatpakAppsClient()
@@ -153,6 +161,20 @@ QVariantMap FlatpakAppsClient::plan(const QString& appId) const
     return m_states.value(appId).toMap().value("plan").toMap();
 }
 
+void FlatpakAppsClient::releaseIdleWorker()
+{
+    if (querying()) return;
+    // The session update agent has no reason to keep an inventory process alive
+    // for six hours between scans. Keep its last snapshot without reporting a crash.
+    m_process.blockSignals(true);
+    if (m_process.state() != QProcess::NotRunning) {
+        m_process.terminate();
+        if (!m_process.waitForFinished(1000)) { m_process.kill(); m_process.waitForFinished(1000); }
+    }
+    m_stdout.clear();
+    m_process.blockSignals(false);
+}
+
 QString FlatpakAppsClient::planId(const QString& appId) const
 {
     return plan(appId).value("planId").toString();
@@ -163,6 +185,25 @@ QVariantMap FlatpakAppsClient::state(const QString& appId) const
     auto result = m_states.value(appId).toMap();
     if (result.isEmpty()) result = {{"known", false}, {"installations", QVariantList{}},
         {"error", m_lastStatus}, {"errorCode", m_lastCode}};
+    // Only reuse a background result for the exact installation and directory entry.
+    const auto entry = AppCatalog::find(appId);
+    const auto saved = AppCatalog::readState("update-" + appId).value("state").toMap();
+    const auto savedUpdate = saved.value("update").toMap();
+    auto current = result.value("update").toMap();
+    const auto matches = [&](const QVariantMap& update) {
+        const auto installations = result.value("installations").toList();
+        const auto selected = update.value("installation").toMap();
+        return entry.value("active").toBool()
+            && update.value("catalogEntryDigest").toString() == AppCatalog::entryDigest(entry)
+            && (installations.isEmpty() ? selected.isEmpty()
+                : installations.size() == 1 && selected == installations.first().toMap());
+    };
+    if (!matches(current)) current.clear();
+    if (saved.value("known").toBool() && saved.value("installations") == result.value("installations") && matches(savedUpdate)) current = savedUpdate;
+    result["update"] = current;
+    if (result.value("plan").toMap().value("catalogEntryDigest").toString() != AppCatalog::entryDigest(entry))
+        result.remove("plan");
+    result["canDiscover"] = result.value("canDiscover").toBool() && entry.value("active").toBool();
     result.insert("querying", querying());
     result.insert("busy", m_activeId == appId);
     if (m_activeId == appId) result.insert("stage", m_activeAction);

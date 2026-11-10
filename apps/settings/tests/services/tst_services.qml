@@ -23,6 +23,22 @@ TestCase {
         id: fakeStore
         property var music: ({available: true, installed: false, busy: false})
         property var apps: []
+        property var sources: []
+        property var updateStatus: ({})
+        property int updateCount: 0
+        property bool testMode: false
+        property bool releasesBusy: false
+        property var releases: ({releases: [{tag: "v1.0.0-rc.1", prerelease: true}]})
+        property string releaseRepository: ""
+        property string releaseTag: ""
+        function setTestMode(enabled) { testMode = enabled; changed(); return "" }
+        function loadReleases(repository) { releaseRepository = repository }
+        function selectSourceRelease(id, repository, tag) { lastId = id; releaseRepository = repository; releaseTag = tag; return "" }
+        function selectAppRelease(id, repository, tag) { lastId = id; releaseRepository = repository; releaseTag = tag; return "" }
+        property bool catalogBusy: false
+        property string catalogError: ""
+        property bool automaticUpdates: true
+        property bool updateNotifications: true
         property bool anyBusy: false
         property bool hasActiveMutation: false
         property int refreshes: 0
@@ -57,6 +73,8 @@ TestCase {
         }
     }
     function init() {
+        fakeStore.testMode = false
+        fakeStore.releaseTag = ""
         bridge.starts = 0
         bridge.stops = 0
         I18n.language = "en"
@@ -67,6 +85,53 @@ TestCase {
         fakeStore.apps = []; fakeStore.anyBusy = false; fakeStore.lastId = ""; fakeStore.checks = fakeStore.updates = 0
     }
     function snapshot(state) { bridge.wallpaperSnapshotChanged({spatialResources: state}) }
+
+    function test_catalog_translation_fallback() {
+        const page = createTemporaryObject(factory, this, {store: fakeStore})
+        verify(page)
+        const names = {en: "Notes", "zh-CN": "笔记", "pt-BR": "Notas"}
+        I18n.language = "pt-BR"
+        compare(page.localText(names, "Legacy"), "Notas")
+        compare(page.catalogMessage("example: Catalog signature is invalid"), "example: A assinatura do catálogo é inválida")
+        I18n.language = "zh-CN"
+        compare(page.localText(names, "Legacy"), "笔记")
+        compare(page.catalogMessage("Catalog signature is invalid"), "目录签名无效")
+        compare(page.localText({en: "Third-party notes"}, "Legacy"), "Third-party notes")
+        I18n.language = "en"
+        compare(page.localText(names, "Legacy"), "Notes")
+    }
+
+    function test_developer_mode_preserves_app_ids_and_translates() {
+        const page = createTemporaryObject(factory, this, {bridge: bridge, store: fakeStore})
+        verify(page)
+        const toggle = findChild(page, "catalogTestModeButton")
+        verify(toggle)
+        toggle.clicked()
+        wait(50)
+        const confirm = findChild(page, "catalogTestModeConfirm")
+        verify(confirm)
+        confirm.clicked()
+        compare(fakeStore.testMode, true)
+        const banner = findChild(page, "catalogTestModeBanner")
+        I18n.language = "zh-CN"
+        verify(banner.text.indexOf("原应用 ID") >= 0)
+        I18n.language = "pt-BR"
+        verify(banner.text.indexOf("IDs originais") >= 0)
+        page.chooseRelease("app", "org.example.Notes", "Example/Notes", "v1.0.0-rc.1")
+        wait(50)
+        compare(fakeStore.releaseRepository, "Example/Notes")
+        const save = findChild(page, "catalogReleaseSave")
+        verify(save)
+        save.clicked()
+        compare(fakeStore.lastId, "org.example.Notes")
+        compare(fakeStore.releaseTag, "v1.0.0-rc.1")
+        compare(fakeStore.removals, 0)
+        toggle.clicked()
+        wait(50)
+        confirm.clicked()
+        compare(fakeStore.testMode, false)
+        compare(fakeStore.removals, 0)
+    }
 
     function test_action_waits_for_backend() {
         const page = createTemporaryObject(factory, this, {bridge: bridge})

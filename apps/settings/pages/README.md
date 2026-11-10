@@ -15,7 +15,14 @@ No registry, dependency container or second IPC protocol is introduced.
   root; `null` means unavailable. Pages retain their existing method and snapshot
   signal contracts. The window appearance page instead receives `backend`, the
   existing WindowSettings object. Neither dependency is discovered from context
-  properties inside extracted pages.
+  properties inside extracted pages. The window appearance page also receives
+  `bridge` for on-demand running-app discovery through `fgSchedRunningApps()`;
+  its per-app button exclusions use the raw KWin app ID and retain a manual
+  exact-class fallback when Shell IPC is unavailable. A separate refresh action
+  remains available when the list is populated and preserves the selected app
+  by ID. The selected app and exclusion rows show desktop-entry/theme icons,
+  with a generic fallback; action icons retain accessible names and Demo tooltips.
+  It does not poll.
 - `ThemeSettingsPage.fontsRequested()` opens route 14 under Theme. The font page
   receives the `FontSettings` native KCM adapter as `backend` and the Shell
   appearance `bridge` separately. The composition root's existing history toolbar
