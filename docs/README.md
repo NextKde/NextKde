@@ -57,3 +57,5 @@ Do not commit session diaries, process screenshots, captured logs or temporary r
 artifacts. Keep project illustrations, required assets and third-party provenance. Removing a file
 from the current tree does not erase historical Git objects; shallow clones avoid downloading the
 old history. Do not rewrite published history as part of normal documentation cleanup.
+
+[Developer test mode](app-store/DeveloperTesting.md): test sources, selected Releases and manual restoration.

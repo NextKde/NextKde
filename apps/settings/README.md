@@ -122,3 +122,5 @@ See [architecture, sources and automatic checks](../../docs/app-store/SignedCata
 checks do not install updates. Catalog metadata and UI strings support English,
 Simplified Chinese and Brazilian Portuguese. Perform builds, tests and GUI acceptance
 only in a development VM or CI, not on the host workstation.
+
+[Developer test mode](../../docs/app-store/DeveloperTesting.md) keeps original app IDs while selecting a separate GitHub test catalog and published release. Test installations must be removed manually.
