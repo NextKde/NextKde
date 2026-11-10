@@ -158,6 +158,7 @@ TestCase {
         compare(results.length, 0)
         windows.publish([record(false, false)])
         compare(windows.requests.length, 1)
+        verify(!launchBackend.isCurrent(), "a mapped window cancels any deferred duplicate launch")
         verify(!windows.requests[0].options.forceAnim)
         windows.publish([record(true, false)])
         verify(results[0].success)

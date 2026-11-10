@@ -71,6 +71,10 @@ QtObject {
     }
 
     function _activate(windowId) {
+        // A window can map while the Dock animation ticket is being prepared.
+        // Stop that deferred launch before it starts a second application.
+        if (_operation)
+            _operation.launchPending = false
         _phase = "activate"
         _windowId = windowId
         _ticket = Activation.nextTicket()
@@ -133,7 +137,7 @@ QtObject {
         if (busy || !notification)
             return
         ++_generation
-        _operation = { active: true }
+        _operation = { active: true, launchPending: true }
         // Resolve a live installed entry; never retain its QObject across an
         // async launch or accept a synthetic AppIdentityService desktop id.
         let desktopId = ""
@@ -160,7 +164,7 @@ QtObject {
                     // dead QML object from a delayed platform callback.
                     if (operation.active && root._phase === "launch" && !ok)
                         root._fallback()
-                }, function() { return operation.active })
+                }, function() { return operation.active && operation.launchPending })
                 if (_generation === generation && !accepted)
                     _fallback()
             } catch (error) {
