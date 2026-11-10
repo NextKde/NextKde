@@ -23,6 +23,13 @@ TestCase {
         id: fakeStore
         property var music: ({available: true, installed: false, busy: false})
         property var apps: []
+        property var sources: []
+        property var updateStatus: ({})
+        property int updateCount: 0
+        property bool catalogBusy: false
+        property string catalogError: ""
+        property bool automaticUpdates: true
+        property bool updateNotifications: true
         property bool anyBusy: false
         property bool hasActiveMutation: false
         property int refreshes: 0
@@ -67,6 +74,21 @@ TestCase {
         fakeStore.apps = []; fakeStore.anyBusy = false; fakeStore.lastId = ""; fakeStore.checks = fakeStore.updates = 0
     }
     function snapshot(state) { bridge.wallpaperSnapshotChanged({spatialResources: state}) }
+
+    function test_catalog_translation_fallback() {
+        const page = createTemporaryObject(factory, this, {store: fakeStore})
+        verify(page)
+        const names = {en: "Notes", "zh-CN": "笔记", "pt-BR": "Notas"}
+        I18n.language = "pt-BR"
+        compare(page.localText(names, "Legacy"), "Notas")
+        compare(page.catalogMessage("example: Catalog signature is invalid"), "example: A assinatura do catálogo é inválida")
+        I18n.language = "zh-CN"
+        compare(page.localText(names, "Legacy"), "笔记")
+        compare(page.catalogMessage("Catalog signature is invalid"), "目录签名无效")
+        compare(page.localText({en: "Third-party notes"}, "Legacy"), "Third-party notes")
+        I18n.language = "en"
+        compare(page.localText(names, "Legacy"), "Notes")
+    }
 
     function test_action_waits_for_backend() {
         const page = createTemporaryObject(factory, this, {bridge: bridge})
