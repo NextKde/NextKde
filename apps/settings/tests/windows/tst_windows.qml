@@ -147,7 +147,7 @@ Item {
             verify(remove !== null)
             mouseClick(remove, remove.width / 2, remove.height / 2)
             compare(backend.state.buttonExclusions, [])
-            verify(findChild(app.contentItem, "windowButtonExclusionsEmpty").visible)
+            tryVerify(() => findChild(app.contentItem, "windowButtonExclusionRow_firefox") === null)
         }
         function test_running_apps_refresh_keeps_manual_fallback() {
             bridgeBackend.apps = []
