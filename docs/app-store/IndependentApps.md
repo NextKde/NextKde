@@ -100,9 +100,7 @@ request automatically prepares the pinned runtime source only if dependencies ar
 missing. No configuration dialog or terminal step is required. Inventory and
 standalone update discovery do not change sources. Runtime acceptance remains pending.
 
-Explicit update checks contact only the catalog-authorized repository's latest stable GitHub
-Release, validate unique attachments, signatures, tag/version and native stable
-ref. Metadata is bounded to 256 KiB, signatures to 64 KiB and bundles to 2 GiB.
+Normal update checks read the exact release manifest embedded in the signed catalog, validating signatures, version and native stable ref without querying application repositories. Direct GitHub discovery is limited to test mode. Metadata is bounded to 256 KiB, signatures to 64 KiB and bundles to 2 GiB.
 Downloads permit only fixed GitHub HTTPS endpoints and attachment CDNs, at most
 five redirects, no arbitrary URLs/credentials. Metadata attempts allow 30 seconds
 within a 90-second discovery budget. Bundle downloads allow a 30-second idle
@@ -451,7 +449,7 @@ arguments also produce one JSON result. `--help` prints usage normally.
 
 ## Release publication and trust
 
-The fixed endpoint is
+The legacy **source backend** (not the catalog Flatpak updater) uses the fixed endpoint
 `https://api.github.com/repos/NextKde/<repository>/releases/latest`.
 A published stable, non-draft release must have a `vX.Y.Z` tag and exactly one
 `<appId>.app-release.json` asset for the selected kos-apps application

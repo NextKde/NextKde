@@ -13,7 +13,10 @@ AppStore::AppStore(const QString& directory, QObject* parent)
     connect(&m_independent, &IndependentApps::taskFinished, this, &AppStore::taskFinished);
     connect(&m_catalogRefresh, &QFutureWatcher<QString>::finished, this, [this] {
         m_catalogError = m_catalogRefresh.result();
-        m_independent.refresh(); emit changed();
+        const auto check = m_checkAfterRefresh; m_checkAfterRefresh.clear();
+        if (m_catalogError.isEmpty() && !check.isEmpty()) m_independent.perform(check, "check-update");
+        else m_independent.refresh();
+        emit changed();
     });
     connect(&m_releases, &QFutureWatcher<QVariantMap>::finished, this, [this] {
         m_releaseResult = m_releaseContext == AppCatalog::contextToken() ? m_releases.result() : QVariantMap{};
@@ -42,7 +45,12 @@ void AppStore::openRepository() { openRepository("kmusic"); }
 void AppStore::install(const QString& id) { if (!anyBusy()) m_independent.perform(id, "install"); }
 void AppStore::uninstall(const QString& id) { if (!anyBusy()) m_independent.perform(id, "uninstall"); }
 void AppStore::update(const QString& id) { if (!anyBusy()) m_independent.perform(id, "update"); }
-void AppStore::checkUpdates(const QString& id) { if (!anyBusy()) m_independent.perform(id, "check-update"); }
+void AppStore::checkUpdates(const QString& id)
+{
+    if (anyBusy() || catalogBusy()) return;
+    if (testMode()) { m_independent.perform(id, "check-update"); return; }
+    m_checkAfterRefresh = id; refreshCatalog();
+}
 void AppStore::confirmPlan(const QString& id, const QString& planId)
 { if (!anyBusy()) m_independent.confirmPlan(id, planId); }
 void AppStore::cancel(const QString& id) { m_independent.cancel(id); }

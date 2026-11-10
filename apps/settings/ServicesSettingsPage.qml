@@ -616,13 +616,13 @@ GridLayout {
             category: I18n.tr("App")
             description: (app.updateAvailable ? I18n.tr("Update available") + " · " : "") + page.localText(app.descriptionLocales, I18n.tr(app.description || ""))
             iconName: app.iconName || "grid"
-            iconSource: app.iconFile ? Qt.resolvedUrl("icons/" + app.iconFile) : ""
-            iconInset: app.id === "calendar" ? 8 / 128 : app.id === "listenfree" ? 0 : 10 / 128
+            iconSource: app.iconSource || ""
+            iconInset: 0
             actionObjectName: app.id + "Action"
             actionText: app.busy && app.stage !== "status" ? I18n.tr("Working…") : app.installed ? I18n.tr("Open") : I18n.tr("Install")
-            actionEnabled: !blocked && !!app.statusKnown && (!!app.installed || app.available !== false)
+            actionEnabled: !blocked && !!app.statusKnown && (!!app.installed || (app.available !== false && (app.catalogApproved !== false || !!page.store.testMode)))
             actionAvailable: !!page.store && !page.store.hasActiveMutation
-                && !!app.statusKnown && (!!app.installed || app.available !== false)
+                && !!app.statusKnown && (!!app.installed || (app.available !== false && (app.catalogApproved !== false || !!page.store.testMode)))
             onActivated: {
                 if (app.installed) page.store.open(app.id);
                 else page.requestPlan(app, false);
@@ -703,6 +703,7 @@ GridLayout {
                                 Layout.preferredWidth: 60
                                 Layout.preferredHeight: 60
                                 Image {
+                                    id: catalogAppIcon
                                     anchors.centerIn: parent
                                     width: parent.width / (1 - 2 * appCard.iconInset)
                                     height: width
@@ -712,7 +713,7 @@ GridLayout {
                                     smooth: true
                                 }
                                 Rectangle {
-                                    visible: !appCard.iconSource.toString().length
+                                    visible: catalogAppIcon.status !== Image.Ready
                                     anchors.fill: parent
                                     radius: 14
                                     color: appCard.iconColor
@@ -801,7 +802,7 @@ GridLayout {
                             objectName: appCard.app.id + "Status"
                             Layout.fillWidth: true
                             Layout.topMargin: 5
-                            text: (appCard.app.catalogActive === false ? I18n.tr("This app is unavailable from its source. Installed copies are kept.") : appCard.app.format && appCard.app.format !== "flatpak" ? I18n.tr("This package format is not supported yet") : "") || page.appEnvironmentError(appCard.app) || (appCard.app.busy ? page.appStage(appCard.app.stage) : !appCard.app.statusKnown ? I18n.tr("Checking installation status…") : appCard.app.backend === "flatpak-unavailable" ? (appCard.app.flatpak && appCard.app.flatpak.error ? appCard.app.flatpak.error : I18n.tr("The application is unavailable in the current trusted catalog. Refresh app sources.")) : appCard.app.backend === "flatpak-ready" ? I18n.tr("Install a Flatpak bundle from the catalogued GitHub Release.") : appCard.app.backend === "flatpak" ? I18n.tr("Managed by Flatpak. Settings checks GitHub for bundle updates; external Flatpak tools can remove the same installation.") : appCard.app.installed && !appCard.app.managed ? I18n.tr("Installed outside Settings. Open is available; updates and removal stay with its installer.") : appCard.app.available === false ? I18n.tr("No stable release is available yet") : I18n.tr("Builds from source; development dependencies are required"))
+                            text: (!page.store.testMode && appCard.app.catalogApproved === false ? I18n.tr("No version has been approved in this catalog.") : appCard.app.catalogActive === false ? I18n.tr("This app is unavailable from its source. Installed copies are kept.") : appCard.app.format && appCard.app.format !== "flatpak" ? I18n.tr("This package format is not supported yet") : "") || page.appEnvironmentError(appCard.app) || (appCard.app.busy ? page.appStage(appCard.app.stage) : !appCard.app.statusKnown ? I18n.tr("Checking installation status…") : appCard.app.backend === "flatpak-unavailable" ? (appCard.app.flatpak && appCard.app.flatpak.error ? appCard.app.flatpak.error : I18n.tr("The application is unavailable in the current trusted catalog. Refresh app sources.")) : appCard.app.backend === "flatpak-ready" ? I18n.tr("Install a Flatpak bundle from the catalogued GitHub Release.") : appCard.app.backend === "flatpak" ? I18n.tr("Managed by Flatpak. Settings compares installed versions with the signed catalog; external Flatpak tools can remove the same installation.") : appCard.app.installed && !appCard.app.managed ? I18n.tr("Installed outside Settings. Open is available; updates and removal stay with its installer.") : appCard.app.available === false ? I18n.tr("No stable release is available yet") : I18n.tr("Builds from source; development dependencies are required"))
                             color: page.colors.secondaryText
                             font.pixelSize: 12
                             lineHeight: 1.15
@@ -812,8 +813,8 @@ GridLayout {
                             objectName: appCard.app.id + "Version"
                             Layout.fillWidth: true
                             Layout.topMargin: 6
-                            visible: !!appCard.app.version || !!appCard.app.latestVersion
-                            text: I18n.tr("Installed: %1 · Latest: %2").arg(appCard.app.version || I18n.tr("Not installed")).arg(appCard.app.latestVersion || I18n.tr("Not checked"))
+                            visible: !!appCard.app.version || !!appCard.app.latestVersion || !!appCard.app.catalogVersion
+                            text: I18n.tr("Installed: %1 · Latest: %2").arg(appCard.app.version || I18n.tr("Not installed")).arg(appCard.app.latestVersion || appCard.app.catalogVersion || I18n.tr("Not checked"))
                             color: page.colors.secondaryText
                             font.pixelSize: 11
                             wrapMode: Text.Wrap
@@ -882,7 +883,7 @@ GridLayout {
                             visible: appCard.app.backend === "flatpak" && !!appCard.app.flatpakUpdate && !!appCard.app.flatpakUpdate.commit
                             text: appCard.app.flatpakUpdate && appCard.app.flatpakUpdate.available
                                 ? I18n.tr("An update is available. Review and confirm to install it.")
-                                : I18n.tr("The installed version matches the GitHub release.")
+                                : I18n.tr("The installed version matches the approved catalog release.")
                             color: page.colors.secondaryText
                             font.pixelSize: 11
                             wrapMode: Text.Wrap
@@ -1173,7 +1174,7 @@ GridLayout {
                     Image {
                         Layout.preferredWidth: 44
                         Layout.preferredHeight: 44
-                        source: planDialog.app.iconFile ? Qt.resolvedUrl("icons/" + planDialog.app.iconFile) : ""
+                        source: planDialog.app.iconSource || ""
                         sourceSize: Qt.size(88, 88)
                         fillMode: Image.PreserveAspectFit
                         smooth: true

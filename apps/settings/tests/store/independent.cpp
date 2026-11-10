@@ -1,3 +1,4 @@
+#include "AppCatalog.h"
 #include "AppStore.h"
 #include "IndependentApps.h"
 #include <QDir>
@@ -60,7 +61,7 @@ private slots:
     void registryAndLegacyFacade()
     {
         AppStore store(temporary.path());
-        QCOMPARE(store.apps().size(), 5);
+        QCOMPARE(store.apps().size(), AppCatalog::apps().size());
         QCOMPARE(store.apps()[0].toMap().value("id").toString(), "kmusic");
         QVERIFY(!store.anyBusy());
         store.install("unknown"); QVERIFY(!store.anyBusy());

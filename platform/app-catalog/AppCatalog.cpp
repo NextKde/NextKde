@@ -4,6 +4,7 @@
 #include <QDateTime>
 #include <QDir>
 #include <QEventLoop>
+#include <QElapsedTimer>
 #include <QFile>
 #include <QFileInfo>
 #include <QJsonArray>
@@ -22,6 +23,7 @@
 #include <QTemporaryDir>
 #include <QTimer>
 #include <QUuid>
+#include <QtEndian>
 
 static void catalogResources() { Q_INIT_RESOURCE(catalog); }
 namespace {
@@ -96,7 +98,7 @@ QVariantMap bootstrap()
 QString validate(const QVariantMap& catalog, const QString& source)
 {
     const auto sequence = catalog.value("sequence").toLongLong();
-    if (catalog.value("schemaVersion").toInt() != 1 || catalog.value("sourceId").toString() != source
+    if (!QList<int>{1, 2}.contains(catalog.value("schemaVersion").toInt()) || catalog.value("sourceId").toString() != source
         || sequence < 1 || sequence > 9007199254740991LL || catalog.value("sequence").toDouble() != double(sequence)
         || catalog.value("apps").metaType().id() != QMetaType::QVariantList
         || catalog.value("apps").toList().size() > 1000) return "Invalid catalog identity, sequence or applications";
@@ -124,6 +126,30 @@ QString validate(const QVariantMap& catalog, const QString& source)
         if (!publisher.isEmpty() && (!matches("^[0-9A-F]{40}([0-9A-F]{24})?$", publisher.value("fingerprint").toString())
             || QByteArray::fromBase64(publisher.value("publicKey").toByteArray()).isEmpty()
             || publisher.value("publicKey").toByteArray().size() > 65536)) return "Invalid optional publisher key";
+        if (catalog.value("schemaVersion").toInt() == 2 && !app.contains("release")) return "Missing catalog release selection";
+        const auto release = app.value("release").toMap();
+        if (app.contains("release") && !app.value("release").isNull() && release.isEmpty()) return "Invalid catalog release selection";
+        if (!release.isEmpty()) {
+            const auto bytes = QByteArray::fromBase64(release.value("manifest").toByteArray());
+            const auto data = QJsonDocument::fromJson(bytes).object();
+            const auto version = release.value("version").toString();
+            if (!matches("^(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)(-[0-9A-Za-z.-]+)?$", version)
+                || release.value("tag").toString() != "v" + version || version.size() > 100
+                || bytes.isEmpty() || bytes.size() > 1024 * 1024
+                || data.value("schemaVersion").toInt() != 2 || data.value("appId").toString() != id
+                || data.value("version").toString() != version || !data.value("bundles").isObject()
+                || (!publisher.isEmpty() && QByteArray::fromBase64(release.value("signature").toByteArray()).isEmpty()))
+                return "Invalid catalog release selection";
+        }
+        if (app.contains("icon")) {
+            const auto icon = app.value("icon").toMap(); const QUrl url(icon.value("url").toString());
+            if (url.scheme() != "https" || url.host() != "raw.githubusercontent.com" || !url.userInfo().isEmpty()
+                || url.port(443) != 443 || url.hasQuery() || url.hasFragment()
+                || !matches("^/[A-Za-z0-9-]+/[A-Za-z0-9_.-]+/[0-9a-f]{40}/icons/" + QRegularExpression::escape(id) + "\\.png$", url.path())
+                || !matches("^[0-9a-f]{64}$", icon.value("sha256").toString())
+                || icon.value("size").toLongLong() < 33 || icon.value("size").toLongLong() > 512 * 1024)
+                return "Invalid catalog icon";
+        }
         ids.insert(id); keys.insert(key);
     }
     return {};
@@ -294,13 +320,13 @@ bool githubUrl(const QUrl& url, const QString& repository, bool redirected)
     if (url.host() == "github.com") return !url.hasQuery() && url.path().startsWith('/' + repository + "/releases/download/");
     return redirected && (url.host() == "release-assets.githubusercontent.com" || url.host() == "objects.githubusercontent.com");
 }
-QByteArray fetch(const QUrl& initial, const QString& repository, qint64 maximum, QString* error, const Cancelled& cancelled)
+static QByteArray fetchBounded(const QUrl& initial, const QString& repository, qint64 maximum, QString* error, const Cancelled& cancelled, bool iconOnly)
 {
     QNetworkAccessManager manager;
     auto url = initial;
     for (int redirect = 0; redirect <= 5; ++redirect) {
         if (cancelled()) { *error = "Cancelled"; return {}; }
-        if (!githubUrl(url, repository, redirect > 0)) { *error = "Untrusted GitHub URL"; return {}; }
+        if (iconOnly ? (redirect != 0 || url != initial) : !githubUrl(url, repository, redirect > 0)) { *error = "Untrusted GitHub URL"; return {}; }
         QNetworkRequest request(url);
         request.setAttribute(QNetworkRequest::RedirectPolicyAttribute, QNetworkRequest::ManualRedirectPolicy);
         request.setRawHeader("User-Agent", "NextKde-AppCatalog/1");
@@ -331,6 +357,40 @@ QByteArray fetch(const QUrl& initial, const QString& repository, qint64 maximum,
     }
     *error = "Too many redirects"; return {};
 }
+QByteArray fetch(const QUrl& url, const QString& repository, qint64 maximum, QString* error, const Cancelled& cancelled)
+{ return fetchBounded(url, repository, maximum, error, cancelled, false); }
+static bool validIconBytes(const QByteArray& bytes, const QVariantMap& icon)
+{
+    if (bytes.size() != icon.value("size").toLongLong() || bytes.size() < 33 || bytes.size() > 512 * 1024
+        || bytes.left(8) != QByteArray::fromHex("89504e470d0a1a0a") || bytes.mid(12, 4) != "IHDR") return false;
+    const auto width = qFromBigEndian<quint32>(bytes.constData() + 16), height = qFromBigEndian<quint32>(bytes.constData() + 20);
+    return width > 0 && width <= 1024 && height > 0 && height <= 1024
+        && QCryptographicHash::hash(bytes, QCryptographicHash::Sha256).toHex() == icon.value("sha256").toByteArray();
+}
+QString iconFile(const QVariantMap& app)
+{
+    const auto icon = app.value("icon").toMap(); const auto digest = icon.value("sha256").toString();
+    if (!matches("^[0-9a-f]{64}$", digest)) return {};
+    const auto path = stateDirectory() + "/icons/" + digest + ".png";
+    return validIconBytes(read(path, 512 * 1024), icon) ? QUrl::fromLocalFile(path).toString() : QString();
+}
+static void cacheIcons(const QVariantMap& catalog, const QString& repository, const Cancelled& cancelled)
+{
+    QElapsedTimer budget; budget.start();
+    const auto stop = [&] { return cancelled() || budget.elapsed() >= 15000; };
+    for (const auto& item : catalog.value("apps").toList()) {
+        if (stop()) return;
+        const auto app = item.toMap(); const auto icon = app.value("icon").toMap();
+        if (icon.isEmpty() || !iconFile(app).isEmpty()) continue;
+        const QUrl url(icon.value("url").toString());
+        // Only immutable artwork in this catalog's own repository is authorized.
+        if (!url.path().startsWith('/' + repository + '/')) continue;
+        QString error;
+        const auto bytes = fetchBounded(url, repository, 512 * 1024, &error, stop, true);
+        if (error.isEmpty() && validIconBytes(bytes, icon)) save(stateDirectory() + "/icons/" + icon.value("sha256").toString() + ".png", bytes);
+    }
+}
+
 bool verify(const QByteArray& bytes, const QByteArray& signature, const QByteArray& keys, const QString& fingerprint)
 {
     if (bytes.isEmpty() || bytes.size() > limit || signature.isEmpty() || signature.size() > 65536
@@ -512,6 +572,7 @@ QString refresh(const Cancelled& cancelled)
         if (error.isEmpty() && QFileInfo::exists(cachePath(id)) && previous.isEmpty()) error = "Previous catalog cannot be verified; refusing to reset rollback history";
         if (error.isEmpty()) error = validateUpdate(catalog, previous, id);
         if (error.isEmpty() && !save(cachePath(id), QJsonDocument::fromVariant(QVariantMap{{"catalog", bytes.toBase64()}, {"signature", signature.toBase64()}, {"releaseTag", source.value("releaseTag").toString()}}).toJson())) error = "Cannot save catalog";
+        if (error.isEmpty()) cacheIcons(catalog, repository, cancelled);
         writeState("source-" + id, {{"error", error}, {"lastChecked", QDateTime::currentDateTimeUtc().toString(Qt::ISODate)}});
         if (!error.isEmpty()) errors.append(id + ": " + error);
     }

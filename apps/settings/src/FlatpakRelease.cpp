@@ -306,11 +306,17 @@ bool configured(const QString& appId)
 }
 QVariantMap checkedDiscovery(const QString& appId, const QVariantMap& discovery, const Cancelled& cancelled)
 {
+    checkCancelled(cancelled);
     const auto entry = AppCatalog::find(appId);
     if (!configured(appId) || AppCatalog::entryDigest(entry) != discovery.value("catalogEntryDigest").toString())
         fail("CATALOG_CHANGED", "The application source or catalog authorization changed. Prepare a new plan.");
     const auto manifest = QByteArray::fromBase64(discovery.value("manifest").toByteArray());
     const auto signature = QByteArray::fromBase64(discovery.value("signature").toByteArray());
+    const auto pinned = entry.value("release").toMap();
+    const bool preview = AppCatalog::testMode();
+    if (!preview && (pinned.isEmpty() || manifest != QByteArray::fromBase64(pinned.value("manifest").toByteArray())
+        || signature != QByteArray::fromBase64(pinned.value("signature").toByteArray())))
+        fail("CATALOG_CHANGED", "Release data does not match the approved catalog version.");
     if (!publicKeys(appId).isEmpty() && !verify(appId, manifest, signature, cancelled))
         fail("FLATPAK_UNTRUSTED", "The configured developer signature is invalid.");
     if (QString::fromLatin1(QCryptographicHash::hash(manifest, QCryptographicHash::Sha256).toHex())
@@ -346,6 +352,27 @@ QVariantMap discover(const QString& appId, const QString& arch, const Cancelled&
     try {
         const auto app = IndependentAppRegistry::find(appId);
         if (!app || !configured(appId)) fail("BUNDLE_KEY_MISSING", "The application is unavailable in the current trusted catalog.");
+        const auto pinned = app->entry.value("release").toMap();
+        const bool preview = AppCatalog::testMode();
+        if (!preview) {
+            checkCancelled(cancelled);
+            if (pinned.isEmpty()) fail("RELEASE_UNAVAILABLE", "No version has been approved in this catalog.");
+            const auto manifest = QByteArray::fromBase64(pinned.value("manifest").toByteArray());
+            const auto signature = QByteArray::fromBase64(pinned.value("signature").toByteArray());
+            auto result = parseManifest(appId, arch, manifest);
+            const auto version = result.value("version").toString();
+            if (pinned.value("version").toString() != version || pinned.value("tag").toString() != "v" + version
+                || (!AppCatalog::testMode() && version.contains('-')))
+                fail("INVALID_RELEASE", "Catalog version does not match its release manifest.");
+            if (!publicKeys(appId).isEmpty() && !verify(appId, manifest, signature, cancelled))
+                fail("FLATPAK_UNTRUSTED", "The configured developer signature is invalid.");
+            result["url"] = "https://github.com/" + app->repository + "/releases/download/" + pinned.value("tag").toString() + '/' + result.value("asset").toString();
+            result["manifest"] = manifest.toBase64(); result["signature"] = signature.toBase64();
+            result["manifestSha256"] = QString::fromLatin1(QCryptographicHash::hash(manifest, QCryptographicHash::Sha256).toHex());
+            result["catalogEntryDigest"] = AppCatalog::entryDigest(app->entry);
+            result["sourceId"] = app->entry.value("sourceId"); result["developerVerified"] = !publicKeys(appId).isEmpty();
+            return result;
+        }
         Download client(app->repository, cancelled, progress, 90000);
         const auto selectedTag = AppCatalog::testMode() ? app->entry.value("releaseTag").toString() : QString();
         const auto endpoint = selectedTag.isEmpty() ? "/releases/latest" : "/releases/tags/" + selectedTag;

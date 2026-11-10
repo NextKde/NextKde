@@ -6,7 +6,7 @@ Settings → **Applications and services** reads application identities from [Ne
 
 ## Contributing and packaging
 
-Application authors publish a bundle and schema-2 manifest with SHA-256 in their own GitHub Release, then submit `apps/<appId>.json` to appCatalog. Maintainers review and publish the signed catalog. Normal new application versions only need a new application Release. Removing an entry or marking it withdrawn/revoked stops installs and updates while retaining management of existing installations.
+Application authors publish a bundle and schema-2 manifest with SHA-256 in their own GitHub Release, then submit `apps/<appId>.json` to appCatalog. Maintainers review and publish the signed catalog. Every new version needs a catalog PR selecting its exact Release, original manifest bytes and optional developer signature. Publishing upstream alone does not change the approved version. Removing an entry or marking it withdrawn/revoked stops installs and updates while retaining management of existing installations.
 
 Read the [submission guide](https://github.com/NextKde/appCatalog#submit-an-application), [release contract](https://github.com/NextKde/appCatalog/blob/main/RELEASE-CONTRACT.md), [Qt runtime guide](https://github.com/NextKde/appCatalog/blob/main/docs/QtRuntime.md) and [localization rules](https://github.com/NextKde/appCatalog/blob/main/docs/Localization.md). Qt applications normally use matching `org.kde.Platform` / `org.kde.Sdk`; current kos-apps manifests use branch 6.11. The app remains on GitHub even when its approved shared runtime comes from Flathub. Host Qt is not a Flatpak runtime.
 
@@ -16,7 +16,7 @@ Read the [submission guide](https://github.com/NextKde/appCatalog#submit-an-appl
 | --- | --- |
 | `platform/app-catalog` | Sources, signature verification, atomic cache, sequence/expiry checks and installation receipts; no installer commands |
 | `IndependentAppRegistry` / `IndependentApps` | Adapt supported entries into Settings inventory and lifecycle actions |
-| `FlatpakRelease` | Discover a stable GitHub Release and validate its manifest against the current catalog entry |
+| `FlatpakRelease` | Read the approved embedded release manifest without network discovery; use GitHub discovery only in test mode |
 | `FlatpakApps` | Verify SHA-256, metadata, commit, architecture, runtime plan and installation ownership; perform the transaction |
 | `kos-app-update-agent` | Check metadata in the user session, persist results and notify about updates |
 | `ServicesSettingsPage` | Catalog sources, update controls, translated names/descriptions and installed-app actions |
@@ -27,7 +27,7 @@ The bundled bootstrap is trusted through the core distribution until a verified 
 
 ## Trust boundaries
 
-Catalog signatures are mandatory and checked against a pinned full OpenPGP primary fingerprint. Packages always require SHA-256. Developer signatures are optional: if `publisher` is configured, both manifest and Flatpak commit signatures are required with no downgrade. Without it, authenticity depends on the approved GitHub repository and HTTPS. A repository attacker replacing both package and hash is outside SHA-256-only protection. These checks do not prove application safety.
+Catalog signatures are mandatory and checked against a pinned full OpenPGP primary fingerprint. Packages always require SHA-256. Developer signatures are optional: if `publisher` is configured, both manifest and Flatpak commit signatures are required with no downgrade. The catalog signature covers the embedded manifest and its package SHA-256 even without developer signing. An attacker replacing upstream package and manifest cannot replace the already approved directory hash; the catalog maintainer and signing key remain trusted. These checks do not prove application safety.
 
 Deployment binds to the catalog entry digest and actual installation snapshot, rechecked at confirmation/deployment. Receipts record repository, source, architecture, commit, origin, package hash and entry. An unsigned existing installation must match a client receipt to be eligible for managed updates; unknown installations are not adopted. Mutations use a cross-process lock. Runtime sources remain governed by a separate pinned policy; app catalogs do not authorize arbitrary runtime repositories.
 
@@ -43,7 +43,7 @@ Configuration: `XDG_CONFIG_HOME/kos-settings/app-sources.json`. Snapshots, recei
 
 ## Update checks and languages
 
-The single-instance agent starts with the user session and is also started by Settings. Automatic checks begin after roughly 2–4 minutes, normally recur every 6 hours with jitter and retry failures after about an hour. Only active, installed, manageable apps are checked. Users can disable automatic checks or notifications and request an immediate check. Checks fetch metadata; updates are not installed automatically.
+The single-instance agent starts with the user session and is also started by Settings. Automatic checks begin after roughly 2–4 minutes, normally recur every 6 hours with jitter and retry failures after about an hour. Each source is refreshed once, then active, installed, manageable apps are compared locally against their directory-approved versions. No normal per-application GitHub requests are made; package assets are downloaded only on confirmed installation. Users can disable automatic checks or notifications and request an immediate check. Checks fetch metadata; updates are not installed automatically.
 
 Settings only reuses a result matching the current installation and catalog entry. Notifications are deduplicated by app ID, version and commit after delivery acknowledgement. Clicking opens Applications and services. Offline/rate-limit failures are recorded without repeated error notifications. Metered-network detection and shared GitHub ETag caching are not implemented.
 
@@ -57,4 +57,12 @@ Build and test only in a development VM or CI. Cover wrong/missing signatures, r
 
 ## Developer testing
 
-[Developer test mode](DeveloperTesting.md) provides separate source/cache configuration and explicit published GitHub Release selection, including prereleases. App IDs, installations and data remain shared; exit never restores or uninstalls applications. Normal mode continues to use latest stable Releases.
+[Developer test mode](DeveloperTesting.md) provides separate source/cache configuration and explicit published GitHub Release selection, including prereleases. App IDs, installations and data remain shared; exit never restores or uninstalls applications. Normal mode uses only directory-approved Releases.
+
+## Approved versions and repository artwork
+
+Schema 2 adds `release` (`version`, `tag`, original manifest and optional developer signature encoded in Base64) and optional `icon` (`url`, `sha256`, `size`). `release: null` explicitly means no approved compatible package. Per-architecture package names, hashes, sizes, commits, metadata and dependencies come from the embedded manifest. An expired/unverified directory cannot authorize installation, and confirmation rechecks the exact embedded bytes against the current entry.
+
+Artwork is submitted as `icons/<appId>.png` in the catalog repository, with licenses/attribution. Publishing pins a full Git commit in its raw GitHub URL. Only this source repository's PNGs are fetched, with 512 KiB/1024-pixel limits, SHA-256 checks, no redirects and a bounded refresh budget. Verified images are cached under `app-catalog/icons/`; invalid/missing images use the placeholder. Normal Settings cards use catalog artwork for official and third-party apps alike.
+
+See [approved-version submission details](https://github.com/NextKde/appCatalog/blob/main/docs/PinnedReleases.md). New clients retain schema 1 rollback history, but unpinned entries cannot authorize normal installs. Old clients reject schema 2 and keep their previous verified snapshot until expiry; update Settings when migrating sources. The bootstrap uses the same approved data and is a distribution seed, not a separate app list.

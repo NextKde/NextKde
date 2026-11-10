@@ -9,6 +9,7 @@
 #include <QProcess>
 #include <QTemporaryDir>
 #include <QLockFile>
+#include <QCryptographicHash>
 
 class CatalogTest : public QObject {
     Q_OBJECT
@@ -64,6 +65,27 @@ private slots:
         QVERIFY(!publicKey.isEmpty());
         QVERIFY(write(root.filePath("public.gpg"), publicKey));
         QCOMPARE(AppCatalog::addSource("fixture", "Example/catalog", fingerprint, root.filePath("public.gpg")), QString());
+    }
+    void pinnedIconValidationAndCache()
+    {
+        const auto png = QByteArray::fromBase64("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/a9sAAAAASUVORK5CYII=");
+        const auto digest = QString::fromLatin1(QCryptographicHash::hash(png, QCryptographicHash::Sha256).toHex());
+        QVariantMap icon{{"url", "https://raw.githubusercontent.com/Example/catalog/" + QString(40, 'a') + "/icons/org.example.Notes.png"},
+            {"sha256", digest}, {"size", png.size()}};
+        auto data = catalog(); auto entry = data.value("apps").toList().first().toMap(); entry["icon"] = icon;
+        data["apps"] = QVariantList{entry};
+        QCOMPARE(AppCatalog::validateUpdate(data, {}, "fixture"), QString());
+        QVERIFY(AppCatalog::iconFile(entry).isEmpty());
+        const auto path = AppCatalog::stateDirectory() + "/icons/" + digest + ".png";
+        QVERIFY(write(path, png)); QVERIFY(!AppCatalog::iconFile(entry).isEmpty());
+        QVERIFY(write(path, png + "changed")); QVERIFY(AppCatalog::iconFile(entry).isEmpty());
+        icon["url"] = "https://raw.githubusercontent.com/Example/catalog/main/icons/org.example.Notes.png";
+        entry["icon"] = icon; data["apps"] = QVariantList{entry};
+        QVERIFY(!AppCatalog::validateUpdate(data, {}, "fixture").isEmpty());
+        entry.remove("icon"); data["apps"] = QVariantList{entry}; data["schemaVersion"] = 2;
+        QVERIFY(!AppCatalog::validateUpdate(data, {}, "fixture").isEmpty());
+        entry["release"] = QVariant(); data["apps"] = QVariantList{entry};
+        QCOMPARE(AppCatalog::validateUpdate(data, {}, "fixture"), QString());
     }
     void githubBoundaries()
     {

@@ -38,5 +38,6 @@ QVariantMap receipt(const QString& appId);
 bool recordInstallation(const QString& appId, const QVariantMap& installation);
 bool forgetInstallation(const QString& appId);
 QString stateDirectory();
+QString iconFile(const QVariantMap& app);
 QString entryDigest(const QVariantMap& app);
 }
