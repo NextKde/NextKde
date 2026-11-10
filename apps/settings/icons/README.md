@@ -1,26 +1,28 @@
-# Icon sources
+# Settings artwork
 
-The application list uses the applications' own artwork, copied without edits:
+Application artwork shares the original NextKde icon family documented in
+[`NextKde/appCatalog/icons`](https://github.com/NextKde/appCatalog/tree/main/icons).
+Calendar, Calculator and Weather SVGs match their canonical `NextKde/kos-apps`
+sources. KMusic matches `NextKde/NkMusic/data/kmusic.svg`; ListenFree's PNG is
+exported from `NextKde/ListenFree/music_player_desktop/assets/icons/app.svg`.
+The signed catalog supplies the other application icons. Existing upstream
+licenses and license copies remain applicable.
 
-- `calendar.svg`, `calculator.svg`, `weather.svg`: `NextKde/kos-apps`, revision
-  `98aadc63ea1079eeade823b9ac35c974509a907f`,
-  `apps/org.nextks.<app>/data/kos-<app>.svg`.
-- `listenfree.png`: `NextKde/ListenFree`, revision
-  `69cb4cb77f28c03348efa5da2bf38ea2228e6fc6`,
-  `music_player_desktop/assets/icons/app.png`. The upstream `app.svg` wraps
-  this PNG; using the PNG directly avoids a relative image dependency.
+`navigation/*.svg` and `spatial-wallpaper.svg` are original NextKde artwork with
+the same continuous rounded tile, soft colors, ivory symbols and restrained
+depth. See `navigation/sources.json` for the category mapping. SVG shapes avoid
+clipping paths so Qt SVG preserves the transparent corners. Material navigation
+retains monochrome semantic glyphs. All PNG/ICO exports and rendering checks
+were performed in the dedicated VM; no application was run on the host.
 
-These assets remain upstream artwork under their respective project licenses.
-The existing `kmusic.svg` and `spatial-wallpaper.svg` are retained.
+`kde-symbolic.svg` and `kde-symbolic-dark.svg` retain the KDE mark from Breeze
+Icons 6.31.0, under its LGPL-3.0-or-later / LGPL-2.1-only terms. These identify the
+toolbar action opening KDE System Settings and retain the upstream geometry.
+Wallpaper action glyphs retain their existing semantic shapes.
 
-`kde-symbolic.svg` and `kde-symbolic-dark.svg` are copies of the
-KDE mark from the installed Breeze Icons 6.31.0 package:
-
-- `/usr/share/icons/breeze/apps/22/kde-symbolic.svg`
-- `/usr/share/icons/breeze-dark/apps/22/kde-symbolic.svg`
-
-The light asset only normalizes trailing whitespace; icon geometry is unchanged.
-
-The package identifies its upstream as KDE Frameworks and declares
-LGPL-3.0-or-later / LGPL-2.1-only licenses. These assets remain upstream artwork.
-The KDE mark identifies the toolbar action that opens KDE System Settings.
+The bundled bootstrap is a sequence-4 core-distribution seed, generated in the VM
+from appCatalog commit `d574270b6f6fb5d0f4c0204e3017029b24cae519`. Its icon
+URLs and SHA-256 values identify the uploaded artwork. It is not a remotely
+published signed catalog. Existing clients with a verified catalog cache receive
+new artwork after the maintainer publishes the next signed catalog; existing
+application bundles receive their desktop icons in a subsequent app release.

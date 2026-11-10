@@ -1,7 +1,7 @@
 import QtQuick
 
-// Sidebar assets retain Apple's original tile, shading and symbol proportions.
-// Content-page SettingIcon instances and Material navigation are independent.
+// Original NextKde artwork shares the application icons' soft tile and shading.
+// Material navigation keeps its monochrome semantic glyphs.
 Item {
     id: root
     required property var colors
@@ -18,7 +18,7 @@ Item {
     Image {
         id: nativeIcon
         anchors.fill: parent
-        source: root.materialForm ? "" : Qt.resolvedUrl("../icons/navigation/" + root.iconName + ".png")
+        source: root.materialForm ? "" : Qt.resolvedUrl("../icons/navigation/" + root.iconName + ".svg")
         fillMode: Image.PreserveAspectFit
         smooth: true
         mipmap: true
