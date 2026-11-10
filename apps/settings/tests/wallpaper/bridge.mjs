@@ -16,7 +16,13 @@ Item {
         const solid = settingsBridge.wallpaperColorImage("#A8C8F0", "#A8C8F0", 0)
         const gradient = settingsBridge.wallpaperColorImage("#A8C8F0", "#EFC5DE", 45)
         const cached = settingsBridge.wallpaperColorImage("#A8C8F0", "#EFC5DE", 405)
-        console.log("COLORS " + JSON.stringify({invalid, solid, gradient, cached}))
+        const colors = ["#5577EE", "#BF75DD", "#55DBCF"]
+        const rich = settingsBridge.wallpaperColorImage("#A8C8F0", "#EFC5DE", 45, colors)
+        const richCached = settingsBridge.wallpaperColorImage("#A8C8F0", "#EFC5DE", 405, colors)
+        const changed = settingsBridge.wallpaperColorImage("#A8C8F0", "#EFC5DE", 45, [colors[0], "#DDAA77", colors[2]])
+        const malformed = settingsBridge.wallpaperColorImage("#A8C8F0", "#EFC5DE", 45, ["bad"])
+        const equalEnds = settingsBridge.wallpaperColorImage("#A8C8F0", "#A8C8F0", 90, colors)
+        console.log("COLORS " + JSON.stringify({invalid, solid, gradient, cached, rich, richCached, changed, malformed, equalEnds}))
     }
 }`);
     const result = spawnSync(binary, ['--smoke-test'], {encoding:'utf8', timeout:15000,
@@ -29,7 +35,12 @@ Item {
     const data = JSON.parse(match[1]);
     assert.equal(data.invalid, '');
     assert.equal(data.gradient, data.cached, 'normalize angles before cache lookup');
-    for (const [path, width, height] of [[data.solid,16,16],[data.gradient,1920,1080]]) {
+    assert.match(data.gradient, /gradient-v3-/, 'new rendering must not reuse legacy gradient PNGs');
+    assert.equal(data.rich, data.richCached);
+    assert.notEqual(data.rich, data.changed, 'all colors must participate in the cache key');
+    assert.notEqual(data.rich, data.gradient);
+    assert.equal(data.malformed, '');
+    for (const [path, width, height] of [[data.solid,16,16],[data.gradient,1920,1080],[data.rich,1920,1080],[data.equalEnds,1920,1080]]) {
         assert.ok(existsSync(path));
         const bytes = readFileSync(path);
         assert.equal(bytes.toString('hex',0,8), '89504e470d0a1a0a');
