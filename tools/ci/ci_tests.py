@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Check required CTest registrations and account for every selected CI test."""
 import argparse
+import html
 import json
 import os
 from pathlib import Path
@@ -15,6 +16,86 @@ GROUPS = {
     "installed": {"installed"},
 }
 ROOT = Path(__file__).resolve().parents[2]
+
+# Workflow order, not JSON key order. A downstream summary failure is a report
+# of these outcomes, not another independent test failure.
+STAGES = [
+    ("bootstrap", "Dependency installation"),
+    ("checkout", "Source checkout"),
+    ("dependencies", "Dependency installation"),
+    ("compositor", "Compositor setup"),
+    ("cache", "Build cache setup"),
+    ("prepare", "Build/configuration"),
+    ("inventory", "Test registration"),
+    ("data_platform", "Data/platform tests"),
+    ("logic", "Logic/translation tests"),
+    ("tray_menu", "Tray menu integration"),
+    ("tray_color", "Tray rendering"),
+    ("status_panels", "Status panel rendering"),
+    ("headless", "Offscreen UI tests"),
+    ("widgets", "Widget rendering"),
+    ("installed", "Installed Shell tests"),
+]
+STAGE_REPORTS = {
+    "data_platform": "data-platform", "logic": "logic", "headless": "headless",
+    "widgets": "widgets", "installed": "installed", "tray_color": "tray-color",
+    "status_panels": "status-panels",
+}
+
+
+def first_test_failure(path):
+    """Use actual JUnit results, not incidental warnings in successful tests."""
+    if not path.exists():
+        return None
+    try:
+        cases = ET.parse(path).iter("testcase")
+        for case in cases:
+            failure = case.find("failure")
+            if failure is None:
+                failure = case.find("error")
+            if failure is None:
+                continue
+            reason = " ".join(filter(None, [failure.get("message"), failure.get("type"), failure.text]))
+            detail = "\n".join(filter(None, [reason, case.findtext("system-out")]))
+            category = "Timeout" if "timeout" in reason.lower() or "timed out" in reason.lower() else "Test failure"
+            # Keep the summary short; full output remains in the uploaded XML/log.
+            useful = [line.strip() for line in detail.splitlines()
+                      if any(marker in line for marker in
+                             ("FAIL!", "AssertionError", "Actual", "Expected", "Loc:", "Timeout", "timed out"))]
+            excerpt = "\n".join(useful[:8]) if useful else detail[:800]
+            return case.get("name", "Unnamed test"), category, excerpt[:1200]
+    except ET.ParseError:
+        return None  # The coverage report below still fails malformed XML.
+    return None
+
+
+def stage_summary(steps, directory):
+    failed = [(key, title, steps.get(key, {}).get("outcome")) for key, title in STAGES
+              if steps.get(key, {}).get("outcome") in {"failure", "cancelled"}]
+    if not failed:
+        return "", []
+    key, title, outcome = failed[0]
+    lines = ["## First unsuccessful stage", "",
+             f"**{title}** (`{key}`): **{outcome}**.", ""]
+    if outcome == "cancelled":
+        lines.append("The stage was cancelled; this is not evidence of a test assertion failure.")
+    else:
+        report = STAGE_REPORTS.get(key)
+        detail = first_test_failure(directory / f"{report}.xml") if report else None
+        if detail:
+            name, category, excerpt = detail
+            lines += [f"{category}: **{html.escape(name)}**.", "",
+                      "<pre>" + html.escape(excerpt) + "</pre>"]
+        elif key in {"bootstrap", "checkout", "dependencies", "compositor", "cache", "prepare", "inventory"}:
+            lines.append("The prerequisite stage failed. Missing downstream results do not mean those tests ran and failed.")
+        else:
+            lines.append("See this stage's log for the first error; no failed JUnit case was available.")
+    if len(failed) > 1:
+        lines += ["", "Other unsuccessful stages: " + ", ".join(
+            f"{title} (`{key}`, {outcome})" for key, title, outcome in failed[1:]) + "."]
+    lines += ["", "The summary reports the same failures; it is not an additional root cause. "
+              "See the failed step's full log and the available reports in the test-results artifact.", ""]
+    return "\n".join(lines) + "\n", [f"{title}: {outcome}" for _, title, outcome in failed]
 
 
 def inventory(tests, required):
@@ -124,6 +205,16 @@ def main():
     else:
         summary = "## Test results\n\nNo inventory: preparation or test discovery failed; coverage is unverified.\n"
         errors = ["Missing inventory"]
+    try:
+        steps = json.loads(os.environ.get("CI_STEP_OUTCOMES", "{}"))
+        if not isinstance(steps, dict) or any(not isinstance(value, dict) for value in steps.values()):
+            raise ValueError("expected a step-object mapping")
+        first, stage_errors = stage_summary(steps, directory)
+        summary = first + summary
+        errors.extend(stage_errors)
+    except (ValueError, TypeError) as error:
+        summary = "## Invalid workflow outcomes\n\n" + html.escape(str(error)) + "\n\n" + summary
+        errors.append("Invalid workflow outcomes")
     (directory / "summary.md").write_text(summary)
     print(summary)
     if os.environ.get("GITHUB_STEP_SUMMARY"):

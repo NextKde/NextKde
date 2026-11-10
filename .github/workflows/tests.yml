@@ -18,6 +18,61 @@ concurrency:
 permissions:
   contents: read
 
+env:
+  # Bootstrap also runs before checkout (the image has no git). Keep one
+  # implementation here; tools/tests/test_ci_reliability.py exercises this block.
+  KOS_CI_PACMAN: |
+    set -uo pipefail
+    export LC_ALL=C
+    log_dir=$(mktemp -d "${RUNNER_TEMP:-/tmp}/kos-pacman.XXXXXX") || exit 1
+    mirrorlist=${KOS_CI_MIRRORLIST:-/etc/pacman.d/mirrorlist}
+    for attempt in 1 2 3; do
+      log="$log_dir/attempt-$attempt.log"
+      echo "::group::Package installation (attempt $attempt/3)"
+      pacman "$@" 2>&1 | tee "$log"
+      pipeline_status=("${PIPESTATUS[@]}")
+      status=${pipeline_status[0]}
+      echo "::endgroup::"
+      if [ "${pipeline_status[1]}" -ne 0 ]; then
+        echo '::error::Cannot retain package installation logs.'
+        exit 1
+      fi
+      if [ "$status" -eq 0 ]; then
+        exit 0
+      fi
+      category='Dependency installation'
+      # Never retry semantic, integrity or local filesystem errors, even if
+      # the same transaction also mentions a failed download.
+      if [ "$status" -ge 128 ] || grep -Eiq 'could not satisfy dependencies|breaks dependency|conflicting dependencies|conflicting files|invalid or corrupted|signature.*(invalid|unknown|trust)|unknown trust|target not found|invalid option|failed to init transaction|no space left|permission denied|read-only file system|failed writing' "$log"; then
+        retry=false
+      elif grep -Eiq 'failed retrieving file|failed to retrieve some files|could not resolve|failed to connect|connection (timed out|reset)|operation (timed out|too slow)|SSL connection timeout|TLS.*(timeout|connection)|HTTP.*(429|50[234])' "$log"; then
+        category='Dependency download'
+        retry=true
+      else
+        retry=false
+      fi
+      if [ "$retry" = false ] || [ "$attempt" -eq 3 ]; then
+        echo "::error title=$category failed::pacman exited $status after $attempt attempt(s); see package installation logs."
+        if [ -n "${GITHUB_STEP_SUMMARY:-}" ]; then
+          printf '### %s failed\n\npacman exited **%s** after **%s/3** attempt(s). No build or test retry was performed. See the package-installation step for full logs.\n\n' \
+            "$category" "$status" "$attempt" >> "$GITHUB_STEP_SUMMARY"
+        fi
+        exit "$status"
+      fi
+      # Preserve dated SDK repositories. Only a rolling mirror list may gain
+      # fallback servers. Retain the original transaction flags on every attempt.
+      if [ "$attempt" -eq 1 ] && ! grep -q 'archive.archlinux.org/repos/' "$mirrorlist"; then
+        cp "$mirrorlist" "$log_dir/mirrorlist" || exit 1
+        {
+          printf '%s\n' 'Server = https://geo.mirror.pkgbuild.com/$repo/os/$arch'
+          printf '%s\n' 'Server = https://fastly.mirror.pkgbuild.com/$repo/os/$arch'
+          cat "$log_dir/mirrorlist"
+        } > "$mirrorlist" || exit 1
+      fi
+      echo "::warning title=Retrying dependency download::Attempt $attempt failed; retrying the same package transaction."
+      sleep "$((attempt * 5))" || exit "$?"
+    done
+
 jobs:
   dock-native-target:
     name: Dock native minimize targets
@@ -28,7 +83,7 @@ jobs:
       - name: Install fixture dependencies
         # Upgrade the image together with its repositories; a partial upgrade
         # can mix new OpenSSL with image packages linked to the previous ABI.
-        run: pacman -Syu --noconfirm --needed git nodejs qt6-base qt6-declarative cmake ninja kconfig kcmutils plasma-workspace kio kservice dbus gtk3 wayland pkgconf flatpak ostree xorg-server-xvfb xorg-xauth
+        run: bash -c "$KOS_CI_PACMAN" -- -Syu --noconfirm --needed git nodejs qt6-base qt6-declarative cmake ninja kconfig kcmutils plasma-workspace kio kservice dbus gtk3 wayland pkgconf flatpak ostree xorg-server-xvfb xorg-xauth
       - uses: actions/checkout@v7
       - name: Run native target identity and publication regressions
         env:
@@ -84,18 +139,12 @@ jobs:
         run: |
           printf 'Server = https://archive.archlinux.org/repos/%s/$repo/os/$arch\n' \
             "$ARCH_SNAPSHOT" > /etc/pacman.d/mirrorlist
-          for attempt in 1 2 3; do
-            if pacman -Syyuu --noconfirm --disable-download-timeout \
-                --ignore archlinux-keyring git; then
-              break
-            fi
-            test "$attempt" -lt 3 || exit 1
-            sleep 5
-          done
+          bash -c "$KOS_CI_PACMAN" -- -Syyuu --noconfirm \
+            --ignore archlinux-keyring git
       - uses: actions/checkout@v7
       - name: Install KDE font runtime and build dependencies
         run: |
-          pacman -S --noconfirm --needed --disable-download-timeout \
+          bash -c "$KOS_CI_PACMAN" -- -S --noconfirm --needed \
             cmake ninja gcc qt6-base qt6-declarative kconfig kcmutils \
             plasma-workspace kio kservice dbus gtk3 wayland pkgconf \
             flatpak ostree xorg-server-xvfb xorg-xauth
@@ -168,7 +217,7 @@ jobs:
     container: archlinux:base-devel
     steps:
       - name: Install Qt lint tools
-        run: pacman -Syu --noconfirm --needed git nodejs qt6-declarative
+        run: bash -c "$KOS_CI_PACMAN" -- -Syu --noconfirm --needed git nodejs qt6-declarative
       - uses: actions/checkout@v7
         with:
           fetch-depth: 0
@@ -205,6 +254,7 @@ jobs:
         run: python3 -m unittest discover -s tools/tests -p 'test_kmusic_catalog.py'
       - name: Check project contracts and documentation
         run: |
+          python3 tools/tests/test_ci_reliability.py
           python3 platform/tests/test_contract.py
           python3 tools/ci/check-docs.py
 
@@ -226,9 +276,11 @@ jobs:
     steps:
       # The container has no git; actions/checkout needs it before anything else.
       - name: Install git
-        run: pacman -Syu --noconfirm --needed git
+        id: bootstrap
+        run: bash -c "$KOS_CI_PACMAN" -- -Syu --noconfirm --needed git
 
       - uses: actions/checkout@v7
+        id: checkout
 
       # node and python drive the platform layer without a display. Building
       # the platform also builds its AI worker, which requires OpenCV and the
@@ -236,8 +288,9 @@ jobs:
       # KOS_BUILD_PLATFORM=ON, even when KWin plugins are disabled; it needs
       # ECM, the Wayland scanner/client library, and Qt WaylandClient.
       - name: Install build dependencies
+        id: dependencies
         run: |
-          pacman -S --noconfirm --needed \
+          bash -c "$KOS_CI_PACMAN" -- -S --noconfirm --needed \
             cmake ninja gcc gtk3 pkgconf flatpak ostree gnupg \
             qt6-base qt6-declarative qt6-wayland qt6-tools qt6-translations qt6-5compat \
             extra-cmake-modules wayland plasma-workspace libplasma kpackage \
@@ -249,6 +302,7 @@ jobs:
       # bounding set excludes. execve then fails with EPERM before KWin starts.
       # Virtual outputs with software rendering do not need elevated scheduling.
       - name: Remove privileged scheduling from the CI compositor
+        id: compositor
         run: |
           sh tools/ci/ci-prepare-kwin.sh
 
@@ -261,6 +315,7 @@ jobs:
       # build root, but the ctest entry point overrides it with an absolute
       # path, so the script's directory and every sibling of it stay empty.
       - name: Mount Go test cache
+        id: cache
         uses: actions/cache@v6
         with:
           path: .build/tests/services/data-service/go-test-cache
@@ -277,10 +332,12 @@ jobs:
         run: ./tools/run-tests.sh --build-only
 
       - name: Check required test registrations
+        id: inventory
         if: ${{ !cancelled() && steps.prepare.outcome == 'success' }}
         run: python tools/ci/ci_tests.py inventory
 
       - name: Run data and platform tests
+        id: data_platform
         if: ${{ !cancelled() && steps.prepare.outcome == 'success' }}
         run: |
           mkdir -p .build/tests/test-results
@@ -290,6 +347,7 @@ jobs:
             --output-junit "$GITHUB_WORKSPACE/.build/tests/test-results/data-platform.xml"
 
       - name: Run logic tests and translation checks
+        id: logic
         if: ${{ !cancelled() && steps.prepare.outcome == 'success' }}
         run: |
           mkdir -p .build/tests/test-results
@@ -299,12 +357,14 @@ jobs:
             --output-junit "$GITHUB_WORKSPACE/.build/tests/test-results/logic.xml"
 
       - name: Check delayed tray context menus
+        id: tray_menu
         if: ${{ !cancelled() && steps.prepare.outcome == 'success' }}
         env:
           QML_IMPORT_PATH: ${{ github.workspace }}/.build/tests/qml
         run: python3 tests/tray-menu/run.py --private-compositor
 
       - name: Render tray icons and appearance settings on a private compositor
+        id: tray_color
         if: ${{ !cancelled() && steps.prepare.outcome == 'success' }}
         env:
           KOS_TRAY_COLOR_QA: ${{ github.workspace }}/.build/tests/test-results/tray-color
@@ -316,6 +376,7 @@ jobs:
             --output-junit "$GITHUB_WORKSPACE/.build/tests/test-results/tray-color.xml"
 
       - name: Render battery and traffic panels on a private compositor
+        id: status_panels
         if: ${{ !cancelled() && steps.prepare.outcome == 'success' }}
         run: |
           mkdir -p .build/tests/test-results
@@ -325,6 +386,7 @@ jobs:
             --output-junit "$GITHUB_WORKSPACE/.build/tests/test-results/status-panels.xml"
 
       - name: Run offscreen UI regressions
+        id: headless
         if: ${{ !cancelled() && steps.prepare.outcome == 'success' }}
         run: |
           mkdir -p .build/tests/test-results
@@ -334,6 +396,7 @@ jobs:
             --output-junit "$GITHUB_WORKSPACE/.build/tests/test-results/headless.xml"
 
       - name: Run widget appearance and countdown rendering regressions
+        id: widgets
         if: ${{ !cancelled() && steps.prepare.outcome == 'success' }}
         env:
           KOS_WIDGET_QA: ${{ github.workspace }}/.build/tests/test-results/widget-experience
@@ -345,6 +408,7 @@ jobs:
             --output-junit "$GITHUB_WORKSPACE/.build/tests/test-results/widgets.xml"
 
       - name: Load deployed Shell trees on a private compositor
+        id: installed
         if: ${{ !cancelled() && steps.prepare.outcome == 'success' }}
         run: |
           mkdir -p .build/tests/test-results
@@ -355,7 +419,15 @@ jobs:
 
       - name: Summarise actual test results
         if: always()
-        run: python tools/ci/ci_tests.py report
+        env:
+          CI_STEP_OUTCOMES: ${{ toJSON(steps) }}
+        run: |
+          if command -v python >/dev/null && [ -f tools/ci/ci_tests.py ]; then
+            python tools/ci/ci_tests.py report
+          else
+            echo 'Test reporting unavailable: dependency installation or checkout did not complete; see the first failed step.' >> "$GITHUB_STEP_SUMMARY"
+            exit 1
+          fi
 
       - name: Upload test reports and diagnostics
         if: always()
@@ -399,14 +471,8 @@ jobs:
         run: |
           printf 'Server = https://archive.archlinux.org/repos/%s/$repo/os/$arch\n' \
             "$ARCH_SNAPSHOT" > /etc/pacman.d/mirrorlist
-          for attempt in 1 2 3; do
-            if pacman -Syyuu --noconfirm --disable-download-timeout \
-                --ignore archlinux-keyring git; then
-              break
-            fi
-            test "$attempt" -lt 3 || exit 1
-            sleep 5
-          done
+          bash -c "$KOS_CI_PACMAN" -- -Syyuu --noconfirm \
+            --ignore archlinux-keyring git
 
       - uses: actions/checkout@v7
 
@@ -418,7 +484,7 @@ jobs:
       # protocol-generation dependencies from tools/kosctl as well.
       - name: Install plugin build dependencies
         run: |
-          pacman -S --noconfirm --needed --disable-download-timeout \
+          bash -c "$KOS_CI_PACMAN" -- -S --noconfirm --needed \
             cmake ninja gcc \
             qt6-base qt6-declarative qt6-wayland qt6-tools qt6-translations \
             extra-cmake-modules kwin kconfig ki18n kguiaddons kcmutils \
