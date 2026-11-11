@@ -13,6 +13,7 @@ Scope {
     property real progress: 0
     property bool loaded: false
     property bool started: false
+    property double startedAt: 0
     readonly property bool active: progress < 1
     readonly property string phase: !active ? "done" : !started ? "idle"
         : progress < 0.25 ? "fading" : progress < 0.45 ? "bar"
@@ -36,7 +37,17 @@ Scope {
         const delay = Math.max(0, index) / Math.max(1, count - 1) * 0.12
         return ease(segment(0.70 + delay, 0.88 + delay))
     }
-    function initialize() {} // Force singleton construction before configuration completion.
+    function initialize() {
+        // reloadCompleted is emitted for reloads, not the first configuration.
+        // callLater runs after construction of the complete desktop object tree.
+        Qt.callLater(configurationLoaded)
+    }
+    function configurationLoaded() {
+        if (loaded) return
+        loaded = true
+        watchdog.start()
+        Qt.callLater(begin)
+    }
     function finish() {
         timeline.stop()
         progress = 1
@@ -49,20 +60,25 @@ Scope {
             finish()
             return
         }
+        watchdog.stop()
+        startedAt = Date.now()
         started = true
         timeline.start()
     }
     onReadyChanged: if (ready) Qt.callLater(begin)
     onPhaseChanged: console.info("[StartupReveal] " + phase)
 
-    NumberAnimation {
+    Timer {
         id: timeline
-        target: reveal
-        property: "progress"
-        from: 0
-        to: 1
-        duration: AppearanceConfigService.startupRevealDuration
-        easing.type: Easing.Linear
+        interval: 16
+        repeat: true
+        onTriggered: {
+            // Account for missed frames on a busy login instead of stretching
+            // an 800ms arrival into a multi-second animation.
+            reveal.progress = Math.min(1, Math.max(reveal.progress,
+                (Date.now() - reveal.startedAt) / AppearanceConfigService.startupRevealDuration))
+            if (reveal.progress >= 1) reveal.finish()
+        }
     }
     // A missing wallpaper/output/config must never leave a hidden desktop.
     Timer {
@@ -71,16 +87,12 @@ Scope {
         onTriggered: reveal.finish()
     }
     StartupInputMonitor {
-        active: reveal.active
+        active: reveal.loaded && reveal.active
         onActivity: reveal.finish()
     }
     Connections {
         target: Quickshell
-        function onReloadCompleted() {
-            reveal.loaded = true
-            watchdog.start()
-            Qt.callLater(reveal.begin)
-        }
+        function onReloadCompleted() { reveal.configurationLoaded() }
     }
     Connections {
         target: AppearanceConfigService

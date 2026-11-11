@@ -50,7 +50,7 @@ Item {
             const record = function() { phases.push(StartupReveal.phase) }
             StartupReveal.phaseChanged.connect(record)
             const start = Date.now()
-            StartupReveal.loaded = true
+            StartupReveal.initialize()
             tryCompare(StartupReveal, "phase", "done", 1100)
             StartupReveal.phaseChanged.disconnect(record)
             compare(phases.join(","), "fading,bar,dock,icons,done")
@@ -59,6 +59,7 @@ Item {
             compare(StartupReveal.iconProgress(999, 1000), 1)
         }
         function test_click_at_zero_delivered() {
+            StartupReveal.loaded = true
             compare(StartupReveal.progress, 0)
             const before = clicks
             // Inside the final slot, outside its displaced pre-reveal upper edge.
@@ -67,6 +68,7 @@ Item {
             compare(clicks, before + 1)
         }
         function test_keyboard_and_motion() {
+            StartupReveal.loaded = true
             keyPress(Qt.Key_Super_L)
             compare(StartupReveal.progress, 1)
             keyRelease(Qt.Key_Super_L)
@@ -87,6 +89,15 @@ Item {
             StartupReveal.loaded = true
             compare(StartupReveal.phase, "done")
             compare(StartupReveal.progress, 1)
+        }
+        function test_missing_wallpaper_fails_open() {
+            WallpaperService.takeoverEnabled = true
+            // Missing config is another readiness failure, independent of pixels.
+            ConfigService.ready = false
+            StartupReveal.initialize()
+            tryCompare(StartupReveal, "phase", "done", 1500)
+            ConfigService.ready = true
+            WallpaperService.takeoverEnabled = false
         }
         function test_stagger_and_no_replay() {
             StartupReveal.progress = 0.8
