@@ -14,7 +14,7 @@ Use the shared `Kos.Ui` `KosWindowControls` in a frameless/client-decorated wind
 KosWindowControls {
     targetWindow: root
     maximizeMode: true
-    actions: ["maximize", "minimize", "close"]
+    actions: ["minimize", "maximize", "close"]
     circleSize: 14
     buttonWidth: 22
     buttonHeight: 22

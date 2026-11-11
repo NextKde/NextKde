@@ -70,7 +70,7 @@ QImage buildPanel(const PanelGeometry &geometry, bool maximized, bool dark)
         // Repeated here rather than shared because the preview must be able to
         // show a panel whose order is being reconsidered, and a preview that
         // reads the order out of the thing it is previewing cannot do that.
-        constexpr Type Order[TypeCount] = {Maximize, Minimize, Close};
+        constexpr Type Order[TypeCount] = {Minimize, Maximize, Close};
         drawLight(painter, dotRect(panel, geometry, i), Order[i], true,
                   maximized);
     }
