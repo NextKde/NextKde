@@ -1,5 +1,6 @@
 import QtQuick
 import QtTest
+import "../../../../shared/demo-ui/controls" as Demo
 
 Item {
     id: harness
@@ -292,7 +293,7 @@ Item {
             compare(centerY(actions), centerY(lights))
             compare(centerY(title), centerY(lights))
             compare(centerY(kdeSettings), centerY(lights))
-            compare(kdeSettings.height, 26)
+            compare(kdeSettings.height, Demo.LiquidStyle.toolbarButtonHeight)
             const kdeLogo = findChild(kdeSettings, "settingsKdeLogo")
             verify(kdeLogo !== null)
             tryCompare(kdeLogo, "status", Image.Ready)
