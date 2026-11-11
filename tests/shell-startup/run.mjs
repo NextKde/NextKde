@@ -84,6 +84,7 @@ async function main() {
             WAYLAND_DISPLAY: display,
             QT_QPA_PLATFORM: "wayland",
             QT_QUICK_BACKEND: "software",
+            QT_FORCE_STDERR_LOGGING: "1",
         },
         stdio: ["ignore", "pipe", "pipe"],
     });
@@ -120,6 +121,13 @@ async function main() {
         return 1;
     }
     console.log("shell.qml loaded and stayed alive on headless weston");
+    console.log(shellOutput.split("\n").filter(line => line.includes("[StartupReveal]")).join("\n"));
+    if (/TypeError|ReferenceError|is not a type|Cannot assign/.test(shellOutput)) {
+        console.error(shellOutput);
+        await stop(shellProcess);
+        await stop(westonProcess);
+        return 1;
+    }
     await stop(shellProcess);
     await stop(westonProcess);
     return 0;

@@ -198,7 +198,7 @@ bool ContextMenuInputEffect::paste(const QString &expectedWindowId)
 
 void ContextMenuInputEffect::watchStartupInput(int milliseconds)
 {
-    m_startupInputDeadline = QDeadlineTimer(qBound(0, milliseconds, 2000));
+    m_startupInputDeadline = QDeadlineTimer(qBound(0, milliseconds, 3000));
 }
 
 void ContextMenuInputEffect::handleStartupInput()

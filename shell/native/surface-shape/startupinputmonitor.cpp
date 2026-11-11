@@ -34,7 +34,7 @@ void StartupInputMonitor::setActive(bool active)
         QStringLiteral("org.kos.KWin.ContextMenuInput"),
         QStringLiteral("watchStartupInput"));
     // Bounded even if the shell exits without disarming. No key identity leaves KWin.
-    message.setArguments({active ? 2000 : 0});
+    message.setArguments({active ? 3000 : 0});
     QDBusConnection::sessionBus().send(message);
     emit activeChanged();
 }
