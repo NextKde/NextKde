@@ -1,4 +1,5 @@
 #include "PlatformServer.h"
+#include "KimpanelBridge.h"
 #include "PlatformNetworkBackend.h"
 #include "KeepAwakeLease.h"
 #include "PlatformProcess.h"
@@ -125,6 +126,7 @@ PlatformServer::PlatformServer(QObject *parent)
     // here; a dedicated pool keeps them from queueing behind file.copy work
     // (and vice versa).
     m_dbusPool.setMaxThreadCount(2);
+    initKimpanelBridge();
 }
 
 PlatformServer::~PlatformServer()
@@ -228,6 +230,10 @@ void PlatformServer::clientDisconnected()
         return;
     delete m_keepAwakeLeases.take(socket);
     m_windowSubscribers.remove(socket);
+    m_inputMethodSubscribers.remove(socket);
+    if (m_inputMethodSubscribers.isEmpty() && m_kimpanelBridge) {
+        m_kimpanelBridge->setShellConnected(false);
+    }
     m_buffers.remove(socket);
     for (auto it = m_inFlightReplies.begin(); it != m_inFlightReplies.end(); ++it) {
         auto &pending = it.value();
@@ -308,19 +314,30 @@ void PlatformServer::sendEvent(QLocalSocket *socket, const QJsonObject &event)
         eventName = QStringLiteral("window.snapshot");
     else if (eventName == QStringLiteral("action"))
         eventName = QStringLiteral("window.action");
+    else if (event.contains(QStringLiteral("event")))
+        eventName = event.value(QStringLiteral("event")).toString();
+
+    const QJsonValue payloadVal = event.contains(QStringLiteral("payload"))
+        ? event.value(QStringLiteral("payload"))
+        : QJsonValue(event);
+
     QJsonObject message{{QStringLiteral("version"), kProtocolVersion},
                         {QStringLiteral("event"), eventName},
-                        {QStringLiteral("payload"), event}};
+                        {QStringLiteral("payload"), payloadVal}};
     writeClientMessage(socket, message);
 }
 
 void PlatformServer::broadcastKWinEvent(const QJsonObject &event)
 {
     const QString type = event.value(QStringLiteral("type")).toString();
-    if (type == QStringLiteral("snapshot"))
+    if (type == QStringLiteral("snapshot")) {
         m_latestWindowSnapshot = event;
-    else if (type == QStringLiteral("desktops"))
+        if (m_kimpanelBridge) {
+            m_kimpanelBridge->setActiveWindowId(event.value(QStringLiteral("activeId")).toString());
+        }
+    } else if (type == QStringLiteral("desktops")) {
         m_latestDesktopSnapshot = event;
+    }
     for (auto *socket : std::as_const(m_windowSubscribers))
         sendEvent(socket, event);
 }
@@ -547,6 +564,7 @@ void PlatformServer::handleRequest(QLocalSocket *socket, const QJsonObject &requ
 #endif
                 QStringLiteral("session.visibility"),
                 QStringLiteral("keepawake"),
+                QStringLiteral("inputmethod.kimpanel"),
             }},
         });
         return;
@@ -663,6 +681,7 @@ void PlatformServer::handleRequest(QLocalSocket *socket, const QJsonObject &requ
         || handleFileOperation(socket, request)
         || handleKWin(socket, request) || handleAppMenu(socket, request)
         || handleInput(socket, request)
+        || handleInputMethodOperation(socket, request)
         || handleAudioOperation(socket, request)
         || handlePowerOperation(socket, request)
         || handleNetworkOperation(socket, request)
