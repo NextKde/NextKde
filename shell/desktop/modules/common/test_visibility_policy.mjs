@@ -17,6 +17,7 @@ assert.equal(isKnownDeskCenterWidget("clock"), true, "clock is a known widget");
 assert.equal(isKnownDeskCenterWidget("music"), true, "music is a known widget");
 assert.equal(isKnownDeskCenterWidget("nope"), false, "unknown widget rejected");
 assert.equal(isKnownStatusCell("battery"), true, "battery is a known cell");
+assert.equal(isKnownStatusCell("inputmethod"), true, "inputmethod is a known cell");
 assert.equal(isKnownStatusCell("clock"), false, "a widget id is not a cell id");
 
 // ── battery presence ────────────────────────────────────────────────────────

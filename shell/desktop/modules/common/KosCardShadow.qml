@@ -51,6 +51,9 @@ ShaderEffect {
     // see this change.
     property real softness: 24
     property real spread: 0
+    // Extra clearance outside the card's silhouette. Small popups can use 0
+    // so a bright backdrop cannot show as a hairline between card and shadow.
+    property real cutoutPadding: 1
     // Retained for source compatibility -- nothing reads it anymore. The
     // shader replaced pow(alpha, falloff) with a fixed alpha*alpha curve: the
     // per-pixel pow() cost an exp2/log2 pair on every fragment while no host

@@ -1,0 +1,49 @@
+name: input method motion
+
+on:
+  push:
+    paths:
+      - 'shell/desktop/modules/inputmethod/**'
+      - 'shell/desktop/modules/common/PopupMotion.qml'
+      - 'tests/inputmethod/**'
+      - '.github/workflows/inputmethod.yml'
+  pull_request:
+    paths:
+      - 'shell/desktop/modules/inputmethod/**'
+      - 'shell/desktop/modules/common/PopupMotion.qml'
+      - 'tests/inputmethod/**'
+      - '.github/workflows/inputmethod.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  motion:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    container: archlinux:base-devel
+    steps:
+      - name: Install Qt Quick test tools
+        run: pacman -Syu --noconfirm --needed git nodejs qt6-base qt6-declarative
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - name: Check input method geometry and status contracts
+        run: |
+          node shell/desktop/modules/inputmethod/test_inputmethod_placement.mjs
+          node shell/desktop/modules/inputmethod/test_inputmethod_status_dismissal.mjs
+      - name: Exercise candidate and language-tip transitions in Qt Quick
+        run: node tests/inputmethod/run.mjs /usr/lib/qt6/bin/qmltestrunner
+      - name: Check changed QML syntax and duplicate declarations
+        env:
+          QMLLINT: /usr/lib/qt6/bin/qmllint
+          BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
+        run: |
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
+          base="$BASE_SHA"
+          if [ -z "$base" ] || ! git cat-file -e "$base^{commit}" 2>/dev/null; then
+            base=$(git rev-parse HEAD^)
+          fi
+          node tools/ci/qmllint-changed.mjs --base "$base"
+          node tools/ci/qml-duplicate-handlers.mjs --base "$base"
