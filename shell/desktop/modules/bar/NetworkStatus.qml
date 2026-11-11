@@ -53,7 +53,7 @@ Item {
         anchors.centerIn: parent
         width: root.iconSize
         height: root.iconSize
-        name: "status-ethernet"
+        name: "network.ethernet"
         color: root.statusIconColor
         opacity: root.connected ? 1.0 : 0.68
     }

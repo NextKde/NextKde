@@ -525,6 +525,7 @@ Item {
     property Component _contextMenuComponent: Component {
         ContextMenu {
             capsuleReveal: true
+            reserveIconSpace: true
             property bool hasBeenVisible: false
             anchorItem: icon
             position: ConfigService.position
@@ -1083,19 +1084,19 @@ Item {
                 const pinned = icon.isPinnedItem || DockModelService.isAppPinned(icon.appId)
                 menu.clear()
                 if (icon.isWindowItem) {
-                    menu.addItem("window-restore", I18n.tr("Activate window"), "activate")
-                    menu.addItem("window-minimize", I18n.tr("Minimize"), "minimize")
-                    menu.addItem("window-close", I18n.tr("Close window"), "close")
-                    menu.addItem("window-new", I18n.tr("New window"), "new_window")
-                    menu.addItem(pinned ? "unpin" : "pin",
+                    menu.addItem("dock.menu.activate", I18n.tr("Activate window"), "activate")
+                    menu.addItem("dock.menu.minimize", I18n.tr("Minimize"), "minimize")
+                    menu.addItem("dock.menu.close", I18n.tr("Close window"), "close")
+                    menu.addItem("dock.menu.new_window", I18n.tr("New window"), "new_window")
+                    menu.addItem(pinned ? "dock.menu.unpin" : "dock.menu.pin",
                         pinned ? I18n.tr("Unpin") : I18n.tr("Pin this app"), pinned ? "unpin" : "pin")
                 } else {
-                    menu.addItem("folder-open", I18n.tr("Open"), "open")
-                    menu.addItem("window-new", I18n.tr("New window"), "new_window")
-                    menu.addItem(pinned ? "unpin" : "pin",
+                    menu.addItem("dock.menu.open", I18n.tr("Open"), "open")
+                    menu.addItem("dock.menu.new_window", I18n.tr("New window"), "new_window")
+                    menu.addItem(pinned ? "dock.menu.unpin" : "dock.menu.pin",
                         pinned ? I18n.tr("Unpin") : I18n.tr("Pin this app"), pinned ? "unpin" : "pin")
                     if (icon.isRunning)
-                        menu.addItem("window-close", I18n.tr("Close all windows"), "close_all")
+                        menu.addItem("dock.menu.close_all", I18n.tr("Close all windows"), "close_all")
                 }
                 DockModelService.activeContextMenu = menu
                 DockModelService.openDockPopup(menu)

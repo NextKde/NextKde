@@ -65,7 +65,7 @@ Item {
 
     BundledIcon {
         anchors.centerIn: parent
-        name: "nextkde"
+        name: "bar.systemMenu"
         size: root.size
         color: root.color
         outlined: !AppearanceTokens.bar.macStyle

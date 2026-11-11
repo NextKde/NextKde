@@ -18,12 +18,19 @@ with tempfile.TemporaryDirectory(prefix='nextkde-font-icons-') as directory:
     common.mkdir(parents=True)
     shutil.copytree(root / 'shared/Icons', stage / 'shared/Icons')
     declarations = []
-    for name in ['BundledIcons', 'BundledIcon', 'AppIcon']:
+    shutil.copyfile(root / 'shell/desktop/modules/common/ShellIconMap.mjs', common / 'ShellIconMap.mjs')
+    for name in ['BundledIcons', 'BundledIcon', 'AppIcon', 'ShellVolumeIcon', 'ShellBatteryIcon']:
         shutil.copyfile(root / f'shell/desktop/modules/common/{name}.qml', common / f'{name}.qml')
         declarations.append(('singleton ' if name == 'BundledIcons' else '') + f'{name} 1.0 {name}.qml')
     (common / 'IconThemeReloadService.qml').write_text('pragma Singleton\nimport QtQuick\nQtObject { readonly property bool pixmapCacheAllowed: true }\n')
     declarations.append('singleton IconThemeReloadService 1.0 IconThemeReloadService.qml')
+    (common / 'AppearanceTokens.qml').write_text('pragma Singleton\nimport QtQuick\nQtObject { readonly property var content: ({glassInk: function() { return "white" }}) }\n')
+    declarations.append('singleton AppearanceTokens 1.0 AppearanceTokens.qml')
     (common / 'qmldir').write_text('module qs.desktop.modules.common\n' + '\n'.join(declarations) + '\n')
+    bar = stage / 'desktop/modules/bar'
+    bar.mkdir(parents=True)
+    shutil.copyfile(root / 'shell/desktop/modules/bar/WifiSignalIcon.qml', bar / 'WifiSignalIcon.qml')
+    (bar / 'qmldir').write_text('module qs.desktop.modules.bar\nWifiSignalIcon 1.0 WifiSignalIcon.qml\n')
     shutil.copyfile(Path(__file__).with_name('shell.qml'), stage / 'shell.qml')
     result = subprocess.run([args.qs, '-p', str(stage)], text=True, capture_output=True, timeout=15,
         env={**os.environ, 'QT_QPA_PLATFORM': 'offscreen', 'QT_QUICK_BACKEND': 'software',

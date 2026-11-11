@@ -68,7 +68,7 @@ Item {
         id: glyphIcon
         Symbols.Icon {
             size: Math.min(width, height)
-            name: root.source.substring(9)
+            name: BundledIcons.resolveName(root.source.substring(9))
             color: root.recolorEnabled ? root.recolorColor : root.tintEnabled ? root.tintColor : "#8e8e93"
             opacity: root.opacityMultiplier
             readonly property real paintedWidth: width

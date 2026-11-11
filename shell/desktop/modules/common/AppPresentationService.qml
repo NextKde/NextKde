@@ -175,7 +175,7 @@ QtObject {
         // 图案，免得留下空白图标。
         return SystemIconResolver.sourceFromCandidates(
             ["application-x-executable", "system-run"], "application-x-executable")
-            || BundledIcons.source("application-x-executable")
+            || BundledIcons.source("application.fallback")
     }
 
     function normalize(value) {

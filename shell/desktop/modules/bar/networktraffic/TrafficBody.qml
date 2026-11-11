@@ -64,7 +64,7 @@ Item {
             x: 8
             anchors.verticalCenter: parent.verticalCenter
             size: 16
-            name: "antenna_radiowaves_left_right"
+            name: "traffic.monitor"
             color: body.mutedInk
         }
         Text {

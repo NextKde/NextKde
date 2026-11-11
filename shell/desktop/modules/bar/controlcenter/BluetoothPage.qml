@@ -97,7 +97,7 @@ Item {
                 BundledIcon {
                     visible: !!modelData.connected
                     anchors { left: parent.left; leftMargin: 8; verticalCenter: parent.verticalCenter }
-                    name: "checkmark"
+                    name: "bluetooth.connected"
                     color: AppearanceTokens.content.glassInk()
                     size: 13
                 }
@@ -105,7 +105,7 @@ Item {
                 BundledIcon {
                     anchors { left: parent.left; leftMargin: 26; verticalCenter: parent.verticalCenter }
                     width: 16; height: 16
-                    name: "bluetooth"
+                    name: "bluetooth.device"
                     color: modelData.connected ? "#0a84ff" : AppearanceTokens.content.glassInk()
                 }
 
@@ -197,7 +197,7 @@ Item {
 
         BundledIcon {
             anchors { right: parent.right; rightMargin: 16; verticalCenter: parent.verticalCenter }
-            name: "chevron_right"
+            name: "bluetooth.settings"
             color: AppearanceTokens.content.glassInk()
             size: 13
         }

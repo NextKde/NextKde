@@ -6,13 +6,14 @@ import "../../../Kos/Ui"
 // submenu chevron, and a thin separator variant. Hover only changes the row's
 // visual highlight; navigation is owned by ContextMenu's click handler.
 //
-// `icon` 是 BundledIcons 的登记名（不是字形、不是路径，也不是主题图标名）。
-// 图案与数据都在那一张表里，渲染不查系统图标主题、不依赖任何字体。
+// `icon` 是 ShellIconMap.mjs 的功能名；外部菜单图片单独通过 iconSource 传入。
+// 界面图标通过共享字形库渲染，不查系统图标主题。
 Item {
     id: row
 
     property string label: ""
     property string icon: ""
+    property bool reserveIconSpace: false
     // Image URL for entries whose icon does not come from BundledIcons
     // (e.g. DBusMenu-provided tray menu icons). Only used when `icon` is
     // not a registered bundled name.
@@ -27,6 +28,7 @@ Item {
 
     readonly property bool _hasIcon: BundledIcons.has(row.icon)
         || row.iconSource.length > 0
+    readonly property bool _reserveIconSlot: row.reserveIconSpace || row._hasIcon
 
     // Bind directly to MouseArea.containsMouse instead of maintaining a
     // transient flag.  Delegates are replaced when entering a submenu, and a
@@ -86,35 +88,30 @@ Item {
         anchors.right: parent.right
         anchors.rightMargin: 10
         anchors.verticalCenter: parent.verticalCenter
-        spacing: row._hasIcon ? 9 : 0
+        spacing: row._reserveIconSlot ? 9 : 0
         visible: !row.separator
 
-        // Shell-owned artwork, resolved through the single BundledIcons table.
-        // White-stroked SVG used as an alpha mask and projected onto the menu
-        // foreground colour, so the mark never depends on an installed icon
-        // system icon theme.
-        BundledIcon {
-            visible: BundledIcons.has(row.icon)
-            width: visible ? 18 : 0
+        // Keep text aligned when only a few actions have leading icons.
+        Item {
+            visible: row._reserveIconSlot
+            width: 18
             height: 18
-            size: 18
-            name: row.icon
-            color: row.foregroundColor
             anchors.verticalCenter: parent.verticalCenter
             opacity: row.itemEnabled ? 0.9 : 0.5
-        }
-
-        // External icon (URL or image-provider path) for items such as
-        // DBusMenu tray entries. Stays synchronous on purpose: the icon
-        // provider can reach KIconEngine, which is not thread-safe.
-        AppIcon {
-            visible: !BundledIcons.has(row.icon) && row.iconSource.length > 0
-            width: visible ? 18 : 0
-            height: 18
-            source: row.iconSource
-            asynchronous: false
-            anchors.verticalCenter: parent.verticalCenter
-            opacity: row.itemEnabled ? 0.9 : 0.5
+            BundledIcon {
+                anchors.fill: parent
+                visible: BundledIcons.has(row.icon)
+                size: 18
+                name: row.icon
+                color: row.foregroundColor
+            }
+            // External DBusMenu icons stay synchronous for KIconEngine.
+            AppIcon {
+                anchors.fill: parent
+                visible: !BundledIcons.has(row.icon) && row.iconSource.length > 0
+                source: row.iconSource
+                asynchronous: false
+            }
         }
 
         ShellText {
@@ -126,7 +123,7 @@ Item {
             color: row.foregroundColor
             opacity: row.itemEnabled ? 1.0 : 0.6
             anchors.verticalCenter: parent.verticalCenter
-            width: Math.min(implicitWidth, (row.width - 24) - (row._hasIcon ? 27 : 0) - ((row.checked || row.hasSubmenu) ? 24 : 0))
+            width: Math.max(0, Math.min(implicitWidth, (row.width - 24) - (row._reserveIconSlot ? 27 : 0) - ((row.checked || row.hasSubmenu) ? 24 : 0)))
         }
     }
 
@@ -143,7 +140,7 @@ Item {
         BundledIcon {
             anchors.centerIn: parent
             size: row.checked ? 14 : 16
-            name: row.checked ? "check" : "submenu"
+            name: row.checked ? "menu.trailing.checked" : "menu.trailing.submenu"
             color: row.checked ? row.foregroundColor
                 : Qt.rgba(row.foregroundColor.r, row.foregroundColor.g,
                     row.foregroundColor.b, 0.55)

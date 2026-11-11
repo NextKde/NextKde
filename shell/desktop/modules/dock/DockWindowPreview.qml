@@ -300,7 +300,7 @@ PopupWindow {
 
                     BundledIcon {
                         anchors.centerIn: parent
-                        name: "plus"
+                        name: "dock.preview.newWindow"
                         color: ThemeService.foregroundColor
                         size: 21
                     }
@@ -545,7 +545,7 @@ PopupWindow {
 
                                 BundledIcon {
                                     anchors.centerIn: parent
-                                    name: "xmark"
+                                    name: "dock.preview.closeWindow"
                                     color: "white"
                                     size: 10
                                 }
