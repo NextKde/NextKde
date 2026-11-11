@@ -1,6 +1,6 @@
 import QtQuick
 import QtTest
-import "../../../../shared/demo-ui/controls" as Demo
+import Kos.Demo as Demo
 
 Item {
     id: harness
