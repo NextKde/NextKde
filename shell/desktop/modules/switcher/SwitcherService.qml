@@ -13,7 +13,7 @@ QtObject {
     property string error: ""
     property bool open: false
     property string session: ""
-    property int sequence: -1
+    property double sequence: -1
     property var windows: []
     property string selectedHandle: ""
     property var screenGeometry: ({})

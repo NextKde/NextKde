@@ -126,6 +126,7 @@ public:
     Q_INVOKABLE void resetAppearanceStrengths();
     Q_INVOKABLE void launcherSnapshot();
     Q_INVOKABLE void shortcutsSnapshot();
+    Q_INVOKABLE void setSwitcherEnabled(bool enabled);
     Q_INVOKABLE void updateShortcut(const QString& id, const QString& combo);
     Q_INVOKABLE void resetShortcut(const QString& id);
     Q_INVOKABLE void updateLauncherDisplayMode(const QString& mode);

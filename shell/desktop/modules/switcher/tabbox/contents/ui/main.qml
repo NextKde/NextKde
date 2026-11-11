@@ -9,7 +9,7 @@ KWin.TabBoxSwitcher {
 
     item: Item {
         id: adapter
-        property int sequence: 0
+        property double sequence: Date.now()
         property string session: ""
 
         function publish() {
