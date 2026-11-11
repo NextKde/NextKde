@@ -16,6 +16,7 @@ import qs.desktop.modules.common
 import qs.desktop.modules.platform
 import qs.desktop.modules.shortcuts
 import qs.desktop.modules.weather
+import qs.desktop.modules.inputmethod
 
 Item {
     id: shell
@@ -714,6 +715,7 @@ Item {
     // values sourced from the live Shell connections so the UI reports what
     // is actually connected, not merely which units were installed.
     IpcHandler {
+        id: integrationStatusIpc
         target: "integration-status"
 
         function snapshot(): string {
@@ -728,7 +730,34 @@ Item {
                 barExpected: !shell.barIntegratedWithDock,
                 barVisible: desktopBar.windowVisible,
                 dockVisible: desktopDock.windowVisible,
+                inputMethodEnabled: InputMethodService.userEnabled,
+                inputMethodActive: InputMethodService.takeoverActive,
+                inputMethodChanging: InputMethodService.changing,
+                inputMethodError: InputMethodService.error,
+                inputMethodPresentation: InputMethodConfigService.snapshot(),
             })
+        }
+    }
+
+    IpcHandler {
+        target: "inputmethod-settings"
+
+        function snapshot(): string {
+            return JSON.stringify({enabled: InputMethodService.enabled,
+                changing: InputMethodService.changing, error: InputMethodService.error,
+                candidateCount: InputMethodService.candidates.length,
+                visible: InputMethodService.visible, panels: inputMethodPopup.inspect()})
+        }
+
+        function setEnabled(enabled: bool): string {
+            InputMethodService.setEnabled(enabled)
+            return JSON.stringify({ enabled: InputMethodService.userEnabled })
+        }
+
+        function updatePresentation(patch: string): string {
+            try { InputMethodConfigService.update(JSON.parse(patch)) }
+            catch (error) { console.warn("[InputMethodConfig] Invalid update: " + error) }
+            return integrationStatusIpc.snapshot()
         }
     }
 
@@ -773,6 +802,8 @@ Item {
     NotificationCenter {
         id: notificationCenter
     }
+
+    InputMethodPopup { id: inputMethodPopup }
 
     DeskCenter {}
     DesktopLyrics {}

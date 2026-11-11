@@ -135,6 +135,8 @@ public:
     Q_INVOKABLE void resetLauncherLayoutProfile(const QString& mode);
     Q_INVOKABLE void applySystemAppearance(bool dark);
     Q_INVOKABLE void integrationSnapshot();
+    Q_INVOKABLE void setInputMethodEnabled(bool enabled);
+    Q_INVOKABLE void setInputMethodPresentation(const QVariantMap& patch);
     Q_INVOKABLE void i18nSnapshot();
     Q_INVOKABLE void updateLanguage(const QString& language);
 

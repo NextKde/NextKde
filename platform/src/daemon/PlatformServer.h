@@ -25,6 +25,7 @@
 namespace KosPlatform {
 
 class KeepAwakeLease;
+class KimpanelBridge;
 struct NmConnectRequest;
 
 class PlatformServer final : public QObject {
@@ -157,6 +158,8 @@ private:
     bool handleKWin(QLocalSocket *socket, const QJsonObject &request);
     bool handleAppMenu(QLocalSocket *socket, const QJsonObject &request);
     bool handleInput(QLocalSocket *socket, const QJsonObject &request);
+    bool handleInputMethodOperation(QLocalSocket *socket, const QJsonObject &request);
+    void initKimpanelBridge();
     bool handleAudioOperation(QLocalSocket *socket, const QJsonObject &request);
     bool handlePowerOperation(QLocalSocket *socket, const QJsonObject &request);
     bool handleNetworkOperation(QLocalSocket *socket, const QJsonObject &request);
@@ -193,6 +196,8 @@ private:
     QString m_socketPath;
     QHash<QLocalSocket *, QByteArray> m_buffers;
     QSet<QLocalSocket *> m_windowSubscribers;
+    QSet<QLocalSocket *> m_inputMethodSubscribers;
+    KimpanelBridge *m_kimpanelBridge = nullptr;
     QHash<QLocalSocket *, KeepAwakeLease *> m_keepAwakeLeases;
     // A Shell can reconnect after Quickshell reloads while KWin has no new
     // window event to broadcast. Retain the authoritative last snapshot so a
