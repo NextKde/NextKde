@@ -3,6 +3,7 @@ import QtTest
 import Quickshell
 import qs.desktop.modules.common
 import qs.desktop.modules.deskcenter
+import qs.desktop.modules.platform
 import qs.desktop.modules.stage
 
 ShellRoot {
@@ -157,6 +158,10 @@ ShellRoot {
                 if (!AppearanceConfigService.ready || !IconAppearanceService.ready || !SystemFontService.loaded) return
                 switch (test.stage++) {
                 case 0:
+                    I18nService.setLanguage("zh-CN")
+                    check(desktop.widgetLabels.clock === "时钟", "clock label switches to Chinese immediately")
+                    I18nService.setLanguage("en")
+                    check(desktop.widgetLabels.clock === "Clock", "clock label switches back to English immediately")
                     if (Quickshell.env("EXPECTED_WIDGET_STYLE") === "glass") {
                         check(AppearanceTokens.typography.textFamily === "Inter", "legacy font opt-out is ignored")
                         check(AppearanceConfigService.desktopFontFamily === "", "old profile follows system")
