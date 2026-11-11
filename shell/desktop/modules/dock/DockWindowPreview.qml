@@ -544,12 +544,11 @@ PopupWindow {
                                     ColorAnimation { duration: 100 }
                                 }
 
-                                Text {
+                                BundledIcon {
                                     anchors.centerIn: parent
-                                    text: "✕"
+                                    name: "xmark"
                                     color: "white"
-                                    font.pixelSize: 10
-                                    font.bold: true
+                                    size: 10
                                 }
 
                                 MouseArea {

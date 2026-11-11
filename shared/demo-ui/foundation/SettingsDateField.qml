@@ -1,5 +1,6 @@
 pragma ComponentBehavior: Bound
 import QtQuick
+import "../../Icons" as Symbols
 import QtQuick.Controls
 import QtQuick.Layouts
 import QtQuick.Effects
@@ -98,7 +99,7 @@ SettingsTextField {
             RowLayout {
                 Layout.fillWidth: true
                 ToolButton { text: "‹"; implicitWidth: 28; implicitHeight: 28; Accessible.name: qsTr("Previous month"); background: Rectangle { radius: 14; color: parent.hovered ? AppTheme.buttonHover : "transparent" }
-                    contentItem: Label { text: parent.text; color: AppTheme.text; font.pixelSize: 18; horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter }
+                    contentItem: Symbols.Icon { name: parent.text === "‹" ? "chevron_left" : "chevron_right"; color: AppTheme.text; size: 18 }
                     onClicked: control.moveMonth(-1) }
                 Label {
                     Layout.fillWidth: true
@@ -107,7 +108,7 @@ SettingsTextField {
                     horizontalAlignment: Text.AlignHCenter
                 }
                 ToolButton { text: "›"; implicitWidth: 28; implicitHeight: 28; Accessible.name: qsTr("Next month"); background: Rectangle { radius: 14; color: parent.hovered ? AppTheme.buttonHover : "transparent" }
-                    contentItem: Label { text: parent.text; color: AppTheme.text; font.pixelSize: 18; horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter }
+                    contentItem: Symbols.Icon { name: parent.text === "‹" ? "chevron_left" : "chevron_right"; color: AppTheme.text; size: 18 }
                     onClicked: control.moveMonth(1) }
             }
             GridLayout {

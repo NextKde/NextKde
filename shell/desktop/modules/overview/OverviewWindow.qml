@@ -325,7 +325,7 @@ PanelWindow {
                                             }
                                             spacing: 8
 
-                                            IconImage {
+                                            AppIcon {
                                                 width: 20
                                                 height: 20
                                                 anchors.verticalCenter: parent.verticalCenter
@@ -367,10 +367,10 @@ PanelWindow {
                                             Behavior on opacity { NumberAnimation { duration: 120 } }
                                             Behavior on color { ColorAnimation { duration: 120 } }
 
-                                            Text {
+                                            BundledIcon {
                                                 anchors.centerIn: parent
-                                                text: "✕"
-                                                font.pixelSize: 10
+                                                name: "xmark"
+                                                size: 10
                                                 color: "white"
                                             }
 
@@ -423,7 +423,7 @@ PanelWindow {
                                                 anchors.centerIn: parent
                                                 spacing: 8
 
-                                                IconImage {
+                                                AppIcon {
                                                     anchors.horizontalCenter: parent.horizontalCenter
                                                     width: 44
                                                     height: 44

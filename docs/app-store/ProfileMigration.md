@@ -158,6 +158,27 @@ It keeps current and the most recent other owned revision, refuses unknown
 contents and preserves personal data/logs. Program journal recovery and installed
 ownership checks remain; they are not a profile migration framework.
 
-See [manual acceptance](ProfileMigrationAcceptance.md) and
+See [manual acceptance](#vm-acceptance) and
 [widget integration](WidgetIntegration.md). Compilation is not runtime acceptance;
 no new signed release or publication is implied by these source edits.
+
+## VM acceptance
+
+Use disposable profiles and record the exact source revision and result. Historical
+build logs or source-review notes do not establish acceptance of current packages.
+The following checks remain required when changing the cleanup or identity boundary:
+
+- Preview every selected app; confirm exact ownership and retained items before apply.
+- Exercise per-app confirmation, cancellation, retry after partial deletion and refusal
+  without an interactive terminal. Never use real personal data for cleanup tests.
+- Verify native/Flatpak coexistence and preservation of current-ID data, shared
+  preferences, runtimes and every Flatpak profile.
+- Check unknown files, changed links, pending transactions, running writers,
+  overlapping XDG roots and concurrent changes are refused without expanding scope.
+- Check native ListenFree removes only owned programs and retains music and settings.
+
+Application lifecycle, installation confirmation, sandbox paths and widget source
+selection require their own acceptance in the owning application repository and
+[widget integration contract](WidgetIntegration.md). Run builds and tests only in
+VM/CI according to [Development](../Development.md). Store logs, screenshots and
+run-specific results in ignored `tmp/` or external CI artifacts, not this guide.

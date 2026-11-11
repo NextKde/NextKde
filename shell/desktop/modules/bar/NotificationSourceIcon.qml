@@ -40,16 +40,10 @@ Item {
             }
         }
     }
-    Image {
+    BundledIcon {
         anchors.fill: parent
         visible: root.usesFallback
-        // Reuse the registry's solid artwork, tinting its SVG directly. A
-        // plain image also remains visible under Qt's software renderer.
-        source: "data:image/svg+xml;utf8," + encodeURIComponent(
-            BundledIcons.svg.bell.replace(/#ffffff/g, String(root.ink)))
-        sourceSize.width: Math.max(8, Math.round(root.width * 2))
-        sourceSize.height: Math.max(8, Math.round(root.height * 2))
-        fillMode: Image.PreserveAspectFit
-        asynchronous: false
+        name: "bell"
+        color: root.ink
     }
 }

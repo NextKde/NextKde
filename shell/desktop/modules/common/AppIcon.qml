@@ -1,4 +1,5 @@
 import QtQuick
+import "../../../shared/Icons" as Symbols
 import QtQuick.Window
 import Qt5Compat.GraphicalEffects
 import Quickshell.Widgets
@@ -9,7 +10,8 @@ import Quickshell.Widgets
 Item {
     id: root
     property string source: ""
-    readonly property int imageStatus: renderer.item?.imageStatus ?? Image.Null
+    readonly property bool fontGlyph: source.startsWith("kos-icon:")
+    readonly property int imageStatus: fontGlyph ? (Symbols.IconRegistry.ready ? Image.Ready : Image.Loading) : (renderer.item?.imageStatus ?? Image.Null)
 
     // Icon appearance controls
     property real   opacityMultiplier: 1.0
@@ -54,13 +56,25 @@ Item {
     Loader {
         id: renderer
         anchors.fill: parent
-        sourceComponent: root.needsEffect ? effectIcon : directIcon
+        sourceComponent: root.fontGlyph ? glyphIcon : root.needsEffect ? effectIcon : directIcon
     }
 
     // IconImage exposes image metrics through backer, not on its wrapper.
     // Both renderer paths report the same aspect-fitted artwork dimensions.
     readonly property real paintedWidth: renderer.item ? renderer.item.paintedWidth : 0
     readonly property real paintedHeight: renderer.item ? renderer.item.paintedHeight : 0
+
+    Component {
+        id: glyphIcon
+        Symbols.Icon {
+            size: Math.min(width, height)
+            name: root.source.substring(9)
+            color: root.recolorEnabled ? root.recolorColor : root.tintEnabled ? root.tintColor : "#8e8e93"
+            opacity: root.opacityMultiplier
+            readonly property real paintedWidth: width
+            readonly property real paintedHeight: height
+        }
+    }
 
     Component {
         id: directIcon

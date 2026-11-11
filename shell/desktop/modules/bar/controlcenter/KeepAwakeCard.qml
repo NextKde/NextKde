@@ -26,19 +26,13 @@ ControlCenterCard {
         opacity: keepAwakePointer.containsMouse && !keepAwakePointer.pressed ? 1.0 : 0.92
         Behavior on color { ColorAnimation { duration: 140 } }
 
-        Image {
+        BundledIcon {
             anchors.centerIn: parent
             width: 18; height: 18
-            source: BundledIcons.source("keep-awake")
-            sourceSize.width: 36; sourceSize.height: 36
-            fillMode: Image.PreserveAspectFit
-            smooth: true
-            layer.enabled: true
-            layer.effect: MultiEffect {
-                colorization: 1.0
-                colorizationColor: keepAwakeCard.service.keepAwakeEnabled
+            name: "keep-awake"
+
+            color: keepAwakeCard.service.keepAwakeEnabled
                     ? ThemeService.tileActiveGlyph : ThemeService.tileGlyph
-            }
         }
     }
     GlassText {
