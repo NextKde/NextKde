@@ -24,6 +24,8 @@ class UpdateController final : public QObject {
     Q_PROPERTY(bool needsRestart READ needsRestart NOTIFY changed)
     Q_PROPERTY(bool sourceAhead READ sourceAhead NOTIFY changed)
     Q_PROPERTY(QString currentVersion READ currentVersion NOTIFY changed)
+    Q_PROPERTY(QString currentRevision READ currentRevision NOTIFY changed)
+    Q_PROPERTY(QString currentTag READ currentTag NOTIFY changed)
     Q_PROPERTY(QString sourceVersion READ sourceVersion NOTIFY changed)
     Q_PROPERTY(int commitsBehind READ commitsBehind NOTIFY changed)
     Q_PROPERTY(QString branch READ branch NOTIFY changed)
@@ -69,6 +71,8 @@ public:
     bool needsRestart() const { return m_status.needsRestart && !m_restarted; }
     bool sourceAhead() const { return m_status.sourceAhead; }
     QString currentVersion() const { return m_currentVersion; }
+    QString currentRevision() const { return m_currentRevision; }
+    QString currentTag() const { return m_currentTag; }
     QString sourceVersion() const { return m_status.sourceVersion; }
     int commitsBehind() const { return m_status.behind; }
     QString branch() const { return m_status.branch; }
@@ -106,7 +110,7 @@ private:
     // status file's startedAt so a stale result is not taken for a fresh one.
     QDateTime m_launchedAt;
     QString m_stateDir, m_statusPath;
-    QString m_sourceRoot, m_currentVersion;
+    QString m_sourceRoot, m_currentVersion, m_currentRevision, m_currentTag;
     // Agent flag of the run this window started: "--run" keeps "available" a
     // waypoint, since that run only ends at updated/failed/blocked/up-to-date.
     QString m_mode;
