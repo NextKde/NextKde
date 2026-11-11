@@ -440,6 +440,7 @@ QtObject { readonly property real effectiveHoverScale: 1.1 }
         `);
             writeFileSync(join(common, 'qmldir'), `module qs.desktop.modules.common
         LiquidGlassPanel 1.0 LiquidGlassPanel.qml
+        MotionTokens 1.0 MotionTokens.qml
         singleton AppearanceTokens 1.0 AppearanceTokens.qml
         `);
             copyFileSync(new URL("./reveal.qml", import.meta.url), join(directory, 'shell.qml'));
