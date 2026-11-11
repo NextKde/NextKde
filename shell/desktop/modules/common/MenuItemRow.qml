@@ -92,7 +92,7 @@ Item {
         // Shell-owned artwork, resolved through the single BundledIcons table.
         // White-stroked SVG used as an alpha mask and projected onto the menu
         // foreground colour, so the mark never depends on an installed icon
-        // theme or glyph font.
+        // system icon theme.
         BundledIcon {
             visible: BundledIcons.has(row.icon)
             width: visible ? 18 : 0
@@ -107,14 +107,12 @@ Item {
         // External icon (URL or image-provider path) for items such as
         // DBusMenu tray entries. Stays synchronous on purpose: the icon
         // provider can reach KIconEngine, which is not thread-safe.
-        Image {
+        AppIcon {
             visible: !BundledIcons.has(row.icon) && row.iconSource.length > 0
             width: visible ? 18 : 0
             height: 18
             source: row.iconSource
             asynchronous: false
-            sourceSize.width: 18
-            sourceSize.height: 18
             anchors.verticalCenter: parent.verticalCenter
             opacity: row.itemEnabled ? 0.9 : 0.5
         }
@@ -133,7 +131,7 @@ Item {
     }
 
     // Trailing checkmark or submenu chevron — bundled artwork, same contract
-    // as the leading icon (no glyph font, no icon theme).
+    // as the leading icon (the shared font, no system icon theme).
     Item {
         anchors.right: parent.right
         anchors.rightMargin: 10

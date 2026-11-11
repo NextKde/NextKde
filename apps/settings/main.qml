@@ -830,7 +830,7 @@ ApplicationWindow {
                         Layout.fillWidth: true
                         active: window.displayedPage === 12
                         visible: active
-                        sourceComponent: NotificationsSettingsPage {
+                        sourceComponent: Pages.NotificationsSettingsPage {
                             theme: window.notificationTheme
                             bridge: typeof settingsBridge !== "undefined" ? settingsBridge : null
                         }
@@ -903,7 +903,7 @@ ApplicationWindow {
                         Layout.fillWidth: true
                         active: window.displayedPage === 9
                         visible: active
-                        sourceComponent: ServicesSettingsPage {
+                        sourceComponent: Pages.ServicesSettingsPage {
                             onRevealRequested: function(card) {
                                 Qt.callLater(function() {
                                     if (!card || window.displayedPage !== 9) return
@@ -924,7 +924,7 @@ ApplicationWindow {
                         Layout.fillWidth: true
                         active: window.displayedPage === 8
                         visible: active
-                        sourceComponent: WallpaperSettingsPage {
+                        sourceComponent: Pages.WallpaperSettingsPage {
                             scrollViewport: pageScroll
                             bridge: (typeof settingsBridge !== "undefined")
                                 ? settingsBridge : null

@@ -13,6 +13,7 @@ try {
     mkdirSync(join(prefix,'bin'),{recursive:true});
     cpSync(join(repo,'apps/settings'),join(prefix,'share/kos/settings'),{recursive:true});
     cpSync(join(repo,'shared/qml'),join(prefix,'share/shared/qml'),{recursive:true});
+    cpSync(join(repo,'shared/Icons'),join(prefix,'share/shared/Icons'),{recursive:true});
     const installed=join(prefix,'bin/kos-settings'); copyFileSync(binary,installed);
     const config=join(root,'config'); mkdirSync(config);
     writeFileSync(join(config,'kwinrc'),'[org.kde.kdecoration2]\nlibrary=third_party\ntheme=original\n');

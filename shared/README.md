@@ -12,9 +12,9 @@ KWin, Wayland-only APIs, or a shell desktop module.
   colour math remains reusable.
 - `qml/wallpapers/`: shell wallpaper scenes and assets; not part of standalone
   `Kos.Ui`.
-- `qml/glass/`: portable liquid-glass visuals. KWin blur adapters remain in
-  `shell/desktop/`.
-- `assets/`: assets used by more than one independent application.
+- `demo-ui/`: the synchronized `Kos.Demo` controls used by Settings. Preserve
+  upstream provenance and hashes when synchronizing implementations.
+- `Icons/`: the shared icon/font module.
 - `contracts/`: versioned IPC and persisted-data schemas. These files are the
   source of truth for socket envelopes, error codes, and shortcut defaults.
 
@@ -24,6 +24,6 @@ repository root alongside `shared/`, so an import looks like
 `import "../../shared/qml/controls"` (adjust the `../` count to the importing
 file's depth).
 
-Standalone applications link `Kos::Ui` and `Kos::UiPlugin` statically. The
-`pim/` module similarly provides the portable D-Bus client shared by Calendar
-and Todo; shell consumers remain decoupled from application processes.
+Standalone test hosts link `Kos::Ui` and `Kos::UiPlugin` statically. Calendar's
+PIM client and application-private modules live in `NextKde/kos-apps`; core
+widgets consume only versioned read-only application summaries.

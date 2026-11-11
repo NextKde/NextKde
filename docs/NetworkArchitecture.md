@@ -29,8 +29,10 @@ orange warning badge instead of an offline icon.
 ## UI ownership
 
 - `NetworkStatus.qml` renders the passive Bar indicator and hover details.
-- `NetworkTraffic.qml` samples the active interface's kernel RX/TX byte
-  counters and renders only presentation-friendly transfer rates.
+- `NetworkService.qml` requests the active interface's RX/TX counters through
+  `network.traffic` and derives shared transfer rates once per second while
+  connected. `NetworkTraffic.qml` only formats that snapshot; tooltips and
+  panels reuse the same samples.
 - `NetworkPanel.qml` renders the Wi-Fi picker popup that the Bar and the
   control centre's Wi-Fi card both open for scan/connect/disconnect actions.
 - `BarWindow.qml` only places the component.

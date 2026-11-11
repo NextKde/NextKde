@@ -40,6 +40,15 @@ class DocumentationTests(unittest.TestCase):
             (root / 'docs/Releasing.md').write_text('Release policy\n')
             self.assertEqual(self.check(root), 0)
 
+    def test_removed_documentation_images_fail(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / 'README.md').write_text('![desktop](docs/desktop.png)\n')
+            self.assertEqual(self.check(root), 1)
+            (root / 'docs').mkdir()
+            (root / 'docs/desktop.png').write_bytes(b'fixture')
+            self.assertEqual(self.check(root), 0)
+
 
 if __name__ == '__main__':
     unittest.main()

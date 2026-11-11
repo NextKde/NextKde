@@ -5,6 +5,7 @@
 #include <QVariantList>
 #include <QString>
 #include <QUrl>
+#include <QDateTime>
 #include <functional>
 
 // Format-independent directory and trust layer. Only the Flatpak adapter knows
@@ -22,7 +23,8 @@ QString validateUpdate(const QVariantMap& candidate, const QVariantMap& previous
 QVariantList apps();
 QVariantMap find(const QString& id);
 QVariantList sources();
-QString refresh(const Cancelled& cancelled = [] { return false; });
+bool needsRefresh(const QVariantMap& catalog, const QVariantMap& state, const QDateTime& now);
+QString refresh(const Cancelled& cancelled = [] { return false; }, bool ifNeeded = false);
 QString addSource(const QString& id, const QString& repository,
                   const QString& fingerprint, const QString& publicKeyFile);
 QString removeSource(const QString& id);

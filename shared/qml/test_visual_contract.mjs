@@ -403,6 +403,7 @@ function controlCenterModule(name) {
 const networkStatus = read("../../shell/desktop/modules/bar/NetworkStatus.qml");
 const networkPanel = read("../../shell/desktop/modules/bar/NetworkPanel.qml");
 const wifiSignalIcon = read("../../shell/desktop/modules/bar/WifiSignalIcon.qml");
+const sharedSignalIcon = read("../Icons/SignalIcon.qml");
 assert.doesNotMatch(barWindow, /LiquidGlassSurface\s*\{/,
     "the Bar keeps the compositor's clear refractive glass instead of a frosted fill");
 assert.match(barWindow,
@@ -436,14 +437,17 @@ assert.match(globalMenuSource,
 assert.match(barStatusArea, /iconSize:\s*18/,
     "top-bar tray icons use the enlarged 18px optical size");
 assert.match(wifiSignalIcon,
-    /signalStrength\s*<\s*30\s*\?\s*1\s*:\s*\(signalStrength\s*<\s*60\s*\?\s*2\s*:\s*3\)/,
+    /Symbols\.SignalIcon\s*\{/,
+    "the Bar reuses the shared signal glyph");
+assert.match(sharedSignalIcon,
+    /signalStrength\s*<\s*30\s*\?\s*1\s*:\s*signalStrength\s*<\s*60\s*\?\s*2\s*:\s*3/,
     "the shared Wi-Fi glyph exposes three live signal-quality levels");
 assert.match(networkStatus,
     /WifiSignalIcon\s*\{[\s\S]{0,420}signalStrength:\s*NetworkService\.signalStrength/,
     "the top-bar Wi-Fi icon renders NetworkManager signal quality");
 assert.match(networkPanel,
-    /id:\s*rowWifiGlyph[\s\S]{0,300}signalStrength:\s*modelData\.signalStrength[\s\S]{0,160}onSignalStrengthChanged:\s*requestPaint\(\)/,
-    "each network row repaints its own signal strength rather than the connected network strength");
+    /WifiSignalIcon\s*\{\s*id:\s*rowWifiGlyph[\s\S]{0,300}signalStrength:\s*modelData\.signalStrength/,
+    "each network row binds its own strength to the shared glyph");
 for (const [name, owner, intent] of [
     ["WifiCard", "wifiCard", "networkRequested"],
     ["BluetoothCard", "bluetoothCard", "bluetoothRequested"]]) {
@@ -514,18 +518,19 @@ for (const marker of ["Card 4: Screenshot", "Card 5: Dark Mode", "Card 6: Power"
     assert.match(section, /width:\s*24[\s\S]{0,80}height:\s*24/,
         `${marker} uses a 24x24 icon container`);
 }
-// 图标自 2026-09-16 起内联在 BundledIcons.qml 里（例外只有两处：Dock 的启动器
-// logo 读 shell/desktop/assets/applauncher.svg，Dock 的回收站跟随系统图标主题），
-// 所以这里改从登记表里取那条数据来验证。
+// Interface symbols now come from the pinned font module; BundledIcons keeps
+// semantic roles and branded artwork rather than duplicate inline SVG glyphs.
 const iconRegistry = read("../../shell/desktop/modules/common/BundledIcons.qml");
-// 注：登记名 "power" 画的是电源键（原先在 assets/logout.svg，现已内联）；"注销" 另画。
-const powerEntry = iconRegistry.match(/^\s*"power": '(.*)',$/m);
-assert.ok(powerEntry, "the power/logout icon is registered in BundledIcons");
-const powerGlyph = powerEntry[1];
-assert.match(powerGlyph, /fill="none"[\s\S]*stroke-width="70"/,
-    "the power glyph uses the same light outline weight as adjacent controls");
-assert.doesNotMatch(powerGlyph, /<path\s+fill=/,
-    "the power glyph does not regress to an oversized solid silhouette");
+const iconMap = read("../Icons/IconMap.js");
+const interfaceIcon = read("../Icons/Icon.qml");
+assert.match(iconRegistry, /"powerOff\|":\s*"power"/,
+    "the power action retains its semantic icon role");
+assert.match(iconRegistry, /Symbols\.IconRegistry\.has\(key\)/,
+    "the shell registry delegates interface symbols to the shared icon module");
+assert.match(iconMap, /"power":\s*"[^"\n]+"/,
+    "the pinned font map supplies the power glyph");
+assert.match(interfaceIcon, /font\.weight:\s*Font\.Normal/,
+    "interface glyphs use the font's consistent normal weight");
 
 // ── Glass selection highlight visual contracts ──────────────────────────────
 const selectionHighlightSource = read("./controls/SelectionHighlight.qml");
