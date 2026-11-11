@@ -1,0 +1,5 @@
+module qs.desktop.modules.switcher
+singleton SwitcherService 1.0 SwitcherService.qml
+SwitcherWindow 1.0 SwitcherWindow.qml
+SwitcherContent 1.0 SwitcherContent.qml
+SwitcherCard 1.0 SwitcherCard.qml
