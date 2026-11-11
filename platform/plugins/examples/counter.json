@@ -1,0 +1,33 @@
+{
+  "id": "org.nextkde.examples.counter",
+  "name": "Pocket Counter",
+  "description": "An offline, interactive counter. Each instance keeps its own label and value.",
+  "author": "NextKDE SDK",
+  "version": "1.0.0",
+  "apiVersion": 1,
+  "license": "MIT",
+  "permissions": [],
+  "widgets": [{
+    "id": "counter",
+    "name": "Pocket Counter",
+    "description": "Count tasks, cups or ideas without sharing data.",
+    "sizes": ["small", "medium", "large"],
+    "multiInstance": true,
+    "settings": [
+      {"key": "label", "label": "Counter label", "type": "string", "default": "Today", "maxLength": 80},
+      {"key": "count", "label": "Count", "type": "number", "default": 0, "min": 0, "max": 9999},
+      {"key": "completed", "label": "Completed", "type": "boolean", "default": false}
+    ],
+    "view": {"id": "root", "type": "column", "children": [
+      {"id": "label", "type": "value", "binding": "settings.label"},
+      {"id": "count", "type": "value", "binding": "settings.count"},
+      {"id": "buttons", "type": "row", "children": [
+        {"id": "decrease", "type": "button", "text": "−", "action": {"type": "increment", "key": "count", "delta": -1}},
+        {"id": "increase", "type": "button", "text": "+", "action": {"type": "increment", "key": "count", "delta": 1}},
+        {"id": "reset", "type": "button", "text": "Reset", "action": {"type": "set", "key": "count", "value": 0}}
+      ]},
+      {"id": "complete", "type": "button", "text": "Toggle done", "action": {"type": "toggle", "key": "completed"}},
+      {"id": "done", "type": "value", "binding": "settings.completed", "label": "Done"}
+    ]}
+  }]
+}

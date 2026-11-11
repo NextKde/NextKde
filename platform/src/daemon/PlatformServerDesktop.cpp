@@ -100,7 +100,8 @@ bool PlatformServer::handleDesktopOperation(QLocalSocket *socket, const QJsonObj
             return true;
         }
         const QString app = payload.value(QStringLiteral("app")).toString();
-        if (payload.contains(QStringLiteral("app")) && app != QLatin1String("calendar") && app != QLatin1String("weather")) {
+        if (payload.contains(QStringLiteral("app")) && app != QLatin1String("calendar")
+                && app != QLatin1String("weather") && app != QLatin1String("plugins")) {
             respond(socket, request, false, {}, QStringLiteral("invalid-widget-app"), QStringLiteral("Unsupported application Settings destination"), false);
             return true;
         }

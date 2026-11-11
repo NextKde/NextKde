@@ -157,17 +157,101 @@ PanelWindow {
     property bool editMode: false
     property bool widgetLibraryOpen: false
     property var activeDragCard: null
+    property string widgetFeedback: ""
+    property string contextWidgetId: ""
+
+    function gallerySpan(entry, size) { return WidgetRegistry.sizeSpan(size) }
+    function moveGalleryDrag(entry, size, point) {
+        const span = gallerySpan(entry, size)
+        galleryDrag.displayColumns = span[0]
+        galleryDrag.displayRows = span[1]
+        galleryDrag.dropPosition = WidgetLayout.snappedPosition(point.x - leftInset - spanSize(span[0]) / 2,
+            point.y - topInset - spanSize(span[1]) / 2, span[0], span[1], cellSize, gap, maximumWidgetColumns, usableRows)
+        const inGallery = point.x >= widgetLibrary.x && point.x <= widgetLibrary.x + widgetLibrary.width
+            && point.y >= widgetLibrary.y && point.y <= widgetLibrary.y + widgetLibrary.height
+        const position = galleryDrag.dropPosition
+        galleryDrag.dropAllowed = !inGallery && point.x >= leftInset && point.y >= topInset
+            && point.x < leftInset + maximumWidgetColumns * (cellSize + gap)
+            && point.y < topInset + usableRows * (cellSize + gap)
+            && WidgetLayout.canPlace(placements, entry.pluginId ? "" : entry.id,
+                position.column, position.row, span[0], span[1], maximumWidgetColumns, usableRows)
+        activeDragCard = galleryDrag
+    }
+    function addGalleryWidget(entry, size, requestedPosition) {
+        if (entry.pluginId && entry.present && !entry.multiInstance) {
+            widgetFeedback = I18n.tr("This widget is already on the desktop.")
+            return
+        }
+        const span = gallerySpan(entry, size)
+        const excludedId = entry.pluginId ? "" : entry.id
+        let position = requestedPosition
+        if (!position) {
+            const existing = placementFor(excludedId)
+            if (existing && WidgetLayout.canPlace(placements, excludedId, existing.column, existing.row,
+                span[0], span[1], maximumWidgetColumns, usableRows)) position = {column: existing.column, row: existing.row}
+            for (let row = 0; row <= usableRows - span[1] && !position; ++row)
+                for (let column = 0; column <= maximumWidgetColumns - span[0] && !position; ++column)
+                    if (WidgetLayout.canPlace(placements, excludedId, column, row, span[0], span[1], maximumWidgetColumns, usableRows))
+                        position = {column, row}
+        }
+        if (!position || !WidgetLayout.canPlace(placements, excludedId, position.column, position.row,
+            span[0], span[1], maximumWidgetColumns, usableRows)) {
+            widgetFeedback = I18n.tr("There is no room for this size. Move or remove another widget first.")
+            return
+        }
+        const before = placements
+        const output = desktopOutput
+        const geometry = widgetGeometry
+        widgetFeedback = ""
+        if (entry.pluginId) {
+            PluginWidgetService.add(entry.pluginId, entry.widgetId, size, function(ok, result) {
+                if (ok && result?.instanceId) {
+                    DeskCenterConfigService.savePosition(output, before, result.instanceId, position.column, position.row, geometry)
+                    root.widgetFeedback = I18n.tr("Widget added to the desktop.")
+                }
+            })
+        } else {
+            DeskCenterConfigService.setSpan(entry.id, span[0], span[1])
+            DeskCenterConfigService.savePosition(output, before, entry.id, position.column, position.row, geometry)
+            AppearanceConfigService.setDeskCenterWidgetVisible(entry.id, true)
+            widgetFeedback = I18n.tr("Widget added to the desktop.")
+        }
+    }
+    function resizeNamedWidget(id, size) {
+        const span = WidgetRegistry.sizeSpan(size)
+        const current = placementFor(id)
+        if (!current || !WidgetLayout.canPlace(placements, id, current.column, current.row,
+            span[0], span[1], maximumWidgetColumns, usableRows)) {
+            widgetFeedback = I18n.tr("There is no room for this size. Move or remove another widget first.")
+            return
+        }
+        if (WidgetRegistry.isPlugin(id)) PluginWidgetService.configure(id, {size})
+        else resizeWidget(id, span[0], span[1])
+    }
+    function showWidgetMenu(id, point) {
+        contextWidgetId = id
+        widgetContextMenu.x = Math.max(8, Math.min(point.x, root.width - widgetContextMenu.width - 8))
+        widgetContextMenu.y = Math.max(8, Math.min(point.y, root.height - widgetContextMenu.height - 8))
+        widgetContextMenu.open()
+    }
+    function configureWidget(id) {
+        widgetConfiguration.openFor(id)
+    }
 
     function enterWidgetEditMode(openLibrary) {
         desktopFileGrid.clearDesktopSelection()
+        desktopFileGrid.activateKeyboard()
+        root.widgetFeedback = ""
         root.widgetLibraryOpen = openLibrary
         root.editMode = true
-        desktopFileGrid.activateKeyboard()
+        if (openLibrary) Qt.callLater(function() { widgetLibrary.begin() })
     }
 
     function leaveWidgetEditMode() {
+        root.activeDragCard = null
         root.widgetLibraryOpen = false
         root.editMode = false
+        desktopFileGrid.activateKeyboard()
     }
 
     // Widget editing is modal: the gesture that entered it also leaves it.
@@ -344,6 +428,13 @@ PanelWindow {
             if (byId[id] && hidden.indexOf(id) < 0)
                 ordered.push(byId[id])
         }
+        for (const instance of PluginWidgetService.instances) {
+            const span = WidgetRegistry.sizeSpan(instance.size)
+            const position = DeskCenterConfigService.displayPositionsForOutput(desktopOutput, widgetGeometry)[instance.id]
+            ordered.push({id: instance.id, title: "", columns: span[0], rows: span[1],
+                column: position?.column, row: position?.row, priority: 40,
+                startColor: "#536783", endColor: "#35465f", surface: false})
+        }
         return ordered
     }
     readonly property var weatherTheme: WeatherTheme.theme(WeatherService.weatherCode, WeatherService.isDay)
@@ -414,6 +505,8 @@ PanelWindow {
         id: widgetBlurHolder
         regions: {
             const arr = []
+            if (widgetLibrary.visible && widgetLibrary.blurRegion)
+                arr.push(widgetLibrary.blurRegion)
             for (let i = 0; i < widgetRepeater.count; ++i) {
                 const card = widgetRepeater.itemAt(i)
                 if (card && card.blurRegion)
@@ -550,81 +643,105 @@ PanelWindow {
     }
 
     Rectangle {
-        id: widgetLibrary
-        objectName: "widget-library"
-        z: 190
-        opacity: root.editMode && root.widgetLibraryOpen ? 1 : 0
-        visible: (root.editMode && root.widgetLibraryOpen) || opacity > 0
-        enabled: root.editMode && root.widgetLibraryOpen
-        scale: 0.96 + 0.04 * opacity
-        transformOrigin: Item.TopRight
-        Behavior on opacity { NumberAnimation { duration: AppearanceTokens.motion.normalDuration; easing.type: Easing.OutCubic } }
-        anchors { top: widgetEditToolbar.bottom; right: widgetEditToolbar.right; topMargin: 10 }
-        width: 430
-        height: 116
-        radius: AppearanceTokens.isMaterial ? 24 : 18
-        color: AppearanceTokens.surface.pick(
-            AppearanceTokens.colors.surfaceContainer,
-            ThemeService.isDark ? Qt.rgba(0.07, 0.07, 0.09, 0.94)
-                : Qt.rgba(1, 1, 1, 0.94))
-        border.width: 1
-        border.color: AppearanceTokens.surface.pick(
-            AppearanceTokens.colors.outlineVariant,
-            Qt.rgba(ThemeService.foregroundColor.r,
-                ThemeService.foregroundColor.g,
-                ThemeService.foregroundColor.b, 0.16))
+        z: 201
+        visible: !root.widgetLibraryOpen && (root.widgetFeedback.length > 0 || (root.editMode && PluginWidgetService.error.length > 0))
+        anchors { top: widgetEditToolbar.bottom; right: parent.right; margins: 16 }
+        width: Math.min(360, root.width - 32)
+        height: widgetStatus.implicitHeight + 24
+        radius: 12
+        color: ThemeService.backgroundColor
+        border { width: 1; color: AppearanceTokens.colors.outlineVariant }
+        Text {
+            id: widgetStatus
+            anchors { left: parent.left; right: parent.right; top: parent.top; margins: 12 }
+            text: root.widgetFeedback || PluginWidgetService.error
+            textFormat: Text.PlainText
+            color: ThemeService.foregroundColor
+            font.pixelSize: 12
+            wrapMode: Text.WordWrap
+        }
+        TapHandler { onTapped: { root.widgetFeedback = ""; PluginWidgetService.error = "" } }
+    }
 
-        Row {
-            anchors.centerIn: parent
-            spacing: 6
-            Repeater {
-                model: DeskCenterConfigService.defaultOrder
-                delegate: Rectangle {
-                    required property string modelData
-                    objectName: "widget-library-" + modelData
-                    readonly property bool active:
-                        !AppearanceConfigService.isDeskCenterWidgetHidden(modelData)
-                    width: 54; height: 82
-                    radius: AppearanceTokens.isMaterial ? 16 : 12
-                    color: active
-                        ? AppearanceTokens.surface.pick(
-                            AppearanceTokens.colors.secondaryContainer,
-                            Qt.rgba(ThemeService.foregroundColor.r,
-                                ThemeService.foregroundColor.g,
-                                ThemeService.foregroundColor.b, 0.10))
-                        : "transparent"
-                    border.width: 1
-                    border.color: active ? AppearanceTokens.colors.primary
-                        : AppearanceTokens.colors.outlineVariant
-                    Column {
-                        anchors.centerIn: parent
-                        spacing: 5
-                        BundledIcon {
-                            anchors.horizontalCenter: parent.horizontalCenter
-                            name: "desktop.widget." + modelData
-                            color: ThemeService.foregroundColor
-                            size: 20
-                        }
-                        Text {
-                            anchors.horizontalCenter: parent.horizontalCenter
-                            text: root.widgetLabels[modelData]
-                            color: ThemeService.foregroundColor
-                            font { pixelSize: 9; weight: Font.DemiBold }
-                        }
-                        BundledIcon {
-                            anchors.horizontalCenter: parent.horizontalCenter
-                            name: active ? "desktop.widget.remove" : "desktop.widget.add"
-                            color: active ? "#ff453a" : ThemeService.accentColor
-                            size: 14
-                        }
-                    }
-                    TapHandler {
-                        onTapped: AppearanceConfigService.setDeskCenterWidgetVisible(
-                            modelData, !active)
-                    }
+    WidgetGallery {
+        id: widgetLibrary
+        z: 190
+        visible: root.editMode && root.widgetLibraryOpen
+        x: Math.min(48, root.leftInset)
+        y: Math.max(root.topInset + 44, root.height - root.bottomInset - height)
+        width: Math.max(1, Math.min(940, root.width - x - root.rightInset))
+        height: Math.max(180, Math.min(510, root.height - root.topInset - root.bottomInset - 44))
+        builtinPreview: widgetCardComponent
+        desktopCellSize: root.cellSize
+        desktopGap: root.gap
+        feedback: root.widgetFeedback || PluginWidgetService.error
+        onVisibleChanged: if (visible) begin()
+        onDone: root.leaveWidgetEditMode()
+        onCenterRequested: PluginWidgetService.openCenter()
+        onAddRequested: (entry, size) => root.addGalleryWidget(entry, size, null)
+        onDragMoved: (entry, size, x, y) => root.moveGalleryDrag(entry, size, mapToItem(desktopCoordinates, x, y))
+        onDragReleased: (entry, size, x, y) => {
+            root.moveGalleryDrag(entry, size, mapToItem(desktopCoordinates, x, y))
+            if (galleryDrag.dropAllowed) root.addGalleryWidget(entry, size, galleryDrag.dropPosition)
+            else root.widgetFeedback = I18n.tr("Choose an empty desktop area outside the gallery.")
+            root.activeDragCard = null
+        }
+        onDragCancelled: root.activeDragCard = null
+    }
+
+    Controls.Menu {
+        id: widgetContextMenu
+        width: 220
+        Controls.MenuItem {
+            text: WidgetRegistry.title(root.contextWidgetId)
+            enabled: false
+        }
+        Controls.MenuSeparator {}
+        Instantiator {
+            model: WidgetRegistry.sizes(root.contextWidgetId)
+            onObjectAdded: (index, object) => widgetContextMenu.insertItem(index + 2, object)
+            onObjectRemoved: (index, object) => widgetContextMenu.removeItem(object)
+            delegate: Controls.MenuItem {
+                required property string modelData
+                text: widgetLibrary.sizeName(modelData)
+                checkable: true
+                checked: {
+                    const span = WidgetRegistry.span(root.contextWidgetId)
+                    const target = WidgetRegistry.sizeSpan(modelData)
+                    return span[0] === target[0] && span[1] === target[1]
                 }
+                onTriggered: root.resizeNamedWidget(root.contextWidgetId, modelData)
             }
         }
+        Controls.MenuSeparator {}
+        Controls.MenuItem {
+            text: I18n.tr("Edit Widget…")
+            enabled: WidgetRegistry.canConfigure(root.contextWidgetId)
+            onTriggered: root.configureWidget(root.contextWidgetId)
+        }
+        Controls.MenuItem {
+            text: I18n.tr("Edit Widgets")
+            onTriggered: root.enterWidgetEditMode(true)
+        }
+        Controls.MenuItem {
+            text: I18n.tr("Remove Widget")
+            onTriggered: WidgetRegistry.remove(root.contextWidgetId)
+        }
+    }
+
+    WidgetConfiguration {
+        id: widgetConfiguration
+        parent: Controls.Overlay.overlay
+        timerSelected: root.timerView
+        onClockModeChanged: timer => root.timerView = timer
+    }
+
+    QtObject {
+        id: galleryDrag
+        property int displayColumns: 1
+        property int displayRows: 1
+        property var dropPosition: ({column: 0, row: 0})
+        property bool dropAllowed: false
     }
 
     Rectangle {
@@ -710,11 +827,20 @@ PanelWindow {
         objectName: "desktop-widget-repeater"
         model: desktopWidgetModel
 
-        delegate: DeskWidgetCard {
+        delegate: widgetCardComponent
+    }
+
+    Component {
+        id: widgetCardComponent
+        DeskWidgetCard {
             id: card
-            objectName: "desktop-widget-" + modelData.id
-            required property string widgetId
+            objectName: (preview ? "widget-preview-" : "desktop-widget-") + modelData.id
+            preview: parent?.previewWidgetId !== undefined
+            property string widgetId: preview ? parent.previewWidgetId : model.widgetId
+            readonly property int previewColumns: preview ? parent.previewColumns : 1
+            readonly property int previewRows: preview ? parent.previewRows : 1
             readonly property var modelData: {
+                if (preview) return root.configuredWidget(widgetId, 0, "#536783", "#35465f")
                 for (const widget of root.widgetDefinitions) {
                     if (widget.id === widgetId) return widget
                 }
@@ -743,7 +869,7 @@ PanelWindow {
             readonly property bool dropAllowed: WidgetLayout.canPlace(root.placements,
                 modelData.id, dropPosition.column, dropPosition.row,
                 displayColumns, displayRows, root.maximumWidgetColumns, root.usableRows)
-            visible: placement !== null
+            visible: preview || placement !== null
             z: widgetDrag.active || resizeHandle.resizing ? 120 : (root.editMode ? 20 : 1)
             scale: widgetDrag.active ? 1.035 : 1
             // The clock is the one card whose glass outline is a shape rather
@@ -759,21 +885,21 @@ PanelWindow {
             // SurfaceShape listens to Item geometry and scale changes, not
             // Translate.x/y. Move the anchor itself so the native glass and
             // the QML content publish the same position on every drag frame.
-            x: root.leftInset + (placement?.column ?? 0) * (root.cellSize + root.gap) + dragOffsetX
-            y: root.topInset + (placement?.row ?? 0) * (root.cellSize + root.gap) + dragOffsetY
+            x: preview ? 0 : root.leftInset + (placement?.column ?? 0) * (root.cellSize + root.gap) + dragOffsetX
+            y: preview ? 0 : root.topInset + (placement?.row ?? 0) * (root.cellSize + root.gap) + dragOffsetY
             // The card and every widget inside it lay themselves out for the
             // cell size they have committed to, never for the mid-drag preview:
             // switching a widget to its other layout at the halfway point made
             // the contents jump while the corner was still moving. The preview
             // span only drives the resize readout and the corner itself.
-            readonly property int displayColumns: placement?.columns ?? 1
-            readonly property int displayRows: placement?.rows ?? 1
+            readonly property int displayColumns: preview ? previewColumns : placement?.columns ?? 1
+            readonly property int displayRows: preview ? previewRows : placement?.rows ?? 1
             // While the corner is held, the card follows the magnetised
             // pointer position; the moment it is released the size switches to
             // the committed cell and the spring below takes it there.
-            width: resizeHandle.resizing ? resizeHandle.previewWidth
+            width: preview ? parent.naturalWidth : resizeHandle.resizing ? resizeHandle.previewWidth
                 : root.spanSize(displayColumns)
-            height: resizeHandle.resizing ? resizeHandle.previewHeight
+            height: preview ? parent.naturalHeight : resizeHandle.resizing ? resizeHandle.previewHeight
                 : root.spanSize(displayRows)
             // A released card lands on its cell instead of sliding there: the
             // old fixed cubic stopped dead at the destination, which is what
@@ -803,7 +929,7 @@ PanelWindow {
             // lands it on the grid with a little weight. Reduced motion still
             // gets the new size, just without the travel.
             Behavior on width {
-                enabled: !resizeHandle.resizing && !AppTheme.reduceMotion
+                enabled: !card.preview && !resizeHandle.resizing && !AppTheme.reduceMotion
                 SpringAnimation {
                     spring: AppearanceTokens.motion.widgetResizeSpring
                     damping: AppearanceTokens.motion.widgetResizeDamping
@@ -812,7 +938,7 @@ PanelWindow {
                 }
             }
             Behavior on height {
-                enabled: !resizeHandle.resizing && !AppTheme.reduceMotion
+                enabled: !card.preview && !resizeHandle.resizing && !AppTheme.reduceMotion
                 SpringAnimation {
                     spring: AppearanceTokens.motion.widgetResizeSpring
                     damping: AppearanceTokens.motion.widgetResizeDamping
@@ -832,20 +958,18 @@ PanelWindow {
                 }
             }
 
-            // A right click is how a card enters editing, so a second right
-            // click has to leave it again. Toggling keeps one gesture as the
-            // single way in and out instead of re-requesting the state the
-            // desktop is already in.
             TapHandler {
+                enabled: !card.preview
                 acceptedButtons: Qt.RightButton
                 gesturePolicy: TapHandler.ReleaseWithinBounds
-                onTapped: root.toggleWidgetEditMode()
+                onTapped: eventPoint => root.showWidgetMenu(card.widgetId,
+                    card.mapToItem(desktopCoordinates, eventPoint.position.x, eventPoint.position.y))
             }
 
             DragHandler {
                 id: widgetDrag
                 target: null
-                enabled: root.editMode && !resizeHandle.resizing
+                enabled: !card.preview && root.editMode && !resizeHandle.resizing
                 acceptedButtons: Qt.LeftButton
                 onActiveTranslationChanged: {
                     if (!active)
@@ -877,7 +1001,7 @@ PanelWindow {
 
             Rectangle {
                 z: 50
-                visible: widgetHover.hovered && !root.editMode
+                visible: !card.preview && widgetHover.hovered && !root.editMode
                 anchors { right: parent.right; bottom: parent.bottom; margins: 8 }
                 width: Math.min(sizeLabelMetrics.advanceWidth + 14, parent.width - 16)
                 height: Math.max(24, sizeLabel.implicitHeight + 10)
@@ -905,7 +1029,7 @@ PanelWindow {
 
             Rectangle {
                 z: 80
-                visible: root.editMode
+                visible: !card.preview && root.editMode
                 anchors { top: parent.top; left: parent.left; margins: 8 }
                 width: 26; height: 26; radius: 13
                 color: "#ff453a"
@@ -916,15 +1040,14 @@ PanelWindow {
                     size: 18
                 }
                 TapHandler {
-                    onTapped: AppearanceConfigService.setDeskCenterWidgetVisible(
-                        card.modelData.id, false)
+                    onTapped: WidgetRegistry.remove(card.modelData.id)
                 }
             }
 
             WidgetResizeHandle {
                 id: resizeHandle
                 z: 80
-                visible: root.editMode
+                visible: !card.preview && root.editMode && !WidgetRegistry.isPlugin(card.widgetId)
                 anchors { right: parent.right; bottom: parent.bottom; margins: 5 }
                 cellSize: root.cellSize
                 gap: root.gap
@@ -973,7 +1096,7 @@ PanelWindow {
                 // drag or a stray click on the music card into a launch of the
                 // app it was showing, and a second copy of a running player is
                 // what crashed QQ Music (two instances share one profile).
-                enabled: !root.editMode
+                enabled: !card.preview && !root.editMode
                 // The clock resolves monochrome ink in its face. Keep its text
                 // out of the extra saturation texture so it renders at the
                 // window's resolution. Other glass artwork is desaturated.
@@ -984,6 +1107,13 @@ PanelWindow {
 	                    colorization: 0.0
                 }
 
+            Loader {
+                anchors.fill: parent
+                active: !card.preview && card.visible && WidgetRegistry.isPlugin(card.widgetId)
+                sourceComponent: Component {
+                    PluginWidgetView { instanceId: card.widgetId; interactive: !root.editMode }
+                }
+            }
             Loader {
                 anchors.fill: parent
                 active: card.visible && card.modelData.id === "clock"
@@ -2095,7 +2225,7 @@ PanelWindow {
                 Timer {
                     interval: 250
                     repeat: true
-                    running: musicContent.visible && card.visible
+                    running: !card.preview && musicContent.visible && card.visible
                         && !!musicContent.player?.isPlaying
                     onTriggered: {
                         if (musicContent.player)

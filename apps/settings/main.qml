@@ -44,6 +44,7 @@ ApplicationWindow {
     property int currentPage: 1
     readonly property int navigationPage: currentPage === 14 ? 1 : currentPage
     property string requestedApp: ""
+    property bool requestedSources: false
     function revealRequestedApp() {
         if (servicesPage.item) servicesPage.item.requestReveal()
     }
@@ -281,7 +282,8 @@ ApplicationWindow {
         { subtitle: I18n.tr("Notifications") },
         { subtitle: I18n.tr("Power") },
         { subtitle: I18n.tr("Fonts") },
-        { subtitle: I18n.tr("About") }
+        { subtitle: I18n.tr("About") },
+        { subtitle: I18n.tr("Plugin Center") }
     ]
 
     // Shown only while a development session drives this window. Every value on
@@ -723,6 +725,15 @@ ApplicationWindow {
 
                                 SidebarEntry {
                                     Layout.fillWidth: true
+                                    pageIndex: 16
+                                    label: I18n.tr("Plugin Center")
+                                    navIcon: "general"
+                                    navSymbol: "◇"
+                                    navTint: "#a775cf"
+                                }
+
+                                SidebarEntry {
+                                    Layout.fillWidth: true
                                     pageIndex: 7
                                     label: I18n.tr("Glass debugging")
                                     navIcon: "appearance"
@@ -903,6 +914,8 @@ ApplicationWindow {
                         active: window.displayedPage === 9
                         visible: active
                         sourceComponent: Pages.ServicesSettingsPage {
+                            openSourcesOnCompleted: window.requestedSources
+                            onSourcesOpened: window.requestedSources = false
                             onRevealRequested: function(card) {
                                 Qt.callLater(function() {
                                     if (!card || window.displayedPage !== 9) return
@@ -931,6 +944,21 @@ ApplicationWindow {
                             onDesktopPreviewFinished: {
                                 window.showNormal()
                                 window.requestActivate()
+                            }
+                        }
+                    }
+
+                    Loader {
+                        objectName: "PluginSettingsPageLoader"
+                        Layout.fillWidth: true
+                        active: window.displayedPage === 16
+                        visible: active
+                        sourceComponent: Pages.PluginSettingsPage {
+                            colors: window.notificationTheme
+                            store: typeof pluginStore !== "undefined" ? pluginStore : null
+                            onManageSourcesRequested: {
+                                window.requestedSources = true
+                                window.currentPage = 9
                             }
                         }
                     }

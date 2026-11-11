@@ -95,8 +95,25 @@ QtObject {
         return projection?.geometry === geometry ? projection.positions : positionsForOutput(output)
     }
 
+    function knownWidget(widgetId) {
+        return defaultOrder.indexOf(widgetId) >= 0 || PluginWidgetService.instance(widgetId) !== null
+    }
+
+    function forgetWidget(widgetId) {
+        const sizes = parsedSizes()
+        delete sizes[widgetId]
+        _settings.sizesJson = JSON.stringify(sizes)
+        let all = ({})
+        try { all = JSON.parse(_settings.positionsJson) } catch (_) {}
+        for (const output of Object.keys(all)) delete all[output][widgetId]
+        _settings.positionsJson = JSON.stringify(all)
+        projectedPositions = ({})
+        _settings.sync()
+        revision++
+    }
+
     function savePosition(output, placements, widgetId, column, row, geometry) {
-        if (defaultOrder.indexOf(widgetId) < 0 || !Number.isInteger(column)
+        if (!knownWidget(widgetId) || !Number.isInteger(column)
                 || !Number.isInteger(row) || column < 0 || row < 0) return false
         let all = ({})
         try {

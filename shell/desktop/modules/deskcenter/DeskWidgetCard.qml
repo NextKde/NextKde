@@ -23,6 +23,9 @@ Item {
     id: root
 
     property string title: ""
+    // Gallery copies paint a bounded thumbnail; they never publish compositor
+    // surface shapes or blur regions into the desktop window.
+    property bool preview: false
     // Host declaration: this card's surface outline is MaterialFlower's flower
     // silhouette instead of the rounded rectangle every other card uses. It is a
     // request, not a form of its own -- the tonal backend paints the same paint
@@ -94,7 +97,7 @@ Item {
         anchors.fill: parent
         // The tonal form always has a surface; the glass form only owns one when
         // the card is not drawing colour artwork of its own.
-        sourceComponent: root.tonalSurface
+        sourceComponent: root.preview ? null : root.tonalSurface
             ? tonalSurfaceComponent
             : (root.usesColorArtwork ? null : glassSurfaceComponent)
     }
@@ -104,6 +107,15 @@ Item {
     // it got -- and neither does the window.
     readonly property var blurRegion:
         surfaceBackend.item ? surfaceBackend.item.blurRegion : null
+
+    Rectangle {
+        anchors.fill: parent
+        radius: root.radius
+        visible: root.preview && (!root.usesColorArtwork || root.tonalSurface)
+        color: root.tonalSurface ? root.materialSurfaceColor : AppearanceTokens.colors.layer1
+        border.width: 1
+        border.color: AppearanceTokens.colors.outlineVariant
+    }
 
     Rectangle {
         anchors.fill: parent

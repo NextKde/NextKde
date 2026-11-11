@@ -1,4 +1,5 @@
 import Quickshell
+import Quickshell.Io
 import QtQuick
 import qs.desktop.modules.common
 import qs.desktop.modules.wallpaper
@@ -7,6 +8,14 @@ import qs.desktop.modules.wallpaper
 // ScreenLifecycle temporarily hides it while KWin has no real output.
 Scope {
     id: root
+    signal widgetEditingRequested(bool library, bool finish)
+
+    IpcHandler {
+        target: "deskWidgets"
+        function openGallery(): void { root.widgetEditingRequested(true, false) }
+        function edit(): void { root.widgetEditingRequested(false, false) }
+        function done(): void { root.widgetEditingRequested(false, true) }
+    }
 
     // Desktop files and context menus exist independently on every usable
     // output. DeskCenterWindow itself keeps widgets restricted to the elected
@@ -37,6 +46,15 @@ Scope {
                     screen: outputScope.modelData
                     visible: ScreenLifecycle.outputAvailable
                     spatialWallpaperActive: wallpaperWindow.active
+                }
+
+                Connections {
+                    target: root
+                    function onWidgetEditingRequested(library, finish) {
+                        if (finish) widgetWindow.leaveWidgetEditMode()
+                        else if (outputScope.modelData === ScreenLifecycle.activeScreen)
+                            widgetWindow.enterWidgetEditMode(library)
+                    }
                 }
 
                 ThemeForegroundWindow {

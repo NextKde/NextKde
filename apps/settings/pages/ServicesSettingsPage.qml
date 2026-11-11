@@ -9,6 +9,8 @@ GridLayout {
     id: page
     property var bridge: null
     property var store: null
+    property bool openSourcesOnCompleted: false
+    signal sourcesOpened()
     // Keep delegate identity stable while per-app status queries finish.
     property var appIds: []
     function syncAppIds() {
@@ -451,6 +453,10 @@ GridLayout {
             bridge.wallpaperSnapshot();
     }
     Component.onCompleted: {
+        if (openSourcesOnCompleted) Qt.callLater(function() {
+            sourceDialog.open()
+            page.sourcesOpened()
+        })
         syncAppIds()
         Qt.callLater(page.ensureCatalogFresh)
         if (compatible)

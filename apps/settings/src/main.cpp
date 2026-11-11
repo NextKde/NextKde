@@ -1,4 +1,5 @@
 #include "AppStore.h"
+#include "PluginStore.h"
 #include "AboutCache.h"
 #include "TaskNotifications.h"
 #include "PowerSettings.h"
@@ -68,7 +69,8 @@ int main(int argc, char* argv[])
 
     QString requestedApp;
     for (const auto &argument : application.arguments()) {
-        if (argument == QLatin1String("--app=calendar") || argument == QLatin1String("--app=weather"))
+        if (argument == QLatin1String("--app=calendar") || argument == QLatin1String("--app=weather")
+            || argument == QLatin1String("--app=plugins"))
             requestedApp = argument.mid(6);
     }
     // Installed and development shells must never navigate each other's window.
@@ -86,7 +88,8 @@ int main(int argc, char* argv[])
             if (argument == QLatin1String("--page=fonts")) navigationRequest = QStringLiteral("page:14");
             else if (argument == QLatin1String("--page=about")) navigationRequest = QStringLiteral("page:15");
             else if (argument == QLatin1String("--page=windows")) navigationRequest = QStringLiteral("page:11");
-            else if (ok && page >= 0 && page <= 15) navigationRequest = QStringLiteral("page:%1").arg(page);
+            else if (argument == QLatin1String("--page=plugins")) navigationRequest = QStringLiteral("page:16");
+            else if (ok && page >= 0 && page <= 16) navigationRequest = QStringLiteral("page:%1").arg(page);
         }
     }
     if (!navigationOwner) {
@@ -118,6 +121,7 @@ int main(int argc, char* argv[])
     WindowSettings windowSettings;
     PowerSettings powerSettings;
     AboutCache aboutCache;
+    PluginStore pluginStore;
     QQmlApplicationEngine engine;
     FontSettings fontSettings(&engine);
     engine.rootContext()->setContextProperty(QStringLiteral("fontSettings"), &fontSettings);
@@ -126,6 +130,7 @@ int main(int argc, char* argv[])
     engine.rootContext()->setContextProperty(QStringLiteral("windowSettings"), &windowSettings);
     engine.rootContext()->setContextProperty(QStringLiteral("powerSettings"), &powerSettings);
     engine.rootContext()->setContextProperty(QStringLiteral("aboutCache"), &aboutCache);
+    engine.rootContext()->setContextProperty(QStringLiteral("pluginStore"), &pluginStore);
 
     const SettingsEntry entry
         = chooseSettingsEntry(bridge.isDevelopmentSession(), bridge.sessionShellDir());
@@ -162,8 +167,8 @@ int main(int argc, char* argv[])
                 const QByteArray app = client->readLine(64).trimmed();
                 bool pageOk = false;
                 const int page = app.startsWith("page:") ? app.mid(5).toInt(&pageOk) : -1;
-                pageOk = pageOk && page >= 0 && page <= 15;
-                if (app != "show" && app != "calendar" && app != "weather" && !pageOk) {
+                pageOk = pageOk && page >= 0 && page <= 16;
+                if (app != "show" && app != "calendar" && app != "weather" && app != "plugins" && !pageOk) {
                     client->disconnectFromServer();
                     return;
                 }
@@ -176,6 +181,8 @@ int main(int argc, char* argv[])
                     root->setProperty("requestedApp", QString::fromUtf8(app));
                     root->setProperty("currentPage", 9);
                     QMetaObject::invokeMethod(root, "revealRequestedApp");
+                } else if (app == "plugins") {
+                    root->setProperty("currentPage", 16);
                 } else if (pageOk) {
                     root->setProperty("currentPage", page);
                 } else if (appStore.hasActiveMutation()) {
@@ -202,6 +209,8 @@ int main(int argc, char* argv[])
         if (argument == QStringLiteral("--app=calendar") || argument == QStringLiteral("--app=weather")) {
             engine.rootObjects().constFirst()->setProperty("requestedApp", argument.mid(6));
             engine.rootObjects().constFirst()->setProperty("currentPage", 9);
+        } else if (argument == QStringLiteral("--app=plugins") || argument == QStringLiteral("--page=plugins")) {
+            engine.rootObjects().constFirst()->setProperty("currentPage", 16);
         } else if (argument == QStringLiteral("--page=about")) {
             engine.rootObjects().constFirst()->setProperty("currentPage", 15);
         } else if (argument == QStringLiteral("--page=fonts")) {
@@ -211,7 +220,7 @@ int main(int argc, char* argv[])
         } else if (argument.startsWith(QStringLiteral("--page="))) {
             bool ok = false;
             const int page = argument.mid(7).toInt(&ok);
-            if (ok && page >= 0 && page <= 15)
+            if (ok && page >= 0 && page <= 16)
                 engine.rootObjects().constFirst()->setProperty("currentPage", page);
         }
     }
