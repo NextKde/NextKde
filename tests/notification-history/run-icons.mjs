@@ -31,4 +31,8 @@ try {
     assert.match(output, /NOTIFICATION_ICONS_TEST_PASS/);
     assert.doesNotMatch(output, /TypeError|ReferenceError|Required property|Binding loop|Error:|Failed to load/);
     console.log(`Notification theme/path/desktop/fallback icons and dark/light stacks passed; QA: ${imagePath}`);
-} finally { rmSync(directory, {recursive: true, force: true}); }
+} finally {
+    if (process.env.KOS_KEEP_TEST_TMP === "1")
+        console.log(`Fixture retained: ${directory}`);
+    else rmSync(directory, {recursive: true, force: true});
+}

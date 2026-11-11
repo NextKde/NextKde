@@ -20,4 +20,8 @@ try {
         assert.doesNotMatch(output, /ReferenceError|TypeError|Binding loop|Error:|Failed to load configuration/);
     }
     console.log("Notification pane: preview, dismiss, expansion, scrolling, clear/arrival and smooth empty-state handoff passed");
-} finally { rmSync(directory, {recursive:true, force:true}); }
+} finally {
+    if (process.env.KOS_KEEP_TEST_TMP === "1")
+        console.log(`Fixture retained: ${directory}`);
+    else rmSync(directory, {recursive:true, force:true});
+}
