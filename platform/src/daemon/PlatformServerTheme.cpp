@@ -1,4 +1,5 @@
 #include "PlatformServer.h"
+#include "KimpanelBridge.h"
 #include "PlatformProcess.h"
 #include "../windowanimation/NativeGenie.h"
 #include "../windowanimation/AnimationTask.h"
@@ -49,7 +50,10 @@ void PlatformServer::applySystemTheme(QLocalSocket *socket,
     }
 
     runCommand(socket, request, program, arguments,
-               [dark, colorScheme, lookAndFeel, method](const QByteArray &, int) {
+               [this, dark, colorScheme, lookAndFeel, method](const QByteArray &, int) {
+        if (m_kimpanelBridge) {
+            m_kimpanelBridge->reassertTakeover();
+        }
         return QJsonObject{{QStringLiteral("dark"), dark},
                            {QStringLiteral("colorScheme"), colorScheme},
                            {QStringLiteral("lookAndFeel"), lookAndFeel},

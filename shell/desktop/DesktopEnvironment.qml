@@ -16,6 +16,7 @@ import qs.desktop.modules.common
 import qs.desktop.modules.platform
 import qs.desktop.modules.shortcuts
 import qs.desktop.modules.weather
+import qs.desktop.modules.inputmethod
 
 Item {
     id: shell
@@ -728,7 +729,17 @@ Item {
                 barExpected: !shell.barIntegratedWithDock,
                 barVisible: desktopBar.windowVisible,
                 dockVisible: desktopDock.windowVisible,
+                inputMethodEnabled: InputMethodService.userEnabled,
             })
+        }
+    }
+
+    IpcHandler {
+        target: "inputmethod-settings"
+
+        function setEnabled(enabled: bool): string {
+            InputMethodService.setEnabled(enabled)
+            return JSON.stringify({ enabled: InputMethodService.userEnabled })
         }
     }
 
@@ -773,6 +784,8 @@ Item {
     NotificationCenter {
         id: notificationCenter
     }
+
+    InputMethodPopup {}
 
     DeskCenter {}
     DesktopLyrics {}
