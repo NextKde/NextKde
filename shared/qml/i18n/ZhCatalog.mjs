@@ -496,6 +496,9 @@ export const catalog = {
     // shortcuts · 快捷键服务
     "App Launcher": "应用启动器",
     "Quick Search": "快速搜索",
+    "Glass window switcher": "玻璃窗口切换器",
+    "Show live window previews while holding Alt+Tab. Turn off to restore the KDE switcher.": "按住 Alt+Tab 显示实时窗口预览。关闭后恢复 KDE 窗口切换器。",
+    "Could not change the window switcher layout": "无法更改窗口切换器布局",
     "Workspace Overview": "工作区概览",
     "Stage Sidebar": "Stage 侧边栏",
     "Clipboard History": "剪贴板历史",

@@ -31,7 +31,7 @@ try {
         qmldir += `${singleton ? 'singleton ' : ''}${name} 1.0 ${name}.qml\n`;
     }
     writeFileSync(join(directory, 'qmldir'), qmldir);
-    const result = spawnSync(process.env.QMLTESTRUNNER || '/usr/lib/qt6/bin/qmltestrunner', ['-input', directory], {
+    const result = spawnSync(process.argv[2] || process.env.QMLTESTRUNNER || '/usr/lib/qt6/bin/qmltestrunner', ['-input', directory], {
         encoding: 'utf8', timeout: 20000,
         env: {...process.env, QT_QPA_PLATFORM: 'offscreen', QT_QUICK_BACKEND: 'software', QT_FORCE_STDERR_LOGGING: '1'},
     });

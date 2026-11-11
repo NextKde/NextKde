@@ -47,10 +47,20 @@ def configure(enabled, package, state):
         if saved is None:
             raise RuntimeError("Cannot restore KWin layout without recovery record")
         value = saved["layout"]
-    command = ["kwriteconfig6", "--file", "kwinrc", "--group", "TabBox", "--key", "LayoutName"]
-    command += ["--delete"] if value == "__kos_absent__" else [value]
-    run(*command)
-    run("qdbus6", "org.kde.KWin", "/KWin", "org.kde.KWin.reconfigure")
+    def write_layout(layout):
+        command = ["kwriteconfig6", "--file", "kwinrc", "--group", "TabBox", "--key", "LayoutName"]
+        command += ["--delete"] if layout == "__kos_absent__" else [layout]
+        run(*command)
+
+    try:
+        write_layout(value)
+        run("qdbus6", "org.kde.KWin", "/KWin", "org.kde.KWin.reconfigure")
+    except subprocess.CalledProcessError:
+        # Keep disk and the last successful UI state aligned when reconfigure
+        # fails. Retain the recovery record even if rollback also fails.
+        write_layout(current)
+        run("qdbus6", "org.kde.KWin", "/KWin", "org.kde.KWin.reconfigure")
+        raise
     if not enabled and state.exists():
         state.unlink()
 

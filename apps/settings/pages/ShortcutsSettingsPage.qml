@@ -31,7 +31,7 @@ ColumnLayout {
         shortcuts = Array.isArray(raw) ? raw : (raw && raw.length !== undefined ? Array.prototype.slice.call(raw) : []);
         if (state.switcher)
             switcher = state.switcher;
-        errorText = state.error || switcher.error || "";
+        errorText = I18n.tr(state.error || switcher.error || "");
     }
 
     function refresh() {
