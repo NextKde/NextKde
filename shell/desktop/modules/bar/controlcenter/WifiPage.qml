@@ -98,12 +98,12 @@ Item {
                     : "transparent"
                 Behavior on color { ColorAnimation { duration: 100 } }
 
-                GlassText {
+                BundledIcon {
                     visible: !!modelData.active
                     anchors { left: parent.left; leftMargin: 8; verticalCenter: parent.verticalCenter }
-                    text: "✓"
+                    name: "network.connected"
                     color: AppearanceTokens.content.glassInk()
-                    font { pixelSize: 13; weight: Font.Bold }
+                    size: 13
                 }
 
                 WifiSignalIcon {
@@ -149,37 +149,12 @@ Item {
                     anchors { right: parent.right; rightMargin: 8; verticalCenter: parent.verticalCenter }
                     spacing: 6
 
-                    Canvas {
+                    BundledIcon {
                         visible: modelData.security && modelData.security !== "none"
                         anchors.verticalCenter: parent.verticalCenter
-                        width: 12
-                        height: 14
-                        readonly property color ink: AppearanceTokens.content.glassInk()
-                        onInkChanged: requestPaint()
-                        onPaint: {
-                            const ctx = getContext("2d")
-                            ctx.reset()
-                            ctx.strokeStyle = ink
-                            ctx.fillStyle = ink
-                            ctx.lineWidth = 1.5
-                            ctx.lineCap = "round"
-                            ctx.beginPath()
-                            ctx.arc(width / 2, 5, 3, Math.PI, 0)
-                            ctx.stroke()
-                            ctx.beginPath()
-                            ctx.moveTo(3.5, 5)
-                            ctx.lineTo(width - 3.5, 5)
-                            ctx.quadraticCurveTo(width - 2, 5, width - 2, 6.5)
-                            ctx.lineTo(width - 2, 10.5)
-                            ctx.quadraticCurveTo(width - 2, 12, width - 3.5, 12)
-                            ctx.lineTo(3.5, 12)
-                            ctx.quadraticCurveTo(2, 12, 2, 10.5)
-                            ctx.lineTo(2, 6.5)
-                            ctx.quadraticCurveTo(2, 5, 3.5, 5)
-                            ctx.closePath()
-                            ctx.fill()
-                        }
-                        Component.onCompleted: requestPaint()
+                        width: 12; height: 14
+                        name: "network.secured"
+                        color: AppearanceTokens.content.glassInk()
                     }
 
                     Rectangle {
@@ -266,11 +241,11 @@ Item {
             font { pixelSize: 12; weight: Font.Bold; family: AppearanceTokens.typography.textFamily }
         }
 
-        GlassText {
+        BundledIcon {
             anchors { right: parent.right; rightMargin: 16; verticalCenter: parent.verticalCenter }
-            text: "›"
+            name: "network.settings"
             color: AppearanceTokens.content.glassInk()
-            font { pixelSize: 13; weight: Font.Bold }
+            size: 13
         }
 
         ControlCenterSelection {

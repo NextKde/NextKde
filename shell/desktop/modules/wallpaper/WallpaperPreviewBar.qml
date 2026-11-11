@@ -46,7 +46,7 @@ PanelWindow {
         const index = effects.map(item => item.id).indexOf(WallpaperService.transition)
         const effect = effects[(index + 1) % effects.length]
         if (WallpaperService.setTransition(effect.id))
-            effectFeedback.show(I18n.tr("Dynamic effect switched to: %1").arg(I18n.tr(effect.label)), "media-shuffle")
+            effectFeedback.show(I18n.tr("Dynamic effect switched to: %1").arg(I18n.tr(effect.label)), "wallpaper.transition")
     }
 
     color: "transparent"
@@ -209,7 +209,7 @@ PanelWindow {
                         color: WallpaperPreviewService.selectedImages.indexOf(modelData) >= 0 ? "#ffffff" : "#80000000"
                         BundledIcon {
                             anchors.centerIn: parent
-                            name: "check"
+                            name: "wallpaper.selection"
                             size: 14
                             visible: WallpaperPreviewService.selectedImages.indexOf(modelData) >= 0
                             color: "#202020"
@@ -264,16 +264,16 @@ PanelWindow {
             Repeater {
                 id: sideActions
                 model: (WallpaperPreviewService.mode === "image" ? [
-                    { action: "spatial-wallpaper", icon: "spatial-wallpaper", label: I18n.tr("Enable spatial wallpaper service") }
+                    { action: "spatial-wallpaper", icon: "wallpaper.spatial", label: I18n.tr("Enable spatial wallpaper service") }
                 ] : WallpaperPreviewService.mode === "slideshow" ? [
-                    { action: "select-all", icon: "select-all", label: I18n.tr("Select all images") },
-                    { action: "play-pause", icon: WallpaperPreviewService.slideshowPlaying ? "media-pause" : "media-play",
+                    { action: "select-all", icon: "wallpaper.selectAll", label: I18n.tr("Select all images") },
+                    { action: "play-pause", icon: WallpaperPreviewService.slideshowPlaying ? "wallpaper.pause" : "wallpaper.play",
                         label: WallpaperPreviewService.slideshowPlaying ? I18n.tr("Pause preview") : I18n.tr("Play preview") }
                 ] : []).concat([
-                    { action: "transition", icon: "media-shuffle", label: I18n.tr("Switch effect") },
-                    { action: "settings", icon: "status-settings", label: I18n.tr("Settings") },
-                    { action: "exit", icon: "window-close", label: I18n.tr("Exit preview") },
-                    { action: "apply", icon: "check", label: WallpaperPreviewService.mode === "slideshow"
+                    { action: "transition", icon: "wallpaper.transition", label: I18n.tr("Switch effect") },
+                    { action: "settings", icon: "wallpaper.settings", label: I18n.tr("Settings") },
+                    { action: "exit", icon: "wallpaper.exit", label: I18n.tr("Exit preview") },
+                    { action: "apply", icon: "wallpaper.apply", label: WallpaperPreviewService.mode === "slideshow"
                         ? I18n.tr("Apply %1 selected").arg(WallpaperPreviewService.selectedImages.length) : I18n.tr("Apply wallpaper") }
                 ])
                 delegate: AbstractButton {
@@ -357,7 +357,7 @@ PanelWindow {
         titleText: I18n.tr("Spatial wallpaper service is not enabled")
         bodyText: I18n.tr("Once enabled, spatial effects can be generated. The first run downloads the required resources.")
         confirmText: I18n.tr("Enable service")
-        iconName: "spatial-wallpaper"
+        iconName: "wallpaper.spatial"
         destructive: false
         onAccepted: SpatialWallpaperService.prepareForEnable()
     }
@@ -439,7 +439,7 @@ PanelWindow {
                             BundledIcon {
                                 anchors.horizontalCenter: parent.horizontalCenter
                                 size: 20
-                                name: ["image-x-generic", "color-picker", "media-play", "theme-appearance"][option.index]
+                                name: ["wallpaper.mode.image", "wallpaper.mode.color", "wallpaper.mode.slideshow", "wallpaper.mode.theme"][option.index]
                                 color: option.iconColor
                             }
                             Text {
@@ -508,7 +508,7 @@ PanelWindow {
         BundledIcon {
             anchors.centerIn: parent
             size: 18
-            name: "submenu"
+            name: "wallpaper.folderDetails"
             color: "white"
             rotation: stage.listExpanded ? -90 : 90
             Behavior on rotation { NumberAnimation { duration: 180; easing.type: Easing.OutCubic } }

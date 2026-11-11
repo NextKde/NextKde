@@ -3,13 +3,11 @@ import QtQuick
 import qs.desktop.modules.common
 import "WindowCycle.mjs" as WindowCycle
 
-// DockModelService — compatibility facade for the current Dock UI.
+// DockModelService owns application/window grouping for the Dock UI.
 //
 // AppIdentityService owns application identity resolution.
 // WindowService owns the live Wayland Toplevel model and window actions.
-// AppGroupService owns reusable app/window grouping.
-// This facade only derives the current Dock presentation and keeps the old
-// DockContainer bindings stable while future UIs consume the lower layers.
+// Grouping stays with the Dock presentation and its DockContainer bindings.
 
 QtObject {
     id: svc

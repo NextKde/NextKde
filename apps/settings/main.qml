@@ -1,5 +1,6 @@
 import Kos.Demo as Demo
 import QtQuick
+import Kos.Icons as Symbols
 import "pages" as Pages
 import "components" as SettingsControls
 import QtQuick.Controls
@@ -313,12 +314,11 @@ ApplicationWindow {
             radius: 14
             color: "#241700"
 
-            Text {
+            Symbols.Icon {
                 anchors.centerIn: parent
-                text: "!"
+                name: "exclamationmark"
                 color: "#ff9f0a"
-                font.pixelSize: 17
-                font.weight: Font.Bold
+                size: 17
             }
         }
 
@@ -336,12 +336,11 @@ ApplicationWindow {
             color: bannerCloseHit.containsMouse
                 ? Qt.rgba(0.14, 0.09, 0, 0.18) : "transparent"
 
-            Text {
+            Symbols.Icon {
                 anchors.centerIn: parent
-                text: "✕"
+                name: "xmark"
                 color: "#241700"
-                font.pixelSize: 15
-                font.weight: Font.Bold
+                size: 15
             }
 
             MouseArea {
@@ -830,7 +829,7 @@ ApplicationWindow {
                         Layout.fillWidth: true
                         active: window.displayedPage === 12
                         visible: active
-                        sourceComponent: NotificationsSettingsPage {
+                        sourceComponent: Pages.NotificationsSettingsPage {
                             theme: window.notificationTheme
                             bridge: typeof settingsBridge !== "undefined" ? settingsBridge : null
                         }
@@ -903,7 +902,7 @@ ApplicationWindow {
                         Layout.fillWidth: true
                         active: window.displayedPage === 9
                         visible: active
-                        sourceComponent: ServicesSettingsPage {
+                        sourceComponent: Pages.ServicesSettingsPage {
                             onRevealRequested: function(card) {
                                 Qt.callLater(function() {
                                     if (!card || window.displayedPage !== 9) return
@@ -924,7 +923,7 @@ ApplicationWindow {
                         Layout.fillWidth: true
                         active: window.displayedPage === 8
                         visible: active
-                        sourceComponent: WallpaperSettingsPage {
+                        sourceComponent: Pages.WallpaperSettingsPage {
                             scrollViewport: pageScroll
                             bridge: (typeof settingsBridge !== "undefined")
                                 ? settingsBridge : null

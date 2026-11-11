@@ -367,28 +367,87 @@ static bool validIconBytes(const QByteArray& bytes, const QVariantMap& icon)
     return width > 0 && width <= 1024 && height > 0 && height <= 1024
         && QCryptographicHash::hash(bytes, QCryptographicHash::Sha256).toHex() == icon.value("sha256").toByteArray();
 }
-QString iconFile(const QVariantMap& app)
+static QString cachedIconFile(const QVariantMap& icon)
 {
-    const auto icon = app.value("icon").toMap(); const auto digest = icon.value("sha256").toString();
+    const auto digest = icon.value("sha256").toString();
     if (!matches("^[0-9a-f]{64}$", digest)) return {};
     const auto path = stateDirectory() + "/icons/" + digest + ".png";
     return validIconBytes(read(path, 512 * 1024), icon) ? QUrl::fromLocalFile(path).toString() : QString();
 }
-static void cacheIcons(const QVariantMap& catalog, const QString& repository, const Cancelled& cancelled)
+static QString iconSourceIdentity(const QVariantMap& source)
 {
+    return QString::fromLatin1(QCryptographicHash::hash(
+        QJsonDocument::fromVariant(source).toJson(QJsonDocument::Compact), QCryptographicHash::Sha256).toHex());
+}
+static void rememberIcons(const QVariantMap& source, const QVariantMap& catalog)
+{
+    const auto key = "last-icons-" + source.value("id").toString();
+    const auto identity = iconSourceIdentity(source);
+    const auto previous = readState(key);
+    const auto previousIcons = previous.value("source").toString() == identity
+        ? previous.value("icons").toMap() : QVariantMap{};
+    QVariantMap icons;
+    for (const auto& value : catalog.value("apps").toList()) {
+        const auto entry = value.toMap(); const auto id = entry.value("appId").toString();
+        const auto current = entry.value("icon").toMap();
+        if (current.isEmpty()) continue;
+        if (!cachedIconFile(current).isEmpty()) icons[id] = current;
+        else {
+            const auto old = previousIcons.value(id).toMap();
+            if (!cachedIconFile(old).isEmpty()) icons[id] = old;
+        }
+    }
+    const QVariantMap next{{"source", identity}, {"icons", icons}};
+    if (next != previous) writeState(key, next);
+}
+QString iconFile(const QVariantMap& app)
+{
+    const auto icon = app.value("icon").toMap();
+    if (icon.isEmpty()) return {};
+    const auto current = cachedIconFile(icon);
+    if (!current.isEmpty()) return current;
+    const auto id = app.value("appId").toString(), sourceId = app.value("sourceId").toString();
+    if (!appIdentifier(id) || !identifier(sourceId)) return {};
+    const auto history = readState("last-icons-" + sourceId);
+    for (const auto& value : configuration().value("sources").toList()) {
+        const auto source = value.toMap();
+        if (source.value("id").toString() == sourceId && history.value("source").toString() == iconSourceIdentity(source))
+            // Display-only local history: never used for downloads, version
+            // selection, package verification or installation authorization.
+            return cachedIconFile(history.value("icons").toMap().value(id).toMap());
+    }
+    return {};
+}
+static void cacheIcons(const QVariantMap& catalog, const QVariantMap& source, const Cancelled& cancelled)
+{
+    const auto entries = catalog.value("apps").toList();
+    if (entries.isEmpty()) return;
+    rememberIcons(source, catalog);
+    const auto repository = source.value("repository").toString();
+    const auto cursorKey = "icon-cursor-" + catalog.value("sourceId").toString();
+    const int start = qMax(0, readState(cursorKey).value("next").toInt()) % entries.size();
+    int next = start;
     QElapsedTimer budget; budget.start();
     const auto stop = [&] { return cancelled() || budget.elapsed() >= 15000; };
-    for (const auto& item : catalog.value("apps").toList()) {
-        if (stop()) return;
-        const auto app = item.toMap(); const auto icon = app.value("icon").toMap();
-        if (icon.isEmpty() || !iconFile(app).isEmpty()) continue;
+    for (int offset = 0; offset < entries.size(); ++offset) {
+        if (stop()) break;
+        const int index = (start + offset) % entries.size();
+        next = (index + 1) % entries.size();
+        const auto app = entries[index].toMap(); const auto icon = app.value("icon").toMap();
+        // A retained old image must not suppress downloading its replacement.
+        if (icon.isEmpty() || !cachedIconFile(icon).isEmpty()) continue;
         const QUrl url(icon.value("url").toString());
         // Only immutable artwork in this catalog's own repository is authorized.
         if (!url.path().startsWith('/' + repository + '/')) continue;
         QString error;
-        const auto bytes = fetchBounded(url, repository, 512 * 1024, &error, stop, true);
+        QElapsedTimer attempt; attempt.start();
+        const auto bytes = fetchBounded(url, repository, 512 * 1024, &error,
+            [&] { return stop() || attempt.elapsed() >= 5000; }, true);
         if (error.isEmpty() && validIconBytes(bytes, icon)) save(stateDirectory() + "/icons/" + icon.value("sha256").toString() + ".png", bytes);
     }
+    // Continue after a slow/broken image on the next pass instead of starving later apps.
+    writeState(cursorKey, {{"next", next}});
+    rememberIcons(source, catalog);
 }
 
 bool verify(const QByteArray& bytes, const QByteArray& signature, const QByteArray& keys, const QString& fingerprint)
@@ -535,16 +594,42 @@ QString removeSource(const QString& id)
     config["sources"] = list;
     return save(configPath(), QJsonDocument::fromVariant(config).toJson()) ? QString() : "Cannot save sources";
 }
-QString refresh(const Cancelled& cancelled)
+bool needsRefresh(const QVariantMap& catalog, const QVariantMap& state, const QDateTime& now)
 {
+    auto success = QDateTime::fromString(state.value("lastSuccess").toString(), Qt::ISODate);
+    if (!success.isValid() && state.value("error").toString().isEmpty())
+        success = QDateTime::fromString(state.value("lastChecked").toString(), Qt::ISODate);
+    const auto expiry = QDateTime::fromString(catalog.value("expiresAt").toString(), Qt::ISODate);
+    return catalog.isEmpty() || !expiry.isValid() || expiry <= now
+        || (catalog.value("schemaVersion").toInt() < 2 && state.value("clientCatalogSchema").toInt() < 2)
+        || !success.isValid() || success > now || success.secsTo(now) >= 1800;
+}
+QString refresh(const Cancelled& cancelled, bool ifNeeded)
+{
+    // Developer test sources and selected Releases only change on explicit refresh.
+    if (ifNeeded && testMode()) return {};
     QDir().mkpath(stateDirectory()); QLockFile context(stateDirectory() + "/context.lock"), lock(stateDirectory() + "/sources.lock");
     if (!context.tryLock(0) || !lock.tryLock(0)) return "Source refresh is already running";
+    if (ifNeeded && testMode()) return {};
     QStringList errors;
     for (const auto& item : configuration().value("sources").toList()) {
         if (cancelled()) break;
         const auto source = item.toMap(); const auto id = source.value("id").toString();
         const auto repository = source.value("repository").toString();
         if (!identifier(id) || !githubRepository(repository)) { errors.append("Invalid source configuration"); continue; }
+        const auto previous = cached(source);
+        auto state = readState("source-" + id);
+        if (ifNeeded) {
+            const auto now = QDateTime::currentDateTimeUtc();
+            const auto attempted = QDateTime::fromString(state.value("pageAttempt").toString(), Qt::ISODate);
+            if (attempted.isValid() && attempted <= now && attempted.secsTo(now) < 60) continue;
+            state["pageAttempt"] = now.toString(Qt::ISODate);
+            writeState("source-" + id, state);
+            if (!needsRefresh(previous, state, now)) {
+                cacheIcons(previous, source, cancelled);
+                continue;
+            }
+        }
         QString error;
         const auto releaseBytes = fetch(QUrl("https://api.github.com/repos/" + repository + (testMode() && !source.value("releaseTag").toString().isEmpty()
             ? "/releases/tags/" + source.value("releaseTag").toString() : "/releases/latest")), repository, limit, &error, cancelled);
@@ -568,12 +653,22 @@ QString refresh(const Cancelled& cancelled)
         const auto signature = attachment("catalog.json.sig", 65536);
         auto catalog = QJsonDocument::fromJson(bytes).object().toVariantMap();
         if (error.isEmpty() && !verify(bytes, signature, QByteArray::fromBase64(source.value("publicKey").toByteArray()), source.value("fingerprint").toString())) error = "Catalog signature is invalid";
-        const auto previous = cached(source);
         if (error.isEmpty() && QFileInfo::exists(cachePath(id)) && previous.isEmpty()) error = "Previous catalog cannot be verified; refusing to reset rollback history";
         if (error.isEmpty()) error = validateUpdate(catalog, previous, id);
+        // Persist each ready old image before readers see the new icon digests.
+        // The signed catalog itself still advances independently of artwork.
+        if (error.isEmpty()) rememberIcons(source, previous);
         if (error.isEmpty() && !save(cachePath(id), QJsonDocument::fromVariant(QVariantMap{{"catalog", bytes.toBase64()}, {"signature", signature.toBase64()}, {"releaseTag", source.value("releaseTag").toString()}}).toJson())) error = "Cannot save catalog";
-        if (error.isEmpty()) cacheIcons(catalog, repository, cancelled);
-        writeState("source-" + id, {{"error", error}, {"lastChecked", QDateTime::currentDateTimeUtc().toString(Qt::ISODate)}});
+        if (error.isEmpty()) cacheIcons(catalog, source, cancelled);
+        else if (QDateTime::fromString(previous.value("expiresAt").toString(), Qt::ISODate) > QDateTime::currentDateTimeUtc())
+            cacheIcons(previous, source, cancelled);
+        state["error"] = error;
+        state["lastChecked"] = QDateTime::currentDateTimeUtc().toString(Qt::ISODate);
+        if (error.isEmpty()) {
+            state["lastSuccess"] = state["lastChecked"];
+            state["clientCatalogSchema"] = 2;
+        }
+        writeState("source-" + id, state);
         if (!error.isEmpty()) errors.append(id + ": " + error);
     }
     return errors.join('\n');

@@ -1500,22 +1500,22 @@ PanelWindow {
                                             event.accepted = true;
                                         }
 
-                                        GlassText {
+                                        BundledIcon {
                                             anchors {
                                                 left: parent.left
                                                 leftMargin: 11
                                                 verticalCenter: parent.verticalCenter
                                             }
-                                            text: "⌕"
+                                            name: "launcher.search"
                                             color: root.launcherForegroundColor
                                             // The icon lights up while the field is
                                             // expanded (focused or holding a query).
                                             opacity: (searchBar.activeFocus || searchBar.text.length > 0) ? 0.95 : 0.65
                                             Behavior on opacity { NumberAnimation { duration: 300 } }
-                                            font.pixelSize: 17
+                                            size: 17
                                         }
 
-                                        GlassText {
+                                        BundledIcon {
                                             anchors {
                                                 right: parent.right
                                                 rightMargin: 10
@@ -1544,12 +1544,9 @@ PanelWindow {
                                                     easing.bezierCurve: [0.34, 1.56, 0.64, 1, 1, 1]
                                                 }
                                             }
-                                            text: "×"
+                                            name: "launcher.clearSearch"
                                             color: root.launcherForegroundColor
-                                            font {
-                                                pixelSize: 17
-                                                weight: Font.DemiBold
-                                            }
+                                            size: 17
                                             MouseArea {
                                                 id: searchClearMouse
                                                 anchors.fill: parent
@@ -2314,17 +2311,14 @@ PanelWindow {
                                 }
                                 height: 28
 
-                                GlassText {
+                                BundledIcon {
                                     anchors {
                                         left: parent.left
                                         verticalCenter: parent.verticalCenter
                                     }
-                                    text: "‹"
+                                    name: "launcher.back"
                                     color: AppLauncherService.dockForegroundColor
-                                    font {
-                                        pixelSize: 28
-                                        weight: Font.DemiBold
-                                    }
+                                    size: 28
                                     MouseArea {
                                         anchors.fill: parent
                                         anchors.margins: -8
@@ -2629,14 +2623,11 @@ PanelWindow {
                                                 rightMargin: -5
                                             }
                                             color: Qt.rgba(0.95, 0.27, 0.25, 0.96)
-                                            ShellText {
+                                            BundledIcon {
                                                 anchors.centerIn: parent
-                                                text: "−"
+                                                name: "launcher.folder.removeApp"
                                                 color: "white"
-                                                font {
-                                                    pixelSize: 17
-                                                    weight: Font.Bold
-                                                }
+                                                size: 17
                                             }
                                             MouseArea {
                                                 anchors.fill: parent
@@ -2778,14 +2769,14 @@ PanelWindow {
                                             weight: Font.DemiBold
                                         }
                                     }
-                                    GlassText {
+                                    BundledIcon {
                                         anchors {
                                             right: parent.right
                                             verticalCenter: parent.verticalCenter
                                         }
-                                        text: "×"
+                                        name: "launcher.closeEditor"
                                         color: AppLauncherService.dockForegroundColor
-                                        font.pixelSize: 22
+                                        size: 22
                                         MouseArea {
                                             anchors.fill: parent
                                             anchors.margins: -8

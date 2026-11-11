@@ -486,7 +486,7 @@ PanelWindow {
                             visible: false
                         }
                     }
-                    IconImage {
+                    AppIcon {
                         anchors.fill: parent
                         source: card.iconSource
                         // Theme icon: synchronous, see AppIcon.qml.
@@ -587,12 +587,13 @@ PanelWindow {
                             elide: Text.ElideRight
                             maximumLineCount: 1
                         }
-                        GlassText {
+                        BundledIcon {
                             id: notifRowClose
-                            text: "×"
+                            name: "notification.dismiss"
                             color: card.foregroundColor
                             opacity: notifRowCloseArea.containsMouse ? 0.9 : 0.45
-                            font.pixelSize: 16
+                            size: 14
+                            width: 16; height: 16
                             anchors { right: parent.right; verticalCenter: parent.verticalCenter }
                             MouseArea {
                                 id: notifRowCloseArea
@@ -710,12 +711,13 @@ PanelWindow {
 
             // ---- close button ----
 
-            GlassText {
+            BundledIcon {
                 id: closeButton
-                text: "×"
+                name: "notification.dismiss"
                 color: card.foregroundColor
                 opacity: 0.55
-                font.pixelSize: 22
+                size: 14
+                width: 22; height: 22
                 anchors { right: parent.right; rightMargin: 12; top: parent.top; topMargin: 9 }
                 MouseArea {
                     anchors.fill: parent

@@ -186,10 +186,6 @@ PanelWindow {
         system: I18n.tr("System"), activity: I18n.tr("Activity"),
         music: I18n.tr("Music")
     })
-    readonly property var widgetSymbols: ({
-        clock: "◷", weather: "☀", calendar: "▦", todo: "✓",
-        system: "⌁", activity: "◌", music: "♫"
-    })
     // Referencing the singleton starts the shared activity recorder once the
     // desktop surface is available.
     readonly property var activityUsage: ActivityUsageService
@@ -603,11 +599,11 @@ PanelWindow {
                     Column {
                         anchors.centerIn: parent
                         spacing: 5
-                        Text {
+                        BundledIcon {
                             anchors.horizontalCenter: parent.horizontalCenter
-                            text: root.widgetSymbols[modelData]
+                            name: "desktop.widget." + modelData
                             color: ThemeService.foregroundColor
-                            font.pixelSize: 20
+                            size: 20
                         }
                         Text {
                             anchors.horizontalCenter: parent.horizontalCenter
@@ -615,11 +611,11 @@ PanelWindow {
                             color: ThemeService.foregroundColor
                             font { pixelSize: 9; weight: Font.DemiBold }
                         }
-                        Text {
+                        BundledIcon {
                             anchors.horizontalCenter: parent.horizontalCenter
-                            text: active ? "−" : "+"
+                            name: active ? "desktop.widget.remove" : "desktop.widget.add"
                             color: active ? "#ff453a" : ThemeService.accentColor
-                            font { pixelSize: 14; weight: Font.Bold }
+                            size: 14
                         }
                     }
                     TapHandler {
@@ -938,11 +934,11 @@ PanelWindow {
                 anchors { top: parent.top; left: parent.left; margins: 8 }
                 width: 26; height: 26; radius: 13
                 color: "#ff453a"
-                Text {
+                BundledIcon {
                     anchors.centerIn: parent
-                    text: "−"
+                    name: "desktop.widget.remove"
                     color: "white"
-                    font { pixelSize: 18; weight: Font.Bold }
+                    size: 18
                 }
                 TapHandler {
                     onTapped: AppearanceConfigService.setDeskCenterWidgetVisible(
@@ -1070,16 +1066,13 @@ PanelWindow {
                     anchors { right: parent.right; bottom: parent.bottom; rightMargin: 12; bottomMargin: 12 }
 	                    color: "transparent"
                     border.width: 0
-                    Image {
+                    BundledIcon {
                         anchors.centerIn: parent
                         anchors.verticalCenterOffset: -1
                         width: 17
                         height: 17
-                        source: BundledIcons.source("countdown")
-                        sourceSize.width: 26
-                        sourceSize.height: 26
-                        fillMode: Image.PreserveAspectFit
-                        smooth: true
+                        name: "desktop.timer"
+
                     }
                     MouseArea {
                         id: timerPointer
@@ -1148,24 +1141,12 @@ PanelWindow {
                         anchors.horizontalCenter: parent.horizontalCenter
                         y: timerDial.y + timerTimeText.y - height - 2
                         spacing: 5
-                        Canvas {
+                        BundledIcon {
                             id: timerBell
                             objectName: "timer-end-bell"
-                            width: 14
-                            height: 16
-                            readonly property color strokeColor: AppearanceTokens.content.onBackdrop
-                                ? "#ffffff" : "#ffb028"
-                            // The clock bypasses the ancestor saturation layer.
-                            // Invalidate this cached artwork when its ink changes.
-                            onStrokeColorChanged: requestPaint()
-                            onPaint: {
-                                const ctx = getContext("2d")
-	                                ctx.reset(); ctx.strokeStyle = timerBell.strokeColor.toString(); ctx.lineWidth = 1.3; ctx.lineCap = "round"
-                                ctx.beginPath(); ctx.moveTo(3, 10); ctx.quadraticCurveTo(4, 8.7, 4, 6.4)
-                                ctx.quadraticCurveTo(4, 3.8, 7, 3.8); ctx.quadraticCurveTo(10, 3.8, 10, 6.4)
-                                ctx.quadraticCurveTo(10, 8.7, 11, 10); ctx.lineTo(3, 10); ctx.stroke()
-                                ctx.beginPath(); ctx.moveTo(5.3, 12); ctx.lineTo(8.7, 12); ctx.stroke()
-                            }
+                            width: 14; height: 16
+                            name: "desktop.timer.notification"
+                            color: AppearanceTokens.content.onBackdrop ? "#ffffff" : "#ffb028"
                         }
                         Text {
                             text: I18n.tr("Ends at %1").arg(root.formattedTimerEndTime())
@@ -1249,11 +1230,11 @@ PanelWindow {
                             }
                         }
                     }
-                    Text {
+                    BundledIcon {
                         anchors { left: parent.left; top: parent.top; leftMargin: 10; topMargin: 7 }
-                        text: "×"
+                        name: "desktop.timer.close"
                         color: Qt.rgba(1, 1, 1, 0.74)
-                        font { pixelSize: 18; weight: Font.Light }
+                        size: 18
                         MouseArea {
                             anchors.fill: parent
                             anchors.margins: -6
@@ -1354,35 +1335,25 @@ PanelWindow {
                         anchors.fill: parent
                         visible: WeatherTheme.category(WeatherService.weatherCode) === "partlyCloudy"
                             || WeatherTheme.category(WeatherService.weatherCode) === "overcast"
-                        Image {
+                        BundledIcon {
                             id: deskCloudBack
                             width: parent.width * 0.34
                             height: parent.height * 0.36
                             y: 2
                             x: -width
-                            source: BundledIcons.source("weather-cloud")
-                            fillMode: Image.PreserveAspectFit
-	                            smooth: true
-	                            layer.enabled: AppearanceConfigService.widgetStyle === "glass"
-	                            layer.effect: MultiEffect {
-                                saturation: -1.0
-                                colorization: 0
-	                            }
+                            name: "weather.cloud"
+
+
                         }
-                        Image {
+                        BundledIcon {
                             id: deskCloudFront
                             width: parent.width * 0.30
                             height: parent.height * 0.29
                             y: parent.height * 0.18
                             x: parent.width
-                            source: BundledIcons.source("weather-cloud-wide")
-                            fillMode: Image.PreserveAspectFit
-	                            smooth: true
-	                            layer.enabled: AppearanceConfigService.widgetStyle === "glass"
-	                            layer.effect: MultiEffect {
-                                saturation: -1.0
-                                colorization: 0
-	                            }
+                            name: "weather.cloudWide"
+
+
                         }
                     }
 
@@ -1441,13 +1412,13 @@ PanelWindow {
                         }
                     }
 
-                    Text {
+                    BundledIcon {
                         anchors { right: parent.right; top: parent.top; rightMargin: 26; topMargin: 8 }
                         visible: WeatherTheme.isStorm(WeatherService.weatherCode)
-                        text: "ϟ"
+                        name: "weather.lightning"
 	                        color: AppearanceTokens.content.ink("#e0ccff", 0.68)
                         opacity: 0.68
-                        font { family: AppearanceTokens.typography.displayFamily; pixelSize: 42; weight: Font.DemiBold }
+                        size: 42
                     }
                 }
                 Text {
@@ -1611,7 +1582,7 @@ PanelWindow {
                 sourceComponent: Component {
                     Item {
                 anchors.fill: parent
-                Image { anchors.fill: parent; source: BundledIcons.source("default-cover"); fillMode: Image.PreserveAspectCrop; asynchronous: true }
+                Image { anchors.fill: parent; source: BundledIcons.source("media.coverFallback"); fillMode: Image.PreserveAspectCrop; asynchronous: true }
                 Rectangle {
                     anchors { left: parent.left; right: parent.right; bottom: parent.bottom }
                     height: 28
@@ -1658,7 +1629,7 @@ PanelWindow {
                     readonly property real storageValue: systemContent.metrics.diskTotalBytes > 0
                         ? systemContent.metrics.diskUsedBytes / systemContent.metrics.diskTotalBytes : 0
                     readonly property var labels: ["CPU", I18n.tr("Memory"), I18n.tr("Storage")]
-                    readonly property var icons: ["cpu", "memory", "drive-harddisk"]
+                    readonly property var icons: ["system.cpu", "system.memory", "system.disk"]
                     readonly property var values: [cpuValue, memoryValue, storageValue]
                     readonly property var colors: AppearanceTokens.content.onBackdrop
                         ? [IconAppearanceService.glassContentColor().toString(),
@@ -1787,7 +1758,7 @@ PanelWindow {
                         anchors.centerIn: parent
                         spacing: Math.max(4, temperatureSummary.width * 0.04)
                         BundledIcon {
-                            name: "temperature"
+                            name: "system.temperature"
                             color: AppearanceTokens.content.ink("#7d7782")
                             size: Math.max(12, temperatureSummary.height * 0.54)
                             anchors.verticalCenter: parent.verticalCenter
@@ -1997,7 +1968,7 @@ PanelWindow {
                                     required property var modelData
                                     width: activityRightPane.width
                                     height: 16
-                                    IconImage {
+                                    AppIcon {
                                         id: appUsageIcon
                                         width: 12
                                         height: 12
@@ -2098,7 +2069,7 @@ PanelWindow {
                 readonly property url artworkSource: {
                     const revision = MediaService.metadataRevision
                     return player?.trackArtUrl
-                        ? player.trackArtUrl : BundledIcons.source("default-cover")
+                        ? player.trackArtUrl : BundledIcons.source("media.coverFallback")
                 }
                 readonly property real safeLength: player?.lengthSupported && player.length > 0
                     ? player.length : 0
@@ -2272,12 +2243,12 @@ PanelWindow {
                                 visible: false
                                 layer.enabled: true
                             }
-                            Text {
+                            BundledIcon {
                                 anchors.centerIn: parent
 	                                visible: !musicContent.hasPlayer
-                                text: "♫"
+                                name: "media.fallback"
                                 color: Qt.rgba(1, 1, 1, 0.46)
-                                font { family: AppearanceTokens.typography.displayFamily; pixelSize: musicArtwork.width * 0.42 }
+                                size: musicArtwork.width * 0.42
                             }
                         }
                     }
@@ -2393,10 +2364,10 @@ PanelWindow {
                                     checked: index === 3
                                         && DeskCenterConfigService.desktopLyricsEnabled
                                         && MediaService.desktopLyricsAllowed
-                                    iconName: index === 0 ? "media-previous"
-                                        : index === 2 ? "media-next"
-                                        : index === 3 ? "media-lyrics"
-                                        : musicContent.player?.isPlaying ? "media-pause" : "media-play"
+                                    iconName: index === 0 ? "media.previous"
+                                        : index === 2 ? "media.next"
+                                        : index === 3 ? "media.lyrics"
+                                        : musicContent.player?.isPlaying ? "media.pause" : "media.play"
                                     text: index === 0 ? I18n.tr("Previous")
                                         : index === 2 ? I18n.tr("Next")
                                         : index === 3 ? (MediaService.desktopLyricsAllowed
@@ -3362,13 +3333,8 @@ PanelWindow {
         }
 
         function iconFor(kind) {
-            if (kind === "folder") return "folder"
-            if (kind === "image") return "image-x-generic"
-            if (kind === "pdf") return "application-pdf"
-            if (kind === "code") return "text-x-script"
-            if (kind === "text") return "text-x-generic"
-            if (kind === "launcher") return "application-x-executable"
-            return "text-x-generic"
+            const type = ["folder", "image", "pdf", "code", "text", "launcher"].indexOf(kind) >= 0 ? kind : "text"
+            return "desktop.file." + type
         }
 
         function canChooseOpenWith(entry) {
@@ -3473,14 +3439,14 @@ PanelWindow {
 
         // ── Liquid context-menu data + builder ──
 
-        function _ctxSub(label, children, icon) {
-            return { icon: icon || "placeholder-dot", label: label, children: children }
+        function _ctxSub(label, children, role) {
+            return { icon: "desktop.menu." + role, label: label, children: children }
         }
-        function _ctxAct(label, cmd, icon) {
-            return { icon: icon || "placeholder-dot", label: label, cmd: cmd, enabled: true }
+        function _ctxAct(label, cmd) {
+            return { icon: "desktop.menu." + cmd, label: label, cmd: cmd, enabled: true }
         }
-        function _ctxCheck(label, cmd, value, checked, icon) {
-            return { icon: icon || "placeholder-dot", label: label, cmd: cmd,
+        function _ctxCheck(label, cmd, value, checked) {
+            return { icon: "desktop.menu." + cmd, label: label, cmd: cmd,
                 checkable: true, checked: checked, value: value, enabled: true }
         }
 
@@ -3492,7 +3458,7 @@ PanelWindow {
             [I18n.tr("🩷 Pink"), "#F783AC"], [I18n.tr("⚫ Gray"), "#868E96"]
             ]
             const EMOJI_CATS = [
-            { id: "frequent", label: I18n.tr("Frequent"), icon: "star", rows: [
+            { id: "frequent", label: I18n.tr("Frequent"), rows: [
                 ["📁 " + I18n.tr("Folder"), "📁"], ["📂 " + I18n.tr("Open folder"), "📂"],
                 ["🗂️ " + I18n.tr("Organized folder"), "🗂️"], ["📦 " + I18n.tr("Package"), "📦"],
                 ["⭐ " + I18n.tr("Star"), "⭐"], ["🔥 " + I18n.tr("Hot"), "🔥"],
@@ -3500,7 +3466,7 @@ PanelWindow {
                 ["✨ " + I18n.tr("Curated"), "✨"], [I18n.tr("📌 Pinned"), "📌"],
                 ["🎯 " + I18n.tr("Goal"), "🎯"], ["💎 " + I18n.tr("Collection"), "💎"]
             ] },
-            { id: "study", label: I18n.tr("Study"), icon: "bookmark", rows: [
+            { id: "study", label: I18n.tr("Study"), rows: [
                 ["📚 " + I18n.tr("Books"), "📚"], ["📖 " + I18n.tr("Reading"), "📖"],
                 ["✏️ " + I18n.tr("Notes"), "✏️"], ["📝 " + I18n.tr("Memo"), "📝"],
                 ["🎓 " + I18n.tr("Academic"), "🎓"], ["🔬 " + I18n.tr("Research"), "🔬"],
@@ -3508,7 +3474,7 @@ PanelWindow {
                 ["🖥️ " + I18n.tr("Workstation"), "🖥️"], ["📐 " + I18n.tr("Design"), "📐"],
                 ["🎨 " + I18n.tr("Creative"), "🎨"], ["🎵 " + I18n.tr("Music"), "🎵"]
             ] },
-            { id: "life", label: I18n.tr("Life"), icon: "home", rows: [
+            { id: "life", label: I18n.tr("Life"), rows: [
                 ["🏠 " + I18n.tr("Home"), "🏠"], ["🏡 " + I18n.tr("Homestead"), "🏡"],
                 ["🛒 " + I18n.tr("Shopping"), "🛒"], ["🍳 " + I18n.tr("Cooking"), "🍳"],
                 ["☕ " + I18n.tr("Coffee"), "☕"], ["🌿 " + I18n.tr("Plants"), "🌿"],
@@ -3516,7 +3482,7 @@ PanelWindow {
                 ["📷 " + I18n.tr("Photos"), "📷"], ["✈️ " + I18n.tr("Travel"), "✈️"],
                 ["🚗 " + I18n.tr("Commute"), "🚗"], ["💰 " + I18n.tr("Finance"), "💰"]
             ] },
-            { id: "symbols", label: I18n.tr("Symbols"), icon: "star", rows: [
+            { id: "symbols", label: I18n.tr("Symbols"), rows: [
                 ["🔵 " + I18n.tr("Blue dot"), "🔵"], ["🟢 " + I18n.tr("Green dot"), "🟢"],
                 ["🟡 " + I18n.tr("Yellow dot"), "🟡"], ["🟠 " + I18n.tr("Orange dot"), "🟠"],
                 ["🔴 " + I18n.tr("Red dot"), "🔴"], ["🟣 " + I18n.tr("Purple dot"), "🟣"],
@@ -3533,23 +3499,23 @@ PanelWindow {
             const items = []
 
             if (e) {
-                items.push(_ctxAct(defaultOpenText(), "openEntry", "folder-open"))
+                items.push(_ctxAct(defaultOpenText(), "openEntry"))
                 if (selectedEntries().length === 1)
-                    items.push(_ctxAct(I18n.tr("Rename"), "rename", "edit-rename"))
+                    items.push(_ctxAct(I18n.tr("Rename"), "rename"))
 
                 // 自定义外观 applies to every desktop entry. The path-based
                 // storage retains the setting across filesystem snapshots.
                 const colorKids = FOLDER_COLORS.map(([label, val]) =>
-                    _ctxCheck(label, "setColor", val, curColor === val, "color-picker"))
-                const appearKids = [ _ctxSub(I18n.tr("Color"), colorKids, "color-picker") ]
+                    _ctxCheck(label, "setColor", val, curColor === val))
+                const appearKids = [ _ctxSub(I18n.tr("Color"), colorKids, "color") ]
                 for (const cat of EMOJI_CATS) {
-                    const rows = [_ctxCheck(I18n.tr("None"), "setEmoji", "", curEmoji === "", "placeholder-dot")]
+                    const rows = [_ctxCheck(I18n.tr("None"), "setEmoji", "", curEmoji === "")]
                         .concat(cat.rows.map(([label, em]) =>
-                            _ctxCheck(label, "setEmoji", em, curEmoji === em, "placeholder-dot")))
-                    appearKids.push(_ctxSub(cat.label, rows, cat.icon))
+                            _ctxCheck(label, "setEmoji", em, curEmoji === em)))
+                    appearKids.push(_ctxSub(cat.label, rows, "emoji." + cat.id))
                 }
-                appearKids.push(_ctxAct(I18n.tr("Remove customization"), "removeCustom", "edit-clear"))
-                items.push(_ctxSub(I18n.tr("Customize Appearance"), appearKids, "customize-appearance"))
+                appearKids.push(_ctxAct(I18n.tr("Remove customization"), "removeCustom"))
+                items.push(_ctxSub(I18n.tr("Customize Appearance"), appearKids, "appearance"))
 
                 // 打开方式（动态）
                 if (canChooseOpenWith(e)) {
@@ -3557,56 +3523,53 @@ PanelWindow {
                     for (let i = 0; i < 6; i++) {
                         const id = openWithIdAt(i)
                         if (id)
-                            owKids.push({ icon: "placeholder-dot", label: applicationName(id), cmd: "openWith", value: id, enabled: true })
+                            owKids.push({ icon: "desktop.menu.openWith", label: applicationName(id), cmd: "openWith", value: id, enabled: true })
                     }
-                    owKids.push(_ctxAct(I18n.tr("Other applications…"), "openWithMore", ""))
-                    items.push(_ctxSub(I18n.tr("Open With"), owKids, "open-with"))
+                    owKids.push(_ctxAct(I18n.tr("Other applications…"), "openWithMore"))
+                    items.push(_ctxSub(I18n.tr("Open With"), owKids, "openWith"))
                 }
 
-                items.push(_ctxAct(I18n.tr("Copy"), "copy", "edit-copy"))
-                items.push(_ctxAct(I18n.tr("Cut"), "cut", "edit-cut"))
-                items.push(_ctxAct(I18n.tr("Move to Trash"), "trash", "user-trash"))
-                items.push(_ctxAct(I18n.tr("Open in File Manager"), "open", "folder-open"))
+                items.push(_ctxAct(I18n.tr("Copy"), "copy"))
+                items.push(_ctxAct(I18n.tr("Cut"), "cut"))
+                items.push(_ctxAct(I18n.tr("Move to Trash"), "trash"))
+                items.push(_ctxAct(I18n.tr("Open in File Manager"), "open"))
             } else {
                 // desktop background
-                items.push(_ctxAct(I18n.tr("Add Widgets…"), "addWidgets", "arrange"))
-                items.push(_ctxAct(I18n.tr("Edit Widgets"), "editWidgets", "edit-rename"))
-                items.push(_ctxAct(I18n.tr("New File"), "newFile", "document-new"))
-                items.push(_ctxAct(I18n.tr("New Folder"), "newFolder", "folder-new"))
-                items.push(_ctxAct(I18n.tr("Paste"), "paste", "edit-paste"))
+                items.push(_ctxAct(I18n.tr("Add Widgets…"), "addWidgets"))
+                items.push(_ctxAct(I18n.tr("Edit Widgets"), "editWidgets"))
+                items.push(_ctxAct(I18n.tr("New File"), "newFile"))
+                items.push(_ctxAct(I18n.tr("New Folder"), "newFolder"))
+                items.push(_ctxAct(I18n.tr("Paste"), "paste"))
                 const arrange = [
-                    _ctxAct(I18n.tr("By Name"), "arrangeByName", "sort-name"),
-                    _ctxAct(I18n.tr("By Type"), "arrangeByType", "sort-type"),
-                    _ctxAct(I18n.tr("By Modified (newest)"), "arrangeModifiedNew", "clock"),
-                    _ctxAct(I18n.tr("By Modified (oldest)"), "arrangeModifiedOld", "clock")
+                    _ctxAct(I18n.tr("By Name"), "arrangeByName"),
+                    _ctxAct(I18n.tr("By Type"), "arrangeByType"),
+                    _ctxAct(I18n.tr("By Modified (newest)"), "arrangeModifiedNew"),
+                    _ctxAct(I18n.tr("By Modified (oldest)"), "arrangeModifiedOld")
                 ]
                 items.push(_ctxSub(I18n.tr("Arrange"), arrange, "arrange"))
-                items.push(_ctxAct(I18n.tr("Reset icon order"), "resetLayout", "reset-layout"))
+                items.push(_ctxAct(I18n.tr("Reset icon order"), "resetLayout"))
                 items.push(_ctxCheck(I18n.tr("Show file extensions"), "toggleExtensions", null,
-                    desktopLayout.showExtensions, "text-x-generic"))
+                    desktopLayout.showExtensions))
                 const sizeKids = [[40, I18n.tr("Small")], [56, I18n.tr("Medium")], [72, I18n.tr("Large")]]
                     .map(([px, l]) => _ctxCheck(l, "setIconSize", px,
-                        iconSize === px, "placeholder-dot"))
-                items.push(_ctxSub(I18n.tr("Icon Size"), sizeKids, "image-x-generic"))
+                        iconSize === px))
+                items.push(_ctxSub(I18n.tr("Icon Size"), sizeKids, "iconSize"))
                 const spacingKids = [
                     ["comfortable", I18n.tr("Comfortable")], ["compact", I18n.tr("Compact")],
                     ["dense", I18n.tr("Dense")]]
                     .map(([value, label]) => _ctxCheck(label, "setIconSpacing", value,
-                        desktopLayout.iconSpacing === value, "placeholder-dot"))
-                items.push(_ctxSub(I18n.tr("Icon Spacing"), spacingKids, "arrange"))
+                        desktopLayout.iconSpacing === value))
+                items.push(_ctxSub(I18n.tr("Icon Spacing"), spacingKids, "iconSpacing"))
                 // Same entries as the control center's session list, routed
-            // through it so the destructive ones reuse its confirm dialog.
-            // Icon names are BundledIcons registry keys -- the role names the
-            // panel passes get mapped by roleName() there, this menu passes
-            // the mapped keys verbatim.
-            items.push(_ctxSub(I18n.tr("Power Off or Log Out"), [
-                _ctxAct(I18n.tr("Lock Screen"), "lock", "lock"),
-                _ctxAct(I18n.tr("Sleep"), "suspend", "system-suspend"),
-                _ctxAct(I18n.tr("Switch User"), "switch", "system-switch-user"),
-                _ctxAct(I18n.tr("Log Out"), "logout", "system-log-out"),
-                _ctxAct(I18n.tr("Restart"), "reboot", "system-reboot"),
-                _ctxAct(I18n.tr("Power Off"), "poweroff", "power")
-            ], "power"))
+                // through it so the destructive ones reuse its confirm dialog.
+                items.push(_ctxSub(I18n.tr("Power Off or Log Out"), [
+                    _ctxAct(I18n.tr("Lock Screen"), "lock"),
+                    _ctxAct(I18n.tr("Sleep"), "suspend"),
+                    _ctxAct(I18n.tr("Switch User"), "switch"),
+                    _ctxAct(I18n.tr("Log Out"), "logout"),
+                    _ctxAct(I18n.tr("Restart"), "reboot"),
+                    _ctxAct(I18n.tr("Power Off"), "poweroff")
+                ], "session"))
             }
             return items
         }
@@ -3883,7 +3846,7 @@ PanelWindow {
                         // Theme icon: synchronous, see AppIcon.qml.
                         asynchronous: false
                         source: SystemIconResolver.sourceFromCandidates(
-                            [desktopFileGrid.iconFor(modelData.kind)], "text-x-generic")
+                            SystemIconResolver.candidates("desktop.file." + modelData.kind), "text-x-generic")
                     }
                     BundledIcon {
                         anchors { horizontalCenter: parent.horizontalCenter; top: parent.top; topMargin: 8 }
@@ -4038,136 +4001,25 @@ PanelWindow {
                             maskSource: imageThumbnailMask
                         }
                     }
-                    IconImage {
+                    AppIcon {
                         id: launcherIcon
                         anchors.fill: parent
                         source: modelData.kind === "launcher"
                             ? AppPresentationService.iconSource(modelData.icon) : ""
-                        // Provider icons already scale with the display; raw
-                        // bundled artwork must request physical pixel sizes.
-                        readonly property int rasterSize: Math.max(1, Math.ceil(
-                            actualSize * (String(source).startsWith("image://")
-                                ? 1 : Math.max(1, Screen.devicePixelRatio))))
-                        backer.sourceSize: Qt.size(rasterSize, rasterSize)
                         // Theme icon: synchronous, see AppIcon.qml.
                         asynchronous: false
-                        visible: source !== "" && status === Image.Ready
+                        visible: source !== "" && imageStatus === Image.Ready
                     }
-                    // Folder icon: a unified Canvas-drawn folder shape used
-                    // for both default and customised folders. When a custom
-                    // color is set the folder is tinted with it; when an emoji
-                    // is set it is drawn centered inside the folder body so
-                    // both the folder and the symbol are visible.
-                    Item {
+                    // Folder artwork and custom emblem share one scalable composition.
+                    DesktopFolderIcon {
                         readonly property var folderCustom: modelData.kind === "folder"
                             ? desktopFileGrid.folderCustomFor(modelData.path) : null
                         anchors.centerIn: parent
                         width: desktopFileGrid.iconSize
                         height: desktopFileGrid.iconSize
                         visible: modelData.kind === "folder"
-
-                        Canvas {
-                            id: folderCanvas
-                            anchors.fill: parent
-                            readonly property color baseColor: {
-                                const c = parent.folderCustom
-                                if (c && c.color)
-                                    return c.color
-                                return "#70b6ff"
-                            }
-                            onBaseColorChanged: requestPaint()
-                            onWidthChanged: requestPaint()
-                            onHeightChanged: requestPaint()
-                            Component.onCompleted: requestPaint()
-
-                            function shade(hex, factor) {
-                                // Darken/lighten an rgba/hex color by factor
-                                // (0..1 = darker, >1 = lighter).
-                                const ctx = getContext("2d")
-                                const c = Qt.color(hex)
-                                const r = Math.max(0, Math.min(255, Math.round(c.r * 255 * factor)))
-                                const g = Math.max(0, Math.min(255, Math.round(c.g * 255 * factor)))
-                                const b = Math.max(0, Math.min(255, Math.round(c.b * 255 * factor)))
-                                return "rgba(" + r + "," + g + "," + b + "," + c.a + ")"
-                            }
-
-                            onPaint: {
-                                const ctx = getContext("2d")
-                                ctx.reset()
-                                const w = width
-                                const h = height
-                                const margin = w * 0.10
-                                const tabH = h * 0.14
-                                const bodyX = margin
-                                const bodyY = margin + tabH
-                                const bodyW = w - margin * 2
-                                const bodyH = h - margin - bodyY
-                                const r = Math.min(bodyW, bodyH) * 0.18
-
-                                // Back tab (folder flap) - darker shade for depth
-                                ctx.fillStyle = folderCanvas.shade(folderCanvas.baseColor, 0.72)
-                                ctx.globalAlpha = 0.92
-                                ctx.beginPath()
-                                ctx.moveTo(bodyX, bodyY)
-                                ctx.lineTo(bodyX + bodyW * 0.42, bodyY)
-                                ctx.lineTo(bodyX + bodyW * 0.42 + tabH * 0.7, bodyY - tabH)
-                                ctx.lineTo(bodyX + bodyW * 0.72, bodyY - tabH)
-                                ctx.arcTo(bodyX + bodyW * 0.72 + r, bodyY - tabH,
-                                          bodyX + bodyW * 0.72 + r, bodyY - tabH + r, r)
-                                ctx.lineTo(bodyX + bodyW * 0.72 + r, bodyY)
-                                ctx.closePath()
-                                ctx.fill()
-
-                                // Front body - base color fill
-                                ctx.fillStyle = folderCanvas.shade(folderCanvas.baseColor, 1.0)
-                                ctx.globalAlpha = 0.90
-                                roundRect(ctx, bodyX, bodyY, bodyW, bodyH, r)
-                                ctx.fill()
-
-                                // Top highlight strip on the front body
-                                ctx.fillStyle = "rgba(255,255,255,0.18)"
-                                ctx.globalAlpha = 1.0
-                                ctx.beginPath()
-                                ctx.moveTo(bodyX + r, bodyY)
-                                ctx.lineTo(bodyX + bodyW - r, bodyY)
-                                ctx.lineTo(bodyX + bodyW - r, bodyY + bodyH * 0.12)
-                                ctx.lineTo(bodyX + r, bodyY + bodyH * 0.12)
-                                ctx.closePath()
-                                ctx.fill()
-
-                                // Subtle inner border for definition
-                                ctx.strokeStyle = "rgba(0,0,0,0.16)"
-                                ctx.lineWidth = 1
-                                roundRect(ctx, bodyX, bodyY, bodyW, bodyH, r)
-                                ctx.stroke()
-                            }
-
-                            function roundRect(ctx, x, y, w, h, r) {
-                                ctx.beginPath()
-                                ctx.moveTo(x + r, y)
-                                ctx.lineTo(x + w - r, y)
-                                ctx.arcTo(x + w, y, x + w, y + r, r)
-                                ctx.lineTo(x + w, y + h - r)
-                                ctx.arcTo(x + w, y + h, x + w - r, y + h, r)
-                                ctx.lineTo(x + r, y + h)
-                                ctx.arcTo(x, y + h, x, y + h - r, r)
-                                ctx.lineTo(x, y + r)
-                                ctx.arcTo(x, y, x + r, y, r)
-                                ctx.closePath()
-                            }
-                        }
-
-                        // Emoji centered inside the folder body.
-                        Text {
-                            anchors {
-                                horizontalCenter: parent.horizontalCenter
-                                top: parent.top
-                                topMargin: parent.height * 0.36
-                            }
-                            visible: parent.folderCustom && parent.folderCustom.emoji
-                            text: parent.folderCustom ? parent.folderCustom.emoji : ""
-                            font { family: AppearanceTokens.typography.emojiFamily; pixelSize: desktopFileGrid.iconSize * 0.36 }
-                        }
+                        color: folderCustom && folderCustom.color ? folderCustom.color : "#70b6ff"
+                        emoji: folderCustom ? folderCustom.emoji || "" : ""
                     }
                     IconImage {
                         id: desktopThemeIcon
@@ -4177,21 +4029,21 @@ PanelWindow {
                         // Theme icon: synchronous, see AppIcon.qml.
                         asynchronous: false
                         source: SystemIconResolver.sourceFromCandidates(
-                            [desktopFileGrid.iconFor(modelData.kind)], "text-x-generic")
+                            SystemIconResolver.candidates("desktop.file." + modelData.kind), "text-x-generic")
                         visible: source !== "" && status === Image.Ready
                             && (modelData.kind !== "image" || imageThumbnail.status !== Image.Ready)
-                            && (modelData.kind !== "launcher" || launcherIcon.status !== Image.Ready)
+                            && (modelData.kind !== "launcher" || launcherIcon.imageStatus !== Image.Ready)
                             && modelData.kind !== "folder"
                     }
                     BundledIcon {
                         anchors.centerIn: parent
                         // A broken or unsupported image still behaves like a
                         // normal desktop file instead of becoming invisible.
-                        // Folders are drawn by the Canvas Item above. 主题没带
+                        // Folders use the composed artwork above. 主题没带
                         // 这个类型图标时才由这里接手。
                         visible: desktopThemeIcon.status !== Image.Ready
                             && (modelData.kind !== "image" || imageThumbnail.status !== Image.Ready)
-                            && (modelData.kind !== "launcher" || launcherIcon.status !== Image.Ready)
+                            && (modelData.kind !== "launcher" || launcherIcon.imageStatus !== Image.Ready)
                             && modelData.kind !== "folder"
                         name: desktopFileGrid.iconFor(modelData.kind)
                         color: Qt.rgba(1, 1, 1, 0.88)
@@ -4483,6 +4335,7 @@ PanelWindow {
 
         ContextMenu {
             id: desktopContextMenu
+            reserveIconSpace: true
             capsuleReveal: true
             // The anchor is only a 4px cursor marker; use the Wi-Fi pill size.
             capsuleSourceWidth: 137

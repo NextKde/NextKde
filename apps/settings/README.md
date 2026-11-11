@@ -96,9 +96,8 @@ Build and verify only in a VM or hosted CI. With `BUILD_TESTING=ON`, build
 suite. Page contracts also check actual trailing-control geometry at 560 px and
 306 px content widths, rather than checking source declarations alone.
 
-The custom wallpaper menu uses one 0.7-coverage liquid surface with actual
-same-window content sampling and QML blur. Its 28 px option rows remain ordinary.
-There are no additional colored rims, per-row glass or KWin liquid requests.
+Wallpaper rows use the same `SettingsSelect` control and opaque menu contract
+as other settings pages. Wallpaper-specific tiles and pickers live in `pages/`.
 Standalone QuickTest tests link the same static module as the app; configure with
 `-DBUILD_TESTING=ON` and build `kos-settings-qml-tests` before running CTest.
 

@@ -1,5 +1,6 @@
 import Kos.Demo as Demo
 import QtQuick
+import Kos.Icons as Symbols
 import QtQuick.Controls
 import QtQuick.Layouts
 import QtQuick.Window
@@ -240,10 +241,10 @@ ColumnLayout {
                 Accessible.role: Accessible.RadioButton
                 Accessible.checked: selected
                 Accessible.onPressAction: fgSchedPage.stageApplyPreset(modelData)
-                Text {
-                    text: presetRow.selected ? "✓" : ""
+                Symbols.Icon {
+                    name: presetRow.selected ? "checkmark" : ""
                     color: colors.accent
-                    font.pixelSize: 16
+                    size: 16
                 }
                 property Item activationArea: MouseArea {
                     parent: presetRow

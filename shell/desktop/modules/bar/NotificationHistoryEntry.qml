@@ -155,13 +155,11 @@ Item {
             color: removeButton.down ? Qt.rgba(0.5, 0.5, 0.5, 0.3)
                 : removeButton.hovered || removeButton.activeFocus ? Qt.rgba(0.5, 0.5, 0.5, 0.18) : "transparent"
         }
-        contentItem: GlassText {
-            text: "×"
+        contentItem: BundledIcon {
+            name: "notification.remove"
             color: entry.ink
             opacity: removeButton.hovered || removeButton.activeFocus ? 1 : 0.5
-            horizontalAlignment: Text.AlignHCenter
-            verticalAlignment: Text.AlignVCenter
-            font.pixelSize: 18
+            size: 14
         }
         onClicked: entry.removeRequested(entry.painted.key)
     }

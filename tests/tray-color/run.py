@@ -83,7 +83,11 @@ def main():
             (applications / f"{desktop_id}.desktop").write_text(
                 f"[Desktop Entry]\nType=Application\nName={desktop_id}\n"
                 f"Exec=/bin/true\nIcon={root / (name + '-color.png')}\n")
+        # Font glyphs can switch between subpixel and grayscale antialiasing
+        # when the light/dark transition recreates an effect layer. Pin one
+        # method so exact pixel comparisons cover the whole scene reliably.
         env = dict(os.environ, QT_QPA_PLATFORM="wayland", QSG_RHI_BACKEND="opengl",
+            QSG_DISTANCEFIELD_ANTIALIASING="gray",
             LIBGL_ALWAYS_SOFTWARE="1", CAPTURE_DIR=str(root), TRAY_TEST_ICON=(root / "icon.png").as_uri(),
             TRAY_TEST_MONO_ICON=(root / "mono.png").as_uri(), TRAY_TEST_GRAY_ICON=(root / "gray.png").as_uri(),
             TRAY_TEST_MISSING_ICON=(root / "missing-application-icon.png").as_uri(),
@@ -195,15 +199,10 @@ def main():
                 actual = gallery_pixel(x + 8, 48)
                 assert all(abs(a - b) <= 2 for a, b in zip(actual, expected)), (name, x, "color artwork", actual, expected)
         assert frames["original"].crop((0, 0, 80, 32)).tobytes() == frames["restored"].crop((0, 0, 80, 32)).tobytes()
-        # The two synthetic "101°" labels are appearance references, not tray
-        # artwork. On CI their glyph rasterization changes after a light/dark
-        # round-trip, while every icon pixel remains identical. Exclude only
-        # those Text item bounds; retain exact equality everywhere else.
+        # The complete scene, including font glyphs and reference labels,
+        # must return to exactly the same pixels after the settings reload.
         for name, reference in [("reloaded", "white"), ("color", "original")]:
             difference = ImageChops.difference(frames[reference], frames[name])
-            scale = frames[name].width / 320
-            for box in [(104, 4, 146, 28), (104, 44, 146, 68)]:
-                difference.paste((0, 0, 0), tuple(int(value * scale) for value in box))
             assert difference.getbbox() is None, (name, "tray artwork changed", difference.getbbox())
         print("PASS: Claude/Magpie use installed color icons with alpha preserved; live attention and other tray artwork stay intact; settings round-trip")
 

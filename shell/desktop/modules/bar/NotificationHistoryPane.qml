@@ -198,7 +198,7 @@ Item {
         }
         readonly property bool backdropVisible: clipped.width > 0 && clipped.height > 0
         readonly property alias blurRegion: buttonGlass.blurRegion
-        implicitWidth: label.implicitWidth + 28
+        implicitWidth: contentItem.implicitWidth + 28
         implicitHeight: 32
         activeFocusOnTab: backdropVisible
         Accessible.name: text
@@ -247,7 +247,7 @@ Item {
     }
     DeckButton {
         anchors { right: parent.right; top: parent.top; topMargin: 1 }
-        text: "×"
+        contentItem: BundledIcon { name: "notification.clearAll"; size: 14; color: pane.ink; opacity: enabled ? 1 : 0.35 }
         implicitWidth: 30; implicitHeight: 30
         enabled: NotificationHistoryService.count > 0
         Accessible.name: I18n.tr("Clear all notifications")
@@ -409,9 +409,34 @@ Item {
             id: footerButton
             objectName: "notification-history-expand"
             anchors.centerIn: parent
+            width: Math.min(implicitWidth, parent.width)
+            leftPadding: 14
+            rightPadding: 14
+            topPadding: 0
+            bottomPadding: 0
             visible: NotificationHistoryService.count > 0 && (NotificationHistoryService.count > 3 || pane.expanded)
             glassButton: true
-            text: pane.expanded ? I18n.tr("Collapse notifications  ⌃") : I18n.tr("More notifications  ·  %1  ⌄").arg(Math.max(0, NotificationHistoryService.count - 3))
+            text: pane.expanded ? I18n.tr("Collapse notifications") : I18n.tr("More notifications  ·  %1").arg(Math.max(0, NotificationHistoryService.count - 3))
+            contentItem: Item {
+                implicitWidth: footerLabel.implicitWidth + 5 + footerChevron.implicitWidth
+                implicitHeight: Math.max(footerLabel.implicitHeight, footerChevron.implicitHeight)
+                GlassText {
+                    id: footerLabel
+                    anchors { left: parent.left; right: footerChevron.left; rightMargin: 5; verticalCenter: parent.verticalCenter }
+                    text: footerButton.text
+                    color: pane.ink
+                    font { pixelSize: 11; weight: Font.Medium }
+                    elide: Text.ElideRight
+                    maximumLineCount: 1
+                }
+                BundledIcon {
+                    id: footerChevron
+                    anchors { right: parent.right; verticalCenter: parent.verticalCenter }
+                    name: pane.expanded ? "notification.history.collapse" : "notification.history.expand"
+                    size: 11
+                    color: pane.ink
+                }
+            }
             onClicked: pane.requestExpanded(pane.folding || !pane.expanded)
         }
     }

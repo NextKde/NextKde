@@ -1,4 +1,5 @@
 import QtQuick
+import qs.desktop.modules.common
 import "WidgetLayout.mjs" as WidgetLayout
 
 // Keep pointer coordinates in the scene: the handle itself moves as its card
@@ -43,18 +44,11 @@ Item {
             SpringAnimation { spring: 5; damping: 0.35; mass: 1; epsilon: 0.005 }
         }
     }
-    Repeater {
-        model: 2
-        delegate: Rectangle {
-            required property int index
-            x: 13 + index * 6
-            y: 19 + index * 3
-            width: 15 - index * 6
-            height: 2
-            radius: 1
-            rotation: -45
-            color: handle.ink
-        }
+    BundledIcon {
+        anchors.centerIn: parent
+        name: "desktop.widget.resize"
+        size: 16
+        color: handle.ink
     }
     MouseArea {
         id: pointer

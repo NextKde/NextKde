@@ -57,12 +57,12 @@ ControlCenterCard {
             border.color: AppearanceTokens.surface.pick(AppearanceTokens.colors.surfaceContainerHigh, ThemeService.isDark ? Qt.rgba(1, 1, 1, 0.18) : Qt.rgba(0, 0, 0, 0.08))
             Behavior on color { ColorAnimation { duration: 110 } }
 
-            GlassText {
+            BundledIcon {
                 anchors.centerIn: parent
                 anchors.horizontalCenterOffset: -1
-                text: "‹"
+                name: "controlCenter.back"
                 color: AppearanceTokens.content.glassInk()
-                font { pixelSize: 18; weight: Font.Bold }
+                size: 18
             }
 
             ControlCenterSelection {

@@ -93,11 +93,11 @@ Item {
             color: AppearanceTokens.content.glassInk()
             font { pixelSize: 11; weight: Font.DemiBold; family: AppearanceTokens.typography.textFamily }
         }
-        GlassText {
+        BundledIcon {
             anchors { right: parent.right; rightMargin: 16; verticalCenter: parent.verticalCenter }
-            text: "›"
+            name: "brightness.settings"
             color: AppearanceTokens.content.glassInk()
-            font { pixelSize: 13; weight: Font.Bold }
+            size: 13
         }
         MouseArea {
             anchors.fill: parent

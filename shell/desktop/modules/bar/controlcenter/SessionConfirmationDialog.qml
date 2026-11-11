@@ -47,9 +47,7 @@ KosFloatPanel {
                 anchors.centerIn: parent
                 width: 26
                 height: 26
-                name: BundledIcons.roleName(sessionConfirm.actionLabel === "poweroff"
-                    ? "powerOff"
-                    : (sessionConfirm.actionLabel === "reboot" ? "reboot" : "logout"))
+                name: "session." + sessionConfirm.actionLabel
                 color: sessionConfirm.contentForegroundColor
             }
         }

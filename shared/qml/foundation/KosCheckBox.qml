@@ -1,4 +1,5 @@
 import QtQuick
+import "../../Icons" as Symbols
 import QtQuick.Controls
 
 CheckBox {
@@ -12,11 +13,11 @@ CheckBox {
         color: root.checked ? AppTheme.accent : AppTheme.fieldSurface
         border.width: root.activeFocus ? 2 : 1
         border.color: root.checked || root.activeFocus ? AppTheme.accent : AppTheme.borderHover
-        Text {
+        Symbols.Icon {
             anchors.centerIn: parent
-            text: root.checkState === Qt.PartiallyChecked ? "−" : "✓"
+            name: root.checkState === Qt.PartiallyChecked ? "minus" : "checkmark"
             visible: root.checkState !== Qt.Unchecked
-            color: AppTheme.accentText; font.pixelSize: 14
+            color: AppTheme.accentText; size: 14
         }
     }
     contentItem: Label {

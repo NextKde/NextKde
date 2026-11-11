@@ -210,7 +210,7 @@ PanelWindow {
                                 spacing: 6
 
                                 BundledIcon {
-                                    name: "window"
+                                    name: "overview.windowFallback"
                                     size: 13
                                     color: isCurrent ? "#ffffff" : Qt.rgba(1, 1, 1, 0.65)
                                     anchors.verticalCenter: parent.verticalCenter
@@ -325,7 +325,7 @@ PanelWindow {
                                             }
                                             spacing: 8
 
-                                            IconImage {
+                                            AppIcon {
                                                 width: 20
                                                 height: 20
                                                 anchors.verticalCenter: parent.verticalCenter
@@ -367,10 +367,10 @@ PanelWindow {
                                             Behavior on opacity { NumberAnimation { duration: 120 } }
                                             Behavior on color { ColorAnimation { duration: 120 } }
 
-                                            Text {
+                                            BundledIcon {
                                                 anchors.centerIn: parent
-                                                text: "✕"
-                                                font.pixelSize: 10
+                                                name: "overview.closeWindow"
+                                                size: 10
                                                 color: "white"
                                             }
 
@@ -423,7 +423,7 @@ PanelWindow {
                                                 anchors.centerIn: parent
                                                 spacing: 8
 
-                                                IconImage {
+                                                AppIcon {
                                                     anchors.horizontalCenter: parent.horizontalCenter
                                                     width: 44
                                                     height: 44
@@ -475,7 +475,7 @@ PanelWindow {
 
                     BundledIcon {
                         anchors.horizontalCenter: parent.horizontalCenter
-                        name: "window"
+                        name: "overview.windowFallback"
                         size: 32
                         color: Qt.rgba(1, 1, 1, 0.25)
                     }
