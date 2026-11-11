@@ -2,6 +2,7 @@ import "../components" as SettingsControls
 import Kos.Demo as Demo
 import "../../../shared/qml/i18n"
 import QtQuick
+import Kos.Icons as Symbols
 import QtQuick.Controls
 import QtQuick.Layouts
 import QtQuick.Dialogs as Platform
@@ -661,10 +662,15 @@ ColumnLayout {
                 }
                 Text {
                     objectName: "currentWallpaperPreviewLabel"
-                    text: page.previewPending ? I18n.tr("Loading…") : page.previewAvailable && page.bridgeCompatible ? I18n.tr("Desktop preview  ›") : I18n.tr("Unavailable")
+                    text: page.previewPending ? I18n.tr("Loading…") : page.previewAvailable && page.bridgeCompatible ? I18n.tr("Desktop preview") : I18n.tr("Unavailable")
                     color: page.previewAvailable && page.bridgeCompatible ? page.colors.accent : page.colors.secondaryText
                     font.pixelSize: 13
                     font.weight: Font.Medium
+                }
+                Symbols.Icon {
+                    size: 13; name: "chevron_right"
+                    visible: !page.previewPending && page.previewAvailable && page.bridgeCompatible
+                    color: page.colors.accent
                 }
             }
             MouseArea {
@@ -1015,11 +1021,10 @@ ColumnLayout {
             anchors.fill: parent
             anchors.margins: 11
             spacing: 9
-            Text {
-                text: "!"
+            Symbols.Icon {
+                name: "exclamationmark"
                 color: "#d93025"
-                font.pixelSize: 14
-                font.weight: Font.Bold
+                size: 14
             }
             Text {
                 Layout.fillWidth: true

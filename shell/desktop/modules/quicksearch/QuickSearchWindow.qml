@@ -730,14 +730,14 @@ PanelWindow {
                         color: viewToggle.containsMouse ? (ThemeService.isDark ? Qt.rgba(1, 1, 1, 0.14) : Qt.rgba(0, 0, 0, 0.08)) : "transparent"
                     }
 
-                    GlassText {
+                    BundledIcon {
                         anchors.centerIn: parent
                         // The button advertises the layout selected by a click.
-                        text: root.viewMode === "list" ? "▦" : "☷"
+                        name: root.viewMode === "list" ? "square_grid_2x2" : "list_bullet"
                         color: AppearanceTokens.content.glassInk(0.76)
-                        font.pixelSize: 16
-                        style: ThemeService.isDark ? Text.Outline : Text.Normal
-                        styleColor: dialog.textOutlineColor
+                        size: 16
+                        outlined: ThemeService.isDark
+                        outlineColor: dialog.textOutlineColor
                     }
 
                     MouseArea {
@@ -1202,15 +1202,15 @@ PanelWindow {
                                 : "transparent"
                         }
 
-                        GlassText {
+                        BundledIcon {
                             anchors.centerIn: parent
-                            text: (resultItem.modelData.pinned ?? false) ? "★" : "☆"
+                            name: (resultItem.modelData.pinned ?? false) ? "star_fill" : "star"
                             color: (resultItem.modelData.pinned ?? false)
                                 ? (ThemeService.isDark ? "#ffd60a" : "#c08a00")
                                 : AppearanceTokens.content.glassInk(0.68)
-                            font.pixelSize: 13
-                            style: ThemeService.isDark ? Text.Outline : Text.Normal
-                            styleColor: dialog.textOutlineColor
+                            size: 13
+                            outlined: ThemeService.isDark
+                            outlineColor: dialog.textOutlineColor
                         }
 
                         MouseArea {

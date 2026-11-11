@@ -20,7 +20,7 @@ AnimatedPopupWindow {
         clock: I18n.tr("Clock"), metrics: I18n.tr("System")
     })
     readonly property var symbols: ({
-        music: "♫", weather: "☀", clock: "◷", metrics: "⌁"
+        music: "music_note_2", weather: "sun_max", clock: "clock", metrics: "cpu"
     })
     readonly property var displayIds: {
         const active = ConfigService.infoCardOrder.slice()
@@ -167,11 +167,11 @@ AnimatedPopupWindow {
                         Column {
                             anchors.centerIn: parent
                             spacing: 4
-                            Text {
+                            BundledIcon {
                                 anchors.horizontalCenter: parent.horizontalCenter
-                                text: editor.symbols[card.modelData]
+                                name: editor.symbols[card.modelData]
                                 color: ThemeService.foregroundColor
-                                font.pixelSize: 22
+                                size: 22
                             }
                             Text {
                                 anchors.horizontalCenter: parent.horizontalCenter
@@ -185,11 +185,11 @@ AnimatedPopupWindow {
                             anchors { top: parent.top; right: parent.right; margins: 5 }
                             width: 20; height: 20; radius: 10
                             color: active ? "#ff453a" : ThemeService.accentColor
-                            Text {
+                            BundledIcon {
                                 anchors.centerIn: parent
-                                text: card.active ? "−" : "+"
+                                name: card.active ? "minus" : "plus"
                                 color: "white"
-                                font { pixelSize: 15; weight: Font.Bold }
+                                size: 15
                             }
                         }
 

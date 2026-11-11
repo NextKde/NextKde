@@ -218,7 +218,9 @@ ControlCenterCard {
                 horizontalCenter: parent.horizontalCenter
             }
             visible: sessionCard.service.lastSessionError.length > 0
-            text: "⚠ " + sessionCard.service.lastSessionError
+            text: sessionCard.service.lastSessionError
+            leftPadding: 16
+            BundledIcon { anchors.left: parent.left; anchors.verticalCenter: parent.verticalCenter; name: "exclamationmark_triangle"; size: 12; color: "#ff453a" }
             color: "#ff453a"
             font { pixelSize: 10; weight: Font.Medium; family: AppearanceTokens.typography.textFamily }
         }

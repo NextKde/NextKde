@@ -499,7 +499,7 @@ GridLayout {
             colors: page.colors
             title: I18n.tr("Spatial wallpaper")
             description: I18n.tr("Add depth and motion to your wallpaper")
-            iconSource: Qt.resolvedUrl("icons/spatial-wallpaper.svg")
+            iconSource: Qt.resolvedUrl("../icons/spatial-wallpaper.svg")
             actionObjectName: "spatialServiceAction"
             actionText: !page.available ? I18n.tr("Unavailable") : page.resources.busy ? I18n.tr("Preparing…") : page.checking ? I18n.tr("Checking…") : page.resources.enabled ? I18n.tr("Disable") : page.resources.ready ? I18n.tr("Enable") : I18n.tr("Get")
             actionEnabled: page.available && !page.resources.busy && !page.checking

@@ -188,12 +188,12 @@ Item {
         }
         onClicked: card.removeRequested(card.historyKey)
     }
-    GlassText {
+    BundledIcon {
         anchors { right: parent.right; bottom: parent.bottom; rightMargin: 14; bottomMargin: 7 }
         visible: card.canExpand
-        text: card.detailsExpanded ? "⌃" : "⌄"
+        name: card.detailsExpanded ? "chevron_up" : "chevron_down"
         color: card.ink
         opacity: 0.4
-        font.pixelSize: 10
+        size: 10
     }
 }
