@@ -15,6 +15,10 @@ clipping paths so Qt SVG preserves the transparent corners. Material navigation
 retains monochrome semantic glyphs. All PNG/ICO exports and rendering checks
 were performed in the dedicated VM; no application was run on the host.
 
+`nextkde-logo.svg` and `nextkde-logo-dark.svg` mirror the copies in
+`docs/images/` for the About page header; the installed Settings app has no
+checkout, so it cannot read `docs/` at runtime.
+
 `kde-symbolic.svg` and `kde-symbolic-dark.svg` retain the KDE mark from Breeze
 Icons 6.31.0, under its LGPL-3.0-or-later / LGPL-2.1-only terms. These identify the
 toolbar action opening KDE System Settings and retain the upstream geometry.
