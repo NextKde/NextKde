@@ -7,7 +7,7 @@ Uses Spectacle's screen selection and recording tray; changes no preferences.
 import json
 import os
 from pathlib import Path
-import selectors
+from process_lines import ProcessLines
 import subprocess
 import time
 
@@ -53,8 +53,7 @@ for attempt in range(1, 4):
         shell = subprocess.Popen(['quickshell', '--path', str(root / '.build/replay'), '--no-color'],
                                  env=env, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
                                  text=True, bufsize=1)
-        selector = selectors.DefaultSelector()
-        selector.register(shell.stdout, selectors.EVENT_READ)
+        output = ProcessLines(shell)
         phases = []
         lines = []
         started = None
@@ -63,17 +62,20 @@ for attempt in range(1, 4):
         while time.monotonic() < deadline:
             if shell.poll() is not None:
                 raise RuntimeError('shell exited during recording')
-            if not selector.select(.1):
-                if ended and time.monotonic() - ended > 2:
+            event = output.get()
+            if event is None:
+                if ended and time.monotonic() - ended > 2.5:
                     break
                 continue
-            line = shell.stdout.readline()
+            observed, line = event
+            if line is None:
+                raise RuntimeError('shell output closed during recording')
             lines.append(line)
             if '[StartupReveal]' in line:
                 phase = line.strip().split()[-1]
                 phases.append(phase)
-                if phase == 'fading': started = time.monotonic()
-                if phase == 'done': ended = time.monotonic()
+                if phase == 'fading': started = observed
+                if phase == 'done': ended = observed
         (out / f'arrival-{attempt}.log').write_text(''.join(lines))
         service, path = recording_tray.split('/', 1)
         stop = time.monotonic()
@@ -89,11 +91,15 @@ for attempt in range(1, 4):
                       '-t', '4', '-c:v', 'libvpx-vp9', '-crf', '30', '-b:v', '0', str(clip))
         if encoded.returncode:
             raise RuntimeError(encoded.stderr)
-        result = dict(attempt=attempt, phases=phases, elapsed_ms=round((ended-started)*1000),
-                      video=str(clip), duration=duration, trim_start=offset)
+        clip_duration = float(run('ffprobe', '-v', 'error', '-show_entries', 'format=duration',
+                                  '-of', 'default=noprint_wrappers=1:nokey=1', str(clip)).stdout.strip())
+        result = dict(attempt=attempt, phases=phases, observed_elapsed_ms=round((ended-started)*1000),
+                      video=str(clip), duration=clip_duration, raw_duration=duration, trim_start=offset)
         (out / f'arrival-{attempt}.json').write_text(json.dumps(result, indent=2))
         print(json.dumps(result), flush=True)
         assert phases == ['idle', 'fading', 'bar', 'dock', 'icons', 'done'], phases
+        assert 3 <= clip_duration <= 5, clip_duration
+        assert 600 <= result['observed_elapsed_ms'] <= 900, result
     finally:
         if shell and shell.poll() is None:
             shell.terminate()
