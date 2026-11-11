@@ -19,6 +19,7 @@ qt_add_qml_module(kos_ui
     QML_FILES
         i18n/I18n.qml
         foundation/AppTheme.qml
+        foundation/MotionTokens.qml
         foundation/KosSidebar.qml
         foundation/KosSidebarToggle.qml
         foundation/KosSidebarGlyph.qml

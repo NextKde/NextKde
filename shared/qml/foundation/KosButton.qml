@@ -28,7 +28,7 @@ Button {
                                : (hovered ? AppTheme.hoverScale : 1))
 
     Behavior on scale {
-        NumberAnimation { duration: AppTheme.motionFast; easing.type: Easing.OutCubic }
+        NumberAnimation { duration: AppTheme.motionFast; easing.type: AppTheme.motion.enterCurve }
     }
 
     contentItem: Label {

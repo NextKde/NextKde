@@ -7,6 +7,7 @@ QtObject {
     property var displayedPage: ""
     property bool enabled: true
     property real progress: 1
+    property var motionPolicy: AppTheme.motion
     property int exitDuration: AppTheme.motionFast
     property int enterDuration: AppTheme.motionNormal
     // Crossfade mode: on a page change the new page becomes `displayedPage`
@@ -52,7 +53,7 @@ QtObject {
             animation.to = 1
             animation.duration = Math.max(1,
                 Math.round(enterDuration * (1 - progress)))
-            animation.easing.type = Easing.OutCubic
+            animation.easing.type = motionPolicy.enterCurve
             animation.start()
             return
         }
@@ -69,7 +70,7 @@ QtObject {
         animation.duration = Math.max(1, Math.round(
             (target === 1 ? enterDuration : exitDuration)
             * Math.abs(target - progress)))
-        animation.easing.type = target === 1 ? Easing.OutCubic : Easing.InCubic
+        animation.easing.type = target === 1 ? motionPolicy.enterCurve : motionPolicy.exitCurve
         animation.start()
     }
 

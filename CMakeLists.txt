@@ -665,6 +665,12 @@ if(BUILD_TESTING)
         set_tests_properties(kos-shell.notification-open PROPERTIES
             ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_QUICK_BACKEND=software"
             LABELS "ui;headless" TIMEOUT 20)
+        add_test(NAME kos-ui.motion-tokens
+            COMMAND ${KOS_INTERACTION_QMLTEST}
+                -input ${CMAKE_CURRENT_SOURCE_DIR}/tests/motion-tokens)
+        set_tests_properties(kos-ui.motion-tokens PROPERTIES
+            ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_QUICK_BACKEND=software"
+            LABELS "ui;headless" TIMEOUT 20)
         add_test(NAME kos-ui.interaction-controls
             COMMAND ${KOS_INTERACTION_QMLTEST}
                 -input ${CMAKE_CURRENT_SOURCE_DIR}/tests/interaction-controls/tst_controls.qml)

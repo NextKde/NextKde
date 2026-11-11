@@ -54,7 +54,7 @@ Item {
             Behavior on x {
                 NumberAnimation {
                     duration: AppTheme.motionNormal
-                    easing.type: Easing.OutCubic
+                    easing.type: AppTheme.motion.enterCurve
                 }
             }
         }
