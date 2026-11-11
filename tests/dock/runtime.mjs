@@ -426,6 +426,7 @@ ListModel {
             copyFileSync(new URL("./fixtures/WindowService.qml", import.meta.url), join(dock, 'WindowService.qml'));
             for (const name of ['LiquidGlassPanel.qml', 'AppearanceTokens.qml'])
                 copyFileSync(new URL(`fixtures/${name}`, import.meta.url), join(common, name));
+            copyFileSync(new URL('../../shared/qml/foundation/MotionTokens.qml', import.meta.url), join(common, 'MotionTokens.qml'));
             writeFileSync(join(dock, 'ConfigService.qml'), `pragma Singleton
 import QtQuick
 QtObject { readonly property real effectiveHoverScale: 1.1 }
@@ -458,7 +459,8 @@ QtObject { readonly property real effectiveHoverScale: 1.1 }
             assert.match(output, /DOCK_REVEAL_RUNTIME_PASS/, output);
             console.log('Dock reveal: real HoverHandler input, delayed/cancelled entry, slow gap hand-off, hide reset, dynamic span, legacy default, mode switching and disabled mode passed offscreen');
         } finally {
-            rmSync(directory, { recursive: true, force: true });
+            if (process.env.KOS_KEEP_TEST_TMP === "1") console.log(`Fixture retained: ${directory}`);
+            else rmSync(directory, { recursive: true, force: true });
         }
     },
     "reveal-indicator": async () => {
