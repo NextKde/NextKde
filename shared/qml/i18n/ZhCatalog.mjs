@@ -31,6 +31,7 @@ export const catalog = {
     "This build of Settings cannot check for KOS updates.": "此版本的设置无法检查 KOS 更新。",
     "Update source not recorded": "未记录更新来源",
     "Run ./tools/kosctl install once from the KOS source folder, then reopen Settings.": "请在 KOS 源码目录运行一次 ./tools/kosctl install，然后重新打开设置。",
+    "NixOS manages KOS updates through its flake/NixOS module; in-app source updates are unavailable.": "NixOS 通过 flake/NixOS module 管理 KOS 更新；设置内不提供源码更新。",
     "The source checkout is newer than the installed version.": "源码目录比已安装版本更新。",
     "1 commit behind %1": "比 %1 落后 1 个提交",
     "%1 commits behind %2": "比 %2 落后 %1 个提交",

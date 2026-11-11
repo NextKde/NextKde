@@ -58,23 +58,13 @@ UpdateController::Status UpdateController::statusFromJson(const QByteArray &json
     status.state = object.value(QStringLiteral("state")).toString();
     if (status.state.isEmpty()) status.state = QStringLiteral("idle");
     status.stage = object.value(QStringLiteral("stage")).toString();
-    status.checkedAt = object.value(QStringLiteral("checkedAt")).toString();
     status.startedAt = object.value(QStringLiteral("startedAt")).toString();
-    status.finishedAt = object.value(QStringLiteral("finishedAt")).toString();
-    status.sourceRoot = object.value(QStringLiteral("sourceRoot")).toString();
     status.branch = object.value(QStringLiteral("branch")).toString();
     status.upstream = object.value(QStringLiteral("upstream")).toString();
     status.channel = object.value(QStringLiteral("channel")).toString();
-    status.installedVersion = object.value(QStringLiteral("installedVersion")).toString();
-    status.installedRevision = object.value(QStringLiteral("installedRevision")).toString();
-    status.sourceVersion = object.value(QStringLiteral("sourceVersion")).toString();
-    status.sourceRevision = object.value(QStringLiteral("sourceRevision")).toString();
     status.logPath = object.value(QStringLiteral("logPath")).toString();
     status.error = object.value(QStringLiteral("error")).toString();
-    status.ahead = object.value(QStringLiteral("ahead")).toInt();
     status.behind = object.value(QStringLiteral("behind")).toInt();
-    status.dirty = object.value(QStringLiteral("dirty")).toBool();
-    status.canFastForward = object.value(QStringLiteral("canFastForward")).toBool();
     status.needsRestart = object.value(QStringLiteral("needsRestart")).toBool();
     status.sourceAhead = object.value(QStringLiteral("sourceAhead")).toBool();
     return status;
@@ -87,12 +77,6 @@ UpdateController::UpdateController(QObject *parent)
     m_statusPath = m_stateDir + QStringLiteral("/status.json");
     m_poll.setInterval(1000);
     connect(&m_poll, &QTimer::timeout, this, &UpdateController::refresh);
-    const auto watchedChange = [this] {
-        refresh();
-        rewatch();
-    };
-    connect(&m_watcher, &QFileSystemWatcher::fileChanged, this, watchedChange);
-    connect(&m_watcher, &QFileSystemWatcher::directoryChanged, this, watchedChange);
     QFile channelFile(channelFilePath());
     if (channelFile.open(QIODevice::ReadOnly) && channelFile.size() <= 32) {
         const QString saved = QString::fromUtf8(channelFile.readAll()).trimmed();
@@ -103,7 +87,6 @@ UpdateController::UpdateController(QObject *parent)
     }
     readRecord();
     readStatus();
-    rewatch();
 }
 
 QString UpdateController::error() const
@@ -198,9 +181,12 @@ void UpdateController::readRecord()
     // Installs made before kosctl recorded sourceRoot land here: there is nothing
     // safe to update until the user runs install once from the checkout.
     if (m_sourceRoot.isEmpty()) {
-        m_configError = QStringLiteral("This KOS install does not record its source "
-                                       "checkout. Run ./tools/kosctl install once, then "
-                                       "reopen Settings.");
+        m_configError = QFileInfo::exists(QStringLiteral("/etc/NIXOS"))
+            ? QStringLiteral("NixOS manages KOS updates through its flake/NixOS module; "
+                             "in-app source updates are unavailable.")
+            : QStringLiteral("This KOS install does not record its source "
+                             "checkout. Run ./tools/kosctl install once, then "
+                             "reopen Settings.");
     } else if (!QFileInfo(m_sourceRoot).isDir()) {
         m_configError = QStringLiteral("The recorded source checkout (%1) is gone. "
                                        "Run ./tools/kosctl install from a valid checkout.")
@@ -251,17 +237,6 @@ void UpdateController::readStatus()
             m_poll.stop();
             m_sawBusy = false;
         }
-    }
-}
-
-void UpdateController::rewatch()
-{
-    const QStringList wanted{m_statusPath, m_stateDir};
-    for (const QString &path : wanted) {
-        if (!QFileInfo::exists(path) || m_watcher.files().contains(path)
-            || m_watcher.directories().contains(path))
-            continue;
-        m_watcher.addPath(path);
     }
 }
 
