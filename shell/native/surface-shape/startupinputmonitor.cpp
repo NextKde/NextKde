@@ -4,6 +4,9 @@
 #include <QDBusConnection>
 #include <QDBusMessage>
 #include <QEvent>
+#include <QGuiApplication>
+#include <QQuickWindow>
+#include <memory>
 
 StartupInputMonitor::StartupInputMonitor(QObject *parent)
     : QObject(parent)
@@ -37,6 +40,26 @@ void StartupInputMonitor::setActive(bool active)
     message.setArguments({active ? 3000 : 0});
     QDBusConnection::sessionBus().send(message);
     emit activeChanged();
+}
+
+void StartupInputMonitor::prepareFrame()
+{
+    // Configuration readiness precedes the first scene-graph render. Start the
+    // clock only after exposed windows have submitted their initial frame.
+    const auto remaining = std::make_shared<int>(0);
+    for (auto *window : QGuiApplication::allWindows()) {
+        auto *quickWindow = qobject_cast<QQuickWindow *>(window);
+        if (!quickWindow || !quickWindow->isExposed())
+            continue;
+        ++*remaining;
+        connect(quickWindow, &QQuickWindow::frameSwapped, this, [this, remaining] {
+            if (--*remaining == 0)
+                emit framePrepared();
+        }, Qt::ConnectionType(Qt::QueuedConnection | Qt::SingleShotConnection));
+        quickWindow->update();
+    }
+    if (*remaining == 0)
+        QMetaObject::invokeMethod(this, &StartupInputMonitor::framePrepared, Qt::QueuedConnection);
 }
 
 void StartupInputMonitor::globalActivity()

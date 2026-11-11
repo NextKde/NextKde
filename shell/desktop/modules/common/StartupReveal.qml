@@ -13,6 +13,7 @@ Scope {
     property real progress: 0
     property bool loaded: false
     property bool started: false
+    property bool preparing: false
     property double startedAt: 0
     readonly property bool active: progress < 1
     readonly property string phase: !active ? "done" : !started ? "idle"
@@ -54,10 +55,20 @@ Scope {
         watchdog.stop()
     }
     function begin() {
-        if (!active || started || !ready)
+        if (!active || started || preparing || !ready)
             return
         if (AppearanceConfigService.reduceMotion) {
             finish()
+            return
+        }
+        preparing = true
+        inputMonitor.prepareFrame()
+    }
+    function startTimeline() {
+        preparing = false
+        if (!active || started) return
+        if (!ready) {
+            begin()
             return
         }
         watchdog.stop()
@@ -87,8 +98,10 @@ Scope {
         onTriggered: reveal.finish()
     }
     StartupInputMonitor {
+        id: inputMonitor
         active: reveal.loaded && reveal.active
         onActivity: reveal.finish()
+        onFramePrepared: reveal.startTimeline()
     }
     Connections {
         target: Quickshell
