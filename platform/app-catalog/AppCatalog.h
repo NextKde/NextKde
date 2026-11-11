@@ -40,6 +40,8 @@ QVariantMap receipt(const QString& appId);
 bool recordInstallation(const QString& appId, const QVariantMap& installation);
 bool forgetInstallation(const QString& appId);
 QString stateDirectory();
+// Presentation only: current verified image, or this app/source's retained image
+// until its replacement is ready. Does not affect catalog or package authority.
 QString iconFile(const QVariantMap& app);
 QString entryDigest(const QVariantMap& app);
 }
