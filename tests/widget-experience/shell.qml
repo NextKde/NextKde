@@ -78,6 +78,9 @@ ShellRoot {
         switch (stage) {
         case 0:
             driver.interval = 120
+            const contentLayer = find(desktop.contentItem, "widget-content-layer")
+            check(!!contentLayer && contentLayer.enabled,
+                "widget contents answer input outside editing")
             test.widgetCard = test.cards.itemAt(0)
             check(!!test.widgetCard, "clock card present for the editing gesture checks")
             check(!desktop.editMode, "editing gesture checks start outside editing")
@@ -86,6 +89,10 @@ ShellRoot {
             break
         case 1:
             check(desktop.editMode, "right click on a card enters widget editing")
+            // A live widget during editing is what launched the app behind a
+            // card (and a second copy of a running player crashes QQ Music).
+            check(!find(desktop.contentItem, "widget-content-layer").enabled,
+                "widget contents stay inert while editing")
             clickButton(test.widgetCard, Qt.RightButton)
             break
         case 2:

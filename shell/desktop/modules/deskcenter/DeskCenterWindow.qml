@@ -631,17 +631,43 @@ PanelWindow {
         id: widgetDropPreview
         objectName: "widget-drop-preview"
         z: 110
-        visible: root.activeDragCard !== null
         readonly property var dragged: root.activeDragCard
-        readonly property bool allowed: dragged?.dropAllowed ?? false
-        x: root.leftInset + (dragged?.dropPosition.column ?? 0) * (root.cellSize + root.gap)
-        y: root.topInset + (dragged?.dropPosition.row ?? 0) * (root.cellSize + root.gap)
-        width: root.spanSize(dragged?.displayColumns ?? 1)
-        height: root.spanSize(dragged?.displayRows ?? 1)
+        // The highlight marks the cell the pointer is over, so it jumps from
+        // cell to cell: only ever one cell is lit. Sliding it across the cells
+        // in between read as several cells lighting up in a row.
+        // Snapshot only live drag updates. Once the drag is gone, keep the
+        // last target geometry and colour for the entire fade-out.
+        property rect lastGeometry: Qt.rect(0, 0, 0, 0)
+        readonly property rect previewGeometry: dragged !== null
+            ? Qt.rect(root.leftInset + dragged.dropPosition.column * (root.cellSize + root.gap),
+                root.topInset + dragged.dropPosition.row * (root.cellSize + root.gap),
+                root.spanSize(dragged.displayColumns), root.spanSize(dragged.displayRows))
+            : lastGeometry
+        onPreviewGeometryChanged: if (dragged !== null) lastGeometry = previewGeometry
+        property bool lastAllowed: false
+        readonly property bool allowed: dragged !== null ? dragged.dropAllowed : lastAllowed
+        onAllowedChanged: if (dragged !== null) lastAllowed = allowed
+        x: previewGeometry.x
+        y: previewGeometry.y
+        width: previewGeometry.width
+        height: previewGeometry.height
         radius: AppearanceTokens.widget.radius
         color: allowed ? "#2434c759" : "#30ff453a"
         border.width: 2
         border.color: allowed ? "#34c759" : "#ff453a"
+        opacity: dragged !== null ? 1 : 0
+        visible: opacity > 0
+        Behavior on opacity {
+            enabled: !AppTheme.reduceMotion
+            NumberAnimation {
+                // Appear promptly, leave a little faster: the highlight should
+                // never trail the card that is landing.
+                duration: widgetDropPreview.dragged !== null
+                    ? AppearanceTokens.motion.fastDuration
+                    : AppearanceTokens.motion.fastDuration * 0.6
+                easing.type: Easing.OutCubic
+            }
+        }
     }
 
     // Position/size saves replace widgetDefinitions. Keep delegate identity
@@ -703,6 +729,13 @@ PanelWindow {
             // 2026-10-18 用户改判：台前调度与桌面组件共存（台前调度在
             // 组件之上），组件不再随台前调度开启而隐藏
             readonly property bool moving: widgetDrag.active
+            // A Behavior gated on `moving` cannot see the end of the drag: the
+            // DragHandler's release handler runs before the binding to active is
+            // invalidated, so the release writes (offset reset, committed cell)
+            // would go straight through a disabled Behavior and the card would
+            // jump. This flag is assigned by that handler itself, so it is
+            // already exact when the writes happen.
+            property bool pointerHeld: false
             readonly property var dropPosition: WidgetLayout.snappedPosition(
                 x - root.leftInset, y - root.topInset,
                 displayColumns, displayRows, root.cellSize, root.gap,
@@ -728,29 +761,76 @@ PanelWindow {
             // the QML content publish the same position on every drag frame.
             x: root.leftInset + (placement?.column ?? 0) * (root.cellSize + root.gap) + dragOffsetX
             y: root.topInset + (placement?.row ?? 0) * (root.cellSize + root.gap) + dragOffsetY
-            readonly property int displayColumns: resizeHandle.resizing
-                ? resizeHandle.previewColumns : (placement?.columns ?? 1)
-            readonly property int displayRows: resizeHandle.resizing
-                ? resizeHandle.previewRows : (placement?.rows ?? 1)
-            width: root.spanSize(displayColumns)
-            height: root.spanSize(displayRows)
+            // The card and every widget inside it lay themselves out for the
+            // cell size they have committed to, never for the mid-drag preview:
+            // switching a widget to its other layout at the halfway point made
+            // the contents jump while the corner was still moving. The preview
+            // span only drives the resize readout and the corner itself.
+            readonly property int displayColumns: placement?.columns ?? 1
+            readonly property int displayRows: placement?.rows ?? 1
+            // While the corner is held, the card follows the magnetised
+            // pointer position; the moment it is released the size switches to
+            // the committed cell and the spring below takes it there.
+            width: resizeHandle.resizing ? resizeHandle.previewWidth
+                : root.spanSize(displayColumns)
+            height: resizeHandle.resizing ? resizeHandle.previewHeight
+                : root.spanSize(displayRows)
+            // A released card lands on its cell instead of sliding there: the
+            // old fixed cubic stopped dead at the destination, which is what
+            // made the snap read as abrupt. The spring carries the release into
+            // the cell and settles with a few pixels of weight.
             Behavior on x {
-                enabled: !card.moving
-                NumberAnimation { duration: AppearanceTokens.motion.normalDuration; easing.type: AppearanceTokens.motion.standardEasing }
+                enabled: !card.pointerHeld && !AppTheme.reduceMotion
+                SpringAnimation {
+                    spring: AppearanceTokens.motion.widgetMoveSpring
+                    damping: AppearanceTokens.motion.widgetMoveDamping
+                    mass: AppearanceTokens.motion.widgetMoveMass
+                    epsilon: AppearanceTokens.motion.widgetMoveEpsilon
+                }
             }
             Behavior on y {
-                enabled: !card.moving
-                NumberAnimation { duration: AppearanceTokens.motion.normalDuration; easing.type: AppearanceTokens.motion.standardEasing }
+                enabled: !card.pointerHeld && !AppTheme.reduceMotion
+                SpringAnimation {
+                    spring: AppearanceTokens.motion.widgetMoveSpring
+                    damping: AppearanceTokens.motion.widgetMoveDamping
+                    mass: AppearanceTokens.motion.widgetMoveMass
+                    epsilon: AppearanceTokens.motion.widgetMoveEpsilon
+                }
             }
+            // Size is the one change that moves a lot of pixels at once, so it
+            // settles instead of jumping: the drag itself tracks the pointer
+            // one-to-one, and releasing hands the corner to this spring, which
+            // lands it on the grid with a little weight. Reduced motion still
+            // gets the new size, just without the travel.
             Behavior on width {
-                enabled: !resizeHandle.resizing
-                NumberAnimation { duration: AppearanceTokens.motion.normalDuration; easing.type: AppearanceTokens.motion.standardEasing }
+                enabled: !resizeHandle.resizing && !AppTheme.reduceMotion
+                SpringAnimation {
+                    spring: AppearanceTokens.motion.widgetResizeSpring
+                    damping: AppearanceTokens.motion.widgetResizeDamping
+                    mass: AppearanceTokens.motion.widgetResizeMass
+                    epsilon: AppearanceTokens.motion.widgetResizeEpsilon
+                }
             }
             Behavior on height {
-                enabled: !resizeHandle.resizing
-                NumberAnimation { duration: AppearanceTokens.motion.normalDuration; easing.type: AppearanceTokens.motion.standardEasing }
+                enabled: !resizeHandle.resizing && !AppTheme.reduceMotion
+                SpringAnimation {
+                    spring: AppearanceTokens.motion.widgetResizeSpring
+                    damping: AppearanceTokens.motion.widgetResizeDamping
+                    mass: AppearanceTokens.motion.widgetResizeMass
+                    epsilon: AppearanceTokens.motion.widgetResizeEpsilon
+                }
             }
-            Behavior on scale { NumberAnimation { duration: 120; easing.type: Easing.OutCubic } }
+            // The lift belongs to the same motion family as the drop, so the
+            // card does not land while it is still shrinking on another curve.
+            Behavior on scale {
+                enabled: !AppTheme.reduceMotion
+                SpringAnimation {
+                    spring: AppearanceTokens.motion.widgetMoveSpring
+                    damping: AppearanceTokens.motion.widgetMoveDamping
+                    mass: AppearanceTokens.motion.widgetMoveMass
+                    epsilon: AppearanceTokens.motion.widgetMoveEpsilon
+                }
+            }
 
             // A right click is how a card enters editing, so a second right
             // click has to leave it again. Toggling keeps one gesture as the
@@ -775,9 +855,11 @@ PanelWindow {
                 }
                 onActiveChanged: {
                     if (active) {
+                        card.pointerHeld = true
                         root.activeDragCard = card
                         return
                     }
+                    card.pointerHeld = false
                     const allowed = root.editMode && card.dropAllowed
                     const destination = card.dropPosition
                     const id = card.modelData.id
@@ -846,6 +928,7 @@ PanelWindow {
                 anchors { right: parent.right; bottom: parent.bottom; margins: 5 }
                 cellSize: root.cellSize
                 gap: root.gap
+                animate: !AppTheme.reduceMotion
                 previewAllowed: card.placement !== null && WidgetLayout.canPlace(
                     root.placements, card.modelData.id, card.placement.column, card.placement.row,
                     previewColumns, previewRows, root.maximumWidgetColumns, root.usableRows)
@@ -862,10 +945,17 @@ PanelWindow {
                 height: 32
                 radius: 12
                 color: resizeHandle.previewAllowed ? "#b0000000" : "#c0a02020"
+                // The readout lands with the grab instead of blinking on, so the
+                // eye is already on the corner when the size starts to change.
+                scale: visible ? 1.0 : 0.86
+                Behavior on scale {
+                    enabled: !AppTheme.reduceMotion
+                    SpringAnimation { spring: 5; damping: 0.35; mass: 1; epsilon: 0.005 }
+                }
                 Text {
                     id: resizePreview
                     anchors.centerIn: parent
-                    text: card.displayColumns + " × " + card.displayRows
+                    text: resizeHandle.previewColumns + " × " + resizeHandle.previewRows
                     color: "white"
                     font { pixelSize: 13; weight: Font.DemiBold }
                 }
@@ -878,6 +968,12 @@ PanelWindow {
                 id: widgetContentLayer
                 objectName: "widget-content-layer"
                 anchors.fill: parent
+                // Editing is spatial: while widgets are being arranged their
+                // contents must not answer clicks. A live content layer turned a
+                // drag or a stray click on the music card into a launch of the
+                // app it was showing, and a second copy of a running player is
+                // what crashed QQ Music (two instances share one profile).
+                enabled: !root.editMode
                 // The clock resolves monochrome ink in its face. Keep its text
                 // out of the extra saturation texture so it renders at the
                 // window's resolution. Other glass artwork is desaturated.
@@ -1962,17 +2058,29 @@ PanelWindow {
                         // Raise the displayed player; ListenFree owns the
                         // music entry when no MPRIS session is available.
                         const player = MediaService.activePlayer
-                        if (player) {
-                            if (player.canRaise) {
-                                player.raise()
-                                return
-                            }
-                            if (player.desktopEntry && AppActionService.launchById(player.desktopEntry, []))
-                                return
-                            // Do not start a different app for the displayed track.
+                        if (!player) {
+                            AppActionService.launchById("listenfree", [])
                             return
                         }
-                        AppActionService.launchById("listenfree", [])
+                        if (player.canRaise) {
+                            player.raise()
+                            return
+                        }
+                        // Not every player offers Raise (the QQ Music bridge
+                        // reports CanRaise=false), so bring up the window that
+                        // already exists. Launching from here started a second
+                        // copy of a running app, and two QQ Music instances
+                        // share one profile and crash each other.
+                        const windows = player.desktopEntry
+                            ? WindowService.windowsForApp(player.desktopEntry) : []
+                        if (windows.length > 0) {
+                            WindowService.activateWindow(windows[0].windowId)
+                            return
+                        }
+                        if (player.desktopEntry
+                                && AppActionService.launchById(player.desktopEntry, []))
+                            return
+                        // Do not start a different app for the displayed track.
                     }
                 }
 
@@ -2083,8 +2191,16 @@ PanelWindow {
 	                                visible: musicContent.hasPlayer
                                 source: musicContent.artworkSource
                                 fillMode: Image.PreserveAspectCrop
-                                sourceSize.width: Math.max(1, Math.ceil(width * 2))
-                                sourceSize.height: Math.max(1, Math.ceil(height * 2))
+                                // Decode once at a size the layout can never
+                                // exceed. Binding sourceSize to the animated
+                                // width re-decoded the cover on every frame of a
+                                // resize and left it not-Ready for most of them
+                                // (measured: 29 of 31 frames), which reads as the
+                                // cover flickering while the card grows.
+                                readonly property int decodeSize: Math.max(1,
+                                    Math.ceil(root.cellSize * 2))
+                                sourceSize.width: decodeSize
+                                sourceSize.height: decodeSize
                                 asynchronous: true
                                 cache: false
                                 smooth: true
