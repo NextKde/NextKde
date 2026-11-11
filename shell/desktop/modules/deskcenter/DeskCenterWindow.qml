@@ -635,10 +635,22 @@ PanelWindow {
         // The highlight marks the cell the pointer is over, so it jumps from
         // cell to cell: only ever one cell is lit. Sliding it across the cells
         // in between read as several cells lighting up in a row.
-        // Its position and colour are held by the Bindings below while the drag
-        // is gone, so a fade-out cannot drift the rectangle to the origin or
-        // turn it red on the last frame.
-        property bool allowed: false
+        // Snapshot only live drag updates. Once the drag is gone, keep the
+        // last target geometry and colour for the entire fade-out.
+        property rect lastGeometry: Qt.rect(0, 0, 0, 0)
+        readonly property rect previewGeometry: dragged !== null
+            ? Qt.rect(root.leftInset + dragged.dropPosition.column * (root.cellSize + root.gap),
+                root.topInset + dragged.dropPosition.row * (root.cellSize + root.gap),
+                root.spanSize(dragged.displayColumns), root.spanSize(dragged.displayRows))
+            : lastGeometry
+        onPreviewGeometryChanged: if (dragged !== null) lastGeometry = previewGeometry
+        property bool lastAllowed: false
+        readonly property bool allowed: dragged !== null ? dragged.dropAllowed : lastAllowed
+        onAllowedChanged: if (dragged !== null) lastAllowed = allowed
+        x: previewGeometry.x
+        y: previewGeometry.y
+        width: previewGeometry.width
+        height: previewGeometry.height
         radius: AppearanceTokens.widget.radius
         color: allowed ? "#2434c759" : "#30ff453a"
         border.width: 2
@@ -655,43 +667,6 @@ PanelWindow {
                     : AppearanceTokens.motion.fastDuration * 0.6
                 easing.type: Easing.OutCubic
             }
-        }
-        Binding {
-            target: widgetDropPreview
-            property: "x"
-            when: widgetDropPreview.dragged !== null
-            // Null-safe: when the drag ends, the Binding re-evaluates value in
-            // the same turn that it disables itself, and reading through a gone
-            // drag card would throw.
-            value: root.leftInset
-                + (widgetDropPreview.dragged?.dropPosition.column ?? 0)
-                    * (root.cellSize + root.gap)
-        }
-        Binding {
-            target: widgetDropPreview
-            property: "y"
-            when: widgetDropPreview.dragged !== null
-            value: root.topInset
-                + (widgetDropPreview.dragged?.dropPosition.row ?? 0)
-                    * (root.cellSize + root.gap)
-        }
-        Binding {
-            target: widgetDropPreview
-            property: "width"
-            when: widgetDropPreview.dragged !== null
-            value: root.spanSize(widgetDropPreview.dragged?.displayColumns ?? 1)
-        }
-        Binding {
-            target: widgetDropPreview
-            property: "height"
-            when: widgetDropPreview.dragged !== null
-            value: root.spanSize(widgetDropPreview.dragged?.displayRows ?? 1)
-        }
-        Binding {
-            target: widgetDropPreview
-            property: "allowed"
-            when: widgetDropPreview.dragged !== null
-            value: widgetDropPreview.dragged?.dropAllowed ?? false
         }
     }
 

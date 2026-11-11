@@ -287,7 +287,13 @@ ShellRoot {
                         check(preview.visible && preview.allowed === target.allowed, "drop preview distinguishes empty and occupied cells")
                         const xBeforeRelease = card.x
                         const yBeforeRelease = card.y
+                        const previewBeforeRelease = Qt.rect(preview.x, preview.y, preview.width, preview.height)
+                        const allowedBeforeRelease = preview.allowed
                         events.mouseRelease(desktop.contentItem, releasePoint.x, releasePoint.y, Qt.LeftButton, Qt.NoModifier, 5)
+                        check(preview.x === previewBeforeRelease.x && preview.y === previewBeforeRelease.y
+                            && preview.width === previewBeforeRelease.width && preview.height === previewBeforeRelease.height
+                            && preview.allowed === allowedBeforeRelease,
+                            "drop preview holds its last target geometry and colour while fading out")
                         // No frame has run yet: the card is still where the pointer
                         // let go. A jump here would mean the drop is not animated.
                         if (target.column !== card.placement.column)
