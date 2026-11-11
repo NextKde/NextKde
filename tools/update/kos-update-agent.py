@@ -18,7 +18,6 @@ import shutil
 import subprocess
 import sys
 import tempfile
-import threading
 import traceback
 from datetime import datetime, timezone
 
@@ -26,8 +25,6 @@ SCHEMA_VERSION = 1
 CHECK_TIMEOUT = 120
 MERGE_TIMEOUT = 120
 INSTALL_TIMEOUT = 3600
-SUDO_TIMEOUT = 300
-KEEPALIVE_SECONDS = 45
 TERMINAL_STATES = ("up-to-date", "available", "blocked", "updated", "failed")
 GIT_MARKERS = (
     "MERGE_HEAD",
@@ -315,56 +312,7 @@ class Agent:
             return str(helper)
         return ""
 
-    def sudo_without_password(self):
-        # NOPASSWD installs need no prompt, and `sudo -v` still asks even when
-        # every command is NOPASSWD. Probe with a no-op command instead.
-        try:
-            result = subprocess.run(
-                ["sudo", "-n", "true"],
-                stdout=subprocess.DEVNULL,
-                stderr=subprocess.DEVNULL,
-                timeout=SUDO_TIMEOUT,
-            )
-        except (OSError, subprocess.SubprocessError):
-            return False
-        return result.returncode == 0
-
-    def authorize(self):
-        try:
-            result = subprocess.run(
-                ["sudo", "-A", "-v"],
-                env={**os.environ, "LC_ALL": "C"},
-                text=True,
-                capture_output=True,
-                timeout=SUDO_TIMEOUT,
-            )
-        except (OSError, subprocess.SubprocessError) as error:
-            self.log(f"sudo authorization could not run: {error}")
-            return False
-        if result.returncode != 0:
-            self.log("sudo authorization failed: " + tail(result.stderr or result.stdout))
-            return False
-        return True
-
-    def keepalive(self, stop):
-        while not stop.wait(KEEPALIVE_SECONDS):
-            try:
-                result = subprocess.run(
-                    ["sudo", "-n", "true"],
-                    stdout=subprocess.DEVNULL,
-                    stderr=subprocess.DEVNULL,
-                    timeout=SUDO_TIMEOUT,
-                )
-            except (OSError, subprocess.SubprocessError):
-                return
-            if result.returncode:
-                self.log("sudo timestamp refresh failed; kosctl may ask again.")
-                return
-
     def install(self):
-        stop = threading.Event()
-        keepalive = threading.Thread(target=self.keepalive, args=(stop,), daemon=True)
-        keepalive.start()
         self.log("--- kosctl install ---")
         code = None
         try:
@@ -387,9 +335,6 @@ class Agent:
         except OSError as error:
             self.set_state("failed", "install", error=f"Cannot run {self.kosctl}: {error}")
             return 2
-        finally:
-            stop.set()
-            keepalive.join(timeout=1)
         if code is None:
             self.set_state(
                 "failed", "install", error=f"kosctl install timed out after {INSTALL_TIMEOUT}s."
@@ -430,23 +375,9 @@ class Agent:
         if state != "available":
             self.log(f"not updating: {state}")
             return 1
-        # Leave the terminal "available" behind immediately: the sudo prompt can
-        # wait for the user while the controller is still watching.
-        self.set_state("updating", "auth")
-        if not self.sudo_without_password():
-            askpass = self.askpass()
-            if not askpass:
-                self.set_state(
-                    "failed",
-                    error="A graphical sudo prompt is required: install ksshaskpass or kdialog, or set SUDO_ASKPASS.",
-                )
-                return 1
-            # Authorize before touching the checkout: a cancelled prompt leaves it intact.
-            if not self.authorize():
-                self.set_state(
-                    "failed", error="sudo authorization failed; the source checkout is unchanged."
-                )
-                return 1
+        # kosctl authorizes only when the system plugin copy is actually needed;
+        # exporting the helper here lets it prompt without a terminal.
+        self.askpass()
         self.set_state("updating", "merge")
         code = self.select()
         if code != 0:

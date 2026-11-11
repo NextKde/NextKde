@@ -1,7 +1,7 @@
 """Run in a VM or hosted CI only; never runs sudo, a build, or an install.
 
 The agent is driven as a subprocess against a throwaway checkout, a local
-"remote", and fake sudo/askpass/kosctl scripts placed first on PATH.
+"remote", and fake askpass/kosctl scripts placed first on PATH.
 """
 import fcntl
 import json
@@ -26,6 +26,7 @@ import json, os, pathlib, sys
 with pathlib.Path(os.environ["FAKE_CALLS"]).open("a") as stream:
     stream.write("args={{}}\\n".format(" ".join(sys.argv[1:])))
     stream.write("askpass={{}}\\n".format(os.environ.get("KOS_SUDO_ASKPASS", "")))
+    stream.write("sudoaskpass={{}}\\n".format(os.environ.get("SUDO_ASKPASS", "")))
     stream.write("cwd={{}}\\n".format(os.getcwd()))
 status = os.environ.get("FAKE_STATUS")
 if status:
@@ -43,21 +44,6 @@ if record and os.environ.get("FAKE_VERSION"):
     }}))
 sys.exit(int(os.environ.get("FAKE_EXIT", "0")))
 """
-FAKE_SUDO = """#!{python}
-import json, os, pathlib, sys
-with pathlib.Path(os.environ["FAKE_SUDO_CALLS"]).open("a") as stream:
-    stream.write("{{}}\\n".format(" ".join(sys.argv[1:])))
-status = os.environ.get("FAKE_STATUS")
-if status:
-    data = json.loads(pathlib.Path(status).read_text())
-    with pathlib.Path(os.environ["FAKE_SUDO_CALLS"]).open("a") as stream:
-        stream.write("status={{}}/{{}}\\n".format(data["state"], data["stage"]))
-if os.environ.get("FAKE_SUDO_NOPASSWD") == "1" and "-n" in sys.argv and "true" in sys.argv:
-    sys.exit(0)
-if "-n" in sys.argv and "true" in sys.argv:
-    sys.exit(1)
-sys.exit(int(os.environ.get("FAKE_SUDO_EXIT", "0")))
-"""
 
 
 class UpdateAgentTests(unittest.TestCase):
@@ -71,7 +57,6 @@ class UpdateAgentTests(unittest.TestCase):
         self.state_home = base / "state"
         self.home = base / "home"
         self.calls = base / "kosctl-calls.log"
-        self.sudo_calls = base / "sudo-calls.log"
         self.record = base / "release.json"
         self.bin.mkdir()
         self.home.mkdir()
@@ -87,7 +72,6 @@ class UpdateAgentTests(unittest.TestCase):
         self.configure(self.root)
         self.head = self.git(self.root, "rev-parse", "HEAD")
         self.write_script(self.fake_kosctl, FAKE_KOSCTL.format(python=sys.executable))
-        self.write_script(self.bin / "sudo", FAKE_SUDO.format(python=sys.executable))
         self.write_script(self.bin / "askpass", "#!/bin/sh\necho secret\n")
         self.write_record("0.1.0", self.head)
 
@@ -132,7 +116,6 @@ class UpdateAgentTests(unittest.TestCase):
             "KOS_UPDATE_AGENT_KOSCTL": str(self.fake_kosctl),
             "SUDO_ASKPASS": str(self.bin / "askpass"),
             "FAKE_CALLS": str(self.calls),
-            "FAKE_SUDO_CALLS": str(self.sudo_calls),
         })
         environment.update({name: str(value) for name, value in overrides.items()})
         return environment
@@ -281,25 +264,10 @@ class UpdateAgentTests(unittest.TestCase):
         calls = self.kosctl_calls()
         self.assertEqual(calls["args"], "install")
         self.assertEqual(calls["askpass"], "1")
+        self.assertEqual(calls["sudoaskpass"], str(self.bin / "askpass"))
         self.assertEqual(Path(calls["cwd"]).resolve(), self.root.resolve())
-        # Neither the sudo prompt nor the install may be observed as terminal.
+        # The install phase is never observed as terminal.
         self.assertEqual(calls["status"], "updating/install")
-        sudo = self.sudo_calls.read_text()
-        self.assertIn("-A -v", sudo)
-        self.assertIn("status=updating/auth", sudo)
-
-    def test_nopasswd_update_skips_the_askpass_prompt(self):
-        target = self.advance(1)
-        result = self.agent("--run", FAKE_SUDO_NOPASSWD="1", FAKE_RECORD=self.record,
-                            FAKE_VERSION="0.1.1", FAKE_SOURCE_ROOT=self.root,
-                            FAKE_STATUS=self.status_path())
-        self.assertEqual(result.returncode, 0, result.stderr)
-        status = self.read_status()
-        self.assertEqual(status["state"], "updated")
-        self.assertEqual(self.git(self.root, "rev-parse", "HEAD"), target)
-        sudo = self.sudo_calls.read_text()
-        self.assertIn("-n true", sudo)
-        self.assertNotIn("-A -v", sudo)
 
     def test_source_ahead_offers_reinstall(self):
         # A select that never got installed: the channel has nothing new, HEAD is
@@ -321,18 +289,6 @@ class UpdateAgentTests(unittest.TestCase):
         self.assertTrue(status["needsRestart"])
         self.assertEqual(self.git(self.root, "rev-parse", "HEAD"), self.head)
         self.assertEqual(self.kosctl_calls()["args"], "install")
-
-    def test_authorization_failure_leaves_checkout_and_skips_install(self):
-        self.advance(1)
-        result = self.agent("--run", FAKE_SUDO_EXIT=1, FAKE_STATUS=self.status_path())
-        self.assertEqual(result.returncode, 1)
-        status = self.read_status()
-        self.assertEqual(status["state"], "failed")
-        self.assertIn("authorization", status["error"])
-        self.assert_utc(status["startedAt"])
-        self.assertIn("status=updating/auth", self.sudo_calls.read_text())
-        self.assertEqual(self.git(self.root, "rev-parse", "HEAD"), self.head)
-        self.assertFalse(self.calls.exists())
 
     def test_missing_source_root_is_blocked_with_fresh_start(self):
         self.record.write_text(json.dumps({"version": "0.1.0", "revision": "abc"}))

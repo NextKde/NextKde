@@ -40,7 +40,6 @@ export const catalog = {
     "Update now": "Atualizar agora",
     "Up to date": "Tudo atualizado",
     "Installed version matches %1.": "A versão instalada corresponde a %1.",
-    "Waiting for authorization…": "Aguardando autorização…",
     "Fetching changes…": "Buscando alterações…",
     "Applying changes…": "Aplicando alterações…",
     "Building and installing…": "Compilando e instalando…",
