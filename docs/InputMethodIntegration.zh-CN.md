@@ -9,25 +9,49 @@ NextKde 为桌面环境提供基于 Fcitx5 与 Kimpanel 协议的原生液态玻
 ## 一、核心架构与环境约定
 
 1. **D-Bus 通信链路**：
-   - `kos-platform` (`KimpanelBridge`) 在初始化时注册 `org.kde.impanel` 服务，通知 Fcitx5 激活其内置的 `kimpanel` 扩展，并自动禁用 `classicui` 传统浮窗。
+   - `kos-platform` (`KimpanelBridge`) 仅为已启用且连接中的前端注册 `org.kde.impanel`，启用 `kimpanel` 并临时禁用 `classicui`。
    - Fcitx5 将候选词列表、预编辑文本（Preedit）与光标位置通过 `org.kde.kimpanel.inputmethod` D-Bus 接口广播给桌面外壳。
    - `kos-shell` (`InputMethodPopup.qml`) 接管候选词渲染，呈现带弹性物理动效、背景模糊与材质高光的液态玻璃卡片。
 
-2. **环境变量规范（禁止全局设置客户端 IM 模块）**：
-   - **关键原则**：在 Wayland 会话中，系统环境应**保持 `GTK_IM_MODULE` 与 `QT_IM_MODULE` 为空**，仅保留 `XMODIFIERS=@im=fcitx`。
-   - **原因**：若全局设置 `QT_IM_MODULE=fcitx` 或 `GTK_IM_MODULE=fcitx`，客户端应用会加载本地输入法插件并向 Fcitx5 声明 `CapabilityFlag::ClientSideInputPanel`（客户端自绘）。这会导致 Fcitx5 停止向 Kimpanel 派发事件，改为由应用在窗口内自绘传统矩形小方框，从而绕过 NextKde 的液态玻璃渲染。
-   - **无全局环境污染原则**：NextKde 不会在后台静默改写或注入用户 systemd / D-Bus 会话环境变量，完全尊重用户原生配置；该功能默认保持关闭，用户可在设置中心（「系统状态与疑难排错」卡片）中手动启用「使用 NextKde 输入法候选框（实验性）」。关闭或 Shell 退出时会自动释放接管并还原 Fcitx5 原始扩展配置。
+2. **按需接管与恢复**：
+   - 功能默认关闭，仅在用户启用且 Shell 前端连接时接管。修改前核对并保存原始扩展状态到 `~/.config/kos/inputmethod-recovery.json`，成功恢复后删除记录。
+   - `ReloadConfig` 无法卸载已加载的 Classic UI。切换时由 KWin 重新创建它管理的 Fcitx 子进程和专用输入法 socket，无需注销或重启 KWin，也不执行 `fcitx5 -r`。设置页显示实际启用状态和错误。
+   - 保留正常工作的 Qt/XCB、GTK、XIM 输入配置。NextKde 不改写全局 `GTK_IM_MODULE` 或 `QT_IM_MODULE`；下方的兼容性调整仅针对对应应用。
+   - Shell 入口通过 Quickshell 仅作用于当前进程的 `Env` 指令，将 `QT_IM_MODULE` 和 `QT_IM_MODULES` 指定为 `wayland`。启动台搜索等 Shell 输入框由此使用合成器输入链路，避免 Fcitx Qt 模块自行绘制候选框；安装版、源码和开发模式均生效，也不改变所启动应用的环境。更新这类启动指令后需要重启 Shell，QML 热重载不能替换已经创建的 Qt 输入上下文。
+   - 绝对光标坐标按配置的 XWayland 根坐标缩放换算为逻辑坐标。坐标不落入任何输出时，回退到活动窗口所在屏幕，避免所有候选框同时隐藏。
 
 ---
+
+## 候选框呈现偏好
+
+设置 → 接入状态 → 候选框外观提供液态/磨砂材质、12–24 号字号、跟随输入法/横向/纵向/自动布局、
+注释显隐、不透明高对比度和减少动画。自动布局在横向放不下时切换为纵向，长列表
+可滚动，并跟随输入法选中的候选项；界面不会重排候选词或改变选词索引。
+
+候选框材质可独立切换，默认保持液态玻璃。磨砂模式使用均匀模糊，不带透镜折射，
+即使桌面液态预设的模糊强度为零也能生效；切换不会改动桌面全局材质。高对比度
+模式优先使用不透明背景，关闭后恢复所选材质。
+
+默认保留展开与收起动效，候选框尺寸连续过渡，选中底板平滑跟随，长列表自动滚动。
+连续输入不会重播入场动画，选词也不必等待动画完成。“减少动画”是可选的无障碍
+偏好，关闭它即可使用完整动效。
+
+这些偏好仅保存到 `$XDG_STATE_HOME/quickshell/kos/inputmethod/presentation.json`
+（通常位于 `~/.local/state`）。调整它们不会调用 Fcitx 配置接口、重启 Fcitx，也不
+改变输入方案、词库或快捷键。既有实验接管开关是独立功能，仍保留上文所述的插件
+备份及恢复行为。
 
 ## 二、应用兼容性矩阵与排障指引
 
 ### 1. 原生现代应用（标准 Qt 6 / GTK 3 / GTK 4）
 - **典型软件**：Dolphin、Kate、Konsole、Firefox、GNOME 原生应用、KDE 核心组件。
-- **支持状态**：**原生完美支持**。
+- **支持状态**：原生 Wayland 输入链路可用时支持；强制加载 Fcitx 工具包模块会绕过桌面候选框。
 - **机制与注意**：
-  - 应用在模块变量为空时，自动握手 Wayland 原生 `text-input-v3` 协议。
-  - **排障**：若候选框显示为经典带尖角的白色方框而非液态玻璃，说明该应用进程继承了旧的 `GTK_IM_MODULE=fcitx` 或 `QT_IM_MODULE=fcitx`。请检查 `~/.bashrc`、`~/.xprofile` 或 `~/.config/environment.d/` 并移除强制赋值，重启应用即可。
+  - GTK 3/4 使用 Wayland `text-input-v3`；Qt 使用其运行时和 KWin 共同支持的 Wayland 文本输入协议，不能一概称为 `text-input-v3`。
+  - **GTK**：全局 `GTK_IM_MODULE=fcitx` 会优先加载 Fcitx 模块，并可能由应用自行绘制传统候选框。原生 Wayland 应用应先取消这一覆盖。例如：`env -u GTK_IM_MODULE GDK_BACKEND=wayland remmina`。如果 GTK 设置仍强制选中了 Fcitx，可仅对此应用使用 `GTK_IM_MODULE=wayland`。
+  - **Qt**：全局 `QT_IM_MODULE=fcitx` 同样可能触发客户端候选框。现代原生 Qt 应用可仅在启动时指定 `QT_IM_MODULE=wayland QT_IM_MODULES=wayland`。
+  - 环境变量在进程创建时读取。必须完全退出旧实例后再启动；修改会话环境文件后通常需要重新登录，重启 Shell 不会更新已运行应用的环境。不要把 `GTK_IM_MODULE=wayland` 全局强制给 GTK 2 或 X11 应用；它们仍需要 Fcitx/XIM 输入链路。
+  - **接管状态**：若原生链路已正确选择但仍显示旧式方框，再查看设置页的实际启用状态。Classic UI 已加载时，即使 `CurrentUI` 显示 `kimpanel` 也可能继续绘制旧界面。
 
 ### 2. Chromium 与 Electron 框架应用
 - **典型软件**：Google Chrome、Chromium、VS Code、Obsidian、Discord、Slack、Linux QQ。
@@ -75,7 +99,7 @@ NextKde 为桌面环境提供基于 Fcitx5 与 Kimpanel 协议的原生液态玻
 
 | 现象 | 排查定位 | 推荐处置方案 |
 | :--- | :--- | :--- |
-| **候选框呈现为旧式白色带角方框** | 应用被注入了 `QT_IM_MODULE=fcitx` 或 `GTK_IM_MODULE=fcitx`，启用了 `ClientSideInputPanel` | 检查并置空该应用的 `QT_IM_MODULE` 与 `GTK_IM_MODULE`，使之走系统 Wayland 协议 |
+| **候选框呈现为旧式白色带角方框** | 接管失败，或 Classic UI 仍加载在进程中 | 查看设置页的实际状态和错误，通过开关让 KWin 重载输入法 |
 | **按键直接英文上屏，无候选框** | 属于自带私有 Qt 的闭源应用（如微信），模块变量为空时未自动协商 Wayland 输入 | 针对该应用单独设置 `QT_IM_MODULE=text-input-unstable-v3`（微信）或排查对应 IME 启动参数 |
 | **Chromium/VSCode 无法打字或弹软键盘** | Chromium 缺失 Wayland IME 命令行特性开关 | 桌面项追加 `--enable-wayland-ime --wayland-text-input-version=3` |
 | **KWin 弹出全屏软键盘遮挡** | `kwinrc` 中误将虚拟键盘设为了鼠标触发模式（Mode 2） | 终端执行 `kwriteconfig6 --file kwinrc --group Wayland --key VirtualKeyboardMode 0` 并刷新 KWin |

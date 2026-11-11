@@ -4,7 +4,8 @@ import {
     parseCandidateText,
     parseKimpanelProperty,
     resolveGlobalSpotRect,
-    placeCandidatePopup
+    placeCandidatePopup,
+    targetScreenName
 } from "./InputMethodPlacement.mjs";
 
 console.log("Running input method placement unit tests...");
@@ -54,6 +55,23 @@ const resAbs = resolveGlobalSpotRect(spotAbs, activeWin, null);
 assert.equal(resAbs.source, "absolute");
 assert.equal(resAbs.x, 720); // Must NOT add activeWin.x (100) -> 820
 assert.equal(resAbs.y, 600); // Must NOT add activeWin.y (150) -> 750
+
+// Kimpanel absolute coordinates use XWayland root pixels, not output pixels.
+const rootScaled = resolveGlobalSpotRect({mode:"absolute", x:4466, y:1510,
+    width:2, height:40, scale:2}, activeWin, null);
+assert.equal(rootScaled.x, 2233);
+assert.equal(rootScaled.y, 755);
+assert.equal(rootScaled.height, 20);
+const outputs = [{name:"internal",x:0,y:40,width:1560,height:1040},
+    {name:"external",x:1560,y:0,width:1920,height:1080}];
+assert.equal(targetScreenName(rootScaled, outputs, activeWin, outputs[0]), "external");
+assert.equal(targetScreenName({x:4466,y:1510}, outputs, activeWin, outputs[1]), "internal");
+assert.equal(targetScreenName({x:99999,y:99999}, outputs, null, outputs[1]), "external");
+assert.equal(targetScreenName({x:99999,y:99999}, [], null, null), "");
+const mixedOutputs = [{name:"left",x:-1920,y:0,width:1920,height:1080},
+    {name:"right",x:0,y:0,width:2560,height:1440}];
+const leftSpot = resolveGlobalSpotRect({mode:"absolute",x:-2800,y:900,scale:2},null,null);
+assert.equal(targetScreenName(leftSpot,mixedOutputs,null,mixedOutputs[1]),"left");
 
 // 3c-2. XWayland absolute spot on negative offset multi-display
 const spotAbsNeg = { mode: "absolute", x: -1400, y: 450, width: 10, height: 20, scale: 1.0 };

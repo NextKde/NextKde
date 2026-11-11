@@ -3,6 +3,8 @@
 // Keys mirror ZhCatalog.mjs; when an English source string changes, update
 // the key here too. Date patterns use Qt format strings (quote literals).
 export const catalog = {
+    "Input method activation failed": "Falha ao ativar a interface do método de entrada",
+    "Reloading input method…": "Recarregando método de entrada…",
     "No version has been approved in this catalog.": "Nenhuma versão foi aprovada neste catálogo.",
     "Catalog version does not match its release manifest.": "A versão do catálogo não corresponde ao manifest.",
     "Release data does not match the approved catalog version.": "Os dados não correspondem à versão aprovada no catálogo.",
@@ -1518,4 +1520,21 @@ export const catalog = {
     "Enable NextKde Input Method Popups": "Ativar janelas do método de entrada do NextKde (experimental)",
     "Render candidates and tips with liquid glass. When disabled, Fcitx5 native candidate windows are preserved.": "Renderiza candidatos e dicas com vidro líquido. Quando desativado, as janelas nativas do Fcitx5 são mantidas.",
     "Candidate Styling & App Compatibility": "Estilo de candidatos e compatibilidade de aplicativos",
+    "Candidate appearance": "Aparência dos candidatos",
+    "Candidate material": "Material dos candidatos",
+    "Choose liquid glass or a soft frosted blur for candidate popups.": "Escolha vidro líquido ou desfoque fosco suave para os candidatos.",
+    "Applies to NextKde candidate popups only. Your Fcitx configuration stays unchanged.": "Aplica-se apenas aos candidatos do NextKde. A configuração do Fcitx permanece inalterada.",
+    "Candidate font size": "Tamanho da fonte dos candidatos",
+    "Candidate layout": "Layout dos candidatos",
+    "Follow input method": "Seguir o método de entrada",
+    "Automatic layout": "Layout automático",
+    "Horizontal": "Horizontal",
+    "Vertical": "Vertical",
+    "Show candidate annotations": "Mostrar anotações dos candidatos",
+    "Show readings and auxiliary codes supplied by the input method.": "Mostrar leituras e códigos auxiliares fornecidos pelo método de entrada.",
+    "High contrast candidates": "Candidatos com alto contraste",
+    "Use an opaque background and stronger selection contrast.": "Usar fundo opaco e maior contraste na seleção.",
+    "Reduce candidate motion": "Reduzir animações dos candidatos",
+    "Show candidates without scaling or size transitions.": "Mostrar candidatos sem transições de escala ou tamanho.",
+    "Could not save candidate appearance": "Não foi possível salvar a aparência dos candidatos",
 }

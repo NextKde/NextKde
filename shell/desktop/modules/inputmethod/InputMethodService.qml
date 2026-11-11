@@ -4,6 +4,7 @@ import QtQuick
 import Quickshell
 import qs.desktop.modules.platform
 import qs.desktop.modules.dock
+import qs.desktop.modules.common
 import "InputMethodPlacement.mjs" as Placement
 
 QtObject {
@@ -12,6 +13,8 @@ QtObject {
     property bool available: PlatformClient.supports("inputmethod.kimpanel")
     property bool userEnabled: false
     property bool takeoverActive: false
+    property bool changing: false
+    property string error: ""
     property bool enabled: false
     property bool visible: false
     property bool lookupVisible: false
@@ -58,6 +61,9 @@ QtObject {
         _openingCaret,
         Quickshell.screens && Quickshell.screens.length > 0 ? Quickshell.screens[0] : null
     )
+
+    readonly property string targetScreenName: Placement.targetScreenName(
+        globalAnchor, ScreenLifecycle.usableScreens, activeWindow, ScreenLifecycle.activeScreen)
 
     property Connections _windowWatch: Connections {
         target: WindowService
@@ -108,6 +114,8 @@ QtObject {
     function _applyState(state) {
         svc.userEnabled = !!state.userEnabled;
         svc.takeoverActive = !!state.takeoverActive;
+        svc.changing = !!state.changing;
+        svc.error = String(state.error || "");
         svc.enabled = !!state.enabled;
         svc.visible = !!state.visible;
         svc.lookupVisible = !!state.lookupVisible;
@@ -120,7 +128,10 @@ QtObject {
         svc.hasPrev = !!state.hasPrev;
         svc.hasNext = !!state.hasNext;
         svc.layout = Number(state.layout) || 0;
-        const nextCandidates = Array.isArray(state.candidates) ? state.candidates : [];
+        // A var signal can expose the transport's QVariantList as an array-like
+        // QML sequence. Array.isArray rejects that sequence and drops every
+        // candidate despite the daemon reporting lookupVisible=true.
+        const nextCandidates = copyList(state.candidates);
         // Caret/visibility events also carry the table. Keep the Repeater's
         // delegates when only those fields changed.
         if (JSON.stringify(nextCandidates) !== JSON.stringify(svc.candidates))
@@ -134,7 +145,7 @@ QtObject {
         if (state.imLabel) svc.imLabel = String(state.imLabel);
         if (state.imIcon) svc.imIcon = String(state.imIcon);
         if (state.imName) svc.imName = String(state.imName);
-        if (Array.isArray(state.properties)) svc.properties = state.properties;
+        svc.properties = copyList(state.properties);
         const showing = svc.enabled && svc.visible
             && (svc.lookupVisible || svc.preeditVisible || svc.auxVisible);
         if (showing && !svc._popupSessionOpen)
@@ -142,6 +153,13 @@ QtObject {
         else if (!showing)
             svc._endPopupSession();
         svc._publishPopupState();
+    }
+
+    function copyList(value) {
+        const result = [];
+        if (value && typeof value.length === "number")
+            for (let i = 0; i < value.length; ++i) result.push(value[i]);
+        return result;
     }
 
     function _publishPopupState() {

@@ -16,6 +16,11 @@
 #include <QSaveFile>
 #include <QJsonDocument>
 #include <QDebug>
+#include <KConfigGroup>
+#include <KSharedConfig>
+#include <QDBusServiceWatcher>
+#include <QEventLoop>
+#include <QTimer>
 
 namespace KosPlatform {
 
@@ -54,14 +59,14 @@ inline const QDBusArgument &operator>>(const QDBusArgument &arg, KosPlatform::Fc
 
 inline QDBusArgument &operator<<(QDBusArgument &arg, const KosPlatform::FcitxAddonInfo &info) {
     arg.beginStructure();
-    arg << info.name << info.label << info.comment << info.category << info.enabled << info.canToggle;
+    arg << info.name << info.label << info.comment << info.category << info.canToggle << info.enabled;
     arg.endStructure();
     return arg;
 }
 
 inline const QDBusArgument &operator>>(const QDBusArgument &arg, KosPlatform::FcitxAddonInfo &info) {
     arg.beginStructure();
-    arg >> info.name >> info.label >> info.comment >> info.category >> info.enabled >> info.canToggle;
+    arg >> info.name >> info.label >> info.comment >> info.category >> info.canToggle >> info.enabled;
     arg.endStructure();
     return arg;
 }
@@ -155,19 +160,34 @@ KimpanelBridge::KimpanelBridge(QObject *parent)
     m_adaptor = new ImpanelAdaptor(this);
     m_adaptor2 = new Impanel2Adaptor(this);
     m_userEnabled = loadPersistedEnabled();
+    recoverOriginalFcitxAddons();
 }
 
 KimpanelBridge::~KimpanelBridge()
 {
+    m_destroying = true;
+    disconnect(this, &KimpanelBridge::stateChanged, nullptr, nullptr);
+    disconnect(this, &KimpanelBridge::menuRequested, nullptr, nullptr);
     releaseTakeover();
 }
 
 bool KimpanelBridge::setUserEnabled(bool enabled)
 {
+    if (m_transitioning)
+        return false;
+    const bool previous = m_userEnabled;
     if (savePersistedEnabled(enabled)) {
         m_userEnabled = enabled;
+        m_error.clear();
         syncTakeoverState();
-        return true;
+        if ((!enabled && m_addonsChanged)
+            || (enabled && m_shellConnected && !m_takeoverActive)) {
+            m_userEnabled = previous;
+            savePersistedEnabled(previous);
+            notifyState();
+            return false;
+        }
+        return m_error.isEmpty();
     }
     return false;
 }
@@ -182,6 +202,8 @@ void KimpanelBridge::setShellConnected(bool connected)
 
 void KimpanelBridge::syncTakeoverState()
 {
+    if (m_transitioning)
+        return;
     const bool shouldBeActive = m_userEnabled && m_shellConnected;
     if (shouldBeActive && !m_takeoverActive) {
         acquireTakeover();
@@ -191,11 +213,11 @@ void KimpanelBridge::syncTakeoverState()
     notifyState();
 }
 
-void KimpanelBridge::backupOriginalFcitxAddons()
+bool KimpanelBridge::backupOriginalFcitxAddons()
 {
     auto bus = QDBusConnection::sessionBus();
     if (!bus.isConnected())
-        return;
+        return false;
 
     QDBusMessage msg = QDBusMessage::createMethodCall(
         QStringLiteral("org.fcitx.Fcitx5"), QStringLiteral("/controller"),
@@ -206,15 +228,120 @@ void KimpanelBridge::backupOriginalFcitxAddons()
         const QDBusArgument arg = reply.arguments().first().value<QDBusArgument>();
         QList<FcitxAddonInfo> addons;
         arg >> addons;
+        bool foundClassic = false, foundKimpanel = false;
         for (const auto &addon : addons) {
             if (addon.name == QStringLiteral("classicui")) {
                 m_origClassicUiEnabled = addon.enabled;
+                foundClassic = true;
             } else if (addon.name == QStringLiteral("kimpanel")) {
                 m_origKimpanelEnabled = addon.enabled;
+                foundKimpanel = true;
             }
         }
-        m_hasOriginalAddonState = true;
+        m_hasOriginalAddonState = foundClassic && foundKimpanel;
+        return m_hasOriginalAddonState;
     }
+    return false;
+}
+
+QString KimpanelBridge::recoveryPath() const
+{
+    return QFileInfo(configPath()).dir().filePath(QStringLiteral("inputmethod-recovery.json"));
+}
+
+bool KimpanelBridge::saveRecoveryState()
+{
+    QDir().mkpath(QFileInfo(recoveryPath()).absolutePath());
+    QSaveFile file(recoveryPath());
+    if (!file.open(QIODevice::WriteOnly))
+        return false;
+    const KConfigGroup wayland(KSharedConfig::openConfig(QStringLiteral("kwinrc")), QStringLiteral("Wayland"));
+    file.write(QJsonDocument(QJsonObject{
+        {QStringLiteral("classicui"), m_origClassicUiEnabled},
+        {QStringLiteral("kimpanel"), m_origKimpanelEnabled},
+        {QStringLiteral("kwinInputMethod"), wayland.readEntry("InputMethod", QString())}
+    }).toJson());
+    return file.commit();
+}
+
+void KimpanelBridge::recoverOriginalFcitxAddons()
+{
+    QFile file(recoveryPath());
+    if (!file.open(QIODevice::ReadOnly))
+        return;
+    const auto state = QJsonDocument::fromJson(file.readAll()).object();
+    if (!state.value(QStringLiteral("classicui")).isBool()
+        || !state.value(QStringLiteral("kimpanel")).isBool()) {
+        m_error = QStringLiteral("Invalid input method recovery state");
+        return;
+    }
+    m_origClassicUiEnabled = state.value(QStringLiteral("classicui")).toBool();
+    m_origKimpanelEnabled = state.value(QStringLiteral("kimpanel")).toBool();
+    m_hasOriginalAddonState = m_addonsChanged = true;
+    // A process interrupted between the two KWin notifications must not leave
+    // the compositor's input-method command empty after its next startup.
+    auto config = KSharedConfig::openConfig(QStringLiteral("kwinrc"));
+    KConfigGroup wayland(config, QStringLiteral("Wayland"));
+    const QString previous = state.value(QStringLiteral("kwinInputMethod")).toString();
+    if (wayland.readEntry("InputMethod", QString()).isEmpty() && !previous.isEmpty()) {
+        wayland.writeEntry("InputMethod", previous, KConfigBase::Notify);
+        config->sync();
+    }
+    releaseTakeover();
+}
+
+bool KimpanelBridge::restartFcitx()
+{
+    // ReloadConfig reloads settings, but cannot unload the already loaded
+    // Classic UI. KWin must recreate its own child and its private IM socket;
+    // fcitx5 -r / Restart would lose that socket in a compositor-owned session.
+    auto config = KSharedConfig::openConfig(QStringLiteral("kwinrc"));
+    config->reparseConfiguration();
+    KConfigGroup wayland(config, QStringLiteral("Wayland"));
+    const QString command = wayland.readEntry("InputMethod", QString());
+    const KConfig desktop(command, KConfig::SimpleConfig);
+    const QString exec = KConfigGroup(&desktop, QStringLiteral("Desktop Entry")).readEntry("Exec", QString());
+    if (command.isEmpty() || !exec.contains(QStringLiteral("fcitx5"))) {
+        m_error = QStringLiteral("Fcitx5 must be managed by KWin to switch candidate windows");
+        return false;
+    }
+    const auto bus = QDBusConnection::sessionBus();
+    const QString service = QStringLiteral("org.fcitx.Fcitx5");
+    const QString oldOwner = bus.interface()->serviceOwner(service).value();
+    QEventLoop loop;
+    QTimer timeout;
+    timeout.setSingleShot(true);
+    QDBusServiceWatcher watcher(service, bus, QDBusServiceWatcher::WatchForOwnerChange);
+    bool restored = false, restarted = false;
+    auto restoreCommand = [&] {
+        if (restored) return;
+        restored = true;
+        wayland.writeEntry("InputMethod", command, KConfigBase::Notify);
+        config->sync();
+    };
+    connect(&watcher, &QDBusServiceWatcher::serviceOwnerChanged, &loop,
+            [&](const QString &, const QString &, const QString &owner) {
+        if (owner.isEmpty()) restoreCommand();
+        else if (restored && owner != oldOwner) {
+            restarted = true;
+            loop.quit();
+        }
+    });
+    connect(&timeout, &QTimer::timeout, &loop, &QEventLoop::quit);
+    const bool requestedTakeover = m_userEnabled && m_shellConnected;
+    m_transitioning = true;
+    notifyState();
+    wayland.writeEntry("InputMethod", QString(), KConfigBase::Notify);
+    config->sync();
+    timeout.start(5000);
+    loop.exec();
+    restoreCommand();
+    m_transitioning = false;
+    if (!restarted)
+        m_error = QStringLiteral("KWin could not reload the input method; native UI recovery is pending");
+    if (!m_destroying && requestedTakeover != (m_userEnabled && m_shellConnected))
+        QTimer::singleShot(0, this, [this] { syncTakeoverState(); });
+    return restarted;
 }
 
 bool KimpanelBridge::setFcitxAddons(bool classicUi, bool kimpanel)
@@ -234,14 +361,18 @@ bool KimpanelBridge::setFcitxAddons(bool classicUi, bool kimpanel)
     QDBusMessage reply = bus.call(msg, QDBus::Block, 500);
     if (reply.type() == QDBusMessage::ErrorMessage) {
         qWarning() << "[KimpanelBridge] SetAddonsState failed:" << reply.errorMessage();
+        m_error = reply.errorMessage();
         return false;
     }
 
     QDBusMessage reloadMsg = QDBusMessage::createMethodCall(
         QStringLiteral("org.fcitx.Fcitx5"), QStringLiteral("/controller"),
         QStringLiteral("org.fcitx.Fcitx.Controller1"), QStringLiteral("ReloadConfig"));
-    bus.call(reloadMsg, QDBus::NoBlock);
-
+    const auto reloadReply = bus.call(reloadMsg, QDBus::Block, 500);
+    if (reloadReply.type() == QDBusMessage::ErrorMessage) {
+        m_error = reloadReply.errorMessage();
+        return false;
+    }
     return true;
 }
 
@@ -250,13 +381,23 @@ bool KimpanelBridge::acquireTakeover()
     if (m_takeoverActive)
         return true;
 
+    const KConfigGroup wayland(KSharedConfig::openConfig(QStringLiteral("kwinrc")), QStringLiteral("Wayland"));
+    const KConfig desktop(wayland.readEntry("InputMethod", QString()), KConfig::SimpleConfig);
+    if (!KConfigGroup(&desktop, QStringLiteral("Desktop Entry")).readEntry("Exec", QString()).contains(QStringLiteral("fcitx5"))) {
+        m_error = QStringLiteral("Fcitx5 must be managed by KWin to switch candidate windows");
+        return false;
+    }
+
     auto bus = QDBusConnection::sessionBus();
     if (!bus.isConnected()) {
         qWarning() << "[KimpanelBridge] Session bus not connected";
         return false;
     }
 
-    backupOriginalFcitxAddons();
+    if (m_addonsChanged || !backupOriginalFcitxAddons()) {
+        m_error = QStringLiteral("Could not back up the original Fcitx5 configuration");
+        return false;
+    }
 
     if (!m_registeredBus) {
         if (!bus.registerObject(QStringLiteral("/org/kde/impanel"), this,
@@ -269,6 +410,7 @@ bool KimpanelBridge::acquireTakeover()
         if (!bus.registerService(QStringLiteral("org.kde.impanel"))) {
             qWarning() << "[KimpanelBridge] Failed to register service org.kde.impanel:"
                        << bus.lastError().message();
+            m_error = bus.lastError().message();
             bus.unregisterObject(QStringLiteral("/org/kde/impanel"));
             return false;
         }
@@ -277,7 +419,13 @@ bool KimpanelBridge::acquireTakeover()
 
     setupDbusListeners();
 
-    if (!setFcitxAddons(false /* classicui */, true /* kimpanel */)) {
+    if (!saveRecoveryState()) {
+        m_error = QStringLiteral("Could not save input method recovery state");
+        releaseTakeover();
+        return false;
+    }
+    m_addonsChanged = true;
+    if (!setFcitxAddons(false /* classicui */, true /* kimpanel */) || !restartFcitx()) {
         qWarning() << "[KimpanelBridge] Failed to configure Fcitx5 addons for takeover";
         releaseTakeover();
         return false;
@@ -288,18 +436,15 @@ bool KimpanelBridge::acquireTakeover()
     emit m_adaptor2->PanelCreated2();
 
     m_takeoverActive = true;
+    if (!m_userEnabled || !m_shellConnected) {
+        releaseTakeover();
+        return false;
+    }
     return true;
 }
 
 void KimpanelBridge::releaseTakeover()
 {
-    if (m_hasOriginalAddonState) {
-        setFcitxAddons(m_origClassicUiEnabled, m_origKimpanelEnabled);
-        m_hasOriginalAddonState = false;
-    } else {
-        setFcitxAddons(true, false);
-    }
-
     teardownDbusListeners();
 
     auto bus = QDBusConnection::sessionBus();
@@ -310,6 +455,14 @@ void KimpanelBridge::releaseTakeover()
     }
 
     m_takeoverActive = false;
+    if (m_addonsChanged && m_hasOriginalAddonState) {
+        if (setFcitxAddons(m_origClassicUiEnabled, m_origKimpanelEnabled) && restartFcitx()) {
+            m_addonsChanged = m_hasOriginalAddonState = false;
+            QFile::remove(recoveryPath());
+        } else {
+            m_error = QStringLiteral("Could not restore native input method UI; recovery state was retained");
+        }
+    }
 }
 
 void KimpanelBridge::reassertTakeover()
@@ -373,7 +526,8 @@ void KimpanelBridge::handleSetSpotRect(int x, int y, int w, int h)
     m_spotY = y;
     m_spotWidth = w;
     m_spotHeight = h;
-    m_spotScale = 1.0;
+    const KConfigGroup xwayland(KSharedConfig::openConfig(QStringLiteral("kwinrc")), QStringLiteral("Xwayland"));
+    m_spotScale = qMax(1.0, xwayland.readEntry("Scale", 1.0));
     m_spotMode = QStringLiteral("absolute");
 
     notifyState();
@@ -449,6 +603,7 @@ void KimpanelBridge::setActiveWindowId(const QString &windowId)
     if (m_activeWindowId == windowId)
         return;
     m_activeWindowId = windowId;
+    m_spotX = m_spotY = m_spotWidth = m_spotHeight = 0;
     ++m_kwinCaretSerial;
     m_kwinCaret = QJsonObject{
         {QStringLiteral("available"), false},
@@ -717,6 +872,8 @@ QJsonObject KimpanelBridge::currentState() const
         {QStringLiteral("userEnabled"), m_userEnabled},
         {QStringLiteral("enabled"), m_takeoverActive},
         {QStringLiteral("takeoverActive"), m_takeoverActive},
+        {QStringLiteral("changing"), m_transitioning},
+        {QStringLiteral("error"), m_error},
         {QStringLiteral("visible"), isVisible},
         {QStringLiteral("lookupVisible"), m_lookupVisible},
         {QStringLiteral("preeditVisible"), m_preeditVisible},
@@ -747,7 +904,8 @@ QJsonObject KimpanelBridge::currentState() const
 
 void KimpanelBridge::notifyState()
 {
-    emit stateChanged(currentState());
+    if (!m_destroying)
+        emit stateChanged(currentState());
 }
 
 } // namespace KosPlatform

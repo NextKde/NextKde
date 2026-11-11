@@ -227,6 +227,14 @@ if(BUILD_TESTING)
             TIMEOUT 30)
     endif()
     if(KOS_PYTHON_EXECUTABLE AND DBUS_RUN_SESSION_EXECUTABLE)
+        qt_add_executable(kos-kimpanel-probe tests/kimpanel_probe.cpp
+            src/daemon/KimpanelBridge.cpp src/daemon/KimpanelBridge.h src/daemon/PlatformDbus.cpp)
+        target_include_directories(kos-kimpanel-probe PRIVATE src/daemon)
+        target_link_libraries(kos-kimpanel-probe PRIVATE Qt6::Core Qt6::DBus KF6::ConfigCore)
+        add_test(NAME kos-platform.kimpanel
+            COMMAND ${KOS_PYTHON_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/test_kimpanel.py
+                $<TARGET_FILE:kos-kimpanel-probe>)
+        set_tests_properties(kos-platform.kimpanel PROPERTIES LABELS platform TIMEOUT 60)
         add_test(NAME kos-platform.brightness
             COMMAND ${KOS_PYTHON_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/test_brightness.py $<TARGET_FILE:kos-platform>)
         set_tests_properties(kos-platform.brightness PROPERTIES LABELS platform TIMEOUT 40)

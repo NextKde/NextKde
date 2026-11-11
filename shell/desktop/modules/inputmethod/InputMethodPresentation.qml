@@ -10,12 +10,14 @@ QtObject {
         preeditVisible: false, auxVisible: false, preeditText: "", auxText: "",
         hasPrev: false, hasNext: false, layout: 0, cursorIndex: -1 })
     property var anchor: null
+    property bool reduceMotion: false
     readonly property bool isOnlyTip: !state.lookupVisible || state.candidates.length === 0
     readonly property bool mapped: motion.mapped
     readonly property bool interactive: motion.interactive
     readonly property real progress: motion.progress
-    readonly property real scale: (isOnlyTip ? 0.92 : 0.975)
-        + (isOnlyTip ? 0.08 : 0.025) * progress
+    readonly property real scale: reduceMotion ? 1 : (isOnlyTip ? 0.90 : 0.96)
+        + (isOnlyTip ? 0.10 : 0.04) * progress
+    readonly property real revealOffset: reduceMotion ? 0 : (isOnlyTip ? 2 : 4) * (1 - progress)
 
     property var _pendingState: ({})
     property var _pendingAnchor: null
@@ -52,9 +54,9 @@ QtObject {
     }
 
     property PopupMotion motion: PopupMotion {
-        openDuration: presentation.isOnlyTip ? 180 : 150
-        closeDuration: presentation.isOnlyTip ? 140 : 120
-        openEasing: Easing.OutCubic
+        openDuration: presentation.reduceMotion ? 0 : (presentation.isOnlyTip ? 190 : 210)
+        closeDuration: presentation.reduceMotion ? 0 : (presentation.isOnlyTip ? 140 : 160)
+        openEasing: Easing.OutQuint
         closeEasing: Easing.InOutCubic
     }
 }

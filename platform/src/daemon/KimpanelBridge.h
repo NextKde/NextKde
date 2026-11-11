@@ -121,8 +121,12 @@ private:
 
     bool acquireTakeover();
     void releaseTakeover();
-    void backupOriginalFcitxAddons();
+    bool backupOriginalFcitxAddons();
     bool setFcitxAddons(bool classicUi, bool kimpanel);
+    bool restartFcitx();
+    bool saveRecoveryState();
+    void recoverOriginalFcitxAddons();
+    QString recoveryPath() const;
 
     ImpanelAdaptor *m_adaptor = nullptr;
     Impanel2Adaptor *m_adaptor2 = nullptr;
@@ -131,6 +135,10 @@ private:
     bool m_shellConnected = false;
     bool m_takeoverActive = false;
     bool m_registeredBus = false;
+    bool m_transitioning = false;
+    bool m_destroying = false;
+    bool m_addonsChanged = false;
+    QString m_error;
 
     bool m_hasOriginalAddonState = false;
     bool m_origClassicUiEnabled = true;

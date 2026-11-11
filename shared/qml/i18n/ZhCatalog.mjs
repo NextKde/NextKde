@@ -3,6 +3,8 @@
 // 规则：值必须与改造前界面上的中文逐字一致（含空格、间隔符与省略号），
 // 改动文案时同步更新对应键，不要只改一边。
 export const catalog = {
+    "Input method activation failed": "输入法界面启用失败",
+    "Reloading input method…": "正在重新加载输入法…",
     "No version has been approved in this catalog.": "此目录尚未批准可安装版本。",
     "Catalog version does not match its release manifest.": "目录版本与发行清单不符。",
     "Release data does not match the approved catalog version.": "发行数据与目录批准版本不符。",
@@ -1729,4 +1731,21 @@ export const catalog = {
     "Enable NextKde Input Method Popups": "使用 NextKde 输入法候选框（实验性）",
     "Render candidates and tips with liquid glass. When disabled, Fcitx5 native candidate windows are preserved.": "使用液态玻璃材质呈现候选框与语言提示胶囊。关闭后保留 Fcitx5 原生候选框。",
     "Candidate Styling & App Compatibility": "候选框样式与应用兼容性",
+    "Candidate appearance": "候选框外观",
+    "Candidate material": "候选框材质",
+    "Choose liquid glass or a soft frosted blur for candidate popups.": "为候选框选择液态玻璃或柔和的磨砂模糊。",
+    "Applies to NextKde candidate popups only. Your Fcitx configuration stays unchanged.": "仅调整 NextKde 候选框，不修改 Fcitx 配置。",
+    "Candidate font size": "候选字号",
+    "Candidate layout": "候选布局",
+    "Follow input method": "跟随输入法",
+    "Automatic layout": "自动布局",
+    "Horizontal": "横向",
+    "Vertical": "纵向",
+    "Show candidate annotations": "显示候选注释",
+    "Show readings and auxiliary codes supplied by the input method.": "显示输入法提供的读音、辅助码等注释。",
+    "High contrast candidates": "高对比度候选框",
+    "Use an opaque background and stronger selection contrast.": "使用不透明背景，加强选中项对比度。",
+    "Reduce candidate motion": "减少候选框动画",
+    "Show candidates without scaling or size transitions.": "显示候选框时取消缩放和尺寸过渡。",
+    "Could not save candidate appearance": "无法保存候选框外观设置",
 }

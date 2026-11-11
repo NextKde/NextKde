@@ -7,6 +7,26 @@ TestCase {
 
     InputMethodPresentation { id: panel }
 
+    QtObject {
+        id: sequenceFixture
+        property list<QtObject> candidates: [QtObject {
+            property string label: "1"
+            property string text: "候选"
+            property string comment: ""
+        }]
+    }
+
+    function test_service_accepts_qml_candidate_sequences() {
+        const state = Object.assign(candidates(), {candidates: sequenceFixture.candidates,
+            properties: sequenceFixture.candidates, spot:{mode:"absolute",x:200,y:200}})
+        InputMethodService._applyState(state)
+        compare(InputMethodService.candidates.length, 1)
+        compare(InputMethodService.candidates[0].text, "候选")
+        compare(InputMethodService.properties.length, 1)
+        verify(InputMethodService.popupState.lookupVisible)
+        compare(InputMethodService.popupState.candidates.length, 1)
+    }
+
     function candidates(text) {
         return { enabled: true, visible: true, lookupVisible: true,
             candidates: [{ label: "1", text: text || "你好", comment: "" }],
@@ -31,6 +51,17 @@ TestCase {
         InputMethodService._applyState({ enabled: true, visible: false })
         PlatformClient.calls = []
         WindowService.kwinActiveId = "window-a"
+        panel.reduceMotion = false
+    }
+
+    function test_reduced_motion_has_no_scale_or_slow_exit() {
+        panel.reduceMotion = true
+        panel.update(candidates(), {x:160,y:120,height:20}, true)
+        tryCompare(panel, "progress", 1, 100)
+        compare(panel.scale, 1)
+        compare(panel.revealOffset, 0)
+        panel.update({enabled:true,visible:false}, null, false)
+        tryCompare(panel, "mapped", false, 100)
     }
 
     function test_exit_retains_candidates_and_anchor() {

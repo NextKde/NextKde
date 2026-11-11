@@ -30,6 +30,20 @@ Item {
     SignalSpy { id: seedSpy; signalName: "materialSeedObserved" }
     SignalSpy { id: settingSpy; signalName: "settingRequested" }
 
+    QtObject {
+        id: candidateBridge
+        property string lastError: ""
+        property var calls: []
+        signal integrationSnapshotChanged(var state)
+        function integrationSnapshot() {}
+        function setInputMethodPresentation(patch) {
+            calls = calls.concat([{operation:"presentation", patch:patch}])
+        }
+        function setInputMethodEnabled(enabled) {
+            calls = calls.concat([{operation:"takeover", enabled:enabled}])
+        }
+    }
+
     TestCase {
         name: "SettingsPageContracts"
         when: windowShown
@@ -65,6 +79,31 @@ Item {
                     "BarSettingsPage", "ShortcutsSettingsPage", "LauncherSettingsPage",
                     "ResourceSchedulingSettings", "AboutSettingsPage"]
                 .map(name => ({tag: name, name: name}))
+        }
+
+        function test_candidate_controls_only_update_presentation() {
+            const page = makePage("IntegrationStatusPage")
+            page.bridge = candidateBridge
+            candidateBridge.calls = []
+            page.snapshot = {inputMethodPresentation:{ready:true, fontSize:15, layout:"engine",
+                showAnnotations:true, highContrast:false, reduceMotion:false}}
+            const font = findChild(page, "candidateFontSizeSelect")
+            const layout = findChild(page, "candidateLayoutSelect")
+            const material = findChild(page, "candidateMaterialSelect")
+            verify(font !== null && layout !== null && material !== null)
+            font.selectionChanged(9)
+            layout.selectionChanged(2)
+            material.selectionChanged(1)
+            compare(candidateBridge.calls.length, 3)
+            compare(candidateBridge.calls[0].operation, "presentation")
+            compare(candidateBridge.calls[0].patch.fontSize, 21)
+            compare(candidateBridge.calls[1].patch.layout, "horizontal")
+            compare(candidateBridge.calls[2].operation, "presentation")
+            compare(candidateBridge.calls[2].patch.material, "frosted")
+            page.snapshot = {inputMethodPresentation:{ready:false}}
+            page.setCandidatePreference("highContrast", true)
+            compare(candidateBridge.calls.length, 3)
+            verify(!font.enabled)
         }
         function test_isolated_load(data) {
             const page = makePage(data.name)

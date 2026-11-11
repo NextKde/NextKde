@@ -9,6 +9,12 @@ import "InputMethodPlacement.mjs" as Placement
 
 Scope {
     id: root
+    property var _inspectors: new Map()
+    function inspect() {
+        const result = {}
+        for (const [name, inspectPanel] of _inspectors) result[name] = inspectPanel()
+        return result
+    }
 
     Variants {
         model: ScreenLifecycle.usableScreens
@@ -36,27 +42,39 @@ Scope {
                 })
                 readonly property var globalAnchor: InputMethodService.globalAnchor
 
-                readonly property bool isTargetScreen: {
-                    if (!globalAnchor) return modelData?.name === ScreenLifecycle.activeScreen?.name;
-                    return globalAnchor.x >= scrGeom.x
-                        && globalAnchor.x < (scrGeom.x + scrGeom.width)
-                        && globalAnchor.y >= scrGeom.y
-                        && globalAnchor.y < (scrGeom.y + scrGeom.height);
-                }
+                readonly property bool isTargetScreen: modelData?.name === InputMethodService.targetScreenName
 
                 function syncPresentation() {
                     presentation.update(InputMethodService.popupState, globalAnchor, isTargetScreen)
                 }
+                function inspect() {
+                    return {
+                            screen: scrGeom, anchor: globalAnchor, target: isTargetScreen,
+                            requested: InputMethodService.popupState.visible,
+                            candidates: InputMethodService.candidates.length,
+                            mapped: presentation.mapped, progress: presentation.progress,
+                            card: {x: cardContainer.x, y: cardContainer.y,
+                                width: cardContainer.width, height: cardContainer.height},
+                            layout: candidateArea.isVertical ? "vertical" : "horizontal",
+                            preferences: InputMethodConfigService.snapshot(),
+                            material: InputMethodConfigService.material,
+                            glass: glassPanel.inspectGlass()
+                    }
+                }
                 onGlobalAnchorChanged: syncPresentation()
                 onIsTargetScreenChanged: syncPresentation()
-                Component.onCompleted: syncPresentation()
+                Component.onCompleted: {
+                    root._inspectors.set(modelData.name, window.inspect)
+                    syncPresentation()
+                }
+                Component.onDestruction: root._inspectors.delete(modelData.name)
 
                 Connections {
                     target: InputMethodService
                     function onPopupStateChanged() { window.syncPresentation() }
                 }
 
-                InputMethodPresentation { id: presentation }
+                InputMethodPresentation { id: presentation; reduceMotion: InputMethodConfigService.reduceMotion }
 
                 // Keep the empty, input-transparent layer surface mapped.
                 // Recreating a full-screen window lets KWin animate its entire
@@ -67,7 +85,7 @@ Scope {
                 Region { id: emptyRegion }
                 Region { id: cardInputRegion; item: cardContainer }
 
-                BackgroundEffect.blurRegion: (window.visible && presentation.mapped && AppearanceTokens.surface.usesKwinBlur)
+                BackgroundEffect.blurRegion: (window.visible && presentation.mapped && !InputMethodConfigService.highContrast && AppearanceTokens.surface.usesKwinBlur)
                     ? glassPanel.blurRegion : null
 
                 Item {
@@ -75,6 +93,7 @@ Scope {
                     visible: presentation.mapped
 
                     readonly property bool isOnlyTip: presentation.isOnlyTip
+                    readonly property bool frosted: InputMethodConfigService.material === "frosted"
 
                     readonly property string cleanTipText: {
                         const raw = presentation.state.auxText || presentation.state.preeditText;
@@ -97,24 +116,25 @@ Scope {
                         8
                     )
 
+                    readonly property bool aboveAnchor: presentation.anchor && placement.y < presentation.anchor.y
                     x: placement.x - window.scrGeom.x
                     y: placement.y - window.scrGeom.y
+                        + (aboveAnchor ? -1 : 1) * presentation.revealOffset
                     width: cardW
                     height: cardH
 
-                    // A tiny contraction toward the caret; no sliding text.
+                    // Reveal from the caret without replaying on each keystroke.
                     scale: presentation.scale
-                    transformOrigin: presentation.anchor && placement.y < presentation.anchor.y
-                        ? Item.BottomLeft : Item.TopLeft
+                    transformOrigin: aboveAnchor ? Item.BottomLeft : Item.TopLeft
                     enabled: presentation.interactive
 
                     Behavior on width {
-                        enabled: presentation.interactive && presentation.progress > 0.99
-                        NumberAnimation { duration: 100; easing.type: Easing.OutCubic }
+                        enabled: !InputMethodConfigService.reduceMotion && presentation.interactive && presentation.progress > 0.99
+                        SmoothedAnimation { duration: 160; velocity: -1; maximumEasingTime: 80 }
                     }
                     Behavior on height {
-                        enabled: presentation.interactive && presentation.progress > 0.99
-                        NumberAnimation { duration: 100; easing.type: Easing.OutCubic }
+                        enabled: !InputMethodConfigService.reduceMotion && presentation.interactive && presentation.progress > 0.99
+                        SmoothedAnimation { duration: 160; velocity: -1; maximumEasingTime: 80 }
                     }
 
                     KosCardShadow {
@@ -128,6 +148,7 @@ Scope {
                         offsetY: cardContainer.isOnlyTip ? 2 : 6
                         softness: cardContainer.isOnlyTip ? 8 : 20
                         spread: cardContainer.isOnlyTip ? 0 : 2
+                        cutoutPadding: 0
                         opacity: (AppearanceTokens.isDarkTheme ? 0.45 : 0.22) * presentation.progress
                     }
 
@@ -143,24 +164,34 @@ Scope {
                         blurAnchor: cardContainer
                         backdropScale: cardContainer.scale
                         effectOpacity: presentation.progress
-                        useKwinEffect: AppearanceTokens.surface.usesKwinBlur
+                        useKwinEffect: !InputMethodConfigService.highContrast && AppearanceTokens.surface.usesKwinBlur
+                        // Per-popup frost keeps its blur even when the desktop's
+                        // liquid preset uses zero blur. It never changes that preset.
+                        frostOnly: cardContainer.frosted
+                        blurSigma: cardContainer.frosted ? 18 : -1
+                        glass.liquidStrength: useKwinEffect || cardContainer.frosted
+                            ? 0 : AppearanceTokens.glass.liquidStrength
+                        glass.blurStrength: cardContainer.frosted ? 0.7
+                            : useKwinEffect ? 1 : AppearanceTokens.glass.blurStrength
                         blurOverrideEnabled: true
                         blurStrength: AppearanceConfigService.globalBlurStrength
                         scrimEnabled: true
-                        scrimLevel: "readable"
-                        material: "thick"
-                        baseColor: ThemeService.isDark
+                        scrimLevel: "balanced"
+                        material: "regular"
+                        baseColor: InputMethodConfigService.highContrast
+                            ? (ThemeService.isDark ? "#000000" : "#ffffff")
+                            : ThemeService.isDark
                             ? Qt.rgba(0.08, 0.09, 0.12, 0.50)
                             : Qt.rgba(0.95, 0.95, 0.98, 0.70)
                         ambientPrimary: WallpaperColorSource.primary
                         ambientSecondary: WallpaperColorSource.secondary
-                        ambientStrength: 0.35 * AppearanceTokens.glass.ambientMultiplier
+                        ambientStrength: InputMethodConfigService.highContrast ? 0 : 0.35 * AppearanceTokens.glass.ambientMultiplier
 
-                        // Inner plate for text contrast protection
                         Rectangle {
                             anchors.fill: parent
-                            radius: glassPanel.contentRadius
-                            color: ThemeService.isDark ? Qt.rgba(0, 0, 0, 0.22) : Qt.rgba(1, 1, 1, 0.28)
+                            visible: InputMethodConfigService.highContrast
+                            radius: glassPanel.radius
+                            color: ThemeService.isDark ? "#000000" : "#ffffff"
                         }
 
                         MouseArea {
@@ -196,9 +227,13 @@ Scope {
                                         : (presentation.state.auxText
                                             ? presentation.state.auxText
                                             : presentation.state.preeditText)
-                                    font.pixelSize: cardContainer.isOnlyTip ? 13 : 14
+                                    width: Math.min(implicitWidth, window.scrGeom.width * 0.75 - 24)
+                                    elide: Text.ElideRight
+                                    textFormat: Text.PlainText
+                                    font.pixelSize: InputMethodConfigService.fontSize - (cardContainer.isOnlyTip ? 2 : 1)
                                     font.weight: cardContainer.isOnlyTip ? Font.Bold : Font.Medium
-                                    color: ThemeService.foregroundColor
+                                    color: InputMethodConfigService.highContrast
+                                        ? (ThemeService.isDark ? "#ffffff" : "#000000") : ThemeService.foregroundColor
                                 }
                             }
 
@@ -210,202 +245,29 @@ Scope {
                                 color: AppearanceTokens.isDarkTheme ? Qt.rgba(1, 1, 1, 0.12) : Qt.rgba(0, 0, 0, 0.08)
                             }
 
-                            // 2. Candidate items (horizontal row or vertical column)
-                            Item {
+                            InputMethodCandidateList {
                                 id: candidateArea
                                 visible: presentation.state.lookupVisible && presentation.state.candidates.length > 0
                                 width: implicitWidth
                                 height: implicitHeight
-                                implicitWidth: isVertical ? verticalCol.implicitWidth : horizontalRow.implicitWidth
-                                implicitHeight: isVertical ? verticalCol.implicitHeight : horizontalRow.implicitHeight
-
-                                readonly property bool isVertical: presentation.state.layout === 1
-
-                                // Horizontal candidate row (default & Rime standard)
-                                Row {
-                                    id: horizontalRow
-                                    visible: !candidateArea.isVertical
-                                    spacing: 12
-
-                                    Repeater {
-                                        model: presentation.state.candidates
-
-                                        delegate: Item {
-                                            id: candItem
-                                            readonly property bool isSelected: index === presentation.state.cursorIndex
-                                            readonly property var dataItem: modelData
-
-                                            width: implicitWidth
-                                            height: implicitHeight
-                                            implicitWidth: candRow.implicitWidth + 12
-                                            implicitHeight: candRow.implicitHeight + 6
-
-                                            // Highlight pill for active candidate
-                                            Rectangle {
-                                                anchors.fill: parent
-                                                radius: 8
-                                                color: isSelected
-                                                    ? (AppearanceTokens.isDarkTheme ? Qt.rgba(1, 1, 1, 0.18) : Qt.rgba(0, 0, 0, 0.09))
-                                                    : candMouse.containsMouse
-                                                        ? (AppearanceTokens.isDarkTheme ? Qt.rgba(1, 1, 1, 0.08) : Qt.rgba(0, 0, 0, 0.04))
-                                                        : "transparent"
-                                                Behavior on color {
-                                                    ColorAnimation { duration: 120 }
-                                                }
-                                            }
-
-                                            Row {
-                                                id: candRow
-                                                anchors.centerIn: parent
-                                                spacing: 4
-
-                                                GlassText {
-                                                    text: String(dataItem.label || (index + 1) + ".")
-                                                    font.pixelSize: 13
-                                                    color: ThemeService.secondaryForegroundColor
-                                                    opacity: isSelected ? 0.95 : 0.65
-                                                    anchors.verticalCenter: parent.verticalCenter
-                                                }
-
-                                                GlassText {
-                                                    id: mainText
-                                                    text: String(dataItem.text || "")
-                                                    font.pixelSize: 15
-                                                    color: ThemeService.foregroundColor
-                                                    font.weight: isSelected ? Font.DemiBold : Font.Normal
-                                                    anchors.verticalCenter: parent.verticalCenter
-                                                }
-
-                                                GlassText {
-                                                    visible: !!dataItem.comment
-                                                    text: String(dataItem.comment || "")
-                                                    font.pixelSize: 12
-                                                    color: ThemeService.tertiaryForegroundColor
-                                                    opacity: 0.65
-                                                    anchors.verticalCenter: parent.verticalCenter
-                                                }
-                                            }
-
-                                            MouseArea {
-                                                id: candMouse
-                                                anchors.fill: parent
-                                                hoverEnabled: true
-                                                cursorShape: Qt.PointingHandCursor
-                                                onClicked: InputMethodService.selectCandidate(index)
-                                            }
-                                        }
-                                    }
-
-                                    // Paging indicators
-                                    Row {
-                                        visible: presentation.state.hasPrev || presentation.state.hasNext
-                                        spacing: 4
-                                        anchors.verticalCenter: parent.verticalCenter
-
-                                        GlassText {
-                                            text: "<"
-                                            visible: presentation.state.hasPrev
-                                            color: ThemeService.secondaryForegroundColor
-                                            opacity: prevMouse.containsMouse ? 0.9 : 0.45
-                                            font.pixelSize: 12
-                                            MouseArea {
-                                                id: prevMouse
-                                                anchors.fill: parent
-                                                hoverEnabled: true
-                                                cursorShape: Qt.PointingHandCursor
-                                                onClicked: InputMethodService.pageUp()
-                                            }
-                                        }
-
-                                        GlassText {
-                                            text: ">"
-                                            visible: presentation.state.hasNext
-                                            color: ThemeService.secondaryForegroundColor
-                                            opacity: nextMouse.containsMouse ? 0.9 : 0.45
-                                            font.pixelSize: 12
-                                            MouseArea {
-                                                id: nextMouse
-                                                anchors.fill: parent
-                                                hoverEnabled: true
-                                                cursorShape: Qt.PointingHandCursor
-                                                onClicked: InputMethodService.pageDown()
-                                            }
-                                        }
-                                    }
-                                }
-
-                                // Vertical candidate column (when layout === 1)
-                                Column {
-                                    id: verticalCol
-                                    visible: candidateArea.isVertical
-                                    spacing: 4
-
-                                    Repeater {
-                                        model: presentation.state.candidates
-
-                                        delegate: Item {
-                                            readonly property bool isSelected: index === presentation.state.cursorIndex
-                                            readonly property var dataItem: modelData
-
-                                            width: implicitWidth
-                                            height: implicitHeight
-                                            implicitWidth: vCandRow.implicitWidth + 16
-                                            implicitHeight: vCandRow.implicitHeight + 4
-
-                                            Rectangle {
-                                                anchors.fill: parent
-                                                radius: 6
-                                                color: isSelected
-                                                    ? (AppearanceTokens.isDarkTheme ? Qt.rgba(1, 1, 1, 0.18) : Qt.rgba(0, 0, 0, 0.09))
-                                                    : vCandMouse.containsMouse
-                                                        ? (AppearanceTokens.isDarkTheme ? Qt.rgba(1, 1, 1, 0.08) : Qt.rgba(0, 0, 0, 0.04))
-                                                        : "transparent"
-                                            }
-
-                                            Row {
-                                                id: vCandRow
-                                                anchors.verticalCenter: parent.verticalCenter
-                                                anchors.left: parent.left
-                                                anchors.leftMargin: 6
-                                                spacing: 6
-
-                                                GlassText {
-                                                    text: String(dataItem.label || (index + 1) + ".")
-                                                    font.pixelSize: 13
-                                                    color: ThemeService.secondaryForegroundColor
-                                                    opacity: isSelected ? 0.95 : 0.65
-                                                    anchors.verticalCenter: parent.verticalCenter
-                                                }
-
-                                                GlassText {
-                                                    id: vMainText
-                                                    text: String(dataItem.text || "")
-                                                    font.pixelSize: 15
-                                                    color: ThemeService.foregroundColor
-                                                    font.weight: isSelected ? Font.DemiBold : Font.Normal
-                                                    anchors.verticalCenter: parent.verticalCenter
-                                                }
-
-                                                GlassText {
-                                                    visible: !!dataItem.comment
-                                                    text: String(dataItem.comment || "")
-                                                    font.pixelSize: 12
-                                                    color: ThemeService.tertiaryForegroundColor
-                                                    opacity: 0.65
-                                                    anchors.verticalCenter: parent.verticalCenter
-                                                }
-                                            }
-
-                                            MouseArea {
-                                                id: vCandMouse
-                                                anchors.fill: parent
-                                                hoverEnabled: true
-                                                cursorShape: Qt.PointingHandCursor
-                                                onClicked: InputMethodService.selectCandidate(index)
-                                            }
-                                        }
-                                    }
-                                }
+                                candidates: presentation.state.candidates
+                                cursorIndex: presentation.state.cursorIndex
+                                engineLayout: presentation.state.layout
+                                layoutPreference: InputMethodConfigService.layout
+                                fontSize: InputMethodConfigService.fontSize
+                                showAnnotations: InputMethodConfigService.showAnnotations
+                                highContrast: InputMethodConfigService.highContrast
+                                reduceMotion: InputMethodConfigService.reduceMotion
+                                dark: AppearanceTokens.isDarkTheme
+                                foreground: highContrast ? (dark ? "#ffffff" : "#000000") : ThemeService.foregroundColor
+                                secondary: ThemeService.secondaryForegroundColor
+                                maximumWidth: Math.max(80, window.scrGeom.width * 0.75 - 24)
+                                maximumHeight: Math.max(60, window.scrGeom.height * 0.6 - preeditRow.height - 40)
+                                hasPrev: presentation.state.hasPrev
+                                hasNext: presentation.state.hasNext
+                                onCandidateSelected: candidateIndex => InputMethodService.selectCandidate(candidateIndex)
+                                onPreviousPage: InputMethodService.pageUp()
+                                onNextPage: InputMethodService.pageDown()
                             }
                         }
                     }

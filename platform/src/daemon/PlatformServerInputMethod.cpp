@@ -70,7 +70,10 @@ bool PlatformServer::handleInputMethodOperation(QLocalSocket *socket, const QJso
 
     if (op == QStringLiteral("inputmethod.set-enabled")) {
         const bool enabled = payload.value(QStringLiteral("enabled")).toBool(false);
+        const QPointer<QLocalSocket> peer(socket);
         const bool ok = m_kimpanelBridge->setUserEnabled(enabled);
+        if (!peer || !m_buffers.contains(peer.data()))
+            return true;
         respond(socket, request, ok, QJsonObject{
             {QStringLiteral("enabled"), m_kimpanelBridge->isUserEnabled()},
             {QStringLiteral("active"), m_kimpanelBridge->isTakeoverActive()}

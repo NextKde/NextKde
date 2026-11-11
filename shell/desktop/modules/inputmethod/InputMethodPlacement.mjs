@@ -55,11 +55,14 @@ export function resolveGlobalSpotRect(spot, activeWindow, kwinCaret, fallbackScr
 
     // 2. If spot mode is absolute and non-zero (XWayland clients)
     if (hasSpot && (spot.mode === "absolute" || !spot.mode)) {
+        // Absolute Kimpanel positions use XWayland's root coordinate scale,
+        // which is independent of the destination output's scale.
+        const scale = Number(spot.scale) > 0 ? Number(spot.scale) : 1;
         return {
-            x: Number(spot.x) || 0,
-            y: Number(spot.y) || 0,
-            width: Number(spot.width) || 0,
-            height: Number(spot.height) || 20,
+            x: (Number(spot.x) || 0) / scale,
+            y: (Number(spot.y) || 0) / scale,
+            width: (Number(spot.width) || 0) / scale,
+            height: (Number(spot.height) || 20) / scale,
             source: "absolute"
         };
     }
@@ -106,6 +109,20 @@ export function resolveGlobalSpotRect(spot, activeWindow, kwinCaret, fallbackScr
         height: 20,
         source: "fallback-screen"
     };
+}
+
+export function targetScreenName(anchor, screens, activeWindow, fallbackScreen) {
+    const outputs = Array.isArray(screens) ? screens : [];
+    const contains = (screen, x, y) => x >= screen.x && x < screen.x + screen.width
+        && y >= screen.y && y < screen.y + screen.height;
+    const atAnchor = anchor && outputs.find(s => contains(s, anchor.x, anchor.y));
+    if (atAnchor) return atAnchor.name;
+    // Stale or unsupported client coordinates must never hide every panel.
+    const geometry = activeWindow?.contentGeometry || activeWindow?.geometry
+        || activeWindow?.toplevel?.contentGeometry || activeWindow?.toplevel?.geometry;
+    const atWindow = geometry && outputs.find(s => contains(s,
+        geometry.x + geometry.width / 2, geometry.y + geometry.height / 2));
+    return atWindow?.name || fallbackScreen?.name || outputs[0]?.name || "";
 }
 
 export function placeCandidatePopup(safeBounds, anchorRect, popupWidth, popupHeight, gap = 8) {

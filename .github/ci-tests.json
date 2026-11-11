@@ -1,6 +1,7 @@
 {
   "installed": ["kos-shell.installed-startup"],
   "data-platform": [
+    "kos-platform.kimpanel",
     "kos-platform.appmenu",
     "kos-platform.brightness",
     "kos-data-service.go",

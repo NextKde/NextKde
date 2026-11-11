@@ -181,6 +181,14 @@ void SettingsBridge::setInputMethodEnabled(bool enabled)
         QStringLiteral("Input method settings request failed"), RequestKind::Integration);
 }
 
+void SettingsBridge::setInputMethodPresentation(const QVariantMap& patch)
+{
+    callShell(QStringLiteral("inputmethod-settings"),
+        { QStringLiteral("updatePresentation"),
+            QString::fromUtf8(QJsonDocument(QJsonObject::fromVariantMap(patch)).toJson(QJsonDocument::Compact)) },
+        QStringLiteral("Input method settings request failed"), RequestKind::Integration);
+}
+
 void SettingsBridge::i18nSnapshot() { callI18n({ QStringLiteral("snapshot") }); }
 
 void SettingsBridge::updateLanguage(const QString& language)

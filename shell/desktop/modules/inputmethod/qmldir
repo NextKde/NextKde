@@ -1,4 +1,6 @@
 singleton InputMethodService 1.0 InputMethodService.qml
+singleton InputMethodConfigService 1.0 InputMethodConfigService.qml
+InputMethodCandidateList 1.0 InputMethodCandidateList.qml
 InputMethodPopup 1.0 InputMethodPopup.qml
 InputMethodPresentation 1.0 InputMethodPresentation.qml
 InputMethodStatus 1.0 InputMethodStatus.qml
