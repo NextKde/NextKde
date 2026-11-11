@@ -250,6 +250,8 @@ jobs:
         run: python3 -m unittest discover -s tools/tests -p 'test_*release*.py'
       - name: Test Shell QML deployment with damaged source aliases
         run: python3 tools/tests/test_shell_qml_deploy.py
+      - name: Test userspace Fcitx panel installation
+        run: python3 tools/tests/test_fcitx_panel_install.py
       - name: Check KMusic catalogue preparation
         run: python3 -m unittest discover -s tools/tests -p 'test_kmusic_catalog.py'
       - name: Check project contracts and documentation
@@ -296,7 +298,7 @@ jobs:
             extra-cmake-modules wayland plasma-workspace libplasma kpackage \
             kwindowsystem kiconthemes kglobalaccel kio kconfig \
             go dbus nodejs python opencv onnxruntime-cpu xorg-server-xvfb xorg-xauth \
-            quickshell kwin python-pillow python-dbus python-gobject mesa vulkan-swrast libcap
+            quickshell kwin fcitx5 python-pillow python-dbus python-gobject mesa vulkan-swrast libcap
 
       # Arch gives KWin CAP_SYS_NICE, which Docker's default capability
       # bounding set excludes. execve then fails with EPERM before KWin starts.

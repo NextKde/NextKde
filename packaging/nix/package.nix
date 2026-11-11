@@ -81,6 +81,9 @@ stdenv.mkDerivation {
     mkdir -p $out/libexec
     ln -s ${kos-platform}/libexec/kos-platform $out/libexec/kos-platform
     ln -s ${kos-platform}/libexec/kos-ai-worker $out/libexec/kos-ai-worker
+    mkdir -p $out/lib/fcitx5 $out/share/fcitx5/addon
+    ln -s ${kos-platform}/lib/fcitx5/libnextkde-inputpanel.so $out/lib/fcitx5/libnextkde-inputpanel.so
+    ln -s ${kos-platform}/share/fcitx5/addon/nextkde-inputpanel.conf $out/share/fcitx5/addon/nextkde-inputpanel.conf
     ln -s ${shell-data-service}/libexec/kos-data-service $out/libexec/kos-data-service
 
     mkdir -p $out/bin
