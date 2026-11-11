@@ -42,12 +42,12 @@ ControlCenterCard {
                 border.color: AppearanceTokens.surface.pick(AppearanceTokens.colors.surfaceContainerHigh, ThemeService.isDark ? Qt.rgba(1, 1, 1, 0.18) : Qt.rgba(0, 0, 0, 0.08))
                 Behavior on color { ColorAnimation { duration: 110 } }
 
-                GlassText {
+                BundledIcon {
                     anchors.centerIn: parent
                     anchors.horizontalCenterOffset: -1
-                    text: "‹"
+                    name: "session.back"
                     color: AppearanceTokens.content.glassInk()
-                    font { pixelSize: 18; weight: Font.Bold }
+                    size: 18
                 }
 
                 ControlCenterSelection {
@@ -95,7 +95,7 @@ ControlCenterCard {
                         anchors.centerIn: parent
                         width: 16
                         height: 16
-                        name: BundledIcons.roleName("switchUser")
+                        name: "session.switch"
                         color: ThemeService.foregroundColor
                     }
                 }
@@ -133,12 +133,12 @@ ControlCenterCard {
 
             Repeater {
                 model: [
-                    { icon: "lock", label: I18n.tr("Lock Screen"), danger: false, action: "lock" },
-                    { icon: "suspend", label: I18n.tr("Sleep"), danger: false, action: "suspend" },
-                    { icon: "switchUser", label: I18n.tr("Switch User"), danger: false, action: "switch" },
-                    { icon: "logout", label: I18n.tr("Log Out"), danger: true, action: "logout" },
-                    { icon: "reboot", label: I18n.tr("Restart"), danger: true, action: "reboot" },
-                    { icon: "powerOff", label: I18n.tr("Power Off"), danger: true, action: "poweroff" }
+                    { label: I18n.tr("Lock Screen"), danger: false, action: "lock" },
+                    { label: I18n.tr("Sleep"), danger: false, action: "suspend" },
+                    { label: I18n.tr("Switch User"), danger: false, action: "switch" },
+                    { label: I18n.tr("Log Out"), danger: true, action: "logout" },
+                    { label: I18n.tr("Restart"), danger: true, action: "reboot" },
+                    { label: I18n.tr("Power Off"), danger: true, action: "poweroff" }
                 ]
 
                 delegate: Item {
@@ -181,7 +181,7 @@ ControlCenterCard {
                             anchors.verticalCenter: parent.verticalCenter
                             width: 20
                             height: 20
-                            name: BundledIcons.roleName(modelData.icon)
+                            name: "session." + modelData.action
                             color: modelData.danger
                                 ? "#ff3b30" : ThemeService.foregroundColor
                         }
@@ -218,7 +218,9 @@ ControlCenterCard {
                 horizontalCenter: parent.horizontalCenter
             }
             visible: sessionCard.service.lastSessionError.length > 0
-            text: "⚠ " + sessionCard.service.lastSessionError
+            text: sessionCard.service.lastSessionError
+            leftPadding: 16
+            BundledIcon { anchors.left: parent.left; anchors.verticalCenter: parent.verticalCenter; name: "session.warning"; size: 12; color: "#ff453a" }
             color: "#ff453a"
             font { pixelSize: 10; weight: Font.Medium; family: AppearanceTokens.typography.textFamily }
         }

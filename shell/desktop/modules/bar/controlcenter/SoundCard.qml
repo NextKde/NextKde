@@ -34,11 +34,11 @@ ControlCenterCard {
         opacity: 0.50
         font { pixelSize: 9; family: AppearanceTokens.typography.textFamily }
     }
-    GlassText {
+    BundledIcon {
         anchors { right: parent.right; top: parent.top; rightMargin: 13; topMargin: 5 }
-        text: "›"
+        name: "audio.details"
         color: ThemeService.foregroundColor
-        font { pixelSize: 15; weight: Font.Bold }
+        size: 15
     }
     MouseArea {
         id: soundPagePointer
@@ -48,92 +48,19 @@ ControlCenterCard {
         hoverEnabled: true
         onClicked: slotCard7.pageRequested("sound")
     }
-    Canvas {
+    ShellVolumeIcon {
         id: volumeGlyph
         anchors { left: parent.left; leftMargin: 12; verticalCenter: volumeSlider.verticalCenter }
         width: 19
         height: 16
-        renderTarget: Canvas.Image
 
         readonly property int volumeLevel: Math.round(slotCard7.volumePreview)
         readonly property bool isMuted: slotCard7.service.audioMuted
         readonly property color ink: AppearanceTokens.content.glassInk()
 
-        onVolumeLevelChanged: requestPaint()
-        onIsMutedChanged: requestPaint()
-        onInkChanged: requestPaint()
-
-        onPaint: {
-            const ctx = getContext("2d")
-            ctx.reset()
-            const fg = ink
-            const bodyColor = isMuted
-                ? Qt.rgba(fg.r, fg.g, fg.b, 0.50) : fg
-
-            ctx.fillStyle = bodyColor
-            ctx.strokeStyle = fg
-            ctx.lineWidth = 1.5
-            ctx.lineCap = "round"
-            ctx.lineJoin = "round"
-
-            ctx.fillRect(1.0, 5.5, 3.2, 5.0)
-
-            ctx.beginPath()
-            ctx.moveTo(4.2, 5.5)
-            ctx.lineTo(7.5, 2.5)
-            ctx.lineTo(7.5, 13.5)
-            ctx.lineTo(4.2, 10.5)
-            ctx.closePath()
-            ctx.fill()
-
-            if (isMuted) {
-                ctx.globalCompositeOperation = "destination-out"
-                ctx.lineWidth = 2.6
-                ctx.beginPath()
-                ctx.moveTo(0.8, 2.0)
-                ctx.lineTo(8.8, 14.0)
-                ctx.stroke()
-
-                ctx.globalCompositeOperation = "source-over"
-                ctx.lineWidth = 1.5
-                ctx.strokeStyle = fg
-                ctx.beginPath()
-                ctx.moveTo(0.8, 2.0)
-                ctx.lineTo(8.8, 14.0)
-                ctx.stroke()
-            } else {
-                const arcs = volumeLevel > 66 ? 3 : (volumeLevel > 33 ? 2 : (volumeLevel > 0 ? 1 : 0))
-                const cx = 6.0, cy = 8.0
-                if (arcs >= 1) {
-                    ctx.beginPath()
-                    ctx.arc(cx, cy, 4.2, -0.65, 0.65)
-                    ctx.stroke()
-                }
-                if (arcs >= 2) {
-                    ctx.beginPath()
-                    ctx.arc(cx, cy, 7.0, -0.70, 0.70)
-                    ctx.stroke()
-                }
-                if (arcs >= 3) {
-                    ctx.beginPath()
-                    ctx.arc(cx, cy, 9.8, -0.72, 0.72)
-                    ctx.stroke()
-                }
-            }
-        }
-
-        Connections {
-            target: slotCard7.service
-            function onAudioMutedChanged() { volumeGlyph.requestPaint() }
-        }
-
-        MouseArea {
-            anchors.fill: parent
-            anchors.margins: -6
-            hoverEnabled: true
-            cursorShape: Qt.PointingHandCursor
-            onClicked: slotCard7.service.setMuted(!slotCard7.service.audioMuted)
-        }
+        level: volumeLevel / 100
+        muted: isMuted
+        color: ink
     }
     ControlCenterSlider {
         id: volumeSlider

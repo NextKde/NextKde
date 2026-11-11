@@ -1,4 +1,5 @@
 import QtQuick
+import "../../Icons" as Symbols
 import QtQuick.Controls
 
 Button {
@@ -24,13 +25,12 @@ Button {
         clip: true
         spacing: 10
 
-        Label {
+        Symbols.Icon {
             width: 22
             anchors.verticalCenter: parent.verticalCenter
-            text: root.symbol
+            name: root.symbol
             color: root.checked ? AppTheme.accent : AppTheme.mutedText
-            horizontalAlignment: Text.AlignHCenter
-            font.pixelSize: 17
+            size: 17
         }
 
         Label {

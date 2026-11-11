@@ -12,7 +12,7 @@ KosFloatPanel {
     property string confirmText: I18n.tr("Empty Trash")
     property string cancelText: I18n.tr("Cancel")
     property bool confirmVisible: true
-    property string iconName: "user-trash"
+    property string iconName: "dialog.trash"
     property bool destructive: true
     property bool confirmBusy: false
     property bool confirmEnabled: true
@@ -192,7 +192,7 @@ KosFloatPanel {
 
             BundledIcon {
                 anchors.centerIn: parent
-                name: "help"
+                name: "dialog.help"
                 color: popup.contentForegroundColor
                 size: 16
             }

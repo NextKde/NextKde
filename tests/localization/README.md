@@ -1,25 +1,16 @@
 # System UI language
 
-Calendar, Todo, Weather, ListenFree, and their desktop widgets use the primary
-system UI language (`QLocale::system().uiLanguages()`, or `Qt.locale().uiLanguages`
-in the shell). On Linux, Qt derives this from the process environment, including
-`LANGUAGE`, `LC_ALL`, `LC_MESSAGES`, and `LANG`; no saved user profile is required.
-A `zh` language, including regional/script variants, selects
-Chinese; a `pt` language, including `pt_PT`, selects Brazilian Portuguese;
-every other primary language selects English. A secondary fallback does not
-override the primary language. The Shell and Settings can also pin the
-interface language (`auto`, `zh-CN`, `pt-BR` or `en`) in Settings → Theme.
-ListenFree has no Portuguese catalog yet, ignores old saved language selections
-and excludes language from settings imports.
+The Shell and Settings follow the primary system UI language
+(`Qt.locale().uiLanguages`) unless Settings → Theme pins `zh-CN`, `pt-BR` or `en`.
+On Linux, Qt derives the system value from `LANGUAGE`, `LC_ALL`, `LC_MESSAGES`
+and `LANG`. A primary `zh` language selects Chinese, `pt` selects Brazilian
+Portuguese, and other primary languages select English. Secondary fallbacks do
+not override the primary language. User content and provider identifiers retain
+their original language; dates use the selected UI locale.
 
-Applications choose the language at startup. Relaunch them after changing the
-system UI language; restart the shell or sign in again for desktop widgets.
-User content, song metadata, and provider API identifiers keep their original
-language. Dates and weekdays use the same selected UI locale.
-
-The common apps embed their Qt Linguist catalogs. Building needs Qt LinguistTools;
-translated standard dialog buttons additionally use the system Qt translations
-package (`qt6-translations` or `qt6-translations-l10n`).
+Independent application catalogs, startup rules and capture tools are maintained
+in [their owning repositories](../../apps/README.md). Core no longer carries
+capture commands for the removed monorepo binaries or the retired Todo app.
 
 ## Catalogs
 
@@ -44,13 +35,6 @@ the independent [ListenFree repository](https://github.com/NextKde/ListenFree).
   `listenfree.language.*`, including saved-language override regression tests.
 
 ## Actual layout captures
-
-`capture_apps.py` expects the three app binaries in `.build/language-apps`.
-`capture_apps.py --music` expects ListenFree in `.build/language-music`, with its
-normal runtime library/plugin paths available. The scripts use temporary
-profiles, capture main/settings/editor views and 760×540 tool-app windows,
-and verify QML load errors. `--language` and `--view` narrow the capture matrix;
-`KOS_APP_BIN_DIR` and `LISTENFREE_BIN` can select installed binaries. Music captures require an X11/XWayland display.
 
 `capture_widgets.py` uses a temporary platform service and the actual widget
 items. It requires a Wayland desktop; `KOS_QUICKSHELL_BIN` can select a custom

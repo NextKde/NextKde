@@ -524,7 +524,9 @@ if(BUILD_TESTING)
             COMMAND ${KOS_NODE_EXECUTABLE}
                 ${CMAKE_CURRENT_SOURCE_DIR}/tests/traditional-color/test_traditional_color.mjs
         )
-        set_tests_properties(kos-ui.traditional-color PROPERTIES TIMEOUT 10)
+        # The full swatch/contrast sweep takes over 20s on the supported VM.
+        # Keep all samples and allow slower CPU-only runners to finish.
+        set_tests_properties(kos-ui.traditional-color PROPERTIES TIMEOUT 60)
         # The kdeglobals `font=` grammar 使用系统字体 builds on, without Qt: the
         # shell test above proves the chain, this one pins the parser's corner
         # cases (a serialised QFont, a family alone, the wrong group).

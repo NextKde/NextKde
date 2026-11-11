@@ -578,5 +578,27 @@ QtObject {
         readonly property int popupCloseDuration: 140
         readonly property real popupStartScale: 0.96
         readonly property real popupAnchorOffset: 20
+        // A widget resize follows the pointer directly while the corner is
+        // held, and this spring takes over the moment it is released, landing
+        // the card on its cell with a little weight. Qt's SpringAnimation has
+        // its own units (spring 0-5, damping 0-1, not SI), so these values were
+        // measured on a one-cell jump: the macOS form overshoots about 5 % and
+        // reaches its final size in ~210 ms; the other forms stay critically
+        // damped to match their tighter motion language. Epsilon is in pixels.
+        readonly property real widgetResizeSpring: springEnabled ? 3.5 : 5.0
+        readonly property real widgetResizeDamping: springEnabled ? 0.30 : 0.50
+        readonly property real widgetResizeMass: 1.0
+        readonly property real widgetResizeEpsilon: 0.25
+        // Dropping a dragged widget settles with the same physical family as a
+        // resize, so the desktop has one motion language instead of a spring for
+        // size and a fixed easing curve for position. A move can travel most of
+        // the desktop, though, and an overshoot that reads as weight on a
+        // one-cell resize would carry the card past the screen edge on a long
+        // drop, so the move spring is critically damped: same velocity profile
+        // and settle, no bounce. Measured: reaches its cell in ~310 ms.
+        readonly property real widgetMoveSpring: 5.0
+        readonly property real widgetMoveDamping: 0.50
+        readonly property real widgetMoveMass: 1.0
+        readonly property real widgetMoveEpsilon: 0.25
     }
 }

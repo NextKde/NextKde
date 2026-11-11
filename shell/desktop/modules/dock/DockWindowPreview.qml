@@ -298,12 +298,11 @@ PopupWindow {
                         ColorAnimation { duration: 100 }
                     }
 
-                    Text {
+                    BundledIcon {
                         anchors.centerIn: parent
-                        text: "+"
+                        name: "dock.preview.newWindow"
                         color: ThemeService.foregroundColor
-                        font.pixelSize: 21
-                        font.weight: Font.Medium
+                        size: 21
                     }
 
                     MouseArea {
@@ -544,12 +543,11 @@ PopupWindow {
                                     ColorAnimation { duration: 100 }
                                 }
 
-                                Text {
+                                BundledIcon {
                                     anchors.centerIn: parent
-                                    text: "✕"
+                                    name: "dock.preview.closeWindow"
                                     color: "white"
-                                    font.pixelSize: 10
-                                    font.bold: true
+                                    size: 10
                                 }
 
                                 MouseArea {

@@ -213,11 +213,11 @@ Item {
                         radius: width / 2
                         color: closeMouse.containsMouse ? Qt.rgba(1, 1, 1, 0.15) : "transparent"
 
-                        GlassText {
+                        BundledIcon {
                             anchors.centerIn: parent
-                            text: "×"
+                            name: "temperature.close"
                             color: ThemeService.foregroundColor
-                            font.pixelSize: 20
+                            size: 20
                         }
                         MouseArea {
                             id: closeMouse

@@ -17,7 +17,7 @@ AnimatedPopupWindow {
     readonly property url artworkSource: {
         const revision = MediaService.metadataRevision
         return player?.trackArtUrl
-            ? player.trackArtUrl : BundledIcons.source("default-cover")
+            ? player.trackArtUrl : BundledIcons.source("media.coverFallback")
     }
     property bool pointerInside: popupMouse.containsMouse
     motionOrigin: Item.Bottom
@@ -346,7 +346,7 @@ AnimatedPopupWindow {
             MusicButton {
                 x: 9.5
                 anchors.verticalCenter: parent.verticalCenter
-                iconName: "media-previous"
+                iconName: "media.previous"
                 text: I18n.tr("Previous")
                 enabled: popup.player?.canGoPrevious ?? false
                 onClicked: MediaService.previous()
@@ -354,7 +354,7 @@ AnimatedPopupWindow {
             MusicButton {
                 anchors.centerIn: parent
                 primary: true
-                iconName: popup.player?.isPlaying ? "media-pause" : "media-play"
+                iconName: popup.player?.isPlaying ? "media.pause" : "media.play"
                 text: popup.player?.isPlaying ? I18n.tr("Pause") : I18n.tr("Play")
                 busy: MediaService.loading
                 enabled: popup.player?.canTogglePlaying ?? false
@@ -363,7 +363,7 @@ AnimatedPopupWindow {
             MusicButton {
                 x: 109.5
                 anchors.verticalCenter: parent.verticalCenter
-                iconName: "media-next"
+                iconName: "media.next"
                 text: I18n.tr("Next")
                 enabled: popup.player?.canGoNext ?? false
                 onClicked: MediaService.next()

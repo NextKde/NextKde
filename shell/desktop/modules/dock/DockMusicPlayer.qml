@@ -40,7 +40,7 @@ Item {
     readonly property url artworkSource: {
         const revision = MediaService.metadataRevision
         return player?.trackArtUrl
-            ? player.trackArtUrl : BundledIcons.source("default-cover")
+            ? player.trackArtUrl : BundledIcons.source("media.coverFallback")
     }
     property bool detailsHovered: false
     property bool musicPopupRequested: false
@@ -209,7 +209,7 @@ Item {
                 visible: widget.isCompact
                 primary: true
                 iconSize: Math.max(14, widget.iconSize * 0.36)
-                iconName: widget.player?.isPlaying ? "media-pause" : "media-play"
+                iconName: widget.player?.isPlaying ? "media.pause" : "media.play"
                 text: widget.player?.isPlaying ? I18n.tr("Pause") : I18n.tr("Play")
                 enabled: widget.player?.canTogglePlaying ?? false
                 busy: MediaService.loading
@@ -405,7 +405,7 @@ Item {
     }
 
     component DockPrevBtn: DockControlButton {
-        iconName: "media-previous"
+        iconName: "media.previous"
         text: I18n.tr("Previous")
         onClicked: MediaService.previous()
     }
@@ -413,14 +413,14 @@ Item {
     component DockPlayBtn: DockControlButton {
         property bool isPlaying: false
         primary: true
-        iconName: isPlaying ? "media-pause" : "media-play"
+        iconName: isPlaying ? "media.pause" : "media.play"
         text: isPlaying ? I18n.tr("Pause") : I18n.tr("Play")
         busy: MediaService.loading
         onClicked: MediaService.togglePlayPause()
     }
 
     component DockNextBtn: DockControlButton {
-        iconName: "media-next"
+        iconName: "media.next"
         text: I18n.tr("Next")
         onClicked: MediaService.next()
     }

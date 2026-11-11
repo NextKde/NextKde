@@ -1,7 +1,7 @@
 # Dock Architecture and Extension Contract
 
 This document is the source of truth for the Dock's application identity,
-window model, grouping, persistence, and future desktop UI features. Read it
+window model, grouping and persistence. Read it
 before adding Dock, Alt+Tab, preview, workspace, or app-menu behavior.
 
 ## Non-negotiable rules
@@ -159,7 +159,8 @@ render path; they do not substitute for subjective high-refresh desktop use.
 ```text
 AppPresentationService ──→ AppLauncher / QuickSearch / shared AppIcon
         ↑
-AppIdentityService → WindowService → AppGroupService → Dock / Alt+Tab / Preview / Stage Manager
+AppIdentityService → WindowService → DockModelService → Dock
+                                  → Alt+Tab / Preview / Stage Manager
 AppActionService ──→ launch / pin / unpin / hide / edit requests
 ```
 
@@ -338,30 +339,11 @@ closeWindow(windowId)
 runtime identifier only; it is intentionally not persisted. Window order may
 change without changing the identity of an existing Toplevel.
 
-### AppGroupService
+### Dock grouping
 
-File: `shell/desktop/modules/dock/AppGroupService.qml`
-
-This derives reusable app groups from the top-level `app` entries in
-`ConfigService.dockItems` (currently exposed as the compatibility projection
-`ConfigService.pinnedAppIds`) and
-`WindowService.records`. The current Dock compatibility facade derives its own
-grouped/separate presentation; `AppGroupService` remains available for future
-Alt+Tab and Stage Manager views.
-
-Group shape:
-
-```js
-{
-    desktopId,
-    name,
-    iconSource,
-    pinned,
-    windows,
-    activeWindow,
-    pinnedVisible
-}
-```
+`DockModelService.qml` derives the Dock presentation from `ConfigService.dockItems`
+and `WindowService.records`. Other surfaces consume the live window model and
+keep their own presentation policy; no unused parallel grouping service is shipped.
 
 The current Dock exposes two presentation policies through
 `DockConfigService.windowGrouping`. In the default `grouped` mode, pinned apps
@@ -393,9 +375,8 @@ unpinApp(appId)
 movePinnedItem(type, key, targetIndex)
 ```
 
-New UI components should prefer `AppIdentityService`, `WindowService`, and
-`AppGroupService` directly. Do not add new identity or window tracking logic
-to `DockModelService`.
+New UI components use `AppIdentityService` and `WindowService` for identity and
+window tracking. Keep Dock-specific ordering and grouping in `DockModelService`.
 
 ## Native minimize targets
 
@@ -749,8 +730,8 @@ order. It must not reuse the Dock's visual order or pinned list.
 
 ### Stage Manager / workspace UI
 
-Use `AppGroupService` for grouping and add provider-specific workspace data
-as optional runtime metadata. Do not put Hyprland workspace IDs into the
+Use `WindowService.records` with the Stage grouping policy; provider-specific
+workspace data stays optional runtime metadata. Do not put Hyprland workspace IDs into the
 canonical app identity or persisted pinned records.
 
 The Stage drawer checks overlap and fullscreen windows on

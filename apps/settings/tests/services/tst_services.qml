@@ -1,6 +1,6 @@
 import QtQuick
 import QtTest
-import "../.." as Settings
+import "../../pages" as Settings
 import "../../../../shared/qml/i18n"
 
 TestCase {
@@ -42,6 +42,8 @@ TestCase {
         property bool anyBusy: false
         property bool hasActiveMutation: false
         property int refreshes: 0
+        property int catalogRequests: 0
+        function ensureCatalogFresh() { catalogRequests++ }
         property string lastId: ""
         property int checks: 0
         property int updates: 0
@@ -82,9 +84,29 @@ TestCase {
         fakeStore.installs = fakeStore.opens = fakeStore.removals = fakeStore.cancellations = 0
         fakeStore.confirmations = 0; fakeStore.confirmedPlan = ""
         fakeStore.hasActiveMutation = false
+        fakeStore.catalogBusy = false
+        fakeStore.catalogRequests = 0
         fakeStore.apps = []; fakeStore.anyBusy = false; fakeStore.lastId = ""; fakeStore.checks = fakeStore.updates = 0
     }
     function snapshot(state) { bridge.wallpaperSnapshotChanged({spatialResources: state}) }
+
+    function test_cached_page_stays_visible_during_catalog_refresh() {
+        fakeStore.catalogBusy = true
+        const page = createTemporaryObject(factory, this, {store: fakeStore})
+        verify(page)
+        tryVerify(() => fakeStore.catalogRequests > 0)
+        verify(page.visible)
+        verify(page.enabled)
+        page.selectedCategory = 1
+        compare(page.selectedCategory, 1)
+        page.visible = false
+        wait(10)
+        const requests = fakeStore.catalogRequests
+        page.ensureCatalogFresh()
+        compare(fakeStore.catalogRequests, requests)
+        page.visible = true
+        tryVerify(() => fakeStore.catalogRequests > requests)
+    }
 
     function test_catalog_translation_fallback() {
         const page = createTemporaryObject(factory, this, {store: fakeStore})

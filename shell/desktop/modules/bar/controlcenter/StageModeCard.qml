@@ -26,19 +26,13 @@ ControlCenterCard {
         opacity: stagePointer.containsMouse && !stagePointer.pressed ? 1.0 : 0.92
         Behavior on color { ColorAnimation { duration: 140 } }
 
-        Image {
+        BundledIcon {
             anchors.centerIn: parent
             width: 18; height: 18
-            source: BundledIcons.source("window")
-            sourceSize.width: 36; sourceSize.height: 36
-            fillMode: Image.PreserveAspectFit
-            smooth: true
-            layer.enabled: true
-            layer.effect: MultiEffect {
-                colorization: 1.0
-                colorizationColor: stageModeCard.stageMode.enabled
+            name: "controlCenter.stageMode"
+
+            color: stageModeCard.stageMode.enabled
                     ? ThemeService.tileActiveGlyph : ThemeService.tileGlyph
-            }
         }
     }
     GlassText {

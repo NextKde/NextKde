@@ -1,4 +1,5 @@
 import QtQuick
+import "../../Icons" as Symbols
 import QtQuick.Controls
 
 ComboBox {
@@ -10,9 +11,9 @@ ComboBox {
         color: root.enabled ? AppTheme.text : AppTheme.mutedText
         verticalAlignment: Text.AlignVCenter; elide: Text.ElideRight
     }
-    indicator: Text {
+    indicator: Symbols.Icon {
         x: root.width - 24; y: (root.height - height) / 2
-        text: "⌄"; color: AppTheme.mutedText; font.pixelSize: 16
+        name: "chevron_down"; color: AppTheme.mutedText; size: 16
     }
     background: KosSurface {
         radius: AppTheme.smallRadius

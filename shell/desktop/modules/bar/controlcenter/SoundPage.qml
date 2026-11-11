@@ -40,12 +40,11 @@ Item {
             font { pixelSize: 10; family: AppearanceTokens.typography.textFamily }
         }
 
-        Canvas {
+        ShellVolumeIcon {
             id: submenuVolumeGlyph
             anchors { left: parent.left; leftMargin: 2; verticalCenter: submenuVolumeSlider.verticalCenter }
             width: 19
             height: 16
-            renderTarget: Canvas.Image
 
             readonly property int volumeLevel: Math.round(soundSubmenuView.volumePreview)
             readonly property bool isMuted: soundSubmenuView.service.audioMuted
@@ -54,82 +53,10 @@ Item {
             // recomputed from a light/dark pair here.
             readonly property color ink: AppearanceTokens.content.glassInk()
 
-            onVolumeLevelChanged: requestPaint()
-            onIsMutedChanged: requestPaint()
-            onInkChanged: requestPaint()
-
-            onPaint: {
-                const ctx = getContext("2d")
-                ctx.reset()
-                const fg = ink
-                const bodyColor = isMuted
-                    ? Qt.rgba(fg.r, fg.g, fg.b, 0.50) : fg
-
-                ctx.fillStyle = bodyColor
-                ctx.strokeStyle = fg
-                ctx.lineWidth = 1.5
-                ctx.lineCap = "round"
-                ctx.lineJoin = "round"
-
-                ctx.fillRect(1.0, 5.5, 3.2, 5.0)
-
-                ctx.beginPath()
-                ctx.moveTo(4.2, 5.5)
-                ctx.lineTo(7.5, 2.5)
-                ctx.lineTo(7.5, 13.5)
-                ctx.lineTo(4.2, 10.5)
-                ctx.closePath()
-                ctx.fill()
-
-                if (isMuted) {
-                    ctx.globalCompositeOperation = "destination-out"
-                    ctx.lineWidth = 2.6
-                    ctx.beginPath()
-                    ctx.moveTo(0.8, 2.0)
-                    ctx.lineTo(8.8, 14.0)
-                    ctx.stroke()
-
-                    ctx.globalCompositeOperation = "source-over"
-                    ctx.lineWidth = 1.5
-                    ctx.strokeStyle = fg
-                    ctx.beginPath()
-                    ctx.moveTo(0.8, 2.0)
-                    ctx.lineTo(8.8, 14.0)
-                    ctx.stroke()
-                } else {
-                    const arcs = volumeLevel > 66 ? 3 : (volumeLevel > 33 ? 2 : (volumeLevel > 0 ? 1 : 0))
-                    const cx = 6.0, cy = 8.0
-                    if (arcs >= 1) {
-                        ctx.beginPath()
-                        ctx.arc(cx, cy, 4.2, -0.65, 0.65)
-                        ctx.stroke()
-                    }
-                    if (arcs >= 2) {
-                        ctx.beginPath()
-                        ctx.arc(cx, cy, 7.0, -0.70, 0.70)
-                        ctx.stroke()
-                    }
-                    if (arcs >= 3) {
-                        ctx.beginPath()
-                        ctx.arc(cx, cy, 9.8, -0.72, 0.72)
-                        ctx.stroke()
-                    }
-                }
-            }
-
-            Connections {
-                target: soundSubmenuView.service
-                function onAudioMutedChanged() { submenuVolumeGlyph.requestPaint() }
-            }
-
-            MouseArea {
-                anchors.fill: parent
-                anchors.margins: -6
-                hoverEnabled: true
-                cursorShape: Qt.PointingHandCursor
-                onClicked: soundSubmenuView.service.setMuted(!soundSubmenuView.service.audioMuted)
-            }
-        }
+            level: volumeLevel / 100
+        muted: isMuted
+        color: ink
+    }
 
         ControlCenterSlider {
             id: submenuVolumeSlider
@@ -197,10 +124,16 @@ Item {
                 height: 30
                 radius: 8
                 color: modelData.isDefault ? Qt.rgba(0.1, 0.5, 1, 0.20) : Qt.rgba(0.5, 0.5, 0.5, 0.10)
+                BundledIcon {
+                    anchors { left: parent.left; leftMargin: 10; verticalCenter: parent.verticalCenter }
+                    size: 11; name: "audio.deviceSelected"
+                    visible: modelData.isDefault
+                    color: ThemeService.foregroundColor
+                }
                 GlassText {
-                    anchors { fill: parent; leftMargin: 10; rightMargin: 10 }
+                    anchors { fill: parent; leftMargin: 27; rightMargin: 10 }
                     verticalAlignment: Text.AlignVCenter
-                    text: (modelData.isDefault ? "✓  " : "    ") + modelData.description
+                    text: modelData.description
                     elide: Text.ElideRight
                     color: ThemeService.foregroundColor
                     font.pixelSize: 11
@@ -318,11 +251,11 @@ Item {
                         ? Qt.rgba(1.0, 0.27, 0.23, ThemeService.isDark ? 0.30 : 0.18)
                         : (AppearanceTokens.surface.pick(AppearanceTokens.colors.surfaceContainerHigh, ThemeService.isDark ? Qt.rgba(1, 1, 1, 0.12) : Qt.rgba(0, 0, 0, 0.07)))
 
-                    GlassText {
+                    BundledIcon {
                         anchors.centerIn: parent
-                        text: appVolumeRow.muted ? "×" : "♪"
+                        name: appVolumeRow.muted ? "audio.application.muted" : "audio.application.audible"
                         color: appVolumeRow.muted ? "#ff453a" : ThemeService.foregroundColor
-                        font { pixelSize: appVolumeRow.muted ? 15 : 13; weight: Font.Bold }
+                        size: appVolumeRow.muted ? 15 : 13
                     }
 
                     MouseArea {
@@ -416,12 +349,12 @@ Item {
             font { pixelSize: 11; weight: Font.DemiBold; family: AppearanceTokens.typography.textFamily }
         }
 
-        GlassText {
+        BundledIcon {
             anchors { right: parent.right; rightMargin: 16; verticalCenter: parent.verticalCenter }
-            text: "›"
+            name: "audio.settings"
             color: ThemeService.foregroundColor
             opacity: 0.45
-            font { pixelSize: 13; weight: Font.Bold }
+            size: 13
         }
 
         MouseArea {

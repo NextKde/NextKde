@@ -6,7 +6,7 @@ import qs.desktop.modules.common
 AbstractButton {
     id: root
 
-    property string iconName: "media-play"
+    property string iconName: "media.play"
     property bool primary: false
     property bool busy: false
     property real iconSize: primary ? 18 : 16
