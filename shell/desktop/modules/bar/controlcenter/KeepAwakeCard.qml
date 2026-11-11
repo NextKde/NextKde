@@ -29,7 +29,7 @@ ControlCenterCard {
         BundledIcon {
             anchors.centerIn: parent
             width: 18; height: 18
-            name: "keep-awake"
+            name: "controlCenter.keepAwake"
 
             color: keepAwakeCard.service.keepAwakeEnabled
                     ? ThemeService.tileActiveGlyph : ThemeService.tileGlyph

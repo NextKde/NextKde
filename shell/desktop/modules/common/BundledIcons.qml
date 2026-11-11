@@ -1,6 +1,7 @@
 pragma Singleton
 import QtQuick
 import "../../../shared/Icons" as Symbols
+import "ShellIconMap.mjs" as IconMap
 
 // Shell roles and branded artwork. Interface glyphs belong to Kos.Icons.
 // source() transports font references for legacy image-model consumers;
@@ -19,26 +20,25 @@ QtObject {
     })
 
     // ── 应用图标（项目自有 app，供 AppPresentationService 优先命中）──
-    readonly property var appIcons: ({
-        "kos-calendar": "kos-calendar",
-        "kos-music": "kos-music",
-        "kos-weather": "kos-weather",
-    })
+    readonly property var appIcons: IconMap.appArtwork
 
     // data URI 按需拼一次就缓存：同一个图标名在多个位置复用时，
     // Image 拿到的是同一个字符串，Qt 的图片缓存因此能命中。
     readonly property var _encoded: ({})
 
     function has(name) {
-        const key = String(name || "")
+        const key = resolveName(name)
         return Symbols.IconRegistry.has(key) || key === "placeholder-dot"
+            || Object.prototype.hasOwnProperty.call(IconMap.artworkSources, key)
             || Object.prototype.hasOwnProperty.call(registry.svg, key)
             || Object.prototype.hasOwnProperty.call(registry.raster, key)
     }
 
     function source(name) {
-        const key = String(name || "")
+        const key = resolveName(name)
         if (Symbols.IconRegistry.has(key)) return "kos-icon:" + key
+        if (Object.prototype.hasOwnProperty.call(IconMap.artworkSources, key))
+            return String(Qt.resolvedUrl(IconMap.artworkSources[key]))
         if (Object.prototype.hasOwnProperty.call(registry.raster, key)) {
             if (_encoded[key] === undefined)
                 _encoded[key] = "data:image/" + registry.raster[key].type
@@ -53,61 +53,14 @@ QtObject {
         return _encoded[key]
     }
 
-    // ── 语义角色 ──
-    // 角色表是本文件的一部分：图标从哪来只有一个地方可查。
-    readonly property var _roles: ({
-        "cpu|": "cpu",
-        "temperature|": "cpu-temperature",
-        "settings|": "preferences-system",
-        "controlCenter|": "control-center",
-        "open|": "folder-open",
-        "edit|": "document-new",
-        "pin|": "pin",
-        "unpin|": "unpin",
-        "activateWindow|": "window-restore",
-        "minimize|": "window-minimize",
-        "close|": "window-close",
-        "copy|": "edit-copy",
-        "cut|": "edit-cut",
-        "paste|": "edit-paste",
-        "folder|": "folder",
-        "newFile|": "document-new",
-        "newFolder|": "folder-new",
-        "refresh|": "view-refresh",
-        "rename|": "edit-rename",
-        "openWith|": "open-with",
-        "sort|": "sort-name",
-        "iconSize|": "arrange",
-        "appearance|": "theme-appearance",
-        "visibility|": "customize-appearance",
-        "reset|": "reset-layout",
-        "back|": "back",
-        "submenu|": "submenu",
-        "check|": "check",
-        "remove|": "edit-clear",
-        "lock|": "lock",
-        "suspend|": "system-suspend",
-        "sleep|": "system-suspend",
-        "hibernate|": "system-suspend",
-        "reboot|": "system-reboot",
-        "restart|": "system-reboot",
-        "powerOff|": "power",
-        "shutdown|": "power",
-        "switchUser|": "system-switch-user",
-        "logout|": "system-log-out",
-        "screenshot|": "screenshot",
-        "nightLight|": "night-light",
-        "doNotDisturb|": "do-not-disturb",
-        "countdown|": "countdown",
-        "radio|checked": "check",
-        "radio|": "placeholder-dot",
-    })
+    // All feature-to-glyph choices live in ShellIconMap.mjs.
+    readonly property var roles: IconMap.icons
+
+    function resolveName(name) { return IconMap.resolve(name) }
 
     function roleName(role, state) {
-        const key = String(role || "") + "|" + String(state || "")
-        if (Object.prototype.hasOwnProperty.call(_roles, key))
-            return _roles[key]
-        return has(role) ? String(role) : "placeholder-dot"
+        const name = IconMap.roleName(role, state)
+        return has(name) ? name : "placeholder-dot"
     }
 
     // 项目自有应用（按 appId 命中）——返回空字符串表示"不归我管，走主题"。

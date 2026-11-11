@@ -16,7 +16,7 @@ DesktopConfirmDialog {
             + (SpatialResourceService.busy && SpatialResourceService.progress >= 0
                 ? " · " + Math.round(SpatialResourceService.progress * 100) + "%" : ""))
         : message
-    iconName: "spatial-wallpaper"
+    iconName: "wallpaper.spatial"
     destructive: false
     confirmVisible: false
     cancelText: preparing ? I18n.tr("Cancel") : I18n.tr("Close")

@@ -29,7 +29,7 @@ ControlCenterCard {
         BundledIcon {
             anchors.centerIn: parent
             width: 18; height: 18
-            name: "window"
+            name: "controlCenter.stageMode"
 
             color: stageModeCard.stageMode.enabled
                     ? ThemeService.tileActiveGlyph : ThemeService.tileGlyph

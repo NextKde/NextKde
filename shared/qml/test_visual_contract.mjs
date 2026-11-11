@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { readFileSync, readdirSync } from "node:fs";
 import { fileURLToPath } from "node:url";
+import { icons as shellIcons, roleName as shellIconRoleName } from "../../shell/desktop/modules/common/ShellIconMap.mjs";
 
 function read(relativePath) {
     return readFileSync(fileURLToPath(new URL(relativePath, import.meta.url)), "utf8");
@@ -403,7 +404,6 @@ function controlCenterModule(name) {
 const networkStatus = read("../../shell/desktop/modules/bar/NetworkStatus.qml");
 const networkPanel = read("../../shell/desktop/modules/bar/NetworkPanel.qml");
 const wifiSignalIcon = read("../../shell/desktop/modules/bar/WifiSignalIcon.qml");
-const sharedSignalIcon = read("../Icons/SignalIcon.qml");
 assert.doesNotMatch(barWindow, /LiquidGlassSurface\s*\{/,
     "the Bar keeps the compositor's clear refractive glass instead of a frosted fill");
 assert.match(barWindow,
@@ -437,11 +437,15 @@ assert.match(globalMenuSource,
 assert.match(barStatusArea, /iconSize:\s*18/,
     "top-bar tray icons use the enlarged 18px optical size");
 assert.match(wifiSignalIcon,
-    /Symbols\.SignalIcon\s*\{/,
-    "the Bar reuses the shared signal glyph");
-assert.match(sharedSignalIcon,
+    /BundledIcon\s*\{/,
+    "the Bar resolves its signal glyph through the shared shell adapter");
+assert.match(wifiSignalIcon,
     /signalStrength\s*<\s*30\s*\?\s*1\s*:\s*signalStrength\s*<\s*60\s*\?\s*2\s*:\s*3/,
-    "the shared Wi-Fi glyph exposes three live signal-quality levels");
+    "the Wi-Fi adapter exposes three live signal-quality levels");
+for (const [state, glyph] of [["weak", "wifi_1"], ["medium", "wifi_2"], ["strong", "wifi"]]) {
+    assert.equal(shellIcons["network.wifi." + state], glyph,
+        `the catalog supplies the shared font glyph for ${state} Wi-Fi`);
+}
 assert.match(networkStatus,
     /WifiSignalIcon\s*\{[\s\S]{0,420}signalStrength:\s*NetworkService\.signalStrength/,
     "the top-bar Wi-Fi icon renders NetworkManager signal quality");
@@ -518,13 +522,16 @@ for (const marker of ["Card 4: Screenshot", "Card 5: Dark Mode", "Card 6: Power"
     assert.match(section, /width:\s*24[\s\S]{0,80}height:\s*24/,
         `${marker} uses a 24x24 icon container`);
 }
-// Interface symbols now come from the pinned font module; BundledIcons keeps
-// semantic roles and branded artwork rather than duplicate inline SVG glyphs.
+// Feature choices live in the Shell catalog; the pinned font owns glyph shapes.
 const iconRegistry = read("../../shell/desktop/modules/common/BundledIcons.qml");
 const iconMap = read("../Icons/IconMap.js");
 const interfaceIcon = read("../Icons/Icon.qml");
-assert.match(iconRegistry, /"powerOff\|":\s*"power"/,
+assert.equal(shellIconRoleName("powerOff"), "power",
     "the power action retains its semantic icon role");
+assert.equal(shellIcons["session.poweroff"], "power",
+    "the session sheet resolves power through the same catalog");
+assert.equal(shellIcons["desktop.menu.rename"], "",
+    "sparse context menus can intentionally leave a leading icon blank");
 assert.match(iconRegistry, /Symbols\.IconRegistry\.has\(key\)/,
     "the shell registry delegates interface symbols to the shared icon module");
 assert.match(iconMap, /"power":\s*"[^"\n]+"/,

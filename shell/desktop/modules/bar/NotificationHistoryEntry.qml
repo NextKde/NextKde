@@ -156,10 +156,10 @@ Item {
                 : removeButton.hovered || removeButton.activeFocus ? Qt.rgba(0.5, 0.5, 0.5, 0.18) : "transparent"
         }
         contentItem: BundledIcon {
-            name: "xmark"
+            name: "notification.remove"
             color: entry.ink
             opacity: removeButton.hovered || removeButton.activeFocus ? 1 : 0.5
-            size: 18
+            size: 14
         }
         onClicked: entry.removeRequested(entry.painted.key)
     }

@@ -86,7 +86,7 @@ Item {
                 opacity: 0.16
                 BundledIcon {
                     anchors.fill: parent
-                    name: "weather-cloud"
+                    name: "weather.cloud"
 
                 }
             }
@@ -99,7 +99,7 @@ Item {
                 opacity: 0.21
                 BundledIcon {
                     anchors.fill: parent
-                    name: "weather-cloud-wide"
+                    name: "weather.cloudWide"
 
                 }
             }

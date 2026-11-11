@@ -643,6 +643,7 @@ Item {
     // from the rest of the shell.
     ContextMenu {
         id: trashContextMenu
+        reserveIconSpace: true
         capsuleReveal: true
         anchorItem: trashIcon
         position: ConfigService.position
@@ -651,8 +652,8 @@ Item {
         property bool hasBeenVisible: false
 
         Component.onCompleted: setItems([
-            { icon: "folder-open", label: I18n.tr("Open Trash"), cmd: "open" },
-            { icon: "user-trash", label: I18n.tr("Empty Trash"), cmd: "empty" }
+            { icon: "dock.menu.trash.open", label: I18n.tr("Open Trash"), cmd: "open" },
+            { icon: "dock.menu.trash.empty", label: I18n.tr("Empty Trash"), cmd: "empty" }
         ])
 
         onAboutToShow: hasBeenVisible = true
@@ -678,6 +679,7 @@ Item {
     // away from the rest of the shell.
     ContextMenu {
         id: appLauncherContextMenu
+        reserveIconSpace: true
         capsuleReveal: true
         anchorItem: appLauncherIcon
         position: ConfigService.position
@@ -688,35 +690,35 @@ Item {
         function rebuildItems() {
             setItems([
                 {
-                    icon: "align-bottom",
+                    icon: "dock.menu.launcher.bottom",
                     label: I18n.tr("Dock to bottom"),
                     cmd: "bottom",
                     checkable: true,
                     checked: AppLauncherConfigService.displayMode === "bottom"
                 },
                 {
-                    icon: "align-center",
+                    icon: "dock.menu.launcher.bottomWide",
                     label: I18n.tr("Compact bottom"),
                     cmd: "bottomWide",
                     checkable: true,
                     checked: AppLauncherConfigService.displayMode === "bottomWide"
                 },
                 {
-                    icon: "align-center",
+                    icon: "dock.menu.launcher.center",
                     label: I18n.tr("Center on screen"),
                     cmd: "center",
                     checkable: true,
                     checked: AppLauncherConfigService.displayMode === "center"
                 },
                 {
-                    icon: "align-fullscreen",
+                    icon: "dock.menu.launcher.fullscreen",
                     label: I18n.tr("Fullscreen"),
                     cmd: "fullscreen",
                     checkable: true,
                     checked: AppLauncherConfigService.displayMode === "fullscreen"
                 },
                 { separator: true },
-                { icon: "preferences-system", label: I18n.tr("Launcher settings…"), cmd: "settings" }
+                { icon: "dock.menu.launcher.settings", label: I18n.tr("Launcher settings…"), cmd: "settings" }
             ])
         }
 
@@ -822,7 +824,7 @@ Item {
             iconSize: container.iconSize
             activeBackgroundGap: container.activeBackgroundGap
             // 启动器使用仓库中的 SVG，避免系统图标主题改变这个固定入口。
-            iconSource: Qt.resolvedUrl("../../assets/applauncher.svg")
+            iconSource: BundledIcons.source("dock.launcher")
             displayName: I18n.tr("Applications")
             showContextMenu: false
             customContextMenu: true

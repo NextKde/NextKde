@@ -17,7 +17,7 @@ Item {
     BundledIcon {
         anchors.centerIn: parent
         size: button.glyphSize
-        name: ({close: "xmark", up: "chevron_up", down: "chevron_down"})[button.kind] || "arrow_counterclockwise"
+        name: "traffic.action." + button.kind
         color: button.ink
     }
 

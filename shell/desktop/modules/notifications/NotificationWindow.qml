@@ -589,10 +589,11 @@ PanelWindow {
                         }
                         BundledIcon {
                             id: notifRowClose
-                            name: "xmark"
+                            name: "notification.dismiss"
                             color: card.foregroundColor
                             opacity: notifRowCloseArea.containsMouse ? 0.9 : 0.45
-                            size: 16
+                            size: 14
+                            width: 16; height: 16
                             anchors { right: parent.right; verticalCenter: parent.verticalCenter }
                             MouseArea {
                                 id: notifRowCloseArea
@@ -712,10 +713,11 @@ PanelWindow {
 
             BundledIcon {
                 id: closeButton
-                name: "xmark"
+                name: "notification.dismiss"
                 color: card.foregroundColor
                 opacity: 0.55
-                size: 22
+                size: 14
+                width: 22; height: 22
                 anchors { right: parent.right; rightMargin: 12; top: parent.top; topMargin: 9 }
                 MouseArea {
                     anchors.fill: parent

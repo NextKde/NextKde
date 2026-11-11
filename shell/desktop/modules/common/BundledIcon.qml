@@ -5,6 +5,7 @@ import "../../../shared/Icons" as Symbols
 // Semantic shell adapter. Only branded artwork uses Image.
 Item {
     id: root
+    // Feature role from ShellIconMap.mjs; raw glyph names remain compatible.
     property string name: ""
     property color color: "#ffffff"
     property real size: 18
@@ -13,13 +14,15 @@ Item {
     property color outlineColor: Qt.rgba(0, 0, 0, 0.5)
     implicitWidth: size
     implicitHeight: size
-    readonly property bool fontGlyph: Symbols.IconRegistry.has(name) || name === "placeholder-dot"
+    readonly property string resolvedName: BundledIcons.resolveName(name)
+    readonly property bool fontGlyph: Symbols.IconRegistry.has(resolvedName) || resolvedName === "placeholder-dot"
     readonly property string source: BundledIcons.source(name)
     Symbols.Icon {
-        size: Math.min(root.width, root.height)
+        // Controls stretch contentItem to the hit area; keep the requested glyph size.
+        size: Math.min(root.size, root.width, root.height)
         anchors.fill: parent
         visible: root.fontGlyph
-        name: root.name
+        name: root.resolvedName
         color: root.color
         outlined: root.outlined
         outlineColor: root.outlineColor

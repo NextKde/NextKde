@@ -1,7 +1,6 @@
 import Quickshell
 import Quickshell.Services.UPower
 import QtQuick
-import "../../../shared/Icons" as Symbols
 import QtQuick.Effects
 import "../../../shared/qml/i18n"
 import qs.desktop.modules.dock
@@ -33,7 +32,7 @@ Item {
     width: implicitWidth
     height: implicitHeight
 
-    Symbols.BatteryIcon {
+    ShellBatteryIcon {
         anchors.fill: parent
         level: root.batteryDevice.ready ? root.level : 0
         charging: root.isCharging

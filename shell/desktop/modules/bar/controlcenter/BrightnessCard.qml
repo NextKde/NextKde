@@ -37,7 +37,7 @@ ControlCenterCard {
     }
     BundledIcon {
         anchors { right: parent.right; top: parent.top; rightMargin: 13; topMargin: 5 }
-        name: "chevron_right"
+        name: "brightness.details"
         color: ThemeService.foregroundColor
         size: 15
     }
@@ -70,7 +70,7 @@ ControlCenterCard {
     }
     BundledIcon {
         anchors { left: parent.left; leftMargin: 12; bottom: parent.bottom; bottomMargin: 12 }
-        name: "sun_max"
+        name: "brightness.level"
         color: ThemeService.foregroundColor
         opacity: 0.65
         size: 13
