@@ -21,7 +21,9 @@ function run(executable, args, env) {
 try {
     const controls = join(scratch, "controls");
     mkdirSync(controls);
-    copyFileSync(join(repo, "shared/qml/controls/SelectionHighlight.qml"), join(controls, "SelectionHighlight.qml"));
+    const highlight = readFileSync(join(repo, "shared/qml/controls/SelectionHighlight.qml"), "utf8")
+        .replace('"../foundation"', JSON.stringify(new URL("../../shared/qml/foundation", import.meta.url).href));
+    writeFileSync(join(controls, "SelectionHighlight.qml"), highlight);
     const adapter = readFileSync(join(repo, "shell/desktop/modules/bar/ControlCenterSelection.qml"), "utf8")
         .replace('import qs.desktop.modules.common', '')
         .replace('import "../../../Kos/Ui"', 'import "."');

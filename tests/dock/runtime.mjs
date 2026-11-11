@@ -161,8 +161,9 @@ ListModel {
         // Quickshell-only service registry into a plain Qt Quick Test process.
         const directory = mkdtempSync(join(tmpdir(), "kos-dock-highlight-"));
         try {
-            copyFileSync(new URL("../../shared/qml/controls/SelectionHighlight.qml", import.meta.url),
-                join(directory, "SelectionHighlight.qml"));
+            const highlight = readFileSync(new URL("../../shared/qml/controls/SelectionHighlight.qml", import.meta.url), "utf8")
+                .replace('"../foundation"', JSON.stringify(new URL("../../shared/qml/foundation", import.meta.url).href));
+            writeFileSync(join(directory, "SelectionHighlight.qml"), highlight);
             const dockWrapper = readFileSync(new URL("../../shell/desktop/modules/dock/DockIconHighlight.qml", import.meta.url), "utf8")
                 .replace('import "../../../Kos/Ui"', 'import "."');
             writeFileSync(join(directory, "DockIconHighlight.qml"), dockWrapper);

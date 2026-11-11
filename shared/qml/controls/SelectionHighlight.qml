@@ -1,4 +1,5 @@
 import QtQuick
+import "../foundation" as Foundation
 
 // A lightweight glass selection plate. All feedback changes paint/opacity;
 // the owning control alone controls geometry and its stable hit-test area.
@@ -11,7 +12,9 @@ Item {
     property bool pressed: false
     property bool dark: true
     property real cornerRadius: width * 0.30
-    property int fadeDuration: 140
+    property var motionPolicy: Foundation.AppTheme.motion
+    property int fadeDuration: motionPolicy.base.duration
+    // motion-exception: Sub-tier press feedback must remain immediate.
     property int pressDuration: 80
     // Overlay hosts can keep semantic state colours and text fully legible.
     property real fillStrength: 1.0
@@ -40,13 +43,13 @@ Item {
     opacity: presence
     visible: enabled && opacity > 0
     Behavior on presence {
-        NumberAnimation { duration: plate.fadeDuration; easing.type: Easing.OutCubic }
+        NumberAnimation { duration: plate.fadeDuration; easing.type: plate.motionPolicy.enterCurve }
     }
     Behavior on hoverAmount {
-        NumberAnimation { duration: plate.fadeDuration; easing.type: Easing.OutCubic }
+        NumberAnimation { duration: plate.fadeDuration; easing.type: plate.motionPolicy.enterCurve }
     }
     Behavior on selectionAmount {
-        NumberAnimation { duration: plate.fadeDuration; easing.type: Easing.OutCubic }
+        NumberAnimation { duration: plate.fadeDuration; easing.type: plate.motionPolicy.enterCurve }
     }
     Behavior on pressAmount {
         NumberAnimation { duration: plate.pressDuration; easing.type: Easing.OutCubic }

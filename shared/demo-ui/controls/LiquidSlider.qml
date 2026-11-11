@@ -4,6 +4,7 @@ import "../foundation" as Foundation
 // The glass thumb samples the sibling track through the shared QML shader.
 Item {
     id: root
+    property var motionPolicy: LiquidStyle.motionFor(root.materialForm)
 
     SystemPalette {
         id: controlPalette
@@ -70,6 +71,7 @@ Item {
     property real _expansion: 0.0
     Behavior on _expansion {
         NumberAnimation {
+            // motion-exception: Lens deformation and displacement retain the original physical response.
             duration: root.reduceMotion ? 0 : root._pressed ? 270 : 460
             easing.type: root._pressed ? Easing.OutBack : Easing.OutQuint
             easing.overshoot: root._pressed ? 1.36 : 1.0
@@ -268,6 +270,7 @@ Item {
 
         Behavior on x {
             NumberAnimation {
+                // motion-exception: Lens deformation and displacement retain the original physical response.
                 duration: root.reduceMotion || root._pressed || root._suppressXAnimation ? 0 : 200
                 easing.type: Easing.OutQuint
             }
@@ -313,7 +316,7 @@ Item {
             radius: height / 2
             color: root.accentColor
             opacity: root._pressed ? 0.10 : 0
-            Behavior on opacity { NumberAnimation { duration: root.reduceMotion ? 0 : 120 } }
+            Behavior on opacity { NumberAnimation { duration: root.reduceMotion ? 0 : root.motionPolicy.fast.duration; easing.type: root.motionPolicy.enterCurve } }
         }
 
         Item {
@@ -385,7 +388,7 @@ Item {
             radius: height / 2
             color: root.accentColor
             opacity: root._pressed ? 0.16 : (root._hovered ? 0.10 : 0.0)
-            Behavior on opacity { NumberAnimation { duration: 120 } }
+            Behavior on opacity { NumberAnimation { duration: root.motionPolicy.fast.duration; easing.type: root.motionPolicy.enterCurve } }
         }
 
         // Handle: a vertical capsule, not the iOS lens.

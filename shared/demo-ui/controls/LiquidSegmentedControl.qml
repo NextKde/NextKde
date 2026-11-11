@@ -9,6 +9,7 @@ import "../foundation" as Foundation
 // make custom segmented controls feel as if they need a second click.
 Item {
     id: root
+    property var motionPolicy: LiquidStyle.motionFor(root.materialForm)
 
     implicitWidth: 180
     implicitHeight: 34
@@ -55,6 +56,7 @@ Item {
     }
     SequentialAnimation {
         id: selectionMotion
+        // motion-exception: Lens deformation and displacement retain the original physical response.
         NumberAnimation { target: root; property: "_deformation"; to: 1; duration: 85; easing.type: Easing.OutCubic }
         NumberAnimation { target: root; property: "_deformation"; to: -.18; duration: 155; easing.type: Easing.InOutSine }
         NumberAnimation { target: root; property: "_deformation"; to: 0; duration: 150; easing.type: Easing.OutCubic }
@@ -155,10 +157,10 @@ Item {
             reflectionStrength: materialHover.hovered ? root._intensity.hoverReflection : root._intensity.reflection
             tintColor: root.backgroundColor
             tintStrength: .65
-            Behavior on refractionStrength { NumberAnimation { duration: Foundation.AppTheme.reduceMotion ? 0 : Foundation.AppTheme.motionFast } }
-            Behavior on magnification { NumberAnimation { duration: Foundation.AppTheme.reduceMotion ? 0 : Foundation.AppTheme.motionFast } }
-            Behavior on reflectionStrength { NumberAnimation { duration: Foundation.AppTheme.reduceMotion ? 0 : Foundation.AppTheme.motionFast } }
-            Behavior on tintStrength { NumberAnimation { duration: Foundation.AppTheme.reduceMotion ? 0 : Foundation.AppTheme.motionFast } }
+            Behavior on refractionStrength { NumberAnimation { duration: Foundation.AppTheme.reduceMotion ? 0 : Foundation.AppTheme.motionFast; easing.type: root.motionPolicy.enterCurve } }
+            Behavior on magnification { NumberAnimation { duration: Foundation.AppTheme.reduceMotion ? 0 : Foundation.AppTheme.motionFast; easing.type: root.motionPolicy.enterCurve } }
+            Behavior on reflectionStrength { NumberAnimation { duration: Foundation.AppTheme.reduceMotion ? 0 : Foundation.AppTheme.motionFast; easing.type: root.motionPolicy.enterCurve } }
+            Behavior on tintStrength { NumberAnimation { duration: Foundation.AppTheme.reduceMotion ? 0 : Foundation.AppTheme.motionFast; easing.type: root.motionPolicy.enterCurve } }
         }
     }
     Item {
@@ -176,6 +178,7 @@ Item {
             origin.y: lens.height / 2
             xScale: 1 + lens.deformation * .12 + lens.pressExpansion
             yScale: 1 - lens.deformation * .08 + lens.pressExpansion
+            // motion-exception: Lens deformation and displacement retain the original physical response.
             Behavior on xScale { enabled: root._motionEnabled && !selectionMotion.running; NumberAnimation { duration: Foundation.AppTheme.motionFast } }
             Behavior on yScale { enabled: root._motionEnabled && !selectionMotion.running; NumberAnimation { duration: Foundation.AppTheme.motionFast } }
         }
@@ -206,10 +209,10 @@ Item {
             // Preserve a readable selected state after release, including on flat scenes.
             tintColor: root.selectionColor
             tintStrength: root._pressedIndex >= 0 ? .50 : .85
-            Behavior on refractionStrength { NumberAnimation { duration: Foundation.AppTheme.reduceMotion ? 0 : Foundation.AppTheme.motionFast } }
-            Behavior on magnification { NumberAnimation { duration: Foundation.AppTheme.reduceMotion ? 0 : Foundation.AppTheme.motionFast } }
-            Behavior on reflectionStrength { NumberAnimation { duration: Foundation.AppTheme.reduceMotion ? 0 : Foundation.AppTheme.motionFast } }
-            Behavior on tintStrength { NumberAnimation { duration: Foundation.AppTheme.reduceMotion ? 0 : Foundation.AppTheme.motionFast } }
+            Behavior on refractionStrength { NumberAnimation { duration: Foundation.AppTheme.reduceMotion ? 0 : Foundation.AppTheme.motionFast; easing.type: root.motionPolicy.enterCurve } }
+            Behavior on magnification { NumberAnimation { duration: Foundation.AppTheme.reduceMotion ? 0 : Foundation.AppTheme.motionFast; easing.type: root.motionPolicy.enterCurve } }
+            Behavior on reflectionStrength { NumberAnimation { duration: Foundation.AppTheme.reduceMotion ? 0 : Foundation.AppTheme.motionFast; easing.type: root.motionPolicy.enterCurve } }
+            Behavior on tintStrength { NumberAnimation { duration: Foundation.AppTheme.reduceMotion ? 0 : Foundation.AppTheme.motionFast; easing.type: root.motionPolicy.enterCurve } }
         }
     }
 
@@ -266,12 +269,12 @@ Item {
                     ? root.selectedFontWeight : root.fontWeight
                 scale: root._pressedIndex === segmentDelegate.index ? 0.96 : 1.0
                 Behavior on color {
-                    ColorAnimation { duration: Foundation.AppTheme.motionFast }
+                    ColorAnimation { duration: Foundation.AppTheme.motionFast; easing.type: root.motionPolicy.enterCurve }
                 }
                 Behavior on scale {
                     NumberAnimation {
                         duration: Foundation.AppTheme.motionFast
-                        easing.type: Easing.OutCubic
+                        easing.type: root.motionPolicy.enterCurve
                     }
                 }
             }

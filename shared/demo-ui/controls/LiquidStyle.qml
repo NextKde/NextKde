@@ -1,7 +1,14 @@
 pragma Singleton
 import QtQuick
+import "../foundation" as Foundation
 
 QtObject {
+    readonly property Foundation.MotionTokens motion: Foundation.MotionTokens {}
+    readonly property Foundation.MotionTokens materialMotion: Foundation.MotionTokens { isMaterial: true }
+    function motionFor(materialForm) {
+        return materialForm ? materialMotion : motion
+    }
+
     // Shared toolbar geometry, independent of material and compactDesign.
     readonly property int toolbarButtonHeight: 28
     readonly property int toolbarIconSize: 16
