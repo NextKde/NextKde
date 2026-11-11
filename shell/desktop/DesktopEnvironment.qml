@@ -15,6 +15,7 @@ import qs.desktop.modules.stage
 import qs.desktop.modules.common
 import qs.desktop.modules.platform
 import qs.desktop.modules.shortcuts
+import qs.desktop.modules.switcher
 import qs.desktop.modules.weather
 import qs.desktop.modules.inputmethod
 
@@ -692,6 +693,8 @@ Item {
         }
     }
 
+    SwitcherWindow {}
+
     // Global-shortcut endpoint for the standalone Settings app. ShortcutsService
     // owns defaults, overrides, and the kglobalaccel handoff; this handler is
     // the only write path the Settings app gets, matching the other targets.
@@ -699,7 +702,14 @@ Item {
         target: "shortcuts-settings"
 
         function snapshot(): string {
-            return JSON.stringify(ShortcutsService.snapshot())
+            return JSON.stringify(Object.assign(ShortcutsService.snapshot(), {
+                switcher: SwitcherService.snapshot()
+            }))
+        }
+
+        function setSwitcherEnabled(enabled: bool): string {
+            SwitcherService.setEnabled(enabled)
+            return snapshot()
         }
 
         function updateShortcut(id: string, combo: string): string {

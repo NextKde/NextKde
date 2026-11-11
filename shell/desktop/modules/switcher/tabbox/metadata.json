@@ -1,0 +1,10 @@
+{
+    "KPackageStructure": "KWin/WindowSwitcher",
+    "KPlugin": {
+        "Id": "kos-glass",
+        "Name": "KOS Glass",
+        "Description": "KOS shell window switcher presentation",
+        "License": "GPL-3.0-or-later"
+    },
+    "X-Plasma-API": "declarativeappletscript"
+}
