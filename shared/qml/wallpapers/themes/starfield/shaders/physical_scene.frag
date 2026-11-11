@@ -252,32 +252,58 @@ float fbm(vec3 p) {
 }
 vec3 stars(vec2 uv) {
     vec3 c=vec3(0);
-    for(int j=0;j<3;j++) {
-        float scale=170.0+float(j)*113.0;
+    for(int j=0;j<2;j++) {
+        float scale=55.0+float(j)*67.0;
         vec2 cell=floor(uv*scale), f=fract(uv*scale)-0.5;
         float seed=hash(vec3(cell,float(j)));
         vec2 pos=vec2(seed,hash(vec3(cell,8.0)))*0.68-0.34;
         float d=length(f-pos);
-        float lum=pow(seed,24.0);
+        float lum=smoothstep(0.965,1.0,seed);
         // Fade unresolved lensed stars rather than drawing stretched dotted arcs.
         vec2 footprint=fwidth(uv*scale);
         float resolved=1.0-smoothstep(0.35,0.9,max(footprint.x,footprint.y));
         float star=exp(-d*d*850.0)*lum*2.0*resolved;
         float halo=exp(-d*d*48.0)*lum*0.05*resolved;
         vec3 tint=mix(vec3(0.42,0.65,1.0),vec3(1.0,0.72,0.42),seed);
-        c+=tint*(star+halo);
+        c+=tint*(star+halo)*(0.78+0.22*sin(u.time*(0.6+seed)+seed*63.0));
     }
     return c;
 }
 vec3 nebula(vec2 p) {
-    vec3 q=vec3(p*2.3,u.time*0.008);
-    float warp=fbm(q*0.7+vec3(9.0));
-    float n=fbm(q+vec3(warp*1.9,warp*1.4,0));
-    float ridge=pow(max(0.0,1.0-abs(p.y+p.x*0.3+sin(p.x*2.1)*0.11)*2.4),2.0);
-    float dust=pow(fbm(q*2.0+vec3(7.0)),3.0);
-    float emission=pow(n,3.1)*ridge*3.8;
-    vec3 color=mix(vec3(0.05,0.22,0.42),vec3(0.8,0.21,0.07),smoothstep(0.35,0.8,p.x*0.3+n));
-    return color*emission*(1.0-dust*1.6)+vec3(0.004,0.008,0.017);
+    // A luminous stellar nursery cut by a dark, torn diagonal dust river.
+    // The large shapes are composed explicitly; noise only sculpts their edges.
+    vec2 q=p-vec2(0.48,-0.18);
+    vec3 domain=vec3(q*1.65,12.0+u.time*0.009);
+    float warp=fbm(domain*0.78);
+    float billow=fbm(domain+vec3(warp*2.4,warp*1.3,3.0));
+    float detail=fbm(domain*3.7+vec3(billow*1.8,0.0,5.0));
+    float fine=u.quality>0.5?fbm(domain*9.0+vec3(2.0,warp,8.0)):detail;
+    float axis=q.y+q.x*0.36+0.12*sin(q.x*2.3)+0.22*(warp-0.46);
+    float envelope=exp(-axis*axis*4.8-q.x*q.x*0.19);
+    float plume=smoothstep(0.22,0.73,billow)*envelope;
+    float folds=pow(clamp(1.0-abs(detail-0.49)*3.8,0.0,1.0),3.0);
+    float core=exp(-dot(q*vec2(1.9,2.9),q*vec2(1.9,2.9)));
+    float knot=exp(-dot((q-vec2(-0.03,-0.07))*vec2(5.0,7.0),
+        (q-vec2(-0.03,-0.07))*vec2(5.0,7.0)));
+    float dustAxis=axis-0.055-0.13*(detail-0.45)-0.045*sin(q.x*7.0+warp*5.0);
+    float dustWidth=0.045+0.14*smoothstep(0.28,0.67,billow);
+    float dust=1.0-smoothstep(dustWidth*0.40,dustWidth+0.055,abs(dustAxis));
+    dust*=exp(-q.x*q.x*0.16);
+    float torn=1.0-smoothstep(0.01,0.065,abs(axis+0.23+(fine-0.5)*0.15));
+    vec3 cold=vec3(0.025,0.30,0.47);
+    vec3 warm=vec3(0.65,0.16,0.065);
+    vec3 gas=mix(cold,warm,smoothstep(-0.65,0.55,q.x+billow*0.45));
+    vec3 color=vec3(0.0015,0.003,0.010);
+    color+=vec3(0.035,0.055,0.15)*envelope*(0.20+billow*0.30);
+    color+=gas*plume*(0.35+folds*1.4+fine*0.28);
+    color+=vec3(0.34,0.65,0.84)*plume*folds*exp(-pow((axis+0.30)*4.0,2.0))*0.7;
+    color+=vec3(1.0,0.62,0.32)*core*(0.3+billow*0.8+folds*0.9);
+    color+=vec3(0.76,0.88,1.0)*knot*2.2;
+    color*=exp(-dust*(2.4+detail*2.8)-torn*envelope*0.65);
+    // An illuminated rim belongs to the dust silhouette, not a uniform glow.
+    float rim=exp(-pow((abs(dustAxis)-dustWidth-0.025)*33.0,2.0));
+    color+=vec3(0.95,0.45,0.16)*rim*core*(0.08+folds*0.22);
+    return color;
 }
 vec3 temperature(float t) {
     return mix(vec3(1.0,0.15,0.015),mix(vec3(1.0,0.62,0.18),vec3(0.75,0.9,1.0),smoothstep(4000.0,11000.0,t)),smoothstep(1000.0,4500.0,t));
@@ -575,7 +601,7 @@ void main() {
     }
     vec2 p=(at+displacement/aspect-0.5)*aspect*2.0;
     vec3 color;
-    if(u.scene<0.5) color=nebula(p)+stars(p*0.55);
+    if(u.scene<0.5) color=nebula(p)+stars(p*0.55+vec2(u.time*0.0008,0.0));
     else if(u.scene<1.5) color=blackhole(p-vec2(0.70*u.viewport.x/u.viewport.y,-0.08))*0.12;
     else color=atmosphere(p);
     // Input distorts the scene itself, and adds a short-lived energy response.

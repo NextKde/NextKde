@@ -29,6 +29,7 @@ Item {
             r.width/Math.max(1,width),r.height/Math.max(1,height)) : Qt.vector4d(-10,-10,0,0)
     }
     // ---- canvas ----
+    readonly property int backgroundFps: economical ? 6 : 12
     readonly property int backgroundLimit: themeId === "weather" ? (economical ? 480 : 640)
         : themeId === "starfield" ? (economical ? 640 : 960) : (economical ? 960 : 1600)
     readonly property int renderWidth: Math.max(1, Math.min(width, backgroundLimit * Math.min(1, width / Math.max(1, height))))
@@ -43,6 +44,12 @@ Item {
         function onThemeIdChanged() { root.requestFrame() }
         function onWeatherCodeChanged() { root.requestFrame() }
         function onIsDayChanged() { root.requestFrame() }
+        function onPointerChanged() { root.requestFrame() }
+        function onClickPulseChanged() { root.requestFrame() }
+        function onWidgetRectsChanged() { root.requestFrame() }
+        function onEconomicalChanged() { root.requestFrame() }
+        function onRenderWidthChanged() { root.requestFrame() }
+        function onRenderHeightChanged() { root.requestFrame() }
     }
     Loader {
         id: tables
@@ -77,7 +84,7 @@ Item {
             anchors.fill: parent
             property vector2d viewport: Qt.vector2d(width, height)
             // Cinematic image material or physical fallback; infall shares the same phase.
-            property real time: 3.8 + (root.themeId === "blackhole" ? root.phase : Math.floor(root.phase * 4) / 4)
+            property real time: 3.8 + (root.themeId === "blackhole" ? root.phase : Math.floor(root.phase * root.backgroundFps) / root.backgroundFps)
             onTimeChanged: root.requestFrame()
             property real scene: root.themeId === "blackhole" ? 1 : root.themeId === "weather" ? 2 : 0
             property real quality: root.economical ? 0 : 1
@@ -105,7 +112,7 @@ Item {
         id: sceneTexture
         sourceItem: sceneBuffer
         hideSource: true
-        live: true
+        live: false
         smooth: true
         textureSize: Qt.size(root.renderWidth, root.renderHeight)
         visible: false

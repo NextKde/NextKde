@@ -30,23 +30,10 @@ Item {
             onFrameReady: root.frameReady()
         }
     }
-    Image {
-        id: sceneryImage
-        source: root.themeId === "forest" ? "" : root.foreground
-            ? "vendor/black-hole/noise_texture.png" : "assets/underwater-cinematic.png"
-        sourceSize: Qt.size(Math.max(1, Math.min(2048, Math.ceil(root.width))),
-            Math.max(1, Math.min(2048, Math.ceil(root.height))))
-        visible: false
-        smooth: true
-        onStatusChanged: if (status === Image.Ready) Qt.callLater(root.frameReady)
-    }
     ShaderEffect {
         visible: root.themeId !== "forest"
         anchors.fill: parent
         property vector2d viewport: Qt.vector2d(width,height)
-        property var scenery: sceneryImage
-        property real imageAspect: sceneryImage.implicitWidth / Math.max(1, sceneryImage.implicitHeight)
-        property real imageReady: sceneryImage.status === Image.Ready ? 1 : 0
         property real time: root.phase
         property real scene: root.themeId === "forest" ? 1 : 0
         property real front: root.foreground ? 1 : 0
