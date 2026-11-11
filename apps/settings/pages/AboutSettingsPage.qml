@@ -29,9 +29,15 @@ ColumnLayout {
     readonly property bool updateHasLog: updateKnown && !!updateBackend.logPath
     readonly property bool updateCanCheck: updateKnown && !!updateBackend.canCheck && !updateBusy
     readonly property bool updateCanUpdate: updateKnown && !!updateBackend.canUpdate && !updateBusy
-    readonly property string updateVersionText: {
+    readonly property string updateInstalledLabel: {
         if (!updateKnown) return ""
         const version = updateBackend.currentVersion ? String(updateBackend.currentVersion) : ""
+        const revision = updateBackend.currentRevision ? String(updateBackend.currentRevision) : ""
+        const tag = updateBackend.currentTag ? String(updateBackend.currentTag) : ""
+        // A tagged install has a meaningful release version; a development
+        // checkout is identified by its commit, not by the VERSION suffix.
+        if (tag.length > 0) return version || tag
+        if (revision.length > 0 && revision !== "unknown") return revision.slice(0, 7)
         return version || I18n.tr("Unknown version")
     }
     readonly property string updateBranchName: updateKnown && updateBackend.branch
@@ -83,7 +89,7 @@ ColumnLayout {
         if (updateFailed) return updateError || I18n.tr("The update stopped before it finished. Open the log for details.")
         if (updateBlocked) return updateError || I18n.tr("The update did not start. Open the log for details.")
         if (updateUpdated || updateNeedsRestart) {
-            const version = updateVersionText
+            const version = updateInstalledLabel
             if (updateNeedsRestart) return version
                 ? I18n.tr("KOS %1 is installed. Restart KOS to load it, and log out or restart the compositor to load updated KWin plugins.").arg(version)
                 : I18n.tr("The new version is installed. Restart KOS to load it, and log out or restart the compositor to load updated KWin plugins.")
@@ -363,7 +369,7 @@ ColumnLayout {
         Demo.SettingsItem {
             objectName: "about-installed-version"
             title: I18n.tr("Installed version")
-            description: page.updateVersionText
+            description: page.updateInstalledLabel
             titleColor: page.colors.primaryText
             descriptionColor: page.colors.secondaryText
             Demo.LiquidActionButton {

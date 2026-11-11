@@ -185,6 +185,8 @@ void UpdateController::readRecord()
         if (document.isObject()) {
             const QJsonObject record = document.object();
             m_currentVersion = record.value(QStringLiteral("version")).toString();
+            m_currentRevision = record.value(QStringLiteral("revision")).toString();
+            m_currentTag = record.value(QStringLiteral("tag")).toString();
             m_sourceRoot = record.value(QStringLiteral("sourceRoot")).toString();
             if (!m_channelSaved) {
                 const QString tag = record.value(QStringLiteral("tag")).toString();
