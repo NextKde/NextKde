@@ -125,9 +125,8 @@ Item {
         border.color: Qt.rgba(0, 0, 0, 0.18)
         scale: pointerArea.pressed ? 1.12 : 1
 
-        // §2.11 / §3 motion.duration.instant=100（原 demo 120 不在五档）。
         Behavior on scale {
-            NumberAnimation { duration: 100; easing.type: Easing.OutCubic }
+            NumberAnimation { duration: LiquidStyle.motion.instant.duration; easing.type: LiquidStyle.motion.enterCurve }
         }
 
         Rectangle {

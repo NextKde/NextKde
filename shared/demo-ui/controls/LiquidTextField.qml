@@ -8,6 +8,7 @@ import "../foundation" as Foundation
 // Liquid fields stay capsules; compact solid fields below 28 use 6px corners.
 TextField {
     id: root
+    property var motionPolicy: LiquidStyle.motionFor(root.materialForm)
     // Plain input inside a host-owned navigation material; opt-in only.
     property bool specificationForm: false
     property string liquidIntensity: LiquidStyle.intensityLevel
@@ -83,7 +84,7 @@ TextField {
     selectedTextColor: _liquid ? textColor : Foundation.AppTheme.accentText
     scale: !Foundation.AppTheme.compactDesign && _liquid && hover.hovered ? 1.01 : 1
     Behavior on scale {
-        NumberAnimation { duration: root.reduceMotion ? 0 : Foundation.AppTheme.motionFast; easing.type: Easing.OutCubic }
+        NumberAnimation { duration: root.reduceMotion ? 0 : Foundation.AppTheme.motionFast; easing.type: root.motionPolicy.enterCurve }
     }
     HoverHandler { id: hover; cursorShape: Qt.IBeamCursor }
 
@@ -102,8 +103,8 @@ TextField {
             color: root._fill
             border.width: root.specificationForm ? 0 : 1
             border.color: root.outlineColor
-            Behavior on color { ColorAnimation { duration: root.reduceMotion ? 0 : 150 } }
-            Behavior on border.color { ColorAnimation { duration: root.reduceMotion ? 0 : 150 } }
+            Behavior on color { ColorAnimation { duration: root.reduceMotion ? 0 : root.motionPolicy.base.duration; easing.type: root.motionPolicy.enterCurve } }
+            Behavior on border.color { ColorAnimation { duration: root.reduceMotion ? 0 : root.motionPolicy.base.duration; easing.type: root.motionPolicy.enterCurve } }
         }
         Rectangle {
             anchors.fill: parent
@@ -136,16 +137,16 @@ TextField {
             darkAppearance: root.darkAppearance
             tintColor: root.darkAppearance ? LiquidStyle.controlFillCenterDark : LiquidStyle.controlFillCenter
             tintStrength: LiquidStyle.controlFillOpacity
-            Behavior on tintStrength { NumberAnimation { duration: root.reduceMotion ? 0 : Foundation.AppTheme.motionFast } }
+            Behavior on tintStrength { NumberAnimation { duration: root.reduceMotion ? 0 : Foundation.AppTheme.motionFast; easing.type: root.motionPolicy.enterCurve } }
             blurStrength: root.blurStrength
             readability: root.readability
             refractionStrength: root.refractionStrength * Math.max(0, Math.min(1, root.liquidStrength))
             magnification: 1 + (root.magnification - 1) * Math.max(0, Math.min(1, root.liquidStrength))
             edgeWidth: Math.min(10, height * .28)
             reflectionStrength: root.liquidStrength * (hover.hovered ? root._intensity.hoverReflection : root._intensity.reflection)
-            Behavior on reflectionStrength { NumberAnimation { duration: root.reduceMotion ? 0 : Foundation.AppTheme.motionFast } }
-            Behavior on refractionStrength { NumberAnimation { duration: root.reduceMotion ? 0 : Foundation.AppTheme.motionFast } }
-            Behavior on magnification { NumberAnimation { duration: root.reduceMotion ? 0 : Foundation.AppTheme.motionFast } }
+            Behavior on reflectionStrength { NumberAnimation { duration: root.reduceMotion ? 0 : Foundation.AppTheme.motionFast; easing.type: root.motionPolicy.enterCurve } }
+            Behavior on refractionStrength { NumberAnimation { duration: root.reduceMotion ? 0 : Foundation.AppTheme.motionFast; easing.type: root.motionPolicy.enterCurve } }
+            Behavior on magnification { NumberAnimation { duration: root.reduceMotion ? 0 : Foundation.AppTheme.motionFast; easing.type: root.motionPolicy.enterCurve } }
             rimColor: root.outlineColor
         }
         Rectangle {
