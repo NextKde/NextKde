@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { canPlace, fitWidgets, savedPositionsAfterMove, widgetColumnLimit, packWidgets, sizeOrder, snappedPosition, snappedSpan, spanFor } from "./WidgetLayout.mjs";
+import { canPlace, fitWidgets, magnetizedSize, savedPositionsAfterMove, widgetColumnLimit, packWidgets, sizeOrder, snappedPosition, snappedSpan, spanFor } from "./WidgetLayout.mjs";
 
 const ids = ["clock", "weather", "calendar", "todo", "system", "activity", "music"];
 
@@ -85,6 +85,17 @@ assert.deepEqual(snappedSpan(370, 370, 180, 10), [2, 2]);
 assert.deepEqual(snappedSpan(-900, 9000, 180, 10), [1, 2]);
 assert.deepEqual(snappedSpan(273, 180, 180, 10), [1, 1], "below half-cell threshold");
 assert.deepEqual(snappedSpan(276, 180, 180, 10), [2, 1], "above half-cell threshold");
+
+// The resize drag is magnetic: the corner is held at a cell size and only
+// follows freely once the pointer pulls it half a cell away.
+const held = magnetizedSize(227, 180, 10);
+assert.equal(magnetizedSize(180, 180, 10), 180, "a corner at a cell size is held exactly");
+assert.equal(magnetizedSize(275, 180, 10), 275, "halfway between cells the corner follows the pointer");
+assert.ok(held > 180 && held < 227, "near a cell the magnet holds the corner back");
+const attracted = magnetizedSize(340, 180, 10);
+assert.ok(attracted > 340 && attracted < 370, "approaching a cell the magnet pulls the corner in");
+assert.equal(magnetizedSize(9999, 180, 10), 370, "the drag never previews past the supported span");
+assert.equal(magnetizedSize(-100, 180, 10), 180, "the drag never previews below one cell");
 
 const positioned = [
     { id: "auto", columns: 2, rows: 1 },

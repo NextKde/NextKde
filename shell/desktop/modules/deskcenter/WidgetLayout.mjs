@@ -93,6 +93,25 @@ export function snappedSpan(width, height, cellSize, gap) {
     return [snap(width), snap(height)];
 }
 
+// A resize drag moves continuously, but a widget only lands on whole cells.
+// Snapping the card at the halfway point would jump under the pointer, so bend
+// the drag instead: near a cell size the magnet holds the corner back, and the
+// further the pointer pulls away the more freely it follows (exactly on the
+// halfway line it is free). The mapping is continuous, so the corner tracks a
+// steady hand while the magnet does the resisting, and the release spring does
+// the snapping to the cell the corner is closest to.
+export function magnetizedSize(size, cellSize, gap, maximumSpan = 2) {
+    const step = Math.max(1, cellSize + gap);
+    const minimum = cellSize;
+    const maximum = maximumSpan * cellSize + (maximumSpan - 1) * gap;
+    const clamped = Math.max(minimum, Math.min(maximum, size));
+    const span = Math.max(1, Math.min(maximumSpan, Math.round((clamped + gap) / step)));
+    const snapped = span * cellSize + (span - 1) * gap;
+    // 0 at the cell size (fully held), 1 on the halfway line (fully free).
+    const free = Math.min(1, Math.abs(clamped - snapped) / (step / 2));
+    return snapped + (clamped - snapped) * free;
+}
+
 export function snappedPosition(x, y, columns, rows, cellSize, gap, maxColumns, maxRows) {
     const step = Math.max(1, cellSize + gap);
     return {
