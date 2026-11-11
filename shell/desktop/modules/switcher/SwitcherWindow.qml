@@ -6,9 +6,10 @@ import qs.desktop.modules.common
 PanelWindow {
     id: window
     readonly property var geometry: SwitcherService.screenGeometry
-    screen: Quickshell.screens.find(output => output.x === geometry.x && output.y === geometry.y)
+    readonly property var targetScreen: Quickshell.screens.find(output => output.x === geometry.x && output.y === geometry.y)
         || ScreenLifecycle.activeScreen
-    visible: content.mapped && screen !== null
+    screen: targetScreen
+    visible: content.mapped && targetScreen !== null
     color: "transparent"
     implicitWidth: Math.min(content.desiredWidth, (screen?.width || 1280) * 0.88)
     implicitHeight: content.implicitHeight + 16

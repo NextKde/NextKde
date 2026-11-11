@@ -4,6 +4,7 @@ import qs.desktop.modules.dock
 
 Item {
     id: content
+    // TODO: optional same-application columns; native TabBox order stays authoritative.
     property var windows: []
     property string selectedHandle: ""
     property bool requestedOpen: false

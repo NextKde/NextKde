@@ -4,6 +4,7 @@ import org.kde.pipewire
 import org.kde.taskmanager
 import qs.desktop.modules.common
 import qs.desktop.modules.dock
+import "../../../Kos/Ui"
 
 Item {
     id: card

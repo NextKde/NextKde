@@ -38,6 +38,32 @@ class ConfigureTests(unittest.TestCase):
                     self.assertFalse(state.exists())
                     self.assertFalse(any("kglobal" in str(call) for call in calls))
 
+    def test_failed_reconfigure_restores_previous_layout(self):
+        for enabled, original in [(True, "compact"), (False, "kos-glass")]:
+            with self.subTest(enabled=enabled), tempfile.TemporaryDirectory() as directory:
+                current = [original]
+                reconfigures = []
+                state = Path(directory) / "native.json"
+                state.write_text('{"layout":"compact"}')
+
+                def run(*args):
+                    if args[0] == "kreadconfig6":
+                        return current[0]
+                    if args[0] == "kwriteconfig6":
+                        current[0] = args[-1]
+                    if args[0] == "qdbus6":
+                        reconfigures.append(current[0])
+                        if len(reconfigures) == 1:
+                            raise module.subprocess.CalledProcessError(1, args)
+                    return ""
+
+                with patch.object(module, "run", run), patch.dict(module.os.environ, {"XDG_DATA_HOME": directory}):
+                    with self.assertRaises(module.subprocess.CalledProcessError):
+                        module.configure(enabled, directory, state)
+                self.assertEqual(current[0], original)
+                self.assertEqual(reconfigures[-1], original)
+                self.assertTrue(state.exists(), "recovery record must survive failure")
+
     def test_respects_later_native_choice(self):
         with tempfile.TemporaryDirectory() as directory:
             state = Path(directory) / "native.json"

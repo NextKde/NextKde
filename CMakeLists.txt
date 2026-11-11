@@ -215,6 +215,11 @@ if(BUILD_TESTING)
         find_program(KOS_QMLTESTRUNNER_EXECUTABLE NAMES qmltestrunner
             HINTS /usr/lib/qt6/bin /usr/lib64/qt6/bin)
         if(KOS_QMLTESTRUNNER_EXECUTABLE)
+            add_test(NAME kos-shell.switcher-state
+                COMMAND ${KOS_NODE_EXECUTABLE}
+                    ${CMAKE_CURRENT_SOURCE_DIR}/tests/switcher/run.mjs
+                    ${KOS_QMLTESTRUNNER_EXECUTABLE})
+            set_tests_properties(kos-shell.switcher-state PROPERTIES LABELS "ui;headless" TIMEOUT 25)
             add_test(NAME kos-shell.stage-visibility-qml
                 COMMAND ${KOS_NODE_EXECUTABLE}
                     ${CMAKE_CURRENT_SOURCE_DIR}/tests/stage-visibility/run.mjs
@@ -588,6 +593,9 @@ if(BUILD_TESTING)
     # default table and the daemon's generated handler in agreement.
     find_program(KOS_PYTHON_EXECUTABLE NAMES python3 python)
     if(KOS_PYTHON_EXECUTABLE)
+        add_test(NAME kos-shell.switcher-layout
+            COMMAND ${KOS_PYTHON_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/switcher/test_configure.py)
+        set_tests_properties(kos-shell.switcher-layout PROPERTIES LABELS logic TIMEOUT 10)
         add_test(NAME kos-window.firefox-buttons-install
             COMMAND ${KOS_PYTHON_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tools/tests/test_firefox_buttons.py)
         set_tests_properties(kos-window.firefox-buttons-install PROPERTIES LABELS logic TIMEOUT 15)
@@ -605,6 +613,12 @@ if(BUILD_TESTING)
     find_program(KOS_INTERACTION_QMLTEST NAMES qmltestrunner qmltestrunner6
         HINTS /usr/lib/qt6/bin)
     find_program(KOS_INTERACTION_QUICKSHELL NAMES quickshell)
+    if(KOS_NODE_EXECUTABLE AND KOS_INTERACTION_QUICKSHELL)
+        add_test(NAME kos-shell.switcher-content
+            COMMAND ${KOS_NODE_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/switcher/content.mjs
+                ${KOS_INTERACTION_QUICKSHELL})
+        set_tests_properties(kos-shell.switcher-content PROPERTIES LABELS "ui;headless" TIMEOUT 15)
+    endif()
     if(KOS_NODE_EXECUTABLE AND KOS_INTERACTION_QMLTEST)
         add_test(NAME kos-shell.inputmethod-motion
             COMMAND ${KOS_NODE_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/inputmethod/run.mjs
