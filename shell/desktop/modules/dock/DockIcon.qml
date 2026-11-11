@@ -455,19 +455,19 @@ Item {
     SequentialAnimation {
         id: attentionPulse
         ParallelAnimation {
-            // motion-exception: preserve drag/physical or periodic response.
+            // motion-exception: Attention pulse keeps its coupled lift, glow and elastic return.
             NumberAnimation { target: icon; property: "_attentionScale"; to: 1.18; duration: 115; easing.type: Easing.OutCubic }
-            // motion-exception: preserve drag/physical or periodic response.
+            // motion-exception: Attention pulse keeps its coupled lift, glow and elastic return.
             NumberAnimation { target: icon; property: "_attentionLift"; to: -6; duration: 115; easing.type: Easing.OutCubic }
-            // motion-exception: preserve drag/physical or periodic response.
+            // motion-exception: Attention pulse keeps its coupled lift, glow and elastic return.
             NumberAnimation { target: icon; property: "_attentionGlow"; to: 1.0; duration: 115; easing.type: Easing.OutCubic }
         }
         ParallelAnimation {
-            // motion-exception: preserve drag/physical or periodic response.
+            // motion-exception: Attention pulse keeps its coupled lift, glow and elastic return.
             NumberAnimation { target: icon; property: "_attentionScale"; to: 1.0; duration: 210; easing.type: Easing.OutBack }
-            // motion-exception: preserve drag/physical or periodic response.
+            // motion-exception: Attention pulse keeps its coupled lift, glow and elastic return.
             NumberAnimation { target: icon; property: "_attentionLift"; to: 0; duration: 210; easing.type: Easing.OutBounce }
-            // motion-exception: preserve drag/physical or periodic response.
+            // motion-exception: Attention pulse keeps its coupled lift, glow and elastic return.
             NumberAnimation { target: icon; property: "_attentionGlow"; to: 0; duration: 210; easing.type: Easing.OutCubic }
         }
     }
@@ -714,13 +714,13 @@ Item {
         loops: Animation.Infinite
         NumberAnimation {
             target: icon; property: "rotation"
-            // motion-exception: preserve drag/physical or periodic response.
+            // motion-exception: Edit-mode wiggle retains its periodic cadence.
             from: -3.4; to: 3.4; duration: 105
             easing.type: Easing.InOutSine
         }
         NumberAnimation {
             target: icon; property: "rotation"
-            // motion-exception: preserve drag/physical or periodic response.
+            // motion-exception: Edit-mode wiggle retains its periodic cadence.
             from: 3.4; to: -3.4; duration: 115
             easing.type: Easing.InOutSine
         }
@@ -756,7 +756,7 @@ Item {
                 && !icon._glassSelectionHighlight) || icon.showUrgentBackground
         z: -1
         Behavior on color {
-            // motion-exception: preserve drag/physical or periodic response.
+            // motion-exception: Sub-tier hover highlight follows the physical pointer response.
             ColorAnimation { duration: DockAnimation.iconHighlightDuration; easing.type: Easing.OutCubic }
         }
     }
@@ -937,10 +937,10 @@ Item {
         scale: opacity > 0 ? 1 : 0
         visible: opacity > 0.01
         z: 3
-        // motion-exception: preserve drag/physical or periodic response.
+        // motion-exception: Badge fade remains coupled to its OutBack inflation.
         Behavior on opacity { NumberAnimation { duration: 140 } }
         Behavior on scale {
-            // motion-exception: preserve drag/physical or periodic response.
+            // motion-exception: Badge fade remains coupled to its OutBack inflation.
             NumberAnimation { duration: 160; easing.type: Easing.OutBack }
         }
 
@@ -1007,7 +1007,7 @@ Item {
                         ThemeService.foregroundColor.b, 0.95)
                     Behavior on color {
                         enabled: runningIndicator.opacity > 0.01
-                        // motion-exception: preserve drag/physical or periodic response.
+                        // motion-exception: Running-indicator color follows the sub-tier hover highlight.
                         ColorAnimation { duration: DockAnimation.iconHighlightDuration; easing.type: Easing.OutCubic }
                     }
                 }
@@ -1021,7 +1021,7 @@ Item {
             color: ThemeService.accentColor
             Behavior on color {
                 enabled: visible
-                // motion-exception: preserve drag/physical or periodic response.
+                // motion-exception: Running-indicator color follows the sub-tier hover highlight.
                 ColorAnimation { duration: DockAnimation.iconHighlightDuration; easing.type: Easing.OutCubic }
             }
         }

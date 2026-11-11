@@ -418,8 +418,9 @@ PanelWindow {
                 color: Qt.rgba(1, 1, 1, 0.10 + surface.lensExpansion * 0.13)
                 border.width: 1
                 border.color: Qt.rgba(1, 1, 1, 0.18 + surface.lensExpansion * 0.20)
-                Behavior on x { NumberAnimation { duration: AppearanceTokens.motion.page.duration; easing.type: AppearanceTokens.motion.enterCurve } }
-                Behavior on scale { NumberAnimation { duration: AppearanceTokens.motion.base.duration; easing.type: AppearanceTokens.motion.enterCurve } }
+                // motion-exception: Lens travel and jelly-driven scale retain their coupled physical response.
+                Behavior on x { NumberAnimation { duration: 280; easing.type: Easing.OutCubic } }
+                Behavior on scale { NumberAnimation { duration: 180; easing.type: Easing.OutCubic } }
             }
             Row {
                 anchors.fill: parent

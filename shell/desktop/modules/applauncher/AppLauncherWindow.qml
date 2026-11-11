@@ -662,6 +662,7 @@ PanelWindow {
         // Duration scales with the remaining travel so a late flick settles
         // quickly while a full page turn keeps the Launchpad's unhurried glide.
         const dist = Math.abs(to - fullscreenPageDragOffset)
+        // motion-exception: Remaining swipe travel determines the 180–420ms settling window.
         fullscreenSettleAnimation.duration = Math.max(180,
             Math.min(420, Math.round(dist / w * 480)))
         fullscreenSettleAnimation.to = to

@@ -130,13 +130,13 @@ Item {
             color: root.highContrast ? (root.dark ? "#ffffff" : "#202020")
                 : (root.dark ? Qt.rgba(1,1,1,0.18) : Qt.rgba(0,0,0,0.09))
             opacity: root._selectionVisible ? 1 : 0
-            // motion-exception: preserve drag/physical or periodic response.
+            // motion-exception: Smoothed selection geometry retains velocity continuity across candidate changes.
             Behavior on x { enabled: !root.reduceMotion && root._selectionReady; SmoothedAnimation { duration: 150; velocity: -1 } }
-            // motion-exception: preserve drag/physical or periodic response.
+            // motion-exception: Smoothed selection geometry retains velocity continuity across candidate changes.
             Behavior on y { enabled: !root.reduceMotion && root._selectionReady; SmoothedAnimation { duration: 150; velocity: -1 } }
-            // motion-exception: preserve drag/physical or periodic response.
+            // motion-exception: Smoothed selection geometry retains velocity continuity across candidate changes.
             Behavior on width { enabled: !root.reduceMotion && root._selectionReady; SmoothedAnimation { duration: 150; velocity: -1 } }
-            // motion-exception: preserve drag/physical or periodic response.
+            // motion-exception: Smoothed selection geometry retains velocity continuity across candidate changes.
             Behavior on height { enabled: !root.reduceMotion && root._selectionReady; SmoothedAnimation { duration: 150; velocity: -1 } }
             Behavior on opacity { enabled: !root.reduceMotion; NumberAnimation { duration: AppearanceTokens.motion.instant.duration; easing.type: AppearanceTokens.motion.enterCurve } }
         }

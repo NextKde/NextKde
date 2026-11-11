@@ -247,11 +247,11 @@ AnimatedPopupWindow {
                                 SequentialAnimation on height {
                                     running: popup.visible && (popup.player?.isPlaying ?? false)
                                     loops: Animation.Infinite
-                                    // motion-exception: preserve drag/physical or periodic response.
+                                    // motion-exception: Equalizer bars retain their staggered periodic envelope.
                                     PauseAnimation { duration: index * 85 }
-                                    // motion-exception: preserve drag/physical or periodic response.
+                                    // motion-exception: Equalizer bars retain their staggered periodic envelope.
                                     NumberAnimation { to: loudHeight; duration: 220; easing.type: Easing.OutCubic }
-                                    // motion-exception: preserve drag/physical or periodic response.
+                                    // motion-exception: Equalizer bars retain their staggered periodic envelope.
                                     NumberAnimation { to: quietHeight; duration: 260; easing.type: Easing.InOutSine }
                                 }
                             }

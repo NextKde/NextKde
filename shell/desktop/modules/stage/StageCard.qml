@@ -458,8 +458,9 @@ Item {
                 height: plate.height
                 opacity: card.engaging ? 0.0 : 1.0
                 Behavior on opacity { NumberAnimation { duration: AppearanceTokens.motion.base.duration; easing.type: AppearanceTokens.motion.enterCurve } }
-                Behavior on x { NumberAnimation { duration: AppearanceTokens.motion.base.duration; easing.type: AppearanceTokens.motion.enterCurve } }
-                Behavior on y { NumberAnimation { duration: AppearanceTokens.motion.base.duration; easing.type: AppearanceTokens.motion.enterCurve } }
+                // motion-exception: Fan spreading must match the compositor's 150ms OutCubic response.
+                Behavior on x { NumberAnimation { duration: 150; easing.type: Easing.OutCubic } }
+                Behavior on y { NumberAnimation { duration: 150; easing.type: Easing.OutCubic } }
 
                 // ⚠️ 不能用 Rectangle：它的圆角抗锯齿同样依赖多重采样目标，
                 // 而本项所在的 plane 是无 MSAA 的离屏层。扇叠背板向前上探出
