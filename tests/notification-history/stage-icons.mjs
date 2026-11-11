@@ -4,6 +4,7 @@ export function stageIcons(directory) {
     const common = join(directory, "desktop/modules/common");
     mkdirSync(common, {recursive: true});
     symlinkSync(new URL("../../shell/shared", import.meta.url), join(directory, "shared"), "dir");
+    copyFileSync(new URL("../../shell/desktop/modules/common/ShellIconMap.mjs", import.meta.url), join(common, "ShellIconMap.mjs"));
     const declarations = ["singleton AppearanceTokens 1.0 AppearanceTokens.qml"];
     writeFileSync(join(common, "AppearanceTokens.qml"), `pragma Singleton
 import QtQuick

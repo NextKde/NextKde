@@ -17,7 +17,7 @@ ControlCenterCard {
         color: AppearanceTokens.surface.pick(AppearanceTokens.colors.surfaceContainerHigh, ThemeService.isDark ? Qt.rgba(1, 1, 1, 0.18) : Qt.rgba(0, 0, 0, 0.08))
         BundledIcon {
             anchors.centerIn: parent
-            name: "music_note_2"
+            name: "media.fallback"
             color: ThemeService.foregroundColor
             opacity: 0.86
             size: 21
@@ -71,7 +71,7 @@ ControlCenterCard {
         TransportButton {
             anchors.verticalCenter: parent.verticalCenter
             objectName: "media-previous"
-            iconName: "media-previous"
+            iconName: "media.previous"
             text: I18n.tr("Previous")
             enabled: mediaCard.player?.canGoPrevious ?? false
             onClicked: mediaCard.media.previous()
@@ -80,7 +80,7 @@ ControlCenterCard {
             anchors.verticalCenter: parent.verticalCenter
             objectName: "media-toggle"
             primary: true
-            iconName: mediaCard.player?.isPlaying ? "media-pause" : "media-play"
+            iconName: mediaCard.player?.isPlaying ? "media.pause" : "media.play"
             text: mediaCard.player?.isPlaying ? I18n.tr("Pause") : I18n.tr("Play")
             busy: mediaCard.media.loading
             enabled: mediaCard.player?.canTogglePlaying ?? false
@@ -89,7 +89,7 @@ ControlCenterCard {
         TransportButton {
             anchors.verticalCenter: parent.verticalCenter
             objectName: "media-next"
-            iconName: "media-next"
+            iconName: "media.next"
             text: I18n.tr("Next")
             enabled: mediaCard.player?.canGoNext ?? false
             onClicked: mediaCard.media.next()

@@ -767,7 +767,7 @@ PopupWindow {
             anchors.centerIn: parent
             width: 24
             height: 24
-            name: "screenshot"
+            name: "controlCenter.screenshot"
 
             color: ThemeService.foregroundColor
         }
@@ -802,7 +802,7 @@ PopupWindow {
             anchors.centerIn: parent
             width: 24
             height: 24
-            name: "theme-appearance"
+            name: "controlCenter.appearance"
 
             rotation: ThemeService.isDark ? 0 : 180
             Behavior on rotation { NumberAnimation { duration: 250; easing.type: Easing.OutCubic } }
@@ -847,7 +847,7 @@ PopupWindow {
             anchors.centerIn: parent
             width: 24
             height: 24
-            name: "power"
+            name: "controlCenter.session"
 
             color: ThemeService.foregroundColor
         }
@@ -889,7 +889,7 @@ PopupWindow {
             anchors.centerIn: parent
             width: 22
             height: 22
-            name: "do-not-disturb"
+            name: "controlCenter.doNotDisturb"
 
             color: ControlCenterService.doNotDisturbEnabled
                     ? "#0a84ff" : ThemeService.foregroundColor
@@ -931,7 +931,7 @@ PopupWindow {
             anchors.centerIn: parent
             width: 22
             height: 22
-            name: "night-light"
+            name: "controlCenter.nightLight"
 
             color: ThemeService.foregroundColor
         }

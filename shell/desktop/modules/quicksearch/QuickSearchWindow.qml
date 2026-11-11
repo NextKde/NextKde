@@ -114,7 +114,7 @@ PanelWindow {
                     title: title,
                     subtitle: item.isImage ? I18n.tr("Pinned image · Enter to copy") : I18n.tr("Pinned text · Enter to copy"),
                     icon: BundledIcons.source(item.isImage
-                        ? "image-x-generic" : "edit-paste"),
+                        ? "clipboard.image" : "clipboard.text"),
                     isImage: item.isImage,
                     preview: item.preview,
                     selectionRecord: "",
@@ -137,7 +137,7 @@ PanelWindow {
                     title: entry.isImage ? I18n.tr("Image") : entry.preview,
                     subtitle: entry.isImage ? I18n.tr("Image clipboard · %1").arg(entry.preview.slice(2, -2).trim()) : I18n.tr("Text clipboard · Enter to copy"),
                     icon: BundledIcons.source(entry.isImage
-                        ? "image-x-generic" : "edit-paste"),
+                        ? "clipboard.image" : "clipboard.text"),
                     isImage: entry.isImage,
                     preview: entry.preview,
                     selectionRecord: entry.record,
@@ -483,7 +483,7 @@ PanelWindow {
                     leftMargin: 14
                     verticalCenter: fieldPill.verticalCenter
                 }
-                name: "search"
+                name: "search.query"
                 color: AppearanceTokens.content.glassInk(0.72)
                 size: 20
                 outlined: ThemeService.isDark
@@ -701,7 +701,7 @@ PanelWindow {
 
                     BundledIcon {
                         anchors.centerIn: parent
-                        name: "gear_alt"
+                        name: "search.settings"
                         color: root.clipboardSettingsOpen
                             ? (ThemeService.isDark ? "#64b5ff" : "#0066cc")
                             : AppearanceTokens.content.glassInk(0.70)
@@ -733,7 +733,7 @@ PanelWindow {
                     BundledIcon {
                         anchors.centerIn: parent
                         // The button advertises the layout selected by a click.
-                        name: root.viewMode === "list" ? "square_grid_2x2" : "list_bullet"
+                        name: root.viewMode === "list" ? "search.view.grid" : "search.view.list"
                         color: AppearanceTokens.content.glassInk(0.76)
                         size: 16
                         outlined: ThemeService.isDark
@@ -819,7 +819,7 @@ PanelWindow {
                     }
                     BundledIcon {
                         width: 24
-                        name: "xmark"
+                        name: "search.clearQuery"
                         size: 18
                         color: AppearanceTokens.content.glassInk(0.60)
                         outlined: ThemeService.isDark
@@ -982,7 +982,7 @@ PanelWindow {
                         BundledIcon {
                             width: 20
                             anchors.verticalCenter: parent.verticalCenter
-                            name: "chevron_right"
+                            name: "search.showAll"
                             size: 16
                         color: AppearanceTokens.content.glassInk(0.40)
                         }
@@ -1204,7 +1204,7 @@ PanelWindow {
 
                         BundledIcon {
                             anchors.centerIn: parent
-                            name: (resultItem.modelData.pinned ?? false) ? "star_fill" : "star"
+                            name: (resultItem.modelData.pinned ?? false) ? "search.pin.pinned" : "search.pin.unpinned"
                             color: (resultItem.modelData.pinned ?? false)
                                 ? (ThemeService.isDark ? "#ffd60a" : "#c08a00")
                                 : AppearanceTokens.content.glassInk(0.68)
@@ -1246,7 +1246,7 @@ PanelWindow {
 
                         BundledIcon {
                             anchors.centerIn: parent
-                            name: "xmark"
+                            name: "search.clipboard.remove"
                             color: deleteBtnMouse.containsMouse ? "#ff453a"
                                 : AppearanceTokens.content.glassInk(0.60)
                             size: 16
@@ -1395,7 +1395,7 @@ PanelWindow {
 
                     BundledIcon {
                         anchors.centerIn: parent
-                        name: "xmark"
+                        name: "search.clipboard.remove"
                         color: gridDeleteMouse.containsMouse ? "#ff453a"
                             : AppearanceTokens.content.glassInk(0.80)
                         size: 14

@@ -101,7 +101,7 @@ Item {
                 BundledIcon {
                     visible: !!modelData.active
                     anchors { left: parent.left; leftMargin: 8; verticalCenter: parent.verticalCenter }
-                    name: "checkmark"
+                    name: "network.connected"
                     color: AppearanceTokens.content.glassInk()
                     size: 13
                 }
@@ -153,7 +153,7 @@ Item {
                         visible: modelData.security && modelData.security !== "none"
                         anchors.verticalCenter: parent.verticalCenter
                         width: 12; height: 14
-                        name: "lock_fill"
+                        name: "network.secured"
                         color: AppearanceTokens.content.glassInk()
                     }
 
@@ -243,7 +243,7 @@ Item {
 
         BundledIcon {
             anchors { right: parent.right; rightMargin: 16; verticalCenter: parent.verticalCenter }
-            name: "chevron_right"
+            name: "network.settings"
             color: AppearanceTokens.content.glassInk()
             size: 13
         }

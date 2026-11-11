@@ -279,25 +279,12 @@ Item {
     }
 
     function iconFor(kind) {
-        if (kind === "folder") return "folder"
-        if (kind === "image") return "image-x-generic"
-        if (kind === "pdf") return "application-pdf"
-        if (kind === "code") return "text-x-script"
-        if (kind === "text") return "text-x-generic"
-        if (kind === "launcher") return "application-x-executable"
-        return "text-x-generic"
+        const type = ["folder", "image", "pdf", "code", "text", "launcher"].indexOf(kind) >= 0 ? kind : "text"
+        return "desktop.file." + type
     }
 
     // 文件类型图标走系统图标主题（freedesktop MIME 名）—— 这几个名字任何图标
     // 主题都带着，所以桌面文件与系统文件管理器看起来一致。
-    function themeIconName(kind) {
-        if (kind === "folder") return "folder"
-        if (kind === "pdf") return "application-pdf"
-        if (kind === "code") return "text-x-script"
-        if (kind === "text") return "text-x-generic"
-        return "application-octet-stream"
-    }
-
     function themeIconSource(entry) {
         if (!entry || entry.kind === "image")
             return ""
@@ -312,7 +299,7 @@ Item {
             return AppPresentationService.iconSource(override.icon || entry.icon)
         }
         return SystemIconResolver.sourceFromCandidates(
-            [themeIconName(entry.kind)], "text-x-generic")
+            SystemIconResolver.candidates("desktop.file." + entry.kind), "text-x-generic")
     }
 
     function folderAtSlot(slot) {
@@ -1072,12 +1059,12 @@ Item {
                         NumberAnimation { duration: 120; easing.type: Easing.OutCubic }
                     }
                     Behavior on color { ColorAnimation { duration: 90 } }
-                    BundledIcon {
+                    DesktopFolderIcon {
                         anchors.fill: parent
                         visible: delegateRoot.usesCustomFolderVisual
-                        name: "folder_fill"
                         color: delegateRoot.folderCustom && delegateRoot.folderCustom.color
                             ? delegateRoot.folderCustom.color : "#70b6ff"
+                        emoji: delegateRoot.folderCustom ? delegateRoot.folderCustom.emoji || "" : ""
                     }
                     Item {
                         id: fileThumbnailFrame
@@ -1137,20 +1124,6 @@ Item {
                         color: "white"
                         size: root.iconVisualSize * 0.68
                         outlined: true
-                    }
-                    Text {
-                        anchors {
-                            horizontalCenter: parent.horizontalCenter
-                            top: parent.top
-                            topMargin: parent.height * 0.36
-                        }
-                        visible: delegateRoot.usesCustomFolderVisual
-                            && !!delegateRoot.folderCustom.emoji
-                        text: visible ? delegateRoot.folderCustom.emoji : ""
-                        font {
-                            family: AppearanceTokens.typography.emojiFamily
-                            pixelSize: root.iconVisualSize * 0.36
-                        }
                     }
                 }
                 Item {

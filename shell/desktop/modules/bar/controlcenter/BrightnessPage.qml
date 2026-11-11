@@ -95,7 +95,7 @@ Item {
         }
         BundledIcon {
             anchors { right: parent.right; rightMargin: 16; verticalCenter: parent.verticalCenter }
-            name: "chevron_right"
+            name: "brightness.settings"
             color: AppearanceTokens.content.glassInk()
             size: 13
         }

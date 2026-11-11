@@ -60,7 +60,7 @@ ControlCenterCard {
             BundledIcon {
                 anchors.centerIn: parent
                 anchors.horizontalCenterOffset: -1
-                name: "chevron_left"
+                name: "controlCenter.back"
                 color: AppearanceTokens.content.glassInk()
                 size: 18
             }

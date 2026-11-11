@@ -30,7 +30,7 @@ Item {
     }
     BundledIcon {
         anchors.centerIn: parent
-        name: "arrow_up_left_arrow_down_right"
+        name: "desktop.widget.resize"
         size: 16
         color: handle.ink
     }

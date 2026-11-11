@@ -39,7 +39,8 @@ Item {
         anchors.centerIn: parent
         width: root.iconSize
         height: root.iconSize
-        name: "control-center"
+        size: root.iconSize
+        name: "bar.controlCenter"
         color: ThemeService.barInk
         scale: hoverArea.pressed ? 0.90 : hoverArea.containsMouse ? 1.06 : 1
         Behavior on scale { NumberAnimation { duration: AppearanceTokens.motion.fastDuration; easing.type: Easing.OutCubic } }

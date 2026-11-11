@@ -18,6 +18,8 @@ PopupWindow {
     // Global AppMenu uses the same macOS motion as Control Center and anchors
     // the popup to the clicked item's horizontal centre.
     property bool macosPopupMotion: true
+    // Opt in to a fixed leading column for menus with sparse action icons.
+    property bool reserveIconSpace: false
     // Opt-in source-capsule morph, matching Control Center's Wi-Fi list.
     property bool capsuleReveal: false
     property real capsuleSourceWidth: 0
@@ -399,7 +401,8 @@ PopupWindow {
                     MenuItemRow {
                         width: parent.width
                         visible: root.displayedPage.parents.length > 0
-                        icon: "back"
+                        icon: "menu.back"
+                        reserveIconSpace: root.reserveIconSpace
                         label: I18n.tr("Back")
                         foregroundColor: root.effectiveForegroundColor
                         onClicked: root.back()
@@ -419,6 +422,7 @@ PopupWindow {
                             width: parent.width
                             foregroundColor: root.effectiveForegroundColor
                             icon: modelData.icon || ""
+                            reserveIconSpace: root.reserveIconSpace
                             iconSource: entry ? (entry.icon || "") : (modelData.iconSource || "")
                             label: entry ? (entry.text || "") : (modelData.label || "")
                             separator: entry ? entry.isSeparator : !!modelData.separator

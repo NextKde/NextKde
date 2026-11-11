@@ -181,17 +181,17 @@ Item {
             opacity: closeButton.down ? 0.14 : closeButton.hovered || closeButton.activeFocus ? 0.08 : 0
         }
         contentItem: BundledIcon {
-            name: "xmark"
+            name: "notification.remove"
             color: card.ink
             opacity: closeButton.hovered || closeButton.activeFocus ? 0.85 : 0.4
-            size: 17
+            size: 14
         }
         onClicked: card.removeRequested(card.historyKey)
     }
     BundledIcon {
         anchors { right: parent.right; bottom: parent.bottom; rightMargin: 14; bottomMargin: 7 }
         visible: card.canExpand
-        name: card.detailsExpanded ? "chevron_up" : "chevron_down"
+        name: card.detailsExpanded ? "notification.details.collapse" : "notification.details.expand"
         color: card.ink
         opacity: 0.4
         size: 10

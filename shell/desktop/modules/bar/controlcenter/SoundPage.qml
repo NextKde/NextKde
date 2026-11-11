@@ -1,5 +1,4 @@
 import QtQuick
-import "../../../../shared/Icons" as Symbols
 import QtQuick.Controls
 import qs.desktop.modules.bar
 import qs.desktop.modules.common
@@ -41,7 +40,7 @@ Item {
             font { pixelSize: 10; family: AppearanceTokens.typography.textFamily }
         }
 
-        Symbols.VolumeIcon {
+        ShellVolumeIcon {
             id: submenuVolumeGlyph
             anchors { left: parent.left; leftMargin: 2; verticalCenter: submenuVolumeSlider.verticalCenter }
             width: 19
@@ -127,7 +126,7 @@ Item {
                 color: modelData.isDefault ? Qt.rgba(0.1, 0.5, 1, 0.20) : Qt.rgba(0.5, 0.5, 0.5, 0.10)
                 BundledIcon {
                     anchors { left: parent.left; leftMargin: 10; verticalCenter: parent.verticalCenter }
-                    size: 11; name: "checkmark"
+                    size: 11; name: "audio.deviceSelected"
                     visible: modelData.isDefault
                     color: ThemeService.foregroundColor
                 }
@@ -254,7 +253,7 @@ Item {
 
                     BundledIcon {
                         anchors.centerIn: parent
-                        name: appVolumeRow.muted ? "speaker_slash" : "speaker_2"
+                        name: appVolumeRow.muted ? "audio.application.muted" : "audio.application.audible"
                         color: appVolumeRow.muted ? "#ff453a" : ThemeService.foregroundColor
                         size: appVolumeRow.muted ? 15 : 13
                     }
@@ -352,7 +351,7 @@ Item {
 
         BundledIcon {
             anchors { right: parent.right; rightMargin: 16; verticalCenter: parent.verticalCenter }
-            name: "chevron_right"
+            name: "audio.settings"
             color: ThemeService.foregroundColor
             opacity: 0.45
             size: 13

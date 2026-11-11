@@ -43,7 +43,7 @@ Item {
     BundledIcon {
         anchors.fill: parent
         visible: root.usesFallback
-        name: "bell"
+        name: "notification.sourceFallback"
         color: root.ink
     }
 }

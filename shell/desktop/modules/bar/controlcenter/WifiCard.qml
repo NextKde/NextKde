@@ -120,7 +120,7 @@ ControlCenterCard {
     }
     BundledIcon {
         anchors { right: parent.right; rightMargin: 8; verticalCenter: parent.verticalCenter }
-        name: "chevron_right"
+        name: "network.wifi.details"
         color: wifiCard.materialSecondaryForegroundColor
         opacity: 0.60
         size: 14

@@ -52,7 +52,7 @@ Item {
     readonly property url artworkSource: {
         const revision = MediaService.metadataRevision
         return player?.trackArtUrl ? player.trackArtUrl
-            : BundledIcons.source("default-cover")
+            : BundledIcons.source("media.coverFallback")
     }
     readonly property bool monochrome: IconAppearanceService.mode !== "color"
     readonly property int availablePageCount: availablePages().length
@@ -330,7 +330,7 @@ Item {
                             BundledIcon {
                                 anchors.centerIn: parent
                                 visible: sideSlot.modelData === carousel.musicPage
-                                name: "music_note_2"
+                                name: "media.fallback"
                                 color: "white"
                                 size: Math.max(10,
                                     Math.round(carousel.iconSize * 0.54))

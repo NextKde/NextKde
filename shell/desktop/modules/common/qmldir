@@ -21,6 +21,8 @@ ContextMenu 1.0 ContextMenu.qml
 MenuItemRow 1.0 MenuItemRow.qml
 KosFloatPanel 1.0 KosFloatPanel.qml
 BundledIcon 1.0 BundledIcon.qml
+ShellVolumeIcon 1.0 ShellVolumeIcon.qml
+ShellBatteryIcon 1.0 ShellBatteryIcon.qml
 singleton ContextMenuCoordinator 1.0 ContextMenuCoordinator.qml
 singleton AppPresentationService 1.0 AppPresentationService.qml
 singleton AppActionService 1.0 AppActionService.qml

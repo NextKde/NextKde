@@ -1506,7 +1506,7 @@ PanelWindow {
                                                 leftMargin: 11
                                                 verticalCenter: parent.verticalCenter
                                             }
-                                            name: "search"
+                                            name: "launcher.search"
                                             color: root.launcherForegroundColor
                                             // The icon lights up while the field is
                                             // expanded (focused or holding a query).
@@ -1544,7 +1544,7 @@ PanelWindow {
                                                     easing.bezierCurve: [0.34, 1.56, 0.64, 1, 1, 1]
                                                 }
                                             }
-                                            name: "xmark"
+                                            name: "launcher.clearSearch"
                                             color: root.launcherForegroundColor
                                             size: 17
                                             MouseArea {
@@ -2316,7 +2316,7 @@ PanelWindow {
                                         left: parent.left
                                         verticalCenter: parent.verticalCenter
                                     }
-                                    name: "chevron_left"
+                                    name: "launcher.back"
                                     color: AppLauncherService.dockForegroundColor
                                     size: 28
                                     MouseArea {
@@ -2625,7 +2625,7 @@ PanelWindow {
                                             color: Qt.rgba(0.95, 0.27, 0.25, 0.96)
                                             BundledIcon {
                                                 anchors.centerIn: parent
-                                                name: "minus"
+                                                name: "launcher.folder.removeApp"
                                                 color: "white"
                                                 size: 17
                                             }
@@ -2774,7 +2774,7 @@ PanelWindow {
                                             right: parent.right
                                             verticalCenter: parent.verticalCenter
                                         }
-                                        name: "xmark"
+                                        name: "launcher.closeEditor"
                                         color: AppLauncherService.dockForegroundColor
                                         size: 22
                                         MouseArea {

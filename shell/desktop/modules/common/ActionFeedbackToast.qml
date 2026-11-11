@@ -6,7 +6,7 @@ LiquidGlassPanel {
     id: root
 
     property string message: ""
-    property string iconName: "check"
+    property string iconName: "feedback.success"
     property int timeout: 2600
     property bool shown: false
     // Epoch ms at which the hold would end if the pointer never entered.
@@ -16,7 +16,7 @@ LiquidGlassPanel {
 
     function show(text, icon) {
         message = text
-        iconName = icon || "check"
+        iconName = icon || "feedback.success"
         shown = true
         dismissAt = Date.now() + timeout
         hold.interval = timeout

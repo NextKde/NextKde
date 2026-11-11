@@ -215,7 +215,7 @@ Item {
 
                         BundledIcon {
                             anchors.centerIn: parent
-                            name: "xmark"
+                            name: "temperature.close"
                             color: ThemeService.foregroundColor
                             size: 20
                         }

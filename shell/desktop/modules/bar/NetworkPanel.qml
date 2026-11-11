@@ -345,7 +345,7 @@ AnimatedPopupWindow {
                 BundledIcon {
                     visible: modelData.active
                     anchors { left: parent.left; leftMargin: 8; verticalCenter: parent.verticalCenter }
-                    name: "checkmark"
+                    name: "network.connected"
                     color: panelSurface.foregroundColor
                     outlined: true
                     outlineColor: Qt.rgba(0, 0, 0, 0.50)
@@ -356,16 +356,17 @@ AnimatedPopupWindow {
                     signalStrength: modelData.signalStrength
                     connected: true
                     glyphColor: panelSurface.foregroundColor
-                    width: 24; height: 24
-                    anchors { left: parent.left; leftMargin: 32; verticalCenter: parent.verticalCenter }
+                    width: 16; height: 16
+                    anchors { left: parent.left; leftMargin: 36; verticalCenter: parent.verticalCenter }
                 }
                 // Encryption uses the same bundled font as the signal glyph.
                 BundledIcon {
                     id: rowSecurityGlyph
                     visible: modelData.secured
-                    width: 8; height: 11
-                    anchors { left: rowWifiGlyph.right; leftMargin: 1; verticalCenter: parent.verticalCenter }
-                    name: "lock_fill"
+                    size: 12
+                    width: 12; height: 12
+                    anchors { left: rowWifiGlyph.right; leftMargin: 4; verticalCenter: parent.verticalCenter }
+                    name: "network.secured"
                     color: panelSurface.foregroundColor
                     opacity: 0.82
                 }
@@ -520,7 +521,7 @@ AnimatedPopupWindow {
                 anchors { left: parent.left; top: parent.top; leftMargin: 13; topMargin: 12 }
                 color: networkDialogOverlay.contentControlFill
                 border.width: 1; border.color: networkDialogOverlay.contentControlBorder
-                BundledIcon { anchors.centerIn: parent; name: "xmark"; color: networkDialogOverlay.contentForegroundColor; size: 22 }
+                BundledIcon { anchors.centerIn: parent; name: "network.dialog.cancel"; color: networkDialogOverlay.contentForegroundColor; size: 22 }
                 MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: panel.closeNetworkDialog() }
             }
 
@@ -531,7 +532,7 @@ AnimatedPopupWindow {
                 color: networkDialogOverlay.contentControlFill
                 border.width: 1; border.color: networkDialogOverlay.contentControlBorder
                 opacity: NetworkService.wifiConnectInProgress ? 0.55 : 1.0
-                BundledIcon { anchors.centerIn: parent; name: NetworkService.wifiConnectInProgress ? "ellipsis" : "checkmark"; color: networkDialogOverlay.contentForegroundColor; size: 18 }
+                BundledIcon { anchors.centerIn: parent; name: NetworkService.wifiConnectInProgress ? "network.dialog.busy" : "network.dialog.connect"; color: networkDialogOverlay.contentForegroundColor; size: 18 }
                 MouseArea { anchors.fill: parent; enabled: !NetworkService.wifiConnectInProgress; cursorShape: enabled ? Qt.PointingHandCursor : Qt.ArrowCursor; onClicked: panel.confirmConnection() }
             }
 
@@ -539,7 +540,7 @@ AnimatedPopupWindow {
                 id: joinWifiGlyph
                 width: 58; height: 48
                 anchors { top: parent.top; topMargin: 43; horizontalCenter: parent.horizontalCenter }
-                name: "wifi"
+                name: "network.dialog.wifi"
                 color: "#0a84ff"
             }
 

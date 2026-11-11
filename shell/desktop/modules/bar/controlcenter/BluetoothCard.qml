@@ -35,7 +35,7 @@ ControlCenterCard {
             id: controlBtGlyph
             anchors.centerIn: parent
             width: 21; height: 21
-            name: "bluetooth"
+            name: "bluetooth.control"
             color: ThemeService.tileGlyph
             opacity: bluetoothCard.service.bluetoothChangeInProgress ? 0 : 1
             Behavior on opacity { NumberAnimation { duration: 140 } }
@@ -111,7 +111,7 @@ ControlCenterCard {
     }
     BundledIcon {
         anchors { right: parent.right; rightMargin: 8; verticalCenter: parent.verticalCenter }
-        name: "chevron_right"
+        name: "bluetooth.details"
         color: bluetoothCard.materialSecondaryForegroundColor
         opacity: 0.60
         size: 14

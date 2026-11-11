@@ -19,9 +19,6 @@ AnimatedPopupWindow {
         music: I18n.tr("Music"), weather: I18n.tr("Weather"),
         clock: I18n.tr("Clock"), metrics: I18n.tr("System")
     })
-    readonly property var symbols: ({
-        music: "music_note_2", weather: "sun_max", clock: "clock", metrics: "cpu"
-    })
     readonly property var displayIds: {
         const active = ConfigService.infoCardOrder.slice()
         for (const id of ConfigService.knownInfoCardIds) {
@@ -169,7 +166,7 @@ AnimatedPopupWindow {
                             spacing: 4
                             BundledIcon {
                                 anchors.horizontalCenter: parent.horizontalCenter
-                                name: editor.symbols[card.modelData]
+                                name: "dock.widget." + card.modelData
                                 color: ThemeService.foregroundColor
                                 size: 22
                             }
@@ -187,7 +184,7 @@ AnimatedPopupWindow {
                             color: active ? "#ff453a" : ThemeService.accentColor
                             BundledIcon {
                                 anchors.centerIn: parent
-                                name: card.active ? "minus" : "plus"
+                                name: card.active ? "dock.widget.remove" : "dock.widget.add"
                                 color: "white"
                                 size: 15
                             }

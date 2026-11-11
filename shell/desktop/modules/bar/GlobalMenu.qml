@@ -309,7 +309,7 @@ Item {
                         ThemeService.barInk.g, ThemeService.barInk.b, 0.16) : "transparent"
                 z: -1
             }
-            BundledIcon { anchors.centerIn: parent; name: "chevron_right_2"; color: ThemeService.barInk; size: 16;}
+            BundledIcon { anchors.centerIn: parent; name: "bar.menuOverflow"; color: ThemeService.barInk; size: 16;}
             MouseArea {
                 id: morePointer
                 anchors.fill: parent

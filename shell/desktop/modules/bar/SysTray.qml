@@ -407,7 +407,7 @@ Item {
             border.color: AppearanceTokens.colors.primary
             BundledIcon {
                 anchors.centerIn: parent
-                name: root.collectionExpanded ? "status-collection-collapse" : "status-collection-expand"
+                name: root.collectionExpanded ? "bar.collection.collapse" : "bar.collection.expand"
                 size: 18
                 color: ThemeService.barInk
             }

@@ -1,5 +1,4 @@
 import QtQuick
-import "../../../../shared/Icons" as Symbols
 import qs.desktop.modules.bar
 import qs.desktop.modules.common
 import qs.desktop.modules.dock
@@ -37,7 +36,7 @@ ControlCenterCard {
     }
     BundledIcon {
         anchors { right: parent.right; top: parent.top; rightMargin: 13; topMargin: 5 }
-        name: "chevron_right"
+        name: "audio.details"
         color: ThemeService.foregroundColor
         size: 15
     }
@@ -49,7 +48,7 @@ ControlCenterCard {
         hoverEnabled: true
         onClicked: slotCard7.pageRequested("sound")
     }
-    Symbols.VolumeIcon {
+    ShellVolumeIcon {
         id: volumeGlyph
         anchors { left: parent.left; leftMargin: 12; verticalCenter: volumeSlider.verticalCenter }
         width: 19

@@ -124,13 +124,13 @@ AnimatedPopupWindow {
                 BundledIcon {
                     width: 18; height: 18
                     anchors { left: parent.left; leftMargin: 31; verticalCenter: parent.verticalCenter }
-                    name: "bluetooth"
+                    name: "bluetooth.device"
                     color: surface.foregroundColor
                 }
                 BundledIcon {
                     visible: modelData.connected
                     anchors { left: parent.left; leftMargin: 8; verticalCenter: parent.verticalCenter }
-                    name: "checkmark"
+                    name: "bluetooth.connected"
                     color: surface.foregroundColor
                     outlined: true; outlineColor: Qt.rgba(0, 0, 0, 0.50)
                     size: 18

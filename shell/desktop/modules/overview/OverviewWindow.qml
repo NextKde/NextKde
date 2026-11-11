@@ -210,7 +210,7 @@ PanelWindow {
                                 spacing: 6
 
                                 BundledIcon {
-                                    name: "window"
+                                    name: "overview.windowFallback"
                                     size: 13
                                     color: isCurrent ? "#ffffff" : Qt.rgba(1, 1, 1, 0.65)
                                     anchors.verticalCenter: parent.verticalCenter
@@ -369,7 +369,7 @@ PanelWindow {
 
                                             BundledIcon {
                                                 anchors.centerIn: parent
-                                                name: "xmark"
+                                                name: "overview.closeWindow"
                                                 size: 10
                                                 color: "white"
                                             }
@@ -475,7 +475,7 @@ PanelWindow {
 
                     BundledIcon {
                         anchors.horizontalCenter: parent.horizontalCenter
-                        name: "window"
+                        name: "overview.windowFallback"
                         size: 32
                         color: Qt.rgba(1, 1, 1, 0.25)
                     }
