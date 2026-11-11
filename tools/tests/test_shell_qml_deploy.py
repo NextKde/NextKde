@@ -15,6 +15,7 @@ SPEC.loader.exec_module(DEPLOY)
 KOSCTL = (ROOT / 'tools/kosctl').read_text()
 ALIASES = [Path('shared/qml') / n for n in ('controls', 'foundation', 'i18n')]
 ALIASES += [Path('Kos/Ui') / n for n in DEPLOY.MODULES]
+ALIASES += [Path('shared/Icons'), Path('Kos/Icons')]
 
 
 def function(name):
@@ -32,6 +33,7 @@ class ShellDeployment(unittest.TestCase):
         self.output = self.root / 'installed'
         shutil.copytree(ROOT / 'shell', self.shell, symlinks=True)
         shutil.copytree(ROOT / 'shared/qml', self.shared)
+        shutil.copytree(ROOT / 'shared/Icons', self.shared.parent / 'Icons')
 
     def damage_aliases(self, kind):
         for alias in ALIASES:
@@ -49,6 +51,10 @@ class ShellDeployment(unittest.TestCase):
 
     def assert_materialized(self):
         DEPLOY.check_installed(self.output)
+        self.assertEqual((self.output / 'shared/Icons/NextKdeIcons.ttf').read_bytes(),
+                         (self.shared.parent / 'Icons/NextKdeIcons.ttf').read_bytes())
+        self.assertEqual((self.output / 'Kos/Icons').resolve(),
+                         (self.output / 'shared/Icons').resolve())
         for name in DEPLOY.MODULES:
             for base in (self.output / 'shared/qml', self.output / 'Kos/Ui'):
                 self.assertFalse((base / name).is_symlink())
@@ -108,6 +114,14 @@ class ShellDeployment(unittest.TestCase):
         with patch.object(DEPLOY, 'check_installed', side_effect=ValueError('copy incomplete')):
             with self.assertRaises(ValueError):
                 DEPLOY.deploy(self.shell, self.shared, self.output)
+        self.assertTrue((self.output / 'old-runtime').is_file())
+
+    def test_missing_font_preserves_previous_installation(self):
+        self.output.mkdir()
+        (self.output / 'old-runtime').write_text('preserve')
+        (self.shared.parent / 'Icons/NextKdeIcons.ttf').unlink()
+        with self.assertRaises(ValueError):
+            DEPLOY.deploy(self.shell, self.shared, self.output)
         self.assertTrue((self.output / 'old-runtime').is_file())
 
     def test_preflight_precedes_runtime_cleanup(self):

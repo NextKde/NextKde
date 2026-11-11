@@ -1,4 +1,5 @@
 import QtQuick
+import qs.desktop.modules.common
 import "../NetworkRateFormat.mjs" as RateFormat
 
 // Process rows backed by a ListModel so a 2 s rate refresh only mutates
@@ -78,21 +79,19 @@ Item {
             width: ListView.view.width
             height: 22
 
-            Image {
+            AppIcon {
                 id: artwork
                 x: 0
                 anchors.verticalCenter: parent.verticalCenter
                 width: 12
                 height: 12
                 source: rowItem.iconSource
-                sourceSize: Qt.size(16, 16)
-                fillMode: Image.PreserveAspectFit
                 // image://icon/* must stay synchronous: KIconEngine is not
                 // thread safe and async decoding races the GUI thread.
                 asynchronous: rowItem.iconSource.indexOf("file:") === 0
                     || rowItem.iconSource.indexOf("qrc:") === 0
                     || rowItem.iconSource.indexOf(":/") === 0
-                visible: rowItem.iconSource.length > 0 && status !== Image.Error
+                visible: rowItem.iconSource.length > 0 && imageStatus !== Image.Error
             }
             Item {
                 visible: !artwork.visible

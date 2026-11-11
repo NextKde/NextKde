@@ -51,4 +51,3 @@ BatteryPanel 1.0 BatteryPanel.qml
 BatteryBody 1.0 BatteryBody.qml
 NetworkTrafficPanel 1.0 NetworkTrafficPanel.qml
 singleton PowerProfileService 1.0 PowerProfileService.qml
-StatusPanelGlyph 1.0 StatusPanelGlyph.qml

@@ -15,7 +15,7 @@ This is the current design, not a runtime acceptance report.
 | `IconAppearanceService.qml`, `BundledIcons.qml`, `BundledIcon.qml`, `SystemIconResolver.qml` | Icon mode/persistence, named bundled assets and centralized system-theme fallback |
 | `shell/desktop/DesktopEnvironment.qml` | `appearance-settings` IPC endpoint |
 | `apps/settings/` | Separate process; edits through IPC, never imports Shell internals |
-| `shared/qml/colorize/` | Portable pure-JS palette/HCT algorithms; no dependency on Quickshell |
+| `shared/qml/colorize/` | Pure-JS palette/HCT algorithms plus Shell-only Quickshell samplers |
 | `shared/qml/controls/` and Shell common components | Reusable surfaces/controls that consume explicit theme inputs |
 
 `AppearanceConfigService` owns Shell configuration; `AppearanceTokens` derives colors, geometry,
@@ -26,7 +26,7 @@ Standalone app preferences remain separate; see [project context](../PROJECT_CON
 
 ## Persistence and IPC
 
-`Quickshell.stateDir/appearance/config.json` is currently written with schema **31**; source
+`Quickshell.stateDir/appearance/config.json` is currently written with schema **33**; source
 `serialize()`/load migrations are authoritative for the full field set. Do not copy a partial
 JSON example over a user's whole file. Keep old-version migration, per-preset optical values,
 validation and range clamping. Unsupported style values must not become unvalidated runtime state.

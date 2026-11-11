@@ -1,6 +1,6 @@
 import QtQuick
 import QtTest
-import "../.." as Settings
+import "../../pages" as Settings
 Item {
     width: 700; height: 950
     QtObject {

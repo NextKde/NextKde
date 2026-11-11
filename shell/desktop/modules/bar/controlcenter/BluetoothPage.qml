@@ -94,44 +94,19 @@ Item {
                     : "transparent"
                 Behavior on color { ColorAnimation { duration: 100 } }
 
-                GlassText {
+                BundledIcon {
                     visible: !!modelData.connected
                     anchors { left: parent.left; leftMargin: 8; verticalCenter: parent.verticalCenter }
-                    text: "✓"
+                    name: "checkmark"
                     color: AppearanceTokens.content.glassInk()
-                    font { pixelSize: 13; weight: Font.Bold }
+                    size: 13
                 }
 
-                Canvas {
-                    anchors {
-                        left: parent.left
-                        leftMargin: 26
-                        verticalCenter: parent.verticalCenter
-                    }
-                    width: 16
-                    height: 16
-                    readonly property color ink: AppearanceTokens.content.glassInk()
-                    onInkChanged: requestPaint()
-                    onPaint: {
-                        const ctx = getContext("2d")
-                        ctx.reset()
-                        ctx.strokeStyle = modelData.connected ? "#0a84ff" : ink
-                        ctx.lineWidth = 1.6
-                        ctx.lineCap = "round"
-                        ctx.lineJoin = "round"
-                        ctx.scale(0.55, 0.55)
-                        ctx.beginPath()
-                        ctx.moveTo(13.5, 2.5)
-                        ctx.lineTo(20, 9)
-                        ctx.lineTo(13.5, 15)
-                        ctx.lineTo(20, 21)
-                        ctx.lineTo(13.5, 26.5)
-                        ctx.lineTo(13.5, 2.5)
-                        ctx.moveTo(7, 8.5)
-                        ctx.lineTo(13.5, 15)
-                        ctx.lineTo(7, 21.5)
-                        ctx.stroke()
-                    }
+                BundledIcon {
+                    anchors { left: parent.left; leftMargin: 26; verticalCenter: parent.verticalCenter }
+                    width: 16; height: 16
+                    name: "bluetooth"
+                    color: modelData.connected ? "#0a84ff" : AppearanceTokens.content.glassInk()
                 }
 
                 Column {
@@ -220,11 +195,11 @@ Item {
             font { pixelSize: 11; weight: Font.DemiBold; family: AppearanceTokens.typography.textFamily }
         }
 
-        GlassText {
+        BundledIcon {
             anchors { right: parent.right; rightMargin: 16; verticalCenter: parent.verticalCenter }
-            text: "›"
+            name: "chevron_right"
             color: AppearanceTokens.content.glassInk()
-            font { pixelSize: 13; weight: Font.Bold }
+            size: 13
         }
 
         ControlCenterSelection {

@@ -342,74 +342,32 @@ AnimatedPopupWindow {
                     Behavior on color { ColorAnimation { duration: 110 } }
                 }
 
-                Text {
+                BundledIcon {
                     visible: modelData.active
                     anchors { left: parent.left; leftMargin: 8; verticalCenter: parent.verticalCenter }
-                    text: "✓"
+                    name: "checkmark"
                     color: panelSurface.foregroundColor
-                    style: Text.Outline
-                    styleColor: Qt.rgba(0, 0, 0, 0.50)
-                    font { pixelSize: 19; weight: Font.DemiBold }
+                    outlined: true
+                    outlineColor: Qt.rgba(0, 0, 0, 0.50)
+                    size: 19
                 }
-                Canvas {
+                WifiSignalIcon {
                     id: rowWifiGlyph
-                    property int signalStrength: modelData.signalStrength
-                    property color ink: panelSurface.foregroundColor
-                    onSignalStrengthChanged: requestPaint()
-                    onInkChanged: requestPaint()
-                    width: 24
-                    height: 24
+                    signalStrength: modelData.signalStrength
+                    connected: true
+                    glyphColor: panelSurface.foregroundColor
+                    width: 24; height: 24
                     anchors { left: parent.left; leftMargin: 32; verticalCenter: parent.verticalCenter }
-                    onPaint: {
-                        const ctx = getContext("2d")
-                        ctx.reset()
-                        ctx.strokeStyle = ink
-                        ctx.fillStyle = ink
-                        ctx.globalAlpha = 0.92
-                        ctx.lineWidth = 1.9
-                        ctx.lineCap = "round"
-                        const rings = signalStrength < 25 ? 1
-                            : (signalStrength < 50 ? 2 : 3)
-                        for (let ring = 0; ring < rings; ring++) {
-                            const ringRadius = 3.3 + ring * 2.7
-                            ctx.beginPath()
-                            ctx.arc(12, 17.1, ringRadius,
-                                Math.PI * 1.22, Math.PI * 1.78)
-                            ctx.stroke()
-                        }
-                        ctx.beginPath()
-                        ctx.arc(12, 16.7, 1.4, 0, Math.PI * 2)
-                        ctx.fill()
-                    }
                 }
-                // Draw the encryption mark instead of relying on a lock
-                // glyph: the configured CJK font can lack that glyph and
-                // renders it as a square on some installations.
-                Canvas {
+                // Encryption uses the same bundled font as the signal glyph.
+                BundledIcon {
                     id: rowSecurityGlyph
                     visible: modelData.secured
-                    width: 8
-                    height: 11
-                    // Keep one tight icon gap, then reserve a larger
-                    // readable gap before the SSID (see label margin).
+                    width: 8; height: 11
                     anchors { left: rowWifiGlyph.right; leftMargin: 1; verticalCenter: parent.verticalCenter }
-                    onPaint: {
-                        const ctx = getContext("2d")
-                        ctx.reset()
-                        ctx.strokeStyle = panelSurface.foregroundColor
-                        ctx.fillStyle = panelSurface.foregroundColor
-                        ctx.globalAlpha = 0.82
-                        ctx.lineWidth = 1.2
-                        ctx.lineCap = "round"
-                        ctx.beginPath()
-                        ctx.arc(4, 4.7, 2.35, Math.PI * 1.12, Math.PI * 1.88)
-                        ctx.stroke()
-                        ctx.fillRect(0.7, 4.8, 6.6, 5.5)
-                        ctx.fillStyle = "rgba(0, 0, 0, 0.28)"
-                        ctx.beginPath()
-                        ctx.arc(4, 7.3, 0.75, 0, Math.PI * 2)
-                        ctx.fill()
-                    }
+                    name: "lock_fill"
+                    color: panelSurface.foregroundColor
+                    opacity: 0.82
                 }
                 Text {
                     // Reserve the checkmark slot in every row. Connected
@@ -562,7 +520,7 @@ AnimatedPopupWindow {
                 anchors { left: parent.left; top: parent.top; leftMargin: 13; topMargin: 12 }
                 color: networkDialogOverlay.contentControlFill
                 border.width: 1; border.color: networkDialogOverlay.contentControlBorder
-                GlassText { anchors.centerIn: parent; text: "×"; color: networkDialogOverlay.contentForegroundColor; font { pixelSize: 22; weight: Font.Light } }
+                BundledIcon { anchors.centerIn: parent; name: "xmark"; color: networkDialogOverlay.contentForegroundColor; size: 22 }
                 MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: panel.closeNetworkDialog() }
             }
 
@@ -577,20 +535,12 @@ AnimatedPopupWindow {
                 MouseArea { anchors.fill: parent; enabled: !NetworkService.wifiConnectInProgress; cursorShape: enabled ? Qt.PointingHandCursor : Qt.ArrowCursor; onClicked: panel.confirmConnection() }
             }
 
-            Canvas {
+            BundledIcon {
                 id: joinWifiGlyph
                 width: 58; height: 48
                 anchors { top: parent.top; topMargin: 43; horizontalCenter: parent.horizontalCenter }
-                onPaint: {
-                    const ctx = getContext("2d")
-                    ctx.reset()
-                    ctx.strokeStyle = "#0a84ff"
-                    ctx.lineWidth = 6.5
-                    ctx.lineCap = "round"
-                    ctx.beginPath(); ctx.arc(width / 2, 28, 21, Math.PI * 1.18, Math.PI * 1.82); ctx.stroke()
-                    ctx.beginPath(); ctx.arc(width / 2, 33, 12, Math.PI * 1.20, Math.PI * 1.80); ctx.stroke()
-                    ctx.beginPath(); ctx.arc(width / 2, 38, 3, Math.PI * 1.23, Math.PI * 1.77); ctx.stroke()
-                }
+                name: "wifi"
+                color: "#0a84ff"
             }
 
             Column {

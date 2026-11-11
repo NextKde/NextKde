@@ -1,0 +1,15 @@
+{
+  "upstream": "https://github.com/framework7io/framework7-icons",
+  "revision": "7fb38494ba82cbef74d4f7e725431544c8ea1ee5",
+  "upstreamSha256": "f623d3f8c23d57f560dd9131a3fb8818ca08503a2b82b13f3ba5e8596aa0b8a9",
+  "fontSha256": "e7576ee0b083b1e42270f0be62fdd7004f1d85a37911f3b0493ccc1be4c1689c",
+  "upstreamGlyphs": 1252,
+  "extensionGlyphs": 27,
+  "extensions": "Original NextKde drawings and MIT Framework7-derived status contours; source in tools/icons/extensions.json",
+  "extensionLicense": "GPL-3.0-or-later",
+  "upstreamLicense": "MIT",
+  "tools": {
+    "fonttools": "4.61.1",
+    "skia-pathops": "0.9.1"
+  }
+}

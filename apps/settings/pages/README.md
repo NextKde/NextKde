@@ -3,7 +3,10 @@
 `main.qml` is the composition root. It owns navigation, lazy Loader lifetimes,
 window chrome and the application palette. `pages/` owns feature views and
 feature-local state; `components/` owns reusable presentation controls. Existing
-wallpaper, services and notifications pages retain their established interfaces.
+wallpaper, services and notifications pages live here with their established
+interfaces. Wallpaper-only tiles, pickers and row helpers are colocated with
+their page; cross-page controls, including `SettingsTextButton`, belong in
+`components/`.
 No registry, dependency container or second IPC protocol is introduced.
 
 ## Inputs and outputs

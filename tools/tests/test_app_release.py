@@ -12,13 +12,6 @@ spec.loader.exec_module(release)
 
 
 class AppReleaseTest(unittest.TestCase):
-    def test_settings_bundles_reviewed_installer_without_divergence(self):
-        self.assertEqual(
-            (ROOT / "apps/settings/app-store/installer.py").read_bytes(),
-            (ROOT / "tools/app-installer.py").read_bytes(),
-            "Update the Settings installer copy whenever the canonical engine changes",
-        )
-
     def test_each_repository_is_allowlisted_and_pinned(self):
         for app, (repository, app_id) in release.APPS.items():
             with self.subTest(app=app):

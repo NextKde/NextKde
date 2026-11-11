@@ -118,12 +118,12 @@ ControlCenterCard {
             font { pixelSize: 10; family: AppearanceTokens.typography.textFamily }
         }
     }
-    GlassText {
+    BundledIcon {
         anchors { right: parent.right; rightMargin: 8; verticalCenter: parent.verticalCenter }
-        text: "›"
+        name: "chevron_right"
         color: wifiCard.materialSecondaryForegroundColor
         opacity: 0.60
-        font { pixelSize: 14; weight: Font.Bold }
+        size: 14
     }
     MouseArea {
         id: wifiPagePointer

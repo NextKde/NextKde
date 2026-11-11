@@ -1,8 +1,8 @@
 import QtQuick
+import Kos.Icons as Symbols
 
-// Original NextKde artwork shares the application icons' soft tile and shading.
-// Material navigation keeps its monochrome semantic glyphs.
-Item {
+// Navigation shares the platform font; the tile is ordinary host styling.
+Rectangle {
     id: root
     required property var colors
     required property string iconName
@@ -11,28 +11,16 @@ Item {
     property bool materialForm: false
     property bool highlighted: false
     property int size: 18
-
-    width: size
-    height: size
-
-    Image {
-        id: nativeIcon
-        anchors.fill: parent
-        source: root.materialForm ? "" : Qt.resolvedUrl("../icons/navigation/" + root.iconName + ".svg")
-        fillMode: Image.PreserveAspectFit
-        smooth: true
-        mipmap: true
-        visible: !root.materialForm && status === Image.Ready
-    }
-
-    SettingIcon {
+    width: size; height: size
+    radius: materialForm ? 0 : size * 0.23
+    color: materialForm ? "transparent" : tint
+    Symbols.Icon {
         anchors.centerIn: parent
-        visible: root.materialForm || nativeIcon.status === Image.Error
-        colors: root.colors
-        materialForm: root.materialForm
-        symbol: root.symbol
-        tint: root.tint
-        highlighted: root.highlighted
-        size: root.size
+        size: root.materialForm ? root.size : root.size * 0.72
+        name: ({"battery":"battery_100", "general":"gear_alt", "spotlight":"search",
+            "menu-bar":"macwindow", "desktop-dock":"rectangle_dock", "appearance":"circle_lefthalf_fill",
+            "notifications":"bell", "keyboard":"keyboard", "network":"globe", "system-settings":"gear_alt",
+            "wallpaper":"photo"})[root.iconName] || root.symbol
+        color: root.materialForm ? (root.highlighted ? colors.selectedForeground : colors.iconMuted) : colors.iconForeground
     }
 }

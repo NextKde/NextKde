@@ -61,6 +61,7 @@ def run(base_env=None):
             shared = source / 'shared/qml'
             shutil.copytree(ROOT / 'shell', shell, symlinks=True)
             shutil.copytree(ROOT / 'shared/qml', shared)
+            shutil.copytree(ROOT / 'shared/Icons', source / 'shared/Icons')
             aliases = [shell / 'shared/qml' / name
                        for name in ('controls', 'foundation', 'i18n')]
             aliases += [shell / 'Kos/Ui' / name for name in MODULES]

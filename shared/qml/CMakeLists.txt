@@ -1,3 +1,7 @@
+if(NOT TARGET kos_icons)
+    add_subdirectory(../Icons ${CMAKE_CURRENT_BINARY_DIR}/kos-icons)
+endif()
+
 set_source_files_properties(
     foundation/AppTheme.qml
     i18n/I18n.qml
@@ -80,6 +84,7 @@ add_library(Kos::Ui ALIAS kos_ui)
 add_library(Kos::UiPlugin ALIAS kos_ui_plugin)
 
 target_link_libraries(kos_ui PUBLIC
+    Kos::Icons Kos::IconsPlugin
     Qt6::Core
     Qt6::Gui
     Qt6::Qml

@@ -9,13 +9,14 @@ move; it does not try to be a complete Markdown parser.
 from __future__ import annotations
 
 import re
+import os
 import sys
 from pathlib import Path
 from urllib.parse import unquote
 
 
 ROOT = Path(__file__).resolve().parents[2]
-LINK_RE = re.compile(r"(?<!!)\[[^\]]*\]\(\s*(<[^>]+>|[^\s)]+)")
+LINK_RE = re.compile(r"!?\[[^\]]*\]\(\s*(<[^>]+>|[^\s)]+)")
 REMOTE_PREFIXES = (
     "https://",
     "http://",
@@ -47,10 +48,13 @@ def main() -> int:
     # are not project documentation and must not make a successful install
     # break this source check.
     generated_roots = {".git", ".build", "build", "tmp", "result"}
-    markdown_files = sorted(
-        path for path in ROOT.rglob("*.md")
-        if path.relative_to(ROOT).parts[0] not in generated_roots
-    )
+    markdown_files = []
+    for directory, names, files in os.walk(ROOT):
+        # Prune before descending: filtering rglob's results still traverses
+        # entire downloaded SDKs and generated build trees.
+        names[:] = [name for name in names if name not in generated_roots]
+        markdown_files.extend(Path(directory) / name for name in files if name.endswith(".md"))
+    markdown_files.sort()
     for markdown in markdown_files:
         for line_number, target in relative_links(markdown):
             resolved = (markdown.parent / target).resolve()

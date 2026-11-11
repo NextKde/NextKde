@@ -32,12 +32,19 @@ export function lint(args, duplicateChecks = false) {
         const version = spawnSync(executable, ['--version'], {encoding: 'utf8'});
         if (version.error || version.status !== 0) throw new Error(`Cannot run ${executable}: ${version.error?.message || version.stderr}`);
         console.log(version.stdout.trim());
+        const help = spawnSync(executable, ['--help'], {encoding: 'utf8'});
+        if (help.error || help.status !== 0) throw new Error(`Cannot query ${executable}: ${help.error?.message || help.stderr}`);
+        const categoryOptions = help.stdout.includes('--only-explicit-categories')
+            ? ['--only-explicit-categories']
+            // Qt 6.10 and earlier lack category opt-in. Their warning budget
+            // leaves syntax errors and explicitly promoted duplicates fatal.
+            : ['--max-warnings', '-1'];
         let failed = false;
         for (const file of files) {
             // Syntax errors are unconditional. Do not suppress errors near ?./??:
             // the Qt 6 SDK supports those expressions. Type/import checks belong
             // to compiled application tests, which have the generated qmltypes.
-            const options = ['--ignore-settings', '--only-explicit-categories'];
+            const options = ['--ignore-settings', ...categoryOptions];
             if (duplicateChecks) options.push('--duplicate-property-binding=error', '--duplicated-name=error');
             const result = spawnSync(executable, [...options, '-I', 'shared/qml', '-I', 'shell', '-I', '.', file], {encoding: 'utf8'});
             if (result.error || result.status !== 0) {

@@ -10,6 +10,7 @@ writeShellScript "kos-shell-init" ''
 
   # Check the selected package before removing the previous deployment.
   test -f ${kos}/share/kos-desktop/shell/shell.qml
+  test -f ${kos}/share/shared/Icons/NextKdeIcons.ttf
   test -d ${kos}/share/shared/qml
   test -d ${kos}/qml/Kos/Spatial3D
   test -d ${kos}/qml/Kos/SurfaceShape
@@ -23,6 +24,9 @@ writeShellScript "kos-shell-init" ''
   mkdir -p "$shell_config/shared/qml" "$shell_config/Kos"
   cp -rL --no-preserve=mode ${kos}/share/kos-desktop/shell/. "$shell_config/"
   cp -rL --no-preserve=mode ${kos}/share/shared/qml/. "$shell_config/shared/qml/"
+  rm -rf "$shell_config/shared/Icons" "$shell_config/Kos/Icons"
+  cp -rL --no-preserve=mode ${kos}/share/shared/Icons "$shell_config/shared/Icons"
+  ln -s ../shared/Icons "$shell_config/Kos/Icons"
   cp -rL --no-preserve=mode \
     ${kos}/qml/Kos/Spatial3D ${kos}/qml/Kos/SurfaceShape "$shell_config/Kos/"
 ''

@@ -1166,7 +1166,7 @@ Item {
                     border.width: iconSlot.containsMouse ? 1 : 0
                     border.color: Qt.rgba(0.62, 0.80, 1.0, 0.85)
                     Behavior on color { ColorAnimation { duration: 120 } }
-                    IconImage {
+                    AppIcon {
                         anchors.fill: parent
                         anchors.margins: parent.width * 0.08
                         source: card.iconPairs[index]?.icon || card.iconSource || ""

@@ -40,12 +40,19 @@ def check_shared(shared):
 
 def check_sources(shell, shared):
     require_file(shell / 'shell.qml')
+    check_qmldir(shared.parent / 'Icons/qmldir')
+    require_file(shared.parent / 'Icons/NextKdeIcons.ttf')
+    require_file(shared.parent / 'Icons/IconMap.js')
     check_shared(shared)
     check_qmldir(shell / 'Kos/Ui/qmldir', shared)
 
 
 def check_installed(shell):
     require_file(shell / 'shell.qml')
+    check_qmldir(shell / 'shared/Icons/qmldir')
+    require_file(shell / 'shared/Icons/NextKdeIcons.ttf')
+    require_file(shell / 'shared/Icons/IconMap.js')
+    check_qmldir(shell / 'Kos/Icons/qmldir')
     check_shared(shell / 'shared/qml')
     check_shared(shell / 'Kos/Ui')
     check_qmldir(shell / 'Kos/Ui/qmldir')
@@ -61,9 +68,9 @@ def deploy(shell, shared, destination):
         def ignore(directory, names):
             relative = Path(directory).relative_to(shell)
             if relative == Path('shared'):
-                return {'qml'}
+                return {'qml', 'Icons'}
             if relative == Path('Kos'):
-                return {'Ui'}
+                return {'Ui', 'Icons'}
             return set()
         shutil.copytree(shell, staged, ignore=ignore)
         # Nix input directories are read-only; enable writing before adding
@@ -73,6 +80,8 @@ def deploy(shell, shared, destination):
         def runtime_only(directory, names):
             return {n for n in names if n == 'CMakeLists.txt' or (n.startswith('test_') and n.endswith('.mjs'))}
         shutil.copytree(shared, staged / 'shared/qml', ignore=runtime_only)
+        shutil.copytree(shared.parent / 'Icons', staged / 'shared/Icons', ignore=runtime_only)
+        (staged / 'Kos/Icons').symlink_to('../shared/Icons')
         shutil.copytree(shared, staged / 'Kos/Ui', ignore=runtime_only)
         shutil.copy2(shell / 'Kos/Ui/qmldir', staged / 'Kos/Ui/qmldir')
         check_installed(staged)

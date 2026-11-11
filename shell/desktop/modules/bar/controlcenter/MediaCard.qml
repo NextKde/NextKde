@@ -15,12 +15,12 @@ ControlCenterCard {
         width: 43; height: 43; radius: 13
         anchors { left: parent.left; top: parent.top; leftMargin: 13; topMargin: 13 }
         color: AppearanceTokens.surface.pick(AppearanceTokens.colors.surfaceContainerHigh, ThemeService.isDark ? Qt.rgba(1, 1, 1, 0.18) : Qt.rgba(0, 0, 0, 0.08))
-        GlassText {
+        BundledIcon {
             anchors.centerIn: parent
-            text: "♫"
+            name: "music_note_2"
             color: ThemeService.foregroundColor
             opacity: 0.86
-            font.pixelSize: 21
+            size: 21
         }
         Image {
             anchors.fill: parent

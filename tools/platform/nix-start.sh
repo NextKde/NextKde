@@ -58,6 +58,11 @@ sync_shell_config() {
         cp -rL --no-preserve=mode "$controls_src" "$shell_config/shared/qml/"
     fi
 
+    rm -rf "$shell_config/shared/Icons" "$shell_config/Kos/Icons"
+    cp -rL --no-preserve=mode "$kos_store/share/shared/Icons" "$shell_config/shared/Icons"
+    mkdir -p "$shell_config/Kos"
+    ln -s ../shared/Icons "$shell_config/Kos/Icons"
+
     print_ok "Shell config synced"
 }
 

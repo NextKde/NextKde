@@ -1,6 +1,6 @@
 import QtQuick
 import QtTest
-import "../.." as Settings
+import "../../pages" as Settings
 import "../../../../shared/qml/i18n"
 
 TestCase {

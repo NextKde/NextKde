@@ -46,8 +46,7 @@ Item {
             settingSpy.clear()
         }
         function makePage(name) {
-            const topLevel = ["NotificationsSettingsPage", "WallpaperSettingsPage", "ServicesSettingsPage"].indexOf(name) >= 0
-            const component = Qt.createComponent((topLevel ? "../../" : "../../pages/") + name + ".qml")
+            const component = Qt.createComponent("../../pages/" + name + ".qml")
             compare(component.status, Component.Ready, component.errorString())
             const properties = name === "NotificationsSettingsPage"
                 ? {theme: harness.palette, width: 700} : {colors: harness.palette, width: 700}

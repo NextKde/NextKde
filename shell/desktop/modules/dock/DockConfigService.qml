@@ -141,7 +141,7 @@ QtObject {
         { type: "app", appId: "org.kde.kate.desktop" },
     ]
 
-    // Compatibility projection for the current Dock UI and AppGroupService.
+    // Compatibility projection for the current Dock UI.
     // Never edit this directly in new code: use setDockItems/addAppItem
     // so all Dock persistence has one source of truth.
     property var pinnedAppIds: [

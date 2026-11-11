@@ -1,4 +1,5 @@
 import QtQuick
+import qs.desktop.modules.common
 import QtQuick.Window
 import "../../../../shared/qml/i18n"
 import "../NetworkRateFormat.mjs" as RateFormat
@@ -58,20 +59,13 @@ Item {
         id: header
         width: parent.width
         height: 42
-        Canvas {
+        BundledIcon {
             id: signalGlyph
             x: 8
             anchors.verticalCenter: parent.verticalCenter
-            width: 16
-            height: 16
-            onPaint: {
-                const c = getContext("2d")
-                c.reset()
-                c.clearRect(0, 0, width, height)
-                c.fillStyle = body.mutedInk
-                for (let i = 0; i < 4; ++i)
-                    c.fillRect(i * 4, height - 5 - i * 2, 3, 5 + i * 2)
-            }
+            size: 16
+            name: "antenna_radiowaves_left_right"
+            color: body.mutedInk
         }
         Text {
             objectName: "traffic-heading"

@@ -1,13 +1,13 @@
-import "components" as SettingsControls
+import "../components" as SettingsControls
 import Kos.Demo as Demo
-import "../../shared/qml/i18n"
+import "../../../shared/qml/i18n"
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
 import QtQuick.Dialogs as Platform
-import "../../shared/qml/controls" as LiquidControls
-import "../../shared/qml/foundation/WallpaperCatalog.js" as WallpaperCatalog
-import "../../shared/qml/wallpapers" as ThemeVisuals
+import "../../../shared/qml/controls" as LiquidControls
+import "../../../shared/qml/foundation/WallpaperCatalog.js" as WallpaperCatalog
+import "../../../shared/qml/wallpapers" as ThemeVisuals
 
 ColumnLayout {
     id: page
@@ -805,7 +805,7 @@ ColumnLayout {
                         page.setSlideshow(page.selectedSlideshowImages.length >= 2, page.slideshowIntervalMinutes);
                     }
                 }
-                WallpaperTextButton {
+                SettingsControls.SettingsTextButton {
                     objectName: "slideshowSelectAll"
                     label: I18n.tr("Select all")
                     colors: page.colors
@@ -978,7 +978,7 @@ ColumnLayout {
                 colors: page.colors
                 label: I18n.tr("More colors")
                 separator: false
-                WallpaperTextButton {
+                SettingsControls.SettingsTextButton {
                     objectName: "addCustomColorButton"
                     label: "+ " + I18n.tr("Custom colors")
                     colors: page.colors
@@ -1001,7 +1001,7 @@ ColumnLayout {
         wrapMode: Text.Wrap
     }
 
-    // WallpaperOptionsDialog 已随「更多选项」入口一起移除；三行设置平铺在
+    // 三行设置平铺在
     // 上面的选项卡片里。要恢复二级弹窗，从 git 历史找回本文件与实例化块。
 
     Rectangle {

@@ -59,6 +59,8 @@ stdenv.mkDerivation {
         # CMakeLists.txt, which excludes the same two patterns.
         mkdir -p $out/share/shared/qml
         cp -r shared/qml/. $out/share/shared/qml/
+        cp -r shared/Icons $out/share/shared/Icons
+        rm -f $out/share/shared/Icons/CMakeLists.txt
         find $out/share/shared/qml -maxdepth 1 \
             -name CMakeLists.txt -o -name 'test_*.mjs' | xargs -r rm -f
 

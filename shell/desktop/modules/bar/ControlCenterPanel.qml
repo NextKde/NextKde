@@ -763,20 +763,13 @@ PopupWindow {
                 && screenshotPointer.containsMouse && !screenshotPointer.pressed ? 1 : 0
             Behavior on opacity { NumberAnimation { duration: 140 } }
         }
-        Image {
+        BundledIcon {
             anchors.centerIn: parent
             width: 24
             height: 24
-            source: BundledIcons.source("screenshot")
-            sourceSize.width: 46
-            sourceSize.height: 46
-            fillMode: Image.PreserveAspectFit
-            smooth: true
-            layer.enabled: true
-            layer.effect: MultiEffect {
-                colorization: 1.0
-                colorizationColor: ThemeService.foregroundColor
-            }
+            name: "screenshot"
+
+            color: ThemeService.foregroundColor
         }
         MouseArea { id: screenshotPointer; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: ControlCenterService.captureInteractiveScreenshot() }
     }
@@ -805,22 +798,16 @@ PopupWindow {
             opacity: ThemeService.isDark ? 1 : 0
             Behavior on opacity { NumberAnimation { duration: 140 } }
         }
-        Image {
+        BundledIcon {
             anchors.centerIn: parent
             width: 24
             height: 24
-            source: BundledIcons.source("theme-appearance")
-            sourceSize.width: 48
-            sourceSize.height: 48
-            fillMode: Image.PreserveAspectFit
-            smooth: true
+            name: "theme-appearance"
+
             rotation: ThemeService.isDark ? 0 : 180
             Behavior on rotation { NumberAnimation { duration: 250; easing.type: Easing.OutCubic } }
-            layer.enabled: true
-            layer.effect: MultiEffect {
-                colorization: 1.0
-                colorizationColor: ThemeService.isDark ? "#000000" : "#ffffff"
-            }
+
+            color: ThemeService.isDark ? "#000000" : "#ffffff"
         }
         MouseArea {
             id: themePointer
@@ -856,20 +843,13 @@ PopupWindow {
                 && powerPointer.containsMouse && !powerPointer.pressed ? 1 : 0
             Behavior on opacity { NumberAnimation { duration: 140 } }
         }
-        Image {
+        BundledIcon {
             anchors.centerIn: parent
             width: 24
             height: 24
-            source: BundledIcons.source("power")
-            sourceSize.width: 48
-            sourceSize.height: 48
-            fillMode: Image.PreserveAspectFit
-            smooth: true
-            layer.enabled: true
-            layer.effect: MultiEffect {
-                colorization: 1.0
-                colorizationColor: ThemeService.foregroundColor
-            }
+            name: "power"
+
+            color: ThemeService.foregroundColor
         }
         MouseArea {
             id: powerPointer
@@ -905,21 +885,14 @@ PopupWindow {
             opacity: ControlCenterService.doNotDisturbEnabled ? 1 : 0
             Behavior on opacity { NumberAnimation { duration: 140 } }
         }
-        Image {
+        BundledIcon {
             anchors.centerIn: parent
             width: 22
             height: 22
-            source: BundledIcons.source("do-not-disturb")
-            sourceSize.width: 44
-            sourceSize.height: 44
-            fillMode: Image.PreserveAspectFit
-            smooth: true
-            layer.enabled: true
-            layer.effect: MultiEffect {
-                colorization: 1.0
-                colorizationColor: ControlCenterService.doNotDisturbEnabled
+            name: "do-not-disturb"
+
+            color: ControlCenterService.doNotDisturbEnabled
                     ? "#0a84ff" : ThemeService.foregroundColor
-            }
         }
         MouseArea {
             id: dndPointer
@@ -954,20 +927,13 @@ PopupWindow {
             opacity: ControlCenterService.nightLightActive ? 1 : 0
             Behavior on opacity { NumberAnimation { duration: 140 } }
         }
-        Image {
+        BundledIcon {
             anchors.centerIn: parent
             width: 22
             height: 22
-            source: BundledIcons.source("night-light")
-            sourceSize.width: 44
-            sourceSize.height: 44
-            fillMode: Image.PreserveAspectFit
-            smooth: true
-            layer.enabled: true
-            layer.effect: MultiEffect {
-                colorization: 1.0
-                colorizationColor: ThemeService.foregroundColor
-            }
+            name: "night-light"
+
+            color: ThemeService.foregroundColor
         }
         MouseArea {
             id: nightLightPointer

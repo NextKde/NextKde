@@ -142,7 +142,7 @@ int main(int argc, char* argv[])
                       << QStringLiteral("(%1%2)").arg(entry.source,
                              entry.checkoutRoot.isEmpty() ? QString()
                                                           : QStringLiteral(", reloads on change"));
-    AppStore appStore(QFileInfo(entry.qmlPath).absolutePath());
+    AppStore appStore;
     const bool smokeTest = application.arguments().contains(QStringLiteral("--smoke-test"))
         || application.arguments().contains(QStringLiteral("--smoke-test-windows"));
     if (!smokeTest) appStore.startUpdateAgent();

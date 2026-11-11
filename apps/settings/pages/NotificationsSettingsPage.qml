@@ -1,10 +1,10 @@
-import "components" as SettingsControls
+import "../components" as SettingsControls
 import Kos.Demo as Demo
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
-import "../../shared/qml/controls" as LiquidControls
-import "../../shared/qml/i18n"
+import "../../../shared/qml/controls" as LiquidControls
+import "../../../shared/qml/i18n"
 
 ColumnLayout {
     id: page
