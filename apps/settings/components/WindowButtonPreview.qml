@@ -1,4 +1,5 @@
 import QtQuick
+import Kos.Icons as Symbols
 import QtQuick.Controls.Basic as Basic
 import QtQuick.Layouts
 import QtQuick.Window
@@ -287,27 +288,11 @@ ColumnLayout {
                         Item {
                             required property string modelData
                             width: 32; height: 28
-                            Rectangle {
+                            Symbols.Icon {
                                 anchors.centerIn: parent
-                                width: 8; height: 8
-                                visible: modelData === "maximize"
-                                color: "transparent"
-                                border.width: 1
-                                border.color: root.colors.secondaryText
-                            }
-                            Rectangle {
-                                anchors.centerIn: parent
-                                width: 9; height: 1
+                                size: 10
+                                name: modelData === "maximize" ? "square" : modelData === "minimize" ? "minus" : "xmark"
                                 color: root.colors.secondaryText
-                                rotation: modelData === "close" ? 45 : 0
-                                visible: modelData !== "maximize"
-                            }
-                            Rectangle {
-                                anchors.centerIn: parent
-                                width: 9; height: 1
-                                color: root.colors.secondaryText
-                                rotation: -45
-                                visible: modelData === "close"
                             }
                         }
                     }

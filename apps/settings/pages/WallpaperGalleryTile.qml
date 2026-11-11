@@ -1,5 +1,6 @@
 import "../../../shared/qml/i18n"
 import QtQuick
+import Kos.Icons as Symbols
 
 Rectangle {
     id: tile
@@ -88,7 +89,7 @@ Rectangle {
 
         component HoverButton: Rectangle {
             id: hoverButton
-            property string iconSource: ""
+            property string iconName: ""
             signal clicked()
             width: 22
             height: 22
@@ -99,18 +100,11 @@ Rectangle {
             // 七成白,不刺眼但仍有描边感
             border.color: "#B3FFFFFF"
             visible: tileMouse.containsMouse && !tile.isSwatch
-            // 线性单色 SVG:字体无关,任何环境渲染一致(字形 ⌂/✕ 在缺字体的
-            // 系统上会变豆腐块)。sourceSize 取 2x 保证高分屏下矢量栅格清晰。
-            Image {
+            Symbols.Icon {
                 anchors.centerIn: parent
-                width: 14
-                height: 14
-                source: hoverButton.iconSource
-                sourceSize: Qt.size(28, 28)
-                fillMode: Image.PreserveAspectFit
-                smooth: true
-                asynchronous: true
-                mipmap: true
+                size: 14
+                name: hoverButton.iconName
+                color: "white"
             }
             MouseArea {
                 anchors.fill: parent
@@ -123,12 +117,12 @@ Rectangle {
         }
 
         HoverButton {
-            iconSource: Qt.resolvedUrl("icons/wallpaper-open-folder.svg")
+            iconName: "folder"
             visible: tileMouse.containsMouse && tile.revealable
             onClicked: tile.revealRequested()
         }
         HoverButton {
-            iconSource: Qt.resolvedUrl("icons/wallpaper-remove.svg")
+            iconName: "xmark"
             visible: tileMouse.containsMouse && tile.removable
             onClicked: tile.removeRequested()
         }
@@ -138,21 +132,12 @@ Rectangle {
             radius: 11
             color: tile.selected ? tile.accent : "#88000000"
             visible: tile.selectionMode || tile.selected || tileMouse.containsMouse
-            // 选中=深色对勾(accent 底上),悬停未选中=白色外向箭头。SVG 颜色
-            // 烘在文件里,两种配色各一份,与其它悬停按钮同一套线性风格。
-            Image {
+            Symbols.Icon {
                 anchors.centerIn: parent
-                width: 14
-                height: 14
+                size: 14
                 visible: !tile.selectionMode || tile.selected
-                source: tile.selected
-                    ? Qt.resolvedUrl("icons/wallpaper-check-dark.svg")
-                    : Qt.resolvedUrl("icons/wallpaper-arrow-up-right.svg")
-                sourceSize: Qt.size(28, 28)
-                fillMode: Image.PreserveAspectFit
-                smooth: true
-                asynchronous: true
-                mipmap: true
+                name: tile.selected ? "checkmark" : "arrow_up_right"
+                color: tile.selected ? "#17202a" : "white"
             }
         }
     }

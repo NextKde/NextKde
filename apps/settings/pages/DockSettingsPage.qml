@@ -1,5 +1,6 @@
 import Kos.Demo as Demo
 import QtQuick
+import Kos.Icons as Symbols
 import QtQuick.Controls
 import QtQuick.Layouts
 import QtQuick.Window
@@ -286,16 +287,12 @@ ColumnLayout {
                 {
                     id: "launcher",
                     stateKey: "showLauncher",
-                    label: I18n.tr("Launcher"),
-                    symbol: "❖",
-                    tint: "#ff9500"
+                    label: I18n.tr("Launcher")
                 },
                 {
                     id: "trash",
                     stateKey: "showTrash",
-                    label: I18n.tr("Trash"),
-                    symbol: "♲",
-                    tint: "#8e8e93"
+                    label: I18n.tr("Trash")
                 }
             ]
 
@@ -324,13 +321,12 @@ ColumnLayout {
                         border.width: builtinCheck.checked ? 0 : 1.5
                         border.color: builtinCheck.hovered ? colors.primaryText : colors.tertiaryText
                         opacity: builtinCheck.enabled ? 1 : 0.45
-                        Text {
+                        Symbols.Icon {
                             anchors.centerIn: parent
                             visible: builtinCheck.checked
-                            text: "✓"
+                            name: "checkmark"
                             color: colors.role("on_primary", "#ffffff")
-                            font.pixelSize: 16
-                            font.weight: Font.Bold
+                            size: 16
                         }
                     }
                     contentItem: Item {}

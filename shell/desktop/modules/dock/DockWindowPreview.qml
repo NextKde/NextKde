@@ -298,12 +298,11 @@ PopupWindow {
                         ColorAnimation { duration: 100 }
                     }
 
-                    Text {
+                    BundledIcon {
                         anchors.centerIn: parent
-                        text: "+"
+                        name: "plus"
                         color: ThemeService.foregroundColor
-                        font.pixelSize: 21
-                        font.weight: Font.Medium
+                        size: 21
                     }
 
                     MouseArea {

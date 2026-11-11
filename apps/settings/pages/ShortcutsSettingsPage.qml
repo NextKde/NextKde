@@ -18,32 +18,6 @@ ColumnLayout {
     property var bridge: null
     property var shortcuts: []
     property string errorText: ""
-    readonly property var rowIcons: ({
-            "net.local.kos-launcher": {
-                symbol: "❖",
-                tint: "#ff9500"
-            },
-            "net.local.kos-window-switcher": {
-                symbol: "⌕",
-                tint: "#0a84ff"
-            },
-            "net.local.kos-control-center": {
-                symbol: "≋",
-                tint: "#5ac8fa"
-            },
-            "net.local.kos-overview": {
-                symbol: "▦",
-                tint: "#af52de"
-            },
-            "net.local.kos-clipboard": {
-                symbol: "⧉",
-                tint: "#34c759"
-            },
-            "net.local.kos-show-desktop": {
-                symbol: "⌂",
-                tint: "#ff375f"
-            }
-        })
 
     function applyState(state) {
         if (!state)

@@ -198,7 +198,7 @@ Item {
         }
         readonly property bool backdropVisible: clipped.width > 0 && clipped.height > 0
         readonly property alias blurRegion: buttonGlass.blurRegion
-        implicitWidth: label.implicitWidth + 28
+        implicitWidth: contentItem.implicitWidth + 28
         implicitHeight: 32
         activeFocusOnTab: backdropVisible
         Accessible.name: text
@@ -247,7 +247,7 @@ Item {
     }
     DeckButton {
         anchors { right: parent.right; top: parent.top; topMargin: 1 }
-        text: "×"
+        contentItem: BundledIcon { name: "xmark"; size: 14; color: pane.ink; opacity: enabled ? 1 : 0.35 }
         implicitWidth: 30; implicitHeight: 30
         enabled: NotificationHistoryService.count > 0
         Accessible.name: I18n.tr("Clear all notifications")
@@ -411,7 +411,12 @@ Item {
             anchors.centerIn: parent
             visible: NotificationHistoryService.count > 0 && (NotificationHistoryService.count > 3 || pane.expanded)
             glassButton: true
-            text: pane.expanded ? I18n.tr("Collapse notifications  ⌃") : I18n.tr("More notifications  ·  %1  ⌄").arg(Math.max(0, NotificationHistoryService.count - 3))
+            text: pane.expanded ? I18n.tr("Collapse notifications") : I18n.tr("More notifications  ·  %1").arg(Math.max(0, NotificationHistoryService.count - 3))
+            contentItem: Row {
+                spacing: 5
+                GlassText { anchors.verticalCenter: parent.verticalCenter; text: footerButton.text; color: pane.ink; font { pixelSize: 11; weight: Font.Medium } }
+                BundledIcon { anchors.verticalCenter: parent.verticalCenter; name: pane.expanded ? "chevron_up" : "chevron_down"; size: 11; color: pane.ink }
+            }
             onClicked: pane.requestExpanded(pane.folding || !pane.expanded)
         }
     }

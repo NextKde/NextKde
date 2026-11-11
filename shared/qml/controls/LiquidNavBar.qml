@@ -1,4 +1,5 @@
 import QtQuick
+import "../../Icons" as Symbols
 import QtQuick.Controls as Controls
 import Qt5Compat.GraphicalEffects
 
@@ -470,17 +471,14 @@ Item {
                 anchors.centerIn: parent
                 width: Math.max(0, parent.width / 1.05 - root.labelHorizontalPadding * 2)
                 spacing: modelData.icon && modelData.label ? 2 : 0
-                Text {
+                Symbols.Icon {
                     anchors.horizontalCenter: parent.horizontalCenter
                     visible: Boolean(modelData.icon)
                     width: parent.width
-                    horizontalAlignment: Text.AlignHCenter
-                    elide: Text.ElideRight
-                    text: modelData.icon || ""
+                    name: modelData.icon || ""
                     color: index === root.currentIndex
                         ? root.selectedItemColor : root.itemColor
-                    font.pixelSize: root.iconSize
-                    font.weight: Font.DemiBold
+                    size: root.iconSize
                 }
                 Text {
                     anchors.horizontalCenter: parent.horizontalCenter

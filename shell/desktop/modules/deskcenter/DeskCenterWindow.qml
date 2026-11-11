@@ -187,8 +187,8 @@ PanelWindow {
         music: I18n.tr("Music")
     })
     readonly property var widgetSymbols: ({
-        clock: "◷", weather: "☀", calendar: "▦", todo: "✓",
-        system: "⌁", activity: "◌", music: "♫"
+        clock: "clock", weather: "sun_max", calendar: "calendar", todo: "checkmark",
+        system: "cpu", activity: "chart_bar", music: "music_note_2"
     })
     // Referencing the singleton starts the shared activity recorder once the
     // desktop surface is available.
@@ -603,11 +603,11 @@ PanelWindow {
                     Column {
                         anchors.centerIn: parent
                         spacing: 5
-                        Text {
+                        BundledIcon {
                             anchors.horizontalCenter: parent.horizontalCenter
-                            text: root.widgetSymbols[modelData]
+                            name: root.widgetSymbols[modelData]
                             color: ThemeService.foregroundColor
-                            font.pixelSize: 20
+                            size: 20
                         }
                         Text {
                             anchors.horizontalCenter: parent.horizontalCenter
@@ -615,11 +615,11 @@ PanelWindow {
                             color: ThemeService.foregroundColor
                             font { pixelSize: 9; weight: Font.DemiBold }
                         }
-                        Text {
+                        BundledIcon {
                             anchors.horizontalCenter: parent.horizontalCenter
-                            text: active ? "−" : "+"
+                            name: active ? "minus" : "plus"
                             color: active ? "#ff453a" : ThemeService.accentColor
-                            font { pixelSize: 14; weight: Font.Bold }
+                            size: 14
                         }
                     }
                     TapHandler {
@@ -3927,7 +3927,7 @@ PanelWindow {
                         anchors.centerIn: parent
                         // A broken or unsupported image still behaves like a
                         // normal desktop file instead of becoming invisible.
-                        // Folders are drawn by the Canvas Item above. 主题没带
+                        // Folders use the bundled font above. 主题没带
                         // 这个类型图标时才由这里接手。
                         visible: desktopThemeIcon.status !== Image.Ready
                             && (modelData.kind !== "image" || imageThumbnail.status !== Image.Ready)

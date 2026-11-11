@@ -531,7 +531,7 @@ AnimatedPopupWindow {
                 color: networkDialogOverlay.contentControlFill
                 border.width: 1; border.color: networkDialogOverlay.contentControlBorder
                 opacity: NetworkService.wifiConnectInProgress ? 0.55 : 1.0
-                GlassText { anchors.centerIn: parent; text: NetworkService.wifiConnectInProgress ? "…" : "✓"; color: networkDialogOverlay.contentForegroundColor; font { pixelSize: 18; weight: Font.Light } }
+                BundledIcon { anchors.centerIn: parent; name: NetworkService.wifiConnectInProgress ? "ellipsis" : "checkmark"; color: networkDialogOverlay.contentForegroundColor; size: 18 }
                 MouseArea { anchors.fill: parent; enabled: !NetworkService.wifiConnectInProgress; cursorShape: enabled ? Qt.PointingHandCursor : Qt.ArrowCursor; onClicked: panel.confirmConnection() }
             }
 

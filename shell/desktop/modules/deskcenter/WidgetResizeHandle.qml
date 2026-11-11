@@ -1,4 +1,5 @@
 import QtQuick
+import qs.desktop.modules.common
 import "WidgetLayout.mjs" as WidgetLayout
 
 // Keep pointer coordinates in the scene: the handle itself moves as its card
@@ -27,18 +28,11 @@ Item {
         radius: 12
         color: pointer.pressed ? "#a0000000" : "#66000000"
     }
-    Repeater {
-        model: 2
-        delegate: Rectangle {
-            required property int index
-            x: 13 + index * 6
-            y: 19 + index * 3
-            width: 15 - index * 6
-            height: 2
-            radius: 1
-            rotation: -45
-            color: handle.ink
-        }
+    BundledIcon {
+        anchors.centerIn: parent
+        name: "arrow_up_left_arrow_down_right"
+        size: 16
+        color: handle.ink
     }
     MouseArea {
         id: pointer

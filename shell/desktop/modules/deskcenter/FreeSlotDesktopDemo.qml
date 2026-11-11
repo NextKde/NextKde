@@ -1072,99 +1072,12 @@ Item {
                         NumberAnimation { duration: 120; easing.type: Easing.OutCubic }
                     }
                     Behavior on color { ColorAnimation { duration: 90 } }
-                    Canvas {
-                        id: customFolderCanvas
+                    BundledIcon {
                         anchors.fill: parent
                         visible: delegateRoot.usesCustomFolderVisual
-                        readonly property color baseColor: delegateRoot.folderCustom
-                                && delegateRoot.folderCustom.color
+                        name: "folder_fill"
+                        color: delegateRoot.folderCustom && delegateRoot.folderCustom.color
                             ? delegateRoot.folderCustom.color : "#70b6ff"
-                        onBaseColorChanged: requestPaint()
-                        onVisibleChanged: if (visible) requestPaint()
-                        onWidthChanged: requestPaint()
-                        onHeightChanged: requestPaint()
-                        Component.onCompleted: requestPaint()
-
-                        function shade(colorValue, factor) {
-                            const c = Qt.color(colorValue)
-                            const r = Math.max(0,
-                                Math.min(255, Math.round(c.r * 255 * factor)))
-                            const g = Math.max(0,
-                                Math.min(255, Math.round(c.g * 255 * factor)))
-                            const b = Math.max(0,
-                                Math.min(255, Math.round(c.b * 255 * factor)))
-                            return "rgba(" + r + "," + g + "," + b + "," + c.a + ")"
-                        }
-
-                        function roundRect(ctx, x, y, w, h, radius) {
-                            ctx.beginPath()
-                            ctx.moveTo(x + radius, y)
-                            ctx.lineTo(x + w - radius, y)
-                            ctx.arcTo(x + w, y, x + w, y + radius, radius)
-                            ctx.lineTo(x + w, y + h - radius)
-                            ctx.arcTo(x + w, y + h, x + w - radius,
-                                y + h, radius)
-                            ctx.lineTo(x + radius, y + h)
-                            ctx.arcTo(x, y + h, x, y + h - radius, radius)
-                            ctx.lineTo(x, y + radius)
-                            ctx.arcTo(x, y, x + radius, y, radius)
-                            ctx.closePath()
-                        }
-
-                        onPaint: {
-                            const ctx = getContext("2d")
-                            ctx.reset()
-                            const w = width
-                            const h = height
-                            const margin = w * 0.10
-                            const tabHeight = h * 0.14
-                            const bodyX = margin
-                            const bodyY = margin + tabHeight
-                            const bodyWidth = w - margin * 2
-                            const bodyHeight = h - margin - bodyY
-                            const corner = Math.min(bodyWidth, bodyHeight) * 0.18
-
-                            ctx.fillStyle = shade(baseColor, 0.72)
-                            ctx.globalAlpha = 0.92
-                            ctx.beginPath()
-                            ctx.moveTo(bodyX, bodyY)
-                            ctx.lineTo(bodyX + bodyWidth * 0.42, bodyY)
-                            ctx.lineTo(bodyX + bodyWidth * 0.42
-                                + tabHeight * 0.7, bodyY - tabHeight)
-                            ctx.lineTo(bodyX + bodyWidth * 0.72,
-                                bodyY - tabHeight)
-                            ctx.arcTo(bodyX + bodyWidth * 0.72 + corner,
-                                bodyY - tabHeight,
-                                bodyX + bodyWidth * 0.72 + corner,
-                                bodyY - tabHeight + corner, corner)
-                            ctx.lineTo(bodyX + bodyWidth * 0.72 + corner, bodyY)
-                            ctx.closePath()
-                            ctx.fill()
-
-                            ctx.fillStyle = shade(baseColor, 1.0)
-                            ctx.globalAlpha = 0.90
-                            roundRect(ctx, bodyX, bodyY, bodyWidth,
-                                bodyHeight, corner)
-                            ctx.fill()
-
-                            ctx.fillStyle = "rgba(255,255,255,0.18)"
-                            ctx.globalAlpha = 1.0
-                            ctx.beginPath()
-                            ctx.moveTo(bodyX + corner, bodyY)
-                            ctx.lineTo(bodyX + bodyWidth - corner, bodyY)
-                            ctx.lineTo(bodyX + bodyWidth - corner,
-                                bodyY + bodyHeight * 0.12)
-                            ctx.lineTo(bodyX + corner,
-                                bodyY + bodyHeight * 0.12)
-                            ctx.closePath()
-                            ctx.fill()
-
-                            ctx.strokeStyle = "rgba(0,0,0,0.16)"
-                            ctx.lineWidth = 1
-                            roundRect(ctx, bodyX, bodyY, bodyWidth,
-                                bodyHeight, corner)
-                            ctx.stroke()
-                        }
                     }
                     Item {
                         id: fileThumbnailFrame

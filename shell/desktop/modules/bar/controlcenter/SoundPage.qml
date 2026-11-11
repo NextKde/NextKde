@@ -125,10 +125,16 @@ Item {
                 height: 30
                 radius: 8
                 color: modelData.isDefault ? Qt.rgba(0.1, 0.5, 1, 0.20) : Qt.rgba(0.5, 0.5, 0.5, 0.10)
+                BundledIcon {
+                    anchors { left: parent.left; leftMargin: 10; verticalCenter: parent.verticalCenter }
+                    size: 11; name: "checkmark"
+                    visible: modelData.isDefault
+                    color: ThemeService.foregroundColor
+                }
                 GlassText {
-                    anchors { fill: parent; leftMargin: 10; rightMargin: 10 }
+                    anchors { fill: parent; leftMargin: 27; rightMargin: 10 }
                     verticalAlignment: Text.AlignVCenter
-                    text: (modelData.isDefault ? "✓  " : "    ") + modelData.description
+                    text: modelData.description
                     elide: Text.ElideRight
                     color: ThemeService.foregroundColor
                     font.pixelSize: 11

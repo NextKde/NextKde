@@ -1,5 +1,6 @@
 import Kos.Demo as Demo
 import QtQuick
+import Kos.Icons as Symbols
 import "pages" as Pages
 import "components" as SettingsControls
 import QtQuick.Controls
@@ -313,12 +314,11 @@ ApplicationWindow {
             radius: 14
             color: "#241700"
 
-            Text {
+            Symbols.Icon {
                 anchors.centerIn: parent
-                text: "!"
+                name: "exclamationmark"
                 color: "#ff9f0a"
-                font.pixelSize: 17
-                font.weight: Font.Bold
+                size: 17
             }
         }
 
@@ -336,12 +336,11 @@ ApplicationWindow {
             color: bannerCloseHit.containsMouse
                 ? Qt.rgba(0.14, 0.09, 0, 0.18) : "transparent"
 
-            Text {
+            Symbols.Icon {
                 anchors.centerIn: parent
-                text: "✕"
+                name: "xmark"
                 color: "#241700"
-                font.pixelSize: 15
-                font.weight: Font.Bold
+                size: 15
             }
 
             MouseArea {

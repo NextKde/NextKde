@@ -1,5 +1,6 @@
 import Kos.Demo as Demo
 import QtQuick
+import Kos.Icons as Symbols
 import QtQuick.Controls
 import QtQuick.Layouts
 import QtQuick.Window
@@ -80,10 +81,10 @@ ColumnLayout {
                 Accessible.role: Accessible.RadioButton
                 Accessible.checked: selected
                 Accessible.onPressAction: section.bridge.fgSchedSetReclaim(modelData.id)
-                Text {
-                    text: reclaimRow.selected ? "✓" : ""
+                Symbols.Icon {
+                    name: reclaimRow.selected ? "checkmark" : ""
                     color: colors.accent
-                    font.pixelSize: 16
+                    size: 16
                 }
                 property Item activationArea: MouseArea {
                     parent: reclaimRow
