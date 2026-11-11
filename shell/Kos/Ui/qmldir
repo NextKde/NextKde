@@ -2,6 +2,7 @@ module Kos.Ui
 KosLyricLine 1.0 foundation/KosLyricLine.qml
 depends QtQuick
 singleton AppTheme 1.0 foundation/AppTheme.qml
+MotionTokens 1.0 foundation/MotionTokens.qml
 KosApplicationWindow 1.0 foundation/KosApplicationWindow.qml
 KosButton 1.0 foundation/KosButton.qml
 KosCard 1.0 foundation/KosCard.qml
