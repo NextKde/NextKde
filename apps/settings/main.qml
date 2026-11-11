@@ -1079,8 +1079,8 @@ ApplicationWindow {
             anchors.right: windowControls.left
             anchors.rightMargin: 22
             anchors.verticalCenter: windowControls.verticalCenter
-            width: 26
-            height: 26
+            width: Demo.LiquidStyle.toolbarButtonHeight
+            height: Demo.LiquidStyle.toolbarButtonHeight
             z: 2
             iconOnly: true
             contentItem: Item {
@@ -1117,15 +1117,15 @@ ApplicationWindow {
             x: contentSurface.x + 20
             y: windowControls.y + (windowControls.height - height) / 2
             width: Math.max(0, kdeSettingsButton.x - x - 12)
-            height: 26
+            height: Demo.LiquidStyle.toolbarButtonHeight
             spacing: 10
             z: 2
 
             Demo.LiquidActionButtonGroup {
                 objectName: "settingsHistoryNavigation"
                 Layout.preferredWidth: implicitWidth
-                Layout.preferredHeight: 26
-                buttonSize: 26
+                Layout.preferredHeight: implicitHeight
+                buttonSize: Demo.LiquidStyle.toolbarButtonHeight
                 icons: ["back", "forward"]
                 labels: [I18n.tr("Previous page"), I18n.tr("Next page")]
                 enabledActions: [window.canGoBack, window.canGoForward]
