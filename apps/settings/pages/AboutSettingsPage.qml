@@ -137,20 +137,64 @@ ColumnLayout {
             onClicked: page.openLink(linkRow.url)
         }
         Demo.VectorIcon {
-            name: "chevron"
-            rotation: -90
+            name: "arrow_up_right_square"
             size: 14
             color: linkRow.activeFocus ? page.colors.accent : page.colors.secondaryText
         }
     }
 
-    Section {
-        Demo.SettingsItem {
-            title: "KOS Desktop Shell"
-            description: I18n.tr("A Quickshell desktop for KDE Plasma, built together with our community.")
-            titleColor: page.colors.primaryText
-            descriptionColor: page.colors.secondaryText
+    // Brand header: the mark, the product name, and the README tagline. The
+    // sections below keep their own titles.
+    ColumnLayout {
+        Layout.fillWidth: true
+        // A nested layout takes its maximum width from the text children, so
+        // fillWidth alone leaves the capped block at the page's left edge.
+        Layout.maximumWidth: 420
+        Layout.alignment: Qt.AlignHCenter
+        Layout.topMargin: 12
+        Layout.bottomMargin: 4
+        spacing: 4
+        Image {
+            Layout.alignment: Qt.AlignHCenter
+            Layout.preferredWidth: 72
+            Layout.preferredHeight: 72
+            source: page.colors.dark ? Qt.resolvedUrl("../icons/nextkde-logo-dark.svg")
+                : Qt.resolvedUrl("../icons/nextkde-logo.svg")
+            sourceSize: Qt.size(144, 144)
+            fillMode: Image.PreserveAspectFit
+            Accessible.ignored: true
         }
+        Text {
+            Layout.alignment: Qt.AlignHCenter
+            text: "NextKDE"
+            color: page.colors.primaryText
+            font.pixelSize: 18
+            font.weight: Font.DemiBold
+        }
+        Text {
+            Layout.alignment: Qt.AlignHCenter
+            Layout.fillWidth: true
+            Layout.maximumWidth: 420
+            Layout.topMargin: 4
+            text: I18n.tr("A Quickshell desktop for KDE Plasma.")
+            color: page.colors.primaryText
+            font.pixelSize: 13
+            horizontalAlignment: Text.AlignHCenter
+            wrapMode: Text.Wrap
+        }
+        Text {
+            Layout.alignment: Qt.AlignHCenter
+            Layout.fillWidth: true
+            Layout.maximumWidth: 420
+            text: I18n.tr("Liquid glass, a floating dock, and a workspace you can make your own.")
+            color: page.colors.secondaryText
+            font.pixelSize: 12
+            horizontalAlignment: Text.AlignHCenter
+            wrapMode: Text.Wrap
+        }
+    }
+
+    Section {
         LinkRow {
             objectName: "about-website"
             title: I18n.tr("Official website")
@@ -161,7 +205,7 @@ ColumnLayout {
         LinkRow {
             objectName: "about-repository"
             title: I18n.tr("GitHub repository")
-            description: "github.com/NextKde/NextKde"
+            description: "NextKde/NextKde"
             url: page.repositoryUrl
         }
     }

@@ -15,7 +15,6 @@ export const catalog = {
     "About": "Sobre",
     "Official website": "Site oficial",
     "GitHub repository": "Repositório no GitHub",
-    "A Quickshell desktop for KDE Plasma, built together with our community.": "Um desktop Quickshell para KDE Plasma, construído com nossa comunidade.",
     "Get involved": "Participe",
     "Submit an Issue": "Enviar uma Issue",
     "Report a bug or suggest an improvement on GitHub.": "Relate um problema ou sugira uma melhoria no GitHub.",
