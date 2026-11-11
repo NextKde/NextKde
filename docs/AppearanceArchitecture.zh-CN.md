@@ -10,11 +10,11 @@
 | 所有者 | 契约 |
 | --- | --- |
 | `shell/desktop/modules/common/AppearanceConfigService.qml` | Shell 外观校验、迁移、快照 |
-| 同目录 `AppearanceTokens.qml` | 派生视觉 Token，版本 9；消费者用 Token，不重复样式分支 |
+| 同目录 `AppearanceTokens.qml` | 派生视觉 Token，版本 10；消费者用 Token，不重复样式分支 |
 | `IconAppearanceService.qml`、`BundledIcons.qml`、`BundledIcon.qml`、`SystemIconResolver.qml` | 图标持久化、命名资源、系统主题集中回退 |
 | `shell/desktop/DesktopEnvironment.qml` | `appearance-settings` IPC |
 | `apps/settings/` | 独立进程，经 IPC 编辑，不导入 Shell 内部 |
-| `shared/qml/colorize/` | 可移植纯 JS 调色/HCT，不依赖 Quickshell |
+| `shared/qml/colorize/` | 纯 JS 调色/HCT 算法与 Shell 专用 Quickshell 采样器 |
 | `shared/qml/controls/` 与 Shell 公共组件 | 通过显式主题输入复用表面和控件 |
 
 配置归 `AppearanceConfigService`，颜色/几何/透明度/动效由 `AppearanceTokens` 派生。
@@ -24,7 +24,7 @@ Bar 融合/布局/显示及 Dock 配置相互独立。切换样式不重置 Dock
 
 ## 持久化与 IPC
 
-`Quickshell.stateDir/appearance/config.json` 当前写入 schema **30**；完整字段以源码
+`Quickshell.stateDir/appearance/config.json` 当前写入 schema **33**；完整字段以源码
 `serialize()` 和加载迁移为准，不用不完整示例覆盖用户整份 JSON。保留旧版迁移、各预设光学值、校验及范围裁剪。
 图标另存 `appearance/icon-appearance.json`（schema 1），含旧 Dock 一次性迁移。
 经防抖、`JsonConfigStore` → 平台 `state.write` → `QSaveFile` 保存，不从 QML 执行 shell 命令。

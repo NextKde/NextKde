@@ -2,12 +2,13 @@
 # Compile the QML-side shaders to Qt Shader Binary (.qsb)
 # Requires: qsb (from qt6-shadertools; on Arch it is /usr/lib/qt6/bin/qsb)
 
-set -e
+set -eu
 cd "$(dirname "$0")"
 
 # qsb ships with qt6-shadertools and is not always on PATH (Arch installs it as
 # /usr/lib/qt6/bin/qsb).
 PATH="$PATH:/usr/lib/qt6/bin"
+QSB=${QSB:-qsb}
 
 # --qt6 == --glsl "100 es,120,150" --hlsl 50 --msl 12, the set Qt Quick bakes
 # its own scene-graph shaders with. That matters because these effects are
@@ -26,39 +27,21 @@ PATH="$PATH:/usr/lib/qt6/bin"
 # and the effect renders nothing. Staying on --qt6 also means this script
 # reproduces the committed .qsb byte for byte, so a diff after re-running it
 # means the shader really changed.
-echo "Compiling icon tint fragment shader..."
-qsb --qt6 -o icon_effect.frag.qsb icon_effect.frag
+# Bake both stages, including the sourceless card-shadow vertex shader and the
+# stage plate. Wallpaper shaders stay next to their consuming QML; do not keep
+# a second global copy that can drift from the module's uniform layout.
+for source in *.frag *.vert ../modules/wallpaper/shaders/*.frag; do
+    case "$source" in
+        # Qt Quick 3D CustomMaterial reads these sources directly.
+        */spatial_background.frag|*/spatial_subject.frag) continue ;;
+    esac
+    echo "Compiling $source..."
+    case "$source" in
+        # This shader samples textureSize and already ships GLSL 330/300 es.
+        */layered_wallpaper.frag)
+            "$QSB" --glsl "330,300 es" --hlsl 50 --msl 12 -o "$source.qsb" "$source" ;;
+        *) "$QSB" --qt6 -o "$source.qsb" "$source" ;;
+    esac
+done
 
-echo "Compiling squircle fragment shader..."
-qsb --qt6 -o squircle.frag.qsb squircle.frag
-
-echo "Compiling card shadow shaders..."
-# Both stages are baked here: the shadow has no source item, so its vertex
-# stage computes the item-local coordinate itself instead of relying on
-# qt_MultiTexCoord0, which a sourceless ShaderEffect is not guaranteed to get.
-qsb --qt6 -o card_shadow.vert.qsb card_shadow.vert
-qsb --qt6 -o card_shadow.frag.qsb card_shadow.frag
-
-echo "Compiling depth parallax fragment shader..."
-qsb --qt6 -o depth_parallax.frag.qsb depth_parallax.frag
-
-echo "Compiling layered wallpaper fragment shader..."
-qsb --qt6 -o layered_wallpaper.frag.qsb layered_wallpaper.frag
-
-echo "Compiling spatial foreground fragment shader..."
-qsb --qt6 -o spatial_foreground.frag.qsb spatial_foreground.frag
-
-echo "Compiling stage tilt shader..."
-# 台前侧栏卡片的真透视倾斜（共享灭点），纯函数孪生在
-# ../../modules/stage/stage-geometry.mjs 的 tiltProject/tiltUnproject。
-qsb --qt6 -o stage_tilt.frag.qsb stage_tilt.frag
-
-echo "Compiling stage round shader..."
-# 沉浸缩略图的圆角遮罩（圆角矩形 SDF；取代 Qt5Compat OpacityMask——
-# layer.effect 形态的嵌套层在本机 freedreno 栈上于 plane 离屏层内失效）。
-qsb --qt6 -o stage_round.frag.qsb stage_round.frag
-
-echo "Compiling scene liquid fragment shader..."
-qsb --qt6 -o scene_liquid.frag.qsb scene_liquid.frag
-
-echo "Done: icon_effect.frag.qsb + squircle.frag.qsb + card_shadow.vert.qsb + card_shadow.frag.qsb + depth_parallax.frag.qsb + layered_wallpaper.frag.qsb + spatial_foreground.frag.qsb + stage_tilt.frag.qsb + stage_round.frag.qsb + scene_liquid.frag.qsb"
+echo "Done: desktop and wallpaper ShaderEffect binaries"

@@ -6,9 +6,7 @@ import "../foundation" as Foundation
 
 // A plain rounded select dropdown, shared by the settings apps. Deliberately
 // not a platform-styled ComboBox and not a glass material: a flat rounded
-// field whose choices live in a small rounded sheet (the look
-// WallpaperValueMenu established for settings rows), lifted into the shared
-// family so every app can use it.
+// field whose choices live in a small rounded sheet shared by settings rows.
 Item {
     id: root
 

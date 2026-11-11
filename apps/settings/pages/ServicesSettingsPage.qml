@@ -1,9 +1,9 @@
-import "../../shared/qml/i18n"
+import "../../../shared/qml/i18n"
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Controls.Basic as Basic
 import QtQuick.Layouts
-import "components" as Controls
+import "../components" as Controls
 
 GridLayout {
     id: page
@@ -158,7 +158,7 @@ GridLayout {
             wrapMode: Text.Wrap
             font.pixelSize: 12
         }
-        WallpaperTextButton {
+        Controls.SettingsTextButton {
             objectName: "catalogTestModeButton"
             label: page.store && page.store.testMode ? I18n.tr("Exit test mode") : I18n.tr("Enter test mode")
             colors: page.colors
@@ -236,11 +236,11 @@ GridLayout {
                     wrapMode: Text.Wrap
                 }
                 Basic.TextField { id: releaseTagField; objectName: "catalogReleaseTag"; Layout.fillWidth: true; placeholderText: I18n.tr("Release tag (blank = latest stable)") }
-                WallpaperTextButton { label: I18n.tr("Latest stable release"); colors: page.colors; onClicked: releaseTagField.text = "" }
+                Controls.SettingsTextButton { label: I18n.tr("Latest stable release"); colors: page.colors; onClicked: releaseTagField.text = "" }
                 Text { Layout.fillWidth: true; textFormat: Text.PlainText; visible: !!page.store && page.store.releasesBusy; text: I18n.tr("Loading releases…"); color: page.colors.secondaryText }
                 Repeater {
                     model: page.store && page.store.releases ? (page.store.releases.releases || []) : []
-                    delegate: WallpaperTextButton {
+                    delegate: Controls.SettingsTextButton {
                         required property var modelData
                         label: modelData.tag + (modelData.prerelease ? " · " + I18n.tr("Prerelease") : "")
                         colors: page.colors
@@ -280,13 +280,13 @@ GridLayout {
             color: page.colors.primaryText
             font.pixelSize: 13
         }
-        WallpaperTextButton {
+        Controls.SettingsTextButton {
             label: page.store && page.store.updateStatus && page.store.updateStatus.running ? I18n.tr("Checking for updates…") : I18n.tr("Check all updates")
             colors: page.colors
             enabled: !!page.store && !(page.store.updateStatus && page.store.updateStatus.running)
             onClicked: page.store.checkAllUpdates()
         }
-        WallpaperTextButton {
+        Controls.SettingsTextButton {
             label: I18n.tr("Manage app sources")
             colors: page.colors
             onClicked: sourceDialog.open()
@@ -356,14 +356,14 @@ GridLayout {
                             color: page.colors.secondaryText
                             wrapMode: Text.Wrap
                         }
-                        WallpaperTextButton {
+                        Controls.SettingsTextButton {
                             visible: !!page.store && page.store.testMode
                             label: I18n.tr("Catalog Release: %1").arg(modelData.releaseTag || I18n.tr("Latest stable release"))
                             colors: page.colors
                             enabled: !!page.store && !page.store.catalogBusy && !page.store.anyBusy && !page.store.releasesBusy
                             onClicked: page.chooseRelease("source", modelData.id, modelData.repository, modelData.releaseTag)
                         }
-                        WallpaperTextButton {
+                        Controls.SettingsTextButton {
                             label: I18n.tr("Remove source")
                             colors: page.colors
                             enabled: !!page.store && !page.store.catalogBusy && !page.store.hasActiveMutation
@@ -371,7 +371,7 @@ GridLayout {
                         }
                     }
                 }
-                WallpaperTextButton {
+                Controls.SettingsTextButton {
                     label: page.store && page.store.catalogBusy ? I18n.tr("Checking…") : I18n.tr("Refresh app sources")
                     colors: page.colors
                     enabled: !!page.store && !page.store.catalogBusy && !page.store.hasActiveMutation
@@ -410,7 +410,7 @@ GridLayout {
                     color: page.colors.primaryText
                     wrapMode: Text.Wrap
                 }
-                WallpaperTextButton {
+                Controls.SettingsTextButton {
                     label: I18n.tr("Add source")
                     colors: page.colors
                     enabled: !!page.store && sourceTrust.checked && !page.store.catalogBusy && !page.store.hasActiveMutation
@@ -678,7 +678,7 @@ GridLayout {
                 }
                 footer: Item {
                     implicitHeight: 58
-                    WallpaperTextButton {
+                    Controls.SettingsTextButton {
                         objectName: appCard.app.id + "DetailsClose"
                         anchors {
                             right: parent.right
@@ -995,7 +995,7 @@ GridLayout {
                             Layout.fillWidth: true
                             Layout.topMargin: 12
                             spacing: 8
-                            WallpaperTextButton {
+                            Controls.SettingsTextButton {
                                 implicitHeight: 28
                                 cornerRadius: 14
                                 objectName: appCard.app.id + "RecheckEnvironment"
@@ -1005,7 +1005,7 @@ GridLayout {
                                 colors: page.colors
                                 onClicked: page.store.refresh()
                             }
-                            WallpaperTextButton {
+                            Controls.SettingsTextButton {
                                 implicitHeight: 28
                                 cornerRadius: 14
                                 objectName: appCard.app.id + "CheckUpdates"
@@ -1014,7 +1014,7 @@ GridLayout {
                                 enabled: !appCard.blocked && appCard.app.backend !== "flatpak-unavailable" && (appCard.app.backend !== "flatpak" && appCard.app.backend !== "flatpak-ready" || !!appCard.app.canCheckUpdates)
                                 onClicked: page.store.checkUpdates(appCard.app.id)
                             }
-                            WallpaperTextButton {
+                            Controls.SettingsTextButton {
                                 implicitHeight: 28
                                 cornerRadius: 14
                                 objectName: appCard.app.id + "Update"
@@ -1024,31 +1024,7 @@ GridLayout {
                                 colors: page.colors
                                 onClicked: page.requestPlan(appCard.app, true)
                             }
-                            WallpaperTextButton {
-                                implicitHeight: 28
-                                cornerRadius: 14
-                                visible: !!appCard.app.installed && !!appCard.app.managed && appCard.app.backend !== "flatpak"
-                                enabled: !appCard.blocked
-                                label: I18n.tr("Preview old program versions")
-                                colors: page.colors
-                                onClicked: page.store.cleanupProgram(appCard.app.id, "cleanup-plan")
-                            }
-                            WallpaperTextButton {
-                                implicitHeight: 28
-                                cornerRadius: 14
-                                visible: !!appCard.app.cleanupPlan && !!appCard.app.cleanupPlan.removedRevisions && appCard.app.cleanupPlan.removedRevisions.length > 0
-                                enabled: !appCard.blocked
-                                label: I18n.tr("Clean old program versions…")
-                                colors: page.colors
-                                onClicked: {
-                                    programActionDialog.appId = appCard.app.id;
-                                    programActionDialog.action = "prune";
-                                    programActionDialog.detail = I18n.tr("Keep the current program and one rollback version. Remove only these installer-owned revisions; personal data and backups are kept.")
-                                        + "\n" + appCard.app.cleanupPlan.removedRevisions.join("\n");
-                                    programActionDialog.open();
-                                }
-                            }
-                            WallpaperTextButton {
+                            Controls.SettingsTextButton {
                                 visible: !!page.store && page.store.testMode && appCard.app.catalogActive
                                 label: I18n.tr("App Release: %1").arg(appCard.app.releaseTag || I18n.tr("Latest stable release"))
                                 colors: page.colors
@@ -1063,14 +1039,14 @@ GridLayout {
                                 color: page.colors.secondaryText
                                 wrapMode: Text.Wrap
                             }
-                            WallpaperTextButton {
+                            Controls.SettingsTextButton {
                                 implicitHeight: 28
                                 cornerRadius: 14
                                 label: I18n.tr("Repository")
                                 colors: page.colors
                                 onClicked: page.store.openRepository(appCard.app.id)
                             }
-                            WallpaperTextButton {
+                            Controls.SettingsTextButton {
                                 implicitHeight: 28
                                 cornerRadius: 14
                                 visible: !!appCard.app.logPath
@@ -1081,7 +1057,7 @@ GridLayout {
                         }
 
                         // Destructive / cancel action, kept apart from the rest.
-                        WallpaperTextButton {
+                        Controls.SettingsTextButton {
                             implicitHeight: 28
                             cornerRadius: 14
                             objectName: appCard.app.id + "ActionSecondary"
@@ -1103,29 +1079,6 @@ GridLayout {
                 }
             }
         }
-    }
-    Dialog {
-        id: programActionDialog
-        property string appId: ""
-        property string action: ""
-        property string detail: ""
-        parent: Overlay.overlay
-        anchors.centerIn: parent
-        width: Math.min(460, parent ? parent.width - 32 : 460)
-        modal: true
-        title: I18n.tr("Remove old program files?")
-        standardButtons: Dialog.Ok | Dialog.Cancel
-        onAccepted: {
-            if (!page.store || page.store.anyBusy) return;
-            page.store.cleanupProgram(appId, action);
-        }
-        contentItem: Text {
-            textFormat: Text.PlainText
-            text: programActionDialog.detail
-            color: page.colors.primaryText
-            wrapMode: Text.WrapAnywhere
-        }
-        background: Rectangle { radius: 10; color: page.colors.card; border.color: page.colors.secondaryText }
     }
     Basic.Dialog {
         id: planDialog
@@ -1301,7 +1254,7 @@ GridLayout {
             RowLayout {
                 anchors { right: parent.right; bottom: parent.bottom; rightMargin: 24; bottomMargin: 20 }
                 spacing: 8
-                WallpaperTextButton {
+                Controls.SettingsTextButton {
                     objectName: "flatpakPlanCancel"
                     label: I18n.tr("Cancel")
                     colors: page.colors
@@ -1309,7 +1262,7 @@ GridLayout {
                     cornerRadius: 15
                     onClicked: planDialog.close()
                 }
-                WallpaperTextButton {
+                Controls.SettingsTextButton {
                     objectName: "flatpakPlanConfirm"
                     label: planDialog.plan.operation === "update" ? I18n.tr("Download and update") : I18n.tr("Download and install")
                     colors: page.colors
@@ -1399,8 +1352,6 @@ GridLayout {
         case "update": return I18n.tr("Updating…");
         case "prepare-install": case "prepare-update": return I18n.tr("Preparing installation…");
         case "uninstall": return I18n.tr("Uninstalling…");
-        case "cleanup-plan": return I18n.tr("Inspecting old program versions…");
-        case "prune": return I18n.tr("Cleaning installer-owned old versions…");
         case "cancelling": return I18n.tr("Cancelling…");
         default: return I18n.tr("Preparing…");
         }

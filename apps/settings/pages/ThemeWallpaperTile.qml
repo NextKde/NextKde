@@ -1,7 +1,7 @@
-import "../../shared/qml/controls" as SharedControls
+import "../../../shared/qml/controls" as SharedControls
 import QtQuick
 import QtQuick.Effects
-import "../../shared/qml/wallpapers" as ThemeVisuals
+import "../../../shared/qml/wallpapers" as ThemeVisuals
 
 Rectangle {
     id: root

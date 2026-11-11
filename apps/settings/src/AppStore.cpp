@@ -2,12 +2,13 @@
 #include "AppCatalog.h"
 #include <QCoreApplication>
 #include <QDateTime>
+#include <QProcess>
 #include <QtConcurrentRun>
 
 // All catalogue entries use the same Flatpak lifecycle. Native installations
 // may coexist; they neither block Flatpak operations nor act as launch fallbacks.
-AppStore::AppStore(const QString& directory, QObject* parent)
-    : QObject(parent), m_independent(directory, this)
+AppStore::AppStore(QObject* parent)
+    : QObject(parent), m_independent(this)
 {
     connect(&m_independent, &IndependentApps::changed, this, &AppStore::changed);
     connect(&m_independent, &IndependentApps::taskFinished, this, &AppStore::taskFinished);
@@ -57,7 +58,6 @@ void AppStore::cancel(const QString& id) { m_independent.cancel(id); }
 void AppStore::open(const QString& id) { if (!anyBusy()) m_independent.open(id); }
 void AppStore::openLog(const QString& id) { m_independent.openLog(id); }
 void AppStore::openRepository(const QString& id) { m_independent.openRepository(id); }
-void AppStore::cleanupProgram(const QString&, const QString&) {}
 
 
 bool AppStore::testMode() const { return AppCatalog::testMode(); }

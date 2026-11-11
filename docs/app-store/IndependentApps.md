@@ -43,7 +43,7 @@ current IDs and has no remove-retired operation. Legacy program AND personal-dat
 deletion is the separate explicit `tools/maintenance/purge-legacy-apps.py`, preview by default.
 Unproven core/system ownership and shared data are retained, not guessed. See
 [boundaries, exact paths and cleanup](ProfileMigration.md) and
-[human acceptance](ProfileMigrationAcceptance.md).
+[human acceptance](ProfileMigration.md#vm-acceptance).
 The old per-app GitHub repositories were deleted in favor of NextKde/kos-apps;
 no signed release of these breaking changes is available yet.
 

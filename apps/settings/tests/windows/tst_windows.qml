@@ -62,6 +62,11 @@ Item {
         function control(name) {
             const item = findChild(app.contentItem, name)
             verify(item !== null, name)
+            const scroll = findChild(app.contentItem, "settings-page-scroll")
+            verify(scroll !== null)
+            scroll.contentY = Math.max(0, Math.min(scroll.contentHeight - scroll.height,
+                item.mapToItem(scroll.contentItem, 0, 0).y - 100))
+            verify(waitForRendering(item))
             return item
         }
         function test_switches() {

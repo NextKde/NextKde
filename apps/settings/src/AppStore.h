@@ -1,12 +1,5 @@
 #pragma once
 
-#include <QElapsedTimer>
-#include <QFile>
-#include <QJsonObject>
-#include <QNetworkAccessManager>
-#include <QPointer>
-#include <QProcess>
-#include <QTimer>
 #include <QVariantMap>
 #include "IndependentApps.h"
 #include <QFutureWatcher>
@@ -29,7 +22,7 @@ class AppStore final : public QObject {
     Q_PROPERTY(bool anyBusy READ anyBusy NOTIFY changed)
     Q_PROPERTY(bool hasActiveMutation READ hasActiveMutation NOTIFY changed)
 public:
-    explicit AppStore(const QString& resourcesDirectory, QObject* parent = nullptr);
+    explicit AppStore(QObject* parent = nullptr);
     ~AppStore() override;
     bool startUpdateAgent(bool checkNow = false);
     bool testMode() const;
@@ -74,7 +67,6 @@ public:
     Q_INVOKABLE void openRepository(const QString& id);
     Q_INVOKABLE void checkUpdates(const QString& id);
     Q_INVOKABLE void refreshApps();
-    Q_INVOKABLE void cleanupProgram(const QString& id, const QString& action);
 signals:
     void changed();
     void taskFinished(const QString& name, const QString& code);

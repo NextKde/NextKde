@@ -1,4 +1,4 @@
-import "../../shared/qml/i18n"
+import "../../../shared/qml/i18n"
 import QtQuick
 
 Rectangle {

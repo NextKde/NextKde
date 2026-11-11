@@ -1,12 +1,12 @@
 import Kos.Demo as Demo
-import "components" as SettingsControls
-import "../../shared/qml/i18n"
-import "../../shared/qml/controls" as SharedControls
+import "../components" as SettingsControls
+import "../../../shared/qml/i18n"
+import "../../../shared/qml/controls" as SharedControls
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
-import "../../shared/qml/controls" as LiquidControls
-import "../../shared/qml/foundation/WallpaperCatalog.js" as WallpaperCatalog
+import "../../../shared/qml/controls" as LiquidControls
+import "../../../shared/qml/foundation/WallpaperCatalog.js" as WallpaperCatalog
 
 Dialog {
     id: picker

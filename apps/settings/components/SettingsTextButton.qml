@@ -1,7 +1,7 @@
 import QtQuick
 import Kos.Demo as Demo
 
-// Existing wallpaper action API, with the canonical compact solid button.
+// Compact text action shared by settings pages.
 Demo.LiquidActionButton {
     id: button
     property alias label: button.text
