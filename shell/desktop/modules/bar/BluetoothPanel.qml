@@ -120,7 +120,7 @@ AnimatedPopupWindow {
                 height: 46
                 radius: 11
                 color: devicePointer.containsMouse ? Qt.rgba(1, 1, 1, 0.12) : "transparent"
-                Behavior on color { ColorAnimation { duration: 110 } }
+                Behavior on color { ColorAnimation { duration: AppearanceTokens.motion.fast.duration; easing.type: AppearanceTokens.motion.enterCurve } }
                 BundledIcon {
                     width: 18; height: 18
                     anchors { left: parent.left; leftMargin: 31; verticalCenter: parent.verticalCenter }

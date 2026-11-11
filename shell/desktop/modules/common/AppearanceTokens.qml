@@ -558,15 +558,12 @@ QtObject {
         readonly property real borderOpacity: tokens.isMaterial ? 0.30 : 0.16
     }
 
-    readonly property QtObject motion: QtObject {
-        readonly property int fastDuration: tokens.isWindows12 ? 120
-            : tokens.isMaterial ? 100 : 135
-        readonly property int normalDuration: tokens.isWindows12 ? 180
-            : tokens.isMaterial ? 220 : 200
-        readonly property int slowDuration: tokens.isWindows12 ? 260
-            : tokens.isMaterial ? 300 : 360
-        readonly property int standardEasing: tokens.isMaterial
-            ? Easing.OutQuart : Easing.OutCubic
+    readonly property MotionTokens motion: MotionTokens {
+        isMaterial: tokens.isMaterial
+        readonly property int fastDuration: fast.duration
+        readonly property int normalDuration: slow.duration
+        readonly property int slowDuration: page.duration
+        readonly property int standardEasing: enterCurve
         readonly property bool springEnabled: tokens.isMacos
         readonly property bool popupAnimatesOnShow: true
         // Whether the shell draws the extra faces a form brings with it -- the
@@ -574,8 +571,8 @@ QtObject {
         readonly property bool drawsFormDecorations: tokens.isMacos
         // Anchored popups share Launchpad's entrance rhythm: a short cubic
         // settle from 0.96 scale with a directional fade/translation.
-        readonly property int popupOpenDuration: 150
-        readonly property int popupCloseDuration: 140
+        readonly property int popupOpenDuration: base.duration
+        readonly property int popupCloseDuration: base.duration
         readonly property real popupStartScale: 0.96
         readonly property real popupAnchorOffset: 20
         // A widget resize follows the pointer directly while the corner is

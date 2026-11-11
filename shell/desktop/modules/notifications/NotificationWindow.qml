@@ -28,10 +28,10 @@ PanelWindow {
     WlrLayershell.namespace: "notification"
 
     required property var groupService
-    property int exitDuration: 200
+    property int exitDuration: AppearanceTokens.motion.slow.duration
     // Fading in place when a click opens the app is quicker than the slide-out
     // used for expiry, so the card never lingers over the window it raised.
-    property int handoffDuration: 140
+    property int handoffDuration: AppearanceTokens.motion.base.duration
 
     // Global ceiling on popup auto-expire, in ms. Apps may request longer
     // (Fcitx requests 60000 for its "Wayland 诊断" notice), but no popup is
@@ -87,17 +87,18 @@ PanelWindow {
 
         // Entrance: opacity + x-slide. Surface size is constant, so no resize
         // lands mid-slide -- the slide stays smooth.
+        // motion-exception: retain the existing accelerating entrance; changing its shape is a redesign.
         add: Transition {
             ParallelAnimation {
-                NumberAnimation { property: "opacity"; from: 0; to: 1; duration: 200; easing.type: Easing.InCubic }
-                NumberAnimation { property: "x"; from: 120; to: 0; duration: 200; easing.type: Easing.InCubic }
+                NumberAnimation { property: "opacity"; from: 0; to: 1; duration: AppearanceTokens.motion.slow.duration; easing.type: Easing.InCubic }
+                NumberAnimation { property: "x"; from: 120; to: 0; duration: AppearanceTokens.motion.slow.duration; easing.type: Easing.InCubic }
             }
         }
         displaced: Transition {
-            NumberAnimation { property: "y"; duration: 200; easing.type: Easing.InOutCubic }
+            NumberAnimation { property: "y"; duration: AppearanceTokens.motion.slow.duration; easing.type: AppearanceTokens.motion.settleCurve }
         }
         removeDisplaced: Transition {
-            NumberAnimation { property: "y"; duration: 200; easing.type: Easing.InOutCubic }
+            NumberAnimation { property: "y"; duration: AppearanceTokens.motion.slow.duration; easing.type: AppearanceTokens.motion.settleCurve }
         }
 
         delegate: Rectangle {
@@ -132,7 +133,7 @@ PanelWindow {
                 property: "x"
                 to: notificationList.width + 44
                 duration: root.exitDuration
-                easing.type: Easing.InCubic
+                easing.type: AppearanceTokens.motion.exitCurve
                 onFinished: card.ListView.delayRemove = false
             }
             // Opening the app fades the card away in place and lifts it a touch,
@@ -147,14 +148,14 @@ PanelWindow {
                     property: "opacity"
                     to: 0
                     duration: root.handoffDuration
-                    easing.type: Easing.OutCubic
+                    easing.type: AppearanceTokens.motion.enterCurve
                 }
                 NumberAnimation {
                     target: card
                     property: "scale"
                     to: 1.04
                     duration: root.handoffDuration
-                    easing.type: Easing.OutCubic
+                    easing.type: AppearanceTokens.motion.enterCurve
                 }
                 onFinished: card.ListView.delayRemove = false
             }
@@ -247,7 +248,7 @@ PanelWindow {
             width: notificationList.width
             height: Math.floor(content.implicitHeight + 28)
             Behavior on height {
-                NumberAnimation { duration: 200; easing.type: Easing.InOutCubic }
+                NumberAnimation { duration: AppearanceTokens.motion.slow.duration; easing.type: AppearanceTokens.motion.settleCurve }
             }
             radius: 28
             color: "transparent"

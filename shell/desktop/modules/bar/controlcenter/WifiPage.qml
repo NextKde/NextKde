@@ -96,7 +96,7 @@ Item {
                     && wifiRowMouse.containsMouse
                     ? (AppearanceTokens.surface.pick(AppearanceTokens.colors.surfaceContainerHigh, ThemeService.isDark ? Qt.rgba(1, 1, 1, 0.12) : Qt.rgba(0, 0, 0, 0.06)))
                     : "transparent"
-                Behavior on color { ColorAnimation { duration: 100 } }
+                Behavior on color { ColorAnimation { duration: AppearanceTokens.motion.instant.duration; easing.type: AppearanceTokens.motion.enterCurve } }
 
                 BundledIcon {
                     visible: !!modelData.active

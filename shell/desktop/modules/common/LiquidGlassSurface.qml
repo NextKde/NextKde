@@ -92,6 +92,7 @@ Rectangle {
     property bool bottomShadeVisible: true
     // Wallpaper changes should feel like pigment slowly moving through the
     // glass rather than a theme colour snapping to its next value.
+    // motion-exception: preserve slow wallpaper pigment interpolation.
     property int ambientTransitionDuration: 2600
     property bool _ambientInitialized: false
     property real _ambientProgress: 1.0
@@ -226,6 +227,7 @@ Rectangle {
         easing.type: Easing.InOutSine
     }
     Behavior on ambientStrength {
+        // motion-exception: preserve the ambient light-strength crossfade.
         NumberAnimation { duration: 420; easing.type: Easing.InOutCubic }
     }
 

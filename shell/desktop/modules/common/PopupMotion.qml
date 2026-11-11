@@ -10,8 +10,8 @@ QtObject {
     property bool mapped: false
     property int openDuration: AppearanceTokens.motion.popupOpenDuration
     property int closeDuration: AppearanceTokens.motion.popupCloseDuration
-    property int openEasing: Easing.OutCubic
-    property int closeEasing: Easing.InCubic
+    property int openEasing: AppearanceTokens.motion.enterCurve
+    property int closeEasing: AppearanceTokens.motion.exitCurve
     readonly property bool interactive: requestedOpen && progress > 0.01
     signal closed()
 
