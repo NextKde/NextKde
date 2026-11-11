@@ -504,7 +504,7 @@ PanelWindow {
         opacity: root.editMode ? 1 : 0
         visible: root.editMode || opacity > 0
         enabled: root.editMode
-        Behavior on opacity { NumberAnimation { duration: AppearanceTokens.motion.fastDuration } }
+        Behavior on opacity { NumberAnimation { duration: AppearanceTokens.motion.fastDuration; easing.type: AppearanceTokens.motion.enterCurve } }
         anchors { top: parent.top; right: parent.right; topMargin: root.topInset; rightMargin: 24 }
         spacing: 8
 
@@ -558,7 +558,7 @@ PanelWindow {
         enabled: root.editMode && root.widgetLibraryOpen
         scale: 0.96 + 0.04 * opacity
         transformOrigin: Item.TopRight
-        Behavior on opacity { NumberAnimation { duration: AppearanceTokens.motion.normalDuration; easing.type: Easing.OutCubic } }
+        Behavior on opacity { NumberAnimation { duration: AppearanceTokens.motion.normalDuration; easing.type: AppearanceTokens.motion.enterCurve } }
         anchors { top: widgetEditToolbar.bottom; right: widgetEditToolbar.right; topMargin: 10 }
         width: 430
         height: 116
@@ -662,6 +662,7 @@ PanelWindow {
             NumberAnimation {
                 // Appear promptly, leave a little faster: the highlight should
                 // never trail the card that is landing.
+                // motion-exception: Drop-preview fade follows the landing card; retain its shortened release.
                 duration: widgetDropPreview.dragged !== null
                     ? AppearanceTokens.motion.fastDuration
                     : AppearanceTokens.motion.fastDuration * 0.6
@@ -998,7 +999,7 @@ PanelWindow {
                 // including while a newly loaded card grows from zero height.
                 property real pageProgress: root.timerView ? 1 : 0
                 Behavior on pageProgress {
-                    NumberAnimation { duration: 240; easing.type: Easing.OutCubic }
+                    NumberAnimation { duration: AppearanceTokens.motion.slow.duration; easing.type: AppearanceTokens.motion.enterCurve }
                 }
 
                 Item {
@@ -2143,6 +2144,7 @@ PanelWindow {
                             SequentialAnimation on y {
                                 running: musicNotes.running
                                 loops: Animation.Infinite
+                                // motion-exception: Music-note loops keep their phase, lifetime and fade envelope.
                                 PauseAnimation { duration: index * 620 }
                                 NumberAnimation { from: musicNotes.height - 14; to: -20; duration: 2200 + index * 180; easing.type: Easing.OutSine }
                             }
@@ -2868,6 +2870,7 @@ PanelWindow {
             property: "folderDropProgress"
             from: 0
             to: 1
+            // motion-exception: Folder-drop progress is the drag acceptance dwell timer.
             duration: 380
             easing.type: Easing.Linear
             onFinished: {
@@ -3756,7 +3759,7 @@ PanelWindow {
             border { width: 1; color: Qt.rgba(1, 1, 1, 0.34) }
             z: 1
             Behavior on opacity {
-                NumberAnimation { duration: 110; easing.type: Easing.OutCubic }
+                NumberAnimation { duration: AppearanceTokens.motion.fast.duration; easing.type: AppearanceTokens.motion.enterCurve }
             }
         }
 
@@ -3772,6 +3775,7 @@ PanelWindow {
             cellWidth: desktopFileGrid.itemWidth
             cellHeight: desktopFileGrid.itemHeight
             displaced: Transition {
+                // motion-exception: Grid displacement retains Qt default timing and its drag reflow curve.
                 NumberAnimation { properties: "x,y"; easing.type: Easing.OutQuad }
             }
             model: DelegateModel {
@@ -3881,7 +3885,7 @@ PanelWindow {
                     color: Qt.rgba(0, 0, 0, 0.46)
                     border { width: 1; color: Qt.rgba(1, 1, 1, 0.28) }
                     Behavior on opacity {
-                        NumberAnimation { duration: 130; easing.type: Easing.OutCubic }
+                        NumberAnimation { duration: AppearanceTokens.motion.fast.duration; easing.type: AppearanceTokens.motion.enterCurve }
                     }
                 }
                 Item {
@@ -3895,7 +3899,7 @@ PanelWindow {
                         && desktopFileGrid.folderDropCandidatePath === modelData.path
                     opacity: visible ? 1 : 0
                     Behavior on opacity {
-                        NumberAnimation { duration: 90; easing.type: Easing.OutCubic }
+                        NumberAnimation { duration: AppearanceTokens.motion.instant.duration; easing.type: AppearanceTokens.motion.enterCurve }
                     }
                     Rectangle {
                         anchors.fill: parent
@@ -3920,7 +3924,7 @@ PanelWindow {
                     color: Qt.rgba(0, 0, 0, 0.56)
                     border { width: 1; color: Qt.rgba(1, 1, 1, 0.62) }
                     Behavior on opacity {
-                        NumberAnimation { duration: 110; easing.type: Easing.OutCubic }
+                        NumberAnimation { duration: AppearanceTokens.motion.fast.duration; easing.type: AppearanceTokens.motion.enterCurve }
                     }
                 }
                 Item {
@@ -3932,11 +3936,11 @@ PanelWindow {
                     transform: Translate {
                         y: filePointer.containsMouse ? -2 : 0
                         Behavior on y {
-                            NumberAnimation { duration: 130; easing.type: Easing.OutCubic }
+                            NumberAnimation { duration: AppearanceTokens.motion.fast.duration; easing.type: AppearanceTokens.motion.enterCurve }
                         }
                     }
                     Behavior on scale {
-                        NumberAnimation { duration: 130; easing.type: Easing.OutCubic }
+                        NumberAnimation { duration: AppearanceTokens.motion.fast.duration; easing.type: AppearanceTokens.motion.enterCurve }
                     }
                     Item {
                         id: imageThumbnailFrame
@@ -3944,7 +3948,7 @@ PanelWindow {
                         visible: modelData.kind === "image"
                         opacity: imageThumbnail.status === Image.Ready ? 1 : 0
                         Behavior on opacity {
-                            NumberAnimation { duration: 170; easing.type: Easing.OutCubic }
+                            NumberAnimation { duration: AppearanceTokens.motion.base.duration; easing.type: AppearanceTokens.motion.enterCurve }
                         }
                         Image {
                             id: imageThumbnail
@@ -4040,7 +4044,7 @@ PanelWindow {
                     styleColor: Qt.rgba(0, 0, 0, 0.72)
                     font { pixelSize: desktopFileGrid.fileNameFontSize; weight: desktopFileGrid.fileNameFontWeight }
                     Behavior on opacity {
-                        NumberAnimation { duration: 110; easing.type: Easing.OutCubic }
+                        NumberAnimation { duration: AppearanceTokens.motion.fast.duration; easing.type: AppearanceTokens.motion.enterCurve }
                     }
                 }
                 MouseArea {
@@ -4147,11 +4151,11 @@ PanelWindow {
                     transform: Translate {
                         y: fileDelegate.isRenaming ? 0 : 2
                         Behavior on y {
-                            NumberAnimation { duration: 140; easing.type: Easing.OutCubic }
+                            NumberAnimation { duration: AppearanceTokens.motion.base.duration; easing.type: AppearanceTokens.motion.enterCurve }
                         }
                     }
                     Behavior on opacity {
-                        NumberAnimation { duration: 140; easing.type: Easing.OutCubic }
+                        NumberAnimation { duration: AppearanceTokens.motion.base.duration; easing.type: AppearanceTokens.motion.enterCurve }
                     }
                     function commit() {
                         if (desktopFileGrid.renamingPath !== modelData.path)
@@ -4304,7 +4308,7 @@ PanelWindow {
             border { width: 1; color: Qt.rgba(1, 1, 1, 0.48) }
             z: 8
             Behavior on opacity {
-                NumberAnimation { duration: 90; easing.type: Easing.OutCubic }
+                NumberAnimation { duration: AppearanceTokens.motion.instant.duration; easing.type: AppearanceTokens.motion.enterCurve }
             }
         }
 

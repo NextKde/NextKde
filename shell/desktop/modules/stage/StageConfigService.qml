@@ -189,6 +189,7 @@ QtObject {
     // 悬停驻留：指针停稳多久才应用聚焦排布（滑动途中只亮卡不重排 =
     // 不跳卡）。0 = 立即聚焦（旧手感）
     property int hoverDwellDelay: 200
+    // motion-exception: Stage timings are user-configurable and shared with the KWin projection.
     property int cardEnterDuration: 200
     property int reflowDuration: 140
     property int tiltAnimDuration: 200

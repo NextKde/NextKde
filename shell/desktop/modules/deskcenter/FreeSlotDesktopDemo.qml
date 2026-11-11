@@ -968,6 +968,7 @@ Item {
             Behavior on x {
                 enabled: root.initialized && !root.isActiveDragItem(delegateRoot.itemId)
                     && root.lastDropId !== delegateRoot.itemId
+                // motion-exception: Drag reflow retains its existing displacement response.
                 NumberAnimation { duration: 150; easing.type: Easing.OutCubic }
             }
             Behavior on y {
@@ -1028,10 +1029,10 @@ Item {
                     opacity: root.isSelected(delegateRoot.itemId)
                         || (hoverHandler.hovered && !dragHandler.active) ? 1 : 0
                     Behavior on color {
-                        ColorAnimation { duration: 120 }
+                        ColorAnimation { duration: AppearanceTokens.motion.fast.duration; easing.type: AppearanceTokens.motion.enterCurve }
                     }
                     Behavior on opacity {
-                        NumberAnimation { duration: 120; easing.type: Easing.OutCubic }
+                        NumberAnimation { duration: AppearanceTokens.motion.fast.duration; easing.type: AppearanceTokens.motion.enterCurve }
                     }
                 }
 
@@ -1052,13 +1053,13 @@ Item {
                     transform: Translate {
                         y: hoverHandler.hovered && !dragHandler.active ? -2 : 0
                         Behavior on y {
-                            NumberAnimation { duration: 120; easing.type: Easing.OutCubic }
+                            NumberAnimation { duration: AppearanceTokens.motion.fast.duration; easing.type: AppearanceTokens.motion.enterCurve }
                         }
                     }
                     Behavior on scale {
-                        NumberAnimation { duration: 120; easing.type: Easing.OutCubic }
+                        NumberAnimation { duration: AppearanceTokens.motion.fast.duration; easing.type: AppearanceTokens.motion.enterCurve }
                     }
-                    Behavior on color { ColorAnimation { duration: 90 } }
+                    Behavior on color { ColorAnimation { duration: AppearanceTokens.motion.instant.duration; easing.type: AppearanceTokens.motion.enterCurve } }
                     DesktopFolderIcon {
                         anchors.fill: parent
                         visible: delegateRoot.usesCustomFolderVisual

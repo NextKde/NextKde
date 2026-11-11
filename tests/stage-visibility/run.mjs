@@ -23,6 +23,12 @@ const production = [
     .replaceAll("ConfigService.", "configService.");
 const directory = mkdtempSync(join(tmpdir(), "kos-stage-visibility-"));
 try {
+    copyFileSync(new URL("../../shared/qml/foundation/MotionTokens.qml", import.meta.url), join(directory, "MotionTokens.qml"));
+    writeFileSync(join(directory, "AppearanceTokens.qml"), `pragma Singleton
+import QtQuick
+QtObject { readonly property MotionTokens motion: MotionTokens {} }
+`);
+    writeFileSync(join(directory, "qmldir"), "singleton AppearanceTokens 1.0 AppearanceTokens.qml\n");
     copyFileSync(new URL("stage-groups.mjs", stage), join(directory, "stage-groups.mjs"));
     copyFileSync(new URL("StageDesktopTransition.qml", stage), join(directory, "StageDesktopTransition.qml"));
     copyFileSync(new URL("tst_transition.qml", import.meta.url), join(directory, "tst_transition.qml"));
