@@ -1,6 +1,7 @@
 import Kos.Demo as Demo
 import "../components" as Controls
 import QtQuick
+import Kos.Icons as Symbols
 import QtQuick.Layouts
 import "../../../shared/qml/i18n"
 
@@ -60,10 +61,10 @@ ColumnLayout {
                     if (enabled)
                         page.backend.setProfile(modelData.key);
                 }
-                Text {
-                    text: modeRow.selected ? "✓" : ""
+                Symbols.Icon {
+                    name: modeRow.selected ? "checkmark" : ""
                     color: page.colors.accent
-                    font.pixelSize: 16
+                    size: 16
                 }
                 property Item activationArea: MouseArea {
                     parent: modeRow

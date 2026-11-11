@@ -2623,14 +2623,11 @@ PanelWindow {
                                                 rightMargin: -5
                                             }
                                             color: Qt.rgba(0.95, 0.27, 0.25, 0.96)
-                                            ShellText {
+                                            BundledIcon {
                                                 anchors.centerIn: parent
-                                                text: "−"
+                                                name: "minus"
                                                 color: "white"
-                                                font {
-                                                    pixelSize: 17
-                                                    weight: Font.Bold
-                                                }
+                                                size: 17
                                             }
                                             MouseArea {
                                                 anchors.fill: parent

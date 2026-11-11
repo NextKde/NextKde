@@ -1,4 +1,5 @@
 import QtQuick
+import Kos.Icons as Symbols
 import Kos.Demo as Demo
 
 // Compatibility adapter: all label, spacing and trailing-slot geometry is canonical.
@@ -16,10 +17,10 @@ Demo.SettingsItem {
         cursorShape: Qt.PointingHandCursor
         onClicked: row.activated()
     }
-    Text {
+    Symbols.Icon {
         visible: row.actionable
-        text: "›"
+        name: "chevron_right"
         color: row.colors ? row.colors.secondaryText : row.titleColor
-        font.pixelSize: 18
+        size: 18
     }
 }

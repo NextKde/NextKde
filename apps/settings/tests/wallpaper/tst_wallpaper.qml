@@ -148,7 +148,7 @@ TestCase {
         verify(action !== null)
         verify(label !== null)
         compare(action.enabled, true)
-        compare(label.text, I18n.tr("Desktop preview  ›"))
+        compare(label.text, I18n.tr("Desktop preview"))
         action.clicked(null)
         compare(bridgeMock.previewRequested, "/tmp/wallpaper.jpg")
     }
