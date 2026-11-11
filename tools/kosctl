@@ -1667,15 +1667,37 @@ install_kwin_plugins() {
             return 1
         fi
     fi
-    if (( ${#system_entries[@]} > 0 || ${#stale_entries[@]} > 0 )); then
-        kos_sudo rm -f -- "${system_entries[@]}" "${stale_entries[@]}"
+    # Create the destination directories first; a failure here leaves every
+    # installed plugin untouched.
+    local -a target_dirs=()
+    local staged_dir
+    while IFS= read -r staged_dir; do
+        target_dirs+=("${staged_dir#"$stage_dir"}")
+    done < <(find "$stage_dir$kwin_system_prefix" -type d)
+    if (( ${#target_dirs[@]} > 0 )); then
+        kos_sudo install -d -m 755 -- "${target_dirs[@]}"
+        kos_sudo chmod 755 -- "${target_dirs[@]}"
     fi
-    kos_sudo cp -a --no-preserve=ownership "${selinux_context[@]}" \
-        "$stage_dir$kwin_system_prefix/." "$kwin_system_prefix/"
+    # Replace each file through a sibling temp + rename. A failed copy leaves
+    # the old file in place; rename swaps inodes atomically, so the running
+    # compositor keeps its mapping while a later start sees the new file.
+    local entry staged_path installed_path temporary
+    for entry in "${system_entries[@]}"; do
+        staged_path="$stage_dir$entry"
+        installed_path="$entry"
+        temporary="$installed_path.kos-new"
+        kos_sudo rm -f -- "$temporary"
+        kos_sudo cp -a --no-preserve=ownership "${selinux_context[@]}" \
+            -- "$staged_path" "$temporary"
+        kos_sudo mv -fT -- "$temporary" "$installed_path"
+    done
     # Belt: the prefix itself is what a bad umask breaks first, and restoring
     # its 0755 here is exactly the manual recovery -- cheap, and it makes the
     # system-wide lockout impossible even if a future staging step slips.
     kos_sudo chmod 755 "$kwin_system_prefix"
+    if (( ${#stale_entries[@]} > 0 )); then
+        kos_sudo rm -f -- "${stale_entries[@]}"
+    fi
     # Directories the stale files lived in are pruned only when they end up
     # empty, so a shared directory such as the plugin dir is never touched.
     if (( ${#stale_entries[@]} > 0 )); then
