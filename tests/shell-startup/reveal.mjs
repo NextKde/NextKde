@@ -43,6 +43,7 @@ Item {
             AppLauncherService.open = false
             StartupReveal.loaded = false
             StartupReveal.started = false
+            StartupReveal.preparing = false
             StartupReveal.progress = 0
         }
         function test_order_and_duration() {

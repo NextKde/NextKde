@@ -12,10 +12,12 @@ public:
     ~StartupInputMonitor() override;
     bool active() const { return m_active; }
     void setActive(bool active);
+    Q_INVOKABLE void prepareFrame();
 
 signals:
     void activeChanged();
     void activity();
+    void framePrepared();
 
 private slots:
     void globalActivity();
