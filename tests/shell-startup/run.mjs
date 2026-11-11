@@ -1,25 +1,40 @@
 import { spawn, spawnSync } from "node:child_process";
-import { existsSync, mkdirSync, mkdtempSync, rmSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 
-// Boots the whole shipping shell -- shell/shell.qml, not a fixture -- on a
-// headless Wayland compositor and waits for Quickshell's "Configuration
-// Loaded" line. The offscreen fixtures under tests/static-work, squircle-mask
-// and liquid-glass-panel load isolated QML; this is the only check that the
-// real configuration and its module graph come up on a live compositor.
+// Boots the shipping DesktopEnvironment and modules on a headless Wayland
+// compositor, with an isolated StateDir and a proxy that rejects session writes.
+// Require both configuration loading and the complete arrival sequence. The
+// offscreen fixtures exercise individual components, not the full module graph.
 //
 // argv[2] quickshell, argv[3] weston (both default to what is on PATH).
 const quickshell = process.argv[2] || "quickshell";
 const weston = process.argv[3] || "weston";
 const repository = fileURLToPath(new URL("../..", import.meta.url));
-const shell = join(repository, "shell");
+const sourceShell = join(repository, "shell");
 
 const directory = mkdtempSync(join(tmpdir(), "kos-shell-startup-"));
 const runtime = join(directory, "runtime");
 mkdirSync(runtime, { mode: 0o700 });
 const display = "wayland-kos-shell-test";
+const shell = join(directory, "shell");
+const state = join(directory, "state");
+const platformSocket = join(runtime, "platform.sock");
+mkdirSync(shell);
+mkdirSync(join(state, "appearance"), { recursive: true });
+writeFileSync(join(state, "appearance/config.json"), JSON.stringify({
+    version: 33, reduceMotion: false, startupRevealDuration: 800,
+}));
+// Link the production modules; only the entrypoint's persistence namespace changes.
+for (const name of ["desktop", "shared", "Kos"])
+    symlinkSync(join(sourceShell, name), join(shell, name));
+writeFileSync(join(shell, "shell.qml"), readFileSync(join(sourceShell, "shell.qml"), "utf8")
+    .replace("$BASE/quickshell/kos", `${state}/quickshell/kos-startup-test`));
+let platformProcess;
+let westonProcess;
+let shellProcess;
 
 function sleep(ms) {
     return new Promise((resolve) => setTimeout(resolve, ms));
@@ -62,7 +77,12 @@ async function main() {
         westonArguments.push(renderer);
     console.log(`weston: ${westonArguments.join(" ")}`);
 
-    const westonProcess = spawn(weston, westonArguments, {
+    platformProcess = spawn("python3", [join(repository, "tests/shell-startup/isolated-platform.py"),
+        platformSocket, state], { stdio: ["ignore", "pipe", "pipe"] });
+    if (!await waitForFile(platformSocket, platformProcess, 5000))
+        throw new Error("isolated platform did not start");
+
+    westonProcess = spawn(weston, westonArguments, {
         env: { ...process.env, XDG_RUNTIME_DIR: runtime },
         stdio: ["ignore", "pipe", "pipe"],
     });
@@ -77,7 +97,7 @@ async function main() {
         return 1;
     }
 
-    const shellProcess = spawn(quickshell, ["-p", shell], {
+    shellProcess = spawn(quickshell, ["-p", shell, "--no-color"], {
         env: {
             ...process.env,
             XDG_RUNTIME_DIR: runtime,
@@ -85,6 +105,7 @@ async function main() {
             QT_QPA_PLATFORM: "wayland",
             QT_QUICK_BACKEND: "software",
             QT_FORCE_STDERR_LOGGING: "1",
+            KOS_PLATFORM_SOCKET: platformSocket,
         },
         stdio: ["ignore", "pipe", "pipe"],
     });
@@ -121,8 +142,10 @@ async function main() {
         return 1;
     }
     console.log("shell.qml loaded and stayed alive on headless weston");
-    console.log(shellOutput.split("\n").filter(line => line.includes("[StartupReveal]")).join("\n"));
-    if (/TypeError|ReferenceError|is not a type|Cannot assign/.test(shellOutput)) {
+    const phases = [...shellOutput.matchAll(/\[StartupReveal\] (\w+)/g)].map(match => match[1]);
+    console.log(`StartupReveal: ${phases.join(" → ")}`);
+    if (phases.join(",") !== "idle,fading,bar,dock,icons,done"
+            || /TypeError|ReferenceError|is not a type|Cannot assign/.test(shellOutput)) {
         console.error(shellOutput);
         await stop(shellProcess);
         await stop(westonProcess);
@@ -139,6 +162,9 @@ try {
 } catch (error) {
     console.error(String((error && error.stack) || error));
 } finally {
+    await stop(shellProcess);
+    await stop(westonProcess);
+    await stop(platformProcess);
     try {
         rmSync(directory, { recursive: true, force: true });
     } catch {
