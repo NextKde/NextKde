@@ -961,7 +961,7 @@ Item {
                     // from its anchored pointer position into the new slot.
                     enabled: pinnedItemLoader !== container.draggedPinnedLoader
                         || pinnedItemLoader.settling
-                    // motion-exception: preserve drag/physical or periodic response.
+                    // motion-exception: Drag reordering settles into the committed slot before releasing the preview.
                     NumberAnimation { duration: 180; easing.type: Easing.OutCubic }
                 }
                 Behavior on scale {

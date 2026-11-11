@@ -85,6 +85,7 @@ Item {
     }
 
     // Squash-stretch wobble
+    // motion-exception: The four wobble segments retain their coupled squash/stretch rhythm.
     SequentialAnimation on _stretch {
         id: wobbleAnim
         running: false
