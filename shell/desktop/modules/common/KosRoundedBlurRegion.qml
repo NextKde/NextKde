@@ -31,7 +31,7 @@ RoundedBlurRegion {
 
     property bool revealEnabled: false
     property bool revealOpened: false
-    property int revealDuration: 320
+    property int revealDuration: AppearanceTokens.motion.page.duration
     readonly property bool revealSupported:
         ("revealSupported" in surfaceShape) && surfaceShape.revealSupported
     signal revealFinished(bool opened)

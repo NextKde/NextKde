@@ -320,12 +320,12 @@ assert.doesNotMatch(appActions, /_queueDeepLink|_deepLinkDelay/,
 const popupMotion = read("../../shell/desktop/modules/common/PopupMotion.qml");
 const appearanceTokens = read("../../shell/desktop/modules/common/AppearanceTokens.qml");
 const contextMenu = read("../../shell/desktop/modules/common/ContextMenu.qml");
-assert.match(appearanceTokens, /popupOpenDuration:\s*150[\s\S]*popupCloseDuration:\s*140/,
-    "shared popup motion uses Launchpad's 150ms entrance timing");
+assert.match(appearanceTokens, /popupOpenDuration:\s*base\.duration[\s\S]*popupCloseDuration:\s*base\.duration/,
+    "shared popup motion uses the base tier for both directions");
 assert.match(appearanceTokens, /popupStartScale:\s*0\.96[\s\S]*popupAnchorOffset:\s*20/,
     "shared popup motion uses Launchpad's 0.96 settle scale");
-assert.match(popupMotion, /openEasing:\s*Easing\.OutCubic[\s\S]*closeEasing:\s*Easing\.InCubic/,
-    "popup open and close use cubic easing without overshoot");
+assert.match(popupMotion, /openEasing:\s*AppearanceTokens\.motion\.enterCurve[\s\S]*closeEasing:\s*AppearanceTokens\.motion\.exitCurve/,
+    "popup open and close use directional motion policy curves without overshoot");
 assert.match(contextMenu, /centerBelowAnchor[\s\S]*PopupAdjustment\.Slide/,
     "centered application menus only slide at screen edges");
 const appLauncherWindow = read("../../shell/desktop/modules/applauncher/AppLauncherWindow.qml");

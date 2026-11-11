@@ -141,7 +141,7 @@ Scope {
             visible: root.backdropVisible
             color: Qt.rgba(root.backdropTint.r, root.backdropTint.g,
                 root.backdropTint.b, root.backdropEffectiveOpacity)
-            Behavior on color { ColorAnimation { duration: 140 } }
+            Behavior on color { ColorAnimation { duration: AppearanceTokens.motion.base.duration; easing.type: AppearanceTokens.motion.enterCurve } }
         }
 
         MouseArea {

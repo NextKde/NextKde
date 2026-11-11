@@ -521,10 +521,12 @@ Item {
                 opacity: isDraggedItem && root.nativeDragStarted ? 0.25 : 1
                 Behavior on x {
                     enabled: root.draggedKey !== "" && !trayItem.isDraggedItem
+                    // motion-exception: drag reflow follows the pointer without changing its response.
                     NumberAnimation { duration: 150; easing.type: Easing.OutCubic }
                 }
                 Behavior on y {
                     enabled: root.draggedKey !== "" && !trayItem.isDraggedItem
+                    // motion-exception: drag reflow follows the pointer without changing its response.
                     NumberAnimation { duration: 150; easing.type: Easing.OutCubic }
                 }
                 Drag.dragType: Drag.Automatic
@@ -615,6 +617,7 @@ Item {
                 AnimatedPopupWindow {
                     id: trayTooltip
                     objectName: "systray-tooltip"
+                    // motion-exception: retain near-instant tooltip fades (both directions).
                     openDuration: 70
                     closeDuration: 70
                     mask: Region { item: null }
@@ -683,10 +686,12 @@ Item {
                 opacity: isDraggedItem && root.nativeDragStarted ? 0.25 : 1
                 Behavior on x {
                     enabled: root.draggedKey !== "" && !trailingItem.isDraggedItem
+                    // motion-exception: drag reflow follows the pointer without changing its response.
                     NumberAnimation { duration: 150; easing.type: Easing.OutCubic }
                 }
                 Behavior on y {
                     enabled: root.draggedKey !== "" && !trailingItem.isDraggedItem
+                    // motion-exception: drag reflow follows the pointer without changing its response.
                     NumberAnimation { duration: 150; easing.type: Easing.OutCubic }
                 }
                 Drag.dragType: Drag.Automatic

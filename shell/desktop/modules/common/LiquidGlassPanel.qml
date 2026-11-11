@@ -97,7 +97,7 @@ Item {
 
     property bool compositorRevealEnabled: false
     property bool compositorRevealOpened: false
-    property int compositorRevealDuration: 320
+    property int compositorRevealDuration: AppearanceTokens.motion.page.duration
     readonly property bool compositorRevealSupported: surfaceRegion.revealSupported
     signal compositorRevealFinished(bool opened)
 
@@ -148,6 +148,7 @@ Item {
     property color ambientPrimary: "transparent"
     property color ambientSecondary: "transparent"
     property real ambientStrength: 0.0
+    // motion-exception: preserve the ambient pigment clock passed to the surface.
     property int ambientTransitionDuration: 2600
     property string material: "regular" // "clear", "regular", "thick"
     // 0 = dock/base surface, 1 = popup, 2 = contextual foreground menu.

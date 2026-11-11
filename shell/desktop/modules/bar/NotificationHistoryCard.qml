@@ -54,7 +54,7 @@ Item {
     Component.onCompleted: sizeReady = true
     Behavior on height {
         enabled: card.sizeReady && !AppTheme.reduceMotion
-        NumberAnimation { duration: AppTheme.motionNormal; easing.type: Easing.OutCubic }
+        NumberAnimation { duration: AppTheme.motionNormal; easing.type: AppearanceTokens.motion.enterCurve }
     }
     clip: true
     enabled: interactive

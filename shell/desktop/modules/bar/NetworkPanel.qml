@@ -339,7 +339,7 @@ AnimatedPopupWindow {
                         : (Boolean(modelData.active)
                             ? (ThemeService.isDark ? Qt.rgba(1, 1, 1, 0.08) : Qt.rgba(0, 0, 0, 0.04))
                             : "transparent")
-                    Behavior on color { ColorAnimation { duration: 110 } }
+                    Behavior on color { ColorAnimation { duration: AppearanceTokens.motion.fast.duration; easing.type: AppearanceTokens.motion.enterCurve } }
                 }
 
                 BundledIcon {
@@ -454,7 +454,7 @@ AnimatedPopupWindow {
                     visible: AppearanceTokens.surface.selectionHighlightStyle !== "glass"
                         && settingsFooterMouse.containsMouse
                     color: ThemeService.isDark ? Qt.rgba(1, 1, 1, 0.12) : Qt.rgba(0, 0, 0, 0.06)
-                    Behavior on color { ColorAnimation { duration: 110 } }
+                    Behavior on color { ColorAnimation { duration: AppearanceTokens.motion.fast.duration; easing.type: AppearanceTokens.motion.enterCurve } }
                 }
 
                 Text {

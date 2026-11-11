@@ -24,6 +24,7 @@ AnimatedPopupWindow {
     implicitWidth: Math.max(root.minimumWidth, tooltipColumn.implicitWidth + 18)
     implicitHeight: tooltipColumn.implicitHeight + 12
     color: "transparent"
+    // motion-exception: retain near-instant tooltip fades (both directions).
     openDuration: 70
     closeDuration: 70
     mask: Region { item: null }

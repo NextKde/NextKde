@@ -78,7 +78,7 @@ Item {
         radius: AppearanceTokens.shape.medium
         visible: !row._useGlassSelection
         color: (row._hover && row.itemEnabled && !row.separator) ? row._hi : "transparent"
-        Behavior on color { ColorAnimation { duration: 90 } }
+        Behavior on color { ColorAnimation { duration: AppearanceTokens.motion.instant.duration; easing.type: AppearanceTokens.motion.enterCurve } }
         z: -1
     }
 

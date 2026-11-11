@@ -48,8 +48,8 @@ LiquidGlassPanel {
     opacity: shown ? 1 : 0
     scale: shown ? 1 : 0.96
     Accessible.name: message
-    Behavior on opacity { NumberAnimation { duration: 150; easing.type: Easing.OutCubic } }
-    Behavior on scale { NumberAnimation { duration: 180; easing.type: Easing.OutCubic } }
+    Behavior on opacity { NumberAnimation { duration: AppearanceTokens.motion.base.duration; easing.type: AppearanceTokens.motion.enterCurve } }
+    Behavior on scale { NumberAnimation { duration: AppearanceTokens.motion.base.duration; easing.type: AppearanceTokens.motion.enterCurve } }
 
     Row {
         id: content

@@ -73,8 +73,9 @@ PopupWindow {
     PageMotion {
         id: pageMotion
         page: root.page
+        // motion-exception: immediate submenu handoff keeps its 60ms exit.
         exitDuration: 60
-        enterDuration: 90
+        enterDuration: AppearanceTokens.motion.instant.duration
         enabled: root.visible && (!root.macosPopupMotion || popupMotion.requestedOpen)
     }
 
@@ -265,10 +266,11 @@ PopupWindow {
 
     PopupMotion {
         id: popupMotion
-        openDuration: 120
+        openDuration: AppearanceTokens.motion.fast.duration
+        // motion-exception: preserve the near-instant menu dismissal.
         closeDuration: 80
-        openEasing: Easing.OutCubic
-        closeEasing: Easing.OutCubic
+        openEasing: AppearanceTokens.motion.enterCurve
+        closeEasing: AppearanceTokens.motion.enterCurve
         onClosed: {
             if (!popupMotion.requestedOpen)
                 root.visible = false

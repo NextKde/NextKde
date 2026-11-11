@@ -40,7 +40,7 @@ ControlCenterCard {
                         : (AppearanceTokens.surface.pick(AppearanceTokens.colors.surfaceContainerHigh, ThemeService.isDark ? Qt.rgba(1, 1, 1, 0.10) : Qt.rgba(0, 0, 0, 0.05))))
                 border.width: 1
                 border.color: AppearanceTokens.surface.pick(AppearanceTokens.colors.surfaceContainerHigh, ThemeService.isDark ? Qt.rgba(1, 1, 1, 0.18) : Qt.rgba(0, 0, 0, 0.08))
-                Behavior on color { ColorAnimation { duration: 110 } }
+                Behavior on color { ColorAnimation { duration: AppearanceTokens.motion.fast.duration; easing.type: AppearanceTokens.motion.enterCurve } }
 
                 BundledIcon {
                     anchors.centerIn: parent
@@ -147,7 +147,7 @@ ControlCenterCard {
                     width: actionsList.width
                     height: 44
                     scale: sessionRow.pressed ? 0.98 : 1
-                    Behavior on scale { NumberAnimation { duration: AppearanceTokens.motion.fastDuration; easing.type: Easing.OutCubic } }
+                    Behavior on scale { NumberAnimation { duration: AppearanceTokens.motion.fastDuration; easing.type: AppearanceTokens.motion.enterCurve } }
 
                     Rectangle {
                         anchors.fill: parent
@@ -160,7 +160,7 @@ ControlCenterCard {
                                     ? Qt.rgba(1, 1, 1, 0.10)
                                     : Qt.rgba(0, 0, 0, 0.06)))
                             : "transparent"
-                        Behavior on color { ColorAnimation { duration: 110 } }
+                        Behavior on color { ColorAnimation { duration: AppearanceTokens.motion.fast.duration; easing.type: AppearanceTokens.motion.enterCurve } }
                     }
 
                     Row {
