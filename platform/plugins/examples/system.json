@@ -1,0 +1,35 @@
+{
+  "id": "org.nextkde.examples.system",
+  "name": "System Snapshot",
+  "description": "A bounded memory and uptime summary. Explicit permission is required; revocation clears the data.",
+  "author": "NextKDE SDK",
+  "version": "1.0.0",
+  "apiVersion": 1,
+  "license": "MIT",
+  "permissions": ["system.summary"],
+  "widgets": [{
+    "id": "memory",
+    "name": "Memory Snapshot",
+    "description": "Host-provided memory totals. No process list, files or network access.",
+    "sizes": ["small", "medium", "large"],
+    "multiInstance": true,
+    "settings": [{"key": "label", "label": "Label", "type": "string", "default": "Memory", "maxLength": 80}],
+    "view": {"id": "root", "type": "column", "children": [
+      {"id": "label", "type": "value", "binding": "settings.label"},
+      {"id": "percent", "type": "value", "binding": "system.memoryUsedPercent", "suffix": "%"},
+      {"id": "used", "type": "value", "binding": "system.memoryUsedMiB", "label": "Used", "suffix": " MiB"},
+      {"id": "total", "type": "value", "binding": "system.memoryTotalMiB", "label": "Total", "suffix": " MiB"}
+    ]}
+  }, {
+    "id": "uptime",
+    "name": "Uptime",
+    "description": "Seconds since boot, available only with system summary permission.",
+    "sizes": ["small", "medium"],
+    "multiInstance": true,
+    "settings": [],
+    "view": {"id": "root", "type": "column", "children": [
+      {"id": "title", "type": "text", "text": "Uptime"},
+      {"id": "seconds", "type": "value", "binding": "system.uptimeSeconds", "suffix": " s"}
+    ]}
+  }]
+}

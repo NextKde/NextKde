@@ -1,5 +1,6 @@
 #include "PlatformServer.h"
 #include "KimpanelBridge.h"
+#include "DeclarativePlugins.h"
 #include "PlatformNetworkBackend.h"
 #include "KeepAwakeLease.h"
 #include "PlatformProcess.h"
@@ -548,10 +549,35 @@ void PlatformServer::handleRequest(QLocalSocket *socket, const QJsonObject &requ
                 QStringLiteral("缺少 operation"), false);
         return;
     }
+    if (op.startsWith(QStringLiteral("plugin."))) {
+        if (request.contains(QStringLiteral("payload")) && !request.value(QStringLiteral("payload")).isObject()) {
+            respond(socket, request, false, {}, QStringLiteral("invalid-payload"), QStringLiteral("Plugin payload must be an object"));
+            return;
+        }
+        if (!m_plugins) m_plugins = new DeclarativePlugins(this);
+        const QPointer<QLocalSocket> guarded(socket);
+        m_plugins->request(socket, op, request.value(QStringLiteral("payload")).toObject(),
+            [this, guarded, request](bool ok, const QJsonObject &result, const QString &code, const QString &message) {
+                if (guarded) respond(guarded.data(), request, ok, result, code, message,
+                                     code == QStringLiteral("busy") || code == QStringLiteral("rate-limited"));
+            });
+        return;
+    }
     if (op == QStringLiteral("platform.ping")) {
         respond(socket, request, true, QJsonObject{
             {QStringLiteral("ready"), true},
             {QStringLiteral("capabilities"), QJsonArray{
+                QStringLiteral("plugin.snapshot"),
+                QStringLiteral("plugin.refresh-catalog"),
+                QStringLiteral("plugin.prepare-install"),
+                QStringLiteral("plugin.confirm-install"),
+                QStringLiteral("plugin.set-enabled"),
+                QStringLiteral("plugin.uninstall"),
+                QStringLiteral("plugin.set-permissions"),
+                QStringLiteral("plugin.instance-add"),
+                QStringLiteral("plugin.instance-remove"),
+                QStringLiteral("plugin.instance-configure"),
+                QStringLiteral("plugin.instance-action"),
                 QStringLiteral("input.clipboard-anchor"),
                 QStringLiteral("application.widget-snapshot"),
                 QStringLiteral("application.widget-open"),

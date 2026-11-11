@@ -51,6 +51,8 @@ set(kos_platform_sources
     src/daemon/PlatformServerApplications.cpp
     src/daemon/IndependentAppWidgets.cpp
     src/daemon/IndependentAppWidgets.h
+    src/daemon/DeclarativePlugins.cpp
+    src/daemon/DeclarativePlugins.h
     src/daemon/PlatformServerAudio.cpp
     src/daemon/PlatformServerBluetooth.cpp
     src/daemon/PlatformServerClipboard.cpp
@@ -122,6 +124,11 @@ if(BUILD_TESTING)
 endif()
 
 qt_add_executable(kos-platform ${kos_platform_sources})
+qt_add_resources(kos-platform declarative_plugin_examples
+    PREFIX "/kos/plugins" BASE "plugins"
+    FILES plugins/examples/counter.json plugins/examples/system.json)
+install(FILES plugins/examples/counter.json plugins/examples/system.json
+    DESTINATION share/kos/plugins/examples)
 set_target_properties(kos-platform PROPERTIES
     INSTALL_RPATH "$ORIGIN/../lib")
 

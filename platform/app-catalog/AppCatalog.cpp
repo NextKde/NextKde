@@ -137,9 +137,20 @@ QString validate(const QVariantMap& catalog, const QString& source)
                 || release.value("tag").toString() != "v" + version || version.size() > 100
                 || bytes.isEmpty() || bytes.size() > 1024 * 1024
                 || data.value("schemaVersion").toInt() != 2 || data.value("appId").toString() != id
-                || data.value("version").toString() != version || !data.value("bundles").isObject()
+                || data.value("version").toString() != version
+                || (app.value("format").toString() == "declarative-widget"
+                    ? !data.value("plugin").isObject() : !data.value("bundles").isObject())
                 || (!publisher.isEmpty() && QByteArray::fromBase64(release.value("signature").toByteArray()).isEmpty()))
                 return "Invalid catalog release selection";
+            if (app.value("format").toString() == "declarative-widget") {
+                const auto plugin = data.value("plugin").toObject();
+                const auto size = plugin.value("size").toDouble();
+                if (data.size() != 4 || plugin.size() != 3 || !plugin.value("asset").isString()
+                    || !matches("^[A-Za-z0-9][A-Za-z0-9._-]{0,110}\\.json$", plugin.value("asset").toString())
+                    || !plugin.value("sha256").isString() || !matches("^[0-9a-f]{64}$", plugin.value("sha256").toString())
+                    || !plugin.value("size").isDouble() || size < 1 || size > 128 * 1024 || size != qint64(size))
+                    return "Invalid declarative plugin release descriptor";
+            }
         }
         if (app.contains("icon")) {
             const auto icon = app.value("icon").toMap(); const QUrl url(icon.value("url").toString());

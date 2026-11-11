@@ -26,6 +26,7 @@ namespace KosPlatform {
 
 class KeepAwakeLease;
 class KimpanelBridge;
+class DeclarativePlugins;
 struct NmConnectRequest;
 
 class PlatformServer final : public QObject {
@@ -59,6 +60,7 @@ private slots:
                                      const QStringList &invalidated);
 
 private:
+    DeclarativePlugins *m_plugins = nullptr;
     bool m_animationSyncPending = false;
     void handleRequest(QLocalSocket *socket, const QJsonObject &request);
     void respond(QLocalSocket *socket, const QJsonObject &request,

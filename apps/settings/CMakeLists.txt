@@ -70,6 +70,8 @@ qt_add_executable(kos-settings
     src/TaskNotifications.h
     src/AppStore.cpp
     src/AppStore.h
+    src/PluginStore.cpp
+    src/PluginStore.h
     src/IndependentApps.cpp
     src/IndependentApps.h
     src/SettingsBridge.h

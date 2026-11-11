@@ -14,3 +14,9 @@ singleton DeskCenterConfigService 1.0 DeskCenterConfigService.qml
 singleton PimWidgetService 1.0 PimWidgetService.qml
 
 WidgetResizeHandle 1.0 WidgetResizeHandle.qml
+WidgetGallery 1.0 WidgetGallery.qml
+WidgetConfiguration 1.0 WidgetConfiguration.qml
+PluginWidgetView 1.0 PluginWidgetView.qml
+PluginViewNode 1.0 PluginViewNode.qml
+singleton WidgetRegistry 1.0 WidgetRegistry.qml
+singleton PluginWidgetService 1.0 PluginWidgetService.qml
