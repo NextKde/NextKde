@@ -6,6 +6,7 @@ import Qt5Compat.GraphicalEffects
 // specular highlights, and squash-stretch wobble animation.
 Item {
     id: root
+    property var motionPolicy: LiquidStyle.motionFor(root.materialForm)
 
     // Public API
     property bool checked: false
@@ -71,20 +72,21 @@ Item {
     // Thumb position animation
     Behavior on _thumbX {
         NumberAnimation {
-            duration: 200
-            easing.type: Easing.OutCubic
+            duration: root.motionPolicy.slow.duration
+            easing.type: root.motionPolicy.enterCurve
         }
     }
 
     // Expansion animation (dissolve into glass)
     Behavior on _expansion {
         NumberAnimation {
+            // motion-exception: preserve the coupled liquid/physical response timing and curve.
             duration: _pressed ? 100 : 200
             easing.type: _pressed ? Easing.OutCubic : Easing.OutQuint
         }
     }
 
-    // Squash-stretch wobble（§2.11：各段取 §3 motion.duration.instant=100，原 50/70/60/50 不在五档）
+    // motion-exception: keep the squash-stretch segment ratios and curves.
     SequentialAnimation on _stretch {
         id: wobbleAnim
         running: false
@@ -157,7 +159,7 @@ Item {
         // 合并 Material 门控与原有淡出判定（同对象两条 visible = 解析错
         // crash-loop，桌面起不来——实测踩过）
         visible: !root.materialForm && opacity > 0.01
-        Behavior on opacity { NumberAnimation { duration: 200 } }
+        Behavior on opacity { NumberAnimation { duration: root.motionPolicy.slow.duration; easing.type: root.motionPolicy.enterCurve } }
     }
 
     // The glass thumb/lens
@@ -333,7 +335,7 @@ Item {
             anchors.fill: parent
             radius: height / 2
             color: root.checked ? root.accentColor : root.trackColor
-            Behavior on color { ColorAnimation { duration: 150 } }
+            Behavior on color { ColorAnimation { duration: root.motionPolicy.base.duration; easing.type: root.motionPolicy.enterCurve } }
         }
 
         // State layer: 10% on hover, 16% pressed, centred on the handle.
@@ -345,8 +347,8 @@ Item {
             radius: width / 2
             color: root.accentColor
             opacity: root._pressed ? 0.16 : (root._hovered ? 0.10 : 0.0)
-            // §2.11 / §3 motion.duration.instant=100（原 demo 120 不在五档）。
-            Behavior on opacity { NumberAnimation { duration: 100 } }
+            // Ordinary feedback follows the shared motion policy.
+            Behavior on opacity { NumberAnimation { duration: root.motionPolicy.instant.duration; easing.type: root.motionPolicy.enterCurve } }
         }
 
         // Handle: a circle that grows into the "on" size, not the iOS lens.
@@ -357,8 +359,8 @@ Item {
             height: materialLayer.handleSize
             radius: width / 2
             color: root.checked ? root.handleOnColor : root.handleOffColor
-            Behavior on x { NumberAnimation { duration: 150; easing.type: Easing.OutCubic } }
-            Behavior on width { NumberAnimation { duration: 150; easing.type: Easing.OutCubic } }
+            Behavior on x { NumberAnimation { duration: root.motionPolicy.base.duration; easing.type: root.motionPolicy.enterCurve } }
+            Behavior on width { NumberAnimation { duration: root.motionPolicy.base.duration; easing.type: root.motionPolicy.enterCurve } }
         }
     }
 

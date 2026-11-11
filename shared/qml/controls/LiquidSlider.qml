@@ -4,6 +4,7 @@ import "../foundation" as Foundation
 // The glass thumb samples the sibling track through the shared QML shader.
 Item {
     id: root
+    property var motionPolicy: LiquidStyle.motionFor(root.materialForm)
 
     implicitWidth: 240
     implicitHeight: 44
@@ -66,13 +67,14 @@ Item {
     property real _expansion: 0.0
     Behavior on _expansion {
         NumberAnimation {
-            // §2.11 / §3：按下 base=220、松开 sheet=400（原 demo 270/460 不在五档）。
+            // motion-exception: preserve the coupled liquid/physical response timing and curve.
             duration: root.reduceMotion ? 0 : root._pressed ? 220 : 400
             easing.type: root._pressed ? Easing.OutBack : Easing.OutQuint
             easing.overshoot: root._pressed ? 1.36 : 1.0
         }
     }
 
+    // motion-exception: preserve the squash-stretch segment ratios and curves.
     // Squash-stretch wobble
     property real _stretch: 0.0
     SequentialAnimation on _stretch {
@@ -286,6 +288,7 @@ Item {
 
         Behavior on x {
             NumberAnimation {
+                // motion-exception: preserve the coupled liquid/physical response timing and curve.
                 duration: root.reduceMotion || root._pressed || root._suppressXAnimation ? 0 : 200
                 easing.type: Easing.OutQuint
             }
@@ -323,7 +326,7 @@ Item {
             radius: height / 2
             color: root.accentColor
             opacity: root._pressed ? 0.10 : root._hovered ? 0.045 : 0
-            Behavior on opacity { NumberAnimation { duration: root.reduceMotion ? 0 : 120 } }
+            Behavior on opacity { NumberAnimation { duration: root.reduceMotion ? 0 : root.motionPolicy.fast.duration; easing.type: root.motionPolicy.enterCurve } }
         }
 
         Item {
@@ -395,8 +398,8 @@ Item {
             radius: height / 2
             color: root.accentColor
             opacity: root._pressed ? 0.16 : (root._hovered ? 0.10 : 0.0)
-            // §2.11 / §3 motion.duration.instant=100（原 demo 120 不在五档）。
-            Behavior on opacity { NumberAnimation { duration: 100 } }
+            // Ordinary feedback follows the shared motion policy.
+            Behavior on opacity { NumberAnimation { duration: root.motionPolicy.instant.duration; easing.type: root.motionPolicy.enterCurve } }
         }
 
         // Handle: a vertical capsule, not the iOS lens.

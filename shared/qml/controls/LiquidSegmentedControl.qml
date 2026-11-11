@@ -7,6 +7,7 @@ import QtQuick
 // make custom segmented controls feel as if they need a second click.
 Item {
     id: root
+    property var motionPolicy: LiquidStyle.motionFor(root.materialForm)
 
     implicitWidth: 180
     implicitHeight: 34
@@ -124,6 +125,7 @@ Item {
         border.width: root.materialForm ? 0 : 1
         border.color: Qt.rgba(1, 1, 1, 0.16)
 
+        // motion-exception: preserve the coupled liquid/physical response timing and curve.
         Behavior on x { NumberAnimation { duration: AppTheme.motionNormal; easing.type: Easing.OutQuint } }
 
         Rectangle {
@@ -192,12 +194,12 @@ Item {
                     ? Font.DemiBold : Font.Normal
                 scale: root._pressedIndex === segmentDelegate.index ? 0.96 : 1.0
                 Behavior on color {
-                    ColorAnimation { duration: AppTheme.motionFast }
+                    ColorAnimation { duration: AppTheme.reduceMotion ? 0 : root.motionPolicy.fast.duration; easing.type: root.motionPolicy.enterCurve }
                 }
                 Behavior on scale {
                     NumberAnimation {
-                        duration: AppTheme.motionFast
-                        easing.type: Easing.OutCubic
+                        duration: AppTheme.reduceMotion ? 0 : root.motionPolicy.fast.duration
+                        easing.type: root.motionPolicy.enterCurve
                     }
                 }
             }
