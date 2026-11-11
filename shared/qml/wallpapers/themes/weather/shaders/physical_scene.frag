@@ -506,41 +506,56 @@ vec3 blackhole(vec2 pixel) {
         vec4(1.0/sqrt(1.0-inverseCameraRadius),0,0,0),vec3(0),ew,eh,ed,vec3(mat2(0.951,0.309,-0.309,0.951)*pixel*0.20,1.0));
     return traced;
 }
+float cloudMass(vec3 pos) {
+    // Camera above an unbroken cloud sea; two rising banks frame a light-filled pass.
+    float rightBank=exp(-pow((pos.x-3.7)*0.38,2.0)-pow((pos.z-3.5)*0.25,2.0));
+    float leftBank=exp(-pow((pos.x+4.8)*0.34,2.0)-pow((pos.z-5.3)*0.22,2.0));
+    float ceiling=0.40-rightBank*2.8-leftBank*2.1-u.storm*0.42;
+    vec3 drift=vec3(u.time*0.028,0.0,u.time*0.012);
+    float shape=fbm(pos*0.83+drift+vec3(13.0,7.0,2.0));
+    float billow=(shape-0.47)*2.1;
+    float depth=pos.y-ceiling+billow;
+    return smoothstep(-0.18,0.68,depth)*(0.45+shape*0.65);
+}
 vec3 atmosphere(vec2 p) {
-    // Single-scattering optical-depth integration. The phase function uses a
-    // Henyey-Greenstein aerosol lobe plus Rayleigh scattering; procedural
-    // density is artistic, rather than a numerical fluid solver.
-    vec3 light=vec3(0); float trans=1.0;
-    vec3 ro=vec3(0,0,-2), rd=normalize(vec3(p,1.3));
-    vec3 sunDir=normalize(vec3(0.6,-0.24,1.0));
-    float mu=dot(rd,sunDir), g=0.78;
-    float rayleigh=0.75*(1.0+mu*mu);
-    float mie=(1.0-g*g)/pow(max(0.04,1.0+g*g-2.0*g*mu),1.5);
-    vec3 drift=vec3(u.time*0.018,0,u.time*0.009);
-    vec3 sunColor=mix(vec3(0.09,0.28,0.65),vec3(1.0,0.61,0.25),u.daylight);
-    for(int i=0;i<28;i++) {
-        vec3 pos=ro+rd*(float(i)*0.19);
-        float n=fbm(pos*1.85+drift);
-        float density=smoothstep(0.39,0.70,n)*(0.75+u.storm)*0.38;
-        float occlusion=0.0;
-        for(int j=1;j<=3;j++) {
-            float sampleDensity=fbm((pos+sunDir*float(j)*0.28)*1.85+drift);
-            occlusion+=smoothstep(0.40,0.67,sampleDensity)*0.8;
-        }
-        float visibility=exp(-occlusion*2.3);
-        vec3 ambient=vec3(0.015,0.048,0.080);
-        vec3 scatter=ambient+sunColor*visibility*(0.15*rayleigh+0.16*mie);
-        light+=trans*scatter*density*2.5;
-        trans*=exp(-density*1.6);
+    float day=u.daylight;
+    float horizon=exp(-pow((p.y-0.22)*2.1,2.0));
+    vec3 zenith=mix(vec3(0.003,0.009,0.032),vec3(0.018,0.105,0.25),day);
+    vec3 horizonColor=mix(vec3(0.055,0.085,0.17),vec3(0.68,0.39,0.22),day);
+    vec3 sky=mix(zenith,horizonColor,horizon*0.88);
+    vec3 ro=vec3(0.0,-1.25,-4.0), rd=normalize(vec3(p,1.5));
+    vec3 sunDir=normalize(vec3(0.58,-0.34,1.5));
+    float mu=max(0.0,dot(rd,sunDir));
+    vec3 sunColor=mix(vec3(0.28,0.44,0.85),vec3(1.0,0.73,0.40),day);
+    float clearLight=1.0-u.storm*0.65;
+    sky+=sunColor*(pow(mu,1100.0)*2.8+pow(mu,28.0)*0.36)*clearLight;
+    // Broad crepuscular shafts converge toward the opening between the banks.
+    float angle=atan(p.x-0.58,p.y+0.34);
+    float shafts=pow(max(0.0,sin(angle*11.0+0.4)),10.0);
+    sky+=sunColor*shafts*pow(mu,8.0)*0.075*clearLight;
+    sky=mix(sky,sky*vec3(0.53,0.66,0.84),u.storm*0.50);
+    vec3 light=vec3(0.0);
+    float trans=1.0;
+    int steps=u.quality>0.5?20:10;
+    float stepSize=12.0/float(steps);
+    for(int i=0;i<20;i++) {
+        if(i>=steps || trans<0.025) break;
+        float distance=(float(i)+0.5)*stepSize+0.6;
+        vec3 pos=ro+rd*distance;
+        float density=cloudMass(pos);
+        if(density<0.002) continue;
+        float sunDensity=cloudMass(pos+sunDir*0.65);
+        float visibility=exp(-sunDensity*2.8)*(0.55+0.45*clamp((density-sunDensity)*3.0,0.0,1.0));
+        float silver=pow(mu,12.0)*0.65;
+        vec3 ambient=mix(vec3(0.017,0.035,0.085),vec3(0.13,0.19,0.29),day);
+        vec3 scatter=ambient+sunColor*visibility*(0.70+silver)*mix(0.38,1.0,day)*clearLight;
+        float aerial=1.0-exp(-distance*0.028);
+        scatter=mix(scatter,horizonColor,aerial*0.40);
+        float opacity=1.0-exp(-density*stepSize*2.8);
+        light+=trans*scatter*opacity;
+        trans*=1.0-opacity;
     }
-    light+=trans*(vec3(0.004,0.014,0.032)+sunColor*pow(max(0.0,mu),4200.0)*1.8);
-    // Filamentary mist catches grazing blue light, not cartoon cloud shapes.
-    vec3 q=vec3(p*3.8,u.time*0.015);
-    float turbulence=fbm(q+vec3(fbm(q*0.65)*2.0));
-    float filament=pow(max(0.0,1.0-abs(turbulence-0.53)*19.0),7.0);
-    float band=exp(-pow(p.y+sin(p.x*1.8)*0.18-0.15,2.0)*5.0);
-    light+=vec3(0.024,0.15,0.24)*filament*band*(0.5+u.storm);
-    return light;
+    return light+sky*trans;
 }
 vec3 aces(vec3 x) { return clamp((x*(2.51*x+0.03))/(x*(2.43*x+0.59)+0.14),0.0,1.0); }
 void main() {

@@ -48,15 +48,15 @@ Item {
         return Qt.point(x*width,y*height)
     }
     function brightness(i) { return 0.45+0.55*Math.pow(0.5+0.5*Math.sin(phase*1.3+i*13.71+4),3) }
-    Image {
+    Loader {
         anchors.fill: parent
-        visible: !root.foreground
-        source: root.foreground ? "" : "assets/forest-cinematic.png"
-        sourceSize: Qt.size(Math.max(1, Math.min(2048, Math.ceil(root.width))),
-            Math.max(1, Math.min(2048, Math.ceil(root.height))))
-        fillMode: Image.PreserveAspectCrop
-        smooth: true
-        onStatusChanged: if(status===Image.Ready) Qt.callLater(root.frameReady)
+        active: !root.foreground
+        sourceComponent: ShaderEffect {
+            property vector2d viewport: Qt.vector2d(width, height)
+            property real time: root.phase
+            property real quality: root.economical ? 0 : 1
+            fragmentShader: "shaders/forest_atmosphere.frag.qsb"
+        }
     }
     // Each glow covers a small quad; flight is calculated once per particle.
     Repeater {
@@ -71,7 +71,7 @@ Item {
             x: location.x-width/2; y: location.y-height/2
             visible: pass>0.001
             opacity: root.brightness(index)*(0.45+depth*0.5)*pass
-            source: index%3===0 ? "assets/firefly-green.svg" : "assets/firefly-gold.svg"
+            source: index%7===0 ? "assets/firefly-green.svg" : "assets/firefly-gold.svg"
             sourceSize: Qt.size(96, 96)
             smooth: true
         }
