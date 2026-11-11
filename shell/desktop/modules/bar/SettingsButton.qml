@@ -46,6 +46,7 @@ Item {
         anchors.centerIn: parent
         width: root.iconSize
         height: root.iconSize
+        size: root.iconSize
         name: "bar.settings"
         color: ThemeService.barInk
         scale: pointer.pressed ? 0.90 : pointer.containsMouse ? 1.06 : 1

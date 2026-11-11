@@ -39,6 +39,7 @@ Item {
         anchors.centerIn: parent
         width: root.iconSize
         height: root.iconSize
+        size: root.iconSize
         name: "bar.controlCenter"
         color: ThemeService.barInk
         scale: hoverArea.pressed ? 0.90 : hoverArea.containsMouse ? 1.06 : 1
