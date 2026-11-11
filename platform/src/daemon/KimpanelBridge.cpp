@@ -21,6 +21,7 @@
 #include <QDBusServiceWatcher>
 #include <QEventLoop>
 #include <QTimer>
+#include <QElapsedTimer>
 
 namespace KosPlatform {
 
@@ -161,6 +162,16 @@ KimpanelBridge::KimpanelBridge(QObject *parent)
     m_adaptor2 = new Impanel2Adaptor(this);
     m_userEnabled = loadPersistedEnabled();
     recoverOriginalFcitxAddons();
+    auto *panelWatcher = new QDBusServiceWatcher(QStringLiteral("org.nextkde.FcitxPanel"),
+        QDBusConnection::sessionBus(), QDBusServiceWatcher::WatchForUnregistration, this);
+    connect(panelWatcher, &QDBusServiceWatcher::serviceUnregistered, this, [this] {
+        QTimer::singleShot(500, this, [this] {
+            if (m_takeoverActive && !m_transitioning && !waitForPanelAdapter()) {
+                releaseTakeover();
+                notifyState();
+            }
+        });
+    });
 }
 
 KimpanelBridge::~KimpanelBridge()
@@ -376,6 +387,44 @@ bool KimpanelBridge::setFcitxAddons(bool classicUi, bool kimpanel)
     return true;
 }
 
+bool KimpanelBridge::waitForPanelAdapter()
+{
+    const auto bus = QDBusConnection::sessionBus();
+    QElapsedTimer deadline;
+    deadline.start();
+    // Fcitx's service can appear just before its module receives the desktop
+    // lease. Keep processing bus events without reporting a premature success.
+    const bool previousTransition = m_transitioning;
+    m_transitioning = true;
+    bool ready = false;
+    while (deadline.elapsed() < 1500) {
+        const QString owner = bus.interface()->serviceOwner(QStringLiteral("org.fcitx.Fcitx5")).value();
+        if (!owner.isEmpty()
+            && owner == bus.interface()->serviceOwner(QStringLiteral("org.nextkde.FcitxPanel")).value()) {
+            auto call = [&](const QString &method) {
+                return bus.call(QDBusMessage::createMethodCall(owner,
+                    QStringLiteral("/org/nextkde/FcitxPanel"),
+                    QStringLiteral("org.nextkde.FcitxPanel1"), method), QDBus::Block, 250);
+            };
+            const auto version = call(QStringLiteral("Version"));
+            const auto active = call(QStringLiteral("Active"));
+            ready = version.type() == QDBusMessage::ReplyMessage && version.arguments().size() == 1
+                && version.arguments().first().toUInt() == 1
+                && active.type() == QDBusMessage::ReplyMessage && active.arguments().size() == 1
+                && active.arguments().first().toBool();
+            if (ready) break;
+        }
+        QEventLoop loop;
+        QTimer::singleShot(50, &loop, &QEventLoop::quit);
+        loop.exec();
+        if (!m_userEnabled || !m_shellConnected) break;
+    }
+    m_transitioning = previousTransition;
+    if (!ready)
+        m_error = QStringLiteral("NextKde Fcitx5 panel extension is unavailable; reinstall NextKde with Fcitx5 support");
+    return ready;
+}
+
 bool KimpanelBridge::acquireTakeover()
 {
     if (m_takeoverActive)
@@ -414,6 +463,14 @@ bool KimpanelBridge::acquireTakeover()
             bus.unregisterObject(QStringLiteral("/org/kde/impanel"));
             return false;
         }
+        // A separate lease keeps the adapter inert when another desktop owns
+        // Kimpanel, and lets Fcitx restore client callbacks when this peer dies.
+        if (!bus.registerService(QStringLiteral("org.nextkde.InputPanel"))) {
+            m_error = bus.lastError().message();
+            bus.unregisterService(QStringLiteral("org.kde.impanel"));
+            bus.unregisterObject(QStringLiteral("/org/kde/impanel"));
+            return false;
+        }
         m_registeredBus = true;
     }
 
@@ -425,7 +482,8 @@ bool KimpanelBridge::acquireTakeover()
         return false;
     }
     m_addonsChanged = true;
-    if (!setFcitxAddons(false /* classicui */, true /* kimpanel */) || !restartFcitx()) {
+    if (!setFcitxAddons(false /* classicui */, true /* kimpanel */)
+        || !restartFcitx() || !waitForPanelAdapter()) {
         qWarning() << "[KimpanelBridge] Failed to configure Fcitx5 addons for takeover";
         releaseTakeover();
         return false;
@@ -449,6 +507,7 @@ void KimpanelBridge::releaseTakeover()
 
     auto bus = QDBusConnection::sessionBus();
     if (m_registeredBus) {
+        bus.unregisterService(QStringLiteral("org.nextkde.InputPanel"));
         bus.unregisterService(QStringLiteral("org.kde.impanel"));
         bus.unregisterObject(QStringLiteral("/org/kde/impanel"));
         m_registeredBus = false;

@@ -19,9 +19,18 @@
 node tests/inputmethod/run.mjs /usr/lib/qt6/bin/qmltestrunner
 node shell/desktop/modules/inputmethod/test_inputmethod_placement.mjs
 node shell/desktop/modules/inputmethod/test_inputmethod_status_dismissal.mjs
+python3 tools/tests/test_fcitx_panel_install.py
 ```
 
 测试运行生产 QML 呈现及动画组件，覆盖退出快照、动画反向、状态合并、跨屏和空内容。
+统一接管验收必须保留 Kate/Qt 的 `QT_IM_MODULE=fcitx` 和 GTK 3/4 的
+`GTK_IM_MODULE=fcitx`，覆盖 Wayland 和支持时的 XWayland。开启一次后输入
+`nihao`，分别用键盘和鼠标选词，确认中文上屏且没有第二个客户端候选窗。
+保持应用打开，关闭接管并确认原有候选界面与输入恢复；前端退出后，扩展的
+`Active` 应为 false、`ContextCount` 应为零。桥接测试还覆盖扩展缺失/版本不兼容
+时的回退、备份失败与崩溃恢复。不得通过改写应用输入模块变量使测试通过。
+没有连接 Fcitx5 的应用不属于此项验收范围。
+
 它不验证 KWin 玻璃渲染。真实 VM 还需验收输入与上屏、快速中英切换、横向及纵向
 候选布局、屏幕边缘定位，并使用安装后的 Shell。
 

@@ -6,6 +6,16 @@ set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_AUTOMOC ON)
 
+# Optional for builders without Fcitx. kosctl installs these dependencies for
+# normal desktop builds; the runtime switch reports a missing adapter clearly.
+find_package(Fcitx5Core 5.0.24 QUIET)
+find_package(Fcitx5ModuleDBus QUIET)
+if(Fcitx5Core_FOUND AND Fcitx5ModuleDBus_FOUND)
+    add_subdirectory(fcitx-panel)
+else()
+    message(STATUS "Fcitx5 panel adapter unavailable (Fcitx5Core/ModuleDBus headers missing)")
+endif()
+
 find_package(Qt6 6.5 REQUIRED COMPONENTS Core Concurrent DBus Gui Network)
 find_package(KF6CoreAddons REQUIRED)
 find_package(KF6Config REQUIRED)

@@ -124,6 +124,7 @@ private:
     bool backupOriginalFcitxAddons();
     bool setFcitxAddons(bool classicUi, bool kimpanel);
     bool restartFcitx();
+    bool waitForPanelAdapter();
     bool saveRecoveryState();
     void recoverOriginalFcitxAddons();
     QString recoveryPath() const;

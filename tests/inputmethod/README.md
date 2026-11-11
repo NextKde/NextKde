@@ -26,6 +26,7 @@ Run **only in a dedicated VM or hosted CI**:
 node tests/inputmethod/run.mjs /usr/lib/qt6/bin/qmltestrunner
 node shell/desktop/modules/inputmethod/test_inputmethod_placement.mjs
 node shell/desktop/modules/inputmethod/test_inputmethod_status_dismissal.mjs
+python3 tools/tests/test_fcitx_panel_install.py
 ```
 
 The fixture exercises the production QML presentation and animation, including
@@ -33,6 +34,17 @@ exit snapshots, reversal, coalescing, screen handoff and empty payloads.
 It does not verify KWin glass rendering. Real VM acceptance must also check
 typing and committing, rapid Chinese/English switches, horizontal/vertical
 candidate layouts, and screen-edge placement with the installed Shell.
+
+Unified-panel acceptance must retain `QT_IM_MODULE=fcitx` in Kate/Qt and
+`GTK_IM_MODULE=fcitx` in GTK 3/4, on Wayland and (where supported) XWayland.
+Enable once, type `nihao`, select by keyboard and pointer, and confirm Chinese
+commits without a second client-side candidate window. Disable takeover while
+the application remains open and confirm the original candidate UI and input
+still work. Stop the frontend and check `org.nextkde.FcitxPanel1.Active` becomes
+false and `ContextCount` returns zero. The bridge test additionally covers
+missing/incompatible adapters, backup failures and durable crash recovery.
+No test should rewrite the application's input-module environment to make the
+panel pass. Applications with no Fcitx input connection are outside this check.
 
 The same runner also exercises presentation preferences: loading and saving
 NextKde-only state, rejecting engine/configuration keys, reporting save

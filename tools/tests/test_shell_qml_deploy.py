@@ -132,7 +132,8 @@ class ShellDeployment(unittest.TestCase):
         for name in ('platform/kos-platform', 'bin/kos-data-service', 'apps/settings/kos-settings',
                      'apps/settings/kos-apps', 'apps/settings/kos-flatpak-worker',
                      'apps/settings/kos-app-update-agent',
-                     'apps/settings/gtk-module/libkos-gtk-window-controls.so'):
+                     'apps/settings/gtk-module/libkos-gtk-window-controls.so',
+                     'platform/fcitx-panel/libnextkde-inputpanel.so'):
             path = build / name
             path.parent.mkdir(parents=True, exist_ok=True)
             path.write_text('fixture')

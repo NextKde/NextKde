@@ -1748,4 +1748,7 @@ export const catalog = {
     "Reduce candidate motion": "减少候选框动画",
     "Show candidates without scaling or size transitions.": "显示候选框时取消缩放和尺寸过渡。",
     "Could not save candidate appearance": "无法保存候选框外观设置",
+    "The Fcitx5 extension unifies candidate popups across Qt, GTK and Wayland input. Keep your working input module settings.": "Fcitx5 扩展统一呈现 Qt、GTK 和 Wayland 输入的候选框，保留现有可用的输入模块设置。",
+    "Enable NextKde popups once. Existing Fcitx Qt/GTK modules and native Wayland input use the same candidate panel.": "开启一次即可，现有 Fcitx Qt/GTK 模块和原生 Wayland 输入将使用同一个候选面板。",
+    "NextKde Fcitx5 panel extension is unavailable; reinstall NextKde with Fcitx5 support": "NextKde Fcitx5 候选面板扩展不可用，请安装支持 Fcitx5 的 NextKde 版本",
 }
