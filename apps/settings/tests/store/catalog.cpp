@@ -118,6 +118,110 @@ private slots:
         entry["release"] = QVariant(); data["apps"] = QVariantList{entry};
         QCOMPARE(AppCatalog::validateUpdate(data, {}, "fixture"), QString());
     }
+    void catalogArtworkChangesKeepReadyImagesUntilEachReplacementIsValid()
+    {
+        QFile config(root.filePath("config/kos-settings/app-sources.json"));
+        QVERIFY(config.open(QIODevice::ReadOnly));
+        const auto original = config.readAll(); config.close();
+        const auto oldProxy = QNetworkProxy::applicationProxy();
+        const auto restore = qScopeGuard([&] {
+            AppCatalog::setTestMode(false);
+            write(config.fileName(), original);
+            QNetworkProxy::setApplicationProxy(oldProxy);
+        });
+        const QVariantMap source{{"id", "fixture"}, {"repository", "Example/catalog"},
+            {"fingerprint", fingerprint}, {"publicKey", publicKey.toBase64()}};
+        const auto configure = [&](const QVariantMap& value) {
+            return write(config.fileName(), QJsonDocument::fromVariant(
+                QVariantMap{{"sources", QVariantList{value}}}).toJson());
+        };
+        QVERIFY(configure(source));
+        const auto oldPng = QByteArray::fromBase64("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR4nGO4syXqPwAHRALqley9cAAAAABJRU5ErkJggg==");
+        const auto notesPng = QByteArray::fromBase64("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR4nGP4etb8PwAHrQL5SFUfbwAAAABJRU5ErkJggg==");
+        const auto weatherPng = QByteArray::fromBase64("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR4nGPwXnrnPwAF1wLMuXhX7QAAAABJRU5ErkJggg==");
+        const auto icon = [](const QString& id, const QByteArray& png) {
+            return QVariantMap{{"url", "https://raw.githubusercontent.com/Example/catalog/" + QString(40, 'a') + "/icons/" + id + ".png"},
+                {"sha256", QString::fromLatin1(QCryptographicHash::hash(png, QCryptographicHash::Sha256).toHex())}, {"size", png.size()}};
+        };
+        const auto path = [](const QVariantMap& metadata) {
+            return AppCatalog::stateDirectory() + "/icons/" + metadata.value("sha256").toString() + ".png";
+        };
+        auto data = catalog(100); data["schemaVersion"] = 2;
+        auto notes = data.value("apps").toList().first().toMap();
+        notes["release"] = QVariant(); notes["icon"] = icon("org.example.Notes", oldPng);
+        auto weather = notes;
+        weather["appId"] = "org.example.Weather"; weather["key"] = "weather";
+        weather["icon"] = icon("org.example.Weather", oldPng);
+        data["apps"] = QVariantList{notes, weather};
+        QVERIFY(snapshot(data));
+        const auto oldPath = path(notes.value("icon").toMap());
+        const auto oldUrl = QUrl::fromLocalFile(oldPath).toString();
+        QVERIFY(write(oldPath, oldPng));
+        const auto fresh = [] {
+            return QVariantMap{{"lastSuccess", QDateTime::currentDateTimeUtc().toString(Qt::ISODate)}, {"error", ""}};
+        };
+        QVERIFY(AppCatalog::writeState("source-fixture", fresh()));
+        QCOMPARE(AppCatalog::refresh([] { return false; }, true), QString());
+
+        data["sequence"] = 101;
+        notes["icon"] = icon("org.example.Notes", notesPng);
+        weather["icon"] = icon("org.example.Weather", weatherPng);
+        data["apps"] = QVariantList{notes, weather};
+        QVERIFY(snapshot(data));
+        const auto displayed = [](const QString& id) { return AppCatalog::iconFile(AppCatalog::find(id)); };
+        QCOMPARE(displayed("org.example.Notes"), oldUrl);
+        QCOMPARE(displayed("org.example.Weather"), oldUrl);
+        QCOMPARE(AppCatalog::readState("last-icons-fixture").value("icons").toMap().size(), 2);
+
+        // A retained image must not make a missing replacement look downloaded.
+        QTcpServer proxy; QVERIFY(proxy.listen(QHostAddress::LocalHost));
+        QNetworkProxy::setApplicationProxy(QNetworkProxy(QNetworkProxy::HttpProxy, "127.0.0.1", proxy.serverPort()));
+        QByteArray requests;
+        connect(&proxy, &QTcpServer::newConnection, this, [&] {
+            auto socket = proxy.nextPendingConnection();
+            connect(socket, &QTcpSocket::readyRead, socket, [&, socket] {
+                requests += socket->readAll();
+                socket->write("HTTP/1.1 502 Bad Gateway\r\nContent-Length: 0\r\nConnection: close\r\n\r\n");
+                socket->disconnectFromHost();
+            });
+        });
+        QVERIFY(AppCatalog::writeState("source-fixture", fresh()));
+        QCOMPARE(AppCatalog::refresh([] { return false; }, true), QString());
+        QVERIFY(requests.contains("raw.githubusercontent.com"));
+        QVERIFY(!requests.contains("api.github.com"));
+        QCOMPARE(displayed("org.example.Weather"), oldUrl);
+        const auto notesPath = path(notes.value("icon").toMap());
+        const auto weatherPath = path(weather.value("icon").toMap());
+        QVERIFY(write(notesPath, notesPng));
+        QCOMPARE(displayed("org.example.Notes"), QUrl::fromLocalFile(notesPath).toString());
+        QCOMPARE(displayed("org.example.Weather"), oldUrl);
+        QVERIFY(write(weatherPath, weatherPng + "incomplete"));
+        QCOMPARE(displayed("org.example.Weather"), oldUrl);
+
+        const auto weatherEntry = AppCatalog::find("org.example.Weather");
+        auto unrelated = weatherEntry;
+        unrelated["appId"] = "org.example.Other";
+        QVERIFY(AppCatalog::iconFile(unrelated).isEmpty());
+        unrelated = weatherEntry; unrelated["sourceId"] = "unrelated";
+        QVERIFY(AppCatalog::iconFile(unrelated).isEmpty());
+        unrelated = weatherEntry; unrelated.remove("icon");
+        QVERIFY(AppCatalog::iconFile(unrelated).isEmpty());
+        auto changedTrust = source; changedTrust["fingerprint"] = QString(40, 'f');
+        QVERIFY(configure(changedTrust));
+        QVERIFY(AppCatalog::iconFile(weatherEntry).isEmpty());
+        QVERIFY(configure(source));
+        QCOMPARE(displayed("org.example.Weather"), oldUrl);
+        QCOMPARE(AppCatalog::setTestMode(true), QString());
+        QVERIFY(AppCatalog::iconFile(weatherEntry).isEmpty());
+        QCOMPARE(AppCatalog::setTestMode(false), QString());
+        QCOMPARE(displayed("org.example.Weather"), oldUrl);
+        QVERIFY(write(oldPath, oldPng + "corrupt"));
+        QVERIFY(displayed("org.example.Weather").isEmpty());
+        QCOMPARE(displayed("org.example.Notes"), QUrl::fromLocalFile(notesPath).toString());
+        QVERIFY(write(oldPath, oldPng));
+        QVERIFY(write(weatherPath, weatherPng));
+        QCOMPARE(displayed("org.example.Weather"), QUrl::fromLocalFile(weatherPath).toString());
+    }
     void freshCatalogOnlyRetriesMissingIcons()
     {
         QFile config(root.filePath("config/kos-settings/app-sources.json"));
