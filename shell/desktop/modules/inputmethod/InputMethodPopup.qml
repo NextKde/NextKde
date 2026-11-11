@@ -130,10 +130,12 @@ Scope {
 
                     Behavior on width {
                         enabled: !InputMethodConfigService.reduceMotion && presentation.interactive && presentation.progress > 0.99
+                        // motion-exception: preserve drag/physical or periodic response.
                         SmoothedAnimation { duration: 160; velocity: -1; maximumEasingTime: 80 }
                     }
                     Behavior on height {
                         enabled: !InputMethodConfigService.reduceMotion && presentation.interactive && presentation.progress > 0.99
+                        // motion-exception: preserve drag/physical or periodic response.
                         SmoothedAnimation { duration: 160; velocity: -1; maximumEasingTime: 80 }
                     }
 

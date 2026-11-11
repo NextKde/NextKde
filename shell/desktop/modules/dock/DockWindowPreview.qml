@@ -292,10 +292,10 @@ PopupWindow {
                     }
 
                     Behavior on color {
-                        ColorAnimation { duration: 100 }
+                        ColorAnimation { duration: AppearanceTokens.motion.instant.duration; easing.type: AppearanceTokens.motion.enterCurve }
                     }
                     Behavior on border.color {
-                        ColorAnimation { duration: 100 }
+                        ColorAnimation { duration: AppearanceTokens.motion.instant.duration; easing.type: AppearanceTokens.motion.enterCurve }
                     }
 
                     BundledIcon {
@@ -393,7 +393,7 @@ PopupWindow {
                             }
 
                             Behavior on color {
-                                ColorAnimation { duration: 100 }
+                                ColorAnimation { duration: AppearanceTokens.motion.instant.duration; easing.type: AppearanceTokens.motion.enterCurve }
                             }
 
                             // Thumbnail display container
@@ -537,10 +537,10 @@ PopupWindow {
                                 z: 5
 
                                 Behavior on opacity {
-                                    NumberAnimation { duration: 100 }
+                                    NumberAnimation { duration: AppearanceTokens.motion.instant.duration; easing.type: AppearanceTokens.motion.enterCurve }
                                 }
                                 Behavior on color {
-                                    ColorAnimation { duration: 100 }
+                                    ColorAnimation { duration: AppearanceTokens.motion.instant.duration; easing.type: AppearanceTokens.motion.enterCurve }
                                 }
 
                                 BundledIcon {

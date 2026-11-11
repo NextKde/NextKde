@@ -54,9 +54,9 @@ QtObject {
     }
 
     property PopupMotion motion: PopupMotion {
-        openDuration: presentation.reduceMotion ? 0 : (presentation.isOnlyTip ? 190 : 210)
-        closeDuration: presentation.reduceMotion ? 0 : (presentation.isOnlyTip ? 140 : 160)
-        openEasing: Easing.OutQuint
-        closeEasing: Easing.InOutCubic
+        openDuration: presentation.reduceMotion ? 0 : AppearanceTokens.motion.slow.duration
+        closeDuration: presentation.reduceMotion ? 0 : AppearanceTokens.motion.base.duration
+        openEasing: AppearanceTokens.motion.enterCurve
+        closeEasing: AppearanceTokens.motion.settleCurve
     }
 }

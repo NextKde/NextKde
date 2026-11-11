@@ -682,9 +682,13 @@ if(BUILD_TESTING)
         # whose embedded plugins are unavailable to plain qmltestrunner.
         set(kos_motion_test_module "${CMAKE_BINARY_DIR}/tests/qml/Kos/Test/LauncherMotion")
         foreach(component LauncherMotion LauncherIconMotion)
-            configure_file(
-                "${CMAKE_CURRENT_SOURCE_DIR}/shell/desktop/modules/applauncher/${component}.qml"
-                "${kos_motion_test_module}/${component}.qml" COPYONLY)
+            set(motion_source "${CMAKE_CURRENT_SOURCE_DIR}/shell/desktop/modules/applauncher/${component}.qml")
+            set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS "${motion_source}")
+            file(READ "${motion_source}" motion_qml)
+            string(REPLACE "../../../shared/qml/foundation"
+                "file:${CMAKE_CURRENT_SOURCE_DIR}/shared/qml/foundation" motion_qml "${motion_qml}")
+            file(MAKE_DIRECTORY "${kos_motion_test_module}")
+            file(WRITE "${kos_motion_test_module}/${component}.qml" "${motion_qml}")
         endforeach()
         file(WRITE "${kos_motion_test_module}/qmldir"
             "module Kos.Test.LauncherMotion\nLauncherMotion 1.0 LauncherMotion.qml\nLauncherIconMotion 1.0 LauncherIconMotion.qml\n")

@@ -158,8 +158,8 @@ AnimatedPopupWindow {
                         transform: Translate { x: card.dragOffset }
                         scale: reorderDrag.active ? 1.06 : 1
 
-                        Behavior on scale { NumberAnimation { duration: 120 } }
-                        Behavior on opacity { NumberAnimation { duration: 120 } }
+                        Behavior on scale { NumberAnimation { duration: AppearanceTokens.motion.fast.duration; easing.type: AppearanceTokens.motion.enterCurve } }
+                        Behavior on opacity { NumberAnimation { duration: AppearanceTokens.motion.fast.duration; easing.type: AppearanceTokens.motion.enterCurve } }
 
                         Column {
                             anchors.centerIn: parent
