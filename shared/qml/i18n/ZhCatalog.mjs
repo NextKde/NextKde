@@ -38,7 +38,6 @@ export const catalog = {
     "Update now": "立即更新",
     "Up to date": "已是最新版本",
     "Installed version matches %1.": "已安装版本与 %1 一致。",
-    "Waiting for authorization…": "正在等待授权…",
     "Fetching changes…": "正在获取改动…",
     "Applying changes…": "正在应用改动…",
     "Building and installing…": "正在编译并安装…",

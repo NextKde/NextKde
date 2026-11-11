@@ -62,7 +62,6 @@ ColumnLayout {
         if (!updateKnown) return ""
         if (String(updateBackend.state || "") === "checking") return I18n.tr("Checking for updates…")
         switch (String(updateBackend.stage || "")) {
-        case "auth": return I18n.tr("Waiting for authorization…")
         case "fetch": return I18n.tr("Fetching changes…")
         case "merge": return I18n.tr("Applying changes…")
         case "install": return I18n.tr("Building and installing…")
