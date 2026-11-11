@@ -87,7 +87,7 @@ PanelWindow {
         visible: opacity > 0
         enabled: !stage.spatialPromptActive
         scale: 0.94 + 0.06 * opacity
-        Behavior on opacity { NumberAnimation { duration: 160; easing.type: Easing.OutCubic } }
+        Behavior on opacity { NumberAnimation { duration: AppearanceTokens.motion.base.duration; easing.type: AppearanceTokens.motion.enterCurve } }
         x: (stage.width - width) / 2
         y: surface.y + surface.height + 12
         width: Math.max(0, Math.min(600, stage.width - 32))
@@ -246,7 +246,7 @@ PanelWindow {
         visible: opacity > 0
         enabled: !stage.spatialPromptActive
         scale: 0.94 + 0.06 * opacity
-        Behavior on opacity { NumberAnimation { duration: 160; easing.type: Easing.OutCubic } }
+        Behavior on opacity { NumberAnimation { duration: AppearanceTokens.motion.base.duration; easing.type: AppearanceTokens.motion.enterCurve } }
         z: 2
         x: backdropPanel.x + (backdropPanel.width - width) / 2
         y: stage.listExpanded ? backdropPanel.y + backdropPanel.height + 8
@@ -381,7 +381,7 @@ PanelWindow {
         visible: opacity > 0
         enabled: !stage.spatialPromptActive
         scale: 0.94 + 0.06 * opacity
-        Behavior on opacity { NumberAnimation { duration: 160; easing.type: Easing.OutCubic } }
+        Behavior on opacity { NumberAnimation { duration: AppearanceTokens.motion.base.duration; easing.type: AppearanceTokens.motion.enterCurve } }
         z: 1
         property real jellyStretch: 0
         property real lensExpansion: 0
@@ -418,8 +418,8 @@ PanelWindow {
                 color: Qt.rgba(1, 1, 1, 0.10 + surface.lensExpansion * 0.13)
                 border.width: 1
                 border.color: Qt.rgba(1, 1, 1, 0.18 + surface.lensExpansion * 0.20)
-                Behavior on x { NumberAnimation { duration: 280; easing.type: Easing.OutCubic } }
-                Behavior on scale { NumberAnimation { duration: 180; easing.type: Easing.OutCubic } }
+                Behavior on x { NumberAnimation { duration: AppearanceTokens.motion.page.duration; easing.type: AppearanceTokens.motion.enterCurve } }
+                Behavior on scale { NumberAnimation { duration: AppearanceTokens.motion.base.duration; easing.type: AppearanceTokens.motion.enterCurve } }
             }
             Row {
                 anchors.fill: parent
@@ -464,6 +464,7 @@ PanelWindow {
         }
         SequentialAnimation {
             id: jellyAnimation
+            // motion-exception: Lens wobble and expansion retain their original physical response.
             NumberAnimation { target: surface; property: "jellyStretch"; to: 0.34; duration: 55; easing.type: Easing.OutQuad }
             NumberAnimation { target: surface; property: "jellyStretch"; to: -0.12; duration: 65; easing.type: Easing.InOutQuad }
             NumberAnimation { target: surface; property: "jellyStretch"; to: 0.04; duration: 55; easing.type: Easing.OutQuad }
@@ -485,7 +486,7 @@ PanelWindow {
         opacity: stage.spatialPromptActive ? 0 : 1
         visible: opacity > 0
         enabled: !stage.spatialPromptActive
-        Behavior on opacity { NumberAnimation { duration: 160; easing.type: Easing.OutCubic } }
+        Behavior on opacity { NumberAnimation { duration: AppearanceTokens.motion.base.duration; easing.type: AppearanceTokens.motion.enterCurve } }
         x: surface.x + surface.width + 12
         y: surface.y + (surface.height - height) / 2
         width: 52; height: 52
@@ -496,7 +497,7 @@ PanelWindow {
         tintColor: "#101820"
         tintOpacity: 0.08
         scale: toggleArea.pressed ? 0.94 : toggleArea.containsMouse ? 1.04 : 1
-        Behavior on scale { NumberAnimation { duration: 160; easing.type: Easing.OutCubic } }
+        Behavior on scale { NumberAnimation { duration: AppearanceTokens.motion.base.duration; easing.type: AppearanceTokens.motion.enterCurve } }
         Rectangle {
             anchors.centerIn: parent
             width: 40; height: 40
@@ -511,7 +512,7 @@ PanelWindow {
             name: "wallpaper.folderDetails"
             color: "white"
             rotation: stage.listExpanded ? -90 : 90
-            Behavior on rotation { NumberAnimation { duration: 180; easing.type: Easing.OutCubic } }
+            Behavior on rotation { NumberAnimation { duration: AppearanceTokens.motion.base.duration; easing.type: AppearanceTokens.motion.enterCurve } }
         }
         MouseArea {
             id: toggleArea

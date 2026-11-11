@@ -19,6 +19,7 @@ Item {
         && (!WallpaperPreviewService.active || WallpaperPreviewService.mode === "image")
     visible: selectedOutput
     opacity: visualReady && !SpatialWallpaperService.activationPending ? 1 : 0
+    // motion-exception: Scene opacity is an ambient wallpaper crossfade.
     Behavior on opacity { NumberAnimation { duration: 500; easing.type: Easing.OutCubic } }
     function finishPresentation() {
         Qt.callLater(() => {
@@ -34,6 +35,7 @@ Item {
     property real pointerSensitivity: 3
     property real renderedPointerX: SpatialPointer.responsivePointer(pointerX, pointerSensitivity)
     property real renderedPointerY: SpatialPointer.responsivePointer(pointerY, pointerSensitivity)
+    // motion-exception: Pointer filtering is part of depth parallax response.
     Behavior on renderedPointerX { NumberAnimation { duration: 150; easing.type: Easing.OutCubic } }
     Behavior on renderedPointerY { NumberAnimation { duration: 150; easing.type: Easing.OutCubic } }
 
