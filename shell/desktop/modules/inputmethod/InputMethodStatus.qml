@@ -146,7 +146,7 @@ Item {
             styleColor: Qt.rgba(0, 0, 0, 0.40)
             scale: hoverArea.pressed ? 0.90 : hoverArea.containsMouse ? 1.05 : 1
             Behavior on scale {
-                NumberAnimation { duration: AppearanceTokens.motion.fastDuration; easing.type: Easing.OutCubic }
+                NumberAnimation { duration: AppearanceTokens.motion.fastDuration; easing.type: AppearanceTokens.motion.enterCurve }
             }
         }
     }

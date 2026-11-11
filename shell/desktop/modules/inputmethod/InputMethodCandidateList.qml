@@ -92,15 +92,15 @@ Item {
         id: horizontalScroll
         target: viewport
         property: "contentX"
-        duration: 160
-        easing.type: Easing.OutCubic
+        duration: AppearanceTokens.motion.base.duration
+        easing.type: AppearanceTokens.motion.enterCurve
     }
     NumberAnimation {
         id: verticalScroll
         target: viewport
         property: "contentY"
-        duration: 160
-        easing.type: Easing.OutCubic
+        duration: AppearanceTokens.motion.base.duration
+        easing.type: AppearanceTokens.motion.enterCurve
     }
 
     Flickable {
@@ -130,11 +130,15 @@ Item {
             color: root.highContrast ? (root.dark ? "#ffffff" : "#202020")
                 : (root.dark ? Qt.rgba(1,1,1,0.18) : Qt.rgba(0,0,0,0.09))
             opacity: root._selectionVisible ? 1 : 0
+            // motion-exception: preserve drag/physical or periodic response.
             Behavior on x { enabled: !root.reduceMotion && root._selectionReady; SmoothedAnimation { duration: 150; velocity: -1 } }
+            // motion-exception: preserve drag/physical or periodic response.
             Behavior on y { enabled: !root.reduceMotion && root._selectionReady; SmoothedAnimation { duration: 150; velocity: -1 } }
+            // motion-exception: preserve drag/physical or periodic response.
             Behavior on width { enabled: !root.reduceMotion && root._selectionReady; SmoothedAnimation { duration: 150; velocity: -1 } }
+            // motion-exception: preserve drag/physical or periodic response.
             Behavior on height { enabled: !root.reduceMotion && root._selectionReady; SmoothedAnimation { duration: 150; velocity: -1 } }
-            Behavior on opacity { enabled: !root.reduceMotion; NumberAnimation { duration: 90 } }
+            Behavior on opacity { enabled: !root.reduceMotion; NumberAnimation { duration: AppearanceTokens.motion.instant.duration; easing.type: AppearanceTokens.motion.enterCurve } }
         }
         Row {
             id: horizontalRow
@@ -173,7 +177,7 @@ Item {
                 radius: 7
                 color: mouse.containsMouse && !entry.selected
                     ? (root.dark ? Qt.rgba(1,1,1,0.08) : Qt.rgba(0,0,0,0.05)) : "transparent"
-                Behavior on color { enabled: !root.reduceMotion; ColorAnimation { duration: 100 } }
+                Behavior on color { enabled: !root.reduceMotion; ColorAnimation { duration: AppearanceTokens.motion.instant.duration; easing.type: AppearanceTokens.motion.enterCurve } }
             }
             readonly property color ink: root.highContrast && selected
                 ? (root.dark ? "#000000" : "#ffffff") : root.foreground

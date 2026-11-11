@@ -247,8 +247,11 @@ AnimatedPopupWindow {
                                 SequentialAnimation on height {
                                     running: popup.visible && (popup.player?.isPlaying ?? false)
                                     loops: Animation.Infinite
+                                    // motion-exception: preserve drag/physical or periodic response.
                                     PauseAnimation { duration: index * 85 }
+                                    // motion-exception: preserve drag/physical or periodic response.
                                     NumberAnimation { to: loudHeight; duration: 220; easing.type: Easing.OutCubic }
+                                    // motion-exception: preserve drag/physical or periodic response.
                                     NumberAnimation { to: quietHeight; duration: 260; easing.type: Easing.InOutSine }
                                 }
                             }

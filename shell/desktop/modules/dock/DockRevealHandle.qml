@@ -155,7 +155,7 @@ Item {
         opacity: handle.fadeOpacity
 
         scale: targetHover.hovered ? 1.08 : 1.0
-        Behavior on scale { NumberAnimation { duration: 120; easing.type: Easing.OutCubic } }
+        Behavior on scale { NumberAnimation { duration: AppearanceTokens.motion.fast.duration; easing.type: AppearanceTokens.motion.enterCurve } }
 
         // The liquid-glass Home Indicator is a second LiquidGlassPanel. It
         // carries its own shaped compositor declaration, which DockWindow
@@ -176,6 +176,7 @@ Item {
             ambientStrength: handle.ambientStrength
             materialDepth: handle.materialDepth
             material: "clear"
+            // motion-exception: preserve ambient glass pigment interpolation.
             ambientTransitionDuration: 600
             bottomEdgeVisible: true
             // The handle is a small high-contrast affordance: its readability

@@ -269,6 +269,7 @@ Item {
                             && trackMarquee.width > trackViewport.width
                         loops: Animation.Infinite
 
+                        // motion-exception: preserve marquee reading pauses.
                         PauseAnimation { duration: 1200 }
                         NumberAnimation {
                             from: 0
@@ -277,6 +278,7 @@ Item {
                                 (trackMarquee.width - trackViewport.width) * 35)
                             easing.type: Easing.Linear
                         }
+                        // motion-exception: preserve marquee reading pauses.
                         PauseAnimation { duration: 800 }
                         PropertyAction { value: 0 }
 
@@ -364,6 +366,7 @@ Item {
                         && compactTrackTitle.width > compactTrackViewport.width
                     loops: Animation.Infinite
 
+                    // motion-exception: preserve marquee reading pauses.
                     PauseAnimation { duration: 900 }
                     NumberAnimation {
                         from: 0
@@ -374,6 +377,7 @@ Item {
                                 - compactTrackViewport.width) * 32)
                         easing.type: Easing.Linear
                     }
+                    // motion-exception: preserve marquee reading pauses.
                     PauseAnimation { duration: 650 }
                     PropertyAction { value: 0 }
 

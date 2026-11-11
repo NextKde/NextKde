@@ -156,6 +156,7 @@ PanelWindow {
     }
 
     LauncherMotion {
+        motionPolicy: AppearanceTokens.motion
         id: popupMotion
         target: launcherContent
         onSettledOpenChanged: {
@@ -272,8 +273,8 @@ PanelWindow {
     property real folderBlurProgress: folderDialogOpen ? 1 : 0
     Behavior on folderBlurProgress {
         NumberAnimation {
-            duration: 220
-            easing.type: Easing.OutCubic
+            duration: AppearanceTokens.motion.slow.duration
+            easing.type: AppearanceTokens.motion.enterCurve
         }
     }
     property bool folderRenameActive: false
@@ -313,6 +314,7 @@ PanelWindow {
     property real folderMergeProgress: 0
     Behavior on folderMergeProgress {
         NumberAnimation {
+            // motion-exception: Folder-merge dwell follows the drag acceptance clock.
             duration: 650
             easing.type: Easing.Linear
         }
@@ -361,6 +363,7 @@ PanelWindow {
         id: fullscreenSettleAnimation
         target: root
         property: "fullscreenPageDragOffset"
+        // motion-exception: Swipe settling uses remaining travel, not a UI transition tier.
         easing.type: Easing.OutCubic
         onFinished: root.commitFullscreenPageTransition()
     }
@@ -1511,7 +1514,7 @@ PanelWindow {
                                             // The icon lights up while the field is
                                             // expanded (focused or holding a query).
                                             opacity: (searchBar.activeFocus || searchBar.text.length > 0) ? 0.95 : 0.65
-                                            Behavior on opacity { NumberAnimation { duration: 300 } }
+                                            Behavior on opacity { NumberAnimation { duration: AppearanceTokens.motion.page.duration; easing.type: AppearanceTokens.motion.enterCurve } }
                                             size: 17
                                         }
 
@@ -1529,9 +1532,10 @@ PanelWindow {
                                                 ? (searchClearMouse.containsMouse ? 0.95 : 0.58) : 0.0
                                             scale: searchBar.text.length > 0 ? 1.0 : 0.5
                                             rotation: searchBar.text.length > 0 ? 0 : -90
-                                            Behavior on opacity { NumberAnimation { duration: 180 } }
+                                            Behavior on opacity { NumberAnimation { duration: AppearanceTokens.motion.base.duration; easing.type: AppearanceTokens.motion.enterCurve } }
                                             Behavior on scale {
                                                 NumberAnimation {
+                                                    // motion-exception: Search-clear scale and rotation share the original overshooting Bezier choreography.
                                                     duration: 450
                                                     easing.type: Easing.Bezier
                                                     easing.bezierCurve: [0.34, 1.56, 0.64, 1, 1, 1]
@@ -1574,14 +1578,14 @@ PanelWindow {
                                 scale: root.editMode ? 1.0 : 0.82
                                 Behavior on opacity {
                                     NumberAnimation {
-                                        duration: 140
-                                        easing.type: Easing.OutCubic
+                                        duration: AppearanceTokens.motion.base.duration
+                                        easing.type: AppearanceTokens.motion.enterCurve
                                     }
                                 }
                                 Behavior on scale {
                                     NumberAnimation {
-                                        duration: 140
-                                        easing.type: Easing.OutCubic
+                                        duration: AppearanceTokens.motion.base.duration
+                                        easing.type: AppearanceTokens.motion.enterCurve
                                     }
                                 }
                                 color: Qt.rgba(0.027, 0.753, 0.376, 1.0)
@@ -1735,6 +1739,7 @@ PanelWindow {
                                 Behavior on x {
                                     enabled: !appDelegate.dragging
                                     NumberAnimation {
+                                        // motion-exception: Drag displacement and held-icon scale retain their original response.
                                         duration: 160
                                         easing.type: Easing.OutCubic
                                     }
@@ -1756,8 +1761,8 @@ PanelWindow {
                             Behavior on opacity {
                                 enabled: !appDelegate.dragging
                                 NumberAnimation {
-                                    duration: 120
-                                    easing.type: Easing.OutCubic
+                                    duration: AppearanceTokens.motion.fast.duration
+                                    easing.type: AppearanceTokens.motion.enterCurve
                                 }
                             }
 
@@ -1822,6 +1827,7 @@ PanelWindow {
                                             property: "rotation"
                                             from: -2.2
                                             to: 2.2
+                                            // motion-exception: Edit-mode wiggle keeps its periodic cadence.
                                             duration: 110
                                             easing.type: Easing.InOutSine
                                         }
@@ -2043,6 +2049,7 @@ PanelWindow {
                                     target: appDelegate
                                     property: "dropOffsetX"
                                     to: appDelegate.dropTargetOffsetX
+                                    // motion-exception: Drop offsets settle before committing the new slot.
                                     duration: 180
                                     easing.type: Easing.OutCubic
                                 }
@@ -2207,7 +2214,7 @@ PanelWindow {
                         color: Qt.rgba(0.05, 0.06, 0.09, 0.34)
                         border.width: 1
                         border.color: Qt.rgba(1, 1, 1, 0.12)
-                        Behavior on width { NumberAnimation { duration: 130; easing.type: Easing.OutCubic } }
+                        Behavior on width { NumberAnimation { duration: AppearanceTokens.motion.fast.duration; easing.type: AppearanceTokens.motion.enterCurve } }
 
                         Row {
                             anchors.centerIn: parent
@@ -2287,14 +2294,15 @@ PanelWindow {
 
                             Behavior on opacity {
                                 NumberAnimation {
-                                    duration: 160
-                                    easing.type: Easing.OutCubic
+                                    duration: AppearanceTokens.motion.base.duration
+                                    easing.type: AppearanceTokens.motion.enterCurve
                                 }
                             }
                             // Liquid inflation: shrink then expand with a soft
                             // overshoot bounce, like the folder is swelling open.
                             Behavior on scale {
                                 NumberAnimation {
+                                    // motion-exception: Folder inflation retains its OutBack overshoot response.
                                     duration: 220
                                     easing.type: Easing.OutBack
                                     easing.overshoot: 1.6
@@ -2402,14 +2410,14 @@ PanelWindow {
                                     scale: root.folderEditMode ? 1.0 : 0.82
                                     Behavior on opacity {
                                         NumberAnimation {
-                                            duration: 140
-                                            easing.type: Easing.OutCubic
+                                            duration: AppearanceTokens.motion.base.duration
+                                            easing.type: AppearanceTokens.motion.enterCurve
                                         }
                                     }
                                     Behavior on scale {
                                         NumberAnimation {
-                                            duration: 140
-                                            easing.type: Easing.OutCubic
+                                            duration: AppearanceTokens.motion.base.duration
+                                            easing.type: AppearanceTokens.motion.enterCurve
                                         }
                                     }
                                     text: I18n.tr("Done")
@@ -2484,6 +2492,7 @@ PanelWindow {
                                         Behavior on x {
                                             enabled: !folderAppDelegate.dragging
                                             NumberAnimation {
+                                                // motion-exception: Folder drag displacement and held-icon scale retain their original response.
                                                 duration: 160
                                                 easing.type: Easing.OutCubic
                                             }
@@ -2504,8 +2513,8 @@ PanelWindow {
                                     }
                                     Behavior on opacity {
                                         NumberAnimation {
-                                            duration: 120
-                                            easing.type: Easing.OutCubic
+                                            duration: AppearanceTokens.motion.fast.duration
+                                            easing.type: AppearanceTokens.motion.enterCurve
                                         }
                                     }
 
@@ -2546,6 +2555,7 @@ PanelWindow {
                                                 property: "rotation"
                                                 from: (index % 2 === 0) ? -1.8 : 1.8
                                                 to: (index % 2 === 0) ? 1.8 : -1.8
+                                                // motion-exception: Folder edit wiggle retains per-icon phase and period.
                                                 duration: (index % 3 === 0) ? 140 : 160
                                                 easing.type: Easing.InOutSine
                                             }
@@ -2603,14 +2613,14 @@ PanelWindow {
                                             scale: root.folderEditMode ? 1.0 : 0.76
                                             Behavior on opacity {
                                                 NumberAnimation {
-                                                    duration: 140
-                                                    easing.type: Easing.OutCubic
+                                                    duration: AppearanceTokens.motion.base.duration
+                                                    easing.type: AppearanceTokens.motion.enterCurve
                                                 }
                                             }
                                             Behavior on scale {
                                                 NumberAnimation {
-                                                    duration: 140
-                                                    easing.type: Easing.OutCubic
+                                                    duration: AppearanceTokens.motion.base.duration
+                                                    easing.type: AppearanceTokens.motion.enterCurve
                                                 }
                                             }
                                             width: 21
@@ -2691,6 +2701,7 @@ PanelWindow {
                                             target: folderAppDelegate
                                             property: "dropOffsetX"
                                             to: folderAppDelegate.dropTargetOffsetX
+                                            // motion-exception: Folder drop offsets settle before committing the new slot.
                                             duration: 180
                                             easing.type: Easing.OutCubic
                                         }
@@ -2841,7 +2852,8 @@ PanelWindow {
                                             color: iconActionMouse.containsMouse ? Qt.rgba(1, 1, 1, 0.20) : Qt.rgba(1, 1, 1, 0.10)
                                             Behavior on color {
                                                 ColorAnimation {
-                                                    duration: 120
+                                                    duration: AppearanceTokens.motion.fast.duration
+                                                    easing.type: AppearanceTokens.motion.enterCurve
                                                 }
                                             }
                                             GlassText {
@@ -2979,7 +2991,8 @@ PanelWindow {
                                             color: editorButtonMouse.containsMouse ? (modelData.name === "save" ? Qt.rgba(1, 1, 1, 0.34) : Qt.rgba(1, 1, 1, 0.20)) : (modelData.name === "save" ? Qt.rgba(1, 1, 1, 0.22) : Qt.rgba(1, 1, 1, 0.10))
                                             Behavior on color {
                                                 ColorAnimation {
-                                                    duration: 120
+                                                    duration: AppearanceTokens.motion.fast.duration
+                                                    easing.type: AppearanceTokens.motion.enterCurve
                                                 }
                                             }
                                             GlassText {
