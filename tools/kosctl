@@ -78,6 +78,17 @@ is_nixos() {
     [[ -f /etc/NIXOS ]]
 }
 
+# Non-TTY callers (the update agent) set KOS_SUDO_ASKPASS=1 so sudo can ask
+# through $SUDO_ASKPASS instead of /dev/tty. LC_ALL=C keeps ksshaskpass able
+# to parse the prompt. Defaults stay plain sudo.
+kos_sudo() {
+    if [[ ${KOS_SUDO_ASKPASS:-0} == 1 ]]; then
+        LC_ALL=C sudo -A "$@"
+    else
+        sudo "$@"
+    fi
+}
+
 # Arch package names are kept in one place so `doctor`, automatic dependency
 # installation, and the README describe the same default build. The KWin list
 # is needed only while compositor plugins are enabled.
@@ -722,7 +733,7 @@ ensure_build_dependencies() {
         if (( ${#missing_packages[@]} > 0 )); then
             printf 'KOS build dependencies require administrator permission:\n'
             printf '  %s\n' "${missing_packages[*]}"
-            sudo pacman -S --needed -- "${missing_packages[@]}"
+            kos_sudo pacman -S --needed -- "${missing_packages[@]}"
         fi
     elif command -v apt-get >/dev/null 2>&1; then
         local package resolved
@@ -761,7 +772,7 @@ ensure_build_dependencies() {
             if (( ${#missing_packages[@]} > 0 )); then
                 printf 'KOS build dependencies require administrator permission:\n'
                 printf '  %s\n' "${missing_packages[*]}"
-                sudo env DEBIAN_FRONTEND=noninteractive apt-get install -y "${missing_packages[@]}"
+                kos_sudo env DEBIAN_FRONTEND=noninteractive apt-get install -y "${missing_packages[@]}"
             fi
         fi
     elif command -v dnf >/dev/null 2>&1; then
@@ -782,7 +793,7 @@ ensure_build_dependencies() {
         if (( ${#missing_packages[@]} > 0 )); then
             printf 'KOS build dependencies require administrator permission:\n'
             printf '  %s\n' "${missing_packages[*]}"
-            sudo dnf install -y "${missing_packages[@]}"
+            kos_sudo dnf install -y "${missing_packages[@]}"
         fi
     fi
 }
@@ -1557,8 +1568,18 @@ install_kwin_plugins() {
             *) ;;  # A path outside the system prefix was never installed.
         esac
     done < <(comm -23 "$previous_manifest" "$kwin_manifest")
+    # Ask once, up front: the rm/cp/chmod below are separate sudo calls and a
+    # non-TTY caller cannot answer a second prompt mid-install. A NOPASSWD
+    # install needs no prompt at all, and `sudo -v` would still ask, so probe
+    # with a no-op command first.
+    if [[ ${KOS_SUDO_ASKPASS:-0} == 1 ]] && ! kos_sudo -n true; then
+        if ! kos_sudo -v; then
+            printf 'sudo authorization failed; KWin plugins were not changed.\n' >&2
+            return 1
+        fi
+    fi
     if (( ${#system_entries[@]} > 0 || ${#stale_entries[@]} > 0 )); then
-        sudo rm -f -- "${system_entries[@]}" "${stale_entries[@]}"
+        kos_sudo rm -f -- "${system_entries[@]}" "${stale_entries[@]}"
     fi
     # The staged tree is written by the invoking user, so a plain `cp -a` copies
     # its ownership into the system prefix: the KWin plugins and the glass
@@ -1597,12 +1618,12 @@ install_kwin_plugins() {
     # directory traverse explicitly instead of only removing write.
     find "$stage_dir$kwin_system_prefix" -type d -exec chmod 755 {} +
     find "$stage_dir$kwin_system_prefix" -type f -exec chmod go-w,a+rX {} +
-    sudo cp -a --no-preserve=ownership "${selinux_context[@]}" \
+    kos_sudo cp -a --no-preserve=ownership "${selinux_context[@]}" \
         "$stage_dir$kwin_system_prefix/." "$kwin_system_prefix/"
     # Belt: the prefix itself is what a bad umask breaks first, and restoring
     # its 0755 here is exactly the manual recovery -- cheap, and it makes the
     # system-wide lockout impossible even if a future staging step slips.
-    sudo chmod 755 "$kwin_system_prefix"
+    kos_sudo chmod 755 "$kwin_system_prefix"
     # Directories the stale files lived in are pruned only when they end up
     # empty, so a shared directory such as the plugin dir is never touched.
     if (( ${#stale_entries[@]} > 0 )); then
@@ -1610,7 +1631,7 @@ install_kwin_plugins() {
         # QML decoration package nested files two levels deep, and pruning only
         # each file's own directory left the package root behind.
         printf '%s\n' "${stale_entries[@]}" | xargs -r -n1 dirname \
-            | sort -ru | sudo xargs -r rmdir -p --ignore-fail-on-non-empty 2>/dev/null || true
+            | sort -ru | kos_sudo xargs -r rmdir -p --ignore-fail-on-non-empty 2>/dev/null || true
     fi
     enable_kwin_effects
     printf 'Installed and enabled KOS Bridge, Dock Animation, Context Menu Input, and Glass.\n'
@@ -1915,7 +1936,7 @@ install_all() {
     take_over_plasma_desktop
     warn_notification_claimers
     python3 "$project_dir/tools/release/source-release.py" stamp "$prefix/share/kos/release.json" \
-        --from-file "$build_dir/release.json"
+        --from-file "$build_dir/release.json" --source-root "$project_dir"
     print_install_summary
 }
 
@@ -2001,7 +2022,7 @@ uninstall_kwin_plugins() {
         if (( ${#system_files[@]} > 0 )); then
             printf 'Removing KWin effects from %s requires administrator permission.\n' \
                 "$kwin_system_prefix"
-            sudo rm -f -- "${system_files[@]}"
+            kos_sudo rm -f -- "${system_files[@]}"
         fi
     fi
     # Clear disable overrides only after plugin files were actually removed.

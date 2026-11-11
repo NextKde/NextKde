@@ -179,6 +179,18 @@ checkout and start applies services. `kosctl version` distinguishes Installed an
 New KWin plugins and desktop takeover require logout/login or reboot.
 Shallow source selection avoids historical process assets; an existing full clone retains its history.
 
+For a source checkout installed with `kosctl install`, Settings → About also offers
+Check for updates with two channels: **Stable** follows the latest official GitHub Release
+tag, and **Canary** follows `origin/main`. The choice is saved per install
+(`~/.config/kos/update-channel`). It refuses dirty trees or in-progress Git operations,
+builds incrementally, and asks for administrator authorization before changing KWin
+plugins. The build and user files stay user-owned; only the existing system-plugin copy
+uses sudo. The first install after this feature must run `./tools/kosctl install` once from
+the checkout so the release record includes its path. Switching channels checks out the
+selected revision (detached); local commits stay on their branches. Stable requires a
+GitHub `origin` with an official Release. Updated KWin plugins still require logout/login
+or a compositor restart.
+
 ## Optional standalone applications
 
 Calendar, Calculator and Weather share the independent `NextKde/kos-apps`
@@ -255,6 +267,11 @@ Before upgrading, back up personal data. Managed runtime/config backups live in
 `${XDG_STATE_HOME:-$HOME/.local/state}/kos/install-backups/`; they do not cover all system plugins,
 dependencies or application data. Deployment is not atomic. See [rollback constraints](Releasing.md#backups-and-rollback)
 for reinstalling a compatible old tag and restoring configuration with services stopped.
+
+Settings → About updates the source checkout in place: it writes progress and a full log under
+`${XDG_STATE_HOME:-$HOME/.local/state}/kos/update/`, can outlive the Settings window, and leaves
+the running Shell untouched until you choose Restart KOS. If authorization or the build fails,
+the source checkout may already be updated; check the log and retry before logging out.
 
 ```sh
 ./tools/kosctl uninstall

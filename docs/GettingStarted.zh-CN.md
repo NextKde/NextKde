@@ -156,6 +156,14 @@ cd NextKde
 选源码、install 部署、start 启动分开；`version` 区分 Installed/Source。
 KWin 插件及桌面接管需注销登录/重启。浅版本切换不下载旧过程资源，已有完整克隆仍保留历史。
 
+用 `kosctl install` 安装的源码 checkout 也可以在 Settings → 关于 中检查更新，并提供两个通道：
+**Stable** 跟随 GitHub 最新正式 Release tag，**Canary** 跟随 `origin/main`。选择按安装保存
+（`~/.config/kos/update-channel`）。它会拒绝脏工作区或未完成的 Git 操作，增量编译，并在修改
+KWin 插件前请求管理员授权。构建和用户文件始终属于当前用户，只有原有的系统插件拷贝使用 sudo。
+升级到带此功能的版本后，需要先在 checkout 里运行一次 `./tools/kosctl install`，让版本记录写入
+源码路径。切换通道会 checkout 对应版本（detached），本地提交仍保留在原分支。Stable 需要
+GitHub `origin` 上存在正式 Release。KWin 插件更新仍需注销登录或重启合成器。
+
 ## 可选独立应用
 
 日历、计算器、天气合用独立 `NextKde/kos-apps` 仓库／版本／Release，各自仍是
@@ -213,6 +221,10 @@ journalctl --user -u kos-platform.service -u kos-data.service -u kos-shell.servi
 
 升级前备份个人数据。管理的运行树/配置备份在 `${XDG_STATE_HOME:-$HOME/.local/state}/kos/install-backups/`，
 不含所有插件、依赖、应用数据，部署不是事务。[回退限制](Releasing.zh-CN.md#备份与回退)说明兼容旧 Tag 重装及停服务恢复配置。
+
+Settings → 关于 会原地更新源码 checkout：进度和完整日志写在
+`${XDG_STATE_HOME:-$HOME/.local/state}/kos/update/`，关闭设置窗口后仍会继续；在点“重启 KOS”
+之前不会动正在运行的 Shell。如果授权或构建失败，源码可能已经更新；请查看日志并重试，确认前不要注销。
 
 ```sh
 ./tools/kosctl uninstall

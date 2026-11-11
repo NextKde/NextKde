@@ -4,6 +4,7 @@ import QtQuick.Effects
 import QtQuick.Layouts
 import Kos.Demo as Demo
 import "../../../shared/qml/i18n"
+import "../components" as Controls
 
 ColumnLayout {
     id: page
@@ -14,6 +15,120 @@ ColumnLayout {
         + (I18n.language === "zh-CN" ? "/blob/main/README.zh-CN.md"
            : I18n.language === "pt-BR" ? "/blob/main/README.pt-BR.md" : "#submit-an-application")
     property var contributors: []
+    // Injected by the main window; a null backend keeps the page loadable alone.
+    property var updateBackend: null
+    readonly property bool updateKnown: !!updateBackend
+    readonly property bool updateBusy: updateKnown && !!updateBackend.busy
+    readonly property bool updateAvailable: updateKnown && !!updateBackend.available
+    readonly property bool updateUpToDate: updateKnown && !!updateBackend.upToDate
+    readonly property bool updateBlocked: updateKnown && !!updateBackend.blocked
+    readonly property bool updateFailed: updateKnown && !!updateBackend.failed
+    readonly property bool updateUpdated: updateKnown && !!updateBackend.updated
+    readonly property bool updateNeedsRestart: updateKnown && !!updateBackend.needsRestart
+    readonly property bool updateRecorded: updateKnown && !!updateBackend.sourceRoot
+    readonly property bool updateHasLog: updateKnown && !!updateBackend.logPath
+    readonly property bool updateCanCheck: updateKnown && !!updateBackend.canCheck && !updateBusy
+    readonly property bool updateCanUpdate: updateKnown && !!updateBackend.canUpdate && !updateBusy
+    readonly property string updateVersionText: {
+        if (!updateKnown) return ""
+        const version = updateBackend.currentVersion ? String(updateBackend.currentVersion) : ""
+        return version || I18n.tr("Unknown version")
+    }
+    readonly property string updateBranchName: updateKnown && updateBackend.branch
+        ? String(updateBackend.branch) : ""
+    readonly property string updateTrackedName: updateKnown && updateBackend.upstream
+        ? String(updateBackend.upstream) : updateBranchName
+    // Stable tracks the tagged release the controller reports in upstream;
+    // main is the canary channel and reports origin/main there. The fallback
+    // matches the controller's own default before its release record is read.
+    readonly property string updateChannel: updateKnown && updateBackend.channel
+        ? String(updateBackend.channel) : "main"
+    readonly property bool updateStableChannel: updateChannel !== "main"
+    readonly property int updateChannelIndex: updateStableChannel ? 0 : 1
+    readonly property string updateTargetName: updateTrackedName || I18n.tr("the tracked branch")
+    // Long git output belongs in the log; the row keeps the first screens only.
+    readonly property string updateError: {
+        if (!updateKnown || !updateBackend.error) return ""
+        const text = String(updateBackend.error).trim()
+        return text.length > 300 ? text.slice(0, 300) + "…" : text
+    }
+    readonly property string updateStageLabel: {
+        if (!updateKnown) return ""
+        if (String(updateBackend.state || "") === "checking") return I18n.tr("Checking for updates…")
+        switch (String(updateBackend.stage || "")) {
+        case "auth": return I18n.tr("Waiting for authorization…")
+        case "fetch": return I18n.tr("Fetching changes…")
+        case "merge": return I18n.tr("Applying changes…")
+        case "install": return I18n.tr("Building and installing…")
+        case "done": return I18n.tr("Finishing up…")
+        }
+        return updateBusy ? I18n.tr("Working…") : ""
+    }
+    readonly property string updateStatusTitle: {
+        if (!updateKnown) return I18n.tr("Updates unavailable")
+        if (!updateRecorded) return I18n.tr("Update source not recorded")
+        if (updateFailed) return I18n.tr("Update failed")
+        if (updateBlocked) return I18n.tr("Update paused")
+        if (updateBusy) return updateStageLabel
+        if (updateNeedsRestart) return I18n.tr("Restart required")
+        if (updateUpdated) return I18n.tr("Updated")
+        if (updateAvailable) return I18n.tr("Update available")
+        if (updateUpToDate) return I18n.tr("Up to date")
+        return ""
+    }
+    readonly property string updateStatusDetail: {
+        if (!updateKnown) return I18n.tr("This build of Settings cannot check for KOS updates.")
+        if (!updateRecorded) return I18n.tr("Run ./tools/kosctl install once from the KOS source folder, then reopen Settings.")
+        if (updateBusy) return I18n.tr("You can close Settings; the update continues in the background.")
+        if (updateFailed) return updateError || I18n.tr("The update stopped before it finished. Open the log for details.")
+        if (updateBlocked) return updateError || I18n.tr("The update did not start. Open the log for details.")
+        if (updateUpdated || updateNeedsRestart) {
+            const version = updateVersionText
+            if (updateNeedsRestart) return version
+                ? I18n.tr("KOS %1 is installed. Restart KOS to load it, and log out or restart the compositor to load updated KWin plugins.").arg(version)
+                : I18n.tr("The new version is installed. Restart KOS to load it, and log out or restart the compositor to load updated KWin plugins.")
+            return version ? I18n.tr("KOS %1 is installed.").arg(version) : I18n.tr("The new version is installed.")
+        }
+        if (updateAvailable) {
+            if (updateBackend.sourceAhead && !Number(updateBackend.commitsBehind))
+                return I18n.tr("The source checkout is newer than the installed version.")
+            if (updateStableChannel)
+                return I18n.tr("Stable release %1 is available.").arg(updateTargetName)
+            const behind = Math.max(1, Number(updateBackend.commitsBehind) || 0)
+            return behind === 1 ? I18n.tr("1 commit behind %1").arg(updateTargetName)
+                : I18n.tr("%1 commits behind %2").arg(behind).arg(updateTargetName)
+        }
+        if (updateUpToDate) return I18n.tr("Installed version matches %1.").arg(updateTargetName)
+        return ""
+    }
+    // One row, one action: the state decides which action is offered.
+    readonly property string updateAction: {
+        if (!updateKnown) return ""
+        if (updateBusy) return updateHasLog ? "log" : ""
+        if (updateFailed || updateBlocked) return updateHasLog ? "log" : ""
+        if (updateNeedsRestart) return "restart"
+        if (updateAvailable && updateCanUpdate) return "update"
+        return ""
+    }
+    readonly property string updateActionText: updateAction === "log" ? I18n.tr("Open log")
+        : updateAction === "restart" ? I18n.tr("Restart KOS")
+        : updateAction === "update" ? I18n.tr("Update now") : ""
+    property double updateStartedAt: 0
+    property int updateElapsed: 0
+    readonly property string updateElapsedLabel: Math.floor(updateElapsed / 60) + ":"
+        + ("0" + (updateElapsed % 60)).slice(-2)
+    onUpdateBusyChanged: {
+        updateElapsed = 0
+        updateStartedAt = updateBusy ? Date.now() : 0
+    }
+    // A busy backend can already be running when the page opens; the clock then
+    // counts from that moment, which is close enough for a "still working" cue.
+    function runUpdateAction() {
+        if (!updateBackend) return
+        if (updateAction === "update") updateBackend.update()
+        else if (updateAction === "restart") updateBackend.restart()
+        else if (updateAction === "log") updateBackend.openLog()
+    }
     property var cache: null
     property var request: null
     property int nextPage: 1
@@ -93,7 +208,10 @@ ColumnLayout {
         xhr.send()
     }
 
-    Component.onCompleted: if (loadContributors) fetchContributors()
+    Component.onCompleted: {
+        if (loadContributors) fetchContributors()
+        if (updateBusy) updateStartedAt = Date.now()
+    }
     Component.onDestruction: {
         const xhr = request
         request = null
@@ -208,6 +326,126 @@ ColumnLayout {
             description: "NextKde/NextKde"
             url: page.repositoryUrl
         }
+    }
+
+    Section {
+        title: I18n.tr("Updates")
+        Demo.SettingsItem {
+            objectName: "about-update-channel"
+            title: I18n.tr("Update channel")
+            description: page.updateStableChannel ? I18n.tr("Latest official release")
+                : I18n.tr("Main branch (development)")
+            titleColor: page.colors.primaryText
+            descriptionColor: page.colors.secondaryText
+            // Two choices stay segmented (settings control contract).
+            Controls.SettingsNavBar {
+                objectName: "about-update-channel-select"
+                colors: page.colors
+                // Persistence and the resulting status belong to the controller.
+                disabled: !page.updateCanCheck
+                model: [
+                    {
+                        id: "stable",
+                        label: I18n.tr("Stable")
+                    },
+                    {
+                        id: "main",
+                        label: I18n.tr("Canary")
+                    }
+                ]
+                currentIndex: page.updateChannelIndex
+                onSelectionChanged: function (index) {
+                    if (page.updateBackend)
+                        page.updateBackend.channel = index === 0 ? "stable" : "main"
+                }
+            }
+        }
+        Demo.SettingsItem {
+            objectName: "about-installed-version"
+            title: I18n.tr("Installed version")
+            description: page.updateVersionText
+            titleColor: page.colors.primaryText
+            descriptionColor: page.colors.secondaryText
+            Demo.LiquidActionButton {
+                objectName: "about-check-updates"
+                text: page.updateFailed || page.updateBlocked ? I18n.tr("Check again") : I18n.tr("Check for updates")
+                materialForm: true
+                implicitHeight: 24
+                cornerRadius: 6
+                enabled: page.updateCanCheck
+                activeFocusOnTab: enabled
+                onClicked: page.updateBackend.check()
+            }
+        }
+        Demo.SettingsItem {
+            objectName: "about-update-status"
+            visible: page.updateStatusTitle.length > 0
+            title: page.updateStatusTitle
+            description: page.updateStatusDetail
+            // An available update is the only state that asks for attention.
+            titleColor: page.updateAvailable ? page.colors.accent : page.colors.primaryText
+            descriptionColor: page.colors.secondaryText
+            Demo.LiquidActionButton {
+                objectName: "about-update-action"
+                visible: page.updateActionText.length > 0
+                text: page.updateActionText
+                materialForm: true
+                implicitHeight: 24
+                cornerRadius: 6
+                activeFocusOnTab: enabled
+                onClicked: page.runUpdateAction()
+            }
+        }
+        ColumnLayout {
+            visible: page.updateBusy
+            Layout.fillWidth: true
+            Layout.leftMargin: 16
+            Layout.rightMargin: 16
+            Layout.topMargin: 4
+            Layout.bottomMargin: 8
+            spacing: 6
+            ProgressBar {
+                objectName: "about-update-progress"
+                Layout.fillWidth: true
+                // No progress protocol exists, so the bar never claims a percentage.
+                indeterminate: true
+                implicitHeight: 4
+                background: Rectangle {
+                    radius: 2
+                    color: Qt.rgba(page.colors.accent.r, page.colors.accent.g, page.colors.accent.b, 0.1)
+                }
+                contentItem: Item {
+                    Rectangle {
+                        width: parent.width * 0.3
+                        height: parent.height
+                        radius: 2
+                        color: page.colors.accent
+                        SequentialAnimation on opacity {
+                            running: page.updateBusy
+                            loops: Animation.Infinite
+                            NumberAnimation { from: 0.4; to: 1; duration: 650 }
+                            NumberAnimation { from: 1; to: 0.4; duration: 650 }
+                        }
+                    }
+                }
+            }
+            Text {
+                Layout.fillWidth: true
+                textFormat: Text.PlainText
+                text: I18n.tr("Elapsed: %1").arg(page.updateElapsedLabel)
+                color: page.colors.secondaryText
+                font.pixelSize: 10
+            }
+        }
+    }
+
+    Timer {
+        interval: 1000
+        repeat: true
+        triggeredOnStart: true
+        running: page.updateBusy && page.visible
+        onTriggered: page.updateElapsed = page.updateStartedAt > 0
+            ? Math.max(0, Math.floor((Date.now() - page.updateStartedAt) / 1000)) : 0
     }
 
     Section {
