@@ -21,4 +21,7 @@ try {
     assert.match(output, /HISTORY_VISUAL_TEST_PASS/);
     assert.doesNotMatch(output, /TypeError|ReferenceError|Unable to assign|Required property|Error:|Failed to load/);
     console.log("Real history delegates: collapse/expand, single and group exits, new arrivals and clear passed");
-} finally { rmSync(directory, {recursive: true, force: true}); }
+} finally {
+    if (process.env.KOS_KEEP_TEST_TMP === "1") console.log(`Fixture retained: ${directory}`);
+    else rmSync(directory, {recursive: true, force: true});
+}
