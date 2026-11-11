@@ -4,6 +4,7 @@
     cmake,
     pkg-config,
     flatpak,
+    fcitx5,
     kdePackages,
     opencv,
     onnxruntime,
@@ -30,6 +31,7 @@ stdenv.mkDerivation {
 
     buildInputs = [
         flatpak
+        fcitx5
         kdePackages.qtbase
         kdePackages.qtdeclarative
         kdePackages.kiconthemes

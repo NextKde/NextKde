@@ -17,7 +17,7 @@ if '--serve' in sys.argv:
     DBusGMainLoop(set_as_default=True)
     root = Path(os.environ['KIMPANEL_FIXTURE'])
     addons = {'classicui': True, 'kimpanel': False}
-    connection = owner = controller = None
+    connection = owner = controller = panel_owner = panel = None
     def record(item):
         with (root / 'trace').open('a') as f:
             f.write(json.dumps(item) + '\n')
@@ -36,18 +36,31 @@ if '--serve' in sys.argv:
         @dbus.service.method('org.fcitx.Fcitx.Controller1')
         def ReloadConfig(self):
             pass
+    class Panel(dbus.service.Object):
+        @dbus.service.method('org.nextkde.FcitxPanel1', out_signature='u')
+        def Version(self):
+            return 2 if (root / 'wrong-version').exists() else 1
+        @dbus.service.method('org.nextkde.FcitxPanel1', out_signature='b')
+        def Active(self):
+            return connection.name_has_owner('org.nextkde.InputPanel')
     def start():
-        global connection, owner, controller
+        global connection, owner, controller, panel_owner, panel
         connection = dbus.SessionBus(private=True)
         owner = dbus.service.BusName('org.fcitx.Fcitx5', connection)
         controller = Controller(connection, '/controller')
+        if not (root / 'missing-adapter').exists():
+            panel_owner = dbus.service.BusName('org.nextkde.FcitxPanel', connection)
+            panel = Panel(connection, '/org/nextkde/FcitxPanel')
     def poll():
-        global connection, owner, controller
+        global connection, owner, controller, panel_owner, panel
         config = configparser.RawConfigParser()
         config.read(root / 'config/kwinrc')
         command = config.get('Wayland', 'InputMethod', fallback='')
         if not command and connection is not None:
             controller.remove_from_connection()
+            if panel is not None:
+                panel.remove_from_connection()
+            panel_owner = panel = None
             owner = None
             connection.close()
             connection = owner = controller = None
@@ -93,6 +106,13 @@ with tempfile.TemporaryDirectory(prefix='kos-kimpanel-') as directory:
         assert trace() == [], 'failed backup changed Fcitx'
         (root / 'fail-backup').unlink()
         clear_choice()
+        for problem in ('missing-adapter', 'wrong-version'):
+            (root / problem).touch()
+            run('failure')
+            assert trace()[-1] == dict(classicui=True, kimpanel=False)
+            assert not (root / 'config/kos/inputmethod-recovery.json').exists()
+            (root / problem).unlink()
+            clear_choice()
         for mode in ('toggle', 'disconnect'):
             run(mode)
             assert trace()[-2:] == [dict(classicui=False, kimpanel=True),
@@ -107,7 +127,7 @@ with tempfile.TemporaryDirectory(prefix='kos-kimpanel-') as directory:
         config = configparser.RawConfigParser()
         config.read(root / 'config/kwinrc')
         assert config['Wayland']['InputMethod'] == str(desktop)
-        print('PASS: default-off, backup failure, toggle, Shell loss, crash recovery, original addon states')
+        print('PASS: default-off, backup failure, missing/incompatible adapter rollback, toggle, Shell loss, crash recovery, original addon states')
     finally:
         fixture.terminate()
         fixture.wait(timeout=5)

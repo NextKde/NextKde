@@ -139,7 +139,7 @@ ColumnLayout {
         Demo.SettingsItem {
             title: I18n.tr("Enable NextKde Input Method Popups")
             description: integrationPage.snapshot.inputMethodError
-                ? I18n.tr("Input method activation failed") + ": " + integrationPage.snapshot.inputMethodError
+                ? I18n.tr("Input method activation failed") + ": " + I18n.tr(integrationPage.snapshot.inputMethodError)
                 : integrationPage.snapshot.inputMethodChanging ? I18n.tr("Reloading input method…")
                 : integrationPage.snapshot.inputMethodActive ? I18n.tr("Enabled")
                 : I18n.tr("Render candidates and tips with liquid glass. When disabled, Fcitx5 native candidate windows are preserved.")
@@ -158,7 +158,7 @@ ColumnLayout {
 
         Demo.SettingsItem {
             title: I18n.tr("Candidate Styling & App Compatibility")
-            description: I18n.tr("NextKde renders liquid glass popups via Wayland text-input-v3. Expand to view per-app adaptation flags and environment settings.")
+            description: I18n.tr("The Fcitx5 extension unifies candidate popups across Qt, GTK and Wayland input. Keep your working input module settings.")
             Demo.LiquidActionButton {
                 text: integrationPage.inputMethodExpanded ? I18n.tr("Hide Solutions ▴") : I18n.tr("App Solutions ▾")
                 materialForm: true
@@ -191,7 +191,7 @@ ColumnLayout {
         Demo.SettingsItem {
             visible: integrationPage.inputMethodExpanded
             title: "↳ " + I18n.tr("Firefox & Native Desktop Apps")
-            description: I18n.tr("Leave GTK_IM_MODULE and QT_IM_MODULE empty to enable compositor takeover.")
+            description: I18n.tr("Enable NextKde popups once. Existing Fcitx Qt/GTK modules and native Wayland input use the same candidate panel.")
         }
     }
     Demo.SettingsGroup {
