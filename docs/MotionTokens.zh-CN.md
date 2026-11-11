@@ -1,8 +1,8 @@
 # Shell 动效 Token 统一方案（T5）
 
-状态：**方案待确认，尚未替换代码**。本文件单独提交；按任务卡“等确认后再批量替换”的要求，确认前不执行后续实现批次。
+状态：**方案已获人工确认，代码批次已落地；视觉验收尚未完成**（2026-11-12）。原始审计与方案保留如下，实测结果、例外登记及未通过项目见第 8 节。
 
-统计基线：`6df77a57`，2026-11-11。目标是统一普通界面过渡的节奏，不重设计动画，不调整弹簧参数。下文“替换后”均为方案或待验收项，不代表已经实现。
+统计基线：`6df77a57`，2026-11-11。目标是统一普通界面过渡的节奏，不重设计动画，不调整弹簧参数。第 1–7 节保留方案基线与约束；第 8 节记录最终实现和实际验收。
 
 ## 1. 复核结果与统计口径
 
@@ -109,7 +109,7 @@
 4. 遵守已有 reduce-motion 与立即完成路径；不要把 0 改成 `instant`。
 5. 中途反向从当前进度续接，用“完整 token 时长 × 剩余进度”。最低 1ms 等计算保护不是第六档。
 
-预期 Shell 调用接口（示意，尚未实现）：
+Shell 调用接口（现已实现）：
 
 ```qml
 NumberAnimation {
@@ -150,14 +150,14 @@ NumberAnimation {
 
 | 替换前值×次数 | 候选数 | 拟采用的 token / 时长 | 当前替换后实测 |
 | --- | ---: | --- | --- |
-| 90×5、100×36、105×1 | 42 | `instant` / 100 | 未实施 |
-| 110×18、115×4、120×27、130×5 | 54 | `fast` / 120 | 未实施 |
-| 140×29、150×30、155×1、160×24、170×5、180×11 | 100 | `base` / 160 | 未实施 |
-| 200×9、210×3、220×4、240×4、250×2 | 22 | `slow` / 220 | 未实施 |
-| 260×2、280×1、300×3 | 6 | `page` / 300 | 未实施 |
-| 50×2、55×2、60×1、65×1、70×1、75×1、85×1 | 9 | 必须审查：分段/跟手等，不直接拉长到 100 | 未实施 |
-| 360×2、380×1、420×1、450×2、500×1、650×2、800×1、900×3、1100×1、1200×1、1840×1、2200×1 | 17 | 必须审查：长过渡、循环、等待、业务进度 | 未实施 |
-| **合计** | **250** | **224 个普通区间候选 + 26 个区间外必审项** | **未实施** |
+| 90×5、100×36、105×1 | 42 | `instant` / 100 | 见第 8 节语义审计结果 |
+| 110×18、115×4、120×27、130×5 | 54 | `fast` / 120 | 见第 8 节语义审计结果 |
+| 140×29、150×30、155×1、160×24、170×5、180×11 | 100 | `base` / 160 | 见第 8 节语义审计结果 |
+| 200×9、210×3、220×4、240×4、250×2 | 22 | `slow` / 220 | 见第 8 节语义审计结果 |
+| 260×2、280×1、300×3 | 6 | `page` / 300 | 见第 8 节语义审计结果 |
+| 50×2、55×2、60×1、65×1、70×1、75×1、85×1 | 9 | 必须审查：分段/跟手等，不直接拉长到 100 | 见第 8 节语义审计结果 |
+| 360×2、380×1、420×1、450×2、500×1、650×2、800×1、900×3、1100×1、1200×1、1840×1、2200×1 | 17 | 必须审查：长过渡、循环、等待、业务进度 | 见第 8 节语义审计结果 |
+| **合计** | **250** | **224 个普通区间候选 + 26 个区间外必审项** | **见第 8 节** |
 
 142 个其他绑定及 JS 赋值、函数参数、属性默认值另行追踪，不计入上述 250 的分桶。范围内所有现存短时长来源都必须有明确归属。
 
@@ -254,19 +254,19 @@ QML syntax: 395 files, OK
 
 至少分别覆盖 macOS、Material，并补 windows12 分支加载与交互检查。headless 软件渲染能检查时序和状态，不证明 KWin 原生玻璃光学效果；若发现只有 KWin 下可复现的几何/可见性问题，先记录为何必须真实合成器，再补专项验证。本任务不预设需要 VM。
 
-### 最终验收表（实施后填写）
+### 最终验收概览
 
 | 指标 | 替换前实测 | 替换后实测 |
-| --- | ---: | --- |
-| 数字开头 duration 行 | 250 | 待实施 |
-| 未说明原因的数字 duration | 尚未逐处完成注释审计 | 目标 0 |
-| instant / fast / base / slow / page 引用数 | 新接口尚不存在 | 待实施，按直接引用与兼容别名分别计 |
-| 条件表达式/JS 赋值隐藏时长 | 已识别，见第 1 节 | 逐项归属 token 或有理由的例外 |
-| 保留例外数 | 待逐处确认 | 必须逐文件列明，不只报总数 |
-| 五组交互录屏 | 尚未录制 | 基线/改后文件及结果待填 |
-| 视觉契约 | 通过 | 各批次待填 |
-| Qt 6 语法检查 | 395 files, OK | 各批次待填 |
-| 完整 lint / headless / Settings 加载 | 未执行 | 待填真实结果与日志 |
+| --- | --- | --- |
+| 数字开头 duration 行 | 250 | 99（含 5 行唯一档位定义） |
+| 普通时序归并 | 多套硬编码 | 五档与兼容别名；物理/环境/业务保留 |
+| instant / fast / base / slow / page 直接引用 | 新接口不存在 | 34 / 55 / 87 / 27 / 9，包含定义默认值和别名 |
+| 条件表达式/JS 赋值 | 需额外追踪 | 剩余进度计算与例外见第 8 节 |
+| 保留例外 | 待逐处确认 | 文件、行号、表达式及原因见第 8 节 |
+| 五组前后录屏 | 尚未录制 | 待真机验证 |
+| 视觉契约 | 通过 | 通过 |
+| Qt 6 语法检查 | 395 files, OK | 476 files, OK |
+| 完整 lint / runtime / Settings | 未执行 | 第 8 节列明通过范围与限制 |
 
 验收 grep 的剩余行可以非零，但每行必须有具体注释及例外记录。不能把 duration 改成一个新变量，再在变量里硬编码同样数字。五档定义本身可在唯一策略源中包含数字，它们是明确设计定义，不是消费者逃逸。
 
@@ -316,11 +316,226 @@ for scope, prefixes in [('shell/shared', ('shell/', 'shared/')),
 PY
 ```
 
-预期汇总：
+基线 `6df77a57` 的预期汇总：
 
 ```text
 shell/shared {'duration_lines': 392, 'easing_lines': 288, 'numeric_start_lines': 250}
 repository {'duration_lines': 429, 'numeric_start_lines': 287, 'easing_lines': 310}
 ```
 
-字典输出顺序可能随文件遍历顺序变化；数值应一致。本统计是文本基线，后续必须附语义审查，不能用文本计数代替行为验收。
+字典输出顺序可能随文件遍历顺序变化。本段保留原始基线，当前分支输出见第 8 节；不能用文本计数代替行为验收。
+
+## 8. 实施结果（2026-11-12）
+
+### 策略与使用方法
+
+唯一数字定义位于 `shared/qml/foundation/MotionTokens.qml`。`AppearanceTokens.motion` 继承该类型并保留 Shell 的 spring、popup 几何与兼容别名。`Kos.Ui`、`Kos.Demo` 均注册此类型；Demo 的源码入口使用符号链接复用定义，构建时进入自己的 QML 资源路径。共享控件不反向导入 Shell。Liquid 控件按自身 `materialForm` 选择策略，并允许宿主显式传入 `motionPolicy`；通用 foundation 默认 macOS 曲线，不能把 `modernDesign` 当成 Material。
+
+| 档位 | ms | 选择依据 |
+| --- | ---: | --- |
+| instant | 100 | 小面积、近乎立即的反馈 |
+| fast | 120 | hover、颜色、轻量显隐 |
+| base | 160 | 普通弹窗与状态切换 |
+| slow | 220 | 大面积显隐、通知、较长控件运动 |
+| page | 300 | 页面/启动台姿态、大跨度展示 |
+
+进入/普通反馈使用 `enterCurve`，离场使用 `exitCurve`，双向平稳重排使用 `settleCurve`。macOS/windows12 为 OutCubic/InCubic/InOutCubic；Material 为 OutQuart/InQuart/InOutQuart。`0` 的减少动画/立即完成语义、剩余进度乘法和 `Math.max(1, ...)` 保留。物理运动、循环周期和业务定时不按档位强制映射。
+
+兼容别名：Shell fastDuration→fast、normalDuration→slow、slowDuration→page、standardEasing→enterCurve、popupOpen/CloseDuration→base；AppTheme.motionFast/Normal→fast/slow，仍响应 reduceMotion。无 spring/damping/mass/epsilon 参数改动，无布局、颜色值或动画层级改动。
+
+### 替换前后分布
+
+统计范围为 Git 跟踪的 shell/shared QML，跳过符号链接及构建产物。新增 5 行是唯一策略中的档位定义。
+
+| 指标 | 基线 | 当前 |
+| --- | ---: | ---: |
+| duration 行 | 392 | 397 |
+| 数字开头 duration 行 | 250 | 99 |
+| easing 相关行 | 288 | 378 |
+
+数字开头绑定减少 151 行；剩余 99 行中 5 行是档位定义，94 行为下表登记的物理/循环/业务例外。这不等于全部 392 行都曾硬编码。新增显式 easing 使 easing 行数增加，不能把净行数差当作替换量。
+
+直接 `.duration` 引用：instant=34、fast=55、base=87、slow=27、page=9。兼容别名消费者继续通过原有 API 读策略。
+
+下表按 diff 中发生变化的原始绑定行计数（包括 `*Duration` 属性和 JS 赋值；同一行 duration/easing 可各计一次；新增显式 easing 不算“替换旧 easing”）。
+
+| 模块 | 时序绑定变更行 | 旧 easing 变更行 |
+| --- | ---: | ---: |
+| `shared/demo-ui/controls` | 34 | 9 |
+| `shared/demo-ui/foundation` | 0 | 2 |
+| `shared/qml/controls` | 30 | 14 |
+| `shared/qml/foundation` | 9 | 13 |
+| `shell/desktop/modules/applauncher` | 17 | 15 |
+| `shell/desktop/modules/bar` | 55 | 30 |
+| `shell/desktop/modules/common` | 16 | 8 |
+| `shell/desktop/modules/deskcenter` | 19 | 16 |
+| `shell/desktop/modules/dock` | 26 | 18 |
+| `shell/desktop/modules/inputmethod` | 7 | 5 |
+| `shell/desktop/modules/notifications` | 7 | 8 |
+| `shell/desktop/modules/overview` | 9 | 2 |
+| `shell/desktop/modules/quicksearch` | 7 | 2 |
+| `shell/desktop/modules/stage` | 5 | 1 |
+| `shell/desktop/modules/wallpaper` | 7 | 6 |
+
+另有 Settings 壁纸瓦片边框 150→base，两个 AppTheme 的 120/220 兼容属性改读统一策略。
+
+### 例外登记
+
+以下按文件和数值分组，行号为本次审计定位（多行表达式列出首行，完整式见源码）；同一数值的多个段合并登记。每组保留原时长和原曲线，原因对应源码 `motion-exception` 注释。
+
+| 文件 | 行号 | 保留值/表达式 | 原因 |
+| --- | --- | --- | --- |
+| `shared/demo-ui/controls/LiquidGlassSwitch.qml` | 82 | `root.reduceMotion ? 0 : _pressed ? 120 : 200` | 透镜膨胀、四段形变/拖拽位移的耦合物理响应 |
+| `shared/demo-ui/controls/LiquidGlassSwitch.qml` | 92, 95 | `50` | 透镜膨胀、四段形变/拖拽位移的耦合物理响应 |
+| `shared/demo-ui/controls/LiquidGlassSwitch.qml` | 93 | `70` | 透镜膨胀、四段形变/拖拽位移的耦合物理响应 |
+| `shared/demo-ui/controls/LiquidGlassSwitch.qml` | 94 | `60` | 透镜膨胀、四段形变/拖拽位移的耦合物理响应 |
+| `shared/demo-ui/controls/LiquidSegmentedControl.qml` | 60 | `85` | 选择透镜形变及位移响应 |
+| `shared/demo-ui/controls/LiquidSegmentedControl.qml` | 61 | `155` | 选择透镜形变及位移响应 |
+| `shared/demo-ui/controls/LiquidSegmentedControl.qml` | 62 | `150` | 选择透镜形变及位移响应 |
+| `shared/demo-ui/controls/LiquidSegmentedControl.qml` | 187 | `300` | 选择透镜形变及位移响应 |
+| `shared/demo-ui/controls/LiquidSlider.qml` | 75 | `root.reduceMotion ? 0 : root._pressed ? 270 : 460` | 透镜膨胀、四段形变/拖拽位移的耦合物理响应 |
+| `shared/demo-ui/controls/LiquidSlider.qml` | 87, 90 | `100` | 透镜膨胀、四段形变/拖拽位移的耦合物理响应 |
+| `shared/demo-ui/controls/LiquidSlider.qml` | 88 | `150` | 透镜膨胀、四段形变/拖拽位移的耦合物理响应 |
+| `shared/demo-ui/controls/LiquidSlider.qml` | 89 | `120` | 透镜膨胀、四段形变/拖拽位移的耦合物理响应 |
+| `shared/demo-ui/controls/LiquidSlider.qml` | 275 | `root.reduceMotion || root._pressed || root._suppressXAnimation ? 0 : 200` | 透镜膨胀、四段形变/拖拽位移的耦合物理响应 |
+| `shared/qml/colorize/ArtworkColorSource.qml` | 23 | `760` | 背景取色的环境过渡 |
+| `shared/qml/controls/LiquidGlassButton.qml` | 43 | `Foundation.AppTheme.reduceMotion ? 0 : (_pressed ? 100 : 150)` | 透镜膨胀、四段形变/拖拽位移的耦合物理响应 |
+| `shared/qml/controls/LiquidGlassButton.qml` | 55, 57, 58 | `100` | 透镜膨胀、四段形变/拖拽位移的耦合物理响应 |
+| `shared/qml/controls/LiquidGlassButton.qml` | 56 | `150` | 透镜膨胀、四段形变/拖拽位移的耦合物理响应 |
+| `shared/qml/controls/LiquidGlassSwitch.qml` | 84 | `_pressed ? 100 : 200` | 透镜膨胀、四段形变/拖拽位移的耦合物理响应 |
+| `shared/qml/controls/LiquidGlassSwitch.qml` | 93, 94, 95, 96 | `100` | 透镜膨胀、四段形变/拖拽位移的耦合物理响应 |
+| `shared/qml/controls/LiquidNavBar.qml` | 118, 119, 120 | `100` | 逐帧弹簧的显示滤波，三轴同步 |
+| `shared/qml/controls/LiquidSlider.qml` | 71 | `root.reduceMotion ? 0 : root._pressed ? 220 : 400` | 透镜膨胀、四段形变/拖拽位移的耦合物理响应 |
+| `shared/qml/controls/LiquidSlider.qml` | 83, 85, 86 | `100` | 透镜膨胀、四段形变/拖拽位移的耦合物理响应 |
+| `shared/qml/controls/LiquidSlider.qml` | 84 | `150` | 透镜膨胀、四段形变/拖拽位移的耦合物理响应 |
+| `shared/qml/controls/LiquidSlider.qml` | 292 | `root.reduceMotion || root._pressed || root._suppressXAnimation ? 0 : 200` | 透镜膨胀、四段形变/拖拽位移的耦合物理响应 |
+| `shared/qml/controls/SelectionHighlight.qml` | 18 | `80` | 80ms 按压反馈，低于普通档位 |
+| `shell/desktop/modules/applauncher/AppLauncherWindow.qml` | 318 | `650` | 文件夹合并拖拽接受计时 |
+| `shell/desktop/modules/applauncher/AppLauncherWindow.qml` | 1540, 1547 | `450` | 搜索清除图标的配套 Bezier 缩放/旋转 |
+| `shell/desktop/modules/applauncher/AppLauncherWindow.qml` | 1744, 1751, 2497, 2504 | `160` | 拖拽位移、握持缩放及落点提交前的回落 |
+| `shell/desktop/modules/applauncher/AppLauncherWindow.qml` | 1758, 2511 | `120` | 拖拽位移、握持缩放及落点提交前的回落 |
+| `shell/desktop/modules/applauncher/AppLauncherWindow.qml` | 1832, 1840 | `110` | 编辑模式周期抖动 |
+| `shell/desktop/modules/applauncher/AppLauncherWindow.qml` | 2054, 2061, 2706, 2713 | `180` | 拖拽位移、握持缩放及落点提交前的回落 |
+| `shell/desktop/modules/applauncher/AppLauncherWindow.qml` | 2307 | `220` | 文件夹 OutBack 膨胀 |
+| `shell/desktop/modules/applauncher/AppLauncherWindow.qml` | 2560, 2568 | `(index % 3 === 0) ? 140 : 160` | 编辑模式周期抖动 |
+| `shell/desktop/modules/bar/NotificationHistoryPane.qml` | 394 | `360` | 空状态玻璃的淡出包络 |
+| `shell/desktop/modules/bar/StatusTooltip.qml` | 28, 29 | `70` | 70ms 提示的近即时显隐 |
+| `shell/desktop/modules/bar/SysTray.qml` | 525, 530, 690, 695 | `150` | 拖拽重排或 70ms 提示显隐 |
+| `shell/desktop/modules/bar/SysTray.qml` | 621, 622 | `70` | 拖拽重排或 70ms 提示显隐 |
+| `shell/desktop/modules/bar/TemperatureSensorPopups.qml` | 96, 97 | `70` | 70ms 提示的近即时显隐 |
+| `shell/desktop/modules/bar/controlcenter/BluetoothCard.qml` | 82 | `900` | 加载指示周期 |
+| `shell/desktop/modules/bar/controlcenter/WifiCard.qml` | 88 | `900` | 加载指示周期 |
+| `shell/desktop/modules/common/ContextMenu.qml` | 77 | `60` | 子菜单/菜单的近即时退出，不放慢到 100ms |
+| `shell/desktop/modules/common/ContextMenu.qml` | 271 | `80` | 子菜单/菜单的近即时退出，不放慢到 100ms |
+| `shell/desktop/modules/common/LiquidGlassPanel.qml` | 152 | `2600` | 环境色/材质强度插值 |
+| `shell/desktop/modules/common/LiquidGlassSurface.qml` | 96 | `2600` | 环境色/材质强度插值 |
+| `shell/desktop/modules/common/LiquidGlassSurface.qml` | 231 | `420` | 环境色/材质强度插值 |
+| `shell/desktop/modules/common/WavyProgress.qml` | 26 | `1100` | 不定进度循环周期 |
+| `shell/desktop/modules/deskcenter/DeskCenterWindow.qml` | 2148, 2154 | `index * 620` | 音乐音符循环的相位、寿命与淡出包络 |
+| `shell/desktop/modules/deskcenter/DeskCenterWindow.qml` | 2149 | `2200 + index * 180` | 音乐音符循环的相位、寿命与淡出包络 |
+| `shell/desktop/modules/deskcenter/DeskCenterWindow.qml` | 2155 | `360` | 音乐音符循环的相位、寿命与淡出包络 |
+| `shell/desktop/modules/deskcenter/DeskCenterWindow.qml` | 2156 | `1840 + index * 180` | 音乐音符循环的相位、寿命与淡出包络 |
+| `shell/desktop/modules/deskcenter/DeskCenterWindow.qml` | 2874 | `380` | 文件夹拖入 dwell |
+| `shell/desktop/modules/deskcenter/FreeSlotDesktopDemo.qml` | 972, 977 | `150` | 拖拽重排响应；跟手期间零时长 |
+| `shell/desktop/modules/dock/DockAnimation.qml` | 33, 38 | `70` | 物理 hover/按压反馈或 30ms 预览交接 |
+| `shell/desktop/modules/dock/DockAnimation.qml` | 39 | `45` | 物理 hover/按压反馈或 30ms 预览交接 |
+| `shell/desktop/modules/dock/DockAnimation.qml` | 113 | `30` | 物理 hover/按压反馈或 30ms 预览交接 |
+| `shell/desktop/modules/dock/DockContainer.qml` | 965 | `180` | 拖拽重排响应；跟手期间零时长 |
+| `shell/desktop/modules/dock/DockIcon.qml` | 459, 461, 463, 724 | `115` | 关注提示弹跳、编辑抖动及徽标回弹的配套淡入 |
+| `shell/desktop/modules/dock/DockIcon.qml` | 467, 469, 471 | `210` | 关注提示弹跳、编辑抖动及徽标回弹的配套淡入 |
+| `shell/desktop/modules/dock/DockIcon.qml` | 718 | `105` | 关注提示弹跳、编辑抖动及徽标回弹的配套淡入 |
+| `shell/desktop/modules/dock/DockIcon.qml` | 941 | `140` | 关注提示弹跳、编辑抖动及徽标回弹的配套淡入 |
+| `shell/desktop/modules/dock/DockIcon.qml` | 944 | `160` | 关注提示弹跳、编辑抖动及徽标回弹的配套淡入 |
+| `shell/desktop/modules/dock/DockMusicPlayer.qml` | 273 | `1200` | 跑马灯阅读停顿和按距离计算的匀速滚动 |
+| `shell/desktop/modules/dock/DockMusicPlayer.qml` | 277 | `Math.max(900,` | 跑马灯阅读停顿和按距离计算的匀速滚动 |
+| `shell/desktop/modules/dock/DockMusicPlayer.qml` | 282 | `800` | 跑马灯阅读停顿和按距离计算的匀速滚动 |
+| `shell/desktop/modules/dock/DockMusicPlayer.qml` | 370 | `900` | 跑马灯阅读停顿和按距离计算的匀速滚动 |
+| `shell/desktop/modules/dock/DockMusicPlayer.qml` | 375 | `Math.max(800,` | 跑马灯阅读停顿和按距离计算的匀速滚动 |
+| `shell/desktop/modules/dock/DockMusicPlayer.qml` | 381 | `650` | 跑马灯阅读停顿和按距离计算的匀速滚动 |
+| `shell/desktop/modules/dock/DockMusicPopup.qml` | 251 | `index * 85` | 均衡器周期及错相延迟 |
+| `shell/desktop/modules/dock/DockMusicPopup.qml` | 253 | `220` | 均衡器周期及错相延迟 |
+| `shell/desktop/modules/dock/DockMusicPopup.qml` | 255 | `260` | 均衡器周期及错相延迟 |
+| `shell/desktop/modules/dock/DockRevealHandle.qml` | 180 | `600` | 环境背景插值 |
+| `shell/desktop/modules/inputmethod/InputMethodCandidateList.qml` | 134, 136, 138, 140 | `150` | SmoothedAnimation 速度连续性及原 easing cap |
+| `shell/desktop/modules/inputmethod/InputMethodPopup.qml` | 134, 139 | `160` | SmoothedAnimation 速度连续性及原 easing cap |
+| `shell/desktop/modules/stage/StageCard.qml` | 340 | `StageConfigService.cardEnterDuration + 40` | 用户配置/KWin 投影共享时序及倾斜回弹 |
+| `shell/desktop/modules/stage/StageCard.qml` | 366 | `card.engaging ? 180 : StageConfigService.tiltAnimDuration` | 用户配置/KWin 投影共享时序及倾斜回弹 |
+| `shell/desktop/modules/stage/StageCard.qml` | 462, 463 | `150` | 用户配置/KWin 投影共享时序及倾斜回弹 |
+| `shell/desktop/modules/stage/StageConfigService.qml` | 193, 195 | `200` | 用户配置/KWin 投影共享时序及倾斜回弹 |
+| `shell/desktop/modules/stage/StageConfigService.qml` | 194 | `140` | 用户配置/KWin 投影共享时序及倾斜回弹 |
+| `shell/desktop/modules/stage/StageConfigService.qml` | 215 | `320` | 用户配置/KWin 投影共享时序及倾斜回弹 |
+| `shell/desktop/modules/wallpaper/DepthWallpaperLayer.qml` | 23 | `500` | 场景环境淡入 |
+| `shell/desktop/modules/wallpaper/DepthWallpaperLayer.qml` | 39, 40 | `150` | 深度视差指针滤波 |
+| `shell/desktop/modules/wallpaper/WallpaperImageLayer.qml` | 26 | `activeTransition === "simple" ? 260 : 800` | 壁纸模式的配套环境转场 |
+| `shell/desktop/modules/wallpaper/WallpaperPreviewBar.qml` | 422 | `280` | 透镜形变、膨胀的物理节奏 |
+| `shell/desktop/modules/wallpaper/WallpaperPreviewBar.qml` | 423 | `180` | 透镜形变、膨胀的物理节奏 |
+| `shell/desktop/modules/wallpaper/WallpaperPreviewBar.qml` | 469, 471 | `55` | 透镜形变、膨胀的物理节奏 |
+| `shell/desktop/modules/wallpaper/WallpaperPreviewBar.qml` | 470 | `65` | 透镜形变、膨胀的物理节奏 |
+| `shell/desktop/modules/wallpaper/WallpaperPreviewBar.qml` | 472 | `75` | 透镜形变、膨胀的物理节奏 |
+| `shell/desktop/modules/wallpaper/WallpaperPreviewBar.qml` | 476 | `100` | 透镜形变、膨胀的物理节奏 |
+| `shell/desktop/modules/wallpaper/WallpaperPreviewBar.qml` | 477 | `250` | 透镜形变、膨胀的物理节奏 |
+
+另外保留：启动台按剩余距离计算的 `180..420ms` swipe settle；KosKineticScroll 的物理计算与 Cubic 曲线；通知原 InCubic 入场；ContextMenu 原减速退出；WallpaperColorSource 的 `transitionDuration: 0`；通知清理序列的业务延迟；所有 Timer/通知停留/轮询间隔。数值未移动到新变量以规避统计。锁屏和 SDDM 是独立应用的专用解锁/错误反馈编排，不在 shell/shared 普通动效批量替换范围。
+
+### 提交与真实验证记录
+
+| 批次 | 提交 | 内容 |
+| --- | --- | --- |
+| 方案 | `3f8c6d76` | 基线核查及待确认方案 |
+| A | `0cc16e39` | 共享策略、foundation 与 QtTest |
+| B | `af96a9f5` | Liquid 控件 |
+| C1 | `e37a0bdc` | common、bar、notifications |
+| C2 | `61e9f14c` | applauncher、dock、inputmethod |
+| C3 | `2e24dd1c` | deskcenter、overview、quicksearch、stage、wallpaper |
+| D | `48ed0f0c` | Demo、Settings、剩余共享入口 |
+| 测试夹具 | `548ebb46` | 隔离夹具复制真实策略；此提交单独运行仍缺类型导出 |
+| 夹具修复 | `6f523713` | named qmldir 导出 MotionTokens，专项 2/2 通过 |
+| 物理例外收尾 | `b79971be` | 恢复透镜 280/180ms、KWin 扇叠 150ms 同步，补具体注释 |
+| 通知夹具保留 | `ccd6da63` | 显式保留临时目录，面板/来源图标原断言 2/2 通过 |
+
+曾有组合命令的后续 lint 成功掩盖前面的 CTest 失败，导致 `548ebb46` 提交时夹具仍未通过；后续检查真实 CTest 输出后补齐类型导出并确认 2/2 通过，不将该中间提交记为通过。
+
+Qt 6 显式路径 `/usr/lib/qt6/bin/qmllint`，版本 6.12.0；各批次检查分别报告 13、9、35、16、11、13 files, OK。最终跟踪文件检查：`QML syntax: 476 files, OK`。仓库脚本只做语法检查，不能称为完整类型 lint 零警告。唯一策略 `MotionTokens.qml` 另以原生 Qt6 qmllint 默认检查运行，退出码 0、无输出；这不代表全部 Shell 文件完成完整类型 lint。视觉契约始终报告 `KOS UI visual contract: all checks passed`。
+
+编译：`kos-shared-motion-tests`（包含 Kos.Demo）成功；独立 CMake 驱动的 `kos_ui` 成功；补编译 Stage desktop policy 和 overview panel projection 测试目标成功。独立配置 `KOS_BUILD_PLATFORM=ON` 后实际 `kos-settings` 编译成功（206 个构建步骤）；原 `build-motion` 配置关闭 platform，因而不存在该目标。无新增依赖。
+
+已通过的实际输出：
+
+- 策略 QtTest：`Totals: 4 passed, 0 failed, 0 skipped, 0 blacklisted`。
+- 输入法：`Totals: 25 passed, 0 failed, 0 skipped, 0 blacklisted`。
+- Dock/启动台 Node：`# tests 56`、`# fail 0`。
+- C1 相关 CTest：`100% tests passed out of 6`。
+- C3 可运行测试（排除缺 Pillow 的总览 GUI）：`100% tests passed out of 20`。
+- Demo/共享动效/交互/选择高亮：`100% tests passed out of 4`。
+- 选择面板 QtTest：`Totals: 6 passed, 0 failed, 0 skipped, 0 blacklisted`，该次独立执行未接 Wayland 的 shipping-surface 部分明确 SKIP。
+- 实际 Settings：隔离 D-Bus/offscreen 下 `--smoke-test` 退出码 0，明确加载本工作树 `apps/settings/main.qml`。日志有 LiquidGlassSwitch、LiquidSlider、ColorRampSlider 的 `enabled` 覆盖基类成员警告，不能称零警告；未作基线差分。
+- 通知面板/来源图标保留目录后完整进程通过：`100% tests passed out of 2`。
+- 最终夹具回归：`100% tests passed out of 2`；物理例外恢复后 Stage visibility、motion-tokens、shared-motion：`100% tests passed out of 3`。
+- 完整 popup-motion 在私有 KWin OpenGL 下通过原始断言：`PASS: Control Center navigation, confirmation, close/reopen; popup input lifetime; menu navigation; launcher exit; transformed blur geometry; stable navigation glass; Dock info backdrop; card content routing; launcher geometry and tint in six presentations; notification blur lifetime, dismissal, expiry and arrival during exit`。
+- 整套 `quickshell --path shell --no-color` 在私有 D-Bus/KWin 下达到 `Configuration Loaded`，Dock/Appearance snapshot、启动台和控制中心 IPC 可调用；还在同一隔离 Wayland 会话打开并关闭 Konsole。由于缺平台 daemon，未取得完整 DockModel 窗口跟踪证据，不能宣称完整 Dock 真机流程通过。仅停止自己创建的实例。隔离环境缺平台服务、PipeWire、portal、kdeglobals，以及 SVG path 警告仍记录在日志中，不能把空 stderr 当无警告。
+
+### 未完成与未通过项
+
+1. **五组前后录屏均待真机验证**：控制中心、启动台、Dock hover、Settings 页切换、通知退出。尚无基线/改后视频，不声明视觉等价或“更顺”。Material/windows12 的完整交互也待验证；策略曲线切换已由 QtTest 覆盖。
+2. 总览 GUI 测试缺 `PIL`；系统 Python 已具备 D-Bus，但没有 Pillow。遵守不新增依赖，未改断言或伪造通过。
+3. popup-motion 初测失败已定位并解决验证环境：软件后端在 stage=1 入场检查失败；OpenGL 初测 stage=4 是标题 `Weather` 不匹配中文断言，blur 对象实际非空。`Qt.locale().uiLanguages` 显示英语优先，补齐 `LANGUAGE=zh_CN`（同时 LANG/LC_ALL=zh_CN.UTF-8）后，原始测试完整通过，没有修改标题/blur 断言。未执行依赖原生 KOS 特效的 `--verify-wayland` 帧提交专项。
+4. 扩展 32 项 CTest 首轮为 `81% tests passed, 6 tests failed out of 32`。其中 Dock reveal、notification-history-visual 的 token 夹具缺失已修正，专项重跑 2/2 通过；notification-pane 和 source-icons 初次在清理时被环境 `SAFE_DELETE_BULK_CONFIRM_REQUIRED` 拦截。增加 `KOS_KEEP_TEST_TMP=1` 后保留文件、原断言专项重跑 2/2 通过，不绕过删除保护。四项专项通过不拼接成一次未实际执行的 32/32 结果。
+5. Dock hover-hit/magnification 的退出阶段报告 `Unable to assign [undefined] to bool/double`，原始测试仍未通过。额外最小差分在相同当前依赖下分别加载当前/`6df77a57` 的 DockIcon：两侧 exit=0、均有 `DOCK_HOVER_HIT_PASS`、均产生相同的 18 条退出绑定警告。因此不是 DockIcon 本轮改动单独引起；未做整仓基线对照，不将它扩大成全基线结论。magnification 的三边 geometry/selection 报告通过不代表整个测试通过，未修改警告断言。
+6. Settings 实际应用加载已通过，但五组视觉对照、KWin 原生玻璃与全部文件完整类型 lint 尚未完成。资源编译、页面状态机测试和 Shell 加载不替代这些检查。
+
+本轮验证依据包括已调用的 `verify` skill（`.claude/skills/verify/SKILL.md`）：真实 Shell 加载、日志与交互检查；完整 Dock 真机流程仍属上述待验收范围。
+
+### 验证日志与复现入口
+
+本工作树保留 `.build/motion/` 中的实际输出：`all-lint.log`、`policy-full-lint.log`、`final-tests.log`、`fixture-final2.log`、`runtime-result.log`、`runtime-shell.log`、`runtime-popup.log`、`ui-build.log`、`settings-build.log`、`settings-smoke.log`、`retained-notification-tests.log`、`dock-differential.log`。这些是本地忽略产物，不进入提交。`build-motion/` 是未跟踪构建目录，也没有提交或清理。
+
+```sh
+QMLLINT=/usr/lib/qt6/bin/qmllint node tools/ci/qmllint-changed.mjs --all
+node shared/qml/test_visual_contract.mjs
+PATH=/usr/bin:/bin KOS_KEEP_TEST_TMP=1 QT_FORCE_STDERR_LOGGING=1 \
+  ctest --test-dir build-motion \
+  -R '^kos-shell.(dock-reveal-runtime|notification-history-visual)$' --output-on-failure
+# 仅在独立的测试 Wayland / D-Bus 会话内运行；不得指向用户当前桌面。
+LANG=zh_CN.UTF-8 LC_ALL=zh_CN.UTF-8 LANGUAGE=zh_CN \
+  QT_FORCE_STDERR_LOGGING=1 /usr/bin/python3 tests/popup-motion/run.py
+```
