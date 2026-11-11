@@ -309,7 +309,38 @@ int main(int argc, char **argv)
         require(repaired.isEmpty(), "rejected keys must not be reported as repaired");
         require(!error.isEmpty(), "rejected keys must be diagnosed");
 
+        // Optional glass presentation never registers Alt+Tab with KOS. Across
+        // enable/disable/reapply, both native directions and custom keys remain
+        // byte-for-byte intact, including the action's present state.
+        fake.refuseChanges = false;
+        const int altShiftTab = key("Alt+Shift+Tab");
+        fake.held = {
+            {QStringLiteral("Walk Through Windows"), QStringLiteral("遍历窗口"),
+             QStringLiteral("kwin"), QStringLiteral("KWin"), {altTab, key("Meta+F6")},
+             {altTab}},
+            {QStringLiteral("Walk Through Windows (Reverse)"), QStringLiteral("反向遍历窗口"),
+             QStringLiteral("kwin"), QStringLiteral("KWin"), {altShiftTab}, {altShiftTab}},
+        };
+        for (int presentationToggle = 0; presentationToggle < 3; ++presentationToggle) {
+            fake.releases.clear();
+            repaired = KosPlatform::repairKWinKeyConflicts(
+                {QStringLiteral("Meta+Space"), QStringLiteral("Meta+Shift+Space"),
+                 QStringLiteral("Meta+B"), QStringLiteral("Meta+Tab"),
+                 QStringLiteral("Meta+Y"), QStringLiteral("Meta+V"),
+                 QStringLiteral("Meta+D")}, &error);
+            require(error.isEmpty() && repaired.isEmpty(), "presentation must not repair native Tab bindings");
+            require(fake.releases.isEmpty(), "presentation must not write native Tab actions");
+            require(fake.held[0].keys == QList<int>{altTab, key("Meta+F6")}
+                    && fake.held[1].keys == QList<int>{altShiftTab}, "native forward/reverse/custom bindings survive");
+            require(fake.held[0].present && fake.held[1].present, "native actions stay present");
+        }
+
         // 7. A later successful repair clears the earlier error.
+        fake.held = {
+            {QStringLiteral("Walk Through Windows"), QStringLiteral("遍历窗口"),
+             QStringLiteral("kwin"), QStringLiteral("KWin"), {metaTab, altTab},
+             {metaTab, altTab}},
+        };
         fake.refuseChanges = false;
         repaired = KosPlatform::repairKWinKeyConflicts(
             {QStringLiteral("Meta+Tab")}, &error);

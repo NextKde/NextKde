@@ -130,6 +130,11 @@ void SettingsBridge::launcherSnapshot() { callLauncher({ QStringLiteral("snapsho
 
 void SettingsBridge::shortcutsSnapshot() { callShortcuts({ QStringLiteral("snapshot") }); }
 
+void SettingsBridge::setSwitcherEnabled(bool enabled)
+{
+    callShortcuts({ QStringLiteral("setSwitcherEnabled"), enabled ? QStringLiteral("true") : QStringLiteral("false") });
+}
+
 void SettingsBridge::updateShortcut(const QString& id, const QString& combo)
 {
     callShortcuts({ QStringLiteral("updateShortcut"), id, combo });
@@ -369,6 +374,7 @@ QVariantMap SettingsBridge::shortcutsSnapshotFromReply(const QString& payload)
     setLastError(error);
     return {
         { QStringLiteral("shortcuts"), shortcuts },
+        { QStringLiteral("switcher"), object.value(QStringLiteral("switcher")).toObject().toVariantMap() },
         { QStringLiteral("error"), error },
     };
 }

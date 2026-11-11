@@ -18,6 +18,7 @@ ColumnLayout {
     property var bridge: null
     property var shortcuts: []
     property string errorText: ""
+    property var switcher: ({ enabled: false, changing: false, error: "" })
 
     function applyState(state) {
         if (!state)
@@ -28,7 +29,9 @@ ColumnLayout {
         // Repeater silently renders nothing.
         const raw = state.shortcuts;
         shortcuts = Array.isArray(raw) ? raw : (raw && raw.length !== undefined ? Array.prototype.slice.call(raw) : []);
-        errorText = state.error || "";
+        if (state.switcher)
+            switcher = state.switcher;
+        errorText = state.error || switcher.error || "";
     }
 
     function refresh() {
@@ -117,6 +120,26 @@ ColumnLayout {
     }
 
     Component.onCompleted: refresh()
+
+    Timer {
+        interval: 250
+        running: shortcutsPage.visible && shortcutsPage.switcher.changing
+        repeat: true
+        onTriggered: shortcutsPage.refresh()
+    }
+
+    Demo.SettingsGroup {
+        backgroundColor: colors.card
+        Demo.SettingsItem {
+            title: I18n.tr("Glass window switcher")
+            description: I18n.tr("Show live window previews while holding Alt+Tab. Turn off to restore the KDE switcher.")
+            Controls.SettingsSwitch {
+                checked: shortcutsPage.switcher.enabled
+                enabled: !!shortcutsPage.bridge && !shortcutsPage.switcher.changing
+                onToggled: shortcutsPage.bridge.setSwitcherEnabled(checked)
+            }
+        }
+    }
 
     Text {
         text: I18n.tr("Click a key capsule then press the new combination to rebind; Esc cancels.")
