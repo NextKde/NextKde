@@ -22,7 +22,7 @@ export const catalog = {
     "Updates": "更新",
     "Update channel": "更新通道",
     "Stable": "稳定版",
-    "Canary": "金丝雀版",
+    "Canary": "Canary",
     "Latest official release": "最新正式版",
     "Main branch (development)": "main 分支（开发版）",
     "Stable release %1 is available.": "稳定版 %1 已可用。",
