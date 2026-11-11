@@ -2,7 +2,6 @@
 
 #include <QByteArray>
 #include <QDateTime>
-#include <QFileSystemWatcher>
 #include <QObject>
 #include <QString>
 #include <QTimer>
@@ -26,7 +25,6 @@ class UpdateController final : public QObject {
     Q_PROPERTY(QString currentVersion READ currentVersion NOTIFY changed)
     Q_PROPERTY(QString currentRevision READ currentRevision NOTIFY changed)
     Q_PROPERTY(QString currentTag READ currentTag NOTIFY changed)
-    Q_PROPERTY(QString sourceVersion READ sourceVersion NOTIFY changed)
     Q_PROPERTY(int commitsBehind READ commitsBehind NOTIFY changed)
     Q_PROPERTY(QString branch READ branch NOTIFY changed)
     Q_PROPERTY(QString upstream READ upstream NOTIFY changed)
@@ -45,16 +43,13 @@ public:
         bool valid = false;
         QString state = QStringLiteral("idle");
         QString stage;
-        QString checkedAt, startedAt, finishedAt;
-        QString sourceRoot, branch, upstream;
+        QString startedAt;
+        QString branch, upstream;
         // Update channel the agent ran for; empty in records written before it.
         QString channel;
-        QString installedVersion, installedRevision;
-        QString sourceVersion, sourceRevision;
         QString logPath, error;
-        int ahead = 0, behind = 0;
-        bool dirty = false, canFastForward = false, needsRestart = false;
-        bool sourceAhead = false;
+        int behind = 0;
+        bool needsRestart = false, sourceAhead = false;
     };
     static Status statusFromJson(const QByteArray &json);
 
@@ -73,7 +68,6 @@ public:
     QString currentVersion() const { return m_currentVersion; }
     QString currentRevision() const { return m_currentRevision; }
     QString currentTag() const { return m_currentTag; }
-    QString sourceVersion() const { return m_status.sourceVersion; }
     int commitsBehind() const { return m_status.behind; }
     QString branch() const { return m_status.branch; }
     QString upstream() const { return m_status.upstream; }
@@ -96,14 +90,12 @@ signals:
 private:
     void readRecord();
     void readStatus();
-    void rewatch();
     void refresh();
     void launch(const QString &mode, int limitSeconds);
     void adopt(const Status &status);
     void fail(const QString &message);
 
     Status m_status;
-    QFileSystemWatcher m_watcher;
     QTimer m_poll;
     QDateTime m_deadline;
     // UTC time of the click that started the current agent run; compared with the

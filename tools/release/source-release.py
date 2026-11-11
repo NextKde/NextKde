@@ -153,6 +153,8 @@ def check(root, channel, repository=None):
         version = git(root, "show", revision + ":VERSION")
         if version != tag[1:]:
             raise ValueError(f"Tag {tag} disagrees with its VERSION file ({version})")
+    # shortcut: a depth-1 clone cannot see the grafted history, so these counts
+    # are approximate; the update decision still uses the exact commit identity.
     return {
         "channel": channel,
         "target": target,

@@ -33,6 +33,7 @@ export const catalog = {
     "This build of Settings cannot check for KOS updates.": "Esta versão das Configurações não pode verificar atualizações do KOS.",
     "Update source not recorded": "Origem da atualização não registrada",
     "Run ./tools/kosctl install once from the KOS source folder, then reopen Settings.": "Execute ./tools/kosctl install uma vez na pasta do código-fonte do KOS e reabra as Configurações.",
+    "NixOS manages KOS updates through its flake/NixOS module; in-app source updates are unavailable.": "O NixOS gerencia atualizações do KOS pelo flake/módulo NixOS; atualizações de código-fonte no aplicativo não estão disponíveis.",
     "The source checkout is newer than the installed version.": "O checkout do código-fonte é mais novo que a versão instalada.",
     "1 commit behind %1": "1 commit atrás de %1",
     "%1 commits behind %2": "%1 commits atrás de %2",

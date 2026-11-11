@@ -83,7 +83,8 @@ ColumnLayout {
     }
     readonly property string updateStatusDetail: {
         if (!updateKnown) return I18n.tr("This build of Settings cannot check for KOS updates.")
-        if (!updateRecorded) return I18n.tr("Run ./tools/kosctl install once from the KOS source folder, then reopen Settings.")
+        if (!updateRecorded) return updateError
+            || I18n.tr("Run ./tools/kosctl install once from the KOS source folder, then reopen Settings.")
         if (updateBusy) return I18n.tr("You can close Settings; the update continues in the background.")
         if (updateFailed) return updateError || I18n.tr("The update stopped before it finished. Open the log for details.")
         if (updateBlocked) return updateError || I18n.tr("The update did not start. Open the log for details.")
