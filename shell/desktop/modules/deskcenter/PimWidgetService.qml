@@ -1,6 +1,7 @@
 pragma Singleton
 import QtQuick
 import qs.desktop.modules.common
+import "../../../shared/qml/i18n"
 
 QtObject {
     id: service
@@ -9,14 +10,34 @@ QtObject {
     readonly property string stateReady: "ready"
     readonly property string stateUnavailable: "unavailable"
     readonly property string state: String(source.state || stateUnavailable)
-    readonly property bool ready: state === stateReady
-    readonly property bool cached: state === "stale"
-    readonly property string errorMessage: IndependentAppWidgetService.feedback("calendar")
-    readonly property double generatedAt: Number(source.generatedAt || 0)
-    readonly property int revision: Number(source.payload?.revision || 0)
+    property var snapshot: null
+    readonly property bool available: snapshot !== null
+    readonly property bool ready: available && state === stateReady
+        && snapshot.sourceToken === source.sourceToken
+    readonly property bool cached: available && !ready
+    readonly property string sourceMessage: IndependentAppWidgetService.feedback("calendar")
+    readonly property string errorMessage: cached && state !== "stale"
+        ? I18n.tr("Cached data") + (sourceMessage ? " · " + sourceMessage : "")
+        : sourceMessage
+    readonly property double generatedAt: Number(snapshot?.generatedAt || 0)
+    readonly property int revision: Number(snapshot?.payload?.revision || 0)
     property string today: Qt.formatDate(new Date(), "yyyy-MM-dd")
-    readonly property var events: (ready || cached) ? (source.payload?.events || []) : []
-    readonly property var todos: (ready || cached) ? (source.payload?.todos || []) : []
+    readonly property var events: snapshot?.payload?.events || []
+    readonly property var todos: snapshot?.payload?.todos || []
+
+    function applySource() {
+        const token = String(source.sourceToken || "")
+        if ((source.state === "ready" || source.state === "stale") && token && source.payload) {
+            snapshot = source
+        } else if ((source.state !== "loading" && source.state !== "unavailable")
+                || (token && token !== snapshot?.sourceToken)) {
+            // Only transient inspection/transport failures retain validated data.
+            // Missing/invalid data and confirmed installation changes clear it.
+            snapshot = null
+        }
+    }
+    onSourceChanged: applySource()
+    Component.onCompleted: applySource()
 
     function value(record, key, fallback) {
         const result = record?.[key]

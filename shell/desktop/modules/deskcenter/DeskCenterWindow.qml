@@ -1438,7 +1438,7 @@ PanelWindow {
                     text: WeatherService.forecastDays.length > 0
                         ? I18n.tr("High %1°  Low %2°").arg(WeatherService.forecastDays[0].high)
                             .arg(WeatherService.forecastDays[0].low)
-                        : I18n.tr("Updating forecast")
+                        : (WeatherService.loading ? I18n.tr("Updating forecast") : "")
 	                    color: AppearanceTokens.content.ink(Qt.rgba(1, 1, 1, 0.74), 0.74)
                     font.pixelSize: 11
                 }
@@ -2425,7 +2425,7 @@ PanelWindow {
                         readonly property string widgetSize: card.displayRows > 1 ? "large"
                             : card.displayColumns > 1 ? "medium" : "small"
                         readonly property int itemLimit: widgetSize === "large" ? 6
-                            : widgetSize === "medium" ? 3 : 0
+                            : widgetSize === "medium" ? (PimWidgetService.errorMessage ? 2 : 3) : 0
                         readonly property var tasks:
                             PimWidgetService.pendingTodos(itemLimit)
                         // In the shared glass modes the card material is the
@@ -2477,7 +2477,7 @@ PanelWindow {
                             font { pixelSize: 13; weight: Font.Bold }
                         }
                         Text {
-                            visible: todoContent.widgetSize === "small"
+                            visible: todoContent.widgetSize === "small" && PimWidgetService.available
                             anchors.centerIn: parent
                             anchors.verticalCenterOffset: 12
                             text: String(PimWidgetService.pendingTodos(99).length)
@@ -2485,15 +2485,15 @@ PanelWindow {
                             font { pixelSize: 38; weight: Font.DemiBold }
                         }
                         Text {
-                            visible: todoContent.widgetSize === "small"
+                            visible: todoContent.widgetSize === "small" && PimWidgetService.available
                             anchors { horizontalCenter: parent.horizontalCenter; bottom: parent.bottom; bottomMargin: 14 }
-                            text: I18n.tr("todos")
+                            text: PimWidgetService.cached ? I18n.tr("Cached data") : I18n.tr("todos")
                             color: AppearanceTokens.content.ink("#686873", 0.6)
                             font.pixelSize: 10
                         }
                         Column {
                             visible: todoContent.widgetSize !== "small"
-                            anchors { left: parent.left; right: parent.right; top: parent.top; bottom: parent.bottom; leftMargin: 14; rightMargin: 14; topMargin: 50; bottomMargin: 10 }
+                            anchors { left: parent.left; right: parent.right; top: parent.top; bottom: parent.bottom; leftMargin: 14; rightMargin: 14; topMargin: 50; bottomMargin: todoStatus.visible ? todoStatus.height + 14 : 10 }
                             spacing: 4
                             Repeater {
                                 model: todoContent.tasks
@@ -2541,11 +2541,10 @@ PanelWindow {
                             }
                             Text {
                                 visible: todoContent.tasks.length === 0
-                                    && PimWidgetService.state !== "not-installed"
                                 anchors.horizontalCenter: parent.horizontalCenter
                                 // Only a ready snapshot can mean all tasks are done.
                                 // App installation is handled when the card is opened.
-                                text: PimWidgetService.ready
+                                text: PimWidgetService.ready && !PimWidgetService.errorMessage
                                     ? I18n.tr("All done for today")
                                     : (PimWidgetService.errorMessage || I18n.tr("Todo service not connected"))
                                 width: Math.max(0, parent.width - 16)
@@ -2556,6 +2555,19 @@ PanelWindow {
                                 color: AppearanceTokens.content.ink("#6c6c75", 0.6)
                                 font.pixelSize: 11
                             }
+                        }
+                        Text {
+                            id: todoStatus
+                            visible: todoContent.widgetSize === "small" ? !PimWidgetService.available
+                                : todoContent.tasks.length > 0 && !!PimWidgetService.errorMessage
+                            anchors { left: parent.left; right: parent.right; bottom: parent.bottom; leftMargin: 14; rightMargin: 14; bottomMargin: 10 }
+                            text: PimWidgetService.errorMessage || I18n.tr("Todo service not connected")
+                            horizontalAlignment: Text.AlignHCenter
+                            wrapMode: Text.Wrap
+                            maximumLineCount: todoContent.widgetSize === "small" ? 3 : 2
+                            elide: Text.ElideRight
+                            color: AppearanceTokens.content.ink("#6c6c75", 0.6)
+                            font.pixelSize: todoContent.widgetSize === "small" ? 11 : 9
                         }
                     }
                 }
@@ -2681,6 +2693,17 @@ PanelWindow {
                         elide: Text.ElideRight
                         font.pixelSize: 9
                     }
+                }
+                Text {
+                    visible: calendarContent.narrow && PimWidgetService.state !== "not-installed"
+                        && (!PimWidgetService.ready || !!IndependentAppWidgetService.launchErrors.calendar)
+                    anchors { left: parent.left; right: parent.right; top: parent.top; leftMargin: 16; rightMargin: 16; topMargin: 100 }
+                    text: PimWidgetService.errorMessage
+                    maximumLineCount: 2
+                    wrapMode: Text.Wrap
+                    elide: Text.ElideRight
+                    color: AppearanceTokens.content.ink("#9a9aa2", 0.55)
+                    font.pixelSize: 9
                 }
                 Item {
                     id: monthGrid
