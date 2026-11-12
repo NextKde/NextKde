@@ -100,6 +100,10 @@ includes the user installation and all configured system installations (includin
 custom paths), and every installed app branch/architecture for the fixed IDs.
 Multiple refs or native/Flatpak coexistence are ambiguous even when only one ref
 has a desktop export. Inventory failure is unavailable, never not-installed.
+Inventory workers wait up to one second for the shared source-context lock,
+off the GUI thread, so concurrent Calendar/Weather polls can complete in turn.
+Longer source/operation contention still returns unknown installation state;
+the wait does not bypass the context lock or the existing inspection deadline.
 An installed ref without a usable export is unavailable; an orphan export cannot
 be used as installation evidence. The unique export must resolve to the unique
 current ref's deployment export. Its installation/scope/branch/arch/commit/origin
@@ -156,7 +160,13 @@ invalidation and discarded late generations. Per-app read revisions also discard
 polls invalidated by a launch result without overlapping replacement reads.
 Launch responses for a superseded source do not reset the newly displayed source.
 Core weather snapshot reads are serialized/coalesced and invalidated on source or
-data-transport changes. Offline states clear live data.
+data-transport changes. Calendar/reminder widgets retain their last validated
+summary in memory through transient inspection failures, reconnects and catalog
+reloads, explicitly marked as cached. A confirmed different source, absent or
+ambiguous installation, missing/invalid summary or unsupported profile clears it.
+Without a validated summary, reminder widgets show the source status rather than
+a zero count or completed-tasks message, including at the smallest size. Calendar's
+date grid stays independent of the app, with source status also shown on narrow cards.
 
 Lock-screen publication uses the fixed `lockscreen.weather-publish` operation,
 not state staging or generic file.copy. The shell coalesces property changes and
