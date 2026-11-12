@@ -21,6 +21,7 @@
 #include <cstdint>
 #include <memory>
 #include <stdexcept>
+#include <string>
 #include <unordered_map>
 #include <vector>
 
@@ -33,6 +34,29 @@ fcitx::dbus::Bus *sessionBus(fcitx::Instance *instance) {
     auto *bus = addon ? addon->call<fcitx::IDBusModule::bus>() : nullptr;
     if (!bus) throw std::runtime_error("NextKde input panel requires a session bus");
     return bus;
+}
+
+// These two accessors arrived after Fcitx5 5.1.19 (the version packaged by
+// Ubuntu 26.04). Detect them at compile time so the panel also builds on older
+// distributions; without overlayMessage() there is simply no overlay to show,
+// and older textWithComment() always separated the comment with a space.
+template<typename Panel>
+auto overlayText(const Panel &panel, int) -> decltype(panel.overlayMessage()) {
+    return panel.overlayMessage();
+}
+template<typename Panel>
+fcitx::Text overlayText(const Panel &, long) {
+    return {};
+}
+
+template<typename Candidate>
+auto commentSeparator(const Candidate &candidate, int)
+    -> decltype(candidate.spaceBetweenComment(), std::string()) {
+    return candidate.spaceBetweenComment() ? std::string(" ") : std::string();
+}
+template<typename Candidate>
+std::string commentSeparator(const Candidate &, long) {
+    return " ";
 }
 
 // This module leaves client input modules, engines, dictionaries and hotkeys
@@ -194,7 +218,10 @@ private:
         const bool empty = panel.empty();
         const auto preedit = empty ? std::string() : filter(panel.preedit());
         auto aux = empty ? std::string() : filter(panel.auxUp());
-        if (empty && !panel.overlayMessage().empty()) aux = panel.overlayMessage().toString();
+        if (empty) {
+            const auto overlay = overlayText(panel, 0);
+            if (!overlay.empty()) aux = overlay.toString();
+        }
         const auto down = empty ? std::string() : filter(panel.auxDown());
         signal("UpdatePreeditText", preedit, std::string());
         const auto byteCursor = panel.preedit().cursor();
@@ -218,7 +245,7 @@ private:
                 if (candidate.isPlaceHolder()) continue;
                 if (i == list->cursorIndex()) cursor = static_cast<int32_t>(texts.size());
                 labels.push_back(filter(candidate.hasCustomLabel() ? candidate.customLabel() : list->label(i)));
-                texts.push_back(filter(candidate.textWithComment(candidate.spaceBetweenComment() ? " " : "")));
+                texts.push_back(filter(candidate.textWithComment(commentSeparator(candidate, 0))));
                 attrs.emplace_back();
             }
             layout = static_cast<int32_t>(list->layoutHint());
