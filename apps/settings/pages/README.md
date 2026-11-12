@@ -22,8 +22,12 @@ No registry, dependency container or second IPC protocol is introduced.
   existing WindowSettings object. Neither dependency is discovered from context
   properties inside extracted pages. The window appearance page also receives
   `bridge` for on-demand running-app discovery through `fgSchedRunningApps()`;
-  its per-app button exclusions use the raw KWin app ID and retain a manual
-  exact-class fallback when Shell IPC is unavailable. A separate refresh action
+  its per-app button exclusions use the actual KWin resource classes, carried
+  separately from desktop entry IDs through `windowClasses`. Running apps remain
+  grouped by app ID and adding an app excludes each reported class. Desktop IDs
+  still supply names and icons; they must never substitute for missing classes.
+  Older Shell replies without classes leave the manual exact-class entry available.
+  A separate refresh action
   remains available when the list is populated and preserves the selected app
   by ID. The selected app and exclusion rows show desktop-entry/theme icons,
   with a generic fallback; action icons retain accessible names and Demo tooltips.

@@ -250,6 +250,7 @@ QtObject {
             && left.title === right.title
             && left.identity.desktopId === right.identity.desktopId
             && left.identity.rawAppId === right.identity.rawAppId
+            && left.resourceClass === right.resourceClass
             && left.iconSource === right.iconSource
             && left.pid === right.pid
             && !!left.isUrgent === !!right.isUrgent
@@ -360,6 +361,7 @@ QtObject {
                 provider: provider,
                 handleId: handleId,
                 identity: identity,
+                resourceClass: useKwin ? String(source.resourceClass || "") : String(toplevel.appId || ""),
                 pid: Number(toplevel.pid || 0),
                 iconSource: iconSource,
                 title: toplevel.title || identity.name || identity.desktopId,
