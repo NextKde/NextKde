@@ -153,6 +153,7 @@ void SettingsBridge::handleReply(RequestKind kind, const QString& payload)
                 apps.append(QVariantMap {
                     { QStringLiteral("name"), o.value(QStringLiteral("name")).toString() },
                     { QStringLiteral("appId"), o.value(QStringLiteral("appId")).toString() },
+                    { QStringLiteral("windowClasses"), o.value(QStringLiteral("windowClasses")).toArray().toVariantList() },
                 });
             }
         }

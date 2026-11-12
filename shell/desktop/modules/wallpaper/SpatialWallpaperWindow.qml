@@ -3,6 +3,7 @@ import Quickshell
 import Quickshell.Io
 import Quickshell.Wayland
 import qs.desktop.modules.common
+import "../../../Kos/Ui"
 
 // Separate wallpaper surface: widget glass asks KWin to blur the window
 // behind it, so the wallpaper must not be painted inside DeskCenterWindow.
@@ -27,11 +28,36 @@ PanelWindow {
     implicitHeight: screen?.height ?? 1080
     mask: Region {}
 
-    contentItem.opacity: StartupReveal.wallpaperProgress
+    // Login backdrop: the same plain black (dark theme) or white (light theme)
+    // the splash process paints, so the splash can be stopped at the start of
+    // the arrival without a visible step and this surface carries on alone
+    // until the wallpaper fades in. The spinner itself lives in that other
+    // process (splash/shell.qml): the Shell's GUI thread is busy here. This is
+    // an overlay rather than content opacity on purpose: ThemeWallpaperLayer
+    // reports readiness from painted frames, and an invisible content tree
+    // would never paint one.
+    readonly property bool backdropCanLeave: StartupReveal.started || !StartupReveal.active
+    onBackdropCanLeaveChanged: if (backdropCanLeave) startupBackdrop.opacity = 0
+    Component.onCompleted: if (backdropCanLeave) startupBackdrop.opacity = 0
+    // Never leave the backdrop covering the desktop if the reveal never starts.
+    Timer {
+        interval: 15000
+        running: true
+        onTriggered: startupBackdrop.opacity = 0
+    }
+    Rectangle {
+        id: startupBackdrop
+        anchors.fill: parent
+        z: 100
+        color: WallpaperColorSource.darkMode ? "#000000" : "#ffffff"
+        visible: opacity > 0
+        Behavior on opacity {
+            NumberAnimation { duration: 600; easing.type: Easing.OutCubic }
+        }
+    }
 
     property real pointerX: 0
     property real pointerY: 0
-    readonly property bool active: wallpaperLayer.active
 
     ThemeWallpaperLayer {
         anchors.fill: parent

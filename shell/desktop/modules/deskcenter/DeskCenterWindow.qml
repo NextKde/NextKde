@@ -744,8 +744,16 @@ PanelWindow {
                 modelData.id, dropPosition.column, dropPosition.row,
                 displayColumns, displayRows, root.maximumWidgetColumns, root.usableRows)
             visible: placement !== null
+            // Desktop widgets are part of the login arrival, not a static
+            // layer that appears before the wallpaper, bar and dock.
+            opacity: StartupReveal.widgetProgress
+            enabled: StartupReveal.widgetProgress > 0
             z: widgetDrag.active || resizeHandle.resizing ? 120 : (root.editMode ? 20 : 1)
-            scale: widgetDrag.active ? 1.035 : 1
+            // A 3% scale gives the arrival fade a direction. Scale, not a
+            // Translate: SurfaceShape follows item geometry and scale, so the
+            // native glass and the QML content move together.
+            scale: widgetDrag.active ? 1.035
+                : 0.97 + 0.03 * StartupReveal.widgetProgress
             // The clock is the one card whose glass outline is a shape rather
             // than a rectangle: it draws MaterialFlower, so its surface has to
             // be the flower itself — no card fill, no rectangular KWin material,
