@@ -269,6 +269,24 @@ class UpdateAgentTests(unittest.TestCase):
         # The install phase is never observed as terminal.
         self.assertEqual(calls["status"], "updating/install")
 
+    def test_run_copies_checkout_askpass_before_switching_source(self):
+        helper = self.root / "tools/update/kos-askpass.sh"
+        helper.parent.mkdir(parents=True)
+        self.write_script(helper, "#!/bin/sh\nexit 0\n")
+        self.git(self.root, "add", "tools/update/kos-askpass.sh")
+        self.git(self.root, "commit", "-m", "local askpass helper")
+        self.advance(1)
+        result = self.agent("--run", FAKE_RECORD=self.record, FAKE_VERSION="0.1.1",
+                            FAKE_SOURCE_ROOT=self.root, FAKE_STATUS=self.status_path(),
+                            SUDO_ASKPASS=str(helper))
+        self.assertEqual(result.returncode, 0, result.stderr)
+        copied = Path(self.kosctl_calls()["sudoaskpass"])
+        self.assertNotEqual(copied, helper)
+        self.assertTrue(copied.is_relative_to(self.state_home))
+        self.assertTrue(copied.is_file())
+        self.assertFalse(helper.exists())
+        self.assertEqual(copied.read_text(), "#!/bin/sh\nexit 0\n")
+
     def test_source_ahead_offers_reinstall(self):
         # A select that never got installed: the channel has nothing new, HEAD is
         # already the channel commit, only the deployed revision is older.
