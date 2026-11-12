@@ -24,7 +24,7 @@ int main(int argc, char **argv)
         return 3;
     }
     if (mode == "crash")
-        std::_Exit(0); // Leave the durable recovery record, as SIGKILL would.
+        std::_Exit(0); // Simulate SIGKILL; takeover must leave no durable addon state.
     if (mode == "disconnect")
         bridge.setShellConnected(false);
     else if (!bridge.setUserEnabled(false))
