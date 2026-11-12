@@ -211,6 +211,26 @@ jobs:
           done < /tmp/kos-fedora-packages
           rpm -q --whatprovides zlib-devel
 
+  fcitx-panel-old-headers:
+    name: Fcitx panel (Ubuntu 26.04 headers)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    # Arch's rolling Fcitx5 is newer than the oldest version we support. Build
+    # the optional panel against Ubuntu 26.04's packaged headers so API
+    # additions cannot silently raise its effective minimum version again.
+    container: ubuntu:26.04
+    steps:
+      - name: Install build dependencies
+        run: |
+          apt-get update
+          DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+            ca-certificates cmake g++ git libfcitx5core-dev fcitx5-modules-dev pkg-config
+      - uses: actions/checkout@v7
+      - name: Build against the packaged Fcitx5 headers
+        run: |
+          cmake -S platform/fcitx-panel -B /tmp/fcitx-panel -DCMAKE_BUILD_TYPE=Release
+          cmake --build /tmp/fcitx-panel --parallel
+
   qml-lint:
     name: QML changed-file checks
     runs-on: ubuntu-24.04
