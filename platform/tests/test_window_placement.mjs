@@ -54,6 +54,22 @@ assert.deepEqual(safeArea({
     workspaceGap: 4
 }), { x: 0, y: 0, width: 1516, height: 900 });
 
+for (const dockPosition of ["bottom", "left", "right"]) {
+    const layout = {
+        outputName: "app-hide-output",
+        outputRect: { x: -1920, y: 0, width: 1920, height: 1080 },
+        barReservedHeight: 35, dockPosition,
+        dockRect: { x: -1900, y: 1000, width: 100, height: 60 },
+        workspaceGap: 8, dockReserved: false
+    };
+    const expected = { x: -1920, y: 35, width: 1920, height: 1045 };
+    assert.deepEqual(safeArea(layout), expected, `${dockPosition}: hidden Dock leaves no placement strip`);
+    assert.equal(context.updateLayout(layout), true);
+    const stored = vm.runInContext('shellLayouts["app-hide-output"]', context);
+    assert.equal(stored.dockReserved, false, "command storage retains the effective reservation");
+    assert.deepEqual(safeArea(stored), expected);
+}
+
 assert.deepEqual(place(
     { x: -2100, y: -20, width: 2400, height: 1400 },
     { width: 100, height: 100 },

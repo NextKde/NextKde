@@ -102,6 +102,8 @@ QtObject {
     // Dock show mode. Single mutually-exclusive enum: "always" | "smart" |
     // "persistent". Never store two booleans — that allows impossible states.
     property string visibilityMode: "always"
+    // Canonical desktop IDs; matching windows temporarily override the show mode.
+    property var autoHideApps: []
     // Window grouping mode: "grouped" (macOS style - 1 icon per app) | "separate" (classic taskbar)
     property string windowGrouping: "grouped"
     // Shell controls stay separate from the persisted application pin order.
@@ -431,6 +433,40 @@ QtObject {
         return true
     }
 
+    function _autoHideAppId(value) {
+        if (typeof value !== "string")
+            return ""
+        const raw = value.trim()
+        if (!raw || raw.length > 256 || /[\/\x00-\x1f\x7f]/.test(raw))
+            return ""
+        const id = AppIdentityService.canonicalId(raw)
+        // The persisted value must also be accepted for removal and reload.
+        return id.length <= 256 ? id : ""
+    }
+
+    function _normalizeAutoHideApps(values) {
+        const result = []
+        for (const value of Array.isArray(values) ? values : []) {
+            const id = svc._autoHideAppId(value)
+            if (id && !result.some(existing => AppIdentityService.sameApp(existing, id)))
+                result.push(id)
+        }
+        return result
+    }
+
+    function updateAutoHideApp(rawId, enabled) {
+        const id = svc._autoHideAppId(rawId)
+        if (!svc.ready || !id || typeof enabled !== "boolean")
+            return false
+        const existing = svc.autoHideApps.some(app => AppIdentityService.sameApp(app, id))
+        if (existing === enabled)
+            return true
+        svc.autoHideApps = enabled ? svc.autoHideApps.concat([id])
+            : svc.autoHideApps.filter(app => !AppIdentityService.sameApp(app, id))
+        svc.scheduleSave()
+        return true
+    }
+
     function updateWindowGrouping(rawMode) {
         const nextMode = String(rawMode)
         if (!isValidWindowGrouping(nextMode) || windowGrouping === nextMode)
@@ -553,7 +589,7 @@ QtObject {
     // ═══════════════════════════════════════════════════════════
     function _doSave() {
         const obj = {
-            version: 12,
+            version: 13,
             baseHeight:    svc.baseHeight,
             theme:         svc.theme,
             position:      svc.position,
@@ -575,6 +611,7 @@ QtObject {
             iconTintColor:    svc.iconTintColor,
             // Show mode (v3)
             visibilityMode: svc.visibilityMode,
+            autoHideApps: svc.autoHideApps,
             // Grouping mode (macOS style vs separate)
             windowGrouping: svc.windowGrouping,
             showLauncher: svc.showLauncher,
@@ -622,6 +659,9 @@ QtObject {
         svc.showTrash = obj.showTrash !== false
         svc.showNotificationBadges = obj.showNotificationBadges !== false
         svc.showRevealIndicator = obj.showRevealIndicator !== false
+        svc.autoHideApps = svc._normalizeAutoHideApps(obj.autoHideApps)
+        if (Number(obj.version ?? 0) < 13)
+            scheduleSave()
         if (obj.baseHeight !== undefined) {
             const height = Number(obj.baseHeight)
             if (Number.isFinite(height))

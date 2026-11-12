@@ -86,6 +86,7 @@ public:
     Q_INVOKABLE void updateDockIconOpacity(double opacity);
     Q_INVOKABLE void updateDockIconTintColor(const QString& color);
     Q_INVOKABLE void updateDockVisibilityMode(const QString& mode);
+    Q_INVOKABLE void updateDockAutoHideApp(const QString& appId, bool enabled);
     Q_INVOKABLE void updateDockWindowGrouping(const QString& mode);
     Q_INVOKABLE void appearanceSnapshot();
     Q_INVOKABLE void updateBlurStrength(double strength);
@@ -154,6 +155,7 @@ signals:
     void wallpaperModelsChecked(bool depthReady, bool foregroundReady);
     void dockNotificationBadgeVisibilityChanged(const QVariantMap& snapshot);
     void dockRevealIndicatorVisibilityChanged(const QVariantMap& snapshot);
+    void dockAutoHideAppChanged(const QVariantMap& snapshot);
     void appearanceSnapshotChanged(const QVariantMap& snapshot);
     void launcherSnapshotChanged(const QVariantMap& snapshot);
     void shortcutsSnapshotChanged(const QVariantMap& snapshot);
@@ -178,6 +180,7 @@ private:
         Wallpaper,
         DockNotificationBadgeVisibility,
         DockRevealIndicatorVisibility,
+        DockAutoHideApp,
         Appearance,
         Launcher,
         Shortcuts,

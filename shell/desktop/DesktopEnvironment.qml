@@ -308,6 +308,15 @@ Item {
                 iconOpacity: ConfigService.iconOpacity,
                 iconTintColor: ConfigService.iconTintColor,
                 visibilityMode,
+                autoHideApps: ConfigService.autoHideApps,
+                // Settings gets the same canonical identities as the Dock,
+                // never the foreground scheduler's provider-specific classes.
+                runningApps: WindowService.records.reduce((apps, record) => {
+                    const id = record.identity?.desktopId || ""
+                    if (id && !apps.some(app => app.appId === id))
+                        apps.push({ appId: id, name: record.identity.name || id })
+                    return apps
+                }, []),
                 windowGrouping,
                 showLauncher: ConfigService.showLauncher,
                 showTrash: ConfigService.showTrash,
@@ -398,6 +407,14 @@ Item {
         function updateVisibilityMode(mode: string): string {
             ConfigService.updateVisibilityMode(mode)
             return snapshot()
+        }
+
+        function updateAutoHideApp(appId: string, enabled: bool): string {
+            const accepted = ConfigService.updateAutoHideApp(appId, enabled)
+            const state = JSON.parse(snapshot())
+            if (!accepted)
+                state.error = "Dock app auto-hide request failed"
+            return JSON.stringify(state)
         }
 
         function updateWindowGrouping(mode: string): string {
