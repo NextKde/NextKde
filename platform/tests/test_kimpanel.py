@@ -62,6 +62,16 @@ if '--serve' in sys.argv:
             connection = owner = controller = None
         elif command and connection is None:
             start()
+        if connection is not None:
+            # The bridge no longer restarts Fcitx, so model an absent adapter
+            # on the fly instead of waiting for a new fixture process.
+            wanted = not (root / 'missing-adapter').exists()
+            if wanted and panel is None:
+                panel_owner = dbus.service.BusName('org.nextkde.FcitxPanel', connection)
+                panel = Panel(connection, '/org/nextkde/FcitxPanel')
+            elif not wanted and panel is not None:
+                panel.remove_from_connection()
+                panel_owner = panel = None
         return True
     start()
     (root / 'ready').touch()
