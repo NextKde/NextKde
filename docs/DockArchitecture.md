@@ -496,11 +496,11 @@ application-grid order in Dock configuration.
 File: `Quickshell.stateDir + "/dock/config.json"`. This keeps runtime user
 state outside the watched QML source directory.
 
-Core user configuration fields (schema version 12):
+Core user configuration fields (schema version 13):
 
 ```json
 {
-  "version": 12,
+  "version": 13,
   "baseHeight": 60,
   "theme": "dark",
   "position": "bottom",
@@ -516,6 +516,7 @@ Core user configuration fields (schema version 12):
   "iconOpacity": 0.5,
   "iconTintColor": "#a855f7",
   "visibilityMode": "always",
+  "autoHideApps": [],
   "windowGrouping": "grouped",
   "showLauncher": true,
   "showTrash": true,
@@ -523,6 +524,17 @@ Core user configuration fields (schema version 12):
   "hoverScale": null
 }
 ```
+
+Schema 13 adds `autoHideApps`, an empty-by-default list of canonical desktop
+IDs. Settings exposes it under **Dock app bar** with the same icon/list controls
+as window-button exclusions: select a running application or enter an app class,
+then add/remove it through `dock-settings.updateAutoHideApp(appId, enabled)`.
+The Shell resolves aliases with `AppIdentityService`, rejects invalid inputs and
+mutations before configuration readiness, and returns the confirmed list. Dock
+snapshots also supply running apps with canonical IDs; Settings never compares
+these rules with the foreground scheduler's raw window classes. App edits use
+an independent pending acknowledgement, so unrelated replies cannot acknowledge
+them. Failed IPC leaves the confirmed list and manual input unchanged.
 
 Schema 12 keeps one `hoverScale` setting: the hovered icon's peak scale
 (1.0–3.0, displayed as 100–300%). Lift is derived as
@@ -574,8 +586,14 @@ dimensions without reserving orphan dividers; an entirely empty Dock has zero
 height.
 
 `kos-shell.dock-builtins` checks defaults, independent changes and persistence
-across a reload. `kos-settings.builtin-checkboxes` uses the actual Settings page
-with a simulated bridge to exercise clicks, pending state, failed replies and
+across a reload, including canonical app rules, duplicate/invalid input and
+removal. `kos-dock.policy` covers app-rule eligibility and effective-mode
+restoration. The `reveal` runtime scenario covers initial window readiness,
+edge reveal, app add/remove, minimize/restore, desktop/output moves and closure.
+The `surface` scenario checks boot and effective-mode workspace reservation on
+all three edges, including temporary reveal while an app rule is active.
+`kos-settings.builtin-checkboxes` uses the actual Settings page with a simulated
+bridge to exercise clicks, app add/remove, pending state, failed replies and
 later snapshots. It runs when Qt's `qmltestrunner` is installed. Adaptive layout
 tests cover information-only, accessory-only and empty content.
 
@@ -611,6 +629,26 @@ watched QML source tree.
 `always`, `smart` (hide only when a window overlaps the Dock area), or
 `persistent` (stay hidden regardless of windows). Never persist separate
 booleans for these; that only produces illegal combinations.
+
+`autoHideApps` temporarily selects the controller's `persistent` effective mode
+when a listed app has a non-minimized, visible window on this output and current
+desktop (including all-desktop windows). It need not overlap the Dock or be
+focused. Matching uses the canonical identity in `WindowService.records` through
+`AppIdentityService.sameApp`; geometry/desktop eligibility stays in
+`DockAutoHideMath`. Missing placement data does not hide an unrelated output.
+Closing, minimizing or moving the last matching window away restores the saved
+mode; a tray-only/background process does not activate a rule. Pointer, popup,
+editing and launcher holds still reveal the Dock, including edge hover/click.
+The initial reveal waits for window data when the list is nonempty, bounded by
+the existing boot timeout. App presence is checked even before Dock dimensions
+are ready. Urgent reveal requests refresh app matching before testing the
+effective mode, since presentation events can precede placement events. The layer-shell reservation and published workspace
+gap follow the effective mode, not animation progress, so temporary reveals do
+not resize windows. `WorkspaceLayoutService` also forwards the optional
+`kwin.layout.update.dockReserved` flag through the daemon to the KWin script;
+clearing only the gap would still leave the full Dock rectangle reserved for
+initial placement. Update all three runtime components together. The configured
+`visibilityMode` is never rewritten.
 
 The hidden Dock reveals only along its own footprint: a hidden Dock responds in
 a 2 logical-pixel strip at the screen edge, over the Dock's actual span, and the
@@ -660,7 +698,7 @@ Non-negotiable invariants:
    hint likewise submits no blur region.
 3. Input is shaped by `DockWindow.mask`: the union of the Dock hit region and
    the handle hit target. All other transparent surface area must pass clicks
-   through. In `always` mode the handle hit target is zero-sized.
+   through. In effective `always` mode the handle hit target is zero-sized.
    A hidden Dock only responds in a **2 logical-pixel strip at the screen edge,
    along the Dock's actual span**. The rest of that edge, and the Dock's future
    footprint above it, remain pass-through. The span follows layout changes and
@@ -676,11 +714,12 @@ Non-negotiable invariants:
    must release its controller hold if the pointer is no longer inside. The
    decorative pill is centred on the Dock's rectangle; it never defines the
    input region.
-4. Dock `exclusiveZone` reserves its full-reveal strip only in `always` mode.
-   That mode also gives newly opened windows the same `workspaceGap` as the
-   Dock's screen-edge float, preserving visible breathing room. Smart and
-   persistent modes publish both values as `0`, so revealing or hiding the
-   Dock never reflows windows or leaves an invisible placement gap.
+4. Dock `exclusiveZone` reserves its full-reveal strip only in effective
+   `always` mode after boot resolves. That mode also gives newly opened windows
+   the same `workspaceGap` as the Dock's screen-edge float, preserving visible
+   breathing room. Effective smart/persistent modes publish both values as `0`,
+   including an active application rule. Edge-triggered reveals never change
+   those reservations or reflow windows.
 5. Editing, dragging, any `DockModelService.activeDockPopup`, an open App
    Launcher, pointer-inside, or a temporary reveal hold are inhibitors that
    force the Dock visible; popups must join the `activeDockPopup` coordinator
