@@ -32,8 +32,13 @@ Item {
     // Sensitivity changes the input curve, not the renderer's camera limits.
     // Apply it once here so background, subject and preview stay registered.
     property real pointerSensitivity: 3
-    property real renderedPointerX: SpatialPointer.responsivePointer(pointerX, pointerSensitivity)
-    property real renderedPointerY: SpatialPointer.responsivePointer(pointerY, pointerSensitivity)
+    // Keep prepared assets and presentation readiness independent of motion:
+    // Settings may cover the desktop while spatial mode is being enabled.
+    readonly property bool motionRunning: active && SpatialWallpaperService.motionRunning
+    property real renderedPointerX: motionRunning
+        ? SpatialPointer.responsivePointer(pointerX, pointerSensitivity) : 0
+    property real renderedPointerY: motionRunning
+        ? SpatialPointer.responsivePointer(pointerY, pointerSensitivity) : 0
     Behavior on renderedPointerX { NumberAnimation { duration: 150; easing.type: Easing.OutCubic } }
     Behavior on renderedPointerY { NumberAnimation { duration: 150; easing.type: Easing.OutCubic } }
 
