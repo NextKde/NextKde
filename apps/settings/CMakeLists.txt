@@ -93,6 +93,8 @@ qt_add_executable(kos-settings
     src/PowerSettings.cpp
     src/PowerSettings.h
     src/WindowSettings.cpp
+    src/LockScreenSettings.cpp
+    src/LockScreenSettings.h
     ${KOS_GTK_RESOURCES}
     ../../platform/src/daemon/PlatformDbus.cpp
     ../../platform/src/daemon/PowerProfilesBus.cpp
@@ -137,6 +139,10 @@ target_compile_definitions(kos-settings PRIVATE
 )
 
 install(TARGETS kos-settings RUNTIME DESTINATION bin)
+# A durable package used by LockScreenSettings; never resolve runtime assets
+# from SETTINGS_QML_DIR or a source checkout. Core kosctl refreshes the same tree.
+install(FILES ../lockscreen/metadata.json DESTINATION share/kos/lockscreen)
+install(DIRECTORY ../lockscreen/contents DESTINATION share/kos/lockscreen)
 file(GLOB SETTINGS_RUNTIME_QML CONFIGURE_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/*.qml")
 install(FILES ${SETTINGS_RUNTIME_QML} DESTINATION share/kos/settings)
 install(DIRECTORY icons app-store DESTINATION share/kos/settings)
@@ -154,6 +160,22 @@ if(BUILD_TESTING)
     add_test(NAME kos-settings.app-catalog COMMAND kos-app-catalog-test)
     set_tests_properties(kos-settings.app-catalog PROPERTIES LABELS logic TIMEOUT 120)
     find_program(DBUS_RUN_SESSION_EXECUTABLE dbus-run-session REQUIRED)
+    add_executable(kos-lockscreen-settings-test tests/lockscreen/backend.cpp
+        src/LockScreenSettings.cpp src/LockScreenSettings.h
+        src/WallpaperLibrary.cpp src/WallpaperLibrary.h)
+    target_include_directories(kos-lockscreen-settings-test PRIVATE src)
+    target_link_libraries(kos-lockscreen-settings-test PRIVATE Qt6::Core Qt6::Gui Qt6::DBus Qt6::Test KF6::ConfigCore)
+    add_test(NAME kos-settings.lockscreen-config
+        COMMAND ${DBUS_RUN_SESSION_EXECUTABLE} -- $<TARGET_FILE:kos-lockscreen-settings-test>)
+    set_tests_properties(kos-settings.lockscreen-config PROPERTIES LABELS logic TIMEOUT 30)
+    find_program(KOS_LOCKSCREEN_PYTHON_EXECUTABLE NAMES python3)
+    if(KOS_LOCKSCREEN_PYTHON_EXECUTABLE)
+        add_test(NAME kos-settings.lockscreen-install
+            COMMAND ${CMAKE_COMMAND} -E env KOS_LOCKSCREEN_SETTINGS_TEST_BINARY=$<TARGET_FILE:kos-settings>
+                ${KOS_LOCKSCREEN_PYTHON_EXECUTABLE} -I
+                ${CMAKE_CURRENT_SOURCE_DIR}/../../tools/tests/test_lockscreen_install.py)
+        set_tests_properties(kos-settings.lockscreen-install PROPERTIES LABELS logic TIMEOUT 30)
+    endif()
     add_executable(kos-app-update-agent-test tests/store/update_agent.cpp
         src/AppUpdateAgent.cpp src/TaskNotifications.cpp)
     target_include_directories(kos-app-update-agent-test PRIVATE src)
@@ -304,6 +326,12 @@ if(BUILD_TESTING)
         set(KOS_QMLTESTRUNNER_EXECUTABLE "$<TARGET_FILE:kos-settings-qml-tests>")
     endif()
     if(KOS_QMLTESTRUNNER_EXECUTABLE)
+        add_test(NAME kos-settings.lockscreen-interactions
+            COMMAND ${KOS_QMLTESTRUNNER_EXECUTABLE}
+                -input ${CMAKE_CURRENT_SOURCE_DIR}/tests/lockscreen/tst_lockscreen.qml)
+        set_tests_properties(kos-settings.lockscreen-interactions PROPERTIES
+            ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_QUICK_BACKEND=software"
+            LABELS ui TIMEOUT 30)
         add_test(NAME kos-settings.page-contracts
             COMMAND ${KOS_QMLTESTRUNNER_EXECUTABLE}
                 -input ${CMAKE_CURRENT_SOURCE_DIR}/tests/pages)

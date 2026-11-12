@@ -1,100 +1,97 @@
-# KOS 锁屏（`apps/lockscreen`）
+# KOS 锁屏
 
-给 KDE Plasma 的 iPadOS 风格锁屏，由 `kscreenlocker` 渲染——**真会话锁**，不是覆盖层。
+MacLock 风格的 KDE Plasma 原生锁屏。`kscreenlocker_greet` 负责会话锁定和 PAM 认证；本包只绘制界面，不启动 Quickshell 锁屏，也不接管快捷键或睡眠策略。SDDM 登录屏不受此次改动影响。
 
-与 `apps/` 下其他目录不同，这不是可执行程序，而是一个 Plasma Look-and-Feel
-包（KPackage）：它只替换 `kscreenlocker_greet` 所画的 QML。认证、闲置锁定、
-睡眠挂钩和所有锁屏入口仍然归 kscreenlocker 管。
+## 外观和运行边界
 
-## 结构
+- 顶部日期与时钟，下方中央为紧凑媒体卡、头像、用户名和密码胶囊。
+- 图片按屏幕物理分辨率解码；GPU 使用 `MultiEffect` 轻度模糊及采样壁纸的玻璃卡片。玻璃不采样密码或锁屏后的桌面窗口。
+- 软件渲染保留清晰壁纸、普通文字和半透明卡片。特效、头像、媒体、通知通过独立 Loader 加载，失败不能阻断密码输入。
+- MPRIS 播放控制与已有歌词元数据；歌词默认收起。只使用本地/内嵌封面，不联网搜索歌词或视频。
+- 通知默认关闭，启用后仅显示应用名、图标和时间，不显示正文、不提供应用操作。窄屏优先保证时钟和密码区不重叠。
+- 回车和箭头在 PAM 密码提示就绪后只提交一次；异步等待期间保留输入，Esc 或 greeter 清空会取消待提交请求。未就绪请求 10 秒后过期，不会稍后重放密码。
+- 任意字符密码、Caps Lock 提示、失败等待和唤醒重试均保留；遵守实际 PAM 密码延迟。非交互认证仅因用户活动重试，不在后台循环开启摄像头。
 
-```
-metadata.json                 KPackage 元数据（Plasma/LookAndFeel，id org.kos.desktop）
-contents/defaults             继承 Breeze Dark，切换主题不影响桌面其余外观；
-                              还把 [Desktop] Containment 钉在纯壁纸的
-                              org.kde.desktopcontainment 上，供 plasmashell 读取（见下）
-contents/lockscreen/
-    LockScreen.qml            greeter 入口（kscreenlocker 契约）＋ 密码输入状态机 + 壁纸接管
-    LockClock.qml             超大时钟 + 日期（数字是液态玻璃：取背景那一块做遮罩）
-tests/headless/               离屏夹具：断言状态机与壁纸接管，渲染 lock.png
-    wallpaper-sample.png      夹具用的高清壁纸样本（真机上是用户自己的壁纸）
-```
+## 设置与部署
 
-## greeter 给 QML 注入了什么
+KOS 设置 → **锁屏**（`kos-settings --page=lockscreen`）：
 
-kscreenlocker_greet 注入 `authenticator`（PAM 会话：`startAuthenticating()` /
-`respond()` / `succeeded` / `failed`）、`wallpaper`（Plasma 壁纸 item）、
-`config` 和 `kscreenlocker_*` 全局量；读取根对象的 `viewVisible`，连接
-`clearPassword()` / `notificationRepeated()` 信号。这里只能用纯 QtQuick 加这些
-注入对象——没有 Quickshell，没有 Kos.Ui。
+- KOS（MacLock 风格）/系统默认锁屏。
+- 独立锁屏图片、现有图库、本地文件和不锁定会话的静态预览。
+- 媒体控制、隐私通知开关，以及需要明确点击的“立即锁屏”。
 
-## 开发循环
+锁屏壁纸写入 `kscreenlockerrc [Greeter][Wallpaper][org.kde.image][General]`，不调用桌面壁纸 IPC。外观项由 `contents/lockscreen/config.xml` 声明，KScreenLocker 加载到 `[Greeter][LnF][General]`。只修改这些外观键，保留 `[Daemon]` 自动锁定设置及未知项。
 
-```sh
-# 让 greeter 看得见这个包（用户级，无需 root）。注意是 plasma/shells/：
-# greeter 从 Shell 包结构里取锁屏，look-and-feel/ 对它无效——
-# 这两个条件是 tests/theme-resolution 逐一验证过的。
-mkdir -p ~/.local/share/plasma/shells
-ln -s "$PWD" ~/.local/share/plasma/shells/org.kos.desktop
-kwriteconfig6 --file plasmashellrc --group Shell --key ShellPackage org.kos.desktop
+**不要通过全局主题或修改 ShellPackage 来切换锁屏外观。** KDE 从 `plasma/shells/org.kos.desktop/contents/lockscreen/LockScreen.qml` 加载皮肤，根级 `X-Plasma-APIVersion` 必须为 `2`；撤下锁屏目录会回退系统主题，但桌面包仍保留。
 
-# 离屏断言 + 渲染预览，不需要真的锁屏：
-./tests/headless/run.sh
+Settings 与 `kosctl` 共用 `LockScreenSettings` 生命周期：稳定资源位于 `$prefix/share/kos/lockscreen`，同文件系统 staging、写入锁、自有标记和原子交换防止半复制入口。GUI 不改变 `ShellPackage`，不覆盖未知皮肤或沿符号链接写入。核心升级保留启用状态。
 
-# 在真 greeter 里预览：
-/usr/lib/kscreenlocker_greet --testing
+从仓库根目录执行显式安装：
+
+```bash
+./tools/kosctl install lockscreen
 ```
 
-每次锁屏都是新起的 greeter 进程，改完 QML 下次锁屏即生效，不用重启 shell 或
-合成器。在系统设置「全局主题 → KOS Lock Screen」切换（或改
-`kdeglobals [KDE] LookAndFeelPackage`）。
+恢复系统锁屏：
 
-## 输入
+```bash
+./tools/kosctl uninstall lockscreen
+```
 
-只有密码输入框，没有数字键盘：账号密码是任意字符串（字母、标点、空格），
-只收数字的界面会把一部分用户锁在门外。回车提交，Esc 清空并让 greeter 丢弃
-未完成的密文；「显示密码」切换明文；大写锁定开着时会有提示（复用
-`org.kde.plasma.private.keyboardindicator`，与上游默认主题同源）。
+独立 CLI 安装保留原有 ShellPackage 备份/恢复语义；如果尚无当前版本 Settings 后端，先构建。每次锁屏启动新的 greeter，已部署 QML 下次锁屏生效。Nix 实机部署未验证。
 
-如果初次认证请求被暂缓，或非交互认证通道已经超时，键盘、鼠标交互会重新发起认证。
-重试失败通道时保留密码会话和已输入的文字，遵守 PAM 的失败等待时间；只有用户交互
-才会请求重试，不在后台循环开启摄像头。离屏测试覆盖实际按键与点击、密码保留、
-通道超时、失败等待以及解锁成功后停止重试。
+## 通知桥
 
-## 背景壁纸：为什么要自己再画一遍
+现有桌面通知服务通过 `lockscreen.notifications-publish` 向平台进程发布内存摘要。平台只读导出：
 
-greeter 交过来的 `wallpaper` 是壁纸包的根 item。`org.kde.image` 内部用 C++ 的
-`TransientImage` 出图，而它的纹理按「加载那一刻 item 的几何尺寸」生成——那个尺寸归
-greeter 管，我们只能事后接管。在 HiDPI 屏上（本项目的面板是 3840×2160 @ scale 2）这张
-纹理可能停在逻辑尺寸上，于是 1920×1080 的图被拉到 3840×2160 的面板上，表现就是
-「壁纸变成了一张很低像素的图」。这些像素已经不存在了：抓 item、动 `layer`、想办法让包
-重新解码，最终都还是在采样同一张偏小的纹理。
+- 服务 `org.kos.LockScreen`
+- 对象 `/org/kos/LockScreen`
+- 接口 `org.kos.LockScreen1`，属性 `NotificationsJson`
 
-所以主题不用它的像素：接管 item 后深度优先遍历那棵子树，找到包自己解析出来的静态图片
-文件（名字解析、`#dark` 之类都在包内处理完了，读结果比读配置可靠），再用普通 `Image`
-配 `sourceSize = 尺寸 × devicePixelRatio` 自己解码一遍，叠在包自己的画面之上。找不到
-文件（动图 / 视频壁纸）就什么都不做，退回 greeter 给的那一张。
+不抢占 `org.freedesktop.Notifications`。最多四条；正文始终为空，阻止来源、关闭历史或勿扰时隐藏。发布者断开或 30 秒租约过期后清空，不读取磁盘通知历史。详见 `shared/contracts/platform.v1.md`。
 
-两个配套细节：遍历要重试（包在我们接管之后才建图，幻灯片还会换文件），5 秒一次；
-解出来的 URL 必须是绝对的——相对 URL 是按写出它的文件解析的，那个文件是包不是我们，
-照抄会去错路径，所以相对 URL 一律不接管。
+## 验证与安全预览
 
-**诊断开关**：把 `LockScreen.qml` 顶部的 `debug` 改成 `true`，锁屏左上角会画出屏幕
-尺寸 / dpr / root 尺寸 / greeter 给的 item 尺寸与 layer / 遍历结果 / 我们解码的尺寸与
-Image 状态。这个主题跑在一个谁也 attach 不上的进程里，这是唯一能看它到底拿到了什么
-的办法。
+以下从仓库根目录运行，不锁定真实会话：
 
-**别用大半径 `FastBlur` 补救**：它按绝对半径挑内部分辨率，radius 64 时约 80% 的输出来自
-1/16 与 1/32 的缓冲（1080p 上就是 120×67 和 60×34）——那不是"模糊的壁纸"，是"低分辨率
-的图"，只会更像糊。真要更强的模糊就用 `MultiEffect`，别加大 radius。
+```bash
+bash apps/lockscreen/tests/headless/run.sh
+```
 
-## 后续
+```bash
+dbus-run-session -- env QT_QPA_PLATFORM=offscreen QT_QUICK_BACKEND=software /usr/lib/qt6/bin/qmltestrunner -input apps/lockscreen/tests/preview/tst_layout.qml
+```
 
-- ~~接入 `tools/kosctl` 部署~~ 已完成：`./tools/kosctl install lockscreen`
-  会把包装到 `$prefix/share/plasma/shells/` **和**
-  `$prefix/share/plasma/look-and-feel/`（greeter 只搜前者，后者是给
-  `plasma-apply-lookandfeel` 和系统设置页的），并把 `plasmashellrc [Shell]
-  ShellPackage` 指过来。不带参数的 `./tools/kosctl install` 也会装 shells/ 根
-  ——作为桌面接管的 shell 包，但不含锁屏。NixOS（`nix/package.nix`）
-  仍未接入——否则 NixOS 装不上（`Kos.SurfaceShape` 踩过同样的坑）。
-- 解锁/锁定过渡动画（KWin 侧「吸走窗口」原型在 vendored 特效里做，不在这里）。
+交互预览使用假的认证器、媒体和通知，约两秒后保存图片并退出：
+
+```bash
+dbus-run-session -- env QT_QUICK_BACKEND=rhi QSG_RHI_BACKEND=opengl qml6 apps/lockscreen/tests/preview/Preview.qml -- --wallpaper /绝对路径/壁纸.png --output /tmp/kos-lockscreen-preview.png
+```
+
+`tests/preview/tst_layout.qml` 覆盖宽屏、小屏、竖屏、窄屏、隐藏媒体和通知、非法通知数据、日期时钟，以及 greeter 加载后再次 reparent 时的自动壁纸重接管。认证、媒体选择和主题解析原有测试继续保留。
+
+通知端到端测试会在临时目录原样复制生产 `LockNotifications.qml` 及其玻璃依赖，用私有 D-Bus 和真实平台桥验证模型与实际卡片标签，包括已有/晚启动服务、四条替换、清空、发布者断开和服务消失/重启：
+
+```bash
+cmake -S tests/lockscreen-notifications -B .build/lockscreen-notifications-tests
+```
+
+```bash
+cmake --build .build/lockscreen-notifications-tests -j 4
+```
+
+```bash
+ctest --test-dir .build/lockscreen-notifications-tests --output-on-failure
+```
+
+真实密码认证、多显示器热插拔、睡眠唤醒仍需在可恢复的测试会话中验收。
+
+## 着色器与许可
+
+`LockGlass.qml` 和 `liquidglass.frag` 改编自 MacShell/MacLock（Rickky，MIT），许可随 `LICENSE.MacShell` 分发。未复制第三方字体、截图壁纸或专辑素材。旧 `LockClock.qml` 与 SDDM 的对应文件保留不变，新锁屏使用 `MacLockClock.qml`。
+
+修改 shader 后重编随包发布的 QSB（不要在 greeter 内编译）：
+
+```bash
+/usr/lib/qt6/bin/qsb --qt6 --qsbversion 64 -o apps/lockscreen/contents/lockscreen/liquidglass.frag.qsb apps/lockscreen/contents/lockscreen/liquidglass.frag
+```

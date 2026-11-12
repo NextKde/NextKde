@@ -14,6 +14,18 @@ Scope {
     readonly property var targetScreen: ScreenLifecycle.activeScreen
     readonly property var soundService: typeof NotificationSoundService !== "undefined" ? NotificationSoundService : null
 
+    // Load the optional bridge separately: an unavailable platform module or
+    // exporter must never prevent the ordinary notification server from loading.
+    Component.onCompleted: {
+        const component = Qt.createComponent("NotificationLockScreenBridge.qml")
+        if (component.status === Component.Ready) {
+            if (!component.createObject(root, {
+                historyService: NotificationHistoryService,
+                policyService: NotificationPolicyService
+            })) console.warn("[Notifications] optional lock-screen bridge unavailable")
+        } else console.warn("[Notifications] optional lock-screen bridge unavailable")
+    }
+
     function recordNotification(notification, firstArrival) {
         if (!NotificationPolicyService.ready) return
         NotificationPolicyService.remember(notification)
