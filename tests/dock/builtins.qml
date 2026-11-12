@@ -24,11 +24,15 @@ Item {
                     check(ConfigService.showLauncher && ConfigService.showTrash,
                         "restored built-ins must survive another restart")
                     check(ConfigService.showNotificationBadges, "restored badges survive another restart")
+                    check(ConfigService.autoHideApps.length === 0, "removed app rules survive another restart")
                     console.log("DOCK_BUILTINS_DEFAULT_RELOAD_PASS")
                     Qt.quit()
                     return
                 }
                 if (Quickshell.env("KOS_TEST_RELOAD") === "1") {
+                    check(JSON.stringify(ConfigService.autoHideApps) === '["org.nextkde.AutoHideFixture.desktop"]',
+                        "canonical app rules survive restart")
+                    check(ConfigService.updateAutoHideApp("org.nextkde.AutoHideFixture", false), "remove app rule")
                     check(!ConfigService.showNotificationBadges, "hidden badges survive restart")
                     check(ConfigService.updateNotificationBadgeVisibility(true), "badges can be restored")
                     check(!ConfigService.showLauncher && !ConfigService.showTrash,
@@ -76,6 +80,21 @@ Item {
                 ConfigService.updateBuiltinVisibility("trash", false)
                 check(ConfigService.showLauncher, "hiding trash changed launcher")
                 ConfigService.updateBuiltinVisibility("launcher", false)
+                check(ConfigService.autoHideApps.length === 0, "legacy configs have no app rules")
+                for (const value of ["", "  ", null, {}, "bad\napp", "/tmp/app.desktop"]) {
+                    check(!ConfigService.updateAutoHideApp(value, true), "reject malformed app identity")
+                }
+                check(!ConfigService.updateAutoHideApp("a".repeat(250), true), "reject oversized canonical ID")
+                check(ConfigService.updateAutoHideApp("a".repeat(248), true), "accept the canonical length boundary")
+                check(ConfigService.updateAutoHideApp("a".repeat(248) + ".desktop", false), "accepted boundary ID is removable")
+                check(!ConfigService.updateAutoHideApp("org.nextkde.AutoHideFixture", "true"), "reject nonboolean rule")
+                ConfigService.ready = false
+                check(!ConfigService.updateAutoHideApp("org.nextkde.AutoHideFixture", true), "wait for config readiness")
+                ConfigService.ready = true
+                check(ConfigService.updateAutoHideApp(" org.nextkde.AutoHideFixture ", true), "add canonical app rule")
+                check(ConfigService.updateAutoHideApp("org.nextkde.AutoHideFixture.desktop", true), "duplicate is accepted")
+                check(JSON.stringify(ConfigService.autoHideApps) === '["org.nextkde.AutoHideFixture.desktop"]',
+                    "canonical identities are deduplicated")
                 savedCheck.start()
             } catch (error) {
                 console.log("FAIL " + error)
@@ -93,7 +112,9 @@ Item {
                 return
             const saved = JSON.parse(data)
             const reload = Quickshell.env("KOS_TEST_RELOAD") === "1"
-            if (saved.showLauncher === reload && saved.showTrash === reload) {
+            if (saved.showLauncher === reload && saved.showTrash === reload
+                    && saved.version === 13 && Array.isArray(saved.autoHideApps)
+                    && JSON.stringify(saved.autoHideApps) === (reload ? '[]' : '["org.nextkde.AutoHideFixture.desktop"]')) {
                 console.log(reload ? "DOCK_BUILTINS_RELOAD_PASS" : "DOCK_BUILTINS_SAVE_PASS")
                 Qt.quit()
             }

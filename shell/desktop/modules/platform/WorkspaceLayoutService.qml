@@ -13,6 +13,7 @@ QtObject {
     property string dockPosition: "bottom"
     property var dockRect: null
     property real workspaceGap: 0
+    property bool dockReserved: true
     property string _lastPayload: ""
     property bool _requestPending: false
 
@@ -46,7 +47,7 @@ QtObject {
         publishTimer.restart()
     }
 
-    function updateDock(screen, position, rect, gap) {
+    function updateDock(screen, position, rect, gap, reserved = true) {
         if (!_updateOutput(screen) || !rect)
             return
         service.dockPosition = String(position || "bottom")
@@ -55,6 +56,7 @@ QtObject {
             width: Number(rect.width), height: Number(rect.height)
         }
         service.workspaceGap = Math.max(0, Number(gap) || 0)
+        service.dockReserved = reserved !== false
         publishTimer.restart()
     }
 
@@ -77,7 +79,8 @@ QtObject {
             barReservedHeight: service.barReservedHeight,
             dockPosition: service.dockPosition,
             dockRect: service.dockRect,
-            workspaceGap: service.workspaceGap
+            workspaceGap: service.workspaceGap,
+            dockReserved: service.dockReserved
         }
         const serialized = JSON.stringify(payload)
         if (serialized === service._lastPayload)
