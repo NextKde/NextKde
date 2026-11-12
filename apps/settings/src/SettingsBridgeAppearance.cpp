@@ -360,7 +360,7 @@ QVariantMap SettingsBridge::appearanceSnapshotFromReply(const QString& payload)
             object.value(QStringLiteral("barMacStyle")).toBool(false) },
         { QStringLiteral("barMacTint"), object.value(QStringLiteral("barMacTint")).toDouble(0.30) },
         { QStringLiteral("reduceMotion"), object.value(QStringLiteral("reduceMotion")).toBool() },
-        { QStringLiteral("startupRevealDuration"), object.value(QStringLiteral("startupRevealDuration")).toInt(800) },
+        { QStringLiteral("startupRevealDuration"), object.value(QStringLiteral("startupRevealDuration")).toInt(1500) },
         { QStringLiteral("dockWindowAnimationStyle"),
             object.value(QStringLiteral("dockWindowAnimationStyle")).toString() },
         { QStringLiteral("desktopFontAvailable"), object.contains(QStringLiteral("desktopFontFamily")) },

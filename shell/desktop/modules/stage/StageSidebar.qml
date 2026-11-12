@@ -11,7 +11,7 @@ import qs.desktop.modules.dock
 Scope {
     id: root
 
-    // 台前调度设置页的数据源：当前运行的窗口应用（去重，人类可读名+类名）。
+    // Running apps retain desktop IDs for scheduling and window classes for button exclusions.
     IpcHandler {
         target: "fg-sched"
         function runningApps(): string {
@@ -20,11 +20,17 @@ Scope {
             const records = WindowService.records || []
             for (let i = 0; i < records.length; i++) {
                 const r = records[i]
-                const cls = r.identity?.rawAppId || ""
-                if (!cls || seen[cls])
+                const appId = r.identity?.rawAppId || ""
+                if (!appId)
                     continue
-                seen[cls] = true
-                out.push({ name: r.identity?.name || r.title || cls, appId: cls })
+                if (!seen[appId]) {
+                    seen[appId] = { name: r.identity?.name || r.title || appId,
+                        appId: appId, windowClasses: [] }
+                    out.push(seen[appId])
+                }
+                const cls = r.resourceClass || ""
+                if (cls && seen[appId].windowClasses.indexOf(cls) < 0)
+                    seen[appId].windowClasses.push(cls)
             }
             return JSON.stringify(out)
         }
