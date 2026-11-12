@@ -2,6 +2,9 @@ pragma Singleton
 import QtQuick
 
 QtObject {
+    // Shared toolbar geometry, independent of material and compactDesign.
+    readonly property int toolbarButtonHeight: 28
+    readonly property int toolbarIconSize: 16
     // Glass-layer opacity over a blurred underlay; tint coverage is independent.
     readonly property real panelMaterialOpacity: 0.95
     // Material intensity only: never changes layout, typography or fill alpha.

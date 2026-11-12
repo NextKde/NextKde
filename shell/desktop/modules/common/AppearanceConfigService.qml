@@ -176,6 +176,8 @@ QtObject {
     // settings page writes both.
     property bool barMacStyle: false
     property real barMacTint: 0.30
+    property bool reduceMotion: false
+    property int startupRevealDuration: 800
     property string dockWindowAnimationStyle: "scale"
     // Empty means follow KDE General font; this override changes only family.
     property string desktopFontFamily: ""
@@ -577,6 +579,13 @@ QtObject {
         return true
     }
 
+    function updateStartupMotion(reduced, duration) {
+        if (!ready || !Number.isFinite(duration)) return
+        reduceMotion = !!reduced
+        startupRevealDuration = Math.round(Math.max(600, Math.min(900, duration)))
+        saveTimer.restart()
+    }
+
     function updateDockWindowAnimationStyle(rawStyle) {
         const style = String(rawStyle)
         if (!isValidDockWindowAnimationStyle(style)
@@ -703,6 +712,8 @@ QtObject {
             barLayoutMode: service.barLayoutMode,
             barMacStyle: service.barMacStyle,
             barMacTint: service.barMacTint,
+            reduceMotion: service.reduceMotion,
+            startupRevealDuration: service.startupRevealDuration,
             dockWindowAnimationStyle: service.dockWindowAnimationStyle,
             desktopFontFamily: service.desktopFontFamily,
             // Sorted before writing so a reorder in the UI never produces a
@@ -861,6 +872,11 @@ QtObject {
                         if (Number.isFinite(barMacTint))
                             service.barMacTint = barMacTint
                     }
+                    service.reduceMotion = object.reduceMotion === true
+                    if (typeof object.startupRevealDuration === "number"
+                            && Number.isFinite(object.startupRevealDuration))
+                        service.startupRevealDuration = Math.round(Math.max(600,
+                            Math.min(900, object.startupRevealDuration)))
                     if (service.isValidDockWindowAnimationStyle(animationStyle))
                         service.dockWindowAnimationStyle = animationStyle
                     if (service.isValidGlassStyle(glassStyle))

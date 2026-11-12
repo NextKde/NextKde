@@ -215,6 +215,15 @@ if(BUILD_TESTING)
         find_program(KOS_QMLTESTRUNNER_EXECUTABLE NAMES qmltestrunner
             HINTS /usr/lib/qt6/bin /usr/lib64/qt6/bin)
         if(KOS_QMLTESTRUNNER_EXECUTABLE)
+            if(KOS_BUILD_PLATFORM OR KOS_BUILD_KWIN_PLUGINS)
+                add_test(NAME kos-shell.startup-reveal
+                    COMMAND ${KOS_NODE_EXECUTABLE}
+                        ${CMAKE_CURRENT_SOURCE_DIR}/tests/shell-startup/reveal.mjs
+                        ${KOS_QMLTESTRUNNER_EXECUTABLE})
+                set_tests_properties(kos-shell.startup-reveal PROPERTIES
+                    LABELS "ui;headless" TIMEOUT 20
+                    ENVIRONMENT "QML_IMPORT_PATH=${CMAKE_BINARY_DIR}/qml")
+            endif()
             add_test(NAME kos-shell.stage-visibility-qml
                 COMMAND ${KOS_NODE_EXECUTABLE}
                     ${CMAKE_CURRENT_SOURCE_DIR}/tests/stage-visibility/run.mjs

@@ -3,6 +3,10 @@
 // 规则：值必须与改造前界面上的中文逐字一致（含空格、间隔符与省略号），
 // 改动文案时同步更新对应键，不要只改一边。
 export const catalog = {
+    "Desktop arrival": "桌面到场",
+    "Reduce motion": "减少动效",
+    "Show the desktop immediately after login, without the arrival animation": "登录后直接显示桌面，跳过首屏到场动画",
+    "Arrival duration": "到场动画时长",
     "Input method activation failed": "输入法界面启用失败",
     "Reloading input method…": "正在重新加载输入法…",
     "No version has been approved in this catalog.": "此目录尚未批准可安装版本。",
@@ -1785,4 +1789,7 @@ export const catalog = {
     "Reduce candidate motion": "减少候选框动画",
     "Show candidates without scaling or size transitions.": "显示候选框时取消缩放和尺寸过渡。",
     "Could not save candidate appearance": "无法保存候选框外观设置",
+    "The Fcitx5 extension unifies candidate popups across Qt, GTK and Wayland input. Keep your working input module settings.": "Fcitx5 扩展统一呈现 Qt、GTK 和 Wayland 输入的候选框，保留现有可用的输入模块设置。",
+    "Enable NextKde popups once. Existing Fcitx Qt/GTK modules and native Wayland input use the same candidate panel.": "开启一次即可，现有 Fcitx Qt/GTK 模块和原生 Wayland 输入将使用同一个候选面板。",
+    "NextKde Fcitx5 panel extension is unavailable; reinstall NextKde with Fcitx5 support": "NextKde Fcitx5 候选面板扩展不可用，请安装支持 Fcitx5 的 NextKde 版本",
 }

@@ -9,18 +9,37 @@ NextKde provides a native liquid glass input method popup (including candidate t
 ## 1. Core Architecture and Session Contracts
 
 1. **D-Bus Communication Pipeline**:
-   - `kos-platform` (`KimpanelBridge`) registers `org.kde.impanel` only for an enabled, connected frontend, enabling `kimpanel` and temporarily disabling `classicui`.
+   - `kos-platform` (`KimpanelBridge`) registers `org.kde.impanel` only for an enabled, connected frontend. Fcitx selects Kimpanel by availability and suspends Classic UI while the panel is owned.
    - Fcitx5 broadcasts lookup tables, preedit strings, and cursor positions over the `org.kde.kimpanel.inputmethod` D-Bus interface.
+   - The unified panel extension publishes input-context content directly. Kimpanel delegates Wayland/XWayland panels to Classic UI on KDE, so the extension bypasses that candidate-update entry point. Selection and paging target the context displayed by the extension.
    - `kos-shell` (`InputMethodPopup.qml`) renders the liquid glass candidate cards featuring physics-based transitions, background blur, and adaptive lighting.
 
 2. **Opt-in takeover and recovery**:
-   - The feature defaults to off. Only an enabled, connected Shell frontend acquires Kimpanel. Original Fcitx addon states are checked and saved to `~/.config/kos/inputmethod-recovery.json` before modification; successful restoration removes this record.
-   - `ReloadConfig` cannot unload an already loaded Classic UI. Switching the frontend asks KWin to recreate its own Fcitx child and private input-method socket. It does not log out, restart KWin, or run `fcitx5 -r`. The Settings page reports the actual active/error state.
-   - Toolkit input modules do not all require the same environment. Keep working Qt/XCB, GTK and XIM configurations. NextKde never rewrites global `GTK_IM_MODULE` or `QT_IM_MODULE`; any application workaround below applies only to that application.
+   - The feature defaults to off. Only an enabled, connected Shell frontend acquires Kimpanel. The switch leaves Fcitx addon settings unchanged. Recovery records from older releases are migrated once using the existing Fcitx process; successful restoration removes the record.
+   - Switching the frontend never restarts Fcitx or changes KWin’s input-method command. Releasing the panel lease restores native UI through Fcitx’s availability mechanism, preserving the compositor input connection. The Settings page reports the actual active/error state.
+   - Toolkit input modules do not all require the same environment. Keep working Qt/XCB, GTK and XIM configurations. NextKde never rewrites global `GTK_IM_MODULE` or `QT_IM_MODULE`; workarounds below apply only to applications that cannot yet connect to input methods.
    - The Shell entrypoint pins `QT_IM_MODULE` and `QT_IM_MODULES` to `wayland` using Quickshell's process-only `Env` pragmas. This keeps launcher search and other Shell text fields on the compositor input path instead of the Fcitx Qt module's client-side candidate panel. The override applies to installed and source/dev launches without changing the environment of launched applications. Restart the Shell after updating these startup pragmas; QML hot reload cannot replace an already-created Qt input context.
    - Kimpanel absolute spots are converted from the configured XWayland root scale to logical screen coordinates. If an anchor is outside all outputs, the panel falls back to the active window's output instead of disappearing.
 
 ---
+
+## Extension installation
+
+Normal `kosctl install` provisions Fcitx5 development dependencies and installs
+the library under `$KOS_PREFIX/lib/fcitx5` (default `~/.local/lib/fcitx5`). Its
+addon description uses an absolute library path and is installed in
+`$FCITX_DATA_HOME/addon` or `$XDG_DATA_HOME/fcitx5/addon`. No global input-module
+environment, engines, dictionaries or shortcuts are changed. CMake system
+installation uses `lib/fcitx5` and `share/fcitx5/addon`; the NixOS module adds
+the extension to Fcitx5 addons.
+
+After installing or updating the extension, log out and back in so Fcitx loads
+the new library. Subsequent feature switches only acquire or release the panel
+lease. Both Kimpanel and native Classic UI must be available; the adapter confirms
+this before takeover is reported. Losing the lease restores each input context’s
+original panel callback. Legacy addon configuration is restored without
+auto-starting Fcitx; a legacy session that started with Classic UI disabled needs
+a new login to load it.
 
 ## Candidate presentation preferences
 
@@ -54,13 +73,13 @@ restore behavior described above.
 
 ### 1. Native Modern Applications (Standard Qt 6 / GTK 3 / GTK 4)
 - **Examples**: Dolphin, Kate, Konsole, Firefox, GNOME applications, KDE core utilities.
-- **Support Status**: Supported through native Wayland input; forcing a Fcitx toolkit module can bypass the desktop candidate panel.
+- **Support Status**: Unified takeover for working Fcitx5 Qt/GTK modules and native Wayland input, without changing module environment variables.
 - **Mechanisms & Notes**:
   - GTK 3/4 use Wayland `text-input-v3`. Qt uses the Wayland text-input protocol supported by its runtime and KWin; it should not universally be described as `text-input-v3`.
-  - **GTK**: A global `GTK_IM_MODULE=fcitx` takes priority over native Wayland input and can make the application draw a classic candidate panel. First remove that override for native Wayland applications, for example `env -u GTK_IM_MODULE GDK_BACKEND=wayland remmina`. If GTK settings still force Fcitx, use `GTK_IM_MODULE=wayland` for that application only.
-  - **Qt**: A global `QT_IM_MODULE=fcitx` can likewise enable a client-side panel. Modern native Qt applications can be launched with process-local `QT_IM_MODULE=wayland QT_IM_MODULES=wayland`.
-  - Applications read their environment at startup. Fully exit old instances before relaunching; session environment file changes normally require a new login. Restarting the Shell does not update running applications. Do not globally force `GTK_IM_MODULE=wayland` on GTK 2 or X11 applications, which still need their Fcitx/XIM path.
-  - **Takeover status**: If the native input path is already selected but the classic panel remains, check the actual activation status in Settings. A loaded Classic UI can keep drawing even when `CurrentUI` says `kimpanel`.
+  - Keep working `GTK_IM_MODULE`, `QT_IM_MODULE` and `XMODIFIERS` settings. The extension uses Fcitx5's custom panel API to override client-side candidate rendering while client preedit still reaches the application.
+  - Install NextKde and enable its popup switch once. `kosctl install` builds and deploys the extension automatically. The extension is inactive unless NextKde holds its lease and Kimpanel is available.
+  - Activation checks the extension version, process owner and active state. A missing, disabled or unloadable extension triggers rollback with a visible error while preserving the original input configuration.
+  - VM acceptance covers Kate with Fcitx/Wayland input, GTK 3 with Fcitx on Wayland/X11, and GTK 4 with Fcitx on Wayland. Applications that do not connect to Fcitx5 still need a working input path first.
 
 ### 2. Chromium and Electron Applications
 - **Examples**: Google Chrome, Chromium, VS Code, Obsidian, Discord, Slack, Linux QQ.
@@ -75,9 +94,9 @@ restore behavior described above.
 
 ### 3. Bundled and Proprietary Qt Applications (Monolithic Packages / RPM / Isolated Runtimes)
 - **Examples**: Official WeChat Linux (RPM/DEB 4.x+), Calibre (standalone), WPS Office, Baidu Netdisk.
-- **Support Status**: **Targeted environment overrides required**.
+- **Support Status**: Existing working Fcitx input is supported; applications with no input connection may still require a toolkit-specific module.
 - **Root Cause**:
-  These applications bundle private or statically compiled Qt runtimes isolated from system Qt libraries. When `QT_IM_MODULE` is empty, their internal Qt runtimes often fail to default to Wayland text input, causing Chinese input methods to be completely unreachable. Setting `QT_IM_MODULE=fcitx` restores input but activates `ClientSideInputPanel`, reverting to classic square popups.
+  These applications bundle private or statically compiled Qt runtimes isolated from system Qt libraries. Some do not automatically select a working input module. If a bundled Fcitx Qt module already connects to Fcitx5, keep it: the extension handles its candidates. Only applications with no input connection need the workarounds below.
 - **Workarounds**:
   - **Official WeChat (WeChat Linux 4.x+)**:
     WeChat embeds `WaylandTextInputV3ContextPlugin` registered under the explicit factory key `text-input-unstable-v3`. Injecting this key provides native Chinese input while retaining NextKde's liquid glass popup:
@@ -95,7 +114,7 @@ restore behavior described above.
     exec /opt/calibre/calibre "$@"
     ```
   - **Other Legacy Bundled Qt Applications**:
-    For legacy applications lacking Wayland text-input support entirely, export `QT_IM_MODULE=fcitx` specifically for that application as a fallback to guarantee basic typing capabilities.
+    For legacy applications lacking Wayland text-input support, a compatible Fcitx Qt plugin can connect them to the same Fcitx5 process and unified candidate panel. A missing toolkit plugin still needs to be installed or supplied by the application.
 
 ### 4. Legacy XWayland Applications & Games
 - **Examples**: Wine / Proton games, legacy X11 utilities, unmigrated Java/AWT programs.
@@ -108,7 +127,7 @@ restore behavior described above.
 
 | Symptom | Probable Cause | Action |
 | :--- | :--- | :--- |
-| **Classic rectangular popup appears instead of liquid glass** | Takeover failed or Classic UI is still loaded | Check the actual status/error in Settings; use the feature switch to reload through KWin |
+| **Classic rectangular popup appears instead of liquid glass** | Takeover inactive or extension not updated | Check Settings; log out and back in after installing the extension |
 | **Keystrokes committed directly as English with no candidate box** | Bundled proprietary Qt runtime did not automatically bind Wayland input | Target the app with `QT_IM_MODULE=text-input-unstable-v3` (e.g., WeChat) or relevant toolkit flags |
 | **Chromium/VSCode cannot trigger IME or invokes virtual keyboard** | Missing Chromium Wayland IME command-line switches | Append `--enable-wayland-ime --wayland-text-input-version=3` to desktop entry |
 | **KWin full-screen virtual keyboard blocks the screen** | `VirtualKeyboardMode` in `kwinrc` set to mouse-triggered mode (Mode 2) | Run `kwriteconfig6 --file kwinrc --group Wayland --key VirtualKeyboardMode 0` and reconfigure KWin |

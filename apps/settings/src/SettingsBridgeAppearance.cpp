@@ -230,6 +230,12 @@ void SettingsBridge::updateBarMacTint(double tint)
     callAppearance({ QStringLiteral("updateBarMacTint"), QString::number(tint, 'f', 3) });
 }
 
+void SettingsBridge::updateStartupMotion(bool reduced, int duration)
+{
+    callAppearance({ QStringLiteral("updateStartupMotion"),
+        reduced ? QStringLiteral("true") : QStringLiteral("false"), QString::number(duration) });
+}
+
 void SettingsBridge::updateDockWindowAnimationStyle(const QString& style)
 {
     callAppearance({ QStringLiteral("updateDockWindowAnimationStyle"), style });
@@ -353,6 +359,8 @@ QVariantMap SettingsBridge::appearanceSnapshotFromReply(const QString& payload)
         { QStringLiteral("barMacStyle"),
             object.value(QStringLiteral("barMacStyle")).toBool(false) },
         { QStringLiteral("barMacTint"), object.value(QStringLiteral("barMacTint")).toDouble(0.30) },
+        { QStringLiteral("reduceMotion"), object.value(QStringLiteral("reduceMotion")).toBool() },
+        { QStringLiteral("startupRevealDuration"), object.value(QStringLiteral("startupRevealDuration")).toInt(800) },
         { QStringLiteral("dockWindowAnimationStyle"),
             object.value(QStringLiteral("dockWindowAnimationStyle")).toString() },
         { QStringLiteral("desktopFontAvailable"), object.contains(QStringLiteral("desktopFontFamily")) },

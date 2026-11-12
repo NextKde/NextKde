@@ -1578,4 +1578,7 @@ export const catalog = {
     "Reduce candidate motion": "Reduzir animações dos candidatos",
     "Show candidates without scaling or size transitions.": "Mostrar candidatos sem transições de escala ou tamanho.",
     "Could not save candidate appearance": "Não foi possível salvar a aparência dos candidatos",
+    "The Fcitx5 extension unifies candidate popups across Qt, GTK and Wayland input. Keep your working input module settings.": "A extensão Fcitx5 unifica os candidatos no Qt, GTK e Wayland. Mantenha as configurações de entrada que já funcionam.",
+    "Enable NextKde popups once. Existing Fcitx Qt/GTK modules and native Wayland input use the same candidate panel.": "Ative uma vez. Os módulos Fcitx Qt/GTK existentes e a entrada nativa Wayland usam o mesmo painel de candidatos.",
+    "NextKde Fcitx5 panel extension is unavailable; reinstall NextKde with Fcitx5 support": "A extensão de candidatos Fcitx5 do NextKde está indisponível; reinstale o NextKde com suporte ao Fcitx5",
 }

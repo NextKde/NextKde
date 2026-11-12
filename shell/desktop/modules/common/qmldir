@@ -1,4 +1,5 @@
 module qs.desktop.modules.common
+singleton StartupReveal 1.0 StartupReveal.qml
 AnimatedPopupWindow 1.0 AnimatedPopupWindow.qml
 PageMotion 1.0 PageMotion.qml
 SceneBounds 1.0 SceneBounds.qml

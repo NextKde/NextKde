@@ -75,6 +75,7 @@
 
           # KWin plugins live under lib/kwin/ in the Nix store
           environment.pathsToLink = [ "/lib/kwin" ];
+          i18n.inputMethod.fcitx5.addons = [ kos.passthru.kos-platform ];
 
           # Systemd user services — declaratively defined with Nix store paths
           systemd.user.services = {
