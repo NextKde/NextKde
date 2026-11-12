@@ -22,7 +22,18 @@ ColumnLayout {
 
     property var bridge: null
     property bool reduceMotion: false
-    property int startupRevealDuration: 800
+    property int startupRevealDuration: 1500
+    // Offered durations. AppearanceConfigService accepts anything in
+    // 800..2000 and rounds to whole milliseconds.
+    // 800 is not offered as a fresh choice, but legacy configs clamp to it and
+    // should still show their real value.
+    readonly property var startupRevealOptions: [800, 1000, 1200, 1500, 1800]
+    // A value saved before this list existed may not be an option; fall back to
+    // the default entry instead of an out-of-range index.
+    function revealDurationIndex() {
+        const index = startupRevealOptions.indexOf(startupRevealDuration)
+        return index >= 0 ? index : startupRevealOptions.indexOf(1500)
+    }
     property string shellStyle: "macos"
     // Material's colour source, mirrored from the Shell so the segmented
     // control reflects what is actually applied.
@@ -77,7 +88,7 @@ ColumnLayout {
         if (!state || !isValidStyle(state.shellStyle))
             return;
         reduceMotion = state.reduceMotion === true;
-        startupRevealDuration = Number(state.startupRevealDuration ?? 800);
+        startupRevealDuration = Number(state.startupRevealDuration ?? 1500);
         shellStyle = state.shellStyle;
         // The window palette follows the same style. ControlForm is NOT
         // assigned here: reading themePage.materialForm before this line would
@@ -345,9 +356,10 @@ ColumnLayout {
                 materialForm: themePage.materialForm
                 enabled: themePage.bridge !== null && !themePage.reduceMotion
                 textRole: "label"
-                model: [{label: "600 ms"}, {label: "700 ms"}, {label: "800 ms"}, {label: "900 ms"}]
-                currentIndex: Math.round((themePage.startupRevealDuration - 600) / 100)
-                onSelectionChanged: index => themePage.bridge.updateStartupMotion(themePage.reduceMotion, 600 + index * 100)
+                model: themePage.startupRevealOptions.map(ms => ({label: ms + " ms"}))
+                currentIndex: themePage.revealDurationIndex()
+                onSelectionChanged: index => themePage.bridge.updateStartupMotion(
+                    themePage.reduceMotion, themePage.startupRevealOptions[index])
             }
         }
     }
