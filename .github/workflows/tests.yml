@@ -224,7 +224,7 @@ jobs:
         run: |
           apt-get update
           DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
-            ca-certificates cmake g++ git libfcitx5core-dev fcitx5-modules-dev pkg-config
+            ca-certificates cmake g++ git libfcitx5core-dev fcitx5-modules-dev make pkg-config
       - uses: actions/checkout@v7
       - name: Build against the packaged Fcitx5 headers
         run: |
