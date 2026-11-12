@@ -24,12 +24,34 @@ Item {
     signal previousPage()
     signal nextPage()
 
+    // Measure the same delegates in either orientation; adaptive layout does
+    // not need a second hidden set of text items and readability backdrops.
+    property var candidateGeometry: ({positions: [], width: 0, height: 0, maxWidth: 0, maxHeight: 0})
+    // Measure after text and delegate bindings settle. Publishing geometry from
+    // inside their evaluation feeds layout changes back into the same binding.
+    function updateCandidateGeometry() {
+        const positions = []
+        let width = 0, height = 0, maxWidth = 0, maxHeight = 0
+        for (let i = 0; i < candidateItems.count; ++i) {
+            const item = candidateItems.itemAt(i)
+            positions.push({ x: width, y: height })
+            if (item) {
+                width += item.implicitWidth + 8
+                height += item.implicitHeight + 4
+                maxWidth = Math.max(maxWidth, item.implicitWidth)
+                maxHeight = Math.max(maxHeight, item.implicitHeight)
+            }
+        }
+        candidateGeometry = { positions: positions, width: Math.max(0, width - 8),
+            height: Math.max(0, height - 4), maxWidth: maxWidth, maxHeight: maxHeight }
+    }
+    readonly property real horizontalWidth: candidateGeometry.width
     readonly property bool isVertical: layoutPreference === "vertical"
         || (layoutPreference === "engine" && engineLayout === 1)
-        || (layoutPreference === "adaptive" && horizontalRow.implicitWidth
+        || (layoutPreference === "adaptive" && horizontalWidth
             > maximumWidth - (paging.visible ? paging.implicitWidth + 6 : 0))
-    readonly property real naturalWidth: isVertical ? verticalColumn.implicitWidth : horizontalRow.implicitWidth
-    readonly property real naturalHeight: isVertical ? verticalColumn.implicitHeight : horizontalRow.implicitHeight
+    readonly property real naturalWidth: isVertical ? candidateGeometry.maxWidth : candidateGeometry.width
+    readonly property real naturalHeight: isVertical ? candidateGeometry.height : candidateGeometry.maxHeight
     readonly property real pagerWidth: paging.visible && !isVertical ? paging.implicitWidth + 6 : 0
     readonly property real footerHeight: paging.visible && isVertical ? paging.height + 4 : 0
     implicitWidth: Math.min(Math.max(1, maximumWidth), Math.max(80, naturalWidth + pagerWidth, paging.implicitWidth))
@@ -56,9 +78,7 @@ Item {
     }
 
     function revealSelection() {
-        if (isVertical) verticalColumn.forceLayout()
-        else horizontalRow.forceLayout()
-        const item = (isVertical ? verticalCandidates : horizontalCandidates).itemAt(cursorIndex)
+        const item = candidateItems.itemAt(cursorIndex)
         if (!item) { _selectionVisible = false; viewport.returnToBounds(); return }
         _selectionRect = Qt.rect(item.x, item.y, item.width, item.height)
         _selectionVisible = true
@@ -77,6 +97,7 @@ Item {
     }
     onCursorIndexChanged: Qt.callLater(revealSelection)
     onCandidatesChanged: Qt.callLater(revealSelection)
+    onCandidateGeometryChanged: Qt.callLater(revealSelection)
     onNaturalWidthChanged: Qt.callLater(revealSelection)
     onNaturalHeightChanged: Qt.callLater(revealSelection)
     onIsVerticalChanged: {
@@ -136,17 +157,13 @@ Item {
             Behavior on height { enabled: !root.reduceMotion && root._selectionReady; SmoothedAnimation { duration: 150; velocity: -1 } }
             Behavior on opacity { enabled: !root.reduceMotion; NumberAnimation { duration: 90 } }
         }
-        Row {
-            id: horizontalRow
-            visible: !root.isVertical
-            spacing: 8
-            Repeater { id: horizontalCandidates; model: root.candidates; delegate: candidateDelegate }
-        }
-        Column {
-            id: verticalColumn
-            visible: root.isVertical
-            spacing: 4
-            Repeater { id: verticalCandidates; model: root.candidates; delegate: candidateDelegate }
+        Repeater {
+            id: candidateItems
+            // A numeric model preserves existing items while their text changes.
+            model: root.candidates.length
+            delegate: candidateDelegate
+            onItemAdded: Qt.callLater(root.updateCandidateGeometry)
+            onItemRemoved: Qt.callLater(root.updateCandidateGeometry)
         }
     }
 
@@ -155,7 +172,12 @@ Item {
         Item {
             id: entry
             required property int index
-            required property var modelData
+            readonly property var modelData: root.candidates[index] || ({})
+            readonly property var position: root.candidateGeometry.positions[index]
+            x: root.isVertical ? 0 : (position?.x || 0)
+            y: root.isVertical ? (position?.y || 0) : 0
+            onImplicitWidthChanged: Qt.callLater(root.updateCandidateGeometry)
+            onImplicitHeightChanged: Qt.callLater(root.updateCandidateGeometry)
             readonly property bool selected: index === root.cursorIndex
             readonly property string annotation: root.showAnnotations ? String(modelData.comment || "") : ""
             readonly property real labelWidth: label.implicitWidth
@@ -164,7 +186,7 @@ Item {
             implicitHeight: Math.max(label.implicitHeight, word.implicitHeight, comment.implicitHeight) + 8
             width: implicitWidth
             height: implicitHeight
-            objectName: (parent === verticalColumn ? "verticalCandidate-" : "horizontalCandidate-") + index
+            objectName: (root.isVertical ? "verticalCandidate-" : "horizontalCandidate-") + index
             Accessible.role: Accessible.Button
             Accessible.name: String(modelData.text || "") + (annotation ? " " + annotation : "")
             Accessible.onPressAction: root.candidateSelected(index)

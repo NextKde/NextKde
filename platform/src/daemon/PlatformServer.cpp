@@ -131,6 +131,10 @@ PlatformServer::PlatformServer(QObject *parent)
 
 PlatformServer::~PlatformServer()
 {
+    // Release the input-panel lease while server members still exist. QObject
+    // child destruction otherwise runs after the derived members are gone.
+    delete m_kimpanelBridge;
+    m_kimpanelBridge = nullptr;
     // QLocalServer owns accepted sockets and is destroyed after the tracking
     // containers below. Disconnect first so socket destruction cannot call
     // clientDisconnected() after those containers have already been freed.
