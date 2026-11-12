@@ -2541,7 +2541,7 @@ PanelWindow {
                             }
                             Text {
                                 visible: todoContent.tasks.length === 0
-                                    && PimWidgetService.state !== "not-installed"
+                                    && (PimWidgetService.ready || PimWidgetService.showFeedback)
                                 anchors.horizontalCenter: parent.horizontalCenter
                                 // Only a ready snapshot can mean all tasks are done.
                                 // App installation is handled when the card is opened.
@@ -2671,8 +2671,7 @@ PanelWindow {
                         }
                     }
                     Text {
-                        visible: PimWidgetService.state !== "not-installed"
-                            && (!PimWidgetService.ready || !!IndependentAppWidgetService.launchErrors.calendar)
+                        visible: PimWidgetService.showFeedback
                         width: parent.width
                         text: PimWidgetService.errorMessage
                         maximumLineCount: 2
