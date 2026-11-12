@@ -96,6 +96,7 @@
     "kos-shell.system-font",
     "kos-shell.inputmethod-motion",
     "kos-shell.weather-refresh",
+    "kos-shell.pim-refresh",
     "kos-shell.stage-visibility-qml",
     "kos-shell.dock-native-target",
     "kos-shell.dock-selection-highlight",

@@ -148,7 +148,10 @@ QtObject {
         onTriggered: service.reload("calendar")
     }
     property Timer weatherPoll: Timer {
-        interval: 300000
+        // This reads the local app summary and installation state, not the
+        // weather provider. Retry promptly after a startup inspection failure
+        // and pick up summaries published after the Weather app opens.
+        interval: 30000
         repeat: true
         running: PlatformClient.connected
         triggeredOnStart: true
