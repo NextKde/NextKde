@@ -177,7 +177,7 @@ QtObject {
     property bool barMacStyle: false
     property real barMacTint: 0.30
     property bool reduceMotion: false
-    property int startupRevealDuration: 800
+    property int startupRevealDuration: 1500
     property string dockWindowAnimationStyle: "scale"
     // Empty means follow KDE General font; this override changes only family.
     property string desktopFontFamily: ""
@@ -582,7 +582,7 @@ QtObject {
     function updateStartupMotion(reduced, duration) {
         if (!ready || !Number.isFinite(duration)) return
         reduceMotion = !!reduced
-        startupRevealDuration = Math.round(Math.max(600, Math.min(900, duration)))
+        startupRevealDuration = Math.round(Math.max(800, Math.min(2000, duration)))
         saveTimer.restart()
     }
 
@@ -875,8 +875,8 @@ QtObject {
                     service.reduceMotion = object.reduceMotion === true
                     if (typeof object.startupRevealDuration === "number"
                             && Number.isFinite(object.startupRevealDuration))
-                        service.startupRevealDuration = Math.round(Math.max(600,
-                            Math.min(900, object.startupRevealDuration)))
+                        service.startupRevealDuration = Math.round(Math.max(800,
+                            Math.min(2000, object.startupRevealDuration)))
                     if (service.isValidDockWindowAnimationStyle(animationStyle))
                         service.dockWindowAnimationStyle = animationStyle
                     if (service.isValidGlassStyle(glassStyle))

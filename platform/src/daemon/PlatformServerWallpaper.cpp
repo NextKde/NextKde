@@ -32,6 +32,7 @@ bool PlatformServer::handleWallpaperOperation(QLocalSocket *socket,
     const QJsonObject payload = request.value(QStringLiteral("payload")).toObject();
     const int screens = payload.value(QStringLiteral("screenCount")).toInt();
     const QString accent = payload.value(QStringLiteral("accent")).toString();
+    // Fallback for screens past the saved backup when the takeover is undone.
     const QString image = payload.value(QStringLiteral("imagePath")).toString();
     const bool dark = payload.value(QStringLiteral("dark")).toBool();
     const QPointer<QLocalSocket> guardedSocket(socket);

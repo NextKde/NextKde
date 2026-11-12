@@ -797,6 +797,10 @@ Item {
         }
     }
 
+    // The login spinner runs in its own process so it keeps moving while this
+    // one is busy building the desktop; see StartupSplash.qml.
+    StartupSplash {}
+
     QuickSearch {
         id: quickSearch
     }
