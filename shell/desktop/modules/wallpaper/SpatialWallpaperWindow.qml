@@ -27,6 +27,8 @@ PanelWindow {
     implicitHeight: screen?.height ?? 1080
     mask: Region {}
 
+    contentItem.opacity: StartupReveal.wallpaperProgress
+
     property real pointerX: 0
     property real pointerY: 0
     readonly property bool active: wallpaperLayer.active

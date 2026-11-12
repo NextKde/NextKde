@@ -94,10 +94,10 @@ PanelWindow {
     Item {
         id: barWrapper
         x: 0
-        y: hide.offsetY
+        y: hide.offsetY + (1 - StartupReveal.barProgress) * 12
         width: root.width
         height: root.height
-        opacity: hide.barOpacity
+        opacity: hide.barOpacity * StartupReveal.barProgress
         visible: root.barEnabled && hide.revealProgress > 0.001
 
         // Passive observation of clicks elsewhere on this bar, without a backdrop
@@ -126,6 +126,7 @@ PanelWindow {
             // wrapper so the published glass follows the slide (matching the
             // Dock's dockWrapper anchor) instead of staying pinned at y=0.
             blurAnchor: barWrapper
+            materialOpacity: StartupReveal.barProgress
             scrimEnabled: AppearanceTokens.surface.usesBackdrop && !root.transparentMode
             scrimLevel: "transparent"
             // BarWindow keeps its established tonal layer0 paint below. This
@@ -221,7 +222,7 @@ PanelWindow {
                         // when the Bar has stopped sliding, because a popup's
                         // anchor rectangle is measured only when its window is
                         // created (see ControlCenterPanel.anchorSettled).
-                        barRevealProgress: hide.revealProgress
+                        barRevealProgress: hide.revealProgress * StartupReveal.barProgress
                     }
                 }
             }

@@ -21,6 +21,8 @@ ColumnLayout {
     spacing: 12
 
     property var bridge: null
+    property bool reduceMotion: false
+    property int startupRevealDuration: 800
     property string shellStyle: "macos"
     // Material's colour source, mirrored from the Shell so the segmented
     // control reflects what is actually applied.
@@ -74,6 +76,8 @@ ColumnLayout {
     function applyState(state) {
         if (!state || !isValidStyle(state.shellStyle))
             return;
+        reduceMotion = state.reduceMotion === true;
+        startupRevealDuration = Number(state.startupRevealDuration ?? 800);
         shellStyle = state.shellStyle;
         // The window palette follows the same style. ControlForm is NOT
         // assigned here: reading themePage.materialForm before this line would
@@ -314,6 +318,36 @@ ColumnLayout {
                     themeMaterialSettings.liquidDirty = false;
                     themeMaterialSettings.refresh();
                 }
+            }
+        }
+    }
+
+    Demo.SettingsGroup {
+        title: I18n.tr("Desktop arrival")
+        backgroundColor: colors.card
+        Demo.SettingsItem {
+            title: I18n.tr("Reduce motion")
+            description: I18n.tr("Show the desktop immediately after login, without the arrival animation")
+            Controls.SettingsSwitch {
+                objectName: "startupReduceMotion"
+                checked: themePage.reduceMotion
+                enabled: themePage.bridge !== null
+                accentColor: colors.accent
+                trackColor: colors.divider
+                onToggled: checked => themePage.bridge.updateStartupMotion(checked, themePage.startupRevealDuration)
+            }
+        }
+        Demo.SettingsItem {
+            title: I18n.tr("Arrival duration")
+            Controls.SettingsSelect {
+                objectName: "startupRevealDuration"
+                colors: themePage.colors
+                materialForm: themePage.materialForm
+                enabled: themePage.bridge !== null && !themePage.reduceMotion
+                textRole: "label"
+                model: [{label: "600 ms"}, {label: "700 ms"}, {label: "800 ms"}, {label: "900 ms"}]
+                currentIndex: Math.round((themePage.startupRevealDuration - 600) / 100)
+                onSelectionChanged: index => themePage.bridge.updateStartupMotion(themePage.reduceMotion, 600 + index * 100)
             }
         }
     }
