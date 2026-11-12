@@ -114,6 +114,10 @@ void SettingsBridge::handleReply(RequestKind kind, const QString& payload)
         emit dockRevealIndicatorVisibilityChanged(latestDockState(payload));
         finishDockRequest();
         break;
+    case RequestKind::DockAutoHideApp:
+        emit dockAutoHideAppChanged(latestDockState(payload));
+        finishDockRequest();
+        break;
     case RequestKind::Appearance:
         emit appearanceSnapshotChanged(appearanceSnapshotFromReply(payload));
         break;
@@ -203,6 +207,10 @@ void SettingsBridge::failKind(RequestKind kind)
         break;
     case RequestKind::DockRevealIndicatorVisibility:
         emit dockRevealIndicatorVisibilityChanged({ });
+        finishDockRequest();
+        break;
+    case RequestKind::DockAutoHideApp:
+        emit dockAutoHideAppChanged({ });
         finishDockRequest();
         break;
     case RequestKind::Appearance:

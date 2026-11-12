@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import vm from "node:vm";
 import { MIN_ICON_SIZE, activeBackgroundPadding, computeLayout } from "../../shell/desktop/modules/dock/AdaptiveMath.mjs";
-import { avoidanceRect, dockOpacity, dockScale, handleOpacity, handleSizes, hasConflict, intentionalOverlapRect, intersects, policyWantsHidden, releaseRect, shouldBeVisible, visibleDockRect, windowEligible } from "../../shell/desktop/modules/dock/DockAutoHideMath.mjs";
+import { avoidanceRect, dockOpacity, dockScale, effectiveVisibilityMode, handleOpacity, handleSizes, hasAutoHideApp, hasConflict, intentionalOverlapRect, intersects, policyWantsHidden, releaseRect, shouldBeVisible, visibleDockRect, windowEligible } from "../../shell/desktop/modules/dock/DockAutoHideMath.mjs";
 import { readFileSync } from "node:fs";
 import { test } from "node:test";
 
@@ -365,6 +365,32 @@ test("autohide", async () => {
     }
     console.log("\n" + (errors === 0 ? "ALL PASS" : errors + " FAILURE(S)"));
     assert.equal(errors, 0, "all checks in this scenario must pass");
+});
+
+test("selected apps override only the effective Dock visibility", () => {
+    const screen = {name: "DP-1", x: 0, y: 0, width: 1920, height: 1080};
+    const window = {autoHideApp: true, geometry: {x: 100, y: 100, width: 400, height: 300},
+        screenName: "DP-1", desktopIds: ["d1"], isVisible: true, isMinimized: false};
+    assert.equal(hasAutoHideApp([window], screen, "d1"), true, "no Dock overlap required");
+    for (const changes of [
+        {autoHideApp: false}, {isMinimized: true}, {isVisible: false},
+        {desktopIds: ["d2"]}, {geometry: null},
+        {screenName: "DP-2", geometry: {x: 2000, y: 100, width: 400, height: 300}},
+    ]) {
+        assert.equal(hasAutoHideApp([{...window, ...changes}], screen, "d1"), false,
+            JSON.stringify(changes));
+    }
+    assert.equal(hasAutoHideApp([{...window, onAllDesktops: true}], screen, "d2"), true);
+    assert.equal(hasAutoHideApp([{...window, isMinimized: true}, window], screen, "d1"), true,
+        "another visible window of the app keeps the rule active");
+    assert.equal(hasAutoHideApp([], screen, "d1"), false);
+    for (const saved of ["always", "smart", "persistent"]) {
+        const effective = effectiveVisibilityMode(saved, true);
+        assert.equal(effective, "persistent");
+        assert.equal(shouldBeVisible(effective, false, false), false);
+        assert.equal(shouldBeVisible(effective, false, true), true, "interaction still reveals");
+        assert.equal(effectiveVisibilityMode(saved, false), saved, "restore the saved mode");
+    }
 });
 
 test("wallpaper color source", async () => {

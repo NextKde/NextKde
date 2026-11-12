@@ -185,7 +185,8 @@ PanelWindow {
             property string _lastSummary: ""
             property string _lastBody: ""
             property string _lastAppName: ""
-            property string _lastIconSource: ""
+            // Keep raw identity/content, not a resolved old-theme URL.
+            property var _lastIcon: ({image: "", appIcon: "", desktopEntry: ""})
             property int _lastUrgency: 1
             onModelDataChanged: card.removing = false
             onNotificationChanged: {
@@ -194,8 +195,6 @@ PanelWindow {
                     card._lastBody = card.notification.body || ""
                     card._lastAppName = card.notification.appName || ""
                     card._lastUrgency = card.notification.urgency
-                    card._lastIconSource = AppIdentityService._iconPath(
-                        card.notification.image || card.notification.appIcon)
                     card.removing = false
                 }
                 // The delegate is reused when a group's newest notification is
@@ -215,16 +214,21 @@ PanelWindow {
                 ? card.notification.body : card._lastBody
             readonly property string displayAppName: card.notification
                 ? card.notification.appName : card._lastAppName
-            readonly property string displayIconSource: card.notification
-                ? AppIdentityService._iconPath(card.notification.image || card.notification.appIcon)
-                : card._lastIconSource
+            readonly property var displayIcon: card.notification
+                ? ({image: card.notification.image || "", appIcon: card.notification.appIcon || "",
+                    desktopEntry: card.notification.desktopEntry || ""})
+                : card._lastIcon
+            // Also retain in-place replacements of the live notification's
+            // icon fields before that object is dismissed/destroyed.
+            onDisplayIconChanged: {
+                if (card.notification) card._lastIcon = card.displayIcon
+            }
             readonly property bool isCritical: (card.notification
                 ? card.notification.urgency : card._lastUrgency) === NotificationUrgency.Critical
             readonly property bool isLow: (card.notification
                 ? card.notification.urgency : card._lastUrgency) === NotificationUrgency.Low
             readonly property bool expanded: !card.groupCollapsed && card.groupCount > 1
             readonly property color foregroundColor: AppearanceTokens.content.glassInk()
-            readonly property string iconSource: card.displayIconSource
 
             // Hover state for pause-on-hover. A HoverHandler (not a MouseArea)
             // so it never steals clicks from the buttons inside the card.
@@ -471,7 +475,7 @@ PanelWindow {
                     anchors.centerIn: parent
                     width: 30; height: width
                     radius: width * 0.30
-                    visible: card.iconSource.length > 0
+                    visible: !notificationIcon.usesFallback
                     color: "transparent"
                     // Rectangle.clip doesn't round-corner child Images reliably.
                     // Use layer + OpacityMask to actually crop the icon to the
@@ -486,12 +490,14 @@ PanelWindow {
                             visible: false
                         }
                     }
-                    AppIcon {
+                    NotificationIcon {
+                        id: notificationIcon
+                        objectName: "notification-popup-icon"
                         anchors.fill: parent
-                        source: card.iconSource
-                        // Theme icon: synchronous, see AppIcon.qml.
-                        asynchronous: false
-                        smooth: true
+                        image: card.displayIcon.image
+                        appIcon: card.displayIcon.appIcon
+                        desktopEntry: card.displayIcon.desktopEntry
+                        ink: card.foregroundColor
                     }
                 }
             }

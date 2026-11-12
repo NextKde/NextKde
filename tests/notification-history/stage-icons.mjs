@@ -15,5 +15,9 @@ QtObject { readonly property bool isDarkTheme: true }
         declarations.push(`${["AppIcon", "BundledIcon", "ShellText", "GlassText"].includes(name) ? "" : "singleton "}${name} 1.0 ${name}.qml`);
     }
     writeFileSync(join(common, "qmldir"), `module qs.desktop.modules.common\n${declarations.join("\n")}\n`);
+    const notifications = join(directory, "desktop/modules/notifications");
+    mkdirSync(notifications, {recursive: true});
+    copyFileSync(new URL("../../shell/desktop/modules/notifications/NotificationIcon.qml", import.meta.url), join(notifications, "NotificationIcon.qml"));
+    writeFileSync(join(notifications, "qmldir"), "module qs.desktop.modules.notifications\nNotificationIcon 1.0 NotificationIcon.qml\n");
     copyFileSync(new URL("../../shell/desktop/modules/bar/NotificationSourceIcon.qml", import.meta.url), join(directory, "NotificationSourceIcon.qml"));
 }

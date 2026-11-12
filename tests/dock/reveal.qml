@@ -62,6 +62,16 @@ ShellRoot {
         dockHeight: test.dockHeight
     }
 
+    function appWindows(changes = {}, notify = true) {
+        WindowService.records = [Object.assign({
+            identity: {desktopId: "org.example.Editor.desktop"},
+            toplevel: {appId: "provider-specific-editor", minimized: false},
+            geometry: {x: 100, y: 100, width: 100, height: 100},
+            screenName: "fixture-output", desktopIds: ["fixture"], isVisible: true
+        }, changes)]
+        if (notify) WindowService.placementRevision++
+    }
+
     function check(ok, message) {
         if (!ok) throw new Error("stage=" + stage + " phase=" + controller.phase + " " + message)
     }
@@ -229,6 +239,86 @@ ShellRoot {
                 case 22:
                     check(!controller._handleHovered && !handle.hitTarget.enabled,
                         "always mode clears the hover and disables the edge target")
+                    test.dockPosition = "bottom"
+                    test.dockX = 200; test.dockY = 520
+                    test.dockWidth = 400; test.dockHeight = 60
+                    controller.targetScreen = {name: "fixture-output", x: 0, y: 0, width: 800, height: 600}
+                    controller.autoHideApps = ["org.example.Editor.desktop"]
+                    controller.resetForScreenChange()
+                    interval = 100
+                    break
+                case 23:
+                    check(controller.phase === "Bootstrapping" && controller.revealProgress === 0,
+                        "always mode with app rules waits for the initial window snapshot")
+                    test.dockWidth = 0; test.dockHeight = 0
+                    appWindows()
+                    controller.windowDataReady = true
+                    interval = 450
+                    break
+                case 24:
+                    check(controller.phase === "Hidden" && controller.handleActive,
+                        "a selected app boots hidden even without Dock overlap")
+                    check(controller.mode === "always" && controller.effectiveMode === "persistent",
+                        "application rules work before Dock dimensions are ready")
+                    test.dockWidth = 400; test.dockHeight = 60
+                    controller.handleEntered()
+                    break
+                case 25:
+                    check(controller.phase === "Held", "edge still reveals an app-hidden Dock")
+                    controller.handleExited()
+                    break
+                case 26:
+                    check(controller.phase === "Hidden", "leaving the edge restores app hiding")
+                    appWindows({toplevel: {minimized: true}})
+                    break
+                case 27:
+                    check(controller.phase === "Shown", "minimizing the last app window restores always mode")
+                    appWindows()
+                    break
+                case 28:
+                    check(controller.phase === "Hidden", "restoring the app hides the Dock")
+                    WindowService.currentDesktopId = "another-desktop"
+                    break
+                case 29:
+                    check(controller.phase === "Shown", "another desktop ignores the selected app")
+                    WindowService.currentDesktopId = "fixture"
+                    break
+                case 30:
+                    check(controller.phase === "Hidden", "returning to the app desktop hides")
+                    appWindows({screenName: "other-output", geometry: {x: 900, y: 100, width: 100, height: 100}})
+                    break
+                case 31:
+                    check(controller.phase === "Shown", "moving the app to another output restores the Dock")
+                    appWindows()
+                    break
+                case 32:
+                    check(controller.phase === "Hidden", "moving back reapplies the rule")
+                    controller.autoHideApps = []
+                    break
+                case 33:
+                    check(controller.phase === "Shown" && !controller.handleActive,
+                        "removing the rule restores the saved mode immediately")
+                    controller.autoHideApps = ["org.example.Editor.desktop"]
+                    break
+                case 34:
+                    check(controller.phase === "Hidden", "adding a rule affects already open apps")
+                    WindowService.records = []
+                    WindowService.placementRevision++
+                    break
+                case 35:
+                    check(controller.phase === "Shown", "closing the app restores always mode")
+                    // WindowService publishes urgency before placementRevision.
+                    appWindows({}, false)
+                    controller.requestReveal("urgent", 1000)
+                    WindowService.placementRevision++
+                    break
+                case 36:
+                    check(controller._temporaryRevealHold && controller.revealProgress === 1,
+                        "first urgent app keeps its reveal hold before placement catches up")
+                    interval = 1200
+                    break
+                case 37:
+                    check(controller.phase === "Hidden", "app hiding resumes after the urgent hold expires")
                     console.log("DOCK_REVEAL_RUNTIME_PASS")
                     Qt.quit()
                     break
@@ -240,7 +330,7 @@ ShellRoot {
         }
     }
     Timer {
-        interval: 18000
+        interval: 20000
         running: true
         onTriggered: { console.log("FAIL timeout stage=" + test.stage); Qt.quit() }
     }
