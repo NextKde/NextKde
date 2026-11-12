@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
+import { runInNewContext } from "node:vm";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const statusQml = readFileSync(join(here, "InputMethodStatus.qml"), "utf8");
@@ -63,4 +64,36 @@ assert.doesNotMatch(popupQml, /anchors\.baseline:\s*vMainText\.baseline/,
 assert.doesNotMatch(popupQml, /transform:\s*Translate/,
     "InputMethodPopup eliminates jarring Translate motion on candidate popup");
 
-console.log("input method status dismissal & blur contract: ok");
+// 8. Opt-in status-cell visibility. Execute the actual QML filter so hiding
+// the badge also removes its component and reorder key (no empty tray slot).
+const statusAreaQml = readFileSync(join(here, "../bar/BarStatusArea.qml"), "utf8");
+const cellFilter = statusAreaQml.match(
+    /readonly property var visibleTrailingCells:\s*([\s\S]*?)\n\n/,
+);
+assert.ok(cellFilter, "BarStatusArea declares its status-cell filter");
+const cellKeys = ["inputmethod", "network", "battery", "settings", "notifications", "controlcenter"];
+function visibleKeys(inputMethodState, hidden = [], showBatteryCell = true) {
+    const cells = runInNewContext(cellFilter[1], {
+        trailingCells: cellKeys.map(key => ({ key })),
+        AppearanceConfigService: { isStatusCellHidden: key => hidden.includes(key) },
+        InputMethodService: inputMethodState,
+        root: { showBatteryCell },
+    });
+    return Array.from(cells, cell => cell.key);
+}
+const withoutInputMethod = cellKeys.filter(key => key !== "inputmethod");
+assert.deepEqual(visibleKeys({ userEnabled: false, enabled: false }), withoutInputMethod,
+    "disabled native input method has no badge or reserved slot");
+assert.deepEqual(visibleKeys({}), withoutInputMethod,
+    "unavailable or not-yet-received input method state has no default badge");
+assert.deepEqual(visibleKeys({ userEnabled: true, enabled: false }), withoutInputMethod,
+    "requested but inactive takeover does not expose a native control");
+assert.deepEqual(visibleKeys({ userEnabled: true, enabled: true }), cellKeys,
+    "active native input method exposes its status control");
+assert.deepEqual(visibleKeys({ enabled: true }, ["inputmethod"]), withoutInputMethod,
+    "the user's explicit hidden-cell preference remains respected");
+assert.deepEqual(visibleKeys({ enabled: false }, [], false),
+    withoutInputMethod.filter(key => key !== "battery"),
+    "input method visibility preserves the battery presence policy");
+
+console.log("input method status visibility, dismissal & blur contract: ok");
