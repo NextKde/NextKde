@@ -7,6 +7,7 @@
 #include "SettingsBridge.h"
 #include "SettingsRuntime.h"
 #include "WindowSettings.h"
+#include "LockScreenSettings.h"
 #include "DesktopTypography.h"
 
 #include <QDebug>
@@ -33,6 +34,28 @@ int main(int argc, char* argv[])
 {
     for (int i = 1; i < argc; ++i) {
         const QByteArray argument(argv[i]);
+        if (argument == "--set-lockscreen-theme" || argument == "--install-lockscreen-shell") {
+            QCoreApplication application(argc, argv);
+            if (i + 1 >= argc) { qWarning() << "Missing lock screen argument"; return 2; }
+            auto paths = LockScreenSettings::defaultPaths();
+            // Explicit installer prefix, never inferred from the checkout.
+            const auto args = application.arguments();
+            const int prefixOption = args.indexOf(QStringLiteral("--lockscreen-prefix"));
+            if (prefixOption >= 0) {
+                const QString prefix = args.value(prefixOption + 1);
+                if (prefix.isEmpty() || !QDir::isAbsolutePath(prefix)) {
+                    qWarning() << "A lock screen installation prefix must be absolute"; return 2;
+                }
+                paths.data = QDir::cleanPath(prefix + "/share");
+                paths.resources = paths.data + "/kos/lockscreen";
+            }
+            LockScreenSettings settings(paths);
+            const QString value = QString::fromLocal8Bit(argv[i + 1]);
+            const bool accepted = argument == "--set-lockscreen-theme"
+                ? settings.setTheme(value) : settings.installShellPackage(value);
+            if (!accepted) qWarning().noquote() << settings.error();
+            return accepted ? 0 : 1;
+        }
         if (argument == "--set-window-animation" && i + 2 < argc) {
             QCoreApplication application(argc, argv);
             WindowSettings settings;
@@ -86,7 +109,8 @@ int main(int argc, char* argv[])
             if (argument == QLatin1String("--page=fonts")) navigationRequest = QStringLiteral("page:14");
             else if (argument == QLatin1String("--page=about")) navigationRequest = QStringLiteral("page:15");
             else if (argument == QLatin1String("--page=windows")) navigationRequest = QStringLiteral("page:11");
-            else if (ok && page >= 0 && page <= 15) navigationRequest = QStringLiteral("page:%1").arg(page);
+            else if (argument == QLatin1String("--page=lockscreen")) navigationRequest = QStringLiteral("page:16");
+            else if (ok && page >= 0 && page <= 16) navigationRequest = QStringLiteral("page:%1").arg(page);
         }
     }
     if (!navigationOwner) {
@@ -116,6 +140,7 @@ int main(int argc, char* argv[])
     TaskNotifications taskNotifications;
     SettingsBridge bridge;
     WindowSettings windowSettings;
+    LockScreenSettings lockScreenSettings;
     PowerSettings powerSettings;
     AboutCache aboutCache;
     QQmlApplicationEngine engine;
@@ -124,6 +149,7 @@ int main(int argc, char* argv[])
     engine.rootContext()->setContextProperty(QStringLiteral("settingsBridge"), &bridge);
     engine.rootContext()->setContextProperty(QStringLiteral("taskNotifications"), &taskNotifications);
     engine.rootContext()->setContextProperty(QStringLiteral("windowSettings"), &windowSettings);
+    engine.rootContext()->setContextProperty(QStringLiteral("lockScreenSettings"), &lockScreenSettings);
     engine.rootContext()->setContextProperty(QStringLiteral("powerSettings"), &powerSettings);
     engine.rootContext()->setContextProperty(QStringLiteral("aboutCache"), &aboutCache);
 
@@ -162,7 +188,7 @@ int main(int argc, char* argv[])
                 const QByteArray app = client->readLine(64).trimmed();
                 bool pageOk = false;
                 const int page = app.startsWith("page:") ? app.mid(5).toInt(&pageOk) : -1;
-                pageOk = pageOk && page >= 0 && page <= 15;
+                pageOk = pageOk && page >= 0 && page <= 16;
                 if (app != "show" && app != "calendar" && app != "weather" && !pageOk) {
                     client->disconnectFromServer();
                     return;
@@ -208,10 +234,12 @@ int main(int argc, char* argv[])
             engine.rootObjects().constFirst()->setProperty("currentPage", 14);
         } else if (argument == QStringLiteral("--page=windows")) {
             engine.rootObjects().constFirst()->setProperty("currentPage", 11);
+        } else if (argument == QStringLiteral("--page=lockscreen")) {
+            engine.rootObjects().constFirst()->setProperty("currentPage", 16);
         } else if (argument.startsWith(QStringLiteral("--page="))) {
             bool ok = false;
             const int page = argument.mid(7).toInt(&ok);
-            if (ok && page >= 0 && page <= 15)
+            if (ok && page >= 0 && page <= 16)
                 engine.rootObjects().constFirst()->setProperty("currentPage", page);
         }
     }

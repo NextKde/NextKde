@@ -4,6 +4,8 @@
 #include "../ai/AiWorkerClient.h"
 #endif
 
+#include "LockScreenNotifications.h"
+
 #include <QObject>
 #include <KService>
 #include <QUrl>
@@ -192,6 +194,7 @@ private:
     void runClipboardPinnedCopy(QLocalSocket *socket, const QJsonObject &request,
                                 const QString &pinId);
 
+    LockScreenNotifications m_lockScreenNotifications;
     QLocalServer m_server;
     QString m_socketPath;
     QHash<QLocalSocket *, QByteArray> m_buffers;

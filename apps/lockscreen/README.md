@@ -1,121 +1,92 @@
-# KOS Lock Screen (`apps/lockscreen`)
+# KOS lock screen
 
-An iPadOS-flavoured lock screen for KDE Plasma, drawn by `kscreenlocker` — a
-real session lock, not an overlay.
+A MacLock-inspired **native KDE Plasma session lock**, not a Quickshell overlay. `kscreenlocker_greet` continues to own PAM, idle locking, suspend integration and lock shortcuts. The SDDM login screen is unchanged.
 
-Unlike the other directories under `apps/`, this is **not** an executable. It
-is a Plasma Look-and-Feel package (KPackage) whose only job is to replace the
-QML that `kscreenlocker_greet` draws: authentication, idle locking, sleep
-hooks, and every lock entry point stay owned by kscreenlocker.
+## Presentation
 
-## Layout
+The date and clock sit at the top; a compact media card, account avatar and password capsule form the lower center. Optional notifications occupy the upper-right corner. Weather/calendar widgets are no longer part of the default layout.
 
-```
-metadata.json                 KPackage metadata (Plasma/LookAndFeel, id org.kos.desktop)
-contents/defaults             Inherits Breeze Dark so switching themes changes nothing else;
-                              also pins [Desktop] Containment to the wallpaper-only
-                              org.kde.desktopcontainment for plasmashell (see below)
-contents/lockscreen/
-    LockScreen.qml            Greeter entry point (kscreenlocker contract) + password input + wallpaper takeover
-    LockClock.qml             Oversized clock + date (liquid-glass numerals masked from the backdrop)
-tests/headless/               Offscreen harness: asserts the state machine and the takeover, renders lock.png
-    wallpaper-sample.png      Wallpaper used by the harness (a real lock screen shows the user's own)
-```
+Still images retain the resolved-file HiDPI takeover: the theme walks the greeter's wallpaper item for its resolved absolute image URL and decodes at logical size × DPR. Unknown/animated providers remain owned by the wallpaper plugin. GPU effects use `MultiEffect` and a shared, preblurred wallpaper texture for glass refraction. Neither passwords nor desktop windows are captured. Software rendering retains plain text, the wallpaper and translucent fallback cards. Optional effects, avatar, media and notifications are isolated behind Loaders.
 
-## What the greeter gives the QML
+Media uses standard MPRIS, including the existing player-selection policy and lyric metadata. Lyrics are collapsed by default; there is no external lyric/video scraping. Artwork is limited to local files or inline image data because the greeter disallows network access. Passwords remain arbitrary strings. Enter/the arrow submit once only after PAM's secret prompt is ready; an asynchronous startup retains the field instead of dropping the first password. Escape or greeter clearing cancels the pending intent; it expires after 10 seconds without replaying a secret later. Caps-lock and failure hints remain visible, and PAM's own password delay is respected. The existing activity-driven PAM retry controller is retained; it does not poll cameras in the background.
 
-kscreenlocker_greet injects `authenticator` (PAM conversation:
-`startAuthenticating()` / `respond()` / `succeeded` / `failed`), `wallpaper`
-(the Plasma wallpaper item), `config`, and the `kscreenlocker_*` globals. It
-reads `viewVisible` off the root object and connects to its `clearPassword()`
-and `notificationRepeated()` signals. Only plain QtQuick plus those objects may
-be used here — no Quickshell, no Kos.Ui.
+## Settings and installation
 
-## Development loop
+Open **KOS Settings → Lock screen**, or `kos-settings --page=lockscreen`:
 
-```sh
-# Make the package visible to the greeter (user level, no root). Note the
-# plasma/shells/ root: the greeter resolves its skin from a Shell package, and
-# look-and-feel/ is not searched for the lock screen at all -- both conditions
-# are verified by tests/theme-resolution.
-mkdir -p ~/.local/share/plasma/shells
-ln -s "$PWD" ~/.local/share/plasma/shells/org.kos.desktop
-kwriteconfig6 --file plasmashellrc --group Shell --key ShellPackage org.kos.desktop
+- KOS (MacLock style) / system-default skin.
+- Independent lock wallpaper, shared image library, local file picker and a safe static preview.
+- Media controls and privacy-only notification toggles.
+- An explicitly clicked **Lock now** action.
 
-# Offscreen assertions + a rendered preview, no real lock needed:
-./tests/headless/run.sh
+Appearance keys are declared in `contents/lockscreen/config.xml`. KScreenLocker loads them from `kscreenlockerrc [Greeter][LnF][General]`. Wallpaper writes go to `[Greeter][Wallpaper][org.kde.image][General]`, with `WallpaperPlugin=org.kde.image` in `[Greeter]`. Desktop wallpaper IPC, `[Daemon]` lock policy and unknown configuration entries are not changed.
 
-# See it on the real greeter:
-/usr/lib/kscreenlocker_greet --testing
+**A global Look-and-Feel selection is not the lock-screen selector.** The greeter resolves `plasma/shells/org.kos.desktop/contents/lockscreen/LockScreen.qml`; the top-level `X-Plasma-APIVersion` must be `2`. Removing the optional skin directory invokes KDE's system fallback while retaining the KOS desktop package.
+
+Settings and `kosctl` share the `LockScreenSettings` lifecycle. Durable resources live under `$prefix/share/kos/lockscreen`, independent of the checkout. A write lock, ownership checks, same-filesystem staging and atomic exchange prevent partially deployed entry points. GUI theme changes never change `ShellPackage` or overwrite unrecognized/symlinked skins. Core upgrades preserve the user's enabled state.
+
+Explicit installation, from the repository root:
+
+```bash
+./tools/kosctl install lockscreen
 ```
 
-Every lock spawns a fresh greeter process, so edited QML takes effect on the
-next lock — no shell or compositor restart. Switch to it with "Global Theme →
-KOS Lock Screen" in System Settings (or `kdeglobals [KDE] LookAndFeelPackage`).
+Restore the system skin:
 
-## Input
+```bash
+./tools/kosctl uninstall lockscreen
+```
 
-A password field, nothing else — no numeric keypad. An account password is an
-arbitrary string (letters, punctuation, spaces), and a digits-only UI would
-lock some users out of their own session. Enter submits, Escape clears the
-field and asks the greeter to forget the pending secret, "显示密码" toggles
-cleartext, and a caps-lock hint appears while caps lock is on (via
-`org.kde.plasma.private.keyboardindicator`, the same module upstream uses).
+Standalone CLI installs retain the original ShellPackage backup/restore behavior. Build first if the current Settings backend is not available. Every lock launches a fresh greeter, so deployed QML changes take effect on the next lock. Nix runtime installation is not verified.
 
-Keyboard and pointer activity also restart authentication if the initial request
-was refused or a noninteractive channel timed out. Failed channels are retried
-without cancelling the password conversation or clearing typed text. Retries
-respect PAM's failure delay and require user activity; they do not run a camera
-in a background retry loop. The headless suite covers real key/click delivery,
-password preservation, channel timeout, failure delay, and successful unlock.
+## Notification bridge
 
-## The wallpaper, and why the theme draws it again
+The existing desktop notification owner publishes an in-memory projection through `lockscreen.notifications-publish`. The platform exposes read-only `NotificationsJson` on session service `org.kos.LockScreen`, path `/org/kos/LockScreen`, interface `org.kos.LockScreen1`.
 
-The `wallpaper` the greeter hands over is the root item of a wallpaper package.
-`org.kde.image` paints through a C++ `TransientImage` whose texture is built
-from the geometry the item had *when it loaded* — geometry that belongs to the
-greeter, and that this theme only takes over afterwards. On a HiDPI panel (this
-project's is 3840x2160 at scale 2) that texture can stop at the logical size, so
-a 1920x1080 picture gets stretched over 3840x2160 physical pixels: the wallpaper
-reads as "a very low resolution image". Those pixels are gone — grabbing the
-item, playing with `layer`, or nudging the package into re-decoding all end up
-sampling the same undersized texture.
+It never claims `org.freedesktop.Notifications`. The projection has at most four rows, with app name/icon/time only; summary and body are always empty. Blocked sources, disabled history and do-not-disturb suppress it. Disconnect or a 30-second lease expiry clears the projection. No persistent notification history is loaded. See `shared/contracts/platform.v1.md`.
 
-So the theme does not use its pixels. After adopting the item it walks that
-subtree depth-first for the still image the package resolved (name resolution
-and `#dark`-style fragments are already done in there, so reading the result
-beats reading the config), then decodes that file itself with a plain `Image`
-and `sourceSize = size x devicePixelRatio`, drawn over the package's own copy.
-When no file is found (animated or video wallpapers) nothing is drawn and the
-greeter's picture is what shows.
+## Verification and safe preview
 
-Two details that come with it: the walk is retried every 5s, because the package
-builds its image after we adopt it and a slideshow swaps files underneath us;
-and the URL has to be absolute, because a relative one is resolved against the
-file that wrote it — the package, not us — so relative URLs are left alone.
+From the repository root, without locking the session:
 
-**The diagnostic switch**: set `debug: true` at the top of `LockScreen.qml` and
-the lock screen paints screen size / dpr / root size / the injected item's size
-and layer / what the walk found / what we decode and the Image status into its
-top-left corner. This theme runs in a process nothing can attach to, so that
-readout is the only way to see what it actually received.
+```bash
+bash apps/lockscreen/tests/headless/run.sh
+```
 
-**Do not "fix" softness with a larger `FastBlur` radius.** It picks its internal
-resolution from the absolute radius: at radius 64 roughly 80% of every output
-pixel comes from the 1/16 and 1/32 buffers — 120x67 and 60x34 on a 1080p display
-— which is not "a blurred wallpaper" but "a low resolution picture", and only
-looks softer. Use `MultiEffect` if a heavier blur is really wanted.
+```bash
+dbus-run-session -- env QT_QPA_PLATFORM=offscreen QT_QUICK_BACKEND=software /usr/lib/qt6/bin/qmltestrunner -input apps/lockscreen/tests/preview/tst_layout.qml
+```
 
-## Later
+A safe window with a fake authenticator and sample media/notifications saves an image and exits:
 
-- ~~Wire the package into `tools/kosctl` deployment~~ done:
-  `./tools/kosctl install lockscreen` ships it to
-  `$prefix/share/plasma/shells/` **and** `$prefix/share/plasma/look-and-feel/`
-  (the greeter only searches the former; the latter is for
-  `plasma-apply-lookandfeel` and the settings page) and points
-  `plasmashellrc [Shell] ShellPackage` at it. A bare `./tools/kosctl install`
-  ships the shells/ root too — as the desktop takeover shell, without the
-  lock screen. NixOS (`nix/package.nix`) is still open — otherwise NixOS
-  installs will not ship it (the same gap that hit `Kos.SurfaceShape`).
-- Unlock/lock transition animations (the KWin-side "suck the windows in"
-  prototype lives in the vendored effect, not here).
+```bash
+dbus-run-session -- env QT_QUICK_BACKEND=rhi QSG_RHI_BACKEND=opengl qml6 apps/lockscreen/tests/preview/Preview.qml -- --wallpaper /absolute/path/wallpaper.png --output /tmp/kos-lockscreen-preview.png
+```
+
+Layout tests cover desktop, small, portrait and narrow screens, optional-content settings, malformed notification data, the clock and automatic wallpaper re-adoption after the greeter reparents it. Existing authentication, media-selection and theme-resolution tests are retained.
+
+Notification end-to-end tests copy the production `LockNotifications.qml` and its glass dependencies unchanged into a temporary config root. A private D-Bus and real platform bridge exercise both the model and rendered card labels: existing/late owners, four-row replacement, empty snapshots, publisher disconnect and service loss/restart.
+
+```bash
+cmake -S tests/lockscreen-notifications -B .build/lockscreen-notifications-tests
+```
+
+```bash
+cmake --build .build/lockscreen-notifications-tests -j 4
+```
+
+```bash
+ctest --test-dir .build/lockscreen-notifications-tests --output-on-failure
+```
+
+Real-password authentication, monitor hotplug and suspend/resume still require acceptance testing in a recoverable session.
+
+## Shader licensing
+
+`LockGlass.qml` and `liquidglass.frag` are adapted from MacShell/MacLock, copyright Rickky, under MIT; `LICENSE.MacShell` ships with the assets. No third-party fonts, screenshot wallpaper or album media were copied. The old `LockClock.qml` and its SDDM counterpart remain unchanged; this skin uses `MacLockClock.qml`.
+
+After changing the shader, rebuild the shipped QSB; never compile shaders inside the greeter:
+
+```bash
+/usr/lib/qt6/bin/qsb --qt6 --qsbversion 64 -o apps/lockscreen/contents/lockscreen/liquidglass.frag.qsb apps/lockscreen/contents/lockscreen/liquidglass.frag
+```

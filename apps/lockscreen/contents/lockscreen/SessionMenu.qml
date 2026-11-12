@@ -7,12 +7,11 @@
 import QtQuick
 import org.kde.plasma.private.sessions
 
-// The way out of a locked session: one round glass button in the top-right
-// corner, and the session actions behind it.
+// The way out of a locked session: one round glass button in the bottom-left
+// corner, and the session actions above it.
 //
-// This is the only file in the theme that imports a Plasma module, and that is
-// exactly why LockScreen.qml loads it through a Loader instead of declaring
-// it. An import that cannot be resolved inside the greeter fails the whole
+// The sessions import is isolated here, which is why LockScreen.qml loads
+// this file through a Loader instead of declaring it directly. An import that cannot be resolved inside the greeter fails the whole
 // file that declared it, and a lock screen whose password field never loaded
 // is a lock screen nobody can get past. Behind a Loader the worst case is a
 // missing menu.
@@ -60,10 +59,10 @@ Item {
     Rectangle {
         id: button
 
-        anchors.top: parent.top
-        anchors.right: parent.right
-        anchors.topMargin: Math.round(Screen.height * 0.030)
-        anchors.rightMargin: Math.round(Screen.width * 0.028)
+        anchors.bottom: parent.bottom
+        anchors.left: parent.left
+        anchors.bottomMargin: Math.round(menu.height * 0.028)
+        anchors.leftMargin: Math.round(menu.width * 0.022)
 
         width: menu.buttonSize
         height: menu.buttonSize
@@ -137,9 +136,9 @@ Item {
 
         readonly property int padding: 8
 
-        anchors.top: button.bottom
-        anchors.right: button.right
-        anchors.topMargin: Math.round(menu.buttonSize * 0.20)
+        anchors.bottom: button.top
+        anchors.left: button.left
+        anchors.bottomMargin: Math.round(menu.buttonSize * 0.20)
 
         width: menu.menuWidth
         height: list.implicitHeight + padding * 2
@@ -150,7 +149,7 @@ Item {
         border.color: Qt.rgba(1, 1, 1, 0.14)
 
         // Grows out of the button rather than appearing next to it.
-        transformOrigin: Item.TopRight
+        transformOrigin: Item.BottomLeft
         visible: opacity > 0
         opacity: menu.open ? 1 : 0
         scale: menu.open ? 1 : 0.92

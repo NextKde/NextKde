@@ -40,6 +40,8 @@ set(kos_platform_sources
     src/daemon/KWinShortcutConflicts.cpp
     src/daemon/KWinShortcutConflicts.h
     src/daemon/PlatformServer.cpp
+    src/daemon/LockScreenNotifications.cpp
+    src/daemon/LockScreenNotifications.h
     src/daemon/PlatformDbus.cpp
     src/daemon/PowerProfilesBus.cpp
     src/daemon/PowerProfilesBus.h
@@ -94,6 +96,8 @@ if(KOS_SPATIAL_ENABLED)
 endif()
 
 if(BUILD_TESTING)
+    add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/../tests/lockscreen-notifications
+        ${CMAKE_CURRENT_BINARY_DIR}/lockscreen-notifications-tests)
     find_package(Qt6 REQUIRED COMPONENTS Test)
     qt_add_executable(kos-independent-app-widgets-test
         tests/test_independent_app_widgets.cpp src/daemon/IndependentAppWidgets.cpp)

@@ -125,6 +125,35 @@ Current operation groups are:
   Errors: `invalid-lockscreen-weather`, `lockscreen-weather-publish-failed`.
   A timeout does not undo a committed write; local filesystem calls have no hard
   time limit. No generic-copy fallback or full uninstall transaction is provided.)
+- `lockscreen.notifications-publish` (optional in-memory privacy feed; exactly
+  `{notifications:[{id,appName,appIcon,createdAt,summary,body}]}`, at most 4 rows,
+  newest first. `id` is a unique nonempty string <=64 UTF-16 units; `appName`
+  <=256 units, neither containing ASCII control characters. `appIcon` is empty
+  or a theme name matching `[A-Za-z0-9][A-Za-z0-9._-]{0,127}`: no file paths,
+  URLs or image providers. `createdAt` is a positive safe-integer epoch millisecond
+  timestamp. `summary` and `body` MUST be empty strings; unknown fields, actions
+  and nonempty content are rejected. Returns `{published:true}` on success.
+  The connected socket's kernel peer UID must match the daemon; the first
+  publisher holds the lease, other sockets cannot overwrite it until disconnect
+  or expiry. The shell's existing persistent PlatformClient sends a fresh snapshot
+  on change/reconnect and every 10 seconds. Disconnect or a 30-second heartbeat
+  timeout clears the feed; no notification history is persisted or read from disk.
+  Errors: `invalid-lockscreen-notifications`, `lockscreen-publisher-denied`,
+  `lockscreen-publisher-busy`, `lockscreen-bridge-unavailable` (last two retryable).
+  This capability is independent of desktop banner/action handling.)
+  - Session D-Bus read contract: service `org.kos.LockScreen`, object path
+    `/org/kos/LockScreen`, interface `org.kos.LockScreen1`. Read-only string
+    property `NotificationsJson` and `GetNotifications() -> s` contain the JSON
+    array above, with `org.freedesktop.DBus.Properties.PropertiesChanged` updates.
+    Registration is lazy at first successful publication, never queues/replaces
+    an existing owner, and never claims `org.freedesktop.Notifications`. Failure
+    only disables this optional feed. A new daemon starts empty. Consumers must
+    clear on service loss and render strings as PlainText, not executable QML.
+  - The shell projects only its existing session history, filters blocked sources,
+    and publishes `[]` while policy is unready, history disabled or DND enabled.
+    Desktop preview settings never authorize body export; the first version is
+    metadata-only. Expiring a banner does not remove a retained history entry;
+    history removal/clear and replacement updates synchronize the feed.
 - `notify` (freedesktop notification; payload `{summary, body?, icon?,
   appName?, urgency?}` with `urgency` one of `low`/`normal`/`critical` and
   `appName` (<=128 chars) the notification's grouping/app label, defaulting

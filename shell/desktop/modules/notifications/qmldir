@@ -6,5 +6,6 @@ NotificationOpenController 1.0 NotificationOpenController.qml
 NotificationGroupService 1.0 NotificationGroupService.qml
 singleton NotificationHistoryService 1.0 NotificationHistoryService.qml
 NotificationHistoryObserver 1.0 NotificationHistoryObserver.qml
+NotificationLockScreenBridge 1.0 NotificationLockScreenBridge.qml
 singleton NotificationPolicyService 1.0 NotificationPolicyService.qml
 singleton NotificationSoundService 1.0 NotificationSoundService.qml

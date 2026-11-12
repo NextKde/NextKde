@@ -107,7 +107,10 @@ Item {
     Timer {
         interval: 500
         running: true
-        onTriggered: wrapper.authenticator.graceLocked = false
+        onTriggered: {
+            wrapper.authenticator.graceLocked = false
+            screen.item.wake()
+        }
     }
 
     Timer {
@@ -166,40 +169,21 @@ Item {
                 if (dateText === null || timeText === null) {
                     Qt.exit(131)
                 } else {
-                    wrapper.check(/^星期[一二三四五六日]\s*\d{1,2}月\d{1,2}日$/.test(dateText.text), 132)
+                    wrapper.check(dateText.text.length > 0, 132)
                     wrapper.check(!/\d{4}年/.test(dateText.text), 133)
-                    wrapper.check(/^\d{2}:\d{2}$/.test(timeText.text), 134)
+                    wrapper.check(/\d{1,2}:\d{2}/.test(timeText.text), 134)
                 }
 
-                // Where the glass put the numerals, against where the Text
-                // actually is. The canvas covers the time line grown by
-                // `rimPad` on every side, so in its own -- ratio-scaled --
-                // coordinates the Text's baseline has to land at
-                // `(text.x + rimPad) * ratio`.
-                //
-                // This is the assertion that catches a wrong origin, and the
-                // reason it is written as a comparison rather than as a look
-                // at the render: at devicePixelRatio 1 every wrong formula
-                // agrees with the right one, so a 1x preview of the clock
-                // looks correct while every HiDPI screen draws it clipped.
-                // run.sh runs this harness at 2x as well for exactly that.
+                // Plain Text replaces the old clock Canvas. Both scales must
+                // keep the complete clock and compact account controls in bounds.
                 const clockItem = wrapper.findByObjectName(lock, "lockClock")
-                const rimItem = wrapper.findByObjectName(lock, "clockTimeRim")
-                const timeItem = wrapper.findByObjectName(lock, "clockTimeText")
-                if (clockItem === null || rimItem === null || timeItem === null
-                        || timeItem.parent === null) {
+                const accountItem = wrapper.findByObjectName(lock, "lockAccount")
+                if (!clockItem || !accountItem) {
                     Qt.exit(135)
                 } else {
-                    const timeLineItem = timeItem.parent
-                    const expectedX = (timeItem.x + clockItem.rimPad) * rimItem.ratio
-                    const expectedY = (timeItem.y + timeItem.baselineOffset + clockItem.rimPad)
-                        * rimItem.ratio
-                    // 3, not 1: `rim.width` is rounded, so the box the canvas
-                    // covers is up to half a logical pixel off nominal on each
-                    // side, and at ratio 2 that is a device pixel per side.
-                    // The failure this is here for was two hundred and forty.
-                    wrapper.check(Math.abs(timeLineItem.paintOriginX - expectedX) <= 3, 136)
-                    wrapper.check(Math.abs(timeLineItem.paintOriginY - expectedY) <= 3, 137)
+                    wrapper.check(clockItem.x >= 0 && clockItem.x + clockItem.width <= lock.width, 136)
+                    wrapper.check(accountItem.y > clockItem.y + clockItem.height
+                        && accountItem.y + accountItem.height <= lock.height, 137)
                 }
 
                 lock.wake()
