@@ -1,5 +1,6 @@
 #include "FlatpakCompatibility.h"
 #include "FlatpakApps.h"
+#include "AppCatalog.h"
 
 #include <QCoreApplication>
 #include <QDir>
@@ -10,6 +11,36 @@
 class FlatpakCompatibilityTest : public QObject {
     Q_OBJECT
 private slots:
+    void inventoryWaitsForShortContextContention()
+    {
+        QVERIFY(QDir().mkpath(AppCatalog::stateDirectory()));
+        QLockFile context(AppCatalog::stateDirectory() + "/context.lock");
+        QVERIFY(context.tryLock(0));
+        FlatpakApps backend;
+        backend.m_refreshTimer.stop();
+        // Model a second inventory holding the same process-shared lock.
+        // The event loop must stay responsive while refresh waits off-thread.
+        QTimer::singleShot(150, &backend, [&context] { context.unlock(); });
+        backend.refresh();
+        QTRY_VERIFY_WITH_TIMEOUT(!backend.querying(), 3000);
+        const auto state = backend.state("org.nextks.calendar");
+        QVERIFY2(state.value("known").toBool(), qPrintable(state.value("error").toString()));
+        QVERIFY(!context.isLocked());
+    }
+    void inventoryLockWaitIsBoundedAndKeepsUnknownState()
+    {
+        QVERIFY(QDir().mkpath(AppCatalog::stateDirectory()));
+        QLockFile context(AppCatalog::stateDirectory() + "/context.lock");
+        QVERIFY(context.tryLock(0));
+        FlatpakApps backend;
+        backend.m_refreshTimer.stop();
+        backend.refresh();
+        QTRY_VERIFY_WITH_TIMEOUT(!backend.querying(), 3000);
+        const auto state = backend.state("org.nextks.calendar");
+        QVERIFY(!state.value("known").toBool());
+        QCOMPARE(state.value("error").toString(), "Application source configuration is busy");
+        QVERIFY(context.isLocked());
+    }
     void closePolicyDistinguishesDiscoveryFromTransactions()
     {
         FlatpakApps backend;
