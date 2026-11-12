@@ -297,19 +297,43 @@ class Agent:
         self.finish("available")
         return "available"
 
+    def stable_askpass(self, source):
+        destination = self.directory / "kos-askpass.sh"
+        try:
+            if Path(source).resolve() != destination.resolve():
+                shutil.copy2(source, destination)
+            destination.chmod(0o700)
+        except OSError:
+            return ""
+        os.environ["SUDO_ASKPASS"] = str(destination)
+        return str(destination)
+
     def askpass(self):
         candidate = os.environ.get("SUDO_ASKPASS", "")
         if candidate and os.access(candidate, os.X_OK):
-            return candidate
+            # Selection replaces the source checkout, so a helper inside it
+            # would disappear before install runs sudo.
+            if not self.root or not Path(candidate).resolve().is_relative_to(self.root):
+                return candidate
+            copied = self.stable_askpass(candidate)
+            if copied:
+                return copied
         found = shutil.which("ksshaskpass")
         if found:
             os.environ["SUDO_ASKPASS"] = found
             return found
-        # A standard Plasma install ships kdialog even without ksshaskpass.
-        helper = Path(__file__).with_name("kos-askpass.sh")
+        # Reuse the copy left by an earlier run if the checkout no longer has
+        # the helper (for example after a failed select).
+        helper = self.directory / "kos-askpass.sh"
         if shutil.which("kdialog") and helper.is_file() and os.access(helper, os.X_OK):
             os.environ["SUDO_ASKPASS"] = str(helper)
             return str(helper)
+        # A standard Plasma install ships kdialog even without ksshaskpass.
+        source = Path(__file__).with_name("kos-askpass.sh")
+        if shutil.which("kdialog") and source.is_file() and os.access(source, os.X_OK):
+            copied = self.stable_askpass(source)
+            if copied:
+                return copied
         return ""
 
     def install(self):
