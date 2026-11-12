@@ -177,14 +177,19 @@ clients must not call that private interface directly.
 
 `kwin.layout.update` is an internal Shell-to-compositor layout update. Its
 payload is
-`{outputName, outputRect, barReservedHeight, dockPosition, dockRect, workspaceGap}`.
+`{outputName, outputRect, barReservedHeight, dockPosition, dockRect, workspaceGap, dockReserved?}`.
 Rectangles use global logical coordinates; `dockPosition` is one of `bottom`,
 `left`, or `right`. The daemon bounds and validates every field before
 forwarding an `update-layout` command to the KWin script. A new normal main
 window may use the latest layout for its one-time initial placement; existing,
 maximized, fullscreen, dialog, transient, and special windows are not moved.
-`workspaceGap` remains accepted for v1 compatibility, but initial placement
-meets the Bar/Dock safe edges directly and does not create an invisible gap.
+The optional boolean `dockReserved` defaults to `true` for older clients. Shell
+publishes `false` for effective auto-hide modes and while boot is unresolved;
+initial placement then ignores `dockRect` and `workspaceGap` but still respects
+the Bar reservation. The full-reveal rectangle remains valid, not a zero-sized
+sentinel. When Dock space is reserved, `workspaceGap` adds the configured inner
+breathing room. The Shell, daemon and KWin script must all be updated for this
+optional field to take effect; an older script retains the legacy reservation.
 
 On `kwin.subscribe`, the daemon replays both its latest `window.snapshot` and
 latest `desktops` event when available. Consumers may explicitly request a
