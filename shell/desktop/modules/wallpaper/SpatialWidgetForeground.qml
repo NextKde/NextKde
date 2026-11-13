@@ -12,7 +12,7 @@ Item {
     property bool suspended: false
     readonly property bool meshRendererAvailable: subject.meshRendererAvailable
     readonly property bool ready: subject.visualReady && SpatialWallpaperService.layeredReady
-    visible: ready && !suspended
+    visible: ready && !suspended && SpatialWallpaperService.motionRunning
 
     DepthWallpaperLayer {
         id: subject

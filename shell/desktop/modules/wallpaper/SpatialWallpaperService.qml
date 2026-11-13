@@ -39,6 +39,11 @@ QtObject {
         && imagePath === currentImagePath()
     readonly property bool layeredReady: ready && backgroundPath.length > 0
         && mattePath.length > 0 && influencePath.length > 0
+    readonly property bool motionRunning: motion.running
+    property WallpaperMotionGate motion: WallpaperMotionGate {
+        enabled: root.ready
+        preview: WallpaperPreviewService.active && WallpaperPreviewService.mode === "image"
+    }
 
     function currentImagePath() {
         const value = wallpaperUrl.toString()

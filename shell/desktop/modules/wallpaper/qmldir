@@ -8,6 +8,7 @@ singleton SpatialWallpaperService 1.0 SpatialWallpaperService.qml
 singleton SpatialResourceService 1.0 SpatialResourceService.qml
 
 WallpaperImageLayer 1.0 WallpaperImageLayer.qml
+WallpaperMotionGate 1.0 WallpaperMotionGate.qml
 DepthWallpaperLayer 1.0 DepthWallpaperLayer.qml
 SpatialWallpaperWindow 1.0 SpatialWallpaperWindow.qml
 SpatialPreparationOverlay 1.0 SpatialPreparationOverlay.qml

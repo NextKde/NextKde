@@ -96,6 +96,7 @@ PanelWindow {
                 pointerX: root.pointerX, pointerY: root.pointerY,
                 renderedPointerX: wallpaperLayer.renderedPointerX,
                 renderedPointerY: wallpaperLayer.renderedPointerY,
+                motionRunning: wallpaperLayer.motionRunning,
                 preview: WallpaperPreviewService.active})
         }
     }
