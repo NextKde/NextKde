@@ -8,7 +8,9 @@
 #include <QAbstractItemModel>
 #include <QFontInfo>
 #include <QFontDatabase>
+#include <QtGui/private/qfontdatabase_p.h>
 #include <QGuiApplication>
+#include <fontconfig/fontconfig.h>
 #include <QMetaProperty>
 #include <QQmlEngine>
 #include <QQuickItem>
@@ -48,6 +50,16 @@ bool writableProperties(QObject *object, const QStringList &names, QMetaType typ
         if (type.isValid() && property.metaType() != type) return false;
     }
     return true;
+}
+
+void refreshSystemFonts()
+{
+    // Fontconfig and Qt both snapshot installed fonts once per process. Settings
+    // can stay open while a font is installed, so rebuild the fontconfig set and
+    // let Qt repopulate instead of requiring a restart.
+    FcInit();
+    FcConfigBuildFonts(FcConfigGetCurrent());
+    QFontDatabasePrivate::instance()->invalidate();
 }
 }
 
@@ -95,6 +107,7 @@ QStringList FontSettings::hintingOptions() const { return options(m_module, "hin
 
 QStringList FontSettings::fontFamilies(bool monospacedOnly) const
 {
+    refreshSystemFonts();
     QStringList families;
     for (const auto &family : QFontDatabase::families()) {
         if (!QFontDatabase::isPrivateFamily(family)
