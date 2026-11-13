@@ -64,6 +64,8 @@ Item {
                     running: ThemeWallpaperService.running,
                     waiting: ThemeWallpaperService.idleDelay.running,
                     hasVisibleWindows: ThemeWallpaperService.hasVisibleWindows,
+                    eligible: ThemeWallpaperService.idleEligible,
+                    locked: ThemeWallpaperService.locked,
                     phase: ThemeWallpaperService.phase,
                     preview: ThemeWallpaperService.preview
                 },
@@ -103,6 +105,13 @@ Item {
                 },
                 spatialEnabled: AppearanceConfigService.spatialWallpaperEnabled,
                 spatialReady: SpatialWallpaperService.ready,
+                spatialMotion: {
+                    running: SpatialWallpaperService.motionRunning,
+                    waiting: SpatialWallpaperService.motion.idleDelay.running,
+                    hasVisibleWindows: SpatialWallpaperService.motion.hasVisibleWindows,
+                    eligible: SpatialWallpaperService.motion.idleEligible,
+                    locked: SpatialWallpaperService.motion.locked
+                },
                 spatialPrepared: SpatialWallpaperService.prepared,
                 spatialBusy: SpatialWallpaperService.requestInFlight,
                 spatialPreparing: SpatialWallpaperService.preparationRequested,
