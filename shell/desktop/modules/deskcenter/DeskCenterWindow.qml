@@ -3594,6 +3594,15 @@ PanelWindow {
             case "setIconSize": setIconSize(v); break
             case "setIconSpacing": setIconSpacing(v); break
             case "refresh": triggerContextAction("refresh"); break
+            // Session entries live in a submenu; without these the menu closes
+            // and the command is dropped.
+            case "lock":
+            case "suspend":
+            case "switch":
+            case "logout":
+            case "reboot":
+            case "poweroff":
+                triggerContextAction(cmd); break
             }
         }
 
