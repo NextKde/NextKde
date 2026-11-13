@@ -56,10 +56,13 @@ void refreshSystemFonts()
 {
     // Fontconfig and Qt both snapshot installed fonts once per process. Settings
     // can stay open while a font is installed, so rebuild the fontconfig set and
-    // let Qt repopulate instead of requiring a restart.
+    // let Qt repopulate instead of requiring a restart. clearFamilies() only
+    // resets the list; QFontDatabasePrivate::invalidate() would also broadcast
+    // fontDatabaseChanged, making the KDE KCM kept alive by this page rebind
+    // hidden controls. The next families() call repopulates from the new set.
     FcInit();
     FcConfigBuildFonts(FcConfigGetCurrent());
-    QFontDatabasePrivate::instance()->invalidate();
+    QFontDatabasePrivate::instance()->clearFamilies();
 }
 }
 
