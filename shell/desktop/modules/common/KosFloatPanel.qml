@@ -181,8 +181,8 @@ Scope {
                     yScale: cardPanel.scale
                 },
                 Translate {
-                    y: (root.animateOnShow && popupMotion.progress < 0.999)
-                        ? Math.round((1 - popupMotion.progress) * root.anchorOffset) : 0
+                    y: root.animateOnShow
+                        ? (1 - popupMotion.geometryProgress) * root.anchorOffset : 0
                 }
             ]
         }
@@ -228,14 +228,14 @@ Scope {
             height: cardHost.height + root.contentPadding * 2
             x: Math.round((cardWindow.width - width) / 2)
             y: Math.round((cardWindow.height - height) / 2)
-            scale: (root.animateOnShow && popupMotion.progress < 0.999)
-                ? root.startScale + (1 - root.startScale) * popupMotion.progress : 1
+            scale: root.animateOnShow
+                ? root.startScale + (1 - root.startScale) * popupMotion.geometryProgress : 1
             transformOrigin: Item.Top
             opacity: root.animateOnShow ? popupMotion.progress : 1
             enabled: !root.animateOnShow || popupMotion.interactive
             transform: Translate {
-                y: (root.animateOnShow && popupMotion.progress < 0.999)
-                    ? Math.round((1 - popupMotion.progress) * root.anchorOffset) : 0
+                y: root.animateOnShow
+                    ? (1 - popupMotion.geometryProgress) * root.anchorOffset : 0
             }
 
             Column {

@@ -4423,7 +4423,7 @@ PanelWindow {
             radius: 16
             visible: openWithMotion.mapped
             opacity: openWithMotion.progress
-            scale: 0.96 + 0.04 * openWithMotion.progress
+            scale: 0.96 + 0.04 * openWithMotion.geometryProgress
             enabled: openWithMotion.interactive
             color: Qt.rgba(0.12, 0.12, 0.15, 0.98)
             border { width: 1; color: Qt.rgba(1, 1, 1, 0.18) }
