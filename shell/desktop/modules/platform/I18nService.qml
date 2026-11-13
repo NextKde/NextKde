@@ -22,6 +22,9 @@ QtObject {
 
     Component.onCompleted: {
         JsonConfigStore.read(_stateDir, "language.json", function(data, exists) {
+            // A selection made while the read was pending already takes precedence.
+            if (service.loaded)
+                return
             if (exists) {
                 try {
                     const parsed = JSON.parse(data)
@@ -37,7 +40,7 @@ QtObject {
         })
     }
 
-    onLanguageChanged: I18n.language = effectiveLanguage
+    onEffectiveLanguageChanged: I18n.language = effectiveLanguage
 
     function setLanguage(lang) {
         // 非法输入回落到默认档（跟随系统），与"无持久文件"时的行为一致。
@@ -45,6 +48,7 @@ QtObject {
         if (service.loaded && next === service.language)
             return
         service.language = next
+        service.loaded = true
         JsonConfigStore.write(_stateDir, "language.json",
             JSON.stringify({ language: next }))
     }
