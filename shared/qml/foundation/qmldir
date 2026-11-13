@@ -1,5 +1,7 @@
 singleton AppTheme 1.0 AppTheme.qml
 MotionTokens 1.0 MotionTokens.qml
+MotionSpring 1.0 MotionSpring.qml
+SpringMotion 1.0 SpringMotion.qml
 KosApplicationWindow 1.0 KosApplicationWindow.qml
 KosWindowControls 1.0 KosWindowControls.qml
 KosWindowResizeHandles 1.0 KosWindowResizeHandles.qml

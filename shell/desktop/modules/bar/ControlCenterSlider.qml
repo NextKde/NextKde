@@ -13,6 +13,7 @@ LiquidControls.LiquidSlider {
     id: root
     height: 30
     materialForm: AppearanceTokens.surface.paintInQml
+    reduceMotion: AppearanceConfigService.reduceMotion
     trackHeight: 5
     thumbWidth: 30
     thumbHeight: 16

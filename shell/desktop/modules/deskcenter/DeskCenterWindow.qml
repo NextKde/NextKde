@@ -745,8 +745,11 @@ PanelWindow {
                 modelData.id, dropPosition.column, dropPosition.row,
                 displayColumns, displayRows, root.maximumWidgetColumns, root.usableRows)
             visible: placement !== null
+            // Desktop widgets are part of the login arrival, not a static
+            // layer that appears before the wallpaper, bar and dock.
+            opacity: StartupReveal.widgetProgress
+            enabled: StartupReveal.widgetProgress > 0
             z: widgetDrag.active || resizeHandle.resizing ? 120 : (root.editMode ? 20 : 1)
-            scale: widgetDrag.active ? 1.035 : 1
             // The clock is the one card whose glass outline is a shape rather
             // than a rectangle: it draws MaterialFlower, so its surface has to
             // be the flower itself — no card fill, no rectangular KWin material,
@@ -760,8 +763,15 @@ PanelWindow {
             // SurfaceShape listens to Item geometry and scale changes, not
             // Translate.x/y. Move the anchor itself so the native glass and
             // the QML content publish the same position on every drag frame.
-            x: root.leftInset + (placement?.column ?? 0) * (root.cellSize + root.gap) + dragOffsetX
-            y: root.topInset + (placement?.row ?? 0) * (root.cellSize + root.gap) + dragOffsetY
+            //
+            // Geometry runs through frame-synchronised springs instead of
+            // Behaviors on these bindings: Qt's SpringAnimation integrates at a
+            // fixed 16 ms step, so on a 240 Hz output a released card moved in
+            // ~60 Hz quanta while the compositor kept presenting every frame.
+            readonly property real targetX: root.leftInset
+                + (placement?.column ?? 0) * (root.cellSize + root.gap) + dragOffsetX
+            readonly property real targetY: root.topInset
+                + (placement?.row ?? 0) * (root.cellSize + root.gap) + dragOffsetY
             // The card and every widget inside it lay themselves out for the
             // cell size they have committed to, never for the mid-drag preview:
             // switching a widget to its other layout at the halfway point made
@@ -771,66 +781,106 @@ PanelWindow {
             readonly property int displayRows: placement?.rows ?? 1
             // While the corner is held, the card follows the magnetised
             // pointer position; the moment it is released the size switches to
-            // the committed cell and the spring below takes it there.
-            width: resizeHandle.resizing ? resizeHandle.previewWidth
-                : root.spanSize(displayColumns)
-            height: resizeHandle.resizing ? resizeHandle.previewHeight
-                : root.spanSize(displayRows)
-            // A released card lands on its cell instead of sliding there: the
-            // old fixed cubic stopped dead at the destination, which is what
-            // made the snap read as abrupt. The spring carries the release into
-            // the cell and settles with a few pixels of weight.
-            Behavior on x {
-                enabled: !card.pointerHeld && !AppTheme.reduceMotion
-                SpringAnimation {
-                    spring: AppearanceTokens.motion.widgetMoveSpring
-                    damping: AppearanceTokens.motion.widgetMoveDamping
-                    mass: AppearanceTokens.motion.widgetMoveMass
-                    epsilon: AppearanceTokens.motion.widgetMoveEpsilon
-                }
-            }
-            Behavior on y {
-                enabled: !card.pointerHeld && !AppTheme.reduceMotion
-                SpringAnimation {
-                    spring: AppearanceTokens.motion.widgetMoveSpring
-                    damping: AppearanceTokens.motion.widgetMoveDamping
-                    mass: AppearanceTokens.motion.widgetMoveMass
-                    epsilon: AppearanceTokens.motion.widgetMoveEpsilon
-                }
-            }
-            // Size is the one change that moves a lot of pixels at once, so it
-            // settles instead of jumping: the drag itself tracks the pointer
-            // one-to-one, and releasing hands the corner to this spring, which
-            // lands it on the grid with a little weight. Reduced motion still
-            // gets the new size, just without the travel.
-            Behavior on width {
-                enabled: !resizeHandle.resizing && !AppTheme.reduceMotion
-                SpringAnimation {
-                    spring: AppearanceTokens.motion.widgetResizeSpring
-                    damping: AppearanceTokens.motion.widgetResizeDamping
-                    mass: AppearanceTokens.motion.widgetResizeMass
-                    epsilon: AppearanceTokens.motion.widgetResizeEpsilon
-                }
-            }
-            Behavior on height {
-                enabled: !resizeHandle.resizing && !AppTheme.reduceMotion
-                SpringAnimation {
-                    spring: AppearanceTokens.motion.widgetResizeSpring
-                    damping: AppearanceTokens.motion.widgetResizeDamping
-                    mass: AppearanceTokens.motion.widgetResizeMass
-                    epsilon: AppearanceTokens.motion.widgetResizeEpsilon
-                }
-            }
+            // the committed cell and the spring takes it there.
+            readonly property real targetWidth: resizeHandle.resizing
+                ? resizeHandle.previewWidth : root.spanSize(displayColumns)
+            readonly property real targetHeight: resizeHandle.resizing
+                ? resizeHandle.previewHeight : root.spanSize(displayRows)
             // The lift belongs to the same motion family as the drop, so the
             // card does not land while it is still shrinking on another curve.
-            Behavior on scale {
+            readonly property real targetScale: widgetDrag.active ? 1.035 : 1
+
+            x: springX.value
+            y: springY.value
+            width: springWidth.value
+            height: springHeight.value
+            // Keep the login arrival scale independent of the drag spring.
+            // SurfaceShape follows this scale together with the QML content.
+            scale: springScale.value * (0.97 + 0.03 * StartupReveal.widgetProgress)
+
+            // A held pointer owns the value one-to-one (follow) and the same
+            // spring keeps its last velocity when the card is released, so the
+            // momentum of the drag carries into the cell instead of stopping
+            // dead. The move spring is critically damped: a long drop must not
+            // overshoot past the screen edge.
+            MotionSpring {
+                id: springX
+                target: card.targetX
+                follow: card.pointerHeld
                 enabled: !AppTheme.reduceMotion
-                SpringAnimation {
-                    spring: AppearanceTokens.motion.widgetMoveSpring
-                    damping: AppearanceTokens.motion.widgetMoveDamping
-                    mass: AppearanceTokens.motion.widgetMoveMass
-                    epsilon: AppearanceTokens.motion.widgetMoveEpsilon
+                angularFrequency: AppearanceTokens.motion.widgetMoveAngularFrequency
+                dampingRatio: AppearanceTokens.motion.widgetMoveDampingRatio
+                epsilon: AppearanceTokens.motion.widgetMoveEpsilon
+            }
+            MotionSpring {
+                id: springY
+                target: card.targetY
+                follow: card.pointerHeld
+                enabled: !AppTheme.reduceMotion
+                angularFrequency: AppearanceTokens.motion.widgetMoveAngularFrequency
+                dampingRatio: AppearanceTokens.motion.widgetMoveDampingRatio
+                epsilon: AppearanceTokens.motion.widgetMoveEpsilon
+            }
+            MotionSpring {
+                id: springWidth
+                target: card.targetWidth
+                follow: resizeHandle.resizing
+                enabled: !AppTheme.reduceMotion
+                angularFrequency: AppearanceTokens.motion.widgetResizeAngularFrequency
+                dampingRatio: AppearanceTokens.motion.widgetResizeDampingRatio
+                epsilon: AppearanceTokens.motion.widgetResizeEpsilon
+            }
+            MotionSpring {
+                id: springHeight
+                target: card.targetHeight
+                follow: resizeHandle.resizing
+                enabled: !AppTheme.reduceMotion
+                angularFrequency: AppearanceTokens.motion.widgetResizeAngularFrequency
+                dampingRatio: AppearanceTokens.motion.widgetResizeDampingRatio
+                epsilon: AppearanceTokens.motion.widgetResizeEpsilon
+            }
+            MotionSpring {
+                id: springScale
+                target: card.targetScale
+                enabled: !AppTheme.reduceMotion
+                angularFrequency: AppearanceTokens.motion.widgetMoveAngularFrequency
+                dampingRatio: AppearanceTokens.motion.widgetMoveDampingRatio
+                epsilon: AppearanceTokens.motion.widgetGripEpsilon
+            }
+            // The resize readout lifts with the grab on the same frame clock.
+            MotionSpring {
+                id: springReadoutScale
+                target: readout.visible ? 1.0 : 0.86
+                enabled: !AppTheme.reduceMotion
+                angularFrequency: AppearanceTokens.motion.widgetGripAngularFrequency
+                dampingRatio: AppearanceTokens.motion.widgetGripDampingRatio
+                epsilon: AppearanceTokens.motion.widgetGripEpsilon
+            }
+            // One frame callback advances every channel, and it stops as soon
+            // as all of them have settled, so idle cards cost nothing.
+            FrameAnimation {
+                running: springX.animating || springY.animating
+                    || springWidth.animating || springHeight.animating
+                    || springScale.animating || springReadoutScale.animating
+                onTriggered: {
+                    springX.advance(frameTime)
+                    springY.advance(frameTime)
+                    springWidth.advance(frameTime)
+                    springHeight.advance(frameTime)
+                    springScale.advance(frameTime)
+                    springReadoutScale.advance(frameTime)
                 }
+            }
+            // Placement arrives asynchronously at startup and whenever a widget
+            // is shown again: prime to the cell there instead of springing in
+            // from the window origin.
+            onVisibleChanged: {
+                springX.snap()
+                springY.snap()
+                springWidth.snap()
+                springHeight.snap()
+                springScale.snap()
+                springReadoutScale.snap()
             }
 
             // A right click is how a card enters editing, so a second right
@@ -939,6 +989,7 @@ PanelWindow {
             }
 
             Rectangle {
+                id: readout
                 z: 81
                 visible: resizeHandle.resizing
                 anchors.centerIn: parent
@@ -948,11 +999,7 @@ PanelWindow {
                 color: resizeHandle.previewAllowed ? "#b0000000" : "#c0a02020"
                 // The readout lands with the grab instead of blinking on, so the
                 // eye is already on the corner when the size starts to change.
-                scale: visible ? 1.0 : 0.86
-                Behavior on scale {
-                    enabled: !AppTheme.reduceMotion
-                    SpringAnimation { spring: 5; damping: 0.35; mass: 1; epsilon: 0.005 }
-                }
+                scale: springReadoutScale.value
                 Text {
                     id: resizePreview
                     anchors.centerIn: parent
@@ -3589,6 +3636,15 @@ PanelWindow {
             case "setIconSize": setIconSize(v); break
             case "setIconSpacing": setIconSpacing(v); break
             case "refresh": triggerContextAction("refresh"); break
+            // Session entries live in a submenu; without these the menu closes
+            // and the command is dropped.
+            case "lock":
+            case "suspend":
+            case "switch":
+            case "logout":
+            case "reboot":
+            case "poweroff":
+                triggerContextAction(cmd); break
             }
         }
 
@@ -4371,7 +4427,7 @@ PanelWindow {
             radius: 16
             visible: openWithMotion.mapped
             opacity: openWithMotion.progress
-            scale: 0.96 + 0.04 * openWithMotion.progress
+            scale: 0.96 + 0.04 * openWithMotion.geometryProgress
             enabled: openWithMotion.interactive
             color: Qt.rgba(0.12, 0.12, 0.15, 0.98)
             border { width: 1; color: Qt.rgba(1, 1, 1, 0.18) }

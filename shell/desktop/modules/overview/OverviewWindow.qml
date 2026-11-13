@@ -150,7 +150,7 @@ PanelWindow {
     Item {
         anchors.fill: parent
         opacity: root.revealProgress
-        scale: 0.96 + 0.04 * root.revealProgress
+        scale: 0.96 + 0.04 * popupMotion.geometryProgress
 
         Column {
             anchors {

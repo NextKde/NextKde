@@ -11,6 +11,9 @@ qt_add_qml_module(kos_demo_ui URI Kos.Demo VERSION 1.0 STATIC
     QML_FILES
         foundation/AppTheme.qml
         foundation/MotionTokens.qml
+        foundation/MotionSpring.qml
+        foundation/MotionSpring.mjs
+        foundation/SpringMotion.qml
         foundation/SettingsGroup.qml
         foundation/SettingsItem.qml
         foundation/SettingsTextField.qml

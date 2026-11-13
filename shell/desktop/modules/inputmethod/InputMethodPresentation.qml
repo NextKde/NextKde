@@ -16,8 +16,8 @@ QtObject {
     readonly property bool interactive: motion.interactive
     readonly property real progress: motion.progress
     readonly property real scale: reduceMotion ? 1 : (isOnlyTip ? 0.90 : 0.96)
-        + (isOnlyTip ? 0.10 : 0.04) * progress
-    readonly property real revealOffset: reduceMotion ? 0 : (isOnlyTip ? 2 : 4) * (1 - progress)
+        + (isOnlyTip ? 0.10 : 0.04) * motion.geometryProgress
+    readonly property real revealOffset: reduceMotion ? 0 : (isOnlyTip ? 2 : 4) * (1 - motion.geometryProgress)
 
     property var _pendingState: ({})
     property var _pendingAnchor: null
@@ -54,6 +54,7 @@ QtObject {
     }
 
     property PopupMotion motion: PopupMotion {
+        reduceMotion: presentation.reduceMotion || AppearanceConfigService.reduceMotion
         openDuration: presentation.reduceMotion ? 0 : AppearanceTokens.motion.slow.duration
         closeDuration: presentation.reduceMotion ? 0 : AppearanceTokens.motion.base.duration
         openEasing: AppearanceTokens.motion.enterCurve

@@ -248,6 +248,7 @@ Item {
     // An unavailable platform fails the write immediately; ShortcutsService
     // publishes again once its config is ready and the transport reconnects.
     Component.onCompleted: {
+        StartupReveal.initialize()
         IconThemeReloadService.initialize()
         // Watch kdeglobals so 使用系统字体 follows a font changed in System
         // Settings without restarting the shell, and so the first value is
@@ -490,6 +491,8 @@ Item {
                 barLayoutMode: AppearanceConfigService.barLayoutMode,
                 barMacStyle: AppearanceConfigService.barMacStyle,
                 barMacTint: AppearanceConfigService.barMacTint,
+                reduceMotion: AppearanceConfigService.reduceMotion,
+                startupRevealDuration: AppearanceConfigService.startupRevealDuration,
                 dockWindowAnimationStyle:
                     AppearanceConfigService.dockWindowAnimationStyle,
                 // The family the desktop would draw with, so the Settings page
@@ -616,6 +619,11 @@ Item {
             return snapshot()
         }
 
+        function updateStartupMotion(reduced: bool, duration: int): string {
+            AppearanceConfigService.updateStartupMotion(reduced, duration)
+            return snapshot()
+        }
+
         function updateDockWindowAnimationStyle(style: string): string {
             AppearanceConfigService.updateDockWindowAnimationStyle(style)
             return snapshot()
@@ -721,6 +729,7 @@ Item {
         function snapshot(): string {
             return JSON.stringify({
                 shellReady: true,
+                startupReveal: { phase: StartupReveal.phase, progress: StartupReveal.progress },
                 platformConnected: PlatformClient.connected,
                 dataConnected: DataClient.connected,
                 outputAvailable: ScreenLifecycle.outputAvailable,
@@ -787,6 +796,10 @@ Item {
             ContextMenuCoordinator.dismissForGlobalPointerPress(x, y, timestamp)
         }
     }
+
+    // The login spinner runs in its own process so it keeps moving while this
+    // one is busy building the desktop; see StartupSplash.qml.
+    StartupSplash {}
 
     QuickSearch {
         id: quickSearch

@@ -20,6 +20,9 @@ qt_add_qml_module(kos_ui
         i18n/I18n.qml
         foundation/AppTheme.qml
         foundation/MotionTokens.qml
+        foundation/MotionSpring.qml
+        foundation/MotionSpring.mjs
+        foundation/SpringMotion.qml
         foundation/KosSidebar.qml
         foundation/KosSidebarToggle.qml
         foundation/KosSidebarGlyph.qml
@@ -59,6 +62,7 @@ qt_add_qml_module(kos_ui
         controls/LiquidCompactSurface.qml
         controls/SelectionHighlight.qml
     RESOURCES
+        foundation/qmldir
         foundation/KosCompositorControls.qml
         controls/shaders/liquid_number.vert.qsb
         controls/shaders/liquid_number.frag.qsb

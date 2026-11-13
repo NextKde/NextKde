@@ -32,17 +32,27 @@ Item {
     property real startHeight: 0
     signal committed(int columns, int rows)
 
+    // Grabbing the corner is a physical hold: the grip acknowledges the press
+    // before the card itself starts changing size. Frame-synchronised, so the
+    // grip follows the display instead of Qt's fixed 16 ms spring step.
+    MotionSpring {
+        id: gripScale
+        target: pointer.pressed ? 1.14 : 1.0
+        enabled: handle.animate
+        angularFrequency: AppearanceTokens.motion.widgetGripAngularFrequency
+        dampingRatio: AppearanceTokens.motion.widgetGripDampingRatio
+        epsilon: AppearanceTokens.motion.widgetGripEpsilon
+    }
+    FrameAnimation {
+        running: gripScale.animating
+        onTriggered: gripScale.advance(frameTime)
+    }
+
     Rectangle {
         anchors.fill: parent
         radius: 12
         color: pointer.pressed ? "#a0000000" : "#66000000"
-        // Grabbing the corner is a physical hold: the grip acknowledges the
-        // press before the card itself starts changing size.
-        scale: pointer.pressed ? 1.14 : 1.0
-        Behavior on scale {
-            enabled: handle.animate
-            SpringAnimation { spring: 5; damping: 0.35; mass: 1; epsilon: 0.005 }
-        }
+        scale: gripScale.value
     }
     BundledIcon {
         anchors.centerIn: parent

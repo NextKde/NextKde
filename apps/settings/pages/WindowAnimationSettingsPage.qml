@@ -30,8 +30,15 @@ ColumnLayout {
         const excluded = snapshot.buttonExclusions ?? [];
         const apps = [];
         for (const app of runningApps) {
-            if (app.appId && excluded.indexOf(app.appId) < 0)
-                apps.push({appId: app.appId, label: app.name && app.name !== app.appId ? app.name + " · " + app.appId : app.appId});
+            const classes = [];
+            const reportedClasses = app.windowClasses || [];
+            for (let i = 0; i < reportedClasses.length; ++i) {
+                const cls = String(reportedClasses[i]);
+                if (cls && excluded.indexOf(cls) < 0 && !cls.split(" ").some(token => token && excluded.indexOf(token) >= 0))
+                    classes.push(cls);
+            }
+            if (app.appId && classes.length > 0)
+                apps.push({appId: app.appId, windowClasses: classes, label: (app.name || app.appId) + " · " + classes.join(", ")});
         }
         return apps;
     }
@@ -292,8 +299,9 @@ ColumnLayout {
                 enabled: windowPage.backend !== null && !!windowPage.availableRunningApps[runningAppsBox.currentIndex]?.appId
                 onClicked: {
                     const app = windowPage.availableRunningApps[runningAppsBox.currentIndex];
-                    if (app && app.appId)
-                        windowPage.backend.setButtonExclusion(app.appId, true);
+                    if (app)
+                        for (const cls of app.windowClasses)
+                            windowPage.backend.setButtonExclusion(cls, true);
                 }
             }
         }
