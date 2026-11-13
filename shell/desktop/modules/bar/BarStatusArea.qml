@@ -142,13 +142,17 @@ Item {
         const gx = origin.x + local.x
         const gy = origin.y + local.y
         const edge = root.dockHosted ? root.dockEdge : "top"
+        // Standalone the panel starts four pixels below the Bar; dock-hosted it
+        // stays flush with the Dock. Same contract the PopupWindow's negative
+        // bottom margin used to express before the surface became persistent.
+        const gap = root.dockHosted ? 0 : 4
         if (edge === "top")
-            return { edge: edge, offset: gy + ih + 6 - sy, center: gx + iw / 2 }
+            return { edge: edge, offset: gy + ih + gap - sy, center: gx + iw / 2 }
         if (edge === "bottom")
-            return { edge: edge, offset: sy + sh - gy + 6, center: gx + iw / 2 }
+            return { edge: edge, offset: sy + sh - gy + gap, center: gx + iw / 2 }
         if (edge === "left")
-            return { edge: edge, offset: gx + iw + 6 - sx, center: gy + ih / 2 }
-        return { edge: edge, offset: sx + sw - gx + 6, center: gy + ih / 2 }
+            return { edge: edge, offset: gx + iw + gap - sx, center: gy + ih / 2 }
+        return { edge: edge, offset: sx + sw - gx + gap, center: gy + ih / 2 }
     }
     function _applyPlacement(panel, placement) {
         if (!panel || !placement)
