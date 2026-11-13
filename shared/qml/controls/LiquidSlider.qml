@@ -61,29 +61,34 @@ Item {
     readonly property real visualValue: Math.max(0, Math.min(1, value))
     readonly property real edgeInset: thumbWidth / 2
     readonly property real travel: Math.max(1, width - edgeInset * 2)
-    readonly property real thumbCenterX: edgeInset + visualValue * travel
+    readonly property real thumbCenterX: edgeInset + positionMotion.value * travel
 
-    // Expansion animation (0 = rest white pill, 1 = fully expanded glass lens)
-    property real _expansion: 0.0
-    Behavior on _expansion {
-        NumberAnimation {
-            // motion-exception: preserve the coupled liquid/physical response timing and curve.
-            duration: root.reduceMotion ? 0 : root._pressed ? 220 : 400
-            easing.type: root._pressed ? Easing.OutBack : Easing.OutQuint
-            easing.overshoot: root._pressed ? 1.36 : 1.0
-        }
+    Foundation.SpringMotion {
+        id: positionMotion
+        target: root.visualValue
+        // Pointer input and commit acknowledgements must land exactly at value.
+        enabled: root.enabled && root.visible && !root.reduceMotion
+            && !root._pressed && !root._suppressXAnimation
+        response: 0.18
+        epsilon: 0.0001
     }
 
-    // motion-exception: preserve the squash-stretch segment ratios and curves.
-    // Squash-stretch wobble
-    property real _stretch: 0.0
-    SequentialAnimation on _stretch {
-        id: wobbleAnim
-        running: false
-        NumberAnimation { to: 0.175; duration: 100; easing.type: Easing.OutQuad }
-        NumberAnimation { to: -0.08; duration: 150; easing.type: Easing.InOutQuad }
-        NumberAnimation { to: 0.04; duration: 100; easing.type: Easing.InOutQuad }
-        NumberAnimation { to: 0.0; duration: 100; easing.type: Easing.OutQuad }
+    property real _expansionTarget: 0
+    readonly property real _lensExpansion: expansionMotion.value
+    readonly property real _stretch: wobbleEnabled && !reduceMotion && !materialForm
+        ? Math.min(0.175, Math.abs(expansionMotion.velocity) * 0.012) : 0
+    Foundation.SpringMotion {
+        id: expansionMotion
+        target: root.enabled && !root.materialForm ? root._expansionTarget : 0
+        enabled: root.enabled && root.visible && !root.reduceMotion
+        response: 0.18
+        dampingRatio: 0.85
+    }
+
+    // Optical fades stay bounded while the lens geometry follows its spring.
+    property real _expansion: enabled && !materialForm ? _expansionTarget : 0
+    Behavior on _expansion {
+        NumberAnimation { duration: root.reduceMotion ? 0 : root.motionPolicy.instant.duration; easing.type: root.motionPolicy.enterCurve }
     }
 
     signal previewChanged(real value)
@@ -98,7 +103,7 @@ Item {
         _pixelAccum = 0
         if (!active) return
         _pressed = false
-        _expansion = 0
+        _expansionTarget = 0
         _dragOffset = 0
         canceled()
     }
@@ -171,11 +176,6 @@ Item {
 
     function positionForPointer(pointerX) {
         return Math.max(0, Math.min(1, (pointerX - edgeInset) / travel))
-    }
-
-    function triggerWobble() {
-        if (wobbleEnabled && !reduceMotion)
-            wobbleAnim.restart()
     }
 
     Component {
@@ -282,16 +282,8 @@ Item {
             id: thumbScale
             origin.x: root.thumbWidth / 2
             origin.y: root.thumbHeight / 2
-            xScale: root.reduceMotion ? 1 : (1 + (root.wobbleEnabled ? 0.35 : 0.06) * root._expansion) * (1 - (root.wobbleEnabled ? 0.2 : 0) * root._stretch)
-            yScale: root.reduceMotion ? 1 : (1 + (root.wobbleEnabled ? 0.35 : 0.06) * root._expansion) * (1 + (root.wobbleEnabled ? 0.4 : 0) * root._stretch)
-        }
-
-        Behavior on x {
-            NumberAnimation {
-                // motion-exception: preserve the coupled liquid/physical response timing and curve.
-                duration: root.reduceMotion || root._pressed || root._suppressXAnimation ? 0 : 200
-                easing.type: Easing.OutQuint
-            }
+            xScale: root.reduceMotion ? 1 : (1 + (root.wobbleEnabled ? 0.35 : 0.06) * root._lensExpansion) * (1 - (root.wobbleEnabled ? 0.2 : 0) * root._stretch)
+            yScale: root.reduceMotion ? 1 : (1 + (root.wobbleEnabled ? 0.35 : 0.06) * root._lensExpansion) * (1 + (root.wobbleEnabled ? 0.4 : 0) * root._stretch)
         }
 
         Rectangle {
@@ -398,8 +390,8 @@ Item {
             radius: height / 2
             color: root.accentColor
             opacity: root._pressed ? 0.16 : (root._hovered ? 0.10 : 0.0)
-            // Ordinary feedback follows the shared motion policy.
-            Behavior on opacity { NumberAnimation { duration: root.motionPolicy.instant.duration; easing.type: root.motionPolicy.enterCurve } }
+            // §2.11 / §3 motion.duration.instant=100（原 demo 120 不在五档）。
+            Behavior on opacity { NumberAnimation { duration: root.reduceMotion ? 0 : root.motionPolicy.instant.duration; easing.type: root.motionPolicy.enterCurve } }
         }
 
         // Handle: a vertical capsule, not the iOS lens.
@@ -440,18 +432,17 @@ Item {
         onEntered: {
             root._hovered = true
             if (!root._pressed && !root.materialForm)
-                root._expansion = 0.40
+                root._expansionTarget = 0.40
         }
         onExited: {
             root._hovered = false
             if (!root._pressed)
-                root._expansion = 0.0
+                root._expansionTarget = 0.0
         }
 
         onPressed: function(mouse) {
             root._pressed = true
-            root._expansion = 1.0
-            root.triggerWobble()
+            root._expansionTarget = 1.0
             // 拖动接管：取消还没落下的那次步进提交
             root._wheelPending = false
             wheelCommitTimer.stop()
@@ -470,7 +461,7 @@ Item {
         onReleased: function() {
             if (!root._pressed) return
             root._pressed = false
-            root._expansion = (containsMouse && !root.materialForm) ? 0.40 : 0.0
+            root._expansionTarget = (containsMouse && !root.materialForm) ? 0.40 : 0.0
             root._dragOffset = 0
             // 提交后屏蔽 x 动画 400ms，等外部服务异步写回对齐（见 _suppressXAnimation）
             root._suppressXAnimation = true

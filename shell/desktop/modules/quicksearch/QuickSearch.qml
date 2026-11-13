@@ -213,18 +213,31 @@ Scope {
         function toggle(mode: string): void { root.toggle(mode) }
     }
 
-    QuickSearchWindow {
-        screen: root.targetScreen
-        open: root.open && ScreenLifecycle.outputAvailable
-            && root.targetScreen !== null
-        mode: root.mode
-        viewMode: root.viewMode
-        clipboardAnchor: root.clipboardAnchor
-        onCloseRequested: root.hide()
-        onModeCycleRequested: root.cycleMode()
-        onViewModeToggleRequested: root.toggleViewMode()
-        onPasteRequested: function (item, copyOnly) {
-            root.beginPaste(item, copyOnly)
+    // The panel is ~1,500 lines of delegates and shader materials. Building it
+    // on a cold Shell start costs about two seconds of main-thread work on a
+    // software-rendered VM even though it stays hidden until the first
+    // shortcut. Create it on first use and keep it alive afterwards so later
+    // opens stay instant.
+    property bool _windowRequested: false
+    onOpenChanged: if (open || _opening) _windowRequested = true
+
+    Loader {
+        active: root._windowRequested
+        sourceComponent: Component {
+            QuickSearchWindow {
+                screen: root.targetScreen
+                open: root.open && ScreenLifecycle.outputAvailable
+                    && root.targetScreen !== null
+                mode: root.mode
+                viewMode: root.viewMode
+                clipboardAnchor: root.clipboardAnchor
+                onCloseRequested: root.hide()
+                onModeCycleRequested: root.cycleMode()
+                onViewModeToggleRequested: root.toggleViewMode()
+                onPasteRequested: function (item, copyOnly) {
+                    root.beginPaste(item, copyOnly)
+                }
+            }
         }
     }
 }

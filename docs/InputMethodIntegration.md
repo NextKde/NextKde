@@ -9,13 +9,14 @@ NextKde provides a native liquid glass input method popup (including candidate t
 ## 1. Core Architecture and Session Contracts
 
 1. **D-Bus Communication Pipeline**:
-   - `kos-platform` (`KimpanelBridge`) registers `org.kde.impanel` only for an enabled, connected frontend, enabling `kimpanel` and temporarily disabling `classicui`.
+   - `kos-platform` (`KimpanelBridge`) registers `org.kde.impanel` only for an enabled, connected frontend. Fcitx selects Kimpanel by availability and suspends Classic UI while the panel is owned.
    - Fcitx5 broadcasts lookup tables, preedit strings, and cursor positions over the `org.kde.kimpanel.inputmethod` D-Bus interface.
+   - The unified panel extension publishes input-context content directly. Kimpanel delegates Wayland/XWayland panels to Classic UI on KDE, so the extension bypasses that candidate-update entry point. Selection and paging target the context displayed by the extension.
    - `kos-shell` (`InputMethodPopup.qml`) renders the liquid glass candidate cards featuring physics-based transitions, background blur, and adaptive lighting.
 
 2. **Opt-in takeover and recovery**:
-   - The feature defaults to off. Only an enabled, connected Shell frontend acquires Kimpanel. Original Fcitx addon states are checked and saved to `~/.config/kos/inputmethod-recovery.json` before modification; successful restoration removes this record.
-   - `ReloadConfig` cannot unload an already loaded Classic UI. Switching the frontend asks KWin to recreate its own Fcitx child and private input-method socket. It does not log out, restart KWin, or run `fcitx5 -r`. The Settings page reports the actual active/error state.
+   - The feature defaults to off. Only an enabled, connected Shell frontend acquires Kimpanel. The switch leaves Fcitx addon settings unchanged. Recovery records from older releases are migrated once using the existing Fcitx process; successful restoration removes the record.
+   - Switching the frontend never restarts Fcitx or changes KWin’s input-method command. Releasing the panel lease restores native UI through Fcitx’s availability mechanism, preserving the compositor input connection. The Settings page reports the actual active/error state.
    - Toolkit input modules do not all require the same environment. Keep working Qt/XCB, GTK and XIM configurations. NextKde never rewrites global `GTK_IM_MODULE` or `QT_IM_MODULE`; workarounds below apply only to applications that cannot yet connect to input methods.
    - The Shell entrypoint pins `QT_IM_MODULE` and `QT_IM_MODULES` to `wayland` using Quickshell's process-only `Env` pragmas. This keeps launcher search and other Shell text fields on the compositor input path instead of the Fcitx Qt module's client-side candidate panel. The override applies to installed and source/dev launches without changing the environment of launched applications. Restart the Shell after updating these startup pragmas; QML hot reload cannot replace an already-created Qt input context.
    - Kimpanel absolute spots are converted from the configured XWayland root scale to logical screen coordinates. If an anchor is outside all outputs, the panel falls back to the active window's output instead of disappearing.
@@ -32,10 +33,13 @@ environment, engines, dictionaries or shortcuts are changed. CMake system
 installation uses `lib/fcitx5` and `share/fcitx5/addon`; the NixOS module adds
 the extension to Fcitx5 addons.
 
-The switch still asks KWin to recreate its managed Fcitx5 to unload an already
-loaded Classic UI. Losing the desktop lease immediately restores each input
-context's original panel callback; platform recovery restores the original
-addon states. Activation is reported only after the adapter confirms takeover.
+After installing or updating the extension, log out and back in so Fcitx loads
+the new library. Subsequent feature switches only acquire or release the panel
+lease. Both Kimpanel and native Classic UI must be available; the adapter confirms
+this before takeover is reported. Losing the lease restores each input context’s
+original panel callback. Legacy addon configuration is restored without
+auto-starting Fcitx; a legacy session that started with Classic UI disabled needs
+a new login to load it.
 
 ## Candidate presentation preferences
 
@@ -123,7 +127,7 @@ restore behavior described above.
 
 | Symptom | Probable Cause | Action |
 | :--- | :--- | :--- |
-| **Classic rectangular popup appears instead of liquid glass** | Takeover failed or Classic UI is still loaded | Check the actual status/error in Settings; use the feature switch to reload through KWin |
+| **Classic rectangular popup appears instead of liquid glass** | Takeover inactive or extension not updated | Check Settings; log out and back in after installing the extension |
 | **Keystrokes committed directly as English with no candidate box** | Bundled proprietary Qt runtime did not automatically bind Wayland input | Target the app with `QT_IM_MODULE=text-input-unstable-v3` (e.g., WeChat) or relevant toolkit flags |
 | **Chromium/VSCode cannot trigger IME or invokes virtual keyboard** | Missing Chromium Wayland IME command-line switches | Append `--enable-wayland-ime --wayland-text-input-version=3` to desktop entry |
 | **KWin full-screen virtual keyboard blocks the screen** | `VirtualKeyboardMode` in `kwinrc` set to mouse-triggered mode (Mode 2) | Run `kwriteconfig6 --file kwinrc --group Wayland --key VirtualKeyboardMode 0` and reconfigure KWin |

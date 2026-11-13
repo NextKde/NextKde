@@ -21,6 +21,19 @@ ColumnLayout {
     spacing: 12
 
     property var bridge: null
+    property bool reduceMotion: false
+    property int startupRevealDuration: 1500
+    // Offered durations. AppearanceConfigService accepts anything in
+    // 800..2000 and rounds to whole milliseconds.
+    // 800 is not offered as a fresh choice, but legacy configs clamp to it and
+    // should still show their real value.
+    readonly property var startupRevealOptions: [800, 1000, 1200, 1500, 1800]
+    // A value saved before this list existed may not be an option; fall back to
+    // the default entry instead of an out-of-range index.
+    function revealDurationIndex() {
+        const index = startupRevealOptions.indexOf(startupRevealDuration)
+        return index >= 0 ? index : startupRevealOptions.indexOf(1500)
+    }
     property string shellStyle: "macos"
     // Material's colour source, mirrored from the Shell so the segmented
     // control reflects what is actually applied.
@@ -74,6 +87,8 @@ ColumnLayout {
     function applyState(state) {
         if (!state || !isValidStyle(state.shellStyle))
             return;
+        reduceMotion = state.reduceMotion === true;
+        startupRevealDuration = Number(state.startupRevealDuration ?? 1500);
         shellStyle = state.shellStyle;
         // The window palette follows the same style. ControlForm is NOT
         // assigned here: reading themePage.materialForm before this line would
@@ -314,6 +329,37 @@ ColumnLayout {
                     themeMaterialSettings.liquidDirty = false;
                     themeMaterialSettings.refresh();
                 }
+            }
+        }
+    }
+
+    Demo.SettingsGroup {
+        title: I18n.tr("Desktop arrival")
+        backgroundColor: colors.card
+        Demo.SettingsItem {
+            title: I18n.tr("Reduce motion")
+            description: I18n.tr("Show the desktop immediately after login, without the arrival animation")
+            Controls.SettingsSwitch {
+                objectName: "startupReduceMotion"
+                checked: themePage.reduceMotion
+                enabled: themePage.bridge !== null
+                accentColor: colors.accent
+                trackColor: colors.divider
+                onToggled: checked => themePage.bridge.updateStartupMotion(checked, themePage.startupRevealDuration)
+            }
+        }
+        Demo.SettingsItem {
+            title: I18n.tr("Arrival duration")
+            Controls.SettingsSelect {
+                objectName: "startupRevealDuration"
+                colors: themePage.colors
+                materialForm: themePage.materialForm
+                enabled: themePage.bridge !== null && !themePage.reduceMotion
+                textRole: "label"
+                model: themePage.startupRevealOptions.map(ms => ({label: ms + " ms"}))
+                currentIndex: themePage.revealDurationIndex()
+                onSelectionChanged: index => themePage.bridge.updateStartupMotion(
+                    themePage.reduceMotion, themePage.startupRevealOptions[index])
             }
         }
     }

@@ -1,5 +1,6 @@
 #include "cursoroverride.h"
 #include "surfaceshape.h"
+#include "startupinputmonitor.h"
 #include "windowcontrolslot.h"
 
 #include <QJSEngine>
@@ -15,6 +16,7 @@ public:
     void registerTypes(const char *uri) override
     {
         qmlRegisterType<SurfaceShape>(uri, 1, 0, "SurfaceShape");
+        qmlRegisterType<StartupInputMonitor>(uri, 1, 0, "StartupInputMonitor");
         qmlRegisterType<WindowControlSlot>(uri, 1, 0, "WindowControlSlot");
         qmlRegisterSingletonType<CursorOverride>(uri, 1, 0, "CursorOverride",
             [](QQmlEngine *, QJSEngine *) -> QObject * {

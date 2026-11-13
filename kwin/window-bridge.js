@@ -662,6 +662,8 @@ function snapshot() {
             id: windowId(window),
             pid: Number(propertyValue(window, "pid", 0)),
             appId: String(window.desktopFileName || window.resourceClass || window.resourceName || ""),
+            // Button exclusions match resourceClass, not the desktop entry ID.
+            resourceClass: String(window.resourceClass || window.resourceName || ""),
             title: String(window.caption || ""),
             // Normalized against the authoritative activeId above: one frame
             // must never mix a stale window.active with fresh minimized.
@@ -1086,7 +1088,7 @@ function watchWindow(window) {
         return;
     const watchedId = windowId(window);
     const metadataSignals = [
-        "captionChanged", "desktopFileNameChanged", "activeChanged",
+        "captionChanged", "desktopFileNameChanged", "windowClassChanged", "activeChanged",
         "minimizedChanged", "fullScreenChanged", "demandsAttentionChanged",
         "skipTaskbarChanged", "skipSwitcherChanged", "hiddenChanged",
         "maximizedChanged", "maximizeModeChanged", "desktopsChanged"

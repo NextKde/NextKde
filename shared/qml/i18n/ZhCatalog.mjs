@@ -3,6 +3,10 @@
 // 规则：值必须与改造前界面上的中文逐字一致（含空格、间隔符与省略号），
 // 改动文案时同步更新对应键，不要只改一边。
 export const catalog = {
+    "Desktop arrival": "桌面到场",
+    "Reduce motion": "减少动效",
+    "Show the desktop immediately after login, without the arrival animation": "登录后直接显示桌面，跳过首屏到场动画",
+    "Arrival duration": "到场动画时长",
     "Input method activation failed": "输入法界面启用失败",
     "Reloading input method…": "正在重新加载输入法…",
     "No version has been approved in this catalog.": "此目录尚未批准可安装版本。",

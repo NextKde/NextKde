@@ -8,6 +8,8 @@ import "desktop/modules/deskcenter/WidgetLayout.mjs" as WidgetLayout
 
 ShellRoot {
     id: test
+    // This fixture mounts only the desktop; no shell boot coordinator runs.
+    Component.onCompleted: StartupReveal.finish()
     DeskCenterWindow {
         id: desktop
         visible: true

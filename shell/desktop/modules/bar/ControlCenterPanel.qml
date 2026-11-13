@@ -218,7 +218,7 @@ PopupWindow {
         width: panel.controlCenterWidth
         height: panel.naturalContentHeight
         y: panel.dockFacingLayout ? Math.max(0, controlViewport.height - height) : 0
-        scale: AppearanceTokens.motion.popupStartScale + (1 - AppearanceTokens.motion.popupStartScale) * popupMotion.progress
+        scale: AppearanceTokens.motion.popupStartScale + (1 - AppearanceTokens.motion.popupStartScale) * popupMotion.geometryProgress
         transformOrigin: !panel.dockHosted ? Item.Top
             : panel.dockEdge === "left" ? Item.Left : panel.dockEdge === "right" ? Item.Right : Item.Bottom
     }

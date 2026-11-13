@@ -48,7 +48,7 @@ Item {
         function init() {
             backend.calls = []
             backend.state = {enabled:true, radius:20, shadow:true, hideAnimation:"scale", closeAnimation:"scale", buttonGlyphMode:"always", buttonExclusions:[], independentButtonBackground:false}
-            bridgeBackend.apps = [{name:"Firefox", appId:"firefox"}, {name:"Obsidian", appId:"md.obsidian.Obsidian"}]
+            bridgeBackend.apps = [{name:"Firefox", appId:"firefox", windowClasses:["firefox"]}, {name:"Obsidian", appId:"md.obsidian.Obsidian", windowClasses:["obsidian"]}]
             bridgeBackend.runningAppsRequests = 0
             const component = Qt.createComponent("../../main.qml")
             compare(component.status, Component.Ready, component.errorString())
@@ -187,9 +187,9 @@ Item {
             picker.activated(1)
             compare(picker.model[picker.currentIndex].appId, "md.obsidian.Obsidian")
             bridgeBackend.apps = [
-                {name:"Kate", appId:"org.kde.kate"},
-                {name:"Firefox", appId:"firefox"},
-                {name:"Obsidian", appId:"md.obsidian.Obsidian"}
+                {name:"Kate", appId:"org.kde.kate", windowClasses:["kate"]},
+                {name:"Firefox", appId:"firefox", windowClasses:["firefox"]},
+                {name:"Obsidian", appId:"md.obsidian.Obsidian", windowClasses:["obsidian"]}
             ]
             const requests = bridgeBackend.runningAppsRequests
             const refresh = control("refreshWindowButtonRunningApps")
@@ -199,9 +199,9 @@ Item {
             compare(picker.model[picker.currentIndex].appId, "md.obsidian.Obsidian")
             const add = control("addRunningWindowButtonExclusion")
             clickControl(add, add.width / 2, add.height / 2)
-            compare(backend.state.buttonExclusions, ["md.obsidian.Obsidian"])
+            compare(backend.state.buttonExclusions, ["obsidian"], "exclusions use the window class, not the desktop entry ID")
             compare(picker.model[picker.currentIndex].appId, "org.kde.kate")
-            verify(control("windowButtonExclusionIcon_md.obsidian.Obsidian").visible)
+            verify(control("windowButtonExclusionIcon_obsidian").visible)
         }
         function test_independent_cover() {
             const toggle = control("windowIndependentButtonBackground")

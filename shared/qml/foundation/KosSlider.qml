@@ -69,6 +69,14 @@ Slider {
         }
     }
 
+    SpringMotion {
+        id: pressMotion
+        target: root.pressed && !AppTheme.reduceMotion ? 1.08 : 1
+        enabled: root.enabled && root.visible && !AppTheme.reduceMotion
+        response: 0.18
+        dampingRatio: 0.85
+    }
+
     background: Rectangle {
         x: root.leftPadding
         y: root.topPadding + (root.availableHeight - height) / 2
@@ -94,10 +102,6 @@ Slider {
         color: AppTheme.windowRaised
         border.width: root.activeFocus ? 3 : 1
         border.color: root.activeFocus ? AppTheme.accent : AppTheme.border
-        scale: root.pressed ? 1.08 : 1
-
-        Behavior on scale {
-            NumberAnimation { duration: AppTheme.motionFast }
-        }
+        scale: pressMotion.value
     }
 }

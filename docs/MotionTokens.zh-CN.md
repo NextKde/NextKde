@@ -327,6 +327,12 @@ repository {'duration_lines': 429, 'numeric_start_lines': 287, 'easing_lines': 3
 
 ## 8. 实施结果（2026-11-12）
 
+### 合入 main 的补充（2026-11-13）
+
+合并保留 main 的共享 `MotionSpring` / `SpringMotion`、启动显现与桌面组件帧同步弹簧；Popup、开关、分段控件和滑块的几何运动继续使用弹簧，颜色及透明度的普通过渡接入五档策略。滑块拖动直达、提交回执期间禁止补间及 reduce-motion 路径保留。下方开关/滑块/分段控件的旧 wobble 分段记录属于合并前历史，不再描述当前几何运动。
+
+`ContextMenu` 保留快速交互例外：`springResponse: 0.08`，打开/关闭淡入淡出为 45/35ms，均使用 OutCubic；菜单内 `PageMotion` 退出/进入为 20/30ms，不套五档。下方旧 60/80ms 菜单例外记录由此取代。本次集成只进行源码审查与 Git 差异检查，未运行测试、构建或图形会话；人工可检查菜单快速反向开关、滑块拖动/提交、开关连续切换和减少动态效果。
+
 ### 策略与使用方法
 
 唯一数字定义位于 `shared/qml/foundation/MotionTokens.qml`。`AppearanceTokens.motion` 继承该类型并保留 Shell 的 spring、popup 几何与兼容别名。`Kos.Ui`、`Kos.Demo` 均注册此类型；Demo 的源码入口使用符号链接复用定义，构建时进入自己的 QML 资源路径。共享控件不反向导入 Shell。Liquid 控件按自身 `materialForm` 选择策略，并允许宿主显式传入 `motionPolicy`；通用 foundation 默认 macOS 曲线，不能把 `modernDesign` 当成 Material。

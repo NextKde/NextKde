@@ -1,4 +1,6 @@
 singleton AppTheme 1.0 AppTheme.qml
+MotionSpring 1.0 MotionSpring.qml
+SpringMotion 1.0 SpringMotion.qml
 KosDialog 1.0 KosDialog.qml
 SettingsTextField 1.0 SettingsTextField.qml
 SettingsTextArea 1.0 SettingsTextArea.qml

@@ -2,6 +2,7 @@
 
 #include <effect/effect.h>
 #include <QVariant>
+#include <QDeadlineTimer>
 
 #include <memory>
 
@@ -36,10 +37,16 @@ public slots:
     // inside KWin, so this needs no uinput device or external helper; the Shell
     // reaches it through kos-platform's input.paste operation.
     Q_SCRIPTABLE bool paste(const QString &expectedWindowId);
+    Q_SCRIPTABLE void watchStartupInput(int milliseconds);
+
+signals:
+    Q_SCRIPTABLE void startupInputActivity();
 
 private:
     friend class ContextMenuPointerSpy;
 
+    void handleStartupInput();
+    QDeadlineTimer m_startupInputDeadline;
     void handlePointerPress(const QPointF &position, Qt::MouseButton button);
     void installPointerSpy();
     void publish(const QJsonObject &eventData);

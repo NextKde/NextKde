@@ -55,8 +55,16 @@ public:
     {
     }
 
+    void pointerMotion(PointerMotionEvent *) override { m_effect->handleStartupInput(); }
+    void pointerAxis(PointerAxisEvent *) override { m_effect->handleStartupInput(); }
+    void keyboardKey(KeyboardKeyEvent *) override { m_effect->handleStartupInput(); }
+    void touchDown(TouchDownEvent *) override { m_effect->handleStartupInput(); }
+    void touchMotion(TouchMotionEvent *) override { m_effect->handleStartupInput(); }
+    void touchUp(TouchUpEvent *) override { m_effect->handleStartupInput(); }
+
     void pointerButton(PointerButtonEvent *event) override
     {
+        m_effect->handleStartupInput();
         if (event && event->state == PointerButtonState::Pressed)
             m_effect->handlePointerPress(event->position, event->button);
     }
@@ -71,7 +79,7 @@ ContextMenuInputEffect::ContextMenuInputEffect()
         QStringLiteral("/KOSContextMenuInput"), this,
         // 只导出 Q_SCRIPTABLE 业务槽：ExportAllSlots 连 deleteLater 一起导
         // 给会话总线（任意进程可打死特效，见头注释）
-        QDBusConnection::ExportScriptableSlots);
+        QDBusConnection::ExportScriptableSlots | QDBusConnection::ExportScriptableSignals);
     m_pointerSpy = std::make_unique<ContextMenuPointerSpy>(this);
     installPointerSpy();
 }
@@ -186,6 +194,19 @@ bool ContextMenuInputEffect::paste(const QString &expectedWindowId)
     keyboard->processKey(letterV->keyCode, KeyboardKeyState::Released, now);
     keyboard->processKey(control->keyCode, KeyboardKeyState::Released, now);
     return true;
+}
+
+void ContextMenuInputEffect::watchStartupInput(int milliseconds)
+{
+    m_startupInputDeadline = QDeadlineTimer(qBound(0, milliseconds, 3000));
+}
+
+void ContextMenuInputEffect::handleStartupInput()
+{
+    if (m_startupInputDeadline.hasExpired())
+        return;
+    m_startupInputDeadline = QDeadlineTimer(0);
+    emit startupInputActivity();
 }
 
 void ContextMenuInputEffect::installPointerSpy()
