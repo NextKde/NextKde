@@ -7,6 +7,8 @@ import qs.desktop.modules.stage
 
 ShellRoot {
     id: test
+    // This fixture mounts only the desktop; no shell boot coordinator runs.
+    Component.onCompleted: StartupReveal.finish()
     DeskCenterWindow {
         id: desktop
         // Bind key events to this window. A synthetic mouse event does not

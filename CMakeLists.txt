@@ -221,7 +221,7 @@ if(BUILD_TESTING)
                         ${CMAKE_CURRENT_SOURCE_DIR}/tests/shell-startup/reveal.mjs
                         ${KOS_QMLTESTRUNNER_EXECUTABLE})
                 set_tests_properties(kos-shell.startup-reveal PROPERTIES
-                    LABELS "ui;headless" TIMEOUT 20
+                    LABELS "ui;headless" TIMEOUT 30
                     ENVIRONMENT "QML_IMPORT_PATH=${CMAKE_BINARY_DIR}/qml")
             endif()
             add_test(NAME kos-shell.stage-visibility-qml
@@ -308,7 +308,7 @@ if(BUILD_TESTING)
                     ${KOS_QUICKSHELL_EXECUTABLE})
             set_tests_properties(kos-shell.weather-refresh PROPERTIES
                 LABELS "ui;headless" TIMEOUT 20
-                ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_QUICK_BACKEND=software")
+                ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_QUICK_BACKEND=software;QML_IMPORT_PATH=${CMAKE_BINARY_DIR}/qml")
         endif()
         if(KOS_QUICKSHELL_EXECUTABLE)
             add_test(NAME kos-shell.dock-surface

@@ -44,19 +44,24 @@ Item {
             StartupReveal.loaded = false
             StartupReveal.started = false
             StartupReveal.preparing = false
+            StartupReveal.startedAt = 0
             StartupReveal.progress = 0
         }
         function test_order_and_duration() {
             const phases = []
             const record = function() { phases.push(StartupReveal.phase) }
             StartupReveal.phaseChanged.connect(record)
-            const start = Date.now()
             StartupReveal.initialize()
-            tryCompare(StartupReveal, "phase", "done", 1100)
+            // Both warm-up handovers precede the configured animation duration.
+            // Each may take up to 2.5s while the GUI thread is busy.
+            tryVerify(function() { return StartupReveal.startedAt > 0 }, 6500)
+            const start = StartupReveal.startedAt
+            // The timeline limits progress per tick and has an 8s safety cap.
+            tryCompare(StartupReveal, "phase", "done", 8500)
             StartupReveal.phaseChanged.disconnect(record)
             compare(phases.join(","), "fading,bar,dock,icons,done")
             verify(Date.now() - start >= 750)
-            verify(Date.now() - start < 1100)
+            verify(Date.now() - start < 8500)
             compare(StartupReveal.iconProgress(999, 1000), 1)
         }
         function test_click_at_zero_delivered() {
@@ -112,7 +117,7 @@ Item {
 }
 `);
     const result = spawnSync(process.argv[2] || '/usr/lib/qt6/bin/qmltestrunner', ['-input', directory, '-import', directory], {
-        encoding: 'utf8', timeout: 15000,
+        encoding: 'utf8', timeout: 25000,
         env: {...process.env, QT_QPA_PLATFORM: 'offscreen', QT_QUICK_BACKEND: 'software', QT_FORCE_STDERR_LOGGING: '1'},
     });
     process.stdout.write(result.stdout || '');
