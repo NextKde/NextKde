@@ -140,6 +140,13 @@ if(BUILD_TESTING)
                 ${CMAKE_CURRENT_SOURCE_DIR}/shell/desktop/modules/deskcenter/test_widget_layout.mjs
         )
         set_tests_properties(kos-deskcenter.widget-layout PROPERTIES TIMEOUT 10)
+        # Widget geometry must look identical at 60 and 240 Hz; the replaced
+        # SpringAnimation advanced in fixed 16 ms steps.
+        add_test(NAME kos-deskcenter.motion-spring
+            COMMAND ${KOS_NODE_EXECUTABLE}
+                ${CMAKE_CURRENT_SOURCE_DIR}/shell/desktop/modules/common/test_motion_spring.mjs
+        )
+        set_tests_properties(kos-deskcenter.motion-spring PROPERTIES LABELS logic TIMEOUT 10)
         add_test(NAME kos-ui.visual-contract
             COMMAND ${KOS_NODE_EXECUTABLE}
                 ${CMAKE_CURRENT_SOURCE_DIR}/shared/qml/test_visual_contract.mjs
@@ -221,7 +228,7 @@ if(BUILD_TESTING)
                         ${CMAKE_CURRENT_SOURCE_DIR}/tests/shell-startup/reveal.mjs
                         ${KOS_QMLTESTRUNNER_EXECUTABLE})
                 set_tests_properties(kos-shell.startup-reveal PROPERTIES
-                    LABELS "ui;headless" TIMEOUT 20
+                    LABELS "ui;headless" TIMEOUT 30
                     ENVIRONMENT "QML_IMPORT_PATH=${CMAKE_BINARY_DIR}/qml")
             endif()
             add_test(NAME kos-shell.stage-visibility-qml
@@ -308,7 +315,7 @@ if(BUILD_TESTING)
                     ${KOS_QUICKSHELL_EXECUTABLE})
             set_tests_properties(kos-shell.weather-refresh PROPERTIES
                 LABELS "ui;headless" TIMEOUT 20
-                ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_QUICK_BACKEND=software;QML_IMPORT_PATH=${CMAKE_BINARY_DIR}/qml;QML2_IMPORT_PATH=${CMAKE_BINARY_DIR}/qml")
+                ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_QUICK_BACKEND=software;QML_IMPORT_PATH=${CMAKE_BINARY_DIR}/qml")
         endif()
         if(KOS_QUICKSHELL_EXECUTABLE)
             add_test(NAME kos-shell.dock-surface

@@ -231,6 +231,10 @@ bool PlasmaWallpaperAdapter::applyProxy(const QString &accent, bool dark,
 
     QSaveFile picture(images + QStringLiteral("/1920x1080.png"));
     QImage pixel(16, 16, QImage::Format_RGB32);
+    // This image is the session background from login until the Shell paints
+    // its own login screen: plain black on a dark theme, plain white on a
+    // light one. The Shell continues from that same colour, so the handover
+    // has no visible step.
     pixel.fill(dark ? Qt::black : Qt::white);
     if (!picture.open(QIODevice::WriteOnly) || !pixel.save(&picture, "PNG")
         || !picture.commit()) {
