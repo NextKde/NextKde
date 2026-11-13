@@ -51,6 +51,7 @@ Scope {
         return t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2
     }
     function iconProgress(index, count) {
+        if (!active) return 1
         if (warmup) return 0.004
         const delay = Math.max(0, index) / Math.max(1, count - 1) * 0.12
         return smooth(segment(0.55 + delay, 0.92 + delay))
@@ -118,6 +119,7 @@ Scope {
         }
         warmup = false
         startedAt = Date.now()
+        timeline.lastTick = 0
         timeline.start()
     }
     onReadyChanged: if (ready) Qt.callLater(begin)
