@@ -262,11 +262,12 @@ PanelWindow {
         // Slide along toward the edge as revealProgress reaches 0. The mask
         // region (dockHitRegion) shares these exact coordinates so input tracks
         // the moving glass.
-        x: hide.offsetX + root.restX
-        y: hide.offsetY + root.restY
+        x: hide.offsetX + root.restX + (root.vertical
+            ? (root.position === "left" ? -1 : 1) * StartupReveal.dockOffset * 28 : 0)
+        y: hide.offsetY + root.restY + (root.vertical ? 0 : StartupReveal.dockOffset * 28)
         width: dockContainer.width
         height: dockContainer.height
-        opacity: hide.dockOpacity
+        opacity: hide.dockOpacity * StartupReveal.dockProgress
         scale: hide.dockScale
         transformOrigin: root.vertical
             ? (root.position === "right" ? Item.Right : Item.Left)
@@ -310,6 +311,7 @@ PanelWindow {
             // the published region to the wrapper, whose x/y carry the capsule's
             // offset in this surface.
             blurAnchor: dockWrapper
+            materialOpacity: StartupReveal.dockProgress
         }
 
         DockContainer {

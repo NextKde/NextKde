@@ -945,6 +945,8 @@ Item {
         delegate: Item {
             id: delegateRoot
             required property var entry
+            required property int index
+            readonly property real arrival: StartupReveal.iconProgress(index, desktopEntryModel.count)
             readonly property string itemId: entry?.path || ""
             readonly property bool isFolder: entry && entry.kind === "folder"
             readonly property var folderCustom: root.folderCustomFor(itemId)
@@ -981,7 +983,7 @@ Item {
                 width: root.cellWidth
                 height: root.cellHeight
                 opacity: root.outboundDragStarted
-                        && root.isActiveDragItem(delegateRoot.itemId) ? 0 : 1
+                        && root.isActiveDragItem(delegateRoot.itemId) ? 0 : delegateRoot.arrival
                 z: dragHandler.active ? 100
                     : (root.isActiveDragItem(delegateRoot.itemId) ? 90 : 0)
                 Drag.dragType: Drag.Automatic
@@ -996,9 +998,9 @@ Item {
                     x: root.isActiveDragItem(delegateRoot.itemId)
                             && delegateRoot.itemId !== root.activeDragSourceId
                         ? root.groupDragOffset.x : 0
-                    y: root.isActiveDragItem(delegateRoot.itemId)
+                    y: (root.isActiveDragItem(delegateRoot.itemId)
                             && delegateRoot.itemId !== root.activeDragSourceId
-                        ? root.groupDragOffset.y : 0
+                        ? root.groupDragOffset.y : 0) - (1 - delegateRoot.arrival) * 14
                 }
                 anchors {
                     horizontalCenter: parent.horizontalCenter
