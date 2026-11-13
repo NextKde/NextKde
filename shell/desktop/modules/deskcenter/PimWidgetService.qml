@@ -11,6 +11,18 @@ QtObject {
     readonly property string state: String(source.state || stateUnavailable)
     readonly property bool ready: state === stateReady
     readonly property bool cached: state === "stale"
+    // The date/month grid works without the optional Calendar application.
+    // Keep a confirmed absence through reconnects and failed inspections so
+    // transport errors do not turn the basic calendar into an error panel.
+    // This is presentation state only; opening still uses the live source.
+    property bool applicationAbsent: false
+    onSourceChanged: {
+        const nextState = String(source.state || stateUnavailable)
+        if (nextState !== stateLoading && nextState !== stateUnavailable)
+            applicationAbsent = nextState === "not-installed"
+    }
+    readonly property bool showFeedback: !!IndependentAppWidgetService.launchErrors.calendar
+        || (!applicationAbsent && state !== "not-installed" && !ready)
     readonly property string errorMessage: IndependentAppWidgetService.feedback("calendar")
     readonly property double generatedAt: Number(source.generatedAt || 0)
     readonly property int revision: Number(source.payload?.revision || 0)
