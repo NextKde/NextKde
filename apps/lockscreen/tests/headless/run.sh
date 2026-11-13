@@ -15,10 +15,8 @@ if [ -f lock.png ]; then
 fi
 
 # Twice: once at 2x, once at 1x, in that order so the preview left behind is
-# the 1x render. The 2x pass is the one that matters for the clock: its glass
-# is a Canvas drawn `devicePixelRatio` times too big and scaled back down, so
-# the origin the numerals are drawn at is wrong in a way only a scaled render
-# can show -- at 1x every wrong formula for it agrees with the right one.
+# the 1x render. Check both device pixel ratios so logical layout bounds and
+# the full-resolution wallpaper takeover stay correct on HiDPI displays.
 #
 # No QML disk cache: a stale compiled copy would let every assertion below run
 # against the previous revision of the theme and pass, which is worse than a

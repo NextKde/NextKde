@@ -560,6 +560,7 @@ void PlatformServer::handleRequest(QLocalSocket *socket, const QJsonObject &requ
                 QStringLiteral("application.widget-snapshot"),
                 QStringLiteral("application.widget-open"),
                 QStringLiteral("lockscreen.weather-publish"),
+                QStringLiteral("lockscreen.notifications-publish"),
                 QStringLiteral("wallpaper.plasma.proxy"),
                 QStringLiteral("wallpaper.plasma.restore"),
                 QStringLiteral("wallpaper.preview.desktop"),
@@ -571,6 +572,14 @@ void PlatformServer::handleRequest(QLocalSocket *socket, const QJsonObject &requ
                 QStringLiteral("inputmethod.kimpanel"),
             }},
         });
+        return;
+    }
+    if (op == QStringLiteral("lockscreen.notifications-publish")) {
+        const auto error = m_lockScreenNotifications.publish(socket, request.value("payload").toObject());
+        respond(socket, request, error.isEmpty(), {{QStringLiteral("published"), error.isEmpty()}},
+                error, error.isEmpty() ? QString() : QStringLiteral("Lock-screen notification publication rejected"),
+                error == QStringLiteral("lockscreen-bridge-unavailable")
+                    || error == QStringLiteral("lockscreen-publisher-busy"));
         return;
     }
     if (op == QStringLiteral("keepawake.get") || op == QStringLiteral("keepawake.set")) {

@@ -915,6 +915,14 @@ if(BUILD_TESTING)
         set_tests_properties(kos-lockscreen.wake-authentication PROPERTIES
             ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_QUICK_BACKEND=software;QML_DISABLE_DISK_CACHE=1"
             LABELS "ui;headless" TIMEOUT 30)
+        foreach(scale IN ITEMS 1 2)
+            add_test(NAME kos-lockscreen.layout-${scale}x
+                COMMAND dbus-run-session -- ${KOS_INTERACTION_QMLTEST}
+                    -input ${CMAKE_CURRENT_SOURCE_DIR}/apps/lockscreen/tests/preview/tst_layout.qml)
+            set_tests_properties(kos-lockscreen.layout-${scale}x PROPERTIES
+                ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_QUICK_BACKEND=software;QML_DISABLE_DISK_CACHE=1;QT_SCALE_FACTOR=${scale}"
+                LABELS "ui;headless" TIMEOUT 30)
+        endforeach()
     endif()
 endif()
 

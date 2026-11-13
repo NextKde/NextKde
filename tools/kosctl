@@ -1642,18 +1642,10 @@ install_kwin_plugins() {
 # in the tree and can still be previewed with
 # `sddm-greeter --test-mode --theme apps/sddm`.
 
-# The package goes under BOTH roots on purpose. The greeter resolves it under
-# plasma/shells/ -- look-and-feel/ is not searched for the lock screen at all,
-# which is what apps/lockscreen/tests/theme-resolution proves -- while
-# plasma-apply-lookandfeel and the systemsettings page resolve under
-# look-and-feel/. Shipping only one of the two leaves half the integrations
-# pointing at a package that is not there. The core `install` ships only the
-# shells/ root (desktop takeover, below); the look-and-feel/ copy stays part
-# of `install lockscreen`.
-#
-# It is a copy, not a symlink, matching how deploy_artifacts ships the shell:
-# an installed layout must not depend on the checkout staying in place. QML
-# edits reach it through `install lockscreen`.
+# The native greeter resolves plasma/shells, not look-and-feel. Settings and
+# this installer share its safe skin lifecycle and durable share/kos/lockscreen
+# resources. Historical look-and-feel copies are left alone on upgrade and
+# removed only after verifying ownership on an explicit uninstall.
 kos_shell_id=org.kos.desktop
 shells_dir="$prefix/share/plasma/shells/$kos_shell_id"
 laf_dir="$prefix/share/plasma/look-and-feel/$kos_shell_id"
@@ -1663,15 +1655,59 @@ laf_dir="$prefix/share/plasma/look-and-feel/$kos_shell_id"
 # writes it back -- deleting the key when the user had none.
 plasma_shell_state="$prefix/share/kos/plasma-shell-state"
 
-install_theme_root() {  # $1: destination package root
-    # The checkout tree carries development content next to the runtime
-    # package; a theme root should hold only what the greeter resolves.
-    # tests/ alone is more than half of the tree (pkgprobe.cpp, stub QML).
-    mkdir -p "$(dirname "$1")"
-    rm -rf "$1"
-    cp -a "$project_dir/apps/lockscreen" "$1"
-    rm -rf "$1/tests"
-    rm -f "$1/README.md" "$1/README.zh-CN.md"
+lockscreen_settings() {
+    # Core install deploys Settings before desktop takeover. An explicitly
+    # requested standalone lockscreen install may use a built backend instead;
+    # it does not require the core services to have been installed.
+    local backend payload
+    for backend in "$prefix/bin/kos-settings" "$build_dir/apps/settings/kos-settings"; do
+        # Previous Settings versions ignore unknown flags and launch their GUI.
+        # Check for the CLI entry before executing anything: never probe an old
+        # binary by running it against the user's live desktop configuration.
+        [[ -x "$backend" ]] || continue
+        payload="$backend"
+        if ! LC_ALL=C grep -aqF -- '--install-lockscreen-shell' "$payload"; then
+            # Standard Nix Qt wrappers keep the ELF beside the wrapper. Inspect
+            # that payload but run the wrapper to retain its library/QML paths.
+            payload="$(dirname "$(readlink -f "$backend")")/.kos-settings-wrapped"
+            [[ -f "$payload" ]] && LC_ALL=C grep -aqF -- '--install-lockscreen-shell' "$payload" || continue
+        fi
+        "$backend" "$@" --lockscreen-prefix "$prefix"
+        return $?
+    done
+    printf 'Lock screen installation needs the current Settings backend; run kosctl build first.\n' >&2
+    return 1
+}
+
+refresh_lockscreen_package() {
+    local source="$project_dir/apps/lockscreen"
+    # Nix/package artifacts carry the same stable runtime resource tree.
+    if [[ -n "${artifact_root:-}" && -f "$artifact_root/share/kos/lockscreen/metadata.json" ]]; then
+        source="$artifact_root/share/kos/lockscreen"
+    fi
+    lockscreen_settings --install-lockscreen-shell "$source"
+}
+
+owned_theme_root() {
+    # Refuse linked ancestors as well as a linked root. A known plugin id is
+    # required before full removal of a historical standalone package.
+    local path="$1"
+    while [[ "$path" != / && "$path" != . ]]; do
+        [[ ! -L "$path" ]] || return 1
+        path=$(dirname "$path")
+    done
+    [[ -f "$1/metadata.json" && ! -L "$1/metadata.json" ]] || return 1
+    python3 -I -c '
+import json, sys
+try:
+    with open(sys.argv[1], encoding="utf-8") as stream:
+        package = json.load(stream)
+    owned = package.get("KPlugin", {}).get("Id") == "org.kos.desktop"
+except (OSError, ValueError, AttributeError):
+    owned = False
+sys.exit(0 if owned else 1)
+' "$1/metadata.json"
+
 }
 
 shell_package_installed() {
@@ -1850,27 +1886,21 @@ restore_plasma_shell() {
 # and the stock shell's panel gives way to the KOS bar and dock. plasmashell
 # picks the switch up the next time it starts, which is the next login.
 take_over_plasma_desktop() {
-    # Record the lock screen's presence before the copy overwrites it, so a
-    # core `install` run after `install lockscreen` keeps the skin.
-    local keep_lockscreen
-    if lockscreen_installed; then keep_lockscreen=1; else keep_lockscreen=0; fi
-    install_theme_root "$shells_dir"
-    # The lock screen stays opt-in: a shells package without contents/lockscreen
-    # makes the greeter fall back to org.kde.plasma.desktop's skin (the
-    # fallback-package path pkgprobe.cpp documents), so the core install does
-    # not drag the lock screen in with the takeover.
-    [[ "$keep_lockscreen" == 1 ]] || rm -rf "$shells_dir/contents/lockscreen"
+    # The shared backend stages both resources and package, preserving the
+    # presence/absence of the opt-in skin. Failed copies leave the old entry.
+    refresh_lockscreen_package || return 1
     switch_plasma_shell
     printf 'Plasma desktop taken over: plasmashell will run the %s shell (wallpaper only).\n' \
         "$kos_shell_id"
 }
 
 install_lockscreen() {
-    install_theme_root "$shells_dir"
-    install_theme_root "$laf_dir"
-    switch_plasma_shell
-    printf 'Lock screen installed (plasma/shells + look-and-feel, ShellPackage=%s).\n' \
-        "$kos_shell_id"
+    refresh_lockscreen_package || return 1
+    # Unlike the Settings theme picker, this explicit standalone installation
+    # retains its historical authorization to select the KOS desktop package.
+    switch_plasma_shell || return 1
+    lockscreen_settings --set-lockscreen-theme kos || return 1
+    printf 'Lock screen installed (plasma/shells, ShellPackage=%s).\n' "$kos_shell_id"
 }
 
 # `uninstall lockscreen` while the core desktop takeover is installed cannot
@@ -1881,11 +1911,8 @@ install_lockscreen() {
 # and keep the takeover intact. Without the core install, revert fully.
 remove_lockscreen() {
     if core_install_present; then
-        # Deleting a path inside the shells root would follow a developer's
-        # symlink at the checkout (apps/lockscreen/README) into the source
-        # tree, so a symlinked root is left alone.
-        rm -rf "$laf_dir"
-        [[ -L "$shells_dir" ]] || rm -rf "$shells_dir/contents/lockscreen"
+        lockscreen_settings --set-lockscreen-theme system || return 1
+        if owned_theme_root "$laf_dir"; then rm -rf "$laf_dir"; fi
         printf 'Lock screen removed; kscreenlocker falls back to the default skin.\n'
         printf 'The desktop takeover keeps the shells/ package (./tools/kosctl uninstall reverts it).\n'
     else
@@ -1895,8 +1922,9 @@ remove_lockscreen() {
         if [[ "$(previous_plasma_shell)" == "$kos_shell_id" ]]; then
             printf 'plasmashellrc still names %s; keeping its shell package.\n' "$kos_shell_id"
         else
-            rm -rf "$shells_dir" "$laf_dir"
-            printf 'Lock screen removed (ShellPackage key reverted).\n'
+            if owned_theme_root "$shells_dir"; then rm -rf "$shells_dir"; fi
+            if owned_theme_root "$laf_dir"; then rm -rf "$laf_dir"; fi
+            printf 'Lock screen removed (ShellPackage key reverted; owned packages removed).\n'
         fi
     fi
 }
@@ -2052,7 +2080,8 @@ uninstall() {
             printf 'plasmashellrc still names %s; keeping its shell package so plasmashell can start.\n' \
                 "$kos_shell_id"
         else
-            rm -rf "$shells_dir" "$laf_dir"
+            if owned_theme_root "$shells_dir"; then rm -rf "$shells_dir"; fi
+            if owned_theme_root "$laf_dir"; then rm -rf "$laf_dir"; fi
             printf 'Plasma shell reverted to its previous shell.\n'
         fi
     fi
@@ -2076,6 +2105,9 @@ uninstall() {
     rm -f "$prefix/lib/fcitx5/libnextkde-inputpanel.so" \
         "${FCITX_DATA_HOME:-${XDG_DATA_HOME:-$HOME/.local/share}/fcitx5}/addon/nextkde-inputpanel.conf"
     rm -f "$prefix/share/kos/release.json"
+    if owned_theme_root "$prefix/share/kos/lockscreen"; then
+        rm -rf "$prefix/share/kos/lockscreen"
+    fi
     rm -f "$prefix/libexec/kos-platform" "$prefix/libexec/kos-ai-worker" \
         "$prefix/libexec/kos-data-service" "$prefix/bin/kos-settings" "$prefix/bin/kos-apps" "$prefix/bin/kos-flatpak-worker" "$prefix/bin/kos-app-update-agent"
     rm -f "$prefix/lib/libonnxruntime.so" "$prefix/lib/libonnxruntime.so.1" \

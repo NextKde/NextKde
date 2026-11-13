@@ -7,9 +7,9 @@
             }
         ],
         "Category": "Global Themes (Plasma 6)",
-        "Description": "KOS lock screen: an iPadOS-flavoured passcode lock drawn by kscreenlocker",
-        "Description[zh_CN]": "KOS 锁屏：由 kscreenlocker 渲染的 iPadOS 风格密码锁屏",
-        "Description[pt_BR]": "Tela de bloqueio do KOS: bloqueio por senha no estilo iPadOS desenhado pelo kscreenlocker",
+        "Description": "KOS lock screen: MacLock-inspired glass drawn by the native KDE session locker",
+        "Description[zh_CN]": "KOS 锁屏：由 KDE 原生会话锁渲染的 MacLock 风格玻璃界面",
+        "Description[pt_BR]": "Tela de bloqueio do KOS: vidro inspirado no MacLock com o bloqueio de sessão nativo do KDE",
         "Id": "org.kos.desktop",
         "License": "GPL-2.0-or-later",
         "Name": "KOS Lock Screen",
