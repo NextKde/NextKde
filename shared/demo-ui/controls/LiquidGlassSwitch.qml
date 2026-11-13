@@ -1,7 +1,7 @@
 import QtQuick
 import "../foundation" as Foundation
 
-// Liquid switch retaining its existing position/expansion/wobble motion.
+// Liquid switch with velocity-continuous position and press response.
 // The expanded lens samples the sibling track; reflection uses LiquidSurface.
 Item {
     id: root
@@ -40,14 +40,16 @@ Item {
     // Internal state
     property bool _pressed: false
     property bool _hovered: false
-    property real _thumbX: checked ? travel : 0
+    readonly property real _thumbX: thumbMotion.value * travel
 
     // The pressed lens must extend beyond the solid slot.
     clip: false
 
     // Animation values
     property real _expansion: 0.0  // 0 = rest pill, 1 = expanded glass lens
-    property real _stretch: 0.0    // squash-stretch wobble
+    readonly property real _stretch: !reduceMotion && !materialForm
+        ? Math.min(0.175, Math.abs(thumbMotion.velocity) * 0.018) : 0
+    readonly property real _lensExpansion: expansionMotion.value
 
     // Computed geometry
     readonly property bool sampling: !materialForm && _expansion > .001 && glassLens.sampling
@@ -57,21 +59,30 @@ Item {
     readonly property real travel: Math.max(0, width - thumbWidth - thumbInset * 2)
     readonly property real thumbRadius: thumbHeight / 2
 
-    // Track color crossfade based on thumb position
+    // Optical fades remain bounded and independent of the spring velocity.
     readonly property real progress: travel > 0 ? Math.max(0, Math.min(1, _thumbX / travel)) : 0
+    property real _trackProgress: checked ? 1 : 0
     readonly property color currentTrackColor: Qt.rgba(
-        trackColor.r + (accentColor.r - trackColor.r) * progress,
-        trackColor.g + (accentColor.g - trackColor.g) * progress,
-        trackColor.b + (accentColor.b - trackColor.b) * progress,
+        trackColor.r + (accentColor.r - trackColor.r) * _trackProgress,
+        trackColor.g + (accentColor.g - trackColor.g) * _trackProgress,
+        trackColor.b + (accentColor.b - trackColor.b) * _trackProgress,
         1.0
     )
+    Behavior on _trackProgress {
+        NumberAnimation { duration: root.reduceMotion ? 0 : 120; easing.type: Easing.OutCubic }
+    }
 
-    // Thumb position animation
-    Behavior on _thumbX {
-        NumberAnimation {
-            duration: root.reduceMotion ? 0 : 200
-            easing.type: Easing.OutCubic
-        }
+    Foundation.SpringMotion {
+        id: thumbMotion
+        target: root.checked ? 1 : 0
+        enabled: !root.reduceMotion && root.visible
+    }
+    Foundation.SpringMotion {
+        id: expansionMotion
+        target: !root.materialForm && root._pressed ? 1 : 0
+        enabled: !root.reduceMotion && root.visible
+        response: 0.22
+        dampingRatio: 0.85
     }
 
     // Expansion animation (dissolve into glass)
@@ -82,16 +93,6 @@ Item {
         }
     }
 
-    // Squash-stretch wobble
-    SequentialAnimation on _stretch {
-        id: wobbleAnim
-        running: false
-        NumberAnimation { to: 0.175; duration: 50; easing.type: Easing.OutQuad }
-        NumberAnimation { to: -0.08; duration: 70; easing.type: Easing.InOutQuad }
-        NumberAnimation { to: 0.04; duration: 60; easing.type: Easing.InOutQuad }
-        NumberAnimation { to: 0.0; duration: 50; easing.type: Easing.OutQuad }
-    }
-
     opacity: enabled ? 1.0 : 0.5
 
     function toggle() {
@@ -99,9 +100,7 @@ Item {
         // The owner confirms the value (often asynchronously). Never replace
         // its checked binding with a local assignment.
         root.toggled(!root.checked)
-        if (!reduceMotion) wobbleAnim.restart()
     }
-
 
     // Shared interaction-state entry points; Gallery review uses these same
     // paths and labels its captures as state-driven rather than pointer events.
@@ -171,15 +170,14 @@ Item {
         x: root.thumbInset + root._thumbX - (width - root.thumbWidth) / 2
         anchors.verticalCenter: parent.verticalCenter
         anchors.verticalCenterOffset: 2
-        width: root.thumbWidth * (1 + 0.3 * root._expansion)
-        height: root.thumbHeight * (1 + 0.3 * root._expansion)
+        width: glassThumb.width
+        height: glassThumb.height
         radius: width / 2
         color: Qt.rgba(0, 0, 0, 0.14)
         opacity: (1 - root._expansion) * 0.5
         // 合并 Material 门控与原有淡出判定（同对象两条 visible = 解析错
         // crash-loop，桌面起不来——实测踩过）
         visible: !root.materialForm && opacity > 0.01
-        Behavior on opacity { NumberAnimation { duration: 200 } }
     }
 
     // The glass thumb/lens
@@ -192,8 +190,8 @@ Item {
         anchors.verticalCenter: parent.verticalCenter
 
         // Size animates from pill to expanded lens with squash-stretch
-        width: root.thumbWidth * (1 + 0.42 * root._expansion) * (1 - 0.2 * root._stretch)
-        height: root.thumbHeight * (1 + 0.50 * root._expansion) * (1 + 0.3 * root._stretch)
+        width: root.thumbWidth * (1 + 0.42 * root._lensExpansion) * (1 - 0.2 * root._stretch)
+        height: root.thumbHeight * (1 + 0.50 * root._lensExpansion) * (1 + 0.3 * root._stretch)
 
         // Layer 1: Base white pill (fades out when expanding)
         Rectangle {
@@ -246,10 +244,10 @@ Item {
         visible: root.materialForm
 
         readonly property real m3Scale: Math.min(1, root.height / 32)
-        readonly property real handleSize: (root.checked ? 24 : 16) * m3Scale
+        readonly property real handleSize: (16 + 8 * thumbMotion.value) * m3Scale
         readonly property real inset: Math.max(1, 4 * m3Scale)
         readonly property real handleX: inset
-            + (root.checked ? Math.max(1, root.width - inset * 2 - handleSize) : 0)
+            + thumbMotion.value * Math.max(1, root.width - inset * 2 - handleSize)
 
         // Track: accent when on, surface variant when off.
         Rectangle {
@@ -279,8 +277,7 @@ Item {
             height: materialLayer.handleSize
             radius: width / 2
             color: root.checked ? root.handleOnColor : root.handleOffColor
-            Behavior on x { NumberAnimation { duration: root.reduceMotion ? 0 : 150; easing.type: Easing.OutCubic } }
-            Behavior on width { NumberAnimation { duration: root.reduceMotion ? 0 : 150; easing.type: Easing.OutCubic } }
+            Behavior on color { ColorAnimation { duration: root.reduceMotion ? 0 : 120 } }
         }
     }
 
