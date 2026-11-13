@@ -53,7 +53,7 @@ PersistentPanelWindow {
         if (effectiveOpen) {
             ncMotion.requestedOpen = true
             ncMotion.mapped = true
-            panel._openPreroll = 3
+            panel._openPreroll = 5
         } else if (!ScreenLifecycle.outputAvailable) {
             ncMotion.reset()
         } else {

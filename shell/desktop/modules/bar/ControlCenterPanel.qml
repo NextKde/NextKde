@@ -242,7 +242,7 @@ PersistentPanelWindow {
                 // the first-frame stall and is over before anything is visible.
                 popupMotion.requestedOpen = true
                 popupMotion.mapped = true
-                panel._openPreroll = 3
+                panel._openPreroll = 5
             } else {
                 popupMotion.open()
             }

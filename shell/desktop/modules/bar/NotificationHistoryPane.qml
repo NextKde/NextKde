@@ -262,7 +262,13 @@ Item {
             topMargin: 36; bottomMargin: pane.expanded || NotificationHistoryService.count <= 3 ? 0 : 12 * (1 - pane.revealProgress) }
         clip: true
         spacing: 0
-        cacheBuffer: pane.expanded ? 112 : 600
+        // Expanded decks scroll through every notification; a small cache kept
+        // recreating card delegates during the scroll (each one is a full glass
+        // card) and that was the whole scroll stutter: 112 px gave 5-200 fps
+        // chaos, covering the deck gives a steady ~240 fps. Cheap: the deck is
+        // capped at ~24 rows (maximumHeight 560).
+        cacheBuffer: pane.expanded
+            ? Math.min(4800, Math.max(2400, historyList.count * 140)) : 600
         activeFocusOnTab: pane.visibleListRect.height > 0
         Accessible.name: I18n.tr("Notification list")
         boundsBehavior: Flickable.StopAtBounds
