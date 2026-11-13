@@ -41,6 +41,12 @@ constexpr auto ReadbackTimeout = std::chrono::milliseconds(250);
 // jitter.
 constexpr qreal SizeTolerance = 0.5;
 
+// `cooperativeButtons` slots are indexed by the protocol action -- 0 maximize,
+// 1 minimize, 2 close -- not by the legacy panel's left-to-right position.
+// Keep this mapping independent of typeAt(): reordering the overlay must not
+// relabel the lights an application declared for its own window.
+constexpr Type CooperativeSlotType[TypeCount] = {Maximize, Minimize, Close};
+
 // Extra logical pixels around the panel in which pointer events are swallowed
 // as well -- see AppConfig::interceptMargin. The controls an application draws
 // are larger than the panel that covers them, and a pointer that reaches the
@@ -598,8 +604,8 @@ void ButtonRenderer::paint(const KWin::RenderTarget &renderTarget,
                                    QSizeF(padded.width()*transform.xScale, padded.height()*transform.yScale));
                 const auto dotClip = clippedToWindow(deviceRegion, viewport, drawn);
                 if (dotClip.isEmpty()) continue;
-                if (auto *texture = cooperativeTexture(dot.size(), scale, typeAt(i), active,
-                        hovered == actionFor(typeAt(i)), maximized, showGlyphs))
+                if (auto *texture = cooperativeTexture(dot.size(), scale, CooperativeSlotType[i], active,
+                        hovered == actionFor(CooperativeSlotType[i]), maximized, showGlyphs))
                     blit(viewport, dotClip, drawn, texture);
             }
         } else if (KWin::GLTexture *tex = panelTexture(panelSize, scale, active, dark,
@@ -1449,10 +1455,12 @@ QImage ButtonRenderer::buildTileMenu(qreal scale, bool dark,
 
 Type ButtonRenderer::typeAt(int index)
 {
-    // Which light sits in each of the three positions, left to right. The
-    // colours, the glyphs, the hit-testing and the actions all follow this, so
-    // reordering the panel is this line and nothing else. Matches KDE's
-    // default decoration layout (IAX = minimize, maximize, close).
+    // Which light sits in each of the three positions of the legacy panel,
+    // left to right. The colours, the glyphs, the hit-testing and the actions
+    // all follow this, so reordering the panel is this line and nothing else.
+    // Matches KDE's default decoration layout (IAX = minimize, maximize,
+    // close). Cooperative buttons use CooperativeSlotType instead: their slots
+    // are protocol action indices, not panel positions.
     constexpr Type Order[TypeCount] = {Minimize, Maximize, Close};
 
     if (index < 0 || index >= TypeCount) {
@@ -1540,7 +1548,7 @@ ButtonRenderer::Action ButtonRenderer::hitTest(const QPointF &logicalPos,
 
         for (int i = 0; i < TypeCount; ++i) {
             if (hit.dots[i].contains(logicalPos)) {
-                return actionFor(typeAt(i));
+                return actionFor(hit.cooperative ? CooperativeSlotType[i] : typeAt(i));
             }
         }
         // Inside the panel but not on a dot: swallow the click, no action.
