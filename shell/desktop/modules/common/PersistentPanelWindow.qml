@@ -39,7 +39,12 @@ PanelWindow {
     exclusiveZone: 0
     WlrLayershell.layer: WlrLayer.Top
     WlrLayershell.namespace: "kos-popup"
-    WlrLayershell.keyboardFocus: popupInteractive
+    // Grab keyboard focus and the full input region as soon as the panel asks
+    // to open, not when the reveal animation crosses its interactive
+    // threshold. Switching either one mid-slide commits a KWin focus/grab
+    // transaction in the middle of the animation and visibly stalls its first
+    // frames (measured 20-50 ms bursts on this session).
+    WlrLayershell.keyboardFocus: !!window.motion && window.motion.requestedOpen
         ? WlrKeyboardFocus.OnDemand : WlrKeyboardFocus.None
 
     contentItem.opacity: motion ? motion.progress : 0
@@ -50,7 +55,8 @@ PanelWindow {
         && (window.motion.requestedOpen || window.motion.progress > 0)
     contentItem.transformOrigin: window.motionOrigin
     contentItem.enabled: popupInteractive
-    mask: popupInteractive ? null : emptyInputRegion
+    mask: !!window.motion && (window.motion.requestedOpen || window.motion.progress > 0)
+        ? null : emptyInputRegion
 
     Region { id: emptyInputRegion }
 

@@ -60,7 +60,7 @@ PersistentPanelWindow {
             ncMotion.close()
         }
     }
-    signal closed()
+    signal revealClosed()
     // Clicking outside used to be dismissed by the compositor's popup grab.
     // A persistent surface has to do it itself; the press still reaches the
     // window underneath, which is the same result a popup gave.
@@ -86,7 +86,7 @@ PersistentPanelWindow {
         target: ncMotion
         function onClosed() {
             DockModelService.releaseDockPopup(panel)
-            panel.closed()
+            panel.revealClosed()
         }
     }
 
