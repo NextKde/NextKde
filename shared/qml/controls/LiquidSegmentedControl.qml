@@ -1,12 +1,14 @@
 pragma ComponentBehavior: Bound
 
 import QtQuick
+import "../foundation" as Foundation
 
 // A fixed-geometry segmented control with an optimistic liquid-glass lens.
 // Keeping each segment's width stable avoids the label-resize artefacts that
 // make custom segmented controls feel as if they need a second click.
 Item {
     id: root
+    property var motionPolicy: LiquidStyle.motionFor(root.materialForm)
 
     implicitWidth: 180
     implicitHeight: 34
@@ -27,6 +29,13 @@ Item {
     property int _pressedIndex: -1
     property int _visualIndex: 0
     property int _pendingIndex: -1
+    property bool _ready: false
+
+    Foundation.SpringMotion {
+        id: selectionSpring
+        target: root._visualIndex
+        enabled: root._ready && !AppTheme.reduceMotion && root.visible
+    }
 
     readonly property int safeIndex: clampedIndex(currentIndex)
     readonly property real segmentWidth: labels.length > 0 ? (width - 4) / labels.length : 0
@@ -39,7 +48,7 @@ Item {
     }
 
     function select(index) {
-        if (index < 0 || index >= labels.length)
+        if (!enabled || index < 0 || index >= labels.length)
             return
         // Draw the result first. The owner may update its persistent state
         // through IPC, but that round trip must not consume the first click.
@@ -57,6 +66,8 @@ Item {
             segment.forceActiveFocus()
     }
 
+    onEnabledChanged: { if (!enabled) _pressedIndex = -1 }
+
     onCurrentIndexChanged: {
         // Read the changed source property directly. A binding that depends on
         // currentIndex (such as safeIndex) may not have been re-evaluated yet
@@ -68,8 +79,9 @@ Item {
     onLabelsChanged: {
         _visualIndex = clampedIndex(currentIndex)
         _pendingIndex = -1
+        if (_ready) selectionSpring.snap()
     }
-    Component.onCompleted: _visualIndex = safeIndex
+    Component.onCompleted: { _visualIndex = safeIndex; _ready = true }
 
     Timer {
         id: confirmationTimer
@@ -115,7 +127,7 @@ Item {
 
     Rectangle {
         id: lens
-        x: 4 + root._visualIndex * root.segmentWidth
+        x: 4 + selectionSpring.value * root.segmentWidth
         y: 2
         width: root.segmentWidth - 4
         height: root.height - 4
@@ -123,8 +135,6 @@ Item {
         color: root.selectionColor
         border.width: root.materialForm ? 0 : 1
         border.color: Qt.rgba(1, 1, 1, 0.16)
-
-        Behavior on x { NumberAnimation { duration: AppTheme.motionNormal; easing.type: Easing.OutQuint } }
 
         Rectangle {
             anchors.fill: parent
@@ -179,6 +189,13 @@ Item {
                 event.accepted = true
             }
 
+            Foundation.SpringMotion {
+                id: labelPressSpring
+                target: root._pressedIndex === segmentDelegate.index ? 0.96 : 1
+                enabled: root._ready && !AppTheme.reduceMotion && root.visible
+                response: 0.22
+            }
+
             Text {
                 anchors.centerIn: parent
                 width: Math.max(0, parent.width - 16)
@@ -190,15 +207,9 @@ Item {
                 font.pixelSize: 12
                 font.weight: segmentDelegate.index === root._visualIndex
                     ? Font.DemiBold : Font.Normal
-                scale: root._pressedIndex === segmentDelegate.index ? 0.96 : 1.0
+                scale: labelPressSpring.value
                 Behavior on color {
-                    ColorAnimation { duration: AppTheme.motionFast }
-                }
-                Behavior on scale {
-                    NumberAnimation {
-                        duration: AppTheme.motionFast
-                        easing.type: Easing.OutCubic
-                    }
+                    ColorAnimation { duration: AppTheme.reduceMotion ? 0 : root.motionPolicy.fast.duration; easing.type: root.motionPolicy.enterCurve }
                 }
             }
             MouseArea {

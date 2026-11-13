@@ -5,10 +5,14 @@ export function stageIcons(directory) {
     mkdirSync(common, {recursive: true});
     symlinkSync(new URL("../../shell/shared", import.meta.url), join(directory, "shared"), "dir");
     copyFileSync(new URL("../../shell/desktop/modules/common/ShellIconMap.mjs", import.meta.url), join(common, "ShellIconMap.mjs"));
-    const declarations = ["singleton AppearanceTokens 1.0 AppearanceTokens.qml"];
+    copyFileSync(new URL("../../shared/qml/foundation/MotionTokens.qml", import.meta.url), join(common, "MotionTokens.qml"));
+    const declarations = ["singleton AppearanceTokens 1.0 AppearanceTokens.qml", "MotionTokens 1.0 MotionTokens.qml"];
     writeFileSync(join(common, "AppearanceTokens.qml"), `pragma Singleton
 import QtQuick
-QtObject { readonly property bool isDarkTheme: true }
+QtObject {
+    readonly property bool isDarkTheme: true
+    readonly property MotionTokens motion: MotionTokens {}
+}
 `);
     for (const name of ["AppIcon", "BundledIcon", "ShellText", "GlassText", "BundledIcons", "AppPresentationService", "SystemIconResolver", "IconThemeReloadService"]) {
         copyFileSync(new URL(`../../shell/desktop/modules/common/${name}.qml`, import.meta.url), join(common, `${name}.qml`));

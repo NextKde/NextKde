@@ -80,12 +80,13 @@ QtObject {
     property var records: []
 }
 `);
+    copyFileSync(new URL("../../shared/qml/foundation/MotionTokens.qml", import.meta.url), join(directory, "MotionTokens.qml"));
     writeFileSync(join(directory, "AppearanceTokens.qml"), `pragma Singleton
 import QtQuick
 QtObject {
-    property QtObject motion: QtObject {
-        property int popupOpenDuration: 150
-        property int popupCloseDuration: 140
+    property MotionTokens motion: MotionTokens {
+        property int popupOpenDuration: base.duration
+        property int popupCloseDuration: base.duration
     }
 }
 `);

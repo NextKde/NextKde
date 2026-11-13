@@ -43,7 +43,7 @@ Item {
         name: "bar.notifications"
         color: ThemeService.barInk
         scale: hoverArea.pressed ? 0.90 : hoverArea.containsMouse ? 1.06 : 1
-        Behavior on scale { NumberAnimation { duration: AppearanceTokens.motion.fastDuration; easing.type: Easing.OutCubic } }
+        Behavior on scale { NumberAnimation { duration: AppearanceTokens.motion.fastDuration; easing.type: AppearanceTokens.motion.enterCurve } }
     }
     Rectangle {
         anchors { right: parent.right; top: parent.top; margins: 2 }

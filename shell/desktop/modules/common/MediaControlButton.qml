@@ -25,7 +25,7 @@ AbstractButton {
     padding: 0
     Accessible.name: text
     opacity: enabled ? 1 : 0.32
-    Behavior on opacity { NumberAnimation { duration: 120 } }
+    Behavior on opacity { NumberAnimation { duration: AppearanceTokens.motion.fast.duration; easing.type: AppearanceTokens.motion.enterCurve } }
 
     // The hit target stays fixed; the disc and icon move together, without a
     // circle-to-square morph or a font fallback changing the glyph's baseline.
@@ -37,7 +37,7 @@ AbstractButton {
             height: width
             scale: root.down ? 0.94 : 1
             Behavior on scale {
-                NumberAnimation { duration: 100; easing.type: Easing.OutCubic }
+                NumberAnimation { duration: AppearanceTokens.motion.instant.duration; easing.type: AppearanceTokens.motion.enterCurve }
             }
             Rectangle {
                 anchors.fill: parent
@@ -48,7 +48,7 @@ AbstractButton {
                     radius: width / 2
                     color: root.ink
                     opacity: root.down ? 0.14 : root.hovered ? 0.08 : 0
-                    Behavior on opacity { NumberAnimation { duration: 120 } }
+                    Behavior on opacity { NumberAnimation { duration: AppearanceTokens.motion.fast.duration; easing.type: AppearanceTokens.motion.enterCurve } }
                 }
                 border.width: root.visualFocus ? 2 : 0
                 border.color: root.ink

@@ -28,6 +28,12 @@ Item {
     Keys.onEnterPressed: requestToggle()
     Keys.onReturnPressed: requestToggle()
 
+    SpringMotion {
+        id: thumbMotion
+        target: root.checked ? 1 : 0
+        enabled: !AppTheme.reduceMotion && root.visible
+    }
+
     Rectangle {
         anchors.fill: parent
         radius: height / 2
@@ -38,11 +44,11 @@ Item {
             ? AppTheme.withAlpha(AppTheme.accent, 0.78) : AppTheme.border
 
         Behavior on color {
-            ColorAnimation { duration: AppTheme.motionFast }
+            ColorAnimation { duration: AppTheme.reduceMotion ? 0 : AppTheme.motionFast }
         }
 
         Rectangle {
-            x: root.checked ? parent.width - width - 3 : 3
+            x: 3 + thumbMotion.value * (parent.width - width - 6)
             anchors.verticalCenter: parent.verticalCenter
             width: parent.height - 6
             height: width
@@ -50,13 +56,6 @@ Item {
             color: AppTheme.whiteSeed
             border.width: AppTheme.dark ? 0 : 1
             border.color: Qt.rgba(0, 0, 0, 0.10)
-
-            Behavior on x {
-                NumberAnimation {
-                    duration: AppTheme.motionNormal
-                    easing.type: Easing.OutCubic
-                }
-            }
         }
     }
 

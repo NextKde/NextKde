@@ -17,7 +17,7 @@ PopupWindow {
     visible: motion.mapped
     contentItem.opacity: revealProgress
     contentItem.scale: AppearanceTokens.motion.popupStartScale
-        + (1 - AppearanceTokens.motion.popupStartScale) * revealProgress
+        + (1 - AppearanceTokens.motion.popupStartScale) * (animationEnabled ? motion.geometryProgress : 1)
     contentItem.transformOrigin: motionOrigin
     contentItem.enabled: interactive
     mask: interactive ? null : emptyInputRegion

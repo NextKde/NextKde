@@ -17,6 +17,7 @@ import Qt5Compat.GraphicalEffects
 //     active, so items show through the translucent glass
 Item {
     id: root
+    property var motionPolicy: LiquidStyle.motionFor(root.materialForm)
 
     // ---- Public API (mirrors the Vue component props) ----
     property var model: []            // [{ id, label?, icon }] - icon is a text symbol
@@ -113,6 +114,7 @@ Item {
     property real _displayX: 0
     property real _displayScaleX: 1
     property real _displayScaleY: 1
+    // motion-exception: 100ms display filtering follows the frame-driven spring in all three axes.
     Behavior on _displayX { NumberAnimation { duration: 100; easing.type: Easing.OutCubic } }
     Behavior on _displayScaleX { NumberAnimation { duration: 100; easing.type: Easing.OutCubic } }
     Behavior on _displayScaleY { NumberAnimation { duration: 100; easing.type: Easing.OutCubic } }
@@ -336,7 +338,7 @@ Item {
             radius: height / 2
             color: root.materialForm ? root.accentColor : "#ffffff"
             opacity: root._isActive ? 0 : 1
-            Behavior on opacity { NumberAnimation { duration: 100 } }
+            Behavior on opacity { NumberAnimation { duration: root.motionPolicy.instant.duration; easing.type: root.motionPolicy.enterCurve } }
 
             // Flat container colour in the tonal form; the iPadOS form keeps its
             // vertical wash, so the same pill carries both finishes.
@@ -367,7 +369,7 @@ Item {
             id: glassLens
             anchors.fill: parent
             opacity: root._isActive ? 1 : 0
-            Behavior on opacity { NumberAnimation { duration: 100 } }
+            Behavior on opacity { NumberAnimation { duration: root.motionPolicy.instant.duration; easing.type: root.motionPolicy.enterCurve } }
 
             // Chromatic aberration - RGB split edges
             Rectangle {
@@ -464,8 +466,8 @@ Item {
             height: root.sliderHeight
             opacity: index === root.currentIndex ? 1.0 : 0.6
             scale: index === root.currentIndex ? 1.05 : 1.0
-            Behavior on opacity { NumberAnimation { duration: 100 } }
-            Behavior on scale { NumberAnimation { duration: 100 } }
+            Behavior on opacity { NumberAnimation { duration: root.motionPolicy.instant.duration; easing.type: root.motionPolicy.enterCurve } }
+            Behavior on scale { NumberAnimation { duration: root.motionPolicy.instant.duration; easing.type: root.motionPolicy.enterCurve } }
 
             Column {
                 anchors.centerIn: parent

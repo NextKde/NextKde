@@ -18,7 +18,7 @@ Dialog {
             property: "revealProgress"
             to: 1
             duration: AppTheme.motionNormal
-            easing.type: Easing.OutCubic
+            easing.type: AppTheme.motion.enterCurve
         }
     }
     exit: Transition {
@@ -27,7 +27,7 @@ Dialog {
             property: "revealProgress"
             to: 0
             duration: AppTheme.motionFast
-            easing.type: Easing.InCubic
+            easing.type: AppTheme.motion.exitCurve
         }
     }
 }

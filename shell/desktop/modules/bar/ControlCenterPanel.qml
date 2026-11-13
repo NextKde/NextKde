@@ -199,7 +199,7 @@ PersistentPanelWindow {
         width: panel.controlCenterWidth
         height: panel.naturalContentHeight
         y: panel.dockFacingLayout ? Math.max(0, controlViewport.height - height) : 0
-        scale: AppearanceTokens.motion.popupStartScale + (1 - AppearanceTokens.motion.popupStartScale) * popupMotion.progress
+        scale: AppearanceTokens.motion.popupStartScale + (1 - AppearanceTokens.motion.popupStartScale) * popupMotion.geometryProgress
         transformOrigin: !panel.dockHosted ? Item.Top
             : panel.dockEdge === "left" ? Item.Left : panel.dockEdge === "right" ? Item.Right : Item.Bottom
     }
@@ -771,14 +771,14 @@ PersistentPanelWindow {
         cardHeight: panel.quickControlWidth
 
         cardScale: screenshotPointer.pressed ? 0.91 : (screenshotPointer.containsMouse ? 1.06 : 1.0)
-        Behavior on cardScale { NumberAnimation { duration: 110; easing.type: Easing.OutCubic } }
+        Behavior on cardScale { NumberAnimation { duration: AppearanceTokens.motion.fast.duration; easing.type: AppearanceTokens.motion.enterCurve } }
         Rectangle {
             anchors.fill: parent
             radius: AppearanceTokens.surface.pick(AppearanceTokens.shape.extraLarge, 26)
             color: ThemeService.isDark ? Qt.rgba(1, 1, 1, 0.14) : Qt.rgba(1, 1, 1, 0.45)
             opacity: AppearanceTokens.surface.selectionHighlightStyle !== "glass"
                 && screenshotPointer.containsMouse && !screenshotPointer.pressed ? 1 : 0
-            Behavior on opacity { NumberAnimation { duration: 140 } }
+            Behavior on opacity { NumberAnimation { duration: AppearanceTokens.motion.base.duration; easing.type: AppearanceTokens.motion.enterCurve } }
         }
         BundledIcon {
             anchors.centerIn: parent
@@ -807,13 +807,13 @@ PersistentPanelWindow {
         cardHeight: panel.quickControlWidth
 
         cardScale: themePointer.pressed ? 0.91 : (themePointer.containsMouse ? 1.06 : 1.0)
-        Behavior on cardScale { NumberAnimation { duration: 110; easing.type: Easing.OutCubic } }
+        Behavior on cardScale { NumberAnimation { duration: AppearanceTokens.motion.fast.duration; easing.type: AppearanceTokens.motion.enterCurve } }
         Rectangle {
             anchors.fill: parent
             radius: AppearanceTokens.surface.pick(AppearanceTokens.shape.extraLarge, 26)
             color: "#ffffff"
             opacity: ThemeService.isDark ? 1 : 0
-            Behavior on opacity { NumberAnimation { duration: 140 } }
+            Behavior on opacity { NumberAnimation { duration: AppearanceTokens.motion.base.duration; easing.type: AppearanceTokens.motion.enterCurve } }
         }
         BundledIcon {
             anchors.centerIn: parent
@@ -822,7 +822,7 @@ PersistentPanelWindow {
             name: "controlCenter.appearance"
 
             rotation: ThemeService.isDark ? 0 : 180
-            Behavior on rotation { NumberAnimation { duration: 250; easing.type: Easing.OutCubic } }
+            Behavior on rotation { NumberAnimation { duration: AppearanceTokens.motion.slow.duration; easing.type: AppearanceTokens.motion.enterCurve } }
 
             color: ThemeService.isDark ? "#000000" : "#ffffff"
         }
@@ -851,14 +851,14 @@ PersistentPanelWindow {
         cardHeight: panel.quickControlWidth
 
         cardScale: powerPointer.pressed ? 0.91 : (powerPointer.containsMouse ? 1.06 : 1.0)
-        Behavior on cardScale { NumberAnimation { duration: 110; easing.type: Easing.OutCubic } }
+        Behavior on cardScale { NumberAnimation { duration: AppearanceTokens.motion.fast.duration; easing.type: AppearanceTokens.motion.enterCurve } }
         Rectangle {
             anchors.fill: parent
             radius: AppearanceTokens.surface.pick(AppearanceTokens.shape.extraLarge, 26)
             color: ThemeService.isDark ? Qt.rgba(1, 1, 1, 0.14) : Qt.rgba(1, 1, 1, 0.45)
             opacity: AppearanceTokens.surface.selectionHighlightStyle !== "glass"
                 && powerPointer.containsMouse && !powerPointer.pressed ? 1 : 0
-            Behavior on opacity { NumberAnimation { duration: 140 } }
+            Behavior on opacity { NumberAnimation { duration: AppearanceTokens.motion.base.duration; easing.type: AppearanceTokens.motion.enterCurve } }
         }
         BundledIcon {
             anchors.centerIn: parent
@@ -894,13 +894,13 @@ PersistentPanelWindow {
         cardHeight: panel.quickControlWidth
 
         cardScale: dndPointer.pressed ? 0.91 : (dndPointer.containsMouse ? 1.06 : 1.0)
-        Behavior on cardScale { NumberAnimation { duration: 110; easing.type: Easing.OutCubic } }
+        Behavior on cardScale { NumberAnimation { duration: AppearanceTokens.motion.fast.duration; easing.type: AppearanceTokens.motion.enterCurve } }
         Rectangle {
             anchors.fill: parent
             radius: AppearanceTokens.surface.pick(AppearanceTokens.shape.extraLarge, 26)
             color: ThemeService.isDark ? Qt.rgba(0.04, 0.52, 1.0, 0.28) : Qt.rgba(0.04, 0.52, 1.0, 0.18)
             opacity: ControlCenterService.doNotDisturbEnabled ? 1 : 0
-            Behavior on opacity { NumberAnimation { duration: 140 } }
+            Behavior on opacity { NumberAnimation { duration: AppearanceTokens.motion.base.duration; easing.type: AppearanceTokens.motion.enterCurve } }
         }
         BundledIcon {
             anchors.centerIn: parent
@@ -936,13 +936,13 @@ PersistentPanelWindow {
         cardHeight: panel.quickControlWidth
 
         cardScale: nightLightPointer.pressed ? 0.91 : (nightLightPointer.containsMouse ? 1.06 : 1.0)
-        Behavior on cardScale { NumberAnimation { duration: 110; easing.type: Easing.OutCubic } }
+        Behavior on cardScale { NumberAnimation { duration: AppearanceTokens.motion.fast.duration; easing.type: AppearanceTokens.motion.enterCurve } }
         Rectangle {
             anchors.fill: parent
             radius: AppearanceTokens.surface.pick(AppearanceTokens.shape.extraLarge, 26)
             color: "#ffcc00"
             opacity: ControlCenterService.nightLightActive ? 1 : 0
-            Behavior on opacity { NumberAnimation { duration: 140 } }
+            Behavior on opacity { NumberAnimation { duration: AppearanceTokens.motion.base.duration; easing.type: AppearanceTokens.motion.enterCurve } }
         }
         BundledIcon {
             anchors.centerIn: parent

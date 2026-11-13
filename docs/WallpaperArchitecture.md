@@ -63,8 +63,13 @@ at most 2000 entries, pause during preview and stop below two images; outputs sh
 
 Themes retain the original image for restoration/lockscreen, stop slideshow and depth mode, and
 need no AI model. `ThemeWallpaperScene` and the foreground layers use the shared host contract.
-Normal playback waits for desktop idle with no visible windows; preview plays immediately, while
-lock/offscreen/reduced-motion policies still apply. Weather uses the shared service cache.
+Theme playback and spatial parallax share `WallpaperMotionGate`: wait five uninterrupted seconds
+with no visible windows on the current virtual desktop. Minimized/hidden windows and windows on
+other desktops do not block motion. Opening/restoring a visible window or switching desktops resets
+the wait. Pointer movement does not reset it, so spatial parallax can respond after activation.
+Preview plays immediately; normal lock/offscreen/reduced-motion policies still apply.
+Spatial assets stay loaded while motion is paused, with the camera centered and widget foreground
+hidden, so preparation/readiness never depends on the idle wait. Weather uses the shared service cache.
 Do not claim independent foreground/background windows are frame-synchronized under load.
 Preserve [vendor provenance](../shared/qml/wallpapers/vendor/README.md) and shader Qt compatibility.
 

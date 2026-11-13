@@ -22,6 +22,7 @@ Canvas {
         running: root.animated && root.visible
         from: 0
         to: Math.PI * 2
+        // motion-exception: wave cycle period is independent of UI transitions.
         duration: 1100
         loops: Animation.Infinite
     }

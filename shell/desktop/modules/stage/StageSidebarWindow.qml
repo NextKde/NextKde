@@ -2431,6 +2431,7 @@ PanelWindow {
                     // 拖拽中的被拖卡必须逐帧跟手（Behavior=橡皮筋延迟）；
                     // 其余卡的 Behavior 保持——让位/回弹平滑
                     enabled: slot.placed && root.dragKey !== slot.appKey
+                    // motion-exception: Stage reflow follows the configured card motion.
                     NumberAnimation { duration: StageConfigService.reflowDuration; easing.type: Easing.OutCubic }
                 }
                 Behavior on x {
@@ -2669,8 +2670,8 @@ PanelWindow {
         id: retractMotion
         target: root
         property: "_retractPx"
-        duration: 260
-        easing.type: Easing.OutCubic
+        duration: AppearanceTokens.motion.page.duration
+        easing.type: AppearanceTokens.motion.enterCurve
     }
     function _animateRetraction() {
         retractMotion.stop()

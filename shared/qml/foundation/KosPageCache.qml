@@ -108,7 +108,7 @@ FocusScope {
             enabled: index === root.currentIndex
             focus: enabled && status === Loader.Ready
             Behavior on opacity {
-                NumberAnimation { duration: AppTheme.motionNormal; easing.type: Easing.OutCubic }
+                NumberAnimation { duration: AppTheme.motionNormal; easing.type: AppTheme.motion.enterCurve }
             }
             transform: Translate { x: AppTheme.reduceMotion ? 0 : 12 * (1 - pageLoader.opacity) }
 

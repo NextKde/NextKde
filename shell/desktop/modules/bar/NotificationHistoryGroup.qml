@@ -39,7 +39,7 @@ Item {
 
     Behavior on height {
         enabled: !group.exiting
-        NumberAnimation { duration: 240; easing.type: Easing.OutCubic }
+        NumberAnimation { duration: AppearanceTokens.motion.slow.duration; easing.type: AppearanceTokens.motion.enterCurve }
     }
     ListModel { id: memberModel }
     function reconcileMembers() {
@@ -85,8 +85,8 @@ Item {
         id: exitMotion
         PauseAnimation { duration: group.coordinator?.historyExitDelay(group.painted.sourceKey) ?? 0 }
         ParallelAnimation {
-            NumberAnimation { target: group; property: "x"; to: 18; duration: 170; easing.type: Easing.InCubic }
-            NumberAnimation { target: group; property: "opacity"; to: 0; duration: 170; easing.type: Easing.InCubic }
+            NumberAnimation { target: group; property: "x"; to: 18; duration: AppearanceTokens.motion.base.duration; easing.type: AppearanceTokens.motion.exitCurve }
+            NumberAnimation { target: group; property: "opacity"; to: 0; duration: AppearanceTokens.motion.base.duration; easing.type: AppearanceTokens.motion.exitCurve }
         }
         onFinished: {
             group.releaseExit()
@@ -177,8 +177,8 @@ Item {
         model: memberModel
         // Instantiate the clipped members so expansion has a settled height.
         cacheBuffer: 5000
-        displaced: Transition { NumberAnimation { property: "y"; duration: 200; easing.type: Easing.OutCubic } }
-        add: Transition { NumberAnimation { property: "opacity"; from: 0; to: 1; duration: 140 } }
+        displaced: Transition { NumberAnimation { property: "y"; duration: AppearanceTokens.motion.slow.duration; easing.type: AppearanceTokens.motion.enterCurve } }
+        add: Transition { NumberAnimation { property: "opacity"; from: 0; to: 1; duration: AppearanceTokens.motion.base.duration; easing.type: AppearanceTokens.motion.enterCurve } }
         delegate: NotificationHistoryEntry {
             id: entryDelegate
             required property int index

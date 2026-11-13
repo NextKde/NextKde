@@ -92,6 +92,7 @@ Item {
 
     AnimatedPopupWindow {
         id: temperatureTooltip
+        // motion-exception: retain near-instant tooltip fades (both directions).
         openDuration: 70
         closeDuration: 70
         mask: Region { item: null }

@@ -961,13 +961,14 @@ Item {
                     // from its anchored pointer position into the new slot.
                     enabled: pinnedItemLoader !== container.draggedPinnedLoader
                         || pinnedItemLoader.settling
+                    // motion-exception: Drag reordering settles into the committed slot before releasing the preview.
                     NumberAnimation { duration: 180; easing.type: Easing.OutCubic }
                 }
                 Behavior on scale {
-                    NumberAnimation { duration: 120; easing.type: Easing.OutCubic }
+                    NumberAnimation { duration: AppearanceTokens.motion.fast.duration; easing.type: AppearanceTokens.motion.enterCurve }
                 }
                 Behavior on opacity {
-                    NumberAnimation { duration: 120; easing.type: Easing.OutCubic }
+                    NumberAnimation { duration: AppearanceTokens.motion.fast.duration; easing.type: AppearanceTokens.motion.enterCurve }
                 }
                 // Releasing a drag commits the reordered top-level app.
                 DragHandler {

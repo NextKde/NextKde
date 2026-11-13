@@ -245,8 +245,9 @@ QtObject {
     readonly property int controlHeight: Math.round((modernDesign ? 34 : 36) * densityScale)
     readonly property int sidebarWidth: Math.round((modernDesign ? 224 : 246) * densityScale)
     readonly property int compactSidebarWidth: Math.round(196 * densityScale)
-    readonly property int motionFast: reduceMotion ? 0 : 120
-    readonly property int motionNormal: reduceMotion ? 0 : 220
+    readonly property MotionTokens motion: MotionTokens {}
+    readonly property int motionFast: reduceMotion ? 0 : motion.fast.duration
+    readonly property int motionNormal: reduceMotion ? 0 : motion.slow.duration
     readonly property real hoverScale: reduceMotion ? 1 : 1.012
     readonly property real pressScale: reduceMotion ? 1 : 0.968
 
