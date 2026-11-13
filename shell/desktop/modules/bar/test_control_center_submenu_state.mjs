@@ -42,8 +42,13 @@ assert.match(submenuCard, /cardShown:\s*panel\.submenuShownPage\s*!==\s*""/,
     "the submenu card stays mapped while its page renders on either side of a crossfade")
 assert.match(submenuCard, /pageTag:\s*panel\.submenuShownPage/,
     "the submenu card belongs to the page it is currently rendering")
-assert.match(panel, /visible:\s*popupMotion\.mapped/,
-    "the window remains mapped for its exit animation")
+const persistentPanel = readFileSync(join(here, "../common/PersistentPanelWindow.qml"), "utf8")
+assert.match(persistentPanel, /visible:\s*true/,
+    "the panel surface stays mapped for the shell's lifetime, including the exit animation")
+assert.match(persistentPanel, /contentItem\.visible:[\s\S]{0,160}requestedOpen/,
+    "only the content hides while the mapped surface stays alive")
+assert.match(panel, /PersistentPanelWindow\s*\{/,
+    "the Control Center uses the persistent layer-shell surface")
 assert.match(panel, /readonly property bool open:\s*popupMotion\.requestedOpen/,
     "toggle state uses intent rather than the still-mapped closing surface")
 assert.match(panel, /PageMotion\s*\{[\s\S]*?page:\s*panel\.requestedPage/,
