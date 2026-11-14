@@ -1009,6 +1009,8 @@ export const catalog = {
     "Select all images": "选择全部图片",
     "Pause preview": "暂停预览",
     "Play preview": "播放预览",
+    "Plays automatically after 10 seconds without windows on the desktop and pauses when windows appear. The preview always plays.": "桌面无窗口持续 10 秒后自动播放，窗口出现即暂停。预览始终播放。",
+    "Tap an app, then use the arrow in the bottom-right for the animated desktop preview. It plays automatically after 10 seconds without desktop windows and lowers its cost on battery.": "点击应用，右下角箭头进入桌面动态预览。桌面无窗口持续 10 秒后自动播放，电池模式自动降低开销。",
     "Switch effect": "切换效果",
     "Exit preview": "退出预览",
     "Apply %1 selected": "应用已选 %1 张",
