@@ -88,6 +88,8 @@ qt_add_executable(kos-settings
     src/WallpaperLibrary.cpp
     src/SettingsRuntime.cpp
     src/CacheMaintenance.cpp
+    src/UpdateController.cpp
+    src/UpdateController.h
     src/FontSettings.cpp
     src/FontSettings.h
     src/PowerSettings.cpp
@@ -234,6 +236,15 @@ if(BUILD_TESTING)
         SETTINGS_SHELL_DIR="${CMAKE_CURRENT_SOURCE_DIR}/../../shell")
     add_test(NAME kos-settings.backend-modules COMMAND kos-settings-backend-test)
     set_tests_properties(kos-settings.backend-modules PROPERTIES LABELS logic TIMEOUT 20)
+
+    add_executable(kos-settings-update-status-test
+        tests/backend/UpdateStatusTest.cpp
+        src/UpdateController.cpp
+        src/UpdateController.h)
+    target_include_directories(kos-settings-update-status-test PRIVATE src)
+    target_link_libraries(kos-settings-update-status-test PRIVATE Qt6::Core Qt6::Gui Qt6::Test)
+    add_test(NAME kos-settings.update-status COMMAND kos-settings-update-status-test)
+    set_tests_properties(kos-settings.update-status PROPERTIES LABELS logic TIMEOUT 20)
 
     add_executable(kos-power-settings-test
         tests/power/backend.cpp

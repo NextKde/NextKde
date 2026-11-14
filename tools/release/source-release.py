@@ -73,30 +73,16 @@ def latest_release(repository):
     return tag
 
 
-def select(root, target, repository=None, mirror=None):
+def source_remote(root, repository=None):
     if Path(git(root, "rev-parse", "--show-toplevel")).resolve() != root.resolve():
-        raise ValueError("Source selection requires the root of a Git checkout")
-    if git(root, "status", "--porcelain", "--untracked-files=normal"):
-        raise ValueError("Working tree has local changes or untracked files; save them before switching versions")
-    if git(root, "ls-files", "-u"):
-        raise ValueError("Resolve the unfinished merge before switching versions")
-    for marker in ("MERGE_HEAD", "CHERRY_PICK_HEAD", "REVERT_HEAD", "rebase-merge", "rebase-apply", "sequencer"):
-        location = Path(git(root, "rev-parse", "--git-path", marker))
-        if not location.is_absolute():
-            location = root / location
-        if location.exists():
-            raise ValueError("Finish the in-progress Git operation before switching versions")
+        raise ValueError("This command requires the root of a Git checkout")
     remote = git(root, "remote", "get-url", "origin")
     if repository and remote.rstrip("/").removesuffix(".git") != repository.rstrip("/").removesuffix(".git"):
         raise ValueError("Existing origin differs from --repo; refusing to change repositories")
-    if target == "stable":
-        target = latest_release(remote)
-    if target == "main":
-        ref = "refs/heads/main"
-    elif re.fullmatch("v" + VERSION_PATTERN, target):
-        ref = "refs/tags/" + target
-    else:
-        raise ValueError("Choose stable, main, or an explicit vX.Y.Z[-rc.N] tag")
+    return remote
+
+
+def fetch_ref(root, remote, ref, mirror=None):
     # Fetch the exact remote ref. Never reuse an old FETCH_HEAD after failure,
     # overwrite local tags, reset branches, or silently continue on network errors.
     fetch_args = ["fetch", "--no-tags"]
@@ -115,6 +101,29 @@ def select(root, target, repository=None, mirror=None):
         # A mirror changes transport only; keep origin and release API canonical.
         mirror_url = mirror.rstrip("/") + "/" + remote
         subprocess.run(["git", "-C", str(root), *fetch_args, mirror_url, ref], check=True)
+
+
+def select(root, target, repository=None, mirror=None):
+    remote = source_remote(root, repository)
+    if git(root, "status", "--porcelain", "--untracked-files=normal"):
+        raise ValueError("Working tree has local changes or untracked files; save them before switching versions")
+    if git(root, "ls-files", "-u"):
+        raise ValueError("Resolve the unfinished merge before switching versions")
+    for marker in ("MERGE_HEAD", "CHERRY_PICK_HEAD", "REVERT_HEAD", "rebase-merge", "rebase-apply", "sequencer"):
+        location = Path(git(root, "rev-parse", "--git-path", marker))
+        if not location.is_absolute():
+            location = root / location
+        if location.exists():
+            raise ValueError("Finish the in-progress Git operation before switching versions")
+    if target == "stable":
+        target = latest_release(remote)
+    if target == "main":
+        ref = "refs/heads/main"
+    elif re.fullmatch("v" + VERSION_PATTERN, target):
+        ref = "refs/tags/" + target
+    else:
+        raise ValueError("Choose stable, main, or an explicit vX.Y.Z[-rc.N] tag")
+    fetch_ref(root, remote, ref, mirror)
     revision = git(root, "rev-parse", "FETCH_HEAD^{commit}")
     if target != "main":
         version = git(root, "show", revision + ":VERSION")
@@ -125,6 +134,37 @@ def select(root, target, repository=None, mirror=None):
     print("Source only. Apply with ./tools/kosctl install, then ./tools/kosctl start.")
 
 
+def check(root, channel, repository=None):
+    """Report a channel's revision relative to HEAD; never changes the checkout."""
+    if channel not in ("stable", "main"):
+        raise ValueError("Choose the stable or main channel")
+    remote = source_remote(root, repository)
+    if channel == "stable":
+        tag = latest_release(remote)
+        ref = "refs/tags/" + tag
+        target = tag
+    else:
+        tag = ""
+        ref = "refs/heads/main"
+        target = "origin/main"
+    fetch_ref(root, remote, ref)
+    revision = git(root, "rev-parse", "FETCH_HEAD^{commit}")
+    if tag:
+        version = git(root, "show", revision + ":VERSION")
+        if version != tag[1:]:
+            raise ValueError(f"Tag {tag} disagrees with its VERSION file ({version})")
+    # shortcut: a depth-1 clone cannot see the grafted history, so these counts
+    # are approximate; the update decision still uses the exact commit identity.
+    return {
+        "channel": channel,
+        "target": target,
+        "tag": tag,
+        "revision": revision,
+        "behind": int(git(root, "rev-list", "--count", "HEAD.." + revision)),
+        "ahead": int(git(root, "rev-list", "--count", revision + "..HEAD")),
+    }
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--root", type=Path, default=ROOT)
@@ -133,19 +173,29 @@ def main():
     selection.add_argument("target", nargs="?", default="stable")
     selection.add_argument("--repo")
     selection.add_argument("--mirror")
+    probe = commands.add_parser("check")
+    probe.add_argument("channel", choices=("stable", "main"))
+    probe.add_argument("--repo")
     report = commands.add_parser("version")
     report.add_argument("--installed", type=Path, required=True)
     stamp = commands.add_parser("stamp")
     stamp.add_argument("destination", type=Path)
     stamp.add_argument("--from-file", type=Path)
-    check = commands.add_parser("check-release")
-    check.add_argument("tag")
+    stamp.add_argument("--source-root", type=Path)
+    release_check = commands.add_parser("check-release")
+    release_check.add_argument("tag")
     args = parser.parse_args()
     root = args.root.resolve()
     if args.command == "select":
         select(root, args.target, args.repo, args.mirror)
+    elif args.command == "check":
+        print(json.dumps(check(root, args.channel, args.repo), indent=2))
     elif args.command == "stamp":
         data = json.loads(args.from_file.read_text()) if args.from_file else identity(root)
+        # Recorded by the installer only: a CI runner's checkout path must not
+        # reach a released release.json.
+        if args.source_root:
+            data["sourceRoot"] = str(args.source_root.resolve())
         write_identity(args.destination, data)
     elif args.command == "check-release":
         data = identity(root)
