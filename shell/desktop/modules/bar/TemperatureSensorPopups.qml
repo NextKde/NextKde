@@ -305,6 +305,8 @@ Item {
                         width: (parent.width - 12) / 2
                         spacing: 3
                         GlassText {
+                            width: parent.width
+                            wrapMode: Text.WordWrap
                             text: I18n.tr("Memory trend · last %1 s")
                                 .arg(MetricsService.memoryHistory.length * 10)
                             color: Qt.rgba(ThemeService.foregroundColor.r, ThemeService.foregroundColor.g, ThemeService.foregroundColor.b, 0.62)
@@ -316,6 +318,8 @@ Item {
                         width: (parent.width - 12) / 2
                         spacing: 3
                         GlassText {
+                            width: parent.width
+                            wrapMode: Text.WordWrap
                             text: I18n.tr("CPU trend · %1% · last %2 s")
                                 .arg(Math.round(MetricsService.cpuUsage * 100))
                                 .arg(MetricsService.cpuHistory.length * 10)
@@ -330,6 +334,8 @@ Item {
                     width: parent.width
                     spacing: 3
                     GlassText {
+                        width: parent.width
+                        wrapMode: Text.WordWrap
                         text: I18n.tr("Avg CPU frequency · %1 MHz · last %2 s")
                             .arg(Math.round(MetricsService.cpuFrequencyMhz))
                             .arg(MetricsService.frequencyHistory.length * 10)
@@ -388,10 +394,12 @@ Item {
     }
 
     function formatBytes(value) {
+        // No-break space: a wrapped "used / total" breaks at the slash, never
+        // between a number and its unit.
         if (value >= 1073741824)
-            return (value / 1073741824).toFixed(1) + " GiB"
+            return (value / 1073741824).toFixed(1) + "\u00a0GiB"
         if (value >= 1048576)
-            return (value / 1048576).toFixed(0) + " MiB"
-        return Math.round(value / 1024) + " KiB"
+            return (value / 1048576).toFixed(0) + "\u00a0MiB"
+        return Math.round(value / 1024) + "\u00a0KiB"
     }
 }
