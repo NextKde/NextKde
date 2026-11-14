@@ -10,6 +10,15 @@ import Quickshell.Widgets
 Item {
     id: root
     property string source: ""
+    property bool layeredEnabled: true
+    property string failedLayeredSource: ""
+    readonly property var layeredArtwork: layeredEnabled && !recolorEnabled
+        ? LayeredIconThemeService.artwork(source) : null
+    readonly property bool useLayers: layeredArtwork !== null
+        && (saturation !== 1.0 || tintEnabled !== 0.0)
+        && failedLayeredSource !== source
+    onSourceChanged: failedLayeredSource = ""
+    onLayeredArtworkChanged: failedLayeredSource = ""
     readonly property bool fontGlyph: source.startsWith("kos-icon:")
     readonly property int imageStatus: fontGlyph ? (Symbols.IconRegistry.ready ? Image.Ready : Image.Loading) : (renderer.item?.imageStatus ?? Image.Null)
 
@@ -56,7 +65,8 @@ Item {
     Loader {
         id: renderer
         anchors.fill: parent
-        sourceComponent: root.fontGlyph ? glyphIcon : root.needsEffect ? effectIcon : directIcon
+        sourceComponent: root.fontGlyph ? glyphIcon : root.useLayers ? layeredIcon
+            : root.needsEffect ? effectIcon : directIcon
     }
 
     // IconImage exposes image metrics through backer, not on its wrapper.
@@ -73,6 +83,19 @@ Item {
             opacity: root.opacityMultiplier
             readonly property real paintedWidth: width
             readonly property real paintedHeight: height
+        }
+    }
+
+    Component {
+        id: layeredIcon
+        LayeredAppIcon {
+            artwork: root.layeredArtwork
+            tinted: root.tintEnabled !== 0.0
+            tintColor: root.tintColor
+            opacityMultiplier: root.opacityMultiplier
+            rasterSize: Math.max(1, Math.ceil(Math.min(root.width, root.height) * Math.max(1, Screen.devicePixelRatio)))
+            smooth: root.smooth
+            onLoadFailed: root.failedLayeredSource = root.source
         }
     }
 

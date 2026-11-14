@@ -84,17 +84,24 @@ BundledIcon {
 `SystemIconResolver.qml` 只负责查询当前系统主题。应用自行提供的图标仍来自
 其 `.desktop` 数据，用户覆盖图标仍按用户设置加载。
 
+## 可选分层图标主题
+
+图标主题可在 `index.theme` 中声明 `X-KOS-LayeredIconsVersion=1`，并通过
+`X-KOS-LayerManifest=layers/manifest.json` 提供素材清单。`LayeredIconThemeService`
+读取当前选中主题的声明；不按主题名或应用名写死适配。素材、别名和 desktop ID 映射
+都随独立的 `nextkde-glass-icons` 主题项目安装；格式见该项目的 `FORMAT.md`。
+
+`AppIcon` 使用现有外观设置：彩色走普通图标；透明模式使用主题的透明素材；
+染色模式组合底板、前景和高光，仅前景使用现有染色 shader。普通主题、未适配图标
+及分层图片加载失败时使用原来的整图处理。用户自定义图标仍优先。
+无需新设置入口，也无需为换色重新生成主题。KDE 的其他应用继续读取普通图标目录。
+
 ## 安装与验证
 
 正常安装流程会将目录、字形库及 QML 一起部署到
 `~/.config/quickshell/kos/`。安装副本禁用了文件监听，编辑源码后需要重新部署并重启 Shell。
 
-图标运行检查仅在虚拟机中执行：
-
-```sh
-python3 tests/icons/run.py
-node tests/notification-history/run-icons.mjs
-```
-
-字体场景检查功能名解析、刻意留空、品牌图片，以及 Wi-Fi、音量、电池状态。
-本机只安装代码，由用户自行检查界面。
+由人工检查功能名解析、刻意留空、品牌图片，以及 Wi-Fi、音量、电池状态。
+分层主题还需在现有外观设置中切换彩色、透明和染色，观察 Dock 与启动台是否同步变化；
+换回普通图标主题后检查原有整图处理。检查 QQ、终端、带自定义图片的应用及普通工具栏图标。
+不运行自动化测试或为了验证而启动图形会话。
