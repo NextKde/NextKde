@@ -15,6 +15,7 @@
 #include "settings.h"
 #include "surfaceshapemanager.h"
 #include "desktopblurpolicy.h"
+#include "../../common/windoweffectpolicy.h"
 #ifndef GLASS_X11
 #include "legacyblurregion.h"
 #include "overviewpreview.h"
@@ -631,6 +632,18 @@ int BlurEffect::blurExpandSize(EffectWindow *w) const
 
 void BlurEffect::updateBlurRegion(EffectWindow *w)
 {
+    if (!w) {
+        return;
+    }
+    if (KOS::keepsClientAppearance(w->windowClass())) {
+        // This is an ownership exclusion, not a forced-blur blacklist: even
+        // explicit client/decoration blur must not add material to Mime frames.
+        if (auto it = m_windows.find(w); it != m_windows.end()) {
+            effects->makeOpenGLContextCurrent();
+            m_windows.erase(it);
+        }
+        return;
+    }
     // Late surface/geometry notifications during a compositor close animation
     // must not resurrect the cached capture as a region-only glass rectangle.
     if (m_closedShapeWindows.contains(w)) {
@@ -1253,6 +1266,11 @@ BlurRegion BlurEffect::contentRegion(EffectWindow *w, const BorderRadius *fallba
 
 BlurRegion BlurEffect::blurRegion(EffectWindow *w, const BorderRadius *fallbackCornerRadius) const
 {
+    if (!w || KOS::keepsClientAppearance(w->windowClass())) {
+        // A late app-ID update must stop opaque/damage expansion immediately,
+        // even before drawWindow retires the old cached backdrop.
+        return {};
+    }
     BlurRegion region = contentRegion(w, fallbackCornerRadius);
 
     if (auto it = m_windows.find(w); it != m_windows.end()) {
@@ -1412,6 +1430,9 @@ void BlurEffect::prePaintWindow(RenderView *view, EffectWindow *w, WindowPrePain
 
 bool BlurEffect::shouldBlur(const EffectWindow *w, int mask, const WindowPaintData &data) const
 {
+    if (!w || KOS::keepsClientAppearance(w->windowClass())) {
+        return false;
+    }
     const bool overviewCapture =
 #ifndef GLASS_X11
         m_overviewCapture;
@@ -1495,6 +1516,12 @@ void
 #endif
 BlurEffect::drawWindow(const RenderTarget &renderTarget, const RenderViewport &viewport, EffectWindow *w, int mask, const BlurRegion &deviceRegion, WindowPaintData &data)
 {
+    if (KOS::keepsClientAppearance(w->windowClass())) {
+        // Also retire a cache created before a late app-ID update. Do not apply
+        // Glass surface reveal transforms or write back any corner radii.
+        updateBlurRegion(w);
+        return effects->drawWindow(renderTarget, viewport, w, mask, deviceRegion, data);
+    }
     blur(renderTarget, viewport, w, mask, deviceRegion, data);
 
     // Glass uses the original transform/capture. Only the already-composited
