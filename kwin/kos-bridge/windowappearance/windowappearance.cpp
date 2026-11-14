@@ -1,6 +1,7 @@
 #include "windowappearance.h"
 #include "appearanceprotocol.h"
 #include "geometryprotocol.h"
+#include "../../common/windoweffectpolicy.h"
 
 #include <effect/effecthandler.h>
 #include <effect/effectwindow.h>
@@ -156,7 +157,16 @@ int WindowAppearanceManager::tierFor(KWin::EffectWindow *window) const
 
 void WindowAppearanceManager::prepare(KWin::EffectWindow *window, bool continuousAvailable)
 {
-    if (m_restoring || !window || !m_config.enabled() || !KWin::effects
+    if (m_restoring || !window) {
+        return;
+    }
+    if (keepsClientAppearance(window->windowClass())) {
+        // The app ID can arrive after mapping. Restore any appearance applied
+        // before the client identified itself, rather than only skipping it.
+        restoreWindow(window);
+        return;
+    }
+    if (!m_config.enabled() || !KWin::effects
         || !window->window() || !window->windowItem()) {
         return;
     }
@@ -366,6 +376,9 @@ void WindowAppearanceManager::prepare(KWin::EffectWindow *window, bool continuou
 
 std::optional<ContinuousStyle> WindowAppearanceManager::continuousStyle(KWin::EffectWindow *window) const
 {
+    if (window && keepsClientAppearance(window->windowClass())) {
+        return std::nullopt;
+    }
     const auto it = m_windows.constFind(window);
     if (it == m_windows.cend() || !it.value().continuous) {
         return std::nullopt;
@@ -509,6 +522,27 @@ void WindowAppearanceManager::forget(KWin::EffectWindow *window)
         }
         m_windows.erase(it);
     }
+    if (m_windows.isEmpty()) {
+        m_animTimer.stop();
+        m_tierTimer.stop();
+    }
+}
+
+void WindowAppearanceManager::restoreWindow(KWin::EffectWindow *window)
+{
+    if (m_restoring) {
+        return;
+    }
+    const auto it = m_windows.find(window);
+    if (it == m_windows.end()) {
+        return;
+    }
+    QScopedValueRollback restoring(m_restoring, true);
+    auto state = std::move(it.value());
+    m_windows.erase(it);
+    // Like restoreAll, remove tracking before touching scene items/properties:
+    // restoration can synchronously re-enter window-deletion callbacks.
+    restore(window, state);
     if (m_windows.isEmpty()) {
         m_animTimer.stop();
         m_tierTimer.stop();

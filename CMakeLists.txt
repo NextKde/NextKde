@@ -851,6 +851,12 @@ find_package(Qt6 6.5 REQUIRED COMPONENTS
 find_package(KF6WindowSystem 6.0 QUIET)
 if(BUILD_TESTING)
     find_package(Qt6 6.5 REQUIRED COMPONENTS Test)
+    add_executable(kos-window-effect-policy-test
+        kwin/common/tests/windoweffectpolicy_test.cpp)
+    target_link_libraries(kos-window-effect-policy-test PRIVATE Qt6::Core)
+    add_test(NAME kos-window.effect-policy COMMAND kos-window-effect-policy-test)
+    set_tests_properties(kos-window.effect-policy PROPERTIES LABELS platform TIMEOUT 10)
+
     add_executable(kos-stage-desktop-policy-test
         kwin/kwin-effects-stageanim/tests/test_desktop_policy.cpp)
     target_link_libraries(kos-stage-desktop-policy-test PRIVATE Qt6::Core)

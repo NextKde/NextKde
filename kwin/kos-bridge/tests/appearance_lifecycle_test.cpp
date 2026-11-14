@@ -83,8 +83,36 @@ public:
         require(manager.m_windows.isEmpty() && !manager.m_restoring,
             "live restoration left tracking or gate active");
         manager.restoreAll();
+
+        // A late Mime app ID restores a single live window, rather than using
+        // forget (which deliberately leaves scene nodes until window teardown).
+        KWin::Item singleParent;
+        auto *singleBounds = new KWin::Item(&singleParent);
+        singleBounds->setParent(&singleParent);
+        singleBounds->setGeometry(KWin::RectF(-10, -10, 100, 100));
+        QPointer<KWin::Item> singleGuard(singleBounds);
+        manager.m_windows[nullptr].continuousBounds = singleBounds;
+        bool singleReentered = false;
+        QObject::connect(&singleParent, &KWin::Item::boundingRectChanged, &manager, [&] {
+            singleReentered = true;
+            require(manager.m_restoring, "single-window restoration gate not active");
+            require(manager.m_windows.isEmpty(), "single-window state still tracked during restore");
+            manager.restoreWindow(nullptr);
+            manager.restoreAll();
+            manager.forget(nullptr);
+            manager.prepare(nullptr);
+        });
+        manager.m_animTimer.start();
+        manager.m_tierTimer.start();
+        manager.restoreWindow(nullptr);
+        require(singleReentered && !singleGuard, "single-window restore left scene additions");
+        require(manager.m_windows.isEmpty() && !manager.m_restoring,
+            "single-window restore left tracking or gate active");
+        require(!manager.m_animTimer.isActive() && !manager.m_tierTimer.isActive(),
+            "single-window restore retained timers after final window");
+        manager.restoreWindow(nullptr);
         std::cout << "appearance lifecycle: deleted-window ownership, disconnected callbacks, "
-                     "timer shutdown, live restore and synchronous re-entry passed\n";
+                     "timer shutdown, live/per-window restore and synchronous re-entry passed\n";
     }
 };
 }

@@ -22,6 +22,18 @@ background blur. Continuous windows need translucent occlusion semantics so back
 clipped corners is painted. Removing that flag to improve performance can produce black corners.
 Glass must use the actual visual contour rather than reapply an old circular input radius.
 
+Mime's Windows clients retain their own appearance. `kwin/common/windoweffectpolicy.h` identifies
+`mime` and `mime.<nonempty app ID>` case-insensitively, including whitespace-separated X11 window-class
+fields. Bridge adds no corners, outline, frame or shadow to these windows. A late app-ID update restores
+any previously applied KOS appearance and releases continuous clipping. Glass creates no blur cache and
+applies no blur, liquid material or surface reveal transform. This hard exclusion precedes explicit blur
+requests, forced blur and class-list settings; other applications retain the KDE blur contract.
+AutoCAD, Quark and other guest applications therefore need no individual rules, and unrelated identifiers
+such as `mimetype-editor` do not match. This does not remove client-owned transparent margins, shadows or
+corners, or disable Dock/Stage window animations. `kos-window.effect-policy` checks identity boundaries;
+Bridge's `appearance_lifecycle_test` checks per-window restoration and re-entry. Final application appearance
+still requires a VM comparison with the new plugins after logout/login, not just offline policy tests.
+
 The continuous cache has a 256 MiB budget and GPU texture-size checks. Shader/resource/geometry/
 budget failure falls back to native arcs with a diagnostic. Reconsider rejection after relevant
 geometry/scale/config/budget changes; do not oscillate allocation every frame. Release references on
