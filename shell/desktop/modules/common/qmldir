@@ -20,6 +20,8 @@ LiquidGlassPanel 1.0 LiquidGlassPanel.qml
 PopupMotion 1.0 PopupMotion.qml
 MotionSpring 1.0 MotionSpring.qml
 AppIcon 1.0 AppIcon.qml
+LayeredAppIcon 1.0 LayeredAppIcon.qml
+singleton LayeredIconThemeService 1.0 LayeredIconThemeService.qml
 ContextMenu 1.0 ContextMenu.qml
 MenuItemRow 1.0 MenuItemRow.qml
 KosFloatPanel 1.0 KosFloatPanel.qml
