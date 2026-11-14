@@ -111,9 +111,10 @@ sudo zypper install \
   quickshell \
   git python313 cmake ninja gcc-c++ go curl patchelf \
   pkgconf-pkg-config gettext-tools \
+  flatpak-devel libostree-devel fcitx5-devel \
   qt6-base-common-devel qt6-declarative-devel qt6-declarative-imports \
   qt6-tools-devel qt6-linguist-devel qt6-translations \
-  qt6-quick3d-devel qt6-quick3d-imports qt6-svg-devel qt6-imageformats \
+  qt6-quick3d-devel qt6-quick3d-imports qt6-svg-devel qt6-imageformats opencv-devel \
   qt6-wayland-devel qt6-wayland-imports \
   qt6-qt5compat-devel qt6-qt5compat-imports \
   qt6-base-private-devel qt6-declarative-private-devel \
