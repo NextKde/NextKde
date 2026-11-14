@@ -3,6 +3,7 @@ import Quickshell.Wayland
 import Quickshell.Widgets
 import Quickshell.Services.Notifications
 import QtQuick
+import QtQuick.Effects
 import Qt5Compat.GraphicalEffects
 import "../../../shared/qml/i18n"
 import qs.desktop.modules.common
@@ -475,25 +476,37 @@ PanelWindow {
                     visible: card.iconSource.length > 0
                     color: "transparent"
                     // Rectangle.clip doesn't round-corner child Images reliably.
-                    // Use layer + OpacityMask to actually crop the icon to the
-                    // rounded rectangle (same pattern as DockWindowPreview).
-                    layer.enabled: true
-                    layer.effect: OpacityMask {
-                        maskSource: Rectangle {
-                            width: iconMask.width
-                            height: iconMask.height
-                            radius: iconMask.radius
-                            color: "black"
-                            visible: false
-                        }
-                    }
+                    // The MultiEffect below crops the mark to the rounded
+                    // rectangle; its hidden source is only texture input.
                     AppIcon {
+                        id: iconImage
                         anchors.fill: parent
                         source: card.iconSource
                         // Theme icon: synchronous, see AppIcon.qml.
                         asynchronous: false
                         smooth: true
+                        visible: false
                     }
+                }
+                // Rounded app mark without a per-card Qt5 compat layer: the old
+                // layer + OpacityMask pair made one card cost 70-160 ms, while
+                // MultiEffect shares a single shader. The mask source needs a
+                // texture, so the tiny 30 px rectangle keeps its own layer.
+                Rectangle {
+                    id: iconMaskSource
+                    width: iconMask.width
+                    height: iconMask.height
+                    radius: iconMask.radius
+                    color: "white"
+                    layer.enabled: true
+                    visible: false
+                }
+                MultiEffect {
+                    anchors.fill: iconMask
+                    source: iconImage
+                    maskEnabled: true
+                    maskSource: iconMaskSource
+                    visible: iconMask.visible
                 }
             }
 

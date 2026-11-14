@@ -10,7 +10,7 @@ import "../../../shared/qml/i18n"
 import "../../../Kos/Ui"
 
 // Independent session notification history.
-AnimatedPopupWindow {
+PersistentPanelWindow {
     id: panel
 
     property Item anchorItem: null
@@ -19,30 +19,75 @@ AnimatedPopupWindow {
     readonly property real availableHeight: Math.max(1, (targetScreen?.height ?? 900) - 110)
     implicitWidth: Math.min(336, Math.max(1, (targetScreen?.width ?? 1920) - 24))
     implicitHeight: Math.min(576, availableHeight)
-    mask: interactive ? historyInput : emptyHistoryInput
     color: "transparent"
-    grabFocus: interactive
     contentItem.scale: 1
     motionOrigin: !dockHosted ? Item.Top
         : dockEdge === "left" ? Item.Left
         : dockEdge === "right" ? Item.Right : Item.Bottom
-    PopupAnchorBinding { popupAnchor: panel.anchor; sourceItem: panel.anchorItem }
 
-    anchor {
-        edges: !panel.dockHosted ? Edges.Bottom
-            : panel.dockEdge === "left" ? Edges.Right
-            : panel.dockEdge === "right" ? Edges.Left : Edges.Top
-        gravity: !panel.dockHosted ? Edges.Bottom
-            : panel.dockEdge === "left" ? Edges.Right
-            : panel.dockEdge === "right" ? Edges.Left : Edges.Top
-        adjustment: PopupAdjustment.Slide
-        margins.top: panel.dockHosted
-            && panel.dockEdge === "bottom" ? -8 : 0
-        margins.bottom: panel.dockHosted ? 0 : -8
-        margins.left: panel.dockHosted
-            && panel.dockEdge === "right" ? -8 : 0
-        margins.right: panel.dockHosted
-            && panel.dockEdge === "left" ? -8 : 0
+    // AnimatedPopupWindow's public surface, kept so BarStatusArea and the dock
+    // popup plumbing do not need to change.
+    property bool requestedOpen: false
+    property bool animationEnabled: true
+    property int openDuration: AppearanceTokens.motion.popupOpenDuration
+    property int closeDuration: AppearanceTokens.motion.popupCloseDuration
+    readonly property real revealProgress: animationEnabled ? ncMotion.progress : 1
+    readonly property bool interactive: effectiveOpen && (!animationEnabled || ncMotion.interactive)
+    readonly property bool effectiveOpen: requestedOpen && ScreenLifecycle.outputAvailable
+    motion: ncMotion
+    function show() { requestedOpen = true }
+    function hide() { requestedOpen = false }
+    function setDockPopupVisible(shouldOpen) { requestedOpen = shouldOpen }
+    function dismissDockPopupImmediately() { requestedOpen = false; ncMotion.reset() }
+    // Deferred open: let a few frames render before the reveal starts.
+    property int _openPreroll: 0
+    FrameAnimation {
+        running: panel._openPreroll > 0
+        onTriggered: {
+            panel._openPreroll--
+            if (panel._openPreroll === 0 && ncMotion.requestedOpen)
+                ncMotion.open()
+        }
+    }
+    onEffectiveOpenChanged: {
+        if (effectiveOpen) {
+            ncMotion.requestedOpen = true
+            ncMotion.mapped = true
+            panel._openPreroll = 5
+        } else if (!ScreenLifecycle.outputAvailable) {
+            ncMotion.reset()
+        } else {
+            ncMotion.close()
+        }
+    }
+    signal revealClosed()
+    // Clicking outside used to be dismissed by the compositor's popup grab.
+    // A persistent surface has to do it itself; the press still reaches the
+    // window underneath, which is the same result a popup gave.
+    property double _suppressToggleUntil: 0
+    Connections {
+        target: WindowService
+        function onGlobalPointerPressed(x, y, button, timestamp) {
+            if (!(panel.interactive))
+                return
+            if (x < panel.globalX || x > panel.globalX + panel.width
+                    || y < panel.globalY || y > panel.globalY + panel.height) {
+                panel._suppressToggleUntil = Date.now() + 350
+                panel.close()
+            }
+        }
+    }
+    PopupMotion {
+        id: ncMotion
+        openDuration: panel.animationEnabled ? panel.openDuration : 0
+        closeDuration: panel.animationEnabled ? panel.closeDuration : 0
+    }
+    Connections {
+        target: ncMotion
+        function onClosed() {
+            DockModelService.releaseDockPopup(panel)
+            panel.revealClosed()
+        }
     }
 
     readonly property var targetScreen: ScreenLifecycle.activeScreen
