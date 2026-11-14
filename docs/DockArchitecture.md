@@ -475,6 +475,12 @@ Card presentations keep the search header outside the scrolling app grid: the
 grid viewport starts below the header, so a scrolled row is clipped at that
 boundary instead of painting over the search field.
 
+Apps hidden from the app editor leave both the grid and search. A hidden-apps
+button appears at the left of the search header only while that list is
+non-empty; its panel restores rows through `unhideApplication`, and a restored
+app returns to its persisted `rootItems` slot. Hiding stays launcher-local
+presentation and never edits the desktop entry.
+
 `LauncherIconMotion.qml` drives tile position and scale from one animated
 progress value, with a separate 200 ms opacity track alongside the 300 ms
 spread. Both use GUI-thread `NumberAnimation`, as does the stationary glass
