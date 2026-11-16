@@ -20,41 +20,22 @@ import "../../../shared/qml/controls" as LiquidControls
 // Its geometry intentionally stays small enough for a top-bar popup while
 // preserving the reference's two-column, pill-and-media-card hierarchy.
 //
-PopupWindow {
+PersistentPanelWindow {
     id: panel
 
     implicitWidth: Math.min(panel.controlCenterWidth, Math.max(1, (panel.targetScreen?.width ?? 1920) - 24))
     implicitHeight: panel.controlCenterHeight
     color: "transparent"
-    grabFocus: popupMotion.interactive
-    visible: popupMotion.mapped
+    motion: popupMotion
     // The whole surface animates as one block: opacity + a small scale around
     // the anchor edge. Animating the shared contentItem instead of each card's
     // x/y/scale keeps every card's compositor blur shape locked to the same
     // transform, so the frosted silhouettes move together instead of drifting
     // as a dozen independent regions.
-    contentItem.opacity: popupMotion.progress
     contentItem.scale: 1
     contentItem.transformOrigin: !panel.dockHosted ? Item.Top
         : panel.dockEdge === "left" ? Item.Left
         : panel.dockEdge === "right" ? Item.Right : Item.Bottom
-    contentItem.enabled: popupMotion.interactive
-    mask: popupMotion.interactive ? panelInputRegion : emptyRegion
-    PopupAnchorBinding { popupAnchor: panel.anchor; sourceItem: panel.anchorItem }
-
-    anchor {
-        edges: !panel.dockHosted ? Edges.Bottom
-            : panel.dockEdge === "left" ? Edges.Right
-            : panel.dockEdge === "right" ? Edges.Left : Edges.Top
-        gravity: !panel.dockHosted ? Edges.Bottom
-            : panel.dockEdge === "left" ? Edges.Right
-            : panel.dockEdge === "right" ? Edges.Left : Edges.Top
-        adjustment: PopupAdjustment.Slide
-        margins.top: 0
-        margins.bottom: panel.dockHosted ? 0 : -4
-        margins.left: 0
-        margins.right: 0
-    }
 
     property Item anchorItem: null
     property bool dockHosted: false
@@ -255,7 +236,16 @@ PopupWindow {
             const opening = !popupMotion.requestedOpen
             if (!popupMotion.mapped)
                 pageMotion.reset(panel.requestedPage)
-            popupMotion.open()
+            if (opening) {
+                // Map the persistent surface and let it render one frame before
+                // starting the reveal. Otherwise the 150 ms slide runs during
+                // the first-frame stall and is over before anything is visible.
+                popupMotion.requestedOpen = true
+                popupMotion.mapped = true
+                panel._openPreroll = 5
+            } else {
+                popupMotion.open()
+            }
             panel.positionViewportForOpen()
             // Paint cached values first, including after a deferred Bar reveal.
             if (opening) Qt.callLater(function() {
@@ -268,6 +258,33 @@ PopupWindow {
 
     PopupMotion {
         id: popupMotion
+    }
+
+    // Deferred open: let a few frames render before the reveal starts, so the
+    // cards' compositor materials are already initialised when the slide moves.
+    property int _openPreroll: 0
+    FrameAnimation {
+        running: panel._openPreroll > 0
+        onTriggered: {
+            panel._openPreroll--
+            if (panel._openPreroll === 0 && popupMotion.requestedOpen)
+                popupMotion.open()
+        }
+    }
+
+    // See NotificationHistoryPanel: a persistent surface dismisses itself.
+    property double _suppressToggleUntil: 0
+    Connections {
+        target: WindowService
+        function onGlobalPointerPressed(x, y, button, timestamp) {
+            if (!popupMotion.interactive)
+                return
+            if (x < panel.globalX || x > panel.globalX + panel.width
+                    || y < panel.globalY || y > panel.globalY + panel.height) {
+                panel._suppressToggleUntil = Date.now() + 350
+                panel.close()
+            }
+        }
     }
 
     PageMotion {

@@ -374,16 +374,20 @@ assert.match(iconThemeReloadSource,
 assert.match(dockAnimationSource,
     /windowPreviewDelay:\s*220/,
     "Dock previews debounce pointer passes before requesting a full-screen capture");
-// The four-pixel separation from the Bar moved from a per-card offset into the
-// panel's own anchor margins when the panel became one window. The value and
-// the intent are unchanged: standalone the panel starts four pixels below the
-// Bar, dock-hosted it must keep its edge flush with the Dock.
-assert.match(controlCenterPanelSource,
-    /margins\.bottom:\s*panel\.dockHosted\s*\?\s*0\s*:\s*-4/,
+// The four-pixel separation from the Bar lives in BarStatusArea's placement
+// math now that the panel is one persistent layer-shell surface: standalone the
+// panel starts four pixels below the Bar, dock-hosted it stays flush with the
+// Dock. Clamping the anchor centre keeps it inside the screen instead of
+// letting the surface resize.
+const barStatusAreaSource = read("../../shell/desktop/modules/bar/BarStatusArea.qml");
+const persistentPanelSource = read("../../shell/desktop/modules/common/PersistentPanelWindow.qml");
+assert.match(barStatusAreaSource, /const gap = root\.dockHosted \? 0 : 4/,
     "standalone Control Center starts four pixels below the Bar");
-assert.match(controlCenterPanelSource,
-    /adjustment:\s*PopupAdjustment\.Slide/,
-    "the Control Center still slides at screen edges instead of resizing");
+assert.match(controlCenterPanelSource, /PersistentPanelWindow \{/,
+    "the Control Center is one persistent layer-shell surface");
+assert.match(persistentPanelSource,
+    /Math\.min\(\s*Math\.round\(window\.panelCenter - window\.implicitWidth/,
+    "the panel clamps at screen edges instead of resizing");
 assert.match(globalMenuSource, /root\.height\s*\+\s*4/,
     "application menus keep a four-pixel Bar gap");
 
