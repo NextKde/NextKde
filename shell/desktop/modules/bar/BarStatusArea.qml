@@ -93,17 +93,77 @@ Item {
             closeControlCenter()
             return
         }
+        if (controlCenter && Date.now() < controlCenter._suppressToggleUntil)
+            return
         notificationPanel.close()
-        if (controlCenter)
+        const placement = _panelPlacement(anchorItem)
+        if (controlCenter) {
+            _applyPlacement(controlCenter, placement)
             controlCenter.toggle(anchorItem)
-        else
+        } else {
             pendingControlCenterAnchor = anchorItem
+            pendingControlCenterPlacement = placement
+        }
     }
 
     function closeControlCenter() {
         pendingControlCenterAnchor = null
         if (controlCenter)
             controlCenter.close()
+    }
+
+    // Persistent panels stay mapped, so they cannot rely on a popup anchor any
+    // more. The host surface (Bar or Dock) knows where the cell sits, and the
+    // panel is placed from that in screen coordinates.
+    readonly property var targetScreen: ScreenLifecycle.activeScreen
+    property var pendingControlCenterPlacement: null
+    readonly property var hostWindow: Window.window
+    function _hostOrigin() {
+        const screen = targetScreen
+        const win = hostWindow
+        const sx = screen ? screen.x : 0
+        const sy = screen ? screen.y : 0
+        const sw = screen ? screen.width : 0
+        const sh = screen ? screen.height : 0
+        if (!win || !root.dockHosted)
+            return Qt.point(sx, sy)
+        if (root.dockEdge === "bottom")
+            return Qt.point(sx, sy + sh - win.height)
+        if (root.dockEdge === "right")
+            return Qt.point(sx + sw - win.width, sy)
+        return Qt.point(sx, sy)
+    }
+    function _panelPlacement(item) {
+        const screen = targetScreen
+        const sx = screen ? screen.x : 0
+        const sy = screen ? screen.y : 0
+        const sw = screen ? screen.width : 0
+        const sh = screen ? screen.height : 0
+        const origin = _hostOrigin()
+        const local = item ? item.mapToItem(null, 0, 0) : Qt.point(0, 0)
+        const iw = item ? item.width : 0
+        const ih = item ? item.height : 0
+        const gx = origin.x + local.x
+        const gy = origin.y + local.y
+        const edge = root.dockHosted ? root.dockEdge : "top"
+        // Standalone the panel starts four pixels below the Bar; dock-hosted it
+        // stays flush with the Dock. Same contract the PopupWindow's negative
+        // bottom margin used to express before the surface became persistent.
+        const gap = root.dockHosted ? 0 : 4
+        if (edge === "top")
+            return { edge: edge, offset: gy + ih + gap - sy, center: gx + iw / 2 }
+        if (edge === "bottom")
+            return { edge: edge, offset: sy + sh - gy + gap, center: gx + iw / 2 }
+        if (edge === "left")
+            return { edge: edge, offset: gx + iw + gap - sx, center: gy + ih / 2 }
+        return { edge: edge, offset: sx + sw - gx + gap, center: gy + ih / 2 }
+    }
+    function _applyPlacement(panel, placement) {
+        if (!panel || !placement)
+            return
+        panel.panelEdge = placement.edge
+        panel.panelOffset = placement.offset
+        panel.panelCenter = placement.center
     }
 
     // Remote session entries (desktop context menu) open the panel anchored
@@ -267,6 +327,10 @@ Item {
                         bluetoothPanel.close()
                         root.closeControlCenter()
                     }
+                    if (Date.now() < notificationPanel._suppressToggleUntil)
+                        return
+                    root._applyPlacement(notificationPanel,
+                        root._panelPlacement(notificationToggle))
                     notificationPanel.toggle(notificationToggle)
                 }
             }
@@ -375,9 +439,13 @@ Item {
         asynchronous: true
         onLoaded: {
             const anchor = root.pendingControlCenterAnchor
-            if (anchor)
+            if (anchor) {
+                root._applyPlacement(item,
+                    root.pendingControlCenterPlacement || root._panelPlacement(anchor))
                 item.toggle(anchor)
+            }
             root.pendingControlCenterAnchor = null
+            root.pendingControlCenterPlacement = null
             if (root.pendingSessionAction !== "") {
                 item.runSessionAction(root.pendingSessionAction)
                 root.pendingSessionAction = ""
