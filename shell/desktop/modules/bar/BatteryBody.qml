@@ -326,8 +326,15 @@ Item {
                     readonly property bool supported: PowerProfileService.profiles.includes(modelData.key)
                     readonly property bool selected: PowerProfileService.activeProfile === modelData.key
                     objectName: "power-mode-" + modelData.key
+                    // Width follows each label's longest word: a multi-word
+                    // title wraps onto two lines rather than squeezing its
+                    // single-word neighbours until they elide. Every tile
+                    // then stretches to the tallest one.
                     Layout.fillWidth: true
-                    Layout.preferredHeight: 32
+                    Layout.fillHeight: true
+                    Layout.preferredWidth: Math.ceil(modeLabelMetrics.advanceWidth) + 12
+                    Layout.minimumHeight: 32
+                    Layout.preferredHeight: Math.max(32, Math.ceil(modeLabel.implicitHeight) + 10)
                     radius: 7
                     color: selected ? Qt.rgba(0.19, 0.78, 0.35, 0.2)
                         : Qt.rgba(body.ink.r, body.ink.g, body.ink.b, modeHover.hovered ? 0.10 : 0.05)
@@ -339,12 +346,23 @@ Item {
                     Accessible.checkable: true
                     Accessible.checked: selected
                     Accessible.onPressAction: if (modeTap.enabled) PowerProfileService.setProfile(modeTile.modelData.key)
+                    TextMetrics {
+                        id: modeLabelMetrics
+                        // Measured at the selected weight so choosing a mode
+                        // does not reflow the row.
+                        font { pixelSize: 11; weight: Font.DemiBold }
+                        text: modeTile.modelData.title.split(/\s+/).reduce(
+                            (longest, word) => word.length > longest.length ? word : longest, "")
+                    }
                     Text {
+                        id: modeLabel
                         anchors { fill: parent; leftMargin: 3; rightMargin: 3 }
                         text: modeTile.modelData.title
                         color: body.ink
                         horizontalAlignment: Text.AlignHCenter
                         verticalAlignment: Text.AlignVCenter
+                        wrapMode: Text.WordWrap
+                        maximumLineCount: 2
                         elide: Text.ElideRight
                         font { pixelSize: 11; weight: modeTile.selected ? Font.DemiBold : Font.Normal }
                     }
