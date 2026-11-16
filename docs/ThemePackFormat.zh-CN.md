@@ -5,9 +5,12 @@
 主题包是侧载主题的分发单位:一个自包含的目录,含清单、入口 QML 和全部资源。
 第三方包不 import shell 的任何模块,只依赖一份稳定的属性契约。
 
-**内置主题与包同构**:`shared/qml/wallpapers/themes/<id>/` 下的 5 个内置主题
-就是随壳发布的同结构目录(唯一区别是没有 `manifest.json`,id 由宿主
-`sceneUrl()` 硬编码)。"内置"只是发布渠道不同,契约与布局完全一致。
+`shared/qml/wallpapers/themes/<id>/` 下的 5 个内置主题沿用同一 host 契约,
+没有 `manifest.json`,id 由宿主 `sceneUrl()` 注册。内置主题共享上级模块的
+`OpticalScene.qml` 与运行时程序化 shader(`aurora`、`prism`、`ocean`、`lagoon`),
+因此单个内置主题目录不能直接复制成独立主题包;第三方包仍须自包含。
+内置场景纹理长边普通模式最多 1280 像素,省电模式最多 800 像素。
+保留的内置预览 PNG 仍展示上一版画面,待替换为当前运行时场景截图。
 
 ## 目录结构
 

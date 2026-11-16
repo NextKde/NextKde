@@ -5,7 +5,12 @@
 A pack is a self-contained directory of QML, manifest and assets. It does not import Shell
 modules: input comes through the stable host object below. Built-ins under
 `shared/qml/wallpapers/themes/<id>/` use the same runtime contract, with IDs registered in source
-instead of a manifest. Packs are side-loaded code; this is not a sandboxed public marketplace.
+instead of a manifest. Built-ins share `OpticalScene.qml` and runtime procedural shaders
+(`aurora`, `prism`, `ocean`, `lagoon`) in the parent module; a built-in theme folder alone is
+therefore not a standalone exportable pack. Their texture long edge is capped at 1280 px normally
+or 800 px in economical mode. The retained built-in preview PNGs still show the previous artwork
+and are pending replacement with current scene captures.
+Packs are side-loaded code; this is not a sandboxed public marketplace.
 
 ## Layout and discovery
 

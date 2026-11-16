@@ -4,6 +4,7 @@
 
 面向 AI 贡献者。壁纸失败不能阻塞 Shell/Dock 启动。[深度引擎](DepthEngine.md)负责模型/worker，
 [主题格式](ThemePackFormat.zh-CN.md)负责 host 契约，本文负责运行编排。
+[动态壁纸设计与扩展指南](WallpaperDesignAndExtension.zh-CN.md)记录视觉目标、社区技术取舍、当前 shader 架构、新增主题步骤及未来渲染路线。
 
 ## 所有权
 
@@ -46,9 +47,26 @@ VM 开发需匹配原生模块和服务，`kosctl dev settings` 打印实际路�
 轮播最多 2000 项，预览暂停，不足两张停播，输出共享随机种子。
 
 主题保留原图供恢复/锁屏，停止轮播和深度，不依赖 AI 模型。`ThemeWallpaperScene` 与前景层共用 host 契约。
-普通模式等待无可见窗口的桌面空闲，预览立即播放，锁屏/离屏/减少动态策略仍生效。
-天气复用共享缓存。负载下不保证独立前后景窗口逐帧同步。
-保留[资源来源](../shared/qml/wallpapers/vendor/README.md)及着色器 Qt 兼容。
+普通模式等待无可见窗口的桌面空闲，并受锁屏、输出可用性与减少动态策略约束。
+预览立即播放，当前绕过普通空闲及减少动态限制，仍受锁屏、输出可用性和电池节奏影响。
+安装的主题包可复用天气共享缓存。负载下不保证独立前后景窗口逐帧同步。
+
+五款内置主题共享 `OpticalScene.qml`，通过 `aurora`、`prism`、`ocean`、`lagoon` fragment shader
+在运行时绘制程序化场景，动画时钟和指针输入来自 host。单个 ShaderEffect layer 保持输出宽高比，
+纹理长边普通模式最多 1280 像素，`host.economical` 为 true 时最多 800 像素。
+这是纹理尺寸限制，不代表实测 GPU 开销或总显存。内置主题没有前景表面，外部主题包保留前景契约。
+普通壁纸图库独立保留；旧离线底图、动态遮罩、`StilllightScene.qml` 及其 shader 和生成脚本
+已无运行时消费者，但仍保留在工作树，待获准后清理。
+
+保留原主题 ID 以兼容已保存配置：`starfield` = Polar Aurora，`blackhole` = Studio Crystal，
+`weather` = Golden Ocean，`underwater` = Crystal Lagoon，`forest` = Moonlit Ocean。
+两款海面主题使用不同 shader variant；`weather` 不由实时天气驱动。
+修改 shader 后用 `shared/qml/wallpapers/compile.sh` 烘焙 `.qsb`，保留 Qt 兼容。
+[素材来源](../shared/qml/wallpapers/assets/thumbnail-sources.txt)记录预览素材状态。
+
+验收 TODO：五份保留的 `assets/preview.png` 仍展示上一版离线画面，须替换为当前运行时场景截图；
+在 VM 检查实际渲染、播放策略及竖屏/超宽屏表现，并实测普通与省电模式的 GPU/内存开销。
+shader 编译通过不代表视觉或性能验收通过。
 
 ## VM 审阅
 

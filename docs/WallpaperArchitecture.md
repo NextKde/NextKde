@@ -64,9 +64,29 @@ at most 2000 entries, pause during preview and stop below two images; outputs sh
 Themes retain the original image for restoration/lockscreen, stop slideshow and depth mode, and
 need no AI model. `ThemeWallpaperScene` and the foreground layers use the shared host contract.
 Normal playback waits for desktop idle with no visible windows; preview plays immediately, while
-lock/offscreen/reduced-motion policies still apply. Weather uses the shared service cache.
+lock/offscreen/reduced-motion policies still apply. Installed packs can use the shared weather cache.
 Do not claim independent foreground/background windows are frame-synchronized under load.
-Preserve [vendor provenance](../shared/qml/wallpapers/vendor/README.md) and shader Qt compatibility.
+
+The five built-ins share `OpticalScene.qml`, which renders procedural scenes at runtime with
+`aurora`, `prism`, `ocean` and `lagoon` fragment shaders. The host supplies the animation clock
+and pointer input. A single ShaderEffect layer preserves the output aspect ratio and caps its
+texture long edge at 1280 px normally or 800 px when `host.economical` is true. These are texture
+limits, not measured GPU cost or total graphics-memory usage. Built-ins have no foreground
+surface; installed packs retain the foreground contract. The original still-image gallery
+remains separate. Obsolete baked plates, motion masks, `StilllightScene.qml`, its shader and the
+offline generator are unused but retained pending authorized cleanup.
+
+Existing IDs remain compatible: `starfield` = Polar Aurora, `blackhole` = Studio Crystal,
+`weather` = Golden Ocean, `underwater` = Crystal Lagoon, and `forest` = Moonlit Ocean.
+The two ocean scenes select different shader variants; `weather` is not driven by live weather.
+Rebuild `.qsb` with `shared/qml/wallpapers/compile.sh` after shader changes and retain Qt shader
+compatibility. [Asset provenance](../shared/qml/wallpapers/assets/thumbnail-sources.txt) records
+preview status.
+
+TODO before visual acceptance: replace all five retained `assets/preview.png` files with captures
+of the current runtime scenes; they still show the previous baked artwork. Verify actual rendering,
+playback policy and portrait/ultrawide output on the VM, and measure GPU/memory cost in normal and
+economical modes. Shader compilation alone does not establish visual or performance acceptance.
 
 ## VM review
 

@@ -1,15 +1,38 @@
-themes/starfield/assets/preview.png and themes/weather/assets/preview.png are actual ThemeWallpaperScene.qml
-frames exported at phase 6, default clear daytime weather, economical=false,
-particleCount=80, with no widgets or pointer interaction. Output size: 960x540.
-Weather changes and animation phase can change the live wallpaper's appearance.
+OpticalScene collection — runtime procedural scenes
 
-Exporter: tools/assets/export-theme-thumbnails.cpp (Qt 6 Quick, QML, Gui).
-Build from the repository root:
-  mkdir -p .build/theme-thumbnail-export
-  g++ -std=c++17 -fPIC tools/assets/export-theme-thumbnails.cpp -o .build/theme-thumbnail-export/export $(pkg-config --cflags --libs Qt6Quick Qt6Qml Qt6Gui)
-Run in an existing graphical session, one theme per process (shows a brief window):
-  QSG_RHI_BACKEND=opengl .build/theme-thumbnail-export/export "$PWD/shared/qml/wallpapers/ThemeWallpaperScene.qml" starfield "$PWD/shared/qml/wallpapers/themes/starfield/assets/preview.png"
-  QSG_RHI_BACKEND=opengl .build/theme-thumbnail-export/export "$PWD/shared/qml/wallpapers/ThemeWallpaperScene.qml" weather "$PWD/shared/qml/wallpapers/themes/weather/assets/preview.png"
+The five built-ins use OpticalScene.qml and the aurora, prism, ocean and lagoon
+fragment shaders in the parent wallpapers module. Runtime scenes no longer load
+baked plates or motion masks. Their texture long edge is capped at 1280 pixels
+normally or 800 pixels when host.economical is true; this is a size limit, not a
+measured performance claim. Rebuild shader binaries with compile.sh after changes.
 
-Settings and preview grids load these PNG files only. The exporter and desktop
-renderer are never instantiated by a thumbnail delegate.
+Stable IDs and current scenes:
+starfield = Polar Aurora (aurora, variant 0)
+blackhole = Studio Crystal (prism, variant 0)
+weather = Golden Ocean (ocean, variant 0)
+underwater = Crystal Lagoon (lagoon, variant 0)
+forest = Moonlit Ocean (ocean, variant 1)
+The weather ID is retained for compatibility and is not driven by live weather.
+
+PREVIEW STATUS: PENDING REPLACEMENT.
+All five themes/assets/preview.png files are retained 640x360 PNGs from the
+previous offline collection. That artwork was generated with Pillow and NumPy
+under the repository license, without photographs, stock images or an AI image
+service. Its obsolete generator, baked plates, motion masks, scene QML and shader
+remain unused in the working tree, pending authorized cleanup.
+These PNGs do not depict the current runtime scenes. Settings and preview grids
+load the PNGs only, never the live renderer.
+
+Cleanup TODO (14 unused files; deletion requires approval):
+  shared/qml/wallpapers/StilllightScene.qml
+  shared/qml/wallpapers/shaders/stilllight.frag
+  shared/qml/wallpapers/shaders/stilllight.frag.qsb
+  tools/assets/generate-wallpaper-collection.py
+  shared/qml/wallpapers/themes/{starfield,blackhole,weather,underwater,forest}/assets/stilllight.jpg
+  shared/qml/wallpapers/themes/{starfield,blackhole,weather,underwater,forest}/assets/motion-mask.png
+Keep every preview.png until its replacement is ready.
+
+TODO: capture each current runtime scene on the VM, replace its preview.png and
+record capture conditions here. Visual correctness, aspect-ratio behavior and
+normal/economical GPU and memory costs still require validation; compilation
+alone does not establish acceptance.

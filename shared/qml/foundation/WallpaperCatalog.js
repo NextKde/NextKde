@@ -173,10 +173,10 @@ function transitionPreset(style) {
 
 // Stable theme IDs shared by Settings and the desktop renderer.
 var themes = [
-    { id: "starfield", label: "Stardust Gravity", detail: "Gravitational particles, turbulent nebulae and layered halos", accent: "#729bda" },
-    { id: "blackhole", label: "Event Horizon", detail: "Bent light, a glowing accretion disk and layered particle trails", accent: "#e5a568" },
-    { id: "weather", label: "Atmospheric Light", detail: "Volumetric scattering, airflow and rain particles", accent: "#7abbd6" },
-    { id: "underwater", label: "Underwater Light", detail: "Flowing caustics, underwater rays and rising bubbles", accent: "#55c9c3" },
-    { id: "forest", label: "Firefly Forest", detail: "Moonlit mist, layered trees and foreground fireflies", accent: "#b5ce75" }
+    { id: "starfield", label: "Polar Aurora", detail: "Luminous auroral curtains in a deep polar sky", accent: "#62cdb6" },
+    { id: "blackhole", label: "Studio Crystal", detail: "Sculpted glass, spectral refraction and studio light", accent: "#dfb47f" },
+    { id: "weather", label: "Golden Ocean", detail: "Moving ocean waves catching the last golden sunlight", accent: "#dca7a2" },
+    { id: "underwater", label: "Crystal Lagoon", detail: "Refracted shallows and sunlight focused by the water", accent: "#66c8bc" },
+    { id: "forest", label: "Moonlit Ocean", detail: "Silver reflections moving across a cobalt sea", accent: "#88b5ae" }
 ];
 function theme(id) { return themes.find(item => item.id === id) || null; }

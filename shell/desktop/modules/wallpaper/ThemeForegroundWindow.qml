@@ -34,7 +34,10 @@ PanelWindow {
     }
     // Unknown geometry fails closed rather than drawing over an application.
     readonly property bool clippingReady: blockingWindows.length<=16 && blockingWindows.every(w=>!!w.geometry)
-    visible: ScreenLifecycle.outputAvailable && ThemeWallpaperService.active
+    // OpticalScene built-ins render only in the background. Only installed
+    // packs can need the full-screen foreground surface and clipping buffer.
+    visible: ThemePackService.has(ThemeWallpaperService.themeId)
+        && ScreenLifecycle.outputAvailable && ThemeWallpaperService.active
         && !ThemeWallpaperService.locked
         && clippingReady
 
