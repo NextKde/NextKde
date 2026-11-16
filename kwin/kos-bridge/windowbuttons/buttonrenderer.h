@@ -15,6 +15,7 @@
 #include <memory>
 #include <optional>
 
+#include "adjustbar.h"
 #include "buttonglyph.h"
 #include "buttonconfig.h"
 #include "titlebarmetrics.h"
@@ -151,6 +152,12 @@ public:
     // the adjust ring and suppresses the hover ring.
     void setAdjusting(KWin::EffectWindow *, bool adjusting);
     bool adjusting(KWin::EffectWindow *) const;
+    void setAdjustOptions(KWin::EffectWindow *, OverlayMode mode,
+                          MatchScope scope, bool canToggleScope,
+                          bool hasRole, bool hasExistingRule);
+    bool adjustBarContains(const QPointF &logicalPos) const;
+    std::optional<AdjustAction> adjustBarActionAt(const QPointF &logicalPos) const;
+    void setAdjustBarHovered(const QPointF &logicalPos);
 
     // Drop cached geometry for a window that has gone away.
     void forget(KWin::EffectWindow *window);
@@ -240,6 +247,8 @@ private:
 
     KWin::GLTexture *tileMenuTexture(qreal scale, bool dark, std::optional<TilePreset> hovered);
     QImage buildTileMenu(qreal scale, bool dark, std::optional<TilePreset> hovered) const;
+    KWin::GLTexture *adjustBarTexture(qreal scale, const AdjustBarLayout &layout,
+                                      const AdjustBarState &state);
 
     // Blit one of this effect's textures over a rectangle of the frame, clipped
     // to the part of the window that is actually being painted. The panel and
@@ -330,8 +339,24 @@ private:
     // committed. Survives invalidateAll(): it belongs to a session that is still
     // running, and a configuration reload is not a reason to throw away what
     // the user is in the middle of doing.
+    struct AdjustOptions {
+        OverlayMode mode = OverlayMode::Cover;
+        MatchScope scope = MatchScope::Window;
+        bool canToggleScope = true;
+        bool hasRole = false;
+        bool hasExistingRule = false;
+    };
+    struct AdjustBarCache {
+        KWin::EffectWindow *window = nullptr;
+        AdjustBarLayout layout;
+        AdjustBarState state;
+        bool hasLayout = false;
+    };
+
     QHash<KWin::EffectWindow *, PanelGeometry> m_pending;
     QSet<KWin::EffectWindow *> m_adjusting;
+    QHash<KWin::EffectWindow *, AdjustOptions> m_adjustOptions;
+    AdjustBarCache m_adjustBar;
 
     KWin::EffectWindow *m_hoverWindow = nullptr;
     Action m_hovered = Action::None;

@@ -22,6 +22,7 @@
 #include <cmath>
 #include <cstdio>
 
+#include "windowbuttons/adjustbar.h"
 #include "windowbuttons/buttonconfig.h"
 #include "windowbuttons/panelgeometry.h"
 #include "windowbuttons/tilemenu.h"
@@ -1151,6 +1152,102 @@ void testIndependentBackground()
     CHECK(resolved.coverage == saved.coverage); // Reactivating restores the cover.
 }
 
+void testOverlayModesAndScopes()
+{
+    removeRulesFile();
+    writeUserConfig(R"({"apps":{"hiddenapp":{"showButtons":false}}})");
+
+    const WindowQuery chat = query(QStringLiteral("wechat"), QStringLiteral("Chat"), 0);
+    const WindowQuery moments = query(QStringLiteral("wechat"), QStringLiteral("Moments"), 0);
+
+    const WindowMatcher appScope = appMatcher(chat);
+    CHECK(appScope.className == QStringLiteral("wechat"));
+    CHECK(appScope.titleRegex.isEmpty());
+    CHECK(appScope.role.isEmpty());
+    CHECK(appScope.matches(chat));
+    CHECK(appScope.matches(moments));
+
+    const WindowMatcher winScope = adjustmentMatcher(moments);
+    CHECK(winScope.matches(moments));
+    CHECK(!winScope.matches(chat));
+
+    ButtonConfig config;
+    config.load();
+
+    // Cover overlay mode keeps hand-written showButtons: false inactive override.
+    CHECK(config.storeGeometry(classMatcher(QStringLiteral("hiddenapp")), PanelGeometry{}, OverlayMode::Cover));
+    AppConfig hiddenAppCfg = config.getAppConfig(query(QStringLiteral("hiddenapp")));
+    CHECK(!hiddenAppCfg.showButtons);
+    CHECK(hiddenAppCfg.overlayMode == OverlayMode::Cover);
+
+    // Explicit per-window Cover, Transparent and Hidden rules round-trip and apply.
+    PanelGeometry g;
+    g.offset = AppOffset{22, 18};
+    CHECK(config.replaceRule(winScope, winScope, g, OverlayMode::Cover));
+    config.load();
+    GeometryRule found;
+    CHECK(config.findStoredRule(moments, &found));
+    CHECK(found.overlayMode == OverlayMode::Cover);
+    CHECK(config.getAppConfig(moments).overlayMode == OverlayMode::Cover);
+    CHECK(config.getAppConfig(moments).showButtons);
+
+    CHECK(config.replaceRule(winScope, winScope, g, OverlayMode::Transparent));
+    config.load();
+    CHECK(config.findStoredRule(moments, &found));
+    CHECK(found.overlayMode == OverlayMode::Transparent);
+    AppConfig momentsCfg = config.getAppConfig(moments);
+    CHECK(momentsCfg.showButtons);
+    CHECK(momentsCfg.overlayMode == OverlayMode::Transparent);
+    CHECK(near(momentsCfg.geometry.offset.x, 22));
+
+    // Replacing window-scoped rule with app-scoped Hidden rule removes old matcher.
+    CHECK(config.replaceRule(winScope, appScope, g, OverlayMode::Hidden));
+    config.load();
+    CHECK(config.findStoredRule(chat, &found));
+    CHECK(found.matcher.canonicalKey() == appScope.canonicalKey());
+    CHECK(found.overlayMode == OverlayMode::Hidden);
+    CHECK(!config.getAppConfig(chat).showButtons);
+    CHECK(config.getAppConfig(chat).overlayMode == OverlayMode::Hidden);
+    CHECK(!config.getAppConfig(moments).showButtons);
+
+    // Removing the rule restores default visibility and Cover mode.
+    CHECK(config.removeRule(appScope));
+    config.load();
+    CHECK(!config.findStoredRule(chat, &found));
+    CHECK(config.getAppConfig(chat).showButtons);
+    CHECK(config.getAppConfig(chat).overlayMode == OverlayMode::Cover);
+}
+
+void testAdjustBar()
+{
+    const QRectF window(0, 0, 900, 600);
+    const QRectF panel(12, 10, 68, 28);
+    const AdjustBarLayout single = adjustBarLayout(panel, window, true, false);
+    CHECK(!single.isEmpty());
+    CHECK(!single.twoRows);
+    CHECK(window.contains(single.rect));
+    CHECK(!single.rect.intersects(panel));
+    for (const auto &btn : single.buttons) {
+        if (btn.enabled) {
+            CHECK(adjustBarActionAt(single, btn.rect.center()) == btn.action);
+        }
+    }
+    CHECK(single.buttons.size() == 7);
+    CHECK(single.buttons[0].action == AdjustAction::ModeCover);
+    CHECK(adjustBarActionAt(single, single.buttons[0].rect.center()) == AdjustAction::ModeCover);
+    CHECK(adjustBarActionAt(single, QPointF(0, 0)) == std::nullopt);
+
+    // Narrow window wraps to two rows and remains inside the window frame.
+    const QRectF narrowWindow(0, 0, 260, 200);
+    const QRectF narrowPanel(8, 8, 68, 28);
+    const AdjustBarLayout wrapped = adjustBarLayout(narrowPanel, narrowWindow, true, true);
+    CHECK(!wrapped.isEmpty());
+    CHECK(wrapped.twoRows);
+    CHECK(narrowWindow.contains(wrapped.rect));
+    CHECK(adjustBarActionAt(wrapped, QPointF(wrapped.rect.left() + 2, wrapped.rect.top() + 2))
+          != AdjustAction::Reset);
+}
+
 } // namespace
 
 int main(int argc, char **argv)
@@ -1195,6 +1292,8 @@ int main(int argc, char **argv)
     testFormaControls();
     testStore();
     testIndependentBackground();
+    testOverlayModesAndScopes();
+    testAdjustBar();
 
     std::printf("%d checks, %d failures\n", g_checks, g_failures);
     return g_failures == 0 ? 0 : 1;
