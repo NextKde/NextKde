@@ -12,7 +12,13 @@ try {
     writeFileSync(join(directory, "InputMethodPresentation.qml"),
         readFileSync(new URL("inputmethod/InputMethodPresentation.qml", source), "utf8")
             .replace("import qs.desktop.modules.common", 'import "."'));
-    copyFileSync(new URL("common/PopupMotion.qml", source), join(directory, "PopupMotion.qml"));
+    // PopupMotion reaches the shell's foundation module through the Kos/Ui
+    // symlink, which does not exist next to this fixture. Ship the one type it
+    // needs (a self-contained SpringMotion) and point the import at it.
+    writeFileSync(join(directory, "PopupMotion.qml"),
+        readFileSync(new URL("common/PopupMotion.qml", source), "utf8")
+            .replace('import "../../../Kos/Ui/foundation" as Foundation', 'import "."'));
+    copyFileSync(new URL("../../shared/qml/foundation/SpringMotion.qml", import.meta.url), join(directory, "SpringMotion.qml"));
     copyFileSync(new URL("inputmethod/InputMethodPlacement.mjs", source), join(directory, "InputMethodPlacement.mjs"));
     writeFileSync(join(directory, "InputMethodService.qml"),
         readFileSync(new URL("inputmethod/InputMethodService.qml", source), "utf8")
