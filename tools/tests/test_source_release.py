@@ -76,6 +76,44 @@ class SelectionTests(unittest.TestCase):
             release.select(self.root, "stable")
         self.assertEqual(self.git(self.root, "rev-parse", "HEAD"), self.first)
 
+    def test_check_main_reports_upstream_without_moving_head(self):
+        (self.remote / "VERSION").write_text("0.2.1\n")
+        self.git(self.remote, "commit", "-am", "newer development")
+        expected = self.git(self.remote, "rev-parse", "HEAD")
+        data = release.check(self.root, "main")
+        self.assertEqual(data["channel"], "main")
+        self.assertEqual(data["target"], "origin/main")
+        self.assertEqual(data["tag"], "")
+        self.assertEqual(data["revision"], expected)
+        self.assertEqual(data["behind"], 1)
+        self.assertEqual(data["ahead"], 0)
+        self.assertEqual(self.git(self.root, "rev-parse", "HEAD"), self.latest)
+
+    def test_check_stable_reports_tag_without_moving_head(self):
+        with patch.object(release, "latest_release", return_value="v0.1.0"):
+            data = release.check(self.root, "stable")
+        self.assertEqual(data["channel"], "stable")
+        self.assertEqual(data["target"], "v0.1.0")
+        self.assertEqual(data["tag"], "v0.1.0")
+        self.assertEqual(data["revision"], self.first)
+        self.assertEqual(data["behind"], 0)
+        self.assertEqual(data["ahead"], 1)
+        self.assertEqual(self.git(self.root, "rev-parse", "HEAD"), self.latest)
+
+    def test_check_failed_fetch_raises_and_leaves_head(self):
+        with patch.object(release, "latest_release", return_value="v8.8.8"):
+            with self.assertRaises(subprocess.CalledProcessError):
+                release.check(self.root, "stable")
+        self.assertEqual(self.git(self.root, "rev-parse", "HEAD"), self.latest)
+
+    def test_check_cli_rejects_another_repository(self):
+        result = subprocess.run(["python3", str(Path(__file__).parents[1] / "release/source-release.py"),
+            "--root", str(self.root), "check", "main", "--repo", "https://github.com/other/repository.git"],
+            text=True, capture_output=True)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("differs", result.stderr)
+        self.assertEqual(self.git(self.root, "rev-parse", "HEAD"), self.latest)
+
     def test_development_can_follow_detached_tag(self):
         release.select(self.root, "v0.1.0")
         release.select(self.root, "main")
@@ -108,6 +146,25 @@ class SelectionTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "differs"):
             release.select(self.root, "main", "https://github.com/other/repository.git")
         self.assertEqual(self.git(self.root, "remote", "get-url", "origin"), str(self.remote))
+
+    def stamp(self, destination, *extra):
+        built = destination.with_suffix(".build.json")
+        built.write_text(json.dumps({"version": "0.1.0", "revision": "built-commit", "tag": "", "dirty": False}))
+        subprocess.run(["python3", str(Path(__file__).parents[1] / "release/source-release.py"),
+            "--root", str(self.root), "stamp", str(destination), "--from-file", str(built), *extra],
+            check=True, capture_output=True, text=True)
+        return json.loads(destination.read_text())
+
+    def test_stamp_without_source_root_omits_it(self):
+        data = self.stamp(Path(self.workspace.name) / "release.json")
+        self.assertNotIn("sourceRoot", data)
+        self.assertEqual(data["revision"], "built-commit")
+
+    def test_stamp_records_resolved_source_root(self):
+        source = self.root / ".."
+        data = self.stamp(Path(self.workspace.name) / "release.json", "--source-root", str(source))
+        self.assertEqual(data["sourceRoot"], str(source.resolve()))
+        self.assertEqual(data["revision"], "built-commit")
 
     def test_stamp_is_snapshot_not_current_checkout(self):
         record = Path(self.workspace.name) / "installed" / "release.json"

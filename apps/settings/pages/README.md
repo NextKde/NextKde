@@ -14,7 +14,9 @@ No registry, dependency container or second IPC protocol is introduced.
 - `colors` is a required palette object: the semantic color roles and
   `role(name, fallback)` supplied by the root. Pages must not access the root's
   `theme` id. `materialForm` is a presentation input where applicable.
-- About takes `colors` and an optional application-owned `cache`, with no Shell bridge. Isolated consumers can set
+- About takes `colors`, an optional application-owned `cache` and an optional `updateBackend`
+  (`state`/`busy`/`available`/… plus `check()`, `update()`, `restart()`, `openLog()`; `null` keeps the
+  page loadable alone), with no Shell bridge. Isolated consumers can set
   `loadContributors: false` before creation to suppress automatic GitHub requests.
 - `bridge` is the existing SettingsBridge interface, explicitly injected by the
   root; `null` means unavailable. Pages retain their existing method and snapshot

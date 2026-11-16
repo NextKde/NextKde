@@ -268,6 +268,8 @@ jobs:
 
       - name: Test release selection without installing the desktop
         run: python3 -m unittest discover -s tools/tests -p 'test_*release*.py'
+      - name: Update agent tests
+        run: python3 -m unittest discover -s tools/tests -p 'test_update_agent.py'
       - name: Test Shell QML deployment with damaged source aliases
         run: python3 tools/tests/test_shell_qml_deploy.py
       - name: Test userspace Fcitx panel installation
