@@ -19,6 +19,7 @@ LiquidGlassSurface 1.0 LiquidGlassSurface.qml
 LiquidGlassPanel 1.0 LiquidGlassPanel.qml
 PopupMotion 1.0 PopupMotion.qml
 MotionSpring 1.0 MotionSpring.qml
+PersistentPanelWindow 1.0 PersistentPanelWindow.qml
 AppIcon 1.0 AppIcon.qml
 LayeredAppIcon 1.0 LayeredAppIcon.qml
 singleton LayeredIconThemeService 1.0 LayeredIconThemeService.qml
