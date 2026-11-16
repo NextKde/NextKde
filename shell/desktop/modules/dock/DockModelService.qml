@@ -2,6 +2,7 @@ pragma Singleton
 import QtQuick
 import qs.desktop.modules.common
 import "WindowCycle.mjs" as WindowCycle
+import "DockItems.mjs" as DockItems
 
 // DockModelService owns application/window grouping for the Dock UI.
 //
@@ -28,6 +29,7 @@ QtObject {
 
     property var pinnedItems: []
     property int pinnedCount: 0
+    property int separatorCount: 0
     // Presentation-only task list. WindowService keeps every live window;
     // this layer derives the Dock's ordered per-window presentation while
     // other shell surfaces can consume the unmodified live model.
@@ -95,9 +97,23 @@ QtObject {
     function _refreshPinned() {
         const isGrouped = ConfigService.windowGrouping === "grouped";
         const dockItems = ConfigService.dockItems || [];
+        // Separators only live in the pinned run. Hiding a running app in
+        // separate mode can orphan the separators beside it; that is display
+        // filtering and must not rewrite the stored list.
+        const visible = DockItems.visibleDockItems(dockItems, function(dockItem) {
+            if (isGrouped)
+                return true;
+            const identity = AppIdentityService.resolve(dockItem.appId);
+            return WindowService.windowsForApp(identity.desktopId).length === 0;
+        });
         const items = [];
-        for (let i = 0; i < dockItems.length; i++) {
-            const dockItem = dockItems[i];
+        for (let i = 0; i < visible.length; i++) {
+            const dockItem = visible[i];
+
+            if (dockItem.type === "separator") {
+                items.push({ type: "separator", id: dockItem.id });
+                continue;
+            }
 
             if (dockItem.type === "app") {
                 const identity = AppIdentityService.resolve(dockItem.appId);
@@ -130,7 +146,11 @@ QtObject {
         const same = items.length === svc.pinnedItems.length
             && items.every((item, i) => {
                 const prev = svc.pinnedItems[i];
-                return prev && item.appId === prev.appId
+                if (!prev || item.type !== prev.type)
+                    return false;
+                if (item.type === "separator")
+                    return item.id === prev.id;
+                return item.appId === prev.appId
                     && item.name === prev.name
                     && item.icon === prev.icon
                     && item.isRunning === prev.isRunning
@@ -138,8 +158,17 @@ QtObject {
                     && item.windowCount === prev.windowCount;
             });
         if (!same) {
+            let apps = 0;
+            let separators = 0;
+            for (let i = 0; i < items.length; i++) {
+                if (items[i].type === "separator")
+                    separators++;
+                else
+                    apps++;
+            }
             svc.pinnedItems = items;
-            svc.pinnedCount = items.length;
+            svc.pinnedCount = apps;
+            svc.separatorCount = separators;
         }
     }
 
@@ -517,7 +546,13 @@ QtObject {
         const items = ConfigService.dockItems || [];
         const remaining = items.filter(item => item.type !== "app"
             || !AppIdentityService.sameApp(item.appId, appId));
-        if (remaining.length === items.length || !ConfigService.setDockItems(remaining))
+        if (remaining.length === items.length)
+            return;
+        // Unpinning can leave a separator at an end or against another
+        // separator. Drop those from storage; the display filter alone would
+        // hide them and make a later removal look like a no-op.
+        const compacted = DockItems.compactDockItems(remaining);
+        if (!ConfigService.setDockItems(compacted))
             return;
         ConfigService.scheduleSave();
         svc._refreshPresentation();
@@ -531,23 +566,64 @@ QtObject {
     // lands in the wrong place while any pinned app is running. Inserting at
     // the target's full index is correct in both directions because
     // moveDockItem splices after removing the source.
-    function _visibleSlotToDockIndex(type, visibleIndex) {
+    function _visibleSlotToDockIndex(visibleIndex) {
         const visible = svc.pinnedItems
         const dockItems = ConfigService.dockItems || []
-        if (type === "app" && visibleIndex >= 0 && visibleIndex < visible.length) {
-            const targetAppId = visible[visibleIndex].appId
+        if (visibleIndex >= 0 && visibleIndex < visible.length) {
+            const target = visible[visibleIndex]
             for (let i = 0; i < dockItems.length; i++) {
                 const item = dockItems[i]
-                if (item.type === "app" && item.appId === targetAppId)
+                if (!item || !target || item.type !== target.type)
+                    continue
+                if (target.type === "app" && item.appId === target.appId)
+                    return i
+                if (target.type === "separator" && item.id === target.id)
                     return i
             }
         }
         return visibleIndex
     }
 
+    function _separatorAppVisible(dockItem) {
+        if (ConfigService.windowGrouping === "grouped")
+            return true
+        const identity = AppIdentityService.resolve(dockItem.appId)
+        return WindowService.windowsForApp(identity.desktopId).length === 0
+    }
+
+    function canAddSeparatorAfter(appId) {
+        const identity = AppIdentityService.resolve(appId)
+        return DockItems.canAddSeparatorAfter(
+            ConfigService.dockItems || [], identity.desktopId,
+            AppIdentityService.sameApp,
+            function(item) { return svc._separatorAppVisible(item) })
+    }
+
+    function addSeparatorAfter(appId) {
+        const identity = AppIdentityService.resolve(appId)
+        const next = DockItems.addSeparatorAfter(
+            ConfigService.dockItems || [], identity.desktopId,
+            DockItems.createSeparatorId(), AppIdentityService.sameApp,
+            function(item) { return svc._separatorAppVisible(item) })
+        if (!next || !ConfigService.setDockItems(next))
+            return false
+        ConfigService.scheduleSave()
+        console.log("[DockModel] add separator after app=" + identity.desktopId)
+        return true
+    }
+
+    function removeSeparator(id) {
+        const next = DockItems.removeSeparator(ConfigService.dockItems || [], id)
+        if (!next || !ConfigService.setDockItems(next))
+            return false
+        ConfigService.scheduleSave()
+        console.log("[DockModel] remove separator id=" + id)
+        return true
+    }
+
     function movePinnedItem(type, key, targetIndex) {
         if (!ConfigService.moveDockItem(type, key,
-                _visibleSlotToDockIndex(type, targetIndex)))
+                _visibleSlotToDockIndex(targetIndex)))
             return
         console.log("[DockModel] reorder " + type + "=" + key
                     + " target=" + targetIndex)

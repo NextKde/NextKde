@@ -574,6 +574,9 @@ Item {
                 case "pin":
                     AppActionService.pin(icon.appId)
                     break
+                case "add_separator":
+                    DockModelService.addSeparatorAfter(icon.appId)
+                    break
                 }
             }
         }
@@ -1108,6 +1111,10 @@ Item {
                     menu.addItem("dock.menu.new_window", I18n.tr("New window"), "new_window")
                     menu.addItem(pinned ? "dock.menu.unpin" : "dock.menu.pin",
                         pinned ? I18n.tr("Unpin") : I18n.tr("Pin this app"), pinned ? "unpin" : "pin")
+                    if (icon.isPinnedItem
+                            && DockModelService.canAddSeparatorAfter(icon.appId))
+                        menu.addItem("dock.menu.separator.add",
+                            I18n.tr("Add separator to the right"), "add_separator")
                     if (icon.isRunning)
                         menu.addItem("dock.menu.close_all", I18n.tr("Close all windows"), "close_all")
                 }
