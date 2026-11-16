@@ -99,6 +99,17 @@ QtObject {
     }
 }
 `);
+    // PopupMotion also asks the appearance service whether motion is reduced.
+    // The real singleton belongs to the common module, which this fixture does
+    // not load, so it ships the one flag that is read.
+    writeFileSync(join(directory, "AppearanceConfigService.qml"), `pragma Singleton
+import QtQuick
+QtObject {
+    property bool reduceMotion: false
+}
+`);
+    writeFileSync(join(directory, "qmldir"), readFileSync(join(directory, "qmldir"), "utf8")
+        + "singleton AppearanceConfigService 1.0 AppearanceConfigService.qml\n");
     const result = spawnSync(process.argv[2] || "qmltestrunner", ["-input", directory], {
         encoding: "utf8", timeout: 20000,
         env: { ...process.env, QT_QPA_PLATFORM: "offscreen", QT_QUICK_BACKEND: "software",
