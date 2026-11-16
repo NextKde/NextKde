@@ -1109,11 +1109,34 @@ Item {
                             maskSource: fileThumbnailMask
                         }
                     }
+                    // Launchers are application artwork, so they follow the
+                    // shell-wide appearance mode like the Dock, the tray and
+                    // the launcher window do. In a layered icon theme that
+                    // also reaches the transparent and tinted modes, which
+                    // need the theme's clear artwork or its layer stack.
+                    // Plain files keep their MIME icon below.
+                    AppIcon {
+                        id: launcherAppIcon
+                        anchors.fill: parent
+                        anchors.margins: 4
+                        source: delegateRoot.entry && delegateRoot.entry.kind === "launcher"
+                            ? root.themeIconSource(delegateRoot.entry) : ""
+                        // Theme icon: synchronous, see AppIcon.qml.
+                        asynchronous: false
+                        opacityMultiplier: IconAppearanceService.mode === "color"
+                            ? 1.0 : IconAppearanceService.opacity
+                        saturation: IconAppearanceService.saturation
+                        tintEnabled: IconAppearanceService.tintEnabled
+                        tintColor: IconAppearanceService.tintColor
+                        visible: source !== "" && imageStatus === Image.Ready
+                            && !delegateRoot.usesCustomFolderVisual
+                    }
                     IconImage {
                         id: fileThemeIcon
                         anchors.fill: parent
                         anchors.margins: 4
-                        source: root.themeIconSource(delegateRoot.entry)
+                        source: delegateRoot.entry && delegateRoot.entry.kind === "launcher"
+                            ? "" : root.themeIconSource(delegateRoot.entry)
                         // Theme icon: synchronous, see AppIcon.qml.
                         asynchronous: false
                         visible: source !== "" && status === Image.Ready
@@ -1123,6 +1146,7 @@ Item {
                         anchors.centerIn: parent
                         name: root.iconFor(delegateRoot.entry ? delegateRoot.entry.kind : "")
                         visible: !fileThumbnailFrame.visible && !fileThemeIcon.visible
+                            && !launcherAppIcon.visible
                             && !delegateRoot.usesCustomFolderVisual
                         color: "white"
                         size: root.iconVisualSize * 0.68
