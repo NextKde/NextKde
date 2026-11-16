@@ -22,7 +22,10 @@ find_package(KDecoration3 REQUIRED)
 
 add_library(kos_decoration MODULE
     kosdecoration.cpp
+    nativebutton.cpp
+    ../kos-bridge/windowbuttons/buttonglyph.cpp
     main.cpp
+    ../kos-bridge/windowappearance/contour.cpp
 )
 
 target_link_libraries(kos_decoration PRIVATE

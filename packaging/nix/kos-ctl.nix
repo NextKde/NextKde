@@ -1,10 +1,10 @@
 {
   lib,
   writeShellScriptBin,
-  jq,
   coreutils,
   systemd,
-  gnugrep,
+  quickshell,
+  sync-shell,
   ...
 }:
 
@@ -13,6 +13,7 @@ writeShellScriptBin "kos-ctl" ''
   # Unified interface for managing KOS Desktop Shell on NixOS
 
   set -euo pipefail
+  export PATH=${lib.makeBinPath [ coreutils systemd quickshell ]}:"$PATH"
 
   RED='\033[0;31m'
   GREEN='\033[0;32m'
@@ -21,7 +22,7 @@ writeShellScriptBin "kos-ctl" ''
   NC='\033[0m'
 
   UNIT_DIR="''${XDG_CONFIG_HOME:-$HOME/.config}/systemd/user"
-  SHELL_CONFIG="''${XDG_CONFIG_HOME:-$HOME/.config}/quickshell/kos"
+  SHELL_CONFIG="$HOME/.config/quickshell/kos"
 
   print_ok()   { printf "$GREEN✓$NC %s\n" "$1"; }
   print_warn() { printf "$YELLOW⚠$NC %s\n" "$1"; }
@@ -60,51 +61,9 @@ EOF
     fi
   }
 
-  find_kos_store() {
-    for dir in /nix/store/*-kos-desktop-unstable; do
-      if [[ -d "$dir/share/kos-desktop/shell" ]]; then
-        echo "$dir"
-        return
-      fi
-    done
-  }
-
   sync_shell_config() {
-    local kos_store
-    kos_store=$(find_kos_store)
-
-    if [[ -z "$kos_store" ]]; then
-      print_err "kos-desktop package not found in Nix store"
-      print_info "Run: sudo nixos-rebuild switch"
-      return 1
-    fi
-
     print_info "Syncing shell config from Nix store..."
-
-    # Remove old config (fix permissions first)
-    if [[ -d "$SHELL_CONFIG" ]]; then
-      find "$SHELL_CONFIG" -type d -exec chmod u+w {} + 2>/dev/null || true
-      find "$SHELL_CONFIG" -type f -exec chmod u+w {} + 2>/dev/null || true
-      rm -rf "$SHELL_CONFIG"
-    fi
-
-    # Create fresh directories
-    mkdir -p "$SHELL_CONFIG/shared/qml"
-
-    # Copy shell QML (follow symlinks, ignore source permissions)
-    cp -rL --no-preserve=mode "$kos_store/share/kos-desktop/shell/." "$SHELL_CONFIG/"
-
-    # Copy shared controls
-    local controls_src=""
-    if [[ -d "$kos_store/share/shared/qml/controls" ]]; then
-      controls_src="$kos_store/share/shared/qml/controls"
-    elif [[ -d "$kos_store/share/kos-desktop/shared/qml/controls" ]]; then
-      controls_src="$kos_store/share/kos-desktop/shared/qml/controls"
-    fi
-    if [[ -n "$controls_src" ]]; then
-      cp -rL --no-preserve=mode "$controls_src" "$SHELL_CONFIG/shared/qml/"
-    fi
-
+    ${sync-shell}
     print_ok "Shell config synced"
   }
 
@@ -119,7 +78,7 @@ EOF
       if systemctl --user is-active "$unit" >/dev/null 2>&1; then
         systemctl --user restart "$unit"
       else
-        systemctl --user start "$unit" 2>/dev/null || true
+        systemctl --user start "$unit"
       fi
     done
 
@@ -181,15 +140,16 @@ EOF
     fi
 
     # Check shell config
-    if [[ -d "$SHELL_CONFIG/shell" ]]; then
+    if [[ -f "$SHELL_CONFIG/shell.qml" ]]; then
       print_ok "Shell config exists"
     else
       print_warn "Shell config missing (run: kos-ctl sync)"
     fi
 
-    # Check systemd services
+    # Module-managed units are provided by the system generation, not copied
+    # into ~/.config/systemd/user. Ask systemd to resolve its full search path.
     for unit in kos-platform.service kos-data.service kos-shell.service; do
-      if [[ -f "$UNIT_DIR/$unit" ]]; then
+      if systemctl --user cat "$unit" >/dev/null 2>&1; then
         print_ok "$unit: installed"
       else
         print_warn "$unit: not installed"
@@ -205,7 +165,7 @@ EOF
       fi
     done
     if (( broken )); then
-      print_warn "Run: kos-ctl start (will auto-fix broken links)"
+      print_warn "Rebuild your NixOS configuration to restore missing unit files"
     fi
 
     printf "\n"

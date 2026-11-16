@@ -1,6 +1,7 @@
 pragma ComponentBehavior: Bound
 
 import QtQuick
+import "../../Icons" as Symbols
 import QtQuick.Controls
 import QtQuick.Layouts
 
@@ -9,6 +10,29 @@ KosDialog {
     objectName: "kosSettingsDialog"
 
     property var settings: null
+    property bool inWindowMaterials: false
+    property bool inWindowSamplingAvailable: false
+    property Component toolTipBackground: null
+    readonly property bool localGlassActive: inWindowMaterials && inWindowSamplingAvailable
+        && settings && settings.materialMode !== "solid" && !settings.reduceTransparency
+    readonly property real displayedOpacity: !settings ? 1 : inWindowMaterials
+        ? (localGlassActive ? settings.materialOpacity : 1) : settings.effectiveMaterialOpacity
+
+    component MaterialTip: ToolTip {
+        id: tip
+        popupType: Popup.Item
+        delay: 500
+        timeout: 5000
+        padding: 5
+        leftPadding: 10
+        rightPadding: 10
+        margins: 8
+        x: parent ? (parent.width - width) / 2 : 0
+        y: parent ? parent.height + 6 : 0
+        contentItem: Label { text: tip.text; color: AppTheme.mutedText; font.pixelSize: 11 }
+        background: Loader { sourceComponent: root.toolTipBackground }
+    }
+
     property string applicationName: qsTr("Application")
     readonly property var accentChoices: [
         { key: "system", label: qsTr("System accent"), color: AppTheme.systemAccent },
@@ -23,6 +47,7 @@ KosDialog {
     anchors.centerIn: parent
     width: Math.min(580, parent ? parent.width - 40 : 580)
     height: Math.min(650, parent ? parent.height - 40 : 650)
+    popupType: Popup.Item
     modal: true
     focus: true
     padding: 0
@@ -44,12 +69,14 @@ KosDialog {
     }
 
     Overlay.modal: Rectangle {
+        radius: AppTheme.modernDesign && root.ApplicationWindow.window ? root.ApplicationWindow.window.windowCornerRadius || 0 : 0
         color: AppTheme.withAlpha(AppTheme.blackSeed, AppTheme.dark ? 0.42 : 0.24)
     }
 
     background: Rectangle {
         radius: AppTheme.largeRadius
-        color: AppTheme.cardSurface
+        color: root.inWindowMaterials
+            ? (AppTheme.dark ? "#2C2C2E" : "#F7F7F9") : AppTheme.cardSurface
         border.width: 1
         border.color: AppTheme.border
 
@@ -80,11 +107,11 @@ KosDialog {
                 color: AppTheme.withAlpha(AppTheme.accent,
                                           AppTheme.dark ? 0.22 : 0.14)
 
-                Label {
+                Symbols.Icon {
                     anchors.centerIn: parent
-                    text: "⚙"
+                    name: "gear_alt"
                     color: AppTheme.accent
-                    font.pixelSize: 20
+                    size: 20
                 }
             }
 
@@ -106,11 +133,17 @@ KosDialog {
             }
 
             KosToolButton {
-                text: "×"
-                font.pixelSize: 18
+                id: closeSettings
+                objectName: "settingsClose"
+                contentItem: Symbols.Icon { name: "xmark"; color: AppTheme.text; size: 18 }
                 Accessible.name: qsTr("Close settings")
-                ToolTip.visible: hovered
+                ToolTip.visible: !root.toolTipBackground && hovered
                 ToolTip.text: Accessible.name
+                MaterialTip {
+                    objectName: "settingsCloseTip"
+                    visible: root.toolTipBackground !== null && closeSettings.hovered && !closeSettings.pressed
+                    text: closeSettings.Accessible.name
+                }
                 onClicked: root.close()
             }
         }
@@ -158,9 +191,12 @@ KosDialog {
 
                         ColumnLayout {
                             Layout.fillWidth: true
+                            Layout.minimumWidth: 0
                             spacing: 2
                             Label { text: qsTr("Color scheme"); color: AppTheme.text }
                             Label {
+                                Layout.fillWidth: true
+                                wrapMode: Text.WordWrap
                                 text: qsTr("Follow KDE or choose a fixed appearance")
                                 color: AppTheme.mutedText
                                 font.pixelSize: 11
@@ -168,7 +204,14 @@ KosDialog {
                         }
 
                         LiquidSegmentedControl {
+                            materialForm: root.inWindowMaterials || ControlForm.materialForm
+                            focusColor: root.inWindowMaterials ? AppTheme.focusRing : AppTheme.accent
+                            backgroundColor: root.inWindowMaterials
+                                ? (AppTheme.dark ? "#3A3A3C" : "#EDEDF0") : AppTheme.button
+                            selectionColor: root.inWindowMaterials
+                                ? (AppTheme.dark ? "#636368" : "#FFFFFF") : AppTheme.cardHover
                             Layout.preferredWidth: 230
+                            objectName: "settingsAppearanceSelector"
                             labels: [qsTr("System"), qsTr("Light"), qsTr("Dark")]
                             currentIndex: root.appearanceIndex()
                             onSelectionRequested: function(index) {
@@ -190,21 +233,31 @@ KosDialog {
 
                         ColumnLayout {
                             Layout.fillWidth: true
+                            Layout.minimumWidth: 0
                             spacing: 2
-                            Label { text: qsTr("Window material"); color: AppTheme.text }
+                            Label { text: root.inWindowMaterials ? qsTr("Liquid material") : qsTr("Window material"); color: AppTheme.text }
                             Label {
-                                text: root.settings && root.settings.nativeBlurAvailable
+                                Layout.fillWidth: true
+                                wrapMode: Text.WordWrap
+                                text: root.inWindowMaterials ? qsTr("Applies to controls and floating panels")
+                                    : root.settings && root.settings.nativeBlurAvailable
                                     ? qsTr("KWin native blur is available")
                                     : qsTr("Uses a readable solid fallback when blur is unavailable")
-                                color: root.settings && root.settings.nativeBlurAvailable
+                                color: !root.inWindowMaterials && root.settings && root.settings.nativeBlurAvailable
                                     ? AppTheme.positive : AppTheme.mutedText
                                 font.pixelSize: 11
-                                wrapMode: Text.WordWrap
                             }
                         }
 
                         LiquidSegmentedControl {
+                            materialForm: root.inWindowMaterials || ControlForm.materialForm
+                            focusColor: root.inWindowMaterials ? AppTheme.focusRing : AppTheme.accent
+                            backgroundColor: root.inWindowMaterials
+                                ? (AppTheme.dark ? "#3A3A3C" : "#EDEDF0") : AppTheme.button
+                            selectionColor: root.inWindowMaterials
+                                ? (AppTheme.dark ? "#636368" : "#FFFFFF") : AppTheme.cardHover
                             Layout.preferredWidth: 230
+                            objectName: "settingsMaterialSelector"
                             labels: [qsTr("Auto"), qsTr("Glass"), qsTr("Solid")]
                             currentIndex: root.materialIndex()
                             onSelectionRequested: function(index) {
@@ -226,25 +279,29 @@ KosDialog {
 
                         ColumnLayout {
                             Layout.fillWidth: true
+                            Layout.minimumWidth: 0
                             spacing: 2
                             Label { text: qsTr("Material opacity"); color: AppTheme.text }
                             Label {
-                                text: qsTr("Higher values improve contrast over detailed wallpapers")
+                                Layout.fillWidth: true
+                                wrapMode: Text.WordWrap
+                                text: root.inWindowMaterials ? qsTr("Higher values make liquid surfaces more opaque")
+                                    : qsTr("Higher values improve contrast over detailed wallpapers")
                                 color: AppTheme.mutedText
                                 font.pixelSize: 11
                             }
                         }
 
                         KosSlider {
+                            objectName: "settingsMaterialOpacity"
                             Layout.preferredWidth: 190
-                            from: root.settings && root.settings.nativeBlurAvailable
+                            from: root.inWindowMaterials || (root.settings && root.settings.nativeBlurAvailable)
                                 ? 0.72 : 0.93
                             to: 0.98
                             stepSize: 0.01
-                            enabled: root.settings && root.settings.glassActive
-                                && !root.settings.reduceTransparency
-                            value: root.settings
-                                ? root.settings.effectiveMaterialOpacity : 1.0
+                            enabled: root.inWindowMaterials ? root.localGlassActive
+                                : root.settings && root.settings.glassActive && !root.settings.reduceTransparency
+                            value: root.displayedOpacity
                             Accessible.name: qsTr("Material opacity")
                             onMoved: if (root.settings)
                                 root.settings.materialOpacity = value
@@ -252,9 +309,7 @@ KosDialog {
 
                         Label {
                             Layout.preferredWidth: 38
-                            text: root.settings
-                                ? Math.round(root.settings.effectiveMaterialOpacity * 100) + "%"
-                                : "100%"
+                            text: Math.round(root.displayedOpacity * 100) + "%"
                             color: AppTheme.mutedText
                             horizontalAlignment: Text.AlignRight
                         }
@@ -293,13 +348,17 @@ KosDialog {
                             Accessible.role: Accessible.RadioButton
                             Accessible.name: modelData.label
                             Accessible.checked: checked
-                            ToolTip.visible: hovered
+                            ToolTip.visible: !root.toolTipBackground && hovered
                             ToolTip.text: modelData.label
+                            MaterialTip {
+                                visible: root.toolTipBackground !== null && accentButton.hovered && !accentButton.pressed
+                                text: accentButton.modelData.label
+                            }
                             onClicked: if (root.settings)
                                 root.settings.accentName = modelData.key
 
-                            contentItem: Label {
-                                text: accentButton.checked ? "✓" : ""
+                            contentItem: Symbols.Icon {
+                                name: "checkmark"; visible: accentButton.checked; size: 14
                                 color: AppTheme.contrastRatio(
                                            accentButton.modelData.color,
                                            AppTheme.blackSeed)
@@ -307,9 +366,9 @@ KosDialog {
                                            accentButton.modelData.color,
                                            AppTheme.whiteSeed)
                                     ? AppTheme.blackSeed : AppTheme.whiteSeed
-                                horizontalAlignment: Text.AlignHCenter
-                                verticalAlignment: Text.AlignVCenter
-                                font.weight: Font.Bold
+
+
+
                             }
 
                             background: Rectangle {
@@ -355,9 +414,12 @@ KosDialog {
                         spacing: 16
                         ColumnLayout {
                             Layout.fillWidth: true
+                            Layout.minimumWidth: 0
                             spacing: 2
                             Label { text: qsTr("Reduce transparency"); color: AppTheme.text }
                             Label {
+                                Layout.fillWidth: true
+                                wrapMode: Text.WordWrap
                                 text: qsTr("Use fully opaque surfaces for maximum readability")
                                 color: AppTheme.mutedText
                                 font.pixelSize: 11
@@ -385,9 +447,12 @@ KosDialog {
                         spacing: 16
                         ColumnLayout {
                             Layout.fillWidth: true
+                            Layout.minimumWidth: 0
                             spacing: 2
                             Label { text: qsTr("Reduce motion"); color: AppTheme.text }
                             Label {
+                                Layout.fillWidth: true
+                                wrapMode: Text.WordWrap
                                 text: qsTr("Disable decorative color and movement transitions")
                                 color: AppTheme.mutedText
                                 font.pixelSize: 11

@@ -35,10 +35,15 @@ Item {
     }
     // ---- scene ----
     Loader {
+        id: physicalBackdrop
         anchors.fill: parent
         active: !root.foreground
         source: Qt.resolvedUrl("PhysicalSceneBackdrop.qml")
         onLoaded: item.host = root
+    }
+    Connections {
+        target: physicalBackdrop.item
+        function onFrameReady() { root.frameReady() }
     }
     Theme.ForegroundEffects {
         anchors.fill: parent

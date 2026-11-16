@@ -43,6 +43,16 @@ QtObject {
     // Compact keeps the whole content group together. Relaxed spends any
     // taskbar slack between apps/windows and the trailing information area.
     property string contentStyle: "compact"
+    // One hover setting controls both peak magnification and lift. null
+    // follows the shell style; an explicit value works in every style.
+    property var hoverScale: null
+    readonly property real minHoverScale: 1.0
+    readonly property real maxHoverScale: 3.0
+    readonly property real effectiveHoverScale: Math.max(svc.minHoverScale,
+        Math.min(svc.maxHoverScale, svc.hoverScale !== null
+            ? svc.hoverScale : AppearanceTokens.dock.magnificationMaxScale))
+    // At 100% both effects stop; every extra 100% adds 20% icon-size lift.
+    readonly property real effectiveHoverLift: 0.2 * (effectiveHoverScale - 1)
     // Internal compatibility projections while renderers consume the concise
     // product model. They are derived, never persisted or exposed in settings.
     readonly property string widthMode: dockStyle === "taskbar" ? "stretch" : "auto"
@@ -122,20 +132,22 @@ QtObject {
     // Keep existing values round-trippable so older config files are not lost.
     property var iconOverrides:   ({})
     // `dockItems` is the canonical ordered list of pinned applications.
-    // App item: { type: "app", appId: "code.desktop" }
+    // Defaults are generic KDE tools plus our own settings entry, never a
+    // developer's personal app pins.
+    // App item: { type: "app", appId: "org.kde.kate.desktop" }
     property var dockItems: [
+        { type: "app", appId: "kos-settings.desktop" },
         { type: "app", appId: "org.kde.dolphin.desktop" },
         { type: "app", appId: "org.kde.kate.desktop" },
-        { type: "app", appId: "code.desktop" },
     ]
 
-    // Compatibility projection for the current Dock UI and AppGroupService.
-    // Never edit this directly in new code: use setDockItems/addAppItem/
-    // removeAppItem so all Dock persistence has one source of truth.
+    // Compatibility projection for the current Dock UI.
+    // Never edit this directly in new code: use setDockItems/addAppItem
+    // so all Dock persistence has one source of truth.
     property var pinnedAppIds: [
+        "kos-settings.desktop",
         "org.kde.dolphin.desktop",
         "org.kde.kate.desktop",
-        "code.desktop",
     ]
     property var    proportions:  defaultProportions
 
@@ -223,6 +235,24 @@ QtObject {
         return true
     }
 
+    // ── Hover magnification ──
+    // The scale clamp opens the macOS feel to every style: 1.0 is flat, so the
+    // slider doubles as the switch -- a separate enable toggle would be a
+    // second way to write the same state.
+    function updateHoverScale(rawScale) {
+        const next = Number(rawScale)
+        if (!Number.isFinite(next))
+            return false
+        const clamped = Math.max(svc.minHoverScale,
+            Math.min(svc.maxHoverScale, next))
+        if (svc.hoverScale !== null
+                && Math.abs(svc.hoverScale - clamped) <= 0.0005)
+            return false
+        svc.hoverScale = clamped
+        scheduleSave()
+        return true
+    }
+
     function updateNotificationBadgeVisibility(visible) {
         if (typeof visible !== "boolean" || svc.showNotificationBadges === visible)
             return false
@@ -255,11 +285,6 @@ QtObject {
     // the row so nothing rotates any more.
     property string infoCardMode: "carousel"
     property bool infoCardAutoRotate: true
-    property bool desktopLyricsEnabled: true
-    function updateDesktopLyricsEnabled(enabled) {
-        desktopLyricsEnabled = Boolean(enabled)
-        scheduleSave()
-    }
     readonly property var knownInfoCardIds: ["music", "weather", "clock", "metrics"]
     // One ordered list is the whole component model. Zero items hides the
     // region, one is naturally fixed, and multiple items rotate or expand.
@@ -421,6 +446,13 @@ QtObject {
     // ═══════════════════════════════════════════════════════════
     function _normalizeDockItems(rawItems) {
         const normalized = []
+        const seen = new Set()
+        function appendApp(appId) {
+            if (seen.has(appId))
+                return
+            seen.add(appId)
+            normalized.push({ type: "app", appId: appId })
+        }
         const items = Array.isArray(rawItems) ? rawItems : []
 
         for (let i = 0; i < items.length; i++) {
@@ -430,7 +462,7 @@ QtObject {
 
             if (item.type === "app" && typeof item.appId === "string"
                     && item.appId.length > 0) {
-                normalized.push({ type: "app", appId: item.appId })
+                appendApp(item.appId)
                 continue
             }
 
@@ -442,7 +474,7 @@ QtObject {
                     ? item.appIds.filter(appId => typeof appId === "string" && appId.length > 0)
                     : []
                 for (let j = 0; j < appIds.length; j++)
-                    normalized.push({ type: "app", appId: appIds[j] })
+                    appendApp(appIds[j])
             }
         }
         return normalized
@@ -516,38 +548,21 @@ QtObject {
         return changed
     }
 
-    function removeAppItem(appId) {
-        const items = _normalizeDockItems(svc.dockItems)
-        const remaining = []
-        let removed = false
-        for (let i = 0; i < items.length; i++) {
-            const item = items[i]
-            if (item.type === "app" && item.appId === appId) {
-                removed = true
-                continue
-            }
-            remaining.push(item)
-        }
-        if (!removed)
-            return false
-        const changed = setDockItems(remaining)
-        if (changed)
-            scheduleSave()
-        return changed
-    }
-
     // ═══════════════════════════════════════════════════════════
     // Persistence — JSON through the platform daemon's state ops
     // ═══════════════════════════════════════════════════════════
     function _doSave() {
         const obj = {
-            version: 10,
+            version: 12,
             baseHeight:    svc.baseHeight,
             theme:         svc.theme,
             position:      svc.position,
             // Product-level layout (v6)
             dockStyle:     svc.dockStyle,
             contentStyle:  svc.contentStyle,
+            // Hover magnification (v12). null persists as null: "follow the
+            // shell style" is a state, not an accident of a missing key.
+            hoverScale:    svc.hoverScale,
             barHeight:     svc.barHeight,
             iconOverrides: svc.iconOverrides,
             dockItems:     svc.dockItems,
@@ -569,7 +584,6 @@ QtObject {
             // Information cards (v6)
             infoCardMode: svc.infoCardMode,
             infoCardAutoRotate: svc.infoCardAutoRotate,
-            desktopLyricsEnabled: svc.desktopLyricsEnabled,
             infoCardOrder: svc.infoCardOrder,
         }
         const json = JSON.stringify(obj, null, 2)
@@ -601,12 +615,18 @@ QtObject {
     }
 
     function _apply(obj) {
+        if (!obj || typeof obj !== "object" || Array.isArray(obj))
+            throw new Error("Dock configuration must be an object")
         // Older configurations and malformed values retain the visible default.
         svc.showLauncher = obj.showLauncher !== false
         svc.showTrash = obj.showTrash !== false
         svc.showNotificationBadges = obj.showNotificationBadges !== false
         svc.showRevealIndicator = obj.showRevealIndicator !== false
-        if (obj.baseHeight   !== undefined) svc.baseHeight   = obj.baseHeight
+        if (obj.baseHeight !== undefined) {
+            const height = Number(obj.baseHeight)
+            if (Number.isFinite(height))
+                svc.baseHeight = Math.max(40, Math.min(100, height))
+        }
         if (obj.position !== undefined) {
             if (isValidPosition(obj.position)) {
                 svc.position = obj.position
@@ -636,6 +656,24 @@ QtObject {
                 scheduleSave()
             }
         }
+        // Hover magnification (v12). A missing key keeps null = follow the
+        // shell style; only numbers are accepted, clamped to the slider range.
+        if (obj.hoverScale !== undefined && obj.hoverScale !== null) {
+            const scale = Number(obj.hoverScale)
+            if (Number.isFinite(scale)) {
+                svc.hoverScale = Math.max(svc.minHoverScale,
+                    Math.min(svc.maxHoverScale, scale))
+                if (svc.hoverScale !== scale)
+                    scheduleSave()
+            } else {
+                console.warn("[DockConfig] invalid hoverScale ignored")
+                scheduleSave()
+            }
+        }
+        // Drop the obsolete independent lift value when migrating. The
+        // retained scale now drives both effects and is capped at 300%.
+        if (obj.hoverLift !== undefined || Number(obj.version ?? 0) < 12)
+            scheduleSave()
 
         // Accept both proposed PR card schemas, then persist only the ordered
         // component model. Missing keys retain the historical four cards.
@@ -649,8 +687,6 @@ QtObject {
         }
         if (obj.infoCardAutoRotate !== undefined)
             svc.infoCardAutoRotate = Boolean(obj.infoCardAutoRotate)
-        if (obj.desktopLyricsEnabled !== undefined)
-            svc.desktopLyricsEnabled = Boolean(obj.desktopLyricsEnabled)
         if (Array.isArray(obj.infoCardOrder)) {
             svc.infoCardOrder = normalizedInfoCardOrder(obj.infoCardOrder)
         } else if (obj.showWidgets === false) {
@@ -683,7 +719,7 @@ QtObject {
                 AppearanceConfigService.updateThemeMode(obj.theme)
             } else {
                 // Do not let a malformed legacy value leak into the IPC
-                // contract. The next ordinary save rewrites it as "dark".
+                // contract. The next ordinary save retains the current valid mode.
                 console.warn("[DockConfig] invalid theme ignored")
                 scheduleSave()
             }
@@ -700,7 +736,7 @@ QtObject {
             // after a later shell restart.
             if (requiresFolderMigration)
                 scheduleSave()
-        } else if (obj.pinnedAppIds !== undefined) {
+        } else if (Array.isArray(obj.pinnedAppIds)) {
             // Version 1 migration: retain the order of the old flat list,
             // then write version 2 after loading. This migration is safe to
             // repeat because dockItems wins once it exists on disk.
@@ -723,7 +759,11 @@ QtObject {
                 scheduleSave()
             }
         }
-        if (obj.iconOpacity !== undefined) svc.iconOpacity = obj.iconOpacity
+        if (obj.iconOpacity !== undefined) {
+            const opacity = Number(obj.iconOpacity)
+            if (Number.isFinite(opacity))
+                svc.iconOpacity = Math.max(0, Math.min(1, opacity))
+        }
 
         const migratedTintColor = obj.iconTintColor ?? obj.iconDuotoneShadowColor
         if (migratedTintColor !== undefined && isValidRgbColor(migratedTintColor))

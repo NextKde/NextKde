@@ -46,6 +46,7 @@ class ButtonInput final : public KWin::InputEventFilter
 public:
     ButtonInput(ButtonRenderer *renderer, ButtonConfig *config);
     ~ButtonInput() override;
+    void cancelAdjustment();
 
     bool pointerButton(KWin::PointerButtonEvent *event) override;
     bool pointerMotion(KWin::PointerMotionEvent *event) override;
@@ -54,8 +55,11 @@ public:
 
     // The window is going away: an adjust session on it is over.
     void forgetWindow(KWin::EffectWindow *window);
+    // Fullscreen has no controls: drop transient input state immediately.
+    void fullscreenChanged(KWin::EffectWindow *window);
 
 private:
+    void clearFullscreenState();
     void performAction(KWin::EffectWindow *window, ButtonRenderer::Action action);
     // Applies one cell of the tiling menu: KWin's own tiling and maximizing for
     // the halves and the whole area, and a placement this effect makes for the
@@ -75,10 +79,10 @@ private:
     ButtonConfig *m_config;
     std::unique_ptr<AdjustSession> m_session;
 
-    // The button whose press was swallowed, and whose release therefore has to
+    // The buttons whose presses were swallowed, and whose releases therefore have to
     // be swallowed too: an application that receives a button-up for a
     // button-down it never saw is left with a stuck button.
-    Qt::MouseButton m_consumedButton = Qt::NoButton;
+    Qt::MouseButtons m_consumedButtons = Qt::NoButton;
     // The keys whose press was consumed while adjusting, for the same reason.
     QSet<int> m_consumedKeys;
 

@@ -1,9 +1,12 @@
 module qs.desktop.modules.common
+singleton StartupReveal 1.0 StartupReveal.qml
+StartupSplash 1.0 StartupSplash.qml
 AnimatedPopupWindow 1.0 AnimatedPopupWindow.qml
 PageMotion 1.0 PageMotion.qml
 SceneBounds 1.0 SceneBounds.qml
 DateProjection 1.0 DateProjection.qml
 GlassText 1.0 GlassText.qml
+ShellText 1.0 ShellText.qml
 MaterialFlower 1.0 MaterialFlower.qml
 WavyProgress 1.0 WavyProgress.qml
 MaterialCardSurface 1.0 MaterialCardSurface.qml
@@ -15,16 +18,24 @@ KosCardShadow 1.0 KosCardShadow.qml
 LiquidGlassSurface 1.0 LiquidGlassSurface.qml
 LiquidGlassPanel 1.0 LiquidGlassPanel.qml
 PopupMotion 1.0 PopupMotion.qml
+MotionSpring 1.0 MotionSpring.qml
 AppIcon 1.0 AppIcon.qml
+LayeredAppIcon 1.0 LayeredAppIcon.qml
+singleton LayeredIconThemeService 1.0 LayeredIconThemeService.qml
 ContextMenu 1.0 ContextMenu.qml
 MenuItemRow 1.0 MenuItemRow.qml
 KosFloatPanel 1.0 KosFloatPanel.qml
 BundledIcon 1.0 BundledIcon.qml
+ShellVolumeIcon 1.0 ShellVolumeIcon.qml
+ShellBatteryIcon 1.0 ShellBatteryIcon.qml
 singleton ContextMenuCoordinator 1.0 ContextMenuCoordinator.qml
 singleton AppPresentationService 1.0 AppPresentationService.qml
 singleton AppActionService 1.0 AppActionService.qml
+singleton IndependentAppWidgetService 1.0 IndependentAppWidgetService.qml
 singleton MetricsService 1.0 MetricsService.qml
+singleton MediaService 1.0 MediaService.qml
 singleton IconThemeReloadService 1.0 IconThemeReloadService.qml
+singleton SystemFontService 1.0 SystemFontService.qml
 singleton BundledIcons 1.0 BundledIcons.qml
 singleton SystemIconResolver 1.0 SystemIconResolver.qml
 singleton TrayAttentionService 1.0 TrayAttentionService.qml
@@ -32,6 +43,7 @@ singleton AppNotificationService 1.0 AppNotificationService.qml
 singleton AppearanceConfigService 1.0 AppearanceConfigService.qml
 singleton IconAppearanceService 1.0 IconAppearanceService.qml
 singleton AppearanceTokens 1.0 AppearanceTokens.qml
+singleton GlassBackdrop 1.0 GlassBackdrop.qml
 singleton ScreenLifecycle 1.0 ScreenLifecycle.qml
 
 MediaControlButton 1.0 MediaControlButton.qml
@@ -39,3 +51,5 @@ MediaControlButton 1.0 MediaControlButton.qml
 ActionFeedbackToast 1.0 ActionFeedbackToast.qml
 
 DesktopConfirmDialog 1.0 DesktopConfirmDialog.qml
+
+PopupAnchorBinding 1.0 PopupAnchorBinding.qml

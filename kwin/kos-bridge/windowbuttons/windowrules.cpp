@@ -29,8 +29,8 @@ constexpr auto RulesFileName = "/kos/window-buttons-rules.json";
 // compositor's thread is not worth doing.
 constexpr qint64 MaxFileSize = 1024 * 1024;
 // Bound the file. A list that only ever grows is eventually a parse of thousands
-// of rules for every window that is looked at; the oldest are the ones the user
-// has least recently cared about.
+// of rules for every window that is looked at. Keep the most specific rules,
+// with the newest adjustment first among equally specific rules.
 constexpr int MaxRules = 200;
 
 // KWin's window types, by the name a rule may use for them. The numbers are
@@ -73,6 +73,8 @@ QJsonObject geometryToJson(const PanelGeometry &geometry)
     out["buttonSpacing"] = geometry.buttonSpacing;
     out["panelPadding"] = geometry.panelPadding;
     out["panelPaddingX"] = geometry.panelPaddingX;
+    out["coverage"] = QJsonObject{{"left", geometry.coverage.left()}, {"top", geometry.coverage.top()},
+        {"right", geometry.coverage.right()}, {"bottom", geometry.coverage.bottom()}};
     return out;
 }
 
@@ -108,17 +110,12 @@ PanelGeometry geometryFromJson(const QJsonObject &object)
     if (object.contains("panelPaddingX")) {
         geometry.panelPaddingX = object["panelPaddingX"].toDouble();
     }
+    const auto coverage = object.value("coverage").toObject();
+    geometry.coverage = QMarginsF(coverage.value("left").toDouble(), coverage.value("top").toDouble(),
+        coverage.value("right").toDouble(), coverage.value("bottom").toDouble());
     // Through the same clamp the gesture goes through, because this file is
     // editable text and a typo in it must not produce an absurd panel.
     return clamped(geometry);
-}
-
-// The parts of a matcher that are set, in a fixed order, as one string. Used as
-// the identity of a rule: two rules with the same key are the same rule, and
-// saving one replaces the other.
-QString fieldKey(const QString &field, const QString &value)
-{
-    return field + QLatin1Char('=') + value;
 }
 
 } // namespace
@@ -185,23 +182,11 @@ int WindowMatcher::specificity() const
 
 QString WindowMatcher::canonicalKey() const
 {
-    QStringList parts;
-    if (!className.isEmpty()) {
-        parts << fieldKey(QStringLiteral("class"), className);
-    }
-    if (!title.isEmpty()) {
-        parts << fieldKey(QStringLiteral("title"), title);
-    }
-    if (!titleRegex.isEmpty()) {
-        parts << fieldKey(QStringLiteral("titleRegex"), titleRegex);
-    }
-    if (!role.isEmpty()) {
-        parts << fieldKey(QStringLiteral("role"), role);
-    }
-    if (hasType) {
-        parts << fieldKey(QStringLiteral("type"), QString::number(type));
-    }
-    return parts.join(QLatin1Char('|'));
+    // Encode each field separately: captions and regexes may contain the
+    // separators a hand-joined key would otherwise treat as extra fields.
+    const QJsonArray fields{className, title, titleRegex, role, hasType,
+                            hasType ? type : 0};
+    return QString::fromUtf8(QJsonDocument(fields).toJson(QJsonDocument::Compact));
 }
 
 QJsonObject WindowMatcher::toJson() const
@@ -267,6 +252,17 @@ WindowMatcher WindowMatcher::fromJson(const QJsonObject &object, bool *ok)
         matcher.type = value;
     }
 
+    return matcher;
+}
+
+WindowMatcher adjustmentMatcher(const WindowQuery &query)
+{
+    WindowMatcher matcher;
+    matcher.className = query.windowClass;
+    matcher.hasType = true;
+    matcher.type = query.type;
+    matcher.role = query.role;
+    if (query.role.isEmpty()) matcher.title = query.caption;
     return matcher;
 }
 
@@ -372,6 +368,12 @@ bool WindowRuleStore::store(const WindowMatcher &matcher,
     // In front: the adjustment that was just made is the one that should win a
     // tie with an older rule of the same specificity.
     m_rules.prepend(GeometryRule{matcher, clamped(geometry)});
+    // Keep the same precedence before and after a reload: prepending a broad
+    // adjustment must not hide an existing more specific rule.
+    std::stable_sort(m_rules.begin(), m_rules.end(),
+                     [](const GeometryRule &a, const GeometryRule &b) {
+                         return moreSpecific(a.matcher, b.matcher);
+                     });
     while (m_rules.size() > MaxRules) {
         m_rules.removeLast();
     }

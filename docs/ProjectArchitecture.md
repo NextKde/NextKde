@@ -2,8 +2,12 @@
 
 KOS is organized by runtime boundary and lifecycle, not by the command used
 to reach a feature. The core produces one Quickshell process, one C++ platform
-daemon, one Go data daemon, one settings app, and two KWin plugin libraries.
-Calendar, Todo, Weather, and Music are optional standalone applications.
+daemon, one Go data daemon, one settings app, and KWin effects and decoration.
+Calendar (including tasks), Calculator and Weather share the independent kos-apps
+repository; ListenFree retains its own repository. The compatibility app installer
+selects signed Flatpak bundles by default, with source builds explicitly selected
+through `--backend=source`. ListenFree is explicitly selected. It does not
+migrate legacy players or change MIME/default-app associations.
 
 ```text
 NextKde/
@@ -11,14 +15,13 @@ NextKde/
 │   ├── shell.qml
 │   ├── desktop/              UI feature modules
 │   └── native/               shell-owned QML native plugins (SurfaceShape, Spatial3D)
-├── apps/                     settings plus optional standalone applications
+├── apps/                     settings, lockscreen and retained sddm theme
 ├── shared/
 │   ├── qml/                  portable controls
 │   └── contracts/            JSONL and shortcut contracts
 ├── services/                 long-running process owners
 │   ├── ai/                   portable C++ local inference library (kos-ai)
-│   ├── data-service/         Go metrics/history/desktop service
-│   └── pim-service/          D-Bus activated Calendar/Todo storage
+│   └── data-service/         Go metrics/history/desktop service
 ├── platform/                 kos-platform C++/Qt daemon
 ├── kwin/                     project-owned KWin plugins, bridge script, and glass-effect
 ├── packaging/                systemd, desktop files, and the nix packages
@@ -40,8 +43,10 @@ kos-platform ── bounded JSONL ──► kos-ai-worker ──► kos-ai ─�
 command output. It consumes `PlatformClient.qml` and `DataClient.qml`, which
 queue requests and correlate responses by `requestId`.
 
-`shared/qml` is portable Qt Quick code. It must not import Quickshell, KWin, or
-Wayland-only modules. `shared/contracts` is the source of truth for protocol
+`shared/qml` contains portable Qt Quick controls and shell-specific adapters.
+The `colorize` JS algorithms are portable; Shell adapters use Quickshell image quantization.
+Standalone applications must avoid importing Shell-specific adapters. Shared components
+must not import `shell/desktop` feature modules. `shared/contracts` is the source of truth for protocol
 versions, error codes, and default shortcut definitions.
 
 ## Runtime products
@@ -50,11 +55,11 @@ versions, error codes, and default shortcut definitions.
 | --- | --- | --- |
 | Quickshell (`qs -c kos`) | interactive | visual shell surfaces and presentation models |
 | `kos-platform` | systemd `--user` resident | live desktop integration, privileged adapters, and bounded AI worker supervision |
-| `kos-ai-worker` | lazily started child process | isolated local model download, CPU inference, and depth cache; exits after one idle minute |
+| `kos-ai-worker` | lazily started child process | isolated local model download, CPU inference, and depth cache; exits after 15 idle seconds |
 | `kos-data-service` | systemd `--user` resident | telemetry, activity ledger, desktop snapshots, weather cache |
 | `kos-settings` | on demand | settings UI; communicates with Shell IPC only |
-| `kos-calendar`, `kos-todo`, `kos-weather`, `kos-music` | on demand | optional independent Qt Quick applications |
-| `kos-pim-service` | D-Bus activated | shared Calendar/Todo storage and reminders |
+| Independent `kos-calendar`, `kos-calculator`, `kos-weather`, `listenfree` | on demand; externally built/installed | Qt Quick applications owned by their repositories; Calendar includes integrated Reminders; ListenFree is explicitly selected |
+| Independent `kos-pim-service` | D-Bus activated; externally built/installed | Calendar-owned storage and reminders; core widgets read its bounded identity-bound summaries without activating it |
 | KWin effect `.so` files | KWin managed | compositor effects, independent plugin IDs |
 
 The old `helpers/` category is intentionally gone. A short-lived utility is
@@ -119,24 +124,27 @@ optional application.
 
 An application-owned service must be activated on demand by that application
 or through D-Bus activation. It must not install a session autostart entry by
-default. Calendar and Todo therefore share the D-Bus-activated PIM service;
+default. Calendar and its integrated tasks therefore use the D-Bus-activated PIM service;
 Music keeps playback in its application process.
 
 Optional services are enhancements, never a single point of failure for an
-existing Shell feature. Weather is not application-owned: it is an operation
-set in the core `kos-data-service`, so the Shell and standalone Weather app
-share one Open-Meteo request policy and persisted cache. Consumers preserve
-their previous complete conditions and show an unavailable/error state while
-the core service reconnects.
+existing Shell feature. Shell weather remains an operation set in core
+`kos-data-service`, with its own Open-Meteo policy and persisted cache. The
+independent Weather application instead owns its private `kos-weather-backend`;
+it neither installs nor activates a core data service. Shell consumers retain
+complete conditions while the core service reconnects and expose unavailable/error state.
 
 `apps/settings/` is the first application. The gear exposed by the top bar or
 Dock-hosted status area starts its process through `DesktopAppLauncher`; it
 never loads Settings UI into the Quickshell process.
 
-The optional applications are separate CMake modules under `apps/<name>/`.
-They link portable `shared/` modules but never import `shell/desktop`. Calendar
-and Todo share the contracts in `shared/pim`; Weather speaks the versioned
-`kos-data.sock` protocol; Music exposes MPRIS for ordinary shell consumers.
+Calendar (including tasks), Calculator, Weather and ListenFree are maintained in independent
+NextKde repositories, including their runtime, PIM and app-specific tests; see
+[applications](../apps/README.md). They never import `shell/desktop`.
+Calendar owns the versioned PIM D-Bus service; Weather owns its private backend;
+ListenFree exposes ordinary MPRIS integration. Extracted application sources are
+not retained in core. The app installer consumes stable signed Flatpak bundles,
+with an explicit source-Release build route.
 
 ## Code-review rules
 
@@ -156,35 +164,39 @@ their service-owned replacement separately.
 
 ## Testing layers
 
-Tests are grouped by what they need to run, and the grouping is enforced by
-ctest `LABELS` rather than by separate test frameworks. `tools/run-tests.sh` is
-the only entry point; local development and CI invoke the same command so that
-a green result means the same thing in both places.
+Tests use CTest `LABELS` to describe their runtime dependencies.
+`tools/run-tests.sh` configures and builds the suite; CI uses `--build-only`
+then runs each group independently so one failure does not suppress the rest.
+Run desktop integration checks in a virtual machine.
 
 | Label | What it covers | Needs | Runs in CI |
 |---|---|---|---|
-| `data` | `services/*` and the code they own: the Go data service, the PIM store and its D-Bus client, app preference/weather/music cores | nothing beyond a compiler and Go | yes |
-| `platform` | `platform/tests/test_window_placement.mjs` (node) and `test_contract.py` (python): the platform daemon's contract | node, python | yes |
-| `logic` | pure computation across the shell and dock: date bucketing, window-record indexing, appearance config, dock adaptive/autohide | node | no |
-| `ui` | anything that constructs a QML engine; the panel tests additionally want a compositor | a graphical session | no |
+| `data` | service and application core tests | compiler, Go, optional application dependencies | registered tests; optional suites are not guaranteed |
+| `platform` | daemon startup, isolated D-Bus integration and protocol contracts | node, python, private D-Bus sessions | yes |
+| `logic` | shell computations, source contracts and translation catalogs | node, python, some offscreen QML | yes |
+| `ui` | QML behavior and desktop flows | QML runtime; desktop flows need a compositor | only tests also labelled `headless` |
+| `headless` | Settings, shared controls, lyrics and lockscreen regressions | offscreen Qt, KDE QML modules and private D-Bus sessions | yes |
 
 ```sh
-./tools/run-tests.sh              # data (default)
+# Run these in the test VM:
+./tools/run-tests.sh                    # data (default)
 ./tools/run-tests.sh --layer platform
-./tools/run-tests.sh --all        # every layer, for a desktop machine
+./tools/run-tests.sh --layer headless
+./tools/run-tests.sh --all              # includes compositor-dependent flows
 ```
 
-Two rules follow from the table:
+`.github/ci-tests.json` lists the tests that must register in the CI environment.
+`tools/ci/ci_tests.py inventory` compares that list with CTest discovery after the
+build. Missing dependencies, disabled tests, missing executables and incorrect
+labels fail the check. Newly registered tests with the selected labels also run
+automatically; add mandatory tests to the manifest to guard their registration.
 
-1. **`data` and `platform` must pass on a bare machine.** They are what CI
-   checks, and a failure here is a real regression, not an environment quirk.
-   Anything added to these layers must stay free of display and D-Bus-session
-   dependencies.
-2. **`ui` failures are only meaningful locally.** They cannot run in a
-   container, so a green CI run says nothing about them. Treat a UI-layer
-   failure as a real signal precisely because it is not drowned out by CI
-   noise, and do not "fix" one by loosening the assertion without checking
-   whether the source or the test is stale.
+Each group writes its own JUnit XML and log. `tools/ci/ci_tests.py report` compares
+those results with the discovered inventory, reports passed/failed/skipped/missing
+counts in the Actions summary, and fails for incomplete or skipped coverage.
+Actions uploads the inventory, reports and build diagnostics even after a failure.
+A green run covers these groups, not compositor integration, ListenFree or every
+optional application suite.
 
 The `kos-data-service.go` test needs `GOCACHE` pointed at a warm cache to stay
 fast: compiling the Go standard library cold takes well over a minute, against
@@ -193,13 +205,10 @@ about a second warm. `services/data-service/CMakeLists.txt` passes an absolute
 `.build/tests/services/data-service/go-test-cache`, which is the directory the
 ctest entry point actually uses.
 
-The four KWin plugins under `kwin` and
-`shell/native/surface-shape` are built by a **separate CI job** that
-only compiles them (`KOS_BUILD_KWIN_PLUGINS=ON`, `BUILD_TESTING=OFF`). That is
-deliberately narrower than "the plugins work": loading them needs a running
-compositor, and installing them needs a SELinux relabel check, and neither
-exists in a container. Compilation is the part that can be verified
-automatically; the rest stays a real-machine check.
+KWin compatibility uses three complete SDK jobs (6.6, 6.7 and 6.8). Each builds and
+links the root plugins and Glass, runs offline bridge regressions and checks official API headers.
+Container GPU skips require VM coverage. Live compositor loading, rendering and platform-specific
+installation checks remain separate VM acceptance; see [Releasing](Releasing.md).
 
 ## Change strategy
 

@@ -2,6 +2,7 @@ import QtQuick
 import QtQuick.Layouts
 import Quickshell
 import Quickshell.Wayland
+import "../../../shared/qml/i18n"
 import qs.desktop.modules.common
 import "../../../Kos/Ui"
 import "../../../shared/qml/controls" as LiquidControls
@@ -15,10 +16,8 @@ AnimatedPopupWindow {
     property Item anchorItem: null
     property bool pointerInside: false
     readonly property var labels: ({
-        music: "音乐", weather: "天气", clock: "时钟", metrics: "系统"
-    })
-    readonly property var symbols: ({
-        music: "♫", weather: "☀", clock: "◷", metrics: "⌁"
+        music: I18n.tr("Music"), weather: I18n.tr("Weather"),
+        clock: I18n.tr("Clock"), metrics: I18n.tr("System")
     })
     readonly property var displayIds: {
         const active = ConfigService.infoCardOrder.slice()
@@ -31,12 +30,15 @@ AnimatedPopupWindow {
 
     motionOrigin: Item.Bottom
     implicitWidth: 456
-    implicitHeight: 204
+    // Height follows the content: translated hints wrap instead of pushing
+    // the cards and the Done button out of the fixed width.
+    implicitHeight: editorContent.implicitHeight + 28
     color: "transparent"
     grabFocus: interactive
 
+    PopupAnchorBinding { popupAnchor: editor.anchor; sourceItem: editor.anchorItem }
+
     anchor {
-        item: editor.anchorItem
         edges: Edges.Top
         gravity: Edges.Top
         margins.top: -12
@@ -64,31 +66,44 @@ AnimatedPopupWindow {
         }
 
         ColumnLayout {
-            anchors { fill: parent; margins: 14 }
+            id: editorContent
+            anchors { left: parent.left; right: parent.right; top: parent.top; margins: 14 }
             spacing: 10
 
             RowLayout {
                 Layout.fillWidth: true
-                Text {
-                    text: "Dock 组件"
-                    color: ThemeService.foregroundColor
-                    font { pixelSize: 14; weight: Font.DemiBold }
+                spacing: 8
+                ColumnLayout {
+                    Layout.fillWidth: true
+                    spacing: 1
+                    Text {
+                        Layout.fillWidth: true
+                        text: I18n.tr("Dock Widgets")
+                        color: ThemeService.foregroundColor
+                        elide: Text.ElideRight
+                        font { pixelSize: 14; weight: Font.DemiBold }
+                    }
+                    Text {
+                        Layout.fillWidth: true
+                        text: I18n.tr("Drag to reorder, tap to add or remove")
+                        color: ThemeService.foregroundColor
+                        opacity: 0.58
+                        wrapMode: Text.WordWrap
+                        font.pixelSize: 11
+                    }
                 }
-                Text {
-                    text: "拖动排序，点按添加或移除"
-                    color: ThemeService.foregroundColor
-                    opacity: 0.58
-                    font.pixelSize: 11
-                }
-                Item { Layout.fillWidth: true; height: 1 }
                 Rectangle {
-                    width: 48; height: 26; radius: AppearanceTokens.isMaterial ? 13 : 9
+                    Layout.alignment: Qt.AlignTop
+                    Layout.preferredWidth: Math.max(48, doneLabel.implicitWidth + 20)
+                    Layout.preferredHeight: 26
+                    radius: AppearanceTokens.isMaterial ? 13 : 9
                     color: AppearanceTokens.surface.pick(
                         AppearanceTokens.colors.primaryContainer,
                         Qt.rgba(1, 1, 1, ThemeService.isDark ? 0.13 : 0.72))
                     Text {
+                        id: doneLabel
                         anchors.centerIn: parent
-                        text: "完成"
+                        text: I18n.tr("Done")
                         color: AppearanceTokens.surface.pick(
                             AppearanceTokens.colors.primaryContainerForeground,
                             ThemeService.foregroundColor)
@@ -143,17 +158,17 @@ AnimatedPopupWindow {
                         transform: Translate { x: card.dragOffset }
                         scale: reorderDrag.active ? 1.06 : 1
 
-                        Behavior on scale { NumberAnimation { duration: 120 } }
-                        Behavior on opacity { NumberAnimation { duration: 120 } }
+                        Behavior on scale { NumberAnimation { duration: AppearanceTokens.motion.fast.duration; easing.type: AppearanceTokens.motion.enterCurve } }
+                        Behavior on opacity { NumberAnimation { duration: AppearanceTokens.motion.fast.duration; easing.type: AppearanceTokens.motion.enterCurve } }
 
                         Column {
                             anchors.centerIn: parent
                             spacing: 4
-                            Text {
+                            BundledIcon {
                                 anchors.horizontalCenter: parent.horizontalCenter
-                                text: editor.symbols[card.modelData]
+                                name: "dock.widget." + card.modelData
                                 color: ThemeService.foregroundColor
-                                font.pixelSize: 22
+                                size: 22
                             }
                             Text {
                                 anchors.horizontalCenter: parent.horizontalCenter
@@ -167,11 +182,11 @@ AnimatedPopupWindow {
                             anchors { top: parent.top; right: parent.right; margins: 5 }
                             width: 20; height: 20; radius: 10
                             color: active ? "#ff453a" : ThemeService.accentColor
-                            Text {
+                            BundledIcon {
                                 anchors.centerIn: parent
-                                text: card.active ? "−" : "+"
+                                name: card.active ? "dock.widget.remove" : "dock.widget.add"
                                 color: "white"
-                                font { pixelSize: 15; weight: Font.Bold }
+                                size: 15
                             }
                         }
 
@@ -219,20 +234,24 @@ AnimatedPopupWindow {
                 Layout.rightMargin: 4
 
                 ColumnLayout {
+                    Layout.fillWidth: true
                     spacing: 1
                     Text {
-                        text: "自动轮播"
+                        Layout.fillWidth: true
+                        text: I18n.tr("Auto rotate")
                         color: ThemeService.foregroundColor
+                        elide: Text.ElideRight
                         font { pixelSize: 13; weight: Font.DemiBold }
                     }
                     Text {
-                        text: "关闭后仍可悬停并使用滚轮切换"
+                        Layout.fillWidth: true
+                        text: I18n.tr("When off, hover and scroll wheel still switch pages")
                         color: ThemeService.foregroundColor
                         opacity: 0.58
+                        wrapMode: Text.WordWrap
                         font.pixelSize: 10
                     }
                 }
-                Item { Layout.fillWidth: true; height: 1 }
                 LiquidControls.LiquidGlassSwitch {
                     id: autoRotateSwitch
                     implicitWidth: 58

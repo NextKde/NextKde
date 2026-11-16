@@ -9,6 +9,7 @@ const dir = mkdtempSync(join(tmpdir(), 'kos-desktop-density-'));
 try {
     copyFileSync(new URL('shell.qml', import.meta.url), join(dir, 'shell.qml'));
     symlinkSync(join(repo, 'shell/desktop'), join(dir, 'desktop'), 'dir');
+    symlinkSync(join(repo, 'shell/shared'), join(dir, 'shared'), 'dir');
     symlinkSync(join(repo, 'shell/Kos'), join(dir, 'Kos'), 'dir');
     const result = spawnSync(process.argv[2] || 'quickshell', ['-p', dir], {
         encoding:'utf8', timeout: 10000,

@@ -15,7 +15,7 @@
     {
       packages.${system} = let
         kos-desktop = pkgs.callPackage ./packaging/nix/package.nix {
-          src = ./.;
+          src = self;
         };
       in {
         inherit kos-desktop;
@@ -30,11 +30,17 @@
       nixosModules.kos = { config, lib, pkgs, ... }:
       let
         cfg = config.services.kos;
-        kos = self.packages.${system}.kos-desktop.override { buildWeather = cfg.weather.enable; };
+        # Build against the host's architecture, Qt and KWin, including overlays.
+        kos = pkgs.callPackage ./packaging/nix/package.nix {
+          src = self;
+          buildWeather = cfg.weather.enable;
+        };
         qs_bin = "${pkgs.quickshell}/bin/quickshell";
-        
+
+        sync-shell = pkgs.callPackage ./packaging/nix/sync-shell.nix { inherit kos; };
+
         # NixOS control interface
-        kos-ctl = pkgs.callPackage ./packaging/nix/kos-ctl.nix {};
+        kos-ctl = pkgs.callPackage ./packaging/nix/kos-ctl.nix { inherit sync-shell; };
       in {
         options.services.kos = {
           enable = lib.mkEnableOption "KOS Desktop Shell";
@@ -69,50 +75,25 @@
 
           # KWin plugins live under lib/kwin/ in the Nix store
           environment.pathsToLink = [ "/lib/kwin" ];
+          i18n.inputMethod.fcitx5.addons = [ kos.passthru.kos-platform ];
 
           # Systemd user services — declaratively defined with Nix store paths
           systemd.user.services = {
             # Oneshot: copy shell QML to ~/.config/quickshell/kos/
             kos-shell-init = {
               description = "KOS shell config initializer";
-              wantedBy = [ "default.target" ];
+              wantedBy = [ "graphical-session.target" ];
               serviceConfig = {
                 Type = "oneshot";
-                ExecStart = pkgs.writeShellScript "kos-shell-init" ''
-                  set -e
-                  shell_config="$HOME/.config/quickshell/kos"
-                  
-                  # Fix permissions on existing files before removal
-                  # (Nix store copies may be read-only)
-                  if [[ -d "$shell_config" ]]; then
-                    find "$shell_config" -type d -exec chmod u+w {} + 2>/dev/null || true
-                    find "$shell_config" -type f -exec chmod u+w {} + 2>/dev/null || true
-                    rm -rf "$shell_config"
-                  fi
-                  
-                  # Create fresh directories
-                  mkdir -p "$shell_config/shared/qml"
-                  
-                  # Copy shell QML (follow symlinks, ignore source permissions)
-                  cp -rL --no-preserve=mode ${kos}/share/kos-desktop/shell/. "$shell_config/"
-                  
-                  cp -rL --no-preserve=mode ${kos}/qml/Kos/Spatial3D ${kos}/qml/Kos/SurfaceShape "$shell_config/Kos/"
-
-                  # Copy shared QML controls
-                  if [[ -d ${kos}/share/shared/qml/controls ]]; then
-                    cp -rL --no-preserve=mode ${kos}/share/shared/qml/controls "$shell_config/shared/qml/"
-                  elif [[ -d ${kos}/share/kos-desktop/shared/qml/controls ]]; then
-                    cp -rL --no-preserve=mode ${kos}/share/kos-desktop/shared/qml/controls "$shell_config/shared/qml/"
-                  fi
-                '';
+                ExecStart = sync-shell;
               };
             };
 
             # Platform daemon
             kos-platform = {
               description = "KOS platform integration service";
-              wantedBy = [ "default.target" ];
-              after = [ "graphical-session.target" ];
+              wantedBy = [ "graphical-session.target" ];
+              after = [ "graphical-session.target" "plasma-kwin_wayland.service" ];
               partOf = [ "graphical-session.target" ];
               serviceConfig = {
                 Type = "simple";
@@ -129,8 +110,8 @@
             # Data service
             kos-data = {
               description = "KOS persistent data service";
-              wantedBy = [ "default.target" ];
-              after = [ "graphical-session.target" ];
+              wantedBy = [ "graphical-session.target" ];
+              after = [ "graphical-session.target" "plasma-kwin_wayland.service" ];
               partOf = [ "graphical-session.target" ];
               serviceConfig = {
                 Type = "simple";
@@ -143,9 +124,11 @@
             # Quickshell desktop shell
             kos-shell = {
               description = "KOS Quickshell desktop shell";
-              wantedBy = [ "default.target" ];
-              requires = [ "kos-platform.service" "kos-data.service" "kos-shell-init.service" ];
-              after = [ "kos-platform.service" "kos-data.service" "kos-shell-init.service" ];
+              wantedBy = [ "graphical-session.target" ];
+              requires = [ "kos-platform.service" "kos-shell-init.service" ];
+              wants = [ "kos-data.service" ];
+              after = [ "graphical-session.target" "plasma-kwin_wayland.service" "plasma-plasmashell.service"
+                "kos-platform.service" "kos-data.service" "kos-shell-init.service" ];
               partOf = [ "graphical-session.target" ];
               serviceConfig = {
                 Type = "simple";
@@ -153,7 +136,7 @@
                 ExecStart = "${qs_bin} --no-duplicate -c kos";
                 Environment = [
                   "QS_DISABLE_FILE_WATCHER=1"
-                  "QSG_RENDER_LOOP=threaded"
+                  "MALLOC_ARENA_MAX=2"
                   "QML2_IMPORT_PATH=%h/.config/quickshell/kos:${kos.passthru.kos-spatial3d}/lib/qt6/qml:${pkgs.kdePackages.qtquick3d}/lib/qt-6/qml:${pkgs.kdePackages.qt5compat}/lib/qt-6/qml"
                   "QT_PLUGIN_PATH=${pkgs.kdePackages.qtsvg}/lib/qt-6/plugins:${pkgs.kdePackages.qtimageformats}/lib/qt-6/plugins"
                   "PATH=/run/current-system/sw/bin:${pkgs.bash}/bin:${pkgs.coreutils}/bin:${pkgs.findutils}/bin:${pkgs.gnugrep}/bin:${pkgs.gnused}/bin"

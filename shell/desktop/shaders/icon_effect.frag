@@ -12,6 +12,8 @@ layout(std140, binding = 0) uniform buf {
     float sat;
     float iconTintEnabled;
     vec4 iconTintColor;
+    float iconRecolorEnabled;
+    vec4 iconRecolorColor;
 } ubuf;
 
 void main() {
@@ -33,6 +35,10 @@ void main() {
     // midtones receive the selected hue, and highlights stay near white.
     vec3 tintColor = mix(ubuf.iconTintColor.rgb, vec3(1.0), lum) * lum;
     vec3 styledColor = mix(desat, tintColor, ubuf.iconTintEnabled);
+
+    // Tray silhouettes follow the bar ink independently of source luminance.
+    // Keep the source alpha so transparent holes and antialiased edges survive.
+    styledColor = mix(styledColor, ubuf.iconRecolorColor.rgb, ubuf.iconRecolorEnabled);
 
     // 3. Apply opacity uniformly, then premultiply RGB again for Qt Quick.
     // This preserves antialiased edges without adding a gray veil.

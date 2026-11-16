@@ -3,9 +3,9 @@
 A KWin effect that covers the window controls of client-side decorated
 windows with an iPadOS-style rounded panel containing three macOS traffic
 lights, so applications that draw their own title bar get consistent KOS
-chrome. The same panel is drawn over windows KWin decorates itself, where the
-KOS decoration draws a frame and no buttons at all. It is drawn only while the
-KOS decoration is selected — see **Which decoration the panel belongs to**.
+chrome. KOS server-side decorations own native KDecoration buttons and are
+never covered by this panel. Cooperative applications and qualified GTK/Firefox
+controls use their respective native paths instead.
 
 ## How it works
 
@@ -13,18 +13,14 @@ KOS decoration is selected — see **Which decoration the panel belongs to**.
   a corner by `position` and `offset`, the same way on every window, so it
   never lands somewhere arbitrary. Its tint is read from the title bar under
   it, because that is the one thing configuration cannot know.
-- **Adjustable in place.** A right press on a panel starts an adjust session:
+- **Adjustable in place.** A right press on a fallback CSD panel starts an adjust session:
   drag it, wheel it larger or smaller, and the geometry it ends at is written to
   a rules file the plugin owns. See **Adjusting a panel**.
-- **One panel for both kinds of window.** An effect is the only place this can
-  live. KWin paints a decoration *below* the client surface and instantiates
-  none at all for a client-side decorated window, so a decoration can never draw
-  over one; this effect paints after the window — decoration included — has been
-  rendered, so it can cover either. The price is that an effect cannot *remove*
-  a decoration: every server-side decorated window gets one, whichever is
-  selected. That is what the KOS decoration is for — it draws a frame and no
-  buttons, so the panel over it is the window's only controls — and why the
-  panel follows the decoration selection rather than standing alone.
+- **Separate ownership.** KOS server-side decorations paint and handle their own
+  controls through KDecoration. Bridge recognizes their capability marker,
+  drops legacy hit regions/tint timers and skips overlay painting even when a
+  legacy rule requests `always`. Undeclared client-side windows still use the
+  fallback overlay; cooperative clients supply their own layout.
 - **Why the position is not measured.** A compositor cannot ask a client-side
   decorated window where it put its controls: `xdg-decoration` carries only a
   mode, `_GTK_FRAME_EXTENTS` carries shadow margins (and only on X11), and
@@ -41,34 +37,22 @@ KOS decoration is selected — see **Which decoration the panel belongs to**.
   a lower window's panel can never be drawn over an upper window.
 - Draws a single **opaque rounded panel**. Being opaque is what lets it
   *cover* the application's own controls rather than float above them.
-- Picks the tint from the title bar's own pixels, rather than from a colour
-  scheme. KWin's window palette follows `kdeglobals`, which a GTK or
-  self-drawn title bar has nothing to do with.
-- **Fails closed, on the tint only.** If the title bar cannot be read yet —
-  the window has not painted, or it is covered — no panel is drawn on that
-  frame and the read is retried. The panel never appears with a guessed tint.
-- Skips frames where the window is being animated
-  (`PAINT_WINDOW_TRANSFORMED`), and only touches normal windows / dialogs.
+- Client-side decorated windows take their tint from the title bar's own
+  pixels. Native KOS decorations are excluded before sampling begins.
+- **Same-frame tint, without a guessed first color.** A fully visible titlebar
+  gutter is copied and reduced to a median color on the GPU before drawing the
+  panel in that same paint. The first cover need not wait for CPU readback.
+  Unusable pixels hide both layers unless a previously validated fallback exists;
+  input stays with the client until CPU confirmation, avoiding invisible hit areas.
+- Skips screen-space panels and sampling while the window is transformed,
+  faded, dimmed or desaturated: those pixels are not its unmodified title bar.
+  Neutral offscreen source captures still include the controls during animations.
+  Only touches standalone normal windows. Dialogs, transient windows and
+  fixed-size splash/loading surfaces keep their own chrome; applications that
+  want compositor-drawn controls declare them through the cooperative
+  protocol.
   Popups, context menus, tooltips, OSDs, notifications, docks, the Quickshell
   bar, the Plasma desktop and input-method surfaces are ignored.
-- **Skips internal windows**, which is every window KWin makes for itself: its
-  OSD (the desktop-change pill, for one), the outline, the tab switcher, the
-  tile editor. They have no client process behind them — no application whose
-  title bar could be underneath — but they otherwise look exactly like an
-  undecorated normal window, so nothing above would have rejected them.
-- Draws a single **opaque rounded panel**. Being opaque is what lets it
-  *cover* the application's own controls rather than float above them.
-- Picks the tint from the title bar's own pixels, rather than from a colour
-  scheme. KWin's window palette follows `kdeglobals`, which a GTK or
-  self-drawn title bar has nothing to do with.
-- **Fails closed, on the tint only.** If the title bar cannot be read yet —
-  the window has not painted, or it is covered — no panel is drawn on that
-  frame and the read is retried. The panel never appears with a guessed tint.
-- Skips frames where the window is being animated
-  (`PAINT_WINDOW_TRANSFORMED`), and only touches normal windows / dialogs
-  using client-side decorations. Popups, context menus, tooltips, OSDs,
-  notifications, docks, the Quickshell bar, the Plasma desktop and
-  input-method surfaces are ignored.
 - **Skips internal windows**, which is every window KWin makes for itself: its
   OSD (the desktop-change pill, for one), the outline, the tab switcher, the
   tile editor. They have no client process behind them — no application whose
@@ -77,22 +61,140 @@ KOS decoration is selected — see **Which decoration the panel belongs to**.
 
 ## The tint
 
-The only thing read from the window. `windowbuttons/titlebarmetrics.cpp` takes
-a band of the composited frame at the panel's own rows, across the window's
-whole width, and takes the **median luma**:
+`windowbuttons/titlebarmetrics.cpp` samples the title bar's rendered pixels for
+legacy overlay windows (excluding native KOS decorations):
 
-- **A median, not a mean.** The caption and the application's controls sit
-  inside that band and are far higher contrast than the bar behind them. A
-  mean would be dragged around by however much of them happens to be there,
-  and by how bright they are; the median is the background as long as the
-  background is the majority, which it is.
-- The **panel's own columns and the caption's middle third are excluded** —
-  the first because it is about to be covered, the second because it is
-  glyphs rather than background.
-- Pixels outside the window's **visible region are excluded**: they belong to
-  whatever is stacked above, and tinting from another window would be worse
-  than not tinting at all. A partly covered window is still tinted from the
-  part of its bar that is visible.
+- **Top-anchored background gutter.** RGB comes from a narrow strip immediately
+  beside the cover, starting two logical pixels below the window top. It does
+  not follow the controls' vertical offset into avatars or lower toolbars. The
+  preferred RGB strip is at most 32 device pixels wide; the fallback is at the
+  opposite end outside the caption's middle third, at most 160 pixels wide.
+  Neither includes the cover's own columns.
+- **GPU visual tint.** `titlebargputint.cpp` copies only a fully visible gutter
+  (at most 160 × 8 pixels) into separate scratch storage, then computes the same
+  integer luma histogram/median cluster as the CPU sampler into one RGBA texel.
+  The panel samples that texel immediately; GPU ordering replaces the former
+  first-frame wait without `glReadPixels`, fence polling or a CPU/GPU stall.
+  Copying first avoids sampling from the framebuffer being painted. Output
+  rotations only reorder the histogram's pixels. This also follows late titlebar
+  changes beyond the five-second CPU warm-up, rather than switching back to an
+  older tint after an arbitrary deadline. It adds one bounded copy and one
+  single-pixel reduction per eligible paint, not another scheduled repaint.
+  Incomplete/integer targets, partial gutter visibility and shader/allocation
+  failures retain the asynchronous path. Invalid alpha yields transparent output,
+  never an uninitialized black fallback. GPU storage is one reusable 100 KiB
+  scratch texture plus a color texel for the renderer, not per window.
+- **Per-window vertical boundary.** One asynchronous read captures a strip of
+  at most **160 × 192 device pixels** (120 KiB), shared by RGB and boundary
+  detection. Eight horizontal groups form robust row profiles. Median colors
+  above and below a candidate edge are compared against their local median
+  deviation, rather than a fixed 12-level RGB threshold: coherent flat steps
+  as small as two channel levels can qualify. At least 3/4 of the columns must
+  support the direction of the change. The strongest local row step places
+  the edge, and two consistent observations confirm it before trimming.
+  Icons, isolated lines and gradual gradients do not trim it. The controls retain their
+  configured positions. Boundary detection requires a completely visible
+  probe; unavailable evidence leaves the configured cover extent in place.
+- **Non-blocking readback.** Transfer into a per-window pixel-pack buffer and
+  inspect its fence on a later paint. Only signalled buffers are mapped; paint
+  hooks never wait on a GPU fence. Preserve the read framebuffer, source read-buffer selection, pixel-pack
+  buffer and pack layout. Reject incomplete/missing-color targets and initialize
+  orphaned transfer storage to transparent zeros: a failed read cannot turn
+  undefined buffer bytes into an opaque black panel. Preserve the render target's content transform
+  (including DRM FlipY and output rotation), then normalize the completed
+  pixels to top-down viewport coordinates. Failed/occluded reads count against the sampling
+  cadence, and a busy transfer is abandoned after 250 ms rather than keeping a
+  fast retry loop alive indefinitely.
+- RGB sampling stays near the window top, while exclusion uses the entire
+  expanded cover. Enlarging it cannot sample the cover itself.
+  Require at least 75% visible strip coverage and 75% near-opaque pixel coverage;
+  sparse damaged glyphs cannot stand in for an undrawn/occluded background.
+  Both CPU and GPU accept alpha 254–255: some CSD clients, such as WeChat,
+  render a nominally opaque titlebar at 254/255. That one-level loss is
+  unpremultiplied before luma and RGB accumulation, with fully opaque RGB
+  unchanged. Alpha 253 or lower is still rejected rather than mistaking a
+  client-side fade-in for a darker titlebar.
+- **A median, not a mean.** A fixed 256-bin luma histogram averages RGB within
+  ±3 of the median, rejecting transparent pixels, glyphs and antialiased edges
+  without allocating, copying and sorting per-pixel sample vectors.
+- **CPU fallback confirmation.** Cached fallback RGB and initial input readiness
+  require two consistent usable captures at least 32 ms apart. The GPU visual
+  path does not wait for this confirmation. The interval is measured at capture rather
+  than GPU completion so polling jitter cannot force an unnecessary third read.
+  Startup/change confirmation polls the fence every 4 ms for the first 32 ms of
+  a transfer, then returns to the regular 16 ms poll; neither path waits on the GPU.
+  Four warm-up attempts run at 32 ms intervals; steady active-window checks back
+  off from 125 ms through 250/500 ms to 1000 ms as observations stay unchanged.
+  During the first five seconds after sampling starts, client damage restarts
+  warm-up even with a known tint: a cold-start placeholder is not evidence that
+  the application's titlebar has finished loading. This deadline is not extended
+  by damage, focus or resize. Afterwards, known windows retain their document/video
+  backoff; observed RGB changes still return to 32 ms confirmation. Before the
+  first tint, client damage also restarts warm-up after failed reads. Damage does
+  not reset the last-attempt time, and a static startup window still backs off;
+  this is not unconditional 32 ms polling for five seconds. New damage during a
+  transfer requests a newer capture without discarding every usable observation,
+  which would starve confirmation in a continuously repainting startup window.
+  Failed observations also back off after warm-up. These are scheduling intervals,
+  not measured end-to-end latency. Focus changes
+  restart the fast phase for both windows while retaining validated RGB. Client
+  damage also requests a throttled refresh for inactive windows; damage during
+  an in-flight transfer remains outstanding until a newer capture completes.
+  Invalid observations break confirmation, and failed inactive refreshes stop
+  after the bounded warm-up budget. Near-equal readings (up to two levels per
+  RGB channel) do not change the cached color.
+- **Bounded reusable storage.** The scan uses fixed stack arrays, without
+  per-pixel heap allocations. CPU pixel arrays are reused. The common GL row
+  flip normalizes in place, avoiding a second full pixel array; rotated/mirrored
+  outputs retain a reusable scratch array. A signalled, consumed PBO is reused;
+  canceled or timed-out transfers orphan storage to avoid GPU waits. The RGBA
+  payload is capped at 120 KiB per buffer (360 KiB for three CPU buffers and
+  120 KiB for one PBO in the general transform path, excluding driver overhead).
+  Minimized windows stop scheduled sampling and release sample caches after
+  a 500 ms animation grace period; closing windows releases them immediately.
+  Periodic repaint requests cover the bounded probe instead of the whole
+  window-width band after the first observation.
+- **No texture upload on RGB changes.** A cached white rounded background mask
+  is tinted by the GPU color texel, or a premultiplied uniform on the fallback
+  path; buttons, hover rings and adjustment marks live in a separate reusable
+  transparent texture. New RGB
+  values do not churn the panel texture cache. Explicit `dark`, `light` and
+  custom-color settings still bypass sampling.
+- Legacy server decorations without the native capability marker retain their palette fallback for upgrade compatibility.
+
+The effect's `window-controls` debug payload includes `tintSameFrame`,
+`tintStartingUp`, `tintIntervalMs`, `tintReadbackPending` and `tintChangePending`
+alongside the CPU-validated fallback RGB. These distinguish the GPU visual path
+from startup backoff, a busy readback or a fallback color awaiting confirmation;
+the GPU color itself is not synchronously read for diagnostics.
+
+Optional CPU-only maximum-probe microbenchmark (excludes GPU/readback/repaint):
+`./.build/kos-bridge/titlebar_tint_test --benchmark`.
+
+Offline regressions (no plugin installation or compositor restart):
+
+```bash
+cmake -S kwin/kos-bridge -B .build/kos-bridge -DKOS_BRIDGE_BUILD_TESTS=ON
+cmake --build .build/kos-bridge --parallel 4
+ctest --test-dir .build/kos-bridge --output-on-failure
+```
+
+`titlebar_tint_test` checks histogram equivalence, bounded sampling geometry,
+neighboring filled toolbar widgets on both sides, noise rejection and confirmation
+timing. `titlebar_readback_test` exercises the
+real PBO/fence path, row orientation, buffer reuse and GL-state restoration on
+an offscreen context; CTest reports it as skipped if no GL context is available.
+With `-DKOS_BRIDGE_BUILD_GPU_TESTS=ON`, `titlebar_pixels_gpu_test` also covers
+the asynchronous path across all eight output transforms, fractional scale,
+non-zero viewport origins and target clipping, plus incomplete/integer-target
+failures, transparent failure pixels, valid black titlebars and source read-buffer
+restoration (no pre-read `glFinish`). `titlebar_gpu_tint_test` draws the final
+panel in the same command stream as changing titlebar content, before any CPU
+read or additional frame. It checks CPU/GPU histogram equivalence across all
+output transforms, gutter visibility, GL-state restoration, valid black,
+transparent failure, premultiplied mask edges and fallback compositing.
+These tests do not replace checking the installed effect's appearance in a new
+KWin session; do not hot-load a replaced plugin into the running compositor.
 
 ## Configuration
 
@@ -125,6 +227,7 @@ adjustment at once).
     },
     "apps": {
         "firefox": { "background": "dark" },
+        "google-chrome": { "background": "#202124" },
         "org.gnome.TextEditor": { "showButtons": false }
     },
     "rules": [
@@ -139,6 +242,7 @@ adjustment at once).
 | Key | Values | Meaning |
 | --- | --- | --- |
 | `showButtons` | bool | Disable the panel for this app |
+| `nativeGtkControls` | bool | Legacy manual qualification for native GTK CSD controls; defaults to false. Standard GTK 3 controls declare ownership automatically through the installed GTK module. Suppresses painting and input interception only without a server-side decoration. Native KOS SSD uses decoration buttons. See [GTK integration](../../docs/GtkWindowButtons.md) |
 | `position` | `left` / `right` | Which edge the panel is pinned to. Anything else falls back to `right`, the layout these applications follow |
 | `offset` | `{ "x": n, "y": n }` | Distance in logical pixels from that edge to the panel's outer edge (`x`), and from the window's top to the panel's top (`y`) |
 | `buttonSize` | number | Traffic light diameter |
@@ -146,7 +250,7 @@ adjustment at once).
 | `panelPadding` | number | Vertical padding between the panel edge and the lights |
 | `panelPaddingX` | number | Horizontal padding; omit it to reuse `panelPadding` |
 | `interceptMargin` | number | Logical pixels around the panel where the pointer is taken by it as well (default 5). Raise it for an application whose own controls still highlight around the panel's edge; `0` takes the panel only |
-| `background` | `auto` / `dark` / `light` | Panel tint; `auto` follows the title bar's own pixels |
+| `background` | `auto` / `dark` / `light` / `#hex` | Panel tint; `auto` follows the title bar's own pixels (exact RGB) or window palette, `dark`/`light` uses fixed theme tones, or specify an explicit hex color (e.g. `"#202124"`) |
 | `drawOnDecoratedWindows` | `auto` / `always` / `never` | How far the panel goes on windows KWin decorates itself. `auto` means "when the decoration in use is ours" — see below |
 
 The panel is exactly the `buttonSize` / `buttonSpacing` layout grown by the
@@ -164,6 +268,12 @@ panel on the window: see **Adjusting a panel** below.
 
 App keys match the window class exactly, or its first whitespace-separated token
 (`"code code"` matches `"code"`).
+
+Qualified Forma/Mayonnaise CSD apps retain their own OpenGL controls, without
+overlay painting, input interception or tint sampling. Saved overlay geometry
+and forced-paint rules cannot add a duplicate cluster. This policy uses verified
+desktop IDs and leaves SSD controls and cooperative surface negotiation intact;
+see [control ownership](../../docs/NativeWindowDecoration.md).
 
 ### Which configuration a window gets
 
@@ -203,31 +313,22 @@ with a warning.
 
 ### Which decoration the panel belongs to
 
-The panel *is* the KOS decoration's window controls, so it is drawn only while
-that decoration is selected in System Settings. `kosctl install` installs the
-decoration and never selects it: the choice is the user's, and until it is made
-the panel is drawn nowhere — `always` in the user's own file is the one
-exception, below. Selecting Breeze, or anything else, takes the panel off every
-window again — the client-side decorated ones included, because an application
-that draws its own title bar draws its own controls in it and a KOS panel in
-the corner of that is a panel nobody asked for.
-
-KWin does not report the decoration to effects, so the configuration reads
-`[org.kde.kdecoration2] library` out of `kwinrc` and watches that file; when it
-changes, every cached decision is dropped and the screen is repainted.
+The common KOS appearance switch controls the selected decoration and CSD
+integration. Fallback CSD overlays normally require KOS decoration selection;
+`drawOnDecoratedWindows: always` retains the explicit legacy override.
 
 ### Server-side decorated windows
 
-On windows KWin decorates itself, `drawOnDecoratedWindows` decides how far the
-panel goes. `auto`, the default, means "when the decoration in use is ours" —
-that decoration draws a frame and no buttons at all, so the panel is the only
-controls such a window has. `never` leaves those windows to the decoration
-entirely.
+The current KOS decoration advertises `_kos_native_decoration_controls` and
+owns its KDecoration buttons, including layout and input. This capability takes
+precedence over all overlay rules. Native controls use the common glyph mode
+and KDE's left/right button layout, not overlay geometry or background settings.
+They cannot enter Bridge's right-click adjustment mode. See
+[native decoration controls](../../docs/NativeWindowDecoration.md).
 
-`always` is the one way to ask for the panel without the decoration: it draws it
-over another decoration's buttons as well, and it is the only thing that
-survives that decoration being selected. Only a hand-written file can set it —
-the rules this plugin writes never carry the key.
+For older decorations without that marker, `auto` / `always` / `never` retain
+legacy behavior so updating Bridge before the decoration does not remove the
+window's only buttons. Update both plugins together and log in again to load them.
 
 Reload without restarting KWin:
 
@@ -236,6 +337,12 @@ qdbus6 org.kde.KWin /Effects org.kde.kwin.Effects.reconfigureEffect kos_bridge
 ```
 
 ## Adjusting a panel
+
+Settings' **Resize button background separately** switch locks all fallback overlay circles
+and gaps to 14 logical pixels. In that mode the edge grips change separately
+saved cover margins without moving the buttons; plain/Shift wheel size changes
+are disabled, and Ctrl+wheel changes only the cover. Turning it off restores the
+original button geometry. See [ownership, persistence and validation](../../docs/WindowAppearance.md#independent-window-button-cover).
 
 Right-click a panel. A blue ring appears around it, a grip appears on each of its
 four edges, and the panel is now being positioned:
@@ -270,10 +377,13 @@ continuously there, so dragging across the middle of a window changes the side
 without a jump. The wheel leaves `offset` alone, so the panel grows away from the
 edge it is pinned to rather than away from its own middle.
 
-Saving writes a rule matched on the **window class** alone — the one thing about
-a window that is the same now and the next time the application starts — so a
-window with no class cannot be adjusted at all. A `title`, `titleRegex` or `type`
-matcher is something to write in `rules` by hand.
+Saving matches the **window class and type**, plus the window role when one
+is available. Without a role (including Wayland), the exact caption is used as
+a fallback, so a QQ image viewer need not inherit the main window's cover size.
+A caption-based adjustment must be saved again if the caption changes; use a
+hand-written `titleRegex` for changing document titles when appropriate. Old
+class-only rules remain compatible as fallbacks; adjust and save the secondary
+window once to override them. A window with no class cannot be adjusted.
 
 Every session ends in a line in the journal, because the file is the only readout
 an adjustment has:
@@ -289,7 +399,7 @@ Watch it with `journalctl --user -b -u plasma-kwin_wayland -f | grep KOS`.
 ## Interaction
 
 - Left-clicking a light performs that light's action. From left to right the
-  panel is **zoom** (green), **minimize** (yellow), **close** (red): the zoom
+  panel is **minimize** (yellow), **zoom** (green), **close** (red): the zoom
   light toggles between maximized and restored, the minimize light minimizes,
   the close light closes. The order lives in one table in `typeAt()`; the
   colours, the glyphs, the hit testing and the actions all follow it.
@@ -401,11 +511,8 @@ the panel is.
 
 ## Notes
 
-- Windows KWin decorates itself are handled too — the panel is the same panel,
-  drawn by this effect in both cases, and the decoration
-  (`kwin/kos-decoration/`) draws a frame and no buttons. There is
-  no way around the decoration for the task switcher, the resize grips and the
-  shadow to come from KWin; the effect is what draws the controls over it.
+- Server-decorated KOS windows use native KDecoration controls; Bridge still
+  supplies their shared corner/shadow appearance, without a button overlay.
 - Only the macOS traffic-light look is implemented.
 - A KWin window rule cannot help here. Since Plasma 6.6, `noborder` = Force: No
   makes KWin draw a decoration for a CSD window, but it does not stop the
@@ -425,3 +532,100 @@ the panel is.
   and `windowrules` keep KWin headers out on purpose — so they run under
   `ctest`. `windowbuttons/panelgeometry.h` is the one definition of where a
   panel is; the renderer, the adjust session and the test all go through it.
+
+## Unified window appearance
+
+Window chrome is resolved by `windowappearance/`: an inner physical-pixel
+outline, a narrow contact shadow and a broad ambient shadow. Continuous corners
+are the default, with a longer tangent transition and zero curvature at the
+straight-edge joins. One compositor shader clips SSD/CSD content and draws all
+three layers against the same contour. Arc mode retains native scene outlines,
+shared decoration shadows and the CSD eight-tile fallback.
+
+Continuous mode uses a damage-driven offscreen window-content cache, with
+a 256 MiB texture budget and GPU size checks; unsupported/excess windows fall
+back to native arcs. It adds GPU rendering work for changing content and resize.
+It does not capture the background. Fullscreen always uses square corners and
+hides KOS outlines, frames, shadows and traffic-light controls, regardless of
+appearance overrides. Leaving fullscreen restores the normal window appearance.
+Glass honors the unified geometry property to avoid applying a cached arc again.
+
+The draw chain is Glass (20), Dock/Stage animations (50), then Bridge (100).
+Dock consumes Bridge's shared source through a synchronous in-process interface:
+one texture contains client content, native decoration and the KOS button panel.
+Dock deforms its mesh while Bridge applies the contour in source UV coordinates,
+so buttons and continuous corners follow the same animation without a second
+Dock texture. Stage retains its outer capture of the already-rounded source.
+Bridge must not cache the animation output: doing so skips downstream animation
+draw calls on undamaged frames. Continuous shadow bounds reserve the larger of
+the active and inactive extents, so a focus change does not resize the source FBO.
+CI builds/links Bridge, Dock and Glass with complete KWin 6.6/6.7/6.8 SDKs and runs
+offline/API checks. Live compositor coverage is separately recorded per Release;
+see [release policy](../../docs/Releasing.md).
+
+Dock allocates its legacy cache only when the provider is unavailable or declines
+the window. That capture includes the KOS controls in arc mode too. Allocation
+failures restore native arcs and are retried after geometry/scale/configuration
+or budget changes. Animated button/menu hit regions are cleared; the final normal
+paint restores them. Source damage, panel hover/focus changes and configuration
+updates invalidate the shared content; unchanged content reuses the texture.
+
+Hidden scene items release the continuous content texture after animation
+visibility references end. Configuration notifications are coalesced and
+unchanged/invalid files keep existing textures. Stacking updates share a single
+snapshot per notification burst; resolved app settings retain only configured
+rules. Native shadow atlases still held by windows survive LRU eviction through
+a weak lookup, avoiding repeated generation. See the
+[resource and performance review](../../docs/WindowAppearance.md)
+for remaining costs and manual acceptance steps.
+
+Configuration: `~/.config/kos/window-appearance.json`. See
+[the version 2 example](windowappearance/window-appearance.example.json) and
+[implementation limits and user verification steps](../../docs/WindowAppearance.md).
+Version 1 is accepted; explicitly configured widths without a unit remain logical
+pixels. Version 2 defaults to one physical pixel. Bridge, decoration and Glass require matching builds
+for the KWin installation that will load them. Run acceptance only in a VM.
+
+For repeatable API checks against another KWin source checkout:
+
+```sh
+python3 tools/ci/check-kwin-api.py --build-dir .build/kosctl --kwin-headers /path/to/kwin/src
+```
+
+Bridge detects the installed paint-hook signature rather than assuming a version
+number, retaining `presentTime` on 6.6.x. Shader validation uses the `link()` result
+available on both APIs; drawing keeps a local copy of non-assignable paint data.
+On 6.6.x, which lacks the base shader resources, Bridge supplies the equivalent
+texture/saturation/modulation stages and uses KWin's own color-management GLSL.
+The continuous-contour stages pass offline GLSL linking for desktop GL and GLES
+against both tested 6.6 versions; GPU execution remains unverified.
+
+### GPU title-bar readback regression test
+
+The title-bar sampler maps through the render target's content transform before
+reading its framebuffer. Readback pixels are normalized to top-down viewport
+coordinates, including flipped and rotated targets, so panel exclusions and
+visibility clipping refer to the correct pixels.
+
+The opt-in GPU test renders coordinate-coded pixels using the installed KWin
+projection matrix and exercises the production readback helper. It covers all
+eight output transforms, 100% and 125% scaling, out-of-bounds clipping, and read
+framebuffer restoration. Run it in an environment with an EGL/OpenGL context:
+
+```sh
+cmake -S kwin/kos-bridge -B .build/titlebar-gpu -G Ninja \
+  -DKOS_BRIDGE_BUILD_GPU_TESTS=ON
+cmake --build .build/titlebar-gpu --target titlebar_pixels_gpu_test
+ctest --test-dir .build/titlebar-gpu -R '^titlebar_pixels_gpu_test$' -V
+```
+
+CTest reports a skipped test (exit 77) when an EGL context is unavailable.
+
+## Cooperative application controls
+
+Custom Wayland apps can declare a surface-local controls slot. Bridge draws only
+the three buttons without a background or title-bar sampling, independently of
+the selected window decoration. The shared appearance switch controls takeover;
+declared surfaces never fall through to the legacy overlay. See the
+[integration contract](../../docs/CooperativeWindowControls.md) and
+[VM test](../../tests/cooperative-controls/README.md).

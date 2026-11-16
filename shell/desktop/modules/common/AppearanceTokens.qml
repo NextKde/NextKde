@@ -8,7 +8,7 @@ import "../../../Kos/Ui"
 QtObject {
     id: tokens
 
-    readonly property int version: 9
+    readonly property int version: 10
     readonly property string style: AppearanceConfigService.shellStyle
     readonly property bool isWindows12: style === "windows12"
     readonly property bool isMacos: style === "macos"
@@ -394,12 +394,21 @@ QtObject {
     }
 
     readonly property QtObject typography: QtObject {
-        readonly property string recommendedDisplayFamily: "SF Pro Display"
-        readonly property bool hasRecommendedDisplayFamily:
-            Qt.fontFamilies().indexOf(recommendedDisplayFamily) >= 0
-        // An empty family delegates fallback to the user's Qt/KDE font setup.
-        readonly property string displayFamily: hasRecommendedDisplayFamily
-            ? recommendedDisplayFamily : ""
+        // General font is the default. A desktop override changes family only.
+        // Surface pixel sizes remain owned by their layouts; emoji are separate.
+        readonly property string systemFamily: SystemFontService.family
+        readonly property string desktopFamily: AppearanceConfigService.desktopFontFamily.length > 0
+            && Qt.fontFamilies().indexOf(AppearanceConfigService.desktopFontFamily) >= 0
+            ? AppearanceConfigService.desktopFontFamily : systemFamily
+        readonly property string textFamily: desktopFamily
+        readonly property string displayFamily: desktopFamily
+        readonly property string displayChain: desktopFamily
+        readonly property string textChain: desktopFamily
+        readonly property string monospaceFamily: desktopFamily
+        // Colour emoji are not interface type: a reference to the emoji font
+        // must never be replaced by the interface font, or the desktop would
+        // draw tofu wherever it draws an emoji glyph.
+        readonly property string emojiFamily: "Noto Color Emoji"
     }
 
     readonly property QtObject dock: QtObject {
@@ -449,6 +458,8 @@ QtObject {
     }
 
     readonly property QtObject bar: QtObject {
+        // Bar popups and Control Center share one compositor tint strength.
+        readonly property string popupScrimLevel: "balanced"
         // Bar keeps one visual language across shell styles. Integration is a
         // user choice, not an implicit Windows-theme side effect.
         readonly property string placement: "top"
@@ -457,6 +468,56 @@ QtObject {
         readonly property string surfaceMode: "transparent"
         readonly property bool unifiedWithDock:
             AppearanceConfigService.barIntegratedWithDock
+
+        // ── mac-style ground ────────────────────────────────────────────────
+        // True while the standalone Bar wears the macOS look: a blurred,
+        // tinted ground of its own instead of floating type kept legible by
+        // outlines. An integrated Bar lives inside the Dock's glass and keeps
+        // the Dock's outlines, so the style must never reach it -- hence the
+        // integration term, not the style choice alone.
+        readonly property bool macStyle:
+            AppearanceConfigService.barMacStyle
+                && !AppearanceConfigService.barIntegratedWithDock
+        // The ground's tint opacity; it only draws while the style is on. The
+        // settings slider produces 5%..85% and the shell clamps 0..1.
+        readonly property real macTint:
+            AppearanceConfigService.barMacTint
+        // How bright the thing behind the Bar is. The shell already samples the
+        // wallpaper -- the dominant colour the context menus tint their glass
+        // with -- so its luminance is the estimate; until one has been sampled
+        // the system window colour stands in, which is what the display-mode
+        // branch effectively measured before this.
+        readonly property color macBackdrop:
+            WallpaperColorSource.ready
+                ? WallpaperColorSource.primary : tokens.systemPalette.window
+        readonly property real macBackdropLuminance:
+            macBackdrop.r * 0.2126 + macBackdrop.g * 0.7152
+                + macBackdrop.b * 0.0722
+        // The plate opposes the backdrop: a bright wallpaper takes the dark
+        // grey so the strip separates from it, a dark wallpaper the light
+        // grey. Both greys are the macOS vibrancy neutrals, deliberately
+        // untinted so the strip reads as a system grey rather than as a
+        // coloured plate.
+        readonly property bool macPlateIsLight:
+            macBackdropLuminance <= 0.5
+        readonly property color macTintColor:
+            macPlateIsLight
+                ? Qt.rgba(0.961, 0.961, 0.969, 1.0)   // #F5F5F7
+                : Qt.rgba(0.114, 0.114, 0.122, 1.0)   // #1D1D1F
+        readonly property real macPlateLuminance:
+            macTintColor.r * 0.2126 + macTintColor.g * 0.7152
+                + macTintColor.b * 0.0722
+        // What the strip actually looks like: the blurred backdrop *under* the
+        // plate at the chosen opacity. ThemeService.barInk picks its ink
+        // against this blend rather than against the plate alone, so the type
+        // stays readable at every slider position -- at a low tint the strip
+        // is still mostly the wallpaper, and ink flipped against the plate
+        // there would be white on a bright backdrop.
+        readonly property real macStripLuminance:
+            macBackdropLuminance
+                + (macPlateLuminance - macBackdropLuminance) * macTint
+        readonly property bool macStripIsLight:
+            macStripLuminance > 0.5
     }
 
     readonly property QtObject widget: QtObject {
@@ -497,15 +558,12 @@ QtObject {
         readonly property real borderOpacity: tokens.isMaterial ? 0.30 : 0.16
     }
 
-    readonly property QtObject motion: QtObject {
-        readonly property int fastDuration: tokens.isWindows12 ? 120
-            : tokens.isMaterial ? 100 : 135
-        readonly property int normalDuration: tokens.isWindows12 ? 180
-            : tokens.isMaterial ? 220 : 200
-        readonly property int slowDuration: tokens.isWindows12 ? 260
-            : tokens.isMaterial ? 300 : 360
-        readonly property int standardEasing: tokens.isMaterial
-            ? Easing.OutQuart : Easing.OutCubic
+    readonly property MotionTokens motion: MotionTokens {
+        isMaterial: tokens.isMaterial
+        readonly property int fastDuration: fast.duration
+        readonly property int normalDuration: slow.duration
+        readonly property int slowDuration: page.duration
+        readonly property int standardEasing: enterCurve
         readonly property bool springEnabled: tokens.isMacos
         readonly property bool popupAnimatesOnShow: true
         // Whether the shell draws the extra faces a form brings with it -- the
@@ -513,9 +571,36 @@ QtObject {
         readonly property bool drawsFormDecorations: tokens.isMacos
         // Anchored popups share Launchpad's entrance rhythm: a short cubic
         // settle from 0.96 scale with a directional fade/translation.
-        readonly property int popupOpenDuration: 150
-        readonly property int popupCloseDuration: 140
+        readonly property int popupOpenDuration: base.duration
+        readonly property int popupCloseDuration: base.duration
         readonly property real popupStartScale: 0.96
         readonly property real popupAnchorOffset: 20
+        // Widget geometry runs on a frame-synchronised spring (MotionSpring).
+        // FrameAnimation.frameTime drives a closed-form damped oscillator, so
+        // 60 Hz, 120 Hz and 240 Hz trace the same curve. Qt's SpringAnimation
+        // integrates at a fixed 16 ms step, which on a 240 Hz output moved a
+        // released card only ~60 times a second even though every frame was
+        // presented. The pairs below are the continuous equivalent of the
+        // tuning the desktop already reviewed (spring 3.5/damping 0.30 ->
+        // 18.25 rad/s at ratio 0.71; spring 5.0/damping 0.50 -> 30 rad/s at
+        // ratio 1.33), fitted to trajectories captured from SpringAnimation so
+        // the reviewed feel is preserved. Epsilon is in pixels.
+        readonly property real widgetResizeAngularFrequency: springEnabled ? 18.25 : 30.0
+        readonly property real widgetResizeDampingRatio: springEnabled ? 0.71 : 1.33
+        readonly property real widgetResizeEpsilon: 0.25
+        // Dropping a dragged widget settles with the same physical family as a
+        // resize, so the desktop has one motion language. A move can travel most
+        // of the desktop, though, and an overshoot that reads as weight on a
+        // one-cell resize would carry the card past the screen edge on a long
+        // drop, so the move spring stays critically damped: same settle, no
+        // bounce.
+        readonly property real widgetMoveAngularFrequency: 30.0
+        readonly property real widgetMoveDampingRatio: 1.33
+        readonly property real widgetMoveEpsilon: 0.25
+        // Decorative grab feedback (resize handle grip and readout): a touch
+        // softer than critical so it acknowledges the press and then stops.
+        readonly property real widgetGripAngularFrequency: 30.0
+        readonly property real widgetGripDampingRatio: 1.05
+        readonly property real widgetGripEpsilon: 0.005
     }
 }

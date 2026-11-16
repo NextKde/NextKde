@@ -1,19 +1,34 @@
 import QtQuick
+import "../../../shared/Icons" as Symbols
+import QtQuick.Window
 import Qt5Compat.GraphicalEffects
 import Quickshell.Widgets
 
 // One renderer for application artwork across Dock, QuickSearch and Launcher.
 // Layout owns width/height; this component owns source loading consistency.
-// Supports grayscale + selective transparency + tonal tint via ShaderEffect.
+// Supports grayscale, transparency, tonal tint and flat tray ink via ShaderEffect.
 Item {
     id: root
     property string source: ""
+    property bool layeredEnabled: true
+    property string failedLayeredSource: ""
+    readonly property var layeredArtwork: layeredEnabled && !recolorEnabled
+        ? LayeredIconThemeService.artwork(source) : null
+    readonly property bool useLayers: layeredArtwork !== null
+        && (saturation !== 1.0 || tintEnabled !== 0.0)
+        && failedLayeredSource !== source
+    onSourceChanged: failedLayeredSource = ""
+    onLayeredArtworkChanged: failedLayeredSource = ""
+    readonly property bool fontGlyph: source.startsWith("kos-icon:")
+    readonly property int imageStatus: fontGlyph ? (Symbols.IconRegistry.ready ? Image.Ready : Image.Loading) : (renderer.item?.imageStatus ?? Image.Null)
 
     // Icon appearance controls
     property real   opacityMultiplier: 1.0
     property real   saturation:        1.0
     property real   tintEnabled:       0.0
     property color  tintColor:         "#a855f7"
+    property bool   recolorEnabled:    false
+    property color  recolorColor:      "white"
     property bool   smooth:            true
 
     // Icon loads must stay on the GUI thread. QIcon::fromTheme() hands back
@@ -25,12 +40,19 @@ Item {
     // sources that never reach the icon provider (plain files, bundled assets).
     property bool   asynchronous:      false
 
+    // The icon provider handles display scaling itself. Raw artwork (including
+    // bundled SVG data URLs) needs an explicit size in physical pixels;
+    // IconImage otherwise rasterizes it at the smaller logical display size.
+    readonly property int rasterSize: Math.max(1, Math.ceil(
+        Math.min(width, height)
+        * (source.startsWith("image://") ? 1 : Math.max(1, Screen.devicePixelRatio))))
+
     // The shader pass only earns its FBO when it actually rewrites pixels:
     // desaturation, tonal tint, or the dimmed monochrome opacity. In the
-    // default color mode all three are identity, so the icon draws directly
+    // default color mode these inputs are identity, so the icon draws directly
     // and skips both the FBO allocation and the second rasterization.
     readonly property bool needsEffect: saturation !== 1.0
-        || tintEnabled !== 0.0 || opacityMultiplier !== 1.0
+        || tintEnabled !== 0.0 || opacityMultiplier !== 1.0 || recolorEnabled
 
     // The artwork is two components rather than one tree with a binding on
     // `layer.enabled`, and that is load-bearing. Enabling a layer on an item
@@ -41,17 +63,53 @@ Item {
     // builds the new one in the same frame, so entering or leaving the effect
     // path always yields artwork that was born in the state it is shown in.
     Loader {
+        id: renderer
         anchors.fill: parent
-        sourceComponent: root.needsEffect ? effectIcon : directIcon
+        sourceComponent: root.fontGlyph ? glyphIcon : root.useLayers ? layeredIcon
+            : root.needsEffect ? effectIcon : directIcon
+    }
+
+    // IconImage exposes image metrics through backer, not on its wrapper.
+    // Both renderer paths report the same aspect-fitted artwork dimensions.
+    readonly property real paintedWidth: renderer.item ? renderer.item.paintedWidth : 0
+    readonly property real paintedHeight: renderer.item ? renderer.item.paintedHeight : 0
+
+    Component {
+        id: glyphIcon
+        Symbols.Icon {
+            size: Math.min(width, height)
+            name: BundledIcons.resolveName(root.source.substring(9))
+            color: root.recolorEnabled ? root.recolorColor : root.tintEnabled ? root.tintColor : "#8e8e93"
+            opacity: root.opacityMultiplier
+            readonly property real paintedWidth: width
+            readonly property real paintedHeight: height
+        }
+    }
+
+    Component {
+        id: layeredIcon
+        LayeredAppIcon {
+            artwork: root.layeredArtwork
+            tinted: root.tintEnabled !== 0.0
+            tintColor: root.tintColor
+            opacityMultiplier: root.opacityMultiplier
+            rasterSize: Math.max(1, Math.ceil(Math.min(root.width, root.height) * Math.max(1, Screen.devicePixelRatio)))
+            smooth: root.smooth
+            onLoadFailed: root.failedLayeredSource = root.source
+        }
     }
 
     Component {
         id: directIcon
 
         IconImage {
+            readonly property int imageStatus: backer.status
+            readonly property real paintedWidth: backer.paintedWidth
+            readonly property real paintedHeight: backer.paintedHeight
             source: root.source
             smooth: root.smooth
             asynchronous: root.asynchronous
+            backer.sourceSize: Qt.size(root.rasterSize, root.rasterSize)
             // Direct rendering can safely reuse Qt Quick's decoded pixmap.
             backer.cache: IconThemeReloadService.pixmapCacheAllowed
         }
@@ -61,12 +119,16 @@ Item {
         id: effectIcon
 
         Item {
+            readonly property int imageStatus: effectImage.backer.status
+            readonly property real paintedWidth: effectImage.backer.paintedWidth
+            readonly property real paintedHeight: effectImage.backer.paintedHeight
             IconImage {
                 id: effectImage
                 anchors.fill: parent
                 source: root.source
                 smooth: root.smooth
                 asynchronous: root.asynchronous
+                backer.sourceSize: Qt.size(root.rasterSize, root.rasterSize)
                 // The effect path owns a live layer texture and cannot share
                 // Qt Quick's decoded pixmap with anyone.
                 backer.cache: false
@@ -86,6 +148,8 @@ Item {
                 property real sat: root.saturation
                 property real iconTintEnabled: root.tintEnabled
                 property color iconTintColor: root.tintColor
+                property real iconRecolorEnabled: root.recolorEnabled ? 1.0 : 0.0
+                property color iconRecolorColor: root.recolorColor
                 fragmentShader: Qt.resolvedUrl("../../shaders/icon_effect.frag.qsb")
             }
         }

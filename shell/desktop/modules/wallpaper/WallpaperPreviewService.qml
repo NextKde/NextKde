@@ -1,5 +1,6 @@
 pragma Singleton
 import QtQuick
+import "../../../shared/qml/i18n"
 import qs.desktop.modules.common
 import "../../../Kos/Ui"
 import "../../../Kos/Ui/foundation/WallpaperCatalog.js" as Catalog
@@ -64,7 +65,7 @@ QtObject {
     }
     function beginSession(path, rawSession) {
         if (!available) {
-            errorMessage = "当前没有可用的显示器"
+            errorMessage = I18n.tr("No available displays")
             return false
         }
         if (pending || WallpaperService.takeoverPending) return false
@@ -173,7 +174,7 @@ QtObject {
                 if (!WallpaperService.chooseTheme(image.slice(6))) return
             } else if (mode === "slideshow") {
                 if (selectedImages.length < 2) {
-                    errorMessage = "请选择至少两张图片"
+                    errorMessage = I18n.tr("Select at least two images")
                     return
                 }
                 if (!WallpaperService.setSlideshow(true, intervalMinutes, JSON.stringify(selectedImages), "")) return
@@ -201,7 +202,7 @@ QtObject {
     }
     function imageFailed(path) {
         if (!active || (mode === "theme" ? String(path) : WallpaperService.localPath(path)) !== image) return
-        errorMessage = "这张图片无法显示，已恢复原壁纸。"
+        errorMessage = I18n.tr("This image cannot be shown; the original wallpaper was restored.")
         finish(false)
     }
     property Timer loadingWatchdog: Timer {

@@ -2,5 +2,7 @@ module qs.desktop.modules.applauncher
 
 AppLauncher 1.0 AppLauncher.qml
 AppLauncherWindow 1.0 AppLauncherWindow.qml
+LauncherMotion 1.0 LauncherMotion.qml
+LauncherIconMotion 1.0 LauncherIconMotion.qml
 singleton AppLauncherService 1.0 AppLauncherService.qml
 singleton AppLauncherConfigService 1.0 AppLauncherConfigService.qml

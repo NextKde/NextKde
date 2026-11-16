@@ -2,6 +2,7 @@ import Quickshell
 import Quickshell.Io
 import Quickshell.Wayland
 import QtQuick
+import "../shared/qml/i18n"
 import qs.desktop.modules.bar
 import qs.desktop.modules.dock
 import qs.desktop.modules.quicksearch
@@ -15,9 +16,35 @@ import qs.desktop.modules.common
 import qs.desktop.modules.platform
 import qs.desktop.modules.shortcuts
 import qs.desktop.modules.weather
+import qs.desktop.modules.inputmethod
 
 Item {
     id: shell
+
+    IpcHandler {
+        target: "notification-settings"
+        function snapshot(): string {
+            return JSON.stringify({ready: NotificationPolicyService.ready,
+                sources: NotificationPolicyService.sources, blockedKeys: NotificationPolicyService.blockedKeys,
+                doNotDisturbEnabled: NotificationPolicyService.doNotDisturbEnabled,
+                bannersEnabled: NotificationPolicyService.bannersEnabled,
+                soundEnabled: NotificationPolicyService.soundEnabled,
+                historyEnabled: NotificationPolicyService.historyEnabled,
+                showPreview: NotificationPolicyService.showPreview,
+                showNotificationBadges: ConfigService.showNotificationBadges,
+                saveError: NotificationPolicyService.saveError})
+        }
+        function setPreference(key: string, value: bool): string {
+            if (key === "showNotificationBadges" && NotificationPolicyService.ready)
+                ConfigService.updateNotificationBadgeVisibility(value)
+            else NotificationPolicyService.setPreference(key, value)
+            return snapshot()
+        }
+        function setBlocked(key: string, blocked: bool): string {
+            NotificationPolicyService.setBlocked(key, blocked)
+            return snapshot()
+        }
+    }
 
     // Settings edits the Quickshell-owned image and presentation preferences
     // through a narrow endpoint. Plasma remains a first-run source only.
@@ -37,6 +64,8 @@ Item {
                     running: ThemeWallpaperService.running,
                     waiting: ThemeWallpaperService.idleDelay.running,
                     hasVisibleWindows: ThemeWallpaperService.hasVisibleWindows,
+                    eligible: ThemeWallpaperService.idleEligible,
+                    locked: ThemeWallpaperService.locked,
                     phase: ThemeWallpaperService.phase,
                     preview: ThemeWallpaperService.preview
                 },
@@ -76,6 +105,13 @@ Item {
                 },
                 spatialEnabled: AppearanceConfigService.spatialWallpaperEnabled,
                 spatialReady: SpatialWallpaperService.ready,
+                spatialMotion: {
+                    running: SpatialWallpaperService.motionRunning,
+                    waiting: SpatialWallpaperService.motion.idleDelay.running,
+                    hasVisibleWindows: SpatialWallpaperService.motion.hasVisibleWindows,
+                    eligible: SpatialWallpaperService.motion.idleEligible,
+                    locked: SpatialWallpaperService.motion.locked
+                },
                 spatialPrepared: SpatialWallpaperService.prepared,
                 spatialBusy: SpatialWallpaperService.requestInFlight,
                 spatialPreparing: SpatialWallpaperService.preparationRequested,
@@ -218,9 +254,15 @@ Item {
     // ShortcutsService is a QML singleton, so it only instantiates on first
     // access — and nothing else touches it during startup. Touch it here so
     // the global shortcuts are registered on every Shell start (self-heal);
-    // the request queues until the platform daemon connects.
+    // An unavailable platform fails the write immediately; ShortcutsService
+    // publishes again once its config is ready and the transport reconnects.
     Component.onCompleted: {
+        StartupReveal.initialize()
         IconThemeReloadService.initialize()
+        // Watch kdeglobals so 使用系统字体 follows a font changed in System
+        // Settings without restarting the shell, and so the first value is
+        // available before any surface binds its family.
+        SystemFontService.initialize()
         ShortcutsService.applyToPlatform()
         // Warm the theme pack scan at startup: a persisted pack themeId is
         // validated against installed packs on every shell start, and the
@@ -267,6 +309,8 @@ Item {
                 position: position,
                 dockStyle: dockStyle,
                 contentStyle: contentStyle,
+                // The one hover control uses the effective peak scale.
+                hoverScale: ConfigService.effectiveHoverScale,
                 infoCardMode: infoCardMode,
                 infoCardAutoRotate: ConfigService.infoCardAutoRotate,
                 infoCardOrder: JSON.stringify(ConfigService.infoCardOrder),
@@ -314,6 +358,11 @@ Item {
 
         function updateDockStyle(newStyle: string): string {
             ConfigService.updateDockStyle(newStyle)
+            return snapshot()
+        }
+
+        function updateHoverScale(scale: real): string {
+            ConfigService.updateHoverScale(scale)
             return snapshot()
         }
 
@@ -371,6 +420,30 @@ Item {
     // Shell-wide appearance controls used by the standalone Settings app.
     // Blur/liquid values are synchronized only with the custom Glass effect,
     // never KDE's stock blur effect. shellStyle selects semantic shape tokens.
+    // Activate-or-launch endpoint for remote surfaces (the Settings app's
+    // KDE settings link): a running window is raised via the same identity
+    // machinery the Dock uses, a stopped app is launched. Unlike the Dock's
+    // click flow, an already-focused app is never minimized here.
+    IpcHandler {
+        target: "app-launch"
+
+        function open(id: string): string {
+            const target = String(id || "").trim()
+            if (!target) return "failed"
+            const identity = AppIdentityService.resolve(target)
+            const windows = WindowService.windowsForApp(identity.desktopId)
+            if (windows.length > 0) {
+                const mru = windows.reduce((a, b) =>
+                    WindowService.lastActivatedAtOf(a.windowId)
+                        >= WindowService.lastActivatedAtOf(b.windowId) ? a : b)
+                WindowService.activateGroup(
+                    windows.map(function(w) { return w.windowId }), mru.windowId)
+                return "ok"
+            }
+            return AppActionService.launch(identity) ? "ok" : "failed"
+        }
+    }
+
     IpcHandler {
         target: "appearance-settings"
 
@@ -425,8 +498,17 @@ Item {
                     AppearanceConfigService.barIntegratedWithDock,
                 barVisibilityMode: AppearanceConfigService.barVisibilityMode,
                 barLayoutMode: AppearanceConfigService.barLayoutMode,
+                barMacStyle: AppearanceConfigService.barMacStyle,
+                barMacTint: AppearanceConfigService.barMacTint,
+                reduceMotion: AppearanceConfigService.reduceMotion,
+                startupRevealDuration: AppearanceConfigService.startupRevealDuration,
                 dockWindowAnimationStyle:
                     AppearanceConfigService.dockWindowAnimationStyle,
+                // The family the desktop would draw with, so the Settings page
+                // can name it instead of describing the option in the abstract.
+                // This is kdeglobals' [General] font= family, resolved.
+                systemFontFamily: SystemFontService.family,
+                desktopFontFamily: AppearanceConfigService.desktopFontFamily,
                 // Same reason as materialColorSwatches above: these are arrays,
                 // and a plain JSON string crosses the hand-written C++ whitelist
                 // with no conversion left to get wrong. They carry the *hidden*
@@ -536,13 +618,32 @@ Item {
             return snapshot()
         }
 
+        function updateBarMacStyle(enabled: bool): string {
+            AppearanceConfigService.updateBarMacStyle(enabled)
+            return snapshot()
+        }
+
+        function updateBarMacTint(value: real): string {
+            AppearanceConfigService.updateBarMacTint(value)
+            return snapshot()
+        }
+
+        function updateStartupMotion(reduced: bool, duration: int): string {
+            AppearanceConfigService.updateStartupMotion(reduced, duration)
+            return snapshot()
+        }
+
         function updateDockWindowAnimationStyle(style: string): string {
             AppearanceConfigService.updateDockWindowAnimationStyle(style)
             return snapshot()
         }
 
-        // Per-surface visibility. `visible` is the wanted state, so the switch
-        // in the Settings page holds the same value it displays.
+        function updateDesktopFontFamily(family: string): string {
+            AppearanceConfigService.updateDesktopFontFamily(family)
+            return snapshot()
+        }
+
+
         function updateDeskCenterWidgetVisibility(id: string, visible: bool): string {
             AppearanceConfigService.setDeskCenterWidgetVisible(id, visible)
             return snapshot()
@@ -631,18 +732,66 @@ Item {
     // values sourced from the live Shell connections so the UI reports what
     // is actually connected, not merely which units were installed.
     IpcHandler {
+        id: integrationStatusIpc
         target: "integration-status"
 
         function snapshot(): string {
             return JSON.stringify({
                 shellReady: true,
+                startupReveal: { phase: StartupReveal.phase, progress: StartupReveal.progress },
                 platformConnected: PlatformClient.connected,
                 dataConnected: DataClient.connected,
                 outputAvailable: ScreenLifecycle.outputAvailable,
                 desktopWidgetsVisible: ScreenLifecycle.outputAvailable
                     && ScreenLifecycle.activeScreen !== null,
                 desktopFilesReady: DesktopFilesService.ready,
+                barExpected: !shell.barIntegratedWithDock,
+                barVisible: desktopBar.windowVisible,
+                dockVisible: desktopDock.windowVisible,
+                inputMethodEnabled: InputMethodService.userEnabled,
+                inputMethodActive: InputMethodService.takeoverActive,
+                inputMethodChanging: InputMethodService.changing,
+                inputMethodError: InputMethodService.error,
+                inputMethodPresentation: InputMethodConfigService.snapshot(),
             })
+        }
+    }
+
+    IpcHandler {
+        target: "inputmethod-settings"
+
+        function snapshot(): string {
+            return JSON.stringify({enabled: InputMethodService.enabled,
+                changing: InputMethodService.changing, error: InputMethodService.error,
+                candidateCount: InputMethodService.candidates.length,
+                visible: InputMethodService.visible, panels: inputMethodPopup.inspect()})
+        }
+
+        function setEnabled(enabled: bool): string {
+            InputMethodService.setEnabled(enabled)
+            return JSON.stringify({ enabled: InputMethodService.userEnabled })
+        }
+
+        function updatePresentation(patch: string): string {
+            try { InputMethodConfigService.update(JSON.parse(patch)) }
+            catch (error) { console.warn("[InputMethodConfig] Invalid update: " + error) }
+            return integrationStatusIpc.snapshot()
+        }
+    }
+
+    // Language preference endpoint for the standalone Settings app. I18nService
+    // owns persistence and applies the value to the shared I18n singleton;
+    // every I18n.tr() binding re-evaluates when it changes.
+    IpcHandler {
+        target: "i18n-settings"
+
+        function snapshot(): string {
+            return I18nService.snapshot()
+        }
+
+        function updateLanguage(language: string): string {
+            I18nService.setLanguage(language)
+            return I18nService.snapshot()
         }
     }
 
@@ -656,6 +805,10 @@ Item {
             ContextMenuCoordinator.dismissForGlobalPointerPress(x, y, timestamp)
         }
     }
+
+    // The login spinner runs in its own process so it keeps moving while this
+    // one is busy building the desktop; see StartupSplash.qml.
+    StartupSplash {}
 
     QuickSearch {
         id: quickSearch
@@ -672,6 +825,8 @@ Item {
         id: notificationCenter
     }
 
+    InputMethodPopup { id: inputMethodPopup }
+
     DeskCenter {}
     DesktopLyrics {}
     // Do not briefly map the standalone Bar with the default setting and then
@@ -679,10 +834,12 @@ Item {
     // can crash while cleaning that incomplete QQuickWindow scene. Wait for
     // the persisted integration choice before making the Bar visible.
     Bar {
+        id: desktopBar
         enabled: AppearanceConfigService.ready
             && !shell.barIntegratedWithDock
     }
     Dock {
+        id: desktopDock
         clockInInfoCarousel: shell.barIntegratedWithDock
             && ConfigService.position === "bottom"
         trailingAccessory: shell.barIntegratedWithDock

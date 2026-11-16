@@ -1,0 +1,15 @@
+import assert from "node:assert/strict";
+import { empty, append } from "../../shell/desktop/modules/bar/NetworkTrafficHistory.mjs";
+let history = empty("eth0");
+for (let i = 0; i < 65; ++i) history = append(history, "eth0", i, i * 2);
+assert.equal(history.download.length, 60);
+assert.equal(history.download[0], 5);
+assert.equal(history.upload.at(-1), 128);
+assert.equal(append(history, "eth0", NaN, 1), history);
+assert.equal(append(history, "eth0", 1, Infinity), history);
+assert.deepEqual(append(history, "wlan0", -10, 20), {device:"wlan0", download:[0], upload:[20]});
+let idle = empty("eth0");
+for (let i=0; i<60; ++i) idle=append(idle,"eth0",0,0);
+assert.equal(append(idle,"eth0",0,0),idle);
+assert.notEqual(append(idle,"eth0",0,1),idle);
+console.log("traffic history: bounded samples, device changes, invalid samples and idle reuse passed");

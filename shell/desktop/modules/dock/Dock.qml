@@ -11,6 +11,7 @@ Scope {
     property Component leadingAccessory: null
     property Component trailingAccessory: null
     property bool clockInInfoCarousel: false
+    readonly property bool windowVisible: dockLoader.item !== null && dockLoader.item.visible
 
     readonly property var targetScreen: ScreenLifecycle.activeScreen
     // Never map a surface with the provisional "always" mode: KWin may keep
@@ -60,6 +61,7 @@ Scope {
     }
 
     Loader {
+        id: dockLoader
         sourceComponent: ConfigService.position === "left"
             ? leftDock
             : (ConfigService.position === "right" ? rightDock : bottomDock)

@@ -8,7 +8,7 @@
 
 stdenv.mkDerivation {
   pname = "kwin-glass";
-  version = "unstable";
+  version = lib.removeSuffix "\n" (builtins.readFile "${src}/VERSION");
   src = "${src}/kwin/glass-effect";
 
   nativeBuildInputs = [
@@ -21,7 +21,10 @@ stdenv.mkDerivation {
     kdePackages.qttools
   ];
 
-  cmakeFlags = [ "-DCMAKE_BUILD_TYPE=Release" ];
+  cmakeFlags = [
+    "-DCMAKE_BUILD_TYPE=Release"
+    "-DKOS_SURFACE_SHAPE_PROTOCOL=${src}/shell/native/surface-shape/kos-surface-shape-v1.xml"
+  ];
   dontWrapQtApps = true;
 
   meta = with lib; {

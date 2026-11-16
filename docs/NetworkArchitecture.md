@@ -2,14 +2,15 @@
 
 `shell/desktop/modules/bar/NetworkService.qml` is the presentation adapter between
 shell UI and the `network.*` operations exposed by `kos-platform`. The C++
-platform module polls/updates NetworkManager through `nmcli` and returns a
-normalized JSON object. No QML component invokes `nmcli` or parses its output.
+platform module reads NetworkManager state and connects profiles through its
+native D-Bus API, and uses `nmcli` for scanning, radio changes, disconnection
+and profile removal. It returns a normalized JSON object. No QML component invokes `nmcli` or parses its output.
 
 ## Public state contract
 
 Consumers use these properties:
 
-- `available`: whether NetworkManager/nmcli could be queried.
+- `available`: whether NetworkManager could be queried.
 - `networkingEnabled`, `wifiEnabled`: global radio state.
 - `connectionType`: `wifi`, `ethernet`, or `none`.
 - `deviceState`: `connected`, `connecting`, `disconnected`, `disabled`, or
@@ -28,8 +29,10 @@ orange warning badge instead of an offline icon.
 ## UI ownership
 
 - `NetworkStatus.qml` renders the passive Bar indicator and hover details.
-- `NetworkTraffic.qml` samples the active interface's kernel RX/TX byte
-  counters and renders only presentation-friendly transfer rates.
+- `NetworkService.qml` requests the active interface's RX/TX counters through
+  `network.traffic` and derives shared transfer rates once per second while
+  connected. `NetworkTraffic.qml` only formats that snapshot; tooltips and
+  panels reuse the same samples.
 - `NetworkPanel.qml` renders the Wi-Fi picker popup that the Bar and the
   control centre's Wi-Fi card both open for scan/connect/disconnect actions.
 - `BarWindow.qml` only places the component.
@@ -44,8 +47,9 @@ again. Enterprise networks use `connectEnterpriseWifi(ssid, identity,
 password, eapMethod, anonymousIdentity)`;
 currently the explicit supported choices are PEAP/MSCHAPv2 and TTLS/PAP. The
 service exposes `wifiConnectInProgress`, `wifiConnectError`, and
-`wifiConnectionFinished` for all UI surfaces. Passwords are positional process
-arguments only and are never logged or persisted in QML. The enterprise method
+`wifiConnectionFinished` for all UI surfaces. Connection credentials are sent
+to NetworkManager in typed D-Bus settings, rather than command-line arguments.
+QML does not persist them; NetworkManager owns saved profile credentials. The enterprise method
 creates only a shell-owned `quickshell-8021x-…` NetworkManager profile, so it
 does not overwrite an unrelated profile with the same SSID.
 

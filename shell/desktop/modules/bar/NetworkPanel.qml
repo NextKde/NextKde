@@ -1,15 +1,15 @@
 import QtQuick
 import Quickshell
 import Quickshell.Wayland
+import "../../../shared/qml/i18n"
 import qs.desktop.modules.bar
 import qs.desktop.modules.common
 import qs.desktop.modules.dock
 import qs.desktop.modules.platform
 import "../../../Kos/Ui"
 
-// Network card shared by the future top control centre. Wi-Fi selection and
-// credential UI are implemented here first; the actual NetworkManager write
-// operation is intentionally deferred until this interaction is validated.
+// Wi-Fi picker and credentials dialog. NetworkService delegates connection
+// and saved-profile changes to the resident platform service.
 AnimatedPopupWindow {
     id: panel
 
@@ -43,8 +43,9 @@ AnimatedPopupWindow {
     motionOrigin: !dockHosted ? Item.Top
         : dockEdge === "left" ? Item.Left
         : dockEdge === "right" ? Item.Right : Item.Bottom
+    PopupAnchorBinding { popupAnchor: panel.anchor; sourceItem: panel.anchorItem }
+
     anchor {
-        item: panel.anchorItem
         edges: !panel.dockHosted ? Edges.Bottom
             : panel.dockEdge === "left" ? Edges.Right
             : panel.dockEdge === "right" ? Edges.Left : Edges.Top
@@ -59,6 +60,8 @@ AnimatedPopupWindow {
         margins.right: panel.dockHosted
             && panel.dockEdge === "left" ? -8 : 0
     }
+
+    readonly property var targetScreen: ScreenLifecycle.activeScreen
 
     // Real liquid glass: a compositor blur region on the panel surface, so
     // windows behind the Wi-Fi list are visible through the glass (QML-only
@@ -97,11 +100,77 @@ AnimatedPopupWindow {
         hide()
     }
 
+    // If the display server ever closes the popup behind our back, fold the
+    // open state too.
+    onClosed: {
+        if (panel.requestedOpen)
+            panel.close()
+    }
+
     Connections {
         target: ScreenLifecycle
         function onOutputAvailableChanged() {
             if (!ScreenLifecycle.outputAvailable)
                 panel.close()
+        }
+    }
+
+    // ── Outside-press and focus-loss dismissal ───────────────────────
+    // An AnimatedPopupWindow anchored to the layer-shell Bar cannot take a Wayland
+    // popup grab, so an explicit full-screen transparent catcher covers presses
+    // on the desktop or the Bar itself when the network list is open.
+    PanelWindow {
+        id: dismissalCatcher
+        screen: panel.targetScreen
+        visible: ScreenLifecycle.outputAvailable && panel.targetScreen !== null
+            && panel.requestedOpen && !networkDialogOverlay.requestedOpen
+        color: "transparent"
+        exclusionMode: ExclusionMode.Ignore
+        WlrLayershell.layer: WlrLayer.Top
+        WlrLayershell.namespace: "quickshell-networkpanel-backdrop"
+        WlrLayershell.keyboardFocus: WlrKeyboardFocus.None
+        anchors {
+            top: true
+            bottom: true
+            left: true
+            right: true
+        }
+        MouseArea {
+            anchors.fill: parent
+            cursorShape: Qt.ArrowCursor
+            onPressed: panel.close()
+        }
+    }
+
+    Connections {
+        target: WindowService
+        function onActiveWindowIdChanged() {
+            if (networkDialogOverlay.requestedOpen)
+                return
+            if (panel.requestedOpen)
+                panel.close()
+        }
+    }
+
+    Connections {
+        target: ContextMenuCoordinator
+        function onActiveMenuChanged() {
+            if (ContextMenuCoordinator.activeMenu
+                    && !networkDialogOverlay.requestedOpen
+                    && panel.requestedOpen)
+                panel.close()
+        }
+    }
+
+    Shortcut {
+        sequence: "Escape"
+        enabled: panel.requestedOpen || networkDialogOverlay.requestedOpen
+        onActivated: {
+            if (networkDialogOverlay.requestedOpen) {
+                panel.closeNetworkDialog()
+            } else {
+                panel.close()
+            }
         }
     }
 
@@ -137,26 +206,6 @@ AnimatedPopupWindow {
         passwordFocusTimer.restart()
     }
 
-    function activeSavedWifi() {
-        const networks = NetworkService.nearbyWifi
-        for (let i = 0; i < networks.length; i++) {
-            if (networks[i].active && networks[i].savedProfileUuid)
-                return networks[i]
-        }
-        return null
-    }
-
-    function showForgetActiveWifi() {
-        const network = activeSavedWifi()
-        if (!network)
-            return
-        showNetworkDialog(network)
-        // The current-connection button is already an intentional action;
-        // enter the in-card confirmation state immediately, but never delete
-        // until the user presses its explicit second “确认” action.
-        confirmForgetNetwork = true
-    }
-
     function closeNetworkDialog() {
         networkDialogOverlay.close()
         requestedPassword = ""
@@ -188,13 +237,13 @@ AnimatedPopupWindow {
             return
         }
         if (selectedNetwork.enterprise && !requestedUsername.length) {
-            dialogError = "请输入用户名"
+            dialogError = I18n.tr("Enter a username")
             usernameInput.forceActiveFocus()
             return
         }
         if (selectedNetwork.enterprise) {
             if (!requestedPassword.length) {
-                dialogError = "请输入 Wi‑Fi 密码"
+                dialogError = I18n.tr("Enter the Wi‑Fi password")
                 passwordInput.forceActiveFocus()
                 return
             }
@@ -221,172 +270,15 @@ AnimatedPopupWindow {
         ambientStrength: 0.35 * AppearanceTokens.glass.ambientMultiplier
         material: "thick"
         adaptiveDarkScrim: true
+            // The bar popups all carry the control-center card's scrim
+            // posture. Without it these three were the only bar surfaces whose
+            // glass never darkened over a bright backdrop, so their white labels
+            // sat on raw glass while every neighbouring panel was scrimmed --
+            // the two tones were visibly different side by side.
+            scrimEnabled: AppearanceTokens.surface.usesBackdrop
+            scrimLevel: AppearanceTokens.bar.popupScrimLevel
     }
 
-    Column {
-        anchors.fill: parent
-        anchors.margins: 10
-        spacing: 0
-
-        Item {
-            visible: false
-            width: parent.width
-            height: 0
-            Text {
-                anchors.left: parent.left
-                anchors.verticalCenter: parent.verticalCenter
-                text: "Wi‑Fi"
-                color: ThemeService.foregroundColor
-                style: Text.Outline
-                styleColor: Qt.rgba(0, 0, 0, 0.38)
-                font { pixelSize: 16; weight: Font.Bold }
-            }
-            Text {
-                anchors.right: parent.right
-                anchors.rightMargin: 48
-                anchors.verticalCenter: parent.verticalCenter
-                text: NetworkService.wifiScanInProgress ? "正在扫描…" : "↻"
-                color: ThemeService.foregroundColor
-                opacity: NetworkService.wifiScanInProgress ? 0.55 : 0.82
-                font { pixelSize: 15; weight: Font.DemiBold }
-                MouseArea {
-                    anchors.fill: parent
-                    anchors.margins: -6
-                    enabled: !NetworkService.wifiScanInProgress
-                    cursorShape: Qt.PointingHandCursor
-                    onClicked: NetworkService.refreshWifiNetworks()
-                }
-            }
-            Rectangle {
-                id: wifiSwitch
-                // Use the control-center radio treatment instead of a
-                // separate blue toggle track: white disc when enabled, blue
-                // Wi-Fi glyph, and neutral glass when it is off.
-                width: 32
-                height: 32
-                radius: width / 2
-                anchors { right: parent.right; verticalCenter: parent.verticalCenter }
-                color: NetworkService.wifiEnabled
-                    ? (ThemeService.isDark ? "#f7fbff" : Qt.rgba(0, 0, 0, 0.08))
-                    : (ThemeService.isDark ? Qt.rgba(1, 1, 1, 0.22) : Qt.rgba(0, 0, 0, 0.05))
-                opacity: NetworkService.wifiToggleInProgress ? 0.55 : 1.0
-                Behavior on color { ColorAnimation { duration: 140 } }
-                border.width: 1
-                border.color: ThemeService.isDark ? Qt.rgba(1, 1, 1, 0.28) : Qt.rgba(0, 0, 0, 0.10)
-                WifiSignalIcon {
-                    anchors.centerIn: parent
-                    width: 20
-                    height: 20
-                    wifiEnabled: NetworkService.wifiEnabled
-                    connected: NetworkService.deviceState === "connected"
-                        && NetworkService.connectionType === "wifi"
-                    signalStrength: NetworkService.signalStrength
-                    glyphColor: NetworkService.wifiEnabled
-                        ? "#0a84ff"
-                        : AppearanceTokens.content.glassInk()
-                }
-                MouseArea {
-                    anchors.fill: parent
-                    enabled: !NetworkService.wifiToggleInProgress
-                    cursorShape: enabled ? Qt.PointingHandCursor : Qt.ArrowCursor
-                    onClicked: NetworkService.setWifiEnabled(!NetworkService.wifiEnabled)
-                }
-            }
-        }
-
-        LiquidGlassPanel {
-            id: connectionCard
-            visible: false
-            width: parent.width
-            height: 0
-            radius: 13
-            cornerExponent: AppearanceTokens.shape.cornerExponent
-            baseColor: ThemeService.backgroundColor
-            ambientPrimary: WallpaperColorSource.primary
-            ambientSecondary: WallpaperColorSource.secondary
-            ambientStrength: 0.72
-            surfaceOpacity: 0.94
-            materialDepth: 1.8
-            Column {
-                anchors {
-                    left: parent.left; right: parent.right; verticalCenter: parent.verticalCenter
-                    leftMargin: 11; rightMargin: 108
-                }
-                spacing: 3
-                Text {
-                    text: !NetworkService.wifiEnabled ? "Wi‑Fi 已关闭"
-                        : (NetworkService.connectionType === "wifi"
-                        ? (NetworkService.ssid || "未连接 Wi‑Fi") : "未连接 Wi‑Fi"
-                        )
-                    color: ThemeService.foregroundColor
-                    style: Text.Outline
-                    styleColor: Qt.rgba(0, 0, 0, 0.38)
-                    font { pixelSize: 13; weight: Font.DemiBold }
-                }
-                GlassText {
-                    text: !NetworkService.wifiEnabled ? "打开开关以扫描附近网络"
-                        : (NetworkService.deviceState === "connected"
-                        ? (NetworkService.connectivity === "full" ? "已连接互联网"
-                            : (NetworkService.connectivity === "portal" ? "需要网页登录认证"
-                                : (NetworkService.connectivity === "limited"
-                                    ? "网络受限" : "已连接")))
-                        : "未连接")
-                    color: ThemeService.foregroundColor
-                    opacity: 0.64
-                    font.pixelSize: 10
-                }
-            }
-            Rectangle {
-                visible: panel.activeSavedWifi() !== null
-                    && NetworkService.connectionType === "wifi"
-                    && NetworkService.deviceState === "connected"
-                width: 42
-                height: 22
-                radius: 11
-                anchors { right: parent.right; rightMargin: 58; verticalCenter: parent.verticalCenter }
-                color: Qt.rgba(1, 1, 1, 0.11)
-                border.width: 1
-                border.color: Qt.rgba(1, 1, 1, 0.18)
-                GlassText {
-                    anchors.centerIn: parent
-                    text: "忘记"
-                    color: "#ff9b92"
-                    font { pixelSize: 10; weight: Font.DemiBold }
-                }
-                MouseArea {
-                    anchors.fill: parent
-                    cursorShape: Qt.PointingHandCursor
-                    onClicked: panel.showForgetActiveWifi()
-                }
-            }
-            Rectangle {
-                visible: NetworkService.wifiEnabled
-                    && NetworkService.connectionType === "wifi"
-                    && NetworkService.deviceState === "connected"
-                width: 42
-                height: 22
-                radius: 11
-                anchors { right: parent.right; rightMargin: 10; verticalCenter: parent.verticalCenter }
-                color: Qt.rgba(1, 1, 1, 0.11)
-                border.width: 1
-                border.color: Qt.rgba(1, 1, 1, 0.18)
-                opacity: NetworkService.wifiDisconnectInProgress ? 0.5 : 1.0
-                GlassText {
-                    anchors.centerIn: parent
-                    text: NetworkService.wifiDisconnectInProgress ? "…" : "断开"
-                    color: panelSurface.foregroundColor
-                    font { pixelSize: 10; weight: Font.DemiBold }
-                }
-                MouseArea {
-                    anchors.fill: parent
-                    enabled: !NetworkService.wifiDisconnectInProgress
-                    cursorShape: enabled ? Qt.PointingHandCursor : Qt.ArrowCursor
-                    onClicked: NetworkService.disconnectActiveWifi()
-                }
-            }
-        }
-
-    }
     Rectangle {
         id: networkListCard
         anchors.fill: parent
@@ -401,7 +293,7 @@ AnimatedPopupWindow {
         Text {
             visible: false
             anchors { left: parent.left; top: parent.top; leftMargin: 13; topMargin: 10 }
-            text: NetworkService.wifiEnabled ? "附近 Wi‑Fi" : "Wi‑Fi 已关闭"
+            text: NetworkService.wifiEnabled ? I18n.tr("Nearby Wi‑Fi") : I18n.tr("Wi‑Fi is off")
             color: ThemeService.foregroundColor
             style: Text.Outline
             styleColor: Qt.rgba(0, 0, 0, 0.50)
@@ -418,79 +310,65 @@ AnimatedPopupWindow {
             clip: true
             spacing: 2
             model: NetworkService.wifiEnabled ? NetworkService.nearbyWifi : []
-            delegate: Rectangle {
+            delegate: Item {
+                id: wifiRow
                 required property int index
                 required property var modelData
                 width: wifiList.width
                 height: 46
-                radius: 10
-                color: networkRowMouse.containsMouse
-                    ? Qt.rgba(1, 1, 1, 0.12) : "transparent"
-                Behavior on color { ColorAnimation { duration: 110 } }
-                Text {
+
+                SelectionHighlight {
+                    objectName: "network-wifi-row-highlight"
+                    anchors.fill: parent
+                    cornerRadius: 10
+                    enabled: AppearanceTokens.surface.selectionHighlightStyle === "glass"
+                    hovered: networkRowMouse.containsMouse
+                    pressed: networkRowMouse.pressed
+                    selected: Boolean(modelData.active)
+                    dark: ThemeService.isDark
+                    fillStrength: 0.85
+                }
+
+                Rectangle {
+                    anchors.fill: parent
+                    radius: 10
+                    visible: AppearanceTokens.surface.selectionHighlightStyle !== "glass"
+                        && (networkRowMouse.containsMouse || Boolean(modelData.active))
+                    color: networkRowMouse.containsMouse
+                        ? (ThemeService.isDark ? Qt.rgba(1, 1, 1, 0.12) : Qt.rgba(0, 0, 0, 0.06))
+                        : (Boolean(modelData.active)
+                            ? (ThemeService.isDark ? Qt.rgba(1, 1, 1, 0.08) : Qt.rgba(0, 0, 0, 0.04))
+                            : "transparent")
+                    Behavior on color { ColorAnimation { duration: AppearanceTokens.motion.fast.duration; easing.type: AppearanceTokens.motion.enterCurve } }
+                }
+
+                BundledIcon {
                     visible: modelData.active
                     anchors { left: parent.left; leftMargin: 8; verticalCenter: parent.verticalCenter }
-                    text: "✓"
+                    name: "network.connected"
                     color: panelSurface.foregroundColor
-                    style: Text.Outline
-                    styleColor: Qt.rgba(0, 0, 0, 0.50)
-                    font { pixelSize: 19; weight: Font.DemiBold }
+                    outlined: true
+                    outlineColor: Qt.rgba(0, 0, 0, 0.50)
+                    size: 19
                 }
-                Canvas {
+                WifiSignalIcon {
                     id: rowWifiGlyph
-                    width: 24
-                    height: 24
-                    anchors { left: parent.left; leftMargin: 32; verticalCenter: parent.verticalCenter }
-                    onPaint: {
-                        const ctx = getContext("2d")
-                        ctx.reset()
-                        ctx.strokeStyle = panelSurface.foregroundColor
-                        ctx.fillStyle = panelSurface.foregroundColor
-                        ctx.globalAlpha = 0.92
-                        ctx.lineWidth = 1.9
-                        ctx.lineCap = "round"
-                        const rings = modelData.signalStrength < 25 ? 1
-                            : (modelData.signalStrength < 50 ? 2 : 3)
-                        for (let ring = 0; ring < rings; ring++) {
-                            const ringRadius = 3.3 + ring * 2.7
-                            ctx.beginPath()
-                            ctx.arc(12, 17.1, ringRadius,
-                                Math.PI * 1.22, Math.PI * 1.78)
-                            ctx.stroke()
-                        }
-                        ctx.beginPath()
-                        ctx.arc(12, 16.7, 1.4, 0, Math.PI * 2)
-                        ctx.fill()
-                    }
+                    signalStrength: modelData.signalStrength
+                    connected: true
+                    glyphColor: panelSurface.foregroundColor
+                    width: 16; height: 16
+                    anchors { left: parent.left; leftMargin: 36; verticalCenter: parent.verticalCenter }
                 }
-                // Draw the encryption mark instead of relying on a lock
-                // glyph: the configured CJK font can lack that glyph and
-                // renders it as a square on some installations.
-                Canvas {
+                // Encryption uses the same bundled font as the signal glyph.
+                BundledIcon {
                     id: rowSecurityGlyph
                     visible: modelData.secured
-                    width: 8
-                    height: 11
-                    // Keep one tight icon gap, then reserve a larger
-                    // readable gap before the SSID (see label margin).
-                    anchors { left: rowWifiGlyph.right; leftMargin: 1; verticalCenter: parent.verticalCenter }
-                    onPaint: {
-                        const ctx = getContext("2d")
-                        ctx.reset()
-                        ctx.strokeStyle = panelSurface.foregroundColor
-                        ctx.fillStyle = panelSurface.foregroundColor
-                        ctx.globalAlpha = 0.82
-                        ctx.lineWidth = 1.2
-                        ctx.lineCap = "round"
-                        ctx.beginPath()
-                        ctx.arc(4, 4.7, 2.35, Math.PI * 1.12, Math.PI * 1.88)
-                        ctx.stroke()
-                        ctx.fillRect(0.7, 4.8, 6.6, 5.5)
-                        ctx.fillStyle = "rgba(0, 0, 0, 0.28)"
-                        ctx.beginPath()
-                        ctx.arc(4, 7.3, 0.75, 0, Math.PI * 2)
-                        ctx.fill()
-                    }
+                    size: 12
+                    width: 12; height: 12
+                    anchors { left: rowWifiGlyph.right; leftMargin: 4; verticalCenter: parent.verticalCenter }
+                    name: "network.secured"
+                    color: panelSurface.foregroundColor
+                    opacity: 0.82
                 }
                 Text {
                     // Reserve the checkmark slot in every row. Connected
@@ -521,7 +399,7 @@ AnimatedPopupWindow {
                 anchors.centerIn: parent
                 visible: NetworkService.wifiEnabled && NetworkService.wifiScanInProgress
                     && NetworkService.nearbyWifi.length === 0
-                text: "正在扫描…"
+                text: I18n.tr("Scanning…")
                 color: panelSurface.secondaryForegroundColor
                 opacity: 0.5
                 font.pixelSize: 12
@@ -530,7 +408,7 @@ AnimatedPopupWindow {
                 anchors.centerIn: parent
                 visible: NetworkService.wifiEnabled && !NetworkService.wifiScanInProgress
                     && NetworkService.nearbyWifi.length === 0
-                text: "未发现可用 Wi‑Fi"
+                text: I18n.tr("No Wi‑Fi networks found")
                 color: panelSurface.secondaryForegroundColor
                 opacity: 0.5
                 font.pixelSize: 12
@@ -549,16 +427,50 @@ AnimatedPopupWindow {
                 height: 1
                 color: Qt.rgba(1, 1, 1, 0.16)
             }
-            Text {
-                anchors { left: parent.left; leftMargin: 18; verticalCenter: parent.verticalCenter }
-                text: "无线局域网设置…"
-                color: panelSurface.foregroundColor
-                style: Text.Outline
-                styleColor: Qt.rgba(0, 0, 0, 0.50)
-                font { pixelSize: 14; weight: Font.DemiBold }
+
+            Item {
+                anchors {
+                    fill: parent
+                    leftMargin: 8
+                    rightMargin: 8
+                    topMargin: 5
+                    bottomMargin: 5
+                }
+
+                SelectionHighlight {
+                    objectName: "network-settings-footer-highlight"
+                    anchors.fill: parent
+                    cornerRadius: 10
+                    enabled: AppearanceTokens.surface.selectionHighlightStyle === "glass"
+                    hovered: settingsFooterMouse.containsMouse
+                    pressed: settingsFooterMouse.pressed
+                    dark: ThemeService.isDark
+                    fillStrength: 0.85
+                }
+
+                Rectangle {
+                    anchors.fill: parent
+                    radius: 10
+                    visible: AppearanceTokens.surface.selectionHighlightStyle !== "glass"
+                        && settingsFooterMouse.containsMouse
+                    color: ThemeService.isDark ? Qt.rgba(1, 1, 1, 0.12) : Qt.rgba(0, 0, 0, 0.06)
+                    Behavior on color { ColorAnimation { duration: AppearanceTokens.motion.fast.duration; easing.type: AppearanceTokens.motion.enterCurve } }
+                }
+
+                Text {
+                    anchors { left: parent.left; leftMargin: 10; verticalCenter: parent.verticalCenter }
+                    text: I18n.tr("WLAN settings…")
+                    color: panelSurface.foregroundColor
+                    style: Text.Outline
+                    styleColor: Qt.rgba(0, 0, 0, 0.50)
+                    font { pixelSize: 13; weight: Font.DemiBold }
+                }
             }
+
             MouseArea {
+                id: settingsFooterMouse
                 anchors.fill: parent
+                hoverEnabled: true
                 cursorShape: Qt.PointingHandCursor
                 onClicked: panel.openWirelessSettings()
             }
@@ -609,7 +521,7 @@ AnimatedPopupWindow {
                 anchors { left: parent.left; top: parent.top; leftMargin: 13; topMargin: 12 }
                 color: networkDialogOverlay.contentControlFill
                 border.width: 1; border.color: networkDialogOverlay.contentControlBorder
-                GlassText { anchors.centerIn: parent; text: "×"; color: networkDialogOverlay.contentForegroundColor; font { pixelSize: 22; weight: Font.Light } }
+                BundledIcon { anchors.centerIn: parent; name: "network.dialog.cancel"; color: networkDialogOverlay.contentForegroundColor; size: 22 }
                 MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: panel.closeNetworkDialog() }
             }
 
@@ -620,24 +532,16 @@ AnimatedPopupWindow {
                 color: networkDialogOverlay.contentControlFill
                 border.width: 1; border.color: networkDialogOverlay.contentControlBorder
                 opacity: NetworkService.wifiConnectInProgress ? 0.55 : 1.0
-                GlassText { anchors.centerIn: parent; text: NetworkService.wifiConnectInProgress ? "…" : "✓"; color: networkDialogOverlay.contentForegroundColor; font { pixelSize: 18; weight: Font.Light } }
+                BundledIcon { anchors.centerIn: parent; name: NetworkService.wifiConnectInProgress ? "network.dialog.busy" : "network.dialog.connect"; color: networkDialogOverlay.contentForegroundColor; size: 18 }
                 MouseArea { anchors.fill: parent; enabled: !NetworkService.wifiConnectInProgress; cursorShape: enabled ? Qt.PointingHandCursor : Qt.ArrowCursor; onClicked: panel.confirmConnection() }
             }
 
-            Canvas {
+            BundledIcon {
                 id: joinWifiGlyph
                 width: 58; height: 48
                 anchors { top: parent.top; topMargin: 43; horizontalCenter: parent.horizontalCenter }
-                onPaint: {
-                    const ctx = getContext("2d")
-                    ctx.reset()
-                    ctx.strokeStyle = "#0a84ff"
-                    ctx.lineWidth = 6.5
-                    ctx.lineCap = "round"
-                    ctx.beginPath(); ctx.arc(width / 2, 28, 21, Math.PI * 1.18, Math.PI * 1.82); ctx.stroke()
-                    ctx.beginPath(); ctx.arc(width / 2, 33, 12, Math.PI * 1.20, Math.PI * 1.80); ctx.stroke()
-                    ctx.beginPath(); ctx.arc(width / 2, 38, 3, Math.PI * 1.23, Math.PI * 1.77); ctx.stroke()
-                }
+                name: "network.dialog.wifi"
+                color: "#0a84ff"
             }
 
             Column {
@@ -645,21 +549,22 @@ AnimatedPopupWindow {
                 spacing: 9
                 Text {
                     width: parent.width
-                    text: "加入 “" + (panel.selectedNetwork?.ssid || "Wi‑Fi") + "”"
+                    text: I18n.tr("Join \u201C%1\u201D")
+                        .arg(panel.selectedNetwork?.ssid || "Wi‑Fi")
                     color: networkDialogOverlay.contentForegroundColor
                     elide: Text.ElideRight
                     font { pixelSize: 18; weight: Font.Bold }
                 }
                 GlassText {
                     width: parent.width
-                    text: NetworkService.wifiConnectInProgress ? "正在加入此无线局域网…"
-                        : (panel.selectedNetwork?.active ? "当前已连接此无线局域网。"
+                    text: NetworkService.wifiConnectInProgress ? I18n.tr("Joining this WLAN…")
+                        : (panel.selectedNetwork?.active ? I18n.tr("Already connected to this WLAN.")
                         : (panel.selectedNetwork?.enterprise
-                            ? "输入用户名和密码加入此无线局域网。"
+                            ? I18n.tr("Enter a username and password to join this WLAN.")
                             : (panel.useSavedCredentials
-                                ? "将使用已保存的密码加入此无线局域网。"
+                                ? I18n.tr("The saved password will be used to join this WLAN.")
                                 : (panel.selectedNetwork?.secured
-                                ? "输入密码加入此无线局域网。" : "加入此无线局域网。"))))
+                                ? I18n.tr("Enter the password to join this WLAN.") : I18n.tr("Join this WLAN.")))))
                     color: networkDialogOverlay.contentSecondaryColor
                     wrapMode: Text.WordWrap
                     font.pixelSize: 14
@@ -708,7 +613,8 @@ AnimatedPopupWindow {
                     }
                     GlassText {
                         anchors.verticalCenter: parent.verticalCenter
-                        text: panel.showAnonymousIdentity ? "收起" : "匿名身份"
+                        text: panel.showAnonymousIdentity
+                            ? I18n.tr("Hide") : I18n.tr("Anonymous identity")
                         color: networkDialogOverlay.contentSecondaryColor
                         font.pixelSize: 10
                         MouseArea {
@@ -747,7 +653,7 @@ AnimatedPopupWindow {
                         clip: true
                         font.pixelSize: 14
                         onTextEdited: panel.requestedUsername = text
-                        GlassText { anchors.verticalCenter: parent.verticalCenter; visible: !usernameInput.text && !usernameInput.activeFocus; text: "用户名"; color: networkDialogOverlay.contentSecondaryColor; font.pixelSize: 14 }
+                        GlassText { anchors.verticalCenter: parent.verticalCenter; visible: !usernameInput.text && !usernameInput.activeFocus; text: I18n.tr("Username"); color: networkDialogOverlay.contentSecondaryColor; font.pixelSize: 14 }
                     }
                     Rectangle {
                         visible: Boolean(panel.selectedNetwork?.enterprise)
@@ -775,7 +681,7 @@ AnimatedPopupWindow {
                         font.pixelSize: 14
                         onTextEdited: panel.requestedPassword = text
                         Keys.onPressed: function(event) { if (event.key === Qt.Key_Return || event.key === Qt.Key_Enter) { panel.confirmConnection(); event.accepted = true } }
-                        GlassText { anchors.verticalCenter: parent.verticalCenter; visible: !passwordInput.text && !passwordInput.activeFocus; text: "密码"; color: networkDialogOverlay.contentSecondaryColor; font.pixelSize: 14 }
+                        GlassText { anchors.verticalCenter: parent.verticalCenter; visible: !passwordInput.text && !passwordInput.activeFocus; text: I18n.tr("Password"); color: networkDialogOverlay.contentSecondaryColor; font.pixelSize: 14 }
                     }
                     Rectangle {
                         visible: Boolean(panel.selectedNetwork?.enterprise
@@ -800,7 +706,7 @@ AnimatedPopupWindow {
                         clip: true
                         font.pixelSize: 14
                         onTextEdited: panel.requestedAnonymousIdentity = text
-                        GlassText { anchors.verticalCenter: parent.verticalCenter; visible: !anonymousIdentityInput.text && !anonymousIdentityInput.activeFocus; text: "匿名身份（可选）"; color: networkDialogOverlay.contentSecondaryColor; font.pixelSize: 14 }
+                        GlassText { anchors.verticalCenter: parent.verticalCenter; visible: !anonymousIdentityInput.text && !anonymousIdentityInput.activeFocus; text: I18n.tr("Anonymous identity (optional)"); color: networkDialogOverlay.contentSecondaryColor; font.pixelSize: 14 }
                     }
                 }
                 Rectangle {
@@ -815,13 +721,14 @@ AnimatedPopupWindow {
                     border.color: Qt.rgba(0.28, 0.64, 1, 0.36)
                     GlassText {
                         anchors { left: parent.left; leftMargin: 13; verticalCenter: parent.verticalCenter }
-                        text: panel.confirmForgetNetwork ? "忘记此网络？" : "✓  已保存密码"
+                        text: panel.confirmForgetNetwork
+                            ? I18n.tr("Forget this network?") : I18n.tr("✓  Password saved")
                         color: networkDialogOverlay.contentForegroundColor
                         font { pixelSize: 12; weight: Font.DemiBold }
                     }
                     GlassText {
                         anchors { right: parent.right; rightMargin: 60; verticalCenter: parent.verticalCenter }
-                        text: panel.confirmForgetNetwork ? "取消" : "更换"
+                        text: panel.confirmForgetNetwork ? I18n.tr("Cancel") : I18n.tr("Change")
                         color: networkDialogOverlay.contentSecondaryColor
                         font.pixelSize: 11
                         MouseArea {
@@ -841,7 +748,7 @@ AnimatedPopupWindow {
                     GlassText {
                         anchors { right: parent.right; rightMargin: 13; verticalCenter: parent.verticalCenter }
                         text: NetworkService.wifiForgetInProgress ? "…"
-                            : (panel.confirmForgetNetwork ? "确认" : "忘记")
+                            : (panel.confirmForgetNetwork ? I18n.tr("Confirm") : I18n.tr("Forget"))
                         color: panel.confirmForgetNetwork ? "#d93025" : networkDialogOverlay.contentSecondaryColor
                         opacity: NetworkService.wifiForgetInProgress ? 0.5 : 1.0
                         font.pixelSize: 11
@@ -865,7 +772,7 @@ AnimatedPopupWindow {
                     visible: !panel.selectedNetwork?.active && !panel.selectedNetwork?.enterprise
                         && !panel.useSavedCredentials
                     width: parent.width
-                    text: "密码将由 NetworkManager 安全保存。"
+                    text: I18n.tr("The password will be stored securely by NetworkManager.")
                     color: networkDialogOverlay.contentTertiaryColor
                     wrapMode: Text.WordWrap
                     font.pixelSize: 13

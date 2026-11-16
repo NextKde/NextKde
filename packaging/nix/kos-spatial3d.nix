@@ -1,7 +1,7 @@
 { lib, stdenv, cmake, kdePackages, opencv, src }:
 stdenv.mkDerivation {
   pname = "kos-spatial3d";
-  version = "unstable";
+  version = lib.removeSuffix "\n" (builtins.readFile "${src}/VERSION");
   src = "${src}/shell/native/spatial3d";
   nativeBuildInputs = [ cmake ];
   buildInputs = [ kdePackages.qtbase kdePackages.qtdeclarative kdePackages.qtquick3d opencv ];

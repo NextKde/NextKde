@@ -9,6 +9,7 @@
 #   logic     pure computation, node, no display
 #   platform  the platform contract test
 #   ui        needs a QML engine; the panel tests also want a compositor
+#   headless  the subset of UI tests that runs offscreen without a compositor
 #
 # The default is `data`: it is the layer that must never crash and it is the
 # only one that runs identically with or without a session. `--all` opts into
@@ -24,18 +25,21 @@ build_dir=${KOS_TEST_BUILD_DIR:-"$project_dir/.build/tests"}
 # scratch directory inside the build tree is what makes a parallel run survive.
 export TMPDIR="${KOS_TEST_TMPDIR:-$build_dir/tmp}"
 export GOTMPDIR="${GOTMPDIR:-$build_dir/tmp}"
-mkdir -p "$TMPDIR"
+mkdir -p "$TMPDIR" "$GOTMPDIR"
 
 # GOCACHE is deliberately not set here. services/data-service/CMakeLists.txt
 # (:18, :47) passes an absolute GOCACHE to every `go` invocation it makes, so a
 # value exported here is overridden before it is ever read. CI caches the real
 # one -- .build/tests/services/data-service/go-test-cache -- instead.
 
+run_all=false
+build_only=false
 layers=()
 build_jobs=${CMAKE_BUILD_PARALLEL_LEVEL:-}
 while (( $# > 0 )); do
     case "$1" in
-        --all) layers=(data logic platform ui) ;;
+        --build-only) build_only=true ;;
+        --all) run_all=true; layers=(data logic platform ui) ;;
         --layer)
             shift
             [[ -n "${1:-}" ]] || { echo "--layer needs a value" >&2; exit 2; }
@@ -48,16 +52,18 @@ while (( $# > 0 )); do
             ;;
         -h|--help)
             cat <<'EOF'
-Usage: ./tools/run-tests.sh [--all] [--layer <name>] [--jobs N]
+Usage: ./tools/run-tests.sh [--all] [--layer <name>] [--jobs N] [--build-only]
 
   (no arguments)   run the data/service layer (default)
   --all            run every layer
-  --layer <name>   run one layer: data, logic, platform, ui
+  --layer <name>   run one layer: data, logic, platform, ui, headless
   --jobs N         parallel build jobs (default: derived from nproc, capped at 12)
+  --build-only     configure and build tests without executing them
 
 Environment:
   KOS_TEST_BUILD_DIR   build directory (default .build/tests)
   KOS_TEST_TMPDIR      scratch directory for compilers and Go
+  KOS_TEST_RUNTIME_TMPDIR short runtime fixture directory (default /tmp)
   KOS_BUILD_TYPE       Debug (default) or Release
   KOS_BUILD_SPATIAL    AUTO (default), ON or OFF for the depth engine and the
                        3D wallpaper plugin; ON makes missing OpenCV or ONNX
@@ -81,7 +87,10 @@ fi
 label_regex=$(IFS='|'; echo "${layers[*]}")
 
 printf '==> configuring %s\n' "$build_dir"
+# Reused core test caches must not retain retired bundled-application switches.
 cmake -S "$project_dir" -B "$build_dir" -G Ninja \
+    -U KOS_BUILD_CALENDAR -U KOS_BUILD_TODO -U KOS_BUILD_WEATHER \
+    -U KOS_BUILD_LISTENFREE -U KOS_BUILD_CALCULATOR \
     -DCMAKE_BUILD_TYPE="${KOS_BUILD_TYPE:-Debug}" \
     -DCMAKE_INSTALL_PREFIX=/usr \
     -DKOS_BUILD_KWIN_PLUGINS=OFF \
@@ -91,6 +100,21 @@ cmake -S "$project_dir" -B "$build_dir" -G Ninja \
 printf '==> building (--parallel %s)\n' "$build_jobs"
 cmake --build "$build_dir" --parallel "$build_jobs"
 
+if [[ "$build_only" == true ]]; then
+    exit 0
+fi
+
+# Compiler temporaries stay in the build tree, but runtime fixtures create
+# Unix sockets. Quickshell adds several path components, so a long checkout
+# path can exceed sockaddr_un.sun_path and break IPC before assertions run.
+export TMPDIR="${KOS_TEST_RUNTIME_TMPDIR:-/tmp}"
+mkdir -p "$TMPDIR"
+
 printf '==> testing label%s: %s\n' \
     "$([[ ${#layers[@]} -gt 1 ]] && echo s)" "$(IFS=', '; echo "${layers[*]}")"
-ctest --test-dir "$build_dir" --output-on-failure -L "$label_regex"
+if [[ "$run_all" == true ]]; then
+    # Include unlabelled and package-provided tests as well.
+    ctest --test-dir "$build_dir" --output-on-failure
+else
+    ctest --test-dir "$build_dir" --output-on-failure -L "$label_regex"
+fi

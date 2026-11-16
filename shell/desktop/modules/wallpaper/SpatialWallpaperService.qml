@@ -1,5 +1,6 @@
 pragma Singleton
 import QtQuick
+import "../../../shared/qml/i18n"
 import qs.desktop.modules.common
 import qs.desktop.modules.platform
 import "../../../Kos/Ui"
@@ -38,6 +39,11 @@ QtObject {
         && imagePath === currentImagePath()
     readonly property bool layeredReady: ready && backgroundPath.length > 0
         && mattePath.length > 0 && influencePath.length > 0
+    readonly property bool motionRunning: motion.running
+    property WallpaperMotionGate motion: WallpaperMotionGate {
+        enabled: root.ready
+        preview: WallpaperPreviewService.active && WallpaperPreviewService.mode === "image"
+    }
 
     function currentImagePath() {
         const value = wallpaperUrl.toString()
@@ -107,7 +113,7 @@ QtObject {
         if (preparationRequested || requestInFlight) return false
         refreshWallpaper()
         if (!imageMode || !imagePath) {
-            errorMessage = "请先选择图片壁纸"
+            errorMessage = I18n.tr("Select an image wallpaper first")
             return false
         }
         errorMessage = ""
@@ -120,7 +126,7 @@ QtObject {
                 waitingForResources = false
                 preparationRequested = false
                 activationPending = false
-                errorMessage = SpatialResourceService.errorMessage || "资源正在检查，请稍后重试"
+                errorMessage = SpatialResourceService.errorMessage || I18n.tr("Resources are being checked, please try again later")
                 return false
             }
         } else requestDepthIfNeeded()
@@ -177,7 +183,7 @@ QtObject {
                 influence: root.influencePath
             }))
             root.cancelPreparation()
-            root.errorMessage = "空间素材加载失败，请重试"
+            root.errorMessage = I18n.tr("Failed to load spatial assets, please retry")
         }
     }
 
@@ -231,7 +237,7 @@ QtObject {
                 root.backgroundPath = backgroundPath
                 root.mattePath = mattePath
                 root.influencePath = influencePath
-                SpatialResourceService.stage = "正在加载空间素材…"
+                SpatialResourceService.stage = I18n.tr("Loading spatial assets…")
                 SpatialResourceService.received = -1
                 SpatialResourceService.total = -1
                 root.depthPath = resultPath

@@ -1,12 +1,12 @@
 # Dock Architecture and Extension Contract
 
 This document is the source of truth for the Dock's application identity,
-window model, grouping, persistence, and future desktop UI features. Read it
+window model, grouping and persistence. Read it
 before adding Dock, Alt+Tab, preview, workspace, or app-menu behavior.
 
 ## Non-negotiable rules
 
-1. Persist canonical desktop IDs such as `code.desktop`.
+1. Persist canonical desktop IDs such as `org.kde.kate.desktop`.
 2. Never compare a pinned desktop ID directly with a provider-specific raw
    window string. Resolve both through `AppIdentityService`.
 3. Never persist a Wayland `Toplevel`, a runtime window ID, activation state,
@@ -20,11 +20,24 @@ before adding Dock, Alt+Tab, preview, workspace, or app-menu behavior.
 
 ## Pointer magnification
 
-`DockIcon` measures pointer distance from its untransformed layout slot in
-`DockContainer` coordinates, including when the content row is rotated for a
-side Dock. The smoothstep distance curve sets a normalized target; one
-`FrameAnimation` follows it using the elapsed-time response in
-`DockMagnification.mjs`. Scale and lift derive from that same animated value.
+`DockContainer` measures pointer distance from untransformed layout slots in
+its content Row, including when that Row is rotated for a side Dock. A quintic smootherstep
+spatial field drives the group; pointer travel is bounded to 0.6 logical pixels at low speed and follows raw
+samples exactly above 600 pixels/second, while
+one shared `FrameAnimation` eases entry/exit with a 26 ms time constant using
+the elapsed-time response in `DockMagnification.mjs`. The frame delta is capped
+at 1/30 second to avoid a jump after an idle period or stalled frame. Scale, lift and
+translations derive from the same frame snapshot.
+The container retains one `hoveredApp` for highlights and preview dwell from
+that published pointer/layout snapshot, using painted horizontal bounds and the
+union of resting and lifted vertical bounds. Name ownership is independently
+continuous across adjacent icon spacing, as described below. Rigid accessories
+retain their own hover handling and cannot own app hover. An 80 ms exit grace
+retains a latched pointer-presence state and last scene position when native
+hover briefly loses its surface; a reported position outside the input band
+still exits immediately. Interactive previews keep their input. The actual
+Dock uses its single immediate in-surface `DockNameLabel`; standalone icon hosts
+retain a lazy `DockAppNameTooltip` with a 180 ms fallback dwell.
 Do not put separate animations on the composed transforms or add a binary
 hover lift to the distance curve: those cause phase mismatch and slot-boundary
 jumps. Attention feedback is composed separately, without a second animation.
@@ -35,8 +48,22 @@ Icon slot sizes, hit testing, layout spacing and the existing magnification
 radius/maximum scale remain independent of the visual animation. Hosts without
 a shared magnification root retain single-icon hover feedback.
 
-`tests/dock-magnification/test_response.mjs` checks response equivalence at
-30–240 Hz, reversal and settlement. `tests/dock-magnification/run.mjs` exercises
+Direct action feedback uses 45 ms press/70 ms highlight transitions. Window
+activation sends its leading request immediately and coalesces only subsequent
+requests in a bounded 24 ms window. Window presentation updates merge for 16 ms
+without resetting their deadline. Auto-hide interaction changes evaluate
+immediately; ordinary geometry changes use bounded 80 ms coalescing.
+
+Window previews dwell 220 ms on first entry, 75 ms while switching an already
+open preview, and recover a still-visible same-icon preview immediately. Their
+90 ms entrance starts on a render-frame callback rather than a fixed 16 ms
+timer. Info/music/temperature cards dwell 220 ms and enter over 100 ms. Closing
+handoff protection remains intact. Stack wheel events accumulate physical
+notches or touchpad pixels and merge once per frame instead of dropping events
+during a fixed cooldown. Pure text popups have empty pointer input regions.
+
+`tests/dock/motion.test.mjs` checks response equivalence at
+30–240 Hz, reversal and settlement. `tests/dock/runtime.mjs magnification` exercises
 the shipping QML on all three edges, alongside the existing `dock-hover-hit`
 regression test. These are offscreen behavior checks, not GPU frame-rate
 benchmarks.
@@ -53,7 +80,7 @@ pointer handlers, blur, offscreen layer or continuously running animation.
 
 Urgent tasks retain their existing colored background; editing/dragging
 suppresses the glass highlight. Material and Windows presets keep the legacy
-selection plates. `tests/dock-highlight/run.mjs` tests state transitions and
+selection plates. `tests/dock/runtime.mjs highlight` tests state transitions and
 light/dark rendering values; the magnification runtime fixture also verifies
 that the actual DockIcon wires these states without stacking legacy plates.
 
@@ -71,12 +98,69 @@ Qt Quick Test, then loads the shipping Launcher and Control Center as unmapped
 Wayland surfaces to verify selection, folder, edit, merge and preset bindings.
 The latter check is explicitly skipped when no Wayland compositor is available.
 
+### Launch feedback and names
+
+`DockLaunchService` owns transient, canonical-desktop-ID launch feedback for
+Dock clicks on applications without windows. It observes `WindowService`
+readiness and `AppActionService.launchFailed`, and expires windowless launches
+after 15 seconds. An immediately ready window preserves at least 500 ms of
+launch feedback; this only delays clearing the animation state, never launching
+or displaying the application. Failed launches still clear immediately.
+Repeated clicks while pending do not spawn duplicate launches.
+The compositor launch ticket is still prepared before executing the app.
+
+`DockIcon` composes a frame-driven ballistic bounce with its shared hover
+transform. Once its feedback state clears, the icon lands within 130 ms rather
+than continuing another full bounce. Side Docks bounce towards the workspace. Launch motion does
+not alter resting slots or KWin's stable window-animation target.
+The animation driver stops for reduced motion, hidden Docks, editing and
+dragging. Launch readiness and expiry remain active independently; revealing
+the Dock resumes feedback only if that application's launch is still pending.
+
+The Dock owns one `DockNameLabel` in its existing `DockWindow.contentItem`
+render tree. Icons publish label eligibility without creating popup windows or
+per-icon label frame drivers. The shared layout frame selects names through bounded, continuous ownership
+cells meeting at adjacent painted icon-center midpoints. Cells bridge spacing
+within each icon run, terminate at dividers/accessories, and also check the
+resting-plus-painted normal envelope. This selection does not alter click hit
+testing or preview dwell. Running apps retain their names until their own
+preview actually becomes visible; exact hover is not a label eligibility gate.
+The shared frame positions the selected name:
+it follows raw pointer position along the Dock and the transformed artwork edge
+across it. Switching icons only changes text; there is no Wayland popup
+reposition/configure round trip. The disabled label has no pointer handlers.
+The first name appears after a 250 ms dwell on an eligible icon. Moving to
+another icon before it appears restarts the dwell; once shown, adjacent names
+switch immediately. Leaving the eligible region or opening a preview/menu
+clears the dwell state. Standalone tooltip fallbacks use the same 250 ms delay.
+Pointer travel follows raw samples directly; only hover entry/exit amplitude
+settles over frames. Icon translation updates only the selected label's
+geometry, without rescanning the entire Dock for each bouncing icon.
+
+`DockWindow` reserves both combined hover/launch excursion and separate name
+paint headroom before interaction starts. Name-only headroom is excluded from
+its hover/input region and never changes workspace reservations.
+`tests/dock/runtime.mjs launch-feedback` checks readiness, asynchronous failure,
+timeout, reduced motion, hidden-Dock suspension, 130 ms landing and label
+geometry on all three edges. `tests/dock/motion.test.mjs` covers the bounded
+flight curve and checks real thin surface and input budgets for adaptive sizes
+and scales 1–3, including name-only pass-through space.
+`sweep_wayland.py` drives 1800 px/s synthetic icon/name sweeps on actual thin
+Wayland layer surfaces without moving the mouse or intercepting input. It
+asserts one mapped layer surface per edge, no popup/reposition requests, and
+reports actual EGL frame-commit intervals. It invokes the shipping
+`DockContainer.selectNameTarget` against actual shared layouts and mixed running
+icons, checking uniform/fast sweeps, gaps, three peak scales, normal/outer exits,
+menus, and visible-versus-unmapped previews. Those measurements demonstrate the
+render path; they do not substitute for subjective high-refresh desktop use.
+
 ## Service layers
 
 ```text
 AppPresentationService ──→ AppLauncher / QuickSearch / shared AppIcon
         ↑
-AppIdentityService → WindowService → AppGroupService → Dock / Alt+Tab / Preview / Stage Manager
+AppIdentityService → WindowService → DockModelService → Dock
+                                  → Alt+Tab / Preview / Stage Manager
 AppActionService ──→ launch / pin / unpin / hide / edit requests
 ```
 
@@ -255,30 +339,11 @@ closeWindow(windowId)
 runtime identifier only; it is intentionally not persisted. Window order may
 change without changing the identity of an existing Toplevel.
 
-### AppGroupService
+### Dock grouping
 
-File: `shell/desktop/modules/dock/AppGroupService.qml`
-
-This derives reusable app groups from the top-level `app` entries in
-`ConfigService.dockItems` (currently exposed as the compatibility projection
-`ConfigService.pinnedAppIds`) and
-`WindowService.records`. The current Dock compatibility facade derives its own
-grouped/separate presentation; `AppGroupService` remains available for future
-Alt+Tab and Stage Manager views.
-
-Group shape:
-
-```js
-{
-    desktopId,
-    name,
-    iconSource,
-    pinned,
-    windows,
-    activeWindow,
-    pinnedVisible
-}
-```
+`DockModelService.qml` derives the Dock presentation from `ConfigService.dockItems`
+and `WindowService.records`. Other surfaces consume the live window model and
+keep their own presentation policy; no unused parallel grouping service is shipped.
 
 The current Dock exposes two presentation policies through
 `DockConfigService.windowGrouping`. In the default `grouped` mode, pinned apps
@@ -310,9 +375,65 @@ unpinApp(appId)
 movePinnedItem(type, key, targetIndex)
 ```
 
-New UI components should prefer `AppIdentityService`, `WindowService`, and
-`AppGroupService` directly. Do not add new identity or window tracking logic
-to `DockModelService`.
+New UI components use `AppIdentityService` and `WindowService` for identity and
+window tracking. Keep Dock-specific ordering and grouping in `DockModelService`.
+
+## Native minimize targets
+
+KWin restricts `org_kde_plasma_window_management`. Installation renders
+`packaging/desktop/org.kos.Shell.desktop.in` with the canonical Quickshell
+executable in `Exec` and that interface in `X-KDE-Wayland-Interfaces`, then
+refreshes the desktop service cache. After changing this declaration, restart
+the Shell connection: KWin caches requested interfaces per Wayland client.
+Without it, libtaskmanager reports that PlasmaWindowManagement did not activate
+and cannot publish targets. Do not disable KWin's permission checks.
+
+`DockWindowAnimationTargetService` publishes the stable icon slot to both the
+private KOS animation effect and Plasma's taskbar protocol. Its ungrouped
+`org.kde.taskmanager.TasksModel` is a protocol adapter only; `WindowService`
+retains ownership of application identity and window actions. Match the exact
+KWin UUID first, then the canonical/raw app ID of a grouped launcher. Never use
+the synthetic `window-N` handle or another window's separate icon as a fallback.
+
+Plasma's Wayland backend ignores the explicit rectangle passed to
+`requestPublishDelegateGeometry`: it reads a real `QQuickItem` and that item's
+window surface. The adapter therefore creates a non-rendering rectangle directly
+under the Dock surface's content item, subtracts the surface origin from the
+global target and publishes integer logical pixels. This avoids hover transforms,
+side-Dock rotation and double-counting secondary-output offsets or pixel scale.
+Auto-hidden slots retain their along-edge position and clip to the permanently
+mapped surface edge, including negative outward offsets on a left Dock.
+Missing/invalid slots invalidate their published rectangle; destroying
+the Dock surface removes its geometries in KWin. Native publication is independent
+of the private effect's availability, payload cache and retry delay.
+
+With KOS **Hide and restore → None**, the enabled KWin minimize effect (for
+example Magic Lamp) reads `Window::iconGeometry()` from that protocol target for
+titlebar, shortcut and Dock actions. KOS does not claim those animations or change
+the user's enabled native effects. The Scale style uses the private KOS target. Genie now selects KWin's native
+Magic Lamp; the old water-drop mesh has been removed. `HideAnimationSelection`
+stores the user's choice while `HideAnimation=none` prevents even an older
+resident KOS effect from running its deformation. Settings and the legacy theme
+adapter share `platform/src/windowanimation/NativeGenie.h` for this transition.
+Legacy and saved `genie` are reconciled at daemon/Settings startup. Explicit
+None and Scale are preserved. The adapter saves/restores the presence and values
+of Magic Lamp and Squash plugin keys while it owns minimize effects.
+Missing/unsupported Magic Lamp, a disconnected compositor, or a failed native
+load configures the project-provided Scale fallback and persists a visible reason
+under `NativeGenieFallback`. `HideAnimationSelection=genie` retains intent;
+`HideAnimation=scale` selects the fallback. A later startup can recover native
+Genie automatically. The adapter checks actual loaded effects after switching;
+if exclusivity or the project effect fails, it restores config and runtime state
+and reports any remaining need to restart the session. Never report fallback as
+the native effect running. `kos-settings.native-genie-upgrade` covers these
+upgrade/failure branches through an injectable runtime, without depending on
+the test host's enabled effects.
+Close/open animation settings remain independent. `tests/dock/native-target.test.mjs`
+covers identity precedence and coordinate conversion, while the offscreen
+`native-target` runtime case loads the production service to exercise publication,
+effect failure, heartbeat retries, surface replacement and icon removal. Real VM acceptance must
+also exercise titlebar minimize and Dock restore, grouped/separate windows,
+hidden/side Docks and secondary outputs at fractional scale.
 
 ## Application launcher module boundary
 
@@ -335,6 +456,9 @@ AppLauncherService.toggle()
 Dock has one strictly presentation-only responsibility: it calls
 `setDockPresentation(width, height, position, background, primary, secondary,
 foreground, barHeight)` whenever its adaptive layout or material changes. The
+width it publishes is the resting Dock length: the live hover spread must never
+reach the launcher, because the launcher re-solves its icon grid from that
+width and would reflow every tile while the pointer slides along the Dock. The
 launcher independently selects the same preferred output policy as Dock.
 Passing geometry and material values through this API is intentional:
 `shell/desktop/modules/applauncher` must not import `qs.desktop.modules.dock`,
@@ -347,6 +471,20 @@ mode fills the selected output. Each mode owns a semantic icon-size, density,
 and font-weight profile. Do not put application search, shortcut registration,
 or grid state back into `DockContainer.qml`.
 
+Card presentations keep the search header outside the scrolling app grid: the
+grid viewport starts below the header, so a scrolled row is clipped at that
+boundary instead of painting over the search field.
+
+`LauncherIconMotion.qml` drives tile position and scale from one animated
+progress value, with a separate 200 ms opacity track alongside the 300 ms
+spread. Both use GUI-thread `NumberAnimation`, as does the stationary glass
+fade in `LauncherMotion.qml`. Keep opacity at its current value when starting
+or reversing: forcing it to 1 to prewarm render-thread Animators can expose a
+fully visible tile before the fade starts. Hidden neighbor pages snap without
+holding the controller open; cold delegates start at the contracted pose and
+follow their resolved grid offsets. `tests/interaction-controls/tst_motion.qml`
+covers the entrance, reversal, cold delegates and hidden-page lifecycle.
+
 Launcher persistence is separate at
 `Quickshell.stateDir + "/applauncher/config.json"`. Schema version 3 owns
 `displayMode`, per-mode `layoutProfiles`, `rootItems` (`app` or `folder`),
@@ -358,18 +496,18 @@ application-grid order in Dock configuration.
 File: `Quickshell.stateDir + "/dock/config.json"`. This keeps runtime user
 state outside the watched QML source directory.
 
-Core user configuration fields (schema version 10):
+Core user configuration fields (schema version 12):
 
 ```json
 {
-  "version": 10,
+  "version": 12,
   "baseHeight": 60,
   "theme": "dark",
   "position": "bottom",
   "barHeight": 35,
   "iconOverrides": {},
   "dockItems": [
-    { "type": "app", "appId": "code.desktop" },
+    { "type": "app", "appId": "org.kde.dolphin.desktop" },
     { "type": "app", "appId": "org.kde.kate.desktop" }
   ],
   "pinnedAppIds": [],
@@ -381,9 +519,29 @@ Core user configuration fields (schema version 10):
   "windowGrouping": "grouped",
   "showLauncher": true,
   "showTrash": true,
-  "showRevealIndicator": true
+  "showRevealIndicator": true,
+  "hoverScale": null
 }
 ```
+
+Schema 12 keeps one `hoverScale` setting: the hovered icon's peak scale
+(1.0–3.0, displayed as 100–300%). Lift is derived as
+`0.2 * (effectiveHoverScale - 1)` of the icon size and follows the same
+neighbour influence as magnification. At 100%, both effects stop. `null`
+follows the active shell style; a number works in every style. Migration
+retains the old scale, clamps values above 3.0 and removes the independent
+`hoverLift` key introduced in schema 11. Settings and IPC expose only scale.
+
+The configured scale is a peak: crowded layouts reduce the shared wave to
+keep its painted slots within the output, including edge padding. A linear
+pass limits scale, lift and translations together; the adaptive resting icon
+size is unchanged by hover. At 100%, plate-gap tightening is disabled too.
+Relaxed layouts spend their empty middle slot on application growth through
+paint translations, keeping trailing controls and resting Row geometry fixed.
+Workspace layout publication uses resting physical width/height on every
+edge and does not subscribe to the live hover extent or glass shift.
+Settings serializes Dock requests and protects in-progress slider previews
+from unrelated replies.
 
 Schema 3 contains `visibilityMode` (see the next section), `windowGrouping`,
 the legacy icon appearance triplet (`iconMode`: `color | grayscale | tint`,
@@ -473,7 +631,7 @@ Components:
   invisible edge target and reads no services. `DockRevealGeometry.mjs` owns
   the target geometry; the window supplies its static full-reveal Dock
   rectangle in surface-local logical coordinates.
-- `DockAutoHideMath.mjs` + `test_autohide.mjs` — pure, unit-tested geometry
+- `DockAutoHideMath.mjs` + `tests/dock/policy.test.mjs` — pure, unit-tested geometry
   and policy functions (`visibleDockRect`, eligibility filtering, conflict
   hysteresis). Geometry and policy must not be scattered into QML bindings.
 - All show-mode timing/easing constants live in `DockAnimation.qml`.
@@ -542,9 +700,11 @@ collision.
 
 ### Context menus
 
-The current implementation is `DockContextMenu.qml`, backed by the native
-`Qt.labs.platform` `Menu` so the window system owns pointer grabs and outside
-clicks. Right-click is handled by `DockIcon`; left-click behavior is unchanged.
+`DockIcon.qml` lazily creates the shared `ContextMenu` for application and
+window actions. `DockContainer.qml` owns the launcher and trash menus. These
+menus join `DockModelService`'s popup coordinator so opening one closes the
+previous popup and holds the Dock visible. Right-click is handled by `DockIcon`;
+left-click behavior is unchanged.
 
 Current context menu actions call service methods:
 
@@ -570,6 +730,121 @@ order. It must not reuse the Dock's visual order or pinned list.
 
 ### Stage Manager / workspace UI
 
-Use `AppGroupService` for grouping and add provider-specific workspace data
-as optional runtime metadata. Do not put Hyprland workspace IDs into the
+Use `WindowService.records` with the Stage grouping policy; provider-specific
+workspace data stays optional runtime metadata. Do not put Hyprland workspace IDs into the
 canonical app identity or persisted pinned records.
+
+The Stage drawer checks overlap and fullscreen windows on
+`WindowService.currentDesktopId`, including windows on all desktops. Windows
+on other desktops, hidden windows and minimized windows do not retract it.
+Both checks observe `placementRevision` because geometry and visibility can
+update in place without a presentation revision. Changing only the current
+desktop must also recompute overlap, cancel pending retraction and release
+an existing yield when the strip is clear. The overlap thresholds remain
+above 60% to retract (after 400ms) and below 50% to release. The production drawer
+checks and overlap release handler have regressions in `test_stage_visibility.mjs`.
+`tests/stage-visibility/run.mjs` also runs the production bindings and timers in
+Qt Quick Test with fixture window records. Full Shell rendering and real
+compositor desktop switching still require graphical VM validation.
+
+`StageDesktopTransition` keeps the displayed card model and the drawer's
+horizontal position unchanged while `WindowService.desktopTransitionActive`
+is true. Desktop navigation does not animate the whole strip's opacity or
+add a horizontal offset. After switching settles, it commits only the latest
+desktop; cards created by that commit start opaque. Input is suspended during
+the switch. Rapid switches, returning to the original desktop and disabling
+Stage cancel or supersede pending commits. Fullscreen/overlap drawer rules
+are applied after the switch, so a new desktop cannot move the old strip.
+
+The platform bridge supplies the bounded switch lifetime through
+`desktops.transitionActive` (see the [platform contract](../shared/contracts/platform.v1.md)).
+The live-card payload identifies the **displayed** model with top-level
+`desktopId`. A changed nonempty desktop ID replaces absent compositor cards
+immediately and starts the incoming cards opaque, bypassing ordinary
+missing-card grace and entrance fading for this handoff. Older payloads
+without that field retain the usual lifecycle behavior.
+
+Stage's post-scene compositor overlay continues painting in fixed screen
+coordinates during KWin's `slide`, `cubeslide` and `fadedesktop` effects. Other
+fullscreen effects, including Overview, remain exclusive; screen lock always
+suppresses the overlay. This native change requires the newly installed KWin
+plugin and a new login session; restarting only Shell cannot enable it.
+
+The Qt Quick fixtures run the production controller, integration handlers and
+drawer bindings, covering model/position retention, fullscreen destinations,
+rapid switches and cancellation. `kos-platform.desktop-transition` covers
+bounded native effect polling on a private bus; `kos-stage.desktop-policy`
+covers fullscreen/lock exclusivity. The optional graphical
+`kos-stage.static-desktop-compositor` test loads the built plugin into an
+isolated virtual KWin and verifies that opaque cards stay at fixed coordinates
+and keep painting during a real slide, then replace without ghost cards.
+See the [Stage test guide](../tests/stage-visibility/README.md).
+
+### Desktop lyrics
+
+Desktop lyrics are an accessory of the desktop music widget, not a Dock
+feature: the widget card carries the on/off switch (DeskCenterConfigService,
+persisted in deskcenter-widgets.ini), and the HUD exists only while the music
+widget itself is on the desktop — hiding the widget through the widget
+library or the Settings page also stops the lyric position polling.
+The switch itself only appears while the current track actually has lyrics
+(KOS live lines, LRC-timed or untimed plain text).
+The HUD has an always-visible Move button so placement is discoverable
+where lyrics are displayed. Normally only this button accepts pointer input.
+Placement temporarily enables pointer input over the lyric card; dragging
+stores normalized coordinates, and Done restores click-through behaviour outside the Move button. The
+position survives restarts and is bounded to the active output after resizing.
+The placement preview works even when no player supplies lyrics.
+
+`MediaService` in `qs.desktop.modules.common` owns the shared player selection,
+metadata and controls used by the Dock, control center and desktop music widget.
+Its lyric parser lives alongside the service; consumers do not select their own
+players. The KDE lock screen runs separately and reads MPRIS over D-Bus.
+
+`MediaService` prefers KOS live lyric metadata (including intentional empty
+lines). Otherwise it parses LRC in `xesam:asText`, reads the current MPRIS
+position every 500 ms only while playing with timed lyrics actually enabled
+(MPRIS position is lazy; the poll is skipped entirely for live lyrics and
+untimed text), and chooses the current/next timed line.
+Seeking recomputes the index; pauses stop polling. Untimed lyrics remain text.
+
+
+## Test organization
+
+All Dock tests live in `tests/dock/`. Group related checks in these suites
+instead of adding a new directory or runner for each regression:
+
+- `model.test.mjs`: process identity, unpinning, window indexing/updates,
+  transport fallback, QML payload arrays and lyric parsing.
+- `policy.test.mjs`: adaptive layout, auto-hide policy and wallpaper colors.
+- `motion.test.mjs`: launch feedback, magnification response/layout and reveal
+  geometry. Named Node test cases preserve individual failure diagnostics.
+- `runtime.mjs`: one entry point selecting an isolated QML scenario. Each case
+  keeps its own scratch configuration and cleanup; QML scenes remain separate.
+- `fixtures/`: shared QML service and renderer doubles for runtime scenes.
+- `sweep.qml` and `sweep_wayland.py`: the compositor-dependent label/frame probe.
+
+Run checks in the test VM, for example:
+
+```sh
+node tests/dock/model.test.mjs
+node tests/dock/policy.test.mjs
+node tests/dock/motion.test.mjs
+node tests/dock/runtime.mjs highlight /usr/lib/qt6/bin/qmltestrunner
+node tests/dock/runtime.mjs magnification quickshell
+node tests/dock/runtime.mjs lyrics /usr/lib/qt6/bin/qmltestrunner
+```
+
+CTest registers the three logic suites as `kos-dock.model`, `kos-dock.policy`
+and `kos-dock.motion`; existing runtime test names and dependency gates remain.
+The launch-feedback scene and Wayland sweep can also be selected manually in
+that VM. Test counts refer to suites after consolidation, rather than one CTest
+entry per small file.
+
+## Timing and input review invariants
+
+Evaluate pointer and window events with bounded scheduling; repeatedly restarting a debounce must
+not postpone hide/reveal indefinitely. Keep tooltip and interactive popup input masks distinct.
+Use actual popup readiness signals instead of an assumed one-frame delay. Intentional hover/preview
+and naming delays are separate policies: do not set every timer to zero to hide latency.
+Measure input-to-frame behavior in the VM; animation duration arithmetic is not a latency measurement.

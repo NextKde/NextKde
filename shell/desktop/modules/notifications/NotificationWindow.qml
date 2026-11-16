@@ -4,6 +4,7 @@ import Quickshell.Widgets
 import Quickshell.Services.Notifications
 import QtQuick
 import Qt5Compat.GraphicalEffects
+import "../../../shared/qml/i18n"
 import qs.desktop.modules.common
 import qs.desktop.modules.dock
 import qs.desktop.modules.notifications
@@ -27,7 +28,10 @@ PanelWindow {
     WlrLayershell.namespace: "notification"
 
     required property var groupService
-    property int exitDuration: 200
+    property int exitDuration: AppearanceTokens.motion.slow.duration
+    // Fading in place when a click opens the app is quicker than the slide-out
+    // used for expiry, so the card never lingers over the window it raised.
+    property int handoffDuration: AppearanceTokens.motion.base.duration
 
     // Global ceiling on popup auto-expire, in ms. Apps may request longer
     // (Fcitx requests 60000 for its "Wayland 诊断" notice), but no popup is
@@ -57,10 +61,13 @@ PanelWindow {
     BackgroundEffect.blurRegion: (root.visible && root.visibleCards.length > 0
         && AppearanceTokens.surface.usesKwinBlur) ? notificationBlur : null
 
+    // Input geometry is its own declaration. The panel's blurRegion is legacy
+    // transport and is null whenever v8 owns the surface (or KWin blur is off),
+    // so deriving the mask from it leaves the whole popup click-through.
     Region {
         id: notificationInput
         regions: root.visibleCards.filter(card => !card.removing)
-            .map(card => card.notificationBlurRegion)
+            .map(card => card.notificationInputRegion)
     }
 
     mask: notificationInput
@@ -80,17 +87,18 @@ PanelWindow {
 
         // Entrance: opacity + x-slide. Surface size is constant, so no resize
         // lands mid-slide -- the slide stays smooth.
+        // motion-exception: retain the existing accelerating entrance; changing its shape is a redesign.
         add: Transition {
             ParallelAnimation {
-                NumberAnimation { property: "opacity"; from: 0; to: 1; duration: 200; easing.type: Easing.InCubic }
-                NumberAnimation { property: "x"; from: 120; to: 0; duration: 200; easing.type: Easing.InCubic }
+                NumberAnimation { property: "opacity"; from: 0; to: 1; duration: AppearanceTokens.motion.slow.duration; easing.type: Easing.InCubic }
+                NumberAnimation { property: "x"; from: 120; to: 0; duration: AppearanceTokens.motion.slow.duration; easing.type: Easing.InCubic }
             }
         }
         displaced: Transition {
-            NumberAnimation { property: "y"; duration: 200; easing.type: Easing.InOutCubic }
+            NumberAnimation { property: "y"; duration: AppearanceTokens.motion.slow.duration; easing.type: AppearanceTokens.motion.settleCurve }
         }
         removeDisplaced: Transition {
-            NumberAnimation { property: "y"; duration: 200; easing.type: Easing.InOutCubic }
+            NumberAnimation { property: "y"; duration: AppearanceTokens.motion.slow.duration; easing.type: AppearanceTokens.motion.settleCurve }
         }
 
         delegate: Rectangle {
@@ -98,33 +106,70 @@ PanelWindow {
             required property var modelData
             required property int index
             readonly property var notificationBlurRegion: panel.blurRegion
+            // Clickable outline, independent of the blur transport above.
+            readonly property var notificationInputRegion: cardInput
             property bool removing: false
+            // True when the card is leaving because its app is being raised:
+            // the exit fades in place instead of sliding out.
+            property bool handoff: false
             enabled: !removing
             ListView.onRemove: {
                 removing = true
                 ListView.delayRemove = true
-                exitAnimation.start()
+                card.startExit()
             }
 
             Timer {
                 id: removingSafetyTimer
                 interval: root.exitDuration + 300
-                running: card.removing && !exitAnimation.running
-                onTriggered: exitAnimation.start()
+                running: card.removing && !card.exiting
+                onTriggered: card.startExit()
             }
 
+            // Expiry slides the card out.
             NumberAnimation {
-                id: exitAnimation
+                id: slideAnimation
                 target: card
                 property: "x"
                 to: notificationList.width + 44
                 duration: root.exitDuration
-                easing.type: Easing.InCubic
+                easing.type: AppearanceTokens.motion.exitCurve
                 onFinished: card.ListView.delayRemove = false
+            }
+            // Opening the app fades the card away in place and lifts it a touch,
+            // so the click reads as handing the notification over to the window
+            // that is arriving. Separate from the slide: binding an animation's
+            // `property` is not evaluated reliably before start, and a property-
+            // less animation finishes immediately and drops the delegate.
+            ParallelAnimation {
+                id: handoffAnimation
+                NumberAnimation {
+                    target: card
+                    property: "opacity"
+                    to: 0
+                    duration: root.handoffDuration
+                    easing.type: AppearanceTokens.motion.enterCurve
+                }
+                NumberAnimation {
+                    target: card
+                    property: "scale"
+                    to: 1.04
+                    duration: root.handoffDuration
+                    easing.type: AppearanceTokens.motion.enterCurve
+                }
+                onFinished: card.ListView.delayRemove = false
+            }
+            readonly property bool exiting: slideAnimation.running || handoffAnimation.running
+            function startExit() {
+                if (card.handoff)
+                    handoffAnimation.start()
+                else
+                    slideAnimation.start()
             }
 
             readonly property string groupKey: modelData.groupKey
             readonly property int groupCount: modelData.count
+            onGroupCountChanged: opener.cancel()
             readonly property bool groupCollapsed: modelData.collapsed
             // Live newest Notification for this group. Depends on
             // sidecarRevision so it re-evaluates when the service rebuilds.
@@ -163,11 +208,11 @@ PanelWindow {
             }
             // Display fields: use live notification, fall back to snapshot
             // when the group is dying (notification null but card visible).
-            readonly property string displaySummary: card.notification
+            readonly property string displaySummary: !NotificationPolicyService.showPreview ? I18n.tr("Notification received") : card.notification
                 ? (card.notification.summary.length > 0
                     ? card.notification.summary : card.notification.appName)
                 : card._lastSummary
-            readonly property string displayBody: card.notification
+            readonly property string displayBody: !NotificationPolicyService.showPreview ? "" : card.notification
                 ? card.notification.body : card._lastBody
             readonly property string displayAppName: card.notification
                 ? card.notification.appName : card._lastAppName
@@ -179,11 +224,7 @@ PanelWindow {
             readonly property bool isLow: (card.notification
                 ? card.notification.urgency : card._lastUrgency) === NotificationUrgency.Low
             readonly property bool expanded: !card.groupCollapsed && card.groupCount > 1
-            readonly property color foregroundColor: ThemeService.foregroundColor
-            readonly property color textOutlineColor: ThemeService.isDark
-                ? Qt.rgba(0.05, 0.08, 0.12, 0.38)
-                : Qt.rgba(1, 1, 1, 0.50)
-            readonly property int textStyle: ThemeService.isDark ? Text.Outline : Text.Normal
+            readonly property color foregroundColor: AppearanceTokens.content.glassInk()
             readonly property string iconSource: card.displayIconSource
 
             // Hover state for pause-on-hover. A HoverHandler (not a MouseArea)
@@ -207,7 +248,7 @@ PanelWindow {
             width: notificationList.width
             height: Math.floor(content.implicitHeight + 28)
             Behavior on height {
-                NumberAnimation { duration: 200; easing.type: Easing.InOutCubic }
+                NumberAnimation { duration: AppearanceTokens.motion.slow.duration; easing.type: AppearanceTokens.motion.settleCurve }
             }
             radius: 28
             color: "transparent"
@@ -219,6 +260,28 @@ PanelWindow {
             // it, along with the child-radius plumbing it needed -- two masks
             // would round the card twice, and the plumbing only existed because
             // a Rectangle could not switch its own circular paint off.
+
+            // Input geometry for this card. It must not come from the glass
+            // panel's blurRegion: that is legacy transport and goes null once
+            // v8 declares the surface itself, which would leave the popup with
+            // an empty mask and no pointer input at all.
+            RoundedBlurRegion {
+                id: cardInput
+                item: card
+                radius: card.radius
+            }
+
+            // Clicking the card opens the app that sent it. Declared before the
+            // card's visual children so the action buttons, inline reply, close
+            // button and group header keep their own clicks; the list can still
+            // steal the pointer for scrolling.
+            MouseArea {
+                objectName: "notification-open-area"
+                anchors.fill: parent
+                cursorShape: Qt.PointingHandCursor
+                enabled: !opener.busy
+                onClicked: opener.open()
+            }
 
             // ---- backgrounds ----
             // Frosted liquid glass backdrop adapting to theme. The urgency
@@ -282,11 +345,33 @@ PanelWindow {
             function close(expired) {
                 if (removing)
                     return
+                opener.cancel()
                 removing = true
                 if (expired)
                     root.groupService.expireGroupByKey(card.groupKey)
                 else
                     root.groupService.dismissGroupByKey(card.groupKey)
+            }
+
+            NotificationOpenController {
+                id: opener
+                notification: card.notification
+                windowService: WindowService
+                launcher: DockModelService
+                lookupEntry: function(hint) { return AppPresentationService.entryFor(hint) }
+                onBusyChanged: card._lastTickAt = 0
+                onFinished: function(source, success) {
+                    if (source !== card.notification || card.removing)
+                        return
+                    // Give failures a fresh countdown so the notice remains
+                    // available for another action instead of expiring at once.
+                    card._elapsedMs = 0
+                    card._lastTickAt = 0
+                    if (success && !(source?.resident ?? false)) {
+                        card.handoff = true
+                        card.close(false)
+                    }
+                }
             }
 
             // ---- countdown bar ----
@@ -348,7 +433,7 @@ PanelWindow {
                 id: expireTicker
                 interval: 50
                 repeat: true
-                running: card.notification !== null && card.expireMs > 0 && !card.hovered
+                running: card.notification !== null && card.expireMs > 0 && !card.hovered && !opener.busy
                 onTriggered: {
                     const now = Date.now()
                     if (card._lastTickAt > 0)
@@ -373,15 +458,13 @@ PanelWindow {
                 width: 34; height: width
                 anchors { left: parent.left; leftMargin: 14; top: parent.top; topMargin: 14 }
 
-                Text {
+                GlassText {
                     anchors.centerIn: parent
                     visible: !iconMask.visible
                     text: card.displayAppName.length > 0
                         ? card.displayAppName.slice(0, 1).toUpperCase()
                         : "•"
                     color: card.foregroundColor
-                    style: card.textStyle
-                    styleColor: card.textOutlineColor
                     font { pixelSize: 16; bold: true }
                 }
                 Rectangle {
@@ -404,7 +487,7 @@ PanelWindow {
                             visible: false
                         }
                     }
-                    IconImage {
+                    AppIcon {
                         anchors.fill: parent
                         source: card.iconSource
                         // Theme icon: synchronous, see AppIcon.qml.
@@ -421,7 +504,7 @@ PanelWindow {
                 height: 18; radius: 9
                 anchors { right: closeButton.left; rightMargin: 8; top: parent.top; topMargin: 15 }
                 color: ThemeService.isDark ? Qt.rgba(1, 1, 1, 0.16) : Qt.rgba(0, 0, 0, 0.08)
-                Text {
+                GlassText {
                     id: badgeText
                     anchors.centerIn: parent
                     text: card.groupCount
@@ -453,27 +536,23 @@ PanelWindow {
                 }
                 spacing: 4
 
-                Text {
+                GlassText {
                     width: parent.width
                     text: card.expanded
                         ? (modelData.appName.length > 0 ? modelData.appName : "Notifications")
                         : card.displaySummary
                     color: card.foregroundColor
-                    style: card.textStyle
-                    styleColor: card.textOutlineColor
                     font { pixelSize: 14; bold: true }
                     elide: Text.ElideRight
                     maximumLineCount: 1
                 }
 
-                Text {
+                GlassText {
                     width: parent.width
                     visible: !card.expanded && text.length > 0
                     text: card.displayBody
                     color: card.foregroundColor
-                    style: card.textStyle
-                    styleColor: card.textOutlineColor
-                    opacity: 0.78
+                    opacity: 1
                     font.pixelSize: 13
                     wrapMode: Text.Wrap
                     maximumLineCount: 4
@@ -493,7 +572,7 @@ PanelWindow {
                         width: content.width
                         height: Math.max(notifRowText.implicitHeight, 20)
                         visible: card.expanded
-                        Text {
+                        GlassText {
                             id: notifRowText
                             anchors {
                                 left: parent.left
@@ -501,24 +580,21 @@ PanelWindow {
                                 rightMargin: 6
                                 verticalCenter: parent.verticalCenter
                             }
-                            text: modelData.summary.length > 0
+                            text: !NotificationPolicyService.showPreview ? I18n.tr("Notification received") : modelData.summary.length > 0
                                 ? modelData.summary
                                 : (modelData.appName || "")
                             color: card.foregroundColor
-                            style: card.textStyle
-                            styleColor: card.textOutlineColor
                             font { pixelSize: 13; bold: true }
                             elide: Text.ElideRight
                             maximumLineCount: 1
                         }
-                        Text {
+                        BundledIcon {
                             id: notifRowClose
-                            text: "×"
+                            name: "notification.dismiss"
                             color: card.foregroundColor
-                            style: card.textStyle
-                            styleColor: card.textOutlineColor
                             opacity: notifRowCloseArea.containsMouse ? 0.9 : 0.45
-                            font.pixelSize: 16
+                            size: 14
+                            width: 16; height: 16
                             anchors { right: parent.right; verticalCenter: parent.verticalCenter }
                             MouseArea {
                                 id: notifRowCloseArea
@@ -564,26 +640,15 @@ PanelWindow {
                                 dark: ThemeService.isDark
                                 fillStrength: 0.85
                             }
-                            Text {
+                            GlassText {
                                 id: actionLabel
                                 anchors.centerIn: parent
                                 text: {
                                     const raw = modelData.text || modelData.identifier || ""
-                                    // Some apps (e.g. QQ) send English action labels.
-                                    // Map common ones to Chinese for display.
-                                    const map = {
-                                        "view": "查看",
-                                        "View": "查看",
-                                        "reply": "回复",
-                                        "Reply": "回复",
-                                        "open": "打开",
-                                        "Open": "打开",
-                                        "close": "关闭",
-                                        "Close": "关闭",
-                                        "mark as read": "标为已读",
-                                        "Mark as read": "标为已读"
-                                    }
-                                    return map[raw] || raw
+                                    // Some apps send lowercase or alternate-case
+                                    // action labels; tr() maps the common ones and
+                                    // falls back to the raw label otherwise.
+                                    return I18n.tr(raw) || raw
                                 }
                                 color: card.foregroundColor
                                 font.pixelSize: 12
@@ -595,8 +660,10 @@ PanelWindow {
                                 hoverEnabled: true
                                 cursorShape: Qt.PointingHandCursor
                                 onClicked: {
+                                    opener.cancel()
+                                    const resident = card.notification?.resident ?? false
                                     modelData.invoke()
-                                    if (!card.notification.resident)
+                                    if (!resident)
                                         card.close(false)
                                 }
                             }
@@ -619,7 +686,7 @@ PanelWindow {
                         color: card.foregroundColor
                         font.pixelSize: 13
                         text: ""
-                        Text {
+                        GlassText {
                             visible: !replyInput.text && !replyInput.activeFocus
                             text: card.notification
                                 ? (card.notification.inlineReplyPlaceholder || "Reply…")
@@ -631,9 +698,11 @@ PanelWindow {
                         }
                         onAccepted: {
                             if (text.length > 0 && card.notification) {
+                                const resident = card.notification.resident
+                                opener.cancel()
                                 card.notification.sendInlineReply(text)
                                 text = ""
-                                if (!card.notification.resident)
+                                if (!resident)
                                     card.close(false)
                             }
                         }
@@ -643,14 +712,13 @@ PanelWindow {
 
             // ---- close button ----
 
-            Text {
+            BundledIcon {
                 id: closeButton
-                text: "×"
+                name: "notification.dismiss"
                 color: card.foregroundColor
-                style: card.textStyle
-                styleColor: card.textOutlineColor
                 opacity: 0.55
-                font.pixelSize: 22
+                size: 14
+                width: 22; height: 22
                 anchors { right: parent.right; rightMargin: 12; top: parent.top; topMargin: 9 }
                 MouseArea {
                     anchors.fill: parent

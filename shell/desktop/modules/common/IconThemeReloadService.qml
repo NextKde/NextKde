@@ -5,14 +5,13 @@ import Quickshell
 import Quickshell.Io
 
 // Quickshell resolves themed icons when the shell loads. KDE stores the
-// selected theme in kdeglobals, so a theme change needs one soft shell reload
-// to make iconPath() resolve against the new theme. This service watches only
-// that one setting; it never reloads for unrelated kdeglobals edits.
+// selected theme in kdeglobals. This service watches only that one setting
+// and publishes a revision so consumers refresh their icon renderers.
 QtObject {
     id: service
 
-    readonly property string configPath: Quickshell.env("HOME")
-        + "/.config/kdeglobals"
+    readonly property string configPath: (Quickshell.env("XDG_CONFIG_HOME")
+        || (Quickshell.env("HOME") + "/.config")) + "/kdeglobals"
     property string activeTheme: ""
     property bool initialized: false
     // Changes whenever KDE applies a different icon theme. Consumers use this

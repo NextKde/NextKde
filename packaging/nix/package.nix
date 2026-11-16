@@ -23,7 +23,16 @@ let
   kwin-kos-bridge = pkgs.callPackage ./kwin-kos-bridge.nix { inherit src; };
   kosctl = pkgs.callPackage ./kosctl.nix { inherit src; };
   kwin-kos-decoration = pkgs.callPackage ./kwin-kos-decoration.nix { inherit src; };
-  kos-weather = if buildWeather then pkgs.callPackage ./kos-weather.nix { inherit src; } else null;
+  # Independent application archive: this is a flat download hash, not a
+  # fetchFromGitHub unpacked-source hash. Never reuse core src as app source.
+  kos-weather = if buildWeather then pkgs.callPackage ./kos-weather.nix {
+    version = "0.2.0";
+    src = pkgs.fetchurl {
+      name = "kos-apps-76068d787af68a1d5f759146787c00e8a71a8d1c.tar.gz";
+      url = "https://codeload.github.com/NextKde/kos-apps/tar.gz/76068d787af68a1d5f759146787c00e8a71a8d1c";
+      hash = "sha256-viGWmVEV0+7xUeD+erUn+LEH8TYxlFrdNWV/Su+WQGE=";
+    };
+  } else null;
 
   qs_bin = if quickshell != null then "${quickshell}/bin/quickshell" else "/run/current-system/sw/bin/quickshell";
 
@@ -33,7 +42,8 @@ let
     installPhase = ''
       runHook preInstall
       mkdir -p $out/lib/systemd/user
-      sed 's|%h/.local/libexec/kos-platform|${kos-platform}/libexec/kos-platform|g' \
+      sed -e 's|%h/.local/libexec/kos-platform|${kos-platform}/libexec/kos-platform|g' \
+          -e 's|%h/.local/share/kos/platform/kwin/window-bridge.js|${kos-platform}/share/kos/platform/kwin/window-bridge.js|g' \
         ${src}/packaging/systemd/kos-platform.service \
         > $out/lib/systemd/user/kos-platform.service
       runHook postInstall
@@ -59,7 +69,7 @@ let
 in
 stdenv.mkDerivation {
   pname = "kos-desktop";
-  version = "unstable";
+  version = lib.removeSuffix "\n" (builtins.readFile "${src}/VERSION");
   inherit src;
 
   dontBuild = true;
@@ -71,15 +81,27 @@ stdenv.mkDerivation {
     mkdir -p $out/libexec
     ln -s ${kos-platform}/libexec/kos-platform $out/libexec/kos-platform
     ln -s ${kos-platform}/libexec/kos-ai-worker $out/libexec/kos-ai-worker
+    mkdir -p $out/lib/fcitx5 $out/share/fcitx5/addon
+    ln -s ${kos-platform}/lib/fcitx5/libnextkde-inputpanel.so $out/lib/fcitx5/libnextkde-inputpanel.so
+    ln -s ${kos-platform}/share/fcitx5/addon/nextkde-inputpanel.conf $out/share/fcitx5/addon/nextkde-inputpanel.conf
     ln -s ${shell-data-service}/libexec/kos-data-service $out/libexec/kos-data-service
 
     mkdir -p $out/bin
     ln -s ${kos-settings}/bin/kos-settings $out/bin/kos-settings
+    ln -s ${kos-settings}/bin/kos-apps $out/bin/kos-apps
+    ln -s ${kos-settings}/bin/kos-app-update-agent $out/bin/kos-app-update-agent
+    if [ -x ${kos-settings}/bin/kos-flatpak-worker ]; then
+      ln -s ${kos-settings}/bin/kos-flatpak-worker $out/bin/kos-flatpak-worker
+    fi
+    mkdir -p $out/etc/xdg/autostart
+    cp ${kos-settings}/etc/xdg/autostart/kos-app-updates.desktop $out/etc/xdg/autostart/
+    mkdir -p $out/lib/gtk-3.0/modules
+    ln -s ${kos-settings}/lib/gtk-3.0/modules/libkos-gtk-window-controls.so $out/lib/gtk-3.0/modules/libkos-gtk-window-controls.so
 
     # --- Weather app (optional) ---
-    if [ -n "${if buildWeather then "1" else ""}" ]; then
+    ${lib.optionalString buildWeather ''
       ln -s ${kos-weather}/bin/kos-weather $out/bin/kos-weather
-    fi
+    ''}
 
     # --- Shared QML / Shell ---
     mkdir -p $out/share/kos-desktop
@@ -90,9 +112,7 @@ stdenv.mkDerivation {
 
     # --- Settings QML (for reference; kos-settings binary embeds path) ---
     mkdir -p $out/share/kos/settings
-    cp apps/settings/main.qml $out/share/kos/settings/main.qml
-    cp apps/settings/Wallpaper*.qml apps/settings/ThemeWallpaperTile.qml \
-      apps/settings/ServicesSettingsPage.qml $out/share/kos/settings/
+    cp apps/settings/*.qml $out/share/kos/settings/
     cp -r apps/settings/icons $out/share/kos/settings/
     mkdir -p $out/qml/Kos
     ln -s ${kos-spatial3d}/lib/qt6/qml/Kos/Spatial3D $out/qml/Kos/Spatial3D
@@ -111,6 +131,8 @@ stdenv.mkDerivation {
     # files and tests must never reach the installed tree.
     mkdir -p $out/share/shared/qml
     cp -r shared/qml/. $out/share/shared/qml/
+        cp -r shared/Icons $out/share/shared/Icons
+        rm -f $out/share/shared/Icons/CMakeLists.txt
     find $out/share/shared/qml -maxdepth 1 \
         -name CMakeLists.txt -o -name 'test_*.mjs' | xargs -r rm -f
 
@@ -122,6 +144,11 @@ stdenv.mkDerivation {
     substitute packaging/desktop/org.kos.Platform.desktop.in \
       $out/share/applications/org.kos.Platform.desktop \
       --replace-fail '@KOS_PLATFORM_EXEC@' "${kos-platform}/libexec/kos-platform"
+    # KWin compares Exec's canonical path to the running executable.
+    kos_shell_exec=$(readlink -f ${qs_bin})
+    substitute packaging/desktop/org.kos.Shell.desktop.in \
+      $out/share/applications/org.kos.Shell.desktop \
+      --replace-fail '@KOS_SHELL_EXEC@' "$kos_shell_exec"
 
     # --- Systemd user services ---
     mkdir -p $out/lib/systemd/user
@@ -131,6 +158,16 @@ stdenv.mkDerivation {
       $out/lib/systemd/user/
     cp ${patched-shell-service}/lib/systemd/user/kos-shell.service \
       $out/lib/systemd/user/
+
+    mkdir -p $out/share/kos
+    cat > $out/share/kos/release.json <<'RELEASE_JSON'
+    ${builtins.toJSON {
+      version = lib.removeSuffix "\n" (builtins.readFile "${src}/VERSION");
+      revision = if builtins.isAttrs src then src.rev or (src.dirtyRev or "unknown") else "unknown";
+      dirty = if !builtins.isAttrs src then null else if src ? rev then false else if src ? dirtyRev then true else null;
+      tag = "";
+    }}
+    RELEASE_JSON
 
     runHook postInstall
   '';

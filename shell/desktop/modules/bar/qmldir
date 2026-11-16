@@ -6,8 +6,8 @@ BarAutoHideController 1.0 BarAutoHideController.qml
 BarDateStatus 1.0 BarDateStatus.qml
 singleton AppMenuService 1.0 AppMenuService.qml
 GlobalMenu 1.0 GlobalMenu.qml
+SystemMenu 1.0 SystemMenu.qml
 BarStatusArea 1.0 BarStatusArea.qml
-StatusAreaEditor 1.0 StatusAreaEditor.qml
 Battery 1.0 Battery.qml
 CpuTemperature 1.0 CpuTemperature.qml
 TemperatureSensorPopups 1.0 TemperatureSensorPopups.qml
@@ -19,6 +19,7 @@ BluetoothPanel 1.0 BluetoothPanel.qml
 ControlCenterToggle 1.0 ControlCenterToggle.qml
 ControlCenterPanel 1.0 ControlCenterPanel.qml
 SysTray 1.0 SysTray.qml
+TrayIcon 1.0 TrayIcon.qml
 UsageRing 1.0 UsageRing.qml
 UsageSparkline 1.0 UsageSparkline.qml
 SettingsButton 1.0 SettingsButton.qml
@@ -29,6 +30,24 @@ singleton ControlCenterService 1.0 ControlCenterService.qml
 singleton SysTrayOrderService 1.0 SysTrayOrderService.qml
 singleton SysTrayIdentityService 1.0 SysTrayIdentityService.qml
 ControlCenterCard 1.0 ControlCenterCard.qml
+ControlCenterGlass 1.0 ControlCenterGlass.qml
 ControlCenterSlider 1.0 ControlCenterSlider.qml
 StatusTooltip 1.0 StatusTooltip.qml
 ControlCenterSelection 1.0 ControlCenterSelection.qml
+NotificationHistoryPanel 1.0 NotificationHistoryPanel.qml
+NotificationHistoryToggle 1.0 NotificationHistoryToggle.qml
+NotificationHistoryGroup 1.0 NotificationHistoryGroup.qml
+NotificationHistoryEntry 1.0 NotificationHistoryEntry.qml
+NotificationSourceIcon 1.0 NotificationSourceIcon.qml
+
+NotificationHistoryPane 1.0 NotificationHistoryPane.qml
+
+NotificationHistoryCard 1.0 NotificationHistoryCard.qml
+
+StatusCollectionPopup 1.0 StatusCollectionPopup.qml
+StatusCollectionDropArea 1.0 StatusCollectionDropArea.qml
+
+BatteryPanel 1.0 BatteryPanel.qml
+BatteryBody 1.0 BatteryBody.qml
+NetworkTrafficPanel 1.0 NetworkTrafficPanel.qml
+singleton PowerProfileService 1.0 PowerProfileService.qml

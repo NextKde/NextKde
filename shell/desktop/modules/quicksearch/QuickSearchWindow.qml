@@ -1,8 +1,8 @@
 import QtQuick
-import Qt5Compat.GraphicalEffects
 import Quickshell
 import Quickshell.Wayland
 import Quickshell.Widgets
+import "../../../shared/qml/i18n"
 import qs.desktop.modules.common
 import qs.desktop.modules.dock
 import "../../../Kos/Ui"
@@ -35,8 +35,8 @@ PanelWindow {
     readonly property real revealProgress: popupMotion.progress
     PopupMotion {
         id: popupMotion
-        openDuration: 90
-        closeDuration: 90
+        openDuration: AppearanceTokens.motion.instant.duration
+        closeDuration: AppearanceTokens.motion.instant.duration
     }
 
     signal closeRequested
@@ -47,8 +47,10 @@ PanelWindow {
     // The item is passed whole so a pinned row and a history row share one path.
     signal pasteRequested(var item, bool copyOnly)
 
-    readonly property string modeTitle: mode === "app" ? "应用" : (mode === "clipboard" ? "剪贴板" : "窗口")
-    readonly property string placeholder: mode === "app" ? "搜索已安装的应用" : (mode === "clipboard" ? "搜索剪贴板历史" : "搜索已打开的窗口")
+    readonly property string modeTitle: mode === "app" ? I18n.tr("Apps")
+        : (mode === "clipboard" ? I18n.tr("Clipboard") : I18n.tr("Windows"))
+    readonly property string placeholder: mode === "app" ? I18n.tr("Search installed apps")
+        : (mode === "clipboard" ? I18n.tr("Search clipboard history") : I18n.tr("Search open windows"))
 
     readonly property var windowResults: {
         // Explicitly depend on the service revision so title, activation, and
@@ -97,7 +99,6 @@ PanelWindow {
     readonly property var clipboardResults: {
         ClipboardService.revision;
         ClipboardService.pinnedRevision;
-        ClipboardService.thumbnailRevision;
         const needle = query.trim().toLowerCase();
         const matches = [];
 
@@ -105,15 +106,15 @@ PanelWindow {
             const pinned = ClipboardService.pinned || [];
             for (let i = 0; i < pinned.length; i++) {
                 const item = pinned[i];
-                const title = item.isImage ? "图片" : item.preview;
+                const title = item.isImage ? I18n.tr("Image") : item.preview;
                 if (needle && !title.toLowerCase().includes(needle))
                     continue;
                 matches.push({
                     kind: "clipboard",
                     title: title,
-                    subtitle: item.isImage ? "固定图片 · 回车复制" : "固定文本 · 回车复制",
+                    subtitle: item.isImage ? I18n.tr("Pinned image · Enter to copy") : I18n.tr("Pinned text · Enter to copy"),
                     icon: BundledIcons.source(item.isImage
-                        ? "image-x-generic" : "edit-paste"),
+                        ? "clipboard.image" : "clipboard.text"),
                     isImage: item.isImage,
                     preview: item.preview,
                     selectionRecord: "",
@@ -133,19 +134,16 @@ PanelWindow {
                 const pinId = ClipboardService.pinIdFor(entry);
                 matches.push({
                     kind: "clipboard",
-                    title: entry.isImage ? "图片" : entry.preview,
-                    subtitle: entry.isImage ? "图片剪贴板 · " + entry.preview.slice(2, -2) : "文本剪贴板 · 回车复制",
+                    title: entry.isImage ? I18n.tr("Image") : entry.preview,
+                    subtitle: entry.isImage ? I18n.tr("Image clipboard · %1").arg(entry.preview.slice(2, -2).trim()) : I18n.tr("Text clipboard · Enter to copy"),
                     icon: BundledIcons.source(entry.isImage
-                        ? "image-x-generic" : "edit-paste"),
+                        ? "clipboard.image" : "clipboard.text"),
                     isImage: entry.isImage,
                     preview: entry.preview,
                     selectionRecord: entry.record,
                     pinId: pinId,
                     pinned: pinId !== "",
-                    // Rendered on demand by the platform and cached there, so a
-                    // re-open costs nothing.
-                    thumbnailSource: entry.isImage
-                        ? ClipboardService.thumbnailSourceFor(entry) : ""
+                    thumbnailSource: ""
                 });
             }
         }
@@ -179,97 +177,6 @@ PanelWindow {
         bottom: true
     }
 
-    // iOS App-Library style liquid header band, mirroring the launcher's
-    // LiquidSearchBar. The whole top strip is one continuous frosted lens over
-    // the result view: it captures the region directly beneath the band and
-    // blurs whatever entries scroll under it, so the entire top flows with
-    // content. The capture rect tracks the view's contentY so the lens always
-    // shows the live content below. The search field floats centered on this
-    // band as a liquid-glass capsule, so there is no seam between the field
-    // and its flanks.
-    component LiquidSearchBand: Item {
-        id: searchBand
-        // The result view (ListView or GridView) whose scrolling content this
-        // lens frosts over. Both are Flickables, so a Flickable reference
-        // exposes contentY and lets the band follow whichever viewMode is
-        // active.
-        required property Flickable sourceView
-        // The band spans the header's full width; only its height is fixed.
-        height: 49
-
-        // Region of the result view directly beneath this band, in the view's
-        // own (viewport) coordinates. A Flickable is captured as its rendered
-        // viewport - the visible window already reflects contentY - so the
-        // source rect must NOT add contentY again.
-        //
-        // The band floats above the view's top edge, so mapping it into the
-        // view gives a negative y: the band sits over the view's empty top
-        // margin. That is exactly what we want to frost. Before any scrolling
-        // the slice over the view is empty, so the band rests on clean glass;
-        // as entries scroll up they slide into the band's slice and become its
-        // flowing background. Pixels outside the view's bounds capture as
-        // transparent, which simply shows the dialog's blurred backdrop.
-        readonly property rect _lensRect: {
-            if (!sourceView)
-                return Qt.rect(0, 0, 0, 0)
-            const topLeft = searchBand.mapToItem(sourceView, 0, 0)
-            return Qt.rect(topLeft.x, topLeft.y,
-                searchBand.width, searchBand.height)
-        }
-
-        ShaderEffectSource {
-            id: lensSource
-            visible: false
-            sourceItem: searchBand.sourceView
-            sourceRect: searchBand._lensRect
-            live: true
-            hideSource: false
-            smooth: true
-        }
-        FastBlur {
-            id: lensBlur
-            anchors.fill: parent
-            source: lensSource
-            radius: 16
-            transparentBorder: true
-            cached: true
-        }
-        // Clip the blur to the card's own top corners and let the bottom fade
-        // out, so the band reads as the card's top edge itself rather than a
-        // separate rounded pill floating over it. The mask is a vertical
-        // gradient: fully opaque at the top, transparent at the bottom.
-        OpacityMask {
-            anchors.fill: parent
-            source: lensBlur
-            maskSource: lensFade
-        }
-        Item {
-            id: lensFade
-            anchors.fill: parent
-            visible: false
-            layer.enabled: true
-            // Rounded only at the top corners (matching the card radius) so
-            // the band's upper edge merges with the card outline.
-            Rectangle {
-                anchors {
-                    left: parent.left
-                    right: parent.right
-                    top: parent.top
-                }
-                height: parent.height
-                radius: 20
-                // Extend below the band so only the top corners stay rounded;
-                // the bottom edge is handled by the fade, not a hard corner.
-                gradient: Gradient {
-                    orientation: Gradient.Vertical
-                    GradientStop { position: 0.0; color: "white" }
-                    GradientStop { position: 0.55; color: "white" }
-                    GradientStop { position: 1.0; color: "transparent" }
-                }
-            }
-        }
-    }
-
     // QuickSearch result icon with the same appearance settings as Dock.
     // Unlike the shared AppIcon component, this samples IconImage's backing
     // texture directly. It deliberately avoids ShaderEffectSource: QuickSearch
@@ -278,6 +185,13 @@ PanelWindow {
     component ResultIcon: Item {
         id: resultIcon
         property string iconSource: ""
+        readonly property bool fontGlyph: iconSource.startsWith("kos-icon:")
+        BundledIcon {
+            anchors.fill: parent
+            visible: resultIcon.fontGlyph
+            name: resultIcon.fontGlyph ? resultIcon.iconSource.substring(9) : ""
+            color: ThemeService.foregroundColor
+        }
 
         // Color mode with no tint/desaturation renders the icon unchanged, so
         // draw it directly and skip the ShaderEffect pass entirely.
@@ -288,7 +202,7 @@ PanelWindow {
         IconImage {
             id: sourceImage
             anchors.fill: parent
-            source: resultIcon.iconSource
+            source: resultIcon.fontGlyph ? "" : resultIcon.iconSource
             smooth: true
             // Theme icon: synchronous, see AppIcon.qml.
             asynchronous: false
@@ -296,12 +210,12 @@ PanelWindow {
             // path, but leave the live ShaderEffect source uncached.
             backer.cache: !resultIcon.needsEffect
                 && IconThemeReloadService.pixmapCacheAllowed
-            visible: !resultIcon.needsEffect
+            visible: !resultIcon.fontGlyph && !resultIcon.needsEffect
         }
 
         ShaderEffect {
             anchors.fill: parent
-            visible: resultIcon.needsEffect
+            visible: !resultIcon.fontGlyph && resultIcon.needsEffect
             property variant source: sourceImage.backer
             property real opacityMult: IconAppearanceService.mode === "color"
                 ? 1.0 : IconAppearanceService.opacity
@@ -343,12 +257,22 @@ PanelWindow {
             ClipboardService.deleteEntry(item.selectionRecord);
     }
 
+    function thumbnailForResult(item) {
+        ClipboardService.thumbnailRevision;
+        if (!item?.isImage)
+            return "";
+        if (item.pinId && !item.selectionRecord)
+            return item.thumbnailSource ?? "";
+        return ClipboardService.thumbnailSourceFor({
+            isImage: true, record: item.selectionRecord
+        });
+    }
+
     function reset() {
         query = "";
         clipboardSettingsOpen = false;
         clipboardPinnedOnly = false;
-        // Window mode opens with the most recently used window selected (the
-        // first MRU result); Alt+Tab proposes the previous window immediately.
+        // Start at the first result in the current mode and ordering.
         selectedIndex = 0;
         focusTimer.restart();
         if (mode === "clipboard") {
@@ -419,7 +343,7 @@ PanelWindow {
         id: focusTimer
         interval: 1
         repeat: false
-        onTriggered: searchInput.forceActiveFocus()
+        onTriggered: { if (root.open) searchInput.forceActiveFocus(); }
     }
 
     // A copy can arrive while the palette is already open. Refreshing the
@@ -553,17 +477,17 @@ PanelWindow {
                 }
             }
 
-            GlassText {
+            BundledIcon {
                 anchors {
                     left: fieldPill.left
                     leftMargin: 14
                     verticalCenter: fieldPill.verticalCenter
                 }
-                text: "⌕"
+                name: "search.query"
                 color: AppearanceTokens.content.glassInk(0.72)
-                font.pixelSize: 20
-                style: ThemeService.isDark ? Text.Outline : Text.Normal
-                styleColor: dialog.textOutlineColor
+                size: 20
+                outlined: ThemeService.isDark
+                outlineColor: dialog.textOutlineColor
             }
 
             TextInput {
@@ -572,13 +496,15 @@ PanelWindow {
                 anchors {
                     left: fieldPill.left
                     leftMargin: 44
-                    right: fieldPill.right
-                    rightMargin: root.mode === "clipboard" ? 180 : 130
+                    // Follow the hint and action row instead of a fixed margin:
+                    // translated labels are wider than the English ones.
+                    right: modeHint.visible ? modeHint.left : headerActions.left
+                    rightMargin: 10
                     verticalCenter: fieldPill.verticalCenter
                 }
                 color: ThemeService.foregroundColor
                 font {
-                    family: "Noto Sans CJK SC"
+                    family: AppearanceTokens.typography.textFamily
                     pixelSize: 15
                 }
                 clip: true
@@ -620,34 +546,62 @@ PanelWindow {
                 }
 
                 GlassText {
+                    id: searchPlaceholder
                     anchors.fill: parent
-                    visible: !searchInput.text
+                    visible: !searchInput.text && !searchInput.inputMethodComposing
                     text: root.placeholder
                     color: AppearanceTokens.content.glassInk(0.54)
                     font: searchInput.font
+                    elide: Text.ElideRight
                     verticalAlignment: Text.AlignVCenter
                     style: ThemeService.isDark ? Text.Outline : Text.Normal
                     styleColor: dialog.textOutlineColor
                 }
             }
 
+            // Mode hint. It sits outside the action row and only takes the
+            // width the search field can spare, so the placeholder is never cut
+            // first: long translations drop the sort note, then the hint itself.
+            GlassText {
+                id: modeHint
+                readonly property string shortText: root.modeTitle + I18n.tr(" · Tab")
+                readonly property string fullText: root.modeTitle + (root.mode === "clipboard"
+                    ? (root.clipboardPinnedOnly ? I18n.tr(" · Pinned") : I18n.tr(" · Newest first")) : "")
+                    + I18n.tr(" · Tab")
+                readonly property real budget: headerActions.x - fieldPill.x - 44 - 10
+                    - modeHint.anchors.rightMargin
+                    - Math.min(searchPlaceholder.implicitWidth, fieldPill.width * 0.45)
+                TextMetrics {
+                    id: modeHintFull
+                    font: modeHint.font
+                    text: modeHint.fullText
+                }
+                TextMetrics {
+                    id: modeHintShort
+                    font: modeHint.font
+                    text: modeHint.shortText
+                }
+                anchors {
+                    right: headerActions.left
+                    rightMargin: 8
+                    verticalCenter: fieldPill.verticalCenter
+                }
+                visible: modeHintShort.advanceWidth <= budget
+                text: modeHintFull.advanceWidth <= budget ? fullText : shortText
+                color: AppearanceTokens.content.glassInk(0.46)
+                font.pixelSize: 11
+                style: ThemeService.isDark ? Text.Outline : Text.Normal
+                styleColor: dialog.textOutlineColor
+            }
+
             Row {
+                id: headerActions
                 anchors {
                     right: fieldPill.right
                     rightMargin: 10
                     verticalCenter: fieldPill.verticalCenter
                 }
                 spacing: 6
-
-                GlassText {
-                    text: root.modeTitle + (root.mode === "clipboard"
-                        ? (root.clipboardPinnedOnly ? " · 固定" : " · 最新优先") : "") + " · Tab"
-                    color: AppearanceTokens.content.glassInk(0.46)
-                    font.pixelSize: 11
-                    anchors.verticalCenter: parent.verticalCenter
-                    style: ThemeService.isDark ? Text.Outline : Text.Normal
-                    styleColor: dialog.textOutlineColor
-                }
 
                 // Clear all clipboard history button
                 Item {
@@ -667,7 +621,7 @@ PanelWindow {
                     GlassText {
                         id: clearText
                         anchors.centerIn: parent
-                        text: "清空"
+                        text: I18n.tr("Clear")
                         color: clearMouse.containsMouse
                             ? "#ff453a"
                             : AppearanceTokens.content.glassInk(0.60)
@@ -709,7 +663,7 @@ PanelWindow {
                     GlassText {
                         id: pinFilterText
                         anchors.centerIn: parent
-                        text: "固定 " + ClipboardService.pinnedCount
+                        text: I18n.tr("Pinned %1").arg(ClipboardService.pinnedCount)
                         color: root.clipboardPinnedOnly
                             ? (ThemeService.isDark ? Qt.rgba(0.84, 0.93, 1, 0.96) : "#0066cc")
                             : AppearanceTokens.content.glassInk(0.60)
@@ -745,15 +699,15 @@ PanelWindow {
                             : "transparent"
                     }
 
-                    GlassText {
+                    BundledIcon {
                         anchors.centerIn: parent
-                        text: "⚙"
+                        name: "search.settings"
                         color: root.clipboardSettingsOpen
                             ? (ThemeService.isDark ? "#64b5ff" : "#0066cc")
                             : AppearanceTokens.content.glassInk(0.70)
-                        font.pixelSize: 13
-                        style: ThemeService.isDark ? Text.Outline : Text.Normal
-                        styleColor: dialog.textOutlineColor
+                        size: 13
+                        outlined: ThemeService.isDark
+                        outlineColor: dialog.textOutlineColor
                     }
 
                     MouseArea {
@@ -776,14 +730,14 @@ PanelWindow {
                         color: viewToggle.containsMouse ? (ThemeService.isDark ? Qt.rgba(1, 1, 1, 0.14) : Qt.rgba(0, 0, 0, 0.08)) : "transparent"
                     }
 
-                    GlassText {
+                    BundledIcon {
                         anchors.centerIn: parent
                         // The button advertises the layout selected by a click.
-                        text: root.viewMode === "list" ? "▦" : "☷"
+                        name: root.viewMode === "list" ? "search.view.grid" : "search.view.list"
                         color: AppearanceTokens.content.glassInk(0.76)
-                        font.pixelSize: 16
-                        style: ThemeService.isDark ? Text.Outline : Text.Normal
-                        styleColor: dialog.textOutlineColor
+                        size: 16
+                        outlined: ThemeService.isDark
+                        outlineColor: dialog.textOutlineColor
                     }
 
                     MouseArea {
@@ -805,7 +759,7 @@ PanelWindow {
             enabled: root.mode === "clipboard" && root.clipboardSettingsOpen
             scale: 0.96 + 0.04 * opacity
             transformOrigin: Item.TopRight
-            Behavior on opacity { NumberAnimation { duration: AppearanceTokens.motion.fastDuration; easing.type: Easing.OutCubic } }
+            Behavior on opacity { NumberAnimation { duration: AppearanceTokens.motion.fastDuration; easing.type: AppearanceTokens.motion.enterCurve } }
             z: 20
             width: 320
             height: settingsContent.implicitHeight + 24
@@ -816,6 +770,19 @@ PanelWindow {
                 topMargin: 4
                 right: parent.right
                 rightMargin: 12
+            }
+
+            // The popover floats over the result list inside the same window.
+            // On glass themes KWin only blurs what lies behind the window, so
+            // without this backing the rows read straight through the text.
+            Rectangle {
+                anchors.fill: parent
+                radius: settingsPopover.radius
+                color: ThemeService.isDark
+                    ? Qt.rgba(0.12, 0.13, 0.16, 0.94)
+                    : Qt.rgba(0.96, 0.96, 0.98, 0.94)
+                border.width: 1
+                border.color: ThemeService.isDark ? Qt.rgba(1, 1, 1, 0.10) : Qt.rgba(0, 0, 0, 0.08)
             }
 
             LiquidGlassPanel {
@@ -843,20 +810,20 @@ PanelWindow {
                     width: parent.width
                     GlassText {
                         width: parent.width - 24
-                        text: "剪贴板偏好设置"
-                        font { pixelSize: 13; bold: true; family: "Noto Sans CJK SC" }
+                        elide: Text.ElideRight
+                        text: I18n.tr("Clipboard Preferences")
+                        font { pixelSize: 13; bold: true; family: AppearanceTokens.typography.textFamily }
                         color: ThemeService.foregroundColor
                         style: ThemeService.isDark ? Text.Outline : Text.Normal
                         styleColor: dialog.textOutlineColor
                     }
-                    GlassText {
+                    BundledIcon {
                         width: 24
-                        horizontalAlignment: Text.AlignRight
-                        text: "×"
-                        font.pixelSize: 18
+                        name: "search.clearQuery"
+                        size: 18
                         color: AppearanceTokens.content.glassInk(0.60)
-                        style: ThemeService.isDark ? Text.Outline : Text.Normal
-                        styleColor: dialog.textOutlineColor
+                        outlined: ThemeService.isDark
+                        outlineColor: dialog.textOutlineColor
                         MouseArea {
                             anchors.fill: parent
                             anchors.margins: -4
@@ -876,18 +843,23 @@ PanelWindow {
                 // Watch Images row
                 Row {
                     width: parent.width
+                    spacing: 6
                     Column {
                         width: parent.width - 46
                         spacing: 2
                         GlassText {
-                            text: "监控图片内容"
-                            font { pixelSize: 12; weight: Font.Medium; family: "Noto Sans CJK SC" }
+                            width: parent.width
+                            elide: Text.ElideRight
+                            text: I18n.tr("Monitor image content")
+                            font { pixelSize: 12; weight: Font.Medium; family: AppearanceTokens.typography.textFamily }
                             color: ThemeService.foregroundColor
                             style: ThemeService.isDark ? Text.Outline : Text.Normal
                             styleColor: dialog.textOutlineColor
                         }
                         GlassText {
-                            text: "自动记录截图与复制的图片"
+                            width: parent.width
+                            wrapMode: Text.WordWrap
+                            text: I18n.tr("Automatically record screenshots and copied images")
                             font.pixelSize: 10
                             color: AppearanceTokens.content.glassInk(0.55)
                             style: ThemeService.isDark ? Text.Outline : Text.Normal
@@ -903,7 +875,7 @@ PanelWindow {
                         color: ClipboardService.watchImages
                             ? "#34c759"
                             : (ThemeService.isDark ? Qt.rgba(1, 1, 1, 0.16) : Qt.rgba(0, 0, 0, 0.15))
-                        Behavior on color { ColorAnimation { duration: 150 } }
+                        Behavior on color { ColorAnimation { duration: AppearanceTokens.motion.base.duration; easing.type: AppearanceTokens.motion.enterCurve } }
 
                         Rectangle {
                             width: 18
@@ -911,7 +883,7 @@ PanelWindow {
                             radius: 9
                             anchors.verticalCenter: parent.verticalCenter
                             x: ClipboardService.watchImages ? parent.width - width - 2 : 2
-                            Behavior on x { NumberAnimation { duration: 150; easing.type: Easing.OutQuad } }
+                            Behavior on x { NumberAnimation { duration: AppearanceTokens.motion.base.duration; easing.type: AppearanceTokens.motion.enterCurve } }
                             color: "#ffffff"
                         }
 
@@ -929,8 +901,8 @@ PanelWindow {
                     spacing: 6
 
                     GlassText {
-                        text: "历史保留数量"
-                        font { pixelSize: 12; weight: Font.Medium; family: "Noto Sans CJK SC" }
+                        text: I18n.tr("History size")
+                        font { pixelSize: 12; weight: Font.Medium; family: AppearanceTokens.typography.textFamily }
                         color: ThemeService.foregroundColor
                         style: ThemeService.isDark ? Text.Outline : Text.Normal
                         styleColor: dialog.textOutlineColor
@@ -956,7 +928,7 @@ PanelWindow {
 
                                 GlassText {
                                     anchors.centerIn: parent
-                                    text: modelData + " 条"
+                                    text: I18n.tr("%1 entries").arg(modelData)
                                     font.pixelSize: 11
                                     color: ClipboardService.maxItems === modelData
                                         ? (ThemeService.isDark ? "#64b5ff" : "#0066cc")
@@ -1000,18 +972,18 @@ PanelWindow {
                         GlassText {
                             width: parent.width - 20
                             anchors.verticalCenter: parent.verticalCenter
-                            text: "⌨ 配置系统全局快捷键 (Meta+V)"
-                            font { pixelSize: 11; family: "Noto Sans CJK SC" }
+                            elide: Text.ElideRight
+                            text: I18n.tr("⌨ Configure global shortcut (Meta+V)")
+                            font { pixelSize: 11; family: AppearanceTokens.typography.textFamily }
                             color: ThemeService.foregroundColor
                             style: ThemeService.isDark ? Text.Outline : Text.Normal
                             styleColor: dialog.textOutlineColor
                         }
-                        GlassText {
+                        BundledIcon {
                             width: 20
-                            horizontalAlignment: Text.AlignRight
                             anchors.verticalCenter: parent.verticalCenter
-                            text: "›"
-                            font.pixelSize: 16
+                            name: "search.showAll"
+                            size: 16
                         color: AppearanceTokens.content.glassInk(0.40)
                         }
                     }
@@ -1045,11 +1017,15 @@ PanelWindow {
                 ? Math.min(root.visibleResultCount * 52, Math.max(0, root.placementBounds.height - 90))
                 : root.visibleResultCount * 52
             clip: true
-            model: root.results
+            model: root.visible && visible ? root.results : null
             currentIndex: root.selectedIndex
 
             delegate: Item {
                 id: resultItem
+                readonly property string thumbnailSource: root.open && resultView.visible
+                    && y + height > resultView.contentY
+                    && y < resultView.contentY + resultView.height
+                    ? root.thumbnailForResult(modelData) : ""
                 required property var modelData
                 required property int index
                 width: resultView.width
@@ -1099,8 +1075,8 @@ PanelWindow {
                         anchors.centerIn: parent
                         width: 26
                         height: 26
-                        visible: (resultItem.modelData.thumbnailSource ?? "") !== ""
-                        source: resultItem.modelData.thumbnailSource ?? ""
+                        visible: resultItem.thumbnailSource !== ""
+                        source: resultItem.thumbnailSource
                         sourceSize.width: 52
                         sourceSize.height: 52
                         fillMode: Image.PreserveAspectCrop
@@ -1111,7 +1087,7 @@ PanelWindow {
                 }
 
                 ResultIcon {
-                    visible: (resultItem.modelData.thumbnailSource ?? "") === ""
+                    visible: resultItem.thumbnailSource === ""
                     width: resultItem.modelData.isImage ? 20 : 30
                     height: width
                     anchors {
@@ -1126,10 +1102,10 @@ PanelWindow {
                     anchors {
                         left: parent.left
                         leftMargin: 54
-                        right: parent.right
-                        // Clipboard rows carry a star next to the delete button:
-                        // 12 margin + 38 (latest badge) + 6 + 28 + 6 + 28.
-                        rightMargin: root.mode === "clipboard" ? 118 : 12
+                        // Clipboard rows end at the badge row (latest badge, star,
+                        // delete), whose width follows the translated label.
+                        right: root.mode === "clipboard" ? rowActions.left : parent.right
+                        rightMargin: root.mode === "clipboard" ? 6 : 12
                         verticalCenter: parent.verticalCenter
                     }
                     spacing: 1
@@ -1163,6 +1139,7 @@ PanelWindow {
                 // topmost first, so without it the row swallows every press and
                 // the icons are decoration. Same trick as the grid delete button.
                 Row {
+                    id: rowActions
                     anchors {
                         right: parent.right
                         rightMargin: 12
@@ -1175,7 +1152,7 @@ PanelWindow {
                     Rectangle {
                         visible: root.mode === "clipboard" && !root.clipboardPinnedOnly
                             && resultItem.index === 0
-                        width: 38
+                        width: Math.max(38, newestLabel.implicitWidth + 12)
                         height: 18
                         radius: 9
                         anchors.verticalCenter: parent.verticalCenter
@@ -1184,8 +1161,9 @@ PanelWindow {
                         border.color: ThemeService.isDark ? Qt.rgba(0.66, 0.82, 1, 0.40) : Qt.rgba(0.0, 0.50, 0.90, 0.30)
 
                         GlassText {
+                            id: newestLabel
                             anchors.centerIn: parent
-                            text: "最新"
+                            text: I18n.tr("Newest")
                             color: ThemeService.isDark ? Qt.rgba(0.84, 0.93, 1, 0.94) : Qt.rgba(0.0, 0.45, 0.85, 1.0)
                             font.pixelSize: 9
                             font.weight: Font.DemiBold
@@ -1212,7 +1190,7 @@ PanelWindow {
                             || pinButtonMouse.containsMouse
                             || resultMouse.containsMouse
                             || resultItem.index === root.selectedIndex ? 1.0 : 0.0
-                        Behavior on opacity { NumberAnimation { duration: 100 } }
+                        Behavior on opacity { NumberAnimation { duration: AppearanceTokens.motion.instant.duration; easing.type: AppearanceTokens.motion.enterCurve } }
 
                         Rectangle {
                             anchors.centerIn: parent
@@ -1224,15 +1202,15 @@ PanelWindow {
                                 : "transparent"
                         }
 
-                        GlassText {
+                        BundledIcon {
                             anchors.centerIn: parent
-                            text: (resultItem.modelData.pinned ?? false) ? "★" : "☆"
+                            name: (resultItem.modelData.pinned ?? false) ? "search.pin.pinned" : "search.pin.unpinned"
                             color: (resultItem.modelData.pinned ?? false)
                                 ? (ThemeService.isDark ? "#ffd60a" : "#c08a00")
                                 : AppearanceTokens.content.glassInk(0.68)
-                            font.pixelSize: 13
-                            style: ThemeService.isDark ? Text.Outline : Text.Normal
-                            styleColor: dialog.textOutlineColor
+                            size: 13
+                            outlined: ThemeService.isDark
+                            outlineColor: dialog.textOutlineColor
                         }
 
                         MouseArea {
@@ -1254,7 +1232,7 @@ PanelWindow {
                         opacity: deleteBtnMouse.containsMouse
                             || resultMouse.containsMouse
                             || resultItem.index === root.selectedIndex ? 1.0 : 0.0
-                        Behavior on opacity { NumberAnimation { duration: 100 } }
+                        Behavior on opacity { NumberAnimation { duration: AppearanceTokens.motion.instant.duration; easing.type: AppearanceTokens.motion.enterCurve } }
 
                         Rectangle {
                             anchors.centerIn: parent
@@ -1266,14 +1244,14 @@ PanelWindow {
                                 : "transparent"
                         }
 
-                        GlassText {
+                        BundledIcon {
                             anchors.centerIn: parent
-                            text: "×"
+                            name: "search.clipboard.remove"
                             color: deleteBtnMouse.containsMouse ? "#ff453a"
                                 : AppearanceTokens.content.glassInk(0.60)
-                            font.pixelSize: 16
-                            style: ThemeService.isDark ? Text.Outline : Text.Normal
-                            styleColor: dialog.textOutlineColor
+                            size: 16
+                            outlined: ThemeService.isDark
+                            outlineColor: dialog.textOutlineColor
                         }
 
                         MouseArea {
@@ -1301,6 +1279,9 @@ PanelWindow {
                     }
                 }
             }
+
+            // Smooth wheel scrolling keeps the selected result in context.
+            KosKineticScroll { flickable: resultView }
         }
 
         GridView {
@@ -1320,11 +1301,15 @@ PanelWindow {
             cellWidth: width / root.gridColumnCount
             cellHeight: 94
             clip: true
-            model: root.results
+            model: root.visible && visible ? root.results : null
             currentIndex: root.selectedIndex
 
             delegate: Item {
                 id: gridResultItem
+                readonly property string thumbnailSource: root.open && gridView.visible
+                    && y + height > gridView.contentY
+                    && y < gridView.contentY + gridView.height
+                    ? root.thumbnailForResult(modelData) : ""
                 required property var modelData
                 required property int index
                 width: gridView.cellWidth
@@ -1360,7 +1345,7 @@ PanelWindow {
                 Rectangle {
                     visible: root.mode === "clipboard" && !root.clipboardPinnedOnly
                         && gridResultItem.index === 0
-                    width: 34
+                    width: Math.max(34, gridNewestLabel.implicitWidth + 10)
                     height: 17
                     radius: 8.5
                     anchors {
@@ -1372,8 +1357,9 @@ PanelWindow {
                     color: ThemeService.isDark ? Qt.rgba(0.30, 0.56, 0.94, 0.36) : Qt.rgba(0.0, 0.50, 0.90, 0.18)
 
                     GlassText {
+                        id: gridNewestLabel
                         anchors.centerIn: parent
-                        text: "最新"
+                        text: I18n.tr("Newest")
                         color: ThemeService.isDark ? Qt.rgba(0.84, 0.93, 1, 0.96) : Qt.rgba(0.0, 0.45, 0.85, 1.0)
                         font.pixelSize: 8
                         font.weight: Font.DemiBold
@@ -1407,14 +1393,14 @@ PanelWindow {
                             : (ThemeService.isDark ? Qt.rgba(0, 0, 0, 0.35) : Qt.rgba(1, 1, 1, 0.60))
                     }
 
-                    GlassText {
+                    BundledIcon {
                         anchors.centerIn: parent
-                        text: "×"
+                        name: "search.clipboard.remove"
                         color: gridDeleteMouse.containsMouse ? "#ff453a"
                             : AppearanceTokens.content.glassInk(0.80)
-                        font.pixelSize: 14
-                        style: ThemeService.isDark ? Text.Outline : Text.Normal
-                        styleColor: dialog.textOutlineColor
+                        size: 14
+                        outlined: ThemeService.isDark
+                        outlineColor: dialog.textOutlineColor
                     }
 
                     MouseArea {
@@ -1444,8 +1430,8 @@ PanelWindow {
                         anchors.centerIn: parent
                         width: 42
                         height: 42
-                        visible: (gridResultItem.modelData.thumbnailSource ?? "") !== ""
-                        source: gridResultItem.modelData.thumbnailSource ?? ""
+                        visible: gridResultItem.thumbnailSource !== ""
+                        source: gridResultItem.thumbnailSource
                         sourceSize.width: 84
                         sourceSize.height: 84
                         fillMode: Image.PreserveAspectCrop
@@ -1456,7 +1442,7 @@ PanelWindow {
                 }
 
                 ResultIcon {
-                    visible: (gridResultItem.modelData.thumbnailSource ?? "") === ""
+                    visible: gridResultItem.thumbnailSource === ""
                     width: gridResultItem.modelData.isImage ? 34 : 42
                     height: width
                     anchors {
@@ -1498,7 +1484,8 @@ PanelWindow {
                         top: parent.top
                         topMargin: 71
                     }
-                    text: gridResultItem.modelData.subtitle.replace("图片剪贴板 · ", "")
+                    text: gridResultItem.modelData.subtitle.replace(
+                        I18n.tr("Image clipboard · %1").arg(""), "")
                     color: AppearanceTokens.content.glassInk(0.54)
                     horizontalAlignment: Text.AlignHCenter
                     elide: Text.ElideRight
@@ -1520,6 +1507,8 @@ PanelWindow {
                     }
                 }
             }
+
+            KosKineticScroll { flickable: gridView }
         }
 
         GlassText {
@@ -1533,10 +1522,12 @@ PanelWindow {
             height: 40
             horizontalAlignment: Text.AlignHCenter
             verticalAlignment: Text.AlignVCenter
-            text: root.mode === "app" ? "未找到匹配的应用"
+            text: root.mode === "app" ? I18n.tr("No matching apps")
                 : (root.mode === "clipboard"
-                    ? (root.clipboardPinnedOnly ? "还没有固定任何内容" : "剪贴板历史为空")
-                    : "未找到匹配的窗口")
+                    ? (root.clipboardPinnedOnly ? I18n.tr("Nothing pinned yet")
+                        : (ClipboardService.historyAvailable ? I18n.tr("Clipboard history is empty")
+                            : I18n.tr("Clipboard history unavailable: install cliphist and wl-clipboard")))
+                    : I18n.tr("No matching windows"))
             color: AppearanceTokens.content.glassInk(0.52)
             font.pixelSize: 13
             style: ThemeService.isDark ? Text.Outline : Text.Normal

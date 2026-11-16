@@ -6,8 +6,8 @@ import qs.desktop.modules.common
 // Groups tracked notifications by desktopEntry (fallback appName) into a
 // ListModel that the popup and history views consume. Quickshell's
 // trackedNotifications is a read-only UntypedObjectModel (no .get(), no sort,
-// no filter), so -- like WindowService for the Dock -- we bridge it with a
-// hidden Repeater that collects the live notification objects, debounce
+// no filter), so -- like WindowService for the Dock -- we bridge it with an
+// Instantiator that collects the live notification objects, debounce
 // changes, then diff into a ListModel of groups.
 //
 // IMPORTANT: ListModel rows can only hold primitive roles (strings, ints,
@@ -134,7 +134,7 @@ QtObject {
     // old object within ~2ms of the new one arriving -- the sidecar (refreshed
     // on a 10ms debounce) can still hold a reference to the destroyed object,
     // and calling dismiss()/expire() on it silently does nothing. Collecting
-    // fresh from the Repeater guarantees we only ever touch live objects.
+    // fresh from the Instantiator guarantees we only ever touch live objects.
     function _liveNotificationsForKey(key) {
         const all = svc._collectNotifications()
         const out = []
@@ -266,7 +266,13 @@ QtObject {
             }
 
             if (currentIdx === -1) {
-                model.insert(targetIdx, targetGroup)
+                // Keep live QObjects exclusively in the sidecar. Passing
+                // targetGroup also inserts its notifications array as a nested
+                // ListModel role, retaining a second collection of wrappers.
+                const row = {}
+                for (const prop of keys)
+                    row[prop] = targetGroup[prop]
+                model.insert(targetIdx, row)
             } else {
                 if (currentIdx !== targetIdx)
                     model.move(currentIdx, targetIdx, 1)
@@ -330,8 +336,8 @@ QtObject {
             g.collapsed = !collapsed
     }
 
-    // Dismiss every notification in a group (by key). Snapshots each into
-    // history before dismissing -- the objects vanish on dismiss. Keyed by
+    // Dismiss every notification in a group (by key). History was recorded
+    // on arrival and must not be re-added after a user deletes it. Keyed by
     // groupKey (stable across rebuilds) rather than index (which can drift).
     // Re-collects LIVE objects instead of trusting the sidecar: replaces_id
     // destroys the old object within ~2ms, and the sidecar (debounce-refreshed)
@@ -340,8 +346,6 @@ QtObject {
         const arr = svc._liveNotificationsForKey(key)
             .filter(n => n && typeof n.dismiss === "function")
         AppNotificationService.clearGroup(key)
-        for (let i = 0; i < arr.length; i++)
-            svc._pushHistory(arr[i])
         for (let j = arr.length - 1; j >= 0; j--)
             arr[j].dismiss()
 
@@ -361,8 +365,6 @@ QtObject {
     function expireGroupByKey(key) {
         const arr = svc._liveNotificationsForKey(key)
             .filter(n => n && typeof n.expire === "function")
-        for (let i = 0; i < arr.length; i++)
-            svc._pushHistory(arr[i])
         for (let j = arr.length - 1; j >= 0; j--)
             arr[j].expire()
 
@@ -375,8 +377,7 @@ QtObject {
         svc.sidecarRevision++
     }
 
-    // Dismiss every notification in a group (by index). Snapshots each into
-    // history before dismissing -- the objects vanish on dismiss.
+    // Dismiss every notification in a group (by index).
     function dismissGroup(index) {
         if (index < 0 || index >= groupsModel.count)
             return
@@ -397,52 +398,41 @@ QtObject {
         if (!svc._isAlive(notification))
             return
         AppNotificationService.clearGroup(svc._groupKey(notification))
-        svc._pushHistory(notification)
         notification.dismiss()
     }
 
     function expireNotification(notification) {
         if (!svc._isAlive(notification))
             return
-        svc._pushHistory(notification)
         notification.expire()
     }
 
     // ---- history -----------------------------------------------------------
 
-    // Public entry: snapshot a notification into the history store. DND uses
-    // this to keep a Do-Not-Disturb notification in the session history even
-    // though it is never shown as a banner (untracked notifications never
-    // reach dismiss/expire, so they would otherwise be lost entirely).
+    // Snapshot on arrival, before tracking or DND presentation is decided.
     function pushHistory(notification) {
         _pushHistory(notification)
     }
 
-    // Snapshot a notification into ControlCenterService.notificationHistory
-    // before it's destroyed. History lives on the ControlCenterService
-    // singleton so the ControlCenter panel can read it without a cross-module
-    // reference. We copy primitive fields only (the Notification object is
-    // about to be deleted).
+    // Copy primitive fields into session history before the live object disappears.
     function _pushHistory(notification) {
         if (!notification)
             return
-        const history = ControlCenterService.notificationHistory
         const snapshot = {
             notifId: notification.id,
             appName: notification.appName || "",
+            desktopEntry: notification.desktopEntry || "",
             appIcon: notification.appIcon || "",
             summary: notification.summary || "",
             body: notification.body || "",
             urgency: notification.urgency,
             timestamp: Date.now()
         }
-        history.insert(0, snapshot)
-        while (history.count > ControlCenterService.notificationHistoryMax)
-            history.remove(history.count - 1)
+        NotificationHistoryService.push(snapshot)
     }
 
     function clearHistory() {
-        ControlCenterService.notificationHistory.clear()
+        NotificationHistoryService.clear()
     }
 
     // Build on first load.

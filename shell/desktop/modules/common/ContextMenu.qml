@@ -1,6 +1,8 @@
 import QtQuick
+import QtQuick.Window
 import Quickshell
 import Quickshell.Wayland
+import "../../../shared/qml/i18n"
 import qs.desktop.modules.common
 import qs.desktop.modules.dock
 import "../../../Kos/Ui"
@@ -16,6 +18,11 @@ PopupWindow {
     // Global AppMenu uses the same macOS motion as Control Center and anchors
     // the popup to the clicked item's horizontal centre.
     property bool macosPopupMotion: true
+    // Opt in to a fixed leading column for menus with sparse action icons.
+    property bool reserveIconSpace: false
+    // Opt-in source-capsule morph, matching Control Center's Wi-Fi list.
+    property bool capsuleReveal: false
+    property real capsuleSourceWidth: 0
     property bool centerBelowAnchor: false
     property real centerBelowOffset: 0
     property var customAnchorEdges: null
@@ -35,6 +42,10 @@ PopupWindow {
     // Compositor blur is declared below; these QML layers make it read as a
     // denser, slightly darker frosted surface on every shared context menu.
     property real surfaceOpacity: 0.98
+    property string scrimLevel: "balanced"
+    // Optional per-menu compositor blur; otherwise follow the global setting.
+    property bool blurOverrideEnabled: false
+    property real blurStrength: AppearanceConfigService.effectiveDockBlur
     property real menuRadius: AppearanceTokens.surface.pick(AppearanceTokens.shape.large, 16)
     readonly property color effectiveForegroundColor: {
         if (!root.adaptiveForeground)
@@ -62,12 +73,17 @@ PopupWindow {
     PageMotion {
         id: pageMotion
         page: root.page
+        exitDuration: 20
+        enterDuration: 30
         enabled: root.visible && (!root.macosPopupMotion || popupMotion.requestedOpen)
     }
 
-    function setItems(items) {
+    function setItems(items, immediate) {
         root.rootItems = items || []
         root.page = ({ items: root.rootItems, parents: [] })
+        // A DBusMenu owner may release its entries immediately. Do not retain
+        // that page through the ordinary navigation crossfade.
+        if (immediate === true) pageMotion.reset(root.page)
     }
     function clear() { root.setItems([]) }
     function addItem(icon, label, cmd, enabled) {
@@ -197,8 +213,9 @@ PopupWindow {
     mask: root.macosPopupMotion && !popupMotion.interactive ? emptyInputRegion : null
     Region { id: emptyInputRegion }
 
+    PopupAnchorBinding { popupAnchor: root.anchor; sourceItem: root.anchorItem }
+
     anchor {
-        item: root.anchorItem
         rect.x: root.centerBelowAnchor && root.anchorItem
             ? root.anchorItem.width / 2 - root.implicitWidth / 2 : 0
         rect.y: (root.centerBelowAnchor || root.centerBelowOffset > 0) ? root.centerBelowOffset : 0
@@ -248,6 +265,12 @@ PopupWindow {
 
     PopupMotion {
         id: popupMotion
+        // Frequent menu actions need a quick response without losing velocity.
+        springResponse: 0.08
+        openDuration: 45
+        closeDuration: 35
+        openEasing: Easing.OutCubic
+        closeEasing: Easing.OutCubic
         onClosed: {
             if (!popupMotion.requestedOpen)
                 root.visible = false
@@ -259,141 +282,201 @@ PopupWindow {
     // to exclude here.
     BackgroundEffect.blurRegion: root.visible && glass.opacity > 0 ? glass.blurRegion : null
 
+    // Keep backdrop capture and blur buffers at the final size. Only the SDF
+    // outline changes during the reveal; older bridges retain their fallback.
+    Item {
+        id: captureFrame
+        width: root.width
+        height: root.height
+    }
+
+    Item {
+        id: revealFrame
+        readonly property bool morphing: root.capsuleReveal && root.macosPopupMotion
+        // Keep the outline inside its fixed capture allocation. The spring
+        // retains velocity on reversal; the fade has its own bounded progress.
+        readonly property real progress: morphing
+            ? Math.max(0, Math.min(1, popupMotion.geometryProgress)) : 1
+        readonly property real sourceWidth: Math.min(root.width,
+            Math.max(48, root.capsuleSourceWidth > 0 ? root.capsuleSourceWidth
+                : (root.anchorItem ? root.anchorItem.width : 96)))
+        readonly property real sourceHeight: Math.min(root.height, 59)
+        // Keep the source inside this popup's allocation, at the edge nearest
+        // its anchor. The final menu geometry and row layout remain fixed.
+        width: sourceWidth + (root.width - sourceWidth) * progress
+        height: sourceHeight + (root.height - sourceHeight) * progress
+        x: (root.width - width) / 2
+        y: root.position === "bottom" && !root.placeBelow
+            ? root.height - height : 0
+        clip: morphing
+    }
+
     LiquidGlassPanel {
         id: glass
+        parent: revealFrame
         anchors.fill: parent
-        radius: root.menuRadius
+        blurAnchor: revealFrame.morphing ? revealFrame : glass
+        captureAnchor: revealFrame.morphing ? captureFrame : null
+        // The growing capsule and partially scrolled rows need corner clipping.
+        // A settled menu that fits draws text without the extra texture pass.
+        maskContent: view.overflowing
+            || (revealFrame.morphing && revealFrame.progress < 1)
+        // During the reveal, reuse the final texture allocation instead of
+        // resizing the FBO on every animation frame.
+        // Explicit texture sizes are physical pixels; Qt only applies the window's
+        // device pixel ratio automatically when textureSize is left empty.
+        layer.textureSize: revealFrame.morphing
+            ? Qt.size(Math.ceil(root.width * Screen.devicePixelRatio),
+                Math.ceil(root.height * Screen.devicePixelRatio))
+            : Qt.size(0, 0)
+        radius: revealFrame.morphing
+            ? root.menuRadius + (Math.min(revealFrame.sourceWidth, revealFrame.sourceHeight) / 2
+                - root.menuRadius) * (1 - revealFrame.progress)
+            : root.menuRadius
         cornerExponent: AppearanceTokens.shape.cornerExponent
         baseColor: root.baseColor
         ambientPrimary: root.ambientPrimary
         ambientSecondary: root.ambientSecondary
         ambientStrength: root.ambientStrength
         surfaceOpacity: root.surfaceOpacity
-        // Menu text sits on this surface, so it carries the same balanced
-        // readability scrim as notification cards.
+        // Menu text sits on this surface, so use the balanced readability scrim.
         scrimEnabled: AppearanceTokens.surface.usesBackdrop
-        scrimLevel: "balanced"
-        scale: (root.macosPopupMotion && popupMotion.progress < 0.999)
+        scrimLevel: root.scrimLevel
+        blurOverrideEnabled: root.blurOverrideEnabled
+        blurStrength: root.blurStrength
+        materialOpacity: revealFrame.morphing ? popupMotion.progress * pageMotion.progress : 1
+        scale: (!root.capsuleReveal && root.macosPopupMotion)
             ? AppearanceTokens.motion.popupStartScale
-                + (1 - AppearanceTokens.motion.popupStartScale) * popupMotion.progress
+                + (1 - AppearanceTokens.motion.popupStartScale) * popupMotion.geometryProgress
             : 1
         transformOrigin: Item.Top
         opacity: (root.macosPopupMotion ? popupMotion.progress : 1) * pageMotion.progress
         enabled: (!root.macosPopupMotion || popupMotion.interactive) && pageMotion.interactive
         transform: Translate {
-            y: (root.macosPopupMotion && popupMotion.progress < 0.999)
-                ? Math.round((1 - popupMotion.progress) * AppearanceTokens.motion.popupAnchorOffset)
+            y: (!root.capsuleReveal && root.macosPopupMotion)
+                ? (1 - popupMotion.geometryProgress) * AppearanceTokens.motion.popupAnchorOffset
                 : 0
         }
 
-        // Viewport for the menu rows. It never grows past root.menuSurfaceHeight,
-        // so the surface stays on the output; anything beyond that scrolls.
-        // Non-interactive while the list fits, which keeps the pre-scroll
-        // click-through behaviour for short menus untouched.
-        Flickable {
-            id: view
-            x: 6
-            y: 6
-            width: parent.width - 12
-            height: root.menuSurfaceHeight
-            contentWidth: width
-            // Same hand-computed source as the surface height above, for the
-            // reason given on menuContentHeight: Column.implicitHeight is not
-            // reliable for these dynamically repeated rows in a PopupWindow.
-            // Mixing the two sources desynchronised viewport and content.
-            contentHeight: root.menuContentHeight
-            // The rows keep their own hover and click handling; this view only
-            // adds wheel scrolling and a drag gesture it does not have to win.
-            interactive: view.overflowing
-            boundsBehavior: Flickable.StopAtBounds
-            flickDeceleration: 2400
-            maximumFlickVelocity: 2600
-            clip: true
+        Item {
+            // Reveal a stable list through the growing capsule, just like the
+            // Wi-Fi submenu; never squash or relayout the text while opening.
+            x: -revealFrame.x
+            y: -revealFrame.y
+            width: root.width
+            height: root.height
 
-            readonly property bool overflowing: contentHeight > height + 1
+            // Viewport for the menu rows. It never grows past root.menuSurfaceHeight,
+            // so the surface stays on the output; anything beyond that scrolls.
+            // Non-interactive while the list fits, which keeps the pre-scroll
+            // click-through behaviour for short menus untouched.
+            Flickable {
+                id: view
+                x: 6
+                y: 6
+                width: parent.width - 12
+                height: root.menuSurfaceHeight
+                contentWidth: width
+                // Same hand-computed source as the surface height above, for the
+                // reason given on menuContentHeight: Column.implicitHeight is not
+                // reliable for these dynamically repeated rows in a PopupWindow.
+                // Mixing the two sources desynchronised viewport and content.
+                contentHeight: root.menuContentHeight
+                // The rows keep their own hover and click handling; this view only
+                // adds wheel scrolling and a drag gesture it does not have to win.
+                interactive: view.overflowing
+                boundsBehavior: Flickable.StopAtBounds
+                flickDeceleration: 2400
+                maximumFlickVelocity: 2600
+                clip: true
 
-            Column {
-                id: list
-                // Fills the viewport width; its implicitHeight is the whole
-                // menu, so the window still opens at the natural size when the
-                // list is short.
-                width: view.width
-                spacing: 2
+                readonly property bool overflowing: contentHeight > height + 1
 
-                MenuItemRow {
-                    width: parent.width
-                    visible: root.displayedPage.parents.length > 0
-                    icon: "back"
-                    label: "返回"
-                    foregroundColor: root.effectiveForegroundColor
-                    onClicked: root.back()
-                }
+                Column {
+                    id: list
+                    // Fills the viewport width; its implicitHeight is the whole
+                    // menu, so the window still opens at the natural size when the
+                    // list is short.
+                    width: view.width
+                    spacing: 2
 
-                Repeater {
-                    id: menuRepeater
-                    model: root.displayedPage.items
-                    delegate: MenuItemRow {
-                        required property int index
-                        required property var modelData
-                        // Items may carry a live QsMenuEntry (DBusMenu tray
-                        // menus). Binding through it keeps label/icon/check
-                        // state current while the menu is open.
-                        readonly property var entry: modelData.entry ?? null
-                        readonly property var submenuItems: root.childrenFor(modelData)
+                    MenuItemRow {
                         width: parent.width
+                        visible: root.displayedPage.parents.length > 0
+                        icon: "menu.back"
+                        reserveIconSpace: root.reserveIconSpace
+                        label: I18n.tr("Back")
                         foregroundColor: root.effectiveForegroundColor
-                        icon: modelData.icon || ""
-                        iconSource: entry ? (entry.icon || "") : (modelData.iconSource || "")
-                        label: entry ? (entry.text || "") : (modelData.label || "")
-                        separator: entry ? entry.isSeparator : !!modelData.separator
-                        hasSubmenu: submenuItems.length > 0
-                        checkable: entry ? (entry.buttonType !== QsMenuButtonType.None)
-                            : !!modelData.checkable
-                        checked: entry ? (entry.checkState !== Qt.Unchecked)
-                            : !!modelData.checked
-                        itemEnabled: entry ? entry.enabled : modelData.enabled !== false
-                        onClicked: {
-                            if (submenuItems.length > 0)
-                                root.enter(submenuItems)
-                            else {
-                                root.action(modelData.cmd || "", modelData)
-                                root.hide()
+                        onClicked: root.back()
+                    }
+
+                    Repeater {
+                        id: menuRepeater
+                        model: root.displayedPage.items
+                        delegate: MenuItemRow {
+                            required property int index
+                            required property var modelData
+                            // Items may carry a live QsMenuEntry (DBusMenu tray
+                            // menus). Binding through it keeps label/icon/check
+                            // state current while the menu is open.
+                            readonly property var entry: modelData.entry ?? null
+                            readonly property var submenuItems: root.childrenFor(modelData)
+                            width: parent.width
+                            foregroundColor: root.effectiveForegroundColor
+                            icon: modelData.icon || ""
+                            reserveIconSpace: root.reserveIconSpace
+                            iconSource: entry ? (entry.icon || "") : (modelData.iconSource || "")
+                            label: entry ? (entry.text || "") : (modelData.label || "")
+                            separator: entry ? entry.isSeparator : !!modelData.separator
+                            hasSubmenu: submenuItems.length > 0
+                            checkable: entry ? (entry.buttonType !== QsMenuButtonType.None)
+                                : !!modelData.checkable
+                            checked: entry ? (entry.checkState !== Qt.Unchecked)
+                                : !!modelData.checked
+                            itemEnabled: entry ? entry.enabled : modelData.enabled !== false
+                            onClicked: {
+                                if (submenuItems.length > 0)
+                                    root.enter(submenuItems)
+                                else {
+                                    root.action(modelData.cmd || "", modelData)
+                                    root.hide()
+                                }
                             }
                         }
                     }
                 }
             }
-        }
 
-        // A new page always starts at its first row; without this a menu opened
-        // after a deep submenu page kept the previous page's scroll offset.
-        Connections {
-            target: root
-            function onPageChanged() {
-                view.contentY = 0
-                view.returnToBounds()
+            // A new page always starts at its first row; without this a menu opened
+            // after a deep submenu page kept the previous page's scroll offset.
+            Connections {
+                target: root
+                function onPageChanged() {
+                    view.contentY = 0
+                    view.returnToBounds()
+                }
             }
-        }
 
-        // Minimal scroll affordance, drawn over the glass at the trailing edge.
-        // It never takes pointer input (no MouseArea, and the Flickable above
-        // still receives the wheel), it only shows that rows continue.
-        Rectangle {
-            id: scrollIndicator
-            readonly property real trackTop: 12
-            readonly property real trackHeight: Math.max(0, view.height - 24)
-            readonly property real thumbHeight: Math.max(24,
-                trackHeight * (view.height / Math.max(1, view.contentHeight)))
-            x: 6 + view.width - 10
-            y: 6 + trackTop + (trackHeight - thumbHeight)
-                * (view.contentY / Math.max(1, view.contentHeight - view.height))
-            width: 4
-            height: thumbHeight
-            radius: 2
-            visible: view.overflowing
-            color: Qt.rgba(root.effectiveForegroundColor.r,
-                root.effectiveForegroundColor.g,
-                root.effectiveForegroundColor.b, 0.32)
+            // Minimal scroll affordance, drawn over the glass at the trailing edge.
+            // It never takes pointer input (no MouseArea, and the Flickable above
+            // still receives the wheel), it only shows that rows continue.
+            Rectangle {
+                id: scrollIndicator
+                readonly property real trackTop: 12
+                readonly property real trackHeight: Math.max(0, view.height - 24)
+                readonly property real thumbHeight: Math.max(24,
+                    trackHeight * (view.height / Math.max(1, view.contentHeight)))
+                x: 6 + view.width - 10
+                y: 6 + trackTop + (trackHeight - thumbHeight)
+                    * (view.contentY / Math.max(1, view.contentHeight - view.height))
+                width: 4
+                height: thumbHeight
+                radius: 2
+                visible: view.overflowing
+                color: Qt.rgba(root.effectiveForegroundColor.r,
+                    root.effectiveForegroundColor.g,
+                    root.effectiveForegroundColor.b, 0.32)
+            }
         }
     }
 }

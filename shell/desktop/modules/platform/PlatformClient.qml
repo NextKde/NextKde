@@ -47,6 +47,7 @@ JsonlClient {
     timeoutName: "platform"
     readOperations: ({
         "session.visibility": true,
+        "application.widget-snapshot": true,
         "appmenu.active": true,
         "appmenu.layout": true,
         "audio.applications": true,
@@ -61,11 +62,16 @@ JsonlClient {
         "file.open-with": true,
         "file.trash-state": true,
         "input.clipboard-anchor": true,
+        "inputmethod.state": true,
         "network.details": true,
         "network.refresh": true,
         "network.scan": true,
         "network.traffic": true,
+        "network.applications": true,
+        "power.profiles": true,
+        "power.battery": true,
         "nightlight.get": true,
+        "keepawake.get": true,
         "platform.ping": true,
         "state.read": true,
         "tray.identify": true
@@ -81,6 +87,7 @@ JsonlClient {
     // spend several minutes downloading the pinned model or running CPU inference.
     // 0 disables expiry entirely.
     requestTimeoutOverrides: ({
+        "power.profile.set": 15000,
         "bluetooth.connect": 90000,
         "bluetooth.disconnect": 90000,
         "file.copy": 0,

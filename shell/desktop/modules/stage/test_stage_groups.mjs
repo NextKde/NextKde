@@ -258,7 +258,7 @@ check("commit: rapid alternation — both due, sequential commits",
 // ── 模型对账 ──
 check("CARD_FIELDS shape", CARD_FIELDS,
     ["targetId", "pid", "appName", "title", "iconSource", "count",
-     "idsJson", "iconsJson", "iconIdsJson", "merged"]);
+     "idsJson", "iconsJson", "iconIdsJson", "rowsJson", "merged", "aspect"]);
 
 function row(appKey, over = {}) {
     return Object.assign({ appKey, targetId: "t-" + appKey, pid: 1,
@@ -318,7 +318,8 @@ check("buildModelRows: fields + dedup",
     ]),
     [{ appKey: "a", targetId: "t1", pid: 5, appName: "A", title: "x",
         iconSource: "i", count: 2, idsJson: '["t1","t2"]',
-        iconsJson: '[]', iconIdsJson: '[]', merged: false }]);
+        iconsJson: '[]', iconIdsJson: '[]', rowsJson: '[]',
+        merged: false, aspect: 0 }]);
 
 // moveOrderKey：拖拽换位
 check("move 前移尾→头", moveOrderKey(["a", "b", "c"], "c", 0), ["c", "a", "b"]);

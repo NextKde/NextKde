@@ -1,4 +1,5 @@
 import QtQuick
+import "../../../shared/qml/i18n"
 import "DesktopGridMetrics.mjs" as DesktopGridMetrics
 import Qt5Compat.GraphicalEffects
 import Quickshell
@@ -72,8 +73,8 @@ Item {
     property point groupDragOffset: Qt.point(0, 0)
     property point dragCenter: Qt.point(0, 0)
     // Real desktop entries are supplied by DesktopFilesService through the
-    // host window. This isolated surface deliberately does not add selection,
-    // context menus, open actions, or filesystem mutations.
+    // host window. Selection and drag layout stay local; context menus,
+    // opening, and filesystem mutations are requested through signals.
     property var entries: []
     property bool showExtensions: true
     property var folderCustomizations: ({})
@@ -250,7 +251,7 @@ Item {
     function displayName(entry) {
         const path = entry && entry.path ? entry.path : ""
         const name = (entry && (entry.title || entry.name))
-            || path.split("/").pop() || "未命名"
+            || path.split("/").pop() || I18n.tr("Untitled")
         if (showExtensions || (entry && entry.kind === "folder"))
             return name
         const extensionIndex = name.lastIndexOf(".")
@@ -278,25 +279,12 @@ Item {
     }
 
     function iconFor(kind) {
-        if (kind === "folder") return "folder"
-        if (kind === "image") return "image-x-generic"
-        if (kind === "pdf") return "application-pdf"
-        if (kind === "code") return "text-x-script"
-        if (kind === "text") return "text-x-generic"
-        if (kind === "launcher") return "application-x-executable"
-        return "text-x-generic"
+        const type = ["folder", "image", "pdf", "code", "text", "launcher"].indexOf(kind) >= 0 ? kind : "text"
+        return "desktop.file." + type
     }
 
     // 文件类型图标走系统图标主题（freedesktop MIME 名）—— 这几个名字任何图标
     // 主题都带着，所以桌面文件与系统文件管理器看起来一致。
-    function themeIconName(kind) {
-        if (kind === "folder") return "folder"
-        if (kind === "pdf") return "application-pdf"
-        if (kind === "code") return "text-x-script"
-        if (kind === "text") return "text-x-generic"
-        return "application-octet-stream"
-    }
-
     function themeIconSource(entry) {
         if (!entry || entry.kind === "image")
             return ""
@@ -311,7 +299,7 @@ Item {
             return AppPresentationService.iconSource(override.icon || entry.icon)
         }
         return SystemIconResolver.sourceFromCandidates(
-            [themeIconName(entry.kind)], "text-x-generic")
+            SystemIconResolver.candidates("desktop.file." + entry.kind), "text-x-generic")
     }
 
     function folderAtSlot(slot) {
@@ -779,6 +767,7 @@ Item {
         }
         onReleased: function(mouse) {
             if (root.selectionBoxActive) {
+                held = true // A completed box selection must not toggle the desktop.
                 root.selectionEnd = rootPoint(mouse)
                 root.updateBoxSelection()
             }
@@ -901,7 +890,7 @@ Item {
         Text {
             anchors.centerIn: parent
             text: root.externalDragAction === Qt.MoveAction
-                ? "移动到桌面" : "复制到桌面"
+                ? I18n.tr("Move to desktop") : I18n.tr("Copy to desktop")
             color: Qt.rgba(1, 1, 1, 0.78)
         }
     }
@@ -956,6 +945,8 @@ Item {
         delegate: Item {
             id: delegateRoot
             required property var entry
+            required property int index
+            readonly property real arrival: StartupReveal.iconProgress(index, desktopEntryModel.count)
             readonly property string itemId: entry?.path || ""
             readonly property bool isFolder: entry && entry.kind === "folder"
             readonly property var folderCustom: root.folderCustomFor(itemId)
@@ -979,6 +970,7 @@ Item {
             Behavior on x {
                 enabled: root.initialized && !root.isActiveDragItem(delegateRoot.itemId)
                     && root.lastDropId !== delegateRoot.itemId
+                // motion-exception: Drag reflow retains its existing displacement response.
                 NumberAnimation { duration: 150; easing.type: Easing.OutCubic }
             }
             Behavior on y {
@@ -992,7 +984,7 @@ Item {
                 width: root.cellWidth
                 height: root.cellHeight
                 opacity: root.outboundDragStarted
-                        && root.isActiveDragItem(delegateRoot.itemId) ? 0 : 1
+                        && root.isActiveDragItem(delegateRoot.itemId) ? 0 : delegateRoot.arrival
                 z: dragHandler.active ? 100
                     : (root.isActiveDragItem(delegateRoot.itemId) ? 90 : 0)
                 Drag.dragType: Drag.Automatic
@@ -1007,9 +999,9 @@ Item {
                     x: root.isActiveDragItem(delegateRoot.itemId)
                             && delegateRoot.itemId !== root.activeDragSourceId
                         ? root.groupDragOffset.x : 0
-                    y: root.isActiveDragItem(delegateRoot.itemId)
+                    y: (root.isActiveDragItem(delegateRoot.itemId)
                             && delegateRoot.itemId !== root.activeDragSourceId
-                        ? root.groupDragOffset.y : 0
+                        ? root.groupDragOffset.y : 0) - (1 - delegateRoot.arrival) * 14
                 }
                 anchors {
                     horizontalCenter: parent.horizontalCenter
@@ -1039,10 +1031,10 @@ Item {
                     opacity: root.isSelected(delegateRoot.itemId)
                         || (hoverHandler.hovered && !dragHandler.active) ? 1 : 0
                     Behavior on color {
-                        ColorAnimation { duration: 120 }
+                        ColorAnimation { duration: AppearanceTokens.motion.fast.duration; easing.type: AppearanceTokens.motion.enterCurve }
                     }
                     Behavior on opacity {
-                        NumberAnimation { duration: 120; easing.type: Easing.OutCubic }
+                        NumberAnimation { duration: AppearanceTokens.motion.fast.duration; easing.type: AppearanceTokens.motion.enterCurve }
                     }
                 }
 
@@ -1063,106 +1055,19 @@ Item {
                     transform: Translate {
                         y: hoverHandler.hovered && !dragHandler.active ? -2 : 0
                         Behavior on y {
-                            NumberAnimation { duration: 120; easing.type: Easing.OutCubic }
+                            NumberAnimation { duration: AppearanceTokens.motion.fast.duration; easing.type: AppearanceTokens.motion.enterCurve }
                         }
                     }
                     Behavior on scale {
-                        NumberAnimation { duration: 120; easing.type: Easing.OutCubic }
+                        NumberAnimation { duration: AppearanceTokens.motion.fast.duration; easing.type: AppearanceTokens.motion.enterCurve }
                     }
-                    Behavior on color { ColorAnimation { duration: 90 } }
-                    Canvas {
-                        id: customFolderCanvas
+                    Behavior on color { ColorAnimation { duration: AppearanceTokens.motion.instant.duration; easing.type: AppearanceTokens.motion.enterCurve } }
+                    DesktopFolderIcon {
                         anchors.fill: parent
                         visible: delegateRoot.usesCustomFolderVisual
-                        readonly property color baseColor: delegateRoot.folderCustom
-                                && delegateRoot.folderCustom.color
+                        color: delegateRoot.folderCustom && delegateRoot.folderCustom.color
                             ? delegateRoot.folderCustom.color : "#70b6ff"
-                        onBaseColorChanged: requestPaint()
-                        onVisibleChanged: if (visible) requestPaint()
-                        onWidthChanged: requestPaint()
-                        onHeightChanged: requestPaint()
-                        Component.onCompleted: requestPaint()
-
-                        function shade(colorValue, factor) {
-                            const c = Qt.color(colorValue)
-                            const r = Math.max(0,
-                                Math.min(255, Math.round(c.r * 255 * factor)))
-                            const g = Math.max(0,
-                                Math.min(255, Math.round(c.g * 255 * factor)))
-                            const b = Math.max(0,
-                                Math.min(255, Math.round(c.b * 255 * factor)))
-                            return "rgba(" + r + "," + g + "," + b + "," + c.a + ")"
-                        }
-
-                        function roundRect(ctx, x, y, w, h, radius) {
-                            ctx.beginPath()
-                            ctx.moveTo(x + radius, y)
-                            ctx.lineTo(x + w - radius, y)
-                            ctx.arcTo(x + w, y, x + w, y + radius, radius)
-                            ctx.lineTo(x + w, y + h - radius)
-                            ctx.arcTo(x + w, y + h, x + w - radius,
-                                y + h, radius)
-                            ctx.lineTo(x + radius, y + h)
-                            ctx.arcTo(x, y + h, x, y + h - radius, radius)
-                            ctx.lineTo(x, y + radius)
-                            ctx.arcTo(x, y, x + radius, y, radius)
-                            ctx.closePath()
-                        }
-
-                        onPaint: {
-                            const ctx = getContext("2d")
-                            ctx.reset()
-                            const w = width
-                            const h = height
-                            const margin = w * 0.10
-                            const tabHeight = h * 0.14
-                            const bodyX = margin
-                            const bodyY = margin + tabHeight
-                            const bodyWidth = w - margin * 2
-                            const bodyHeight = h - margin - bodyY
-                            const corner = Math.min(bodyWidth, bodyHeight) * 0.18
-
-                            ctx.fillStyle = shade(baseColor, 0.72)
-                            ctx.globalAlpha = 0.92
-                            ctx.beginPath()
-                            ctx.moveTo(bodyX, bodyY)
-                            ctx.lineTo(bodyX + bodyWidth * 0.42, bodyY)
-                            ctx.lineTo(bodyX + bodyWidth * 0.42
-                                + tabHeight * 0.7, bodyY - tabHeight)
-                            ctx.lineTo(bodyX + bodyWidth * 0.72,
-                                bodyY - tabHeight)
-                            ctx.arcTo(bodyX + bodyWidth * 0.72 + corner,
-                                bodyY - tabHeight,
-                                bodyX + bodyWidth * 0.72 + corner,
-                                bodyY - tabHeight + corner, corner)
-                            ctx.lineTo(bodyX + bodyWidth * 0.72 + corner, bodyY)
-                            ctx.closePath()
-                            ctx.fill()
-
-                            ctx.fillStyle = shade(baseColor, 1.0)
-                            ctx.globalAlpha = 0.90
-                            roundRect(ctx, bodyX, bodyY, bodyWidth,
-                                bodyHeight, corner)
-                            ctx.fill()
-
-                            ctx.fillStyle = "rgba(255,255,255,0.18)"
-                            ctx.globalAlpha = 1.0
-                            ctx.beginPath()
-                            ctx.moveTo(bodyX + corner, bodyY)
-                            ctx.lineTo(bodyX + bodyWidth - corner, bodyY)
-                            ctx.lineTo(bodyX + bodyWidth - corner,
-                                bodyY + bodyHeight * 0.12)
-                            ctx.lineTo(bodyX + corner,
-                                bodyY + bodyHeight * 0.12)
-                            ctx.closePath()
-                            ctx.fill()
-
-                            ctx.strokeStyle = "rgba(0,0,0,0.16)"
-                            ctx.lineWidth = 1
-                            roundRect(ctx, bodyX, bodyY, bodyWidth,
-                                bodyHeight, corner)
-                            ctx.stroke()
-                        }
+                        emoji: delegateRoot.folderCustom ? delegateRoot.folderCustom.emoji || "" : ""
                     }
                     Item {
                         id: fileThumbnailFrame
@@ -1173,7 +1078,8 @@ Item {
                         Image {
                             id: fileThumbnail
                             anchors.fill: parent
-                            source: delegateRoot.entry
+                            source: root.visible && delegateRoot.visible
+                                    && delegateRoot.entry
                                     && delegateRoot.entry.kind === "image"
                                 ? "file://" + delegateRoot.entry.path : ""
                             fillMode: Image.PreserveAspectCrop
@@ -1203,11 +1109,34 @@ Item {
                             maskSource: fileThumbnailMask
                         }
                     }
+                    // Launchers are application artwork, so they follow the
+                    // shell-wide appearance mode like the Dock, the tray and
+                    // the launcher window do. In a layered icon theme that
+                    // also reaches the transparent and tinted modes, which
+                    // need the theme's clear artwork or its layer stack.
+                    // Plain files keep their MIME icon below.
+                    AppIcon {
+                        id: launcherAppIcon
+                        anchors.fill: parent
+                        anchors.margins: 4
+                        source: delegateRoot.entry && delegateRoot.entry.kind === "launcher"
+                            ? root.themeIconSource(delegateRoot.entry) : ""
+                        // Theme icon: synchronous, see AppIcon.qml.
+                        asynchronous: false
+                        opacityMultiplier: IconAppearanceService.mode === "color"
+                            ? 1.0 : IconAppearanceService.opacity
+                        saturation: IconAppearanceService.saturation
+                        tintEnabled: IconAppearanceService.tintEnabled
+                        tintColor: IconAppearanceService.tintColor
+                        visible: source !== "" && imageStatus === Image.Ready
+                            && !delegateRoot.usesCustomFolderVisual
+                    }
                     IconImage {
                         id: fileThemeIcon
                         anchors.fill: parent
                         anchors.margins: 4
-                        source: root.themeIconSource(delegateRoot.entry)
+                        source: delegateRoot.entry && delegateRoot.entry.kind === "launcher"
+                            ? "" : root.themeIconSource(delegateRoot.entry)
                         // Theme icon: synchronous, see AppIcon.qml.
                         asynchronous: false
                         visible: source !== "" && status === Image.Ready
@@ -1217,24 +1146,11 @@ Item {
                         anchors.centerIn: parent
                         name: root.iconFor(delegateRoot.entry ? delegateRoot.entry.kind : "")
                         visible: !fileThumbnailFrame.visible && !fileThemeIcon.visible
+                            && !launcherAppIcon.visible
                             && !delegateRoot.usesCustomFolderVisual
                         color: "white"
                         size: root.iconVisualSize * 0.68
                         outlined: true
-                    }
-                    Text {
-                        anchors {
-                            horizontalCenter: parent.horizontalCenter
-                            top: parent.top
-                            topMargin: parent.height * 0.36
-                        }
-                        visible: delegateRoot.usesCustomFolderVisual
-                            && !!delegateRoot.folderCustom.emoji
-                        text: visible ? delegateRoot.folderCustom.emoji : ""
-                        font {
-                            family: "Noto Color Emoji"
-                            pixelSize: root.iconVisualSize * 0.36
-                        }
                     }
                 }
                 Item {
@@ -1252,7 +1168,6 @@ Item {
                     Text {
                         id: fileTitleIcon
                         visible: delegateRoot.fileTitleIcon !== ""
-                        width: visible ? implicitWidth : 0
                         anchors.verticalCenter: fileTitleText.verticalCenter
                         // Place the icon beside the text actually painted,
                         // rather than at the left edge of the label's box.
@@ -1261,7 +1176,7 @@ Item {
                             - width - 2)
                         text: delegateRoot.fileTitleIcon
                         font {
-                            family: "Noto Color Emoji"
+                            family: AppearanceTokens.typography.emojiFamily
                             pixelSize: Math.max(9, Math.round(
                                 fileTitleText.font.pixelSize * 0.75))
                         }
@@ -1442,13 +1357,14 @@ Item {
                             })
                         } else {
                             const sourceId = delegateRoot.itemId
+                            const serial = root.outboundDragSerial
                             if (root.outboundDragStarted)
                                 dragVisual.Drag.active = false
                             // dragFinished normally owns system-DnD cleanup.
                             // The deferred fallback covers cancellation and a
                             // release before grabToImage has completed.
                             Qt.callLater(function() {
-                                if (!root.dragActive)
+                                if (!root.dragActive || root.outboundDragSerial !== serial)
                                     return
                                 if (root.outboundDragStarted) {
                                     root.clearOutboundDrag(dragVisual)

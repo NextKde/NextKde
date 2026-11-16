@@ -1,16 +1,10 @@
 import QtQuick
-import QtQuick.Effects
+import "../foundation" as Foundation
 
-// iOS-style liquid glass slider with true refraction.
-// Uses ShaderEffect to bend the track colors through the glass thumb,
-// with chromatic aberration and specular highlights.
+// The glass thumb samples the sibling track through the shared QML shader.
 Item {
     id: root
-
-    SystemPalette {
-        id: controlPalette
-        colorGroup: SystemPalette.Active
-    }
+    property var motionPolicy: LiquidStyle.motionFor(root.materialForm)
 
     implicitWidth: 240
     implicitHeight: 44
@@ -19,16 +13,24 @@ Item {
     property bool enabled: true
     property color accentColor: "#0a84ff"
     property color trackColor: Qt.rgba(0.5, 0.5, 0.55, 0.35)
-    readonly property bool darkAppearance: {
-        const color = controlPalette.window
-        return color.r * 0.2126 + color.g * 0.7152 + color.b * 0.0722 < 0.5
+    property string appearanceMode: Foundation.AppTheme.appearanceMode
+    property bool reduceMotion: Foundation.AppTheme.reduceMotion
+    property real refractionStrength: 2.5
+    property real magnification: 1.3
+    property bool darkAppearance: {
+        if (appearanceMode === "dark") return true
+        if (appearanceMode === "light") return false
+        // Same dark decision as the rest of the family (LiquidSurface,
+        // LiquidTextField, …): the app-wide AppTheme.dark, which also falls
+        // back to light when the system palette itself is unusable.
+        return Foundation.AppTheme.dark
     }
     property color thumbColor: darkAppearance ? Qt.rgba(1, 1, 1, 0.38) : Qt.rgba(1, 1, 1, 0.72)
     property color thumbBorderColor: darkAppearance
         ? Qt.rgba(1, 1, 1, 0.45) : Qt.rgba(0, 0, 0, 0.16)
-    property real trackHeight: 6
-    property real thumbWidth: 32
-    property real thumbHeight: 16
+    property real trackHeight: 4
+    property real thumbWidth: 20
+    property real thumbHeight: 20
     property bool chromaticAberration: false
     property bool wobbleEnabled: false
 
@@ -59,27 +61,34 @@ Item {
     readonly property real visualValue: Math.max(0, Math.min(1, value))
     readonly property real edgeInset: thumbWidth / 2
     readonly property real travel: Math.max(1, width - edgeInset * 2)
-    readonly property real thumbCenterX: edgeInset + visualValue * travel
+    readonly property real thumbCenterX: edgeInset + positionMotion.value * travel
 
-    // Expansion animation (0 = rest white pill, 1 = fully expanded glass lens)
-    property real _expansion: 0.0
-    Behavior on _expansion {
-        NumberAnimation {
-            duration: root._pressed ? 270 : 460
-            easing.type: root._pressed ? Easing.OutBack : Easing.OutQuint
-            easing.overshoot: root._pressed ? 1.36 : 1.0
-        }
+    Foundation.SpringMotion {
+        id: positionMotion
+        target: root.visualValue
+        // Pointer input and commit acknowledgements must land exactly at value.
+        enabled: root.enabled && root.visible && !root.reduceMotion
+            && !root._pressed && !root._suppressXAnimation
+        response: 0.18
+        epsilon: 0.0001
     }
 
-    // Squash-stretch wobble
-    property real _stretch: 0.0
-    SequentialAnimation on _stretch {
-        id: wobbleAnim
-        running: false
-        NumberAnimation { to: 0.175; duration: 100; easing.type: Easing.OutQuad }
-        NumberAnimation { to: -0.08; duration: 150; easing.type: Easing.InOutQuad }
-        NumberAnimation { to: 0.04; duration: 120; easing.type: Easing.InOutQuad }
-        NumberAnimation { to: 0.0; duration: 100; easing.type: Easing.OutQuad }
+    property real _expansionTarget: 0
+    readonly property real _lensExpansion: expansionMotion.value
+    readonly property real _stretch: wobbleEnabled && !reduceMotion && !materialForm
+        ? Math.min(0.175, Math.abs(expansionMotion.velocity) * 0.012) : 0
+    Foundation.SpringMotion {
+        id: expansionMotion
+        target: root.enabled && !root.materialForm ? root._expansionTarget : 0
+        enabled: root.enabled && root.visible && !root.reduceMotion
+        response: 0.18
+        dampingRatio: 0.85
+    }
+
+    // Optical fades stay bounded while the lens geometry follows its spring.
+    property real _expansion: enabled && !materialForm ? _expansionTarget : 0
+    Behavior on _expansion {
+        NumberAnimation { duration: root.reduceMotion ? 0 : root.motionPolicy.instant.duration; easing.type: root.motionPolicy.enterCurve }
     }
 
     signal previewChanged(real value)
@@ -87,80 +96,178 @@ Item {
     signal canceled()
 
     function cancelInteraction() {
-        if (!_pressed) return
+        const active = _pressed || _wheelPending
+        _wheelPending = false
+        wheelCommitTimer.stop()
+        _angleAccum = 0
+        _pixelAccum = 0
+        if (!active) return
         _pressed = false
-        _expansion = 0
+        _expansionTarget = 0
         _dragOffset = 0
         canceled()
     }
     onEnabledChanged: { if (!enabled) cancelInteraction() }
     onVisibleChanged: { if (!visible) cancelInteraction() }
 
-    opacity: enabled ? 1.0 : 0.45
+    // ── Ctrl+滚轮：精细步进 ────────────────────────────────────────────────
+    // 光滚轮不碰滑块：滑块大多住在可滚动的面板里，那一下滚轮属于面板。按住 Ctrl
+    // 才是"我要调这个滑块"：鼠标一格（±120）走一档，触控板的小增量先攒够一档再
+    // 走，否则触控板会刷出一串碎步。wheelStep 是一档走多少行程，默认 1%；设置页
+    // 按真实单位传（每档一格整数 / 1% 之类），窄区间才不至于每档都被舍入掉。
+    property real wheelStep: 0.01
+    // 一次滚轮事件有两种量级：鼠标是"一格 = angleDelta 的 ±120"；触控板在 Wayland 上
+    // pixelDelta 与 angleDelta 一起给，量级小一个数量级（实测 |angle| ≈ 12 × |px|，
+    // 所以鼠标那一格的量 ≈ 10px）。各按自己的量级累积，两种设备一档的手感才对得上：
+    // 用同一个阈值，触控板要么"转不动"，要么两格才走一档。
+    property real wheelPixelStep: 10
+    property real _angleAccum: 0
+    property real _pixelAccum: 0
+    property bool _wheelPending: false
+
+    // 收一档。基准取当前显示值（visualValue），与拖动同一条规矩：宿主把请求夹住
+    // 或量化过（如不透明度有 10% 下限）时，下一次步进从夹住后的位置继续，不会在
+    // 边界上攒一堆空档。preview 立刻生效，提交去抖合并——每转一格就写一次平台
+    // 服务太贵。
+    function stepByWheel(delta) {
+        if (!enabled || !visible || _pressed || delta === 0)
+            return
+        const next = Math.max(0, Math.min(1, visualValue + delta * wheelStep))
+        if (Math.abs(next - visualValue) < 1e-9)
+            return
+        _wheelPending = true
+        previewChanged(next)
+        wheelCommitTimer.restart()
+    }
+
+    // 喂进一次滚轮增量。pixelY 非 0 = 触控板（连续滚动），按像素攒；否则按鼠标的
+    // 一格（120）攒。攒够一档才走，余量留着给下一次。
+    function accumulateWheel(angleY, pixelY) {
+        if (!enabled || !visible || _pressed) return
+        if (pixelY !== 0) {
+            _pixelAccum += pixelY
+            while (Math.abs(_pixelAccum) >= wheelPixelStep) {
+                stepByWheel(_pixelAccum > 0 ? 1 : -1)
+                _pixelAccum -= (_pixelAccum > 0 ? wheelPixelStep : -wheelPixelStep)
+            }
+        } else if (angleY !== 0) {
+            _angleAccum += angleY
+            while (Math.abs(_angleAccum) >= 120) {
+                stepByWheel(_angleAccum > 0 ? 1 : -1)
+                _angleAccum -= (_angleAccum > 0 ? 120 : -120)
+            }
+        }
+    }
+
+    Timer {
+        id: wheelCommitTimer
+        interval: 180
+        onTriggered: {
+            if (!root._wheelPending)
+                return
+            root._wheelPending = false
+            // 与松手提交一致：提交当前显示值
+            root.commitRequested(root.value)
+        }
+    }
+
+    // §5 Disabled：整体 α .38，无高光/阴影/hover（hover/press 由 MouseArea enabled 关断）。
+    opacity: enabled ? 1.0 : 0.38
 
     function positionForPointer(pointerX) {
         return Math.max(0, Math.min(1, (pointerX - edgeInset) / travel))
     }
 
-    function triggerWobble() {
-        if (wobbleEnabled)
-            wobbleAnim.restart()
+    Component {
+        id: trackDrawing
+        Item {
+            // Track background
+            Rectangle {
+                id: track
+                anchors.left: parent.left
+                anchors.right: parent.right
+                anchors.verticalCenter: parent.verticalCenter
+                height: root.trackHeight
+                radius: height / 2
+                color: root.trackColor
+
+                // Inner shadow for depth
+                Rectangle {
+                    anchors.fill: parent
+                    radius: parent.radius
+                    gradient: Gradient {
+                        orientation: Gradient.Vertical
+                        GradientStop { position: 0; color: Qt.rgba(0, 0, 0, 0.12) }
+                        GradientStop { position: 0.5; color: Qt.rgba(0, 0, 0, 0.03) }
+                        GradientStop { position: 1; color: Qt.rgba(1, 1, 1, 0.06) }
+                    }
+                }
+            }
+
+            // Progress fill
+            Rectangle {
+                id: progress
+                anchors.left: parent.left
+                anchors.verticalCenter: parent.verticalCenter
+                width: Math.max(height, Math.min(parent.width, root.thumbCenterX))
+                height: root.trackHeight
+                radius: height / 2
+                color: root.accentColor
+
+                // Glass sheen on progress
+                Rectangle {
+                    anchors.fill: parent
+                    radius: parent.radius
+                    gradient: Gradient {
+                        orientation: Gradient.Vertical
+                        GradientStop { position: 0; color: Qt.rgba(1, 1, 1, 0.45) }
+                        GradientStop { position: 0.5; color: Qt.rgba(1, 1, 1, 0.12) }
+                        GradientStop { position: 1; color: Qt.rgba(1, 1, 1, 0.0) }
+                    }
+                }
+            }
+        }
     }
 
-    // Track container - this is what gets refracted through the glass
     Item {
         id: trackContainer
         anchors.fill: parent
-        visible: !root.materialForm
+        visible: !root.materialForm && !thumbSurface.sampling
+        Loader { anchors.fill: parent; sourceComponent: trackDrawing }
+    }
 
-        // Track background
-        Rectangle {
-            id: track
-            anchors.left: parent.left
-            anchors.right: parent.right
-            anchors.verticalCenter: parent.verticalCenter
-            height: root.trackHeight
-            radius: height / 2
-            color: root.trackColor
-
-            // Inner shadow for depth
-            Rectangle {
-                anchors.fill: parent
-                radius: parent.radius
-                gradient: Gradient {
-                    orientation: Gradient.Vertical
-                    GradientStop { position: 0; color: Qt.rgba(0, 0, 0, 0.12) }
-                    GradientStop { position: 0.5; color: Qt.rgba(0, 0, 0, 0.03) }
-                    GradientStop { position: 1; color: Qt.rgba(1, 1, 1, 0.06) }
-                }
-            }
+    // Remove the straight track beneath the lens; otherwise it shows through
+    // the refracted copy and produces a second progress edge.
+    Item {
+        anchors.fill: parent
+        visible: !root.materialForm && thumbSurface.sampling
+        readonly property real lensLeft: glassThumb.x + root.thumbWidth / 2
+            - root.thumbWidth * thumbScale.xScale / 2
+        readonly property real lensRight: glassThumb.x + root.thumbWidth / 2
+            + root.thumbWidth * thumbScale.xScale / 2
+        Item {
+            width: Math.max(0, Math.min(root.width, parent.lensLeft))
+            height: root.height
+            clip: true
+            Loader { width: root.width; height: root.height; sourceComponent: trackDrawing }
         }
-
-        // Progress fill
-        Rectangle {
-            id: progress
-            anchors.left: parent.left
-            anchors.verticalCenter: parent.verticalCenter
-            width: Math.max(height, Math.min(parent.width, root.thumbCenterX))
-            height: root.trackHeight
-            radius: height / 2
-            color: root.accentColor
-
-            // Glass sheen on progress
-            Rectangle {
-                anchors.fill: parent
-                radius: parent.radius
-                gradient: Gradient {
-                    orientation: Gradient.Vertical
-                    GradientStop { position: 0; color: Qt.rgba(1, 1, 1, 0.45) }
-                    GradientStop { position: 0.5; color: Qt.rgba(1, 1, 1, 0.12) }
-                    GradientStop { position: 1; color: Qt.rgba(1, 1, 1, 0.0) }
-                }
-            }
+        Item {
+            x: Math.max(0, Math.min(root.width, parent.lensRight))
+            width: root.width - x
+            height: root.height
+            clip: true
+            Loader { x: -parent.x; width: root.width; height: root.height; sourceComponent: trackDrawing }
         }
     }
 
-    // The glass thumb/lens - uses layered optics for true translucent glass refraction
+    LiquidBackdrop {
+        id: trackBackdrop
+        sourceItem: trackContainer
+        active: root.visible && !root.materialForm
+        registerAsDefault: false
+    }
+
+    // Track and thumb must stay siblings to avoid capturing the lens itself.
     Item {
         id: glassThumb
         // 中心固定在 thumbCenterX：x/width 用固定基准尺寸，展开形变走 transform Scale，
@@ -172,184 +279,68 @@ Item {
         visible: !root.materialForm
 
         transform: Scale {
+            id: thumbScale
             origin.x: root.thumbWidth / 2
             origin.y: root.thumbHeight / 2
-            xScale: (1 + (root.wobbleEnabled ? 0.35 : 0.06) * root._expansion) * (1 - (root.wobbleEnabled ? 0.2 : 0) * root._stretch)
-            yScale: (1 + (root.wobbleEnabled ? 0.35 : 0.06) * root._expansion) * (1 + (root.wobbleEnabled ? 0.4 : 0) * root._stretch)
+            xScale: root.reduceMotion ? 1 : (1 + (root.wobbleEnabled ? 0.35 : 0.06) * root._lensExpansion) * (1 - (root.wobbleEnabled ? 0.2 : 0) * root._stretch)
+            yScale: root.reduceMotion ? 1 : (1 + (root.wobbleEnabled ? 0.35 : 0.06) * root._lensExpansion) * (1 + (root.wobbleEnabled ? 0.4 : 0) * root._stretch)
         }
 
-        Behavior on x {
-            NumberAnimation {
-                duration: root._pressed || root._suppressXAnimation ? 0 : 200
-                easing.type: Easing.OutQuint
-            }
-        }
-
-        // Layer 0: Ambient drop shadow for tactile physical depth
         Rectangle {
-            anchors.fill: parent
-            anchors.verticalCenterOffset: root._pressed ? 2.0 : (root._hovered ? 1.4 : 0.8)
+            x: 0
+            y: root._pressed ? 2 : 1
+            width: parent.width
+            height: parent.height
             radius: height / 2
-            color: root._pressed
-                ? Qt.rgba(0, 0, 0, 0.32)
-                : (root._hovered ? Qt.rgba(0, 0, 0, 0.24) : Qt.rgba(0, 0, 0, 0.16))
+            color: Qt.rgba(0, 0, 0, root._pressed ? 0.24 : 0.14)
             z: -1
-            Behavior on anchors.verticalCenterOffset { NumberAnimation { duration: 160; easing.type: Easing.OutCubic } }
-            Behavior on color { ColorAnimation { duration: 160 } }
         }
 
-        // Layer 1: Base translucent frosted glass matrix
-        // Keeps the thumb legible while allowing underlying track & accent color to shine through
-        Rectangle {
-            id: basePill
+        LiquidSurface {
+            id: thumbSurface
             anchors.fill: parent
             radius: height / 2
-
-            readonly property real baseAlpha: root.thumbColor.a < 0.95
-                ? root.thumbColor.a
-                : (root.darkAppearance ? 0.36 : 0.70)
-
-            gradient: Gradient {
-                orientation: Gradient.Vertical
-                GradientStop {
-                    position: 0.0
-                    color: Qt.rgba(
-                        root.thumbColor.r,
-                        root.thumbColor.g,
-                        root.thumbColor.b,
-                        Math.min(0.96, basePill.baseAlpha * (root._pressed ? 1.25 : (root._hovered ? 1.12 : 1.0))))
-                }
-                GradientStop {
-                    position: 1.0
-                    color: Qt.rgba(
-                        root.thumbColor.r * 0.96,
-                        root.thumbColor.g * 0.96,
-                        root.thumbColor.b * 0.96,
-                        Math.min(0.90, basePill.baseAlpha * 0.72 * (root._pressed ? 1.25 : (root._hovered ? 1.12 : 1.0))))
-                }
-            }
-
-            border.width: 1
-            border.color: root._pressed
-                ? (root.darkAppearance ? Qt.rgba(1, 1, 1, 0.75) : Qt.rgba(0, 0, 0, 0.35))
-                : (root._hovered
-                    ? (root.darkAppearance ? Qt.rgba(1, 1, 1, 0.55) : Qt.rgba(0, 0, 0, 0.25))
-                    : (root.thumbBorderColor.a > 0.01
-                        ? root.thumbBorderColor
-                        : (root.darkAppearance ? Qt.rgba(1, 1, 1, 0.32) : Qt.rgba(0, 0, 0, 0.16))))
-            Behavior on border.color { ColorAnimation { duration: 160 } }
+            backdrop: trackBackdrop
+            darkAppearance: root.darkAppearance
+            tintColor: Qt.rgba(root.thumbColor.r, root.thumbColor.g, root.thumbColor.b, 1)
+            tintStrength: Math.min(0.5, root.thumbColor.a * (root._pressed ? 0.35 : 0.6))
+            blurStrength: 0
+            readability: 0
+            refractionStrength: root.refractionStrength * (1 + root._expansion * 0.3)
+            magnification: root.magnification
+            edgeWidth: Math.min(6, height / 2)
+            reflectionStrength: root._pressed ? 1 : 0.75
+            rimColor: root.thumbBorderColor
         }
 
-        // Layer 2: Liquid refraction & track accent transmission
-        Rectangle {
-            id: refractionLayer
-            anchors.fill: parent
-            radius: height / 2
-            opacity: 0.50 + 0.40 * root._expansion
-            Behavior on opacity { NumberAnimation { duration: 180 } }
-
-            gradient: Gradient {
-                orientation: Gradient.Horizontal
-                GradientStop {
-                    position: 0.0
-                    color: root.visualValue > 0.05
-                        ? Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b,
-                                  root.darkAppearance ? (0.35 + 0.15 * root._expansion) : (0.22 + 0.12 * root._expansion))
-                        : (root.darkAppearance ? Qt.rgba(1, 1, 1, 0.15) : Qt.rgba(0, 0, 0, 0.08))
-                }
-                GradientStop {
-                    position: 0.4
-                    color: root.darkAppearance ? Qt.rgba(1, 1, 1, 0.12) : Qt.rgba(1, 1, 1, 0.25)
-                }
-                GradientStop {
-                    position: 0.7
-                    color: root.darkAppearance ? Qt.rgba(1, 1, 1, 0.10) : Qt.rgba(1, 1, 1, 0.20)
-                }
-                GradientStop {
-                    position: 1.0
-                    color: root.visualValue > 0.95
-                        ? Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b,
-                                  root.darkAppearance ? (0.30 + 0.15 * root._expansion) : (0.18 + 0.12 * root._expansion))
-                        : Qt.rgba(root.trackColor.r, root.trackColor.g, root.trackColor.b, 0.25)
-                }
-            }
-        }
-
-        // Layer 3: Top specular chamfer reflection (macOS glass convex curvature)
-        Rectangle {
-            id: specularHighlight
-            anchors.top: parent.top
-            anchors.topMargin: 1
-            anchors.horizontalCenter: parent.horizontalCenter
-            anchors.horizontalCenterOffset: root._dragOffset * 0.12
-            width: parent.width * 0.55
-            height: Math.max(2, parent.height * 0.26)
-            radius: height / 2
-
-            gradient: Gradient {
-                orientation: Gradient.Vertical
-                GradientStop {
-                    position: 0.0
-                    color: Qt.rgba(1, 1, 1, root._pressed ? 0.75 : (root._hovered ? 0.65 : 0.45))
-                }
-                GradientStop {
-                    position: 0.6
-                    color: Qt.rgba(1, 1, 1, root._pressed ? 0.28 : (root._hovered ? 0.20 : 0.12))
-                }
-                GradientStop {
-                    position: 1.0
-                    color: Qt.rgba(1, 1, 1, 0.0)
-                }
-            }
-            opacity: root.darkAppearance ? 0.85 : 0.95
-            Behavior on opacity { NumberAnimation { duration: 160 } }
-        }
-
-        // Layer 4: Delicate inner specular rim (bevel reflection)
-        Rectangle {
-            anchors.fill: parent
-            anchors.margins: 1
-            radius: height / 2
-            color: "transparent"
-            border.width: 1
-            border.color: root._pressed
-                ? Qt.rgba(1, 1, 1, 0.45)
-                : (root._hovered ? Qt.rgba(1, 1, 1, 0.30) : Qt.rgba(1, 1, 1, 0.16))
-            Behavior on border.color { ColorAnimation { duration: 160 } }
-        }
-
-        // Layer 5: Accent color glow on selection / press
         Rectangle {
             anchors.fill: parent
             radius: height / 2
             color: root.accentColor
-            opacity: root._pressed ? 0.16 : (root._hovered ? 0.08 : 0.03)
-            Behavior on opacity { NumberAnimation { duration: 160 } }
+            opacity: root._pressed ? 0.10 : root._hovered ? 0.045 : 0
+            Behavior on opacity { NumberAnimation { duration: root.reduceMotion ? 0 : root.motionPolicy.fast.duration; easing.type: root.motionPolicy.enterCurve } }
         }
 
-        // Layer 6: Optional chromatic aberration (when explicitly enabled)
         Item {
             anchors.fill: parent
             visible: root.chromaticAberration && (root._hovered || root._pressed)
-            opacity: root._expansion
-
             Rectangle {
-                anchors.fill: parent
-                anchors.margins: -1
+                x: -0.5
+                width: parent.width
+                height: parent.height
                 radius: height / 2
                 color: "transparent"
                 border.width: 1
-                border.color: Qt.rgba(1, 0.2, 0.2, 0.22 * root._expansion)
-                x: -0.5
+                border.color: Qt.rgba(1, 0.2, 0.2, 0.18 * root._expansion)
             }
             Rectangle {
-                anchors.fill: parent
-                anchors.margins: -1
+                x: 0.5
+                width: parent.width
+                height: parent.height
                 radius: height / 2
                 color: "transparent"
                 border.width: 1
-                border.color: Qt.rgba(0.2, 0.9, 1, 0.22 * root._expansion)
-                x: 0.5
+                border.color: Qt.rgba(0.2, 0.9, 1, 0.18 * root._expansion)
             }
         }
     }
@@ -399,7 +390,8 @@ Item {
             radius: height / 2
             color: root.accentColor
             opacity: root._pressed ? 0.16 : (root._hovered ? 0.10 : 0.0)
-            Behavior on opacity { NumberAnimation { duration: 120 } }
+            // §2.11 / §3 motion.duration.instant=100（原 demo 120 不在五档）。
+            Behavior on opacity { NumberAnimation { duration: root.reduceMotion ? 0 : root.motionPolicy.instant.duration; easing.type: root.motionPolicy.enterCurve } }
         }
 
         // Handle: a vertical capsule, not the iOS lens.
@@ -420,28 +412,43 @@ Item {
         hoverEnabled: true
         cursorShape: Qt.PointingHandCursor
 
+        // 滚轮挂在 MouseArea 自己的 onWheel 上：MouseArea 盖满整个控件，独立的
+        // WheelHandler 拿不到滚轮（实测滚轮完全收不到，见其提交说明），在这一层才
+        // 收得到。只认 Ctrl（触控板两指滚动 + Ctrl 走的也是这条路）；不按 Ctrl 就
+        // 放行，让所在面板照旧滚动。
+        onWheel: function(wheel) {
+            if (!(wheel.modifiers & Qt.ControlModifier)) {
+                wheel.accepted = false
+                return
+            }
+            root.accumulateWheel(wheel.angleDelta.y, wheel.pixelDelta.y)
+            wheel.accepted = true
+        }
+
         property real startX: 0
-        property real startValue: 0
 
         // A light thumb lift on hover alone (before any press) matches
         // macOS's slider feel; press still drives the full lens expansion.
         onEntered: {
             root._hovered = true
             if (!root._pressed && !root.materialForm)
-                root._expansion = 0.40
+                root._expansionTarget = 0.40
         }
         onExited: {
             root._hovered = false
             if (!root._pressed)
-                root._expansion = 0.0
+                root._expansionTarget = 0.0
         }
 
         onPressed: function(mouse) {
             root._pressed = true
-            root._expansion = 1.0
-            root.triggerWobble()
+            root._expansionTarget = 1.0
+            // 拖动接管：取消还没落下的那次步进提交
+            root._wheelPending = false
+            wheelCommitTimer.stop()
+            root._angleAccum = 0
+            root._pixelAccum = 0
             startX = mouse.x
-            startValue = root.value
             root.previewChanged(root.positionForPointer(mouse.x))
         }
 
@@ -454,7 +461,7 @@ Item {
         onReleased: function() {
             if (!root._pressed) return
             root._pressed = false
-            root._expansion = (containsMouse && !root.materialForm) ? 0.40 : 0.0
+            root._expansionTarget = (containsMouse && !root.materialForm) ? 0.40 : 0.0
             root._dragOffset = 0
             // 提交后屏蔽 x 动画 400ms，等外部服务异步写回对齐（见 _suppressXAnimation）
             root._suppressXAnimation = true

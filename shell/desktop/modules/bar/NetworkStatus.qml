@@ -2,6 +2,7 @@ import QtQuick
 import QtQuick.Effects
 import Quickshell
 import Quickshell.Widgets
+import "../../../shared/qml/i18n"
 import qs.desktop.modules.bar
 import qs.desktop.modules.common
 import qs.desktop.modules.dock
@@ -34,21 +35,28 @@ Item {
         || (NetworkService.deviceState === "connected"
             && NetworkService.connectivity === "none")
     readonly property bool connected: NetworkService.deviceState === "connected"
-    readonly property color statusIconColor: IconAppearanceService.mode === "tint"
-        ? IconAppearanceService.styledSymbolicColor()
-        : ThemeService.foregroundColor
-    readonly property real statusIconOpacity: IconAppearanceService.mode !== "color"
-        ? IconAppearanceService.opacity : 1.0
+    readonly property color statusIconColor: ThemeService.barInk
+    // The readability edge both glyphs carry is dropped while the mac-style
+    // ground paints a plate under them.
+    readonly property bool outlined: AppearanceTokens.isDarkTheme
+        && !AppearanceTokens.bar.macStyle
 
     BundledIcon {
+
+        // Same readability edge the bar text carries (Text.Outline).
+
+        outlined: root.outlined
+
+        outlineColor: Qt.rgba(0, 0, 0, 0.40)
         id: networkGlyph
         visible: NetworkService.connectionType === "ethernet"
         anchors.centerIn: parent
         width: root.iconSize
         height: root.iconSize
-        name: "status-ethernet"
+        size: root.iconSize
+        name: "network.ethernet"
         color: root.statusIconColor
-        opacity: root.statusIconOpacity * (root.connected ? 0.96 : 0.68)
+        opacity: root.connected ? 1.0 : 0.68
     }
 
     WifiSignalIcon {
@@ -62,11 +70,10 @@ Item {
             && NetworkService.connectionType === "wifi"
         signalStrength: NetworkService.signalStrength
         glyphColor: root.statusIconColor
-        opacity: root.statusIconOpacity * (root.connected ? 0.96 : 0.68)
+        opacity: root.connected ? 1.0 : 0.68
         layer.enabled: true
         layer.effect: MultiEffect {
-            shadowEnabled: IconAppearanceService.mode !== "color"
-                || ThemeService.isDark
+            shadowEnabled: root.outlined
             shadowColor: Qt.rgba(0, 0, 0, 0.82)
             shadowOpacity: 0.62
             shadowBlur: 0.32
@@ -105,14 +112,16 @@ Item {
         minimumWidth: 150
         primaryText: root.connected
             ? (NetworkService.connectionType === "ethernet"
-                ? "有线网络" : (NetworkService.ssid || "Wi‑Fi"))
+                ? I18n.tr("Wired network") : (NetworkService.ssid || "Wi‑Fi"))
             : (NetworkService.deviceState === "connecting"
-                ? "正在连接网络…" : "未连接网络")
+                ? I18n.tr("Connecting to network…") : I18n.tr("Network disconnected"))
         secondaryText: !root.connected ? "" : (root.hasIssue
             ? (NetworkService.connectivity === "portal"
-                ? "需要网页登录认证" : "网络受限，无法访问互联网")
+                ? I18n.tr("Web sign-in required")
+                : I18n.tr("Limited connectivity, no internet access"))
             : ((NetworkService.ipv4.length > 0
-                ? "已连接 · " + NetworkService.ipv4 : "已连接互联网")
+                ? I18n.tr("Connected · %1").arg(NetworkService.ipv4)
+                : I18n.tr("Connected to the internet"))
                 // The rate snapshot comes from NetworkService's own sampling,
                 // so this stays live in both the top Bar and the Dock host.
                 + (NetworkService.deviceName

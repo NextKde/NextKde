@@ -2,6 +2,7 @@ import QtQuick
 import QtQuick.Effects
 import Quickshell
 import Qt5Compat.GraphicalEffects
+import "../../../shared/qml/i18n"
 import qs.desktop.modules.common
 import qs.desktop.modules.weather
 import "../../../Kos/Ui"
@@ -13,6 +14,7 @@ Item {
 
     property int iconSize: 44
     property int dockHeight: 60
+    required property real cornerRadius
     property int widthUnits: 4
     // DockInfoCarousel sets this false while another page is shown so the
     // glyph-mask ShaderEffectSource stops re-sampling every frame.
@@ -35,7 +37,8 @@ Item {
     }
 
     function shortWeekday(date) {
-        return ["周日", "周一", "周二", "周三", "周四", "周五", "周六"][date.getDay()]
+        return [I18n.tr("Sun"), I18n.tr("Mon"), I18n.tr("Tue"), I18n.tr("Wed"),
+            I18n.tr("Thu"), I18n.tr("Fri"), I18n.tr("Sat")][date.getDay()]
     }
 
     // Clock has no content-owned palette like weather or album artwork, so it
@@ -73,7 +76,7 @@ Item {
                 color: ThemeService.foregroundColor
                 opacity: 0.72
                 font {
-                    family: "Noto Sans CJK SC"
+                    family: AppearanceTokens.typography.textFamily
                     pixelSize: Math.max(8, Math.round(widget.iconSize * 0.18))
                     weight: Font.Medium
                 }
@@ -83,7 +86,7 @@ Item {
                 color: ThemeService.foregroundColor
                 opacity: value === "--:--" ? 0.48 : 0.92
                 font {
-                    family: "SF Pro Display"
+                    family: AppearanceTokens.typography.displayFamily
                     pixelSize: Math.max(8, Math.round(widget.iconSize * 0.19))
                     weight: Font.DemiBold
                 }
@@ -92,14 +95,14 @@ Item {
     }
 
     // Match the music/weather card contract exactly: the visible background
-    // extends by backgroundGap on every side and shares their 0.35 radius.
+    // extends by backgroundGap on every side and shares the outer Dock radius.
     Rectangle {
         id: clockBackground
         anchors.horizontalCenter: parent.horizontalCenter
         y: -widget.backgroundGap
         width: widget.width
         height: widget.iconSize + widget.backgroundGap * 2
-        radius: widget.iconSize * 0.35
+        radius: widget.cornerRadius
         gradient: Gradient {
             orientation: Gradient.Horizontal
             GradientStop {
@@ -221,7 +224,7 @@ Item {
                     fontSizeMode: Text.HorizontalFit
                     minimumPixelSize: 13
                     font {
-                        family: "SF Pro Display"
+                        family: AppearanceTokens.typography.displayFamily
                         pixelSize: Math.max(16, Math.round(widget.iconSize * 0.43))
                         weight: Font.DemiBold
                         letterSpacing: 0.6
@@ -232,7 +235,7 @@ Item {
             Text {
                 width: parent.width
                 height: Math.round(widget.iconSize * 0.27)
-                text: Qt.formatDateTime(calendarClock.dayDate, "yyyy年M月d日")
+                text: I18n.fmt(calendarClock.dayDate, I18n.tr("MMMM d, yyyy"))
                     + " " + widget.shortWeekday(calendarClock.dayDate)
                 color: ThemeService.foregroundColor
                 opacity: 0.82
@@ -241,7 +244,7 @@ Item {
                 fontSizeMode: Text.HorizontalFit
                 minimumPixelSize: 7
                 font {
-                    family: "Noto Sans CJK SC"
+                    family: AppearanceTokens.typography.textFamily
                     pixelSize: Math.max(9, Math.round(widget.iconSize * 0.21))
                     weight: Font.Medium
                 }
@@ -257,13 +260,13 @@ Item {
             SolarEventRow {
                 width: parent.width
                 height: parent.height / 2
-                label: "日落"
+                label: I18n.tr("Sunset")
                 value: WeatherService.sunsetTime
             }
             SolarEventRow {
                 width: parent.width
                 height: parent.height / 2
-                label: "日出"
+                label: I18n.tr("Sunrise")
                 value: WeatherService.sunriseTime
             }
         }
@@ -287,18 +290,18 @@ Item {
             color: "white"
             anchors.verticalCenter: parent.verticalCenter
             font {
-                family: "SF Pro Display"
+                family: AppearanceTokens.typography.displayFamily
                 pixelSize: Math.max(9, Math.round(widget.iconSize * 0.52))
                 weight: Font.DemiBold
             }
         }
         Text {
-            text: "· 日落 " + WeatherService.sunsetTime
+            text: I18n.tr("· Sunset %1").arg(WeatherService.sunsetTime)
             color: "white"
             opacity: 0.68
             anchors.verticalCenter: parent.verticalCenter
             font {
-                family: "Noto Sans CJK SC"
+                family: AppearanceTokens.typography.textFamily
                 pixelSize: Math.max(6, Math.round(widget.iconSize * 0.28))
                 weight: Font.Medium
             }

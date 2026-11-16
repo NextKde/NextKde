@@ -2,6 +2,7 @@ import QtQuick
 import QtQuick.Layouts
 import Quickshell
 import Quickshell.Wayland
+import "../../../shared/qml/i18n"
 import qs.desktop.modules.common
 import qs.desktop.modules.weather
 import "../../../Kos/Ui"
@@ -22,6 +23,7 @@ AnimatedPopupWindow {
     property bool pointerInside: false
 
     motionOrigin: Item.Bottom
+    openDuration: DockAnimation.infoPopupEntranceDuration
     // Geometry is decided up front: a PopupWindow does not reflow its content
     // the way an in-window Item does.
     implicitWidth: 288
@@ -31,8 +33,9 @@ AnimatedPopupWindow {
     BackgroundEffect.blurRegion: popup.visible && popup.revealProgress > 0
         && AppearanceTokens.surface.usesKwinBlur ? infoSurface.blurRegion : null
 
+    PopupAnchorBinding { popupAnchor: popup.anchor; sourceItem: popup.anchorItem }
+
     anchor {
-        item: popup.anchorItem
         edges: Edges.Top
         gravity: Edges.Top
         margins.top: -12
@@ -52,11 +55,11 @@ AnimatedPopupWindow {
     readonly property int rowCount: rows.length
     readonly property string title: {
         if (popup.page === 2)
-            return "时钟"
+            return I18n.tr("Clock")
         if (popup.page === 1)
-            return "天气"
+            return I18n.tr("Weather")
         if (popup.page === 3)
-            return "资源占用"
+            return I18n.tr("Resource Usage")
         return ""
     }
 
@@ -71,7 +74,8 @@ AnimatedPopupWindow {
     }
 
     function weekdayName(date) {
-        return ["周日", "周一", "周二", "周三", "周四", "周五", "周六"][date.getDay()]
+        return [I18n.tr("Sun"), I18n.tr("Mon"), I18n.tr("Tue"), I18n.tr("Wed"),
+            I18n.tr("Thu"), I18n.tr("Fri"), I18n.tr("Sat")][date.getDay()]
     }
 
     function detailRows() {
@@ -79,38 +83,38 @@ AnimatedPopupWindow {
         // hover is an explicit request for everything it knows.
         if (popup.page === 2) {
             return [
-                { label: "时间",
-                    value: Qt.formatDateTime(clock.date, "HH:mm:ss") },
-                { label: "日期",
-                    value: Qt.formatDateTime(calendarClock.dayDate, "M月d日")
+                { label: I18n.tr("Time"),
+                    value: I18n.fmt(clock.date, "HH:mm:ss") },
+                { label: I18n.tr("Date"),
+                    value: I18n.fmt(calendarClock.dayDate, I18n.tr("MMMM d"))
                         + " " + popup.weekdayName(calendarClock.dayDate) },
-                { label: "日出", value: WeatherService.sunriseTime },
-                { label: "日落", value: WeatherService.sunsetTime },
+                { label: I18n.tr("Sunrise"), value: WeatherService.sunriseTime },
+                { label: I18n.tr("Sunset"), value: WeatherService.sunsetTime },
             ]
         }
         if (popup.page === 1) {
             return [
-                { label: "天气", value: WeatherService.available
+                { label: I18n.tr("Weather"), value: WeatherService.available
                     ? WeatherService.conditionText(WeatherService.weatherCode)
                     : "--" },
-                { label: "气温", value: WeatherService.temperature },
-                { label: "体感", value: WeatherService.apparentTemperature },
-                { label: "湿度", value: WeatherService.humidity },
-                { label: "风速", value: WeatherService.windSpeed },
+                { label: I18n.tr("Temperature"), value: WeatherService.temperature },
+                { label: I18n.tr("Feels like"), value: WeatherService.apparentTemperature },
+                { label: I18n.tr("Humidity"), value: WeatherService.humidity },
+                { label: I18n.tr("Wind speed"), value: WeatherService.windSpeed },
             ]
         }
         if (popup.page === 3) {
             return [
-                { label: "平均温度",
+                { label: I18n.tr("Avg temperature"),
                     value: popup.thermalValue(MetricsService.currentMilliC) },
-                { label: "最高温度",
+                { label: I18n.tr("Max temperature"),
                     value: popup.thermalValue(MetricsService.maximum5MinuteMilliC) },
                 { label: "CPU", value: popup.percent(MetricsService.cpuUsage) },
-                { label: "内存",
+                { label: I18n.tr("Memory"),
                     value: MetricsService.memoryTotalBytes > 0
                         ? popup.percent(MetricsService.memoryUsedBytes
                             / MetricsService.memoryTotalBytes) : "--" },
-                { label: "存储",
+                { label: I18n.tr("Storage"),
                     value: MetricsService.diskTotalBytes > 0
                         ? popup.percent(MetricsService.diskUsedBytes
                             / MetricsService.diskTotalBytes) : "--" },
@@ -151,23 +155,23 @@ AnimatedPopupWindow {
                 Layout.fillWidth: true
                 spacing: 8
 
-                Text {
+                GlassText {
                     text: popup.title
                     color: ThemeService.foregroundColor
                     font {
-                        family: "Noto Sans CJK SC"
+                        family: AppearanceTokens.typography.textFamily
                         pixelSize: 14
                         weight: Font.DemiBold
                     }
                 }
-                Text {
+                GlassText {
                     // Only the weather card has a scope worth naming.
                     visible: popup.page === 1
                     text: WeatherService.cityName
                     color: ThemeService.foregroundColor
                     opacity: 0.62
                     font {
-                        family: "Noto Sans CJK SC"
+                        family: AppearanceTokens.typography.textFamily
                         pixelSize: 11
                         weight: Font.Medium
                     }
@@ -191,22 +195,22 @@ AnimatedPopupWindow {
                     Layout.preferredHeight: 20
                     spacing: 12
 
-                    Text {
+                    GlassText {
                         text: modelData.label
                         color: ThemeService.foregroundColor
                         opacity: 0.62
                         font {
-                            family: "Noto Sans CJK SC"
+                            family: AppearanceTokens.typography.textFamily
                             pixelSize: 12
                             weight: Font.Medium
                         }
                     }
                     Item { Layout.fillWidth: true; height: 1 }
-                    Text {
+                    GlassText {
                         text: modelData.value
                         color: ThemeService.foregroundColor
                         font {
-                            family: "Noto Sans CJK SC"
+                            family: AppearanceTokens.typography.textFamily
                             pixelSize: 13
                             weight: Font.DemiBold
                         }

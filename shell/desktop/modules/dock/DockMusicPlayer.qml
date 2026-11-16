@@ -1,17 +1,18 @@
 import QtQuick
 import QtQuick.Effects
 import Quickshell.Services.Mpris
+import "../../../shared/qml/i18n"
 import qs.desktop.modules.common
 import "../../../Kos/Ui"
 
 // ────────────────────────────────────────────────────────────────
 // DockMusicPlayer — Music player widget sized in icon-width units.
 //
-// Binds to DockMprisService.activePlayer reactively.  Two modes:
-//   - Compact (iconSize < 36):  album art only with a tiny play/pause overlay
+// Binds to MediaService.activePlayer reactively.  Two modes:
+//   - Compact (iconSize < 36):  album art, title and a play/pause overlay
 //   - Full (iconSize ≥ 36):     art + track title/artist + prev/play/next buttons
 //
-// Expand/collapse animation when hasPlayer toggles.
+// Hover opens the detailed player in an independent popup.
 // ────────────────────────────────────────────────────────────────
 
 Item {
@@ -20,6 +21,7 @@ Item {
     // ── Inputs ──
     property int iconSize: 44
     property int dockHeight: 60
+    required property real cornerRadius
     property int widthUnits: 4
     // Set by DockInfoCarousel: true only while this page is the visible one.
     // Inactive pages keep their transitions but stop self-driven animation.
@@ -34,11 +36,11 @@ Item {
     readonly property bool monochrome: IconAppearanceService.mode !== "color"
 
     // ── Player reference ──
-    readonly property var player: DockMprisService.activePlayer
+    readonly property var player: MediaService.activePlayer
     readonly property url artworkSource: {
-        const revision = DockMprisService.metadataRevision
+        const revision = MediaService.metadataRevision
         return player?.trackArtUrl
-            ? player.trackArtUrl : BundledIcons.source("default-cover")
+            ? player.trackArtUrl : BundledIcons.source("media.coverFallback")
     }
     property bool detailsHovered: false
     property bool musicPopupRequested: false
@@ -77,7 +79,10 @@ Item {
             if (hovered) {
                 musicPopupRequested = true
                 musicPopupCloseDelay.stop()
-                musicPopupOpenDelay.restart()
+                if (musicPopup.visible)
+                    DockModelService.openDockPopup(musicPopup)
+                else if (!musicPopupOpenDelay.running)
+                    musicPopupOpenDelay.start()
             } else if (!musicPopup.pointerInside) {
                 musicPopupOpenDelay.stop()
                 musicPopupCloseDelay.restart()
@@ -87,7 +92,7 @@ Item {
 
     Timer {
         id: musicPopupOpenDelay
-        interval: 420
+        interval: DockAnimation.infoPopupOpenDelay
         repeat: false
         onTriggered: {
             if (!musicHover.hovered || !widget.player)
@@ -132,7 +137,7 @@ Item {
         y: -widget.backgroundGap
         width: widget.width
         height: widget.iconSize + widget.backgroundGap * 2
-        radius: widget.iconSize * 0.35
+        radius: widget.cornerRadius
         color: "transparent"
         gradient: Gradient {
             orientation: Gradient.Horizontal
@@ -204,11 +209,11 @@ Item {
                 visible: widget.isCompact
                 primary: true
                 iconSize: Math.max(14, widget.iconSize * 0.36)
-                iconName: widget.player?.isPlaying ? "media-pause" : "media-play"
-                text: widget.player?.isPlaying ? qsTr("暂停") : qsTr("播放")
+                iconName: widget.player?.isPlaying ? "media.pause" : "media.play"
+                text: widget.player?.isPlaying ? I18n.tr("Pause") : I18n.tr("Play")
                 enabled: widget.player?.canTogglePlaying ?? false
-                busy: DockMprisService.loading
-                onClicked: DockMprisService.togglePlayPause()
+                busy: MediaService.loading
+                onClicked: MediaService.togglePlayPause()
             }
 
         }
@@ -260,10 +265,11 @@ Item {
                         id: trackScroll
                         // Avoid continuous full-scene rendering while the
                         // Dock is idle. Long metadata scrolls on demand.
-                        running: widget.pageActive && widget.detailsHovered
+                        running: widget.visible && widget.pageActive && widget.detailsHovered
                             && trackMarquee.width > trackViewport.width
                         loops: Animation.Infinite
 
+                        // motion-exception: preserve marquee reading pauses.
                         PauseAnimation { duration: 1200 }
                         NumberAnimation {
                             from: 0
@@ -272,6 +278,7 @@ Item {
                                 (trackMarquee.width - trackViewport.width) * 35)
                             easing.type: Easing.Linear
                         }
+                        // motion-exception: preserve marquee reading pauses.
                         PauseAnimation { duration: 800 }
                         PropertyAction { value: 0 }
 
@@ -312,8 +319,7 @@ Item {
         // ── Compact mode: cover + track metadata ───────────────────
         // Keep the artwork's play/pause overlay as the direct control, while
         // using the remaining width for a deliberately small now-playing
-        // readout. A long title scrolls by itself because the compact card
-        // has no room for the full-mode hover interaction.
+        // readout. Hovering the compact card scrolls long metadata on demand.
         Item {
             id: compactTrackInfo
             visible: widget.isCompact
@@ -355,10 +361,12 @@ Item {
 
                 SequentialAnimation on scrollOffset {
                     id: compactTrackScroll
-                    running: widget.pageActive && widget.isCompact
+                    running: widget.visible && widget.pageActive && widget.isCompact
+                        && musicHover.hovered
                         && compactTrackTitle.width > compactTrackViewport.width
                     loops: Animation.Infinite
 
+                    // motion-exception: preserve marquee reading pauses.
                     PauseAnimation { duration: 900 }
                     NumberAnimation {
                         from: 0
@@ -369,6 +377,7 @@ Item {
                                 - compactTrackViewport.width) * 32)
                         easing.type: Easing.Linear
                     }
+                    // motion-exception: preserve marquee reading pauses.
                     PauseAnimation { duration: 650 }
                     PropertyAction { value: 0 }
 
@@ -400,23 +409,23 @@ Item {
     }
 
     component DockPrevBtn: DockControlButton {
-        iconName: "media-previous"
-        text: qsTr("上一首")
-        onClicked: DockMprisService.previous()
+        iconName: "media.previous"
+        text: I18n.tr("Previous")
+        onClicked: MediaService.previous()
     }
 
     component DockPlayBtn: DockControlButton {
         property bool isPlaying: false
         primary: true
-        iconName: isPlaying ? "media-pause" : "media-play"
-        text: isPlaying ? qsTr("暂停") : qsTr("播放")
-        busy: DockMprisService.loading
-        onClicked: DockMprisService.togglePlayPause()
+        iconName: isPlaying ? "media.pause" : "media.play"
+        text: isPlaying ? I18n.tr("Pause") : I18n.tr("Play")
+        busy: MediaService.loading
+        onClicked: MediaService.togglePlayPause()
     }
 
     component DockNextBtn: DockControlButton {
-        iconName: "media-next"
-        text: qsTr("下一首")
-        onClicked: DockMprisService.next()
+        iconName: "media.next"
+        text: I18n.tr("Next")
+        onClicked: MediaService.next()
     }
 }

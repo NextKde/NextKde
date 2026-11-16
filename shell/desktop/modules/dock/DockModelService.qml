@@ -1,14 +1,13 @@
 pragma Singleton
 import QtQuick
 import qs.desktop.modules.common
+import "WindowCycle.mjs" as WindowCycle
 
-// DockModelService — compatibility facade for the current Dock UI.
+// DockModelService owns application/window grouping for the Dock UI.
 //
 // AppIdentityService owns application identity resolution.
 // WindowService owns the live Wayland Toplevel model and window actions.
-// AppGroupService owns reusable app/window grouping.
-// This facade only derives the current Dock presentation and keeps the old
-// DockContainer bindings stable while future UIs consume the lower layers.
+// Grouping stays with the Dock presentation and its DockContainer bindings.
 
 QtObject {
     id: svc
@@ -20,6 +19,12 @@ QtObject {
 
     property variant _lastUrgentIds: []
     property bool _urgentInitDone: false
+
+    // Multi-window cycling lag guard across rapid dock clicks
+    property string _pendingCycleAppId: ""
+    property string _pendingCycleWindowId: ""
+    property string _pendingCycleSourceWindowId: ""
+    property double _pendingCycleAt: 0
 
     property var pinnedItems: []
     property int pinnedCount: 0
@@ -280,12 +285,37 @@ QtObject {
         _refreshWindowItems();
     }
 
+    function _clearPendingCycle() {
+        svc._pendingCycleAppId = "";
+        svc._pendingCycleWindowId = "";
+        svc._pendingCycleSourceWindowId = "";
+        svc._pendingCycleAt = 0;
+    }
+
+    function _syncPendingCycle() {
+        if (!svc._pendingCycleWindowId)
+            return;
+        if (!WindowCycle.pendingWindowIdFor(svc._pendingCycleWindowId,
+                svc._pendingCycleSourceWindowId, WindowService.activeWindowId,
+                Date.now() - svc._pendingCycleAt)
+                || !WindowService.windowById(svc._pendingCycleWindowId))
+            svc._clearPendingCycle();
+    }
+
     property Connections _windowConnections: Connections {
         target: WindowService
         function onRevisionChanged() {
+            svc._syncPendingCycle();
             svc._refreshPresentation();
         }
+        // A preview or another shell surface can request
+        // focus before the compositor publishes it. That request takes priority.
+        function onActivationRequested(windowId) {
+            if (windowId !== svc._pendingCycleWindowId)
+                svc._clearPendingCycle();
+        }
         function onActiveWindowIdChanged() {
+            svc._syncPendingCycle();
             const record = WindowService.windowById(WindowService.activeWindowId)
             if (record)
                 AppNotificationService.clearForApp(record.identity.desktopId,
@@ -319,22 +349,21 @@ QtObject {
     }
 
     function activateApp(appId) {
+        svc._syncPendingCycle();
         const identity = AppIdentityService.resolve(appId);
+        if (svc._pendingCycleAppId !== identity.desktopId)
+            svc._clearPendingCycle();
         AppNotificationService.clearForApp(identity.desktopId, identity.name);
         const windows = WindowService.windowsForApp(identity.desktopId);
 
         if (windows.length === 0) {
-            console.log("[DockModel] launch app=" + identity.desktopId);
-            // KWin must receive the Dock launch ticket before the client can
-            // map its first window. Otherwise the real window may be painted
-            // once and only then jump back to the Dock animation origin.
-            DockWindowAnimationTargetService.prepareLaunch(identity, function() {
-                AppActionService.launch(identity);
-            });
+            svc._clearPendingCycle();
+            launchApp(identity.desktopId);
             return;
         }
 
         if (windows.length === 1) {
+            svc._clearPendingCycle();
             const singleWin = windows[0];
             if (singleWin.toplevel.activated && !singleWin.toplevel.minimized) {
                 console.log("[DockModel] minimize single window app=" + identity.desktopId);
@@ -346,36 +375,49 @@ QtObject {
             return;
         }
 
-        // Multiple windows (macOS logic):
-        // Find if any window of this app is currently activated
-        let activeIdx = -1;
-        for (let i = 0; i < windows.length; i++) {
-            if (windows[i].toplevel.activated) {
-                activeIdx = i;
-                break;
-            }
-        }
+        const pendingId = (svc._pendingCycleAppId === identity.desktopId)
+            ? svc._pendingCycleWindowId : "";
+        const pendingAge = Date.now() - svc._pendingCycleAt;
+        const target = WindowCycle.nextWindowToActivate(
+            windows,
+            WindowService.activeWindowId,
+            function(winId) { return WindowService.lastActivatedAtOf(winId); },
+            pendingId,
+            pendingAge,
+            svc._pendingCycleSourceWindowId);
 
-        if (activeIdx === -1) {
-            // App not currently in foreground: activate MRU window
-            // （v87 审查：windowsForApp 返回 records 序，旧代码取 [0] 实为
-            // "最早创建的窗"，与 MRU 注释语义不符——按最近激活时间戳取真 MRU）
-            const mru = windows.reduce((a, b) =>
-                WindowService.lastActivatedAtOf(a.windowId)
-                    >= WindowService.lastActivatedAtOf(b.windowId) ? a : b);
-            console.log("[DockModel] activate app MRU window=" + mru.windowId);
-            activateWindow(mru.windowId);
-        } else {
-            // App already active: cycle to next window in group (MRU 序)
-            const byMru = windows.slice().sort((a, b) =>
-                WindowService.lastActivatedAtOf(b.windowId)
-                    - WindowService.lastActivatedAtOf(a.windowId));
-            const rank = byMru.indexOf(windows[activeIdx]);
-            const nextIdx = (rank + 1) % byMru.length;
-            console.log("[DockModel] cycle app window from=" + windows[activeIdx].windowId
-                        + " to=" + byMru[nextIdx].windowId);
-            activateWindow(byMru[nextIdx].windowId);
+        if (target) {
+            svc._pendingCycleAppId = identity.desktopId;
+            svc._pendingCycleWindowId = target.windowId;
+            svc._pendingCycleSourceWindowId = WindowService.activeWindowId;
+            svc._pendingCycleAt = Date.now();
+            console.log("[DockModel] activate app window=" + target.windowId
+                        + " app=" + identity.desktopId);
+            activateWindow(target.windowId);
         }
+    }
+
+    // Non-toggle launch for notification clicks. Keep the animation origin,
+    // but leave notification counts intact until the caller confirms focus.
+    function launchApp(appId, onFinished, isCurrent) {
+        const identity = AppIdentityService.resolve(appId);
+        if (DockLaunchService.isLaunching(identity.desktopId))
+            return true;
+        DockLaunchService.begin(identity.desktopId);
+        // Prepare the compositor before the client maps its first window.
+        DockWindowAnimationTargetService.prepareLaunch(identity, function() {
+            if (isCurrent && !isCurrent()) {
+                DockLaunchService.finish(identity.desktopId);
+                return;
+            }
+            AppActionService.launch(identity, function(accepted) {
+                if (!accepted)
+                    DockLaunchService.finish(identity.desktopId);
+                if (onFinished)
+                    onFinished(accepted);
+            });
+        });
+        return true;
     }
 
     function launchNewWindow(appId) {
@@ -472,11 +514,12 @@ QtObject {
     }
 
     function unpinApp(appId) {
-        const wanted = AppIdentityService.canonicalId(appId);
-        if (!ConfigService.removeAppItem(wanted))
+        const items = ConfigService.dockItems || [];
+        const remaining = items.filter(item => item.type !== "app"
+            || !AppIdentityService.sameApp(item.appId, appId));
+        if (remaining.length === items.length || !ConfigService.setDockItems(remaining))
             return;
-        console.log("[DockModel] unpin app=" + wanted
-                    + " items=" + JSON.stringify(ConfigService.dockItems));
+        ConfigService.scheduleSave();
         svc._refreshPresentation();
     }
 

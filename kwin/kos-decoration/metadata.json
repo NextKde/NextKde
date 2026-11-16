@@ -8,6 +8,7 @@
         ],
         "Description": "Thin KOS window frame: a title bar with a centred caption, invisible resize borders, and natively rounded window corners.",
         "Description[zh_CN]": "KOS 的薄窗框：带居中标题文字的标题栏、不可见的缩放边框，以及由 KWin 原生裁剪的四角圆角。",
+        "Description[pt_BR]": "Moldura fina de janela do KOS: barra de título com legenda centralizada, bordas de redimensionamento invisíveis e cantos arredondados nativamente pelo KWin.",
         "Id": "kos_decoration",
         "License": "MIT",
         "Name": "KOS",

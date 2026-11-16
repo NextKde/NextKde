@@ -10,8 +10,10 @@
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QStandardPaths>
+#include <QStringView>
 
 #include <algorithm>
+#include <iterator>
 
 namespace KOS
 {
@@ -19,12 +21,42 @@ namespace KOS
 namespace
 {
 
+bool hasFormaControls(const QString &windowClass)
+{
+    // Forma/Mayonnaise draws and hit-tests its own TrafficLightsView. Match
+    // verified desktop IDs, never a title, executable name or broad prefix.
+    // For X11 use the WM_CLASS class token, not the user-selected instance.
+    const auto trimmed = QStringView(windowClass).trimmed();
+    const auto appId = trimmed.mid(trimmed.lastIndexOf(QLatin1Char(' ')) + 1);
+    static constexpr QLatin1StringView ids[] = {
+        QLatin1StringView("io.github.egely1337.Mayonnaise.Calculator"),
+        QLatin1StringView("io.github.egely1337.Mayonnaise.Finder"),
+        QLatin1StringView("io.github.egely1337.Mayonnaise.Music"),
+        QLatin1StringView("io.github.egely1337.Mayonnaise.Photos"),
+        QLatin1StringView("io.github.egely1337.Mayonnaise.Settings"),
+        QLatin1StringView("io.github.egely1337.Mayonnaise.TaskManager"),
+        QLatin1StringView("io.github.egely1337.Mayonnaise.Terminal"),
+        QLatin1StringView("io.github.egely1337.Mayonnaise.TextEditor"),
+        QLatin1StringView("io.github.egely1337.Mayonnaise.VideoPlayer"),
+        QLatin1StringView("io.github.skjsbsnq.Forma.AppStore"),
+        QLatin1StringView("io.github.skjsbsnq.Forma.Mail"),
+        QLatin1StringView("io.github.skjsbsnq.Forma.PolkitAgent"),
+        QLatin1StringView("io.github.skjsbsnq.Forma.Screenshot"),
+    };
+    return std::any_of(std::begin(ids), std::end(ids), [appId](auto id) { return appId == id; });
+}
+
 // Reads one JSON object over the config it is given and reports which keys it
 // named. Shared by `default`, `apps` and the hand-written `rules`, so the three
 // accept exactly the same keys with exactly the same meanings.
 AppFieldMask applyFields(AppConfig &config, const QJsonObject &object)
 {
     AppFieldMask fields = AppFieldNone;
+
+    if (object.value("nativeGtkControls").isBool()) {
+        config.nativeGtkControls = object["nativeGtkControls"].toBool();
+        fields |= AppFieldNativeGtkControls;
+    }
 
     if (object.contains("showButtons")) {
         config.showButtons = object["showButtons"].toBool();
@@ -75,10 +107,22 @@ AppFieldMask applyFields(AppConfig &config, const QJsonObject &object)
         const QString background = object["background"].toString();
         if (background == QLatin1String("dark")) {
             config.background = PanelBackground::Dark;
+            config.customBackground = QColor();
         } else if (background == QLatin1String("light")) {
             config.background = PanelBackground::Light;
-        } else {
+            config.customBackground = QColor();
+        } else if (background == QLatin1String("auto")) {
             config.background = PanelBackground::Auto;
+            config.customBackground = QColor();
+        } else {
+            const QColor custom(background);
+            if (custom.isValid()) {
+                config.background = PanelBackground::Custom;
+                config.customBackground = custom;
+            } else {
+                config.background = PanelBackground::Auto;
+                config.customBackground = QColor();
+            }
         }
         fields |= AppFieldBackground;
     }
@@ -94,6 +138,15 @@ AppFieldMask applyFields(AppConfig &config, const QJsonObject &object)
             config.decoratedWindows = DecoratedWindows::Auto;
         }
         fields |= AppFieldDecoratedWindows;
+    }
+    if (object.contains("glyphMode")) {
+        const QString mode = object["glyphMode"].toString();
+        if (mode == QLatin1String("hover") || mode == QLatin1String("macos")) {
+            config.glyphMode = GlyphMode::Hover;
+        } else {
+            config.glyphMode = GlyphMode::Always;
+        }
+        fields |= AppFieldGlyphMode;
     }
 
     // Values from a hand-edited text file, through the same clamp the adjust
@@ -125,6 +178,7 @@ void ButtonConfig::load()
     m_store.load();
 
     m_default = AppConfig();
+    m_independentButtonBackground = false;
     m_apps.clear();
     m_rules.clear();
 
@@ -146,6 +200,7 @@ void ButtonConfig::load()
     }
 
     const QJsonObject root = document.object();
+    m_independentButtonBackground = root.value("independentButtonBackground").toBool(false);
 
     if (root.contains("default")) {
         applyFields(m_default, root["default"].toObject());
@@ -225,6 +280,10 @@ AppConfig ButtonConfig::getAppConfig(const WindowQuery &query) const
         config.geometry = geometry;
     }
 
+    // Global policy is applied after every app and machine rule. Rules cannot
+    // re-enable button resizing or override the standard size in this mode.
+    config.nativeAppControls = hasFormaControls(query.windowClass);
+    config.geometry.independentBackground = m_independentButtonBackground;
     config.kosDecorationSelected = m_kosDecorationSelected;
     config.drawOnDecoratedWindows =
         config.decoratedWindows == DecoratedWindows::Always ? true
@@ -264,6 +323,9 @@ const ButtonConfig::AppEntry *ButtonConfig::findApp(const QString &windowClass) 
 void ButtonConfig::mergeInto(AppConfig &base, const AppConfig &overlay,
                              AppFieldMask fields)
 {
+    if (fields & AppFieldNativeGtkControls) {
+        base.nativeGtkControls = overlay.nativeGtkControls;
+    }
     if (fields & AppFieldShowButtons) {
         base.showButtons = overlay.showButtons;
     }
@@ -293,9 +355,13 @@ void ButtonConfig::mergeInto(AppConfig &base, const AppConfig &overlay,
     }
     if (fields & AppFieldBackground) {
         base.background = overlay.background;
+        base.customBackground = overlay.customBackground;
     }
     if (fields & AppFieldDecoratedWindows) {
         base.decoratedWindows = overlay.decoratedWindows;
+    }
+    if (fields & AppFieldGlyphMode) {
+        base.glyphMode = overlay.glyphMode;
     }
 }
 

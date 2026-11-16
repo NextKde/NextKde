@@ -1,4 +1,5 @@
 #include "KWinBridge.h"
+#include "DesktopTransitionMonitor.h"
 
 #include <QDBusConnection>
 #include <QDBusError>
@@ -8,6 +9,7 @@
 #include <QDBusPendingCallWatcher>
 #include <QDBusPendingReply>
 #include <QDBusReply>
+#include <QDBusServiceWatcher>
 #include <QDBusUnixFileDescriptor>
 #include <QDateTime>
 #include <QDirIterator>
@@ -43,6 +45,9 @@
 #include <array>
 #include <cerrno>
 #include <memory>
+#if defined(__GLIBC__)
+#include <malloc.h>
+#endif
 #include <poll.h>
 #include <fcntl.h>
 #include <unistd.h>
@@ -61,6 +66,28 @@ constexpr int kMaxThumbnailConcurrency = 2;
 constexpr qsizetype kMaxThumbnailQueue = 32;
 constexpr qint64 kThumbnailFreshMs = 5000;
 constexpr int kThumbnailWorkerThreads = 4;
+constexpr qint64 kMaxThumbnailFrameBytes = 256 * 1024 * 1024;
+
+// A raw screenshot frame is tens of MB of RGBA. After the first large block is
+// freed glibc raises its dynamic mmap threshold, so later captures of the same
+// size are served from the heap arenas and their pages are not returned to the
+// OS on free -- the daemon's RSS ratchets up in ~25 MB steps while Dock/Stage
+// previews are live and does not come back down. Hand the freed arenas back
+// after each capture batch. Throttled: a trim walks every arena, and captures
+// complete at a few hertz while previews are open.
+void trimCaptureMemory()
+{
+#if defined(__GLIBC__)
+    static std::atomic<qint64> lastTrimMs{0};
+    const qint64 now = QDateTime::currentMSecsSinceEpoch();
+    qint64 last = lastTrimMs.load(std::memory_order_relaxed);
+    if (now - last < 5000)
+        return;
+    if (!lastTrimMs.compare_exchange_strong(last, now, std::memory_order_relaxed))
+        return;
+    malloc_trim(0);
+#endif
+}
 
 class Bridge final : public QObject {
     Q_OBJECT
@@ -102,6 +129,11 @@ public slots:
             // thread so geometry snapshots never stall the bridge.
             decorateSnapshotIcons(event);
             return;
+        }
+        if (event.value(QStringLiteral("type")) == QStringLiteral("desktops")) {
+            event.insert(QStringLiteral("transitionActive"),
+                m_desktopTransition.observeDesktop(event.value(QStringLiteral("current")).toString()));
+            m_lastDesktopEvent = event;
         }
         publishEvent(event);
     }
@@ -205,8 +237,15 @@ public slots:
 
 public:
     explicit Bridge(QObject *parent = nullptr)
-        : QObject(parent)
+        : QObject(parent), m_desktopTransition(QDBusConnection::sessionBus(), this)
     {
+        connect(&m_desktopTransition, &DesktopTransitionMonitor::settled, this,
+                [this](const QString &desktopId) {
+            if (m_lastDesktopEvent.value(QStringLiteral("current")).toString() != desktopId)
+                return;
+            m_lastDesktopEvent.insert(QStringLiteral("transitionActive"), false);
+            publishEvent(m_lastDesktopEvent);
+        });
         // All icon work — the desktop-file index, KIconLoader lookups and the
         // full directory fallback scan — lives on this single worker thread.
         // One thread means the caches below need no locking and KIconLoader
@@ -228,6 +267,8 @@ public:
                 self->ensureDesktopIndex();
         });
     }
+
+    void resetDesktopTransition() { m_desktopTransition.reset(); }
 
 private:
     void publishEvent(const QJsonObject &event)
@@ -322,6 +363,7 @@ private:
             m_thumbnailQueue = retained;
         }
         m_lastWindowIds = ids;
+        m_haveWindowSnapshot = true;
         publishEvent(event);
     }
 
@@ -382,7 +424,10 @@ private:
         // we wait for that reply before reading, KWin and this process can
         // deadlock. Start draining immediately in a worker thread.
         const auto expectedBytes = std::make_shared<std::atomic<qint64>>(-1);
-        const auto deadlineMs = std::make_shared<std::atomic<qint64>>(-1);
+        // This deadline also applies before metadata arrives, including during
+        // shutdown when the event loop can no longer deliver the D-Bus reply.
+        const auto deadlineMs = std::make_shared<std::atomic<qint64>>(
+            QDateTime::currentMSecsSinceEpoch() + 10000);
         auto pixelsFuture = QtConcurrent::run(&m_thumbnailPool,
                 [readFd = pipeFds[0], expectedBytes, deadlineMs] {
             // The drain loop leaves through four different branches. Hand-closing
@@ -402,8 +447,7 @@ private:
                     return bytes.left(expected);
                 }
                 const qint64 deadline = deadlineMs->load();
-                if (expected >= 0 && deadline > 0
-                        && QDateTime::currentMSecsSinceEpoch() >= deadline) {
+                if (QDateTime::currentMSecsSinceEpoch() >= deadline) {
                     return bytes;
                 }
 
@@ -412,6 +456,8 @@ private:
                     continue;
                 const ssize_t bytesRead = ::read(readFd, buffer.data(), buffer.size());
                 if (bytesRead > 0) {
+                    if (bytes.size() > kMaxThumbnailFrameBytes - bytesRead)
+                        return QByteArray{};
                     bytes.append(buffer.data(), bytesRead);
                     continue;
                 }
@@ -427,12 +473,20 @@ private:
         // 标题栏+应用图标（台前卡片"最上面覆盖着图标"的根源），实时模式
         // 下内容持续刷新、那条静止的图标条格外显眼
         options.insert(QStringLiteral("include-decoration"), false);
+        // 不含窗口投影：CaptureWindow 默认把窗口的合成器投影一起拍进
+        // alpha 通道（实测 614×440 的暗窗，左右各有 ~12px 的 alpha 渐变
+        // 带，内容只从 x=12 开始）。缩略图是"窗口内容"，带投影会同时造成
+        // 三个可见缺陷：①内容被投影边距缩进、实际比卡面小一圈；②透明
+        // 边距让卡背板的白描边透出来，暗窗上读作"一圈莫名其妙的亮边"；
+        // ③卡面内部自带一层投影，与卡外的 KosCardShadow 叠成双影。
+        options.insert(QStringLiteral("include-shadow"), false);
         // ScreenShot2 writes raw pixels to this descriptor after its D-Bus
         // reply describes the image dimensions and QImage format.
         QDBusUnixFileDescriptor writePipe(dbusWriteFd);
         QDBusInterface screenshot(QStringLiteral("org.kde.KWin"),
                                   QStringLiteral("/org/kde/KWin/ScreenShot2"),
                                   QStringLiteral("org.kde.KWin.ScreenShot2"));
+        screenshot.setTimeout(8000);
         // Async so a slow or stuck KWin reply never blocks every other bridge
         // request; the pipe reader drains independently of the reply anyway.
         const QDBusPendingCall pending = screenshot.asyncCall(
@@ -461,10 +515,12 @@ private:
                 expectedBytes->store(0);
                 // The reader exits on the expected-size check within one poll
                 // cycle; reap it off-thread so this callback never blocks.
-                // Fire-and-forget: we only need waitForFinished to return, the
-                // QFuture is intentionally discarded.
+                // Reap off-thread and consume any partial pixels before trimming.
                 m_thumbnailPool.start(
-                    [pixelsFuture]() mutable { pixelsFuture.waitForFinished(); });
+                    [pixelsFuture]() mutable {
+                        const auto trimAfterCapture = qScopeGuard([] { trimCaptureMemory(); });
+                        const QByteArray discardedPixels = pixelsFuture.takeResult();
+                    });
                 publishThumbnailError(id, reply.error().message());
                 endThumbnailCapture(id);
                 return;
@@ -480,7 +536,10 @@ private:
             publishThumbnailDebug(id, QStringLiteral("meta=%1x%2 stride=%3 format=%4 type=%5")
                 .arg(width).arg(height).arg(stride).arg(int(format))
                 .arg(result.value(QStringLiteral("type")).toString()));
-            expectedBytes->store(std::max<qint64>(0, expectedSize));
+            // Reject oversized metadata before constructing an image. The
+            // pipe reader independently enforces the same allocation bound.
+            expectedBytes->store(expectedSize > kMaxThumbnailFrameBytes
+                ? 0 : std::max<qint64>(0, expectedSize));
             deadlineMs->store(QDateTime::currentMSecsSinceEpoch() + 4000);
 
             // A 4K frame is tens of MB of pixels plus a PNG encode; decode,
@@ -491,7 +550,12 @@ private:
             const QPointer<Bridge> guard(this);
             m_thumbnailPool.start([guard, id, pixelsFuture, width, height, stride,
                                format, expectedSize, serial]() mutable {
-                const QByteArray bytes = pixelsFuture.result();
+                // Release the capture's heap pages on every exit path, the
+                // failure branches below included.
+                const auto trimAfterCapture = qScopeGuard([] { trimCaptureMemory(); });
+                // Consume the future's stored result; result() leaves another
+                // reference alive in the task/watcher after this scope's trim.
+                const QByteArray bytes = pixelsFuture.takeResult();
                 if (!guard)
                     return;
                 QMetaObject::invokeMethod(guard, [guard, id] {
@@ -510,6 +574,7 @@ private:
                 };
                 if (width <= 0 || height <= 0 || stride <= 0
                         || format == QImage::Format_Invalid
+                        || expectedSize > kMaxThumbnailFrameBytes
                         || bytes.size() < expectedSize) {
                     fail(QStringLiteral("KWin returned an invalid screenshot"));
                     return;
@@ -526,6 +591,41 @@ private:
                 if (image.isNull()) {
                     fail(QStringLiteral("Cannot decode KWin screenshot"));
                     return;
+                }
+
+                // KWin's frame carries a fully transparent rim along the window
+                // shape's outer edge (2px on every side even with decorations
+                // and shadows excluded). Scaled onto the card face that rim is
+                // a translucent hairline around the thumbnail: the card's
+                // rounded clip trims the *rim* instead of the window content,
+                // which reads as "rounded frame around a square screenshot".
+                // Trim the frame to the rows/columns that actually carry
+                // pixels so the card edge meets the content edge.
+                if (image.hasAlphaChannel()) {
+                    constexpr int kAlphaFloor = 8;
+                    int left = image.width();
+                    int top = image.height();
+                    int right = -1;
+                    int bottom = -1;
+                    for (int y = 0; y < image.height(); ++y) {
+                        const auto *line = reinterpret_cast<const QRgb *>(
+                            image.constScanLine(y));
+                        for (int x = 0; x < image.width(); ++x) {
+                            if (qAlpha(line[x]) < kAlphaFloor)
+                                continue;
+                            left = std::min(left, x);
+                            top = std::min(top, y);
+                            right = std::max(right, x);
+                            bottom = std::max(bottom, y);
+                        }
+                    }
+                    if (right >= left && bottom >= top
+                            && (left > 0 || top > 0
+                                || right < image.width() - 1
+                                || bottom < image.height() - 1)) {
+                        image = image.copy(left, top, right - left + 1,
+                                           bottom - top + 1);
+                    }
                 }
 
                 const QString runtimeDir = QStandardPaths::writableLocation(
@@ -558,7 +658,7 @@ private:
     {
         // The window can close while a capture drains; drop the PNG instead of
         // handing the shell a file it would immediately discard.
-        if (!m_lastWindowIds.isEmpty() && !m_lastWindowIds.contains(id)) {
+        if (m_haveWindowSnapshot && !m_lastWindowIds.contains(id)) {
             QFile::remove(path);
             endThumbnailCapture(id);
             return;
@@ -684,6 +784,8 @@ private:
     }
 
     QQueue<QString> m_commands;
+    DesktopTransitionMonitor m_desktopTransition;
+    QJsonObject m_lastDesktopEvent;
     QHash<QString, QString> m_desktopIcons;
     QHash<QString, QString> m_appIconName;
     QHash<QString, QString> m_iconCache;
@@ -695,6 +797,7 @@ private:
     QQueue<QString> m_thumbnailQueue;
     quint64 m_thumbnailSerial = 0;
     bool m_desktopIndexReady = false;
+    bool m_haveWindowSnapshot = false;
     std::atomic<quint64> m_iconTicket{0};
     // Both pools are declared last so their destructors wait for workers while
     // every cache they access above is still alive.
@@ -738,10 +841,34 @@ bool startKWinBridge(const KWinEventHandler &handler)
                             << bus.lastError().message() << Qt::endl;
     }
 
-    // KWin's script is deliberately loaded by the same resident process. The
-    // D-Bus bridge is usable even when KWin is unavailable; the call simply
-    // fails and the rest of the platform adapters keep serving clients.
-    QTimer::singleShot(0, [] {
+    // KWin may register after the platform daemon, or acquire a new bus owner
+    // after a compositor restart. A one-shot load leaves Dock permanently
+    // without windows in either case. Retry startup briefly, and reload when
+    // a new KWin owner appears. This only loads our JS script, not effect .so's.
+    auto *scriptLoader = new QTimer(g_bridge);
+    scriptLoader->setInterval(2000);
+    auto attempts = std::make_shared<int>(0);
+    auto *kwinWatcher = new QDBusServiceWatcher(
+        QStringLiteral("org.kde.KWin"), bus,
+        QDBusServiceWatcher::WatchForOwnerChange, g_bridge);
+    QObject::connect(kwinWatcher, &QDBusServiceWatcher::serviceOwnerChanged,
+                     scriptLoader, [scriptLoader, attempts](const QString &,
+                                     const QString &, const QString &newOwner) {
+        g_bridge->resetDesktopTransition();
+        scriptLoader->stop();
+        if (!newOwner.isEmpty()) {
+            *attempts = 0;
+            scriptLoader->start(0);
+        }
+    });
+    QObject::connect(scriptLoader, &QTimer::timeout, g_bridge, [scriptLoader, attempts] {
+        scriptLoader->setInterval(2000);
+        if (++*attempts >= 5)
+            scriptLoader->stop();
+        const auto reportFailure = [](const QString &reason) {
+            QTextStream(stderr) << "KWin window bridge not started: " << reason
+                                << Qt::endl;
+        };
         QDBusInterface effects(QStringLiteral("org.kde.KWin"),
                               QStringLiteral("/Effects"),
                               QStringLiteral("org.kde.kwin.Effects"),
@@ -756,20 +883,42 @@ bool startKWinBridge(const KWinEventHandler &handler)
         QDBusInterface scripting(QStringLiteral("org.kde.KWin"),
                                  QStringLiteral("/Scripting"),
                                  QStringLiteral("org.kde.kwin.Scripting"));
-        if (!scripting.isValid())
+        if (!scripting.isValid()) {
+            reportFailure(scripting.lastError().message());
             return;
+        }
         const QString script = qEnvironmentVariable("KOS_PLATFORM_KWIN_SCRIPT");
-        if (script.isEmpty())
+        scripting.setTimeout(1500);
+        if (script.isEmpty() || !QFileInfo(script).isReadable()) {
+            reportFailure(QStringLiteral("KOS_PLATFORM_KWIN_SCRIPT is missing or unreadable: ") + script);
+            scriptLoader->stop();
             return;
+        }
+        // Desktop stacking now belongs to the platform bridge. Retire the
+        // former Shell-owned scripts before installing its single owner.
+        scripting.call(QStringLiteral("unloadScript"), QStringLiteral("kos-stage-stack"));
+        scripting.call(QStringLiteral("unloadScript"), QStringLiteral("kos-desktop-stack-v1"));
         scripting.call(QStringLiteral("unloadScript"),
                        QStringLiteral("kos-window-bridge"));
-        const QDBusMessage loaded = scripting.call(QStringLiteral("loadScript"),
+        const QDBusReply<int> loaded = scripting.call(QStringLiteral("loadScript"),
                                                     script,
                                                     QStringLiteral("kos-window-bridge"));
-        if (loaded.type() == QDBusMessage::ErrorMessage)
+        if (!loaded.isValid() || loaded.value() < 0) {
+            reportFailure(loaded.isValid() ? QStringLiteral("loadScript returned a negative script id")
+                                           : loaded.error().message());
             return;
-        scripting.call(QStringLiteral("start"));
+        }
+        const QDBusMessage started = scripting.call(QStringLiteral("start"));
+        if (started.type() == QDBusMessage::ErrorMessage) {
+            reportFailure(started.errorMessage());
+            return;
+        }
+        scriptLoader->stop();
+        // start() dispatches evaluation asynchronously; runtime JS errors are
+        // reported by KWin's scripting log, not by this D-Bus reply.
+        QTextStream(stderr) << "KWin window bridge start requested: " << script << Qt::endl;
     });
+    scriptLoader->start(0);
     return true;
 }
 

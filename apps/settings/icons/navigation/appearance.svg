@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="128" height="128" viewBox="0 0 128 128">
+  <title>Appearance</title>
+  <defs>
+    <linearGradient id="tileColor" x1="0" y1="10" x2="0" y2="114" gradientUnits="userSpaceOnUse"><stop stop-color="#b9aceb"/><stop offset="1" stop-color="#8373bc"/></linearGradient>
+    <linearGradient id="ivory" x1="0" y1="32" x2="0" y2="100" gradientUnits="userSpaceOnUse"><stop stop-color="#ffffff"/><stop offset="1" stop-color="#f1f0eb"/></linearGradient>
+    <path id="tile" d="M42 10H86C107 10 116 19 116 40V84C116 105 107 114 86 114H42C21 114 12 105 12 84V40C12 19 21 10 42 10Z"/>
+    
+  </defs>
+  <use xlink:href="#tile" transform="translate(0 4)" fill="#434047" opacity=".06"/>
+  <use xlink:href="#tile" transform="translate(0 2)" fill="#434047" opacity=".07"/>
+  <use xlink:href="#tile" fill="url(#tileColor)"/>
+  <g>
+    
+      <circle cx="64" cy="64" r="30" fill="url(#ivory)"/>
+      <path d="M64 34A30 30 0 0 1 64 94Z" fill="#575272"/>
+      <circle cx="64" cy="64" r="30" fill="none" stroke="#fff" stroke-opacity=".55" stroke-width="1"/>
+    
+    <path d="M28 16C34 13 39 12 46 12H84C92 12 98 14 103 17" fill="none" stroke="#fff" stroke-opacity=".48" stroke-width="1.25" stroke-linecap="round"/>
+  </g>
+  <use xlink:href="#tile" fill="none" stroke="#434047" stroke-opacity=".14" stroke-width=".75"/>
+</svg>

@@ -1,4 +1,5 @@
 import QtQuick
+import "AppMenuIdentity.mjs" as MenuIdentity
 import Quickshell
 import qs.desktop
 import qs.desktop.modules.common
@@ -25,6 +26,8 @@ Item {
     readonly property var shownItems: items.slice(0, visibleCount)
     readonly property var overflowItems: items.slice(visibleCount)
     property int activeOpeningId: 0
+    property int _openingSerial: 0
+    property bool _changingAnchor: false
     implicitHeight: 28
     implicitWidth: available && items.length > 0
         ? Math.min(maximumWidth, menuRow.implicitWidth + (overflowItems.length > 0 ? 34 : 0)) : 0
@@ -33,7 +36,7 @@ Item {
 
     FontMetrics {
         id: labelMetrics
-        font.family: "SF Pro Display, Noto Sans CJK SC, sans-serif"
+        font.family: AppearanceTokens.typography.displayChain
         font.pixelSize: 13
         font.weight: Font.DemiBold
     }
@@ -62,15 +65,25 @@ Item {
 
     // ContextMenu has a synchronous page stack. Hydrate children before it is
     // shown, with a small depth limit to keep malformed menus bounded.
-    function hydrate(itemsToHydrate, depth, done) {
+    function hydrate(itemsToHydrate, depth, done, serial) {
+        if (serial !== _openingSerial)
+            return
         if (depth >= 4 || !itemsToHydrate || itemsToHydrate.length === 0) {
             done(itemsToHydrate || [])
             return
         }
-        let pending = 0
+        // Count before dispatch: disconnected requests and populated children
+        // can complete synchronously, including from inside this loop.
+        let pending = itemsToHydrate.filter(item => item?.hasChildren).length
+        if (pending === 0) {
+            for (const item of itemsToHydrate)
+                item.children = []
+            done(itemsToHydrate)
+            return
+        }
         const finish = function() {
             pending--
-            if (pending === 0)
+            if (pending === 0 && serial === root._openingSerial)
                 done(itemsToHydrate)
         }
         for (let i = 0; i < itemsToHydrate.length; ++i) {
@@ -80,28 +93,26 @@ Item {
                 continue
             }
             if (item.children && item.children.length > 0) {
-                pending++
                 hydrate(item.children, depth + 1, function(result) {
                     item.children = result
                     finish()
-                })
+                }, serial)
                 continue
             }
-            pending++
             AppMenuService.requestLayout(item.id, function(children) {
                 hydrate(children, depth + 1, function(result) {
                     item.children = result
                     finish()
-                })
+                }, serial)
             }, 2)
         }
-        if (pending === 0)
-            done(itemsToHydrate)
     }
 
-    function presentMenu(rootId, anchorItem, result) {
+    function presentMenu(rootId, anchorItem, result, serial) {
         const anchorChanging = menuPopup.visible && root.popupAnchorItem !== anchorItem
         const openNew = function() {
+            if (serial !== root._openingSerial)
+                return
             popupRootId = rootId
             popupAnchorItem = anchorItem
             menuPopup.anchorItem = anchorItem
@@ -111,49 +122,96 @@ Item {
             Qt.callLater(function() { menuPopup.anchor.updateAnchor() })
         }
         if (anchorChanging) {
+            root._changingAnchor = true
             menuPopup.visible = false
+            root._changingAnchor = false
             Qt.callLater(openNew)
         } else {
             openNew()
         }
     }
 
-    function openItem(item, clickedItem) {
-        if (!item || !item.enabled)
-            return
-        console.info("[GlobalMenu] click id=" + item.id + " children=" + item.hasChildren)
-        if (!item.hasChildren) {
-            PlatformClient.request("appmenu.trigger", { service, path, id: item.id })
-            return
-        }
-        popupRootId = item.id
-        activeOpeningId = item.id
-        PlatformClient.request("appmenu.open", { service, path, id: item.id })
-        AppMenuService.requestLayout(item.id, function(children) {
-            if (activeOpeningId !== item.id)
+    // Refresh the whole model, including labels and enabled state. A failed
+    // refresh must never send a cached ID back to the application.
+    function freshRoot(serial, callback) {
+        AppMenuService.requestLayout(0, function(rootItems) {
+            if (serial !== root._openingSerial)
                 return
-            hydrate(children, 0, function(result) {
-                if (activeOpeningId !== item.id)
-                    return
-                root.presentMenu(item.id, clickedItem, result)
+            const fresh = (rootItems || []).filter(item => item.visible !== false && !item.separator)
+            AppMenuService.items = fresh
+            root.updateVisibleCount()
+            // Repeater delegates are recreated when the model changes.
+            Qt.callLater(function() {
+                if (serial === root._openingSerial)
+                    callback(fresh)
             })
         }, 2)
     }
 
+    function openItem(index) {
+        const previous = items
+        const shown = previous[index]
+        if (!shown || shown.enabled === false)
+            return
+        if (menuPopup.visible)
+            menuPopup.visible = false
+        const serial = ++_openingSerial
+        freshRoot(serial, function(fresh) {
+            const freshIndex = MenuIdentity.resolve(previous, index, fresh)
+            if (freshIndex < 0)
+                return
+            const item = fresh[freshIndex]
+            if (item.enabled === false)
+                return
+            const anchor = freshIndex < root.visibleCount
+                ? menuItems.itemAt(freshIndex) : overflowButton
+            if (!anchor)
+                return
+            if (!item.hasChildren) {
+                PlatformClient.request("appmenu.trigger", { service, path, id: item.id })
+                return
+            }
+            popupRootId = item.id
+            activeOpeningId = item.id
+            // Layout owns AboutToShow; open only emits the lifecycle event.
+            PlatformClient.request("appmenu.open", { service, path, id: item.id }, function(response) {
+                if (serial !== root._openingSerial || !response?.ok)
+                    return
+                AppMenuService.requestLayout(item.id, function(children) {
+                    if (serial !== root._openingSerial)
+                        return
+                    hydrate(children, 0, function(result) {
+                        root.presentMenu(item.id, anchor, result, serial)
+                    }, serial)
+                }, 2)
+            })
+        })
+    }
+
     function openOverflow(anchor) {
+        if (menuPopup.visible)
+            menuPopup.visible = false
+        const serial = ++_openingSerial
         popupRootId = 0
         activeOpeningId = 0
-        hydrate(overflowItems, 0, function(result) {
-            root.presentMenu(0, anchor, result)
+        freshRoot(serial, function(fresh) {
+            const remaining = fresh.slice(root.visibleCount)
+            if (remaining.length === 0)
+                return
+            hydrate(remaining, 0, function(result) {
+                root.presentMenu(0, anchor, result, serial)
+            }, serial)
         })
     }
 
     onMaximumWidthChanged: updateVisibleCount()
     onServiceChanged: {
+        _openingSerial++
         if (menuPopup.visible)
             menuPopup.hide()
     }
     onPathChanged: {
+        _openingSerial++
         if (menuPopup.visible)
             menuPopup.hide()
     }
@@ -166,6 +224,7 @@ Item {
         spacing: 1
 
         Repeater {
+            id: menuItems
             model: root.shownItems
             delegate: Item {
                 id: menuItem
@@ -190,14 +249,14 @@ Item {
                     radius: 8
                     visible: AppearanceTokens.surface.selectionHighlightStyle !== "glass"
                     color: (pointer.containsMouse || (menuPopup.visible && root.popupRootId === modelData.id))
-                        ? Qt.rgba(ThemeService.foregroundColor.r,
-                            ThemeService.foregroundColor.g, ThemeService.foregroundColor.b, 0.16) : "transparent"
+                        ? Qt.rgba(ThemeService.barInk.r,
+                            ThemeService.barInk.g, ThemeService.barInk.b, 0.16) : "transparent"
                     z: -1
                 }
                 Text {
                     anchors.centerIn: parent
                     text: modelData.label || ""
-                    color: ThemeService.foregroundColor
+                    color: ThemeService.barInk
                     font: labelMetrics.font
                     renderType: Text.NativeRendering
                     elide: Text.ElideRight
@@ -213,12 +272,12 @@ Item {
                         if (menuPopup.visible && root.popupRootId === modelData.id) {
                             menuPopup.hide()
                         } else {
-                            root.openItem(modelData, menuItem)
+                            root.openItem(index)
                         }
                     }
                     onEntered: {
                         if (menuPopup.visible && root.popupRootId !== modelData.id) {
-                            root.openItem(modelData, menuItem)
+                            root.openItem(index)
                         }
                     }
                 }
@@ -246,11 +305,11 @@ Item {
                 radius: 8
                 visible: AppearanceTokens.surface.selectionHighlightStyle !== "glass"
                 color: (morePointer.containsMouse || (menuPopup.visible && root.popupRootId === 0))
-                    ? Qt.rgba(ThemeService.foregroundColor.r,
-                        ThemeService.foregroundColor.g, ThemeService.foregroundColor.b, 0.16) : "transparent"
+                    ? Qt.rgba(ThemeService.barInk.r,
+                        ThemeService.barInk.g, ThemeService.barInk.b, 0.16) : "transparent"
                 z: -1
             }
-            Text { anchors.centerIn: parent; text: "››"; color: ThemeService.foregroundColor; font.pixelSize: 16; renderType: Text.NativeRendering }
+            BundledIcon { anchors.centerIn: parent; name: "bar.menuOverflow"; color: ThemeService.barInk; size: 16;}
             MouseArea {
                 id: morePointer
                 anchors.fill: parent
@@ -273,6 +332,7 @@ Item {
 
     ContextMenu {
         id: menuPopup
+        scrimLevel: AppearanceTokens.bar.popupScrimLevel
         anchorItem: root.popupAnchorItem
         baseColor: ThemeService.backgroundColor
         foregroundColor: ThemeService.foregroundColor
@@ -300,6 +360,8 @@ Item {
             })
         }
         onAboutToHide: {
+            if (!root._changingAnchor)
+                root._openingSerial++
             PlatformClient.request("appmenu.close", {
                 service: root.service, path: root.path, id: root.popupRootId
             })

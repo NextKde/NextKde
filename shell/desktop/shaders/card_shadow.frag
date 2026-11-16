@@ -25,9 +25,10 @@ layout(std140, binding = 0) uniform buf {
     float spread;
     float falloff;
     vec4 shadowColor;
-    // Appended last so the vertex stage's identical block keeps every earlier
-    // offset: both stages share one buffer, and only this one needs the field.
+    // Fragment-only fields follow the shared prefix to preserve every offset
+    // used by the vertex stage.
     float debugMode;
+    float cutoutPadding;
 };
 
 // The same superelliptical field as Squircle.mjs / shaders/squircle.frag. Keep
@@ -79,14 +80,16 @@ void main()
     float maxRadius = min(halfSize.x, halfSize.y);
     float radius = min(cornerRadius, maxRadius);
 
-    // The card, where it actually is. The hole is grown a pixel past the card's
-    // own outline on purpose: the compositor captures the *previous* frame inside
+    // The card, where it actually is. Most hosts leave clearance past the card's
+    // own outline because the compositor captures the *previous* frame inside
     // this rectangle as the glass backdrop (BlurEffect::drawWindow blurs before
     // it draws the window, and renderTarget keeps the frame before that), so a
     // single shadow pixel landing inside the card's silhouette gets blurred back
-    // into the glass and greys the card out. One pixel of margin means rounding,
-    // scaling and anti-aliasing cannot place one there.
-    float card = squircleDistance(centered, halfSize + vec2(1.0), radius, n);
+    // into the glass and greys the card out. A popup can instead keep the hole
+    // flush with its silhouette: extra clearance exposes the bright application
+    // behind it as a continuous white line between the card and its shadow.
+    float card = squircleDistance(centered,
+        halfSize + vec2(max(cutoutPadding, 0.0)), radius, n);
 
     // The card's own coverage: 1 inside the outline, 0 outside. A fixed
     // one-pixel band rather than the mask's f / fwidth(f) ratio -- the hole only

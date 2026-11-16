@@ -1,5 +1,6 @@
 import QtQuick
 import Quickshell
+import Quickshell.Wayland
 import qs.desktop.modules.common
 
 // Edge-aware tooltip shared by built-in status items. A PopupWindow is used
@@ -23,25 +24,33 @@ AnimatedPopupWindow {
     implicitWidth: Math.max(root.minimumWidth, tooltipColumn.implicitWidth + 18)
     implicitHeight: tooltipColumn.implicitHeight + 12
     color: "transparent"
+    // motion-exception: retain near-instant tooltip fades (both directions).
+    openDuration: 70
+    closeDuration: 70
+    mask: Region { item: null }
+
+    PopupAnchorBinding { popupAnchor: root.anchor; sourceItem: root.anchorItem }
 
     anchor {
-        item: root.anchorItem
         edges: !root.dockHosted ? Edges.Bottom
             : root.dockEdge === "left" ? Edges.Right
             : root.dockEdge === "right" ? Edges.Left : Edges.Top
         gravity: !root.dockHosted ? Edges.Bottom
             : root.dockEdge === "left" ? Edges.Right
             : root.dockEdge === "right" ? Edges.Left : Edges.Top
-        margins.top: root.dockHosted && root.dockEdge === "bottom" ? -6 : 0
-        margins.bottom: root.dockHosted ? 0 : -6
-        margins.left: root.dockHosted && root.dockEdge === "right" ? -6 : 0
-        margins.right: root.dockHosted && root.dockEdge === "left" ? -6 : 0
+        margins.top: root.dockHosted && root.dockEdge === "bottom" ? 4 : 0
+        margins.bottom: root.dockHosted ? 0 : 4
+        margins.left: root.dockHosted && root.dockEdge === "right" ? 4 : 0
+        margins.right: root.dockHosted && root.dockEdge === "left" ? 4 : 0
     }
 
-    Rectangle {
+    BackgroundEffect.blurRegion: root.visible && AppearanceTokens.surface.usesBackdrop
+        ? tooltipSurface.blurRegion : null
+
+    ControlCenterGlass {
+        id: tooltipSurface
         anchors.fill: parent
         radius: 7
-        color: "#000000"
 
         Column {
             id: tooltipColumn
@@ -51,15 +60,15 @@ AnimatedPopupWindow {
             Text {
                 anchors.horizontalCenter: parent.horizontalCenter
                 text: root.primaryText
-                color: "#ffffff"
-                font { family: "Noto Sans CJK SC"; pixelSize: 12; weight: Font.DemiBold }
+                color: tooltipSurface.foregroundColor
+                font { family: AppearanceTokens.typography.textFamily; pixelSize: 12; weight: Font.DemiBold }
             }
             Text {
                 anchors.horizontalCenter: parent.horizontalCenter
                 visible: root.secondaryText.length > 0
                 text: root.secondaryText
-                color: "#ffffff"
-                font { family: "Noto Sans CJK SC"; pixelSize: 10; weight: Font.Medium }
+                color: tooltipSurface.secondaryForegroundColor
+                font { family: AppearanceTokens.typography.textFamily; pixelSize: 10; weight: Font.Medium }
             }
         }
     }

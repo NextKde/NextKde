@@ -2,6 +2,7 @@ import QtQuick
 import Quickshell
 import Quickshell.Wayland
 import Quickshell.Widgets
+import "../../../shared/qml/i18n"
 import qs.desktop.modules.bar
 import qs.desktop.modules.common
 import qs.desktop.modules.dock
@@ -18,7 +19,7 @@ Item {
     property bool dockHosted: false
 
     // Dock hosts follow the other info cards (DockMusicPlayer contract):
-    // hovering the card opens the dashboard after a 420 ms dwell, and
+    // hovering the card opens the dashboard after the shared short dwell, and
     // leaving closes it 260 ms later unless the pointer moved into the
     // popup itself. The Bar keeps the hover tooltip + click toggle instead.
     property bool popupPointerInside: false
@@ -55,7 +56,10 @@ Item {
                 return
             if (containsMouse) {
                 dashboardCloseDelay.stop()
-                dashboardOpenDelay.restart()
+                if (detailsPopup.visible)
+                    DockModelService.openDockPopup(detailsPopup)
+                else if (!dashboardOpenDelay.running)
+                    dashboardOpenDelay.start()
             } else if (!root.popupPointerInside) {
                 dashboardOpenDelay.stop()
                 dashboardCloseDelay.restart()
@@ -65,7 +69,7 @@ Item {
 
     Timer {
         id: dashboardOpenDelay
-        interval: 420
+        interval: DockAnimation.infoPopupOpenDelay
         repeat: false
         onTriggered: {
             if (root.dockHosted && hoverArea.containsMouse && root.available)
@@ -88,6 +92,10 @@ Item {
 
     AnimatedPopupWindow {
         id: temperatureTooltip
+        // motion-exception: retain near-instant tooltip fades (both directions).
+        openDuration: 70
+        closeDuration: 70
+        mask: Region { item: null }
         motionOrigin: root.dockHosted ? Item.Bottom : Item.Top
         // Dock hosts go straight to the dashboard on hover, so the compact
         // tooltip only serves the standalone Bar.
@@ -113,11 +121,11 @@ Item {
             Text {
                 id: tooltipText
                 anchors.centerIn: parent
-                text: "CPU 平均 " + root.currentC + "°C · 60 秒最高 "
-                    + root.maximum5MinuteC + "°C"
+                text: I18n.tr("CPU avg %1°C · 5 min max %2°C")
+                    .arg(root.currentC).arg(root.maximum5MinuteC)
                 color: ThemeService.foregroundColor
                 font {
-                    family: "Noto Sans CJK SC"
+                    family: AppearanceTokens.typography.textFamily
                     pixelSize: 12
                     weight: Font.DemiBold
                 }
@@ -129,6 +137,8 @@ Item {
     // keeps the compact one-line tooltip for a quick glance.
     AnimatedPopupWindow {
         id: detailsPopup
+        openDuration: root.dockHosted ? DockAnimation.infoPopupEntranceDuration
+            : AppearanceTokens.motion.popupOpenDuration
         motionOrigin: root.dockHosted ? Item.Bottom : Item.Top
         implicitWidth: 360
         implicitHeight: 670
@@ -157,6 +167,13 @@ Item {
             surfaceOpacity: 0.96
             materialDepth: 1.8
             material: "thick"
+            // The bar popups all carry the control-center card's scrim
+            // posture. Without it these three were the only bar surfaces whose
+            // glass never darkened over a bright backdrop, so their white labels
+            // sat on raw glass while every neighbouring panel was scrimmed --
+            // the two tones were visibly different side by side.
+            scrimEnabled: AppearanceTokens.surface.usesBackdrop
+            scrimLevel: AppearanceTokens.bar.popupScrimLevel
 
             HoverHandler {
                 // Keeps the hover-opened dashboard alive while the pointer is
@@ -177,15 +194,16 @@ Item {
                         spacing: 2
 
                         GlassText {
-                            text: "温度传感器"
+                            text: I18n.tr("Temperature Sensors")
                             color: ThemeService.foregroundColor
-                            font { family: "Noto Sans CJK SC"; pixelSize: 16; weight: Font.DemiBold }
+                            font { family: AppearanceTokens.typography.textFamily; pixelSize: 16; weight: Font.DemiBold }
                         }
 
                         GlassText {
-                            text: "每 10 秒更新 · " + MetricsService.sensors.length + " 个读数"
+                            text: I18n.tr("Updates every 10 s · %1 readings")
+                                .arg(MetricsService.sensors.length)
                             color: Qt.rgba(ThemeService.foregroundColor.r, ThemeService.foregroundColor.g, ThemeService.foregroundColor.b, 0.62)
-                            font { family: "Noto Sans CJK SC"; pixelSize: 11 }
+                            font { family: AppearanceTokens.typography.textFamily; pixelSize: 11 }
                         }
                     }
 
@@ -196,11 +214,11 @@ Item {
                         radius: width / 2
                         color: closeMouse.containsMouse ? Qt.rgba(1, 1, 1, 0.15) : "transparent"
 
-                        GlassText {
+                        BundledIcon {
                             anchors.centerIn: parent
-                            text: "×"
+                            name: "temperature.close"
                             color: ThemeService.foregroundColor
-                            font.pixelSize: 20
+                            size: 20
                         }
                         MouseArea {
                             id: closeMouse
@@ -218,8 +236,8 @@ Item {
                     spacing: 8
                     Repeater {
                         model: [
-                            { label: "平均 CPU", value: root.currentC + "°C" },
-                            { label: "60 秒最高", value: root.maximum5MinuteC + "°C" }
+                            { label: I18n.tr("Avg CPU"), value: root.currentC + "°C" },
+                            { label: I18n.tr("5 min max"), value: root.maximum5MinuteC + "°C" }
                         ]
                         delegate: Rectangle {
                             width: (parent.width - 8) / 2
@@ -241,8 +259,8 @@ Item {
                     spacing: 8
                     Repeater {
                         model: [
-                            { label: "下行", value: NetworkService.formatRate(NetworkService.downloadBytesPerSecond) },
-                            { label: "上行", value: NetworkService.formatRate(NetworkService.uploadBytesPerSecond) }
+                            { label: I18n.tr("Down"), value: NetworkService.formatRate(NetworkService.downloadBytesPerSecond) },
+                            { label: I18n.tr("Up"), value: NetworkService.formatRate(NetworkService.uploadBytesPerSecond) }
                         ]
                         delegate: Rectangle {
                             width: (parent.width - 8) / 2
@@ -265,14 +283,14 @@ Item {
 
                     UsageRing {
                         width: (parent.width - 8) / 2
-                        label: "内存"
+                        label: I18n.tr("Memory")
                         detail: root.formatBytes(MetricsService.memoryUsedBytes) + " / " + root.formatBytes(MetricsService.memoryTotalBytes)
                         value: root.memoryUsage
                         accentColor: "#5e5ce6"
                     }
                     UsageRing {
                         width: (parent.width - 8) / 2
-                        label: "磁盘 /"
+                        label: I18n.tr("Disk /")
                         detail: root.formatBytes(MetricsService.diskUsedBytes) + " / " + root.formatBytes(MetricsService.diskTotalBytes)
                         value: root.diskUsage
                         accentColor: "#30d158"
@@ -287,9 +305,10 @@ Item {
                         width: (parent.width - 12) / 2
                         spacing: 3
                         GlassText {
-                            text: "内存趋势 · 最近 " + MetricsService.memoryHistory.length * 10 + " 秒"
+                            text: I18n.tr("Memory trend · last %1 s")
+                                .arg(MetricsService.memoryHistory.length * 10)
                             color: Qt.rgba(ThemeService.foregroundColor.r, ThemeService.foregroundColor.g, ThemeService.foregroundColor.b, 0.62)
-                            font { family: "Noto Sans CJK SC"; pixelSize: 10 }
+                            font { family: AppearanceTokens.typography.textFamily; pixelSize: 10 }
                         }
                         UsageSparkline { width: parent.width; values: MetricsService.memoryHistoryValues; lineColor: "#5e5ce6"; adaptiveRange: true }
                     }
@@ -297,9 +316,11 @@ Item {
                         width: (parent.width - 12) / 2
                         spacing: 3
                         GlassText {
-                            text: "CPU 趋势 · " + Math.round(MetricsService.cpuUsage * 100) + "% · 最近 " + MetricsService.cpuHistory.length * 10 + " 秒"
+                            text: I18n.tr("CPU trend · %1% · last %2 s")
+                                .arg(Math.round(MetricsService.cpuUsage * 100))
+                                .arg(MetricsService.cpuHistory.length * 10)
                             color: Qt.rgba(ThemeService.foregroundColor.r, ThemeService.foregroundColor.g, ThemeService.foregroundColor.b, 0.62)
-                            font { family: "Noto Sans CJK SC"; pixelSize: 10 }
+                            font { family: AppearanceTokens.typography.textFamily; pixelSize: 10 }
                         }
                         UsageSparkline { width: parent.width; values: MetricsService.cpuHistoryValues; lineColor: "#ff9f0a" }
                     }
@@ -309,9 +330,11 @@ Item {
                     width: parent.width
                     spacing: 3
                     GlassText {
-                        text: "CPU 平均频率 · " + Math.round(MetricsService.cpuFrequencyMhz) + " MHz · 最近 " + MetricsService.frequencyHistory.length * 10 + " 秒"
+                        text: I18n.tr("Avg CPU frequency · %1 MHz · last %2 s")
+                            .arg(Math.round(MetricsService.cpuFrequencyMhz))
+                            .arg(MetricsService.frequencyHistory.length * 10)
                         color: Qt.rgba(ThemeService.foregroundColor.r, ThemeService.foregroundColor.g, ThemeService.foregroundColor.b, 0.62)
-                        font { family: "Noto Sans CJK SC"; pixelSize: 10 }
+                        font { family: AppearanceTokens.typography.textFamily; pixelSize: 10 }
                     }
                     UsageSparkline {
                         width: parent.width
@@ -322,9 +345,9 @@ Item {
                 }
 
                 GlassText {
-                    text: "实时读数"
+                    text: I18n.tr("Live readings")
                     color: ThemeService.foregroundColor
-                    font { family: "Noto Sans CJK SC"; pixelSize: 12; weight: Font.DemiBold }
+                    font { family: AppearanceTokens.typography.textFamily; pixelSize: 12; weight: Font.DemiBold }
                 }
 
                 ListView {
@@ -346,14 +369,14 @@ Item {
                             elide: Text.ElideRight
                             text: modelData.device + " · " + modelData.label
                             color: ThemeService.foregroundColor
-                            font { family: "Noto Sans CJK SC"; pixelSize: 12 }
+                            font { family: AppearanceTokens.typography.textFamily; pixelSize: 12 }
                         }
                         GlassText {
                             id: valueText
                             anchors { right: parent.right; rightMargin: 10; verticalCenter: parent.verticalCenter }
                             text: (modelData.milliC / 1000).toFixed(1) + "°C"
                             color: modelData.milliC >= 85000 ? "#ff453a" : modelData.milliC >= 70000 ? "#ff9f0a" : ThemeService.foregroundColor
-                            font { family: "SF Pro Display"; pixelSize: 13; weight: Font.DemiBold }
+                            font { family: AppearanceTokens.typography.displayFamily; pixelSize: 13; weight: Font.DemiBold }
                         }
                     }
                 }

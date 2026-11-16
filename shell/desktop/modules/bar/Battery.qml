@@ -2,31 +2,29 @@ import Quickshell
 import Quickshell.Services.UPower
 import QtQuick
 import QtQuick.Effects
+import "../../../shared/qml/i18n"
 import qs.desktop.modules.dock
 import qs.desktop.modules.common
 
-// Compact battery indicator with charging-state colours and hover details.
+// Compact battery indicator using the same monochrome ink as other status cells.
 Item {
     id: root
 
+    signal panelToggleRequested()
+    property bool panelOpen: false
     property bool dockHosted: false
     property string dockEdge: "bottom"
     property bool verticalDock: false
     property real iconSize: 18
     rotation: verticalDock ? -90 : 0
-    readonly property bool tintActive: IconAppearanceService.mode === "tint"
-    readonly property color dockTintColor: tintActive
-        ? IconAppearanceService.styledSymbolicColor()
-        : ThemeService.foregroundColor
-    opacity: tintActive ? IconAppearanceService.opacity : 1.0
-    layer.enabled: tintActive
+    readonly property color dockTintColor: ThemeService.barInk
+    // Keep the existing contrast treatment over the wallpaper.
+    readonly property bool iconOutlined: AppearanceTokens.isDarkTheme && !AppearanceTokens.bar.macStyle
+    layer.enabled: iconOutlined
     layer.effect: MultiEffect {
         shadowEnabled: true
-        shadowColor: Qt.rgba(0, 0, 0, 0.82)
-        shadowOpacity: 0.62
-        shadowBlur: 0.32
-        shadowVerticalOffset: 0.7
-        shadowScale: 1.04
+        shadowColor: Qt.rgba(0, 0, 0, 0.40)
+        shadowBlur: 0.22
     }
 
     implicitWidth: iconSize
@@ -34,70 +32,31 @@ Item {
     width: implicitWidth
     height: implicitHeight
 
-    Rectangle {
-        id: outline
-        anchors {
-            left: parent.left
-            verticalCenter: parent.verticalCenter
-        }
-        width: Math.max(12, root.iconSize - 2)
-        height: Math.max(8, Math.round(root.iconSize * 0.56))
-        radius: 3
-        color: "transparent"
-        border {
-            width: 1.5
-            color: root.dockTintColor
-        }
-    }
-
-    Rectangle {
-        anchors {
-            left: outline.right
-            verticalCenter: outline.verticalCenter
-        }
-        width: Math.max(1.5, root.iconSize - outline.width)
-        height: Math.max(3, root.iconSize * 0.20)
-        radius: 1
+    ShellBatteryIcon {
+        anchors.fill: parent
+        level: root.batteryDevice.ready ? root.level : 0
+        charging: root.isCharging
         color: root.dockTintColor
-    }
-
-    Rectangle {
-        anchors {
-            left: outline.left
-            verticalCenter: outline.verticalCenter
-            leftMargin: 2
-        }
-        width: batteryDevice.ready && root.percent > 0
-            ? Math.max(2, (outline.width - 4) * root.level)
-            : 0
-        height: outline.height - 4
-        radius: 2
-        color: root.fillColor
-    }
-
-    Text {
-        anchors.centerIn: outline
-        visible: root.isCharging
-        text: "⚡"
-        color: root.boltColor
-        font.pixelSize: Math.max(7, root.iconSize * 0.44)
-        font.bold: true
+        fillColor: root.fillColor
+        chargeColor: root.boltColor
     }
 
     MouseArea {
         id: hoverArea
         anchors.fill: parent
         hoverEnabled: true
+        cursorShape: Qt.PointingHandCursor
+        onClicked: root.panelToggleRequested()
     }
 
     StatusTooltip {
         anchorItem: root
-        shown: hoverArea.containsMouse && batteryDevice.ready
+        shown: hoverArea.containsMouse && batteryDevice.ready && !root.panelOpen
         dockHosted: root.dockHosted
         dockEdge: root.dockEdge
         primaryText: root.isCharging
-            ? "充电中 · " + root.percent + "%"
-            : "电池 · " + root.percent + "%"
+            ? I18n.tr("Charging · %1%").arg(root.percent)
+            : I18n.tr("Battery · %1%").arg(root.percent)
     }
 
     readonly property var batteryDevice: UPower.displayDevice
@@ -108,15 +67,6 @@ Item {
     readonly property bool isCharging: batteryDevice.ready
         && (batteryDevice.state === UPowerDeviceState.Charging
             || batteryDevice.state === UPowerDeviceState.PendingCharge)
-    readonly property color fillColor: tintActive ? dockTintColor
-        : percent > 95
-        ? "#30d158"
-        : percent >= 50
-            ? ThemeService.foregroundColor
-            : percent >= 15
-                ? "#ff9f0a"
-                : "#ff453a"
-    readonly property color boltColor: tintActive ? dockTintColor
-        : percent >= 50 && percent <= 95
-        ? "#ff9f0a" : ThemeService.foregroundColor
+    readonly property color fillColor: ThemeService.barInk
+    readonly property color boltColor: ThemeService.barInk
 }

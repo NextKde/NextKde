@@ -5,25 +5,36 @@
     ninja,
     kdePackages,
     quickshell,
+    python3,
+    glib,
+    flatpak,
+    ostree,
+    gnupg,
+    gtk3,
+    pkg-config,
+    wayland,
+    wayland-scanner,
     src,
 }:
 
 stdenv.mkDerivation {
     pname = "kos-settings";
-    version = "unstable";
+    version = lib.removeSuffix "\n" (builtins.readFile "${src}/VERSION");
     inherit src;
 
     nativeBuildInputs = [
         cmake
         ninja
+        pkg-config
+        wayland-scanner
         kdePackages.wrapQtAppsHook
     ];
 
-    buildInputs = [ kdePackages.qtbase kdePackages.qtdeclarative
+    buildInputs = [ flatpak ostree gtk3 wayland kdePackages.kconfig kdePackages.kcmutils kdePackages.plasma-workspace kdePackages.kio kdePackages.kservice kdePackages.qtbase kdePackages.qtdeclarative
                     kdePackages.qtsvg kdePackages.qtimageformats kdePackages.qt5compat ];
 
     preFixup = ''
-        qtWrapperArgs+=(--prefix PATH : ${lib.makeBinPath [ quickshell ]})
+        qtWrapperArgs+=(--prefix PATH : ${lib.makeBinPath [ quickshell python3 glib flatpak gnupg ]})
     '';
 
     dontBuild = true;
@@ -34,6 +45,8 @@ stdenv.mkDerivation {
 
         cmake -S apps/settings -B "$TMPDIR/build" -G Ninja \
             -DCMAKE_BUILD_TYPE=Release \
+            -DBUILD_TESTING=OFF \
+            -DKOS_FLATPAK_SUPPORT=AUTO \
             -DCMAKE_INSTALL_PREFIX=$out
         cmake --build "$TMPDIR/build" --parallel
         cmake --install "$TMPDIR/build"
@@ -46,6 +59,8 @@ stdenv.mkDerivation {
         # CMakeLists.txt, which excludes the same two patterns.
         mkdir -p $out/share/shared/qml
         cp -r shared/qml/. $out/share/shared/qml/
+        cp -r shared/Icons $out/share/shared/Icons
+        rm -f $out/share/shared/Icons/CMakeLists.txt
         find $out/share/shared/qml -maxdepth 1 \
             -name CMakeLists.txt -o -name 'test_*.mjs' | xargs -r rm -f
 

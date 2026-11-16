@@ -1,4 +1,7 @@
 #include "kosdecoration.h"
+#include "nativebutton.h"
+#include "../kos-bridge/windowappearance/appearanceprotocol.h"
+#include "../kos-bridge/windowappearance/contour.h"
 
 #include <KDecoration3/DecoratedWindow>
 #include <KDecoration3/DecorationSettings>
@@ -6,28 +9,26 @@
 
 #include <QFontMetricsF>
 #include <QPainter>
+#include <QDynamicPropertyChangeEvent>
+#include <QPainterPath>
+#include <QFile>
+#include <QFileInfo>
+#include <QJsonDocument>
+#include <QJsonObject>
+#include <QStandardPaths>
+#include <QScopedValueRollback>
 
 namespace KOS
 {
 
 namespace
 {
-// Logical pixels. KWin scales them per output.
-//
-// TitleBarHeight is tied to the effect that draws the three-dot panel: with
-// the shipped defaults in ~/.config/kos/window-buttons.json (offset.y = 6,
-// buttonSize = 14, panelPadding = 4.5) the dots are centred at
-// offset.y + (buttonSize + 2 * panelPadding) / 2 = 17.5, while this bar's
-// centre is TitleBarHeight / 2 = 17. Changing this height therefore moves the
-// bar away from the dots, so check that file before touching it.
+// Logical pixels; native decoration painting follows the output scale.
 constexpr qreal TitleBarHeight = 34.0;
 // The window has no visible side or bottom frame, so resizing relies entirely
 // on this invisible grab margin.
 constexpr qreal ResizeGrab = 4.0;
-// The caption is inset symmetrically so a long title stops short of the
-// corners. It cannot reserve room for the effect's button panel: that panel
-// can be configured onto either end of the bar, while this plugin only ever
-// sees the title bar itself.
+// Minimum caption clearance; button groups reserve additional space.
 constexpr qreal CaptionSideMargin = 8.0;
 }
 
@@ -38,6 +39,30 @@ KosDecoration::KosDecoration(QObject *parent, const QVariantList &args)
 
 KosDecoration::~KosDecoration() = default;
 
+bool KosDecoration::event(QEvent *event)
+{
+    if (event->type() == QEvent::DynamicPropertyChange) {
+        const auto *change = static_cast<QDynamicPropertyChangeEvent *>(event);
+        if (change->propertyName() == WindowAppearance::DecorationRadiiProperty) {
+            update();
+        } else if (change->propertyName() == WindowAppearance::DecorationShadowProperty) {
+            const QVariant value = property(WindowAppearance::DecorationShadowProperty);
+            if (value.canConvert<std::shared_ptr<KDecoration3::DecorationShadow>>()) {
+                if (!m_bridgeShadowActive) {
+                    m_shadowBeforeBridge = shadow();
+                    m_bridgeShadowActive = true;
+                }
+                setShadow(value.value<std::shared_ptr<KDecoration3::DecorationShadow>>());
+            } else if (m_bridgeShadowActive) {
+                setShadow(m_shadowBeforeBridge);
+                m_shadowBeforeBridge.reset();
+                m_bridgeShadowActive = false;
+            }
+        }
+    }
+    return KDecoration3::Decoration::event(event);
+}
+
 bool KosDecoration::init()
 {
     auto *client = window();
@@ -45,6 +70,22 @@ bool KosDecoration::init()
         return false;
     }
 
+    setOpaque(false);
+    setProperty(WindowAppearance::DecorationAppearanceSupportedProperty, true);
+
+    const auto factory = [](KDecoration3::DecorationButtonType type, KDecoration3::Decoration *decoration, QObject *parent) {
+        return new NativeButton(type, decoration, parent);
+    };
+    m_leftButtons = new KDecoration3::DecorationButtonGroup(KDecoration3::DecorationButtonGroup::Position::Left, this, factory);
+    m_rightButtons = new KDecoration3::DecorationButtonGroup(KDecoration3::DecorationButtonGroup::Position::Right, this, factory);
+    for (auto *group : {m_leftButtons, m_rightButtons}) {
+        group->setSpacing(0);
+        connect(group, &KDecoration3::DecorationButtonGroup::geometryChanged, this, &KosDecoration::updateDerivedGeometry);
+    }
+    setProperty(WindowAppearance::DecorationControlsProperty, true);
+    connect(&m_buttonWatcher, &QFileSystemWatcher::fileChanged, this, &KosDecoration::refreshButtonPreferences);
+    connect(&m_buttonWatcher, &QFileSystemWatcher::directoryChanged, this, &KosDecoration::refreshButtonPreferences);
+    refreshButtonPreferences();
     updateLayout();
 
     // Geometry-affecting changes.
@@ -107,25 +148,14 @@ void KosDecoration::updateLayout()
     };
 
     // No visible side or bottom frame in either state.
-    setBorders(QMarginsF(0, client->isShaded() ? 0 : snap(TitleBarHeight), 0, 0));
+    setBorders(QMarginsF(0, snap(TitleBarHeight), 0, 0));
     setResizeOnlyBorders(maximized
         ? QMarginsF(0, 0, 0, 0)
         : QMarginsF(snap(ResizeGrab), 0, snap(ResizeGrab), snap(ResizeGrab)));
 
-    // The window's shape is deliberately left alone: no setBorderRadius() and
-    // no setBorderOutline().
-    //
-    // setBorderRadius() is not a cosmetic request -- it is how KWin clips the
-    // whole window, the client's opaque content included, so calling it
-    // *replaces* whatever shape the window had before this decoration was
-    // selected. Breeze's own corner rounding and outline are user settings
-    // (breezerc [Common] RoundedCorners / OutlineEnabled), and a decoration
-    // that draws neither has no business overriding them. Whoever wants KOS
-    // corners can turn Breeze's on instead of getting ours silently.
-    //
-    // It is also what makes this decoration usable at every corner radius: the
-    // bar below is painted square, so nothing here can disagree with a radius
-    // KWin or another decoration applied.
+    // Geometry policy belongs to kos-bridge. The resolved corner property
+    // shapes the titlebar, and the shadow property relays DecorationShadow.
+    // Do not write another native radius or outline here.
 
     // Runs again on bordersChanged() when the new borders are actually
     // applied; calling it here as well covers the changes that move nothing
@@ -135,12 +165,35 @@ void KosDecoration::updateLayout()
 
 void KosDecoration::updateDerivedGeometry()
 {
-    if (!window()) {
-        return;
-    }
+    if (!window() || m_updatingGeometry) return;
+    const QScopedValueRollback guard(m_updatingGeometry, true);
+    if (m_leftButtons) m_leftButtons->setPos(QPointF(7.5, (borderTop()-28)/2));
+    if (m_rightButtons) m_rightButtons->setPos(QPointF(size().width()-7.5-m_rightButtons->geometry().width(), (borderTop()-28)/2));
 
     setTitleBar(QRectF(0, 0, size().width(), borderTop()));
     update();
+}
+
+void KosDecoration::refreshButtonPreferences()
+{
+    const QString directory = QStandardPaths::writableLocation(QStandardPaths::GenericConfigLocation)+"/kos";
+    const QString path = directory+"/window-buttons.json";
+    for (const auto &dir : {QFileInfo(directory).path(), directory})
+        if (QFileInfo::exists(dir) && !m_buttonWatcher.directories().contains(dir)) m_buttonWatcher.addPath(dir);
+    if (QFileInfo::exists(path) && !m_buttonWatcher.files().contains(path)) m_buttonWatcher.addPath(path);
+    QFile file(path);
+    if (file.exists() && !file.open(QIODevice::ReadOnly)) return;
+    const auto doc = file.isOpen() ? QJsonDocument::fromJson(file.readAll()) : QJsonDocument(QJsonObject{});
+    if (!doc.isObject()) return;
+    const bool hover = doc.object().value("default").toObject().value("glyphMode").toString() == "hover";
+    if (hover != m_hoverGlyphs) { m_hoverGlyphs = hover; update(); }
+}
+bool KosDecoration::showButtonGlyphs() const
+{
+    if (!m_hoverGlyphs) return true;
+    for (auto *group : {m_leftButtons,m_rightButtons})
+        if (group) for (auto *button : group->buttons()) if (button->isHovered()) return true;
+    return false;
 }
 
 QColor KosDecoration::barColor() const
@@ -150,10 +203,7 @@ QColor KosDecoration::barColor() const
         return QColor(0x2b, 0x2f, 0x36);
     }
 
-    // Fully opaque on purpose: the kos-bridge effect reads this strip back to
-    // choose the button panel's tint, so a translucent bar over the
-    // compositor's blur would tint the panel from a blend of the bar and
-    // whatever sits behind the window.
+    // The native controls share this titlebar; no background sampling.
     return client->palette().color(QPalette::Window);
 }
 
@@ -177,15 +227,25 @@ void KosDecoration::paintTitleBar(QPainter *painter)
         return;
     }
 
-    // Square, in every state and at every radius. The bar cannot know what
-    // shape the window ends up with -- that is the client's rounded rectangle,
-    // or the radius KWin clips the frame to -- and a corner painted here that
-    // disagrees with it leaves a sliver of nothing along the diagonal. Filling
-    // the whole strip leaves the top corners to whoever owns them.
+    // The bridge resolves one contour for content, decoration and shadow.
+    // Without the bridge property this decoration retains its square bar.
     painter->save();
     painter->setPen(Qt::NoPen);
     painter->setBrush(barColor());
-    painter->drawRect(bar);
+    const QVariant resolved = property(WindowAppearance::DecorationRadiiProperty);
+    if (resolved.canConvert<QVector4D>()) {
+        const QVector4D radius = resolved.value<QVector4D>();
+        const WindowAppearance::CornerRadii corners{
+            radius.x(), radius.y(), radius.z(), radius.w()};
+        QPainterPath strip;
+        strip.addRect(bar);
+        // Fill the intersection instead of applying an aliased painter
+        // clip: the atlas must retain antialiased, transparent top corners.
+        painter->drawPath(WindowAppearance::contourPath(
+            QRectF(QPointF(), size()), corners, 0.0).intersected(strip));
+    } else {
+        painter->drawRect(bar);
+    }
     painter->restore();
 
     // Neither edge of the title bar gets a hairline of its own: the bottom is
@@ -209,21 +269,29 @@ void KosDecoration::paintCaption(QPainter *painter)
         return;
     }
 
-    // Centred on the window, macOS-style. The inset is symmetric, so the
-    // caption stays centred whichever end of the bar the effect's panel is
-    // configured onto, and a long title elides instead of running to the edge.
-    const qreal available = size().width() - 2.0 * CaptionSideMargin;
+    // Keep the caption centered and elide before either native button group.
+    const qreal margin = std::max({CaptionSideMargin,
+        m_leftButtons ? m_leftButtons->geometry().width()+16 : 0.,
+        m_rightButtons ? m_rightButtons->geometry().width()+16 : 0.});
+    const qreal available = size().width() - 2.0 * margin;
     if (available <= 0.0) {
         return;
     }
 
-    const QRectF bar(CaptionSideMargin, 0, available, borderTop());
+    const QRectF bar(margin, 0, available, borderTop());
     const QFontMetricsF metrics(config->font());
     const QString elided = metrics.elidedText(caption, Qt::ElideMiddle, available);
 
     painter->save();
     painter->setFont(config->font());
     painter->setPen(captionColor());
+    const QVariant resolved = property(WindowAppearance::DecorationRadiiProperty);
+    if (resolved.canConvert<QVector4D>()) {
+        const QVector4D r = resolved.value<QVector4D>();
+        painter->setClipPath(WindowAppearance::contourPath(QRectF(QPointF(), size()),
+            WindowAppearance::CornerRadii{r.x(), r.y(), r.z(), r.w()}, 0.0),
+            Qt::IntersectClip);
+    }
     painter->drawText(bar, Qt::AlignCenter | Qt::TextSingleLine, elided);
     painter->restore();
 }
@@ -248,6 +316,8 @@ void KosDecoration::paint(QPainter *painter, const QRectF &repaintArea)
 
     paintTitleBar(painter);
     paintCaption(painter);
+    if (m_leftButtons) m_leftButtons->paint(painter, repaintArea);
+    if (m_rightButtons) m_rightButtons->paint(painter, repaintArea);
 
     painter->restore();
 }

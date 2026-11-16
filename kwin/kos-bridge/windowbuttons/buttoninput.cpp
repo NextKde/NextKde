@@ -105,11 +105,33 @@ ButtonInput::ButtonInput(ButtonRenderer *renderer, ButtonConfig *config)
 
 ButtonInput::~ButtonInput() = default;
 
+void ButtonInput::fullscreenChanged(KWin::EffectWindow *window)
+{
+    if (!window || !window->isFullScreen() || !m_renderer) {
+        return;
+    }
+    if (m_session->window() == window) {
+        m_session->cancel();
+    }
+    // Also clears source-capture hits and closes this window's tiling menu.
+    m_renderer->clearHits(window, true);
+    // Keep consumed press bookkeeping until its matching release arrives.
+}
+
+void ButtonInput::clearFullscreenState()
+{
+    // Check only the two transient owners, without walking the window stack.
+    // This also protects input arriving before the state-change callback.
+    fullscreenChanged(m_session->window());
+    fullscreenChanged(m_renderer->tileMenuWindow());
+}
+
 bool ButtonInput::pointerMotion(KWin::PointerMotionEvent *event)
 {
     if (!event || !m_renderer) {
         return false;
     }
+    clearFullscreenState();
 
     // A drag of a panel is this filter's own, and stays swallowed wherever the
     // pointer goes. It is tested before the pass-through below, which would
@@ -124,14 +146,15 @@ bool ButtonInput::pointerMotion(KWin::PointerMotionEvent *event)
     // A drag that began elsewhere -- a text selection, a slider -- has to keep
     // its motion even where it passes over a panel, or the application's drag
     // freezes for as long as the pointer is there.
-    if (event->buttons != Qt::NoButton && m_consumedButton == Qt::NoButton) {
+    if (event->buttons != Qt::NoButton && m_consumedButtons == Qt::NoButton) {
         return false;
     }
 
     KWin::EffectWindow *window = nullptr;
     bool insidePanel = false;
+    bool nearLights = false;
     const ButtonRenderer::Action action =
-        m_renderer->hitTest(event->position, &window, &insidePanel);
+        m_renderer->hitTest(event->position, &window, &insidePanel, &nearLights);
 
     // An open menu takes the pointer before the panel does. It hangs from the
     // panel's bottom edge, and the first few rows of it are inside the panel's
@@ -145,8 +168,8 @@ bool ButtonInput::pointerMotion(KWin::PointerMotionEvent *event)
             m_renderer->setTileMenuHovered(event->position);
             if (!m_session->active()) {
                 m_renderer->setHovered(
-                    action == ButtonRenderer::Action::None ? nullptr : window,
-                    action);
+                    (action == ButtonRenderer::Action::None && !insidePanel) ? nullptr : window,
+                    action, insidePanel, nearLights);
             }
             return true;
         }
@@ -158,7 +181,8 @@ bool ButtonInput::pointerMotion(KWin::PointerMotionEvent *event)
     // only repaint it for nothing.
     if (!m_session->active()) {
         m_renderer->setHovered(
-            action == ButtonRenderer::Action::None ? nullptr : window, action);
+            (action == ButtonRenderer::Action::None && !insidePanel) ? nullptr : window,
+            action, insidePanel, nearLights);
 
         // Alt over the zoom light opens the tiling menu. Alt is already KWin's
         // "this window is about to be moved with the pointer" modifier, so it
@@ -169,7 +193,7 @@ bool ButtonInput::pointerMotion(KWin::PointerMotionEvent *event)
         // the light is inside the panel, the panel is inside the menu's own
         // region, and a pointer in that region returned above.
         if ((event->modifiers & Qt::AltModifier)
-            && action == ButtonRenderer::Action::Maximize && window) {
+            && action == ButtonRenderer::Action::Maximize && window && !m_renderer->cooperativeControls(window)) {
             m_renderer->openTileMenu(window);
         }
     }
@@ -193,6 +217,7 @@ bool ButtonInput::pointerButton(KWin::PointerButtonEvent *event)
     if (!event || !m_renderer) {
         return false;
     }
+    clearFullscreenState();
 
     if (event->state == KWin::PointerButtonState::Released) {
         if (m_session->dragging() && event->button == Qt::LeftButton) {
@@ -200,8 +225,8 @@ bool ButtonInput::pointerButton(KWin::PointerButtonEvent *event)
         }
         // Swallow the release that belongs to a press we already swallowed so
         // the application does not see a stray button-up.
-        if (event->button == m_consumedButton) {
-            m_consumedButton = Qt::NoButton;
+        if (m_consumedButtons.testFlag(event->button)) {
+            m_consumedButtons &= ~Qt::MouseButtons(event->button);
             return true;
         }
         return false;
@@ -219,9 +244,12 @@ bool ButtonInput::pointerButton(KWin::PointerButtonEvent *event)
     // opened the menu from closing the window on the way to putting the menu
     // away.
     if (KWin::EffectWindow *menuWindow = m_renderer->tileMenuWindow()) {
-        m_consumedButton = event->button;
+        m_consumedButtons |= event->button;
         const std::optional<TilePreset> preset =
-            m_renderer->tileMenuPresetAt(event->position);
+            event->button == Qt::LeftButton
+                && m_renderer->tileMenuRegionContains(event->position)
+            ? m_renderer->tileMenuPresetAt(event->position)
+            : std::nullopt;
         m_renderer->closeTileMenu();
         if (preset) {
             performTilePreset(menuWindow, *preset);
@@ -241,8 +269,8 @@ bool ButtonInput::pointerButton(KWin::PointerButtonEvent *event)
     // A right press on a panel is how an adjustment starts. It is swallowed
     // whether or not a session begins, as every press on the panel is -- an
     // application's context menu must not open through the panel.
-    if (event->button == Qt::RightButton && insidePanel && window) {
-        m_consumedButton = event->button;
+    if (event->button == Qt::RightButton && insidePanel && window && !window->hasDecoration() && !m_renderer->cooperativeControls(window)) {
+        m_consumedButtons |= event->button;
         startSession(window);
         return true;
     }
@@ -255,7 +283,7 @@ bool ButtonInput::pointerButton(KWin::PointerButtonEvent *event)
     // lands on the controls underneath; only the left button acts, so a
     // right-click meant to open the application's own context menu cannot
     // close the window instead.
-    m_consumedButton = event->button;
+    m_consumedButtons |= event->button;
     if (event->button == Qt::LeftButton) {
         performAction(window, action);
     }
@@ -276,7 +304,7 @@ bool ButtonInput::sessionPress(KWin::PointerButtonEvent *event,
         // one that loses what was done in it.
         const bool elsewhere =
             insidePanel && window && window != m_session->window();
-        m_consumedButton = event->button;
+        m_consumedButtons |= event->button;
         finishSession();
         if (elsewhere) {
             startSession(window);
@@ -288,7 +316,7 @@ bool ButtonInput::sessionPress(KWin::PointerButtonEvent *event,
         if (insidePanel && window == m_session->window()) {
             // Pressed on the panel: the edge under the pointer is dragged, or --
             // anywhere else on it -- the panel as a whole follows the pointer.
-            m_consumedButton = event->button;
+            m_consumedButtons |= event->button;
             const std::optional<PanelEdge> edge =
                 m_session->edgeAt(event->position);
             if (edge) {
@@ -307,8 +335,14 @@ bool ButtonInput::sessionPress(KWin::PointerButtonEvent *event,
     // Every other button: swallowed, as it is when no session is running, and
     // the session goes on. A scroll-wheel click in the middle of positioning a
     // panel is not a decision about the panel.
-    m_consumedButton = event->button;
+    m_consumedButtons |= event->button;
     return true;
+}
+
+void ButtonInput::cancelAdjustment()
+{
+    m_session->cancel();
+    m_renderer->closeTileMenu();
 }
 
 bool ButtonInput::pointerAxis(KWin::PointerAxisEvent *event)
@@ -316,6 +350,7 @@ bool ButtonInput::pointerAxis(KWin::PointerAxisEvent *event)
     if (!event || !m_renderer) {
         return false;
     }
+    clearFullscreenState();
 
     // While adjusting, the wheel resizes the panel, and it is taken whether or
     // not the pointer is still on it: the pointer is free to leave the panel
@@ -370,6 +405,7 @@ bool ButtonInput::keyboardKey(KWin::KeyboardKeyEvent *event)
     if (!event || !m_renderer) {
         return false;
     }
+    clearFullscreenState();
 
     if (event->state == KWin::KeyboardKeyState::Released) {
         if (m_consumedKeys.remove(event->key)) {
@@ -386,8 +422,10 @@ bool ButtonInput::keyboardKey(KWin::KeyboardKeyEvent *event)
         return true;
     }
 
+    // A terminating key can repeat after closing the menu or session. Its
+    // repeats belong to the same consumed press until the matching release.
     if (!m_session->active()) {
-        return false;
+        return m_consumedKeys.contains(event->key);
     }
 
     switch (event->key) {

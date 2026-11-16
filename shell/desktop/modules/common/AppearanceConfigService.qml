@@ -165,7 +165,22 @@ QtObject {
     property bool barIntegratedWithDock: false
     property string barVisibilityMode: "always" // "always" | "smart" | "persistent"
     property string barLayoutMode: "transparent" // "full" | "floating" | "transparent"
+    // The Bar's macOS-style ground. `barMacStyle` is the style choice -- off is
+    // the default Bar, outlines and all. With it on the Bar publishes its
+    // backdrop blur region even in the transparent layout, and paints a
+    // light/dark grey tint between that blur and its content, so the strip
+    // stays legible over any wallpaper without relying on text outlines.
+    // `barMacTint` is that tint's opacity and only means anything while the
+    // style is on; the blur strength itself follows the compositor's own
+    // region-material frost, so the tint is the one adjustable value. The
+    // settings page writes both.
+    property bool barMacStyle: false
+    property real barMacTint: 0.30
+    property bool reduceMotion: false
+    property int startupRevealDuration: 1500
     property string dockWindowAnimationStyle: "scale"
+    // Empty means follow KDE General font; this override changes only family.
+    property string desktopFontFamily: ""
     // Which individual surfaces are shown. Both lists hold the ids that are
     // *hidden*; an absent id is visible, so a newly added widget or StatusArea
     // cell appears by default and an upgrade never silently removes one.
@@ -353,7 +368,7 @@ QtObject {
 
     // The writable preset parameters, valued in preset units, bracketed by the
     // range the compositor clamps them into when it writes kwinrc (theme.sync-glass
-    // in platform/src/daemon/PlatformServer.cpp). Two unit systems meet here:
+    // in platform/src/daemon/PlatformServerTheme.cpp). Two unit systems meet here:
     // Refraction is 0..1 and reaches kwinrc as RefractionStrength 0..20 through
     // `round(globalLiquidStrength * Refraction * 20)`; every other entry maps one
     // to one onto the kwinrc key of the same name.
@@ -545,6 +560,32 @@ QtObject {
         return true
     }
 
+    function updateBarMacStyle(rawValue) {
+        const value = _toBool(rawValue)
+        if (barMacStyle === value)
+            return false
+        barMacStyle = value
+        saveTimer.restart()
+        return true
+    }
+
+    function updateBarMacTint(rawValue) {
+        const value = _normalized(rawValue)
+        if (!Number.isFinite(value)
+                || Math.abs(barMacTint - value) <= 0.001)
+            return false
+        barMacTint = value
+        saveTimer.restart()
+        return true
+    }
+
+    function updateStartupMotion(reduced, duration) {
+        if (!ready || !Number.isFinite(duration)) return
+        reduceMotion = !!reduced
+        startupRevealDuration = Math.round(Math.max(800, Math.min(2000, duration)))
+        saveTimer.restart()
+    }
+
     function updateDockWindowAnimationStyle(rawStyle) {
         const style = String(rawStyle)
         if (!isValidDockWindowAnimationStyle(style)
@@ -553,6 +594,17 @@ QtObject {
         dockWindowAnimationStyle = style
         saveTimer.restart()
         dockAnimationEffectSyncTimer.restart()
+        return true
+    }
+
+    function updateDesktopFontFamily(rawFamily) {
+        const family = String(rawFamily ?? "").trim()
+        if (family !== "" && Qt.fontFamilies().indexOf(family) < 0)
+            return false
+        if (desktopFontFamily === family)
+            return false
+        desktopFontFamily = family
+        saveTimer.restart()
         return true
     }
 
@@ -581,10 +633,10 @@ QtObject {
     }
 
     // The compositor plugin owns the real backdrop blur/refraction for Dock
-    // and other BackgroundEffect regions. Quickshell can publish the region,
-    // but Wayland exposes no per-surface strength field, so synchronize the
-    // two user-facing values with the custom Glass effect's own settings.
-    // This deliberately does not touch KDE's stock [Effect-blur] group.
+    // and other BackgroundEffect regions. Synchronize the global defaults
+    // with the custom Glass effect; Kos.SurfaceShape can additionally publish
+    // per-shape blur overrides without changing these defaults.
+    // The platform also mirrors blur strength to KDE's stock [Effect-blur].
     property Timer effectSyncTimer: Timer {
         interval: 80
         repeat: false
@@ -614,7 +666,7 @@ QtObject {
         if (!service._widgetStyleResolved)
             return // Migration will restart the save timer once icons are loaded.
         const payload = JSON.stringify({
-            version: 29,
+            version: 33,
             globalBlurStrength: service.globalBlurStrength,
             globalLiquidStrength: service.globalLiquidStrength,
             materialPresetBlurStrength: service.materialPresetBlurStrength,
@@ -658,7 +710,12 @@ QtObject {
             barIntegratedWithDock: service.barIntegratedWithDock,
             barVisibilityMode: service.barVisibilityMode,
             barLayoutMode: service.barLayoutMode,
+            barMacStyle: service.barMacStyle,
+            barMacTint: service.barMacTint,
+            reduceMotion: service.reduceMotion,
+            startupRevealDuration: service.startupRevealDuration,
             dockWindowAnimationStyle: service.dockWindowAnimationStyle,
+            desktopFontFamily: service.desktopFontFamily,
             // Sorted before writing so a reorder in the UI never produces a
             // spurious diff, and so the file stays readable by hand.
             hiddenDeskCenterWidgets: service.hiddenDeskCenterWidgets.slice().sort(),
@@ -736,7 +793,18 @@ QtObject {
                     const hasBarIntegration = typeof object.barIntegratedWithDock === "boolean"
                     const barVisibility = String(object.barVisibilityMode ?? "")
                     const barLayout = String(object.barLayoutMode ?? "")
+                    // v30 adds the Bar's mac-style ground. A file written
+                    // before it has neither key, and the off/30% values are
+                    // exactly the appearance those installations already had,
+                    // so a missing pair is not a reason to rewrite the file.
+                    const hasBarMacStyle = typeof object.barMacStyle === "boolean"
+                        && Number.isFinite(Number(object.barMacTint))
                     const animationStyle = String(object.dockWindowAnimationStyle ?? "")
+                    // v32 removes the font opt-in: old true/false values are
+                    // ignored and dropped on save. v33 adds an optional family
+                    // override; older profiles still follow KDE General font.
+                    service.desktopFontFamily = typeof object.desktopFontFamily === "string"
+                        ? object.desktopFontFamily.trim() : ""
                     // v28 adds per-surface visibility. Files written before it
                     // carry neither key, and the empty arrays they fall back to
                     // mean "everything visible" -- the behaviour those
@@ -798,6 +866,17 @@ QtObject {
                         service.barVisibilityMode = barVisibility
                     if (service.isValidBarLayoutMode(barLayout))
                         service.barLayoutMode = barLayout
+                    if (hasBarMacStyle) {
+                        service.barMacStyle = object.barMacStyle
+                        const barMacTint = service._normalized(object.barMacTint)
+                        if (Number.isFinite(barMacTint))
+                            service.barMacTint = barMacTint
+                    }
+                    service.reduceMotion = object.reduceMotion === true
+                    if (typeof object.startupRevealDuration === "number"
+                            && Number.isFinite(object.startupRevealDuration))
+                        service.startupRevealDuration = Math.round(Math.max(800,
+                            Math.min(2000, object.startupRevealDuration)))
                     if (service.isValidDockWindowAnimationStyle(animationStyle))
                         service.dockWindowAnimationStyle = animationStyle
                     if (service.isValidGlassStyle(glassStyle))
@@ -900,7 +979,7 @@ QtObject {
                     service.globalLiquidStrength = service.activePresetLiquidStrength
                     service.liquidStrength = service.activePresetLiquidStrength
 
-                    if (Number(object.version) !== 29
+                    if (Number(object.version) !== 33
                             || !service.isValidWidgetStyle(widgetStyle)
                             || !service.isValidShellStyle(style)
                             || !service.isValidThemeMode(themeMode)
@@ -908,6 +987,7 @@ QtObject {
                             || !hasBarIntegration
                             || !hasGlassFollows
                             || !hasSpatialWallpaper
+                            || !hasBarMacStyle
                             || !service.isValidBarVisibilityMode(barVisibility)
                             || !service.isValidBarLayoutMode(barLayout)
                             || !service.isValidGlassStyle(glassStyle)

@@ -2,6 +2,7 @@ import QtQuick
 import QtQuick.Effects
 import Quickshell
 import Quickshell.Wayland
+import "../../../shared/qml/i18n"
 import qs.desktop.modules.common
 import "../../../Kos/Ui"
 
@@ -12,14 +13,15 @@ AnimatedPopupWindow {
     id: popup
 
     property Item anchorItem: null
-    property var player: DockMprisService.activePlayer
+    property var player: MediaService.activePlayer
     readonly property url artworkSource: {
-        const revision = DockMprisService.metadataRevision
+        const revision = MediaService.metadataRevision
         return player?.trackArtUrl
-            ? player.trackArtUrl : BundledIcons.source("default-cover")
+            ? player.trackArtUrl : BundledIcons.source("media.coverFallback")
     }
     property bool pointerInside: popupMouse.containsMouse
     motionOrigin: Item.Bottom
+    openDuration: DockAnimation.infoPopupEntranceDuration
     readonly property bool monochrome: IconAppearanceService.mode !== "color"
 
     readonly property real safeLength: player?.lengthSupported
@@ -57,8 +59,9 @@ AnimatedPopupWindow {
     color: "transparent"
     grabFocus: false
 
+    PopupAnchorBinding { popupAnchor: popup.anchor; sourceItem: popup.anchorItem }
+
     anchor {
-        item: popup.anchorItem
         edges: Edges.Top
         gravity: Edges.Top
         margins.top: -10
@@ -179,7 +182,7 @@ AnimatedPopupWindow {
 
                 Text {
                     width: parent.width
-                    text: popup.player?.trackTitle || "未播放曲目"
+                    text: popup.player?.trackTitle || I18n.tr("No track playing")
                     color: ThemeService.foregroundColor
                     elide: Text.ElideRight
                     font {
@@ -189,7 +192,7 @@ AnimatedPopupWindow {
                 }
                 Text {
                     width: parent.width
-                    text: popup.player?.trackArtist || "未知艺术家"
+                    text: popup.player?.trackArtist || I18n.tr("Unknown artist")
                     color: ThemeService.foregroundColor
                     opacity: 0.72
                     elide: Text.ElideRight
@@ -197,7 +200,7 @@ AnimatedPopupWindow {
                 }
                 Text {
                     width: parent.width
-                    text: DockMprisService.playbackStatus || popup.player?.trackAlbum || popup.player?.identity || "MPRIS Player"
+                    text: MediaService.playbackStatus || popup.player?.trackAlbum || popup.player?.identity || "MPRIS Player"
                     color: ThemeService.foregroundColor
                     opacity: 0.48
                     elide: Text.ElideRight
@@ -244,8 +247,11 @@ AnimatedPopupWindow {
                                 SequentialAnimation on height {
                                     running: popup.visible && (popup.player?.isPlaying ?? false)
                                     loops: Animation.Infinite
+                                    // motion-exception: Equalizer bars retain their staggered periodic envelope.
                                     PauseAnimation { duration: index * 85 }
+                                    // motion-exception: Equalizer bars retain their staggered periodic envelope.
                                     NumberAnimation { to: loudHeight; duration: 220; easing.type: Easing.OutCubic }
+                                    // motion-exception: Equalizer bars retain their staggered periodic envelope.
                                     NumberAnimation { to: quietHeight; duration: 260; easing.type: Easing.InOutSine }
                                 }
                             }
@@ -328,18 +334,6 @@ AnimatedPopupWindow {
             }
         }
 
-        // Desktop lyric visibility is independent of the app lyric preference.
-        MediaControlButton {
-            anchors { right: parent.right; bottom: parent.bottom; rightMargin: 12; bottomMargin: 21 }
-            width: 32; height: 32
-            iconName: "media-lyrics"
-            text: qsTr("桌面歌词")
-            checkable: true
-            checked: ConfigService.desktopLyricsEnabled
-            glassInk: ThemeService.foregroundColor
-            onClicked: ConfigService.updateDesktopLyricsEnabled(!ConfigService.desktopLyricsEnabled)
-        }
-
         // 32px side controls and the 38px play control share one centre line.
         Item {
             width: 150
@@ -355,27 +349,27 @@ AnimatedPopupWindow {
             MusicButton {
                 x: 9.5
                 anchors.verticalCenter: parent.verticalCenter
-                iconName: "media-previous"
-                text: qsTr("上一首")
+                iconName: "media.previous"
+                text: I18n.tr("Previous")
                 enabled: popup.player?.canGoPrevious ?? false
-                onClicked: DockMprisService.previous()
+                onClicked: MediaService.previous()
             }
             MusicButton {
                 anchors.centerIn: parent
                 primary: true
-                iconName: popup.player?.isPlaying ? "media-pause" : "media-play"
-                text: popup.player?.isPlaying ? qsTr("暂停") : qsTr("播放")
-                busy: DockMprisService.loading
+                iconName: popup.player?.isPlaying ? "media.pause" : "media.play"
+                text: popup.player?.isPlaying ? I18n.tr("Pause") : I18n.tr("Play")
+                busy: MediaService.loading
                 enabled: popup.player?.canTogglePlaying ?? false
-                onClicked: DockMprisService.togglePlayPause()
+                onClicked: MediaService.togglePlayPause()
             }
             MusicButton {
                 x: 109.5
                 anchors.verticalCenter: parent.verticalCenter
-                iconName: "media-next"
-                text: qsTr("下一首")
+                iconName: "media.next"
+                text: I18n.tr("Next")
                 enabled: popup.player?.canGoNext ?? false
-                onClicked: DockMprisService.next()
+                onClicked: MediaService.next()
             }
         }
     }

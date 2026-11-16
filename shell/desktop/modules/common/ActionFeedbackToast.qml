@@ -6,15 +6,24 @@ LiquidGlassPanel {
     id: root
 
     property string message: ""
-    property string iconName: "check"
-    property int timeout: 1600
+    property string iconName: "feedback.success"
+    property int timeout: 2600
     property bool shown: false
+    // Epoch ms at which the hold would end if the pointer never entered.
+    // Hovering stops the timer; leaving restarts it with what is left, so the
+    // toast never restarts its full timeout after a pause.
+    property real dismissAt: 0
 
     function show(text, icon) {
         message = text
-        iconName = icon || "check"
+        iconName = icon || "feedback.success"
         shown = true
-        hold.restart()
+        dismissAt = Date.now() + timeout
+        hold.interval = timeout
+        // Re-showing while hovered stays paused; the new deadline is what the
+        // later leave resumes from.
+        if (!hover.hovered)
+            hold.restart()
     }
     function dismiss() {
         hold.stop()
@@ -32,13 +41,15 @@ LiquidGlassPanel {
     useKwinEffect: AppearanceTokens.surface.usesKwinBlur
     fallbackEnabled: AppearanceTokens.surface.paintInQml
     blurAnchor: root
-    enabled: false
+    // Hover must reach the surface for the pause, but the toast still takes no
+    // clicks and no focus: a HoverHandler observes the pointer passively.
+    enabled: shown
     visible: opacity > 0
     opacity: shown ? 1 : 0
     scale: shown ? 1 : 0.96
     Accessible.name: message
-    Behavior on opacity { NumberAnimation { duration: 150; easing.type: Easing.OutCubic } }
-    Behavior on scale { NumberAnimation { duration: 180; easing.type: Easing.OutCubic } }
+    Behavior on opacity { NumberAnimation { duration: AppearanceTokens.motion.base.duration; easing.type: AppearanceTokens.motion.enterCurve } }
+    Behavior on scale { NumberAnimation { duration: AppearanceTokens.motion.base.duration; easing.type: AppearanceTokens.motion.enterCurve } }
 
     Row {
         id: content
@@ -56,6 +67,19 @@ LiquidGlassPanel {
             color: root.foregroundColor
             font.pixelSize: 12
             font.weight: Font.Medium
+        }
+    }
+    HoverHandler {
+        id: hover
+        onHoveredChanged: {
+            if (hovered) {
+                hold.stop()
+            } else if (root.shown) {
+                const left = Math.max(1, root.dismissAt - Date.now())
+                root.dismissAt = Date.now() + left
+                hold.interval = left
+                hold.restart()
+            }
         }
     }
     Timer {

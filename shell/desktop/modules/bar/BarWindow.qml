@@ -24,6 +24,9 @@ PanelWindow {
     WlrLayershell.layer: (AppLauncherService.open
         && AppLauncherConfigService.displayMode === "fullscreen")
         ? WlrLayer.Overlay : WlrLayer.Top
+    WlrLayershell.keyboardFocus: ((barContentLoader.item?.statusArea?.collectionExpanded ?? false)
+        || (barContentLoader.item?.statusArea?.statusDragActive ?? false))
+        ? WlrKeyboardFocus.OnDemand : WlrKeyboardFocus.None
     implicitHeight: ConfigService.barHeight
     readonly property bool transparentMode:
         AppearanceConfigService.barLayoutMode === "transparent"
@@ -37,8 +40,9 @@ PanelWindow {
         barHeight: root.implicitHeight
         edgeMargin: 15
         pointerInsideBar: contentHoverHandler.hovered
-        popupOpen: (barContentLoader.item?.statusArea?.anyPanelOpen ?? false)
+        popupOpen: (barContentLoader.item?.statusArea?.keepBarOpen ?? false)
             || (barContentLoader.item?.globalMenu?.menuOpen ?? false)
+            || (barContentLoader.item?.systemMenu?.menuOpen ?? false)
         launcherOpen: AppLauncherService.open
     }
 
@@ -73,26 +77,47 @@ PanelWindow {
     // The transparent layout deliberately leaves only the content: it must not
     // register a backdrop region, otherwise KWin adds blur/refraction behind
     // it. Other Bar layouts still use the regular compositor glass pipeline.
-    BackgroundEffect.blurRegion: (AppearanceTokens.surface.usesKwinBlur && !root.transparentMode && root.visible
-        && (AppearanceConfigService.effectiveBarBlur > 0.005
-            || AppearanceConfigService.effectiveBarLiquid > 0.005))
-        ? barSurface.blurRegion : null
+    //
+    // The mac style is the deliberate exception. Its slider asks for that
+    // backdrop in the transparent layout too -- and the panel withholds its
+    // shape declaration in the same breath (frostOnly below), so what KWin
+    // paints behind the strip is the plain frosted plate the tint sits on,
+    // not the liquid finish the transparent layout was avoiding.
+    readonly property bool backdropRequested: AppearanceTokens.bar.macStyle
+        || (AppearanceTokens.surface.usesKwinBlur && !root.transparentMode
+            && (AppearanceConfigService.effectiveBarBlur > 0.005
+                || AppearanceConfigService.effectiveBarLiquid > 0.005))
+    BackgroundEffect.blurRegion: (root.visible
+        && root.backdropRequested) ? barSurface.blurRegion : null
 
     // ── Visual Bar content ──
     Item {
         id: barWrapper
         x: 0
-        y: hide.offsetY
+        y: hide.offsetY + (1 - StartupReveal.barProgress) * 12
         width: root.width
         height: root.height
-        opacity: hide.barOpacity
+        opacity: hide.barOpacity * StartupReveal.barProgress
         visible: root.barEnabled && hide.revealProgress > 0.001
 
+        // Passive observation of clicks elsewhere on this bar, without a backdrop
+        // covering application windows or consuming their first click.
+        TapHandler {
+            acceptedButtons: Qt.LeftButton | Qt.RightButton
+            enabled: barContentLoader.item?.statusArea?.collectionExpanded ?? false
+            onTapped: point => barContentLoader.item?.statusArea?.closeCollectionOutside(
+                point.scenePosition.x, point.scenePosition.y)
+        }
         // The Bar is a glass surface too. Its QML Rectangle below remains the
         // tonal-theme paint, while this panel owns the rounded compositor mask
         // and exact corner declaration in backdrop themes.
         LiquidGlassPanel {
             id: barSurface
+            // Transparent layout must retire the shape as well as the blur
+            // region: the compositor can recover a backdrop from live shapes.
+            visible: !root.transparentMode
+                && (AppearanceConfigService.effectiveBarBlur > 0.005
+                    || AppearanceConfigService.effectiveBarLiquid > 0.005)
             anchors.fill: parent
             radius: AppearanceConfigService.barLayoutMode === "floating"
                 ? barWrapper.height * 0.5 : 0
@@ -101,9 +126,16 @@ PanelWindow {
             // wrapper so the published glass follows the slide (matching the
             // Dock's dockWrapper anchor) instead of staying pinned at y=0.
             blurAnchor: barWrapper
+            materialOpacity: StartupReveal.barProgress
+            scrimEnabled: AppearanceTokens.surface.usesBackdrop && !root.transparentMode
+            scrimLevel: "transparent"
             // BarWindow keeps its established tonal layer0 paint below. This
             // panel exists here solely as the compositor surface declaration.
             fallbackEnabled: false
+            // With the mac style on, the strip is a tinted blur and not a lens:
+            // keep the blur region, withhold the shape, and let KWin render
+            // the plain frosted plate.
+            frostOnly: AppearanceTokens.bar.macStyle
             z: -2
         }
 
@@ -118,6 +150,21 @@ PanelWindow {
             color: AppearanceTokens.surface.barFill
             opacity: AppearanceTokens.surface.barOpacity
             border.width: 0
+            z: -1
+        }
+
+        // The mac-style tint. It sits between the compositor's blurred
+        // backdrop -- which KWin paints behind this transparent window across
+        // the region published above -- and the content, so the strip reads as
+        // one plate instead of as text floating on the wallpaper. The grey
+        // opposes the wallpaper and its opacity is the slider's position.
+        Rectangle {
+            anchors.fill: parent
+            visible: AppearanceTokens.bar.macStyle
+            radius: AppearanceConfigService.barLayoutMode === "floating"
+                ? barWrapper.height * 0.5 : 0
+            color: AppearanceTokens.bar.macTintColor
+            opacity: AppearanceTokens.bar.macTint
             z: -1
         }
 
@@ -136,11 +183,19 @@ PanelWindow {
                     id: barContentItem
                     readonly property alias statusArea: barStatusArea
                     readonly property alias globalMenu: barGlobalMenu
+                    readonly property alias systemMenu: barSystemMenu
+
+                    SystemMenu {
+                        id: barSystemMenu
+                        anchors.left: parent.left
+                        anchors.verticalCenter: parent.verticalCenter
+                    }
 
                     BarDateStatus {
                         id: barDateStatus
                         anchors {
-                            left: parent.left
+                            left: barSystemMenu.right
+                            leftMargin: 8
                             verticalCenter: parent.verticalCenter
                         }
                     }
@@ -167,7 +222,7 @@ PanelWindow {
                         // when the Bar has stopped sliding, because a popup's
                         // anchor rectangle is measured only when its window is
                         // created (see ControlCenterPanel.anchorSettled).
-                        barRevealProgress: hide.revealProgress
+                        barRevealProgress: hide.revealProgress * StartupReveal.barProgress
                     }
                 }
             }

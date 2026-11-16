@@ -1,179 +1,196 @@
 #include "titlebarmetrics.h"
+#include "titlebartint.h"
 
+#include <effect/effecthandler.h>
 #include <effect/effectwindow.h>
 #include <core/region.h>
 #include <core/rendertarget.h>
 #include <core/renderviewport.h>
 #include <opengl/glframebuffer.h>
 
-#include <QByteArray>
-#include <QRect>
-#include <QSize>
-
 #include <algorithm>
-#include <vector>
-
-#include <epoxy/gl.h>
 
 namespace KOS
 {
-namespace
+
+bool TitlebarPixelReadback::enqueue(const KWin::RenderTarget &target, const QRect &rect)
 {
+    if (pending() || !target.framebuffer()) return false;
+    const QSize bounds = target.transformedSize();
+    const QRect clipped = rect.intersected(QRect(QPoint(), bounds));
+    if (clipped.isEmpty()) return false;
+    const auto transform = target.transform();
+    const QRect bufferRect = transform.map(KWin::Rect(clipped), bounds);
+    if (!m_readback.enqueue(target.framebuffer()->handle(), target.size(), bufferRect)) return false;
 
-// Fewest pixels worth taking a median of. Below this the sample is a handful
-// of glyph edges or antialiased corners rather than a background.
-constexpr int MinSamples = 64;
-
-// A pixel counts as dark below this luma. Same threshold QColor uses for
-// QColor::lightness() < 128, so a "dark" panel is the one a theme would call
-// dark.
-constexpr int DarkThreshold = 128;
-
-// A pixel below this alpha is not part of any window.
-//
-// The scene's render target is cleared to transparent, so a window that has
-// been mapped but has not painted yet -- or a region no window covers -- reads
-// back as (0, 0, 0, 0). By luma alone that is indistinguishable from a
-// genuinely black title bar, and taking it would decide "dark" for a window
-// whose bar is white. Alpha is what tells the two apart, so a sample has to
-// have one. A target without an alpha channel reads back as fully opaque and
-// is unaffected.
-constexpr int MinAlpha = 128;
-
-// Rec.709 luma, matching PixelBlock. GL_RGBA readback is R,G,B,A.
-int lumaOf(const uchar *p)
-{
-    return (54 * p[0] + 183 * p[1] + 19 * p[2]) >> 8;
-}
-
-// Read a rect out of the render target currently bound, in the render target's
-// own coordinates. `readRect` receives the rect actually read, which is `rect`
-// clipped to the target.
-bool readPixels(const KWin::RenderTarget &renderTarget, const QRect &rect,
-                QByteArray &out, QRect *readRect)
-{
-    const QSize targetSize = renderTarget.transformedSize();
-    const QRect r = rect.intersected(QRect(QPoint(0, 0), targetSize));
-    if (r.isEmpty()) {
-        return false;
-    }
-
-    if (auto *fbo = renderTarget.framebuffer()) {
-        glBindFramebuffer(GL_READ_FRAMEBUFFER, fbo->handle());
-    }
-
-    out.resize(r.width() * r.height() * 4);
-    // No y-flip. KWin renders the scene into its render targets y-down -- row 0
-    // of the target is the top row of the output -- and glReadPixels' row
-    // argument is that same row index. The usual "OpenGL's origin is
-    // bottom-left" rule belongs to client textures and to the default
-    // framebuffer, and applying it here is not a harmless slip: it mirrors the
-    // band about the middle of the target, so the tint gets read from whatever
-    // happens to sit at the mirrored position -- usually the desktop below the
-    // window, which is why panels came out dark on light title bars.
-    glReadPixels(r.x(), r.y(), r.width(), r.height(), GL_RGBA, GL_UNSIGNED_BYTE,
-                 out.data());
-    *readRect = r;
+    // Preserve upstream's pixel-center mapping: edges are off by one for
+    // mirrors, and DRM FlipY is not the same as GL's bottom-up row order.
+    const QPointF origin = transform.map(QPointF(clipped.x() + 0.5, clipped.y() + 0.5), QSizeF(bounds));
+    const QPointF stepX = transform.map(QPointF(clipped.x() + 1.5, clipped.y() + 0.5), QSizeF(bounds)) - origin;
+    const QPointF stepY = transform.map(QPointF(clipped.x() + 0.5, clipped.y() + 1.5), QSizeF(bounds)) - origin;
+    m_origin = QPoint(int(origin.x()) - bufferRect.x(), bufferRect.bottom() - int(origin.y()));
+    m_stepX = QPoint(qRound(stepX.x()), -qRound(stepX.y()));
+    m_stepY = QPoint(qRound(stepY.x()), -qRound(stepY.y()));
+    m_rect = clipped;
+    m_bufferRect = bufferRect;
     return true;
 }
 
-} // namespace
-
-bool sampleTitlebarTint(const KWin::RenderTarget &renderTarget,
-                        const KWin::RenderViewport &viewport,
-                        KWin::EffectWindow *window,
-                        const KWin::Region &deviceClip,
-                        const QRectF &panelRect,
-                        bool *dark)
+bool TitlebarPixelReadback::take(QByteArray &pixels)
 {
-    if (!window || !dark || panelRect.height() < 2.0) {
-        return false;
+    // The usual output transform only flips GL's row order. Normalize that
+    // in place, retaining the caller's allocation between observations.
+    const bool straight = m_stepX == QPoint(1, 0) && m_bufferRect.size() == m_rect.size();
+    if (straight && m_stepY == QPoint(0, 1) && m_origin == QPoint())
+        return m_readback.take(pixels);
+    if (straight && m_stepY == QPoint(0, -1) && m_origin == QPoint(0, m_rect.height() - 1)) {
+        if (!m_readback.take(pixels)) return false;
+        const qsizetype stride = qsizetype(m_rect.width()) * 4;
+        auto *data = pixels.data();
+        for (int y = 0; y < m_rect.height() / 2; ++y)
+            std::swap_ranges(data + y * stride, data + (y + 1) * stride,
+                             data + (m_rect.height() - y - 1) * stride);
+        return true;
     }
-
-    const QRectF frame = window->frameGeometry();
-    if (frame.width() < 8.0 || frame.height() < 8.0) {
-        return false;
-    }
-
-    // The panel's own rows, across the whole window: the bar's background
-    // dominates that band even when the caption and the application's controls
-    // are inside it, and the two of them are excluded below anyway.
-    const QRectF bandLogical(frame.x(), frame.y() + panelRect.y(),
-                             frame.width(), panelRect.height());
-    const QRectF panelLogical(frame.x() + panelRect.x(),
-                              frame.y() + panelRect.y(),
-                              panelRect.width(), panelRect.height());
-
-    // Two mappings of the same rectangle, because two spaces are in play.
-    // `deviceClip` comes from the compositor, so the clip test has to be in
-    // device coordinates; the read has to be in the render target's own
-    // coordinates. On a single output the two coincide, which is exactly what
-    // makes mixing them up look like it works -- so ask KWin for each instead
-    // of deriving one from the other.
-    const QRect bandDevice =
-        viewport.mapToDeviceCoordinatesAligned(bandLogical);
-    const QRect bandTarget =
-        viewport.mapToRenderTargetTexture(bandLogical).toAlignedRect();
-    const QRect panelDevice =
-        viewport.mapToDeviceCoordinatesAligned(panelLogical);
-    if (bandTarget.width() < 8 || bandTarget.height() < 2) {
-        return false;
-    }
-
-    QByteArray pixels;
-    QRect readTarget;
-    if (!readPixels(renderTarget, bandTarget, pixels, &readTarget)) {
-        return false;
-    }
-
-    // Where the part that was actually read sits in device space: everything
-    // the read gave up (clipping to the target) is relative to the request, so
-    // the shift between the two mappings is what carries over.
-    const QPoint shift = readTarget.topLeft() - bandTarget.topLeft();
-    const QRect readDevice(bandDevice.topLeft() + shift,
-                           QSize(readTarget.width(), readTarget.height()));
-
-    // Whatever the panel will cover is not a sample of the bar, and neither is
-    // the caption, whose glyphs are far higher contrast than the background
-    // they sit on.
-    const int panelFrom = panelDevice.x() - readDevice.x();
-    const int panelTo = panelFrom + panelDevice.width();
-    const int third = readTarget.width() / 3;
-
-    std::vector<int> samples;
-    samples.reserve(size_t(readTarget.width()) * size_t(readTarget.height()));
-    for (int y = 0; y < readTarget.height(); ++y) {
-        const uchar *row = reinterpret_cast<const uchar *>(pixels.constData())
-            + size_t(y) * size_t(readTarget.width()) * 4;
-        const int deviceY = readDevice.y() + y;
-        for (int x = 0; x < readTarget.width(); ++x) {
-            const uchar *p = row + size_t(x) * 4;
-            if (p[3] < MinAlpha) {
-                continue;
-            }
-            if (x >= panelFrom && x < panelTo) {
-                continue;
-            }
-            if (third > 4 && x >= third && x < 2 * third) {
-                continue;
-            }
-            // Pixels outside the visible region belong to whatever window is
-            // stacked above, not to this title bar. Reading past them would
-            // tint the panel from a different window.
-            if (!deviceClip.contains(QPoint(readDevice.x() + x, deviceY))) {
-                continue;
-            }
-            samples.push_back(lumaOf(p));
+    if (!m_readback.take(m_rawPixels)) return false;
+    pixels.resize(m_rect.width() * m_rect.height() * 4);
+    for (int y = 0; y < m_rect.height(); ++y) {
+        for (int x = 0; x < m_rect.width(); ++x) {
+            const QPoint source = m_origin + x * m_stepX + y * m_stepY;
+            const qsizetype offset = (qsizetype(source.y()) * m_bufferRect.width() + source.x()) * 4;
+            std::copy_n(m_rawPixels.constData() + offset, 4,
+                        pixels.data() + (qsizetype(y) * m_rect.width() + x) * 4);
         }
     }
-    if (int(samples.size()) < MinSamples) {
-        return false;
-    }
-
-    const size_t middle = samples.size() / 2;
-    std::nth_element(samples.begin(), samples.begin() + middle, samples.end());
-    *dark = samples[middle] < DarkThreshold;
     return true;
+}
+
+TitlebarSampler::~TitlebarSampler()
+{
+    // Cache eviction also happens on window close/config reload, outside paint.
+    if (KWin::effects) KWin::effects->makeOpenGLContextCurrent();
+}
+
+namespace
+{
+struct SampleArea {
+    QRect band, gutter, cover;
+    QRegion visible;
+    qreal scale;
+};
+
+SampleArea sampleArea(const KWin::RenderViewport &viewport, const QRectF &frame,
+                      const KWin::Region &deviceClip, const QRectF &panel, const QRectF &cover)
+{
+    // Both paths use the same top-anchored gutter and exclude the entire cover.
+    const qreal probeHeight = std::min(frame.height(), std::max(panel.bottom(), cover.bottom()) + 4);
+    const QRectF bandLogical(frame.x(), frame.y(), frame.width(), probeHeight);
+    const QRect bandDevice = viewport.mapToDeviceCoordinatesAligned(bandLogical);
+    const QRect bandTarget = viewport.mapToRenderTargetTexture(bandLogical).toAlignedRect();
+    const QPoint offset = bandTarget.topLeft() - bandDevice.topLeft();
+    const qreal scale = bandTarget.height() / bandLogical.height();
+    const QRect gutter(bandTarget.x(), bandTarget.y() + qRound(2 * scale),
+                       bandTarget.width(), std::max(2, qRound(3 * scale)));
+    const QRect panelTarget = viewport.mapToDeviceCoordinatesAligned(cover.translated(frame.topLeft()))
+                                  .translated(offset);
+    QRegion visible;
+    // Bound infinite source-capture regions before converting to Qt rectangles.
+    const KWin::Region boundedClip = deviceClip & KWin::Region(KWin::Rect(bandDevice));
+    for (const auto &rect : boundedClip.rects())
+        visible += QRect(rect.x(), rect.y(), rect.width(), rect.height());
+    visible.translate(offset);
+    return {bandTarget, gutter, panelTarget, visible, scale};
+}
+}
+
+QRect visibleTitlebarGutter(const KWin::RenderTarget &target, const KWin::RenderViewport &viewport,
+                            const QRectF &frame, const KWin::Region &deviceClip,
+                            const QRectF &panel, const QRectF &cover)
+{
+    if (panel.height() < 2 || frame.width() < 8 || frame.height() < 8) return {};
+    const auto area = sampleArea(viewport, frame, deviceClip, panel, cover);
+    const QRect bounds(QPoint(), target.transformedSize());
+    for (bool fallback : {false, true}) {
+        const QRect rect = tintSampleRect(area.gutter, area.cover, fallback);
+        // The same-frame path cannot inspect a CPU visibility mask. Require
+        // the entire gutter, rather than copy pixels from an occluding window.
+        if (rect.width() * rect.height() >= TintHistogram::MinSamples
+            && bounds.contains(rect) && QRegion(rect).subtracted(area.visible).isEmpty()) return rect;
+    }
+    return {};
+}
+
+bool TitlebarSampler::enqueue(const KWin::RenderTarget &renderTarget,
+                              const KWin::RenderViewport &viewport,
+                              KWin::EffectWindow *window, const KWin::Region &deviceClip,
+                              const QRectF &panel, const QRectF &cover)
+{
+    if (pending() || !window || panel.height() < 2) return false;
+    const QRectF frame = window->frameGeometry();
+    if (frame.width() < 8 || frame.height() < 8) return false;
+    const auto area = sampleArea(viewport, frame, deviceClip, panel, cover);
+    const auto &bandTarget = area.band;
+    const auto &gutter = area.gutter;
+    const auto &panelTarget = area.cover;
+    const auto &visible = area.visible;
+    m_deviceScale = area.scale;
+    const QRect targetBounds(QPoint(), renderTarget.transformedSize());
+    for (int attempt = 0; attempt < 2; ++attempt) {
+        m_tintRect = tintSampleRect(gutter, panelTarget, m_fallback).intersected(targetBounds);
+        // Read a bounded vertical strip once, for both RGB and the cover's
+        // bottom boundary. Never include the cover's own columns.
+        const bool right = panelTarget.center().x() >= bandTarget.center().x();
+        const int left = right ? std::max(bandTarget.left(), m_tintRect.right() - TintProbeWidth + 1) : m_tintRect.left();
+        const int end = right ? m_tintRect.right() + 1 : std::min(bandTarget.right() + 1, left + TintProbeWidth);
+        m_rect = QRect(left, bandTarget.y(), std::max(0, end - left),
+                       std::min(TintProbeHeight, bandTarget.height())).intersected(targetBounds);
+        m_probeTop = (m_rect.y() - bandTarget.y()) / m_deviceScale;
+        m_probeRect = QRectF((m_rect.x() - bandTarget.x()) / m_deviceScale,
+                             m_probeTop, m_rect.width() / m_deviceScale,
+                             m_rect.height() / m_deviceScale);
+        m_visible = visible.intersected(m_rect);
+        qsizetype count = 0;
+        for (const QRect &rect : m_visible) count += qsizetype(rect.width()) * rect.height();
+        // A few damaged glyph pixels are not a representative titlebar strip.
+        // Request a complete band on the next bounded refresh rather than
+        // accepting a mostly occluded/undrawn strip as a black background.
+        const quint64 required = std::max(quint64(TintHistogram::MinSamples),
+            (quint64(m_rect.width()) * m_rect.height() * 3 + 3) / 4);
+        if (quint64(count) >= required) {
+            return m_readback.enqueue(renderTarget, m_rect);
+        }
+        m_fallback = !m_fallback;
+    }
+    return false;
+}
+
+bool TitlebarSampler::take(bool *dark, QColor *color)
+{
+    if (!m_readback.take(m_pixels)) return false;
+    TintHistogram histogram;
+    // Visit visible spans, not a QRegion::contains lookup for every pixel.
+    for (const QRect &rect : m_visible.intersected(m_tintRect)) {
+        for (int y = rect.y(); y < rect.y() + rect.height(); ++y) {
+            const auto *row = reinterpret_cast<const uchar *>(m_pixels.constData())
+                + qsizetype(y - m_rect.y()) * m_rect.width() * 4;
+            for (int x = rect.x(); x < rect.x() + rect.width(); ++x) {
+                histogram.add(row + (x - m_rect.x()) * 4);
+            }
+        }
+    }
+    const quint64 tintArea = quint64(m_tintRect.width()) * m_tintRect.height();
+    const bool usable = histogram.tint(dark, color, (tintArea * 3 + 3) / 4);
+    m_backgroundBottom = -1;
+    if (usable && QRegion(m_rect).subtracted(m_visible).isEmpty()) {
+        const int bottom = tintBackgroundBottom(reinterpret_cast<const uchar *>(m_pixels.constData()),
+            m_rect.width(), m_rect.height(), *color, m_tintRect.bottom() - m_rect.y() + 1,
+            qRound(3 * m_deviceScale));
+        if (bottom < m_rect.height()) m_backgroundBottom = bottom / m_deviceScale + m_probeTop;
+    }
+    // A transparent/unpainted local strip can fall back on the next attempt,
+    // without a second transfer (or a synchronous wait) in this frame.
+    m_fallback = usable ? false : !m_fallback;
+    return usable;
 }
 
 } // namespace KOS

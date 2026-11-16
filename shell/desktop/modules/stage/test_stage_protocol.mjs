@@ -42,9 +42,14 @@ const parsed = [...reloadBlock.matchAll(
     .map(m => m[1]);
 const parsedCard = parsed.filter(k => k !== "id" && k !== "winId");
 
+// 特效解析但发布端有意不发送的键：QML 已删纵深渐变层，特效保留解析
+// 并以 0 关闭（stageanim.cpp 该行注释同义）。
+const parsedWhitelist = new Set(["cardDepth"]);
 let cases = 0;
 for (const k of parsedCard) {
     cases++;
+    if (parsedWhitelist.has(k))
+        continue;
     assert(published.has(k),
         `effect parses "${k}" but publishLiveCards does not send it`);
 }
@@ -52,6 +57,12 @@ assert(parsedCard.length >= 30,
     `suspiciously few parsed fields (${parsedCard.length}) — parser moved?`);
 assert(published.has("winId"), "v3 winId field missing from publish");
 cases += 2;
+assert(sidebar.includes("const desktopId = desktopTransition._displayedDesktopId"),
+    "live payload must identify the displayed model, not the pending desktop");
+assert(sidebar.includes("desktopId: desktopId, cards: out"), "desktop commit field missing");
+assert(reloadBlock.includes('obj.value(QStringLiteral("desktopId"))'),
+    "effect must consume the desktop commit field");
+cases += 3;
 
 // 反向：发布侧死字段检测（白名单=发布但特效有意不读的键）
 const publishWhitelist = new Set([]);

@@ -1,5 +1,6 @@
 import Quickshell
 import QtQuick
+import "../../../shared/qml/i18n"
 import qs.desktop.modules.common
 import qs.desktop.modules.dock
 
@@ -25,7 +26,10 @@ Item {
             id: timeText
             anchors.verticalCenter: parent.verticalCenter
             text: Qt.formatDateTime(clock.date, "h:mm")
-            color: ThemeService.foregroundColor
+            // With the mac-style ground on, the clock takes the strip's own
+            // ink and the readability edge goes away with it.
+            color: ThemeService.barInk
+            outlineEnabled: !AppearanceTokens.bar.macStyle
             renderType: Text.NativeRendering
             font {
                 family: AppearanceTokens.typography.displayFamily
@@ -36,8 +40,9 @@ Item {
 
         GlassText {
             anchors.verticalCenter: parent.verticalCenter
-            text: Qt.formatDateTime(clock.date, "M月d日 dddd")
-            color: ThemeService.foregroundColor
+            text: I18n.fmt(clock.date, I18n.tr("dddd, MMMM d"))
+            color: ThemeService.barInk
+            outlineEnabled: !AppearanceTokens.bar.macStyle
             renderType: Text.NativeRendering
             font {
                 family: AppearanceTokens.typography.displayFamily

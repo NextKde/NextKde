@@ -2,73 +2,57 @@
 
 **[English](README.md) | [中文](README.zh-CN.md)**
 
-每个直接子目录都是独立的 Qt Quick 应用和进程。应用可以导入 `shared/`，
-通过已记录的契约与 `services/` 通信，但绝不能导入 `shell/desktop/`。
+核心 `apps/` 源码树保留 `settings/`、`lockscreen/` 和 `sddm/` 主题（暂无支持的 SDDM 安装入口）。日历（含待办功能）、计算器、天气和
+ListenFree 均独立于 core；前三款共用 kos-apps 仓库、版本和 Release，但分别安装／更新／卸载：
 
-应用工作区从仓库根目录配置。四个构建开关和对应 CMake preset 使各应用可
-独立管理：
+| 应用 | 源码、Release 与应用测试 |
+| --- | --- |
+| 日历（内置待办功能） | [NextKde/kos-apps](https://github.com/NextKde/kos-apps) |
+| 计算器 | [NextKde/kos-apps](https://github.com/NextKde/kos-apps) |
+| 天气 | [NextKde/kos-apps](https://github.com/NextKde/kos-apps) |
+| ListenFree | [NextKde/ListenFree](https://github.com/NextKde/ListenFree) |
 
-| 应用 | 目标 | 配置 preset |
-| --- | --- | --- |
-| 日历 | `kos-calendar` | `calendar-dev` |
-| 待办 | `kos-todo` | `todo-dev` |
-| 天气 | `kos-weather` | `weather-dev` |
-| 音乐 | `kos-music` | `music-dev` |
+根构建不再编译这些应用、其私有运行时或 PIM 服务，应用 CMake preset 已移除。
+启用原 `KOS_BUILD_CALENDAR`、`KOS_BUILD_TODO`、`KOS_BUILD_CALCULATOR`、
+`KOS_BUILD_WEATHER` 或 `KOS_BUILD_LISTENFREE` 会明确报错并提示迁移。
+请在对应独立仓库构建和贡献。切换期间保留的源码目录不是备用构建/安装路径，
+独立验收门槛通过前不得删除。
 
-使用 `apps-dev` 可一次构建四个应用。每个应用拥有自己的可执行文件、QML
-模块、桌面入口、测试和中英文文档。`apps/common/` 只是很小的应用运行时，
-不是功能层；应用之间不会互相导入。天气 preset 还会构建并安装 Go 数据服务，
-应用会在需要时自动启动它。
+前三款源码目录与应用 ID 为 `apps/org.nextks.calendar`、`apps/org.nextks.calculator`、
+`apps/org.nextks.weather`（ID 去掉 `apps/`）。新远端尚未创建／推送，旧仓库保留历史。
+旧 `org.nextkde.*` Flatpak 不自动改名、卸载或迁移数据。
 
-## 开发调试：QML 热重载
-
-每个应用都支持直接从源码树加载 QML 并热重载，改 QML 不需要重编或重启：
-
-```bash
-.build/music-dev/apps/music/kos-music --watch-qml apps/music/qml
-# 或者用环境变量省去参数
-KOS_APP_QML_DIR=apps/music/qml .build/music-dev/apps/music/kos-music
-```
-
-参数指向存放 `Main.qml` 的目录（或入口文件本身）。监视树内的
-`*.qml`/`*.mjs`，保存后 300ms 防抖重建窗口；新代码会先在一次性引擎上
-完整编译校验（含被引用的兄弟组件），编译不过就报错并保留当前窗口。
-由 C++ 创建、经 initial properties 注入 QML 的控制器（如 music 的
-`music`）跨重载存活，播放、队列、数据库连接与 MPRIS 注册不会中断；
-QML 自己拥有的状态（当前页面、打开的对话框）会重置。`shared/qml`
-（Kos.Ui）编译在二进制里，改动它仍需重编。
-
-watch 运行是独立的开发实例：不与已运行的正式实例争单例激活。
-各应用的 C++ 改动仍需重编；只有 QML/JS 改动走热重载。
-
-要在 Plasma 开发机上注册为持久的用户级系统应用，请运行：
+## 安装与生命周期
 
 ```sh
-./tools/install-apps.sh
+./tools/kosctl install apps
+./tools/kosctl install apps --app calendar
+./tools/kosctl install apps --with-listenfree
+./tools/kosctl install apps check-update --app weather
+./tools/kosctl install apps update --app weather
+./tools/kosctl install apps status --app calendar
+./tools/kosctl install apps uninstall --app calculator
 ```
 
-`install-apps.sh` 会一次构建全部四个应用，而不只是当前要使用的应用。除仓库
-根目录 README 中的基础依赖外，Arch 还需要先安装：
+`tools/install-apps.sh` 是相同命令的兼容分发入口。默认选择日历（含待办）、
+计算器和天气，ListenFree 必须显式选择。`--app todo` 是日历的别名；
+`--update`、`--uninstall` 是对应生命周期动作的别名。
+修改操作要求终端确认或 `--yes`。默认经 `kos-apps` 使用与 Settings 相同的用户级 Flatpak 后端，
+应用包通过 GitHub Releases 发布，签名目录由 [appCatalog](https://github.com/NextKde/appCatalog) 提供。SHA-256 必须校验，开发者签名可选，但已固定发布者的条目必须验签。明确安装/更新时可为缺失依赖准备已批准的 Flathub runtime 源；不要求应用上架 Flathub，不允许目录添加任意运行库源。实际可用性取决于对应正式 Release，不静默回退源码构建。
+历史兼容／开发源码入口必须显式 `--backend=source`；`--app APP --version X.Y.Z` 及构建依赖 `check` 仅用于源码模式。
+`--with-listenfree-video` 会明确拒绝；自定义视频功能请按独立 ListenFree
+仓库指南构建，不能覆盖稳定 Release 清单的功能选择。
 
-```sh
-sudo pacman -S --needed kcalendarcore gstreamer gst-plugins-base-libs taglib
-```
+Flatpak 管理安装记录，外部 Flatpak 工具可卸载同一 ref。GitHub 包更新由 Settings／CLI 发现，
+无在线 origin 时不承诺 Discover／`flatpak update` 自动发现新版。libflatpak 可能留下本地 origin／公钥记录，
+即便随后拒绝事务；runtime 使用独立批准的固定来源。唯一用户级 Flatpak
+状态查询／卸载不要求发布者认可；普通卸载保留个人数据，不自动迁移旧安装。
 
-其中 `kcalendarcore` 由日历和待办使用；GStreamer 与 TagLib 由音乐使用；天气所需
-的 Go 已包含在 KOS 核心构建依赖中。实际播放和转码所需的 GStreamer 编解码/输出
-插件需按使用场景另行安装。若仅使用对应的 CMake preset 构建单个应用，只需要该
-应用的直接依赖。
+显式源码模式从固定 NextKde 仓库下载稳定 **源码** Release，在本地编译；其私有所有权记录
+不是 Discover 软件包。两种模式均不回退本仓库源码或开发分支；批量操作遇错即停，保留已完成项。
+上架、第三方源、自动更新和 Qt runtime 打包见[签名目录指南](../docs/app-store/SignedCatalog.zh-CN.md)。
+完整边界见[生命周期与信任契约](../docs/app-store/IndependentApps.zh-CN.md)。
 
-脚本会完成 Release 构建和测试，安装到 `~/.local`，注册桌面入口、hicolor
-图标和 AppStream 元数据，启用核心 `kos-data.service`、注册由 D-Bus 按需激活的
-PIM 服务，并刷新 Plasma 应用缓存。桌面入口使用绝对可执行路径，因此重新登录后无需回到源码目录构建。
-后续升级可重复运行同一个脚本。
-
-每个应用都可通过平台“首选项”快捷键（通常为 `Ctrl+,`）打开统一外观设置，包括跟随系统/浅色/深色、
-自动/玻璃/实色材质、不透明度、强调色、减少透明度和减少动画。偏好保存在
-四个 KOS 应用共用的配置中，并会同步到其他正在运行的应用。在 KDE Plasma
-上，应用运行时会在合成器支持时通过 `KWindowEffects` 请求原生背景模糊和
-背景对比；不可用时会自动切换为保证可读性的实色方案。
-
-`settings` 早于该工作区存在，在它依赖源码路径的 QML 加载方式单独迁移前，
-仍沿用现有构建路径。
+核心 `services/data-service` 仍是 Shell 依赖，保留共享天气能力和 Go 测试。
+日历 PIM 与应用专有测试由独立仓库负责。核心 CI 检查独立安装器和发布契约，
+不再构建过时的单仓库应用目录。剩余核心门槛见[开发指南](../docs/Development.zh-CN.md)。

@@ -1,4 +1,6 @@
 import QtQuick
+import QtQuick.Window
+import QtQuick.Controls as Controls
 import QtQuick.Effects
 import QtQml.Models
 import QtCore
@@ -7,6 +9,7 @@ import Quickshell
 import Quickshell.Wayland
 import Quickshell.Widgets
 import Qt5Compat.GraphicalEffects
+import "../../../shared/qml/i18n"
 import qs.desktop.modules.applauncher
 import qs.desktop.modules.bar
 import qs.desktop.modules.common
@@ -17,17 +20,29 @@ import qs.desktop.modules.stage
 import qs.desktop.modules.weather
 import "../../../Kos/Ui"
 import "WidgetLayout.mjs" as WidgetLayout
+import "DesktopGridMetrics.mjs" as DesktopGridMetrics
 
-// iPadOS-inspired desktop widgets. Keep this in the Bottom layer so Plasma's
-// desktop surface cannot cover it when plasmashell starts after KOS. Normal and
-// maximised application windows remain above it, and it reserves no usable
-// desktop area.
+// iPadOS-inspired desktop widgets. Stays on the Bottom layer: Plasma's desktop
+// surface shares the Desktop/Background layer and would cover it if moved down.
+// Application windows remain above it; it reserves no usable desktop area.
 PanelWindow {
     id: root
 
     color: "transparent"
     exclusionMode: ExclusionMode.Ignore
     exclusiveZone: 0
+    // 2026-10-18 层序：留在 Bottom。降到 Background（KWin DesktopLayer）
+    // 会被同在 DesktopLayer 的 Plasma 桌面表面盖住——实测重登后组件全部
+    // 消失。与台前调度条带的层内先后由 KWin 脚本重排，见
+    // kwin/window-bridge.js。
+    // KWin protects both Desktop and Dock windows from ordinary close/move
+    // shortcuts and Show Desktop hiding. Only the wallpaper may be Desktop:
+    // native Overview's DesktopBackground captures one Desktop window, so
+    // typing this transparent widget surface as Desktop loses the wallpaper.
+    // Bottom still puts widgets below applications; the bridge orders them
+    // above the separate wallpaper. Native Overview fades Dock thumbnails;
+    // Glass supplies the composed desktop texture so widgets scale with it.
+    WlrLayershell.namespace: "dock"
     WlrLayershell.layer: WlrLayer.Bottom
     // A desktop needs shortcuts only after the user explicitly clicks it.
     // OnDemand keeps active applications' Ctrl+C/V untouched otherwise.
@@ -61,12 +76,14 @@ PanelWindow {
             point.position.x, point.position.y)
     }
 
+    property var spatialWidgetRects: []
+
     // Publish current visual positions, including drag transforms. Both
     // wallpaper surfaces use these coordinates for a visible crossing orbit.
     Timer {
         interval: 250
         repeat: true
-        running: ThemeWallpaperService.active && root.visible
+        running: (ThemeWallpaperService.active || SpatialWallpaperService.layeredReady) && root.visible
         triggeredOnStart: true
         onTriggered: {
             const rectangles = []
@@ -77,15 +94,28 @@ PanelWindow {
                 rectangles.push({x: Math.round(point.x), y: Math.round(point.y),
                     width: Math.round(card.width * card.scale), height: Math.round(card.height * card.scale)})
             }
+            if (JSON.stringify(root.spatialWidgetRects) !== JSON.stringify(rectangles))
+                root.spatialWidgetRects = rectangles
             ThemeWallpaperService.setWidgetRects(root.screen?.name, rectangles)
         }
+    }
+
+    SpatialWidgetForeground {
+        objectName: "spatial-widget-foreground"
+        anchors.fill: parent
+        z: 2
+        targetScreen: root.screen
+        pointerX: root.depthPointerX
+        pointerY: root.depthPointerY
+        widgetRects: root.spatialWidgetRects
+        suspended: root.editMode || WallpaperPreviewService.active
     }
 
     // Ten square units are derived exclusively from screen width. Every
     // widget uses integer spans, giving desktop cards the intentional, large
     // iPadOS scale rather than a collection of small floating macOS tiles.
     readonly property int columns: 10
-    readonly property int widgetColumns: Math.min(4, columns)
+    readonly property int widgetColumns: widgetLayout.columns
     readonly property real sideMargin: 20
     // Keep card sizing tied to the original grid metrics. The larger visual
     // insets should consume the flexible desktop-file field on the right,
@@ -126,6 +156,7 @@ PanelWindow {
     property bool timerView: false
     property bool editMode: false
     property bool widgetLibraryOpen: false
+    property var activeDragCard: null
 
     function enterWidgetEditMode(openLibrary) {
         desktopFileGrid.clearDesktopSelection()
@@ -138,13 +169,22 @@ PanelWindow {
         root.widgetLibraryOpen = false
         root.editMode = false
     }
+
+    // Widget editing is modal: the gesture that entered it also leaves it.
+    // Nothing is ever pending at this point -- a moved card is persisted when
+    // its drag ends and a resized card when the handle commits -- so leaving
+    // only drops the editing chrome, it never has to flush state.
+    function toggleWidgetEditMode() {
+        if (root.editMode)
+            root.leaveWidgetEditMode()
+        else
+            root.enterWidgetEditMode(false)
+    }
     readonly property var widgetLabels: ({
-        clock: "时钟", weather: "天气", calendar: "日历", todo: "待办",
-        system: "系统", activity: "活动", music: "音乐"
-    })
-    readonly property var widgetSymbols: ({
-        clock: "◷", weather: "☀", calendar: "▦", todo: "✓",
-        system: "⌁", activity: "◌", music: "♫"
+        clock: I18n.tr("Clock"), weather: I18n.tr("Weather"),
+        calendar: I18n.tr("Calendar"), todo: I18n.tr("To-Do"),
+        system: I18n.tr("System"), activity: I18n.tr("Activity"),
+        music: I18n.tr("Music")
     })
     // Referencing the singleton starts the shared activity recorder once the
     // desktop surface is available.
@@ -186,12 +226,14 @@ PanelWindow {
 
     function lunarDate(date) {
         try {
-            return new Intl.DateTimeFormat("zh-CN-u-ca-chinese", {
+            // 农历数字部分两种语言都读得懂，但月份名要跟语言走。
+            return new Intl.DateTimeFormat(I18n.language === "en" ? "en-US-u-ca-chinese"
+                : I18n.language === "pt-BR" ? "pt-BR-u-ca-chinese" : "zh-CN-u-ca-chinese", {
                 month: "long",
                 day: "numeric"
             }).format(date)
         } catch (error) {
-            return "农历日期"
+            return I18n.tr("Lunar date")
         }
     }
 
@@ -207,7 +249,10 @@ PanelWindow {
         const total = Math.max(0, Math.round(seconds || 0))
         const hours = Math.floor(total / 3600)
         const minutes = Math.floor((total % 3600) / 60)
-        return hours > 0 ? hours + "小时" + (minutes ? minutes + "分" : "") : minutes + "分"
+        if (hours > 0)
+            return I18n.tr("%1 h %2").arg(hours)
+                .arg(minutes > 0 ? I18n.tr("%1 min").arg(minutes) : "")
+        return I18n.tr("%1 min").arg(minutes)
     }
 
     function addTimerMinute() {
@@ -232,7 +277,8 @@ PanelWindow {
         }
         timerRunning = true
         timerHasStarted = true
-        sendTimerNotification("倒计时开始", "剩余 " + formattedTimer())
+        sendTimerNotification(I18n.tr("Timer started"),
+            I18n.tr("%1 remaining").arg(formattedTimer()))
     }
 
     Timer {
@@ -247,7 +293,7 @@ PanelWindow {
             root.timerSeconds = 0
             root.timerRunning = false
             root.timerHasStarted = false
-            root.sendTimerNotification("倒计时结束", "计时已完成")
+            root.sendTimerNotification(I18n.tr("Timer finished"), I18n.tr("Time is up"))
         }
     }
 
@@ -265,11 +311,12 @@ PanelWindow {
         })
     }
 
-    // Higher priority widgets win when a short display cannot accommodate all
-    // rows. The desktop never scrolls and cards never shrink their type.
+    // Saved grid positions are per output; unpositioned cards fill free cells.
     function configuredWidget(id, priority, startColor, endColor) {
         const span = DeskCenterConfigService.spanFor(id)
+        const position = DeskCenterConfigService.displayPositionsForOutput(desktopOutput, widgetGeometry)[id]
         return { id: id, title: "", columns: span[0], rows: span[1],
+            column: position?.column, row: position?.row,
             priority: priority, startColor: startColor, endColor: endColor,
             surface: false }
     }
@@ -305,7 +352,33 @@ PanelWindow {
         return WidgetLayout.packWidgets(definitions, columnCount, rowCount)
     }
 
-    readonly property var placements: packWidgets(widgetDefinitions, widgetColumns, usableRows)
+    FontMetrics { id: desktopFileFontMetrics }
+    readonly property var reservedFileMetrics: DesktopGridMetrics.metrics(
+        desktopFiles.layout.iconSize + 72, desktopFiles.layout.iconSize + 58,
+        desktopFiles.layout.iconSize + 12, desktopFiles.layout.iconSpacing, desktopFileFontMetrics.height)
+    readonly property int maximumWidgetColumns: WidgetLayout.widgetColumnLimit(
+        width - leftInset - rightInset, cellSize, gap,
+        reservedFileMetrics.cellWidth + reservedFileMetrics.gap,
+        desktopFiles.entriesForOutput(desktopOutput).length,
+        Math.floor((height - topInset - bottomInset + reservedFileMetrics.gap)
+            / (reservedFileMetrics.cellHeight + reservedFileMetrics.gap)))
+    readonly property string widgetGeometry: maximumWidgetColumns + ":" + usableRows
+
+    readonly property var widgetLayout: WidgetLayout.fitWidgets(
+        widgetDefinitions, 4, maximumWidgetColumns, usableRows)
+    readonly property var placements: widgetLayout.placements
+    function resizeWidget(widgetId, columns, rows) {
+        const placement = placementFor(widgetId)
+        if (![1, 2].includes(columns) || ![1, 2].includes(rows)
+                || !placement || !WidgetLayout.canPlace(placements, widgetId,
+                placement.column, placement.row, columns, rows,
+                maximumWidgetColumns, usableRows)) return false
+        DeskCenterConfigService.savePosition(desktopOutput, placements,
+            widgetId, placement.column, placement.row, widgetGeometry)
+        DeskCenterConfigService.setSpan(widgetId, columns, rows)
+        return true
+    }
+
     function placementFor(widgetId) {
         for (let i = 0; i < placements.length; i++)
             if (placements[i].id === widgetId)
@@ -332,6 +405,8 @@ PanelWindow {
     // declaration has its *material* drawn from this union, so any card that
     // joined it would come back as glass. Material cards paint themselves and
     // stay out of it.
+    // 2026-10-18 用户改判：台前调度开启时桌面组件照常显示（两者共存，
+    // 台前调度在组件之上）；不再随 StageModeService.enabled 隐藏。
     BackgroundEffect.blurRegion: (AppearanceTokens.surface.usesKwinBlur
         && root.visible) ? widgetBlurHolder : null
 
@@ -360,12 +435,27 @@ PanelWindow {
 
     MouseArea {
         id: globalDesktopBackgroundArea
+        objectName: "desktop-background-catcher"
         anchors.fill: parent
         z: 0
         acceptedButtons: Qt.LeftButton | Qt.RightButton
+        // A long press enters widget editing, and releasing it must not be read
+        // as a plain click: a plain click on this surface either toggles
+        // show-desktop or leaves editing, and neither may happen from the hold
+        // that just started editing.
+        property bool holdEnteredEditing: false
 
         onPressed: function(mouse) {
+            holdEnteredEditing = false
             if (mouse.button === Qt.RightButton) {
+                // While editing, bare desktop dismisses the session instead of
+                // opening the menu. That menu is the way *into* editing (Add
+                // Widgets / Edit Widgets), so it belongs to the non-editing
+                // desktop; outside editing the next right click opens it.
+                if (root.editMode) {
+                    root.leaveWidgetEditMode()
+                    return
+                }
                 desktopFileGrid.setSelectedPaths([])
                 desktopFileGrid.contextEntry = null
                 desktopFileGrid.showMenu(null,
@@ -374,21 +464,36 @@ PanelWindow {
             }
             desktopFileGrid.clearDesktopSelection()
         }
-        // 空桌面左键＝显示桌面开关：台前侧栏把桌面应用全部带动画收进
-        // 卡，再点一次整组放出来。⚠️ 不能在 onPressAndHold 里吞事件来
-        // 防误触——按住超 800ms 的"慢点击"会被一起吞掉（点击全部失效，
-        // 实测踩过）；改用 editMode 守卫：长按进了挂件编辑模式，release
-        // 的 clicked 自然跳过。
+        // 空桌面左键：编辑模式下退出编辑（改动先在各自手势里落盘，这里只
+        // 收尾），否则＝显示桌面开关：台前侧栏把桌面应用全部带动画收进卡，
+        // 再点一次整组放出来。⚠️ 不能在 onPressAndHold 里吞事件来防误触
+        // ——按住超 800ms 的"慢点击"会被一起吞掉（点击全部失效，实测踩
+        // 过）；改用 holdEnteredEditing 守卫：长按进了挂件编辑模式，
+        // release 的 clicked 自然跳过。
         onClicked: function(mouse) {
+            if (mouse.button !== Qt.LeftButton)
+                return
+            if (holdEnteredEditing) {
+                holdEnteredEditing = false
+                return
+            }
+            if (root.editMode) {
+                // Leaving is the click's job while a widget is being placed;
+                // modifier clicks stay selection-only, as below.
+                if (mouse.modifiers === Qt.NoModifier)
+                    root.leaveWidgetEditMode()
+                return
+            }
             // 修饰键守卫与网格入口（FreeSlotDesktopDemo）同款：Ctrl/Shift+
             // 点击是选择语义，不该翻转显示桌面
-            if (mouse.button === Qt.LeftButton && !root.editMode
-                    && mouse.modifiers === Qt.NoModifier)
+            if (mouse.modifiers === Qt.NoModifier)
                 StageModeService.deskRevealToggleRequested()
         }
         onPressAndHold: function(mouse) {
-            if (mouse.button === Qt.LeftButton && mouse.modifiers === Qt.NoModifier)
+            if (mouse.button === Qt.LeftButton && mouse.modifiers === Qt.NoModifier) {
+                holdEnteredEditing = true
                 root.enterWidgetEditMode(false)
+            }
         }
     }
 
@@ -399,14 +504,14 @@ PanelWindow {
         opacity: root.editMode ? 1 : 0
         visible: root.editMode || opacity > 0
         enabled: root.editMode
-        Behavior on opacity { NumberAnimation { duration: AppearanceTokens.motion.fastDuration } }
+        Behavior on opacity { NumberAnimation { duration: AppearanceTokens.motion.fastDuration; easing.type: AppearanceTokens.motion.enterCurve } }
         anchors { top: parent.top; right: parent.right; topMargin: root.topInset; rightMargin: 24 }
         spacing: 8
 
         Repeater {
             model: [
-                { id: "add", label: "+ 组件" },
-                { id: "done", label: "完成" }
+                { id: "add", label: I18n.tr("+ Widgets") },
+                { id: "done", label: I18n.tr("Done") }
             ]
             delegate: Rectangle {
                 required property var modelData
@@ -453,7 +558,7 @@ PanelWindow {
         enabled: root.editMode && root.widgetLibraryOpen
         scale: 0.96 + 0.04 * opacity
         transformOrigin: Item.TopRight
-        Behavior on opacity { NumberAnimation { duration: AppearanceTokens.motion.normalDuration; easing.type: Easing.OutCubic } }
+        Behavior on opacity { NumberAnimation { duration: AppearanceTokens.motion.normalDuration; easing.type: AppearanceTokens.motion.enterCurve } }
         anchors { top: widgetEditToolbar.bottom; right: widgetEditToolbar.right; topMargin: 10 }
         width: 430
         height: 116
@@ -494,11 +599,11 @@ PanelWindow {
                     Column {
                         anchors.centerIn: parent
                         spacing: 5
-                        Text {
+                        BundledIcon {
                             anchors.horizontalCenter: parent.horizontalCenter
-                            text: root.widgetSymbols[modelData]
+                            name: "desktop.widget." + modelData
                             color: ThemeService.foregroundColor
-                            font.pixelSize: 20
+                            size: 20
                         }
                         Text {
                             anchors.horizontalCenter: parent.horizontalCenter
@@ -506,11 +611,11 @@ PanelWindow {
                             color: ThemeService.foregroundColor
                             font { pixelSize: 9; weight: Font.DemiBold }
                         }
-                        Text {
+                        BundledIcon {
                             anchors.horizontalCenter: parent.horizontalCenter
-                            text: active ? "−" : "+"
+                            name: active ? "desktop.widget.remove" : "desktop.widget.add"
                             color: active ? "#ff453a" : ThemeService.accentColor
-                            font { pixelSize: 14; weight: Font.Bold }
+                            size: 14
                         }
                     }
                     TapHandler {
@@ -522,21 +627,129 @@ PanelWindow {
         }
     }
 
+    Rectangle {
+        id: widgetDropPreview
+        objectName: "widget-drop-preview"
+        z: 110
+        readonly property var dragged: root.activeDragCard
+        // The highlight marks the cell the pointer is over, so it jumps from
+        // cell to cell: only ever one cell is lit. Sliding it across the cells
+        // in between read as several cells lighting up in a row.
+        // Snapshot only live drag updates. Once the drag is gone, keep the
+        // last target geometry and colour for the entire fade-out.
+        property rect lastGeometry: Qt.rect(0, 0, 0, 0)
+        readonly property rect previewGeometry: dragged !== null
+            ? Qt.rect(root.leftInset + dragged.dropPosition.column * (root.cellSize + root.gap),
+                root.topInset + dragged.dropPosition.row * (root.cellSize + root.gap),
+                root.spanSize(dragged.displayColumns), root.spanSize(dragged.displayRows))
+            : lastGeometry
+        onPreviewGeometryChanged: if (dragged !== null) lastGeometry = previewGeometry
+        property bool lastAllowed: false
+        readonly property bool allowed: dragged !== null ? dragged.dropAllowed : lastAllowed
+        onAllowedChanged: if (dragged !== null) lastAllowed = allowed
+        x: previewGeometry.x
+        y: previewGeometry.y
+        width: previewGeometry.width
+        height: previewGeometry.height
+        radius: AppearanceTokens.widget.radius
+        color: allowed ? "#2434c759" : "#30ff453a"
+        border.width: 2
+        border.color: allowed ? "#34c759" : "#ff453a"
+        opacity: dragged !== null ? 1 : 0
+        visible: opacity > 0
+        Behavior on opacity {
+            enabled: !AppTheme.reduceMotion
+            NumberAnimation {
+                // Appear promptly, leave a little faster: the highlight should
+                // never trail the card that is landing.
+                // motion-exception: Drop-preview fade follows the landing card; retain its shortened release.
+                duration: widgetDropPreview.dragged !== null
+                    ? AppearanceTokens.motion.fastDuration
+                    : AppearanceTokens.motion.fastDuration * 0.6
+                easing.type: Easing.OutCubic
+            }
+        }
+    }
+
+    // Position/size saves replace widgetDefinitions. Keep delegate identity
+    // separate from those snapshots so an unrelated move cannot recreate the
+    // clock face, reset content state or replay every card's size animation.
+    readonly property var visibleWidgetIds:
+        root.screen?.name === ScreenLifecycle.activeScreen?.name
+            ? root.widgetDefinitions.map(widget => widget.id) : []
+    onVisibleWidgetIdsChanged: syncWidgetModel()
+
+    ListModel {
+        id: desktopWidgetModel
+        Component.onCompleted: root.syncWidgetModel()
+    }
+
+    function syncWidgetModel() {
+        if (!desktopWidgetModel) return
+        const ids = root.visibleWidgetIds
+        for (let index = desktopWidgetModel.count - 1; index >= 0; --index) {
+            if (ids.indexOf(desktopWidgetModel.get(index).widgetId) < 0)
+                desktopWidgetModel.remove(index)
+        }
+        for (let target = 0; target < ids.length; ++target) {
+            let current = -1
+            for (let index = target; index < desktopWidgetModel.count; ++index) {
+                if (desktopWidgetModel.get(index).widgetId === ids[target]) {
+                    current = index
+                    break
+                }
+            }
+            if (current < 0)
+                desktopWidgetModel.insert(target, { widgetId: ids[target] })
+            else if (current !== target)
+                desktopWidgetModel.move(current, target, 1)
+        }
+    }
+
     Repeater {
         id: widgetRepeater
         objectName: "desktop-widget-repeater"
-        model: root.screen?.name === ScreenLifecycle.activeScreen?.name ? root.widgetDefinitions : []
+        model: desktopWidgetModel
 
         delegate: DeskWidgetCard {
             id: card
-            required property var modelData
+            objectName: "desktop-widget-" + modelData.id
+            required property string widgetId
+            readonly property var modelData: {
+                for (const widget of root.widgetDefinitions) {
+                    if (widget.id === widgetId) return widget
+                }
+                // A visibility change can invalidate the definition before
+                // the keyed model removes its delegate in the same update.
+                return { id: widgetId, title: "", startColor: "transparent",
+                    endColor: "transparent", surface: false }
+            }
             property real dragOffsetX: 0
             property real dragOffsetY: 0
             readonly property var placement: root.placementFor(modelData.id)
+            // 2026-10-18 用户改判：台前调度与桌面组件共存（台前调度在
+            // 组件之上），组件不再随台前调度开启而隐藏
+            readonly property bool moving: widgetDrag.active
+            // A Behavior gated on `moving` cannot see the end of the drag: the
+            // DragHandler's release handler runs before the binding to active is
+            // invalidated, so the release writes (offset reset, committed cell)
+            // would go straight through a disabled Behavior and the card would
+            // jump. This flag is assigned by that handler itself, so it is
+            // already exact when the writes happen.
+            property bool pointerHeld: false
+            readonly property var dropPosition: WidgetLayout.snappedPosition(
+                x - root.leftInset, y - root.topInset,
+                displayColumns, displayRows, root.cellSize, root.gap,
+                root.maximumWidgetColumns, root.usableRows)
+            readonly property bool dropAllowed: WidgetLayout.canPlace(root.placements,
+                modelData.id, dropPosition.column, dropPosition.row,
+                displayColumns, displayRows, root.maximumWidgetColumns, root.usableRows)
             visible: placement !== null
-            z: widgetDrag.active ? 120 : (root.editMode ? 20 : 1)
-            transform: Translate { x: card.dragOffsetX; y: card.dragOffsetY }
-            scale: widgetDrag.active ? 1.035 : 1
+            // Desktop widgets are part of the login arrival, not a static
+            // layer that appears before the wallpaper, bar and dock.
+            opacity: StartupReveal.widgetProgress
+            enabled: StartupReveal.widgetProgress > 0
+            z: widgetDrag.active || resizeHandle.resizing ? 120 : (root.editMode ? 20 : 1)
             // The clock is the one card whose glass outline is a shape rather
             // than a rectangle: it draws MaterialFlower, so its surface has to
             // be the flower itself — no card fill, no rectangular KWin material,
@@ -547,56 +760,167 @@ PanelWindow {
             startColor: modelData.id === "weather" ? root.weatherTheme.primary : modelData.startColor
             endColor: modelData.id === "weather" ? root.weatherTheme.secondary : modelData.endColor
             showSurface: modelData.surface
-            x: root.leftInset + (placement?.column ?? 0) * (root.cellSize + root.gap)
-            y: root.topInset + (placement?.row ?? 0) * (root.cellSize + root.gap)
-            width: root.spanSize(placement?.columns ?? 1)
-            height: root.spanSize(placement?.rows ?? 1)
-            Behavior on x { NumberAnimation { duration: AppearanceTokens.motion.normalDuration; easing.type: AppearanceTokens.motion.standardEasing } }
-            Behavior on y { NumberAnimation { duration: AppearanceTokens.motion.normalDuration; easing.type: AppearanceTokens.motion.standardEasing } }
-            Behavior on width { NumberAnimation { duration: AppearanceTokens.motion.normalDuration; easing.type: AppearanceTokens.motion.standardEasing } }
-            Behavior on height { NumberAnimation { duration: AppearanceTokens.motion.normalDuration; easing.type: AppearanceTokens.motion.standardEasing } }
-            Behavior on scale { NumberAnimation { duration: 120; easing.type: Easing.OutCubic } }
+            // SurfaceShape listens to Item geometry and scale changes, not
+            // Translate.x/y. Move the anchor itself so the native glass and
+            // the QML content publish the same position on every drag frame.
+            //
+            // Geometry runs through frame-synchronised springs instead of
+            // Behaviors on these bindings: Qt's SpringAnimation integrates at a
+            // fixed 16 ms step, so on a 240 Hz output a released card moved in
+            // ~60 Hz quanta while the compositor kept presenting every frame.
+            readonly property real targetX: root.leftInset
+                + (placement?.column ?? 0) * (root.cellSize + root.gap) + dragOffsetX
+            readonly property real targetY: root.topInset
+                + (placement?.row ?? 0) * (root.cellSize + root.gap) + dragOffsetY
+            // The card and every widget inside it lay themselves out for the
+            // cell size they have committed to, never for the mid-drag preview:
+            // switching a widget to its other layout at the halfway point made
+            // the contents jump while the corner was still moving. The preview
+            // span only drives the resize readout and the corner itself.
+            readonly property int displayColumns: placement?.columns ?? 1
+            readonly property int displayRows: placement?.rows ?? 1
+            // While the corner is held, the card follows the magnetised
+            // pointer position; the moment it is released the size switches to
+            // the committed cell and the spring takes it there.
+            readonly property real targetWidth: resizeHandle.resizing
+                ? resizeHandle.previewWidth : root.spanSize(displayColumns)
+            readonly property real targetHeight: resizeHandle.resizing
+                ? resizeHandle.previewHeight : root.spanSize(displayRows)
+            // The lift belongs to the same motion family as the drop, so the
+            // card does not land while it is still shrinking on another curve.
+            readonly property real targetScale: widgetDrag.active ? 1.035 : 1
 
+            x: springX.value
+            y: springY.value
+            width: springWidth.value
+            height: springHeight.value
+            // Keep the login arrival scale independent of the drag spring.
+            // SurfaceShape follows this scale together with the QML content.
+            scale: springScale.value * (0.97 + 0.03 * StartupReveal.widgetProgress)
+
+            // A held pointer owns the value one-to-one (follow) and the same
+            // spring keeps its last velocity when the card is released, so the
+            // momentum of the drag carries into the cell instead of stopping
+            // dead. The move spring is critically damped: a long drop must not
+            // overshoot past the screen edge.
+            MotionSpring {
+                id: springX
+                target: card.targetX
+                follow: card.pointerHeld
+                enabled: !AppTheme.reduceMotion
+                angularFrequency: AppearanceTokens.motion.widgetMoveAngularFrequency
+                dampingRatio: AppearanceTokens.motion.widgetMoveDampingRatio
+                epsilon: AppearanceTokens.motion.widgetMoveEpsilon
+            }
+            MotionSpring {
+                id: springY
+                target: card.targetY
+                follow: card.pointerHeld
+                enabled: !AppTheme.reduceMotion
+                angularFrequency: AppearanceTokens.motion.widgetMoveAngularFrequency
+                dampingRatio: AppearanceTokens.motion.widgetMoveDampingRatio
+                epsilon: AppearanceTokens.motion.widgetMoveEpsilon
+            }
+            MotionSpring {
+                id: springWidth
+                target: card.targetWidth
+                follow: resizeHandle.resizing
+                enabled: !AppTheme.reduceMotion
+                angularFrequency: AppearanceTokens.motion.widgetResizeAngularFrequency
+                dampingRatio: AppearanceTokens.motion.widgetResizeDampingRatio
+                epsilon: AppearanceTokens.motion.widgetResizeEpsilon
+            }
+            MotionSpring {
+                id: springHeight
+                target: card.targetHeight
+                follow: resizeHandle.resizing
+                enabled: !AppTheme.reduceMotion
+                angularFrequency: AppearanceTokens.motion.widgetResizeAngularFrequency
+                dampingRatio: AppearanceTokens.motion.widgetResizeDampingRatio
+                epsilon: AppearanceTokens.motion.widgetResizeEpsilon
+            }
+            MotionSpring {
+                id: springScale
+                target: card.targetScale
+                enabled: !AppTheme.reduceMotion
+                angularFrequency: AppearanceTokens.motion.widgetMoveAngularFrequency
+                dampingRatio: AppearanceTokens.motion.widgetMoveDampingRatio
+                epsilon: AppearanceTokens.motion.widgetGripEpsilon
+            }
+            // The resize readout lifts with the grab on the same frame clock.
+            MotionSpring {
+                id: springReadoutScale
+                target: readout.visible ? 1.0 : 0.86
+                enabled: !AppTheme.reduceMotion
+                angularFrequency: AppearanceTokens.motion.widgetGripAngularFrequency
+                dampingRatio: AppearanceTokens.motion.widgetGripDampingRatio
+                epsilon: AppearanceTokens.motion.widgetGripEpsilon
+            }
+            // One frame callback advances every channel, and it stops as soon
+            // as all of them have settled, so idle cards cost nothing.
+            FrameAnimation {
+                running: springX.animating || springY.animating
+                    || springWidth.animating || springHeight.animating
+                    || springScale.animating || springReadoutScale.animating
+                onTriggered: {
+                    springX.advance(frameTime)
+                    springY.advance(frameTime)
+                    springWidth.advance(frameTime)
+                    springHeight.advance(frameTime)
+                    springScale.advance(frameTime)
+                    springReadoutScale.advance(frameTime)
+                }
+            }
+            // Placement arrives asynchronously at startup and whenever a widget
+            // is shown again: prime to the cell there instead of springing in
+            // from the window origin.
+            onVisibleChanged: {
+                springX.snap()
+                springY.snap()
+                springWidth.snap()
+                springHeight.snap()
+                springScale.snap()
+                springReadoutScale.snap()
+            }
+
+            // A right click is how a card enters editing, so a second right
+            // click has to leave it again. Toggling keeps one gesture as the
+            // single way in and out instead of re-requesting the state the
+            // desktop is already in.
             TapHandler {
                 acceptedButtons: Qt.RightButton
                 gesturePolicy: TapHandler.ReleaseWithinBounds
-                onTapped: root.enterWidgetEditMode(false)
+                onTapped: root.toggleWidgetEditMode()
             }
 
             DragHandler {
                 id: widgetDrag
                 target: null
-                enabled: root.editMode
+                enabled: root.editMode && !resizeHandle.resizing
                 acceptedButtons: Qt.LeftButton
-                onTranslationChanged: {
+                onActiveTranslationChanged: {
                     if (!active)
                         return
-                    card.dragOffsetX = translation.x
-                    card.dragOffsetY = translation.y
+                    card.dragOffsetX = activeTranslation.x
+                    card.dragOffsetY = activeTranslation.y
                 }
                 onActiveChanged: {
-                    if (active)
+                    if (active) {
+                        card.pointerHeld = true
+                        root.activeDragCard = card
                         return
-                    const centerX = card.x + card.width / 2 + card.dragOffsetX
-                    const centerY = card.y + card.height / 2 + card.dragOffsetY
-                    let nearestId = card.modelData.id
-                    let nearestDistance = Number.POSITIVE_INFINITY
-                    for (let i = 0; i < widgetRepeater.count; ++i) {
-                        const candidate = widgetRepeater.itemAt(i)
-                        if (!candidate)
-                            continue
-                        const dx = centerX - (candidate.x + candidate.width / 2)
-                        const dy = centerY - (candidate.y + candidate.height / 2)
-                        const distance = dx * dx + dy * dy
-                        if (distance < nearestDistance) {
-                            nearestDistance = distance
-                            nearestId = candidate.modelData.id
-                        }
                     }
-                    const targetIndex = DeskCenterConfigService.orderedIds().indexOf(nearestId)
-                    DeskCenterConfigService.moveWidget(card.modelData.id, targetIndex)
+                    card.pointerHeld = false
+                    const allowed = root.editMode && card.dropAllowed
+                    const destination = card.dropPosition
+                    const id = card.modelData.id
+                    const placements = root.placements
+                    root.activeDragCard = null
                     card.dragOffsetX = 0
                     card.dragOffsetY = 0
+                    if (allowed)
+                        DeskCenterConfigService.savePosition(root.desktopOutput, placements,
+                            id, destination.column, destination.row, root.widgetGeometry)
                 }
             }
 
@@ -606,19 +930,27 @@ PanelWindow {
                 z: 50
                 visible: widgetHover.hovered && !root.editMode
                 anchors { right: parent.right; bottom: parent.bottom; margins: 8 }
-                width: sizeLabel.implicitWidth + 14
-                height: 24
+                width: Math.min(sizeLabelMetrics.advanceWidth + 14, parent.width - 16)
+                height: Math.max(24, sizeLabel.implicitHeight + 10)
                 radius: 12
                 color: AppearanceTokens.surface.pick(AppearanceTokens.colors.layer4, Qt.rgba(0, 0, 0, 0.52))
                 border.width: 1
                 border.color: AppearanceTokens.surface.pick(AppearanceTokens.colors.outlineVariant, Qt.rgba(1, 1, 1, 0.18))
+                TextMetrics {
+                    id: sizeLabelMetrics
+                    font: sizeLabel.font
+                    text: sizeLabel.text
+                }
                 Text {
                     id: sizeLabel
                     anchors.centerIn: parent
-                    text: ({ small: "小", medium: "中", large: "大" })[
-                        DeskCenterConfigService.sizeFor(card.modelData.id)] + " · 右键编辑"
+                    width: parent.width - 14
+                    text: card.displayColumns + "×" + card.displayRows
+                        + " · " + I18n.tr("Right-click to edit")
                     color: AppearanceTokens.surface.pick(AppearanceTokens.colors.surfaceForeground, "white")
                     font { pixelSize: 9; weight: Font.DemiBold }
+                    horizontalAlignment: Text.AlignHCenter
+                    wrapMode: Text.WordWrap
                 }
             }
 
@@ -628,11 +960,11 @@ PanelWindow {
                 anchors { top: parent.top; left: parent.left; margins: 8 }
                 width: 26; height: 26; radius: 13
                 color: "#ff453a"
-                Text {
+                BundledIcon {
                     anchors.centerIn: parent
-                    text: "−"
+                    name: "desktop.widget.remove"
                     color: "white"
-                    font { pixelSize: 18; weight: Font.Bold }
+                    size: 18
                 }
                 TapHandler {
                     onTapped: AppearanceConfigService.setDeskCenterWidgetVisible(
@@ -640,27 +972,40 @@ PanelWindow {
                 }
             }
 
-            Rectangle {
+            WidgetResizeHandle {
+                id: resizeHandle
                 z: 80
                 visible: root.editMode
-                anchors { right: parent.right; bottom: parent.bottom; margins: 8 }
-                width: editSizeText.implicitWidth + 16
-                height: 26
-                radius: AppearanceTokens.isMaterial ? 13 : 9
-                color: AppearanceTokens.surface.pick(
-                    AppearanceTokens.colors.primaryContainer,
-                    Qt.rgba(0, 0, 0, 0.56))
-                Text {
-                    id: editSizeText
-                    anchors.centerIn: parent
-                    text: ({ small: "小", medium: "中", large: "大" })[
-                        DeskCenterConfigService.sizeFor(card.modelData.id)]
-                    color: AppearanceTokens.surface.pick(
-                        AppearanceTokens.colors.primaryContainerForeground, "white")
-                    font { pixelSize: 10; weight: Font.DemiBold }
+                anchors { right: parent.right; bottom: parent.bottom; margins: 5 }
+                cellSize: root.cellSize
+                gap: root.gap
+                animate: !AppTheme.reduceMotion
+                previewAllowed: card.placement !== null && WidgetLayout.canPlace(
+                    root.placements, card.modelData.id, card.placement.column, card.placement.row,
+                    previewColumns, previewRows, root.maximumWidgetColumns, root.usableRows)
+                onCommitted: function(columns, rows) {
+                    root.resizeWidget(card.modelData.id, columns, rows)
                 }
-                TapHandler {
-                    onTapped: DeskCenterConfigService.cycleSize(card.modelData.id)
+            }
+
+            Rectangle {
+                id: readout
+                z: 81
+                visible: resizeHandle.resizing
+                anchors.centerIn: parent
+                width: resizePreview.implicitWidth + 24
+                height: 32
+                radius: 12
+                color: resizeHandle.previewAllowed ? "#b0000000" : "#c0a02020"
+                // The readout lands with the grab instead of blinking on, so the
+                // eye is already on the corner when the size starts to change.
+                scale: springReadoutScale.value
+                Text {
+                    id: resizePreview
+                    anchors.centerIn: parent
+                    text: resizeHandle.previewColumns + " × " + resizeHandle.previewRows
+                    color: "white"
+                    font { pixelSize: 13; weight: Font.DemiBold }
                 }
             }
 
@@ -671,9 +1016,17 @@ PanelWindow {
                 id: widgetContentLayer
                 objectName: "widget-content-layer"
                 anchors.fill: parent
-                // Glass widgets use monochrome content independently of the
-                // application icons. Colour cards retain their own artwork.
+                // Editing is spatial: while widgets are being arranged their
+                // contents must not answer clicks. A live content layer turned a
+                // drag or a stray click on the music card into a launch of the
+                // app it was showing, and a second copy of a running player is
+                // what crashed QQ Music (two instances share one profile).
+                enabled: !root.editMode
+                // The clock resolves monochrome ink in its face. Keep its text
+                // out of the extra saturation texture so it renders at the
+                // window's resolution. Other glass artwork is desaturated.
                 layer.enabled: AppearanceConfigService.widgetStyle === "glass"
+                    && card.modelData.id !== "clock"
 	                layer.effect: MultiEffect {
 	                    saturation: -1.0
 	                    colorization: 0.0
@@ -684,15 +1037,23 @@ PanelWindow {
                 active: card.visible && card.modelData.id === "clock"
                 sourceComponent: Component {
 	                    Item {
+	                id: clockPages
+	                objectName: "desktop-clock-pages"
 	                anchors.fill: parent
                 clip: true
+                // Animate the selected page, not its pixel position. Geometry
+                // changes must keep the hidden timer exactly below the face,
+                // including while a newly loaded card grows from zero height.
+                property real pageProgress: root.timerView ? 1 : 0
+                Behavior on pageProgress {
+                    NumberAnimation { duration: AppearanceTokens.motion.slow.duration; easing.type: AppearanceTokens.motion.enterCurve }
+                }
 
                 Item {
                     id: clockPage
                     width: parent.width
                     height: parent.height
-                    y: root.timerView ? -height : 0
-                    Behavior on y { NumberAnimation { duration: 240; easing.type: Easing.OutCubic } }
+                    y: -height * clockPages.pageProgress
 
                 // The flower itself is not drawn here: this card is a regular
                 // Material card whose outline happens to be the flower, so its
@@ -701,102 +1062,40 @@ PanelWindow {
                 // different surface -- its own colour, its own opacity, its own
                 // outline. The clock only adds its face below.
 
-                Canvas {
+                DeskClockFace {
                     id: analogClock
+                    objectName: "desktop-clock-face"
                     anchors.fill: parent
                     anchors.margins: 14
-                    onPaint: {
-                        const ctx = getContext("2d")
-                        const size = Math.min(width, height)
-                        const center = size / 2
-                        const radius = Math.max(0, size / 2 - 3)
-                        if (radius <= 0)
-                            return
-                        const date = clock.date
-                        ctx.reset()
-                        ctx.translate((width - size) / 2 + center, (height - size) / 2 + center)
-                        // In the shared glass modes the card material is the
-                        // face: do not paint a second opaque white disc.
-                        if (!AppearanceTokens.content.onBackdrop) {
-                            ctx.fillStyle = "#fafafa"
-                            ctx.beginPath(); ctx.arc(0, 0, radius, 0, Math.PI * 2); ctx.fill()
-                        }
-                        if (!AppearanceTokens.isMaterial) {
-                            ctx.strokeStyle = AppearanceTokens.content.ink("#dedede", 0.42).toString()
-                            ctx.lineWidth = 1
-                            ctx.beginPath(); ctx.arc(0, 0, radius, 0, Math.PI * 2); ctx.stroke()
-                        }
-	                        ctx.strokeStyle = AppearanceTokens.content.ink("#171717").toString()
-                        ctx.lineCap = "round"
-                        for (let mark = 0; mark < 12; mark++) {
-                            const angle = mark * Math.PI / 6
-                            ctx.lineWidth = mark % 3 === 0 ? 1.8 : 0.8
-                            ctx.beginPath()
-                            ctx.moveTo(Math.sin(angle) * (radius - 4), -Math.cos(angle) * (radius - 4))
-                            ctx.lineTo(Math.sin(angle) * (radius - (mark % 3 === 0 ? 10 : 7)), -Math.cos(angle) * (radius - (mark % 3 === 0 ? 10 : 7)))
-                            ctx.stroke()
-                        }
-                        // Full hour numerals make the small analogue clock
-                        // readable at a glance, rather than relying on ticks
-                        // alone. Their radius leaves a clear channel for the
-                        // hands in this one-cell tile.
-	                        ctx.fillStyle = AppearanceTokens.content.ink("#242126").toString()
-                        ctx.font = "bold " + Math.max(7, Math.round(radius * 0.18)) + "px sans-serif"
-                        ctx.textAlign = "center"
-                        ctx.textBaseline = "middle"
-                        for (let number = 1; number <= 12; number++) {
-                            const angle = number * Math.PI / 6
-                            const numberRadius = radius * 0.68
-                            ctx.fillText(String(number),
-                                Math.sin(angle) * numberRadius,
-                                -Math.cos(angle) * numberRadius)
-                        }
-                        const hour = (date.getHours() % 12 + date.getMinutes() / 60) * Math.PI / 6
-                        const minute = date.getMinutes() * Math.PI / 30
-                        const second = date.getSeconds() * Math.PI / 30
-                        if (AppearanceTokens.isMaterial)
-                            ctx.strokeStyle = AppearanceTokens.colors.primary.toString()
-                        ctx.lineWidth = 2.5; ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(Math.sin(hour) * radius * 0.48, -Math.cos(hour) * radius * 0.48); ctx.stroke()
-                        if (AppearanceTokens.isMaterial)
-                            ctx.strokeStyle = AppearanceTokens.colors.tertiary.toString()
-                        ctx.lineWidth = 1.8; ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(Math.sin(minute) * radius * 0.70, -Math.cos(minute) * radius * 0.70); ctx.stroke()
-	                        ctx.strokeStyle = AppearanceTokens.content.accent(AppearanceTokens.colors.secondary.toString(), "#ee7659").toString(); ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(Math.sin(second) * radius * 0.76, -Math.cos(second) * radius * 0.76); ctx.stroke()
-	                        ctx.fillStyle = AppearanceTokens.content.accent(AppearanceTokens.colors.primary.toString(), "#ee7659").toString(); ctx.beginPath(); ctx.arc(0, 0, 2.2, 0, Math.PI * 2); ctx.fill()
-                    }
-                    Connections { target: clock; function onDateChanged() { analogClock.requestPaint() } }
-                    // A Canvas reads the scheme only when it paints, so a
-                    // shell-style switch (material -> macos) or a colour-source
-                    // switch has to ask for a repaint explicitly, independently
-                    // of both the date tick and the widget surface switch.
-                    Connections {
-                        target: AppearanceTokens
-                        function onColorRevisionChanged() { analogClock.requestPaint() }
-                        function onIsMaterialChanged() { analogClock.requestPaint() }
-                    }
-	                    Connections {
-	                        target: AppearanceTokens.content
-	                        function onOnBackdropChanged() { analogClock.requestPaint() }
-                    }
+                    date: clock.date
+                    monochrome: AppearanceConfigService.widgetStyle === "glass"
+                    faceColor: AppearanceTokens.content.onBackdrop ? "transparent" : "#fafafa"
+                    rimColor: AppearanceTokens.isMaterial ? "transparent"
+                        : AppearanceTokens.content.ink("#dedede", 0.42)
+                    numeralColor: AppearanceTokens.content.ink("#242126")
+                    markColor: AppearanceTokens.content.ink("#171717")
+                    hourColor: AppearanceTokens.isMaterial ? AppearanceTokens.colors.primary : markColor
+                    minuteColor: AppearanceTokens.isMaterial ? AppearanceTokens.colors.tertiary : markColor
+                    secondColor: AppearanceTokens.content.accent(AppearanceTokens.colors.secondary, "#ee7659")
+                    hubColor: AppearanceTokens.content.accent(AppearanceTokens.colors.primary, "#ee7659")
                 }
 
 	                Rectangle {
                     id: timerButton
+                    objectName: "clock-timer-button"
                     width: 21
                     height: 21
                     radius: width / 2
                     anchors { right: parent.right; bottom: parent.bottom; rightMargin: 12; bottomMargin: 12 }
 	                    color: "transparent"
                     border.width: 0
-                    Image {
+                    BundledIcon {
                         anchors.centerIn: parent
                         anchors.verticalCenterOffset: -1
                         width: 17
                         height: 17
-                        source: BundledIcons.source("countdown")
-                        sourceSize.width: 26
-                        sourceSize.height: 26
-                        fillMode: Image.PreserveAspectFit
-                        smooth: true
+                        name: "desktop.timer"
+
                     }
                     MouseArea {
                         id: timerPointer
@@ -810,10 +1109,10 @@ PanelWindow {
 
                 Item {
                     id: timerPage
+                    objectName: "desktop-clock-timer-page"
                     width: parent.width
                     height: parent.height
-                    y: root.timerView ? 0 : height
-                    Behavior on y { NumberAnimation { duration: 240; easing.type: Easing.OutCubic } }
+                    y: height * (1 - clockPages.pageProgress)
                     Item {
                         id: timerDial
                         width: Math.min(parent.width - 28, parent.height - 45)
@@ -857,7 +1156,7 @@ PanelWindow {
                             anchors.centerIn: parent
                             text: root.formattedTimer()
                             color: "white"
-                            font { family: "SF Pro Display"; pixelSize: Math.min(16, timerDial.width * 0.15); weight: Font.Medium }
+                            font { family: AppearanceTokens.typography.displayFamily; pixelSize: Math.min(16, timerDial.width * 0.15); weight: Font.Medium }
                         }
                     }
                     Row {
@@ -865,20 +1164,15 @@ PanelWindow {
                         anchors.horizontalCenter: parent.horizontalCenter
                         y: timerDial.y + timerTimeText.y - height - 2
                         spacing: 5
-                        Canvas {
-                            width: 14
-                            height: 16
-                            onPaint: {
-                                const ctx = getContext("2d")
-	                                ctx.reset(); ctx.strokeStyle = AppearanceTokens.content.onBackdrop ? "#ffffff" : "#ffb028"; ctx.lineWidth = 1.3; ctx.lineCap = "round"
-                                ctx.beginPath(); ctx.moveTo(3, 10); ctx.quadraticCurveTo(4, 8.7, 4, 6.4)
-                                ctx.quadraticCurveTo(4, 3.8, 7, 3.8); ctx.quadraticCurveTo(10, 3.8, 10, 6.4)
-                                ctx.quadraticCurveTo(10, 8.7, 11, 10); ctx.lineTo(3, 10); ctx.stroke()
-                                ctx.beginPath(); ctx.moveTo(5.3, 12); ctx.lineTo(8.7, 12); ctx.stroke()
-                            }
+                        BundledIcon {
+                            id: timerBell
+                            objectName: "timer-end-bell"
+                            width: 14; height: 16
+                            name: "desktop.timer.notification"
+                            color: AppearanceTokens.content.onBackdrop ? "#ffffff" : "#ffb028"
                         }
                         Text {
-                            text: "结束于 " + root.formattedTimerEndTime()
+                            text: I18n.tr("Ends at %1").arg(root.formattedTimerEndTime())
                             color: Qt.rgba(1, 1, 1, 0.72)
                             font { pixelSize: 10; weight: Font.DemiBold }
                         }
@@ -901,7 +1195,7 @@ PanelWindow {
 	                                    ? Qt.rgba(1, 1, 1, 0.72) : Qt.rgba(255 / 255, 165 / 255, 21 / 255, 0.72)
                                 Text {
                                     anchors.centerIn: parent
-                                    text: modelData + "分"
+                                    text: I18n.tr("%1 min").arg(modelData)
 	                                    color: AppearanceTokens.content.onBackdrop ? "white" : "#ffb028"
                                     font { pixelSize: 8; weight: Font.DemiBold }
                                 }
@@ -917,23 +1211,28 @@ PanelWindow {
                         anchors { horizontalCenter: parent.horizontalCenter; bottom: parent.bottom; bottomMargin: 5 }
                         spacing: 22
                         Repeater {
-                            model: ["取消", root.timerRunning ? "暂停"
-                                : (root.timerHasStarted ? "继续" : "开始")]
+                            model: [
+                                { id: "cancel", label: I18n.tr("Cancel") },
+                                { id: root.timerRunning ? "pause"
+                                        : (root.timerHasStarted ? "resume" : "start"),
+                                    label: root.timerRunning ? I18n.tr("Pause")
+                                        : (root.timerHasStarted ? I18n.tr("Resume") : I18n.tr("Start")) }
+                            ]
                             delegate: Rectangle {
                                 required property var modelData
                                 width: 38
                                 height: 21
                                 radius: height / 2
-	                                color: modelData !== "取消"
+	                                color: modelData.id !== "cancel"
 	                                    ? (AppearanceTokens.content.onBackdrop ? Qt.rgba(1, 1, 1, 0.24) : Qt.rgba(255 / 255, 165 / 255, 21 / 255, 0.24))
                                     : Qt.rgba(1, 1, 1, 0.13)
                                 border.width: 1
-	                                border.color: modelData !== "取消"
+	                                border.color: modelData.id !== "cancel"
 	                                    ? (AppearanceTokens.content.onBackdrop ? "white" : "#ffa515") : Qt.rgba(1, 1, 1, 0.22)
                                 Text {
                                     anchors.centerIn: parent
-                                    text: modelData
-	                                    color: modelData !== "取消"
+                                    text: modelData.label
+	                                    color: modelData.id !== "cancel"
 	                                        ? (AppearanceTokens.content.onBackdrop ? "white" : "#ffb028") : "white"
                                     font { pixelSize: 9; weight: Font.DemiBold }
                                 }
@@ -941,7 +1240,7 @@ PanelWindow {
                                     anchors.fill: parent
                                     cursorShape: Qt.PointingHandCursor
                                     onClicked: {
-                                        if (modelData === "取消") {
+                                        if (modelData.id === "cancel") {
                                             root.timerRunning = false
                                             root.timerSeconds = 0
                                             root.timerDuration = 0
@@ -954,11 +1253,11 @@ PanelWindow {
                             }
                         }
                     }
-                    Text {
+                    BundledIcon {
                         anchors { left: parent.left; top: parent.top; leftMargin: 10; topMargin: 7 }
-                        text: "×"
+                        name: "desktop.timer.close"
                         color: Qt.rgba(1, 1, 1, 0.74)
-                        font { pixelSize: 18; weight: Font.Light }
+                        size: 18
                         MouseArea {
                             anchors.fill: parent
                             anchors.margins: -6
@@ -985,14 +1284,14 @@ PanelWindow {
                 }
                 Text {
                     anchors { horizontalCenter: parent.horizontalCenter; top: parent.top; topMargin: 5 }
-                    text: Qt.formatDateTime(calendarClock.dayDate, "yyyy年M月")
+                    text: I18n.fmt(calendarClock.dayDate, I18n.tr("yyyy/MM"))
                     color: "white"
                     font { pixelSize: 11; weight: Font.Bold }
                 }
-                Text { anchors.centerIn: parent; anchors.verticalCenterOffset: 10; text: Qt.formatDateTime(calendarClock.dayDate, "d日 dddd"); color: "#111118"; font { pixelSize: 24; weight: Font.Bold } }
+                Text { anchors.centerIn: parent; anchors.verticalCenterOffset: 10; text: I18n.fmt(calendarClock.dayDate, I18n.tr("d dddd")); color: "#111118"; font { pixelSize: 24; weight: Font.Bold } }
                 Text {
                     anchors { horizontalCenter: parent.horizontalCenter; bottom: parent.bottom; bottomMargin: 10 }
-                    text: Qt.formatDateTime(calendarClock.dayDate, "dddd")
+                    text: I18n.fmt(calendarClock.dayDate, "dddd")
                     color: "#3c3c43"
                     font.pixelSize: 9
                 }
@@ -1059,35 +1358,25 @@ PanelWindow {
                         anchors.fill: parent
                         visible: WeatherTheme.category(WeatherService.weatherCode) === "partlyCloudy"
                             || WeatherTheme.category(WeatherService.weatherCode) === "overcast"
-                        Image {
+                        BundledIcon {
                             id: deskCloudBack
                             width: parent.width * 0.34
                             height: parent.height * 0.36
                             y: 2
                             x: -width
-                            source: BundledIcons.source("weather-cloud")
-                            fillMode: Image.PreserveAspectFit
-	                            smooth: true
-	                            layer.enabled: AppearanceConfigService.widgetStyle === "glass"
-	                            layer.effect: MultiEffect {
-                                saturation: -1.0
-                                colorization: 0
-	                            }
+                            name: "weather.cloud"
+
+
                         }
-                        Image {
+                        BundledIcon {
                             id: deskCloudFront
                             width: parent.width * 0.30
                             height: parent.height * 0.29
                             y: parent.height * 0.18
                             x: parent.width
-                            source: BundledIcons.source("weather-cloud-wide")
-                            fillMode: Image.PreserveAspectFit
-	                            smooth: true
-	                            layer.enabled: AppearanceConfigService.widgetStyle === "glass"
-	                            layer.effect: MultiEffect {
-                                saturation: -1.0
-                                colorization: 0
-	                            }
+                            name: "weather.cloudWide"
+
+
                         }
                     }
 
@@ -1146,13 +1435,13 @@ PanelWindow {
                         }
                     }
 
-                    Text {
+                    BundledIcon {
                         anchors { right: parent.right; top: parent.top; rightMargin: 26; topMargin: 8 }
                         visible: WeatherTheme.isStorm(WeatherService.weatherCode)
-                        text: "ϟ"
+                        name: "weather.lightning"
 	                        color: AppearanceTokens.content.ink("#e0ccff", 0.68)
                         opacity: 0.68
-                        font { family: "SF Pro Display"; pixelSize: 42; weight: Font.DemiBold }
+                        size: 42
                     }
                 }
                 Text {
@@ -1165,16 +1454,29 @@ PanelWindow {
                     anchors { left: parent.left; top: parent.top; leftMargin: 15; topMargin: 29 }
                     text: WeatherService.temperature
 	                    color: AppearanceTokens.content.ink("white")
-                    font { family: "SF Pro Display"; pixelSize: Math.min(42, parent.height * 0.32); weight: Font.Normal }
+                    // Shrink with the available band above the weekly forecast so
+                    // short cards never push the glyph box into the forecast row
+                    // (issue #205). Tall cards keep the authored 42 px.
+                    font {
+                        family: AppearanceTokens.typography.displayFamily
+                        pixelSize: Math.min(42, parent.height * 0.32,
+                            Math.max(16, (parent.height - weeklyForecast.height - 38) / 1.5))
+                        weight: Font.Normal
+                    }
                 }
                 Text {
+                    id: weatherConditionSymbol
                     anchors { right: parent.right; top: parent.top; rightMargin: 18; topMargin: 14 }
                     text: WeatherService.conditionSymbol(WeatherService.weatherCode, WeatherService.isDay)
 	                    color: AppearanceTokens.content.ink(root.weatherTheme.accent)
-                    font.pixelSize: Math.min(34, parent.height * 0.26)
+                    font.pixelSize: Math.min(34, parent.height * 0.26,
+                        Math.max(16, (parent.height - weeklyForecast.height - 72) * 0.75))
                 }
                 Text {
-                    anchors { right: parent.right; top: parent.top; rightMargin: 16; topMargin: 48 }
+                    anchors {
+                        right: parent.right; rightMargin: 16
+                        top: weatherConditionSymbol.bottom; topMargin: 2
+                    }
                     text: WeatherService.conditionText(WeatherService.weatherCode)
 	                    color: AppearanceTokens.content.ink("white")
                     font { pixelSize: 15; weight: Font.DemiBold }
@@ -1182,8 +1484,9 @@ PanelWindow {
                 Text {
                     anchors { right: parent.right; bottom: weeklyForecast.top; rightMargin: 16; bottomMargin: 3 }
                     text: WeatherService.forecastDays.length > 0
-                        ? "最高 " + WeatherService.forecastDays[0].high + "°  最低 "
-                            + WeatherService.forecastDays[0].low + "°" : "正在更新预报"
+                        ? I18n.tr("High %1°  Low %2°").arg(WeatherService.forecastDays[0].high)
+                            .arg(WeatherService.forecastDays[0].low)
+                        : I18n.tr("Updating forecast")
 	                    color: AppearanceTokens.content.ink(Qt.rgba(1, 1, 1, 0.74), 0.74)
                     font.pixelSize: 11
                 }
@@ -1191,13 +1494,14 @@ PanelWindow {
                     id: weeklyForecast
                     anchors { left: parent.left; right: parent.right; bottom: parent.bottom; leftMargin: 10; rightMargin: 10; bottomMargin: 8 }
                     height: Math.min(62, parent.height * 0.46)
+                    readonly property int dayCount: card.displayColumns === 1 ? 3 : 7
                     Repeater {
-                        model: WeatherService.forecastDays
+                        model: WeatherService.forecastDays.slice(0, weeklyForecast.dayCount)
                         delegate: Item {
                             required property var modelData
                             required property int index
-                            x: index * weeklyForecast.width / 7
-                            width: weeklyForecast.width / 7
+                            x: index * weeklyForecast.width / weeklyForecast.dayCount
+                            width: weeklyForecast.width / weeklyForecast.dayCount
                             height: weeklyForecast.height
                             Text {
                                 anchors { horizontalCenter: parent.horizontalCenter; top: parent.top }
@@ -1222,7 +1526,13 @@ PanelWindow {
                     Text {
                         anchors.centerIn: parent
                         visible: WeatherService.forecastDays.length === 0
-                        text: WeatherService.loading ? "正在获取 7 日预报…" : "暂无 7 日预报"
+                        width: Math.max(0, parent.width - 12)
+                        horizontalAlignment: Text.AlignHCenter
+                        wrapMode: Text.Wrap
+                        maximumLineCount: 3
+                        elide: Text.ElideRight
+                        text: (!WeatherService.coreMode ? WeatherService.sourceMessage : "") || WeatherService.errorMessage
+                            || (WeatherService.loading ? I18n.tr("Loading 7-day forecast…") : I18n.tr("No 7-day forecast"))
 	                        color: AppearanceTokens.content.ink(Qt.rgba(1, 1, 1, 0.65), 0.65)
                         font.pixelSize: 11
                     }
@@ -1232,8 +1542,8 @@ PanelWindow {
                     cursorShape: Qt.PointingHandCursor
                     onClicked: {
                         const locationId = String(WeatherService.location?.id ?? "")
-                        AppActionService.launchById("kos-weather",
-                            locationId ? ["--location", locationId] : [])
+                        IndependentAppWidgetService.open("weather",
+                            locationId ? { location: locationId } : {})
                     }
                 }
             }
@@ -1251,9 +1561,9 @@ PanelWindow {
                     spacing: 18
                     Repeater {
                         model: [
-                            { label: "音量", value: Math.round(ControlCenterService.volumePercent) + "%", amount: ControlCenterService.volumePercent / 100 },
-                            { label: "湿度", value: WeatherService.humidity, amount: Math.min(1, Number(WeatherService.humidity.replace("%", "")) / 100) },
-                            { label: "天气", value: WeatherService.temperature, amount: 0.72 }
+                            { label: I18n.tr("Volume"), value: Math.round(ControlCenterService.volumePercent) + "%", amount: ControlCenterService.volumePercent / 100 },
+                            { label: I18n.tr("Humidity"), value: WeatherService.humidity, amount: Math.min(1, Number(WeatherService.humidity.replace("%", "")) / 100) },
+                            { label: I18n.tr("Weather"), value: WeatherService.temperature, amount: 0.72 }
                         ]
                         delegate: Item {
                             required property var modelData
@@ -1295,7 +1605,7 @@ PanelWindow {
                 sourceComponent: Component {
                     Item {
                 anchors.fill: parent
-                Image { anchors.fill: parent; source: BundledIcons.source("default-cover"); fillMode: Image.PreserveAspectCrop; asynchronous: true }
+                Image { anchors.fill: parent; source: BundledIcons.source("media.coverFallback"); fillMode: Image.PreserveAspectCrop; asynchronous: true }
                 Rectangle {
                     anchors { left: parent.left; right: parent.right; bottom: parent.bottom }
                     height: 28
@@ -1303,7 +1613,7 @@ PanelWindow {
                 }
                 Text {
                     anchors { left: parent.left; bottom: parent.bottom; leftMargin: 12; bottomMargin: 8 }
-                    text: "精选画面"
+                    text: I18n.tr("Featured")
                     color: "white"
                     font { pixelSize: 11; weight: Font.DemiBold }
                 }
@@ -1341,8 +1651,8 @@ PanelWindow {
                         ? systemContent.metrics.memoryUsedBytes / systemContent.metrics.memoryTotalBytes : 0
                     readonly property real storageValue: systemContent.metrics.diskTotalBytes > 0
                         ? systemContent.metrics.diskUsedBytes / systemContent.metrics.diskTotalBytes : 0
-                    readonly property var labels: ["CPU", "内存", "存储"]
-                    readonly property var icons: ["cpu", "memory", "drive-harddisk"]
+                    readonly property var labels: ["CPU", I18n.tr("Memory"), I18n.tr("Storage")]
+                    readonly property var icons: ["system.cpu", "system.memory", "system.disk"]
                     readonly property var values: [cpuValue, memoryValue, storageValue]
                     readonly property var colors: AppearanceTokens.content.onBackdrop
                         ? [IconAppearanceService.glassContentColor().toString(),
@@ -1352,7 +1662,7 @@ PanelWindow {
 
                     function detailFor(metric) {
                         if (metric === 0)
-                            return "实时使用率"
+                            return I18n.tr("Live usage")
                         if (metric === 1)
                             return root.formatMetricBytes(systemContent.metrics.memoryUsedBytes)
                                 + " / " + root.formatMetricBytes(systemContent.metrics.memoryTotalBytes)
@@ -1430,7 +1740,7 @@ PanelWindow {
                             text: activityRings.labels[activityRings.hoveredMetric] + " "
                                 + Math.round(activityRings.values[activityRings.hoveredMetric] * 100) + "%"
 	                            color: AppearanceTokens.content.ink("#7d7782")
-                            font { family: "SF Pro Display"; pixelSize: Math.max(8, activityRings.width * 0.075); weight: Font.DemiBold }
+                            font { family: AppearanceTokens.typography.displayFamily; pixelSize: Math.max(8, activityRings.width * 0.075); weight: Font.DemiBold }
                         }
                     }
 
@@ -1471,7 +1781,7 @@ PanelWindow {
                         anchors.centerIn: parent
                         spacing: Math.max(4, temperatureSummary.width * 0.04)
                         BundledIcon {
-                            name: "temperature"
+                            name: "system.temperature"
                             color: AppearanceTokens.content.ink("#7d7782")
                             size: Math.max(12, temperatureSummary.height * 0.54)
                             anchors.verticalCenter: parent.verticalCenter
@@ -1482,10 +1792,10 @@ PanelWindow {
                                 text: temperatureSummary.available
                                     ? Math.round(temperatureSummary.currentC) + "°" : "--"
 	                                color: AppearanceTokens.content.ink("#7d7782")
-                                font { family: "SF Pro Display"; pixelSize: Math.max(10, temperatureSummary.height * 0.42); weight: Font.DemiBold }
+                                font { family: AppearanceTokens.typography.displayFamily; pixelSize: Math.max(10, temperatureSummary.height * 0.42); weight: Font.DemiBold }
                             }
                             Text {
-                                text: "当前"
+                                text: I18n.tr("Now")
 	                                color: AppearanceTokens.content.ink(Qt.rgba(0.49, 0.47, 0.51, 0.76), 0.72)
                                 font.pixelSize: Math.max(8, temperatureSummary.height * 0.25)
                             }
@@ -1502,10 +1812,10 @@ PanelWindow {
                                 text: temperatureSummary.available
                                     ? Math.round(temperatureSummary.maximum5MinuteC) + "°" : "--"
 	                                color: AppearanceTokens.content.ink("#7d7782")
-                                font { family: "SF Pro Display"; pixelSize: Math.max(10, temperatureSummary.height * 0.42); weight: Font.DemiBold }
+                                font { family: AppearanceTokens.typography.displayFamily; pixelSize: Math.max(10, temperatureSummary.height * 0.42); weight: Font.DemiBold }
                             }
                             Text {
-                                text: "最高"
+                                text: I18n.tr("High")
 	                                color: AppearanceTokens.content.ink(Qt.rgba(0.49, 0.47, 0.51, 0.76), 0.72)
                                 font.pixelSize: Math.max(8, temperatureSummary.height * 0.25)
                             }
@@ -1524,10 +1834,10 @@ PanelWindow {
                         Text {
                             id: memoryTrendLabel
                             anchors { left: parent.left; top: parent.top }
-                            text: "内存  " + Math.round(activityRings.memoryValue * 100) + "%"
+                            text: I18n.tr("Memory  %1%").arg(Math.round(activityRings.memoryValue * 100))
 	                            color: activityRings.hoveredMetric === 1
                                 ? AppearanceTokens.content.ink(Qt.rgba(0.12, 0.50, 0.31, 0.84))
-                                : Qt.rgba(0.30, 0.29, 0.33, 0.78)
+                                : AppearanceTokens.content.ink(Qt.rgba(0.30, 0.29, 0.33, 0.78))
                             font { pixelSize: Math.max(8, systemContent.height * 0.06); weight: Font.DemiBold }
                         }
                         UsageSparkline {
@@ -1546,10 +1856,10 @@ PanelWindow {
                         Text {
                             id: cpuTrendLabel
                             anchors { left: parent.left; top: parent.top }
-                            text: "CPU  " + Math.round(activityRings.cpuValue * 100) + "%"
+                            text: I18n.tr("CPU  %1%").arg(Math.round(activityRings.cpuValue * 100))
 	                            color: activityRings.hoveredMetric === 0
                                 ? AppearanceTokens.content.ink(Qt.rgba(0.76, 0.14, 0.23, 0.84))
-                                : Qt.rgba(0.30, 0.29, 0.33, 0.78)
+                                : AppearanceTokens.content.ink(Qt.rgba(0.30, 0.29, 0.33, 0.78))
                             font { pixelSize: Math.max(8, systemContent.height * 0.06); weight: Font.DemiBold }
                         }
                         UsageSparkline {
@@ -1567,7 +1877,7 @@ PanelWindow {
                         Text {
                             id: frequencyTrendLabel
                             anchors { left: parent.left; top: parent.top }
-                            text: "平均频率  " + Math.round(systemContent.metrics.cpuFrequencyMhz ?? 0) + " MHz"
+                            text: I18n.tr("Avg frequency  %1 MHz").arg(Math.round(systemContent.metrics.cpuFrequencyMhz ?? 0))
 	                            color: AppearanceTokens.content.ink(Qt.rgba(0.30, 0.29, 0.33, 0.78))
                             font { pixelSize: Math.max(8, systemContent.height * 0.06); weight: Font.DemiBold }
                         }
@@ -1615,12 +1925,12 @@ PanelWindow {
                             Text {
                                 anchors.verticalCenter: parent.verticalCenter
                                 text: uptimeHeatmap.hoveredDay
-                                    ? uptimeHeatmap.hoveredDay.key + " · 开机时长："
-                                        + root.formatDuration(uptimeHeatmap.hoveredDay.seconds)
-                                    : "已开机：" + root.formatDuration(
-                                        root.activityUsage.uptimeByDay[root.activityUsage.dayKey(Date.now())] ?? 0)
+                                    ? I18n.tr("%1 · Uptime: %2").arg(uptimeHeatmap.hoveredDay.key)
+                                        .arg(root.formatDuration(uptimeHeatmap.hoveredDay.seconds))
+                                    : I18n.tr("Uptime: %1").arg(root.formatDuration(
+                                        root.activityUsage.uptimeByDay[root.activityUsage.dayKey(Date.now())] ?? 0))
 	                                        color: AppearanceTokens.content.ink(Qt.rgba(1, 1, 1, 0.86), 0.86)
-                                font { family: "SF Pro Display"; pixelSize: 14; weight: Font.DemiBold }
+                                font { family: AppearanceTokens.typography.displayFamily; pixelSize: 14; weight: Font.DemiBold }
                             }
                         }
                         Item {
@@ -1681,7 +1991,7 @@ PanelWindow {
                                     required property var modelData
                                     width: activityRightPane.width
                                     height: 16
-                                    IconImage {
+                                    AppIcon {
                                         id: appUsageIcon
                                         width: 12
                                         height: 12
@@ -1702,7 +2012,7 @@ PanelWindow {
                                         anchors { right: appUsageRow.right; verticalCenter: appUsageRow.verticalCenter }
                                         text: root.formatDuration(modelData.seconds)
 	                                        color: AppearanceTokens.content.ink(Qt.rgba(1, 1, 1, 0.46), 0.46)
-                                        font { family: "SF Pro Display"; pixelSize: 9 }
+                                        font { family: AppearanceTokens.typography.displayFamily; pixelSize: 9 }
                                     }
                                     Text {
                                         anchors { left: appUsageIcon.right; right: appDurationText.left; verticalCenter: appUsageRow.verticalCenter; leftMargin: 6; rightMargin: 6 }
@@ -1733,13 +2043,13 @@ PanelWindow {
                 }
                 Text {
                     anchors { left: parent.left; top: parent.top; leftMargin: 12; topMargin: 7 }
-                    text: "备忘录"
+                    text: I18n.tr("Notes")
                     color: "white"
                     font { pixelSize: 11; weight: Font.Bold }
                 }
                 Text {
                     anchors { left: parent.left; right: parent.right; top: parent.top; leftMargin: 12; rightMargin: 12; topMargin: 42 }
-                    text: "暂时没有更多备忘"
+                    text: I18n.tr("No more notes for now")
                     color: "#333238"
                     font.pixelSize: 11
                 }
@@ -1754,13 +2064,13 @@ PanelWindow {
                     Item {
                 anchors.fill: parent
                 Text {
-                    text: "桌面工作区"
+                    text: I18n.tr("Desktop Workspace")
                     color: "white"
                     anchors { left: parent.left; top: parent.top; leftMargin: 18; topMargin: 42 }
                     font { pixelSize: 24; weight: Font.DemiBold }
                 }
                 GlassText {
-                    text: "日历、天气和媒体会在此保持一目了然"
+                    text: I18n.tr("Calendar, weather and media stay at a glance here")
                     wrapMode: Text.Wrap
                     color: Qt.rgba(1, 1, 1, 0.74)
                     anchors { left: parent.left; right: parent.right; bottom: parent.bottom; leftMargin: 18; rightMargin: 18; bottomMargin: 20 }
@@ -1777,12 +2087,12 @@ PanelWindow {
                     Item {
                 id: musicContent
                 anchors.fill: parent
-                readonly property var player: DockMprisService.activePlayer
+                readonly property var player: MediaService.activePlayer
                 readonly property bool hasPlayer: player !== null
                 readonly property url artworkSource: {
-                    const revision = DockMprisService.metadataRevision
+                    const revision = MediaService.metadataRevision
                     return player?.trackArtUrl
-                        ? player.trackArtUrl : BundledIcons.source("default-cover")
+                        ? player.trackArtUrl : BundledIcons.source("media.coverFallback")
                 }
                 readonly property real safeLength: player?.lengthSupported && player.length > 0
                     ? player.length : 0
@@ -1792,7 +2102,34 @@ PanelWindow {
                 MouseArea {
                     anchors.fill: parent
                     cursorShape: Qt.PointingHandCursor
-                    onClicked: AppActionService.launchById("kos-music", [])
+                    onClicked: {
+                        // Raise the displayed player; ListenFree owns the
+                        // music entry when no MPRIS session is available.
+                        const player = MediaService.activePlayer
+                        if (!player) {
+                            AppActionService.launchById("listenfree", [])
+                            return
+                        }
+                        if (player.canRaise) {
+                            player.raise()
+                            return
+                        }
+                        // Not every player offers Raise (the QQ Music bridge
+                        // reports CanRaise=false), so bring up the window that
+                        // already exists. Launching from here started a second
+                        // copy of a running app, and two QQ Music instances
+                        // share one profile and crash each other.
+                        const windows = player.desktopEntry
+                            ? WindowService.windowsForApp(player.desktopEntry) : []
+                        if (windows.length > 0) {
+                            WindowService.activateWindow(windows[0].windowId)
+                            return
+                        }
+                        if (player.desktopEntry
+                                && AppActionService.launchById(player.desktopEntry, []))
+                            return
+                        // Do not start a different app for the displayed track.
+                    }
                 }
 
                 function artworkTint(color, alpha) {
@@ -1850,10 +2187,11 @@ PanelWindow {
                             x: offsets[index]
                             text: modelData
                             color: AppearanceTokens.surface.pick(AppearanceTokens.colors.tertiary, Qt.rgba(1, 1, 1, 0.60))
-                            font { family: "SF Pro Display"; pixelSize: index === 1 ? 18 : 14; weight: Font.DemiBold }
+                            font { family: AppearanceTokens.typography.displayFamily; pixelSize: index === 1 ? 18 : 14; weight: Font.DemiBold }
                             SequentialAnimation on y {
                                 running: musicNotes.running
                                 loops: Animation.Infinite
+                                // motion-exception: Music-note loops keep their phase, lifetime and fade envelope.
                                 PauseAnimation { duration: index * 620 }
                                 NumberAnimation { from: musicNotes.height - 14; to: -20; duration: 2200 + index * 180; easing.type: Easing.OutSine }
                             }
@@ -1871,6 +2209,8 @@ PanelWindow {
                 Item {
                     id: musicBody
                     anchors { fill: parent; margins: 16 }
+                    readonly property bool narrow: card.displayColumns === 1
+                    readonly property bool compact: narrow && card.displayRows === 1
                     readonly property real splitGap: 20
                     z: 1
 
@@ -1878,8 +2218,10 @@ PanelWindow {
                         id: musicCoverPane
                         x: 0
                         y: 0
-                        width: (musicBody.width - musicBody.splitGap) * 0.3
-                        height: musicBody.height
+                        width: musicBody.narrow ? musicBody.width
+                            : (musicBody.width - musicBody.splitGap) * 0.3
+                        height: musicBody.narrow ? Math.min(musicBody.width * 0.72,
+                            musicBody.height * 0.4) : musicBody.height
                         Rectangle {
                             id: musicArtwork
                             anchors.centerIn: parent
@@ -1898,8 +2240,16 @@ PanelWindow {
 	                                visible: musicContent.hasPlayer
                                 source: musicContent.artworkSource
                                 fillMode: Image.PreserveAspectCrop
-                                sourceSize.width: Math.max(1, Math.ceil(width * 2))
-                                sourceSize.height: Math.max(1, Math.ceil(height * 2))
+                                // Decode once at a size the layout can never
+                                // exceed. Binding sourceSize to the animated
+                                // width re-decoded the cover on every frame of a
+                                // resize and left it not-Ready for most of them
+                                // (measured: 29 of 31 frames), which reads as the
+                                // cover flickering while the card grows.
+                                readonly property int decodeSize: Math.max(1,
+                                    Math.ceil(root.cellSize * 2))
+                                sourceSize.width: decodeSize
+                                sourceSize.height: decodeSize
                                 asynchronous: true
                                 cache: false
                                 smooth: true
@@ -1917,26 +2267,26 @@ PanelWindow {
                                 visible: false
                                 layer.enabled: true
                             }
-                            Text {
+                            BundledIcon {
                                 anchors.centerIn: parent
 	                                visible: !musicContent.hasPlayer
-                                text: "♫"
+                                name: "media.fallback"
                                 color: Qt.rgba(1, 1, 1, 0.46)
-                                font { family: "SF Pro Display"; pixelSize: musicArtwork.width * 0.42 }
+                                size: musicArtwork.width * 0.42
                             }
                         }
                     }
 
                     Item {
                         id: musicDetailsPane
-                        x: musicCoverPane.width + musicBody.splitGap
-                        y: 0
+                        x: musicBody.narrow ? 0 : musicCoverPane.width + musicBody.splitGap
+                        y: musicBody.narrow ? musicCoverPane.height + 8 : 0
                         width: musicBody.width - x
-                        height: musicBody.height
+                        height: musicBody.height - y
                         Text {
                             id: musicTitle
                             anchors { left: parent.left; right: parent.right; verticalCenter: parent.verticalCenter; verticalCenterOffset: -22 }
-                            text: musicContent.player?.trackTitle || "暂无播放内容"
+                            text: musicContent.player?.trackTitle || I18n.tr("Nothing playing")
                             elide: Text.ElideRight
                             horizontalAlignment: Text.AlignHCenter
 	                            color: AppearanceTokens.content.ink("white")
@@ -1944,6 +2294,7 @@ PanelWindow {
                         }
                         Text {
                             id: musicArtist
+                            visible: !musicBody.compact
                             anchors { left: parent.left; right: parent.right; top: musicTitle.bottom; topMargin: 3 }
                             text: musicContent.player?.trackArtist || ""
                             elide: Text.ElideRight
@@ -1954,8 +2305,8 @@ PanelWindow {
                         KosLyricLine {
                             id: musicLyric
                             anchors { left: parent.left; right: parent.right; top: musicArtist.bottom; topMargin: 5 }
-                            text: DockMprisService.loading ? DockMprisService.playbackStatus : DockMprisService.currentLyric
-                            visible: text.length > 0
+                            text: MediaService.loading ? MediaService.playbackStatus : MediaService.currentLyric
+                            visible: !musicBody.compact && text.length > 0
                             elide: Text.ElideRight
                             horizontalAlignment: Text.AlignHCenter
                             color: AppearanceTokens.content.ink(Qt.rgba(1, 1, 1, 0.86), 0.86)
@@ -1970,7 +2321,7 @@ PanelWindow {
                                 topMargin: musicLyric.visible ? 7 : 12
                             }
                             height: 5
-                            visible: musicContent.safeLength > 0
+                            visible: !musicBody.compact && musicContent.safeLength > 0
                             WavyProgress {
                                 anchors.fill: parent
                                 anchors.topMargin: -3
@@ -2024,31 +2375,42 @@ PanelWindow {
                                 bottomMargin: 2
                             }
                             height: 36
-                            spacing: 10
+                            spacing: musicBody.narrow ? 4 : 10
                             Repeater {
                                 // Keep delegates alive when play/pause changes.
-                                model: 3
+                                model: 4
                                 delegate: DeskMediaButton {
                                     required property int index
+                                    visible: index !== 3 || MediaService.lyricsAvailable
                                     primary: index === 1
-                                    busy: index === 1 && DockMprisService.loading
-                                    iconName: index === 0 ? "media-previous"
-                                        : index === 2 ? "media-next"
-                                        : musicContent.player?.isPlaying ? "media-pause" : "media-play"
-                                    text: index === 0 ? qsTr("上一首")
-                                        : index === 2 ? qsTr("下一首")
-                                        : musicContent.player?.isPlaying ? qsTr("暂停") : qsTr("播放")
-                                    enabled: musicContent.hasPlayer
+                                    busy: index === 1 && MediaService.loading
+                                    checkable: index === 3
+                                    checked: index === 3
+                                        && DeskCenterConfigService.desktopLyricsEnabled
+                                        && MediaService.desktopLyricsAllowed
+                                    iconName: index === 0 ? "media.previous"
+                                        : index === 2 ? "media.next"
+                                        : index === 3 ? "media.lyrics"
+                                        : musicContent.player?.isPlaying ? "media.pause" : "media.play"
+                                    text: index === 0 ? I18n.tr("Previous")
+                                        : index === 2 ? I18n.tr("Next")
+                                        : index === 3 ? (MediaService.desktopLyricsAllowed
+                                            ? I18n.tr("Desktop Lyrics") : I18n.tr("Player has desktop lyrics off"))
+                                        : musicContent.player?.isPlaying ? I18n.tr("Pause") : I18n.tr("Play")
+                                    enabled: index === 3 ? MediaService.desktopLyricsAllowed : (musicContent.hasPlayer
                                         && (index === 0 ? (musicContent.player?.canGoPrevious ?? false)
                                             : index === 2 ? (musicContent.player?.canGoNext ?? false)
-                                            : (musicContent.player?.canTogglePlaying ?? false))
+                                            : (musicContent.player?.canTogglePlaying ?? false)))
+                                    Controls.ToolTip.visible: hovered && (enabled || index === 3)
                                     glassInk: AppearanceTokens.content.onBackdrop
                                         ? IconAppearanceService.glassContentColor(0.88)
                                         : Qt.rgba(1, 1, 1, 0.88)
                                     onClicked: {
-                                        if (index === 0) DockMprisService.previous()
-                                        else if (index === 1) DockMprisService.togglePlayPause()
-                                        else DockMprisService.next()
+                                        if (index === 0) MediaService.previous()
+                                        else if (index === 1) MediaService.togglePlayPause()
+                                        else if (index === 2) MediaService.next()
+                                        else DeskCenterConfigService.updateDesktopLyricsEnabled(
+                                            !DeskCenterConfigService.desktopLyricsEnabled)
                                     }
                         }
                     }
@@ -2069,7 +2431,11 @@ PanelWindow {
                     anchors { left: parent.left; right: parent.right; top: parent.top; leftMargin: 18; rightMargin: 18; topMargin: 44 }
                     spacing: 10
                     Repeater {
-                        model: ["应用库", "刷新天气", "媒体"]
+                        model: [
+                            { id: "library", label: I18n.tr("App Library") },
+                            { id: "refresh", label: I18n.tr("Refresh Weather") },
+                            { id: "media", label: I18n.tr("Media") }
+                        ]
                         delegate: Rectangle {
                             required property var modelData
                             width: (parent.width - parent.spacing * 2) / 3
@@ -2078,17 +2444,17 @@ PanelWindow {
                             color: Qt.rgba(1, 1, 1, 0.14)
                             border.width: 1
                             border.color: Qt.rgba(1, 1, 1, 0.15)
-                            GlassText { anchors.centerIn: parent; text: modelData; color: "white"; font { pixelSize: 12; weight: Font.DemiBold } }
+                            GlassText { anchors.centerIn: parent; text: modelData.label; color: "white"; font { pixelSize: 12; weight: Font.DemiBold } }
                             MouseArea {
                                 anchors.fill: parent
                                 cursorShape: Qt.PointingHandCursor
                                 onClicked: {
-                                    if (modelData === "应用库")
+                                    if (modelData.id === "library")
                                         AppLauncherService.show()
-                                    else if (modelData === "刷新天气")
+                                    else if (modelData.id === "refresh")
                                         WeatherService.refresh()
                                     else
-                                        DockMprisService.togglePlayPause()
+                                        MediaService.togglePlayPause()
                                 }
                             }
                         }
@@ -2105,8 +2471,8 @@ PanelWindow {
                     Item {
                         id: todoContent
                         anchors.fill: parent
-                        readonly property string widgetSize:
-                            DeskCenterConfigService.sizeFor("todo")
+                        readonly property string widgetSize: card.displayRows > 1 ? "large"
+                            : card.displayColumns > 1 ? "medium" : "small"
                         readonly property int itemLimit: widgetSize === "large" ? 6
                             : widgetSize === "medium" ? 3 : 0
                         readonly property var tasks:
@@ -2119,8 +2485,7 @@ PanelWindow {
                         MouseArea {
                             anchors.fill: parent
                             cursorShape: Qt.PointingHandCursor
-                            onClicked: AppActionService.launchById(
-                                "kos-todo", ["--view", "today"])
+                            onClicked: IndependentAppWidgetService.open("calendar", { view: "today" })
                         }
 
                         // A parent Item's `clip` is rectangular, not rounded.
@@ -2156,7 +2521,7 @@ PanelWindow {
                         }
                         Text {
                             anchors { left: parent.left; top: parent.top; margins: 14 }
-                            text: "提醒事项"
+                            text: I18n.tr("Reminders")
                             color: AppearanceTokens.content.ink("white")
                             font { pixelSize: 13; weight: Font.Bold }
                         }
@@ -2171,7 +2536,7 @@ PanelWindow {
                         Text {
                             visible: todoContent.widgetSize === "small"
                             anchors { horizontalCenter: parent.horizontalCenter; bottom: parent.bottom; bottomMargin: 14 }
-                            text: "项待办"
+                            text: I18n.tr("todos")
                             color: AppearanceTokens.content.ink("#686873", 0.6)
                             font.pixelSize: 10
                         }
@@ -2196,7 +2561,8 @@ PanelWindow {
                                     }
                                     Text {
                                         anchors { left: parent.left; right: dueText.left; verticalCenter: parent.verticalCenter; leftMargin: 22; rightMargin: 8 }
-                                        text: String(PimWidgetService.value(parent.modelData, "title", "未命名任务"))
+                                        text: String(PimWidgetService.value(parent.modelData, "title",
+                                            I18n.tr("Untitled task")))
                                         color: AppearanceTokens.content.ink("#303038")
                                         elide: Text.ElideRight
                                         font { pixelSize: 11; weight: Font.Medium }
@@ -2215,25 +2581,27 @@ PanelWindow {
                                     MouseArea {
                                         anchors.fill: parent
                                         cursorShape: Qt.PointingHandCursor
-                                        onClicked: AppActionService.launchById("kos-todo", [
-                                            "--item", String(PimWidgetService.value(parent.modelData,
+                                        onClicked: IndependentAppWidgetService.open("calendar", {
+                                            view: "reminders", item: String(PimWidgetService.value(parent.modelData,
                                                 "id", PimWidgetService.value(parent.modelData, "seriesId", "")))
-                                        ])
+                                        })
                                     }
                                 }
                             }
                             Text {
                                 visible: todoContent.tasks.length === 0
+                                    && (PimWidgetService.ready || PimWidgetService.showFeedback)
                                 anchors.horizontalCenter: parent.horizontalCenter
-                                // Distinguish a starting service from one
-                                // that never produced data (uninstalled or
-                                // not yet activated); tapping the card
-                                // launches the app, whose PIM client
-                                // activates the service on demand.
+                                // Only a ready snapshot can mean all tasks are done.
+                                // App installation is handled when the card is opened.
                                 text: PimWidgetService.ready
-                                    ? "今天已全部完成"
-                                    : (PimWidgetService.state === PimWidgetService.stateLoading
-                                       ? "正在载入待办…" : "未连接待办服务")
+                                    ? I18n.tr("All done for today")
+                                    : (PimWidgetService.errorMessage || I18n.tr("Todo service not connected"))
+                                width: Math.max(0, parent.width - 16)
+                                horizontalAlignment: Text.AlignHCenter
+                                wrapMode: Text.Wrap
+                                maximumLineCount: 3
+                                elide: Text.ElideRight
                                 color: AppearanceTokens.content.ink("#6c6c75", 0.6)
                                 font.pixelSize: 11
                             }
@@ -2259,17 +2627,18 @@ PanelWindow {
                 // the whole panel height instead of ending with a blank band.
                 readonly property int weekCount: Math.ceil((firstWeekday + daysInMonth) / 7)
                 readonly property int headerHeight: 38
-                readonly property string widgetSize:
-                    DeskCenterConfigService.sizeFor("calendar")
+                readonly property bool narrow: card.displayColumns === 1
+                readonly property string widgetSize: card.displayRows > 1 ? "large"
+                    : card.displayColumns > 1 ? "medium" : "small"
                 readonly property var todayEvents: PimWidgetService.eventsForToday(
                     widgetSize === "large" ? 3 : 1)
 
                 MouseArea {
                     anchors.fill: parent
                     cursorShape: Qt.PointingHandCursor
-                    onClicked: AppActionService.launchById("kos-calendar", [
-                        "--date", Qt.formatDate(clock.date, "yyyy-MM-dd")
-                    ])
+                    onClicked: IndependentAppWidgetService.open("calendar", {
+                        date: Qt.formatDate(clock.date, "yyyy-MM-dd")
+                    })
                 }
 
                 Rectangle {
@@ -2309,32 +2678,33 @@ PanelWindow {
                 }
                 Rectangle {
                     anchors { left: parent.left; top: parent.top; bottom: parent.bottom; leftMargin: parent.width * 0.42; topMargin: calendarContent.headerHeight; bottomMargin: 8 }
+                    visible: !calendarContent.narrow
                     width: 1
 	                    color: AppearanceTokens.content.accent(AppearanceTokens.colors.outlineVariant, Qt.rgba(0, 0, 0, 0.10), 0.28)
                 }
 
                 Text {
                     anchors.centerIn: calendarHeader
-                    text: Qt.formatDateTime(calendarClock.dayDate, "yyyy年M月")
+                    text: I18n.fmt(calendarClock.dayDate, I18n.tr("yyyy/MM"))
                     horizontalAlignment: Text.AlignHCenter
                     color: AppearanceTokens.surface.pick(AppearanceTokens.colors.surfaceForeground, "white")
                     font { pixelSize: 15; weight: Font.Bold }
                 }
                 Text {
                     anchors { left: parent.left; top: parent.top; leftMargin: 15; topMargin: calendarContent.headerHeight + 7 }
-                    text: Qt.formatDateTime(calendarClock.dayDate, "d日")
+                    text: I18n.fmt(calendarClock.dayDate, I18n.tr("d"))
 	                    color: AppearanceTokens.content.ink("#15151a")
-                    font { family: "SF Pro Display"; pixelSize: 32; weight: Font.DemiBold }
+                    font { family: AppearanceTokens.typography.displayFamily; pixelSize: 32; weight: Font.DemiBold }
                 }
                 Text {
                     anchors { left: parent.left; top: parent.top; leftMargin: 16; topMargin: calendarContent.headerHeight + 46 }
-                    text: Qt.formatDateTime(calendarClock.dayDate, "ddd") + " · " + root.lunarDate(calendarClock.dayDate)
+                    text: I18n.fmt(calendarClock.dayDate, "ddd") + " · " + root.lunarDate(calendarClock.dayDate)
 	                    color: AppearanceTokens.content.ink("#4d4d55", 0.74)
                     font { pixelSize: 10; weight: Font.DemiBold }
                 }
                 Column {
                     visible: calendarContent.widgetSize !== "small"
-                        && calendarContent.todayEvents.length > 0
+                        && !calendarContent.narrow
                     anchors { left: parent.left; right: monthGrid.left; bottom: parent.bottom; leftMargin: 16; rightMargin: 8; bottomMargin: 10 }
                     spacing: 3
                     Repeater {
@@ -2342,16 +2712,19 @@ PanelWindow {
                         delegate: Text {
                             required property var modelData
                             width: parent.width
-                            text: "• " + String(PimWidgetService.value(modelData, "title", "日程"))
+                            text: "• " + String(PimWidgetService.value(modelData, "title",
+                                I18n.tr("Event")))
                             color: AppearanceTokens.surface.pick(AppearanceTokens.colors.surfaceVariantForeground, "#4d4d55")
                             elide: Text.ElideRight
                             font.pixelSize: 9
                         }
                     }
                     Text {
-                        visible: calendarContent.todayEvents.length === 0
-                            && PimWidgetService.state === PimWidgetService.stateUnavailable
-                        text: "未连接日历服务"
+                        visible: PimWidgetService.showFeedback
+                        width: parent.width
+                        text: PimWidgetService.errorMessage
+                        maximumLineCount: 2
+                        wrapMode: Text.Wrap
                         color: AppearanceTokens.content.ink("#9a9aa2", 0.55)
                         elide: Text.ElideRight
                         font.pixelSize: 9
@@ -2359,12 +2732,14 @@ PanelWindow {
                 }
                 Item {
                     id: monthGrid
-                    anchors { left: parent.left; right: parent.right; top: parent.top; bottom: parent.bottom; leftMargin: parent.width * 0.42 + 10; rightMargin: 10; topMargin: calendarContent.headerHeight + 6; bottomMargin: 7 }
+                    visible: !calendarContent.narrow || card.displayRows > 1
+                    anchors { left: parent.left; right: parent.right; top: parent.top; bottom: parent.bottom; leftMargin: calendarContent.narrow ? 10 : parent.width * 0.42 + 10; rightMargin: 10; topMargin: calendarContent.narrow ? 130 : calendarContent.headerHeight + 6; bottomMargin: 7 }
                     Row {
                         width: parent.width
                         height: 15
                         Repeater {
-                            model: ["一", "二", "三", "四", "五", "六", "日"]
+                            model: [I18n.tr("Mo"), I18n.tr("Tu"), I18n.tr("We"), I18n.tr("Th"),
+                                I18n.tr("Fr"), I18n.tr("Sa"), I18n.tr("Su")]
                             delegate: Text {
                                 required property var modelData
                                 required property int index
@@ -2428,9 +2803,12 @@ PanelWindow {
     Item {
         id: desktopFileGrid
         objectName: "desktop-file-grid"
-        x: root.leftInset + (root.screen?.name === ScreenLifecycle.activeScreen?.name && root.placements.length > 0 ? 4 * (root.cellSize + root.gap) : 0)
+        // Files and their labels always stay above wallpaper subjects, even
+        // while a widget or file is being rearranged near the shared boundary.
+        z: 3
+        x: root.leftInset + (root.screen?.name === ScreenLifecycle.activeScreen?.name && root.placements.length > 0 ? root.widgetColumns * (root.cellSize + root.gap) : 0)
         y: root.topInset
-        width: root.width - x - root.rightInset
+        width: Math.max(0, root.width - x - root.rightInset)
         height: root.height - y - root.bottomInset
         clip: false
         readonly property int iconSize: desktopLayout.iconSize
@@ -2538,6 +2916,7 @@ PanelWindow {
             property: "folderDropProgress"
             from: 0
             to: 1
+            // motion-exception: Folder-drop progress is the drag acceptance dwell timer.
             duration: 380
             easing.type: Easing.Linear
             onFinished: {
@@ -2751,17 +3130,6 @@ PanelWindow {
             desktopLayout.sync()
         }
 
-        function saveVisualOrder() {
-            const next = []
-            for (let index = 0; index < desktopFileVisualModel.items.count; ++index) {
-                const item = desktopFileVisualModel.items.get(index)
-                if (item?.model)
-                    next.push(item.model)
-            }
-            if (next.length === orderedEntries.length)
-                saveOrder(next)
-        }
-
         function arrange(compare) {
             const next = screenEntries.slice().sort(function(left, right) {
                 const leftIsFolder = left.kind === "folder"
@@ -2843,7 +3211,7 @@ PanelWindow {
         function commitRename(entry, name) {
             const newName = (name ?? "").trim()
             if (!entry?.path || !root.desktopFiles.validName(newName)) {
-                root.desktopFiles.lastError = "名称不能为空，且不能包含 /"
+                root.desktopFiles.lastError = I18n.tr("Name cannot be empty and cannot contain /")
                 return false
             }
             const newPath = root.desktopFiles.directory + "/" + newName
@@ -2852,7 +3220,7 @@ PanelWindow {
                     return candidate.path === newPath
                 })
                 if (clash) {
-                    root.desktopFiles.lastError = "该名称已被占用"
+                    root.desktopFiles.lastError = I18n.tr("That name is already in use")
                     return false
                 }
             }
@@ -2978,13 +3346,8 @@ PanelWindow {
         }
 
         function iconFor(kind) {
-            if (kind === "folder") return "folder"
-            if (kind === "image") return "image-x-generic"
-            if (kind === "pdf") return "application-pdf"
-            if (kind === "code") return "text-x-script"
-            if (kind === "text") return "text-x-generic"
-            if (kind === "launcher") return "application-x-executable"
-            return "text-x-generic"
+            const type = ["folder", "image", "pdf", "code", "text", "launcher"].indexOf(kind) >= 0 ? kind : "text"
+            return "desktop.file." + type
         }
 
         function canChooseOpenWith(entry) {
@@ -2997,7 +3360,7 @@ PanelWindow {
             // Resolve through the same desktop-entry identity layer used by
             // the Dock.  gio returns filenames (for example nvim.desktop),
             // while the visible label must be the entry's Name field.
-            try { return AppIdentityService.resolve(id)?.name || id } catch (_) { return id || "默认应用" }
+            try { return AppIdentityService.resolve(id)?.name || id } catch (_) { return id || I18n.tr("Default app") }
         }
 
         function openWithIdAt(index) {
@@ -3006,7 +3369,7 @@ PanelWindow {
 
         function defaultOpenText() {
             const handler = root.desktopFiles.openWith.defaultId
-            return handler ? "使用 " + applicationName(handler) + " 打开" : "打开"
+            return handler ? I18n.tr("Open with %1").arg(applicationName(handler)) : I18n.tr("Open")
         }
 
         function showMenu(entry, windowPoint) {
@@ -3080,34 +3443,66 @@ PanelWindow {
                 arrangeByName()
             else if (kind === "resetLayout")
                 resetLayout()
-            else if (kind === "refresh")
-                root.desktopFiles.reload()
+            else if (["lock", "suspend", "switch", "logout", "reboot", "poweroff"]
+                     .indexOf(kind) >= 0)
+                // Routed through the control center so the destructive
+                // entries reuse its shared confirmation dialog.
+                ControlCenterService.requestSessionAction(kind)
         }
 
         // ── Liquid context-menu data + builder ──
 
-        function _ctxSub(label, children, icon) {
-            return { icon: icon || "placeholder-dot", label: label, children: children }
+        function _ctxSub(label, children, role) {
+            return { icon: "desktop.menu." + role, label: label, children: children }
         }
-        function _ctxAct(label, cmd, icon) {
-            return { icon: icon || "placeholder-dot", label: label, cmd: cmd, enabled: true }
+        function _ctxAct(label, cmd) {
+            return { icon: "desktop.menu." + cmd, label: label, cmd: cmd, enabled: true }
         }
-        function _ctxCheck(label, cmd, value, checked, icon) {
-            return { icon: icon || "placeholder-dot", label: label, cmd: cmd,
+        function _ctxCheck(label, cmd, value, checked) {
+            return { icon: "desktop.menu." + cmd, label: label, cmd: cmd,
                 checkable: true, checked: checked, value: value, enabled: true }
         }
 
         function buildContextItems() {
         const FOLDER_COLORS = [
-            ["默认", ""], ["🔴 红", "#FF6B6B"], ["🟠 橙", "#FFA94D"], ["🟡 黄", "#FFD43B"],
-            ["🟢 绿", "#69DB7C"], ["🔵 蓝", "#4DABF7"], ["🟣 紫", "#9775FA"],
-            ["🩷 粉", "#F783AC"], ["⚫ 灰", "#868E96"]
+            [I18n.tr("Default"), ""], [I18n.tr("🔴 Red"), "#FF6B6B"], [I18n.tr("🟠 Orange"), "#FFA94D"],
+            [I18n.tr("🟡 Yellow"), "#FFD43B"], [I18n.tr("🟢 Green"), "#69DB7C"],
+            [I18n.tr("🔵 Blue"), "#4DABF7"], [I18n.tr("🟣 Purple"), "#9775FA"],
+            [I18n.tr("🩷 Pink"), "#F783AC"], [I18n.tr("⚫ Gray"), "#868E96"]
             ]
             const EMOJI_CATS = [
-            ["常用", [["📁 文件夹","📁"],["📂 打开的文件夹","📂"],["🗂️ 分类文件夹","🗂️"],["📦 包裹","📦"],["⭐ 星标","⭐"],["🔥 热门","🔥"],["💡 灵感","💡"],["❤️ 收藏","❤️"],["✨ 精选","✨"],["📌 置顶","📌"],["🎯 目标","🎯"],["💎 珍藏","💎"]]],
-            ["学习", [["📚 书籍","📚"],["📖 阅读","📖"],["✏️ 笔记","✏️"],["📝 备忘录","📝"],["🎓 学业","🎓"],["🔬 研究","🔬"],["🧪 实验","🧪"],["💻 编程","💻"],["🖥️ 工作站","🖥️"],["📐 设计","📐"],["🎨 创意","🎨"],["🎵 音乐","🎵"]]],
-            ["生活", [["🏠 主页","🏠"],["🏡 居家","🏡"],["🛒 购物","🛒"],["🍳 烹饪","🍳"],["☕ 咖啡","☕"],["🌿 植物","🌿"],["🎮 游戏","🎮"],["🎬 影视","🎬"],["📷 照片","📷"],["✈️ 旅行","✈️"],["🚗 出行","🚗"],["💰 财务","💰"]]],
-            ["符号", [["🔵 蓝点","🔵"],["🟢 绿点","🟢"],["🟡 黄点","🟡"],["🟠 橙点","🟠"],["🔴 红点","🔴"],["🟣 紫点","🟣"],["⚫ 黑点","⚫"],["⚪ 白点","⚪"],["⬛ 方块","⬛"],["🔶 菱形","🔶"],["⚡ 闪电","⚡"],["🌈 彩虹","🌈"]]]
+            { id: "frequent", label: I18n.tr("Frequent"), rows: [
+                ["📁 " + I18n.tr("Folder"), "📁"], ["📂 " + I18n.tr("Open folder"), "📂"],
+                ["🗂️ " + I18n.tr("Organized folder"), "🗂️"], ["📦 " + I18n.tr("Package"), "📦"],
+                ["⭐ " + I18n.tr("Star"), "⭐"], ["🔥 " + I18n.tr("Hot"), "🔥"],
+                ["💡 " + I18n.tr("Idea"), "💡"], ["❤️ " + I18n.tr("Favorites"), "❤️"],
+                ["✨ " + I18n.tr("Curated"), "✨"], [I18n.tr("📌 Pinned"), "📌"],
+                ["🎯 " + I18n.tr("Goal"), "🎯"], ["💎 " + I18n.tr("Collection"), "💎"]
+            ] },
+            { id: "study", label: I18n.tr("Study"), rows: [
+                ["📚 " + I18n.tr("Books"), "📚"], ["📖 " + I18n.tr("Reading"), "📖"],
+                ["✏️ " + I18n.tr("Notes"), "✏️"], ["📝 " + I18n.tr("Memo"), "📝"],
+                ["🎓 " + I18n.tr("Academic"), "🎓"], ["🔬 " + I18n.tr("Research"), "🔬"],
+                ["🧪 " + I18n.tr("Experiment"), "🧪"], ["💻 " + I18n.tr("Coding"), "💻"],
+                ["🖥️ " + I18n.tr("Workstation"), "🖥️"], ["📐 " + I18n.tr("Design"), "📐"],
+                ["🎨 " + I18n.tr("Creative"), "🎨"], ["🎵 " + I18n.tr("Music"), "🎵"]
+            ] },
+            { id: "life", label: I18n.tr("Life"), rows: [
+                ["🏠 " + I18n.tr("Home"), "🏠"], ["🏡 " + I18n.tr("Homestead"), "🏡"],
+                ["🛒 " + I18n.tr("Shopping"), "🛒"], ["🍳 " + I18n.tr("Cooking"), "🍳"],
+                ["☕ " + I18n.tr("Coffee"), "☕"], ["🌿 " + I18n.tr("Plants"), "🌿"],
+                ["🎮 " + I18n.tr("Games"), "🎮"], ["🎬 " + I18n.tr("Movies"), "🎬"],
+                ["📷 " + I18n.tr("Photos"), "📷"], ["✈️ " + I18n.tr("Travel"), "✈️"],
+                ["🚗 " + I18n.tr("Commute"), "🚗"], ["💰 " + I18n.tr("Finance"), "💰"]
+            ] },
+            { id: "symbols", label: I18n.tr("Symbols"), rows: [
+                ["🔵 " + I18n.tr("Blue dot"), "🔵"], ["🟢 " + I18n.tr("Green dot"), "🟢"],
+                ["🟡 " + I18n.tr("Yellow dot"), "🟡"], ["🟠 " + I18n.tr("Orange dot"), "🟠"],
+                ["🔴 " + I18n.tr("Red dot"), "🔴"], ["🟣 " + I18n.tr("Purple dot"), "🟣"],
+                ["⚫ " + I18n.tr("Black dot"), "⚫"], ["⚪ " + I18n.tr("White dot"), "⚪"],
+                ["⬛ " + I18n.tr("Square"), "⬛"], ["🔶 " + I18n.tr("Diamond"), "🔶"],
+                ["⚡ " + I18n.tr("Lightning"), "⚡"], ["🌈 " + I18n.tr("Rainbow"), "🌈"]
+            ] }
             ]
             const e = contextEntry
             const path = e?.path ?? ""
@@ -3117,26 +3512,23 @@ PanelWindow {
             const items = []
 
             if (e) {
-                items.push(_ctxAct(defaultOpenText(), "openEntry", "folder-open"))
+                items.push(_ctxAct(defaultOpenText(), "openEntry"))
                 if (selectedEntries().length === 1)
-                    items.push(_ctxAct("重命名", "rename", "edit-rename"))
+                    items.push(_ctxAct(I18n.tr("Rename"), "rename"))
 
                 // 自定义外观 applies to every desktop entry. The path-based
                 // storage retains the setting across filesystem snapshots.
                 const colorKids = FOLDER_COLORS.map(([label, val]) =>
-                    _ctxCheck(label, "setColor", val, curColor === val, "color-picker"))
-                const appearKids = [ _ctxSub("颜色", colorKids, "color-picker") ]
-                for (const [catTitle, list] of EMOJI_CATS) {
-                    const rows = [_ctxCheck("无", "setEmoji", "", curEmoji === "", "placeholder-dot")]
-                        .concat(list.map(([label, em]) =>
-                            _ctxCheck(label, "setEmoji", em, curEmoji === em, "placeholder-dot")))
-                    const categoryIcon = catTitle === "学习" ? "bookmark"
-                        : catTitle === "生活" ? "home"
-                        : catTitle === "符号" ? "star" : "star"
-                    appearKids.push(_ctxSub(catTitle, rows, categoryIcon))
+                    _ctxCheck(label, "setColor", val, curColor === val))
+                const appearKids = [ _ctxSub(I18n.tr("Color"), colorKids, "color") ]
+                for (const cat of EMOJI_CATS) {
+                    const rows = [_ctxCheck(I18n.tr("None"), "setEmoji", "", curEmoji === "")]
+                        .concat(cat.rows.map(([label, em]) =>
+                            _ctxCheck(label, "setEmoji", em, curEmoji === em)))
+                    appearKids.push(_ctxSub(cat.label, rows, "emoji." + cat.id))
                 }
-                appearKids.push(_ctxAct("移除自定义", "removeCustom", "edit-clear"))
-                items.push(_ctxSub("自定义外观", appearKids, "customize-appearance"))
+                appearKids.push(_ctxAct(I18n.tr("Remove customization"), "removeCustom"))
+                items.push(_ctxSub(I18n.tr("Customize Appearance"), appearKids, "appearance"))
 
                 // 打开方式（动态）
                 if (canChooseOpenWith(e)) {
@@ -3144,41 +3536,53 @@ PanelWindow {
                     for (let i = 0; i < 6; i++) {
                         const id = openWithIdAt(i)
                         if (id)
-                            owKids.push({ icon: "placeholder-dot", label: applicationName(id), cmd: "openWith", value: id, enabled: true })
+                            owKids.push({ icon: "desktop.menu.openWith", label: applicationName(id), cmd: "openWith", value: id, enabled: true })
                     }
-                    owKids.push(_ctxAct("其他应用程序…", "openWithMore", ""))
-                    items.push(_ctxSub("打开方式", owKids, "open-with"))
+                    owKids.push(_ctxAct(I18n.tr("Other applications…"), "openWithMore"))
+                    items.push(_ctxSub(I18n.tr("Open With"), owKids, "openWith"))
                 }
 
-                items.push(_ctxAct("复制", "copy", "edit-copy"))
-                items.push(_ctxAct("剪切", "cut", "edit-cut"))
-                items.push(_ctxAct("移到废纸篓", "trash", "user-trash"))
-                items.push(_ctxAct("在文件管理器中打开", "open", "folder-open"))
+                items.push(_ctxAct(I18n.tr("Copy"), "copy"))
+                items.push(_ctxAct(I18n.tr("Cut"), "cut"))
+                items.push(_ctxAct(I18n.tr("Move to Trash"), "trash"))
+                items.push(_ctxAct(I18n.tr("Open in File Manager"), "open"))
             } else {
                 // desktop background
-                items.push(_ctxAct("添加小组件…", "addWidgets", "arrange"))
-                items.push(_ctxAct("编辑小组件", "editWidgets", "edit-rename"))
-                items.push(_ctxAct("新建文件", "newFile", "document-new"))
-                items.push(_ctxAct("新建文件夹", "newFolder", "folder-new"))
-                items.push(_ctxAct("粘贴", "paste", "edit-paste"))
+                items.push(_ctxAct(I18n.tr("Add Widgets…"), "addWidgets"))
+                items.push(_ctxAct(I18n.tr("Edit Widgets"), "editWidgets"))
+                items.push(_ctxAct(I18n.tr("New File"), "newFile"))
+                items.push(_ctxAct(I18n.tr("New Folder"), "newFolder"))
+                items.push(_ctxAct(I18n.tr("Paste"), "paste"))
                 const arrange = [
-                    _ctxAct("按名称", "arrangeByName", "sort-name"), _ctxAct("按类型", "arrangeByType", "sort-type"),
-                    _ctxAct("按修改时间（最新）", "arrangeModifiedNew", "clock"),
-                    _ctxAct("按修改时间（最早）", "arrangeModifiedOld", "clock")
+                    _ctxAct(I18n.tr("By Name"), "arrangeByName"),
+                    _ctxAct(I18n.tr("By Type"), "arrangeByType"),
+                    _ctxAct(I18n.tr("By Modified (newest)"), "arrangeModifiedNew"),
+                    _ctxAct(I18n.tr("By Modified (oldest)"), "arrangeModifiedOld")
                 ]
-                items.push(_ctxSub("整理方式", arrange, "arrange"))
-                items.push(_ctxAct("重置图标排序", "resetLayout", "reset-layout"))
-                items.push(_ctxCheck("显示文件扩展名", "toggleExtensions", null,
-                    desktopLayout.showExtensions, "text-x-generic"))
-                const sizeKids = [[40, "小"], [56, "中"], [72, "大"]]
+                items.push(_ctxSub(I18n.tr("Arrange"), arrange, "arrange"))
+                items.push(_ctxAct(I18n.tr("Reset icon order"), "resetLayout"))
+                items.push(_ctxCheck(I18n.tr("Show file extensions"), "toggleExtensions", null,
+                    desktopLayout.showExtensions))
+                const sizeKids = [[40, I18n.tr("Small")], [56, I18n.tr("Medium")], [72, I18n.tr("Large")]]
                     .map(([px, l]) => _ctxCheck(l, "setIconSize", px,
-                        iconSize === px, "placeholder-dot"))
-                items.push(_ctxSub("图标大小", sizeKids, "image-x-generic"))
-                const spacingKids = [["comfortable", "宽松"], ["compact", "紧凑"], ["dense", "更紧凑"]]
+                        iconSize === px))
+                items.push(_ctxSub(I18n.tr("Icon Size"), sizeKids, "iconSize"))
+                const spacingKids = [
+                    ["comfortable", I18n.tr("Comfortable")], ["compact", I18n.tr("Compact")],
+                    ["dense", I18n.tr("Dense")]]
                     .map(([value, label]) => _ctxCheck(label, "setIconSpacing", value,
-                        desktopLayout.iconSpacing === value, "placeholder-dot"))
-                items.push(_ctxSub("图标间距", spacingKids, "arrange"))
-                items.push(_ctxAct("刷新", "refresh", "view-refresh"))
+                        desktopLayout.iconSpacing === value))
+                items.push(_ctxSub(I18n.tr("Icon Spacing"), spacingKids, "iconSpacing"))
+                // Same entries as the control center's session list, routed
+                // through it so the destructive ones reuse its confirm dialog.
+                items.push(_ctxSub(I18n.tr("Power Off or Log Out"), [
+                    _ctxAct(I18n.tr("Lock Screen"), "lock"),
+                    _ctxAct(I18n.tr("Sleep"), "suspend"),
+                    _ctxAct(I18n.tr("Switch User"), "switch"),
+                    _ctxAct(I18n.tr("Log Out"), "logout"),
+                    _ctxAct(I18n.tr("Restart"), "reboot"),
+                    _ctxAct(I18n.tr("Power Off"), "poweroff")
+                ], "session"))
             }
             return items
         }
@@ -3220,6 +3624,15 @@ PanelWindow {
             case "setIconSize": setIconSize(v); break
             case "setIconSpacing": setIconSpacing(v); break
             case "refresh": triggerContextAction("refresh"); break
+            // Session entries live in a submenu; without these the menu closes
+            // and the command is dropped.
+            case "lock":
+            case "suspend":
+            case "switch":
+            case "logout":
+            case "reboot":
+            case "poweroff":
+                triggerContextAction(cmd); break
             }
         }
 
@@ -3287,7 +3700,7 @@ PanelWindow {
             }
             function onLastErrorChanged() {
                 if (root.desktopFiles.lastError && root.desktopOutput === root.desktopFiles.defaultOutput)
-                    root.sendTimerNotification("桌面文件", root.desktopFiles.lastError)
+                    root.sendTimerNotification(I18n.tr("Desktop Files"), root.desktopFiles.lastError)
             }
         }
 
@@ -3319,7 +3732,7 @@ PanelWindow {
             z: 19
             Text {
                 anchors.centerIn: parent
-                text: "复制到桌面"
+                text: I18n.tr("Copy to desktop")
                 color: Qt.rgba(1, 1, 1, 0.78)
                 font { pixelSize: 13; weight: Font.DemiBold }
             }
@@ -3390,569 +3803,10 @@ PanelWindow {
             border { width: 1; color: Qt.rgba(1, 1, 1, 0.34) }
             z: 1
             Behavior on opacity {
-                NumberAnimation { duration: 110; easing.type: Easing.OutCubic }
+                NumberAnimation { duration: AppearanceTokens.motion.fast.duration; easing.type: AppearanceTokens.motion.enterCurve }
             }
         }
 
-        GridView {
-            id: desktopFileView
-            anchors.fill: parent
-            visible: false
-            interactive: false
-            clip: true
-            flow: GridView.FlowLeftToRight
-            layoutDirection: Qt.RightToLeft
-            verticalLayoutDirection: GridView.TopToBottom
-            cellWidth: desktopFileGrid.itemWidth
-            cellHeight: desktopFileGrid.itemHeight
-            displaced: Transition {
-                NumberAnimation { properties: "x,y"; easing.type: Easing.OutQuad }
-            }
-            model: DelegateModel {
-                id: desktopFileVisualModel
-                // FreeSlotDesktopDemo is the active desktop implementation.
-                // This legacy GridView remains only as dormant reference code;
-                // an invisible QML view can still instantiate delegates, which
-                // would decode every image thumbnail a second time. Keep its
-                // model empty unless it is deliberately made visible again.
-                model: desktopFileView.visible
-                    ? desktopFileGrid.orderedEntries : []
-                delegate: DropArea {
-                id: fileDelegate
-                required property var modelData
-                width: desktopFileView.cellWidth
-                height: desktopFileView.cellHeight
-                onEntered: function(drag) {
-                    desktopFileVisualModel.items.move(
-                        drag.source.DelegateModel.itemsIndex,
-                        minimalDragIcon.DelegateModel.itemsIndex)
-                }
-
-                // Intentionally mirrors Qt's Dynamic View Ordering example:
-                // a visual DelegateModel, a DropArea per cell, and one item
-                // reparented to the GridView while DragHandler moves it.
-                Item {
-                    id: minimalDragIcon
-                    width: fileDelegate.width
-                    height: fileDelegate.height
-                    z: minimalDragHandler.active ? 100 : 0
-                    Drag.active: minimalDragHandler.active
-                    Drag.source: minimalDragIcon
-                    Drag.hotSpot.x: width / 2
-                    Drag.hotSpot.y: height / 2
-                    states: State {
-                        when: minimalDragHandler.active
-                        ParentChange { target: minimalDragIcon; parent: desktopFileView.contentItem }
-                    }
-
-                    // 文件类型图标走系统主题（freedesktop MIME 名）；主题缺这个
-                    // 图标时才退回自带的线条图案。
-                    IconImage {
-                        id: minimalDragThemeIcon
-                        anchors { horizontalCenter: parent.horizontalCenter; top: parent.top; topMargin: 8 }
-                        width: desktopFileGrid.iconSize * 0.75
-                        height: width
-                        // Theme icon: synchronous, see AppIcon.qml.
-                        asynchronous: false
-                        source: SystemIconResolver.sourceFromCandidates(
-                            [desktopFileGrid.iconFor(modelData.kind)], "text-x-generic")
-                    }
-                    BundledIcon {
-                        anchors { horizontalCenter: parent.horizontalCenter; top: parent.top; topMargin: 8 }
-                        visible: minimalDragThemeIcon.status !== Image.Ready
-                        name: desktopFileGrid.iconFor(modelData.kind)
-                        color: Qt.rgba(1, 1, 1, 0.88)
-                        size: desktopFileGrid.iconSize * 0.75
-                        outlined: true
-                    }
-                    Text {
-                        anchors { left: parent.left; right: parent.right; top: parent.top; topMargin: desktopFileGrid.iconSize + 12; leftMargin: 5; rightMargin: 5 }
-                        text: desktopFileGrid.displayName(modelData)
-                        elide: Text.ElideRight
-                        maximumLineCount: 2
-                        wrapMode: Text.Wrap
-                        horizontalAlignment: Text.AlignHCenter
-                        color: "white"
-                        style: Text.Outline
-                        styleColor: Qt.rgba(0, 0, 0, 0.72)
-                        font { pixelSize: desktopFileGrid.fileNameFontSize; weight: desktopFileGrid.fileNameFontWeight }
-                    }
-                    DragHandler {
-                        id: minimalDragHandler
-                        onActiveChanged: {
-                            if (!active)
-                                desktopFileGrid.saveVisualOrder()
-                        }
-                    }
-                }
-
-                Item {
-                    id: fileVisual
-                    visible: false
-                    width: fileDelegate.width
-                    height: fileDelegate.height
-                    z: reorderDrag.active ? 100 : 0
-                    Drag.active: reorderDrag.active && fileDelegate.draggingSingle
-                    Drag.source: fileDelegate
-                    Drag.hotSpot.x: width / 2
-                    Drag.hotSpot.y: height / 2
-                    states: State {
-                        when: reorderDrag.active && fileDelegate.draggingSingle
-                        ParentChange { target: fileVisual; parent: desktopFileView.contentItem }
-                        PropertyChanges { target: fileVisual; x: fileDelegate.x; y: fileDelegate.y }
-                    }
-
-                Rectangle {
-                    // Match the actual pointer target rather than colouring
-                    // the complete grid cell.  The cell edge stays visibly
-                    // and interactively empty for lasso selection.
-                    anchors.fill: filePointer
-                    radius: 10
-                    // Hover is intentionally quieter than selection: both
-                    // use the neutral black material introduced above.
-                    opacity: desktopFileGrid.isSelected(modelData.path) ? 1
-                        : filePointer.containsMouse ? 0.38 : 0
-                    color: Qt.rgba(0, 0, 0, 0.46)
-                    border { width: 1; color: Qt.rgba(1, 1, 1, 0.28) }
-                    Behavior on opacity {
-                        NumberAnimation { duration: 130; easing.type: Easing.OutCubic }
-                    }
-                }
-                Item {
-                    // The target folder shows the exact hold progress rather
-                    // than a vague hover state. Releasing before it fills is
-                    // always treated as an icon reorder.
-                    anchors { horizontalCenter: parent.horizontalCenter; top: parent.top; topMargin: desktopFileGrid.iconSize + 5 }
-                    width: desktopFileGrid.iconSize
-                    height: 4
-                    visible: modelData.kind === "folder"
-                        && desktopFileGrid.folderDropCandidatePath === modelData.path
-                    opacity: visible ? 1 : 0
-                    Behavior on opacity {
-                        NumberAnimation { duration: 90; easing.type: Easing.OutCubic }
-                    }
-                    Rectangle {
-                        anchors.fill: parent
-                        radius: height / 2
-                        color: Qt.rgba(1, 1, 1, 0.22)
-                    }
-                    Rectangle {
-                        width: parent.width * desktopFileGrid.folderDropProgress
-                        height: parent.height
-                        radius: height / 2
-                        color: Qt.rgba(1, 1, 1, 0.88)
-                    }
-                }
-                // Finder-style destination feedback: only actual folders can
-                // receive a drop, so files never imply an unsupported action.
-                Rectangle {
-                    anchors { fill: parent; margins: 3 }
-                    radius: 10
-                    visible: opacity > 0.01
-                    opacity: modelData.kind === "folder"
-                        && desktopFileGrid.dropFolderPath === modelData.path ? 1 : 0
-                    color: Qt.rgba(0, 0, 0, 0.56)
-                    border { width: 1; color: Qt.rgba(1, 1, 1, 0.62) }
-                    Behavior on opacity {
-                        NumberAnimation { duration: 110; easing.type: Easing.OutCubic }
-                    }
-                }
-                Item {
-                    anchors { horizontalCenter: parent.horizontalCenter; top: parent.top; topMargin: 8 }
-                    width: desktopFileGrid.iconSize
-                    height: desktopFileGrid.iconSize
-                    scale: (filePointer.containsMouse ? 1.035 : 1)
-                        * (fileDelegate.opening ? 0.96 : 1)
-                    transform: Translate {
-                        y: filePointer.containsMouse ? -2 : 0
-                        Behavior on y {
-                            NumberAnimation { duration: 130; easing.type: Easing.OutCubic }
-                        }
-                    }
-                    Behavior on scale {
-                        NumberAnimation { duration: 130; easing.type: Easing.OutCubic }
-                    }
-                    Item {
-                        id: imageThumbnailFrame
-                        anchors { fill: parent; margins: 4 }
-                        visible: modelData.kind === "image"
-                        opacity: imageThumbnail.status === Image.Ready ? 1 : 0
-                        Behavior on opacity {
-                            NumberAnimation { duration: 170; easing.type: Easing.OutCubic }
-                        }
-                        Image {
-                            id: imageThumbnail
-                            anchors.fill: parent
-                            source: modelData.kind === "image" ? "file://" + modelData.path : ""
-                            fillMode: Image.PreserveAspectCrop
-                            // Keep this dormant legacy delegate safe if it is
-                            // ever re-enabled: desktop thumbnails must never
-                            // decode their original multi-megapixel images.
-                            sourceSize.width: Math.max(1, Math.ceil(width * 2))
-                            sourceSize.height: Math.max(1, Math.ceil(height * 2))
-                            asynchronous: true
-                            cache: false
-                            smooth: true
-                            // OpacityMask below renders this source. A plain
-                            // Rectangle.clip only clips to a rectangle and
-                            // cannot apply radius to the image pixels.
-                            visible: false
-                        }
-                        Rectangle {
-                            id: imageThumbnailMask
-                            anchors.fill: parent
-                            radius: 5
-                            visible: false
-                        }
-                        OpacityMask {
-                            anchors.fill: parent
-                            source: imageThumbnail
-                            maskSource: imageThumbnailMask
-                        }
-                    }
-                    IconImage {
-                        id: launcherIcon
-                        anchors.fill: parent
-                        source: modelData.kind === "launcher"
-                            ? AppPresentationService.iconSource(modelData.icon) : ""
-                        // Theme icon: synchronous, see AppIcon.qml.
-                        asynchronous: false
-                        visible: source !== "" && status === Image.Ready
-                    }
-                    // Folder icon: a unified Canvas-drawn folder shape used
-                    // for both default and customised folders. When a custom
-                    // color is set the folder is tinted with it; when an emoji
-                    // is set it is drawn centered inside the folder body so
-                    // both the folder and the symbol are visible.
-                    Item {
-                        readonly property var folderCustom: modelData.kind === "folder"
-                            ? desktopFileGrid.folderCustomFor(modelData.path) : null
-                        anchors.centerIn: parent
-                        width: desktopFileGrid.iconSize
-                        height: desktopFileGrid.iconSize
-                        visible: modelData.kind === "folder"
-
-                        Canvas {
-                            id: folderCanvas
-                            anchors.fill: parent
-                            readonly property color baseColor: {
-                                const c = parent.folderCustom
-                                if (c && c.color)
-                                    return c.color
-                                return "#70b6ff"
-                            }
-                            onBaseColorChanged: requestPaint()
-                            onWidthChanged: requestPaint()
-                            onHeightChanged: requestPaint()
-                            Component.onCompleted: requestPaint()
-
-                            function shade(hex, factor) {
-                                // Darken/lighten an rgba/hex color by factor
-                                // (0..1 = darker, >1 = lighter).
-                                const ctx = getContext("2d")
-                                const c = Qt.color(hex)
-                                const r = Math.max(0, Math.min(255, Math.round(c.r * 255 * factor)))
-                                const g = Math.max(0, Math.min(255, Math.round(c.g * 255 * factor)))
-                                const b = Math.max(0, Math.min(255, Math.round(c.b * 255 * factor)))
-                                return "rgba(" + r + "," + g + "," + b + "," + c.a + ")"
-                            }
-
-                            onPaint: {
-                                const ctx = getContext("2d")
-                                ctx.reset()
-                                const w = width
-                                const h = height
-                                const margin = w * 0.10
-                                const tabH = h * 0.14
-                                const bodyX = margin
-                                const bodyY = margin + tabH
-                                const bodyW = w - margin * 2
-                                const bodyH = h - margin - bodyY
-                                const r = Math.min(bodyW, bodyH) * 0.18
-
-                                // Back tab (folder flap) - darker shade for depth
-                                ctx.fillStyle = folderCanvas.shade(folderCanvas.baseColor, 0.72)
-                                ctx.globalAlpha = 0.92
-                                ctx.beginPath()
-                                ctx.moveTo(bodyX, bodyY)
-                                ctx.lineTo(bodyX + bodyW * 0.42, bodyY)
-                                ctx.lineTo(bodyX + bodyW * 0.42 + tabH * 0.7, bodyY - tabH)
-                                ctx.lineTo(bodyX + bodyW * 0.72, bodyY - tabH)
-                                ctx.arcTo(bodyX + bodyW * 0.72 + r, bodyY - tabH,
-                                          bodyX + bodyW * 0.72 + r, bodyY - tabH + r, r)
-                                ctx.lineTo(bodyX + bodyW * 0.72 + r, bodyY)
-                                ctx.closePath()
-                                ctx.fill()
-
-                                // Front body - base color fill
-                                ctx.fillStyle = folderCanvas.shade(folderCanvas.baseColor, 1.0)
-                                ctx.globalAlpha = 0.90
-                                roundRect(ctx, bodyX, bodyY, bodyW, bodyH, r)
-                                ctx.fill()
-
-                                // Top highlight strip on the front body
-                                ctx.fillStyle = "rgba(255,255,255,0.18)"
-                                ctx.globalAlpha = 1.0
-                                ctx.beginPath()
-                                ctx.moveTo(bodyX + r, bodyY)
-                                ctx.lineTo(bodyX + bodyW - r, bodyY)
-                                ctx.lineTo(bodyX + bodyW - r, bodyY + bodyH * 0.12)
-                                ctx.lineTo(bodyX + r, bodyY + bodyH * 0.12)
-                                ctx.closePath()
-                                ctx.fill()
-
-                                // Subtle inner border for definition
-                                ctx.strokeStyle = "rgba(0,0,0,0.16)"
-                                ctx.lineWidth = 1
-                                roundRect(ctx, bodyX, bodyY, bodyW, bodyH, r)
-                                ctx.stroke()
-                            }
-
-                            function roundRect(ctx, x, y, w, h, r) {
-                                ctx.beginPath()
-                                ctx.moveTo(x + r, y)
-                                ctx.lineTo(x + w - r, y)
-                                ctx.arcTo(x + w, y, x + w, y + r, r)
-                                ctx.lineTo(x + w, y + h - r)
-                                ctx.arcTo(x + w, y + h, x + w - r, y + h, r)
-                                ctx.lineTo(x + r, y + h)
-                                ctx.arcTo(x, y + h, x, y + h - r, r)
-                                ctx.lineTo(x, y + r)
-                                ctx.arcTo(x, y, x + r, y, r)
-                                ctx.closePath()
-                            }
-                        }
-
-                        // Emoji centered inside the folder body.
-                        Text {
-                            anchors {
-                                horizontalCenter: parent.horizontalCenter
-                                top: parent.top
-                                topMargin: parent.height * 0.36
-                            }
-                            visible: parent.folderCustom && parent.folderCustom.emoji
-                            text: parent.folderCustom ? parent.folderCustom.emoji : ""
-                            font { family: "Noto Color Emoji"; pixelSize: desktopFileGrid.iconSize * 0.36 }
-                        }
-                    }
-                    IconImage {
-                        id: desktopThemeIcon
-                        anchors.centerIn: parent
-                        width: desktopFileGrid.iconSize * 0.75
-                        height: width
-                        // Theme icon: synchronous, see AppIcon.qml.
-                        asynchronous: false
-                        source: SystemIconResolver.sourceFromCandidates(
-                            [desktopFileGrid.iconFor(modelData.kind)], "text-x-generic")
-                        visible: source !== "" && status === Image.Ready
-                            && (modelData.kind !== "image" || imageThumbnail.status !== Image.Ready)
-                            && (modelData.kind !== "launcher" || launcherIcon.status !== Image.Ready)
-                            && modelData.kind !== "folder"
-                    }
-                    BundledIcon {
-                        anchors.centerIn: parent
-                        // A broken or unsupported image still behaves like a
-                        // normal desktop file instead of becoming invisible.
-                        // Folders are drawn by the Canvas Item above. 主题没带
-                        // 这个类型图标时才由这里接手。
-                        visible: desktopThemeIcon.status !== Image.Ready
-                            && (modelData.kind !== "image" || imageThumbnail.status !== Image.Ready)
-                            && (modelData.kind !== "launcher" || launcherIcon.status !== Image.Ready)
-                            && modelData.kind !== "folder"
-                        name: desktopFileGrid.iconFor(modelData.kind)
-                        color: Qt.rgba(1, 1, 1, 0.88)
-                        size: desktopFileGrid.iconSize * 0.75
-                        outlined: true
-                    }
-                }
-                Text {
-                    anchors { left: parent.left; right: parent.right; top: parent.top; topMargin: desktopFileGrid.iconSize + 12; leftMargin: 5; rightMargin: 5 }
-                    opacity: fileDelegate.isRenaming ? 0 : 1
-                    visible: opacity > 0.01
-                    text: desktopFileGrid.displayName(modelData)
-                    elide: Text.ElideRight
-                    maximumLineCount: 2
-                    wrapMode: Text.Wrap
-                    horizontalAlignment: Text.AlignHCenter
-                    color: "white"
-                    style: Text.Outline
-                    styleColor: Qt.rgba(0, 0, 0, 0.72)
-                    font { pixelSize: desktopFileGrid.fileNameFontSize; weight: desktopFileGrid.fileNameFontWeight }
-                    Behavior on opacity {
-                        NumberAnimation { duration: 110; easing.type: Easing.OutCubic }
-                    }
-                }
-                MouseArea {
-                    id: filePointer
-                    enabled: false
-                    // The complete cell used to be clickable, leaving no
-                    // genuine blank area between adjacent files.  Keep a
-                    // compact content target around the icon and label.
-                    anchors {
-                        left: parent.left
-                        right: parent.right
-                        top: parent.top
-                        bottom: parent.bottom
-                        leftMargin: 9
-                        rightMargin: 9
-                        topMargin: 4
-                        bottomMargin: 6
-                    }
-                    acceptedButtons: Qt.LeftButton | Qt.RightButton
-                    hoverEnabled: true
-                    onPressed: function(mouse) {
-                        if (mouse.button === Qt.RightButton) {
-                            if (!desktopFileGrid.isSelected(modelData.path))
-                                desktopFileGrid.selectOnly(modelData.path)
-                            desktopFileGrid.contextEntry = modelData
-                            desktopFileGrid.showMenu(modelData,
-                                fileDelegate.mapToItem(root, mouse.x, mouse.y))
-                        } else {
-                            fileDelegate.dragEnabled = !(mouse.modifiers & Qt.ControlModifier)
-                            if (mouse.modifiers & Qt.ControlModifier)
-                                desktopFileGrid.toggleSelection(modelData.path)
-                            else if (!desktopFileGrid.isSelected(modelData.path))
-                                desktopFileGrid.selectOnly(modelData.path)
-                            fileDelegate.dragMoved = false
-                            desktopFileGrid.activateKeyboard()
-                        }
-                    }
-                    onClicked: function(mouse) {
-                        if (fileDelegate.dragMoved || mouse.button !== Qt.LeftButton
-                                || (mouse.modifiers & Qt.ControlModifier))
-                            return
-                        if (!desktopFileGrid.isSelected(modelData.path)) {
-                            desktopFileGrid.selectOnly(modelData.path)
-                            return
-                        }
-                        // Finder icon view enters rename after a second,
-                        // deliberately slow click on an already selected item.
-                        const now = Date.now()
-                        const elapsed = now - previousClickTime
-                        previousClickTime = now
-                        if (!fileDelegate.dragMoved && elapsed >= 350 && elapsed <= 1200)
-                            desktopFileGrid.beginInlineRename(modelData)
-                    }
-                    onDoubleClicked: function(mouse) {
-                        if (fileDelegate.dragMoved || Date.now() < fileDelegate.suppressOpenUntil
-                                || mouse.button !== Qt.LeftButton)
-                            return
-                        fileDelegate.opening = true
-                        openFeedback.restart()
-                    }
-                }
-                // DragHandler supplies a direct gesture translation. Unlike
-                // MouseArea's positional callback it never derives the next
-                // pointer position from an item that is itself transformed.
-                DragHandler {
-                    id: reorderDrag
-                    enabled: false
-                    target: fileVisual
-                    acceptedButtons: Qt.LeftButton
-                    acceptedModifiers: Qt.NoModifier
-                    onActiveChanged: {
-                        if (active) {
-                            fileDelegate.dragHandlerStarted = true
-                            fileDelegate.dragMoved = true
-                            fileDelegate.draggingSingle = true
-                        } else if (fileDelegate.dragHandlerStarted) {
-                            if (fileDelegate.draggingSingle)
-                                desktopFileGrid.saveVisualOrder()
-                            fileDelegate.draggingSingle = false
-                            fileDelegate.dragHandlerStarted = false
-                        }
-                    }
-                }
-                Timer {
-                    id: openFeedback
-                    interval: 90
-                    repeat: false
-                    onTriggered: {
-                        fileDelegate.opening = false
-                        root.desktopFiles.openEntry(modelData)
-                    }
-                }
-                Rectangle {
-                    id: inlineRenameFrame
-                    anchors { horizontalCenter: parent.horizontalCenter; top: parent.top; topMargin: desktopFileGrid.iconSize + 10 }
-                    width: Math.min(parent.width - 10, Math.max(68, inlineRenameInput.contentWidth + 18))
-                    height: 23
-                    radius: 5
-                    opacity: fileDelegate.isRenaming ? 1 : 0
-                    visible: opacity > 0.01
-                    color: "#ffffff"
-                    border { width: 1; color: "#0a84ff" }
-                    z: 2
-                    transform: Translate {
-                        y: fileDelegate.isRenaming ? 0 : 2
-                        Behavior on y {
-                            NumberAnimation { duration: 140; easing.type: Easing.OutCubic }
-                        }
-                    }
-                    Behavior on opacity {
-                        NumberAnimation { duration: 140; easing.type: Easing.OutCubic }
-                    }
-                    function commit() {
-                        if (desktopFileGrid.renamingPath !== modelData.path)
-                            return
-                        const newName = inlineRenameInput.text.trim()
-                        const newPath = root.desktopFiles.directory + "/" + newName
-                        // Reject name collisions synchronously so the folder
-                        // customisation is not migrated to a path that will
-                        // never be created.
-                        if (newPath !== modelData.path) {
-                            const clash = root.desktopFiles.entries.some(function(e) {
-                                return e.path === newPath
-                            })
-                            if (clash) {
-                                root.desktopFiles.lastError = "该名称已被占用"
-                                return
-                            }
-                        }
-                        if (root.desktopFiles.renameEntry(modelData, inlineRenameInput.text)) {
-                            // Migrate folder customisation to the new path so
-                            // renaming a folder does not discard its color/emoji.
-                            if (newPath !== modelData.path)
-                                desktopFileGrid.migrateFolderCustom(modelData.path, newPath)
-                            desktopFileGrid.renamingPath = ""
-                        }
-                    }
-                    onVisibleChanged: {
-                        if (!visible)
-                            return
-                        inlineRenameInput.text = modelData.name
-                        inlineRenameInput.forceActiveFocus()
-                        inlineRenameInput.select(0, desktopFileGrid.renameSelectionEnd(modelData))
-                    }
-                    TextInput {
-                        id: inlineRenameInput
-                        anchors { fill: parent; leftMargin: 6; rightMargin: 6 }
-                        color: "#1d1d1f"
-                        selectByMouse: true
-                        selectionColor: "#252529"
-                        selectedTextColor: "white"
-                        verticalAlignment: TextInput.AlignVCenter
-                        horizontalAlignment: TextInput.AlignHCenter
-                        font { pixelSize: desktopFileGrid.fileNameFontSize; weight: desktopFileGrid.fileNameFontWeight }
-                        onActiveFocusChanged: {
-                            if (!activeFocus && fileDelegate.isRenaming)
-                                inlineRenameFrame.commit()
-                        }
-                        Keys.onReturnPressed: function(event) {
-                            inlineRenameFrame.commit()
-                            event.accepted = true
-                        }
-                        Keys.onEscapePressed: function(event) {
-                            desktopFileGrid.renamingPath = ""
-                            event.accepted = true
-                        }
-                    }
-                }
-            }
-        }
-
-            }
-        }
 
         FreeSlotDesktopDemo {
             id: freeSlotDesktop
@@ -3965,7 +3819,7 @@ PanelWindow {
             validY: desktopFileGrid.y
             validWidth: desktopFileGrid.width
             validHeight: desktopFileGrid.height
-            baseCellWidth: desktopFileGrid.itemWidth
+            baseCellWidth: desktopFileGrid.preferredItemWidth
             baseCellHeight: desktopFileGrid.itemHeight
             density: desktopFileGrid.desktopLayout.iconSpacing
             iconVisualSize: desktopFileGrid.iconSize + 12
@@ -3989,6 +3843,13 @@ PanelWindow {
                 desktopFileGrid.setSelectedPaths(selectedIds)
             }
             onContextMenuRequested: function(entry, pos) {
+                // Bare desktop while editing: dismiss the session instead of
+                // opening the menu that re-enters it. A file keeps its own
+                // menu, it acts on that file rather than on the desktop.
+                if (entry === null && root.editMode) {
+                    root.leaveWidgetEditMode()
+                    return
+                }
                 desktopFileGrid.setSelectedPaths(freeSlotDesktop.selectedIds)
                 desktopFileGrid.contextEntry = entry
                 // freeSlotDesktop is offset by (-gridX,-gridY); translate its
@@ -4001,10 +3862,13 @@ PanelWindow {
             }
             onActivityRequested: desktopFileGrid.activateKeyboard()
             onBackgroundPressAndHold: root.enterWidgetEditMode(false)
-            // 空桌面普通单击＝显示桌面开关（挂件编辑模式除外）。这个
-            // MouseArea 盖住绝大部分桌面，是比背景捕获器更主要的入口。
+            // 空桌面普通单击：编辑模式下退出编辑（只收尾，位置/尺寸各自
+            // 手势里已落盘），否则＝显示桌面开关。这个 MouseArea 盖住绝大
+            // 部分桌面，是比背景捕获器更主要的入口。
             onBackgroundPlainClicked: {
-                if (!root.editMode)
+                if (root.editMode)
+                    root.leaveWidgetEditMode()
+                else
                     StageModeService.deskRevealToggleRequested()
             }
             onExternalUrlsDropped: function(urls, action) {
@@ -4033,12 +3897,16 @@ PanelWindow {
             border { width: 1; color: Qt.rgba(1, 1, 1, 0.48) }
             z: 8
             Behavior on opacity {
-                NumberAnimation { duration: 90; easing.type: Easing.OutCubic }
+                NumberAnimation { duration: AppearanceTokens.motion.instant.duration; easing.type: AppearanceTokens.motion.enterCurve }
             }
         }
 
         ContextMenu {
             id: desktopContextMenu
+            reserveIconSpace: true
+            capsuleReveal: true
+            // The anchor is only a 4px cursor marker; use the Wi-Fi pill size.
+            capsuleSourceWidth: 137
             anchorItem: desktopContextAnchor
             position: "bottom"
             placeBelow: true
@@ -4092,7 +3960,7 @@ PanelWindow {
             radius: 16
             visible: openWithMotion.mapped
             opacity: openWithMotion.progress
-            scale: 0.96 + 0.04 * openWithMotion.progress
+            scale: 0.96 + 0.04 * openWithMotion.geometryProgress
             enabled: openWithMotion.interactive
             color: Qt.rgba(0.12, 0.12, 0.15, 0.98)
             border { width: 1; color: Qt.rgba(1, 1, 1, 0.18) }
@@ -4114,7 +3982,7 @@ PanelWindow {
             }
             Text {
                 anchors { left: parent.left; top: parent.top; leftMargin: 16; topMargin: 14 }
-                text: "打开方式"
+                text: I18n.tr("Open With")
                 color: "white"
                 font { pixelSize: 13; weight: Font.DemiBold }
             }
@@ -4127,7 +3995,7 @@ PanelWindow {
             }
             Text {
                 anchors { left: parent.left; right: parent.right; top: parent.top; leftMargin: 16; rightMargin: 16; topMargin: 57 }
-                text: root.desktopFiles.openWith.mime || "未能识别文件类型"
+                text: root.desktopFiles.openWith.mime || I18n.tr("Unrecognized file type")
                 color: Qt.rgba(1, 1, 1, 0.42)
                 font.pixelSize: 9
             }
@@ -4155,7 +4023,7 @@ PanelWindow {
                 }
                 Text {
                     visible: root.desktopFiles.openWith.handlers.length === 0
-                    text: "系统没有找到可用的关联应用。"
+                    text: I18n.tr("No associated applications found on the system.")
                     color: Qt.rgba(1, 1, 1, 0.52)
                     font.pixelSize: 10
                 }
@@ -4164,21 +4032,25 @@ PanelWindow {
                 anchors { right: parent.right; bottom: parent.bottom; rightMargin: 14; bottomMargin: 12 }
                 spacing: 8
                 Repeater {
-                    model: ["取消", "仅此一次", "设为默认"]
+                    model: [
+                        { id: "cancel", label: I18n.tr("Cancel") },
+                        { id: "once", label: I18n.tr("Just Once") },
+                        { id: "default", label: I18n.tr("Set as Default") }
+                    ]
                     delegate: Rectangle {
                         required property var modelData
-                        width: modelData === "设为默认" ? 64 : modelData === "仅此一次" ? 64 : 52
+                        width: modelData.id === "default" ? 64 : modelData.id === "once" ? 64 : 52
                         height: 26
                         radius: 7
-                        color: modelData === "设为默认" ? "#4385dc" : Qt.rgba(1, 1, 1, 0.10)
-                        opacity: modelData === "取消" || openWithDialog.selectedHandler ? 1 : 0.45
-                        Text { anchors.centerIn: parent; text: modelData; color: "white"; font.pixelSize: 10 }
+                        color: modelData.id === "default" ? "#4385dc" : Qt.rgba(1, 1, 1, 0.10)
+                        opacity: modelData.id === "cancel" || openWithDialog.selectedHandler ? 1 : 0.45
+                        Text { anchors.centerIn: parent; text: modelData.label; color: "white"; font.pixelSize: 10 }
                         MouseArea {
                             anchors.fill: parent
                             onClicked: {
-                                if (modelData === "取消") openWithMotion.close()
+                                if (modelData.id === "cancel") openWithMotion.close()
                                 else if (openWithDialog.selectedHandler) {
-                                    if (modelData === "仅此一次")
+                                    if (modelData.id === "once")
                                         root.desktopFiles.launchWith(openWithDialog.entry, openWithDialog.selectedHandler)
                                     else
                                         root.desktopFiles.setDefaultOpenWith(root.desktopFiles.openWith.mime, openWithDialog.selectedHandler)

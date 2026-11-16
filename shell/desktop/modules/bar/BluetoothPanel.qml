@@ -1,6 +1,7 @@
 import QtQuick
 import Quickshell
 import Quickshell.Wayland
+import "../../../shared/qml/i18n"
 import qs.desktop.modules.bar
 import qs.desktop.modules.common
 import qs.desktop.modules.dock
@@ -23,8 +24,9 @@ AnimatedPopupWindow {
     motionOrigin: !dockHosted ? Item.Top
         : dockEdge === "left" ? Item.Left
         : dockEdge === "right" ? Item.Right : Item.Bottom
+    PopupAnchorBinding { popupAnchor: panel.anchor; sourceItem: panel.anchorItem }
+
     anchor {
-        item: panel.anchorItem
         edges: !panel.dockHosted ? Edges.Bottom
             : panel.dockEdge === "left" ? Edges.Right
             : panel.dockEdge === "right" ? Edges.Left : Edges.Top
@@ -98,6 +100,12 @@ AnimatedPopupWindow {
         ambientSecondary: WallpaperColorSource.secondary
         ambientStrength: 0.35 * AppearanceTokens.glass.ambientMultiplier
         material: "thick"
+        // The bar popups all carry the control-center card's scrim
+        // posture. Without it this panel was one of the only bar surfaces whose
+        // glass never darkened over a bright backdrop, so its white labels sat
+        // on raw glass while every neighbouring panel was scrimmed.
+        scrimEnabled: AppearanceTokens.surface.usesBackdrop
+        scrimLevel: AppearanceTokens.bar.popupScrimLevel
         adaptiveDarkScrim: true
 
         ListView {
@@ -112,24 +120,20 @@ AnimatedPopupWindow {
                 height: 46
                 radius: 11
                 color: devicePointer.containsMouse ? Qt.rgba(1, 1, 1, 0.12) : "transparent"
-                Behavior on color { ColorAnimation { duration: 110 } }
-                Canvas {
+                Behavior on color { ColorAnimation { duration: AppearanceTokens.motion.fast.duration; easing.type: AppearanceTokens.motion.enterCurve } }
+                BundledIcon {
                     width: 18; height: 18
                     anchors { left: parent.left; leftMargin: 31; verticalCenter: parent.verticalCenter }
-                    onPaint: {
-                        const ctx = getContext("2d")
-                        ctx.reset(); ctx.strokeStyle = surface.foregroundColor; ctx.lineWidth = 1.8
-                        ctx.lineCap = "round"; ctx.lineJoin = "round"; ctx.scale(0.67, 0.67)
-                        ctx.beginPath(); ctx.moveTo(13.5, 2.5); ctx.lineTo(20, 9); ctx.lineTo(13.5, 15); ctx.lineTo(20, 21); ctx.lineTo(13.5, 26.5); ctx.lineTo(13.5, 2.5); ctx.moveTo(7, 8.5); ctx.lineTo(13.5, 15); ctx.lineTo(7, 21.5); ctx.stroke()
-                    }
+                    name: "bluetooth.device"
+                    color: surface.foregroundColor
                 }
-                Text {
+                BundledIcon {
                     visible: modelData.connected
                     anchors { left: parent.left; leftMargin: 8; verticalCenter: parent.verticalCenter }
-                    text: "✓"
+                    name: "bluetooth.connected"
                     color: surface.foregroundColor
-                    style: Text.Outline; styleColor: Qt.rgba(0, 0, 0, 0.50)
-                    font { pixelSize: 18; weight: Font.DemiBold }
+                    outlined: true; outlineColor: Qt.rgba(0, 0, 0, 0.50)
+                    size: 18
                 }
                 Text {
                     anchors { left: parent.left; right: parent.right; leftMargin: 58; rightMargin: 12; verticalCenter: parent.verticalCenter }
@@ -153,7 +157,7 @@ AnimatedPopupWindow {
                 visible: ControlCenterService.bluetoothPowered
                     && !ControlCenterService.bluetoothDevicesRefreshInProgress
                     && ControlCenterService.bluetoothDevices.length === 0
-                text: "未发现已配对设备"
+                text: I18n.tr("No paired devices found")
                 color: surface.secondaryForegroundColor
                 opacity: 0.52
                 font.pixelSize: 12
@@ -161,7 +165,7 @@ AnimatedPopupWindow {
             GlassText {
                 anchors.centerIn: parent
                 visible: ControlCenterService.bluetoothDevicesRefreshInProgress
-                text: "正在刷新…"
+                text: I18n.tr("Refreshing…")
                 color: surface.secondaryForegroundColor
                 opacity: 0.52
                 font.pixelSize: 12
@@ -169,7 +173,7 @@ AnimatedPopupWindow {
             GlassText {
                 anchors.centerIn: parent
                 visible: !ControlCenterService.bluetoothPowered
-                text: "蓝牙已关闭"
+                text: I18n.tr("Bluetooth is off")
                 color: surface.secondaryForegroundColor
                 opacity: 0.52
                 font.pixelSize: 12
@@ -187,7 +191,7 @@ AnimatedPopupWindow {
             }
             Text {
                 anchors { left: parent.left; leftMargin: 18; verticalCenter: parent.verticalCenter }
-                text: "蓝牙设置…"
+                text: I18n.tr("Bluetooth settings…")
                 color: surface.foregroundColor
                 style: Text.Outline
                 styleColor: Qt.rgba(0, 0, 0, 0.50)

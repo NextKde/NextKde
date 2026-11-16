@@ -55,7 +55,8 @@ QtObject {
         const defaultName = entry?.name ?? raw
         // Never leak an unresolved icon name into Image.source: Qt treats a
         // bare name as a relative qrc URL and emits a Cannot open warning.
-        const defaultIcon = iconSource(entry?.icon ?? "") || genericIconSource()
+        const defaultIcon = LayeredIconThemeService.defaultSource(entry?.icon ?? "", desktopId)
+            || iconSource(entry?.icon ?? "") || genericIconSource()
         return { desktopId: desktopId, rawAppId: raw,
             defaultName: defaultName, defaultIcon: defaultIcon,
             displayName: override.name || defaultName,
@@ -175,7 +176,7 @@ QtObject {
         // 图案，免得留下空白图标。
         return SystemIconResolver.sourceFromCandidates(
             ["application-x-executable", "system-run"], "application-x-executable")
-            || BundledIcons.source("application-x-executable")
+            || BundledIcons.source("application.fallback")
     }
 
     function normalize(value) {
@@ -195,6 +196,11 @@ QtObject {
             // repeatedly perform expensive icon lookups on the UI thread.
             service.catalogRevision++
         }
+    }
+
+    property Connections _layeredThemeConnections: Connections {
+        target: LayeredIconThemeService
+        function onRevisionChanged() { service.invalidateThemeIcons() }
     }
 
     property Connections _iconThemeConnections: Connections {

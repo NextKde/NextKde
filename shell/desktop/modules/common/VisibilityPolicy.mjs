@@ -15,7 +15,7 @@ export const deskCenterWidgetIds = [
 
 // The shell-owned StatusArea cells, in their declared trailing order.
 export const statusCellIds = [
-    "network", "battery", "settings", "controlcenter",
+    "inputmethod", "network", "battery", "settings", "notifications", "controlcenter",
 ];
 
 // The cells the shell always renders, whatever the hidden set says. The
@@ -56,6 +56,18 @@ export function normalizeHiddenIds(value, known) {
 
 export function isHidden(hiddenIds, id) {
     return (hiddenIds ?? []).indexOf(String(id)) >= 0;
+}
+
+// Whether the status tray should draw the battery cell.
+//
+// UPower publishes a DisplayDevice even on a machine with no battery, so
+// `isPresent` alone is not enough: while the daemon has not finished
+// enumerating devices, `ready` is false and the value is not meaningful yet.
+// Hide the cell only after UPower has positively reported no battery; keep it
+// while the state is unknown so a laptop does not lose its battery during
+// startup, and so an unavailable UPower cannot make the cell disappear.
+export function shouldShowBatteryCell(ready, present) {
+    return !ready || Boolean(present);
 }
 
 // `visible` is the wanted state, so a caller can hand over the value its

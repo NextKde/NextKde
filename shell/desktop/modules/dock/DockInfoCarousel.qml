@@ -1,4 +1,5 @@
 import QtQuick
+import qs.desktop.modules.common
 import qs.desktop.modules.weather
 
 // One Dock slot shared by music, weather, clock and metrics.
@@ -13,6 +14,17 @@ import qs.desktop.modules.weather
 Item {
     id: carousel
     signal editRequested()
+
+    // Slide with the magnified row so the information slot keeps its place
+    // between the spreading icons (see DockContainer's hover spread).
+    transform: Translate {
+        x: {
+            let p = carousel.parent
+            while (p && typeof p.spreadFor !== "function")
+                p = p.parent
+            return p ? p.spreadFor(carousel) : 0
+        }
+    }
 
     readonly property int musicPage: 0
     readonly property int weatherPage: 1
@@ -31,6 +43,7 @@ Item {
 
     property int iconSize: 44
     property int dockHeight: 60
+    required property real cornerRadius
     property int widthUnits: 4
     property bool showClock: false
     property bool showTemperature: true
@@ -38,7 +51,7 @@ Item {
     property bool expanded: false
     property bool autoRotate: true
 
-    readonly property bool hasMusic: DockMprisService.hasPlayer
+    readonly property bool hasMusic: MediaService.hasPlayer
     readonly property bool hasWeather: WeatherService.available
     readonly property real cardGap: iconSize * 0.2
     // Visible seam between neighbouring expanded cards. Each card's painted
@@ -71,13 +84,15 @@ Item {
     }
 
     function cardVisible(candidate) {
+        if ((pageOrder || []).indexOf(candidate) < 0)
+            return false
         if (candidate === musicPage)
             return hasMusic
         if (candidate === weatherPage)
             return hasWeather
         if (candidate === clockPage)
             return showClock
-        return showTemperature
+        return candidate === temperaturePage && showTemperature
     }
 
     function unitsFor(candidate) {
@@ -124,7 +139,7 @@ Item {
     }
 
     function ensureValidPage(preferClock) {
-        if (preferClock && showClock && pageOrder.indexOf(clockPage) >= 0) {
+        if (preferClock && showClock && (pageOrder || []).indexOf(clockPage) >= 0) {
             previousPage = page
             page = clockPage
             return
@@ -141,13 +156,13 @@ Item {
         if (pages.length < 2)
             return
         const direction = requestedDirection === undefined
-            ? 1 : (requestedDirection >= 0 ? 1 : -1)
+            ? 1 : Math.trunc(requestedDirection)
         let currentIndex = pages.indexOf(page)
         if (currentIndex < 0)
             currentIndex = 0
         previousPage = page
-        transitionDirection = direction
-        page = pages[(currentIndex + direction + pages.length) % pages.length]
+        transitionDirection = direction >= 0 ? 1 : -1
+        page = pages[((currentIndex + direction) % pages.length + pages.length) % pages.length]
         if (resetTimer && autoRotate)
             carouselTimer.restart()
     }
@@ -206,16 +221,23 @@ Item {
         id: carouselTimer
         interval: 30000
         // Nothing rotates once every card has its own place.
-        running: carousel.autoRotate && !carousel.expanded
+        running: carousel.visible && carousel.autoRotate && !carousel.expanded
             && carousel.availablePageCount > 1
         repeat: true
         onTriggered: carousel.switchPage(false, 1)
     }
 
-    Timer {
-        id: wheelCooldown
-        interval: 180
-        repeat: false
+    property real wheelRemainder: 0
+    property bool wheelUsesPixels: false
+    property int wheelSteps: 0
+    FrameAnimation {
+        running: carousel.wheelSteps !== 0
+        onTriggered: {
+            const steps = carousel.wheelSteps
+            carousel.wheelSteps = 0
+            if (!carousel.expanded)
+                carousel.switchPage(true, steps)
+        }
     }
 
     MouseArea {
@@ -225,11 +247,19 @@ Item {
         onWheel: function(wheel) {
             if (carousel.expanded)
                 return
-            const delta = wheel.angleDelta.y + wheel.pixelDelta.y
-            if (delta === 0 || wheelCooldown.running)
-                return
-            carousel.switchPage(true, delta >= 0 ? -1 : 1)
-            wheelCooldown.restart()
+            const pixels = wheel.angleDelta.y === 0
+            const delta = pixels ? wheel.pixelDelta.y : wheel.angleDelta.y
+            if (delta === 0) return
+            // Reverse before the pending frame: discard unpainted old direction.
+            if (carousel.wheelSteps * delta < 0) carousel.wheelSteps = 0
+            if (pixels !== carousel.wheelUsesPixels || carousel.wheelRemainder * delta < 0)
+                carousel.wheelRemainder = 0
+            carousel.wheelUsesPixels = pixels
+            carousel.wheelRemainder += delta / (pixels ? 40 : 120)
+            const steps = carousel.wheelRemainder >= 0
+                ? Math.floor(carousel.wheelRemainder) : Math.ceil(carousel.wheelRemainder)
+            carousel.wheelRemainder -= steps
+            carousel.wheelSteps += steps
             wheel.accepted = true
         }
     }
@@ -257,6 +287,7 @@ Item {
         if (pointerPage < 0)
             return
         if (pointerPage === carousel.musicPage) {
+            infoPopupOpenDelay.stop()
             if (infoPopup.visible)
                 infoPopup.requestClose()
             return
@@ -265,6 +296,7 @@ Item {
         // (TemperatureSensorPopups), so the generic info popup must not
         // compete with it for the hover.
         if (pointerPage === carousel.temperaturePage) {
+            infoPopupOpenDelay.stop()
             if (infoPopup.visible)
                 infoPopup.requestClose()
             return
@@ -274,6 +306,8 @@ Item {
             infoPopupOpenDelay.stop()
         else if (infoPopup.visible)
             DockModelService.openDockPopup(infoPopup)
+        else if (infoHover.hovered && !infoPopupOpenDelay.running)
+            infoPopupOpenDelay.start()
     }
 
     HoverHandler {
@@ -281,7 +315,14 @@ Item {
         onHoveredChanged: {
             if (hovered) {
                 infoPopupCloseDelay.stop()
-                infoPopupOpenDelay.restart()
+                if (carousel.pointerPage >= 0
+                        && carousel.pointerPage !== carousel.musicPage
+                        && carousel.pointerPage !== carousel.temperaturePage) {
+                    if (infoPopup.visible)
+                        DockModelService.openDockPopup(infoPopup)
+                    else if (!infoPopupOpenDelay.running)
+                        infoPopupOpenDelay.start()
+                }
             } else if (!infoPopup.pointerInside) {
                 infoPopupOpenDelay.stop()
                 infoPopupCloseDelay.restart()
@@ -291,7 +332,7 @@ Item {
 
     Timer {
         id: infoPopupOpenDelay
-        interval: 420
+        interval: DockAnimation.infoPopupOpenDelay
         repeat: false
         onTriggered: {
             if (infoHover.hovered && carousel.pointerPage >= 0
@@ -315,6 +356,15 @@ Item {
         id: infoPopup
         anchorItem: infoAnchor
         page: carousel.hoveredPage
+        onPointerInsideChanged: {
+            if (pointerInside) {
+                infoPopupCloseDelay.stop()
+                if (!infoPopup.requestedOpen)
+                    DockModelService.openDockPopup(infoPopup)
+            } else if (!infoHover.hovered) {
+                infoPopupCloseDelay.restart()
+            }
+        }
         onVisibleChanged: if (!visible) DockModelService.releaseDockPopup(infoPopup)
     }
 
@@ -322,59 +372,63 @@ Item {
         anchors.verticalCenter: parent.verticalCenter
         iconSize: carousel.iconSize
         dockHeight: carousel.dockHeight
+        cornerRadius: carousel.cornerRadius
         widthUnits: carousel.expanded
             ? carousel.unitsFor(carousel.musicPage) : carousel.widthUnits
         visible: carousel.cardVisible(carousel.musicPage)
         enabled: carousel.isShown(carousel.musicPage)
-        pageActive: carousel.isShown(carousel.musicPage)
+        pageActive: carousel.visible && carousel.isShown(carousel.musicPage)
         x: carousel.layoutX(carousel.musicPage)
         opacity: carousel.isShown(carousel.musicPage) ? 1 : 0
-        Behavior on x { NumberAnimation { duration: 260; easing.type: Easing.OutCubic } }
-        Behavior on opacity { NumberAnimation { duration: 220; easing.type: Easing.OutCubic } }
+        Behavior on x { NumberAnimation { duration: AppearanceTokens.motion.base.duration; easing.type: AppearanceTokens.motion.enterCurve } }
+        Behavior on opacity { NumberAnimation { duration: AppearanceTokens.motion.fast.duration; easing.type: AppearanceTokens.motion.enterCurve } }
     }
 
     DockWeatherWidget {
         anchors.verticalCenter: parent.verticalCenter
         iconSize: carousel.iconSize
         dockHeight: carousel.dockHeight
+        cornerRadius: carousel.cornerRadius
         widthUnits: carousel.expanded
             ? carousel.unitsFor(carousel.weatherPage) : carousel.widthUnits
         visible: carousel.cardVisible(carousel.weatherPage)
         enabled: carousel.isShown(carousel.weatherPage)
-        pageActive: carousel.isShown(carousel.weatherPage)
+        pageActive: carousel.visible && carousel.isShown(carousel.weatherPage)
         x: carousel.layoutX(carousel.weatherPage)
         opacity: carousel.isShown(carousel.weatherPage) ? 1 : 0
-        Behavior on x { NumberAnimation { duration: 260; easing.type: Easing.OutCubic } }
-        Behavior on opacity { NumberAnimation { duration: 220; easing.type: Easing.OutCubic } }
+        Behavior on x { NumberAnimation { duration: AppearanceTokens.motion.base.duration; easing.type: AppearanceTokens.motion.enterCurve } }
+        Behavior on opacity { NumberAnimation { duration: AppearanceTokens.motion.fast.duration; easing.type: AppearanceTokens.motion.enterCurve } }
     }
 
     DockClockWidget {
         anchors.verticalCenter: parent.verticalCenter
         iconSize: carousel.iconSize
         dockHeight: carousel.dockHeight
+        cornerRadius: carousel.cornerRadius
         widthUnits: carousel.expanded
             ? carousel.unitsFor(carousel.clockPage) : carousel.widthUnits
         visible: carousel.cardVisible(carousel.clockPage)
         enabled: carousel.isShown(carousel.clockPage)
-        pageActive: carousel.isShown(carousel.clockPage)
+        pageActive: carousel.visible && carousel.isShown(carousel.clockPage)
         x: carousel.layoutX(carousel.clockPage)
         opacity: carousel.isShown(carousel.clockPage) ? 1 : 0
-        Behavior on x { NumberAnimation { duration: 260; easing.type: Easing.OutCubic } }
-        Behavior on opacity { NumberAnimation { duration: 220; easing.type: Easing.OutCubic } }
+        Behavior on x { NumberAnimation { duration: AppearanceTokens.motion.base.duration; easing.type: AppearanceTokens.motion.enterCurve } }
+        Behavior on opacity { NumberAnimation { duration: AppearanceTokens.motion.fast.duration; easing.type: AppearanceTokens.motion.enterCurve } }
     }
 
     DockTemperatureWidget {
         anchors.verticalCenter: parent.verticalCenter
         iconSize: carousel.iconSize
         dockHeight: carousel.dockHeight
+        cornerRadius: carousel.cornerRadius
         widthUnits: carousel.expanded
             ? carousel.unitsFor(carousel.temperaturePage) : carousel.widthUnits
         visible: carousel.cardVisible(carousel.temperaturePage)
         enabled: carousel.isShown(carousel.temperaturePage)
-        pageActive: carousel.isShown(carousel.temperaturePage)
+        pageActive: carousel.visible && carousel.isShown(carousel.temperaturePage)
         x: carousel.layoutX(carousel.temperaturePage)
         opacity: carousel.isShown(carousel.temperaturePage) ? 1 : 0
-        Behavior on x { NumberAnimation { duration: 260; easing.type: Easing.OutCubic } }
-        Behavior on opacity { NumberAnimation { duration: 220; easing.type: Easing.OutCubic } }
+        Behavior on x { NumberAnimation { duration: AppearanceTokens.motion.base.duration; easing.type: AppearanceTokens.motion.enterCurve } }
+        Behavior on opacity { NumberAnimation { duration: AppearanceTokens.motion.fast.duration; easing.type: AppearanceTokens.motion.enterCurve } }
     }
 }

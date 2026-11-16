@@ -2,7 +2,11 @@ pragma Singleton
 
 import QtQuick
 import Quickshell
+import Quickshell.Services.Pipewire
+import "../../../shared/qml/i18n"
+import "../common/AudioOutputNames.mjs" as AudioOutputNames
 import qs.desktop.modules.platform
+import qs.desktop.modules.notifications
 
 // Shared Control Centre state. The resident platform service owns PipeWire,
 // BlueZ, brightness, session, screenshot and theme integration.
@@ -15,6 +19,16 @@ QtObject {
     property var audioApplications: []
     property bool audioApplicationsAvailable: false
     property bool audioApplicationsRefreshInProgress: false
+    property var audioOutputs: []
+    // PipeWire's node properties preserve the original UTF-8 description while
+    // the platform's audio.outputs snapshot can carry the literal "(null)" for
+    // a non-ASCII name. Keep the live node list for name resolution.
+    readonly property var _audioOutputNodes: Pipewire.nodes.values
+    property bool audioOutputsRefreshInProgress: false
+    property bool audioOutputChangeInProgress: false
+    property string _audioOutputReadError: ""
+    property string _audioOutputChangeError: ""
+    readonly property string audioOutputError: _audioOutputChangeError || _audioOutputReadError
     property bool volumeChangeInProgress: false
     property bool brightnessAvailable: false
     property int brightnessPercent: 0
@@ -29,24 +43,30 @@ QtObject {
     property bool bluetoothDevicesRefreshInProgress: false
     property bool bluetoothDeviceChangeInProgress: false
     property string bluetoothChangingAddress: ""
-    property bool doNotDisturbEnabled: false
-    property ListModel notificationHistory: ListModel {}
-    property int notificationHistoryMax: 50
-    property var historyGroups: []
-    property int historyRevision: 0
+    readonly property bool doNotDisturbEnabled: NotificationPolicyService.doNotDisturbEnabled
     property bool screenshotInProgress: false
     property bool sessionActionInProgress: false
     property alias logoutInProgress: service.sessionActionInProgress
     property string lastSessionError: ""
-    property string currentUserName: Quickshell.env("USER") || "用户"
+    property string currentUserName: Quickshell.env("USER") || I18n.tr("User")
     property bool canSuspend: true
     property bool canHibernate: false
     property bool themeChangeInProgress: false
+    property bool keepAwakeAvailable: false
+    property bool keepAwakeEnabled: false
+    property bool keepAwakeChangeInProgress: false
+    property string keepAwakeError: ""
     property bool nightLightAvailable: true
     property bool nightLightEnabled: false
     property bool nightLightActive: false
     property bool nightLightChangeInProgress: false
     signal toggleRequested()
+
+    // Surfaces outside the bar (e.g. the desktop context menu) route their
+    // destructive session entries through here so they reuse the control
+    // center's shared confirmation dialog instead of acting immediately.
+    signal sessionActionRequested(string action)
+    function requestSessionAction(action) { sessionActionRequested(action) }
 
     // Every surface that shows this service's live data (network/bluetooth
     // quick panels, the control centre itself) registers while it is open.
@@ -60,42 +80,6 @@ QtObject {
     }
     onAnyPanelOpenChanged: if (anyPanelOpen) refresh()
 
-    function rebuildHistoryGroups() {
-        const groups = []
-        const groupIndex = ({})
-        for (let i = 0; i < notificationHistory.count; ++i) {
-            const row = notificationHistory.get(i)
-            const key = row.appName || "其他"
-            let index = groupIndex[key]
-            if (index === undefined) {
-                index = groups.length
-                groupIndex[key] = index
-                groups.push({ appName: key, appIcon: row.appIcon, items: [] })
-            }
-            groups[index].items.push({ notifId: row.notifId, summary: row.summary,
-                body: row.body, timestamp: row.timestamp })
-        }
-        historyGroups = groups
-        historyRevision++
-    }
-
-    function removeHistoryById(notifId) {
-        for (let i = 0; i < notificationHistory.count; ++i) {
-            if (notificationHistory.get(i).notifId === notifId) {
-                notificationHistory.remove(i)
-                return
-            }
-        }
-    }
-
-    property Connections _historyConnections: Connections {
-        target: service.notificationHistory
-        function onRowsInserted() { service.rebuildHistoryGroups() }
-        function onRowsRemoved() { service.rebuildHistoryGroups() }
-        function onRowsMoved() { service.rebuildHistoryGroups() }
-        function onModelReset() { service.rebuildHistoryGroups() }
-    }
-
     function refresh() {
         PlatformClient.request("audio.get", {}, function(response) {
             if (response?.ok) {
@@ -107,7 +91,9 @@ QtObject {
                 audioAvailable = false
             }
         })
+        refreshKeepAwake()
         refreshAudioApplications()
+        if (anyPanelOpen) refreshAudioOutputs()
         PlatformClient.request("bluetooth.list", {}, function(response) {
             if (response?.ok) {
                 const value = response.result || ({})
@@ -151,6 +137,42 @@ QtObject {
         })
     }
 
+    function refreshKeepAwake() {
+        if (!PlatformClient.supports("keepawake")) {
+            keepAwakeAvailable = false
+            keepAwakeEnabled = false
+            return
+        }
+        PlatformClient.request("keepawake.get", {}, function(response) {
+            if (response?.ok) {
+                keepAwakeAvailable = !!response.result?.available
+                if (!keepAwakeChangeInProgress)
+                    keepAwakeEnabled = !!response.result?.enabled
+            } else {
+                keepAwakeAvailable = false
+            }
+        })
+    }
+
+    function toggleKeepAwake() {
+        if (keepAwakeChangeInProgress || !keepAwakeAvailable)
+            return false
+        keepAwakeChangeInProgress = true
+        keepAwakeError = ""
+        PlatformClient.request("keepawake.set", { enabled: !keepAwakeEnabled }, function(response) {
+            keepAwakeChangeInProgress = false
+            if (response?.ok) {
+                keepAwakeEnabled = !!response.result?.enabled
+                keepAwakeAvailable = !!response.result?.available
+            } else {
+                keepAwakeError = response?.error?.message
+                    || I18n.tr("Failed to toggle Keep Awake")
+                refreshKeepAwake()
+            }
+        })
+        return true
+    }
+
     function refreshAudioApplications() {
         if (audioApplicationsRefreshInProgress)
             return
@@ -165,6 +187,52 @@ QtObject {
                 audioApplicationsAvailable = false
                 audioApplications = []
             }
+        })
+    }
+
+    function audioOutputWithName(output) {
+        // pactl JSON can turn a non-ASCII description into the literal
+        // "(null)". PipeWire's node properties preserve the original UTF-8;
+        // AudioOutputNames owns the fallback order and is unit tested.
+        return Object.assign({}, output, {
+            description: AudioOutputNames.resolveAudioOutputName(
+                _audioOutputNodes, output, I18n.tr("Output devices"))
+        })
+    }
+
+    function refreshAudioOutputs() {
+        if (audioOutputsRefreshInProgress || audioOutputChangeInProgress) return
+        audioOutputsRefreshInProgress = true
+        PlatformClient.request("audio.outputs", {}, function(response) {
+            audioOutputsRefreshInProgress = false
+            if (response?.ok) {
+                audioOutputs = (response.result?.outputs || []).map(audioOutputWithName)
+                _audioOutputReadError = ""
+            } else {
+                audioOutputs = []
+                _audioOutputReadError = response?.error?.message
+                    || I18n.tr("Could not read output devices")
+            }
+        })
+    }
+
+    function retryAudioOutputs() {
+        _audioOutputChangeError = ""
+        _audioOutputReadError = ""
+        refreshAudioOutputs()
+    }
+
+    function setAudioOutput(name) {
+        if (audioOutputChangeInProgress || audioOutputsRefreshInProgress) return
+        audioOutputChangeInProgress = true
+        _audioOutputChangeError = ""
+        PlatformClient.request("audio.output.set-default", { name: name }, function(response) {
+            audioOutputChangeInProgress = false
+            if (!response?.ok)
+                _audioOutputChangeError = response?.error?.message
+                    || I18n.tr("Failed to switch output device")
+            refreshAudioOutputs()
+            refresh()
         })
     }
 
@@ -355,7 +423,7 @@ QtObject {
         PlatformClient.request("screenshot.capture", {}, function(response) {
             screenshotInProgress = false
             if (!response?.ok)
-                lastSessionError = response?.error?.message || "截图失败"
+                lastSessionError = response?.error?.message || I18n.tr("Screenshot failed")
         })
         return true
     }
@@ -384,13 +452,13 @@ QtObject {
     // overlay is just a window -- a very large, very convincing one, with a
     // real PAM conversation behind it, that the compositor will happily route
     // global shortcuts past and drop when the process dies.
-    function lockSession() { return _sessionAction("session.lock", "锁屏失败") }
-    function suspendSystem() { return _sessionAction("session.suspend", "睡眠操作失败") }
-    function hibernateSystem() { return _sessionAction("session.hibernate", "休眠操作失败") }
-    function rebootSystem() { return _sessionAction("session.reboot", "重启操作失败") }
-    function powerOffSystem() { return _sessionAction("session.poweroff", "关机操作失败") }
-    function switchUser() { return _sessionAction("session.switch-user", "切换用户失败") }
-    function logoutCurrentSession() { return _sessionAction("session.logout", "注销失败") }
+    function lockSession() { return _sessionAction("session.lock", I18n.tr("Failed to lock the screen")) }
+    function suspendSystem() { return _sessionAction("session.suspend", I18n.tr("Failed to suspend")) }
+    function hibernateSystem() { return _sessionAction("session.hibernate", I18n.tr("Failed to hibernate")) }
+    function rebootSystem() { return _sessionAction("session.reboot", I18n.tr("Failed to reboot")) }
+    function powerOffSystem() { return _sessionAction("session.poweroff", I18n.tr("Failed to power off")) }
+    function switchUser() { return _sessionAction("session.switch-user", I18n.tr("Failed to switch user")) }
+    function logoutCurrentSession() { return _sessionAction("session.logout", I18n.tr("Failed to log out")) }
 
     function toggleDarkMode() {
         if (themeChangeInProgress)
@@ -399,13 +467,14 @@ QtObject {
         PlatformClient.request("theme.toggle", {}, function(response) {
             themeChangeInProgress = false
             if (!response?.ok)
-                lastSessionError = response?.error?.message || "主题切换失败"
+                lastSessionError = response?.error?.message
+                    || I18n.tr("Failed to toggle theme")
         })
         return true
     }
 
     function toggleDoNotDisturb() {
-        doNotDisturbEnabled = !doNotDisturbEnabled
+        NotificationPolicyService.setPreference("doNotDisturbEnabled", !doNotDisturbEnabled)
         return doNotDisturbEnabled
     }
 
@@ -426,7 +495,8 @@ QtObject {
             } else {
                 nightLightEnabled = previousEnabled
                 nightLightActive = previousActive
-                const message = response?.error?.message || "夜灯切换失败"
+                const message = response?.error?.message
+                    || I18n.tr("Failed to toggle Night Light")
                 console.warn("[ControlCenter] nightlight.toggle failed: " + message)
                 lastSessionError = message
             }
@@ -447,10 +517,14 @@ QtObject {
         interval: 1800
         repeat: true
         running: PlatformClient.socket.connected && service.anyPanelOpen
-        onTriggered: service.refreshAudioApplications()
+        onTriggered: {
+            service.refreshAudioApplications()
+            service.refreshAudioOutputs()
+        }
     }
     property Connections platformTransport: Connections {
         target: PlatformClient
+        function onCapabilitiesChanged() { service.refreshKeepAwake() }
         function onTransportChanged(connected) {
             if (connected) {
                 service.refresh()
@@ -458,6 +532,10 @@ QtObject {
                 // The client fails every outstanding callback on disconnect,
                 // which already clears these; reset defensively so no tile or
                 // session button can stay wedged by a lost response.
+                audioOutputsRefreshInProgress = false
+                audioOutputChangeInProgress = false
+                audioOutputs = []
+                _audioOutputReadError = I18n.tr("Audio service disconnected")
                 audioApplicationsRefreshInProgress = false
                 volumeChangeInProgress = false
                 brightnessChangeInProgress = false
@@ -468,6 +546,10 @@ QtObject {
                 screenshotInProgress = false
                 sessionActionInProgress = false
                 themeChangeInProgress = false
+                keepAwakeChangeInProgress = false
+                keepAwakeAvailable = false
+                keepAwakeEnabled = false
+                keepAwakeError = ""
                 nightLightChangeInProgress = false
                 _bluetoothPollTimer.stop()
             }

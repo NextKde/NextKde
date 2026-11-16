@@ -4,8 +4,10 @@ import Quickshell
 import Quickshell.Io
 import qs.desktop.modules.platform
 
-// Shell-wide icon appearance. Application icons, launcher results, Bar icons
-// and future desktop widgets share this contract; it is not Dock state.
+// Shell-wide application artwork styling, independent of Dock state.
+// Tray artwork follows the same mode as Dock artwork. Shell-owned status
+// controls always use the bar's opaque ink, like the temperature and
+// network-rate labels.
 QtObject {
     id: service
 
@@ -81,7 +83,8 @@ QtObject {
         onTriggered: service.save()
     }
     function save() {
-        const payload = JSON.stringify({ version: 1, mode, opacity, tintColor: tintColor.toString() }, null, 2)
+        const payload = JSON.stringify({ version: 1, mode, opacity,
+            tintColor: tintColor.toString() }, null, 2)
         JsonConfigStore.writePath(configPath, payload)
     }
     // The icon settings used to live inside dock/config.json. An existing

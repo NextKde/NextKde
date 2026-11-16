@@ -2,6 +2,9 @@
     lib,
     stdenv,
     cmake,
+    pkg-config,
+    flatpak,
+    fcitx5,
     kdePackages,
     opencv,
     onnxruntime,
@@ -10,31 +13,41 @@
 
 stdenv.mkDerivation {
     pname = "kos-platform";
-    version = "unstable";
+    version = lib.removeSuffix "\n" (builtins.readFile "${src}/VERSION");
     src = "${src}/platform";
 
     # The standalone AI library lives at `services/ai/` in the source
     # tree, while this derivation builds the platform subdirectory alone.
     postPatch = ''
+      mkdir -p services
       cp -r ${src}/services/ai services/ai
     '';
 
     nativeBuildInputs = [
         cmake
+        pkg-config
         kdePackages.extra-cmake-modules
     ];
 
     buildInputs = [
+        flatpak
+        fcitx5
         kdePackages.qtbase
         kdePackages.qtdeclarative
         kdePackages.kiconthemes
         kdePackages.kglobalaccel
         kdePackages.kio
+        kdePackages.kconfig
         opencv
         onnxruntime
     ];
 
-    cmakeFlags = [ "-DCMAKE_BUILD_TYPE=Release" ];
+    cmakeFlags = [
+        "-DCMAKE_BUILD_TYPE=Release"
+        "-DKOS_SPATIAL_ENABLED=ON"
+        "-DKOS_PLATFORM_KWIN_SCRIPT_SOURCE=${src}/kwin/window-bridge.js"
+        "-DBUILD_TESTING=OFF"
+    ];
     dontWrapQtApps = true;
 
     meta = with lib; {

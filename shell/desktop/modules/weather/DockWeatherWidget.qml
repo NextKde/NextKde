@@ -1,4 +1,5 @@
 import QtQuick
+import "../../../shared/qml/i18n"
 import qs.desktop.modules.common
 import qs.desktop.modules.dock
 
@@ -6,6 +7,7 @@ Item {
     id: widget
     property int iconSize: 44
     property int dockHeight: 60
+    required property real cornerRadius
     property int widthUnits: 4
     // Set by DockInfoCarousel; decoration layers follow page visibility.
     property bool pageActive: true
@@ -47,7 +49,7 @@ Item {
         y: -widget.backgroundGap
         width: widget.width
         height: widget.iconSize + widget.backgroundGap * 2
-        radius: widget.iconSize * 0.35
+        radius: widget.cornerRadius
         gradient: Gradient {
             orientation: Gradient.Horizontal
             GradientStop {
@@ -82,11 +84,10 @@ Item {
                 y: parent.height * 0.10
                 x: -width
                 opacity: 0.16
-                Image {
+                BundledIcon {
                     anchors.fill: parent
-                    source: BundledIcons.source("weather-cloud")
-                    fillMode: Image.PreserveAspectFit
-                    smooth: true
+                    name: "weather.cloud"
+
                 }
             }
             Item {
@@ -96,11 +97,10 @@ Item {
                 y: parent.height * 0.42
                 x: parent.width
                 opacity: 0.21
-                Image {
+                BundledIcon {
                     anchors.fill: parent
-                    source: BundledIcons.source("weather-cloud-wide")
-                    fillMode: Image.PreserveAspectFit
-                    smooth: true
+                    name: "weather.cloudWide"
+
                 }
             }
         }
@@ -197,7 +197,7 @@ Item {
             spacing: 2
             Text {
                 width: parent.width
-                text: "体感 " + WeatherService.apparentTemperature
+                text: I18n.tr("Feels like %1").arg(WeatherService.apparentTemperature)
                 color: ThemeService.foregroundColor
                 opacity: 0.88
                 font.pixelSize: Math.max(8, widget.iconSize * 0.19)
@@ -205,7 +205,7 @@ Item {
             }
             Text {
                 width: parent.width
-                text: "湿度 " + WeatherService.humidity
+                text: I18n.tr("Humidity %1").arg(WeatherService.humidity)
                 color: ThemeService.foregroundColor
                 opacity: 0.74
                 font.pixelSize: Math.max(8, widget.iconSize * 0.19)
@@ -237,7 +237,7 @@ Item {
             }
         }
         Text {
-            text: "· 体感 " + WeatherService.apparentTemperature
+            text: I18n.tr("· Feels like %1").arg(WeatherService.apparentTemperature)
             color: "white"
             opacity: 0.68
             anchors.verticalCenter: parent.verticalCenter

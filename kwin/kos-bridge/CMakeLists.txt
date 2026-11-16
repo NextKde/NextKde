@@ -1,6 +1,7 @@
 cmake_minimum_required(VERSION 3.21)
 
 project(kos-bridge LANGUAGES CXX)
+enable_language(C)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -17,11 +18,20 @@ include(KDECompilerSettings NO_POLICY_SCOPE)
 
 find_package(Qt6 6.6 REQUIRED COMPONENTS Core DBus Gui Widgets OpenGL Network Xml)
 find_package(KWin REQUIRED COMPONENTS kwineffects)
+find_package(epoxy REQUIRED)
+find_package(KDecoration3 REQUIRED)
 # To read which decoration KWin is configured to use out of kwinrc. Nothing else
 # in the plugin uses KConfig.
 find_package(KF6 REQUIRED COMPONENTS Config)
+find_package(WaylandScanner REQUIRED)
+find_package(Wayland REQUIRED COMPONENTS Server)
+ecm_add_wayland_server_protocol(controls_protocol
+    PROTOCOL "${CMAKE_CURRENT_SOURCE_DIR}/../../shell/native/surface-shape/kos-window-controls-v1.xml"
+    BASENAME kos-window-controls-v1)
 
 add_library(kos_bridge MODULE
+    ${controls_protocol}
+    windowbuttons/cooperativecontrols.cpp
     bridge.cpp
     main.cpp
     windowbuttons/adjustsession.cpp
@@ -32,15 +42,47 @@ add_library(kos_bridge MODULE
     windowbuttons/panelgeometry.cpp
     windowbuttons/tilemenu.cpp
     windowbuttons/titlebarmetrics.cpp
+    windowbuttons/titlebargputint.cpp
+    windowbuttons/titlebarreadback.cpp
+    windowbuttons/titlebartint.cpp
     windowbuttons/windowrules.cpp
+    windowappearance/contour.cpp
+    windowappearance/appearanceconfig.cpp
+    windowappearance/sceneshadow.cpp
+    windowappearance/continuousclip.cpp
+    windowappearance/windowappearance.cpp
 )
 
 target_link_libraries(kos_bridge PRIVATE
+    Wayland::Server
+    xcb
     Qt6::Core
     Qt6::DBus
     KF6::ConfigCore
     KWin::kwin
+    KDecoration3::KDecoration
 )
+target_include_directories(kos_bridge PRIVATE ${CMAKE_CURRENT_BINARY_DIR})
+
+# Detect signatures from the installed headers, including distro backports.
+get_target_property(_kos_kwin_include_dirs KWin::kwin INTERFACE_INCLUDE_DIRECTORIES)
+foreach(_dir IN LISTS _kos_kwin_include_dirs)
+    if(EXISTS "${_dir}/effect/effect.h")
+        file(READ "${_dir}/effect/effect.h" _kos_kwin_effect_header)
+        break()
+    endif()
+endforeach()
+if(NOT _kos_kwin_effect_header)
+    message(FATAL_ERROR "Cannot locate KWin effect/effect.h to detect the paint API")
+endif()
+if(_kos_kwin_effect_header MATCHES "prePaintWindow\\([^;]*std::chrono::milliseconds")
+    target_compile_definitions(kos_bridge PRIVATE KOS_KWIN_PAINT_TIME_API)
+    message(STATUS "Bridge: KWin paint hooks with presentTime (6.6-style)")
+else()
+    message(STATUS "Bridge: KWin paint hooks without presentTime (6.7-style)")
+endif()
+set_property(TARGET kos_bridge APPEND PROPERTY AUTOMOC_MACRO_NAMES
+    KWIN_EFFECT_FACTORY_SUPPORTED_ENABLED)
 
 # Offline preview of the window-button panel. The lights are pure QPainter
 # geometry over a rectangle (see windowbuttons/buttonglyph.h), so the whole panel
@@ -60,12 +102,16 @@ if(KOS_BRIDGE_BUILD_PREVIEW)
         preview/glyph_preview.cpp
         windowbuttons/buttonglyph.cpp
         windowbuttons/panelgeometry.cpp
+        windowappearance/contour.cpp
     )
     # Qt6::Gui and nothing else: no KWin, no KF6, no DBus. If this target ever
     # needs one of those, the light drawing has picked up a dependency it should
     # not have and the preview has stopped being able to answer the question it
     # exists to answer.
     target_link_libraries(glyph_preview PRIVATE Qt6::Gui)
+    add_executable(cooperative_light_preview
+        preview/cooperative_light_preview.cpp windowbuttons/buttonglyph.cpp)
+    target_link_libraries(cooperative_light_preview PRIVATE Qt6::Gui)
 endif()
 
 # Offline harness for the title-bar scan. The scan is pure geometry over a
@@ -87,14 +133,89 @@ if(KOS_BRIDGE_BUILD_TESTS)
     add_executable(rules_test
         tests/rules_test.cpp
         windowbuttons/panelgeometry.cpp
+        windowappearance/contour.cpp
         windowbuttons/tilemenu.cpp
         windowbuttons/windowrules.cpp
         windowbuttons/buttonconfig.cpp
     )
-    target_link_libraries(rules_test PRIVATE Qt6::Core KF6::ConfigCore)
+    target_link_libraries(rules_test PRIVATE Qt6::Core Qt6::Gui KF6::ConfigCore)
     add_test(NAME rules_test COMMAND rules_test)
+
+    add_executable(titlebar_tint_test tests/titlebar_tint_test.cpp
+        windowbuttons/titlebartint.cpp)
+    target_include_directories(titlebar_tint_test PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+    target_link_libraries(titlebar_tint_test PRIVATE Qt6::Gui)
+    add_test(NAME titlebar_tint_test COMMAND titlebar_tint_test)
+
+    add_executable(titlebar_readback_test tests/titlebar_readback_test.cpp
+        windowbuttons/titlebarreadback.cpp)
+    target_include_directories(titlebar_readback_test PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+    target_link_libraries(titlebar_readback_test PRIVATE Qt6::Gui epoxy::epoxy)
+    add_test(NAME titlebar_readback_test COMMAND titlebar_readback_test)
+    set_tests_properties(titlebar_readback_test PROPERTIES
+        SKIP_RETURN_CODE 77 ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
+
+    # Real production appearance manager and KWin scene Items, without a
+    # compositor, Wayland connection, or authentication/session service.
+    add_executable(appearance_lifecycle_test
+        tests/appearance_lifecycle_test.cpp
+        windowappearance/windowappearance.cpp
+        windowappearance/appearanceconfig.cpp
+        windowappearance/sceneshadow.cpp
+        windowappearance/contour.cpp
+    )
+    target_include_directories(appearance_lifecycle_test PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+    target_link_libraries(appearance_lifecycle_test PRIVATE
+        Qt6::Gui KF6::ConfigCore KWin::kwin KDecoration3::KDecoration)
+    add_test(NAME appearance_lifecycle_test COMMAND appearance_lifecycle_test)
+    set_tests_properties(appearance_lifecycle_test PROPERTIES
+        ENVIRONMENT "QT_QPA_PLATFORM=offscreen;DISPLAY=;WAYLAND_DISPLAY=;GREETD_SOCK=;DBUS_SESSION_BUS_ADDRESS=unix:path=/nonexistent/kos-bridge-test")
 endif()
 
 install(TARGETS kos_bridge
     DESTINATION ${KDE_INSTALL_PLUGINDIR}/kwin/effects/plugins
     COMPONENT kwin_plugins)
+
+# Explicit opt-in: this regression test needs a real EGL/OpenGL context.
+option(KOS_BRIDGE_BUILD_GPU_TESTS "Build title-bar GPU readback tests" OFF)
+if(KOS_BRIDGE_BUILD_GPU_TESTS)
+    enable_testing()
+    add_executable(titlebar_pixels_gpu_test
+        tests/titlebar_pixels_gpu_test.cpp
+        windowbuttons/titlebarmetrics.cpp
+        windowbuttons/titlebarreadback.cpp
+        windowbuttons/titlebartint.cpp
+    )
+    target_link_libraries(titlebar_pixels_gpu_test PRIVATE Qt6::Gui KWin::kwin)
+    add_test(NAME titlebar_pixels_gpu_test COMMAND titlebar_pixels_gpu_test)
+    set_tests_properties(titlebar_pixels_gpu_test PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 30)
+
+    add_executable(titlebar_gpu_tint_test
+        tests/titlebar_gpu_tint_test.cpp
+        windowbuttons/titlebargputint.cpp
+        windowbuttons/titlebarmetrics.cpp
+        windowbuttons/titlebarreadback.cpp
+        windowbuttons/titlebartint.cpp
+    )
+    target_link_libraries(titlebar_gpu_tint_test PRIVATE Qt6::Gui KWin::kwin)
+    add_test(NAME titlebar_gpu_tint_test COMMAND titlebar_gpu_tint_test)
+    set_tests_properties(titlebar_gpu_tint_test PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 30)
+endif()
+
+# KWin 6.8 propagates paint success through the effect chain. Detect the
+# installed signature so older releases and distribution backports still work.
+if(TARGET kos_bridge)
+    get_target_property(_kos_paint_includes KWin::kwin INTERFACE_INCLUDE_DIRECTORIES)
+    foreach(_dir IN LISTS _kos_paint_includes)
+        if(EXISTS "${_dir}/effect/effect.h")
+            set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS "${_dir}/effect/effect.h")
+            file(READ "${_dir}/effect/effect.h" _kos_paint_header)
+            if(_kos_paint_header MATCHES "bool drawWindow\\(")
+                target_compile_definitions(kos_bridge PRIVATE KOS_KWIN_PAINT_RESULT_API)
+            endif()
+            break()
+        endif()
+    endforeach()
+    set_property(TARGET kos_bridge APPEND PROPERTY AUTOMOC_MACRO_NAMES
+        KWIN_EFFECT_FACTORY_SUPPORTED_ENABLED)
+endif()

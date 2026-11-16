@@ -54,6 +54,12 @@ QtObject {
     // light surface, and light ink on a dark surface. This role is shared by
     // launcher labels, symbolic tray icons, Dock glyphs and status content.
     readonly property color foregroundColor: AppearanceTokens.surface.pick(AppearanceTokens.colors.surfaceForeground, (isDark ? darkFg : lightFg))
+    // Status labels and glyphs share opaque black/white ink. The regular bar
+    // follows its resolved appearance; the mac-style plate instead chooses
+    // against its wallpaper/plate blend so every tint remains readable.
+    readonly property color barInk: AppearanceTokens.bar.macStyle
+        ? (AppearanceTokens.bar.macStripIsLight ? "#000000" : "#ffffff")
+        : (isDark ? "#ffffff" : "#000000")
     readonly property color secondaryForegroundColor: AppearanceTokens.surface.pick(AppearanceTokens.colors.surfaceVariantForeground, (isDark ? darkSecondaryFg : lightSecondaryFg))
     readonly property color tertiaryForegroundColor: AppearanceTokens.surface.pick(Qt.rgba(AppearanceTokens.colors.surfaceVariantForeground.r,
             AppearanceTokens.colors.surfaceVariantForeground.g,

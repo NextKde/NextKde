@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { readFileSync, readdirSync } from "node:fs";
 import { fileURLToPath } from "node:url";
+import { icons as shellIcons, roleName as shellIconRoleName } from "../../shell/desktop/modules/common/ShellIconMap.mjs";
 
 function read(relativePath) {
     return readFileSync(fileURLToPath(new URL(relativePath, import.meta.url)), "utf8");
@@ -56,8 +57,8 @@ const uiModuleCmake = read("./CMakeLists.txt");
 assert.doesNotMatch(uiModuleCmake,
     /colorize\/(?:Artwork|Wallpaper)ColorSource\.qml/,
     "standalone Kos.Ui never packages Quickshell-only color samplers");
-assert.match(windowSource, /color:\s*AppTheme\.glassActive\s*\?\s*"transparent"/,
-    "glass mode clears the native window exactly once");
+assert.match(windowSource, /color:\s*modernDesign\s*\|\|\s*AppTheme\.glassActive\s*\?\s*"transparent"/,
+    "glass and rounded windows clear the native window exactly once");
 assert.match(windowSource, /background:[\s\S]*color:\s*AppTheme\.windowSurface/,
     "window background uses the material surface selected by the shared theme");
 assert.match(windowSource, /color:\s*AppTheme\.windowTintSurface/,
@@ -92,25 +93,27 @@ for (const mode of ["dark", "light"]) {
         `${mode} dock indicator reaches AA contrast against dock background`);
 }
 const glassTextSource = read("../../shell/desktop/modules/common/GlassText.qml");
-// GlassText keeps the root type Text so every Text property passes through
+// GlassText inherits Text through ShellText so every Text property passes through
 // natively. Readability is now a two-way contract driven by the appearance
-// token: dark appearance keeps white type with a restrained outline, light
-// appearance drops to clean black type with no outline at all, and the chosen
-// ink is the token that decides both branches together.
-assert.match(glassTextSource, /^Text \{/m,
-    "glass text stays a Text so callers keep native Text properties");
+// token: dark appearance keeps white type over a soft area backdrop; light
+// appearance uses clean dark type. Neither branch adds a glyph outline.
+assert.match(glassTextSource, /^ShellText \{/m,
+    "glass text shares Shell text rendering while retaining Text properties");
+assert.match(read("../../shell/desktop/modules/common/ShellText.qml"), /^Text \{/m,
+    "shared Shell text retains Text layout and elision properties");
 assert.match(glassTextSource,
     /color:[\s\S]*AppearanceTokens\.isDarkTheme[\s\S]*"#ffffff"[\s\S]*"#000000"/,
     "glass text picks black-or-white ink from the appearance token");
-assert.match(glassTextSource,
-    /style:[\s\S]*AppearanceTokens\.isDarkTheme[\s\S]*Text\.Outline[\s\S]*Text\.Normal/,
-    "only the dark-appearance branch pays for an outline");
-assert.match(glassTextSource,
-    /styleColor:[\s\S]*AppearanceTokens\.isDarkTheme[\s\S]*Qt\.rgba\([\s\S]*"transparent"/,
-    "the light-appearance branch draws no outline at all");
-// The outline exists to hold white type over a bright backdrop; if the light
-// branch kept it, black type would gain an invisible halo and the two
-// appearances would stop being mirror images.
+assert.match(glassTextSource, /style:\s*Text\.Normal/,
+    "glass text retains clean glyphs");
+assert.doesNotMatch(glassTextSource, /Text\.(?:Outline|Raised|Sunken)/,
+    "readability must not add a glyph outline or embossing");
+assert.match(glassTextSource, /property bool shadowEnabled:[^\n]*AppearanceTokens\.isDarkTheme/,
+    "only light ink on dark glass requests the area backdrop");
+assert.match(glassTextSource, /sourceComponent:\s*Canvas\s*\{[\s\S]*opacity:\s*strength/,
+    "the area backdrop applies its faint strength during composition");
+assert.match(glassTextSource, /textWidth \+ padX \* 2[\s\S]*textHeight \+ padY \* 2/,
+    "the backdrop covers the text block with padding");
 assert.doesNotMatch(glassTextSource, /inkLuminance/,
     "glass readability no longer depends on a sampled ink luminance");
 
@@ -147,25 +150,16 @@ assert.match(pageCacheSource, /_lastUsed[\s\S]*PageCachePolicy\.trim/,
 assert.match(pageCacheSource, /asynchronous:[\s\S]*index\s*!==\s*root\.currentIndex/,
     "inactive page construction cannot block the selected page");
 
-for (const app of ["calendar", "todo", "weather", "music"]) {
-    const source = read(`../../apps/${app}/qml/Main.qml`);
-    assert.match(source, /color:\s*AppTheme\.sidebarSurface/,
-        `${app} has an adaptive semantic sidebar material`);
-    assert.doesNotMatch(source, /withAlpha\(AppTheme\.sidebar/,
-        `${app} sidebar does not expose desktop content`);
-    assert.doesNotMatch(source, /\b(?:Button|ToolButton|RoundButton)\s*\{/,
-        `${app} uses the shared rounded button controls`);
-    assert.match(source, /KosSettingsDialog\s*\{/,
-        `${app} exposes the shared settings panel`);
-    assert.match(source, /Accessible\.name:\s*qsTr\(".*settings"\)/,
-        `${app} settings entry has an accessible label`);
-    assert.match(source, /function handleActivation\(activationArgs, workingDirectory\)/,
-        `${app} accepts normalized reuse context from the shared runner`);
-    assert.doesNotMatch(source,
-        /function [A-Za-z0-9_]+\([^)]*\barguments\b/,
-        `${app} does not shadow JavaScript's implicit arguments object`);
-}
-
+const collapsibleSidebar = read("./foundation/KosSidebar.qml");
+assert.match(collapsibleSidebar, /property color surfaceColor:\s*AppTheme\.sidebarSurface/,
+    "collapsible sidebars default to the adaptive semantic material");
+assert.match(collapsibleSidebar, /color:\s*root\.surfaceColor/,
+    "collapsible sidebars render the selected semantic material");
+assert.doesNotMatch(collapsibleSidebar, /withAlpha\(AppTheme\.sidebar/,
+    "collapsible sidebars do not expose desktop content");
+assert.match(collapsibleSidebar, /enabled:\s*expanded/,
+    "collapsed navigation cannot take keyboard focus");
+// Application integration assertions moved with their independent repositories.
 const settingsDialog = read("./foundation/KosSettingsDialog.qml");
 for (const option of ["appearanceMode", "materialMode", "materialOpacity",
                       "accentName", "reduceTransparency", "reduceMotion"])
@@ -184,39 +178,27 @@ assert.match(settingsDialog, /Accessible\.RadioButton[\s\S]*Accessible\.checked/
 // style. Under Material the liquid-only controls are absent, and each card's
 // height has to shrink by exactly the rows it drops -- a height that ignores
 // the hidden rows leaves a blank band where they used to be.
+// The settings app is built from the shared compact form: Demo.SettingsGroup
+// and Demo.SettingsItem size themselves from their rows, so hiding a row
+// shrinks the card. The tripwire is therefore that the glass-follows row stays
+// a conditional item inside such a group, and that no page reintroduces a
+// hardcoded Material-conditional card height -- the old way to leave a blank
+// band where the hidden rows used to be.
 const settingsApp = read("../../apps/settings/main.qml");
-assert.match(settingsApp,
-    /implicitHeight:\s*displayPage\.isMaterialDesign\s*\?\s*54\s*:\s*109/,
-    "the appearance card drops the glass-follows-mode row under Material");
-assert.match(settingsApp,
-    /implicitHeight:\s*displayPage\.isMaterialDesign\s*\?\s*48\s*:\s*145/,
-    "the glass card keeps only the blur row under Material");
-// Both glass-follows-mode rows (the row and its separator) must hide together:
-// hiding only the row leaves a stray rule under the appearance-mode switch.
-const glassFollowsSlice = settingsApp.slice(
-    settingsApp.indexOf('text: "液态玻璃跟随外观模式"') - 900,
-    settingsApp.indexOf('text: "液态玻璃跟随外观模式"'));
-assert.ok((glassFollowsSlice.match(/visible:\s*!displayPage\.isMaterialDesign/g)
-    || []).length >= 2,
-    "the glass-follows-mode row hides with its separator under Material");
-assert.match(settingsApp, /function saveGlassFollowsAppearanceMode/,
+const displaySettingsPage = read("../../apps/settings/pages/DisplaySettingsPage.qml");
+const themeSettingsPage = read("../../apps/settings/pages/ThemeSettingsPage.qml");
+assert.match(displaySettingsPage,
+    /Demo\.SettingsGroup\s*\{[\s\S]{0,3000}?Demo\.SettingsItem\s*\{[\s\S]{0,400}?visible:\s*!displayPage\.isMaterialDesign/,
+    "the glass-follows-mode row is a conditional item in a content-sized group");
+assert.match(displaySettingsPage, /function saveGlassFollowsAppearanceMode/,
     "the glass-follows-mode preference stays wired for non-Material styles");
-// The card that hosts the gallery and those controls must measure itself from
-// its contents. A literal height sized for the macOS layout leaves a dead band
-// under Material, where the embedded page is ~150px shorter.
-//
-// The gap between the gallery term and the Material term is left generous on
-// purpose: the sum legitimately grows as the card gains conditionally-visible
-// rows (the Material colour-source control is one), and a tight bound turned
-// that into a false failure. What the assertion actually guards is that both
-// terms are *present in the same expression* — the hardcoded height is caught
-// by the `doesNotMatch` below.
-assert.match(settingsApp,
-    /implicitHeight:\s*16\s*\+\s*styleGallery\.height[\s\S]{0,400}?themeMaterialSettings\.implicitHeight/,
-    "the theme card derives its height from the gallery and the embedded page");
-assert.match(settingsApp, /Layout\.preferredHeight:\s*implicitHeight/,
-    "the theme card feeds that derived height into the layout");
-assert.doesNotMatch(settingsApp, /Layout\.preferredHeight:\s*550\b/,
+assert.doesNotMatch(displaySettingsPage,
+    /implicitHeight:\s*[\w.]*[Pp]age\.isMaterialDesign\s*\?/,
+    "the appearance cards no longer hardcode a Material-conditional height");
+assert.match(themeSettingsPage,
+    /Demo\.SettingsGroup\s*\{[\s\S]{0,4000}?Demo\.SettingsAppearancePreview/,
+    "the theme shape gallery lives in a content-sized settings group");
+assert.doesNotMatch(themeSettingsPage, /Layout\.preferredHeight:\s*550\b/,
     "the theme card no longer hardcodes the macOS-only height");
 
 // 玻璃文字墨色 is driven by the one option the settings row above already owns
@@ -250,21 +232,33 @@ assert.match(read("../../shell/desktop/modules/bar/NetworkTraffic.qml"),
     /onGlyphInkChanged[\s\S]*?requestPaint\(\)/,
     "the Bar traffic arrow repaints when the ink it strokes with moves");
 for (const [path, description] of [
-    ["../../shell/desktop/modules/bar/ControlCenterPanel.qml", "Control Centre chrome"],
-    ["../../shell/desktop/modules/bar/NetworkPanel.qml", "network panel chrome"],
-    ["../../shell/desktop/modules/bar/NetworkTraffic.qml", "Bar traffic arrow"],
+    ["../../shell/desktop/modules/bar/controlcenter/SubmenuCard.qml", "Control Centre chrome"],
     ["../../shell/desktop/modules/bar/WifiSignalIcon.qml", "shared Wi-Fi glyph"],
     ["../../shell/desktop/modules/quicksearch/QuickSearchWindow.qml", "Quick Search chrome"],
 ]) {
     assert.match(read(path), /content\.glassInk\(/,
         `${description} takes the glass ink instead of a white literal`);
 }
+assert.match(read("../../shell/desktop/modules/bar/NetworkTraffic.qml"),
+    /readonly property color glyphInk:\s*ThemeService\.barInk/,
+    "the Bar traffic arrow shares the status labels' opaque appearance ink");
+// NetworkPanel now delegates ink to the surface, which resolves the same
+// glass roles. Assert both ends of that delegation rather than requiring the
+// older direct AppearanceTokens call in every consumer.
+const networkInkPanel = read("../../shell/desktop/modules/bar/NetworkPanel.qml");
+assert.match(networkInkPanel, /LiquidGlassPanel\s*\{\s*id:\s*panelSurface/);
+assert.match(networkInkPanel, /color:\s*panelSurface\.foregroundColor/);
+assert.match(networkInkPanel, /color:\s*panelSurface\.secondaryForegroundColor/);
+const glassPanel = read("../../shell/desktop/modules/common/LiquidGlassPanel.qml");
+assert.match(glassPanel, /readonly property color foregroundColor:\s*bodySurface\.foregroundColor/);
+assert.match(glassPanel, /readonly property color secondaryForegroundColor:\s*bodySurface\.secondaryForegroundColor/);
 // A second switch would split one decision in two and let the halves disagree,
 // and the rejected draft of this rule is exactly what that looked like.
 assert.doesNotMatch(read("../../shell/desktop/modules/common/AppearanceConfigService.qml"),
     /glassInkFollowsAppearanceMode/,
     "the glass ink reuses the existing option instead of adding its own");
-assert.doesNotMatch(settingsApp, /glassInkFollowsAppearanceMode|文字颜色跟随外观/,
+assert.doesNotMatch([settingsApp, displaySettingsPage, themeSettingsPage].join("\n"),
+    /glassInkFollowsAppearanceMode|文字颜色跟随外观/,
     "the appearance card grows no second glass row");
 
 const switchSource = read("./foundation/KosSwitch.qml");
@@ -282,54 +276,6 @@ assert.match(segmentedSource,
     /onCurrentIndexChanged:[\s\S]{0,320}_visualIndex = clampedIndex\(currentIndex\)/,
     "segmented choices immediately mirror externally changed state");
 
-const calendar = read("../../apps/calendar/qml/Main.qml");
-assert.match(calendar,
-    /KosPageCache[\s\S]{0,320}cacheLimit:\s*2[\s\S]{0,220}monthPage[\s\S]{0,100}weekPage[\s\S]{0,100}dayPage/,
-    "Calendar keeps its active and recent date views without retaining every page");
-assert.match(calendar, /model:\s*42/, "calendar mini-month contains six complete weeks");
-assert.doesNotMatch(calendar, /\bCheckBox\s*\{/,
-    "calendar uses custom rounded toggles instead of native checkboxes");
-assert.match(calendar, /property date now[\s\S]*interval:\s*60000/,
-    "calendar refreshes date and time-dependent UI while it remains open");
-assert.match(calendar, /Qt\.locale\(\)\.firstDayOfWeek/,
-    "calendar follows the locale's first weekday");
-assert.match(calendar, /date\.getDay\(\) - localeFirstDayOfWeek \+ 7/,
-    "calendar date offsets support both Sunday- and Monday-first locales");
-for (const calendarView of ["CalendarMonthView.qml", "CalendarScheduleView.qml"]) {
-    const source = read(`../../apps/calendar/qml/${calendarView}`);
-    assert.match(source, /required property date currentTime/,
-        `${calendarView} receives the observable application clock`);
-    assert.doesNotMatch(source, /new Date\(\)/,
-        `${calendarView} does not freeze an unobservable current time in bindings`);
-}
-const calendarMonth = read("../../apps/calendar/qml/CalendarMonthView.qml");
-assert.doesNotMatch(calendarMonth, /"✓ "/,
-    "completed calendar items use shape and typography instead of checkmark text");
-assert.doesNotMatch(calendarMonth, /\b(?:Button|ToolButton|RoundButton)\s*\{/,
-    "the full calendar month view uses rounded shared or custom controls");
-
-const todo = read("../../apps/todo/qml/Main.qml");
-assert.match(todo, /property date now[\s\S]*interval:\s*60000/,
-    "Todo refreshes today and overdue state while it remains open");
-assert.doesNotMatch(todo, /function todayKey\(\)[\s\S]{0,80}new Date\(\)/,
-    "Todo date filters depend on its observable application clock");
-assert.match(todo, /pendingItemId[\s\S]*onSnapshotChanged:\s*root\.openPendingItem/,
-    "Todo retains widget item deep links until its async snapshot arrives");
-
-const music = read("../../apps/music/qml/Main.qml");
-assert.match(music,
-    /KosPageCache[\s\S]{0,220}cacheLimit:\s*3[\s\S]{0,120}pinnedIndexes:\s*\[0\]/,
-    "Music uses a bounded cache and retains the primary library page");
-assert.match(music, /function activationUri[\s\S]*workingDirectory/,
-    "reused Music instances resolve relative files in the caller's directory");
-assert.match(music,
-    /ButtonGroup \{ id: navigationGroup \}[\s\S]*ButtonGroup\.group: navigationGroup[\s\S]*ButtonGroup\.group: navigationGroup/,
-    "Music navigation stays exclusively selected when its active item is clicked again");
-
-const weather = read("../../apps/weather/qml/Main.qml");
-assert.match(weather, /ButtonGroup \{ id: unitsGroup \}[\s\S]*ButtonGroup\.group: unitsGroup[\s\S]*ButtonGroup\.group: unitsGroup/,
-    "Weather unit choices form one exclusive accessible group");
-
 // LiquidTextField is shell-owned: it is directory-imported by the Quickshell
 // surfaces where the AppTheme singleton is not in scope, so it keeps the
 // shell's own fixed motion policy. The AppTheme-backed foundation controls
@@ -339,26 +285,6 @@ for (const control of ["KosButton", "KosRoundButton", "KosSlider", "KosSwitch"])
     assert.doesNotMatch(source, /duration:\s*(?:130|150)/,
         `${control} honors the reduce-motion duration tokens`);
 }
-
-const preferences = read("../../apps/common/src/ApplicationPreferences.cpp");
-assert.match(preferences, /KosApplications/,
-    "appearance preferences share one store across all applications");
-assert.match(preferences, /setInterval\(1000\)/,
-    "appearance preferences refresh across running application processes");
-
-const runner = read("../../apps/common/src/ApplicationRunner.cpp");
-assert.match(runner, /KWindowEffects::enableBlurBehind/,
-    "application windows request KDE native blur when it is available");
-assert.match(runner, /QQuickWindow::setDefaultAlphaBuffer\(true\)/,
-    "application windows allocate an alpha-capable framebuffer before creation");
-assert.match(runner, /isolatedTestRun[\s\S]*!isolatedTestRun/,
-    "smoke and screenshot runs cannot be short-circuited by a primary instance");
-
-const activation = read("../../apps/common/src/ApplicationActivation.cpp");
-assert.match(activation, /XDG_ACTIVATION_TOKEN[\s\S]*setCurrentXdgActivationToken/,
-    "secondary launches forward the Wayland activation token to the primary window");
-assert.match(activation, /AcquireResult::Error/,
-    "a failed single-instance hand-off is not reported as a successful launch");
 
 const glassEffect = read("../../kwin/glass-effect/src/blur.cpp");
 assert.match(glassEffect, /hasExplicitBlurRequest[\s\S]*explicitlyRequestedBlur/,
@@ -372,15 +298,14 @@ assert.match(glassEffect, /if \(m_valid\)[\s\S]*stackingOrder\(\)[\s\S]*updateBl
 const deskCenter = read("../../shell/desktop/modules/deskcenter/DeskCenterWindow.qml");
 assert.doesNotMatch(deskCenter, /#101010|#17151c|#170f14/,
     "desktop widget palette avoids near-black blocks");
-for (const [widget, desktopId] of [
-    ["Weather", "kos-weather"],
-    ["Calendar", "kos-calendar"],
-    ["Todo", "kos-todo"],
-    ["Music", "kos-music"]
-]) {
-    assert.match(deskCenter, new RegExp(`launchById\\("${desktopId}"`),
-        `${widget} widget launches its matching installed application`);
+for (const app of ["weather", "calendar"]) {
+    assert.match(deskCenter, new RegExp(`IndependentAppWidgetService\\.open\\("${app}"`),
+        `${app} widgets open their inspected installation through the identity-bound service`);
+    assert.doesNotMatch(deskCenter, new RegExp(`launchById\\("kos-${app}"`),
+        `${app} widgets never fall back to a different desktop identity`);
 }
+assert.match(deskCenter, /launchById\("listenfree"/,
+    "Music retains its independent player launch behavior");
 
 const appActions = read("../../shell/desktop/modules/common/AppActionService.qml");
 assert.doesNotMatch(appActions,
@@ -395,12 +320,12 @@ assert.doesNotMatch(appActions, /_queueDeepLink|_deepLinkDelay/,
 const popupMotion = read("../../shell/desktop/modules/common/PopupMotion.qml");
 const appearanceTokens = read("../../shell/desktop/modules/common/AppearanceTokens.qml");
 const contextMenu = read("../../shell/desktop/modules/common/ContextMenu.qml");
-assert.match(appearanceTokens, /popupOpenDuration:\s*150[\s\S]*popupCloseDuration:\s*140/,
-    "shared popup motion uses Launchpad's 150ms entrance timing");
+assert.match(appearanceTokens, /popupOpenDuration:\s*base\.duration[\s\S]*popupCloseDuration:\s*base\.duration/,
+    "shared popup motion uses the base tier for both directions");
 assert.match(appearanceTokens, /popupStartScale:\s*0\.96[\s\S]*popupAnchorOffset:\s*20/,
     "shared popup motion uses Launchpad's 0.96 settle scale");
-assert.match(popupMotion, /Easing\.OutCubic\s*:\s*Easing\.InCubic/,
-    "popup open and close use cubic easing without overshoot");
+assert.match(popupMotion, /openEasing:\s*AppearanceTokens\.motion\.enterCurve[\s\S]*closeEasing:\s*AppearanceTokens\.motion\.exitCurve/,
+    "popup open and close use directional motion policy curves without overshoot");
 assert.match(contextMenu, /centerBelowAnchor[\s\S]*PopupAdjustment\.Slide/,
     "centered application menus only slide at screen edges");
 const appLauncherWindow = read("../../shell/desktop/modules/applauncher/AppLauncherWindow.qml");
@@ -413,11 +338,14 @@ const appIconSource = read("../../shell/desktop/modules/common/AppIcon.qml");
 const iconThemeReloadSource = read("../../shell/desktop/modules/common/IconThemeReloadService.qml");
 const quickSearchWindow = read("../../shell/desktop/modules/quicksearch/QuickSearchWindow.qml");
 assert.match(appLauncherWindow,
-    /PopupMotion\s*\{[\s\S]*openDuration:\s*300[\s\S]*closeDuration:\s*240/,
-    "the large launcher surface uses a slower reversible entrance and exit");
+    /LauncherMotion\s*\{[\s\S]*target:\s*launcherContent/,
+    "the launcher coordinates tile motion while retaining its content container");
+const launcherMotion = read("../../shell/desktop/modules/applauncher/LauncherMotion.qml");
+assert.match(launcherMotion, /function finishIfSettled\(\)[\s\S]*changing \|\| !glassFinished \|\| pendingIcons !== 0[\s\S]*if \(!requestedOpen\) mapped = false/,
+    "the launcher remains mapped until its closing tile animations finish");
 assert.match(appLauncherWindow,
-    /property var applications:\s*\[\][\s\S]*applicationCatalogRefresh[\s\S]*model:\s*!root\.isFullscreenMode/,
-    "Launchpad keeps its resolved catalogue and visible-mode delegates warm between opens");
+    /property var applications:\s*\[\][\s\S]*applicationCatalogRefresh[\s\S]*model:\s*root\.contentAlive && !root\.isFullscreenMode/,
+    "Launchpad retains its catalogue while delegates follow the content lifetime and visible mode");
 assert.match(appLauncherWindow,
     /property bool outputAvailable:\s*false[\s\S]*visible:\s*root\.outputAvailable/,
     "Launchpad retains one backing window while a real output is available");
@@ -430,10 +358,10 @@ assert.match(appLauncherWindow,
 assert.match(appLauncherWindow,
     /BackgroundEffect\.blurRegion:[\s\S]*root\.panelVisible/,
     "the closed Launchpad surface never publishes a compositor blur region");
-assert.match(appLauncherWindow, /blurAnchor:\s*launcherCard/,
-    "launcher native glass follows the animated card, not the fixed layout");
-assert.match(appLauncherWindow, /width:\s*launcherRevealClip\.width \* root\.panelWidthProgress[\s\S]*height:\s*launcherRevealClip\.height \* root\.panelHeightProgress/,
-    "the launcher backdrop expands and contracts with its contents");
+assert.match(appLauncherWindow, /blurAnchor:\s*background/,
+    "launcher native glass follows the stationary backdrop");
+assert.match(appLauncherWindow, /id:\s*launcherCard[\s\S]*width:\s*launcherRevealClip\.width\s+height:\s*launcherRevealClip\.height/,
+    "the launcher backdrop retains its full dimensions during tile motion");
 assert.match(appIconSource,
     /backer\.cache:\s*(?:!root\.needsEffect\s*&&\s*)?IconThemeReloadService\.pixmapCacheAllowed/,
     "shared app icons cache decoded pixmaps only on the direct-render path");
@@ -444,7 +372,7 @@ assert.match(iconThemeReloadSource,
     /pixmapCacheAllowed:\s*true[\s\S]*pixmapCacheAllowed = false[\s\S]*revision\+\+/,
     "an icon-theme change bypasses stale process-wide decoded pixmaps");
 assert.match(dockAnimationSource,
-    /windowPreviewDelay:\s*300/,
+    /windowPreviewDelay:\s*220/,
     "Dock previews debounce pointer passes before requesting a full-screen capture");
 // The four-pixel separation from the Bar moved from a per-card offset into the
 // panel's own anchor margins when the panel became one window. The value and
@@ -464,6 +392,15 @@ const barWindow = read("../../shell/desktop/modules/bar/BarWindow.qml");
 const barAutoHide = read("../../shell/desktop/modules/bar/BarAutoHideController.qml");
 const barDateStatus = read("../../shell/desktop/modules/bar/BarDateStatus.qml");
 const controlCenterPanel = read("../../shell/desktop/modules/bar/ControlCenterPanel.qml");
+const controlCenterModuleDirectory = new URL(
+    "../../shell/desktop/modules/bar/controlcenter/", import.meta.url);
+const controlCenterModules = new Map(readdirSync(controlCenterModuleDirectory, { withFileTypes: true })
+    .filter(entry => entry.isFile() && entry.name.endsWith(".qml"))
+    .map(entry => [entry.name, readFileSync(new URL(entry.name, controlCenterModuleDirectory), "utf8")]));
+function controlCenterModule(name) {
+    assert.ok(controlCenterModules.has(name), `Control Center module ${name} exists`);
+    return controlCenterModules.get(name);
+}
 const networkStatus = read("../../shell/desktop/modules/bar/NetworkStatus.qml");
 const networkPanel = read("../../shell/desktop/modules/bar/NetworkPanel.qml");
 const wifiSignalIcon = read("../../shell/desktop/modules/bar/WifiSignalIcon.qml");
@@ -480,39 +417,54 @@ assert.match(barDateStatus, /GlassText\s*\{/,
 // readability outline. The session-confirmation dialog is the exception: it is
 // a KosFloatPanel with its own opaque content surface, so its labels read
 // ThemeService/content colours on a solid fill and an outline would be wrong.
-// Slice that dialog out before checking, so the assertion keeps guarding the
-// glass surfaces without forbidding plain Text on the opaque one.
+// Check every glass module independently, exempting only the opaque dialog.
 const sessionConfirmStart = controlCenterPanel.indexOf("id: sessionConfirm");
 assert.ok(sessionConfirmStart > 0,
     "the session confirmation dialog is still present to be exempted");
-const controlCenterGlass = controlCenterPanel.slice(0, sessionConfirmStart);
-assert.doesNotMatch(controlCenterGlass, /^\s*Text\s*\{/m,
-    "control-center labels use bidirectional glass readability outlines");
+assert.match(controlCenterPanel,
+    /ControlParts\.SessionConfirmationDialog\s*\{\s*id:\s*sessionConfirm\b/,
+    "the panel composes the opaque confirmation dialog");
+controlCenterModule("SessionConfirmationDialog.qml");
+for (const [name, source] of [["ControlCenterPanel.qml", controlCenterPanel],
+    ...controlCenterModules]) {
+    if (name !== "SessionConfirmationDialog.qml")
+        assert.doesNotMatch(source, /^\s*Text\s*\{/m,
+            `${name}: control-center labels use bidirectional glass readability outlines`);
+}
 assert.match(globalMenuSource,
     /ContextMenu\s*\{[\s\S]{0,180}baseColor:\s*ThemeService\.backgroundColor[\s\S]{0,120}foregroundColor:\s*ThemeService\.foregroundColor/,
     "application menus follow the stable light/dark material palette");
 assert.match(barStatusArea, /iconSize:\s*18/,
     "top-bar tray icons use the enlarged 18px optical size");
 assert.match(wifiSignalIcon,
-    /signalStrength\s*<\s*30\s*\?\s*1\s*:\s*\(signalStrength\s*<\s*60\s*\?\s*2\s*:\s*3\)/,
-    "the shared Wi-Fi glyph exposes three live signal-quality levels");
+    /BundledIcon\s*\{/,
+    "the Bar resolves its signal glyph through the shared shell adapter");
+assert.match(wifiSignalIcon,
+    /signalStrength\s*<\s*30\s*\?\s*1\s*:\s*signalStrength\s*<\s*60\s*\?\s*2\s*:\s*3/,
+    "the Wi-Fi adapter exposes three live signal-quality levels");
+for (const [state, glyph] of [["weak", "wifi_1"], ["medium", "wifi_2"], ["strong", "wifi"]]) {
+    assert.equal(shellIcons["network.wifi." + state], glyph,
+        `the catalog supplies the shared font glyph for ${state} Wi-Fi`);
+}
 assert.match(networkStatus,
     /WifiSignalIcon\s*\{[\s\S]{0,420}signalStrength:\s*NetworkService\.signalStrength/,
     "the top-bar Wi-Fi icon renders NetworkManager signal quality");
 assert.match(networkPanel,
-    /WifiSignalIcon\s*\{[\s\S]{0,420}signalStrength:\s*NetworkService\.signalStrength/,
-    "the network panel reuses the live Wi-Fi signal glyph");
-for (const marker of ["Card 1: Wi-Fi", "Card 2: Bluetooth"]) {
-    const start = controlCenterPanel.indexOf(marker);
-    const nextCard = controlCenterPanel.indexOf("// ── Card", start + marker.length);
-    const section = controlCenterPanel.slice(start,
-        nextCard < 0 ? controlCenterPanel.length : nextCard);
+    /WifiSignalIcon\s*\{\s*id:\s*rowWifiGlyph[\s\S]{0,300}signalStrength:\s*modelData\.signalStrength/,
+    "each network row binds its own strength to the shared glyph");
+for (const [name, owner, intent] of [
+    ["WifiCard", "wifiCard", "networkRequested"],
+    ["BluetoothCard", "bluetoothCard", "bluetoothRequested"]]) {
+    const section = controlCenterModule(name + ".qml");
     assert.match(section,
         /id:\s*(?:wifi|bluetooth)TogglePointer[\s\S]{0,420}onClicked:[\s\S]{0,140}set(?:Wifi|Bluetooth)Enabled/,
-        `${marker} round disc owns its power toggle`);
+        `${name} round disc owns its power toggle`);
     assert.match(section,
-        /leftMargin:\s*49[\s\S]{0,520}onClicked:\s*panel\.(?:network|bluetooth)Requested\(\)/,
-        `${marker} card body opens details without covering the toggle`);
+        new RegExp(`leftMargin:\\s*49[\\s\\S]{0,520}onClicked:\\s*${owner}\\.pageRequested\\(\\)`),
+        `${name} card body requests details without covering the toggle`);
+    assert.match(controlCenterPanel,
+        new RegExp(`ControlParts\\.${name}\\s*\\{[\\s\\S]*?onPageRequested:\\s*panel\\.${intent}\\(\\)`),
+        `${name} detail intent is forwarded by the panel`);
 }
 for (const component of ["NetworkStatus", "Battery", "SettingsButton",
                          "ControlCenterToggle"]) {
@@ -526,10 +478,10 @@ assert.doesNotMatch(controlCenterPanel,
 const controlCenterCard = read("../../shell/desktop/modules/bar/ControlCenterCard.qml");
 const controlCenterSlider = read("../../shell/desktop/modules/bar/ControlCenterSlider.qml");
 const statusTooltip = read("../../shell/desktop/modules/bar/StatusTooltip.qml");
-assert.match(statusTooltip, /color:\s*"#000000"/,
-    "built-in status tooltips use a black background");
-assert.ok((statusTooltip.match(/color:\s*"#ffffff"/g) || []).length >= 2,
-    "built-in status tooltip text is always white");
+assert.match(statusTooltip, /ControlCenterGlass\s*\{/,
+    "built-in status tooltips use the shared glass surface");
+assert.ok((statusTooltip.match(/color:\s*tooltipSurface\.(?:foregroundColor|secondaryForegroundColor)/g) || []).length >= 2,
+    "built-in status tooltip text follows the surface colors");
 for (const statusSource of [networkStatus, read("../../shell/desktop/modules/bar/Battery.qml"),
                             read("../../shell/desktop/modules/bar/ControlCenterToggle.qml")]) {
     assert.match(statusSource, /StatusTooltip\s*\{/,
@@ -537,11 +489,15 @@ for (const statusSource of [networkStatus, read("../../shell/desktop/modules/bar
 }
 assert.match(controlCenterSlider, /LiquidControls\.LiquidSlider\s*\{/,
     "Control Center sliders share one styled LiquidSlider wrapper");
-assert.ok((controlCenterPanel.match(/ControlCenterSlider\s*\{/g) || []).length >= 4,
+const sliderSources = ["SoundCard.qml", "BrightnessCard.qml", "SoundPage.qml", "BrightnessPage.qml"]
+    .map(controlCenterModule);
+for (const [index, source] of sliderSources.entries())
+    assert.match(source, /ControlCenterSlider\s*\{/,
+        `volume/brightness surface ${index + 1} uses the shared slider`);
+assert.ok(sliderSources.reduce((count, source) =>
+    count + (source.match(/ControlCenterSlider\s*\{/g) || []).length, 0) >= 4,
     "volume and brightness surfaces reuse the Control Center slider style");
-const wifiSubmenuStart = controlCenterPanel.indexOf("id: wifiSubmenuView");
-const bluetoothSubmenuStart = controlCenterPanel.indexOf("id: bluetoothSubmenuView");
-const wifiSubmenu = controlCenterPanel.slice(wifiSubmenuStart, bluetoothSubmenuStart);
+const wifiSubmenu = controlCenterModule("WifiPage.qml");
 assert.doesNotMatch(wifiSubmenu, /glyphColor:[^\n]*#000000/,
     "Wi-Fi list icons never switch to black");
 // The per-card coordinator suppression model is gone: the Control Center is
@@ -566,18 +522,22 @@ for (const marker of ["Card 4: Screenshot", "Card 5: Dark Mode", "Card 6: Power"
     assert.match(section, /width:\s*24[\s\S]{0,80}height:\s*24/,
         `${marker} uses a 24x24 icon container`);
 }
-// 图标自 2026-09-16 起内联在 BundledIcons.qml 里（例外只有两处：Dock 的启动器
-// logo 读 shell/desktop/assets/applauncher.svg，Dock 的回收站跟随系统图标主题），
-// 所以这里改从登记表里取那条数据来验证。
+// Feature choices live in the Shell catalog; the pinned font owns glyph shapes.
 const iconRegistry = read("../../shell/desktop/modules/common/BundledIcons.qml");
-// 注：登记名 "power" 画的是电源键（原先在 assets/logout.svg，现已内联）；"注销" 另画。
-const powerEntry = iconRegistry.match(/^\s*"power": '(.*)',$/m);
-assert.ok(powerEntry, "the power/logout icon is registered in BundledIcons");
-const powerGlyph = powerEntry[1];
-assert.match(powerGlyph, /fill="none"[\s\S]*stroke-width="70"/,
-    "the power glyph uses the same light outline weight as adjacent controls");
-assert.doesNotMatch(powerGlyph, /<path\s+fill=/,
-    "the power glyph does not regress to an oversized solid silhouette");
+const iconMap = read("../Icons/IconMap.js");
+const interfaceIcon = read("../Icons/Icon.qml");
+assert.equal(shellIconRoleName("powerOff"), "power",
+    "the power action retains its semantic icon role");
+assert.equal(shellIcons["session.poweroff"], "power",
+    "the session sheet resolves power through the same catalog");
+assert.equal(shellIcons["desktop.menu.rename"], "",
+    "sparse context menus can intentionally leave a leading icon blank");
+assert.match(iconRegistry, /Symbols\.IconRegistry\.has\(key\)/,
+    "the shell registry delegates interface symbols to the shared icon module");
+assert.match(iconMap, /"power":\s*"[^"\n]+"/,
+    "the pinned font map supplies the power glyph");
+assert.match(interfaceIcon, /font\.weight:\s*Font\.Normal/,
+    "interface glyphs use the font's consistent normal weight");
 
 // ── Glass selection highlight visual contracts ──────────────────────────────
 const selectionHighlightSource = read("./controls/SelectionHighlight.qml");
@@ -599,9 +559,22 @@ for (const [path, desc] of [
     ["../../shell/desktop/modules/quicksearch/QuickSearchWindow.qml", "Quick Search results"],
     ["../../shell/desktop/modules/dock/DockWindowPreview.qml", "Dock preview cards"],
     ["../../shell/desktop/modules/notifications/NotificationWindow.qml", "Notification action buttons"],
+    ["../../shell/desktop/modules/bar/NetworkPanel.qml", "Network panel Wi-Fi list and settings"],
 ]) {
     assert.match(read(path), /SelectionHighlight\s*\{/,
         `${desc} integrates SelectionHighlight glass selection`);
 }
+
+// ── Notification history pane contracts ─────────────────────────────────────
+const notificationHistoryPane = read("../../shell/desktop/modules/bar/NotificationHistoryPane.qml");
+assert.match(notificationHistoryPane,
+    /footerButton[\s\S]*visible:\s*NotificationHistoryService\.count\s*>\s*0\s*&&/,
+    "notification deck footer button only appears when history is non-empty");
+assert.match(notificationHistoryPane,
+    /function clearHistory\(\)[\s\S]*reset\(\)/,
+    "clearing notification history resets the deck expansion state");
+assert.match(notificationHistoryPane,
+    /onHistoryUpdated[\s\S]*NotificationHistoryService\.count === 0[\s\S]*pane\.reset\(\)/,
+    "dropping notification count to zero resets deck expansion state");
 
 console.log("KOS UI visual contract: all checks passed");

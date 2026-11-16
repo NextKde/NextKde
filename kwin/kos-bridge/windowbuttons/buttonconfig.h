@@ -1,5 +1,6 @@
 #pragma once
 
+#include <QColor>
 #include <QFileSystemWatcher>
 #include <QHash>
 #include <QObject>
@@ -7,6 +8,7 @@
 #include <QVector>
 
 #include <functional>
+#include <array>
 
 #include "panelgeometry.h"
 #include "windowrules.h"
@@ -19,6 +21,7 @@ enum class PanelBackground {
     Auto,  // follow the window's own title bar pixels
     Dark,
     Light,
+    Custom, // explicit hex / RGB color configured by user
 };
 
 // Whether the panel is drawn over windows KWin decorates itself.
@@ -30,6 +33,12 @@ enum class DecoratedWindows {
     Auto,
     Always,
     Never,
+};
+
+// Controls whether traffic light glyphs (x, -, +) are always visible or only on hover.
+enum class GlyphMode {
+    Always, // always visible (default)
+    Hover,  // macOS style: hide glyphs unless hovering over button cluster
 };
 
 // Which of AppConfig's keys a JSON object named. A config is built by merging
@@ -51,10 +60,30 @@ enum AppField : AppFieldMask {
     AppFieldInterceptMargin = 1u << 8,
     AppFieldBackground = 1u << 9,
     AppFieldDecoratedWindows = 1u << 10,
+    AppFieldGlyphMode = 1u << 11,
+    AppFieldNativeGtkControls = 1u << 12,
 };
 
 struct AppConfig {
     bool showButtons = true;
+    // Explicitly qualified GTK CSD windows only. SSD still needs our panel.
+    bool nativeGtkControls = false;
+    // Runtime policy for qualified self-drawn apps, independent of GTK or
+    // saved overlay geometry. Cooperative surface negotiation supersedes it.
+    bool nativeAppControls = false;
+    // Runtime-only, negotiated per wl_surface. Never read from app-ID rules.
+    bool cooperativeControls = false;
+    QRectF cooperativeRect;
+    std::array<QRectF, 3> cooperativeButtons; // maximize, minimize, close; empty means absent
+    bool usesNativeGtkControls(bool hasDecoration) const
+    {
+        return nativeGtkControls && !hasDecoration;
+    }
+    bool usesClientControls(bool hasDecoration) const
+    {
+        return (nativeGtkControls || nativeAppControls) && !hasDecoration;
+    }
+    GlyphMode glyphMode = GlyphMode::Always;
     // Where the panel is and how big it is: the part of this struct an adjust
     // session changes and a machine-written rule stores (WindowRuleStore).
     PanelGeometry geometry;
@@ -68,6 +97,7 @@ struct AppConfig {
     // stop that, and it is per application because the controls are.
     qreal interceptMargin = 5.0;
     PanelBackground background = PanelBackground::Auto;
+    QColor customBackground;
     // What was configured. Merged key by key like every other field.
     DecoratedWindows decoratedWindows = DecoratedWindows::Auto;
     // The above resolved against the decoration KWin is configured to use. Set
@@ -140,6 +170,7 @@ private:
     QString m_configPath;
     QString m_kwinrcPath;
     bool m_kosDecorationSelected = false;
+    bool m_independentButtonBackground = false;
     bool m_watchingKwinrc = false;
 
     // The watchers below are connected with this as the context object, so the

@@ -1,6 +1,7 @@
 import QtQuick
 import QtQuick.Effects
 import Quickshell
+import "../../../shared/qml/i18n"
 import qs.desktop.modules.common
 import qs.desktop.modules.weather
 import "../../../Kos/Ui"
@@ -11,6 +12,16 @@ import "../../../Kos/Ui"
 Item {
     id: carousel
     signal editRequested()
+
+    // Slide with the magnified row (see DockContainer's hover spread).
+    transform: Translate {
+        x: {
+            let p = carousel.parent
+            while (p && typeof p.spreadFor !== "function")
+                p = p.parent
+            return p ? p.spreadFor(carousel) : 0
+        }
+    }
 
     readonly property int musicPage: 0
     readonly property int weatherPage: 1
@@ -29,18 +40,19 @@ Item {
 
     property int iconSize: 44
     property int dockHeight: 60
+    required property real cornerRadius
     property real widthUnits: 2
     property bool showClock: false
     property bool showTemperature: true
     property bool expanded: false
     property bool autoRotate: true
-    readonly property bool hasMusic: DockMprisService.hasPlayer
+    readonly property bool hasMusic: MediaService.hasPlayer
     readonly property bool hasWeather: WeatherService.available
-    readonly property var player: DockMprisService.activePlayer
+    readonly property var player: MediaService.activePlayer
     readonly property url artworkSource: {
-        const revision = DockMprisService.metadataRevision
+        const revision = MediaService.metadataRevision
         return player?.trackArtUrl ? player.trackArtUrl
-            : BundledIcons.source("default-cover")
+            : BundledIcons.source("media.coverFallback")
     }
     readonly property bool monochrome: IconAppearanceService.mode !== "color"
     readonly property int availablePageCount: availablePages().length
@@ -69,6 +81,8 @@ Item {
     }
 
     function pageAvailable(candidate) {
+        if ((pageOrder || []).indexOf(candidate) < 0)
+            return false
         if (candidate === musicPage)
             return hasMusic
         if (candidate === weatherPage)
@@ -101,13 +115,13 @@ Item {
         let index = pages.indexOf(page)
         if (index < 0)
             index = 0
-        const step = direction >= 0 ? 1 : -1
-        page = pages[(index + step + pages.length) % pages.length]
+        const step = Math.trunc(direction)
+        page = pages[((index + step) % pages.length + pages.length) % pages.length]
     }
 
     function pageText(candidate) {
         if (candidate === musicPage)
-            return "音乐"
+            return I18n.tr("Music")
         if (candidate === weatherPage)
             return WeatherService.temperature
         if (candidate === temperaturePage) {
@@ -222,7 +236,7 @@ Item {
 
     Timer {
         interval: 30000
-        running: carousel.autoRotate && !carousel.expanded
+        running: carousel.visible && carousel.autoRotate && !carousel.expanded
             && carousel.availablePageCount > 1
         repeat: true
         onTriggered: {
@@ -230,10 +244,17 @@ Item {
         }
     }
 
-    Timer {
-        id: wheelCooldown
-        interval: 180
-        repeat: false
+    property real wheelRemainder: 0
+    property bool wheelUsesPixels: false
+    property int wheelSteps: 0
+    FrameAnimation {
+        running: carousel.wheelSteps !== 0
+        onTriggered: {
+            const steps = carousel.wheelSteps
+            carousel.wheelSteps = 0
+            if (!carousel.expanded)
+                carousel.switchPage(steps)
+        }
     }
 
     MouseArea {
@@ -243,11 +264,18 @@ Item {
         onWheel: function(wheel) {
             if (carousel.expanded)
                 return
-            const delta = wheel.angleDelta.y + wheel.pixelDelta.y
-            if (delta === 0 || wheelCooldown.running)
-                return
-            carousel.switchPage(delta >= 0 ? -1 : 1)
-            wheelCooldown.restart()
+            const pixels = wheel.angleDelta.y === 0
+            const delta = pixels ? wheel.pixelDelta.y : wheel.angleDelta.y
+            if (delta === 0) return
+            if (carousel.wheelSteps * delta < 0) carousel.wheelSteps = 0
+            if (pixels !== carousel.wheelUsesPixels || carousel.wheelRemainder * delta < 0)
+                carousel.wheelRemainder = 0
+            carousel.wheelUsesPixels = pixels
+            carousel.wheelRemainder += delta / (pixels ? 40 : 120)
+            const steps = carousel.wheelRemainder >= 0
+                ? Math.floor(carousel.wheelRemainder) : Math.ceil(carousel.wheelRemainder)
+            carousel.wheelRemainder -= steps
+            carousel.wheelSteps += steps
             wheel.accepted = true
         }
     }
@@ -280,7 +308,7 @@ Item {
 
                     Rectangle {
                         anchors.fill: parent
-                        radius: Math.max(4, carousel.iconSize * 0.30)
+                        radius: carousel.cornerRadius
                         gradient: Gradient {
                             orientation: Gradient.Horizontal
                             GradientStop { position: 0.0; color: carousel.backgroundStart(sideSlot.modelData) }
@@ -299,12 +327,12 @@ Item {
                             width: parent.width
                             height: parent.height * 0.50
 
-                            Text {
+                            BundledIcon {
                                 anchors.centerIn: parent
                                 visible: sideSlot.modelData === carousel.musicPage
-                                text: "♫"
+                                name: "media.fallback"
                                 color: "white"
-                                font.pixelSize: Math.max(10,
+                                size: Math.max(10,
                                     Math.round(carousel.iconSize * 0.54))
                             }
                             Text {
@@ -345,7 +373,7 @@ Item {
                             fontSizeMode: Text.HorizontalFit
                             minimumPixelSize: 5
                             font {
-                                family: "SF Pro Display"
+                                family: AppearanceTokens.typography.displayFamily
                                 pixelSize: Math.max(8,
                                     Math.round(carousel.iconSize * 0.42))
                                 weight: Font.DemiBold

@@ -1,11 +1,13 @@
 import QtQuick
 import Quickshell
+import "../../../shared/qml/i18n"
 import "./AdaptiveMath.mjs" as AdaptiveMath
 import qs.desktop
 import qs.desktop.modules.applauncher
 import qs.desktop.modules.common
 import qs.desktop.modules.weather
 import "../../../Kos/Ui"
+import "DockMagnification.mjs" as Magnification
 
 // ────────────────────────────────────────────────────────────────
 // DockContainer — Adaptive layout engine.
@@ -32,6 +34,14 @@ Item {
     property Component trailingAccessory: null
     property bool clockInInfoCarousel: false
 
+    readonly property bool statusCollectionExpanded: trailingAccessoryLoader.item?.collectionExpanded ?? false
+    readonly property bool statusDragActive: trailingAccessoryLoader.item?.statusDragActive ?? false
+    readonly property bool accessoryInteractionActive: trailingAccessoryLoader.item?.keepBarOpen ?? false
+
+    function closeStatusCollectionOutside(x, y) {
+        trailingAccessoryLoader.item?.closeCollectionOutside(x, y)
+    }
+
     // ═══════════════════════════════════════════════════════════
     // Inputs (from services / parent)
     // ═══════════════════════════════════════════════════════════
@@ -44,7 +54,7 @@ Item {
         return ConfigService.infoCardOrder.indexOf(id) >= 0
     }
     readonly property bool hasPlayingMusic: infoCardSelected("music")
-        && DockMprisService.hasPlayer
+        && MediaService.hasPlayer
     readonly property bool hasWeather: infoCardSelected("weather")
         && WeatherService.available
     // Side Dock Stack information keeps its clock page. The separate
@@ -82,6 +92,7 @@ Item {
     // values equal the previous Dock defaults, preserving the upgrade baseline.
     // User-owned height/position/visibility remain in DockConfigService.
     readonly property var proportions: ({
+        activeRadiusRatio: AppearanceTokens.dock.activeRadiusRatio,
         vpad: AppearanceTokens.dock.verticalPaddingRatio,
         hpad: AppearanceTokens.dock.horizontalPaddingRatio,
         spacing: AppearanceTokens.dock.itemSpacingRatio,
@@ -179,21 +190,31 @@ Item {
     // naturalDockWidth is the width the content asks for. A taskbar or relaxed
     // layout grows to the available edge length. distributionSlack is spent
     // only by relaxed content, between apps/windows and trailing components.
-    readonly property int naturalDockWidth: Math.round(_layout.dockWidth
+    // The hover spread is added on top of restingDockWidth as a REAL width:
+    // rounding it to whole pixels made the glass (and, through the centred row,
+    // every icon) step by a pixel per frame while the pointer slid.
+    readonly property int restingDockWidth: Math.round(_layout.dockWidth
         + accessoryContentWidth
         + accessoryDividerCount * (2 + dividerMargin * 2)
         + accessoryGapCount * itemSpacing)
-    readonly property int computedDockWidth: fillsAvailableLength
+    readonly property real naturalDockWidth: restingDockWidth + hoverSpreadTotal
+    // The resting counterpart of computedDockWidth (no hover spread).
+    readonly property int restingComputedWidth: fillsAvailableLength
+        ? Math.max(restingDockWidth, availableLength)
+        : restingDockWidth
+    readonly property real computedDockWidth: fillsAvailableLength
         ? Math.max(naturalDockWidth, availableLength)
         : naturalDockWidth
-    readonly property real distributionSlack: Math.max(0, computedDockWidth
-        - naturalDockWidth)
+    readonly property real distributionSlack: Math.max(0, restingComputedWidth
+        - restingDockWidth)
     readonly property int itemSpacing: _layout.itemSpacing
     readonly property int hPadding: _layout.hPadding
     readonly property int vPadding: _layout.vPadding
     readonly property int dividerMargin: _layout.dividerMargin
     readonly property int pillRadius: Math.round(computedDockHeight
         * AppearanceTokens.dock.radiusRatio)
+    // One effective radius for the outer Dock and all Stack card backgrounds.
+    readonly property int surfaceRadius: stretched ? 0 : pillRadius
     // DockIcon reserves this invisible outer slot even when inactive. This
     // keeps the Row width stable while the active background appears/disappears.
     readonly property real activeBackgroundGap: _layout.activeBackgroundGap
@@ -210,18 +231,240 @@ Item {
     readonly property real draggedPointerX: draggedPinnedLoader
         ? draggedPinnedLoader.dragPointerX : -1
 
-    // ── Auto-hide inhibitor state (consumed by DockAutoHideController) ──
-    // A passive pointer probe so the controller can keep the dock shown while
-    // the cursor is over the glass. passive because DockIcon, music controls,
-    // drag gestures and MouseAreas still win their own events.
-    readonly property bool pointerInside: _dockPointerHover.hovered
-    // Keep the pointer in DockContainer coordinates. Mapping each icon back to
-    // this same Item is safe for both bottom and rotated side Docks.
-    readonly property point magnificationPointer: _dockPointerHover.hovered
-        ? _dockPointerHover.point.position
-        : Qt.point(-10000, -10000)
+    // A stable native input parent is supplied by DockWindow. Its position
+    // and bounds do not follow the expanding glass or transformed icons.
+    property Item pointerInputItem: container
+    property Item pointerEventRoot: container
+    property bool _pointerOverApps: false
+    property bool _pointerHeld: false
+    readonly property bool pointerInside: _pointerHeld
+        && pointerInputItem.contains(pointerInputItem.mapFromItem(null,
+            _rawPointer.x, _rawPointer.y))
+    readonly property point _livePointer: _dockPointerHover.point.scenePosition
+    property point _lastPointer: Qt.point(-10000, -10000)
+    readonly property point _rawPointer: _dockPointerHover.hovered ? _livePointer : _lastPointer
+    on_LivePointerChanged: {
+        if (_dockPointerHover.hovered)
+            _lastPointer = _livePointer
+    }
+    property point magnificationPointer: Qt.point(-10000, -10000)
+    property real hoverProgress: 0
+    property point _rowPointer: Qt.point(-10000, -10000)
+    // Reach about three neighbours on either side. Use slot pitch rather
+    // than artwork size so crowded adaptive layouts retain the same reach.
+    readonly property real magnificationRadius:
+        (iconSize + activeBackgroundGap * 2 + itemSpacing)
+        * (3 + 0.2 * Math.max(0, ConfigService.effectiveHoverScale - 1))
+    readonly property bool magnificationEnabled:
+        ConfigService.effectiveHoverScale > 1
+        && (AppearanceTokens.dock.magnificationEnabled
+            || ConfigService.hoverScale !== null)
+    // Bounds use the resting Row, whose geometry excludes visual transforms.
+    // Keep edge padding even at the largest configured peak scale.
+    readonly property point magnificationBounds: Qt.point(
+        (contentRow.width - availableLength) / 2 + hPadding,
+        (contentRow.width + availableLength) / 2 - hPadding)
+    readonly property real _hoverTarget: pointerInside && _pointerOverApps && !isEditing
+        && magnificationEnabled ? 1 : 0
+    property bool _hoverDirty: true
+    on_RawPointerChanged: _hoverDirty = true
+    onPointerInsideChanged: _hoverDirty = true
+    on_SpreadStatesChanged: _hoverDirty = true
+    onMagnificationRadiusChanged: _hoverDirty = true
+    onMagnificationBoundsChanged: _hoverDirty = true
+    on_HoverTargetChanged: _hoverDirty = true
+
+    readonly property var _spreadStates: {
+        // Startup and idle do not need a hover model. In particular, do not
+        // subscribe to geometry while the Dock's children are being created.
+        if (!pointerInside && hoverProgress === 0)
+            return []
+        const states = []
+        if (!contentRow)
+            return states
+        function layoutCentre(item, crossAxis = false) {
+            let centre = crossAxis ? item.y + item.height / 2 : item.x + item.width / 2
+            let ancestor = item.parent
+            while (ancestor && ancestor !== contentRow) {
+                centre += crossAxis ? ancestor.y : ancestor.x
+                ancestor = ancestor.parent
+            }
+            return centre
+        }
+        function addIcon(item) {
+            if (!item || !item.visible || item.width <= 0
+                    || item.iconSlotSize === undefined)
+                return
+            states.push({ item: item, cx: layoutCentre(item),
+                cy: layoutCentre(item, true), halfHeight: item.height / 2,
+                liftDirection: item._hoverDirection,
+                half: item.iconSlotWidth / 2,
+                artHalf: Math.max(item.iconSize, item.iconPaintedWidth) / 2,
+                hoverGapReduction: item.hoverGapReduction,
+                growable: true })
+        }
+        // Only pinned app groups expose nested icons. Stack and accessories
+        // are rigid outer slots: never inspect their internal component trees.
+        for (const child of contentRow.children) {
+            if (!child || !child.visible || child.width <= 0)
+                continue
+            if (child.iconSlotSize !== undefined) {
+                addIcon(child)
+            } else if (child.magnificationItems !== undefined) {
+                for (const item of child.magnificationItems)
+                    addIcon(item)
+            } else {
+                states.push({ item: child, cx: layoutCentre(child),
+                    half: child.width / 2, growable: false,
+                    flexible: child === distributionSpacer,
+                    blocksMagnification: child.dividerWidth === undefined
+                        && child !== distributionSpacer })
+            }
+        }
+        return states
+    }
+    // All consumers read one snapshot. Pointer travel follows the raw input;
+    // only the entry/exit amplitude needs to settle over subsequent frames.
+    property var _hoverLayout: ({ entries: [], byItem: new Map(), total: 0, shift: 0 })
+    FrameAnimation {
+        running: container._hoverDirty
+            || container.hoverProgress !== container._hoverTarget
+        onTriggered: {
+            container._hoverDirty = false
+            if (!container.pointerInside && container.hoverProgress === 0) {
+                container._pointerOverApps = false
+                container.magnificationPointer = Qt.point(-10000, -10000)
+                if (container._hoverLayout.entries.length > 0)
+                    container._hoverLayout = { entries: [], byItem: new Map(), total: 0, shift: 0 }
+                container.nameLabelTarget = null
+                return
+            }
+            let hoverPoint = null
+            if (container.pointerInside) {
+                const raw = container._rawPointer
+                const rowPoint = contentRow.mapFromItem(null, raw.x, raw.y)
+                hoverPoint = rowPoint
+                container.magnificationPointer = container.mapFromItem(null, raw.x, raw.y)
+                container._pointerOverApps = Magnification.overApps(
+                    container._spreadStates, container._hoverLayout, rowPoint.x)
+                // Hold the last application position while leaving for Stack
+                // or the tray, so the exit wave does not chase their controls.
+                if (container._pointerOverApps)
+                    container._rowPointer = rowPoint
+            } else {
+                container._pointerOverApps = false
+                container.magnificationPointer = Qt.point(-10000, -10000)
+            }
+            const next = Magnification.advance(container.hoverProgress,
+                container._hoverTarget, Math.min(frameTime, 1 / 30),
+                DockAnimation.magnificationResponseSeconds,
+                DockAnimation.magnificationEpsilon)
+            container.hoverProgress = next
+            const frame = Magnification.layout(container._spreadStates,
+                container._rowPointer.x, next,
+                ConfigService.effectiveHoverScale, container.magnificationRadius,
+                container.itemSpacing, container.magnificationBounds)
+            // Resolve ownership against the same input/layout snapshot used
+            // for paint, not once on input and again against changed transforms.
+            frame.pointer = hoverPoint
+            container._hoverLayout = frame
+            container.updateNameLabel()
+        }
+    }
+    Connections {
+        target: ConfigService
+        function onEffectiveHoverScaleChanged() { container._hoverDirty = true }
+    }
+    property bool launchAnimationVisible: true
+    property bool nameLabelsEnabled: true
+    onNameLabelsEnabledChanged: updateNameLabel()
+    property Item nameLabelHost: container
+    property Item nameLabelTarget: null
+    readonly property alias nameLabel: sharedNameLabel
+    DockNameLabel {
+        id: sharedNameLabel
+        parent: container.nameLabelHost
+        targetIcon: container.nameLabelTarget
+        pointerRoot: container
+        pointerPosition: container.magnificationPointer
+    }
+    // Label ownership bridges spacing, independently of exact click hits and
+    // preview dwell. The normal envelope is bounded by resting + painted slots.
+    function selectNameTarget(states, frame, point, coordinateRoot) {
+        const item = Magnification.nameOwner(states, frame, point.x)
+        if (!item || !item.dockNameEligible || !coordinateRoot) return null
+        const restingTop = item.parent.mapToItem(coordinateRoot, item.x, item.y)
+        const restingBottom = item.parent.mapToItem(coordinateRoot,
+            item.x + item.width, item.y + item.height)
+        const paintedTop = item.mapToItem(coordinateRoot, 0, 0)
+        const paintedBottom = item.mapToItem(coordinateRoot, item.width, item.height)
+        const top = Math.min(restingTop.y, restingBottom.y, paintedTop.y, paintedBottom.y)
+        const bottom = Math.max(restingTop.y, restingBottom.y, paintedTop.y, paintedBottom.y)
+        return point.y >= top && point.y <= bottom ? item : null
+    }
+    function updateNameLabel() {
+        let target = null
+        if (nameLabelsEnabled && pointerInside && !isEditing) {
+            const point = _hoverLayout.pointer
+            if (point) target = selectNameTarget(_spreadStates, _hoverLayout, point, contentRow)
+        }
+        nameLabelTarget = target
+        if (sharedNameLabel) sharedNameLabel.updateGeometry()
+    }
+    function magnificationFor(item) {
+        const entry = _hoverLayout.byItem.get(item)
+        return entry ? entry.progress : 0
+    }
+    function spreadFor(item) {
+        const entry = _hoverLayout.byItem.get(item)
+        return entry ? entry.dx : 0
+    }
+    // One owner per pointer update/frame. Consumers do not independently map
+    // through their animated transforms and compete for hover ownership.
+    readonly property var hoveredApp: {
+        if (!pointerInside) return null
+        const point = _hoverLayout.pointer
+        if (!point) return null
+        let owner = null, nearest = Infinity
+        for (const state of _spreadStates) {
+            const entry = _hoverLayout.byItem.get(state.item)
+            const cx = state.cx + (entry ? entry.dx : 0)
+            const half = entry ? entry.half : state.half
+            if (Math.abs(point.x - cx) > half) continue
+            if (!state.growable) {
+                if (state.blocksMagnification) return null
+                continue
+            }
+            if (!state.item.interactive) continue
+            const scale = entry ? entry.scale : 1
+            const progress = entry ? entry.progress : 0
+            const lift = (state.liftDirection ?? 1)
+                * (-state.item.iconSize * ConfigService.effectiveHoverLift * progress
+                    - state.halfHeight * (scale - 1))
+            // Keep the resting vertical band while admitting elevated artwork:
+            // lifting away from the pointer must not cancel and restart dwell.
+            const top = Math.min(state.cy - state.halfHeight,
+                state.cy + lift - state.halfHeight * scale)
+            const bottom = Math.max(state.cy + state.halfHeight,
+                state.cy + lift + state.halfHeight * scale)
+            if (point.y < top || point.y > bottom) continue
+            const distance = Math.abs(point.x - cx)
+            if (distance < nearest) {
+                nearest = distance
+                owner = state.item
+            }
+        }
+        return owner
+    }
+    function hoverFor(item) {
+        return hoveredApp === item
+    }
+    readonly property real hoverSpreadTotal: _hoverLayout.total
+    readonly property real hoverGlassShift: fillsAvailableLength ? 0 : _hoverLayout.shift
     HoverHandler {
         id: _dockPointerHover
+        parent: container.pointerEventRoot
+        blocking: false
         enabled: true
         acceptedDevices: PointerDevice.Mouse | PointerDevice.TouchPad
         // Editing is spatial: once the pointer leaves the dock the user is
@@ -229,11 +472,28 @@ Item {
         // of a dock corner from ending an in-progress session, and any
         // started drag cancels the pending exit.
         onHoveredChanged: {
-            if (hovered)
+            if (hovered) {
+                container._lastPointer = container._livePointer
+                container._pointerHeld = true
+                hoverExitTimer.stop()
                 editExitTimer.stop()
-            else if (container.editMode && !container.draggedPinnedLoader)
-                editExitTimer.restart()
+            } else {
+                // A popup/input-region update can briefly revoke hover even
+                // though the pointer has not moved. Retain its last position
+                // for one short grace period, without restarting preview dwell.
+                if (container._pointerHeld)
+                    hoverExitTimer.restart()
+                if (container.editMode && !container.draggedPinnedLoader)
+                    editExitTimer.restart()
+            }
         }
+    }
+
+    Timer {
+        id: hoverExitTimer
+        interval: DockAnimation.magnificationExitGrace
+        repeat: false
+        onTriggered: container._pointerHeld = _dockPointerHover.hovered
     }
 
     Timer {
@@ -248,8 +508,11 @@ Item {
     }
 
     function publishLauncherPresentation() {
+        // Publish the resting length, never the live hover spread: the launcher
+        // re-solves its icon grid from this width, so a per-frame spread would
+        // reflow every tile while the pointer slides along the Dock.
         AppLauncherService.setDockPresentation(
-            computedDockWidth,
+            restingComputedWidth,
             computedDockHeight,
             ConfigService.position,
             ThemeService.backgroundColor,
@@ -329,14 +592,20 @@ Item {
     // Keep PR #2's size interpolation when app groups, accessories, or the
     // information carousel change the adaptive layout.
     Behavior on height {
+        enabled: !container.pointerInside && container.hoverProgress === 0
         NumberAnimation {
             duration: DockAnimation.dockResizeDuration
             easing.type: DockAnimation.dockResizeEasing
         }
     }
     Behavior on width {
+        enabled: !container.pointerInside && container.hoverProgress === 0
         NumberAnimation {
-            duration: DockAnimation.dockResizeDuration
+            // The hover spread retargets every frame; animating that would make
+            // the glass trail the icons. Discrete layout changes keep the
+            // interpolation.
+            duration: container.hoverSpreadTotal > 0.5
+                ? 0 : DockAnimation.dockResizeDuration
             easing.type: DockAnimation.dockResizeEasing
         }
     }
@@ -374,6 +643,8 @@ Item {
     // from the rest of the shell.
     ContextMenu {
         id: trashContextMenu
+        reserveIconSpace: true
+        capsuleReveal: true
         anchorItem: trashIcon
         position: ConfigService.position
         baseColor: ThemeService.backgroundColor
@@ -381,8 +652,8 @@ Item {
         property bool hasBeenVisible: false
 
         Component.onCompleted: setItems([
-            { icon: "folder-open", label: "打开回收站", cmd: "open" },
-            { icon: "user-trash", label: "清空回收站", cmd: "empty" }
+            { icon: "dock.menu.trash.open", label: I18n.tr("Open Trash"), cmd: "open" },
+            { icon: "dock.menu.trash.empty", label: I18n.tr("Empty Trash"), cmd: "empty" }
         ])
 
         onAboutToShow: hasBeenVisible = true
@@ -408,6 +679,8 @@ Item {
     // away from the rest of the shell.
     ContextMenu {
         id: appLauncherContextMenu
+        reserveIconSpace: true
+        capsuleReveal: true
         anchorItem: appLauncherIcon
         position: ConfigService.position
         baseColor: ThemeService.backgroundColor
@@ -417,35 +690,35 @@ Item {
         function rebuildItems() {
             setItems([
                 {
-                    icon: "align-bottom",
-                    label: "底部吸附",
+                    icon: "dock.menu.launcher.bottom",
+                    label: I18n.tr("Dock to bottom"),
                     cmd: "bottom",
                     checkable: true,
                     checked: AppLauncherConfigService.displayMode === "bottom"
                 },
                 {
-                    icon: "align-center",
-                    label: "底部紧凑",
+                    icon: "dock.menu.launcher.bottomWide",
+                    label: I18n.tr("Compact bottom"),
                     cmd: "bottomWide",
                     checkable: true,
                     checked: AppLauncherConfigService.displayMode === "bottomWide"
                 },
                 {
-                    icon: "align-center",
-                    label: "屏幕居中",
+                    icon: "dock.menu.launcher.center",
+                    label: I18n.tr("Center on screen"),
                     cmd: "center",
                     checkable: true,
                     checked: AppLauncherConfigService.displayMode === "center"
                 },
                 {
-                    icon: "align-fullscreen",
-                    label: "全屏覆盖",
+                    icon: "dock.menu.launcher.fullscreen",
+                    label: I18n.tr("Fullscreen"),
                     cmd: "fullscreen",
                     checkable: true,
                     checked: AppLauncherConfigService.displayMode === "fullscreen"
                 },
                 { separator: true },
-                { icon: "preferences-system", label: "启动台设置…", cmd: "settings" }
+                { icon: "dock.menu.launcher.settings", label: I18n.tr("Launcher settings…"), cmd: "settings" }
             ])
         }
 
@@ -500,7 +773,12 @@ Item {
         rotation: container.vertical ? 90 : 0
         transformOrigin: Item.Center
         anchors.verticalCenter: parent.verticalCenter
-        anchors.horizontalCenter: parent.horizontalCenter
+        // Horizontal centre minus the glass's recentring shift, so the icons
+        // stay exactly where the pointer pinned them while the glass moves to
+        // hug the displaced row (see hoverGlassShift).
+        x: (parent.width - width) / 2
+            - (container.vertical ? 0 : container.hoverGlassShift)
+        anchors.verticalCenterOffset: container.vertical ? -container.hoverGlassShift : 0
         spacing: container.itemSpacing
         leftPadding: container.hPadding
         rightPadding: container.hPadding
@@ -513,6 +791,9 @@ Item {
             width: active && item ? item.implicitWidth : 0
             height: container.computedDockHeight
             visible: active
+            transform: Translate {
+                x: container.spreadFor(leadingAccessoryLoader)
+            }
         }
 
         DockDivider {
@@ -539,12 +820,12 @@ Item {
             surfaceOriginX: container.surfaceOriginX
             surfaceOriginY: container.surfaceOriginY
             vertical: container.vertical
+            dockEdge: ConfigService.position
             iconSize: container.iconSize
             activeBackgroundGap: container.activeBackgroundGap
-            // 启动器 logo 是仓库里的位图原作（1024²），走文件而不是内联
-            // 降采样副本 —— 后者在 Dock 尺寸下明显发糊。
-            iconSource: Qt.resolvedUrl("../../assets/applauncher.svg")
-            displayName: "应用程序"
+            // 启动器使用仓库中的 SVG，避免系统图标主题改变这个固定入口。
+            iconSource: BundledIcons.source("dock.launcher")
+            displayName: I18n.tr("Applications")
             showContextMenu: false
             customContextMenu: true
             allowEdit: false
@@ -559,7 +840,7 @@ Item {
                 if (DockModelService.activeDockPopup)
                     DockModelService.setDockPopupVisible(
                         DockModelService.activeDockPopup, false)
-                AppLauncherService.toggle()
+                AppLauncherService.toggle(container.targetScreen)
             }
             onContextRequested: DockModelService.openDockPopup(appLauncherContextMenu)
         }
@@ -580,12 +861,13 @@ Item {
             surfaceOriginX: container.surfaceOriginX
             surfaceOriginY: container.surfaceOriginY
             vertical: container.vertical
+            dockEdge: ConfigService.position
             iconSize: container.iconSize
             activeBackgroundGap: container.activeBackgroundGap
             // 回收站是这条统一链路的例外：图案跟随系统图标主题。
             iconSource: SystemIconResolver.source("trash",
                 DockTrashService.hasItems ? "full" : "empty")
-            displayName: "回收站"
+            displayName: I18n.tr("Trash")
             showContextMenu: false
             customContextMenu: true
             allowEdit: false
@@ -615,8 +897,8 @@ Item {
                 id: pinnedItemLoader
                 required property var modelData
                 required property int index
-                property real lastDragX: 0
                 property var itemData: modelData
+                readonly property var magnificationItems: pinnedIconRow.children
                 property int pinnedIndex: index
                 property bool dragged: false
                 property real lastDragOffsetX: 0
@@ -679,13 +961,14 @@ Item {
                     // from its anchored pointer position into the new slot.
                     enabled: pinnedItemLoader !== container.draggedPinnedLoader
                         || pinnedItemLoader.settling
+                    // motion-exception: Drag reordering settles into the committed slot before releasing the preview.
                     NumberAnimation { duration: 180; easing.type: Easing.OutCubic }
                 }
                 Behavior on scale {
-                    NumberAnimation { duration: 120; easing.type: Easing.OutCubic }
+                    NumberAnimation { duration: AppearanceTokens.motion.fast.duration; easing.type: AppearanceTokens.motion.enterCurve }
                 }
                 Behavior on opacity {
-                    NumberAnimation { duration: 120; easing.type: Easing.OutCubic }
+                    NumberAnimation { duration: AppearanceTokens.motion.fast.duration; easing.type: AppearanceTokens.motion.enterCurve }
                 }
                 // Releasing a drag commits the reordered top-level app.
                 DragHandler {
@@ -770,6 +1053,7 @@ Item {
                 }
 
                 Row {
+                            id: pinnedIconRow
                             anchors.centerIn: parent
                             spacing: container.itemSpacing
 
@@ -891,16 +1175,20 @@ Item {
         }
 
         // ── Stretch slack: push the information slot to the far end ──
-        // Only a stretched dock has slack. Spending it between the window
+        // Relaxed content spends available slack between the window
         // tasks and the information slot keeps launchers and running windows
         // against the starting edge while the clock, weather and the trailing
         // status area sit at the opposite one — a taskbar-style split. The
         // spacer carries no content, so an auto-width dock collapses it to 0
         // and the row keeps its historical compact layout.
         Item {
+            id: distributionSpacer
             width: container.relaxed ? container.distributionSlack : 0
             height: 1
             visible: width > 0
+            transform: Translate {
+                x: container.spreadFor(distributionSpacer)
+            }
         }
 
         // ── Divider 2: windows | information slot (conditional) ──
@@ -914,6 +1202,7 @@ Item {
         // ── Shared music / weather / clock / temperature information slot ──
         DockInfoCarousel {
             id: horizontalInfoCarousel
+            cornerRadius: container.surfaceRadius
             iconSize: container.iconSize
             dockHeight: container.computedDockHeight
             widthUnits: container.infoUnits
@@ -931,6 +1220,7 @@ Item {
         // reserving only two icon lengths along the edge.
         DockSideInfoCarousel {
             id: verticalInfoCarousel
+            cornerRadius: container.surfaceRadius
             iconSize: container.iconSize
             dockHeight: container.computedDockHeight
             widthUnits: container.infoUnits
@@ -957,6 +1247,9 @@ Item {
             width: active && item ? item.implicitWidth : 0
             height: container.computedDockHeight
             visible: active
+            transform: Translate {
+                x: container.spreadFor(trailingAccessoryLoader)
+            }
         }
     }
 
@@ -982,7 +1275,7 @@ Item {
         Text {
             id: componentEditLabel
             anchors.centerIn: parent
-            text: "+ 组件"
+            text: I18n.tr("+ Widgets")
             color: AppearanceTokens.surface.pick(
                 AppearanceTokens.colors.primaryContainerForeground,
                 ThemeService.foregroundColor)

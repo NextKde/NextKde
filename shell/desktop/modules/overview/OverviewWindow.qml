@@ -3,6 +3,7 @@ import QtQuick.Layouts
 import Quickshell
 import Quickshell.Wayland
 import Quickshell.Widgets
+import "../../../shared/qml/i18n"
 import qs.desktop.modules.common
 import qs.desktop.modules.dock
 
@@ -38,8 +39,8 @@ PanelWindow {
     readonly property real revealProgress: popupMotion.progress
     PopupMotion {
         id: popupMotion
-        openDuration: 220
-        closeDuration: 220
+        openDuration: AppearanceTokens.motion.slow.duration
+        closeDuration: AppearanceTokens.motion.slow.duration
     }
 
     readonly property var desktops: WindowService.desktops || []
@@ -149,7 +150,7 @@ PanelWindow {
     Item {
         anchors.fill: parent
         opacity: root.revealProgress
-        scale: 0.96 + 0.04 * root.revealProgress
+        scale: 0.96 + 0.04 * popupMotion.geometryProgress
 
         Column {
             anchors {
@@ -201,7 +202,7 @@ PanelWindow {
                             border.color: isCurrent ? Qt.rgba(255, 255, 255, 0.45) : Qt.rgba(255, 255, 255, 0.25)
 
                             Behavior on color {
-                                ColorAnimation { duration: 150 }
+                                ColorAnimation { duration: AppearanceTokens.motion.base.duration; easing.type: AppearanceTokens.motion.enterCurve }
                             }
 
                             Row {
@@ -209,7 +210,7 @@ PanelWindow {
                                 spacing: 6
 
                                 BundledIcon {
-                                    name: "window"
+                                    name: "overview.windowFallback"
                                     size: 13
                                     color: isCurrent ? "#ffffff" : Qt.rgba(1, 1, 1, 0.65)
                                     anchors.verticalCenter: parent.verticalCenter
@@ -217,7 +218,7 @@ PanelWindow {
 
                                 Text {
                                     id: desktopLabel
-                                    text: modelData.name || ("桌面 " + (index + 1))
+                                    text: modelData.name || I18n.tr("Desktop %1").arg(index + 1)
                                     color: isCurrent ? "#ffffff" : Qt.rgba(1, 1, 1, 0.78)
                                     font { pixelSize: 12; weight: isCurrent ? Font.Bold : Font.DemiBold }
                                     anchors.verticalCenter: parent.verticalCenter
@@ -283,10 +284,10 @@ PanelWindow {
                             scale: isHovered || isSelected ? 1.028 : 1.0
                             y: isHovered || isSelected ? -4 : 0
                             Behavior on scale {
-                                NumberAnimation { duration: 160; easing.type: Easing.OutCubic }
+                                NumberAnimation { duration: AppearanceTokens.motion.base.duration; easing.type: AppearanceTokens.motion.enterCurve }
                             }
                             Behavior on y {
-                                NumberAnimation { duration: 160; easing.type: Easing.OutCubic }
+                                NumberAnimation { duration: AppearanceTokens.motion.base.duration; easing.type: AppearanceTokens.motion.enterCurve }
                             }
 
                             // Card Glass Surface
@@ -302,8 +303,8 @@ PanelWindow {
                                     ? "#38bdf8"
                                     : (cardDelegate.isHovered ? Qt.rgba(255, 255, 255, 0.38) : Qt.rgba(255, 255, 255, 0.14))
 
-                                Behavior on color { ColorAnimation { duration: 140 } }
-                                Behavior on border.color { ColorAnimation { duration: 140 } }
+                                Behavior on color { ColorAnimation { duration: AppearanceTokens.motion.base.duration; easing.type: AppearanceTokens.motion.enterCurve } }
+                                Behavior on border.color { ColorAnimation { duration: AppearanceTokens.motion.base.duration; easing.type: AppearanceTokens.motion.enterCurve } }
 
                                 Column {
                                     anchors.fill: parent
@@ -324,7 +325,7 @@ PanelWindow {
                                             }
                                             spacing: 8
 
-                                            IconImage {
+                                            AppIcon {
                                                 width: 20
                                                 height: 20
                                                 anchors.verticalCenter: parent.verticalCenter
@@ -334,7 +335,7 @@ PanelWindow {
                                             }
 
                                             Text {
-                                                text: modelData.identity?.name || modelData.title || "应用"
+                                                text: modelData.identity?.name || modelData.title || I18n.tr("App")
                                                 color: "white"
                                                 font { pixelSize: 12; weight: Font.Bold }
                                                 elide: Text.ElideRight
@@ -363,13 +364,13 @@ PanelWindow {
                                                 : (cardDelegate.isHovered ? Qt.rgba(1, 1, 1, 0.16) : "transparent")
                                             opacity: cardDelegate.isHovered || cardDelegate.isSelected ? 1.0 : 0.0
 
-                                            Behavior on opacity { NumberAnimation { duration: 120 } }
-                                            Behavior on color { ColorAnimation { duration: 120 } }
+                                            Behavior on opacity { NumberAnimation { duration: AppearanceTokens.motion.fast.duration; easing.type: AppearanceTokens.motion.enterCurve } }
+                                            Behavior on color { ColorAnimation { duration: AppearanceTokens.motion.fast.duration; easing.type: AppearanceTokens.motion.enterCurve } }
 
-                                            Text {
+                                            BundledIcon {
                                                 anchors.centerIn: parent
-                                                text: "✕"
-                                                font.pixelSize: 10
+                                                name: "overview.closeWindow"
+                                                size: 10
                                                 color: "white"
                                             }
 
@@ -404,6 +405,13 @@ PanelWindow {
                                             sourceSize: Qt.size(600, 400)
                                             fillMode: Image.PreserveAspectCrop
                                             smooth: true
+                                            // 失效自愈（同 StageCard）：URL
+                                            // 被新一轮拍摄替换删除后 Image
+                                            // 不会重读盘——上报清账并补拍
+                                            onStatusChanged: if (status === Image.Error)
+                                                WindowService.thumbnailLoadFailed(
+                                                    modelData.windowId,
+                                                    String(previewImg.source))
                                         }
 
                                         // Placeholder when no live thumbnail is available yet
@@ -415,7 +423,7 @@ PanelWindow {
                                                 anchors.centerIn: parent
                                                 spacing: 8
 
-                                                IconImage {
+                                                AppIcon {
                                                     anchors.horizontalCenter: parent.horizontalCenter
                                                     width: 44
                                                     height: 44
@@ -426,7 +434,7 @@ PanelWindow {
 
                                                 Text {
                                                     anchors.horizontalCenter: parent.horizontalCenter
-                                                    text: modelData.title || "窗口预览"
+                                                    text: modelData.title || I18n.tr("Window preview")
                                                     color: Qt.rgba(1, 1, 1, 0.40)
                                                     font.pixelSize: 11
                                                     elide: Text.ElideRight
@@ -467,14 +475,14 @@ PanelWindow {
 
                     BundledIcon {
                         anchors.horizontalCenter: parent.horizontalCenter
-                        name: "window"
+                        name: "overview.windowFallback"
                         size: 32
                         color: Qt.rgba(1, 1, 1, 0.25)
                     }
 
                     Text {
                         anchors.horizontalCenter: parent.horizontalCenter
-                        text: "当前桌面没有打开的应用窗口"
+                        text: I18n.tr("No open app windows on this desktop")
                         color: Qt.rgba(1, 1, 1, 0.45)
                         font { pixelSize: 13; weight: Font.Medium }
                     }
@@ -531,7 +539,7 @@ PanelWindow {
                 if (seen[id] || record.provider !== "kwin")
                     continue
                 seen[id] = true
-                if (WindowService.thumbnailUrl(id) === "")
+                if (WindowService.thumbnailNeedsRefresh(id))
                     queue.push(id)
             }
             if (queue.length === 0)

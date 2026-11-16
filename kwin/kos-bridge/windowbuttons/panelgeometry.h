@@ -1,8 +1,11 @@
 #pragma once
 
+#include <QPainterPath>
+#include "../windowappearance/contour.h"
 #include <QPointF>
 #include <QRectF>
 #include <QSizeF>
+#include <QMarginsF>
 
 #include <optional>
 
@@ -23,7 +26,7 @@ struct AppOffset {
 
 // Everything about where the panel is and how big it is -- and nothing else.
 //
-// These six values are the whole of what the adjust gesture changes and the
+// The persistent values below are what the adjust gesture changes and the
 // whole of what a machine-written rule stores (see WindowRuleStore): a window
 // whose panel has been dragged keeps the geometry that was dragged into place,
 // and a hand-written offset in window-buttons.json stops reaching it. Everything
@@ -38,7 +41,19 @@ struct PanelGeometry {
     qreal panelPadding = 4.5;
     // Horizontal padding. Negative means "same as panelPadding".
     qreal panelPaddingX = -1.0;
+    // Saved independently of the legacy button geometry. Ignored when the
+    // global switch is off, so disabling it restores the user's old layout.
+    QMarginsF coverage;
+    bool independentBackground = false; // runtime policy, never saved in a rule
 };
+
+// Settings, Calendar, Weather and native KOS decoration use 14 px circles
+// with a 28 px center-to-center pitch.
+inline constexpr qreal StandardButtonSize = 14.0;
+inline constexpr qreal StandardButtonSpacing = 14.0;
+inline constexpr qreal MaxCoverage = 200.0;
+qreal effectiveButtonSize(const PanelGeometry &);
+qreal effectiveButtonSpacing(const PanelGeometry &);
 
 // Bounds for the values above. They are enforced by the gesture and again on
 // every read, because the rules file is a text file a user may edit, and an
@@ -139,5 +154,24 @@ PanelGeometry clamped(const PanelGeometry &);
 // arrive from JSON and from pointer motion and a hundredth of a pixel is not a
 // difference anyone can see.
 bool sameGeometry(const PanelGeometry &, const PanelGeometry &);
+
+// Actual touched edges, independent of the panel's pinning direction.
+inline constexpr int PanelFlushTop = 1;
+inline constexpr int PanelFlushLeft = 2;
+inline constexpr int PanelFlushRight = 4;
+int panelFlushMask(const PanelGeometry &);
+
+// Native scene contour. Continuous corners are applied to the complete source
+// after buttons are painted, so that path supplies zero native radii here.
+struct PanelWindowContour {
+    QSizeF size;
+    WindowAppearance::CornerRadii radii;
+};
+
+// Floating panels remain pills. Edge-attached panels cover the control box
+// with a rectangle, clipped only by the real window contour at that location.
+QPainterPath panelBackgroundPath(const QRectF &rect, const PanelGeometry &geometry,
+                                 const PanelWindowContour &window = {});
+QString panelBackgroundKey(const PanelGeometry &, const PanelWindowContour &);
 
 } // namespace KOS

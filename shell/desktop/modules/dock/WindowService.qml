@@ -6,6 +6,7 @@ import qs.desktop.modules.platform
 import qs.desktop.modules.common
 import "ProcessIdentity.mjs" as ProcessIdentity
 import "WindowRecordIndex.mjs" as WindowRecordIndex
+import "PayloadArray.mjs" as PayloadArray
 
 // WindowService — provider-neutral runtime window model.
 //
@@ -50,6 +51,10 @@ QtObject {
     // on command success (stage engage) reset on this instead of staying
     // stuck when the command was lost.
     signal commandFinished(string action, string ticket, bool found)
+    // 缩略图回执（stage 侧重试策略的输入）：failed 带平台侧原因（授权失效/
+    // 队列满/无效帧……）——消费方据此做重试封顶；ready 用于清零计数。
+    signal thumbnailFailed(string handleId, string message)
+    signal thumbnailReady(string handleId)
 
     property int _nextWindowNumber: 1
     property var _recordsById: ({})
@@ -63,6 +68,7 @@ QtObject {
     // (same content re-published) are dropped without scheduling a rebuild.
     property string _lastSnapshotJson: ""
     property var _pendingKwinActivation: null
+    property var _lastKwinActivationId: null
     property bool _kwinScriptStarted: false
     property bool _kwinSubscribePending: false
     // Process-side identity hints, keyed by window PID. A window resolves from
@@ -125,7 +131,9 @@ QtObject {
             return
         }
         svc._kwinSubscribePending = false
+        svc.desktopTransitionActive = false
         svc._pendingKwinActivation = null
+        svc._lastKwinActivationId = null
         svc._kwinActivationTimer.stop()
         // Thumbnail replies are event-only and cannot arrive after the socket
         // drops. Their temporary files may also belong to the old daemon.
@@ -160,22 +168,24 @@ QtObject {
     }
 
     property Timer _updateTimer: Timer {
-        interval: 40
+        interval: 16
         repeat: false
         onTriggered: svc._rebuild()
     }
 
-    // Merge pointer double-clicks or quick target changes before sending an
-    // IPC request. The platform bridge also coalesces requests, but doing it
-    // here avoids needless messages in the first place.
+    // Leading-edge activation is immediate. Only subsequent requests within
+    // this short window are coalesced; continuous input cannot postpone it.
     property Timer _kwinActivationTimer: Timer {
         interval: 24
         repeat: false
         onTriggered: {
             const command = svc._pendingKwinActivation;
             svc._pendingKwinActivation = null;
-            if (command)
+            if (command && command.id !== svc._lastKwinActivationId) {
+                svc._lastKwinActivationId = command.id;
                 svc._sendKwinCommand(command);
+                svc._kwinActivationTimer.start();
+            }
         }
     }
 
@@ -216,7 +226,7 @@ QtObject {
     }
 
     function _scheduleUpdate() {
-        _updateTimer.restart();
+        if (!_updateTimer.running) _updateTimer.start();
     }
 
     function _collectToplevels() {
@@ -240,10 +250,12 @@ QtObject {
             && left.title === right.title
             && left.identity.desktopId === right.identity.desktopId
             && left.identity.rawAppId === right.identity.rawAppId
+            && left.resourceClass === right.resourceClass
             && left.iconSource === right.iconSource
             && left.pid === right.pid
             && !!left.isUrgent === !!right.isUrgent
             && !!left.toplevel.activated === !!right.toplevel.activated
+            && !!left.toplevel.focusConfirmed === !!right.toplevel.focusConfirmed
             && !!left.toplevel.minimized === !!right.toplevel.minimized
             && !!left.toplevel.fullscreen === !!right.toplevel.fullscreen
             && !!left.onAllDesktops === !!right.onAllDesktops
@@ -267,6 +279,7 @@ QtObject {
         // provider-owned QObjects and must never be written here.
         if (record.provider === "kwin") {
             record.toplevel.geometry = next.toplevel.geometry;
+            record.toplevel.contentGeometry = next.toplevel.contentGeometry;
             record.toplevel.outputName = next.toplevel.outputName;
             record.toplevel.maximized = next.toplevel.maximized;
             record.toplevel.visible = next.toplevel.visible;
@@ -299,16 +312,23 @@ QtObject {
             const handleId = useKwin ? String(source.id) : "";
             const toplevel = useKwin ? {
                 activated: !!source.activated,
+                focusConfirmed: source.focusConfirmed === true,
                 minimized: !!source.minimized,
                 fullscreen: !!source.fullscreen,
                 pid: Number(source.pid || 0),
                 appId: source.appId || "",
                 title: source.title || "",
-                desktopIds: Array.isArray(source.desktops) ? source.desktops : [],
+                desktopIds: PayloadArray.toArray(source.desktops) || [],
                 onAllDesktops: !!source.onAllDesktops,
                 // Full-reveal geometry & placement for Dock collision.
                 geometry: source.geometry && source.geometry.width > 0
                     ? source.geometry : null,
+                // Content rect (frame minus decoration). Stage cards use this
+                // for their aspect: thumbnails are captured without decoration,
+                // so sizing from the frame letterboxes wide windows.
+                contentGeometry: source.contentGeometry
+                    && source.contentGeometry.width > 0
+                    ? source.contentGeometry : null,
                 outputName: source.outputName || "",
                 maximized: !!source.maximized,
                 visible: source.visible === undefined ? true : !!source.visible
@@ -341,11 +361,12 @@ QtObject {
                 provider: provider,
                 handleId: handleId,
                 identity: identity,
+                resourceClass: useKwin ? String(source.resourceClass || "") : String(toplevel.appId || ""),
                 pid: Number(toplevel.pid || 0),
                 iconSource: iconSource,
                 title: toplevel.title || identity.name || identity.desktopId,
                 isUrgent: useKwin ? !!source.urgent : foreignUrgent,
-                desktopIds: Array.isArray(toplevel.desktopIds) ? toplevel.desktopIds : [],
+                desktopIds: PayloadArray.toArray(toplevel.desktopIds) || [],
                 onAllDesktops: !!toplevel.onAllDesktops,
                 // Provision-normalised placement used by the Dock auto-hide
                 // controller. Foreign-toplevel has no compositor geometry, so
@@ -441,9 +462,16 @@ QtObject {
         // MRU 时间戳（v87 审查）：dock 多窗应用点击应激活"最近用过的窗"
         // 而不是 records 序首窗——历史行为与注释语义不符。copy-on-write
         //（var 属性原地变异不发通知，v82 P0 同款坑）
-        if (active) {
-            const stamps = Object.assign({}, svc._lastActivatedAt)
-            stamps[active.windowId] = Date.now()
+        {
+            // Window IDs are never reused. Retaining closed IDs here would
+            // grow this session-long MRU map on every application restart.
+            const stamps = {}
+            for (const record of nextRecords) {
+                if (svc._lastActivatedAt[record.windowId] !== undefined)
+                    stamps[record.windowId] = svc._lastActivatedAt[record.windowId]
+            }
+            if (active)
+                stamps[active.windowId] = Date.now()
             svc._lastActivatedAt = stamps
         }
         svc.revision++;
@@ -461,9 +489,9 @@ QtObject {
     }
 
     // Thumbnail state is keyed by KWin's window handle, which dies with the
-    // window. Without this sweep a closed window would leave its PNG URL and
-    // any pending mark behind forever; a late thumbnail event for a dead
-    // handle is dropped again on the next rebuild.
+    // window. Without this sweep a closed window would leave its PNG URL,
+    // pending mark and load-failure counter behind forever; a late thumbnail
+    // event for a dead handle is dropped again on the next rebuild.
     function _pruneThumbnails(nextRecords) {
         const live = {};
         for (let i = 0; i < nextRecords.length; i++) {
@@ -492,6 +520,26 @@ QtObject {
         }
         if (pendingChanged)
             svc._thumbnailPendingByHandle = pending;
+        let loadFailuresChanged = false;
+        const loadFailures = {};
+        for (const handle in svc._thumbnailLoadFailures) {
+            if (live[handle])
+                loadFailures[handle] = svc._thumbnailLoadFailures[handle];
+            else
+                loadFailuresChanged = true;
+        }
+        if (loadFailuresChanged)
+            svc._thumbnailLoadFailures = loadFailures;
+        let refusedChanged = false;
+        const refused = {};
+        for (const handle in svc._thumbnailRefusedByHandle) {
+            if (live[handle])
+                refused[handle] = svc._thumbnailRefusedByHandle[handle];
+            else
+                refusedChanged = true;
+        }
+        if (refusedChanged)
+            svc._thumbnailRefusedByHandle = refused;
     }
 
     // ── Process identity fallback ──
@@ -586,6 +634,7 @@ QtObject {
     // record.desktopIds against these ids to place windows on desktops.
     property var desktops: []
     property string currentDesktopId: ""
+    property bool desktopTransitionActive: false
 
     // Switch to a virtual desktop by id (KWin performs the actual switch).
     function switchDesktop(id) {
@@ -653,25 +702,103 @@ QtObject {
         return true;
     }
 
-    function activateWindow(windowId) {
+    // ── 缩略图「读盘失败」自愈通道 ──
+    // Qt Quick 的 Image 对同一 source 不会重读盘：URL 指向的 PNG 被新一轮
+    // 拍摄替换/删除后（平台每次拍摄写新文件并删上一张），加载失败的 Image
+    // 会永远停在 Error——可见性变化、同串重赋值都不会让它重读，只有
+    // source 变化才会重读。而卡片侧的补拍循环是「有图即停」（URL 非空就
+    // 跳过），于是该卡永久停在无图态，直到用户手动点卡（engage 走的路径
+    // 会重新触发一次拍摄）才恢复。
+    //
+    // 这里接住消费端的 Image 错误回执：给该窗当前 URL 盖「已判死」章并
+    // 立刻补拍；补拍回来的新 URL 顶掉旧 URL（source 变化）→ Image 重读。
+    //
+    // ⚠️ 不要改成「把 URL 从表里清掉再补拍」（曾这么写过，实机 A/B 否掉）：
+    // 清空会让 source 走 "" → url 的过渡，而 Qt 的 QQuickItemLayer 在
+    // 「先清空 source、再赋新值」这条路上**不会重绘层纹理**——数据链全绿
+    // （新文件在、status=Ready）但卡面永远空白，用户看到的还是"没预览"。
+    // 直换 URL（无 "" 过渡）才会重绘（隔离会话 A/B：毒化前 sd=0.33206 →
+    // 直换后 sd=0.33208＝内容回来了；清空版恒 0.27773＝空白）。
+    //
+    // 安全网沿用补拍的「失败封顶 + 30s 时间窗衰减」：同一窗口连续 4 次
+    // 读盘失败（文件在却不可解码等永远修不好的情形）暂停自愈，窗口期
+    // 过期后自动恢复；迟到的错误回执（旧 URL 的失败在新 URL 就位后才到）
+    // 由「表里仍是失败的那个 URL」判定拦下，不会给新图盖章。
+    property var _thumbnailLoadFailures: ({})     // handleId -> { count, at }
+    property var _thumbnailRefusedByHandle: ({})  // handleId -> 已判死的 URL
+    readonly property int thumbnailLoadFailureCap: 4
+    readonly property int _thumbnailLoadFailureWindowMs: 30000
+    function thumbnailLoadFailureCount(handleId) {
+        const e = _thumbnailLoadFailures[handleId]
+        if (!e)
+            return 0
+        return (Date.now() - e.at < _thumbnailLoadFailureWindowMs) ? e.count : 0
+    }
+    // 消费端/补拍侧的单一判定：该窗的 URL 缺失、或已就位但被 Image 判死
+    // （需要一次补拍）。「有图即停」的正确含义由此得出。
+    function thumbnailNeedsRefresh(windowId) {
+        const record = windowById(windowId)
+        if (!record?.handleId)
+            return false
+        const url = _thumbnailUrlsByHandle[record.handleId] ?? ""
+        return url === "" || _thumbnailRefusedByHandle[record.handleId] === url
+    }
+    function thumbnailLoadFailed(windowId, url) {
+        const record = windowById(windowId)
+        if (!record?.handleId || !url)
+            return
+        const handleId = record.handleId
+        if (_thumbnailUrlsByHandle[handleId] !== url)
+            return
+        if (_thumbnailRefusedByHandle[handleId] === url)
+            return    // 同一 URL 已判死过：计一次就够，防同帧重复计数
+        const refused = Object.assign({}, _thumbnailRefusedByHandle)
+        refused[handleId] = url
+        _thumbnailRefusedByHandle = refused
+        const alive = thumbnailLoadFailureCount(handleId)
+        const f = Object.assign({}, _thumbnailLoadFailures)
+        f[handleId] = { count: alive + 1, at: Date.now() }
+        _thumbnailLoadFailures = f
+        console.info("[WindowService] thumbnail load failed id=" + handleId
+            + " attempt=" + (alive + 1) + " " + url)
+        if (alive >= thumbnailLoadFailureCap)
+            return;   // 封顶：不补拍（时间窗衰减后自动恢复）
+        requestThumbnail(windowId)   // 立刻补拍，不等侧栏 1.5s 重试拍
+    }
+
+    // `options.forceAnim` asks the compositor to replay its reveal animation
+    // even when the window is already on screen. A notification click uses it:
+    // the window is being summoned from another surface, so it should arrive
+    // with the same animation a Dock click gets.
+    function activateWindow(windowId, options) {
         const record = windowById(windowId);
         if (!record) {
             console.warn("[WindowService] activate missing windowId=" + windowId);
-            return;
+            return false;
         }
         activationRequested(windowId);
         if (record.provider === "kwin") {
-            _enqueueKwinCommand({ action: "activate", id: record.handleId });
-            return;
+            _enqueueKwinCommand({ action: "activate", id: record.handleId,
+                forceAnim: options?.forceAnim === true, ticket: options?.ticket });
+            return true;
         }
-        try { record.toplevel.activate(); } catch (e) {}
+        try {
+            record.toplevel.activate();
+            return true;
+        } catch (e) {
+            return false;
+        }
     }
 
     // 整组一起展开（macOS 语义）：同应用全部窗口还原抬升、focusId 最后激活
     // 拿焦点。必须走单个 activate-group 原子命令——连续的 activate 会被
     // _kwinActivationTimer 的单槽合并吞掉兄弟窗的还原（dock/侧栏两条入口
     // 都踩过）。activationRequested 只对 focus 窗发一次（stage 退位交换）。
-    function activateGroup(windowIds, focusId) {
+    // forceAnim：卡侧调用（显示桌面放出/撤销看门狗/拖拽中心）传 true——
+    // 目标窗"应该"在卡里，快照滞后导致它其实已在桌面时，桥注入一次真翻转
+    // 播完整的"从卡片展开"动画（同值写入会被 KWin 静默短路、无动画）；
+    // dock 点击不传——对已在桌面的窗它是抬前语义，注入反而制造伪影。
+    function activateGroup(windowIds, focusId, forceAnim) {
         const ids = [];
         for (let i = 0; i < windowIds.length; i++) {
             const record = windowById(windowIds[i]);
@@ -690,7 +817,7 @@ QtObject {
             ? focusRecord.handleId : ids[ids.length - 1];
         activationRequested(focusId);
         _sendKwinCommand({ action: "activate-group", ids: ids,
-            focusId: focusHandle });
+            focusId: focusHandle, forceAnim: forceAnim === true });
     }
 
     // 同拍交换（点击卡片）：激活目标组 + 收编退位组走**一条原子命令**——
@@ -723,7 +850,11 @@ QtObject {
         activationRequested(focusId);
         _sendKwinCommand({ action: "engage-swap", ids: actHandles,
             focusId: focusHandle, minimizeIds: minHandles,
-            ticket: ticket || undefined });
+            ticket: ticket || undefined,
+            // 点卡 = 从卡位展开语义：目标窗若已不在最小化态（快照滞后/
+            // 上一手还原提前落地），桥注入真翻转补出展开动画（见桥内
+            // restoreWithAnimation 注释）
+            forceAnim: true });
     }
 
 
@@ -798,9 +929,11 @@ QtObject {
 
         for (let i = 0; i < records.length; i++) {
             const r = records[i];
+            const toplevelDesktops = PayloadArray.toArray(r.toplevel?.desktopIds) || [];
+            const recordDesktops = PayloadArray.toArray(r.desktopIds) || [];
             const onDesktop = r.toplevel?.onAllDesktops
-                || (Array.isArray(r.toplevel?.desktopIds) && r.toplevel.desktopIds.indexOf(currentId) >= 0)
-                || (Array.isArray(r.desktopIds) && r.desktopIds.indexOf(currentId) >= 0);
+                || (toplevelDesktops.length > 0 && toplevelDesktops.indexOf(currentId) >= 0)
+                || (recordDesktops.length > 0 && recordDesktops.indexOf(currentId) >= 0);
             if (onDesktop) {
                 currentDeskWindows.push(r);
             }
@@ -828,6 +961,12 @@ QtObject {
 
     function _consumeKwinEvent(event) {
             try {
+                // Qt 6.12 converts nested arrays carried by a `var` signal to
+                // QML sequences: Array.isArray() then rejects valid snapshots.
+                // Restore plain JSON arrays, including each window's desktops,
+                // at the signal boundary before validating or storing the data.
+                if (event.type === "snapshot" || event.type === "desktops")
+                    event = JSON.parse(JSON.stringify(event));
                 if (event.type !== "snapshot")
                     console.log("[WindowService] bridge event type=" + event.type
                         + (event.stage ? " stage=" + event.stage : ""));
@@ -840,7 +979,11 @@ QtObject {
                         String(event.ticket ?? ""), !!event.found);
                     return;
                 }
-                if (event.type === "snapshot" && Array.isArray(event.windows)) {
+                // Payload arrays arrive as QV4 sequences through the signal
+                // boundary (see PayloadArray.mjs); never gate them on
+                // Array.isArray, which is false for every real snapshot.
+                const windows = PayloadArray.toArray(event.windows)
+                if (event.type === "snapshot" && windows) {
                         // Coalesce redundant snapshots. The KWin script already
                         // publishes only on change, but a second filter here
                         // keeps the model rebuild rate bounded even if a future
@@ -850,7 +993,7 @@ QtObject {
                         // activeDesktop 同理：桌面表面（quickshell）不在
                         // windows 里，它拿走/交还焦点时 windows 与 activeId
                         // 都不变——漏键会把桌面聚焦状态冻结在旧值。
-                        const snapshotJson = JSON.stringify(event.windows)
+                        const snapshotJson = JSON.stringify(windows)
                             + "#" + (event.activeId ?? "")
                             + "#" + (event.activeDesktop ? 1 : 0);
                         if (snapshotJson === svc._lastSnapshotJson)
@@ -861,11 +1004,11 @@ QtObject {
                         // authoritative list also delayed focus changes.
                         svc.kwinActiveId = String(event.activeId ?? "");
                         svc.kwinActiveDesktop = !!event.activeDesktop;
-                        svc._kwinWindows = event.windows;
+                        svc._kwinWindows = windows;
                         if (!svc._kwinReceivedInitialSnapshot) {
                             svc._kwinReceivedInitialSnapshot = true;
                             console.info("[WindowService] initial KWin snapshot windows="
-                                + event.windows.length)
+                                + windows.length)
                         }
                         // KWin already coalesces metadata bursts and throttles
                         // live geometry. Apply its authoritative snapshot now;
@@ -887,16 +1030,27 @@ QtObject {
                             const urls = Object.assign({}, svc._thumbnailUrlsByHandle);
                             urls[event.id] = "file://" + event.path;
                             svc._thumbnailUrlsByHandle = urls;
+                            // 新 URL 落地即撤旧 URL 的「已判死」章——否则
+                            // 补拍循环会一直认为这张卡需要刷新（补拍风暴）
+                            if (svc._thumbnailRefusedByHandle[event.id] !== undefined) {
+                                const refused = Object.assign({}, svc._thumbnailRefusedByHandle);
+                                delete refused[event.id];
+                                svc._thumbnailRefusedByHandle = refused;
+                            }
                             svc.thumbnailRevision++;
                             console.log("[WindowService] thumbnail ready id="
                                 + event.id + " " + event.width + "x" + event.height);
+                            svc.thumbnailReady(event.id);
                         } else if (event.error) {
                             console.warn("[WindowService] thumbnail failed id="
                                 + event.id + " error=" + event.error);
+                            svc.thumbnailFailed(event.id, String(event.error));
                         }
                 } else if (event.type === "desktops") {
-                        svc.desktops = Array.isArray(event.desktops)
-                            ? event.desktops : [];
+                        svc.desktops = PayloadArray.toArray(event.desktops) || [];
+                        // Set the gate before the id: Stage may synchronously
+                        // rebuild its model as soon as currentDesktopId changes.
+                        svc.desktopTransitionActive = event.transitionActive === true;
                         svc.currentDesktopId = event.current ?? "";
                         if (!svc._kwinReceivedDesktopSnapshot) {
                             svc._kwinReceivedDesktopSnapshot = true;
@@ -915,16 +1069,31 @@ QtObject {
 
     function _enqueueKwinCommand(command) {
         if (command.action === "activate") {
-            svc._pendingKwinActivation = command;
-            svc._kwinActivationTimer.restart();
+            if (!svc._kwinActivationTimer.running) {
+                svc._lastKwinActivationId = command.id;
+                svc._sendKwinCommand(command);
+                svc._kwinActivationTimer.start();
+            } else {
+                svc._pendingKwinActivation = command;
+            }
             return;
         }
         svc._sendKwinCommand(command);
     }
 
     function _sendKwinCommand(command) {
+        // A later focus/visibility action supersedes any queued single-window
+        // activation; never let an old click undo a minimize or group action.
+        if (["activate-group", "minimize", "minimize-group", "close", "engage-swap",
+                "switch-desktop", "show-overview", "toggle-overview"].includes(command.action)) {
+            svc._pendingKwinActivation = null;
+            svc._lastKwinActivationId = null;
+            svc._kwinActivationTimer.stop();
+        }
         PlatformClient.request("kwin.command", command, function(response) {
             if (!response?.ok) {
+                if (command.action === "activate" && svc._lastKwinActivationId === command.id)
+                    svc._lastKwinActivationId = null;
                 console.warn("[WindowService] KWin command failed: "
                     + (response?.error?.message || "platform unavailable"))
                 // A rejected thumbnail request never produces a thumbnail

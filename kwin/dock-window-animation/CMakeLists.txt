@@ -1,6 +1,7 @@
 cmake_minimum_required(VERSION 3.21)
 
 project(kos_dock_window_animation LANGUAGES CXX)
+include(CTest)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -29,6 +30,8 @@ target_link_libraries(kos_dock_window_animation PRIVATE
     KF6::ConfigCore
     KWin::kwin
 )
+set_property(TARGET kos_dock_window_animation APPEND PROPERTY AUTOMOC_MACRO_NAMES
+    KWIN_EFFECT_FACTORY_SUPPORTED_ENABLED)
 
 # Since KWin 6.7 (master), presentTime was dropped from the prePaintScreen /
 # prePaintWindow hooks and TimeLine::advance(RenderView*) replaced
@@ -58,3 +61,27 @@ endif()
 install(TARGETS kos_dock_window_animation
     DESTINATION ${KDE_INSTALL_PLUGINDIR}/kwin/effects/plugins
     COMPONENT kwin_plugins)
+
+if(BUILD_TESTING)
+    add_executable(kos_dock_animation_reference_lifetime_test tests/reference_lifetime_test.cpp)
+    add_test(NAME kos-dock-animation.reference-lifetime COMMAND kos_dock_animation_reference_lifetime_test)
+    set_tests_properties(kos-dock-animation.reference-lifetime PROPERTIES LABELS "logic")
+endif()
+
+# KWin 6.8 propagates paint success through the effect chain. Detect the
+# installed signature so older releases and distribution backports still work.
+if(TARGET kos_dock_window_animation)
+    get_target_property(_kos_paint_includes KWin::kwin INTERFACE_INCLUDE_DIRECTORIES)
+    foreach(_dir IN LISTS _kos_paint_includes)
+        if(EXISTS "${_dir}/effect/effect.h")
+            set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS "${_dir}/effect/effect.h")
+            file(READ "${_dir}/effect/effect.h" _kos_paint_header)
+            if(_kos_paint_header MATCHES "bool drawWindow\\(")
+                target_compile_definitions(kos_dock_window_animation PRIVATE KOS_KWIN_PAINT_RESULT_API)
+            endif()
+            break()
+        endif()
+    endforeach()
+    set_property(TARGET kos_dock_window_animation APPEND PROPERTY AUTOMOC_MACRO_NAMES
+        KWIN_EFFECT_FACTORY_SUPPORTED_ENABLED)
+endif()

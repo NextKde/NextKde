@@ -3,12 +3,13 @@ import Quickshell.Io
 import qs.desktop.modules.bar
 import qs.desktop.modules.common
 
-// Keep the layer-shell window on ScreenLifecycle's last real output while
-// KWin removes and re-adds outputs around a sleep/resume cycle.
+// Hide the layer-shell window while ScreenLifecycle settles the output list
+// around sleep/resume, then bind it to the newly elected output.
 Scope {
     id: root
 
     property bool enabled: true
+    readonly property bool windowVisible: barWindow.visible
 
     // Bridge system tray attention signals into desktop notifications.
     TrayNotificationBridge {}
@@ -24,6 +25,7 @@ Scope {
     }
 
     BarWindow {
+        id: barWindow
         screen: root.targetScreen
         visible: root.enabled && ScreenLifecycle.outputAvailable
             && root.targetScreen !== null

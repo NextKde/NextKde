@@ -2,87 +2,76 @@
 
 **[English](README.md) | [中文](README.zh-CN.md)**
 
-Every direct child is a standalone Qt Quick application and a separate
-process. Applications may import `shared/`, communicate with `services/`
-through documented contracts, and must never import `shell/desktop/`.
+The core `apps/` source tree contains `settings/`, `lockscreen/` and the retained
+`sddm/` theme (no supported SDDM installer).
+Calendar (including tasks), Calculator and Weather share the independent kos-apps
+repository, version and Release, with separate install/update/uninstall. ListenFree remains separate:
 
-The application workspace is configured from the repository root. Four build
-options and matching CMake presets keep the new applications independently
-manageable:
+| Application | Source, releases and application tests |
+| --- | --- |
+| Calendar with integrated tasks | [NextKde/kos-apps](https://github.com/NextKde/kos-apps) |
+| Calculator | [NextKde/kos-apps](https://github.com/NextKde/kos-apps) |
+| Weather | [NextKde/kos-apps](https://github.com/NextKde/kos-apps) |
+| ListenFree | [NextKde/ListenFree](https://github.com/NextKde/ListenFree) |
 
-| Application | Target | Configure preset |
-| --- | --- | --- |
-| Calendar | `kos-calendar` | `calendar-dev` |
-| Todo | `kos-todo` | `todo-dev` |
-| Weather | `kos-weather` | `weather-dev` |
-| Music | `kos-music` | `music-dev` |
+The root build no longer compiles these applications, their private runtime or PIM
+service. App CMake presets are removed. Enabling a former `KOS_BUILD_CALENDAR`,
+`KOS_BUILD_TODO`, `KOS_BUILD_CALCULATOR`, `KOS_BUILD_WEATHER` or
+`KOS_BUILD_LISTENFREE` option fails with migration guidance. Build and contribute
+in the corresponding independent repository. Source directories retained during
+cutover are not an alternative build/install path and must not be deleted until
+the independent gates have been validated.
 
-Use `apps-dev` to build all four. Each application owns its executable, QML
-module, desktop entry, tests, and bilingual documentation. `apps/common/` is a
-small application runtime rather than a feature layer; applications do not
-import one another. The Weather preset additionally builds and installs its Go
-data service, which the application starts on demand.
+The first three source directories/IDs are `apps/org.nextks.calendar`,
+`apps/org.nextks.calculator` and `apps/org.nextks.weather` (IDs omit `apps/`).
+The new remote is not created/pushed; old repositories retain history. Old
+`org.nextkde.*` Flatpaks are not automatically renamed, uninstalled or migrated.
 
-## Development: QML hot reload
-
-Every application can load its QML from a source tree and hot reload it, so QML
-edits need neither a rebuild nor a restart:
-
-```bash
-.build/music-dev/apps/music/kos-music --watch-qml apps/music/qml
-# or skip the argument via the environment
-KOS_APP_QML_DIR=apps/music/qml .build/music-dev/apps/music/kos-music
-```
-
-The path names the directory holding `Main.qml` (or the entry file itself).
-`*.qml`/`*.mjs` files in the tree are watched and the window is rebuilt after a
-300 ms debounce; the new code is fully compiled on a throwaway engine first
-(including referenced siblings), and text that does not compile reports its
-errors and keeps the current window. Controllers created in C++ and injected
-into QML through initial properties (such as music's `music`) survive a reload:
-playback, the queue, the database connection, and the MPRIS registration keep
-running. QML-owned state (the current page, open dialogs) resets.
-`shared/qml` (Kos.Ui) is compiled into the binary and still needs a rebuild.
-
-A watch run is an isolated development instance: it never displaces the
-single-instance activation of the running application. C++ edits still need a
-rebuild; only QML/JS edits go through hot reload.
-
-For a persistent per-user installation on Plasma, run:
+## Installation and lifecycle
 
 ```sh
-./tools/install-apps.sh
+./tools/kosctl install apps
+./tools/kosctl install apps --app calendar
+./tools/kosctl install apps --with-listenfree
+./tools/kosctl install apps check-update --app weather
+./tools/kosctl install apps update --app weather
+./tools/kosctl install apps status --app calendar
+./tools/kosctl install apps uninstall --app calculator
 ```
 
-`install-apps.sh` builds all four applications, rather than only the app you
-intend to open. In addition to the base requirements in the repository README,
-install these Arch build dependencies first:
+`tools/install-apps.sh` is the compatibility dispatcher for the same commands.
+The default selection is Calendar (including tasks), Calculator and Weather;
+ListenFree requires explicit selection. `--app todo` aliases Calendar.
+`--update` and `--uninstall` are aliases for the matching lifecycle actions.
+Mutations require terminal confirmation or `--yes`. The default backend is the
+shared `kos-apps` user-Flatpak backend using GitHub Release bundles. Signed catalogs
+from [appCatalog](https://github.com/NextKde/appCatalog) supply application entries;
+SHA-256 is required, developer signatures are optional unless pinned by the entry.
+Explicit Install/Update can prepare the approved Flathub runtime source for missing
+dependencies. Catalogs do not authorize arbitrary runtime sources, and no application
+needs a Flathub listing. Availability depends on its real compatible Release.
+Use `--backend=source` for legacy/developer source installation explicitly;
+`--app APP --version X.Y.Z` and build-dependency `check` are source-only.
+`--with-listenfree-video` is rejected: use the independent ListenFree build guide
+for custom video features, rather than overriding a stable Release manifest.
 
-```sh
-sudo pacman -S --needed kcalendarcore gstreamer gst-plugins-base-libs taglib
-```
+Flatpak owns its installation records; external Flatpak tools can remove the same
+ref. Settings/CLI discovers signed GitHub bundle updates, not Discover or
+`flatpak update` for URL-less app origins. Libflatpak may create a local origin/key
+record even if a transaction is later refused. Runtime distribution uses the separately pinned runtime source.
+Status and uninstall of an unambiguous user Flatpak work without publisher approval;
+normal uninstall preserves data. No automatic legacy migration occurs.
 
-`kcalendarcore` is required by Calendar and Todo; GStreamer and TagLib are
-required by Music. Go is required by Weather and is already part of the core
-KOS build requirements. Runtime GStreamer codec/plugin packages are separate:
-install the ones needed for the audio formats and output backends you use.
-Building a single app with its corresponding CMake preset needs only that
-app's direct dependencies.
+The explicit source backend downloads stable **source** Releases from the fixed
+NextKde repositories and builds locally. Its private ownership records are not
+Discover packages. Neither backend falls back to this checkout or a development
+branch. A batch stops at the first failure, retaining completed operations.
+For submissions, third-party sources, updates and Qt runtime packaging, see the
+[signed catalog guide](../docs/app-store/SignedCatalog.md).
+See the [lifecycle and trust contract](../docs/app-store/IndependentApps.md).
 
-This performs a Release build and test pass, installs the binaries under
-`~/.local`, registers desktop entries, hicolor icons and AppStream metadata,
-enables the core `kos-data.service`, registers the D-Bus-activated PIM service,
-and refreshes Plasma's application cache. The desktop entries contain absolute executable paths, so
-the applications remain available after login without a source-tree build.
-Re-run the same command to perform an in-place upgrade.
-
-Each application exposes the same appearance settings with the platform Preferences shortcut
-(typically `Ctrl+,`): system,
-light or dark appearance; automatic, glass or solid material; opacity; accent
-colour; reduced transparency; and reduced motion. Preferences use one shared
-store and propagate to other running KOS applications. On KDE Plasma the app
-runtime uses `KWindowEffects` for native blur and background contrast when the
-compositor advertises them, with a readable solid fallback everywhere else.
-
-`settings` predates this workspace and remains on its existing build path
-until its source-path-dependent QML loader is migrated separately.
+Core `services/data-service` remains a Shell dependency, including shared weather
+and its Go coverage. Calendar PIM and application-specific tests belong to their
+independent repositories. Core CI checks the independent installer and release
+contracts, not obsolete monorepo application directories. See
+[Development](../docs/Development.md) for the remaining core verification gates.

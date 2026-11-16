@@ -1,6 +1,7 @@
 import QtQuick
 import Quickshell
 import Quickshell.Wayland
+import "../../../shared/qml/i18n"
 import qs.desktop.modules.common
 import qs.desktop.modules.dock
 
@@ -16,8 +17,9 @@ AnimatedPopupWindow {
     color: "transparent"
     grabFocus: false
 
+    PopupAnchorBinding { popupAnchor: popup.anchor; sourceItem: popup.anchorItem }
+
     anchor {
-        item: popup.anchorItem
         edges: Edges.Top
         gravity: Edges.Top
         margins.top: -10
@@ -53,7 +55,7 @@ AnimatedPopupWindow {
                 spacing: 2
                 Text { text: WeatherService.cityName; color: ThemeService.foregroundColor; font.pixelSize: 14 }
                 Text { text: WeatherService.temperature; color: ThemeService.foregroundColor; font.pixelSize: 32; font.weight: Font.Bold }
-                Text { text: WeatherService.conditionText(WeatherService.weatherCode) + " · 体感 " + WeatherService.apparentTemperature; color: ThemeService.foregroundColor; opacity: 0.72; font.pixelSize: 12 }
+                Text { text: WeatherService.conditionText(WeatherService.weatherCode) + " · " + I18n.tr("Feels like %1").arg(WeatherService.apparentTemperature); color: ThemeService.foregroundColor; opacity: 0.72; font.pixelSize: 12 }
             }
         }
 
@@ -71,21 +73,23 @@ AnimatedPopupWindow {
         Row {
             anchors { left: parent.left; right: parent.right; bottom: parent.bottom; margins: 16 }
             spacing: 20
+            // 底行复用既有列补 Gusts（用户裁定 3：不新增列；Apple Wind 卡 "Gusts" 副行惯例；popup 336px 加列会溢出）
             Repeater {
                 model: [
-                    { label: "湿度", value: WeatherService.humidity },
-                    { label: "风速", value: WeatherService.windSpeed },
-                    { label: "风向", value: WeatherService.windDirection }
+                    { label: I18n.tr("Humidity"), value: WeatherService.humidity, sub: "" },
+                    { label: I18n.tr("Wind speed"), value: WeatherService.windSpeed, sub: WeatherService.windGust },
+                    { label: I18n.tr("Wind direction"), value: WeatherService.windDirection, sub: "" }
                 ]
                 delegate: Column {
                     required property var modelData
                     spacing: 3
                     Text { text: modelData.label; color: ThemeService.foregroundColor; opacity: 0.55; font.pixelSize: 11 }
                     Text { text: modelData.value; color: ThemeService.foregroundColor; font.pixelSize: 13 }
+                    Text { visible: modelData.sub !== ""; text: modelData.sub; color: ThemeService.foregroundColor; opacity: 0.5; font.pixelSize: 10 }
                 }
             }
             Item { width: 1; height: 1 }
-            Text { text: WeatherService.errorMessage || (WeatherService.stale ? "缓存数据" : "刚刚更新"); color: ThemeService.foregroundColor; opacity: 0.5; font.pixelSize: 10; anchors.verticalCenter: parent.verticalCenter }
+            Text { text: WeatherService.errorMessage || (WeatherService.stale ? I18n.tr("Cached data") : I18n.tr("Just updated")); color: ThemeService.foregroundColor; opacity: 0.5; font.pixelSize: 10; anchors.verticalCenter: parent.verticalCenter }
         }
     }
 }

@@ -24,6 +24,12 @@ stdenv.mkDerivation rec {
     qttools
   ];
 
+  cmakeFlags = [
+    "-DKOS_SURFACE_SHAPE_PROTOCOL=${../../../shell/native/surface-shape/kos-surface-shape-v1.xml}"
+    "-DGLASS_WAYLAND=OFF"
+    "-DGLASS_X11=ON"
+  ];
+
   meta = with lib; {
     description = "Fork of the KWin Blur effect for KDE Plasma 6 with additional features (including force blur) and bug fixes";
     license = licenses.gpl3;

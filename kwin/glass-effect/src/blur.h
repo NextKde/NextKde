@@ -16,6 +16,7 @@
 #include "settings.h"
 
 #include <QList>
+#include <QSet>
 #include <QStringList>
 
 #include <unordered_map>
@@ -24,6 +25,7 @@
 namespace KWin
 {
 class SurfaceShapeManager;
+class OverviewPreview;
 
 #if !defined(GLASS_X11) && !defined(GLASS_KWIN_67)
 class BlurManagerInterface;
@@ -66,6 +68,8 @@ struct BlurRenderData
         QSize size;
     };
     std::unordered_map<uint, BlurOverrideScratch> blurOverrideScratch;
+    BlurOverrideScratch gaussianTemp;
+    std::unordered_map<uint, BlurOverrideScratch> gaussianScratch;
 };
 
 struct BlurEffectData
@@ -74,6 +78,8 @@ struct BlurEffectData
     /// Forced-blur policy must not masquerade as an application request,
     /// otherwise class filters cannot distinguish the two paths.
     bool hasExplicitBlurRequest = false;
+    // Survives wl_surface destruction while KWin fades a deleted popup.
+    bool surfaceShapeOwned = false;
 
     /// The region that should be blurred behind the window
     std::optional<BlurRegion> content;
@@ -93,11 +99,6 @@ struct BlurEffectData
     ItemEffect windowEffect;
 
     /**
-     * Color transformation matrix (contrast, and saturation).
-     */
-    std::optional<QMatrix4x4> colorMatrix;
-
-    /**
      * Corner radius reported by the window before this effect overrides it.
      */
     std::optional<BorderRadius> originalCornerRadius;
@@ -115,6 +116,7 @@ public:
     static bool enabledByDefault();
 
     void reconfigure(ReconfigureFlags flags) override;
+    void postPaintScreen() override;
 #ifdef GLASS_KWIN_67
     void prePaintScreen(ScreenPrePaintData &data) override;
 
@@ -135,7 +137,12 @@ public:
     void prePaintWindow(RenderView *view, EffectWindow *w, WindowPrePaintData &data, std::chrono::milliseconds presentTime) override;
 #endif
 #endif
-    void drawWindow(const RenderTarget &renderTarget, const RenderViewport &viewport, EffectWindow *w, int mask, const BlurRegion &deviceRegion, WindowPaintData &data) override;
+#ifdef KOS_KWIN_PAINT_RESULT_API
+    bool
+#else
+    void
+#endif
+    drawWindow(const RenderTarget &renderTarget, const RenderViewport &viewport, EffectWindow *w, int mask, const BlurRegion &deviceRegion, WindowPaintData &data) override;
 
     bool provides(Feature feature) override;
     bool isActive() const override;
@@ -152,6 +159,7 @@ public:
 
 public Q_SLOTS:
     void slotWindowAdded(KWin::EffectWindow *w);
+    void slotWindowClosed(KWin::EffectWindow *w);
     void slotWindowDeleted(KWin::EffectWindow *w);
     void slotOutputRemoved(KWin::BlurOutput *output);
 #if KWIN_BUILD_X11
@@ -182,7 +190,6 @@ private:
     void repaintDynamicCorners();
     void blur(const RenderTarget &renderTarget, const RenderViewport &viewport, EffectWindow *w, int mask, const BlurRegion &deviceRegion, WindowPaintData &data);
     GLTexture *ensureNoiseTexture(int noiseStrength);
-    QMatrix4x4 colorMatrix(const float &brightness, const float &saturation, const float &contrast) const;
     BlurPipelineSettings pipelineSettingsForStrength(int blurStrength, int noiseStrength) const;
     /// The pixels that have to be repainted below opaque regions so a moving
     /// blur never exposes unblurred content: the global expand, raised to the
@@ -202,6 +209,7 @@ private:
         int viewportScaleLocation;
         int boxLocation;
         int cornerRadiusLocation;
+        int appearanceMaskEnabledLocation;
         int cornerExponentLocation;
         int glassEnabledLocation;
         int opacityLocation;
@@ -215,6 +223,8 @@ private:
         int materialSoftnessLocation;
         int materialReflectionStrengthLocation;
 
+        int tintLocation;
+        int liquidEnabledLocation;
         int scrimModeLocation;
         int scrimCapLocation;
         int scrimDecayLocation;
@@ -229,6 +239,11 @@ private:
         int offsetLocation;
         int halfpixelLocation;
     } m_downsamplePass;
+
+    struct {
+        std::unique_ptr<GLShader> shader;
+        int mvp, direction, kernel, count;
+    } m_gaussianPass;
 
     struct
     {
@@ -256,6 +271,8 @@ private:
     BlurSettings m_settings;
 #ifndef GLASS_X11
     std::unique_ptr<SurfaceShapeManager> m_surfaceShapeManager;
+    std::unique_ptr<OverviewPreview> m_overviewPreview;
+    bool m_overviewCapture = false;
 #endif
     bool m_valid = false;
 #ifdef GLASS_KWIN_67
@@ -301,7 +318,11 @@ private:
     QMap<EffectWindow *, QMetaObject::Connection> windowContrastChangedConnections;
 #endif
     QMap<EffectWindow *, QMetaObject::Connection> windowFrameGeometryChangedConnections;
+    QMap<EffectWindow *, QMetaObject::Connection> windowDecorationChangedConnections;
+    QMap<EffectWindow *, QMetaObject::Connection> decorationBlurChangedConnections;
     std::unordered_map<EffectWindow *, BlurEffectData> m_windows;
+    // Closed popup snapshots may outlive both wl_surface and shape resources.
+    QSet<EffectWindow *> m_closedShapeWindows;
 
 #if !defined(GLASS_X11) && !defined(GLASS_KWIN_67)
     static BlurManagerInterface *s_blurManager;

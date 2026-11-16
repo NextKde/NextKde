@@ -25,9 +25,18 @@ set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS
 # own helper include before that insertion.
 string(REPLACE "#include \"snells-glass.glsl\"" "${SNELLS_GLASS_SHADER}" GLASS_SHADER "${GLASS_SHADER}")
 
+# Generated resources belong to the build tree. Source-only VM sync must not
+# erase shader products that Ninja still considers configured and up to date.
+file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/generated")
+configure_file(blur.qrc "${CMAKE_CURRENT_BINARY_DIR}/blur.qrc" COPYONLY)
+
 # Generate a core shader variant from a single .glsl source.
 # Output goes into generated/ to keep source shaders/ clean.
 function(generate_shader_variants input_glsl output_base)
+    # Re-run shader generation when its source changes, including incremental
+    # builds; an old generated fragment would silently miss appearance masks.
+    set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS
+        "${CMAKE_CURRENT_SOURCE_DIR}/${input_glsl}")
     file(READ "${input_glsl}" SHADER_SRC)
 
     # Expand helper-shader includes
@@ -38,8 +47,8 @@ function(generate_shader_variants input_glsl output_base)
     # KWin <= 6.6 resolves a second, core-profile variant of every shader by
     # appending a "_core" suffix to the resource name (6.7 merged the two
     # variants into one), so publish the same bytes under both names.
-    file(WRITE "generated/${output_base}${ARGN}" "${COMPAT_CORE}\n${SHADER_SRC_EXPANDED}")
-    file(WRITE "generated/${output_base}_core${ARGN}" "${COMPAT_CORE}\n${SHADER_SRC_EXPANDED}")
+    file(WRITE "${CMAKE_CURRENT_BINARY_DIR}/generated/${output_base}${ARGN}" "${COMPAT_CORE}\n${SHADER_SRC_EXPANDED}")
+    file(WRITE "${CMAKE_CURRENT_BINARY_DIR}/generated/${output_base}_core${ARGN}" "${COMPAT_CORE}\n${SHADER_SRC_EXPANDED}")
 endfunction()
 
 # Generate vertex shaders
@@ -48,6 +57,7 @@ generate_shader_variants(shaders/onscreen_rounded_vertex.glsl onscreen_rounded .
 
 # Generate fragment shaders
 generate_shader_variants(shaders/downsample.glsl downsample .frag)
+generate_shader_variants(shaders/gaussian.glsl gaussian .frag)
 generate_shader_variants(shaders/upsample.glsl upsample .frag)
 generate_shader_variants(shaders/noise.glsl noise .frag)
 generate_shader_variants(shaders/onscreen_rounded.glsl onscreen_rounded .frag)
@@ -56,13 +66,16 @@ set(glass_SOURCES
     blur.cpp
     settings.cpp
     surfaceshapemanager.cpp
-    blur.qrc
+    "${CMAKE_CURRENT_BINARY_DIR}/blur.qrc"
     main.cpp
 )
 
 find_package(WaylandScanner REQUIRED)
+set(KOS_SURFACE_SHAPE_PROTOCOL
+    "${CMAKE_CURRENT_SOURCE_DIR}/../../../shell/native/surface-shape/kos-surface-shape-v1.xml"
+    CACHE FILEPATH "KOS surface shape protocol used by the Glass effect")
 ecm_add_wayland_server_protocol(glass_SOURCES
-    PROTOCOL "${CMAKE_CURRENT_SOURCE_DIR}/../../../shell/native/surface-shape/kos-surface-shape-v1.xml"
+    PROTOCOL "${KOS_SURFACE_SHAPE_PROTOCOL}"
     BASENAME kos-surface-shape-v1)
 
 kconfig_add_kcfg_files(glass_SOURCES
@@ -70,8 +83,10 @@ kconfig_add_kcfg_files(glass_SOURCES
 )
 
 if(GLASS_WAYLAND)
-    add_library(glass MODULE ${glass_SOURCES})
+    find_package(Qt6 ${QT_MIN_VERSION} CONFIG REQUIRED COMPONENTS Quick)
+    add_library(glass MODULE ${glass_SOURCES} overviewpreview.cpp)
     target_link_libraries(glass PRIVATE
+        Qt6::Quick
         KDecoration3::KDecoration
         KF6::ConfigGui
         KWin::kwin
@@ -92,4 +107,22 @@ if(GLASS_X11)
     )
     target_compile_definitions(glass_x11 PRIVATE GLASS_X11)
     install(TARGETS glass_x11 DESTINATION ${KDE_INSTALL_PLUGINDIR}/kwin-x11/effects/plugins)
+endif()
+
+# KWin 6.8 propagates paint success through the effect chain. Detect the
+# installed signature so older releases and distribution backports still work.
+if(TARGET glass)
+    get_target_property(_kos_paint_includes KWin::kwin INTERFACE_INCLUDE_DIRECTORIES)
+    foreach(_dir IN LISTS _kos_paint_includes)
+        if(EXISTS "${_dir}/effect/effect.h")
+            set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS "${_dir}/effect/effect.h")
+            file(READ "${_dir}/effect/effect.h" _kos_paint_header)
+            if(_kos_paint_header MATCHES "bool drawWindow\\(")
+                target_compile_definitions(glass PRIVATE KOS_KWIN_PAINT_RESULT_API)
+            endif()
+            break()
+        endif()
+    endforeach()
+    set_property(TARGET glass APPEND PROPERTY AUTOMOC_MACRO_NAMES
+        KWIN_EFFECT_FACTORY_SUPPORTED_ENABLED)
 endif()

@@ -1,4 +1,5 @@
 import QtQuick
+import "../../Icons" as Symbols
 import QtQuick.Controls
 
 Button {
@@ -11,25 +12,25 @@ Button {
     hoverEnabled: true
     leftPadding: 14
     rightPadding: 14
-    implicitHeight: Math.round(42 * AppTheme.densityScale)
+    implicitHeight: Math.round((AppTheme.modernDesign ? 38 : 42) * AppTheme.densityScale)
     transformOrigin: Item.Center
     scale: !enabled ? 1 : (down ? AppTheme.pressScale
                                : (hovered ? AppTheme.hoverScale : 1))
 
     Behavior on scale {
-        NumberAnimation { duration: AppTheme.motionFast; easing.type: Easing.OutCubic }
+        NumberAnimation { duration: AppTheme.motionFast; easing.type: AppTheme.motion.enterCurve }
     }
 
     contentItem: Row {
+        clip: true
         spacing: 10
 
-        Label {
+        Symbols.Icon {
             width: 22
             anchors.verticalCenter: parent.verticalCenter
-            text: root.symbol
+            name: root.symbol
             color: root.checked ? AppTheme.accent : AppTheme.mutedText
-            horizontalAlignment: Text.AlignHCenter
-            font.pixelSize: 17
+            size: 17
         }
 
         Label {

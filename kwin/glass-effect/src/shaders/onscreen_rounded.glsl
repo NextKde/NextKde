@@ -10,6 +10,9 @@ uniform vec4 box;
 uniform vec4 cornerRadius;
 uniform float opacity;
 uniform int glassEnabled;
+uniform int liquidEnabled;
+uniform vec4 tint;
+uniform int appearanceMaskEnabled;
 uniform int scrimMode;
 uniform float scrimCap;
 uniform float scrimDecay;
@@ -88,9 +91,9 @@ void main(void)
     // otherwise ("initializer of const variable must be a constant
     // expression"), which leaves the effect half-initialised and the glass
     // unrendered.
-    bool needsDetail = glassEnabled != 1 || refractionStrength <= 0.0;
+    bool needsDetail = glassEnabled != 1 || liquidEnabled != 1 || refractionStrength <= 0.0;
     vec4 sum = vec4(0);
-    if (dist <= 0.0 && needsDetail) {
+    if ((dist <= 0.0 || appearanceMaskEnabled == 1) && needsDetail) {
         sum = texture(texUnit, uv + vec2(-halfpixel.x * 2.0, 0.0) * offset);
         sum += texture(texUnit, uv + vec2(-halfpixel.x, halfpixel.y) * offset) * 2.0;
         sum += texture(texUnit, uv + vec2(0.0, halfpixel.y * 2.0) * offset);
@@ -103,20 +106,21 @@ void main(void)
     }
 
     if (glassEnabled == 1) {
-        sum = glass(sum, cornerRadius, position, box.zw);
+        if (liquidEnabled == 1) sum = glass(sum, cornerRadius, position, box.zw);
+        // Tint changes color only; the Gaussian backdrop remains fully present.
+        sum.rgb = mix(sum.rgb, tint.rgb, tint.a);
         // Fixed finishes keep their exact tone/opacity. Adaptive finishes
         // follow broad local luminance through continuous, gently sloped curves.
-        if (scrimMode >= 3) {
-            bool whiteScrim = scrimMode == 4 || scrimMode == 6;
-            vec3 tint = scrimMode == 6 ? vec3(0.92, 0.915, 0.905)
-                : scrimMode == 5 ? vec3(0.34, 0.335, 0.35)
-                : (whiteScrim ? vec3(1.0) : vec3(0.0));
-            sum.rgb = mix(sum.rgb, tint, scrimCap);
-        } else if (scrimMode > 0) {
+        if (scrimMode > 0) {
             float lum = scrimLumaValid == 1 ? localScrimLuminance(uv) : 0.5;
             sum.rgb = adaptiveScrim(sum.rgb, lum, scrimMode == 2);
         }
-        float df = fwidth(dist);
+    }
+
+    // Unified application windows mask their plain blur as well as material
+    // passes, so a rectangular blurred patch cannot fill their cut corners.
+    if (glassEnabled == 1 || appearanceMaskEnabled == 1) {
+        float df = max(fwidth(dist), 0.0001);
         sum *= 1.0 - clamp(0.5 + dist / df, 0.0, 1.0);
     }
 

@@ -5,8 +5,11 @@
 #endif
 
 #include <QObject>
+#include <KService>
+#include <QUrl>
 #include <QDBusObjectPath>
 #include <QHash>
+#include <QMap>
 #include <QJsonObject>
 #include <QLocalServer>
 #include <QLocalSocket>
@@ -16,19 +19,14 @@
 #include <QThreadPool>
 #include <QVariantMap>
 
+#include <functional>
 #include <optional>
 
 namespace KosPlatform {
 
-// One connect request: the settings dict already carries every secret, so the
-// runner treats this as opaque data. The map never lands in a log or an argv
-// -- it goes straight into AddConnection.
-struct NmConnectRequest {
-    QString device;
-    QString savedProfileUuid;
-    QVariantMap settings;
-    QString replaceProfileId;
-};
+class KeepAwakeLease;
+class KimpanelBridge;
+struct NmConnectRequest;
 
 class PlatformServer final : public QObject {
     Q_OBJECT
@@ -61,16 +59,28 @@ private slots:
                                      const QStringList &invalidated);
 
 private:
+    bool m_animationSyncPending = false;
     void handleRequest(QLocalSocket *socket, const QJsonObject &request);
     void respond(QLocalSocket *socket, const QJsonObject &request,
                  bool ok, const QJsonObject &result = {},
                  const QString &code = {}, const QString &message = {},
-                 bool retryable = false);
+                 bool retryable = false, const QJsonObject &details = {});
+    // Drops a peer whose write backlog (kMaxClientWriteBytes) shows it is no
+    // longer draining. Deferred: the abort lands after the current dispatch
+    // returns, so callers iterating subscribers or parsing the same socket's
+    // read buffer never see it torn down mid-loop.
+    void kickStuckClient(QLocalSocket *socket);
+    bool writeClientMessage(QLocalSocket *socket, const QJsonObject &message);
     void runCommand(QLocalSocket *socket, const QJsonObject &request,
                     const QString &program, const QStringList &arguments,
                     std::function<QJsonObject(const QByteArray &, int)> parser = {},
                     int timeoutMs = -1,
-                    const QString &cacheKey = QString(), int cacheTtlMs = 0);
+                    const QString &cacheKey = QString(), int cacheTtlMs = 0,
+                    std::function<void()> failedToStart = {});
+    void launchDesktopService(QLocalSocket *socket, const QJsonObject &request,
+                              const KService::Ptr &service, const QList<QUrl> &urls,
+                              const QString &widgetKey = {});
+    void runAudioOutputs(QLocalSocket *socket, const QJsonObject &request);
     void applySystemTheme(QLocalSocket *socket, const QJsonObject &request,
                           bool dark);
     void runNetworkRefresh(QLocalSocket *socket, const QJsonObject &request);
@@ -110,9 +120,9 @@ private:
                     const QJsonObject &result = {}, const QString &code = {},
                     const QString &message = {}, bool retryable = false);
     void invalidateReplies(const QString &keyPrefix);
-    // Returns true when a fetch for `key` is already running and this request
-    // was queued onto it; false means the caller must start the fetch itself
-    // and finish it with completeInFlight().
+    // Returns true when a fetch already runs and this request was queued, or
+    // when the bounded queue rejected it with a reply. False means the caller
+    // must start the fetch and finish it with completeInFlight().
     bool queueIfInFlight(const QString &key, QLocalSocket *socket,
                          const QJsonObject &request);
     void completeInFlight(const QString &key, bool ok,
@@ -120,19 +130,43 @@ private:
                           const QString &code = {}, const QString &message = {},
                           bool retryable = false, int ttlMs = 0);
     void watchNmPath(const QString &path);
+    void unwatchNmPath(const QString &path);
     void watchBluezManager();
     void watchBluezPath(const QString &path);
     void watchBrightnessPath(const QString &service, const QString &path);
+    void unwatchBrightnessPath(const QString &key);
+    // Removes NM/brightness watches that no operation has re-confirmed within
+    // kDbusStaleWatchMs, unlinking their D-Bus match rules. NetworkManager
+    // object paths embed counters that increase on every reconnect, so without
+    // this the daemon (and the system bus) accumulate one dead subscription
+    // per reconnect for the process lifetime.
+    void pruneStaleDbusWatches();
     void watchNightLight();
     void startAudioEventWatcher(const QString &pactl);
 
     bool handleClipboard(QLocalSocket *socket, const QJsonObject &request);
     bool handleApplication(QLocalSocket *socket, const QJsonObject &request);
+    QSet<QString> m_widgetOpening;
+    QSet<QString> m_widgetQueries;
+    QSet<QString> m_widgetTimedOut;
     bool handleFileOperation(QLocalSocket *socket, const QJsonObject &request);
+    // Copy/transfer admission: bounds the m_copyPool queue the way
+    // queueIfInFlight bounds the reply cache, answering busy(retryable) over
+    // the limit. Queued jobs are never cancelled on disconnect.
+    bool admitCopyJob(QLocalSocket *socket, const QJsonObject &request);
+    void releaseCopyJob();
     bool handleKWin(QLocalSocket *socket, const QJsonObject &request);
     bool handleAppMenu(QLocalSocket *socket, const QJsonObject &request);
     bool handleInput(QLocalSocket *socket, const QJsonObject &request);
-    bool handleSystemOperation(QLocalSocket *socket, const QJsonObject &request);
+    bool handleInputMethodOperation(QLocalSocket *socket, const QJsonObject &request);
+    void initKimpanelBridge();
+    bool handleAudioOperation(QLocalSocket *socket, const QJsonObject &request);
+    bool handlePowerOperation(QLocalSocket *socket, const QJsonObject &request);
+    bool handleNetworkOperation(QLocalSocket *socket, const QJsonObject &request);
+    bool handleBluetoothOperation(QLocalSocket *socket, const QJsonObject &request);
+    bool handleDisplayOperation(QLocalSocket *socket, const QJsonObject &request);
+    bool handleThemeOperation(QLocalSocket *socket, const QJsonObject &request);
+    bool handleDesktopOperation(QLocalSocket *socket, const QJsonObject &request);
     bool handleTrayOperation(QLocalSocket *socket, const QJsonObject &request);
     bool handleStateOperation(QLocalSocket *socket, const QJsonObject &request);
     bool handleWallpaperOperation(QLocalSocket *socket, const QJsonObject &request);
@@ -162,6 +196,9 @@ private:
     QString m_socketPath;
     QHash<QLocalSocket *, QByteArray> m_buffers;
     QSet<QLocalSocket *> m_windowSubscribers;
+    QSet<QLocalSocket *> m_inputMethodSubscribers;
+    KimpanelBridge *m_kimpanelBridge = nullptr;
+    QHash<QLocalSocket *, KeepAwakeLease *> m_keepAwakeLeases;
     // A Shell can reconnect after Quickshell reloads while KWin has no new
     // window event to broadcast. Retain the authoritative last snapshot so a
     // new subscriber never has to wait for unrelated window activity.
@@ -181,18 +218,29 @@ private:
     qint64 m_lastClipboardPruneMs = 0;
     QHash<QString, CachedReply> m_replyCache;
     QHash<QString, QList<PendingReply>> m_inFlightReplies;
-    QSet<QString> m_nmWatchedPaths;
+    // path -> last re-confirmation (ms since epoch). The paths themselves are
+    // stable only while their object lives: NM numbers ActiveConnection/<N>,
+    // IP4Config/<N> etc. with counters that increase on every reconnect, so
+    // entries age out via pruneStaleDbusWatches() instead of accumulating one
+    // D-Bus match rule per reconnect forever.
+    QHash<QString, qint64> m_nmWatchedPaths;
     QSet<QString> m_bluezWatchedPaths;
     // "service path" pairs: the KDE brightness service name differs between
     // powerdevil generations, so the watch key carries the resolved service.
-    QSet<QString> m_brightnessWatched;
+    // Values are last re-confirmation timestamps, aged out like the NM set.
+    QHash<QString, qint64> m_brightnessWatched;
     bool m_bluezManagerWatched = false;
     bool m_nightLightWatched = false;
     QProcess *m_audioEventWatcher = nullptr;
-    // file.copy work runs here so a multi-GB copy cannot stall the socket
+    // file.copy/transfer work runs here so large copies cannot stall the socket
     // event loop. Declared last so it is destroyed first: ~QThreadPool waits
     // for in-flight copies (bounded file IO) before members go away.
     QThreadPool m_copyPool;
+    // Queued-or-running copy/transfer jobs. The pool's thread cap bounds only
+    // concurrency, so without this counter a slow disk plus a batch-submitting
+    // client grows the queue without bound. Guarded by the socket event loop
+    // like every other member access.
+    int m_copyJobs = 0;
     // Synchronous NM/BlueZ-class D-Bus walks (network.refresh/details) run
     // here off the socket event loop. Declared last so ~QThreadPool waits for
     // in-flight workers (bounded calls) before members go away.

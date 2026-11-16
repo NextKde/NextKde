@@ -1,0 +1,17 @@
+/* Native GTK buttons keep their input and accessibility. The GTK module draws
+ * the same 14 px lights as the KWin decoration inside 28 px hit targets. */
+@define-color kos_native_controls #ffffff;
+@define-color kos_native_glyph #ffffff;
+headerbar button.titlebutton.close,
+headerbar button.titlebutton.minimize,
+headerbar button.titlebutton.maximize {
+    min-width: 28px;
+    min-height: 28px;
+    padding: 0;
+    margin: 0;
+    border: none;
+    border-radius: 0;
+    background: none;
+    box-shadow: none;
+    -gtk-icon-shadow: none;
+}

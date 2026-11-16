@@ -5,6 +5,7 @@
 #include "wayland/surface.h"
 
 #include <algorithm>
+#include <utility>
 #include <wayland-server-core.h>
 
 namespace KWin
@@ -15,12 +16,29 @@ struct SurfaceShapeManager::ShapeResource
     SurfaceInterface *surface = nullptr;
     wl_resource *resource = nullptr;
     SurfaceShape value;
+    SurfaceShape pending;
+    bool retired = false;
+    std::optional<SurfaceShape> sealed;
+    struct RevealCommand { uint32_t enabled, opened, duration, serial; };
+    std::optional<RevealCommand> pendingReveal;
+    std::optional<RevealCommand> sealedReveal;
+    SurfaceShape &edit() { return value.transactional ? pending : value; }
     QMetaObject::Connection surfaceDestroyed;
+    bool revealEnabled = false;
+    bool revealOpened = false;
+    bool revealRunning = false;
+    bool revealCompletionPending = false;
+    qreal progress = 0;
+    qreal startProgress = 0;
+    qint64 startTime = 0;
+    uint32_t duration = 320;
+    uint32_t serial = 0;
 };
 
 static const struct kos_surface_shape_manager_v1_interface s_managerImplementation{
     SurfaceShapeManager::getShape,
     SurfaceShapeManager::destroyManagerResource,
+    SurfaceShapeManager::commit,
 };
 
 static const struct kos_surface_shape_v1_interface s_shapeImplementation{
@@ -31,17 +49,26 @@ static const struct kos_surface_shape_v1_interface s_shapeImplementation{
     SurfaceShapeManager::destroyShape,
     SurfaceShapeManager::setScrim,
     SurfaceShapeManager::setBlur,
+    SurfaceShapeManager::setCaptureGeometry,
+    SurfaceShapeManager::setMaterialOpacity,
+    SurfaceShapeManager::setReveal,
+    SurfaceShapeManager::setMaterial,
+    SurfaceShapeManager::setBlurSigma,
+    SurfaceShapeManager::setTint,
 };
 
 SurfaceShapeManager::SurfaceShapeManager(Display *display, QObject *parent)
     : QObject(parent)
 {
+    m_clock.start();
     // Must advertise the interface version the protocol declares, or a
     // conformant client binds at 1 and can never send the since=3 set_scrim
-    // or the since=4 set_blur (it would have to skip them silently). The
-    // resources below already create their shape objects at 4.
-    m_global = wl_global_create(*display, &kos_surface_shape_manager_v1_interface,
-                                4, this, bindManager);
+    // or the since=4..8 material, reveal and transaction requests. Shape resource versions follow
+    // the actual negotiated manager version below.
+    if (display) {
+        m_global = wl_global_create(*display, &kos_surface_shape_manager_v1_interface,
+                                    8, this, bindManager);
+    }
 }
 
 SurfaceShapeManager::~SurfaceShapeManager()
@@ -49,6 +76,11 @@ SurfaceShapeManager::~SurfaceShapeManager()
     if (m_global) {
         wl_global_destroy(m_global);
     }
+    // Existing manager bindings also outlive the global. Detach their user
+    // data so a late get_shape/destroy cannot dereference this deleted manager.
+    for (wl_resource *resource : std::as_const(m_managerResources))
+        wl_resource_set_user_data(resource, nullptr);
+    m_managerResources.clear();
     // Client-owned shape resources OUTLIVE us. Destroying them here would drop
     // their ids from the client's object map, and the `destroy` the client is
     // about to send for the vanished global would come back as "invalid object"
@@ -63,6 +95,8 @@ SurfaceShapeManager::~SurfaceShapeManager()
             shape->manager = nullptr;
             shape->surface = nullptr;
             disconnect(shape->surfaceDestroyed);
+            // Retired v8 objects have no client resource left to free them.
+            if (!shape->resource) delete shape;
         }
     }
 }
@@ -71,20 +105,86 @@ QVector<SurfaceShape> SurfaceShapeManager::shapesFor(const SurfaceInterface *sur
 {
     QVector<SurfaceShape> result;
     for (const ShapeResource *shape : m_shapes.value(surface)) {
-        if (shape->value.enabled && shape->value.geometry.width() > 0
+        // Retain a zero-opacity declaration through the client's final hide
+        // commit, so a stale blur region cannot fall back to a full glass slab.
+        const bool closedReveal = shape->revealEnabled && shape->progress == 0;
+        const bool transparentMaterial = shape->value.materialOpacity <= 0;
+        if ((shape->value.enabled || closedReveal || transparentMaterial) && shape->value.geometry.width() > 0
             && shape->value.geometry.height() > 0) {
-            result.append(shape->value);
+            SurfaceShape value = shape->value;
+            if (transparentMaterial) value.enabled = true;
+            if (shape->revealEnabled) {
+                value.enabled = true;
+                const QRectF finalRect = value.geometry;
+                // The allocation remains constant, including the fully closed pose.
+                value.captureGeometry = surfaceCaptureBounds(value);
+                const SurfaceReveal reveal{finalRect, shape->progress};
+                // Glass and client content share the same bottom-center transform.
+                // Closed geometry is still 80% sized; opacity retires the panel.
+                value.geometry = reveal.visibleGeometry();
+                value.radius *= reveal.scale();
+                value.materialOpacity *= reveal.progress;
+            }
+            result.append(value);
         }
     }
     return result;
+}
+
+std::optional<SurfaceReveal> SurfaceShapeManager::revealFor(const SurfaceInterface *surface) const
+{
+    for (const ShapeResource *shape : m_shapes.value(surface)) {
+        if (shape->revealEnabled) {
+            return SurfaceReveal{shape->value.geometry, shape->progress};
+        }
+    }
+    return std::nullopt;
+}
+
+void SurfaceShapeManager::advanceAnimations()
+{
+    const qint64 now = m_clock.elapsed();
+    for (const auto &list : std::as_const(m_shapes)) {
+        for (ShapeResource *shape : list) {
+            if (!shape->revealRunning) continue;
+            const qreal t = std::clamp(qreal(now - shape->startTime) / shape->duration, 0.0, 1.0);
+            const qreal eased = 1 - (1 - t) * (1 - t) * (1 - t);
+            shape->progress = shape->startProgress
+                + ((shape->revealOpened ? 1.0 : 0.0) - shape->startProgress) * eased;
+            Q_EMIT revealFrameChanged(shape->surface, surfaceCaptureBounds(shape->value));
+            if (t >= 1) {
+                shape->revealRunning = false;
+                // Notify only after the endpoint frame has been drawn.
+                shape->revealCompletionPending = true;
+            }
+        }
+    }
+}
+
+void SurfaceShapeManager::completeAnimations()
+{
+    for (const auto &list : std::as_const(m_shapes)) {
+        for (ShapeResource *shape : list) {
+            if (!shape->revealCompletionPending) continue;
+            shape->revealCompletionPending = false;
+            kos_surface_shape_v1_send_reveal_finished(shape->resource,
+                shape->revealOpened, shape->serial);
+        }
+    }
 }
 
 void SurfaceShapeManager::bindManager(wl_client *client, void *data,
                                       uint32_t version, uint32_t id)
 {
     wl_resource *resource = wl_resource_create(client,
-        &kos_surface_shape_manager_v1_interface, std::min(version, 4u), id);
-    wl_resource_set_implementation(resource, &s_managerImplementation, data, nullptr);
+        &kos_surface_shape_manager_v1_interface, std::min(version, 8u), id);
+    if (!resource) {
+        wl_client_post_no_memory(client);
+        return;
+    }
+    auto *manager = static_cast<SurfaceShapeManager *>(data);
+    manager->m_managerResources.insert(resource);
+    wl_resource_set_implementation(resource, &s_managerImplementation, data, destroyManagerBinding);
 }
 
 void SurfaceShapeManager::destroyManagerResource(wl_client *, wl_resource *resource)
@@ -92,10 +192,22 @@ void SurfaceShapeManager::destroyManagerResource(wl_client *, wl_resource *resou
     wl_resource_destroy(resource);
 }
 
+void SurfaceShapeManager::destroyManagerBinding(wl_resource *resource)
+{
+    auto *manager = static_cast<SurfaceShapeManager *>(wl_resource_get_user_data(resource));
+    if (manager) manager->m_managerResources.remove(resource);
+}
+
 void SurfaceShapeManager::getShape(wl_client *client, wl_resource *resource,
                                    uint32_t id, wl_resource *surfaceResource)
 {
     auto *manager = static_cast<SurfaceShapeManager *>(wl_resource_get_user_data(resource));
+    if (!manager) {
+        // The effect was unloaded after this client bound the old global.
+        // A new object cannot be created on a retired manager binding.
+        wl_resource_post_error(resource, 0, "surface shape manager is no longer available");
+        return;
+    }
     SurfaceInterface *surface = SurfaceInterface::get(surfaceResource);
     if (!surface) {
         wl_resource_post_error(resource, 0, "invalid wl_surface");
@@ -105,10 +217,28 @@ void SurfaceShapeManager::getShape(wl_client *client, wl_resource *resource,
     shape->manager = manager;
     shape->surface = surface;
     shape->value.id = manager->m_nextId++;
-    // shape 资源版本跟随 manager 资源的实际协商版本（bind 侧已 min(version,4)）
+    shape->value.transactional = wl_resource_get_version(resource) >= 8;
+    shape->value.enabled = !shape->value.transactional;
+    shape->pending = shape->value;
+    if (shape->value.transactional && !manager->m_transactionSurfaces.contains(surface)) {
+        manager->m_transactionSurfaces.insert(surface);
+        manager->connect(surface, &SurfaceInterface::committed, manager,
+                         [manager, surface] { manager->applyCommit(surface); });
+        manager->connect(surface, &QObject::destroyed, manager,
+                         [manager, surface] {
+            manager->m_transactionSurfaces.remove(surface);
+            manager->m_ownedSurfaces.remove(surface);
+        });
+    }
+    // shape 资源版本跟随 manager 资源的实际协商版本（bind 侧已 min(version,8)）
     // ——写死 4 会让 v1 客户端拿到标成 v4 的资源，将来按版本门控全失真
     shape->resource = wl_resource_create(client, &kos_surface_shape_v1_interface,
                                           wl_resource_get_version(resource), id);
+    if (!shape->resource) {
+        delete shape;
+        wl_client_post_no_memory(client);
+        return;
+    }
     wl_resource_set_implementation(shape->resource, &s_shapeImplementation, shape,
                                    destroyShapeResource);
     shape->surfaceDestroyed = connect(surface, &QObject::destroyed, manager,
@@ -117,9 +247,11 @@ void SurfaceShapeManager::getShape(wl_client *client, wl_resource *resource,
             // NOT be cleared here -- doing so would leave the bucket holding a
             // freed ShapeResource. The disconnect inside remove() also makes
             // sure this lambda can never run after the shape is gone.
-            if (shape->resource) {
-                wl_resource_destroy(shape->resource);
-            }
+            const bool transactional = shape->value.transactional;
+            if (shape->resource) wl_resource_destroy(shape->resource);
+            // A v8 resource may have been retired ahead of the next commit.
+            // Surface destruction is the final lifetime boundary for its state.
+            if (transactional && shape->manager) shape->manager->remove(shape);
         });
     manager->m_shapes[surface].append(shape);
     Q_EMIT manager->surfaceShapesChanged(surface);
@@ -133,7 +265,16 @@ void SurfaceShapeManager::destroyShapeResource(wl_resource *resource)
     }
     shape->resource = nullptr;
     if (shape->manager) {
-        shape->manager->remove(shape);
+        if (shape->value.transactional) {
+            shape->retired = true;
+            shape->revealRunning = false;
+            shape->revealCompletionPending = false;
+            shape->sealedReveal.reset();
+            shape->pending.enabled = false;
+            shape->pendingReveal.reset();
+        } else {
+            shape->manager->remove(shape);
+        }
     } else {
         // Orphaned by the manager's teardown; the resource was kept alive on
         // purpose so this client-side destroy could reclaim it.
@@ -148,7 +289,9 @@ void SurfaceShapeManager::setGeometry(wl_client *, wl_resource *resource,
     if (!shape->manager) {
         return;
     }
-    shape->value.geometry = QRectF(x, y, std::max(width, 0), std::max(height, 0));
+    const QRectF geometry(x, y, std::max(width, 0), std::max(height, 0));
+    if (shape->edit().geometry == geometry) return;
+    shape->edit().geometry = geometry;
     shape->manager->changed(shape);
 }
 
@@ -159,9 +302,68 @@ void SurfaceShapeManager::setCorner(wl_client *, wl_resource *resource,
     if (!shape->manager) {
         return;
     }
-    shape->value.radius = std::clamp(wl_fixed_to_double(radius), 0.0, 4096.0);
-    shape->value.exponent = std::clamp(wl_fixed_to_double(exponent), 2.0, 8.0);
+    const qreal r = std::clamp(wl_fixed_to_double(radius), 0.0, 4096.0);
+    const qreal e = std::clamp(wl_fixed_to_double(exponent), 2.0, 8.0);
+    if (shape->edit().radius == r && shape->edit().exponent == e) return;
+    shape->edit().radius = r;
+    shape->edit().exponent = e;
     shape->manager->changed(shape);
+}
+
+void SurfaceShapeManager::setCaptureGeometry(wl_client *, wl_resource *resource,
+                                            int32_t x, int32_t y, int32_t width, int32_t height)
+{
+    auto *shape = static_cast<ShapeResource *>(wl_resource_get_user_data(resource));
+    if (!shape->manager) return;
+    const QRectF capture(x, y, std::max(width, 0), std::max(height, 0));
+    if (shape->edit().captureGeometry == capture) return;
+    shape->edit().captureGeometry = capture;
+    shape->manager->changed(shape);
+}
+
+void SurfaceShapeManager::setMaterialOpacity(wl_client *, wl_resource *resource, wl_fixed_t opacity)
+{
+    auto *shape = static_cast<ShapeResource *>(wl_resource_get_user_data(resource));
+    if (!shape->manager) return;
+    const qreal value = std::clamp(wl_fixed_to_double(opacity), 0.0, 1.0);
+    if (shape->edit().materialOpacity == value) return;
+    shape->edit().materialOpacity = value;
+    // Only a uniform changed; keep capture geometry and blur bookkeeping intact.
+    if (!shape->value.transactional)
+        Q_EMIT shape->manager->revealFrameChanged(shape->surface, surfaceCaptureBounds(shape->value));
+}
+
+void SurfaceShapeManager::setReveal(wl_client *, wl_resource *resource,
+                                    uint32_t enabled, uint32_t opened, uint32_t duration, uint32_t serial)
+{
+    auto *shape = static_cast<ShapeResource *>(wl_resource_get_user_data(resource));
+    if (!shape->manager) return;
+    if (shape->value.transactional) {
+        shape->pendingReveal = ShapeResource::RevealCommand{enabled, opened, duration, serial};
+        return;
+    }
+    shape->manager->applyReveal(shape, enabled, opened, duration, serial);
+}
+
+void SurfaceShapeManager::applyReveal(ShapeResource *shape, uint32_t enabled,
+                                     uint32_t opened, uint32_t duration, uint32_t serial)
+{
+    advanceAnimations();
+    const bool wasEnabled = shape->revealEnabled;
+    shape->revealEnabled = enabled != 0;
+    shape->revealOpened = opened != 0;
+    shape->serial = serial;
+    shape->revealCompletionPending = false;
+    if (!wasEnabled) shape->progress = 0;
+    shape->startProgress = shape->progress;
+    shape->startTime = m_clock.elapsed();
+    shape->duration = std::clamp(duration, 1u, 2000u);
+    shape->revealRunning = shape->revealEnabled
+        && shape->progress != (shape->revealOpened ? 1.0 : 0.0);
+    if (!shape->value.transactional) changed(shape);
+    if (shape->revealEnabled && !shape->revealRunning) {
+        kos_surface_shape_v1_send_reveal_finished(shape->resource, shape->revealOpened, serial);
+    }
 }
 
 void SurfaceShapeManager::setEnabled(wl_client *, wl_resource *resource, uint32_t enabled)
@@ -170,7 +372,8 @@ void SurfaceShapeManager::setEnabled(wl_client *, wl_resource *resource, uint32_
     if (!shape->manager) {
         return;
     }
-    shape->value.enabled = enabled != 0;
+    if (shape->edit().enabled == (enabled != 0)) return;
+    shape->edit().enabled = enabled != 0;
     shape->manager->changed(shape);
 }
 
@@ -188,10 +391,20 @@ void SurfaceShapeManager::setScrim(wl_client *, wl_resource *resource,
     if (!shape->manager) {
         return;
     }
-    shape->value.scrimEnabled = enabled != 0;
-    shape->value.scrimTint = (tint == 1) ? 1 : 0;
-    shape->value.scrimCap = std::clamp(wl_fixed_to_double(cap), 0.0, 1.0);
-    shape->value.scrimDecay = std::clamp(wl_fixed_to_double(decay), 0.0, 4.0);
+    const int tintValue = (tint == 1) ? 1 : 0;
+    const qreal capValue = std::clamp(wl_fixed_to_double(cap), 0.0, 1.0);
+    const qreal rawDecay = std::clamp(wl_fixed_to_double(decay), 0.0, 4.0);
+    const qreal decayValue = std::min(rawDecay, 1.0);
+    if (!shape->value.transactional) {
+        auto &state = shape->edit();
+        state.tintMode = (enabled && rawDecay > 1) ? (rawDecay > 3 ? 3 : rawDecay > 2 ? 2 : 1) : 0;
+        state.tint = QVector4D(tintValue, tintValue, tintValue, capValue);
+    }
+    if (!shape->value.transactional && rawDecay > 1) enabled = 0;
+    shape->edit().scrimEnabled = enabled != 0;
+    shape->edit().scrimTint = tintValue;
+    shape->edit().scrimCap = capValue;
+    shape->edit().scrimDecay = decayValue;
     shape->manager->changed(shape);
 }
 
@@ -202,12 +415,87 @@ void SurfaceShapeManager::setBlur(wl_client *, wl_resource *resource,
     if (!shape->manager) {
         return;
     }
-    shape->value.blurEnabled = enabled != 0;
+    const uint clampedLevel = std::clamp<uint>(level, 1, 15);
+    if (shape->edit().blurEnabled == (enabled != 0) && shape->edit().blurLevel == clampedLevel) return;
+    shape->edit().blurEnabled = enabled != 0;
     // The compositor blur table is 15 steps. The precise clamp against the
     // table length happens at consumption (blur.cpp); this only rejects
     // nonsense so a hostile value cannot reach far.
-    shape->value.blurLevel = std::clamp<uint>(level, 1, 15);
+    shape->edit().blurLevel = clampedLevel;
     shape->manager->changed(shape);
+}
+
+bool SurfaceShapeManager::ownsGeometry(const SurfaceInterface *surface) const
+{
+    return m_ownedSurfaces.contains(surface);
+}
+
+void SurfaceShapeManager::commit(wl_client *, wl_resource *resource, wl_resource *surfaceResource)
+{
+    auto *manager = static_cast<SurfaceShapeManager *>(wl_resource_get_user_data(resource));
+    if (!manager) return;
+    auto *surface = SurfaceInterface::get(surfaceResource);
+    if (!surface) return;
+    for (ShapeResource *shape : manager->m_shapes.value(surface)) {
+        if (!shape->value.transactional) continue;
+        shape->sealed = shape->pending;
+        if (shape->pendingReveal) {
+            shape->sealedReveal = shape->pendingReveal;
+            shape->pendingReveal.reset();
+        }
+    }
+}
+
+void SurfaceShapeManager::applyCommit(const SurfaceInterface *surface)
+{
+    bool dirty = false;
+    QVector<ShapeResource *> retired;
+    for (ShapeResource *shape : m_shapes.value(surface)) {
+        if (!shape->sealed) continue;
+        shape->value = *shape->sealed;
+        shape->sealed.reset();
+        if (shape->retired) {
+            retired.append(shape);
+            shape->revealEnabled = false;
+            shape->revealRunning = false;
+            shape->sealedReveal.reset();
+        }
+        if (shape->sealedReveal) {
+            const auto command = *shape->sealedReveal;
+            shape->sealedReveal.reset();
+            applyReveal(shape, command.enabled, command.opened, command.duration, command.serial);
+        }
+        dirty = true;
+    }
+    // Switching away from the standard region is itself committed state.
+    if (dirty) m_ownedSurfaces.insert(surface);
+    for (ShapeResource *shape : retired) remove(shape);
+    if (dirty) Q_EMIT surfaceShapesChanged(const_cast<SurfaceInterface *>(surface));
+}
+
+void SurfaceShapeManager::setMaterial(wl_client *, wl_resource *resource, uint32_t effect, uint32_t profile)
+{
+    auto *shape = static_cast<ShapeResource *>(wl_resource_get_user_data(resource));
+    if (!shape->manager) return;
+    shape->pending.effect = std::min(effect, 1u);
+    shape->pending.material = std::min(profile, 2u);
+}
+
+void SurfaceShapeManager::setBlurSigma(wl_client *, wl_resource *resource, wl_fixed_t sigma)
+{
+    auto *shape = static_cast<ShapeResource *>(wl_resource_get_user_data(resource));
+    if (!shape->manager) return;
+    shape->pending.blurSigma = std::clamp(wl_fixed_to_double(sigma), 0.0, 32.0);
+}
+
+void SurfaceShapeManager::setTint(wl_client *, wl_resource *resource, uint32_t mode,
+                                 wl_fixed_t red, wl_fixed_t green, wl_fixed_t blue, wl_fixed_t opacity)
+{
+    auto *shape = static_cast<ShapeResource *>(wl_resource_get_user_data(resource));
+    if (!shape->manager) return;
+    const auto unit = [](wl_fixed_t v) { return float(std::clamp(wl_fixed_to_double(v), 0.0, 1.0)); };
+    shape->pending.tintMode = std::min(mode, 3u);
+    shape->pending.tint = QVector4D(unit(red), unit(green), unit(blue), unit(opacity));
 }
 
 void SurfaceShapeManager::destroyShape(wl_client *, wl_resource *resource)
@@ -217,7 +505,7 @@ void SurfaceShapeManager::destroyShape(wl_client *, wl_resource *resource)
 
 void SurfaceShapeManager::changed(ShapeResource *shape)
 {
-    if (shape->surface) {
+    if (shape->surface && !shape->value.transactional) {
         Q_EMIT surfaceShapesChanged(shape->surface);
     }
 }

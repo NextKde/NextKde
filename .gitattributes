@@ -1,0 +1,6 @@
+# Local automation output is not part of source releases.
+# Keep defensive exclusions for UI iteration directories as well.
+/.loop export-ignore
+/tmp export-ignore
+/docs/ui-calendar export-ignore
+/docs/ui-weather export-ignore

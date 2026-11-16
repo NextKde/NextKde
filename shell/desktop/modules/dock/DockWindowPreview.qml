@@ -2,6 +2,7 @@ import QtQuick
 import Qt5Compat.GraphicalEffects
 import Quickshell
 import Quickshell.Wayland
+import "../../../shared/qml/i18n"
 import qs.desktop.modules.common
 import "../../../Kos/Ui"
 
@@ -19,6 +20,8 @@ PopupWindow {
     property var windows: []
     property real revealProgress: 0.0
     property bool closing: false
+    readonly property bool isWindowPreview: true
+    property bool entrancePending: false
 
     // Exposed to the owning DockIcon so it can bridge pointer movement across
     // the gap between two separate Wayland popup surfaces.
@@ -57,8 +60,9 @@ PopupWindow {
     // title; with several windows the count is the only aggregate the strip
     // itself can state.
     readonly property string toolbarLabel: {
-        const label = appName.trim().length > 0 ? appName.trim() : "窗口"
-        return windowCount > 1 ? label + " · " + windowCount + " 个窗口" : label
+        const label = appName.trim().length > 0 ? appName.trim() : I18n.tr("Window")
+        return windowCount > 1
+            ? I18n.tr("%1 · %2 windows").arg(label).arg(windowCount) : label
     }
     readonly property real cardWidth: 174
     readonly property real cardHeight: 124
@@ -85,9 +89,10 @@ PopupWindow {
         const list = preview.effectiveWindows
         for (let i = 0; i < list.length; i++) {
             // 已有图的不再重拍：effectiveWindows 现在每次 revision 重建
-            //（新数组身份），本函数会被频繁触发——重拍守卫把它变 no-op
+            //（新数组身份），本函数会被频繁触发——重拍守卫把它变 no-op。
+            // 「已有图」以 Image 没判死为准（读盘失败的图会被清章重拍）
             if (list[i]?.windowId
-                    && !WindowService.thumbnailUrl(list[i].windowId))
+                    && WindowService.thumbnailNeedsRefresh(list[i].windowId))
                 WindowService.requestThumbnail(list[i].windowId)
         }
     }
@@ -95,6 +100,8 @@ PopupWindow {
     onVisibleChanged: {
         if (visible)
             requestAllThumbnails()
+        else
+            preview.windows = []
     }
 
     onEffectiveWindowsChanged: {
@@ -124,17 +131,20 @@ PopupWindow {
             closing = false
             preview.visible = true
             revealProgress = 0.0
-            previewRevealStart.restart()
+            preview.entrancePending = true
             return
         }
         if (!preview.visible || closing)
             return
+        preview.entrancePending = false
+        previewEntrance.stop()
+        previewHandoff.stop()
         closing = true
         previewExit.restart()
     }
 
     function dismissDockPopupImmediately() {
-        previewRevealStart.stop()
+        preview.entrancePending = false
         previewEntrance.stop()
         previewHandoff.stop()
         previewExit.stop()
@@ -143,11 +153,10 @@ PopupWindow {
         preview.visible = false
     }
 
-    Timer {
-        id: previewRevealStart
-        interval: 16
-        repeat: false
+    FrameAnimation {
+        running: preview.entrancePending && preview.visible && !preview.closing
         onTriggered: {
+            preview.entrancePending = false
             if (preview.visible && !preview.closing)
                 previewEntrance.restart()
         }
@@ -158,7 +167,7 @@ PopupWindow {
         target: preview
         property: "revealProgress"
         to: 1.0
-        duration: 120
+        duration: DockAnimation.windowPreviewEntranceDuration
         easing.type: DockAnimation.elementEnterEasing
     }
 
@@ -188,8 +197,9 @@ PopupWindow {
         }
     }
 
+    PopupAnchorBinding { popupAnchor: preview.anchor; sourceItem: preview.anchorItem }
+
     anchor {
-        item: preview.anchorItem
         edges: Edges.Top
         gravity: Edges.Top
         margins.top: -6
@@ -210,10 +220,12 @@ PopupWindow {
         }
         radius: 14
         cornerExponent: AppearanceTokens.shape.cornerExponent
-        baseColor: ThemeService.backgroundColor
-        surfaceOpacity: 0.88
-        materialDepth: 2
-        material: "clear"
+        scrimEnabled: AppearanceTokens.surface.usesBackdrop
+        // Same tint recipe as the launcher surface: the shared adaptive
+        // scrim at its "transparent" preset, no custom base fill, material
+        // or depth overrides on top of the common liquid glass.
+        scrimLevel: "transparent"
+        scrimOpacity: 1
 
         HoverHandler {
             id: backgroundHover
@@ -280,18 +292,17 @@ PopupWindow {
                     }
 
                     Behavior on color {
-                        ColorAnimation { duration: 100 }
+                        ColorAnimation { duration: AppearanceTokens.motion.instant.duration; easing.type: AppearanceTokens.motion.enterCurve }
                     }
                     Behavior on border.color {
-                        ColorAnimation { duration: 100 }
+                        ColorAnimation { duration: AppearanceTokens.motion.instant.duration; easing.type: AppearanceTokens.motion.enterCurve }
                     }
 
-                    Text {
+                    BundledIcon {
                         anchors.centerIn: parent
-                        text: "+"
+                        name: "dock.preview.newWindow"
                         color: ThemeService.foregroundColor
-                        font.pixelSize: 21
-                        font.weight: Font.Medium
+                        size: 21
                     }
 
                     MouseArea {
@@ -333,7 +344,7 @@ PopupWindow {
                     height: parent.height
 
                 Repeater {
-                    model: preview.effectiveWindows
+                    model: preview.visible ? preview.effectiveWindows : []
                     delegate: Item {
                         id: cardDelegate
                         required property var modelData
@@ -382,7 +393,7 @@ PopupWindow {
                             }
 
                             Behavior on color {
-                                ColorAnimation { duration: 100 }
+                                ColorAnimation { duration: AppearanceTokens.motion.instant.duration; easing.type: AppearanceTokens.motion.enterCurve }
                             }
 
                             // Thumbnail display container
@@ -416,6 +427,14 @@ PopupWindow {
                                     sourceSize.height: Math.max(1,
                                         Math.round(thumbnailBox.height * 2))
                                     opacity: 0
+                                    // 失效自愈（同 StageCard）：URL 指向的
+                                    // PNG 被新一轮拍摄替换删除后 Image 不会
+                                    // 重读盘——上报给 WindowService 清账并
+                                    // 补拍，否则预览永远停在"正在获取预览…"
+                                    onStatusChanged: if (status === Image.Error)
+                                        WindowService.thumbnailLoadFailed(
+                                            cardDelegate.winId,
+                                            String(thumbMetrics.source))
                                 }
 
                                 Rectangle {
@@ -463,7 +482,8 @@ PopupWindow {
 
                                     Text {
                                         anchors.horizontalCenter: parent.horizontalCenter
-                                        text: cardDelegate.thumbUrl ? "正在刷新…" : "正在获取预览…"
+                                        text: cardDelegate.thumbUrl
+                                            ? I18n.tr("Refreshing…") : I18n.tr("Loading preview…")
                                         color: ThemeService.foregroundColor
                                         style: Text.Outline
                                         styleColor: Qt.rgba(0, 0, 0, 0.40)
@@ -487,7 +507,8 @@ PopupWindow {
                                 anchors.right: parent.right
                                 anchors.bottom: parent.bottom
                                 anchors.margins: 7
-                                text: cardDelegate.winTitle || preview.appName || "窗口"
+                                text: cardDelegate.winTitle || preview.appName
+                                    || I18n.tr("Window")
                                 color: ThemeService.foregroundColor
                                 style: Text.Outline
                                 styleColor: Qt.rgba(0, 0, 0, 0.45)
@@ -516,18 +537,17 @@ PopupWindow {
                                 z: 5
 
                                 Behavior on opacity {
-                                    NumberAnimation { duration: 100 }
+                                    NumberAnimation { duration: AppearanceTokens.motion.instant.duration; easing.type: AppearanceTokens.motion.enterCurve }
                                 }
                                 Behavior on color {
-                                    ColorAnimation { duration: 100 }
+                                    ColorAnimation { duration: AppearanceTokens.motion.instant.duration; easing.type: AppearanceTokens.motion.enterCurve }
                                 }
 
-                                Text {
+                                BundledIcon {
                                     anchors.centerIn: parent
-                                    text: "✕"
+                                    name: "dock.preview.closeWindow"
                                     color: "white"
-                                    font.pixelSize: 10
-                                    font.bold: true
+                                    size: 10
                                 }
 
                                 MouseArea {

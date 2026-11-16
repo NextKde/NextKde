@@ -156,6 +156,27 @@ function frameGeometry(window) {
     }
 }
 
+// Window content geometry (frame minus decoration). Stage cards size themselves
+// from the *content* aspect because the thumbnail is captured without
+// decoration — sizing from frameGeometry letterboxes wide windows (2026-10-18
+// kate: frame 1206x747 = 1.61, client 1206x713 = 1.69, thumbnail 720x425).
+// Older scripting APIs without clientGeometry fall back to the frame rect.
+function contentGeometry(window) {
+    try {
+        const g = window.clientGeometry;
+        if (!g || !(Number(propertyValue(g, "width", 0)) > 0))
+            return frameGeometry(window);
+        return {
+            x: Number(propertyValue(g, "x", 0)),
+            y: Number(propertyValue(g, "y", 0)),
+            width: Number(propertyValue(g, "width", 0)),
+            height: Number(propertyValue(g, "height", 0))
+        };
+    } catch (error) {
+        return frameGeometry(window);
+    }
+}
+
 // KWin 6 exposes maximizeMode as a flag set: vertical=1, horizontal=2. Read it
 // first; the older `maximized` shapes remain only as a compatibility fallback.
 function isMaximized(window) {
@@ -264,7 +285,16 @@ function schedulePlacementAttempt(window, attempt, delay) {
     const timer = new QTimer();
     timer.interval = delay;
     timer.singleShot = true;
-    timer.timeout.connect(function() { placeInitialWindow(window, attempt); });
+    const id = windowId(window);
+    timer.timeout.connect(function() {
+        if (initialPlacementState[id] !== "pending")
+            return;
+        const current = findWindow(id);
+        if (current)
+            placeInitialWindow(current, attempt);
+        else
+            delete initialPlacementState[id];
+    });
     keepPlacementTimer(timer);
     timer.start();
 }
@@ -374,6 +404,100 @@ function scheduleInitialPlacement(window) {
     schedulePlacementAttempt(window, 0, 0);
 }
 
+function installDesktopStack(workspace) {
+    // All three KOS surfaces share KWin's Below layer. Their window types and
+    // keyboard modes distinguish wallpaper < desktop widgets < Stage strip:
+    //   Wallpaper: Desktop + keyboardFocus None
+    //   Widgets:   Dock    + keyboardFocus OnDemand
+    //   Strip:     Normal  + keyboardFocus None
+    // Dock typing protects widgets/files from close/move and Show Desktop while
+    // excluding the transparent surface from native Overview's wallpaper choice.
+    // Layer-shell keeps them on every virtual desktop. Types do not impose a same-layer
+    // order: desktop activation or a late wallpaper map can still cover widgets.
+    // This script only orders existing surfaces; it never changes their visibility
+    // or desktop membership and never creates/reopens a window.
+    const BELOW_LAYER = 1
+    const NORMAL_WINDOW = 0
+    const DESKTOP_WINDOW = 1
+    const DOCK_WINDOW = 2
+    const WALLPAPER = 0
+    const WIDGETS = 1
+    const STRIP = 2
+
+    let reordering = false
+
+    function surfaceRole(window) {
+        if (!window || window.layer !== BELOW_LAYER
+                || (window.resourceClass !== "quickshell" && window.resourceClass !== "org.quickshell"))
+            return -1
+        if (window.windowType === DESKTOP_WINDOW)
+            return WALLPAPER
+        // wantsInput can still be false before the first buffer is ready.
+        // Watch and order the widget surface from its initial map onward.
+        if (window.windowType === DOCK_WINDOW)
+            return WIDGETS
+        if (window.windowType === NORMAL_WINDOW && !window.wantsInput)
+            return STRIP
+        return -1
+    }
+
+    function ensureOrder() {
+        if (reordering)
+            return
+
+        // Use list position rather than window.stackingOrder: KWin assigns those
+        // properties one at a time, emitting signals while later values are stale.
+        const windows = workspace.stackingOrder
+        const widgets = []
+        const strips = []
+        let highestRole = -1
+        let needsReorder = false
+        for (let i = 0; i < windows.length; ++i) {
+            const window = windows[i]
+            const role = surfaceRole(window)
+            if (role < 0)
+                continue
+            if (role < highestRole)
+                needsReorder = true
+            highestRole = Math.max(highestRole, role)
+            if (role === WIDGETS)
+                widgets.push(window)
+            else if (role === STRIP)
+                strips.push(window)
+        }
+        if (!needsReorder)
+            return
+
+        reordering = true
+        try {
+            // Keep wallpaper in place, then raise each role in its existing order.
+            // Bottom-layer surfaces stay below ordinary application windows.
+            for (let i = 0; i < widgets.length; ++i)
+                workspace.raiseWindow(widgets[i])
+            for (let i = 0; i < strips.length; ++i)
+                workspace.raiseWindow(strips[i])
+        } finally {
+            reordering = false
+        }
+    }
+
+    function watchWindow(window) {
+        if (surfaceRole(window) < 0)
+            return
+        window.stackingOrderChanged.connect(ensureOrder)
+    }
+
+    workspace.windowAdded.connect(function (window) {
+        watchWindow(window)
+        ensureOrder()
+    })
+
+    const initialWindows = workspace.stackingOrder
+    for (let i = 0; i < initialWindows.length; ++i)
+        watchWindow(initialWindows[i])
+    ensureOrder()
+}
+
 // Runtime-dependent bridge helpers start here. Tests evaluate the pure layout
 // and placement helpers above this marker without a live KWin workspace.
 
@@ -387,24 +511,6 @@ function outputName(window) {
     } catch (error) {
         return "";
     }
-}
-
-function windowDebug(window) {
-    return {
-        id: windowId(window),
-        pid: Number(propertyValue(window, "pid", 0)),
-        resourceClass: String(propertyValue(window, "resourceClass", "")),
-        resourceName: String(propertyValue(window, "resourceName", "")),
-        desktopFileName: String(propertyValue(window, "desktopFileName", "")),
-        caption: String(propertyValue(window, "caption", "")),
-        normalWindow: !!propertyValue(window, "normalWindow", false),
-        skipTaskbar: !!propertyValue(window, "skipTaskbar", false),
-        skipSwitcher: !!propertyValue(window, "skipSwitcher", false),
-        hidden: !!propertyValue(window, "hidden", false),
-        inputMethod: !!propertyValue(window, "inputMethod", false),
-        windowType: String(propertyValue(window, "windowType", "")),
-        onAllDesktops: !!propertyValue(window, "onAllDesktops", false)
-    };
 }
 
 function includeWindow(window) {
@@ -476,6 +582,28 @@ function setActiveWindow(window) {
     }
 }
 
+// ── 展开动画保证：状态感知翻转 ──
+// stageanim 的收/放动画全部寄生在 minimizedChanged 上，而 KWin 的
+// setMinimized 对同值写入直接 return（window.cpp：m_minimized ==
+// effectiveSet 即短路，不发信号）。编排侧的快照滞后/多路重复批次会
+// 写出同值——典型：窗口经旁路（alt-tab/上一手还原）已回到桌面、卡片
+// 还没随快照消失时点卡——写 false 是静默 no-op＝窗口瞬现、无动画。
+// 修复：需要展开而窗口已展开时，注入一次同 tick 真翻转（true→false）。
+// KWin TimeLine 语义（effect/timeline.cpp）：新建后 elapsed=0，Forward
+// 下 value()=0；紧随的 setDirection(Backward) 在 elapsed==0 且
+// sourceRedirectMode=Relaxed 时**不镜像** elapsed，value()=1−progress
+// 从 1.0 起步＝完整的"从卡片展开"动画；两次写入之间没有合成帧，窗口
+// 不会闪现。若该窗展开动画正在播放（elapsed>0），两次 toggleDirection
+// 各镜像一次 elapsed＝净零，动画连续无抖动。
+// ⚠️ 仅 forceAnim 命令（点卡/卡侧整组放出）注入：dock 点应用对"已在
+// 桌面的窗"是抬前语义，注入会先藏再从卡片长出（无中生有的伪影）。
+function restoreWithAnimation(window, forceAnim) {
+    if (forceAnim === true && !window.minimized) {
+        window.minimized = true;
+    }
+    window.minimized = false;
+}
+
 function snapshot() {
     const all = workspace.windowList();
     // The real KWin-active window, scanned UNFILTERED (transient dialogs
@@ -534,10 +662,15 @@ function snapshot() {
             id: windowId(window),
             pid: Number(propertyValue(window, "pid", 0)),
             appId: String(window.desktopFileName || window.resourceClass || window.resourceName || ""),
+            // Button exclusions match resourceClass, not the desktop entry ID.
+            resourceClass: String(window.resourceClass || window.resourceName || ""),
             title: String(window.caption || ""),
             // Normalized against the authoritative activeId above: one frame
             // must never mix a stale window.active with fresh minimized.
             activated: windowId(window) === activeId,
+            // Confirmation consumers must not mistake the animation lag
+            // guard above for focus that KWin has actually granted.
+            focusConfirmed: windowId(window) === liveActiveId,
             minimized: !!window.minimized,
             fullscreen: !!window.fullScreen,
             // KWin's authoritative _NET_WM_STATE_DEMANDS_ATTENTION state.
@@ -552,6 +685,8 @@ function snapshot() {
             // placement, so the user's actual drawn window is what occludes
             // the dock, not an app's requested size.
             geometry: frameGeometry(window),
+            // Content rect (no decoration) — Stage card aspect source.
+            contentGeometry: contentGeometry(window),
             outputName: outputName(window),
             maximized: isMaximized(window),
             visible: !!propertyValue(window, "visible", true)
@@ -691,6 +826,9 @@ function handleCommand(serialized) {
     // activated=false) and there is no later windowActivated event to correct
     // it if focus never changes again.
     if (command.action === "refresh-snapshot") {
+        // A restarted daemon has lost its replay cache even when KWin state
+        // is unchanged. This explicit request must bypass snapshot deduplication.
+        lastSnapshotJson = "";
         scheduleSnapshot();
         return;
     }
@@ -746,7 +884,7 @@ function handleCommand(serialized) {
                 // 工作区"钳位会在异步重放里盖掉之后排队的任何写入（实测）
                 if (geo)
                     groupWindow.frameGeometry = geo;
-                groupWindow.minimized = false;
+                restoreWithAnimation(groupWindow, command.forceAnim);
                 // 实时卡片模式把后台窗压在桌面底层（keepBelow）；整组激活
                 // 即走向前台，压底标记必须一并摘掉
                 groupWindow.keepBelow = false;
@@ -797,7 +935,7 @@ function handleCommand(serialized) {
                 // 会触发活动窗钳位的异步重放，盖掉后续写入）
                 if (geo)
                     groupWindow.frameGeometry = geo;
-                groupWindow.minimized = false;
+                restoreWithAnimation(groupWindow, command.forceAnim);
                 groupWindow.keepBelow = false;
                 if (geo)
                     restores.push({ window: groupWindow, geo: geo });
@@ -877,11 +1015,11 @@ function handleCommand(serialized) {
             // before making it active, otherwise KWin may accept the request but
             // leave it invisible. 停泊窗必须先复位几何再激活（否则激活到屏幕外）。
             const geo = takeParkedGeometry(window);
-            // 先复位再解除最小化（同 activate-group：重映射在停泊位上会
-            // 触发活动窗钳位的异步重放）
+            // 先复位再解除最小化（同 activate-group：重映射在停泊位上
+            // 会触发活动窗钳位的异步重放）
             if (geo)
                 window.frameGeometry = geo;
-            window.minimized = false;
+            restoreWithAnimation(window, command.forceAnim);
             setActiveWindow(window);
             // 激活后再写一次复位（保险带：任何钳位/重放时序都盖不过最后写）
             applyRestore(window, geo);
@@ -931,33 +1069,46 @@ function handleCommand(serialized) {
     publishSnapshotNow();
 }
 
+// Missing signals must not abort evaluation before the first snapshot. Keep
+// property reads authoritative; signals only request a fresh snapshot.
+function connectBridgeSignal(object, name, callback) {
+    try {
+        if (object[name] && object[name].connect) {
+            object[name].connect(callback);
+            return true;
+        }
+    } catch (error) {
+        print("[QuickshellWindowBridge] signal connect failed: " + name + " error=" + error);
+    }
+    return false;
+}
+
 function watchWindow(window) {
     if (!window)
         return;
     const watchedId = windowId(window);
-    window.captionChanged.connect(scheduleSnapshot);
-    window.desktopFileNameChanged.connect(scheduleSnapshot);
-    window.activeChanged.connect(scheduleSnapshot);
-    window.minimizedChanged.connect(scheduleSnapshot);
-    window.fullScreenChanged.connect(scheduleSnapshot);
-    // Kept defensive for an older KWin scripting API that lacks this signal.
-    try { window.demandsAttentionChanged.connect(scheduleSnapshot); } catch (error) {}
-    window.skipTaskbarChanged.connect(scheduleSnapshot);
-    // Geometry/placement changes drive the Dock auto-hide collision judgement.
-    // Each connect is defensive: one missing signal must not kill the bridge.
-    try { window.frameGeometryChanged.connect(scheduleGeometrySnapshot); } catch (error) {}
-    try { window.outputChanged.connect(scheduleGeometrySnapshot); } catch (error) {}
-    try { window.maximizedChanged.connect(scheduleSnapshot); } catch (error) {}
-    try { window.maximizeModeChanged.connect(scheduleSnapshot); } catch (error) {}
-    try { window.desktopsChanged.connect(scheduleSnapshot); } catch (error) {}
-    window.closed.connect(function() {
-        if (watchedId)
+    const metadataSignals = [
+        "captionChanged", "desktopFileNameChanged", "windowClassChanged", "activeChanged",
+        "minimizedChanged", "fullScreenChanged", "demandsAttentionChanged",
+        "skipTaskbarChanged", "skipSwitcherChanged", "hiddenChanged",
+        "maximizedChanged", "maximizeModeChanged", "desktopsChanged"
+    ];
+    for (let i = 0; i < metadataSignals.length; i++)
+        connectBridgeSignal(window, metadataSignals[i], scheduleSnapshot);
+    connectBridgeSignal(window, "frameGeometryChanged", scheduleGeometrySnapshot);
+    connectBridgeSignal(window, "outputChanged", scheduleGeometrySnapshot);
+    connectBridgeSignal(window, "closed", function() {
+        if (watchedId) {
             delete initialPlacementState[watchedId];
+            delete parkedGeometry[watchedId];
+        }
         scheduleSnapshot();
     });
 }
 
-// Runtime wiring.
+// Runtime wiring. Desktop ordering is owned by this platform-loaded bridge,
+// independently of optional Stage effects or the Shell instance lifecycle.
+installDesktopStack(workspace);
 const initial = workspace.windowList();
 for (let i = 0; i < initial.length; i++)
     watchWindow(initial[i]);
@@ -968,7 +1119,7 @@ for (let i = 0; i < initial.length; i++)
 // happens to fire.
 scheduleSnapshot();
 
-workspace.windowAdded.connect(function(window) {
+connectBridgeSignal(workspace, "windowAdded", function(window) {
     watchWindow(window);
     scheduleInitialPlacement(window);
     scheduleSnapshot();
@@ -976,19 +1127,22 @@ workspace.windowAdded.connect(function(window) {
 // 停泊档案随窗销毁清理（原写在纯函数区——测试用 "Runtime-dependent
 // bridge helpers" 标记切走 workspace 依赖段，顶层 connect 在标记前会让
 // window-placement 测试 ReferenceError，自停泊落地起一直红着）
-workspace.windowRemoved.connect(function(window) {
-    delete parkedGeometry[windowId(window)];
+connectBridgeSignal(workspace, "windowRemoved", function(window) {
+    const id = windowId(window);
+    delete parkedGeometry[id];
+    delete initialPlacementState[id];
+    scheduleSnapshot();
 });
-workspace.windowRemoved.connect(scheduleSnapshot);
-workspace.windowActivated.connect(scheduleSnapshot);
+connectBridgeSignal(workspace, "windowActivated", scheduleSnapshot);
 
 // Virtual-desktop lifecycle signals. KWin's QtScript API does not expose every
 // signal name in every version, and one missing connect aborts the whole
 // script (which would also stop the window snapshots). Connect defensively;
-// snapshot() republishes the desktop list as a fallback, so the overview stays
-// fresh even when every signal is unavailable.
+// The initial desktop publish and explicit "desktops" requests remain
+// available when a lifecycle signal is missing.
 function connectDesktopSignals() {
     const hooks = {
+        desktopsChanged: publishDesktops,
         desktopAdded: publishDesktops,
         desktopRemoved: publishDesktops,
         desktopNameChanged: publishDesktops,

@@ -13,6 +13,7 @@ ShellRoot {
     property real savedProgress: 0
     property int stableGlassChecks: 0
     property int launcherVariant: 0
+    property real launcherClosedAt: 0
     property var launcherFrame: null
     property var launcherLayout: null
     property real stableLayoutWidth: 0
@@ -59,7 +60,7 @@ ShellRoot {
     }
     ContextMenu { id: menu; anchorItem: anchorItem }
     DockInfoPopup { id: info; anchorItem: anchorItem; page: 2 }
-    AppLauncherWindow { id: launcher; outputAvailable: false }
+    AppLauncherWindow { id: launcher; outputAvailable: true }
 
     QtObject {
         id: notificationGroups
@@ -114,13 +115,23 @@ ShellRoot {
         function onPageProgressChanged() { Qt.callLater(test.checkPersistentGlass) }
     }
 
+    // Shipping cards are reparented into the scrolling panel canvas. Walk
+    // that actual hierarchy rather than assuming direct contentItem children.
+    function visibleCards(item) {
+        let cards = []
+        for (const child of item.children || []) {
+            if (child.isControlCenterCard && child.visible) cards.push(child)
+            else cards = cards.concat(visibleCards(child))
+        }
+        return cards
+    }
+
     function checkPersistentGlass() {
         if (!center.isOpen || center.revealProgress !== 1 || center.pageProgress === 1
                 || center.displayedSubmenu === "confirm")
             return
         try {
-            const cards = center.contentItem.children.filter(child =>
-                child.isControlCenterCard && child.visible)
+            const cards = visibleCards(center.contentItem)
             check(cards.length > 0, "a page transition always retains a glass surface")
             check(center.BackgroundEffect.blurRegion !== null,
                 "a page transition never clears the window blur region")
@@ -128,8 +139,9 @@ ShellRoot {
                 // Crossfade: the outgoing page's glass and content fade
                 // together while the incoming page fades in -- a card never
                 // leaves a bare glass shell hanging over the next page.
-                check(Math.abs(card.opacity - card.contentOpacity) < 0.001,
-                    "glass and content fade together during navigation")
+                check(card.contentOpacity === 1
+                    && Math.abs(card.glassOpacity - card.opacity * center.revealProgress) < 0.001,
+                    "the card fades content once and drives glass with the same page opacity")
                 check(card.opacity >= 0 && card.opacity <= 1,
                     "a transitioning card stays inside the fade range")
             }
@@ -158,35 +170,32 @@ ShellRoot {
 
     function checkLauncherFrame() {
         check(launcherFrame.width > 0 && launcherFrame.height > 0
-            && launcherFrame.width < stableLayoutWidth
-            && launcherFrame.height < stableLayoutHeight,
-            "the actual glass panel expands/contracts, not just its foreground")
+            && launcherFrame.width === stableLayoutWidth
+            && launcherFrame.height === stableLayoutHeight,
+            "the glass panel keeps its full dimensions during tile motion")
         check(launcherLayout.width === stableLayoutWidth
             && launcherLayout.height === stableLayoutHeight,
             "grid layout remains fixed throughout the panel animation")
         const surface = findItem(launcherFrame, "launcher-glass-surface")
         const content = findItem(launcherFrame, "launcher-motion-content")
-        const progress = launcher.contentRevealProgress
-        check(launcherFrame.opacity === 1 && content.opacity === progress,
-            "launcher content fades once without leaving an empty dark panel")
-        check(Math.abs(surface.blurRegion.scrimCap - surface._effectiveScrimCap * progress) < 0.0001
-            && Math.abs(surface.blurRegion.scrimDecay - surface._effectiveScrimDecay * progress) < 0.0001,
-            "native glass tint fades with the same progress as the launcher content")
+        check(launcherFrame.opacity === 1 && content.opacity === 1
+            && content.y === 0 && content.scale === 1,
+            "tile animations keep the glass and content container stationary")
+        check(Math.abs(surface.blurRegion.scrimCap - surface._effectiveScrimCap) < 0.0001
+            && Math.abs(surface.blurRegion.scrimDecay - surface._effectiveScrimDecay) < 0.0001,
+            "native glass tint stays constant during tile animations")
         const blur = launcher.BackgroundEffect.blurRegion
-        check(blur !== null && blur.item === launcherFrame,
-            "native blur follows the animated frame instead of the full-sized layout")
-        const expected = launcherFrame.mapToItem(null,
-            Qt.rect(0, 0, launcherFrame.width, launcherFrame.height))
+        check(blur !== null && blur.item === launcherLayout,
+            "native blur follows the stationary backdrop layout")
+        const expected = launcherLayout.mapToItem(null,
+            Qt.rect(0, 0, launcherLayout.width, launcherLayout.height))
         check(Math.abs(blur.itemRect.x - expected.x) < 0.01
             && Math.abs(blur.itemRect.y - expected.y) < 0.01
             && Math.abs(blur.itemRect.width - expected.width) < 0.01
             && Math.abs(blur.itemRect.height - expected.height) < 0.01,
             "blur geometry matches the current visible frame")
-        check(Math.abs(launcherFrame.x + launcherFrame.width * launcher.panelOriginX
-            - stableLayoutWidth * launcher.panelOriginX) < 0.01
-            && Math.abs(launcherFrame.y + launcherFrame.height * launcher.panelOriginY
-            - stableLayoutHeight * launcher.panelOriginY) < 0.01,
-            "the panel keeps its Dock edge or central origin fixed")
+        check(launcherFrame.x === 0 && launcherFrame.y === 0,
+            "tile animations do not displace the backdrop")
     }
 
     function checkScrimOpacity() {
@@ -358,22 +367,30 @@ ShellRoot {
                     interval = 400
                     break
                 case 14:
+                    // Exercise a populated, scrolling catalog without depending on
+                    // the applications installed in the VM.
+                    launcher.applications = Array.from({length: 80}, (_, i) => ({
+                        id: "motion-" + i + ".desktop", name: "Motion " + i, icon: ""
+                    }))
+                    launcher.applicationsDirty = false
                     check(menu.displayedPage.items[0].label === "Child", "menu page animation settles")
                     menu.hide()
                     menu.show()
+                    AppLauncherService.dockWidth = 800
+                    AppLauncherService.dockHeight = 60
                     launcher.open = true
                     interval = 380
                     break
                 case 15:
                     check(menu.visible, "context menu close can reverse")
-                    check(launcher.contentRevealProgress === 1, "launcher entrance settles")
+                    check(launcher.panelVisible, "launcher entrance retains the panel")
                     launcher.open = false
-                    check(launcher.contentRevealProgress === 1, "launcher close does not snap to zero")
+                    check(launcher.panelVisible, "launcher close retains the glass until tiles finish")
                     interval = 60
                     break
                 case 16:
-                    check(launcher.contentRevealProgress > 0 && launcher.contentRevealProgress < 1,
-                        "launcher has an exit animation")
+                    check(launcher.panelVisible && !launcher.open,
+                        "launcher remains mapped during the tile exit animation")
                     launcher.open = true
                     popup.hide()
                     menu.hide()
@@ -385,7 +402,7 @@ ShellRoot {
                     check(!info.visible && info.BackgroundEffect.blurRegion === null,
                         "the detail popup releases blur after closing")
                     check(!popup.visible && !menu.visible, "popups unmap after closing")
-                    check(launcher.contentRevealProgress === 1, "launcher exit can reverse")
+                    check(launcher.panelVisible && launcher.open, "launcher exit can reverse")
                     launcher.open = false
                     launcher.outputAvailable = true
                     interval = 300
@@ -417,20 +434,27 @@ ShellRoot {
                     break
                 case 21:
                     checkLauncherFrame()
-                    savedProgress = launcher.contentRevealProgress
                     launcher.open = true
-                    check(launcher.contentRevealProgress === savedProgress, "panel geometry reverses continuously")
+                    checkLauncherFrame()
                     interval = 330
                     break
                 case 22:
                     check(launcherFrame.width === stableLayoutWidth
                         && launcherFrame.height === stableLayoutHeight, "reopening restores full panel size")
                     launcher.open = false
-                    interval = 300
+                    launcherClosedAt = Date.now()
+                    interval = 350
                     break
                 case 23:
+                    // VM render-thread jobs can start later than GUI timers.
+                    // Keep a finite deadline while checking the actual lifetime.
+                    if (launcher.panelVisible && Date.now() - launcherClosedAt < 2000) {
+                        test.stage = 23
+                        interval = 50
+                        break
+                    }
                     check(!launcherFrame.visible && launcher.BackgroundEffect.blurRegion === null,
-                        "panel collapses completely before its blur is removed")
+                        "panel and blur retire after the closing tile animations finish: " + launcher.inspectGlass())
                     launcherVariant++
                     if (launcherVariant < launcherVariants.length) {
                         test.stage = 18

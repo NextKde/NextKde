@@ -1,5 +1,6 @@
 import QtQuick
 import QtQuick.Effects
+import "../../../shared/qml/i18n"
 import qs.desktop.modules.bar
 import qs.desktop.modules.common
 
@@ -11,6 +12,7 @@ Item {
 
     property int iconSize: 44
     property int dockHeight: 60
+    required property real cornerRadius
     property int widthUnits: 4
     // Set by DockInfoCarousel; the activity Canvas only repaints while shown.
     property bool pageActive: true
@@ -50,7 +52,7 @@ Item {
         y: -widget.backgroundGap
         width: widget.width
         height: widget.iconSize + widget.backgroundGap * 2
-        radius: widget.iconSize * 0.35
+        radius: widget.cornerRadius
         gradient: Gradient {
             orientation: Gradient.Horizontal
             GradientStop {
@@ -110,10 +112,13 @@ Item {
                 spacing: 0
 
                 Repeater {
+                    // Fixed two-letter labels: the narrow dock column overflows
+                    // with the localized "Avg/Max temperature" strings, and
+                    // degree abbreviations need no localization.
                     model: [
-                        { label: "平均温度", value: widget.currentC,
+                        { label: "Avg", value: widget.currentC,
                             accent: "#64d2ff" },
-                        { label: "最高温度", value: widget.maximum5MinuteC,
+                        { label: "Max", value: widget.maximum5MinuteC,
                             accent: "#ff6b62" }
                     ]
                     delegate: Item {
@@ -142,7 +147,7 @@ Item {
                             color: ThemeService.foregroundColor
                             opacity: 0.82
                             font {
-                                family: "Noto Sans CJK SC"
+                                family: AppearanceTokens.typography.textFamily
                                 pixelSize: Math.max(9,
                                     Math.round(widget.iconSize * 0.21))
                                 weight: Font.Medium
@@ -157,7 +162,7 @@ Item {
                                 ? modelData.value + "°" : "--°"
                             color: ThemeService.foregroundColor
                             font {
-                                family: "SF Pro Display"
+                                family: AppearanceTokens.typography.displayFamily
                                 pixelSize: Math.max(11,
                                     Math.round(widget.iconSize * 0.27))
                                 weight: Font.DemiBold
@@ -253,19 +258,19 @@ Item {
             color: "white"
             anchors.verticalCenter: parent.verticalCenter
             font {
-                family: "SF Pro Display"
+                family: AppearanceTokens.typography.displayFamily
                 pixelSize: Math.max(9, Math.round(widget.iconSize * 0.48))
                 weight: Font.DemiBold
             }
         }
         Text {
-            text: "· 峰值 " + (widget.available
+            text: I18n.tr("· Peak %1").arg(widget.available
                 ? widget.maximum5MinuteC + "°" : "--°")
             color: "white"
             opacity: 0.68
             anchors.verticalCenter: parent.verticalCenter
             font {
-                family: "Noto Sans CJK SC"
+                family: AppearanceTokens.typography.textFamily
                 pixelSize: Math.max(6, Math.round(widget.iconSize * 0.28))
                 weight: Font.Medium
             }

@@ -11,6 +11,11 @@ ROOT = Path(__file__).resolve().parents[2]
 # The authoritative default shortcut table lives in the Shell's
 # ShortcutsService; it must keep referring to every documented target.
 SHORTCUTS_SERVICE = ROOT / "shell/desktop/modules/shortcuts/ShortcutsService.qml"
+DAEMON = ROOT / "platform/src/daemon"
+
+
+def platform_sources() -> str:
+    return "\n".join(path.read_text() for path in sorted(DAEMON.glob("Platform*.cpp")))
 
 
 def test_shortcuts_service_defaults() -> None:
@@ -53,7 +58,7 @@ def test_literal_shell_operations_have_daemon_handlers() -> None:
         for pattern in request_patterns:
             operations.update(pattern.findall(text))
 
-    source = (ROOT / "platform/src/daemon/PlatformServer.cpp").read_text()
+    source = platform_sources()
     missing = sorted(
         operation
         for operation in operations
@@ -63,15 +68,19 @@ def test_literal_shell_operations_have_daemon_handlers() -> None:
 
 
 def test_application_launch_uses_kde_launcher_without_arbitrary_commands() -> None:
-    source = (ROOT / "platform/src/daemon/PlatformServer.cpp").read_text()
+    source = (DAEMON / "PlatformServerApplications.cpp").read_text()
     handler = source[source.index("bool PlatformServer::handleApplication"):]
-    handler = handler[:handler.index("bool PlatformServer::handleFileOperation")]
     assert 'QStringLiteral("application.launch")' in handler
     assert "KService::serviceByStorageId" in handler
     assert "KIO::ApplicationLauncherJob" in handler
     assert 'value(QStringLiteral("desktopId"))' in handler
     assert 'value(QStringLiteral("urls"))' in handler
-    assert 'value(QStringLiteral("command"))' not in handler
+    launch = handler[handler.index('if (op != QStringLiteral("application.launch"))'):]
+    assert 'value(QStringLiteral("command"))' not in launch
+    assert 'payload.value(QStringLiteral("command"))' not in handler
+    # Widget launch compares daemon-owned inventory with the desktop file; it
+    # must not turn that internal command field into a caller-supplied command.
+    assert 'service->exec() != result.value(QStringLiteral("command")).toString()' in handler
 
     qml = (ROOT / "shell/desktop/modules/common/AppActionService.qml").read_text()
     assert 'PlatformClient.request("application.launch"' in qml
@@ -80,11 +89,11 @@ def test_application_launch_uses_kde_launcher_without_arbitrary_commands() -> No
     main = (ROOT / "platform/src/daemon/main.cpp").read_text()
     assert "app.setQuitOnLastWindowClosed(false)" in main
     assert "QCoreApplication::setQuitLockEnabled(false)" in main
-    assert "PlatformServer::~PlatformServer()" in source
+    assert "PlatformServer::~PlatformServer()" in (DAEMON / "PlatformServer.cpp").read_text()
 
 
 def test_theme_toggle_uses_the_safe_palette_path() -> None:
-    source = (ROOT / "platform/src/daemon/PlatformServer.cpp").read_text()
+    source = (DAEMON / "PlatformServerTheme.cpp").read_text()
     toggle = source[source.index('if (op == QStringLiteral("theme.toggle"))'):]
     assert "QSettings settings" in toggle
     assert 'QStringLiteral("ColorScheme")' in toggle
@@ -97,9 +106,9 @@ def test_theme_toggle_uses_the_safe_palette_path() -> None:
 
 
 def test_nightlight_toggle_only_changes_persistent_master_switch() -> None:
-    source = (ROOT / "platform/src/daemon/PlatformServer.cpp").read_text()
+    source = (DAEMON / "PlatformServerDisplay.cpp").read_text()
     toggle = source[source.index('if (op == QStringLiteral("nightlight.toggle"))'):]
-    toggle = toggle[:toggle.index('if (op == QStringLiteral("shortcuts.apply"))')]
+    toggle = toggle[:toggle.index('if (op == QStringLiteral("display.outputs.get"))')]
     assert 'QStringLiteral("NightColor/Active")' in toggle
     assert 'QStringLiteral("inhibit")' in toggle
     assert 'QStringLiteral("uninhibit")' in toggle
@@ -178,42 +187,36 @@ def test_thumbnail_memory_is_bounded_and_recent_frames_are_reused() -> None:
 
 
 def test_brightness_targets_one_kde_display() -> None:
-    source = (ROOT / "platform/src/daemon/PlatformServer.cpp").read_text()
+    source = (DAEMON / "PlatformServerDisplay.cpp").read_text()
     assert "openScreenBrightness" in source
     assert 'property("DisplaysDBusNames")' in source
     assert 'QStringLiteral("org.kde.ScreenBrightness.Display")' in source
-    setter = source[source.index("bool setKdeDisplayBrightness("):]
-    setter = setter[:setter.index("QJsonObject readSysfsBrightness()")]
-    assert "displayIds.contains(displayId)" in setter
-    assert 'display.call(QStringLiteral("SetBrightness")' in setter
-    assert "for (const QString &displayId : displayIds)" not in setter
-
-    handler = source[source.index('if (op == QStringLiteral("display.brightness.set"))'):]
-    handler = handler[:handler.index('if (op == QStringLiteral("theme.reconfigure"))')]
-    assert 'payload.value(QStringLiteral("displayId"))' in handler
-    assert "setKdeDisplayBrightness(displayId, value)" in handler
+    # Behavior (targeting, partial failures, timeouts and fallback ordering)
+    # is exercised by the private-bus kos-platform.brightness fixture.
+    setter = source[source.index("class BrightnessWrite"):source.index("QJsonObject readSysfsBrightness()")]
+    assert "asyncCall" in setter
+    assert "QDBusInterface" not in setter[setter.index("public:"):]
+    assert 'payload.value(QStringLiteral("displayId"))' in source
 
 
-def test_lockscreen_feed_hands_the_daemon_a_local_path() -> None:
-    """StandardPaths.writableLocation() is a QUrl in QML, not a path.
-
-    Concatenated straight into the publish destination it read as
-    "file:///home/.../LockFeed.qml". FileView loads that happily, so the probe
-    gating the publish never noticed, but QFileInfo does not treat it as
-    absolute and the daemon answered every file.copy with "invalid-path": the
-    lock screen silently kept the weather its package was installed with. The
-    QUrl therefore has to go through the file URL conversion.
-    """
+def test_lockscreen_feed_uses_daemon_owned_fixed_destination() -> None:
+    """Weather text crosses IPC; paths and atomic publication stay in C++."""
     source = (ROOT
               / "shell/desktop/modules/weather/LockScreenFeedService.qml"
               ).read_text()
-    assert "StandardPaths.writableLocation" in source
-    assert "decodeURIComponent" in source, (
-        "the QUrl from StandardPaths must be converted to a local path"
-    )
-    assert 'replace(/^file:\\/\\//, "")' in source, (
-        "the file URL scheme must be stripped before the value is used as a path"
-    )
+    assert 'PlatformClient.request("lockscreen.weather-publish", payload()' in source
+    for obsolete in ("StandardPaths.writableLocation", "file.copy", "FileView", "LockFeed.qml"):
+        assert obsolete not in source, "the client must not choose or stage a publication path"
+    daemon = (DAEMON / "PlatformServerState.cpp").read_text()
+    publisher = daemon[daemon.index('if (op == QLatin1String("lockscreen.weather-publish"))'):]
+    publisher = publisher[:publisher.index('if (!op.startsWith(QStringLiteral("state.")))')]
+    assert 'payload.value(QStringLiteral("path"))' not in publisher
+    assert 'QStringLiteral("/plasma/shells/org.kos.desktop/contents/lockscreen")' in publisher
+    assert '::open(directory.constData(), O_RDONLY | O_DIRECTORY | O_NOFOLLOW | O_CLOEXEC)' in publisher
+    assert '::openat(dir, temporary.constData()' in publisher
+    assert '::renameat(dir, temporary.constData(), dir, "LockFeed.qml")' in publisher
+    assert 'QJsonDocument(QJsonArray{value})' in publisher
+    assert 'QStringLiteral("theme-unavailable")' in publisher
 
 
 if __name__ == "__main__":
@@ -228,5 +231,5 @@ if __name__ == "__main__":
     test_thumbnail_capture_closes_every_descriptor_it_opens()
     test_thumbnail_memory_is_bounded_and_recent_frames_are_reused()
     test_brightness_targets_one_kde_display()
-    test_lockscreen_feed_hands_the_daemon_a_local_path()
+    test_lockscreen_feed_uses_daemon_owned_fixed_destination()
     print("platform contracts: ok")

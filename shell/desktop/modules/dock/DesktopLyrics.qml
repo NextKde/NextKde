@@ -1,13 +1,15 @@
 import Quickshell
 import Quickshell.Wayland
 import QtQuick
+import "../../../shared/qml/i18n"
 import qs.desktop.modules.applauncher
 import qs.desktop.modules.common
+import qs.desktop.modules.deskcenter
 import qs.desktop.modules.dock
 import "../../../Kos/Ui"
 
-// A read-only, click-through lyric surface. One window exists per usable
-// output, but only the active output maps it so lyrics never duplicate.
+// Lyrics pass clicks through except for the visible Move button. Placement
+// mode temporarily accepts input over the card on the active output.
 Scope {
     Variants {
         model: ScreenLifecycle.usableScreens
@@ -17,46 +19,127 @@ Scope {
                 id: lyricWindow
 
                 required property var modelData
-                readonly property string currentLine: DockMprisService.currentLyric
-                readonly property string nextLine: DockMprisService.nextLyric
+                readonly property string currentLine: MediaService.desktopLyricsAllowed ? MediaService.currentLyric : ""
+                readonly property string nextLine: MediaService.desktopLyricsAllowed ? MediaService.nextLyric : ""
 
                 screen: modelData
                 visible: ScreenLifecycle.outputAvailable
-                    && ConfigService.desktopLyricsEnabled
+                    && DeskCenterConfigService.desktopLyricsActive
+                    && (MediaService.desktopLyricsAllowed || DeskCenterConfigService.desktopLyricsEditing)
                     && modelData?.name === ScreenLifecycle.activeScreen?.name
-                    && currentLine.length > 0
+                    && (currentLine.length > 0 || DeskCenterConfigService.desktopLyricsEditing)
                 color: "transparent"
                 exclusionMode: ExclusionMode.Ignore
                 WlrLayershell.namespace: "kos-desktop-lyrics"
                 WlrLayershell.layer: WlrLayer.Overlay
                 WlrLayershell.keyboardFocus: WlrKeyboardFocus.None
 
-                anchors { left: true; right: true; bottom: true }
-                margins.bottom: ConfigService.position === "bottom"
+                anchors { left: true; right: true; top: true; bottom: true }
+                readonly property real bottomInset: ConfigService.position === "bottom"
                     ? Math.max(104, AppLauncherService.dockHeight + 28) : 38
-                implicitHeight: 112
-
-                // No input region: every pixel, including the text, passes
-                // through to the application or desktop underneath.
-                mask: Region {}
+                mask: Region { item: DeskCenterConfigService.desktopLyricsEditing ? lyricCard : moveButton }
 
                 Rectangle {
-                    anchors.horizontalCenter: parent.horizontalCenter
-                    anchors.bottom: parent.bottom
-                    width: Math.min(parent.width - 80, 820)
-                    height: nextText.visible ? 76 : 54
+                    id: lyricCard
+                    readonly property real travelX: Math.max(0, lyricWindow.width - width)
+                    readonly property real travelY: Math.max(0, lyricWindow.height - lyricWindow.bottomInset - height)
+                    x: DeskCenterConfigService.desktopLyricsX * travelX
+                    y: DeskCenterConfigService.desktopLyricsY * travelY
+                    width: Math.max(1, Math.min(lyricWindow.width - 24, 820))
+                    height: (nextText.visible ? 76 : 54) + (DeskCenterConfigService.desktopLyricsEditing ? 34 : 0)
                     radius: 22
                     color: Qt.rgba(0.05, 0.05, 0.07, 0.66)
                     border.width: 1
                     border.color: Qt.rgba(1, 1, 1, 0.20)
 
+                    MouseArea {
+                        anchors.fill: parent
+                        anchors.bottomMargin: 34
+                        enabled: DeskCenterConfigService.desktopLyricsEditing
+                        cursorShape: pressed ? Qt.ClosedHandCursor : Qt.OpenHandCursor
+                        property point startPointer
+                        property real startX
+                        property real startY
+                        onPressed: mouse => {
+                            startPointer = mapToItem(lyricWindow.contentItem, mouse.x, mouse.y)
+                            startX = DeskCenterConfigService.desktopLyricsX
+                            startY = DeskCenterConfigService.desktopLyricsY
+                        }
+                        onPositionChanged: mouse => {
+                            if (!pressed) return
+                            const point = mapToItem(lyricWindow.contentItem, mouse.x, mouse.y)
+                            DeskCenterConfigService.desktopLyricsX = Math.max(0, Math.min(1,
+                                startX + (point.x - startPointer.x) / Math.max(1, lyricCard.travelX)))
+                            DeskCenterConfigService.desktopLyricsY = Math.max(0, Math.min(1,
+                                startY + (point.y - startPointer.y) / Math.max(1, lyricCard.travelY)))
+                        }
+                        onReleased: DeskCenterConfigService.updateDesktopLyricsPosition(
+                            DeskCenterConfigService.desktopLyricsX, DeskCenterConfigService.desktopLyricsY)
+                        onCanceled: DeskCenterConfigService.updateDesktopLyricsPosition(
+                            DeskCenterConfigService.desktopLyricsX, DeskCenterConfigService.desktopLyricsY)
+                    }
+                    Rectangle {
+                        id: moveButton
+                        objectName: "desktop-lyrics-move"
+                        visible: !DeskCenterConfigService.desktopLyricsEditing
+                        anchors { right: parent.right; top: parent.top; rightMargin: 12; topMargin: 12 }
+                        width: 62
+                        height: 28
+                        radius: 9
+                        color: movePointer.containsMouse ? Qt.rgba(1, 1, 1, 0.24) : Qt.rgba(1, 1, 1, 0.12)
+                        border.color: Qt.rgba(1, 1, 1, 0.22)
+                        Text {
+                            anchors.centerIn: parent
+                            text: I18n.tr("↔ Move")
+                            color: "white"
+                            font.pixelSize: 12
+                        }
+                        MouseArea {
+                            id: movePointer
+                            anchors.fill: parent
+                            hoverEnabled: true
+                            cursorShape: Qt.PointingHandCursor
+                            onClicked: DeskCenterConfigService.editDesktopLyrics()
+                        }
+                    }
+                    Row {
+                        visible: DeskCenterConfigService.desktopLyricsEditing
+                        anchors { horizontalCenter: parent.horizontalCenter; bottom: parent.bottom; bottomMargin: 9 }
+                        spacing: 28
+                        Text {
+                            text: I18n.tr("Drag the lyrics box to adjust its position")
+                            color: Qt.rgba(1, 1, 1, 0.72)
+                            font.pixelSize: 12
+                        }
+                        Repeater {
+                            model: [I18n.tr("Reset position"), I18n.tr("Done")]
+                            delegate: Text {
+                                required property int index
+                                required property string modelData
+                                text: modelData
+                                color: "white"
+                                font.pixelSize: 12
+                                MouseArea {
+                                    anchors.fill: parent
+                                    cursorShape: Qt.PointingHandCursor
+                                    onClicked: {
+                                        if (index === 0) DeskCenterConfigService.updateDesktopLyricsPosition(0.5, 1)
+                                        else DeskCenterConfigService.desktopLyricsEditing = false
+                                    }
+                                }
+                            }
+                        }
+                    }
+
                     KosLyricLine {
                         id: currentText
                         anchors { left: parent.left; right: parent.right; top: parent.top }
-                        anchors.leftMargin: 22
-                        anchors.rightMargin: 22
+                        anchors.leftMargin: DeskCenterConfigService.desktopLyricsEditing ? 22 : 84
+                        anchors.rightMargin: DeskCenterConfigService.desktopLyricsEditing ? 22 : 84
                         anchors.topMargin: nextText.visible ? 13 : 14
                         text: lyricWindow.currentLine
+                            || (DeskCenterConfigService.desktopLyricsEditing
+                                ? I18n.tr("Drag here to adjust the lyrics position") : "")
                         color: "white"
                         horizontalAlignment: Text.AlignHCenter
                         elide: Text.ElideRight
@@ -66,8 +149,8 @@ Scope {
                     KosLyricLine {
                         id: nextText
                         anchors { left: parent.left; right: parent.right; top: currentText.bottom }
-                        anchors.leftMargin: 22
-                        anchors.rightMargin: 22
+                        anchors.leftMargin: DeskCenterConfigService.desktopLyricsEditing ? 22 : 84
+                        anchors.rightMargin: DeskCenterConfigService.desktopLyricsEditing ? 22 : 84
                         anchors.topMargin: 5
                         visible: text.length > 0
                         text: lyricWindow.nextLine

@@ -36,3 +36,6 @@ target_link_libraries(kos_context_menu_input PRIVATE
 install(TARGETS kos_context_menu_input
     DESTINATION ${KDE_INSTALL_PLUGINDIR}/kwin/effects/plugins
     COMPONENT kwin_plugins)
+
+set_property(TARGET kos_context_menu_input APPEND PROPERTY AUTOMOC_MACRO_NAMES
+    KWIN_EFFECT_FACTORY_SUPPORTED_ENABLED)

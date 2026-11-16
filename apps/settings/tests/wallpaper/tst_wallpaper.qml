@@ -1,6 +1,7 @@
 import QtQuick
 import QtTest
-import "../.." as Settings
+import "../../pages" as Settings
+import "../../../../shared/qml/i18n"
 
 TestCase {
     name: "WallpaperSettings"
@@ -20,6 +21,30 @@ TestCase {
 
     SignalSpy { id: previewFinished; signalName: "desktopPreviewFinished" }
 
+    function test_languageSwitchUpdatesWallpaperLabels() {
+        const previous = I18n.language
+        try {
+            I18n.language = "en"
+            const page = createTemporaryObject(pageComponent, this)
+            verify(page !== null)
+            const effects = findChild(page, "wallpaperTransitionMenu")
+            verify(effects !== null)
+            compare(effects.model[0].label, "No transition")
+            compare(page.intervals[0].label, "Every minute")
+            compare(page.colorItems[0].title, "Cyan blue")
+            page.galleryCategory = "themes"
+            compare(page.galleryItems[0].label, "Stardust Gravity")
+
+            I18n.language = "zh-CN"
+            compare(effects.model[0].label, "无过渡")
+            compare(page.intervals[0].label, "每分钟")
+            compare(page.colorItems[0].title, "青蓝")
+            compare(page.galleryItems[0].label, "星尘引力")
+        } finally {
+            I18n.language = previous
+        }
+    }
+
     QtObject {
         id: bridgeMock
         property bool slideshowRequested: false
@@ -33,22 +58,27 @@ TestCase {
         property var sessionRequested: ({})
         property var playlistRequested: []
         property var gradientRequested: []
+        property var gradientColorsRequested: []
         property var optionsRequested: ({})
         property string lastError: ""
+        property var importedImages: []
+        property int folderResult: 0
         signal wallpaperSnapshotChanged(var state)
         signal wallpaperModelsChecked(bool depthReady, bool foregroundReady)
+        signal galleryImportProgress(int imported)
+        signal galleryImportFinished(int imported)
         function wallpaperCatalog() { return [] }
         function chooseWallpaperTheme(id) { themeRequested = id }
         function updateWallpaperThemeEconomical(value) { themeEconomicalRequested = value }
-        function galleryImages() { return [] }
+        function galleryImages() { return importedImages }
         function importGalleryImage(path) {}
-        function importGalleryFolder(path) {}
+        function importGalleryFolder(path) { return folderResult }
         function deleteGalleryImage(path) { return true }
         function wallpaperSnapshot() {}
         function inspectWallpaperModels() {}
         function previewWallpaperImage(path, images) { previewRequested = path }
-        function wallpaperColorImage(start, end, angle) { return "/tmp/wallpaper-colors/" + start.slice(1) + "-" + end.slice(1) + "-" + angle + ".png" }
-        function chooseWallpaperGradient(start, end, angle) { gradientRequested = [start, end, angle] }
+        function wallpaperColorImage(start, end, angle, colors) { return "/tmp/wallpaper-colors/" + start.slice(1) + "-" + end.slice(1) + "-" + angle + ".png" }
+        function chooseWallpaperGradient(start, end, angle, colors) { gradientRequested = [start, end, angle]; gradientColorsRequested = colors || [] }
         function wallpaperThumbnail(path, width, height) { return "/tmp/cache/" + encodeURIComponent(path) + ".webp" }
         function updateWallpaperPreviewThumbnails(thumbnails) {}
         function previewWallpaperSession(path, session) { previewRequested = path; sessionRequested = session }
@@ -73,6 +103,38 @@ TestCase {
         function updateWallpaperTakeoverEnabled(enabled) {}
     }
 
+    function test_folderImportRefreshesAfterCompletion() {
+        const page = createTemporaryObject(pageComponent, this)
+        verify(page !== null)
+        page.bridge = bridgeMock
+        tryCompare(page, "bridgeCompatible", true)
+        try {
+            page.errorText = "previous import failed"
+            page.importGalleryFromFolder("file:///tmp/wallpapers")
+            compare(page.importingFolder, true)
+            compare(page.errorText, "")
+            compare(page.galleryImages.length, 0)
+            bridgeMock.importedImages = ["/tmp/gallery/first.png", "/tmp/gallery/second.png"]
+            bridgeMock.galleryImportFinished(2)
+            compare(page.importingFolder, false)
+            compare(page.galleryImages.length, 2)
+
+            bridgeMock.folderResult = -2
+            page.importGalleryFromFolder("file:///tmp/other")
+            compare(page.importingFolder, true)
+            bridgeMock.galleryImportFinished(0)
+            compare(page.importingFolder, false)
+            compare(page.errorText, I18n.tr("No supported images in that folder."))
+
+            bridgeMock.folderResult = -1
+            page.importGalleryFromFolder("file:///tmp/missing")
+            compare(page.importingFolder, false)
+        } finally {
+            bridgeMock.importedImages = []
+            bridgeMock.folderResult = 0
+        }
+    }
+
     function test_previewActionUsesCompatibleBridge() {
         const page = createTemporaryObject(pageComponent, null)
         verify(page !== null)
@@ -86,7 +148,7 @@ TestCase {
         verify(action !== null)
         verify(label !== null)
         compare(action.enabled, true)
-        compare(label.text, "桌面预览  ›")
+        compare(label.text, I18n.tr("Desktop preview"))
         action.clicked(null)
         compare(bridgeMock.previewRequested, "/tmp/wallpaper.jpg")
     }
@@ -133,6 +195,7 @@ TestCase {
         compare(page.galleryItems.length, 18)
         page.choosePresetColor(7)
         compare(bridgeMock.gradientRequested.length, 3)
+        compare(bridgeMock.gradientColorsRequested.length, 3)
         verify(bridgeMock.gradientRequested[0] !== bridgeMock.gradientRequested[1])
         findChild(page, "customWallpaperColorDialog").selectedColor = "#A8C8F0"
         page.applyCustomColor()
@@ -221,7 +284,7 @@ TestCase {
         const action = findChild(page, "currentWallpaperPreviewAction")
         const label = findChild(page, "currentWallpaperPreviewLabel")
         compare(action.enabled, false)
-        compare(label.text, "不可用")
+        compare(label.text, I18n.tr("Unavailable"))
     }
 
     function test_pageLoadsAndAcceptsSnapshot() {
@@ -292,7 +355,8 @@ TestCase {
         page.previewAvailable = true
         page.chooseCategory(3)
         compare(page.galleryCategory, "themes")
-        compare(page.galleryItems.length, 3)
+        compare(page.galleryItems.map(item => item.id).join(","),
+                "starfield,blackhole,weather,underwater,forest")
         const gallery = findChild(page, "wallpaperGallery")
         tryVerify(() => gallery.itemAtIndex(1) !== null && gallery.itemAtIndex(1).item !== null)
         gallery.itemAtIndex(1).item.activated()

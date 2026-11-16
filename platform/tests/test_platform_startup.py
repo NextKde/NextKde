@@ -108,6 +108,79 @@ def main():
                 fail("platform.ping missing capability " + capability + ": "
                      + buf.decode().strip(), output)
 
+        # Pipeline requests across feature modules on one connection. Rejected
+        # payloads must keep their domain error, request id and framing; an
+        # unrelated request must remain usable after every rejection.
+        cases = [
+            ("audio.output.set-default", {}, "invalid-audio-output"),
+            ("audio.application.set-volume", {}, "invalid-audio-stream"),
+            ("network.details", {}, "invalid-device"),
+            ("network.scan", {"device": "../../net"}, "invalid-device"),
+            ("bluetooth.connect", {"address": "bad"}, "invalid-address"),
+            ("settings.open", {"module": "unsupported"}, "invalid-settings-module"),
+            ("theme.sync-dock-animation", {"style": "unsupported"}, "invalid-style"),
+            ("kwin.layout.update", {}, "invalid-payload"),
+            ("application.launch", {}, "invalid-desktop-id"),
+            ("file.copy", {}, "invalid-path"),
+            ("state.read", {}, "invalid-state-path"),
+            ("clipboard.set", {}, "invalid-clipboard-request"),
+            ("display.unknown-operation", {}, "unknown-operation"),
+            ("platform.ping", {}, None),
+        ]
+        with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as routed:
+            routed.settimeout(5)
+            routed.connect(sock_path)
+            routed.sendall(b"".join((json.dumps({"version": 1,
+                "requestId": "route-" + str(index), "operation": operation,
+                "payload": payload}) + "\n").encode()
+                for index, (operation, payload, _) in enumerate(cases)))
+            with routed.makefile("rb") as stream:
+                for index, (operation, _, code) in enumerate(cases):
+                    response = json.loads(stream.readline())
+                    if (response.get("version") != 1
+                            or response.get("requestId") != "route-" + str(index)
+                            or response.get("ok") is not (code is None)):
+                        fail("invalid routed reply for " + operation + ": " + str(response), output)
+                    if code is not None:
+                        error = response.get("error", {})
+                        if error.get("code") != code or error.get("retryable") is not False:
+                            fail("domain error changed for " + operation + ": " + str(response), output)
+
+        # Malformed replies must obey the same write cap as events and normal
+        # replies. Keep each input batch small and never drain this peer's
+        # output: the total input stays below the separate 1 MiB read cap.
+        with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as stalled:
+            stalled.setsockopt(socket.SOL_SOCKET, socket.SO_RCVBUF, 4096)
+            stalled.settimeout(2)
+            stalled.connect(sock_path)
+            stalled.sendall(b"invalid\n")
+            line = b""
+            while b"\n" not in line:
+                line += stalled.recv(4096)
+            if json.loads(line.splitlines()[0]).get("error", {}).get("code") != "invalid-json":
+                fail("malformed request reply changed", output)
+            kicked = False
+            for _ in range(1200):
+                try:
+                    stalled.sendall(b"x\n" * 128)
+                except (BrokenPipeError, ConnectionResetError):
+                    kicked = True
+                    break
+                time.sleep(0.002)
+            if not kicked:
+                fail("non-reading malformed-request client was not disconnected", output)
+
+        # Deferred abort must leave the daemon and other clients usable.
+        with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as healthy:
+            healthy.settimeout(5)
+            healthy.connect(sock_path)
+            healthy.sendall(b'{"version":1,"requestId":"after-backpressure",'
+                            b'"operation":"platform.ping","payload":{}}\n')
+            with healthy.makefile("rb") as stream:
+                response = json.loads(stream.readline())
+            if not response.get("ok"):
+                fail("daemon unhealthy after backpressure disconnect", output)
+
         # An absent positioning bridge is a supported, bounded fallback.
         with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as anchor_client:
             anchor_client.settimeout(2)

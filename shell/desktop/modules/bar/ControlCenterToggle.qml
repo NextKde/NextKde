@@ -1,6 +1,7 @@
 import QtQuick
 import Quickshell
 import Quickshell.Widgets
+import "../../../shared/qml/i18n"
 import qs.desktop.modules.common
 import qs.desktop.modules.dock
 import "../../../Kos/Ui"
@@ -32,19 +33,17 @@ Item {
         dark: AppearanceTokens.isDarkTheme
     }
     BundledIcon {
+        // Same readability edge the bar text carries (Text.Outline).
+        outlined: AppearanceTokens.isDarkTheme && !AppearanceTokens.bar.macStyle
+        outlineColor: Qt.rgba(0, 0, 0, 0.40)
         anchors.centerIn: parent
         width: root.iconSize
         height: root.iconSize
-        name: "control-center"
-        color: IconAppearanceService.mode === "tint"
-            ? IconAppearanceService.styledSymbolicColor()
-            : ThemeService.foregroundColor
-        opacity: IconAppearanceService.mode !== "color"
-            ? IconAppearanceService.opacity * (root.panelOpen ? 1.0 : 0.88)
-            : (root.panelOpen ? 1.0 : 0.88)
+        size: root.iconSize
+        name: "bar.controlCenter"
+        color: ThemeService.barInk
         scale: hoverArea.pressed ? 0.90 : hoverArea.containsMouse ? 1.06 : 1
-        Behavior on scale { NumberAnimation { duration: AppearanceTokens.motion.fastDuration; easing.type: Easing.OutCubic } }
-        Behavior on opacity { NumberAnimation { duration: AppearanceTokens.motion.fastDuration } }
+        Behavior on scale { NumberAnimation { duration: AppearanceTokens.motion.fastDuration; easing.type: AppearanceTokens.motion.enterCurve } }
     }
     MouseArea {
         id: hoverArea
@@ -58,7 +57,7 @@ Item {
         shown: hoverArea.containsMouse && !root.panelOpen
         dockHosted: root.dockHosted
         dockEdge: root.dockEdge
-        primaryText: "控制中心"
+        primaryText: I18n.tr("Control Center")
         minimumWidth: 92
     }
 }

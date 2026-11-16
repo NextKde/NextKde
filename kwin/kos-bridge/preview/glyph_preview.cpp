@@ -6,7 +6,7 @@
 // /usr -> restart KWin, and a KWin restart takes every Wayland client with it.
 // Hot-loading a replaced plugin .so is not a way out either -- it is the
 // operation that has crashed KWin before, which is why kosctl's
-// reload_kwin_effects() is deliberately called by no command.
+// kosctl leaves effect loading to the next compositor/session start.
 //
 //   cmake -S kwin/kos-bridge -B build -DKOS_BRIDGE_BUILD_PREVIEW=ON
 //   cmake --build build --target glyph_preview
@@ -63,15 +63,14 @@ QImage buildPanel(const PanelGeometry &geometry, bool maximized, bool dark)
 
     painter.setPen(Qt::NoPen);
     painter.setBrush(dark ? QColor(28, 28, 32) : QColor(242, 242, 245));
-    painter.drawRoundedRect(QRectF(QPointF(0, 0), panel), panel.height() / 2.0,
-                            panel.height() / 2.0);
+    painter.drawPath(panelBackgroundPath(QRectF(QPointF(0, 0), panel), geometry));
 
     for (int i = 0; i < TypeCount; ++i) {
         // The order the panel is laid out in, which ButtonRenderer::typeAt owns.
         // Repeated here rather than shared because the preview must be able to
         // show a panel whose order is being reconsidered, and a preview that
         // reads the order out of the thing it is previewing cannot do that.
-        constexpr Type Order[TypeCount] = {Maximize, Minimize, Close};
+        constexpr Type Order[TypeCount] = {Minimize, Maximize, Close};
         drawLight(painter, dotRect(panel, geometry, i), Order[i], true,
                   maximized);
     }

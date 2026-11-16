@@ -1,0 +1,68 @@
+{
+  "copyright": "Original NextKde category artwork, GPL-3.0-or-later.",
+  "transformations": "Original vector drawings. Shared rounded tile, soft vertical color, ivory symbols, fine edge and restrained depth.",
+  "scope": "KOS Settings category navigation. Material mode uses its monochrome semantic glyphs.",
+  "mapping": {
+    "Theme": "appearance",
+    "Windows and animations": "desktop-dock",
+    "Wallpaper": "wallpaper",
+    "Top bar": "menu-bar",
+    "Dock": "desktop-dock",
+    "Power": "battery",
+    "Notifications": "notifications",
+    "Launcher": "spotlight",
+    "Shortcuts": "keyboard",
+    "Integration status": "network",
+    "Applications and services": "general",
+    "Glass debugging": "appearance",
+    "Stage scheduling": "desktop-dock",
+    "KDE System Settings": "system-settings"
+  },
+  "assets": [
+    {
+      "file": "appearance.svg",
+      "source": "Original NextKde vector artwork"
+    },
+    {
+      "file": "battery.svg",
+      "source": "Original NextKde vector artwork"
+    },
+    {
+      "file": "desktop-dock.svg",
+      "source": "Original NextKde vector artwork"
+    },
+    {
+      "file": "general.svg",
+      "source": "Original NextKde vector artwork"
+    },
+    {
+      "file": "keyboard.svg",
+      "source": "Original NextKde vector artwork"
+    },
+    {
+      "file": "menu-bar.svg",
+      "source": "Original NextKde vector artwork"
+    },
+    {
+      "file": "network.svg",
+      "source": "Original NextKde vector artwork"
+    },
+    {
+      "file": "notifications.svg",
+      "source": "Original NextKde vector artwork"
+    },
+    {
+      "file": "spotlight.svg",
+      "source": "Original NextKde vector artwork"
+    },
+    {
+      "file": "system-settings.svg",
+      "source": "Original NextKde vector artwork"
+    },
+    {
+      "file": "wallpaper.svg",
+      "source": "Original NextKde vector artwork"
+    }
+  ],
+  "created": "2026-11-10"
+}

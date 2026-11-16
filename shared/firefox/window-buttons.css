@@ -1,0 +1,47 @@
+/* Style Firefox's existing browser-chrome buttons. No replacement widgets. */
+@-moz-document url("chrome://browser/content/browser.xhtml") {
+  :root#main-window[customtitlebar] .titlebar-buttonbox {
+    align-items: center !important;
+    gap: 0 !important;
+  }
+  :root#main-window[customtitlebar] .titlebar-button:is(.titlebar-close, .titlebar-min, .titlebar-max, .titlebar-restore) {
+    -moz-window-dragging: no-drag !important;
+    appearance: none !important;
+    background: transparent !important;
+    border: none !important;
+    box-shadow: none !important;
+    border-radius: 0 !important;
+    padding: 7px !important;
+    min-width: 28px !important;
+    width: 28px !important;
+    height: 28px !important;
+    color: black !important;
+  }
+  :root#main-window[customtitlebar] .titlebar-button > .toolbarbutton-icon {
+    appearance: none !important;
+    list-style-image: none !important;
+    box-sizing: border-box !important;
+    width: 14px !important;
+    height: 14px !important;
+    padding: 0 !important;
+    border-radius: 50% !important;
+    border: .75px solid var(--kos-button-border) !important;
+    background-color: var(--kos-button-color) !important;
+    background-image: var(--kos-visible-glyph, var(--kos-button-glyph)) !important;
+    background-size: 100% 100% !important;
+    background-position: center !important;
+    background-repeat: no-repeat !important;
+    opacity: 1 !important;
+  }
+  .titlebar-close { --kos-button-color: #ff5f57; --kos-button-border: #e0443e; --kos-button-glyph: @CLOSE@; }
+  .titlebar-min { --kos-button-color: #febc2e; --kos-button-border: #dea123; --kos-button-glyph: @MINIMIZE@; }
+  .titlebar-max, .titlebar-restore { --kos-button-color: #28c840; --kos-button-border: #1aab29; --kos-button-glyph: @MAXIMIZE@; }
+  :root[sizemode="maximized"] .titlebar-max, .titlebar-restore { --kos-button-glyph: @RESTORE@; }
+  :root:-moz-window-inactive .titlebar-button {
+    --kos-button-color: #9a9a9e;
+    --kos-button-border: #828286;
+  }
+  :root#main-window[customtitlebar] .titlebar-button:hover > .toolbarbutton-icon { filter: brightness(1.06); }
+  :root#main-window[customtitlebar] .titlebar-button:active > .toolbarbutton-icon { filter: brightness(.9); }
+  @HOVER@
+}

@@ -2,9 +2,11 @@ name: tests
 
 # Pull requests and the default branch share one configuration so that "green"
 # means exactly the same thing in both places.
+# Tray identity/rendering and extensions UI checks run in the regular jobs;
+# no separate manual run is needed to complete their coverage.
 on:
   push:
-    branches: [main]
+    branches: [main, 'release/**']
   pull_request:
   workflow_dispatch:
 
@@ -16,23 +18,291 @@ concurrency:
 permissions:
   contents: read
 
+env:
+  # Bootstrap also runs before checkout (the image has no git). Keep one
+  # implementation here; tools/tests/test_ci_reliability.py exercises this block.
+  KOS_CI_PACMAN: |
+    set -uo pipefail
+    export LC_ALL=C
+    log_dir=$(mktemp -d "${RUNNER_TEMP:-/tmp}/kos-pacman.XXXXXX") || exit 1
+    mirrorlist=${KOS_CI_MIRRORLIST:-/etc/pacman.d/mirrorlist}
+    for attempt in 1 2 3; do
+      log="$log_dir/attempt-$attempt.log"
+      echo "::group::Package installation (attempt $attempt/3)"
+      pacman "$@" 2>&1 | tee "$log"
+      pipeline_status=("${PIPESTATUS[@]}")
+      status=${pipeline_status[0]}
+      echo "::endgroup::"
+      if [ "${pipeline_status[1]}" -ne 0 ]; then
+        echo '::error::Cannot retain package installation logs.'
+        exit 1
+      fi
+      if [ "$status" -eq 0 ]; then
+        exit 0
+      fi
+      category='Dependency installation'
+      # Never retry semantic, integrity or local filesystem errors, even if
+      # the same transaction also mentions a failed download.
+      if [ "$status" -ge 128 ] || grep -Eiq 'could not satisfy dependencies|breaks dependency|conflicting dependencies|conflicting files|invalid or corrupted|signature.*(invalid|unknown|trust)|unknown trust|target not found|invalid option|failed to init transaction|no space left|permission denied|read-only file system|failed writing' "$log"; then
+        retry=false
+      elif grep -Eiq 'failed retrieving file|failed to retrieve some files|could not resolve|failed to connect|connection (timed out|reset)|operation (timed out|too slow)|SSL connection timeout|TLS.*(timeout|connection)|HTTP.*(429|50[234])' "$log"; then
+        category='Dependency download'
+        retry=true
+      else
+        retry=false
+      fi
+      if [ "$retry" = false ] || [ "$attempt" -eq 3 ]; then
+        echo "::error title=$category failed::pacman exited $status after $attempt attempt(s); see package installation logs."
+        if [ -n "${GITHUB_STEP_SUMMARY:-}" ]; then
+          printf '### %s failed\n\npacman exited **%s** after **%s/3** attempt(s). No build or test retry was performed. See the package-installation step for full logs.\n\n' \
+            "$category" "$status" "$attempt" >> "$GITHUB_STEP_SUMMARY"
+        fi
+        exit "$status"
+      fi
+      # Preserve dated SDK repositories. Only a rolling mirror list may gain
+      # fallback servers. Retain the original transaction flags on every attempt.
+      if [ "$attempt" -eq 1 ] && ! grep -q 'archive.archlinux.org/repos/' "$mirrorlist"; then
+        cp "$mirrorlist" "$log_dir/mirrorlist" || exit 1
+        {
+          printf '%s\n' 'Server = https://geo.mirror.pkgbuild.com/$repo/os/$arch'
+          printf '%s\n' 'Server = https://fastly.mirror.pkgbuild.com/$repo/os/$arch'
+          cat "$log_dir/mirrorlist"
+        } > "$mirrorlist" || exit 1
+      fi
+      echo "::warning title=Retrying dependency download::Attempt $attempt failed; retrying the same package transaction."
+      sleep "$((attempt * 5))" || exit "$?"
+    done
+
 jobs:
+  dock-native-target:
+    name: Dock native minimize targets
+    runs-on: ubuntu-24.04
+    container:
+      image: archlinux:base-devel
+    steps:
+      - name: Install fixture dependencies
+        # Upgrade the image together with its repositories; a partial upgrade
+        # can mix new OpenSSL with image packages linked to the previous ABI.
+        run: bash -c "$KOS_CI_PACMAN" -- -Syu --noconfirm --needed git nodejs qt6-base qt6-declarative cmake ninja kconfig kcmutils plasma-workspace kio kservice dbus gtk3 wayland pkgconf flatpak ostree xorg-server-xvfb xorg-xauth
+      - uses: actions/checkout@v7
+      - name: Run native target identity and publication regressions
+        env:
+          QT_FORCE_STDERR_LOGGING: "1"
+        run: |
+          node tests/dock/native-target.test.mjs
+          node tests/dock/runtime.mjs native-target /usr/lib/qt6/bin/qmltestrunner
+      - name: Build and exercise the native KDE font adapter
+        run: |
+          cmake -S apps/settings -B .build/native-genie-settings -G Ninja -DBUILD_TESTING=ON
+          cmake --build .build/native-genie-settings --target kos-settings-fonts-test --parallel 2
+          mkdir -p .build/native-genie-settings/test-results
+          ctest --test-dir .build/native-genie-settings -R '^kos-settings.fonts$' --output-on-failure \
+            --output-log "$GITHUB_WORKSPACE/.build/native-genie-settings/test-results/fonts.log"
+      - name: Build Settings and check native animation and window controls
+        run: |
+          cmake --build .build/native-genie-settings --target kos-window-settings-test kos-native-genie-test kos-animation-async-test kos-settings kos-settings-qml-tests --parallel 2
+          ctest --test-dir .build/native-genie-settings -R '^kos-settings.(window-config|window-interactions|native-genie-upgrade|animation-async)$' --output-on-failure
+          python3 tools/tests/test_gtk_window_buttons.py
+      - name: Upload native font page diagnostics
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: native-font-settings
+          path: .build/native-genie-settings/test-results/
+          if-no-files-found: ignore
+
+  kde-fonts:
+    name: KDE fonts Plasma ${{ matrix.series }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - series: '6.6'
+            snapshot: '2026/05/15'
+            font_dpi: '1'
+          - series: '6.7'
+            snapshot: '2026/10/01'
+            font_dpi: '1'
+          - series: '6.8'
+            snapshot: '2026/10/18'
+            font_dpi: '0'
+    env:
+      KOS_EXPECT_FONT_DPI: ${{ matrix.font_dpi }}
+    container: archlinux:base-devel
+    steps:
+      # Pin the entire Qt/KF/Plasma runtime, not just headers or a mocked KCM.
+      - name: Select the Plasma ${{ matrix.series }} runtime snapshot
+        env:
+          ARCH_SNAPSHOT: ${{ matrix.snapshot }}
+        run: |
+          printf 'Server = https://archive.archlinux.org/repos/%s/$repo/os/$arch\n' \
+            "$ARCH_SNAPSHOT" > /etc/pacman.d/mirrorlist
+          bash -c "$KOS_CI_PACMAN" -- -Syyuu --noconfirm \
+            --ignore archlinux-keyring git
+      - uses: actions/checkout@v7
+      - name: Install KDE font runtime and build dependencies
+        run: |
+          bash -c "$KOS_CI_PACMAN" -- -S --noconfirm --needed \
+            cmake ninja gcc qt6-base qt6-declarative kconfig kcmutils \
+            plasma-workspace kio kservice dbus gtk3 wayland pkgconf \
+            flatpak ostree xorg-server-xvfb xorg-xauth
+      - name: Assert Plasma series and record the actual runtime
+        env:
+          PLASMA_SERIES: ${{ matrix.series }}
+        run: |
+          mkdir -p .build/kde-fonts/test-results
+          pacman -Q plasma-workspace kcmutils kconfig qt6-base qt6-declarative \
+            > .build/kde-fonts/test-results/packages.txt
+          cat .build/kde-fonts/test-results/packages.txt
+          version=$(pacman -Q plasma-workspace | cut -d ' ' -f2)
+          case "$version" in
+            "$PLASMA_SERIES".*) ;;
+            *) echo "Expected Plasma $PLASMA_SERIES, got $version" >&2; exit 1 ;;
+          esac
+      - name: Build the production font adapter and native form test
+        run: |
+          cmake -S apps/settings -B .build/kde-fonts -G Ninja -DBUILD_TESTING=ON
+          cmake --build .build/kde-fonts --target kos-settings-fonts-test --parallel 2
+      - name: Verify KDE persistence, refresh signal and the native form
+        run: |
+          ctest --test-dir .build/kde-fonts -R '^kos-settings.fonts$' --verbose \
+            --output-log "$GITHUB_WORKSPACE/.build/kde-fonts/test-results/offscreen.log"
+          mv .build/kde-fonts/test-results/fonts.png .build/kde-fonts/test-results/offscreen.png
+      - name: Verify X11 DPI and the same KDE save path
+        env:
+          KOS_FONT_TEST_PLATFORM: xcb
+        run: |
+          ctest --test-dir .build/kde-fonts -R '^kos-settings.fonts$' --verbose \
+            --output-log "$GITHUB_WORKSPACE/.build/kde-fonts/test-results/x11.log"
+          mv .build/kde-fonts/test-results/fonts.png .build/kde-fonts/test-results/x11.png
+      - name: Upload font compatibility evidence
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: kde-fonts-${{ matrix.series }}
+          include-hidden-files: true
+          path: |
+            .build/kde-fonts/test-results/
+            .build/kde-fonts/Testing/Temporary/
+            .build/kde-fonts/CMakeFiles/CMakeConfigureLog.yaml
+
+  fedora-dependencies:
+    name: Fedora 44 dependency packages
+    runs-on: ubuntu-24.04
+    container: fedora:44
+    steps:
+      - name: Install package query tools
+        run: dnf install -y git python3 zlib-ng-compat-devel
+      - uses: actions/checkout@v7
+      - name: Check Fedora package providers and installer selection
+        shell: bash
+        run: |
+          python3 tools/tests/test_kosctl_fedora.py
+          python3 tools/tests/test_kosctl_fedora.py --packages > /tmp/kos-fedora-packages
+          while IFS= read -r package; do
+            provider=$(dnf -q repoquery --available --whatprovides "$package")
+            if [ -z "$provider" ]; then
+              echo "Missing Fedora package provider: $package" >&2
+              exit 1
+            fi
+            printf '%s: %s\n' "$package" "$provider"
+          done < /tmp/kos-fedora-packages
+          rpm -q --whatprovides zlib-devel
+
+  fcitx-panel-old-headers:
+    name: Fcitx panel (Ubuntu 26.04 headers)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    # Arch's rolling Fcitx5 is newer than the oldest version we support. Build
+    # the optional panel against Ubuntu 26.04's packaged headers so API
+    # additions cannot silently raise its effective minimum version again.
+    container: ubuntu:26.04
+    steps:
+      - name: Install build dependencies
+        run: |
+          apt-get update
+          DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+            ca-certificates cmake g++ git libfcitx5core-dev fcitx5-modules-dev make pkg-config
+      - uses: actions/checkout@v7
+      - name: Build against the packaged Fcitx5 headers
+        run: |
+          cmake -S platform/fcitx-panel -B /tmp/fcitx-panel -DCMAKE_BUILD_TYPE=Release
+          cmake --build /tmp/fcitx-panel --parallel
+
+  qml-lint:
+    name: QML changed-file checks
+    runs-on: ubuntu-24.04
+    container: archlinux:base-devel
+    steps:
+      - name: Install Qt lint tools
+        run: bash -c "$KOS_CI_PACMAN" -- -Syu --noconfirm --needed git nodejs qt6-declarative
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - name: Check lint gate regressions
+        env:
+          QMLLINT: /usr/lib/qt6/bin/qmllint
+        run: node --test tools/tests/qml-lint.test.mjs
+      - name: Check changed QML
+        env:
+          QMLLINT: /usr/lib/qt6/bin/qmllint
+          BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
+        run: |
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
+          base="$BASE_SHA"
+          if [ -z "$base" ] || ! git cat-file -e "$base^{commit}" 2>/dev/null; then
+            base=$(git rev-parse HEAD^)
+          fi
+          node tools/ci/qmllint-changed.mjs --base "$base"
+          node tools/ci/qml-duplicate-handlers.mjs --base "$base"
+
+  source-release:
+    name: source release selection
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+      - name: Verify tray identity and template matching
+        run: node shell/desktop/modules/bar/test_tray_identity.mjs
+
+      - name: Test release selection without installing the desktop
+        run: python3 -m unittest discover -s tools/tests -p 'test_*release*.py'
+      - name: Test Shell QML deployment with damaged source aliases
+        run: python3 tools/tests/test_shell_qml_deploy.py
+      - name: Test userspace Fcitx panel installation
+        run: python3 tools/tests/test_fcitx_panel_install.py
+      - name: Check KMusic catalogue preparation
+        run: python3 -m unittest discover -s tools/tests -p 'test_kmusic_catalog.py'
+      - name: Check project contracts and documentation
+        run: |
+          python3 tools/tests/test_ci_reliability.py
+          python3 platform/tests/test_contract.py
+          python3 tools/ci/check-docs.py
+
   tests:
-    name: data + platform layers
-    runs-on: ubuntu-latest
+    name: data + platform + logic + headless
+    runs-on: ubuntu-24.04
+    env:
+      QT_FORCE_STDERR_LOGGING: "1"
 
     # Arch, not Ubuntu: `tools/kosctl` provisions `arch_core_build_packages`
     # from `pacman`, and this image gives those packages the same names and the
-    # same Qt 6.11 the project is developed against. Ubuntu's names differ and
+    # current Qt SDK. Ubuntu's names differ and
     # mapping them would be a second, drifting source of truth.
-    container: archlinux:base-devel
+    container:
+      image: archlinux:base-devel
+      # KWin 6.8 software rendering requires access to this kernel device.
+      options: --device=/dev/udmabuf
 
     steps:
       # The container has no git; actions/checkout needs it before anything else.
       - name: Install git
-        run: pacman -Sy --noconfirm --needed git
+        id: bootstrap
+        run: bash -c "$KOS_CI_PACMAN" -- -Syu --noconfirm --needed git
 
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
+        id: checkout
 
       # node and python drive the platform layer without a display. Building
       # the platform also builds its AI worker, which requires OpenCV and the
@@ -40,13 +310,23 @@ jobs:
       # KOS_BUILD_PLATFORM=ON, even when KWin plugins are disabled; it needs
       # ECM, the Wayland scanner/client library, and Qt WaylandClient.
       - name: Install build dependencies
+        id: dependencies
         run: |
-          pacman -S --noconfirm --needed \
-            cmake ninja gcc \
-            qt6-base qt6-declarative qt6-wayland \
-            extra-cmake-modules wayland \
-            kwindowsystem kiconthemes kglobalaccel kio \
-            go dbus nodejs python opencv onnxruntime-cpu
+          bash -c "$KOS_CI_PACMAN" -- -S --noconfirm --needed \
+            cmake ninja gcc gtk3 pkgconf flatpak ostree gnupg \
+            qt6-base qt6-declarative qt6-wayland qt6-tools qt6-translations qt6-5compat \
+            extra-cmake-modules wayland plasma-workspace libplasma kpackage \
+            kwindowsystem kiconthemes kglobalaccel kio kconfig \
+            go dbus nodejs python opencv onnxruntime-cpu xorg-server-xvfb xorg-xauth \
+            quickshell kwin fcitx5 python-pillow python-dbus python-gobject mesa vulkan-swrast libcap
+
+      # Arch gives KWin CAP_SYS_NICE, which Docker's default capability
+      # bounding set excludes. execve then fails with EPERM before KWin starts.
+      # Virtual outputs with software rendering do not need elevated scheduling.
+      - name: Remove privileged scheduling from the CI compositor
+        id: compositor
+        run: |
+          sh tools/ci/ci-prepare-kwin.sh
 
       # Warm Go's build cache across runs. `kos-data-service.go` compiles the
       # whole standard library on a cold cache (>50 s locally, ~1 s warm),
@@ -57,55 +337,166 @@ jobs:
       # build root, but the ctest entry point overrides it with an absolute
       # path, so the script's directory and every sibling of it stay empty.
       - name: Mount Go test cache
-        uses: actions/cache@v4
+        id: cache
+        uses: actions/cache@v6
         with:
           path: .build/tests/services/data-service/go-test-cache
           key: gocache-${{ runner.os }}-${{ hashFiles('services/data-service/go.sum') }}
           restore-keys: |
             gocache-${{ runner.os }}-
 
-      # The single entry point shared with local development: it configures with
-      # -DBUILD_TESTING=ON -DKOS_BUILD_KWIN_PLUGINS=OFF, keeps TMPDIR and
-      # GOTMPDIR inside the build tree, and runs `ctest -L data|platform`.
-      #
-      # KOS_BUILD_SPATIAL=ON (not the AUTO default) so a container that failed
-      # to install OpenCV or the ONNX Runtime fails here instead of quietly
-      # dropping the depth engine from the coverage.
-      - name: Run the data and platform layers
+      # Build once, then let each test group run even if another group fails.
+      # Spatial dependencies are mandatory: AUTO could silently omit coverage.
+      - name: Prepare test binaries
+        id: prepare
         env:
           KOS_BUILD_SPATIAL: ON
-        run: ./tools/run-tests.sh --layer data --layer platform
+        run: ./tools/run-tests.sh --build-only
 
-      - name: Check Stage logic and publishing protocol
+      - name: Check required test registrations
+        id: inventory
+        if: ${{ !cancelled() && steps.prepare.outcome == 'success' }}
+        run: python tools/ci/ci_tests.py inventory
+
+      - name: Run data and platform tests
+        id: data_platform
+        if: ${{ !cancelled() && steps.prepare.outcome == 'success' }}
         run: |
-          ctest --test-dir .build/tests --output-on-failure \
-            -R '^kos-shell\.stage-(geometry|groups|effects|protocol)$'
+          mkdir -p .build/tests/test-results
+          ctest --test-dir .build/tests --output-on-failure --no-tests=error \
+            -L '^(data|platform)$' \
+            --output-log "$GITHUB_WORKSPACE/.build/tests/test-results/data-platform.log" \
+            --output-junit "$GITHUB_WORKSPACE/.build/tests/test-results/data-platform.xml"
 
-      - name: Summarise which layers ran
+      - name: Run logic tests and translation checks
+        id: logic
+        if: ${{ !cancelled() && steps.prepare.outcome == 'success' }}
+        run: |
+          mkdir -p .build/tests/test-results
+          ctest --test-dir .build/tests --output-on-failure --no-tests=error \
+            -L '^logic$' \
+            --output-log "$GITHUB_WORKSPACE/.build/tests/test-results/logic.log" \
+            --output-junit "$GITHUB_WORKSPACE/.build/tests/test-results/logic.xml"
+
+      - name: Check delayed tray context menus
+        id: tray_menu
+        if: ${{ !cancelled() && steps.prepare.outcome == 'success' }}
+        env:
+          QML_IMPORT_PATH: ${{ github.workspace }}/.build/tests/qml
+        run: python3 tests/tray-menu/run.py --private-compositor
+
+      - name: Render tray icons and appearance settings on a private compositor
+        id: tray_color
+        if: ${{ !cancelled() && steps.prepare.outcome == 'success' }}
+        env:
+          KOS_TRAY_COLOR_QA: ${{ github.workspace }}/.build/tests/test-results/tray-color
+        run: |
+          mkdir -p .build/tests/test-results
+          ctest --test-dir .build/tests --output-on-failure --no-tests=error \
+            -R '^kos-ui.tray-color$' \
+            --output-log "$GITHUB_WORKSPACE/.build/tests/test-results/tray-color.log" \
+            --output-junit "$GITHUB_WORKSPACE/.build/tests/test-results/tray-color.xml"
+
+      - name: Render battery and traffic panels on a private compositor
+        id: status_panels
+        if: ${{ !cancelled() && steps.prepare.outcome == 'success' }}
+        run: |
+          mkdir -p .build/tests/test-results
+          ctest --test-dir .build/tests --output-on-failure --no-tests=error \
+            -R '^kos-ui.status-panels(-opengl)?$' \
+            --output-log "$GITHUB_WORKSPACE/.build/tests/test-results/status-panels.log" \
+            --output-junit "$GITHUB_WORKSPACE/.build/tests/test-results/status-panels.xml"
+
+      - name: Run offscreen UI regressions
+        id: headless
+        if: ${{ !cancelled() && steps.prepare.outcome == 'success' }}
+        run: |
+          mkdir -p .build/tests/test-results
+          ctest --test-dir .build/tests --output-on-failure --no-tests=error \
+            -L '^headless$' \
+            --output-log "$GITHUB_WORKSPACE/.build/tests/test-results/headless.log" \
+            --output-junit "$GITHUB_WORKSPACE/.build/tests/test-results/headless.xml"
+
+      - name: Run widget appearance and countdown rendering regressions
+        id: widgets
+        if: ${{ !cancelled() && steps.prepare.outcome == 'success' }}
+        env:
+          KOS_WIDGET_QA: ${{ github.workspace }}/.build/tests/test-results/widget-experience
+        run: |
+          mkdir -p .build/tests/test-results
+          ctest --test-dir .build/tests --output-on-failure --no-tests=error \
+            -L '^widgets$' \
+            --output-log "$GITHUB_WORKSPACE/.build/tests/test-results/widgets.log" \
+            --output-junit "$GITHUB_WORKSPACE/.build/tests/test-results/widgets.xml"
+
+      - name: Load deployed Shell trees on a private compositor
+        id: installed
+        if: ${{ !cancelled() && steps.prepare.outcome == 'success' }}
+        run: |
+          mkdir -p .build/tests/test-results
+          ctest --test-dir .build/tests --output-on-failure --no-tests=error \
+            -L '^installed$' \
+            --output-log "$GITHUB_WORKSPACE/.build/tests/test-results/installed.log" \
+            --output-junit "$GITHUB_WORKSPACE/.build/tests/test-results/installed.xml"
+
+      - name: Summarise actual test results
         if: always()
+        env:
+          CI_STEP_OUTCOMES: ${{ toJSON(steps) }}
         run: |
-          {
-            echo "### Test layers"
-            echo
-            echo "| layer | where it runs |"
-            echo "|---|---|"
-            echo "| \`data\` | here, on every run |"
-            echo "| \`platform\` | here, on every run |"
-            echo "| \`logic\` | locally, via \`./tools/run-tests.sh --all\` |"
-            echo "| \`ui\` | locally, on a machine with a compositor |"
-          } >> "${GITHUB_STEP_SUMMARY}"
+          if command -v python >/dev/null && [ -f tools/ci/ci_tests.py ]; then
+            python tools/ci/ci_tests.py report
+          else
+            echo 'Test reporting unavailable: dependency installation or checkout did not complete; see the first failed step.' >> "$GITHUB_STEP_SUMMARY"
+            exit 1
+          fi
+
+      - name: Upload test reports and diagnostics
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: test-results
+          include-hidden-files: true
+          if-no-files-found: warn
+          path: |
+            .build/tests/test-results/
+            .build/tests/apps/settings/extensions-*.png
+            .build/tests/Testing/Temporary/
+            .build/tests/CMakeFiles/CMakeConfigureLog.yaml
 
   kwin-plugins:
-    name: KWin plugins compile
-    runs-on: ubuntu-latest
-
+    name: KWin ${{ matrix.series }} SDK build and offline checks
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - series: '6.6'
+            snapshot: '2026/05/15'
+            api_versions: '6.6.0 6.6.6'
+          - series: '6.7'
+            snapshot: '2026/10/01'
+            api_versions: '6.7.0 6.7.5'
+          - series: '6.8'
+            snapshot: '2026/10/18'
+            api_versions: '6.8.0'
     container: archlinux:base-devel
 
     steps:
-      - name: Install git
-        run: pacman -Sy --noconfirm --needed git
+      # A complete repository snapshot keeps Qt/KF/KDecoration and KWin in
+      # agreement. Alternate headers on a rolling SDK alone do not prove a
+      # plugin can compile and link on each supported series.
+      - name: Select the KWin ${{ matrix.series }} SDK snapshot
+        env:
+          ARCH_SNAPSHOT: ${{ matrix.snapshot }}
+        run: |
+          printf 'Server = https://archive.archlinux.org/repos/%s/$repo/os/$arch\n' \
+            "$ARCH_SNAPSHOT" > /etc/pacman.d/mirrorlist
+          bash -c "$KOS_CI_PACMAN" -- -Syyuu --noconfirm \
+            --ignore archlinux-keyring git
 
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       # The four plugins under kwin/ and shell/native
       # pull their own dependencies on top of the core set: `KWin` and
@@ -115,27 +506,91 @@ jobs:
       # protocol-generation dependencies from tools/kosctl as well.
       - name: Install plugin build dependencies
         run: |
-          pacman -S --noconfirm --needed \
+          bash -c "$KOS_CI_PACMAN" -- -S --noconfirm --needed \
             cmake ninja gcc \
-            qt6-base qt6-declarative qt6-wayland \
+            qt6-base qt6-declarative qt6-wayland qt6-tools qt6-translations \
             extra-cmake-modules kwin kconfig ki18n kguiaddons kcmutils \
-            kcoreaddons kdecoration gettext libxcb vulkan-headers wayland
+            kcoreaddons kdecoration gettext libxcb vulkan-headers wayland python
 
-      # Compiling is all this job proves, and that is deliberate. Whether the
-      # plugin then loads, and whether the install path relabels correctly, is
+      - name: Assert SDK series and record package versions
+        env:
+          KWIN_SERIES: ${{ matrix.series }}
+        run: |
+          mkdir -p .build/kwin
+          pacman -Q kwin kdecoration qt6-base > .build/kwin/sdk-packages.txt
+          cat .build/kwin/sdk-packages.txt
+          version=$(pacman -Q kwin | cut -d ' ' -f2)
+          case "$version" in
+            "$KWIN_SERIES".*) ;;
+            *) echo "Expected KWin $KWIN_SERIES SDK, got $version" >&2; exit 1 ;;
+          esac
+
+      # Compilation and offline bridge regressions do not prove whether the
+      # plugin loads, or whether the install path relabels correctly. That is
       # a question about a running compositor and a SELinux policy -- neither
       # of which exists in a container, and both of which have already burned
       # this project once. Those stay a real-machine check.
       #
-      # BUILD_TESTING=OFF keeps the unrelated test binaries out of the build so
-      # a compiler error here is unambiguously a plugin error.
+      # BUILD_TESTING=OFF keeps unrelated test binaries out of the build.
+      # Opt into the bridge's own offline harnesses explicitly.
       - name: Configure
         run: |
           cmake -S . -B .build/kwin -G Ninja \
             -DCMAKE_BUILD_TYPE=Release \
             -DKOS_BUILD_KWIN_PLUGINS=ON \
+            -DKOS_BRIDGE_BUILD_TESTS=ON \
+            -DKOS_BRIDGE_BUILD_GPU_TESTS=ON \
             -DKOS_BUILD_PLATFORM=OFF \
             -DBUILD_TESTING=OFF
 
       - name: Build the KWin plugins
         run: cmake --build .build/kwin --parallel "$(nproc)"
+
+      - name: Build the Glass effect against the same SDK
+        run: |
+          cmake -S kwin/glass-effect -B .build/glass -G Ninja \
+            -DCMAKE_BUILD_TYPE=Release -DGLASS_WAYLAND=ON -DGLASS_X11=OFF
+          cmake --build .build/glass --parallel "$(nproc)"
+
+      - name: Run offline bridge regressions
+        # The PBO test reports SKIP when the container has no OpenGL context.
+        run: ctest --test-dir .build/kwin/kwin/kos-bridge --output-on-failure
+
+      - name: Check official KWin API headers
+        env:
+          API_VERSIONS: ${{ matrix.api_versions }}
+        run: |
+          for version in $API_VERSIONS; do
+            # KDE's official mirror avoids Invent's HTTP 403 on hosted runners.
+            git clone --quiet --depth 1 --branch "v${version}" \
+              https://github.com/KDE/kwin.git ".build/kwin-${version}"
+            python tools/ci/check-kwin-api.py --build-dir .build/kwin \
+              --kwin-headers ".build/kwin-${version}/src"
+          done
+
+      - name: Upload SDK and test diagnostics
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: kwin-${{ matrix.series }}-results
+          include-hidden-files: true
+          path: |
+            .build/kwin/sdk-packages.txt
+            .build/kwin/Testing/Temporary/
+            .build/kwin/kwin/kos-bridge/Testing/Temporary/
+            .build/kwin/CMakeFiles/CMakeConfigureLog.yaml
+            .build/glass/CMakeFiles/CMakeConfigureLog.yaml
+
+  applications:
+    name: Calendar Calculator Weather build and tests
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v7
+      # App build/runtime suites belong to NextKde/kos-apps and
+      # NextKde/ListenFree. Core owns its shipped installer contract.
+      # These offline suites must exist; missing files are an error, not a skip.
+      - name: Check source installer ownership and release metadata
+        run: |
+          python3 tools/tests/test_app_installer.py
+          python3 tools/tests/test_app_release.py

@@ -15,6 +15,14 @@
 #include "opengl/glframebuffer.h"
 #include "opengl/glshader.h"
 #include "opengl/gltexture.h"
+#if defined(ANLAND_KWIN_67) && !defined(KOS_KWIN_PAINT_TIME_API)
+#include "scene/itemrenderer.h"
+#if defined(STAGE_RENDERER_RENDERDEVICE_API)
+#include "core/renderbackend.h"
+#else
+#include "opengl/egldisplay.h"
+#endif
+#endif
 
 // 6.6 公开的离屏渲染入口（Compositor::scene()->renderer()）在 6.7+ 被收进
 // KWin 进程内部（kwinApp()->scene() / renderer(RenderDevice*) 均不在公开头
@@ -22,8 +30,15 @@
 // 保留 QML 快照与交互，避免用空背板替代窗口内容。
 #ifdef KOS_KWIN_PAINT_TIME_API
 #define STAGE_LIVE_CONTENT_RENDER 1
+#elif defined(ANLAND_KWIN_67)
+// 6.7 端口：scene()->renderer() 不可达，自建 ItemRendererOpenGL
+#define STAGE_LIVE_CONTENT_RENDER 1
+#define STAGE_LIVE_CONTENT_RENDER_67 1
 #else
 #define STAGE_LIVE_CONTENT_RENDER 0
+#endif
+#ifndef STAGE_LIVE_CONTENT_RENDER_67
+#define STAGE_LIVE_CONTENT_RENDER_67 0
 #endif
 
 #include <QFileSystemWatcher>
@@ -60,7 +75,7 @@ struct LiveCardPose
     QRectF rect;      // 屏幕逻辑坐标的卡面矩形（= 快照所在 plate）
     qreal angleDeg = 0; // 已含右侧镜像符号的终态倾角
     qreal yOff = 0;   // 卡中心相对共享地平线的 y 偏移（正 = 地平线下方）
-    qreal focal = 2200;
+    qreal focal = 1100; // 与 stage-geometry.mjs TILT_FOCAL 同源（发布端覆盖）
     qreal radius = 10; // 圆角半径（与 plate.radius 同源）
 };
 
@@ -77,7 +92,7 @@ struct LiveCard
     QPointer<EffectWindow> window;
     LiveCardPose target;  // 最新发布的终态
     LiveCardPose from;    // 缓动起点
-    TimeLine ease{std::chrono::milliseconds(220)};
+    TimeLine ease{std::chrono::milliseconds(180)};
     bool easing = false;
     bool offscreenRef = false;
     QMetaObject::Connection damageConnection;
@@ -90,7 +105,7 @@ struct LiveCard
     qint64 lastRenderMs = 0; // 损伤重拍限频（30fps 上限）
     qint64 lastDamageMs = 0; // 最近损伤时刻（动静自适应喂帧判据）
     qint64 lastPoseChangeMs = 0; // 上次姿态变化（密集流 vs 孤立跳变判据）
-    qint64 absentSinceMs = 0; // 发布流缺席起点（掉卡迟滞 350ms）
+    qint64 absentSinceMs = 0; // 发布流缺席起点（掉卡迟滞 600ms）
     int feedPhase = 0; // 非优先卡的帧投喂轮询相位
     quint32 renderCount = 0;
     quint32 paintCount = 0;
@@ -98,7 +113,7 @@ struct LiveCard
     // ── 卡面本体（方案"卡进特效"：chrome 由特效同管线绘制）──
     // 元数据（QML 发布，v2 协议）
     QString title;        // 显示名（QML 拼好含 ×N 后缀）
-    int count = 1;        // 组内窗数（扇叠背板数 = min(count-1, 2)）
+    int count = 1;        // 组内窗数（扇叠背板数 = min(count-1, 4)）
     qreal z = 0;          // 叠序（QML slot.z）
     bool dragging = false; // 跟手模式：矩形逐帧由 QML 发布，特效免悬停
     bool engaging = false; // 展开中：整体淡出后让位给窗口动画
@@ -120,6 +135,7 @@ struct LiveCard
     bool enterInstant = false;
     bool chipHot = false;
     QString iconsJson;
+    QString rowsJson;      // 逐窗行（合并卡左下窗口列：{icon,title,id} 数组）
     qreal iconSize = 40;   // 图标排图标边长（payload，v88：原硬编码 24）
     int iconSlots = 4;     // 图标排并列上限（payload，v88：原仅按宽度封顶）
     qreal engagingTilt = 0;
@@ -142,6 +158,12 @@ struct LiveCard
     // 悬停状态机（特效自驱：cursorPos 命中静止矩形——与 QML 输入区同界；
     // 动画在本进程跑，与内容同管线同时钟 = 像素级同步）
     bool hovered = false;
+    // 驻留协同（2026-10-13）：QML 侧 hoverDwellDelay 驻留后才触发聚焦布局
+    //（退避），特效放大若命中即动＝"放大先动、退避驻留后才动"两段式
+    //（用户实测延迟感）。命中先挂起，驻留期满与 QML 布局同拍启动。
+    bool hoverPending = false;
+    std::chrono::nanoseconds hoverPendingSince{0};
+    std::chrono::milliseconds hoverDwellMs{0};
     qreal curScale = 1.0;   // 当前插值（绘制用）
     qreal curTiltDeg = 0;
     qreal scaleFrom = 1.0, scaleTo = 1.0, tiltFrom = 0, tiltTo = 0;
@@ -163,13 +185,13 @@ struct LiveCard
     // 挂起等窗口真开始装卡飞行（isMinimized/最小化动画）才同拍起摆
     bool enterHold = false;
     qreal fade = 1.0;
-    bool closeHot = false;
+    qreal cardOpacity = 1.0; // 整卡透明度旋钮（面板 cardOpacity；缺省=不透明）
     TimeLine fadeTl{std::chrono::milliseconds(180)};
     bool fadeAnimating = false;
-    // 铭牌（标题/关闭钮，QPainter 光栅 → 纹理；键变才重绘，Y 镜像匹配
+    // 铭牌（标题，QPainter 光栅 → 纹理；键变才重绘，Y 镜像匹配
     // stage-live 的 FBO 朝向采样）
     std::unique_ptr<GLTexture> chromeTex;
-    std::unique_ptr<GLTexture> overlayTex; // 正视覆盖层（图标排/拆分芯片）
+    std::unique_ptr<GLTexture> overlayTex; // 随卡投影覆盖层（图标排/拆分芯片）
     QString chromeKey;
     QString overlayKey;
 };
@@ -192,14 +214,20 @@ public:
     void prePaintScreen(ScreenPrePaintData &data, std::chrono::milliseconds presentTime) override;
     void prePaintWindow(RenderView *view, EffectWindow *w, WindowPrePaintData &data, std::chrono::milliseconds presentTime) override;
 #else
-    // 6.7+：prePaint 钩子移除 presentTime；paintScreen 签名两代一致（void）
+    // 6.7+：prePaint 钩子移除 presentTime；paintScreen 从 6.8 起返回 bool
     void prePaintScreen(ScreenPrePaintData &data) override;
     void prePaintWindow(RenderView *view, EffectWindow *w, WindowPrePaintData &data) override;
 #endif
-    void paintScreen(const RenderTarget &renderTarget, const RenderViewport &viewport,
+#ifdef KOS_KWIN_PAINT_RESULT_API
+    bool
+#else
+    void
+#endif
+    paintScreen(const RenderTarget &renderTarget, const RenderViewport &viewport,
                      int mask, const Region &deviceRegion, LogicalOutput *screen) override;
     void postPaintScreen() override;
     bool isActive() const override;
+    QString debug(const QString &parameter) const override;
 
     int requestedEffectChainPosition() const override
     {
@@ -224,7 +252,8 @@ private:
     QSet<EffectWindow *> m_connected; // 已挂 minimizedChanged 的窗口
     QRect m_target; // 全局配置目标（Stage 侧栏区域）；无效 = 回落行为
     QEasingCurve m_easing{QEasingCurve::InOutCubic};
-    qreal m_tiltAngle = 22.0; // kwinrc TiltAngle：卡片倾斜角，动画起止姿态
+    qreal m_tiltAngle = 0.0;   // kwinrc TiltAngle：卡片倾斜角，动画起止姿态
+                               //（默认 0 = iPadOS 还原的近平贴卡）
     qreal m_glassOpacity = 0.65; // kwinrc GlassOpacity：飞行途中透明度（1=关）
     bool m_trace = false; // kwinrc TraceTargets：正常路径也打目标解析日志
     bool m_mirrorTargets = false; // kwinrc TargetMirror：右侧常驻——装卡姿态镜像
@@ -248,12 +277,13 @@ private:
                       const QColor &tint, const QColor &border,
                       qreal borderWidth, qreal depthG, qreal topLight,
                       GLTexture *tex, qreal alpha, qreal hoverBlend = 0.0,
-                      float sideRight = 0.0f);
+                      float sideRight = 0.0f, qreal cardSizePad = 0.0);
     QRectF cardBodyQuad(const LiveCardPose &pose, qreal fanMax, qreal dpr) const;
     void drawLiveCardBody(const RenderViewport &viewport, qreal dpr,
                           LiveCard &card, quint32 &paintable);
     void writeLiveStatus();
     bool liveCardPaintable(const LiveCard &card) const;
+    bool liveOverlayAllowed() const;
     static LiveCardPose lerpPose(const LiveCardPose &a, const LiveCardPose &b, qreal t);
     static LiveCardPose currentPose(const LiveCard &card);
     // 卡面铭牌（标题/关闭钮）光栅化；键（标题/计数/尺寸）变才重绘
@@ -261,7 +291,9 @@ private:
 
     QString m_livePath;
     QString m_liveStatusPath;
+    QString m_liveDesktopId;
     QFileSystemWatcher *m_liveWatcher = nullptr;
+    QTimer m_liveReloadTimer;   // Restarted by both watcher signals; one reload per burst.
     QTimer m_liveStatusTimer;   // 周期刷 status 文件（shell 据此让位快照）
     QTimer m_liveStaleTimer;    // 10s 周期 reload 兜底（真正的心跳超时判定在 reload 内按 mtime 25s）
     QTimer m_liveFrameTimer;    // 自驱帧回调投喂（30Hz framePainted）
@@ -271,6 +303,7 @@ private:
     qint64 m_shaderLastFailMs = 0;    // 最近一次编译失败时刻（steady ms）
     QHash<QString, QSharedPointer<LiveCard>> m_liveCards; // 含 dying 退场卡（统一绘制管线）
     QSet<QString> m_liveWanted; // 最近一次发布在册的 id（缺席踢除的对照基准）
+    QSet<QString> m_livePendingOpaque; // Desktop handoff: retain until registration succeeds.
     QSet<QString> m_livePending; // 文件里有、窗口还没出现（等 windowAdded）
     QSet<QString> m_liveAcknowledged; // Only cards with rendered, painted content own QML visuals.
     quint32 m_liveFeedTick = 0;  // 帧投喂分级节拍
@@ -283,6 +316,13 @@ private:
     std::unique_ptr<GLTexture> m_cursorTex;
     qint64 m_cursorImgKey = 0;
     QPointF m_cursorHotspot;
+#if STAGE_LIVE_CONTENT_RENDER_67
+    ItemRenderer *m_itemRenderer67 = nullptr;
+#if defined(ANLAND_KWIN_67) && !defined(KOS_KWIN_PAINT_TIME_API) \
+    && !defined(STAGE_RENDERER_RENDERDEVICE_API)
+    EglDisplay *m_eglDisplay67 = nullptr; // 6.8 走 RenderDevice 路径不需要
+#endif
+#endif
     bool m_liveEnabled = true; // kwinrc LiveCards 总闸（默认开，排障用）
 };
 

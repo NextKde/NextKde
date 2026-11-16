@@ -1,4 +1,6 @@
 import QtQuick
+import "../../Icons" as Symbols
+import QtQuick.Controls as Controls
 import Qt5Compat.GraphicalEffects
 
 // Liquid glass bottom navigation bar, ported from the vue-web-liquid-glass
@@ -15,6 +17,7 @@ import Qt5Compat.GraphicalEffects
 //     active, so items show through the translucent glass
 Item {
     id: root
+    property var motionPolicy: LiquidStyle.motionFor(root.materialForm)
 
     // ---- Public API (mirrors the Vue component props) ----
     property var model: []            // [{ id, label?, icon }] - icon is a text symbol
@@ -25,6 +28,8 @@ Item {
     property real itemWidthOverride: 0 // >0 widens each item beyond the preset (e.g.
                                       // to fit a 4-char CJK label) without changing
                                       // the preset height/pill look.
+    property bool sizeToLabels: false
+    property real labelHorizontalPadding: 10
     property bool disabled: false
     property color accentColor: "#ff453a"
     // Foreground painted over the selected thumb. Liquid form historically
@@ -61,9 +66,28 @@ Item {
     readonly property var dims: presets[size] ?? presets.medium
     readonly property real scaleFactor: barHeight > 0 ? barHeight / dims.height : 1
     readonly property real sliderHeight: barHeight > 0 ? barHeight : dims.height
-    readonly property real itemWidth: itemWidthOverride > 0
+    readonly property real minimumItemWidth: itemWidthOverride > 0
         ? itemWidthOverride : dims.itemWidth * scaleFactor
-    readonly property real sliderWidth: itemWidth * Math.max(1, model.length)
+    FontMetrics {
+        id: labelMetrics
+        font.pixelSize: root.fontSize
+        font.weight: Math.max(root.labelFontWeight, Font.DemiBold)
+    }
+    readonly property real preferredItemWidth: {
+        let result = minimumItemWidth
+        if (sizeToLabels) {
+            for (const item of model) {
+                // Reserve the selected label's 1.05 scale as well as padding.
+                result = Math.max(result, (Math.ceil(labelMetrics.advanceWidth(
+                    String(item.label || ""))) + labelHorizontalPadding * 2 + 1) * 1.05)
+            }
+        }
+        return Math.ceil(result)
+    }
+    // Layouts may constrain the preferred width. All geometry must use the
+    // resulting width, including labels, click targets and selection physics.
+    readonly property real itemWidth: width / Math.max(1, model.length)
+    readonly property real sliderWidth: width
     readonly property real thumbWidth: Math.max(itemWidth * 0.5, itemWidth - 12 * scaleFactor)
     readonly property real thumbHeight: dims.thumbHeight * scaleFactor
     readonly property real iconSize: Math.max(6, Math.round(dims.iconSize * scaleFactor))
@@ -75,7 +99,7 @@ Item {
     readonly property int _selectedIndex: model.length > 0
         ? Math.max(0, Math.min(model.length - 1, currentIndex)) : 0
 
-    implicitWidth: sliderWidth
+    implicitWidth: preferredItemWidth * Math.max(1, model.length)
     implicitHeight: sliderHeight
 
     // ---- Physics layer (frame-driven, no animation) ----
@@ -90,6 +114,7 @@ Item {
     property real _displayX: 0
     property real _displayScaleX: 1
     property real _displayScaleY: 1
+    // motion-exception: 100ms display filtering follows the frame-driven spring in all three axes.
     Behavior on _displayX { NumberAnimation { duration: 100; easing.type: Easing.OutCubic } }
     Behavior on _displayScaleX { NumberAnimation { duration: 100; easing.type: Easing.OutCubic } }
     Behavior on _displayScaleY { NumberAnimation { duration: 100; easing.type: Easing.OutCubic } }
@@ -188,6 +213,11 @@ Item {
         }
     }
 
+    onItemWidthChanged: {
+        root._currentThumbX = targetX(root._selectedIndex)
+        root.syncDisplay()
+    }
+
     Component.onCompleted: {
         if (root.model.length > 0) {
             root._currentThumbX = targetX(root._selectedIndex)
@@ -245,6 +275,10 @@ Item {
             height: root.sliderHeight
             enabled: !root.disabled
             cursorShape: root.disabled ? Qt.ArrowCursor : Qt.PointingHandCursor
+            hoverEnabled: true
+            Controls.ToolTip.visible: containsMouse && Boolean(modelData.label)
+            Controls.ToolTip.text: String(modelData.label || "")
+            Controls.ToolTip.delay: 600
 
             onPressed: {
                 // Timers are scoped ids, not root properties
@@ -304,7 +338,7 @@ Item {
             radius: height / 2
             color: root.materialForm ? root.accentColor : "#ffffff"
             opacity: root._isActive ? 0 : 1
-            Behavior on opacity { NumberAnimation { duration: 100 } }
+            Behavior on opacity { NumberAnimation { duration: root.motionPolicy.instant.duration; easing.type: root.motionPolicy.enterCurve } }
 
             // Flat container colour in the tonal form; the iPadOS form keeps its
             // vertical wash, so the same pill carries both finishes.
@@ -335,7 +369,7 @@ Item {
             id: glassLens
             anchors.fill: parent
             opacity: root._isActive ? 1 : 0
-            Behavior on opacity { NumberAnimation { duration: 100 } }
+            Behavior on opacity { NumberAnimation { duration: root.motionPolicy.instant.duration; easing.type: root.motionPolicy.enterCurve } }
 
             // Chromatic aberration - RGB split edges
             Rectangle {
@@ -432,22 +466,28 @@ Item {
             height: root.sliderHeight
             opacity: index === root.currentIndex ? 1.0 : 0.6
             scale: index === root.currentIndex ? 1.05 : 1.0
-            Behavior on opacity { NumberAnimation { duration: 100 } }
-            Behavior on scale { NumberAnimation { duration: 100 } }
+            Behavior on opacity { NumberAnimation { duration: root.motionPolicy.instant.duration; easing.type: root.motionPolicy.enterCurve } }
+            Behavior on scale { NumberAnimation { duration: root.motionPolicy.instant.duration; easing.type: root.motionPolicy.enterCurve } }
 
             Column {
                 anchors.centerIn: parent
-                spacing: modelData.label && modelData.label.toString().length > 0 ? 2 : 0
-                Text {
+                width: Math.max(0, parent.width / 1.05 - root.labelHorizontalPadding * 2)
+                spacing: modelData.icon && modelData.label ? 2 : 0
+                Symbols.Icon {
                     anchors.horizontalCenter: parent.horizontalCenter
-                    text: modelData.icon || ""
+                    visible: Boolean(modelData.icon)
+                    width: parent.width
+                    name: modelData.icon || ""
                     color: index === root.currentIndex
                         ? root.selectedItemColor : root.itemColor
-                    font.pixelSize: root.iconSize
-                    font.weight: Font.DemiBold
+                    size: root.iconSize
                 }
                 Text {
                     anchors.horizontalCenter: parent.horizontalCenter
+                    objectName: "liquid-nav-label-" + index
+                    width: parent.width
+                    horizontalAlignment: Text.AlignHCenter
+                    elide: Text.ElideRight
                     visible: Boolean(modelData.label
                         && modelData.label.toString().length > 0)
                     text: modelData.label || ""

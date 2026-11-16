@@ -5,24 +5,13 @@
 // The QVariantList default argument below is instantiated by moc, which needs
 // QVariant complete rather than merely forward-declared.
 #include <QVariant>
+#include <QFileSystemWatcher>
+#include <KDecoration3/DecorationButtonGroup>
 
 namespace KOS
 {
 
-// The KOS window decoration: a thin frame with nothing drawn in it.
-//
-// It draws the title bar and the caption and stops there. No buttons and no
-// glass on purpose: the three-dot panel over server-side decorated windows is
-// drawn by the kos-bridge effect, which reads this title bar back to choose the
-// panel's tint, so a translucent bar over the compositor's blur would tint the
-// panel from something other than the window's own colour. The liquid material
-// the plugin used to paint has been dropped with it.
-//
-// The window's own shape is left alone as well -- no setBorderRadius(), no
-// setBorderOutline(), square corners painted here. See updateLayout() for why;
-// briefly, setBorderRadius() is how KWin clips the whole window, so calling it
-// would override the rounding and outline the user set on the decoration they
-// came from.
+// Native server-side frame and controls; Bridge supplies only appearance policy.
 class KosDecoration final : public KDecoration3::Decoration
 {
     Q_OBJECT
@@ -34,7 +23,12 @@ public:
     bool init() override;
     void paint(QPainter *painter, const QRectF &repaintArea) override;
 
+public:
+    bool showButtonGlyphs() const;
+
 private:
+    void refreshButtonPreferences();
+    bool event(QEvent *event) override;
     // Borders are double-buffered through DecorationState: borderTop() still
     // reports the previous value right after setBorders(). So the buffered
     // properties are written here...
@@ -49,6 +43,13 @@ private:
 
     void paintTitleBar(QPainter *painter);
     void paintCaption(QPainter *painter);
+    KDecoration3::DecorationButtonGroup *m_leftButtons = nullptr;
+    KDecoration3::DecorationButtonGroup *m_rightButtons = nullptr;
+    QFileSystemWatcher m_buttonWatcher;
+    bool m_hoverGlyphs = false;
+    bool m_updatingGeometry = false;
+    bool m_bridgeShadowActive = false;
+    std::shared_ptr<KDecoration3::DecorationShadow> m_shadowBeforeBridge;
 };
 
 } // namespace KOS

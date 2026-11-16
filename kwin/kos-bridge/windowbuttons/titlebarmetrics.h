@@ -1,8 +1,9 @@
 #pragma once
 
+#include "titlebarreadback.h"
+#include <QColor>
 #include <QRectF>
-
-#include "buttonconfig.h"
+#include <QRegion>
 
 namespace KWin
 {
@@ -15,31 +16,60 @@ class Region;
 namespace KOS
 {
 
-// Read the tint of the title bar the panel is about to cover.
-//
-// This is the only thing the effect still measures. Where the panel goes is
-// configured -- see AppConfig::offset -- because a compositor cannot reliably
-// work out where a client-side decorated window put its controls: nothing
-// exposes it (`xdg-decoration` carries only a mode, `_GTK_FRAME_EXTENTS`
-// carries shadow margins and only on X11, `GtkHeaderBar` lives inside the
-// client process, and `EffectWindow::decoration()` is null for these windows),
-// and guessing from pixels mistakes logos, toolbars and half-painted frames
-// for controls. The tint is different: it is a property of the whole bar, not
-// of a feature inside it, so a median over the bar is right even when nothing
-// in it is understood.
-//
-// `panelRect` is the panel in window-local logical pixels. The sample is taken
-// from the band the panel occupies, across the window's whole width, minus the
-// panel itself and the caption's middle third.
-//
-// Returns false when the band could not be read or held too few visible
-// pixels, which means "not yet" -- the window has not painted, or is covered.
-// The caller is expected to retry on a later frame.
-bool sampleTitlebarTint(const KWin::RenderTarget &renderTarget,
-                        const KWin::RenderViewport &viewport,
-                        KWin::EffectWindow *window,
-                        const KWin::Region &deviceClip,
-                        const QRectF &panelRect,
-                        bool *dark);
+// Asynchronous counterpart of the upstream readTitlebarPixels helper. Enqueue
+// accepts untransformed, top-down texture coordinates; take normalizes the
+// captured FBO's flip/rotation back to that same orientation. The GL context
+// must be current throughout this object's lifetime, including destruction.
+class TitlebarPixelReadback
+{
+public:
+    bool enqueue(const KWin::RenderTarget &target, const QRect &rect);
+    bool take(QByteArray &pixels);
+    bool pending() const { return m_readback.pending(); }
+    void discard() { m_readback.discard(); }
+    QRect rect() const { return m_rect; }
+
+private:
+    TitlebarReadback m_readback;
+    QRect m_rect;
+    QRect m_bufferRect;
+    QPoint m_origin, m_stepX, m_stepY;
+    QByteArray m_rawPixels;
+};
+
+// Fully visible, top-down target coordinates for same-frame GPU tinting. Empty
+// when neither gutter can be copied without including occlusion/undrawn damage.
+QRect visibleTitlebarGutter(const KWin::RenderTarget &, const KWin::RenderViewport &,
+                            const QRectF &frame, const KWin::Region &deviceClip,
+                            const QRectF &panel, const QRectF &cover);
+
+// Per-window, bounded asynchronous readback. The panel's position remains
+// configuration-driven; only its tint is measured, never inferred controls.
+class TitlebarSampler
+{
+public:
+    ~TitlebarSampler();
+    bool enqueue(const KWin::RenderTarget &renderTarget,
+                 const KWin::RenderViewport &viewport,
+                 KWin::EffectWindow *window, const KWin::Region &deviceClip,
+                 const QRectF &panel, const QRectF &cover);
+    bool take(bool *dark, QColor *color);
+    bool pending() const { return m_readback.pending(); }
+    void discard() { m_readback.discard(); }
+    qreal backgroundBottom() const { return m_backgroundBottom; }
+    QRectF probeRect() const { return m_probeRect; }
+
+private:
+    TitlebarPixelReadback m_readback;
+    QRect m_rect;
+    QRegion m_visible;
+    bool m_fallback = false;
+    QRect m_tintRect;
+    qreal m_deviceScale = 1;
+    qreal m_probeTop = 0;
+    qreal m_backgroundBottom = -1;
+    QRectF m_probeRect;
+    QByteArray m_pixels;
+};
 
 } // namespace KOS
