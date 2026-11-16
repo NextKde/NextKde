@@ -78,6 +78,17 @@ is_nixos() {
     [[ -f /etc/NIXOS ]]
 }
 
+# Non-TTY callers (the update agent) set KOS_SUDO_ASKPASS=1 so sudo can ask
+# through $SUDO_ASKPASS instead of /dev/tty. LC_ALL=C keeps ksshaskpass able
+# to parse the prompt. Defaults stay plain sudo.
+kos_sudo() {
+    if [[ ${KOS_SUDO_ASKPASS:-0} == 1 ]]; then
+        LC_ALL=C sudo -A "$@"
+    else
+        sudo "$@"
+    fi
+}
+
 # Arch package names are kept in one place so `doctor`, automatic dependency
 # installation, and the README describe the same default build. The KWin list
 # is needed only while compositor plugins are enabled.
@@ -726,7 +737,7 @@ ensure_build_dependencies() {
         if (( ${#missing_packages[@]} > 0 )); then
             printf 'KOS build dependencies require administrator permission:\n'
             printf '  %s\n' "${missing_packages[*]}"
-            sudo pacman -S --needed -- "${missing_packages[@]}"
+            kos_sudo pacman -S --needed -- "${missing_packages[@]}"
         fi
     elif command -v apt-get >/dev/null 2>&1; then
         local package resolved
@@ -765,7 +776,7 @@ ensure_build_dependencies() {
             if (( ${#missing_packages[@]} > 0 )); then
                 printf 'KOS build dependencies require administrator permission:\n'
                 printf '  %s\n' "${missing_packages[*]}"
-                sudo env DEBIAN_FRONTEND=noninteractive apt-get install -y "${missing_packages[@]}"
+                kos_sudo env DEBIAN_FRONTEND=noninteractive apt-get install -y "${missing_packages[@]}"
             fi
         fi
     elif command -v dnf >/dev/null 2>&1; then
@@ -786,7 +797,7 @@ ensure_build_dependencies() {
         if (( ${#missing_packages[@]} > 0 )); then
             printf 'KOS build dependencies require administrator permission:\n'
             printf '  %s\n' "${missing_packages[*]}"
-            sudo dnf install -y "${missing_packages[@]}"
+            kos_sudo dnf install -y "${missing_packages[@]}"
         fi
     fi
 }
@@ -1537,8 +1548,6 @@ install_kwin_plugins() {
         return 1
     fi
 
-    printf 'Installing KWin effects to %s requires administrator permission.\n' \
-        "$kwin_system_prefix"
     # Replace each file via rm-then-cp (new inode), never by copying over the
     # existing file in place: the running compositor keeps its mapping of the
     # old plugin, while overwriting in place has crashed kwin_wayland.
@@ -1567,9 +1576,6 @@ install_kwin_plugins() {
             *) ;;  # A path outside the system prefix was never installed.
         esac
     done < <(comm -23 "$previous_manifest" "$kwin_manifest")
-    if (( ${#system_entries[@]} > 0 || ${#stale_entries[@]} > 0 )); then
-        sudo rm -f -- "${system_entries[@]}" "${stale_entries[@]}"
-    fi
     # The staged tree is written by the invoking user, so a plain `cp -a` copies
     # its ownership into the system prefix: the KWin plugins and the glass
     # effect would end up user-writable while the compositor loads them, which
@@ -1596,23 +1602,112 @@ install_kwin_plugins() {
         [[ "$(getenforce)" != Disabled ]]; then
         selinux_context=(-Z)
     fi
-    # Normalise the staged tree's modes before the copy. `cp -a` carries the
-    # *source* directory's permissions onto the destination -- including the
-    # staged root, which becomes the system prefix itself. A permissive umask
-    # is therefore not enough: running the installer under a restrictive one
-    # (e.g. `umask 077`, the usual habit while a secret is on disk) stages 0700
-    # directories, `chmod go-w` leaves them 0700, and /usr ends up 0700 --
-    # every non-root process then loses access to the whole prefix, and a
-    # reboot has no graphical session at all. Grant group/other read and
-    # directory traverse explicitly instead of only removing write.
+    # Normalise the staged tree's modes before comparing or copying. `cp -a`
+    # carries the *source* directory's permissions onto the destination --
+    # including the staged root, which becomes the system prefix itself. A
+    # permissive umask is therefore not enough: running the installer under a
+    # restrictive one (e.g. `umask 077`, the usual habit while a secret is on
+    # disk) stages 0700 directories, `chmod go-w` leaves them 0700, and /usr
+    # ends up 0700 -- every non-root process then loses access to the whole
+    # prefix, and a reboot has no graphical session at all. Grant group/other
+    # read and directory traverse explicitly instead of only removing write.
     find "$stage_dir$kwin_system_prefix" -type d -exec chmod 755 {} +
     find "$stage_dir$kwin_system_prefix" -type f -exec chmod go-w,a+rX {} +
-    sudo cp -a --no-preserve=ownership "${selinux_context[@]}" \
-        "$stage_dir$kwin_system_prefix/." "$kwin_system_prefix/"
+
+    # If the staged tree is byte-identical to the root-owned installed tree and
+    # no files became stale, the copy would only refresh inodes: skip it, and
+    # skip the sudo prompt that comes with it.
+    local unchanged=1
+    # Active SELinux needs the cp -Z relabel even when content is identical.
+    if command -v getenforce >/dev/null 2>&1 && [[ "$(getenforce)" != Disabled ]]; then
+        unchanged=0
+    elif (( ${#stale_entries[@]} == 0 )) && [[ "$(stat -c %a "$kwin_system_prefix")" == 755 ]]; then
+        local manifest_entry staged_file
+        for manifest_entry in "${system_entries[@]}"; do
+            staged_file="$stage_dir$manifest_entry"
+            if [[ ! -e "$manifest_entry" && ! -L "$manifest_entry" ]] \
+                    || [[ "$(stat -c %u "$manifest_entry")" != 0 ]]; then
+                unchanged=0
+                break
+            fi
+            if [[ -L "$staged_file" ]]; then
+                if [[ ! -L "$manifest_entry" ]] \
+                        || [[ "$(readlink "$staged_file")" != "$(readlink "$manifest_entry")" ]]; then
+                    unchanged=0
+                    break
+                fi
+            else
+                if [[ -L "$manifest_entry" || ! -f "$manifest_entry" ]] \
+                        || ! cmp -s -- "$staged_file" "$manifest_entry" \
+                        || [[ "$(stat -c %a "$staged_file")" != "$(stat -c %a "$manifest_entry")" ]]; then
+                    unchanged=0
+                    break
+                fi
+            fi
+        done
+        if (( unchanged )); then
+            local installed_dir
+            while IFS= read -r installed_dir; do
+                installed_dir="${installed_dir#"$stage_dir"}"
+                if [[ ! -d "$installed_dir" ]] \
+                        || [[ "$(stat -c %u "$installed_dir")" != 0 ]] \
+                        || [[ "$(stat -c %a "$installed_dir")" != 755 ]]; then
+                    unchanged=0
+                    break
+                fi
+            done < <(find "$stage_dir$kwin_system_prefix" -type d)
+        fi
+    else
+        unchanged=0
+    fi
+    if (( unchanged )); then
+        printf 'KWin plugins are unchanged; skipping the system copy.\n'
+        enable_kwin_effects
+        return 0
+    fi
+    printf 'Installing KWin effects to %s requires administrator permission.\n' \
+        "$kwin_system_prefix"
+    # Ask once, up front: the rm/cp/chmod below are separate sudo calls and a
+    # non-TTY caller cannot answer a second prompt mid-install. A NOPASSWD
+    # install needs no prompt at all, and `sudo -v` would still ask, so probe
+    # with a no-op command first.
+    if [[ ${KOS_SUDO_ASKPASS:-0} == 1 ]] && ! kos_sudo -n true; then
+        if ! kos_sudo -v; then
+            printf 'sudo authorization failed; KWin plugins were not changed.\n' >&2
+            return 1
+        fi
+    fi
+    # Create the destination directories first; a failure here leaves every
+    # installed plugin untouched.
+    local -a target_dirs=()
+    local staged_dir
+    while IFS= read -r staged_dir; do
+        target_dirs+=("${staged_dir#"$stage_dir"}")
+    done < <(find "$stage_dir$kwin_system_prefix" -type d)
+    if (( ${#target_dirs[@]} > 0 )); then
+        kos_sudo install -d -m 755 -- "${target_dirs[@]}"
+        kos_sudo chmod 755 -- "${target_dirs[@]}"
+    fi
+    # Replace each file through a sibling temp + rename. A failed copy leaves
+    # the old file in place; rename swaps inodes atomically, so the running
+    # compositor keeps its mapping while a later start sees the new file.
+    local entry staged_path installed_path temporary
+    for entry in "${system_entries[@]}"; do
+        staged_path="$stage_dir$entry"
+        installed_path="$entry"
+        temporary="$installed_path.kos-new"
+        kos_sudo rm -f -- "$temporary"
+        kos_sudo cp -a --no-preserve=ownership "${selinux_context[@]}" \
+            -- "$staged_path" "$temporary"
+        kos_sudo mv -fT -- "$temporary" "$installed_path"
+    done
     # Belt: the prefix itself is what a bad umask breaks first, and restoring
     # its 0755 here is exactly the manual recovery -- cheap, and it makes the
     # system-wide lockout impossible even if a future staging step slips.
-    sudo chmod 755 "$kwin_system_prefix"
+    kos_sudo chmod 755 "$kwin_system_prefix"
+    if (( ${#stale_entries[@]} > 0 )); then
+        kos_sudo rm -f -- "${stale_entries[@]}"
+    fi
     # Directories the stale files lived in are pruned only when they end up
     # empty, so a shared directory such as the plugin dir is never touched.
     if (( ${#stale_entries[@]} > 0 )); then
@@ -1620,7 +1715,7 @@ install_kwin_plugins() {
         # QML decoration package nested files two levels deep, and pruning only
         # each file's own directory left the package root behind.
         printf '%s\n' "${stale_entries[@]}" | xargs -r -n1 dirname \
-            | sort -ru | sudo xargs -r rmdir -p --ignore-fail-on-non-empty 2>/dev/null || true
+            | sort -ru | kos_sudo xargs -r rmdir -p --ignore-fail-on-non-empty 2>/dev/null || true
     fi
     enable_kwin_effects
     printf 'Installed and enabled KOS Bridge, Dock Animation, Context Menu Input, and Glass.\n'
@@ -1925,7 +2020,7 @@ install_all() {
     take_over_plasma_desktop
     warn_notification_claimers
     python3 "$project_dir/tools/release/source-release.py" stamp "$prefix/share/kos/release.json" \
-        --from-file "$build_dir/release.json"
+        --from-file "$build_dir/release.json" --source-root "$project_dir"
     print_install_summary
 }
 
@@ -2011,7 +2106,7 @@ uninstall_kwin_plugins() {
         if (( ${#system_files[@]} > 0 )); then
             printf 'Removing KWin effects from %s requires administrator permission.\n' \
                 "$kwin_system_prefix"
-            sudo rm -f -- "${system_files[@]}"
+            kos_sudo rm -f -- "${system_files[@]}"
         fi
     fi
     # Clear disable overrides only after plugin files were actually removed.
