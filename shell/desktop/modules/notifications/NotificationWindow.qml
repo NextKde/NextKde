@@ -621,8 +621,12 @@ PanelWindow {
                     }
                 }
 
-                // Action buttons (collapsed: latest notification).
-                Row {
+                // Action buttons (collapsed: latest notification). A Flow, not
+                // a Row: apps such as mail clients send three or more labelled
+                // actions, which are wider than the card and would otherwise
+                // spill past its edge and be cut off.
+                Flow {
+                    objectName: "notification-actions"
                     width: parent.width
                     spacing: 8
                     visible: !card.expanded
@@ -635,7 +639,9 @@ PanelWindow {
                         Rectangle {
                             id: actionBtn
                             height: 28
-                            width: actionLabel.implicitWidth + 24
+                            // A single label longer than the card elides
+                            // instead of widening its button past the edge.
+                            width: Math.min(actionLabel.implicitWidth + 24, content.width)
                             radius: 14
                             color: AppearanceTokens.surface.selectionHighlightStyle === "glass"
                                 ? (ThemeService.isDark ? Qt.rgba(1, 1, 1, 0.08) : Qt.rgba(0, 0, 0, 0.04))
@@ -656,6 +662,7 @@ PanelWindow {
                             GlassText {
                                 id: actionLabel
                                 anchors.centerIn: parent
+                                width: Math.min(implicitWidth, actionBtn.width - 24)
                                 text: {
                                     const raw = modelData.text || modelData.identifier || ""
                                     // Some apps send lowercase or alternate-case
@@ -729,15 +736,27 @@ PanelWindow {
                 id: closeButton
                 name: "notification.dismiss"
                 color: card.foregroundColor
-                opacity: 0.55
+                opacity: closeArea.pressed ? 1 : closeArea.containsMouse ? 0.9 : 0.55
                 size: 14
                 width: 22; height: 22
                 anchors { right: parent.right; rightMargin: 12; top: parent.top; topMargin: 9 }
                 MouseArea {
+                    id: closeArea
+                    objectName: "notification-close-area"
                     anchors.fill: parent
                     anchors.margins: -6
+                    hoverEnabled: true
                     cursorShape: Qt.PointingHandCursor
-                    onClicked: card.close(false)
+                    // Released, not clicked: a card that is still sliding in, or
+                    // moving up after the one above it closed, carries the button
+                    // away from a stationary pointer between press and release,
+                    // and clicked would silently drop that dismissal. A release
+                    // anywhere on the card still counts; dragging off cancels.
+                    onReleased: mouse => {
+                        const point = mapToItem(card, mouse.x, mouse.y)
+                        if (card.contains(point))
+                            card.close(false)
+                    }
                 }
             }
         }
