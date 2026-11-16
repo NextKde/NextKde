@@ -57,7 +57,6 @@ private slots:
                                      const QStringList &invalidated);
     void nightLightPropertiesChanged(const QString &interface, const QVariantMap &changed,
                                      const QStringList &invalidated);
-    void onScreenSaverActiveChanged(bool locked);
 
 private:
     bool m_animationSyncPending = false;

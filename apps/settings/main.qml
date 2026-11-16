@@ -979,7 +979,6 @@ ApplicationWindow {
                         sourceComponent: Pages.AboutSettingsPage {
                             colors: window.notificationTheme
                             cache: typeof aboutCache !== "undefined" ? aboutCache : null
-                            updateBackend: typeof updateController !== "undefined" ? updateController : null
                         }
                     }
 

@@ -625,11 +625,7 @@ if(BUILD_TESTING)
         add_test(NAME kos-shell.inputmethod-motion
             COMMAND ${KOS_NODE_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/inputmethod/run.mjs
                 ${KOS_INTERACTION_QMLTEST})
-        add_test(NAME kos-shell.screen-lifecycle
-            COMMAND ${KOS_NODE_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/screen-lifecycle/run.mjs
-                ${KOS_INTERACTION_QMLTEST})
-        set_tests_properties(kos-shell.inputmethod-motion kos-shell.screen-lifecycle
-            PROPERTIES LABELS "ui;headless" TIMEOUT 20)
+        set_tests_properties(kos-shell.inputmethod-motion PROPERTIES LABELS "ui;headless" TIMEOUT 20)
     endif()
     if(KOS_NODE_EXECUTABLE)
         add_test(NAME kos-shell.inputmethod-placement
@@ -855,12 +851,6 @@ find_package(Qt6 6.5 REQUIRED COMPONENTS
 find_package(KF6WindowSystem 6.0 QUIET)
 if(BUILD_TESTING)
     find_package(Qt6 6.5 REQUIRED COMPONENTS Test)
-    add_executable(kos-window-effect-policy-test
-        kwin/common/tests/windoweffectpolicy_test.cpp)
-    target_link_libraries(kos-window-effect-policy-test PRIVATE Qt6::Core)
-    add_test(NAME kos-window.effect-policy COMMAND kos-window-effect-policy-test)
-    set_tests_properties(kos-window.effect-policy PROPERTIES LABELS platform TIMEOUT 10)
-
     add_executable(kos-stage-desktop-policy-test
         kwin/kwin-effects-stageanim/tests/test_desktop_policy.cpp)
     target_link_libraries(kos-stage-desktop-policy-test PRIVATE Qt6::Core)
