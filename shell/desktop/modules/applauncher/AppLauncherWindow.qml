@@ -194,6 +194,9 @@ PanelWindow {
     // load on the GUI thread, so clearing this model on close made every open
     // rebuild and synchronously decode the first screen of icons.
     property var applications: []
+    // Hidden apps stay in the catalogue; they only leave the grid. This second
+    // projection is the restore panel's model.
+    property var hiddenApplications: []
     property bool applicationsDirty: true
 
     function rebuildApplications() {
@@ -201,11 +204,20 @@ PanelWindow {
         AppPresentationService.revision;
         const catalogue = AppPresentationService.catalog();
         const apps = [];
+        const hidden = [];
         for (let i = 0; i < catalogue.length; i++) {
             const presentation = catalogue[i];
             const appId = presentation.rawAppId;
-            if (!appId || AppLauncherConfigService.hiddenAppIds.indexOf(appId) >= 0)
+            if (!appId)
                 continue;
+            if (AppLauncherConfigService.hiddenAppIds.indexOf(appId) >= 0) {
+                hidden.push({
+                    id: appId,
+                    name: presentation.displayName,
+                    icon: presentation.iconSource
+                });
+                continue;
+            }
             apps.push({
                 id: appId,
                 name: presentation.displayName,
@@ -215,6 +227,7 @@ PanelWindow {
             });
         }
         applications = apps;
+        hiddenApplications = hidden;
         applicationsDirty = false;
     }
 
@@ -266,6 +279,9 @@ PanelWindow {
     readonly property var orderedApplications: AppLauncherConfigService.orderedApplications(applications)
     readonly property var rootGridItems: AppLauncherConfigService.rootGridItems(applications)
     property var openFolder: null
+    // Restore panel for apps hidden with "Hide app". Launcher-local, because
+    // the fullscreen presentation offers no edit mode to reach it from.
+    property bool hiddenAppsOpen: false
     // Keep a stable snapshot during the close animation. `openFolder` remains
     // the live persistence target; `displayedFolder` is only presentation.
     property var displayedFolder: null
@@ -482,6 +498,19 @@ PanelWindow {
         editorName = "";
         editorIcon = "";
         editorIconStatus = "";
+    }
+
+    function closeHiddenApps() {
+        hiddenAppsOpen = false;
+        // Hand the keyboard back to search once the modal barrier is gone.
+        searchFocusTimer.restart();
+    }
+
+    // Restoring the last app leaves nothing to list, so the panel retires
+    // itself instead of showing an empty card.
+    onHiddenApplicationsChanged: {
+        if (hiddenAppsOpen && hiddenApplications.length === 0)
+            closeHiddenApps();
     }
 
     function saveApplicationEditor() {
@@ -973,6 +1002,8 @@ PanelWindow {
             dismissApplicationMenu();
             editMode = false;
             folderEditMode = false;
+            // A panel left open must not survive into the next launcher open.
+            hiddenAppsOpen = false;
             openFolder = null;
             displayedFolder = null;
             folderDialogOpen = false;
@@ -1475,6 +1506,7 @@ PanelWindow {
                                         selectionColor: Qt.rgba(1, 1, 1, 0.30)
                                         selectedTextColor: AppLauncherService.dockForegroundColor
                                         enabled: !root.editMode && !root.openFolder
+                                            && !root.hiddenAppsOpen
 
                                         onTextEdited: {
                                             root.cancelFullscreenPageTransition();
@@ -1562,6 +1594,58 @@ PanelWindow {
                                             }
                                         }
                                     }
+                                }
+                            }
+
+                            Rectangle {
+                                id: hiddenAppsButton
+                                // The header's left side is free in every
+                                // presentation; edit mode is not available in
+                                // fullscreen, so the restore entry lives here.
+                                width: 30
+                                height: 26
+                                radius: height / 2
+                                anchors {
+                                    left: parent.left
+                                    verticalCenter: parent.verticalCenter
+                                }
+                                // Nothing to restore means no button at all.
+                                visible: opacity > 0.01
+                                opacity: root.hiddenApplications.length > 0 ? 1.0 : 0.0
+                                scale: root.hiddenApplications.length > 0 ? 1.0 : 0.82
+                                color: hiddenAppsButtonMouse.containsMouse
+                                    ? Qt.rgba(1, 1, 1, 0.22) : Qt.rgba(1, 1, 1, 0.10)
+                                Behavior on opacity {
+                                    NumberAnimation {
+                                        duration: AppearanceTokens.motion.base.duration
+                                        easing.type: AppearanceTokens.motion.enterCurve
+                                    }
+                                }
+                                Behavior on scale {
+                                    NumberAnimation {
+                                        duration: AppearanceTokens.motion.base.duration
+                                        easing.type: AppearanceTokens.motion.enterCurve
+                                    }
+                                }
+                                Behavior on color {
+                                    ColorAnimation {
+                                        duration: AppearanceTokens.motion.fast.duration
+                                        easing.type: AppearanceTokens.motion.enterCurve
+                                    }
+                                }
+
+                                BundledIcon {
+                                    anchors.centerIn: parent
+                                    name: "launcher.hiddenApps"
+                                    color: root.launcherForegroundColor
+                                    size: 16
+                                }
+                                MouseArea {
+                                    id: hiddenAppsButtonMouse
+                                    anchors.fill: parent
+                                    hoverEnabled: true
+                                    cursorShape: Qt.PointingHandCursor
+                                    onClicked: root.hiddenAppsOpen = true
                                 }
                             }
 
@@ -2720,6 +2804,196 @@ PanelWindow {
                                             folderAppDelegate.heldForEdit = false;
                                         }
                                     }
+                                }
+                            }
+                        }
+                    }
+
+                    // Restore panel for apps hidden from the launcher. Hiding
+                    // stays an edit action; this is its only way back.
+                    Item {
+                        id: hiddenAppsOverlay
+                        anchors.fill: parent
+                        z: 1000
+                        visible: root.hiddenAppsOpen
+                        focus: visible
+
+                        // Escape retires the panel, not the launcher beneath it.
+                        Keys.onPressed: function (event) {
+                            if (event.key !== Qt.Key_Escape)
+                                return;
+                            root.closeHiddenApps();
+                            event.accepted = true;
+                        }
+
+                        Rectangle {
+                            anchors.fill: parent
+                            color: Qt.rgba(0, 0, 0, 0.18)
+                            MouseArea {
+                                anchors.fill: parent
+                                // Consume every button before lower grid handlers
+                                // can observe it; this is the modal barrier.
+                                acceptedButtons: Qt.AllButtons
+                                preventStealing: true
+                                onClicked: root.closeHiddenApps()
+                            }
+                        }
+
+                        Rectangle {
+                            id: hiddenAppsDialog
+                            anchors.centerIn: parent
+                            width: Math.min(360, parent.width - 80)
+                            readonly property real rowHeight: 44
+                            readonly property real pad: 20
+                            readonly property real headerHeight: 30
+                            // Height follows the rows until the list would take
+                            // more than about two thirds of the launcher; the
+                            // ListView scrolls from there.
+                            height: Math.min(parent.height * 0.65,
+                                pad * 2 + headerHeight + 12
+                                    + Math.max(rowHeight,
+                                        root.hiddenApplications.length * rowHeight))
+                            radius: 18
+                            color: Qt.rgba(0.08, 0.09, 0.12, 0.82)
+
+                            Item {
+                                id: hiddenAppsHeader
+                                anchors {
+                                    top: parent.top
+                                    left: parent.left
+                                    right: parent.right
+                                    margins: hiddenAppsDialog.pad
+                                }
+                                height: hiddenAppsDialog.headerHeight
+
+                                ShellText {
+                                    anchors {
+                                        left: parent.left
+                                        verticalCenter: parent.verticalCenter
+                                    }
+                                    text: I18n.tr("Hidden apps")
+                                    color: AppLauncherService.dockForegroundColor
+                                    style: Text.Outline
+                                    styleColor: Qt.rgba(0, 0, 0, 0.38)
+                                    font {
+                                        pixelSize: 17
+                                        weight: Font.DemiBold
+                                    }
+                                }
+                                BundledIcon {
+                                    anchors {
+                                        right: parent.right
+                                        verticalCenter: parent.verticalCenter
+                                    }
+                                    name: "launcher.closeEditor"
+                                    color: AppLauncherService.dockForegroundColor
+                                    size: 22
+                                    MouseArea {
+                                        anchors.fill: parent
+                                        anchors.margins: -8
+                                        cursorShape: Qt.PointingHandCursor
+                                        onClicked: root.closeHiddenApps()
+                                    }
+                                }
+                            }
+
+                            ListView {
+                                id: hiddenAppsList
+                                anchors {
+                                    top: hiddenAppsHeader.bottom
+                                    topMargin: 12
+                                    left: parent.left
+                                    right: parent.right
+                                    bottom: parent.bottom
+                                    leftMargin: hiddenAppsDialog.pad
+                                    rightMargin: hiddenAppsDialog.pad
+                                    bottomMargin: hiddenAppsDialog.pad
+                                }
+                                clip: true
+                                // Swallow the wheel while the modal is open, even
+                                // when the rows fit, so the grid cannot scroll
+                                // underneath it.
+                                boundsBehavior: Flickable.StopAtBounds
+                                model: root.hiddenApplications
+
+                                delegate: Item {
+                                    required property var modelData
+                                    width: ListView.view.width
+                                    height: hiddenAppsDialog.rowHeight
+
+                                    AppIcon {
+                                        id: hiddenAppIcon
+                                        width: 24
+                                        height: 24
+                                        anchors {
+                                            left: parent.left
+                                            verticalCenter: parent.verticalCenter
+                                        }
+                                        source: modelData.icon
+                                            || AppPresentationService.genericIconSource()
+                                        opacityMultiplier: IconAppearanceService.mode === "color" ? 1.0 : IconAppearanceService.opacity
+                                        saturation: IconAppearanceService.saturation
+                                        tintEnabled: IconAppearanceService.tintEnabled
+                                        tintColor: IconAppearanceService.tintColor
+                                    }
+
+                                    GlassText {
+                                        anchors {
+                                            left: hiddenAppIcon.right
+                                            leftMargin: 12
+                                            right: restorePill.left
+                                            rightMargin: 12
+                                            verticalCenter: parent.verticalCenter
+                                        }
+                                        text: modelData.name
+                                        color: AppLauncherService.dockForegroundColor
+                                        elide: Text.ElideRight
+                                        font {
+                                            pixelSize: 13
+                                            weight: Font.Medium
+                                        }
+                                    }
+
+                                    Rectangle {
+                                        id: restorePill
+                                        anchors {
+                                            right: parent.right
+                                            verticalCenter: parent.verticalCenter
+                                        }
+                                        width: restoreLabel.implicitWidth + 24
+                                        height: 26
+                                        radius: height / 2
+                                        color: restoreArea.containsMouse
+                                            ? Qt.rgba(1, 1, 1, 0.22) : Qt.rgba(1, 1, 1, 0.10)
+                                        Behavior on color {
+                                            ColorAnimation {
+                                                duration: AppearanceTokens.motion.fast.duration
+                                                easing.type: AppearanceTokens.motion.enterCurve
+                                            }
+                                        }
+                                        GlassText {
+                                            id: restoreLabel
+                                            anchors.centerIn: parent
+                                            text: I18n.tr("Restore")
+                                            color: AppLauncherService.dockForegroundColor
+                                            font {
+                                                pixelSize: 11
+                                                weight: Font.Medium
+                                            }
+                                        }
+                                        MouseArea {
+                                            id: restoreArea
+                                            anchors.fill: parent
+                                            hoverEnabled: true
+                                            cursorShape: Qt.PointingHandCursor
+                                            onClicked: AppLauncherConfigService.unhideApplication(modelData.id)
+                                        }
+                                    }
+                                }
+                                // Same wheel/trackpad policy as the app grid; the
+                                // rows only scroll once they outgrow the card.
+                                KosKineticScroll {
+                                    flickable: hiddenAppsList
                                 }
                             }
                         }
