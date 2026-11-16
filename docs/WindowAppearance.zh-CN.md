@@ -17,6 +17,16 @@ Bridge 连续圆角通过 KWin `OffscreenEffect` 缓存**窗口自身内容**，
 连续窗口需透明遮挡语义，让裁角后背景参与绘制；为性能删除此标志可能造成黑角。
 Glass 用真实视觉轮廓，不再次应用旧圆弧输入半径。
 
+Mime 的 Windows 客户端保留自己的外观：`kwin/common/windoweffectpolicy.h` 统一识别
+`mime` 和 `mime.<非空应用ID>`（不区分大小写，也匹配 X11 window class 的空白分隔字段）。
+Bridge 不对这些窗口增加圆角、描边、外框或阴影；窗口映射后才更新应用标识时，恢复已施加的
+KOS 外观并释放连续裁剪。Glass 不创建它们的模糊缓存，也不应用模糊、液态材质或表面展开变换；
+这是先于显式 blur 请求、强制 blur 和名单配置的硬排除，不改变其他应用的 KDE blur 合约。
+因此不需要逐个配置 AutoCAD、夸克等 guest 应用，也不会误匹配 `mimetype-editor` 等非 Mime 标识。
+此排除不裁去客户端自己的透明留白、阴影或圆角，也不禁用 Dock/Stage 窗口动画。
+`kos-window.effect-policy` 检查标识边界；Bridge 的 `appearance_lifecycle_test` 检查逐窗口恢复与重入。
+应用最终外观仍需在 VM 中使用新插件、注销重新登录后对比，不以离线策略测试代替图形验收。
+
 连续缓存预算 256 MiB 并检查 GPU 纹理上限，着色器/资源/几何/预算失败则记录原因并回退原生圆弧。
 几何、缩放、配置、预算变化后重考虑拒绝项，不每帧反复分配。窗口删除或关闭效果时释放引用。
 原生阴影 atlas 为 32 MiB LRU，活动引用及其他 GPU 资源不计其中，两者都不是合成器总显存上限。

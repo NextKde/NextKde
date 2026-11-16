@@ -130,6 +130,11 @@ if(KOS_BRIDGE_BUILD_TESTS)
     # compositor: panelgeometry and windowrules are deliberately free of KWin
     # headers so that they can be tested like this.
     enable_testing()
+    add_executable(window_effect_policy_test
+        ../common/tests/windoweffectpolicy_test.cpp)
+    target_link_libraries(window_effect_policy_test PRIVATE Qt6::Core)
+    add_test(NAME window_effect_policy_test COMMAND window_effect_policy_test)
+
     add_executable(rules_test
         tests/rules_test.cpp
         windowbuttons/panelgeometry.cpp
