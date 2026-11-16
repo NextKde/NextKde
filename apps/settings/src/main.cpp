@@ -6,7 +6,6 @@
 #include "CacheMaintenance.h"
 #include "SettingsBridge.h"
 #include "SettingsRuntime.h"
-#include "UpdateController.h"
 #include "WindowSettings.h"
 #include "DesktopTypography.h"
 
@@ -119,7 +118,6 @@ int main(int argc, char* argv[])
     WindowSettings windowSettings;
     PowerSettings powerSettings;
     AboutCache aboutCache;
-    UpdateController updateController;
     QQmlApplicationEngine engine;
     FontSettings fontSettings(&engine);
     engine.rootContext()->setContextProperty(QStringLiteral("fontSettings"), &fontSettings);
@@ -128,7 +126,6 @@ int main(int argc, char* argv[])
     engine.rootContext()->setContextProperty(QStringLiteral("windowSettings"), &windowSettings);
     engine.rootContext()->setContextProperty(QStringLiteral("powerSettings"), &powerSettings);
     engine.rootContext()->setContextProperty(QStringLiteral("aboutCache"), &aboutCache);
-    engine.rootContext()->setContextProperty(QStringLiteral("updateController"), &updateController);
 
     const SettingsEntry entry
         = chooseSettingsEntry(bridge.isDevelopmentSession(), bridge.sessionShellDir());

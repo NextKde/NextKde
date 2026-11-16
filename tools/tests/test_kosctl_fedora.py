@@ -18,7 +18,7 @@ class FedoraSelection(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             log = Path(directory) / 'sudo.log'
             script = '\n'.join(ARRAYS + [function(name) for name in (
-                'kos_sudo', 'fedora_package_installed', 'kwin_plugins_enabled',
+                'fedora_package_installed', 'kwin_plugins_enabled',
                 'spatial_requested', 'ensure_build_dependencies')])
             # Only intercept package-manager discovery. No host package mutation.
             script += r'''

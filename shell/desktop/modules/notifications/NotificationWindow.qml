@@ -3,7 +3,6 @@ import Quickshell.Wayland
 import Quickshell.Widgets
 import Quickshell.Services.Notifications
 import QtQuick
-import QtQuick.Effects
 import Qt5Compat.GraphicalEffects
 import "../../../shared/qml/i18n"
 import qs.desktop.modules.common
@@ -476,37 +475,25 @@ PanelWindow {
                     visible: card.iconSource.length > 0
                     color: "transparent"
                     // Rectangle.clip doesn't round-corner child Images reliably.
-                    // The MultiEffect below crops the mark to the rounded
-                    // rectangle; its hidden source is only texture input.
+                    // Use layer + OpacityMask to actually crop the icon to the
+                    // rounded rectangle (same pattern as DockWindowPreview).
+                    layer.enabled: true
+                    layer.effect: OpacityMask {
+                        maskSource: Rectangle {
+                            width: iconMask.width
+                            height: iconMask.height
+                            radius: iconMask.radius
+                            color: "black"
+                            visible: false
+                        }
+                    }
                     AppIcon {
-                        id: iconImage
                         anchors.fill: parent
                         source: card.iconSource
                         // Theme icon: synchronous, see AppIcon.qml.
                         asynchronous: false
                         smooth: true
-                        visible: false
                     }
-                }
-                // Rounded app mark without a per-card Qt5 compat layer: the old
-                // layer + OpacityMask pair made one card cost 70-160 ms, while
-                // MultiEffect shares a single shader. The mask source needs a
-                // texture, so the tiny 30 px rectangle keeps its own layer.
-                Rectangle {
-                    id: iconMaskSource
-                    width: iconMask.width
-                    height: iconMask.height
-                    radius: iconMask.radius
-                    color: "white"
-                    layer.enabled: true
-                    visible: false
-                }
-                MultiEffect {
-                    anchors.fill: iconMask
-                    source: iconImage
-                    maskEnabled: true
-                    maskSource: iconMaskSource
-                    visible: iconMask.visible
                 }
             }
 
@@ -621,12 +608,8 @@ PanelWindow {
                     }
                 }
 
-                // Action buttons (collapsed: latest notification). A Flow, not
-                // a Row: apps such as mail clients send three or more labelled
-                // actions, which are wider than the card and would otherwise
-                // spill past its edge and be cut off.
-                Flow {
-                    objectName: "notification-actions"
+                // Action buttons (collapsed: latest notification).
+                Row {
                     width: parent.width
                     spacing: 8
                     visible: !card.expanded
@@ -639,9 +622,7 @@ PanelWindow {
                         Rectangle {
                             id: actionBtn
                             height: 28
-                            // A single label longer than the card elides
-                            // instead of widening its button past the edge.
-                            width: Math.min(actionLabel.implicitWidth + 24, content.width)
+                            width: actionLabel.implicitWidth + 24
                             radius: 14
                             color: AppearanceTokens.surface.selectionHighlightStyle === "glass"
                                 ? (ThemeService.isDark ? Qt.rgba(1, 1, 1, 0.08) : Qt.rgba(0, 0, 0, 0.04))
@@ -662,7 +643,6 @@ PanelWindow {
                             GlassText {
                                 id: actionLabel
                                 anchors.centerIn: parent
-                                width: Math.min(implicitWidth, actionBtn.width - 24)
                                 text: {
                                     const raw = modelData.text || modelData.identifier || ""
                                     // Some apps send lowercase or alternate-case
@@ -736,27 +716,15 @@ PanelWindow {
                 id: closeButton
                 name: "notification.dismiss"
                 color: card.foregroundColor
-                opacity: closeArea.pressed ? 1 : closeArea.containsMouse ? 0.9 : 0.55
+                opacity: 0.55
                 size: 14
                 width: 22; height: 22
                 anchors { right: parent.right; rightMargin: 12; top: parent.top; topMargin: 9 }
                 MouseArea {
-                    id: closeArea
-                    objectName: "notification-close-area"
                     anchors.fill: parent
                     anchors.margins: -6
-                    hoverEnabled: true
                     cursorShape: Qt.PointingHandCursor
-                    // Released, not clicked: a card that is still sliding in, or
-                    // moving up after the one above it closed, carries the button
-                    // away from a stationary pointer between press and release,
-                    // and clicked would silently drop that dismissal. A release
-                    // anywhere on the card still counts; dragging off cancels.
-                    onReleased: mouse => {
-                        const point = mapToItem(card, mouse.x, mouse.y)
-                        if (card.contains(point))
-                            card.close(false)
-                    }
+                    onClicked: card.close(false)
                 }
             }
         }

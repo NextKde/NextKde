@@ -89,13 +89,6 @@ PlatformServer::PlatformServer(QObject *parent)
         QDBusConnectionInterface::DontAllowReplacement);
     connect(&m_server, &QLocalServer::newConnection,
             this, &PlatformServer::acceptConnections);
-    // QML surfaces must stop output polling as soon as DPMS turns the
-    // outputs off. Forward the authoritative ScreenSaver transition instead
-    // of making every consumer poll GetActive during the lock.
-    QDBusConnection::sessionBus().connect(
-        QStringLiteral("org.freedesktop.ScreenSaver"), QStringLiteral("/ScreenSaver"),
-        QStringLiteral("org.freedesktop.ScreenSaver"), QStringLiteral("ActiveChanged"),
-        this, SLOT(onScreenSaverActiveChanged(bool)));
     const QString wlPaste = QStandardPaths::findExecutable(QStringLiteral("wl-paste"));
     const QString cliphist = QStandardPaths::findExecutable(QStringLiteral("cliphist"));
     if (wlPaste.isEmpty() || cliphist.isEmpty()) {
@@ -336,17 +329,6 @@ void PlatformServer::sendEvent(QLocalSocket *socket, const QJsonObject &event)
                         {QStringLiteral("event"), eventName},
                         {QStringLiteral("payload"), payloadVal}};
     writeClientMessage(socket, message);
-}
-
-void PlatformServer::onScreenSaverActiveChanged(bool locked)
-{
-    const QJsonObject event{
-        {QStringLiteral("event"), QStringLiteral("session.lock-changed")},
-        {QStringLiteral("payload"), QJsonObject{{QStringLiteral("locked"), locked}}}
-    };
-    const QList<QLocalSocket *> sockets = m_buffers.keys();
-    for (QLocalSocket *socket : sockets)
-        sendEvent(socket, event);
 }
 
 void PlatformServer::broadcastKWinEvent(const QJsonObject &event)
