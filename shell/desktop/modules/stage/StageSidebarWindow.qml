@@ -241,10 +241,11 @@ PanelWindow {
     //                     （自动收编路径：多窗连拍需要时间）
     //   delayed = false → 立即发布 → 30ms 派发
     //                     （交换路径：单窗即时拍）
-    function captureAndDemote(ids, excludeKey, delayed, captureDelayMs) {
+    function captureAndDemote(ids, excludeKey, delayed, captureDelayMs, explicitCollection) {
         for (let i = 0; i < ids.length; i++)
             WindowService.requestThumbnail(ids[i])
         root._pendingMinimize = ids
+        root._pendingMinimizeAutomatic = explicitCollection !== true
         root._pendingPublishExcludeKey = excludeKey
         if (delayed) {
             _captureThenMinTimer.interval = captureDelayMs > 0
@@ -264,9 +265,25 @@ PanelWindow {
     property string _pendingPublishExcludeKey: ""
 
     property var _pendingMinimize: []
+    property bool _pendingMinimizeAutomatic: true
+
+    function _validatedPendingMinimize() {
+        if (!root._pendingMinimizeAutomatic)
+            return root._pendingMinimize
+        const active = WindowService.windowById(WindowService.stageActiveWindowId)
+        return root._pendingMinimize.filter(id => {
+            const rec = WindowService.windowById(id)
+            return rec && !rec.toplevel?.minimized
+                && StageGroups.isOnDesktop(rec, WindowService.currentDesktopId)
+                && StageGroups.canAutoDemote(rec, active, root._mergeOverrides)
+        })
+    }
     property Timer _minimizeDispatchTimer: Timer {
         interval: StageConfigService.demoteDispatchDelay
-        onTriggered: {
+        onTriggered: root._dispatchPendingMinimize()
+    }
+
+    function _dispatchPendingMinimize() {
         // 模式关闭/面板隐藏后不派发（v87 审查，与 _dispatchNextEngage
         // 同款守卫）：关闭侧栏的用户不该看到窗口随后被收进一个已经
         // 不存在的卡列
@@ -274,18 +291,18 @@ PanelWindow {
             root._pendingMinimize = []
             return
         }
-        const t = root._pendingMinimize
+        const t = root._validatedPendingMinimize()
         root._pendingMinimize = []
         // 原子整组最小化：N 窗一条命令一个桥轮询拍内落地（逐窗排队会把
         // 收编管线拖到 N*50ms，比 toggle 防抖还长——快速第二击插进管线
         // 中途的"卡出现、程序没收回去"即此，实测复现过）
-        WindowService.minimizeGroup(t, true)
+        if (t.length > 0)
+            WindowService.minimizeGroup(t, true, root._pendingMinimizeAutomatic)
         // 最小化已派发＝窗口开始飞进卡：此刻放出被扣住的卡（同拍）
         if (root._deskHoldActive) {
             root._deskHoldActive = false
             root._deskHoldReleaseTimer.stop()
-            root.stageActiveId = WindowService.activeWindowId
-        }
+            root.stageActiveId = WindowService.stageActiveWindowId
         }
     }
 
@@ -296,7 +313,7 @@ PanelWindow {
         onTriggered: {
             if (root._deskHoldActive) {
                 root._deskHoldActive = false
-                root.stageActiveId = WindowService.activeWindowId
+                root.stageActiveId = WindowService.stageActiveWindowId
             }
         }
     }
@@ -304,6 +321,9 @@ PanelWindow {
         // interval 由 captureAndDemote 每次命令式赋值（可带 captureDelayMs
         // 覆盖）——声明处不写绑定：绑定首启后被赋值永久切断，纯装饰误导
         onTriggered: {
+            root._pendingMinimize = root._validatedPendingMinimize()
+            if (root._pendingMinimize.length === 0)
+                return
             root.publishSimulatedLayout(root._pendingPublishExcludeKey)
             root._minimizeDispatchTimer.restart()
         }
@@ -328,7 +348,7 @@ PanelWindow {
         if (!StageModeService.enabled || !open
                 || !StageConfigService.autoMinimize)
             return
-        const activeId = WindowService.activeWindowId
+        const activeId = WindowService.stageActiveWindowId
         if (!activeId)
             // 空活动窗＝桌面聚焦：此刻在途的往往是桌面收编批次
             //（focus 路径 150ms 起拍、330ms 才派发），取消它＝最小化
@@ -348,15 +368,11 @@ PanelWindow {
         if (root.deskCollectedIds.indexOf(activeId) >= 0)
             return
         const activeRec = WindowService.windowById(activeId)
-        const activeGroup = activeRec ? root._effKey(activeRec) : ""
         // 外科手术式作废：只从在途批次剔除"现在成了活动应用"的窗口
         //（round35 的病＝刚展开的应用被迟到批次收走），其余保留——
         // 桌面收编/整组退位批次不该被一次无关的激活周期整批清掉。
-        if (root._pendingMinimize.length > 0 && activeGroup !== "") {
-            root._pendingMinimize = root._pendingMinimize.filter(id => {
-                const r = WindowService.windowById(id)
-                return !(r && root._effKey(r) === activeGroup)
-            })
+        if (root._pendingMinimize.length > 0 && root._pendingMinimizeAutomatic) {
+            root._pendingMinimize = root._validatedPendingMinimize()
             if (root._pendingMinimize.length === 0) {
                 root._captureThenMinTimer.stop()
                 root._minimizeDispatchTimer.stop()
@@ -371,11 +387,9 @@ PanelWindow {
                 continue
             if (!StageGroups.isOnDesktop(r, currentId))
                 continue
-            // 同应用豁免双保险：同组，或同进程（XWayland 弹窗的身份解析
-            // 常与主窗对不上，pid 不会骗人）
-            if (root._effKey(r) === activeGroup)
-                continue
-            if (StageGroups.isSameProcess(r, activeRec))
+            // Explicit owners, process helpers and manual groups share the
+            // same protection as activation and queued demotion.
+            if (!StageGroups.canAutoDemote(r, activeRec, root._mergeOverrides))
                 continue
             targets.push(r.windowId)
         }
@@ -386,8 +400,14 @@ PanelWindow {
 
     Connections {
         target: WindowService
-        function onActiveWindowIdChanged() {
-            const current = WindowService.activeWindowId
+        function onRevisionChanged() {
+            // Process evidence may arrive without a focus change. Reconsider
+            // automatic collection once the relation has settled.
+            if (StageModeService.enabled && root.open)
+                root._autoMinTimer.restart()
+        }
+        function onStageActiveWindowIdChanged() {
+            const current = WindowService.stageActiveWindowId
             // 覆盖层（启动台）拿走焦点：活动窗变空但桌面应用没动——
             // 冻结舞台活动窗、不走任何切换/收编路径。
             if (current === "" && root.shellOverlayActive) {
@@ -529,20 +549,14 @@ PanelWindow {
         if (!StageModeService.enabled || !open
                 || !StageConfigService.autoMinimize)
             return
-        const demotedId = WindowService.activeWindowId
+        const demotedId = WindowService.stageActiveWindowId
         if (!demotedId || demotedId === windowId)
             return
         const rec = WindowService.windowById(demotedId)
         if (!rec || rec.toplevel?.minimized)
             return
         const activeRec = WindowService.windowById(windowId)
-        // 同卡豁免：目标窗与退位窗已在同一张卡（同应用，或用户合并的
-        // 自由组）＝整卡一起向前，无退位可言
-        if (_effKey(rec) === _effKey(activeRec))
-            return
-        // 同应用豁免双保险（同 applyAutoMinimize）
-        if (StageGroups.isSameApp(rec, activeRec,
-                _appOf(demotedId), _appOf(windowId)))
+        if (!StageGroups.canAutoDemote(rec, activeRec, root._mergeOverrides))
             return
         // 整组同拍收编：退位应用的全部窗口一起飞回组卡
         _cancelPendingDemote()
@@ -560,7 +574,7 @@ PanelWindow {
         if (!StageModeService.enabled || !open
                 || !StageConfigService.autoMinimize)
             return
-        const activeId = WindowService.activeWindowId
+        const activeId = WindowService.stageActiveWindowId
         const demotedId = root._prevActiveId
         if (!activeId || !demotedId || demotedId === activeId)
             return
@@ -570,12 +584,7 @@ PanelWindow {
         if (rec?.toplevel?.minimized)
             return
         const activeRec = WindowService.windowById(activeId)
-        // 同卡豁免（合并组同卡＝无退位；同 activateWithSwap）
-        if (_effKey(rec) === _effKey(activeRec))
-            return
-        // 同应用豁免双保险（对话框安全，与 applyAutoMinimize 同规则）
-        if (StageGroups.isSameApp(rec, activeRec,
-                _appOf(demotedId), _appOf(activeId)))
+        if (!StageGroups.canAutoDemote(rec, activeRec, root._mergeOverrides))
             return
         if (!StageGroups.isOnDesktop(rec, WindowService.currentDesktopId))
             return
@@ -616,7 +625,7 @@ PanelWindow {
             // 让路判定统一走 _deskCollectYielded（toggle/换主/覆盖层）
             if (_deskCollectYielded())
                 return
-            if (WindowService.activeWindowId === ""
+            if (WindowService.stageActiveWindowId === ""
                     && root._desktopFocused()
                     && StageConfigService.autoMinimize)
                 root._collectDesktopToStrip(true)
@@ -852,7 +861,7 @@ PanelWindow {
                     + " skip restore (" + w.ids.length + " window(s))")
                 return
             }
-            const cur = WindowService.activeWindowId
+            const cur = WindowService.stageActiveWindowId
             if (cur !== "" && w.ids.indexOf(cur) < 0) {
                 _markEngagingByIds(w.ids)
                 root._deskReleaseEngageReset.restart()
@@ -901,7 +910,7 @@ PanelWindow {
         // 120)：桌面收编通常 1-3 扇且点击后的手感优先，120 封顶防手滑
         // 调慢；用户调低「收编快照等待」时这里跟随（不再被绕过）
         captureAndDemote(ids, "__desk-collect-no-exclude__", true,
-            Math.min(StageConfigService.demoteCaptureDelay, 120))
+            Math.min(StageConfigService.demoteCaptureDelay, 120), true)
         console.info("[StageSidebar] collapse to strip: "
             + ids.length + " window(s)")
         return true
@@ -1428,6 +1437,21 @@ PanelWindow {
         const entry = root._engageQueue.shift()
         if (!entry)
             return
+        const targetRec = WindowService.windowById(entry.targetId)
+        if (!targetRec) {
+            root._resetEngaging(entry.appKey)
+            if (root._engageQueue.length > 0) root._engageDispatchTimer.restart()
+            return
+        }
+        const currentKey = root._effKey(targetRec)
+        if (entry.appKey !== currentKey) {
+            root._resetEngaging(entry.appKey)
+            entry.appKey = currentKey
+        }
+        entry.idsJson = JSON.stringify((WindowService.records || []).filter(r =>
+            root._effKey(r) === currentKey
+                && StageGroups.isOnDesktop(r, WindowService.currentDesktopId)
+        ).map(r => r.windowId))
         // 🔴 快照上一手派发（restoredInFlight 判定要用"上一个还原是谁"，
         // 旧版先覆写再判定＝条件恒退化，快连点收错槽回归）
         const prevDispatchedKey = root._lastDispatchedKey
@@ -1447,7 +1471,7 @@ PanelWindow {
         }
         // 退位判定在派发时刻做（点击到派发之间没有任何激活派发，活动窗
         // 未变；豁免规则与旧点击时刻版一致：同组/同应用/已最小化豁免）
-        const demotedId = WindowService.activeWindowId
+        const demotedId = WindowService.stageActiveWindowId
         let skipDemote = true
         let demotedKey = ""
         let minimizeIds = []
@@ -1471,8 +1495,7 @@ PanelWindow {
             if (!deskOwned && !sameGroup
                     && (!(dRec?.toplevel?.minimized === true)
                         || restoredInFlight)
-                    && !StageGroups.isSameApp(dRec, aRec,
-                        _appOf(demotedId), _appOf(entry.targetId))) {
+                    && StageGroups.canAutoDemote(dRec, aRec, root._mergeOverrides)) {
                 skipDemote = false
                 demotedKey = dKey
             }
@@ -1856,7 +1879,7 @@ PanelWindow {
             root._mergeDwellTimer.stop()
         }
         const activeRec = WindowService.windowById(
-            WindowService.activeWindowId)
+            WindowService.stageActiveWindowId)
         const target = root._effKey(activeRec)
         const valid = target !== "" && target !== root.dragKey
         root._centerMergeArmed = valid
@@ -2212,7 +2235,7 @@ PanelWindow {
         const slot = cardRepeater.itemAt(0)
         if (!slot)
             return JSON.stringify({ error: "no cards" })
-        const demoted = WindowService.activeWindowId
+        const demoted = WindowService.stageActiveWindowId
         engageCard(slot)
         return JSON.stringify({ engaged: slot.targetId, demoted: demoted })
     }
@@ -2222,7 +2245,7 @@ PanelWindow {
         const slot = cardRepeater.itemAt(index)
         if (!slot)
             return JSON.stringify({ error: "bad index", n: cardModel.count })
-        const demoted = WindowService.activeWindowId
+        const demoted = WindowService.stageActiveWindowId
         engageCard(slot)
         return JSON.stringify({ engaged: slot.targetId,
             demoted: demoted, app: slot.appKey })
@@ -3006,7 +3029,7 @@ PanelWindow {
             hold: root._deskHoldActive,
             undoWatch: root._deskUndoWatch !== null,
             stageActiveId: root.stageActiveId,
-            activeId: WindowService.activeWindowId,
+            activeId: WindowService.stageActiveWindowId,
             kwinActiveId: WindowService.kwinActiveId,
             kwinDesktop: WindowService.kwinActiveDesktop,
             lastToggleAt: Math.round(Date.now() - root._lastDeskToggleAt),
@@ -3330,7 +3353,7 @@ PanelWindow {
 
     onOpenChanged: {
         if (open) {
-            _prevActiveId = WindowService.activeWindowId
+            _prevActiveId = WindowService.stageActiveWindowId
             if (StageConfigService.thumbLiveEffect)
                 root._pollLiveStatus()
             _queueAllThumbnails()
@@ -3377,14 +3400,14 @@ PanelWindow {
                 return
             // 覆盖层关在桌面上（点外部关闭/启动应用后又回桌面）：此刻
             // 活动窗已是空且不会再变——手动补一次桌面聚焦判定
-            if (WindowService.activeWindowId === ""
+            if (WindowService.stageActiveWindowId === ""
                     && root._prevActiveId !== "")
                 root._desktopFocusTimer.restart()
         }
     }
 
     Component.onCompleted: {
-        stageActiveId = WindowService.activeWindowId
+        stageActiveId = WindowService.stageActiveWindowId
         // 自由组合落盘加载：读到的覆盖表就位后再对账一次（首帧先按自然
         // 组显示，不阻塞启动）
         JsonConfigStore.readPath(root._mergesPath, function(data, exists) {
@@ -3422,7 +3445,7 @@ PanelWindow {
             // 空窗时裸收编＝把刚放大的窗又收回去（放大残影的另一扇门）
             if (_deskCollectYielded())
                 return
-            if (WindowService.activeWindowId === ""
+            if (WindowService.stageActiveWindowId === ""
                     && root._desktopFocused()
                     && StageConfigService.autoMinimize)
                 root._collectDesktopToStrip(true)
@@ -3486,7 +3509,7 @@ PanelWindow {
                 return
             if (!StageConfigService.autoMinimize)
                 return
-            const activeId = WindowService.activeWindowId
+            const activeId = WindowService.stageActiveWindowId
             if (activeId !== "")
                 return
             if (!root._desktopFocused())
