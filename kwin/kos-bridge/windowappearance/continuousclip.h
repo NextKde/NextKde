@@ -2,6 +2,7 @@
 
 #include "appearanceconfig.h"
 #include "sharedwindowsource.h"
+#include <core/region.h>
 #include <effect/offscreeneffect.h>
 #include <QHash>
 #include <QMetaObject>
@@ -28,9 +29,15 @@ struct ContinuousStyle
     ShadowSettings shadow;
 };
 
-// One source texture includes client content, decoration and KOS buttons.
-// Both normal painting and Dock morphs consume it; damage invalidates it.
-// Arc mode continues to use native scene rounding without redirection.
+// One source texture includes client content and decoration. Animated (morph)
+// captures also bake the KOS buttons in because the deformation moves them
+// with the window; stationary frames paint the panel as an overlay instead,
+// so panel/tint changes never dirty this texture. Client damage is refreshed
+// per damaged region: drawWindow's device region is mapped back into source
+// texture coordinates and only that area is cleared and repainted. Areas the
+// compositor never drew (occluded or off screen) stay marked uncaptured and
+// are filled in when they become visible again. Arc mode continues to use
+// native scene rounding without redirection.
 class ContinuousClip : public KWin::Effect
 {
 public:
@@ -44,8 +51,8 @@ public:
     void forget(KWin::EffectWindow *window);
     void invalidate(KWin::EffectWindow *window);
     void invalidateAll();
-    void invalidateRegion(const QRectF &region);
-    using SourcePainter = std::function<bool(const KWin::RenderTarget &, const KWin::RenderViewport &)>;
+    using SourcePainter = std::function<bool(const KWin::RenderTarget &,
+        const KWin::RenderViewport &, const KWin::Region &sourceRegion)>;
     bool paint(const KWin::RenderTarget &target,
                const KWin::RenderViewport &viewport,
                KWin::EffectWindow *window, int mask,
@@ -54,6 +61,7 @@ public:
                const WindowSourceMorph &morph = {});
 private:
     void release(KWin::EffectWindow *window);
+    void invalidateDamage(KWin::EffectWindow *window);
     struct Rejection { QSizeF frameSize; qreal scale; };
     struct Reservation {
         qsizetype bytes = 0;
@@ -62,7 +70,19 @@ private:
         std::shared_ptr<KWin::GLTexture> texture;
         std::shared_ptr<KWin::GLFramebuffer> fbo;
         std::shared_ptr<KWin::ItemEffect> effect;
-        bool dirty = true;
+        // The whole texture must be repainted (new texture, geometry change,
+        // invalidation raised by the effect itself).
+        bool fullDirty = true;
+        // Client damage was reported, but the compositor has not yet drawn
+        // every affected area (occluded/off-screen parts wait for a draw).
+        bool damaged = false;
+        // Source-device areas refreshed since `damaged` was raised. A draw
+        // outside this union has never been captured since the damage and is
+        // therefore repainted when it becomes visible.
+        KWin::Region captured;
+        // Bumped by every invalidation. A draw that raced with one must not
+        // record its (possibly stale) capture as covering the new damage.
+        quint64 epoch = 0;
         qreal sourceScale = 0;
         QPointF sourceOrigin;
         QSizeF frameSize;

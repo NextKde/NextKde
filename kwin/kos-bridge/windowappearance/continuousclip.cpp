@@ -273,7 +273,7 @@ bool ContinuousClip::configure(KWin::EffectWindow *window,
     m_rejected.remove(window);
     if (!reservation.damageConnection) {
         reservation.damageConnection = connect(window, &KWin::EffectWindow::windowDamaged,
-            this, [this, window] { invalidate(window); });
+            this, [this, window] { invalidateDamage(window); });
         reservation.effect = std::make_shared<KWin::ItemEffect>(window->windowItem());
     }
     return true;
@@ -301,18 +301,33 @@ void ContinuousClip::release(KWin::EffectWindow *window)
 void ContinuousClip::invalidate(KWin::EffectWindow *window)
 {
     auto it = m_reservations.find(window);
-    if (it != m_reservations.end()) it->dirty = true;
+    if (it == m_reservations.end()) return;
+    it->fullDirty = true;
+    it->damaged = false;
+    it->captured = {};
+    ++it->epoch;
+}
+
+void ContinuousClip::invalidateDamage(KWin::EffectWindow *window)
+{
+    auto it = m_reservations.find(window);
+    if (it == m_reservations.end() || it->fullDirty) return;
+    // Content changed, but we do not get the damage region. Forget what has
+    // been captured; each subsequent draw re-captures the area it paints, and
+    // anything the compositor skips (occluded/off screen) is caught up when
+    // it is painted again.
+    it->damaged = true;
+    it->captured = {};
+    ++it->epoch;
 }
 
 void ContinuousClip::invalidateAll()
 {
-    for (auto &cache : m_reservations) cache.dirty = true;
-}
-
-void ContinuousClip::invalidateRegion(const QRectF &region)
-{
-    for (auto it = m_reservations.begin(); it != m_reservations.end(); ++it) {
-        if (QRectF(it.key()->frameGeometry()).intersects(region)) it->dirty = true;
+    for (auto &cache : m_reservations) {
+        cache.fullDirty = true;
+        cache.damaged = false;
+        cache.captured = {};
+        ++cache.epoch;
     }
 }
 
@@ -362,7 +377,9 @@ bool ContinuousClip::paint(const KWin::RenderTarget &target,
     const QPointF relativeOrigin = sourceGeometry.topLeft() - window->frameGeometry().topLeft();
     if (cache.sourceScale != sourceScale || cache.sourceOrigin != relativeOrigin
         || cache.frameSize != window->frameGeometry().size()) {
-        cache.dirty = true;
+        cache.fullDirty = true;
+        cache.damaged = false;
+        cache.captured = {};
         cache.sourceScale = sourceScale;
         cache.sourceOrigin = relativeOrigin;
         cache.frameSize = window->frameGeometry().size();
@@ -385,31 +402,88 @@ bool ContinuousClip::paint(const KWin::RenderTarget &target,
         if (!cache.fbo->valid()) {
             return reject();
         }
-        cache.dirty = true;
+        cache.fullDirty = true;
+        cache.damaged = false;
+        cache.captured = {};
     }
-    if (cache.dirty) {
-        // Clear before the callback: invalidations raised while sampling the
-        // title bar remain pending for the next frame.
-        cache.dirty = false;
+    if (cache.fullDirty || cache.damaged) {
         KWin::RenderTarget sourceTarget(cache.fbo.get());
         KWin::RenderViewport sourceViewport(sourceGeometry, sourceScale, sourceTarget, QPoint());
-#ifdef KOS_KWIN_PAINT_RESULT_API
-        auto *sourceContext = KWin::EglContext::currentContext();
-#endif
-        KWin::GLFramebuffer::pushFramebuffer(cache.fbo.get());
-        glClearColor(0, 0, 0, 0);
-        glClear(GL_COLOR_BUFFER_BIT);
-        const bool painted = sourcePainter(sourceTarget, sourceViewport);
-#ifdef KOS_KWIN_PAINT_RESULT_API
-        if (KWin::EglContext::currentContext() != sourceContext) {
-            cache.dirty = true;
-            return false;
+        const bool morphing = static_cast<bool>(morph);
+        const KWin::Region textureRegion(KWin::Rect(QPoint(0, 0), textureSize));
+        // Transformed draws (drag, morph, slide) express their region in
+        // target space, which cannot be mapped back to source pixels. Morph
+        // captures also have to bake the controls, so refresh them whole.
+        const bool wholeUpdate = cache.fullDirty || (cache.damaged
+            && (morphing || (mask & PAINT_WINDOW_TRANSFORMED)));
+        KWin::Region update = textureRegion;
+        if (!wholeUpdate) {
+            const KWin::Region logical = viewport.mapFromDeviceCoordinatesAligned(deviceClip);
+            update = sourceViewport.mapToDeviceCoordinatesAligned(logical) & textureRegion;
+            // Anything captured since the damage was raised is already
+            // current; repainting it again would blend translucent content
+            // onto itself.
+            update -= cache.captured;
         }
+        // An empty update still has to composite: the texture is current for
+        // this draw region, so only the capture is skipped.
+        if (!update.isEmpty()) {
+#ifdef KOS_KWIN_PAINT_RESULT_API
+            auto *sourceContext = KWin::EglContext::currentContext();
 #endif
-        KWin::GLFramebuffer::popFramebuffer();
-        if (!painted) {
-            cache.dirty = true;
-            return false;
+            KWin::GLFramebuffer::pushFramebuffer(cache.fbo.get());
+            glClearColor(0, 0, 0, 0);
+            if (wholeUpdate) {
+                glClear(GL_COLOR_BUFFER_BIT);
+            } else {
+                // Clear only the area that is about to be repainted. The rest
+                // of the texture keeps its previous pixels.
+                // glScissor takes bottom-left origin, like GLVertexBuffer::draw.
+                const QSize clearSize = sourceTarget.transformedSize();
+                const GLboolean scissorWasEnabled = glIsEnabled(GL_SCISSOR_TEST);
+                GLint scissorBox[4];
+                glGetIntegerv(GL_SCISSOR_BOX, scissorBox);
+                glEnable(GL_SCISSOR_TEST);
+                for (const KWin::Rect &rect : update.rects()) {
+                    glScissor(rect.x(), clearSize.height() - (rect.y() + rect.height()),
+                        rect.width(), rect.height());
+                    glClear(GL_COLOR_BUFFER_BIT);
+                }
+                glScissor(scissorBox[0], scissorBox[1], scissorBox[2], scissorBox[3]);
+                if (!scissorWasEnabled) {
+                    glDisable(GL_SCISSOR_TEST);
+                }
+            }
+            // Invalidations raised while sampling the title bar stay pending
+            // for the next frame, so the callback still sees the captured
+            // state.
+            const quint64 epochBefore = cache.epoch;
+            cache.fullDirty = false;
+            const bool painted = sourcePainter(sourceTarget, sourceViewport,
+                wholeUpdate ? KWin::Region::infinite() : update);
+#ifdef KOS_KWIN_PAINT_RESULT_API
+            if (KWin::EglContext::currentContext() != sourceContext) {
+                cache.fullDirty = true;
+                cache.damaged = false;
+                cache.captured = {};
+                KWin::GLFramebuffer::popFramebuffer();
+                return false;
+            }
+#endif
+            KWin::GLFramebuffer::popFramebuffer();
+            if (!painted) {
+                cache.fullDirty = true;
+                cache.damaged = false;
+                cache.captured = {};
+                return false;
+            }
+            if (cache.epoch == epochBefore) {
+                cache.captured |= update;
+                if (wholeUpdate || (textureRegion - cache.captured).isEmpty()) {
+                    cache.damaged = false;
+                    cache.captured = {};
+                }
+            }
         }
     }
 
