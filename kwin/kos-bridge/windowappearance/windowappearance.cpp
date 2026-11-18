@@ -122,6 +122,8 @@ void WindowAppearanceManager::updateTiers()
         if (auto state = m_windows.find(window); state != m_windows.end()) {
             // Preserve the result of texture admission; do not retry a
             // rejected continuous texture merely because its tier changed.
+            // The tier was assigned above, so prepare() must run its body.
+            state->prepareDirty = true;
             prepare(window, state->continuous.has_value());
         }
     }
@@ -185,17 +187,43 @@ void WindowAppearanceManager::prepare(KWin::EffectWindow *window, bool continuou
                 }
             }));
     }
-    const EffectiveAppearance eff = m_config.effectiveFor(window->windowClass(),
-        {native->desktopFileName(), native->resourceClass()});
-    const bool maximized = native->maximizeMode() == KWin::MaximizeFull;
+    WindowState::PrepareInputs inputs;
+    inputs.size = size;
+    inputs.scale = native->targetScale();
+    inputs.decoration = native->decoration();
+    inputs.shadowItem = item->shadowItem();
+    inputs.windowClass = window->windowClass();
+    inputs.desktopFileName = native->desktopFileName();
+    inputs.resourceClass = native->resourceClass();
+    inputs.borderRadius = native->borderRadius().toVector();
+    inputs.tier = state.tier;
+    inputs.maximized = native->maximizeMode() == KWin::MaximizeFull;
+    inputs.fullscreen = window->isFullScreen();
+    inputs.continuousAvailable = continuousAvailable;
+    inputs.decorationSupportsAppearance = inputs.decoration
+        && inputs.decoration->property(DecorationAppearanceSupportedProperty).toBool();
+    inputs.wantsDecorationShadow = native->wantsShadowToBeRendered();
+    // Nothing the body derives from has changed. The body only reapplies the
+    // same properties and rebuilds the same style, so skip it; this call runs
+    // for every painted window on every pass.
+    if (state.prepared && !state.toneDirty && !state.tierDirty && !state.prepareDirty
+        && inputs == state.prepareInputs) {
+        return;
+    }
+    state.prepared = true;
+    state.prepareDirty = false;
+
+    const EffectiveAppearance eff = m_config.effectiveFor(inputs.windowClass,
+        {inputs.desktopFileName, inputs.resourceClass});
+    const bool maximized = inputs.maximized;
     // Fullscreen content must cover the output, regardless of appearance overrides.
-    const bool fullscreen = window->isFullScreen();
+    const bool fullscreen = inputs.fullscreen;
     const auto policy = fullscreen ? StateSettings::Policy::Off
         : maximized ? eff.states.maximized : StateSettings::Policy::Inherit;
     const bool dropped = policy == StateSettings::Policy::Off;
     state.appearanceDropped = dropped;
     state.fullscreen = fullscreen;
-    const qreal scale = std::max<qreal>(0.01, native->targetScale());
+    const qreal scale = std::max<qreal>(0.01, inputs.scale);
     // Match KWin's pixel-snapped native corner radius; use the same value in
     // the decoration, inner outline, outer frame and both shadow layers.
     const qreal arcRadius = policy == StateSettings::Policy::Inherit
@@ -232,7 +260,7 @@ void WindowAppearanceManager::prepare(KWin::EffectWindow *window, bool continuou
     }
     state.appliedRadius = target;
 
-    QObject *decoration = native->decoration();
+    QObject *decoration = inputs.decoration;
     if (state.decoration != decoration) {
         if (state.decoration) {
             state.decoration->setProperty(DecorationRadiiProperty, state.declaredDecorationRadii);
@@ -303,8 +331,10 @@ void WindowAppearanceManager::prepare(KWin::EffectWindow *window, bool continuou
         const qreal blur = eff.shadow.dynamic
             ? std::max(eff.shadow.activeBlur, eff.shadow.inactiveBlur)
             : eff.shadow.activeBlur;
+        // The shifted shadow reaches one offset further on its cast side.
         const qreal padding = frameWidth + (eff.shadow.enabled
-            ? 3 * std::max(blur, eff.shadow.contactBlur) : 0) + 1 / scale;
+            ? 3 * std::max(blur, eff.shadow.contactBlur)
+                + std::abs(eff.shadow.offsetY) : 0) + 1 / scale;
         if (!state.continuousBounds) {
             state.continuousBounds = new KWin::Item(item);
             state.continuousBounds->setParent(item);
@@ -318,9 +348,8 @@ void WindowAppearanceManager::prepare(KWin::EffectWindow *window, bool continuou
 
     // DecorationShadow is preferred whenever the selected decoration exposes
     // the KOS relay and KWin permits native shadows in this window state.
-    state.usesDecorationShadow = !continuous && decoration
-        && decoration->property(DecorationAppearanceSupportedProperty).toBool()
-        && native->wantsShadowToBeRendered();
+    state.usesDecorationShadow = !continuous && inputs.decorationSupportsAppearance
+        && inputs.wantsDecorationShadow;
     const bool hasShadow = !dropped && !continuous && eff.shadow.enabled;
     const bool wide = !eff.shadow.dynamic || state.tier == 0;
     const auto atlas = hasShadow ? m_shadowCache.get(state.radii, frameWidth,
@@ -328,7 +357,7 @@ void WindowAppearanceManager::prepare(KWin::EffectWindow *window, bool continuou
     // Keep the currently used atlas alive for SSD as well as CSD. A cache
     // eviction must not regenerate the same atlas on every paint pass.
     state.shadowAtlas = atlas;
-    if (decoration && decoration->property(DecorationAppearanceSupportedProperty).toBool()) {
+    if (inputs.decorationSupportsAppearance) {
         const auto shadow = state.usesDecorationShadow && atlas
             ? atlas->decorationShadow : std::shared_ptr<KDecoration3::DecorationShadow>();
         const QVariant value = dropped && !fullscreen
@@ -337,7 +366,7 @@ void WindowAppearanceManager::prepare(KWin::EffectWindow *window, bool continuou
             decoration->setProperty(DecorationShadowProperty, value);
         }
     }
-    auto *nativeShadow = item->shadowItem();
+    auto *nativeShadow = inputs.shadowItem.data();
     if (state.nativeShadow != nativeShadow) {
         if (state.nativeShadow) {
             state.nativeShadow->setOpacity(state.declaredNativeShadowOpacity);
@@ -362,6 +391,11 @@ void WindowAppearanceManager::prepare(KWin::EffectWindow *window, bool continuou
     } else {
         applyOpacities(state);
     }
+    // The tier may have been recomputed and the border radius reapplied above;
+    // store what the body actually applied, not the pre-body snapshot.
+    state.prepareInputs = inputs;
+    state.prepareInputs.tier = state.tier;
+    state.prepareInputs.borderRadius = state.appliedRadius;
 }
 
 std::optional<ContinuousStyle> WindowAppearanceManager::continuousStyle(KWin::EffectWindow *window) const
