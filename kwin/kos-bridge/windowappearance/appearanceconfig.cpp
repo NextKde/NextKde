@@ -359,8 +359,12 @@ void AppearanceConfig::applyShadow(const QJsonObject &object,
                         into.contactOpacity, error)) {
         return;
     }
-    parseDouble(object, QStringLiteral("ambientOpacity"), 0.0, 1.0,
-                into.ambientOpacity, error);
+    if (!parseDouble(object, QStringLiteral("ambientOpacity"), 0.0, 1.0,
+                     into.ambientOpacity, error)) {
+        return;
+    }
+    parseDouble(object, QStringLiteral("offsetY"), -64.0, 64.0,
+                into.offsetY, error);
 }
 
 void AppearanceConfig::applyStates(const QJsonObject &object,

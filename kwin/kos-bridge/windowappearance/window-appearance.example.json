@@ -21,15 +21,16 @@
     "shadow": {
       "enabled": true,
       "dynamic": true,
-      "strength": 0.37,
+      "strength": 0.5,
       "minimumStrength": 0.08,
       "depthDecay": 0.7,
       "transitionMs": 180,
-      "contactBlur": 1,
-      "activeBlur": 14,
-      "inactiveBlur": 8,
-      "contactOpacity": 0.22,
-      "ambientOpacity": 0.28
+      "contactBlur": 2,
+      "activeBlur": 28,
+      "inactiveBlur": 20,
+      "contactOpacity": 0.12,
+      "ambientOpacity": 0.26,
+      "offsetY": 12
     },
     "states": { "fullscreen": "off", "maximized": "inherit", "tiled": "inherit" }
   },

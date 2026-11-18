@@ -86,7 +86,8 @@ rules and merge fields, not a complete example over an existing file. Invalid co
 last valid state. App matching uses window class then desktop/resource identifiers, never title guessing.
 
 Preserve physical versus logical outline-width semantics and schema-1 conversion. Gaussian shadow
-values are sigma in logical pixels, not total extent. Focus transitions reserve enough cache margin
+values are sigma in logical pixels, not total extent; `offsetY` shifts the cast shadow downward by
+that many logical pixels while the frame contour stays put. Focus transitions reserve enough cache margin
 for both states; bounded repaint timers stop when idle. Fullscreen always disables KOS corners/outlines/shadows/controls to cover the output;
 maximized behavior follows configuration. Restore normal appearance on leaving fullscreen.
 Settings → Window appearance exposes **Square corners when maximized** below Corner radius.

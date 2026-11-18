@@ -1,10 +1,12 @@
 #pragma once
 
 #include "appearanceconfig.h"
+#include "cornermask.h"
 #include "sharedwindowsource.h"
 #include <core/region.h>
 #include <effect/offscreeneffect.h>
 #include <QHash>
+#include <QMatrix4x4>
 #include <QMetaObject>
 #include <optional>
 
@@ -99,7 +101,66 @@ private:
         int edgeOpacity = -1;
         int shadowOpacity = -1;
         int shadow = -1;
+        int shadowOffset = -1;
     } m_uniforms;
+    // The style-only 9-slice mask. All entries describe the same contour math
+    // as the shader above, evaluated once on the CPU and shared by every
+    // window that uses the same style.
+    struct MaskKey {
+        qreal radius = 0;
+        qreal exponent = 0;
+        qreal stroke = 0;
+        qreal frameWidth = 0;
+        qreal contactSigma = 0;
+        qreal ambientSigma = 0;
+        qreal contactOpacity = 0;
+        qreal ambientOpacity = 0;
+        qreal extent = 0;
+        qreal padding = 0;
+        qreal offsetY = 0;
+        bool operator==(const MaskKey &other) const
+        {
+            return qFuzzyCompare(radius + 1, other.radius + 1)
+                && qFuzzyCompare(exponent + 1, other.exponent + 1)
+                && qFuzzyCompare(stroke + 1, other.stroke + 1)
+                && qFuzzyCompare(frameWidth + 1, other.frameWidth + 1)
+                && qFuzzyCompare(contactSigma + 1, other.contactSigma + 1)
+                && qFuzzyCompare(ambientSigma + 1, other.ambientSigma + 1)
+                && qFuzzyCompare(contactOpacity + 1, other.contactOpacity + 1)
+                && qFuzzyCompare(ambientOpacity + 1, other.ambientOpacity + 1)
+                && qFuzzyCompare(extent + 1, other.extent + 1)
+                && qFuzzyCompare(padding + 1, other.padding + 1)
+                && qFuzzyCompare(offsetY + 1, other.offsetY + 1);
+        }
+        friend size_t qHash(const MaskKey &key, size_t seed)
+        {
+            const qreal values[] = {key.radius, key.exponent, key.stroke,
+                key.frameWidth, key.contactSigma, key.ambientSigma,
+                key.contactOpacity, key.ambientOpacity, key.extent, key.padding,
+                key.offsetY};
+            for (qreal value : values) {
+                seed = ::qHash(qRound64(value * 64.0), seed);
+            }
+            return seed;
+        }
+    };
+    struct MaskAsset {
+        std::shared_ptr<KWin::GLTexture> texture;
+        CornerMaskAtlas atlas;
+        QMatrix4x4 textureMatrix;
+    };
+    std::shared_ptr<MaskAsset> maskFor(const ContinuousStyle &style,
+                                       qreal sourceScale, qreal padding);
+    struct MaskUniformLocations {
+        int maskMatrix = -1;
+        int edgeColor = -1;
+        int frameColor = -1;
+        int edgeOpacity = -1;
+        int shadowOpacity = -1;
+        int sampler = -1;
+    } m_maskUniforms;
+    std::unique_ptr<KWin::GLShader> m_maskShader;
+    QHash<MaskKey, std::shared_ptr<MaskAsset>> m_masks;
     std::unique_ptr<KWin::GLShader> m_shader;
     QHash<KWin::EffectWindow *, Reservation> m_reservations;
     QHash<KWin::EffectWindow *, Rejection> m_rejected;
