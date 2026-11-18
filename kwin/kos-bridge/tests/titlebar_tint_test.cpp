@@ -111,21 +111,39 @@ void startupPixelsTests()
 void paintTransformTests()
 {
     CHECK(PaintTransform{}.canSampleTitlebar()); // Neutral offscreen source.
+    CHECK(PaintTransform{}.isNeutral());
+    CHECK(PaintTransform{}.canPaintOverlay());
     for (auto member : {&PaintTransform::xScale, &PaintTransform::yScale,
                         &PaintTransform::opacity, &PaintTransform::brightness,
                         &PaintTransform::saturation}) {
         PaintTransform transform;
         transform.*member = 0.5;
         CHECK(!transform.canSampleTitlebar());
+        CHECK(!transform.isNeutral());
+        CHECK(transform.canPaintOverlay()); // Reuse confirmed tint during 2D fades/scales.
     }
     for (auto member : {&PaintTransform::xTranslate, &PaintTransform::yTranslate}) {
         PaintTransform transform;
         transform.*member = 8;
         CHECK(!transform.canSampleTitlebar());
+        CHECK(!transform.isIdentityGeometry());
+        CHECK(transform.canPaintOverlay());
     }
+    for (auto member : {&PaintTransform::zScale, &PaintTransform::zTranslate,
+                        &PaintTransform::rotationAngle}) {
+        PaintTransform transform;
+        transform.*member = 2.0;
+        CHECK(!transform.canSampleTitlebar());
+        CHECK(!transform.canPaintOverlay());
+    }
+    PaintTransform hidden;
+    hidden.opacity = 0.0;
+    CHECK(!hidden.canPaintOverlay());
     PaintTransform rotated;
     rotated.transformed = true;
     CHECK(!rotated.canSampleTitlebar());
+    CHECK(rotated.isNeutral());
+    CHECK(rotated.canPaintOverlay());
 }
 
 void geometryTests()
@@ -247,6 +265,23 @@ void backgroundBoundaryTests()
         }
         CHECK(tintBackgroundBottom(pixels.data(), width, height, QColor(17, 17, 17),
                                    5 * scale, 3 * scale) == boundary);
+        // Scanning from the bottom of the core button row (29 logical px)
+        // still catches a 30 px titlebar while ignoring widgets inside it.
+        CHECK(tintBackgroundBottom(pixels.data(), width, height, QColor(17, 17, 17),
+                                   29 * scale, 3 * scale) == boundary);
+
+        // An active browser tab or titlebar search box starting at y = 7 px
+        // and spanning the button band must not slice off the button cover.
+        std::vector<uchar> tabbed(width * height * 4, 255);
+        for (int y = 0; y < height; ++y) {
+            for (int x = 0; x < width; ++x) {
+                auto *p = tabbed.data() + (y * width + x) * 4;
+                const uchar c = y < 7 * scale ? 32 : (y < 41 * scale ? 53 : 32);
+                p[0] = p[1] = p[2] = c;
+            }
+        }
+        CHECK(tintBackgroundBottom(tabbed.data(), width, height, QColor(32, 32, 32),
+                                   29 * scale, 3 * scale) == height);
     }
     std::vector<uchar> gradient(160 * 60 * 4, 255);
     for (int y = 0; y < 60; ++y) for (int x = 0; x < 160; ++x) {

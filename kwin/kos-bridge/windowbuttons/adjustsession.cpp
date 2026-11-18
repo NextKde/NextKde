@@ -134,9 +134,9 @@ bool AdjustSession::commit()
         return false;
     }
 
-    const QString windowClass = m_query.windowClass;
+    KWin::EffectWindow *window = m_window;
+    const WindowQuery query = m_query;
     const PanelGeometry geometry = m_geometry;
-    const WindowMatcher matcher = adjustmentMatcher(m_query);
     const bool changed = !sameGeometry(m_base, geometry);
 
     // Ended before the write, so that a write that fails leaves the panel
@@ -144,16 +144,7 @@ bool AdjustSession::commit()
     // adjustment that is not on disk.
     endSession();
 
-    if (!changed) {
-        // Nothing was moved. A rule storing the geometry that was already in
-        // effect would be a second place the same answer is written down, and
-        // it would take the panel out of the user's configuration for nothing.
-        qInfo() << "KOS: the panel for" << windowClass
-                << "was not changed; nothing written";
-        return true;
-    }
-
-    return m_commit(matcher, geometry);
+    return m_commit(window, query, geometry, changed);
 }
 
 void AdjustSession::cancel()

@@ -1081,6 +1081,49 @@ void testStore()
     // A matcher that says nothing about a window is refused rather than stored:
     // it would apply to every window there is.
     CHECK(!writing.store(WindowMatcher{}, written));
+
+    // Interactive Wayland adjustments (empty role): single-window adjustments
+    // persist across dynamic captions, while adjustments made alongside an open
+    // sibling window scope to the secondary caption without altering the main one.
+    removeRulesFile();
+    WindowRuleStore waylandStore;
+    PanelGeometry mainCover;
+    mainCover.offset = AppOffset{12, 6};
+    mainCover.coverage = QMarginsF(16, 4, 12, 4);
+    PanelGeometry refinedCover = mainCover;
+    refinedCover.coverage.setLeft(22);
+    PanelGeometry viewerCover = mainCover;
+    viewerCover.coverage.setBottom(18);
+
+    const WindowQuery chat1 = query(QStringLiteral("antigravity antigravity"),
+                                    QStringLiteral("Chat 1 - Antigravity"), 0);
+    const WindowQuery chat2 = query(QStringLiteral("antigravity antigravity"),
+                                    QStringLiteral("Chat 2 - Antigravity"), 0);
+    const WindowQuery chat3 = query(QStringLiteral("antigravity antigravity"),
+                                    QStringLiteral("Chat 3 - Antigravity"), 0);
+    // Simulate a legacy caption-locked rule first; re-saving as a single window
+    // promotes it to class+type so switching chats never drops the cover.
+    CHECK(waylandStore.store(adjustmentMatcher(chat1), mainCover));
+    CHECK(!waylandStore.hasClassFallback(chat1));
+    CHECK(!waylandStore.found(chat2, &readBack));
+
+    CHECK(waylandStore.storeAdjustment(chat1, mainCover, false));
+    CHECK(waylandStore.hasClassFallback(chat1));
+    CHECK(waylandStore.count() == 1);
+    CHECK(waylandStore.found(chat2, &readBack) && sameGeometry(readBack, mainCover));
+    CHECK(waylandStore.storeAdjustment(chat2, refinedCover, false));
+    CHECK(waylandStore.found(chat1, &readBack) && sameGeometry(readBack, refinedCover));
+    CHECK(waylandStore.found(chat3, &readBack) && sameGeometry(readBack, refinedCover));
+
+    // Secondary window adjusted while the main window is also open.
+    const WindowQuery wechatMain = query(QStringLiteral("wechat com.tencent.wechat"),
+                                         QStringLiteral("微信"), 0);
+    const WindowQuery wechatViewer = query(QStringLiteral("wechat com.tencent.wechat"),
+                                           QStringLiteral("图片和视频"), 0);
+    CHECK(waylandStore.storeAdjustment(wechatMain, mainCover, false));
+    CHECK(waylandStore.storeAdjustment(wechatViewer, viewerCover, true));
+    CHECK(waylandStore.found(wechatMain, &readBack) && sameGeometry(readBack, mainCover));
+    CHECK(waylandStore.found(wechatViewer, &readBack) && sameGeometry(readBack, viewerCover));
 }
 
 void testIndependentBackground()

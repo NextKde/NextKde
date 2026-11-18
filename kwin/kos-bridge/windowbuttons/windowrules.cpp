@@ -350,6 +350,50 @@ bool WindowRuleStore::found(const WindowQuery &query, PanelGeometry *out) const
     return false;
 }
 
+bool WindowRuleStore::hasClassFallback(const WindowQuery &query) const
+{
+    if (query.windowClass.isEmpty()) {
+        return false;
+    }
+    WindowQuery untitled = query;
+    untitled.caption.clear();
+    for (const GeometryRule &rule : m_rules) {
+        if (rule.matcher.title.isEmpty() && rule.matcher.titleRegex.isEmpty()
+            && rule.matcher.matches(untitled)) {
+            return true;
+        }
+    }
+    return false;
+}
+
+bool WindowRuleStore::storeAdjustment(const WindowQuery &query,
+                                      const PanelGeometry &geometry,
+                                      bool hasDistinctOpenSibling)
+{
+    const WindowMatcher exact = adjustmentMatcher(query);
+    if (exact.isEmpty()) {
+        qWarning() << "KOS: refusing to store a rule that matches every window";
+        return false;
+    }
+    if (query.role.isEmpty() && !hasDistinctOpenSibling) {
+        if (!exact.title.isEmpty()) {
+            const QString exactKey = exact.canonicalKey();
+            for (int i = 0; i < m_rules.size(); ++i) {
+                if (m_rules.at(i).matcher.canonicalKey() == exactKey) {
+                    m_rules.removeAt(i);
+                    break;
+                }
+            }
+        }
+        WindowMatcher classAndType;
+        classAndType.className = query.windowClass;
+        classAndType.hasType = true;
+        classAndType.type = query.type;
+        return store(classAndType, geometry);
+    }
+    return store(exact, geometry);
+}
+
 bool WindowRuleStore::store(const WindowMatcher &matcher,
                             const PanelGeometry &geometry)
 {

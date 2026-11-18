@@ -86,6 +86,7 @@ public:
     // something else happens to repaint it.
     void repaintPanels(KWin::EffectWindow *a, KWin::EffectWindow *b);
     void contentChanged(KWin::EffectWindow *window);
+    void captionChanged(KWin::EffectWindow *window, const AppConfig &config);
 
     // ---- the tiling menu --------------------------------------------------
     //
@@ -248,7 +249,8 @@ private:
     void blit(const KWin::RenderViewport &viewport, const KWin::Region &clip,
               const QRectF &logicalRect, KWin::GLTexture *texture,
               const QColor &modulation = Qt::white,
-              bool sameFrameTint = false, bool tintBackground = true);
+              bool sameFrameTint = false, bool tintBackground = true,
+              qreal opacity = 1.0, qreal brightness = 1.0);
 
     // The light that opens the tiling menu: the one that performs Action::Maximize.
     // Found through typeAt() so that reordering the panel moves the menu's

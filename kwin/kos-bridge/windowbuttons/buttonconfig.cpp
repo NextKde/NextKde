@@ -298,6 +298,13 @@ bool ButtonConfig::storeGeometry(const WindowMatcher &matcher,
     return m_store.store(matcher, geometry);
 }
 
+bool ButtonConfig::storeAdjustment(const WindowQuery &query,
+                                   const PanelGeometry &geometry,
+                                   bool hasDistinctOpenSibling)
+{
+    return m_store.storeAdjustment(query, geometry, hasDistinctOpenSibling);
+}
+
 void ButtonConfig::setOnDecorationChanged(std::function<void()> callback)
 {
     m_onDecorationChanged = std::move(callback);

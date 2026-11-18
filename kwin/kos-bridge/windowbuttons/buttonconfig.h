@@ -135,6 +135,9 @@ public:
     // Writes an adjusted geometry as a machine rule. The user's own file is
     // never opened for writing.
     bool storeGeometry(const WindowMatcher &, const PanelGeometry &);
+    bool storeAdjustment(const WindowQuery &, const PanelGeometry &,
+                         bool hasDistinctOpenSibling = false);
+    bool hasClassFallback(const WindowQuery &query) const { return m_store.hasClassFallback(query); }
 
     QString rulesPath() const { return m_store.path(); }
     // Whether the decoration KWin is configured to use is ours, which is what

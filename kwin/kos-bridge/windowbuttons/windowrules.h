@@ -86,9 +86,15 @@ public:
     void load();
     // First matching rule wins, in the order they were loaded in.
     bool found(const WindowQuery &, PanelGeometry *out) const;
+    bool hasClassFallback(const WindowQuery &) const;
     // Replaces the rule with the same matcher, or adds it. False when the file
     // could not be written.
     bool store(const WindowMatcher &, const PanelGeometry &);
+    // Stores an interactive adjustment: uses class+type when no distinct
+    // sibling window of the same class and type is open so dynamic document/tab
+    // captions keep the cover, and scopes to caption when a sibling is open.
+    bool storeAdjustment(const WindowQuery &, const PanelGeometry &,
+                         bool hasDistinctOpenSibling = false);
 
     QString path() const { return m_path; }
     int count() const { return m_rules.size(); }

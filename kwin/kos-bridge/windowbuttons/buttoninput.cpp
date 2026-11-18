@@ -96,9 +96,37 @@ ButtonInput::ButtonInput(ButtonRenderer *renderer, ButtonConfig *config)
     , m_renderer(renderer)
     , m_config(config)
     , m_session(std::make_unique<AdjustSession>(
-          renderer, [config](const WindowMatcher &matcher,
-                             const PanelGeometry &geometry) {
-              return config && config->storeGeometry(matcher, geometry);
+          renderer, [config](KWin::EffectWindow *sessionWindow,
+                             const WindowQuery &query,
+                             const PanelGeometry &geometry,
+                             bool changed) {
+              if (!config) {
+                  return false;
+              }
+              bool hasDistinctOpenSibling = false;
+              if (query.role.isEmpty() && KWin::effects) {
+                  const auto windows = KWin::effects->stackingOrder();
+                  for (KWin::EffectWindow *other : windows) {
+                      if (!other || other == sessionWindow || other->isDeleted()
+                          || !other->isManaged()) {
+                          continue;
+                      }
+                      if (other->windowClass() == query.windowClass
+                          && other->windowTypeInt() == query.type
+                          && other->caption() != query.caption) {
+                          hasDistinctOpenSibling = true;
+                          break;
+                      }
+                  }
+              }
+              if (!changed && (!query.role.isEmpty() || hasDistinctOpenSibling
+                               || config->hasClassFallback(query))) {
+                  qInfo() << "KOS: the panel for" << query.windowClass
+                          << "was not changed; nothing written";
+                  return true;
+              }
+              return config->storeAdjustment(query, geometry,
+                                             hasDistinctOpenSibling);
           }))
 {
 }
@@ -515,9 +543,11 @@ void ButtonInput::performAction(KWin::EffectWindow *window, ButtonRenderer::Acti
 {
     switch (action) {
     case ButtonRenderer::Action::Close:
+        m_renderer->setHovered(nullptr, ButtonRenderer::Action::None);
         window->closeWindow();
         break;
     case ButtonRenderer::Action::Minimize:
+        m_renderer->setHovered(nullptr, ButtonRenderer::Action::None);
         window->minimize();
         break;
     case ButtonRenderer::Action::Maximize:

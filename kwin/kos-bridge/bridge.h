@@ -5,6 +5,11 @@
 #include <memory>
 #include <QSet>
 
+namespace KWin
+{
+class GLFramebuffer;
+}
+
 namespace KOS
 {
 
@@ -48,6 +53,17 @@ public:
 #else
     void
 #endif
+    paintWindow(const KWin::RenderTarget &renderTarget,
+                const KWin::RenderViewport &viewport,
+                KWin::EffectWindow *window, int mask,
+                const KWin::Region &deviceRegion,
+                KWin::WindowPaintData &data) override;
+
+#ifdef KOS_KWIN_PAINT_RESULT_API
+    bool
+#else
+    void
+#endif
     drawWindow(const KWin::RenderTarget &renderTarget,
                     const KWin::RenderViewport &viewport,
                     KWin::EffectWindow *window, int mask,
@@ -84,6 +100,7 @@ private:
     // in the constructor. Cleared when that window is deleted, which is the only
     // way an EffectWindow pointer here could stop meaning anything.
     KWin::EffectWindow *m_lastActive = nullptr;
+    KWin::GLFramebuffer *m_screenFramebuffer = nullptr;
 };
 
 } // namespace KOS

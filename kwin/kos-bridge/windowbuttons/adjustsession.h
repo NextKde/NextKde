@@ -35,7 +35,8 @@ class AdjustSession
 public:
     // Writes a committed geometry. False when the file could not be written.
     using Commit =
-        std::function<bool(const WindowMatcher &, const PanelGeometry &)>;
+        std::function<bool(KWin::EffectWindow *, const WindowQuery &,
+                           const PanelGeometry &, bool changed)>;
 
     AdjustSession(ButtonRenderer *renderer, Commit commit);
 
