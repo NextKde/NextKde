@@ -21,6 +21,17 @@ Animation captures the clipped source; Bridge must not cache its own later anima
 background blur. Continuous windows need translucent occlusion semantics so background behind
 clipped corners is painted. Removing that flag to improve performance can produce black corners.
 Glass must use the actual visual contour rather than reapply an old circular input radius.
+Because that flag also disables KWin's own occlusion culling, Bridge skips capture, tint,
+buttons and draw for a continuous window only when opaque continuous windows above it cover
+everything it could paint (expandedGeometry clipped to the output). Coverage uses the upper
+clients' opaque regions minus whole corner squares, so it is conservative; two windows with
+the same frame and the same contour (stacked maximized/fullscreen) count as exact coverage
+because no shadow reaches the screen. Transformed windows, dock morphs and active fullscreen
+effects keep the normal path.
+Stationary captures contain client content and decoration only; the panel and its tint are
+drawn as an overlay after the clipped window, so hover, menu and tint changes repaint the
+panel instead of invalidating the whole-window source. Animated (morph) captures include the
+panel because the deformation moves it with the window.
 
 The continuous cache has a 256 MiB budget and GPU texture-size checks. Shader/resource/geometry/
 budget failure falls back to native arcs with a diagnostic. Reconsider rejection after relevant
@@ -75,7 +86,8 @@ rules and merge fields, not a complete example over an existing file. Invalid co
 last valid state. App matching uses window class then desktop/resource identifiers, never title guessing.
 
 Preserve physical versus logical outline-width semantics and schema-1 conversion. Gaussian shadow
-values are sigma in logical pixels, not total extent. Focus transitions reserve enough cache margin
+values are sigma in logical pixels, not total extent; `offsetY` shifts the cast shadow downward by
+that many logical pixels while the frame contour stays put. Focus transitions reserve enough cache margin
 for both states; bounded repaint timers stop when idle. Fullscreen always disables KOS corners/outlines/shadows/controls to cover the output;
 maximized behavior follows configuration. Restore normal appearance on leaving fullscreen.
 Settings → Window appearance exposes **Square corners when maximized** below Corner radius.

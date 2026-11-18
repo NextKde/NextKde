@@ -50,6 +50,7 @@ add_library(kos_bridge MODULE
     windowappearance/appearanceconfig.cpp
     windowappearance/sceneshadow.cpp
     windowappearance/continuousclip.cpp
+    windowappearance/cornermask.cpp
     windowappearance/windowappearance.cpp
 )
 
