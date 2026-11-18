@@ -183,4 +183,4 @@ Automatically generated from GitHub contributions with [contrib.rocks](https://c
 ## License
 
 See [LICENSE](LICENSE) for the project license. The bundled Glass effect has
-its own [license](kwin/glass-effect/LICENSE).
+its own [license](kwin/glass/LICENSE).
