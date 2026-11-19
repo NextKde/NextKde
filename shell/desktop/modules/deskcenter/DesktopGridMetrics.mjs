@@ -1,6 +1,40 @@
 // Density changes spacing, never the icon artwork or the two-line label.
 export const densities = ["comfortable", "compact", "dense"];
 
+// Use spare vertical space for one more row instead of leaving a visible
+// bottom gap. The extra row must keep at least a 3 px gutter; otherwise the
+// requested density gap and its bottom remainder are retained.
+export function rowLayout(validHeight, cellHeight, gap) {
+    const preferred = Math.max(1,
+        Math.floor((validHeight + gap) / (cellHeight + gap)));
+    const candidate = preferred + 1;
+    if (candidate > 1) {
+        const candidateGap = (validHeight - candidate * cellHeight)
+            / (candidate - 1);
+        if (candidateGap >= 3) {
+            return {
+                count: candidate,
+                pitch: cellHeight + candidateGap,
+                gap: candidateGap
+            };
+        }
+    }
+    return { count: preferred, pitch: cellHeight + gap, gap: gap };
+}
+
+// Slot indices are column-major: one column is filled top-to-bottom before
+// the next. Right alignment fills from the right edge, left alignment from
+// the left edge of the desktop file area.
+export function columnForSlot(slot, rowCount, columnCount, alignment) {
+    const index = Math.floor(slot / rowCount);
+    return alignment === "left" ? index : columnCount - 1 - index;
+}
+
+export function slotForCell(column, row, rowCount, columnCount, alignment) {
+    const index = alignment === "left" ? column : columnCount - 1 - column;
+    return index * rowCount + row;
+}
+
 export function metrics(baseWidth, baseHeight, iconSize, density, lineHeight) {
     const mode = densities.includes(density) ? density : "comfortable";
     const gap = mode === "comfortable" ? 16 : mode === "compact" ? 8 : 6;
