@@ -539,6 +539,8 @@ export const catalog = {
     "New window": "Nova janela",
     "Unpin": "Desafixar",
     "Pin this app": "Fixar este aplicativo",
+    "Add separator to the right": "Adicionar separador à direita",
+    "Remove separator": "Remover separador",
     "Open": "Abrir",
     "Close all windows": "Fechar todas as janelas",
     "Music": "Música",

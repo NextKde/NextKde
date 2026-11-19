@@ -198,6 +198,8 @@ export const icons = Object.freeze({
     "dock.menu.new_window": "window-new",
     "dock.menu.open": "",
     "dock.menu.pin": "",
+    "dock.menu.separator.add": "",
+    "dock.menu.separator.remove": "",
     "dock.menu.trash.empty": "user-trash",
     "dock.menu.trash.open": "",
     "dock.menu.unpin": "",

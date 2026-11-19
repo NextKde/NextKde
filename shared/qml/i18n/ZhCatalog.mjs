@@ -639,6 +639,8 @@ export const catalog = {
     "New window": "新建窗口",
     "Unpin": "取消固定",
     "Pin this app": "固定此应用",
+    "Add separator to the right": "在右侧添加分隔线",
+    "Remove separator": "移除分隔线",
     "Open": "打开",
     "Close all windows": "关闭所有窗口",
 
