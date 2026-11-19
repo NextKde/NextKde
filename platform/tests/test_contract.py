@@ -219,6 +219,34 @@ def test_lockscreen_feed_uses_daemon_owned_fixed_destination() -> None:
     assert 'QStringLiteral("theme-unavailable")' in publisher
 
 
+def test_file_operations_do_not_resolve_shortcut_symlinks() -> None:
+    """A desktop shortcut must be renamed/moved/trashed as a link."""
+    source = (DAEMON / "PlatformServerFiles.cpp").read_text()
+
+    def handler_for(operation: str) -> str:
+        start = source.index(f'if (op == QStringLiteral("{operation}")')
+        following = re.search(r'\n    if \(op == QStringLiteral\("', source[start + 1:])
+        return source[start:start + 1 + following.start()] if following else source[start:]
+
+    for operation in ("file.trash", "file.rename", "file.transfer"):
+        assert "cleanEntryPath" in handler_for(operation), operation
+
+    clipboard = (DAEMON / "PlatformServerClipboard.cpp").read_text()
+    setter = clipboard[clipboard.index(
+        'if (op == QStringLiteral("clipboard.set"))'):]
+    setter = setter[:setter.index(
+        'if (op == QStringLiteral("clipboard.read"))')]
+    assert "cleanEntryPaths" in setter
+
+    paths = (DAEMON / "PlatformPaths.cpp").read_text()
+    entry = paths[paths.index("QString cleanEntryPath"):]
+    entry = entry[:entry.index("QStringList cleanEntryPaths")]
+    # Only the parent is canonicalised; the final entry is appended unchanged.
+    assert "const QString canonicalParent = parentInfo.canonicalFilePath();" in entry
+    assert "QDir(canonicalParent).filePath(fileName)" in entry
+    assert "const QFileInfo entry(result);" in entry
+
+
 if __name__ == "__main__":
     test_shortcuts_service_defaults()
     test_platform_contract_mentions_socket_and_errors()
@@ -232,4 +260,5 @@ if __name__ == "__main__":
     test_thumbnail_memory_is_bounded_and_recent_frames_are_reused()
     test_brightness_targets_one_kde_display()
     test_lockscreen_feed_uses_daemon_owned_fixed_destination()
+    test_file_operations_do_not_resolve_shortcut_symlinks()
     print("platform contracts: ok")

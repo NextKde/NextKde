@@ -261,6 +261,12 @@ launcher as `application.launch`. A desktop-file path is resolved and parsed by
 `KService`; optional file arguments are passed as URLs. Launch failure is
 reported through the common response envelope.
 
+`file.rename`, `file.transfer`, `file.trash` and `clipboard.set` operate on the
+named directory entry itself. Their source paths canonicalise the parent
+directory but do not resolve the final component, so renaming, copying, moving
+or trashing a shortcut symlink leaves the installed `.desktop` file it points at
+untouched. A symlink is not followed to its target by these operations.
+
 ### Status panel operations
 
 - `network.applications` (read): returns `{scope: "user-tcp", sockets: [{id, name, pid, rxBytes, txBytes}]}` from `ss -tinpeOH`. Visible-owner TCP counters are sampled per socket before grouping by process name. Local proxy connections may count the same traffic twice. UDP/QUIC, inaccessible owners, and connections closed between samples are excluded. These totals are independent of interface totals.
