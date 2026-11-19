@@ -251,6 +251,8 @@ QtObject {
 
         const result = {
             desktopId: desktopId,
+            hasDesktopEntry: !!entry,
+            desktopEntryNoDisplay: !!entry?.noDisplay,
             normalizedId: normalize(desktopId),
             rawAppId: raw,
             name: presentationOverride.name || presentation.defaultName,

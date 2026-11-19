@@ -3,17 +3,19 @@
   stdenv,
   cmake,
   kdePackages,
+  wayland-scanner,
   src,
 }:
 
 stdenv.mkDerivation {
   pname = "kwin-glass";
   version = lib.removeSuffix "\n" (builtins.readFile "${src}/VERSION");
-  src = "${src}/kwin/glass-effect";
+  src = "${src}/kwin/glass";
 
   nativeBuildInputs = [
     cmake
     kdePackages.extra-cmake-modules
+    wayland-scanner
   ];
 
   buildInputs = [
@@ -28,7 +30,7 @@ stdenv.mkDerivation {
   dontWrapQtApps = true;
 
   meta = with lib; {
-    description = "Fork of the KWin Blur effect for KDE Plasma 6 with glass/refraction features";
+    description = "KOS KWin glass effect (liquid/soft materials over kos_surface_shape_v1)";
     homepage = "https://gitee.com/xiaoyintx_ciallo/test";
     license = licenses.gpl3;
     platforms = platforms.linux;

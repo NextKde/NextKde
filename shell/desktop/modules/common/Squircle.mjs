@@ -3,12 +3,12 @@
 // A shell surface's outline is drawn by more than one layer: the QML material
 // mask (SquircleMask.qml), the compositor blur region (RoundedBlurRegion.qml,
 // rectangular primitives only) and, from the KWin side of the work, the glass
-// mask in kwin/glass-effect. Each is written in a different language,
+// mask in kwin/glass. Each is written in a different language,
 // so the field lives here once and every other copy is a mirror of it:
 //
 //   Squircle.mjs                                 reference -- this file
 //   SquircleMask.qml + shaders/squircle.frag     GPU mirror (QML side)
-//   glass.glsl / onscreen_rounded.glsl           GPU mirror (compositor side)
+//   kwin/glass/src/shaders/onscreen.glsl         GPU mirror (compositor side)
 //
 // Keep them in sync. If the mask and the compositor mask stop evaluating the
 // same family the content edge and the glass edge split apart around 45
@@ -129,8 +129,8 @@ export function squircleGradient(x, y, halfWidth, halfHeight, radius, exponent) 
 }
 
 // Coverage of the shape at one pixel centre, using the compositor's own
-// first-order footprint (kwin/glass-effect:
-// src/shaders/onscreen_rounded.glsl -- sum *= 1 - clamp(0.5 + f / fwidth(f))).
+// first-order footprint (kwin/glass/src/shaders/onscreen.glsl:
+// sum *= 1 - clamp(0.5 + dist / fwidth(dist))).
 //
 // On the GPU fwidth() comes from screen-space derivatives; for a smooth field
 // that is pixelSize * (|df/dx| + |df/dy|). Two consequences worth stating,

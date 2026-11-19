@@ -309,6 +309,7 @@ windowCount
 records           // runtime records, including the Toplevel reference
 revision          // increments after a rebuild
 activeWindowId
+stageActiveWindowId // actual tracked focus, or the tracked owner of a transient
 ```
 
 Window model roles:
@@ -739,6 +740,39 @@ order. It must not reuse the Dock's visual order or pinned list.
 Use `WindowService.records` with the Stage grouping policy; provider-specific
 workspace data stays optional runtime metadata. Do not put Hyprland workspace IDs into the
 canonical app identity or persisted pinned records.
+
+`WindowFamily.mjs` resolves ownership before publishing a window revision.
+Records retain their original application identity and expose `familyKey`,
+`ownerWindowId`, `ownerHandleId`, `familyReason` and `familyPending` separately.
+The KWin bridge supplies the nearest tracked transient parent, walking through
+filtered dialogs. `stageActiveWindowId` follows that parent when an untracked
+dialog has focus, without changing Dock's `activeWindowId` semantics.
+
+For top-level helpers that omit a transient parent, the existing asynchronous
+process probe reads a bounded ancestor chain. The nearest ancestor owning a
+window is accepted only when its process start stamp matches, both executables
+share a private application directory, and the helper has no different visible
+desktop entry. Hidden (`NoDisplay`) helper launchers still require both ancestry
+and directory evidence. System directories, general runtimes, ambiguous owners and
+independent applications do not qualify. This is conservative inference: when
+evidence is unavailable the normal application grouping remains in effect.
+No application names or helper-specific aliases are hard-coded.
+
+Process evidence expires when its live window generation disappears; stale
+replies cannot populate a recycled PID's cache. While evidence is pending,
+automatic demotion waits. Probes have a one-second deadline, and even failure
+settles the record and resumes scheduling. Family changes increment the
+presentation revision and re-evaluate collection without needing a focus change.
+
+Stage uses one family-aware predicate for focus changes, automatic collection,
+card activation and the delayed minimize queue. Dispatch rechecks the current
+family; automatic batches also carry the expected compositor focus so KWin can
+discard a batch made stale in its command queue. Explicit desktop collection
+and user minimization retain their semantics, including sidebar access to a
+manually minimized sibling. New children inherit their owner's manual group.
+`stage-sidebar familyState` exposes title-free ownership diagnostics.
+Regression coverage lives in `tests/window-family` (production decision paths,
+process lifetime, compositor guards and real QML process execution).
 
 The Stage drawer checks overlap and fullscreen windows on
 `WindowService.currentDesktopId`, including windows on all desktops. Windows

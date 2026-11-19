@@ -334,6 +334,7 @@ PopupWindow {
                 - root.menuRadius) * (1 - revealFrame.progress)
             : root.menuRadius
         cornerExponent: AppearanceTokens.shape.cornerExponent
+        pointerEffects: AppearanceConfigService.pointerEffectsFor("contextMenu")
         baseColor: root.baseColor
         ambientPrimary: root.ambientPrimary
         ambientSecondary: root.ambientSecondary
