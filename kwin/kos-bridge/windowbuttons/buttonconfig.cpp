@@ -273,11 +273,16 @@ AppConfig ButtonConfig::getAppConfig(const WindowQuery &query) const
     // than merged: a machine rule is only ever written by a drag, and a drag
     // positions the whole panel. Merging would let a hand-written `buttonSize`
     // survive into a panel whose size was dragged, which is the one thing the
-    // gesture is for. Nothing else is touched, so `showButtons`, `background`
-    // and `interceptMargin` stay the user's.
-    PanelGeometry geometry;
-    if (m_store.found(query, &geometry)) {
-        config.geometry = geometry;
+    // gesture is for. Nothing else is touched, so `background` and
+    // `interceptMargin` stay the user's; an explicit per-window `overlayMode`
+    // (`transparent` or `hidden`) applies on top.
+    GeometryRule rule;
+    if (m_store.foundRule(query, &rule)) {
+        config.geometry = rule.geometry;
+        config.overlayMode = rule.overlayMode;
+        if (rule.overlayMode == OverlayMode::Hidden) {
+            config.showButtons = false;
+        }
     }
 
     // Global policy is applied after every app and machine rule. Rules cannot
@@ -292,10 +297,29 @@ AppConfig ButtonConfig::getAppConfig(const WindowQuery &query) const
     return config;
 }
 
-bool ButtonConfig::storeGeometry(const WindowMatcher &matcher,
-                                 const PanelGeometry &geometry)
+bool ButtonConfig::findStoredRule(const WindowQuery &query, GeometryRule *out) const
 {
-    return m_store.store(matcher, geometry);
+    return m_store.foundRule(query, out);
+}
+
+bool ButtonConfig::storeGeometry(const WindowMatcher &matcher,
+                                 const PanelGeometry &geometry,
+                                 OverlayMode overlayMode)
+{
+    return m_store.store(matcher, geometry, overlayMode);
+}
+
+bool ButtonConfig::replaceRule(const WindowMatcher &previous,
+                               const WindowMatcher &matcher,
+                               const PanelGeometry &geometry,
+                               OverlayMode overlayMode)
+{
+    return m_store.replace(previous, matcher, geometry, overlayMode);
+}
+
+bool ButtonConfig::removeRule(const WindowMatcher &matcher)
+{
+    return m_store.remove(matcher);
 }
 
 void ButtonConfig::setOnDecorationChanged(std::function<void()> callback)

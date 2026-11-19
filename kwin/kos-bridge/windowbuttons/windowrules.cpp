@@ -7,6 +7,7 @@
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonValue>
+#include <QLockFile>
 #include <QRegularExpression>
 #include <QSaveFile>
 #include <QStandardPaths>
@@ -266,6 +267,39 @@ WindowMatcher adjustmentMatcher(const WindowQuery &query)
     return matcher;
 }
 
+WindowMatcher appMatcher(const WindowQuery &query)
+{
+    WindowMatcher matcher;
+    matcher.className = query.windowClass;
+    matcher.hasType = true;
+    matcher.type = query.type;
+    return matcher;
+}
+
+QString overlayModeToString(OverlayMode mode)
+{
+    switch (mode) {
+    case OverlayMode::Transparent:
+        return QStringLiteral("transparent");
+    case OverlayMode::Hidden:
+        return QStringLiteral("hidden");
+    case OverlayMode::Cover:
+    default:
+        return QStringLiteral("cover");
+    }
+}
+
+OverlayMode overlayModeFromString(const QString &value)
+{
+    if (value == QLatin1String("transparent")) {
+        return OverlayMode::Transparent;
+    }
+    if (value == QLatin1String("hidden")) {
+        return OverlayMode::Hidden;
+    }
+    return OverlayMode::Cover;
+}
+
 bool moreSpecific(const WindowMatcher &a, const WindowMatcher &b)
 {
     return a.specificity() > b.specificity();
@@ -315,8 +349,10 @@ void WindowRuleStore::load()
             }
             continue;
         }
-        m_rules.append(GeometryRule{matcher,
-                                    geometryFromJson(entry["geometry"].toObject())});
+        m_rules.append(GeometryRule{
+            matcher,
+            geometryFromJson(entry["geometry"].toObject()),
+            overlayModeFromString(entry["overlayMode"].toString())});
     }
 
     // The rules were written most recently first, and the order within the same
@@ -337,12 +373,12 @@ void WindowRuleStore::load()
     m_lastWritten = bytes;
 }
 
-bool WindowRuleStore::found(const WindowQuery &query, PanelGeometry *out) const
+bool WindowRuleStore::foundRule(const WindowQuery &query, GeometryRule *out) const
 {
     for (const GeometryRule &rule : m_rules) {
         if (rule.matcher.matches(query)) {
             if (out) {
-                *out = rule.geometry;
+                *out = rule;
             }
             return true;
         }
@@ -350,8 +386,29 @@ bool WindowRuleStore::found(const WindowQuery &query, PanelGeometry *out) const
     return false;
 }
 
+bool WindowRuleStore::found(const WindowQuery &query, PanelGeometry *out) const
+{
+    GeometryRule rule;
+    if (!foundRule(query, &rule)) {
+        return false;
+    }
+    if (out) {
+        *out = rule.geometry;
+    }
+    return true;
+}
+
 bool WindowRuleStore::store(const WindowMatcher &matcher,
-                            const PanelGeometry &geometry)
+                            const PanelGeometry &geometry,
+                            OverlayMode overlayMode)
+{
+    return replace(WindowMatcher{}, matcher, geometry, overlayMode);
+}
+
+bool WindowRuleStore::replace(const WindowMatcher &previous,
+                              const WindowMatcher &matcher,
+                              const PanelGeometry &geometry,
+                              OverlayMode overlayMode)
 {
     if (matcher.isEmpty()) {
         qWarning() << "KOS: refusing to store a rule that matches every window";
@@ -359,15 +416,16 @@ bool WindowRuleStore::store(const WindowMatcher &matcher,
     }
 
     const QString key = matcher.canonicalKey();
-    for (int i = 0; i < m_rules.size(); ++i) {
-        if (m_rules.at(i).matcher.canonicalKey() == key) {
+    const QString prevKey = previous.isEmpty() ? QString() : previous.canonicalKey();
+    for (int i = m_rules.size() - 1; i >= 0; --i) {
+        const QString entryKey = m_rules.at(i).matcher.canonicalKey();
+        if (entryKey == key || (!prevKey.isEmpty() && entryKey == prevKey)) {
             m_rules.removeAt(i);
-            break;
         }
     }
     // In front: the adjustment that was just made is the one that should win a
     // tie with an older rule of the same specificity.
-    m_rules.prepend(GeometryRule{matcher, clamped(geometry)});
+    m_rules.prepend(GeometryRule{matcher, clamped(geometry), overlayMode});
     // Keep the same precedence before and after a reload: prepending a broad
     // adjustment must not hide an existing more specific rule.
     std::stable_sort(m_rules.begin(), m_rules.end(),
@@ -381,6 +439,25 @@ bool WindowRuleStore::store(const WindowMatcher &matcher,
     return write();
 }
 
+bool WindowRuleStore::remove(const WindowMatcher &matcher)
+{
+    if (matcher.isEmpty()) {
+        return false;
+    }
+    const QString key = matcher.canonicalKey();
+    bool removed = false;
+    for (int i = m_rules.size() - 1; i >= 0; --i) {
+        if (m_rules.at(i).matcher.canonicalKey() == key) {
+            m_rules.removeAt(i);
+            removed = true;
+        }
+    }
+    if (!removed) {
+        return true;
+    }
+    return write();
+}
+
 bool WindowRuleStore::write()
 {
     QJsonArray rules;
@@ -388,6 +465,9 @@ bool WindowRuleStore::write()
         QJsonObject entry;
         entry["match"] = rule.matcher.toJson();
         entry["geometry"] = geometryToJson(rule.geometry);
+        if (rule.overlayMode != OverlayMode::Cover) {
+            entry["overlayMode"] = overlayModeToString(rule.overlayMode);
+        }
         rules.append(entry);
     }
 
@@ -405,6 +485,12 @@ bool WindowRuleStore::write()
     const QFileInfo info(m_path);
     if (!QDir().mkpath(info.absolutePath())) {
         qWarning() << "KOS: could not create" << info.absolutePath();
+        return false;
+    }
+
+    QLockFile lock(m_path + QStringLiteral(".lock"));
+    if (!lock.tryLock(100)) {
+        qWarning() << "KOS: rules file is locked by another writer:" << m_path;
         return false;
     }
 
