@@ -406,16 +406,17 @@ function bandFromSlope(centreX, centreY, directionX, directionY, halfWidth,
     //     effect is present. The whole point of matching the family is that
     //     both edges describe one outline.
     const compositor = new URL(
-        "../../../../kwin/glass-effect/src/shaders/onscreen_rounded.glsl",
+        "../../../../kwin/glass/src/shaders/onscreen.glsl",
         import.meta.url);
     try {
         const compositorSource = readFileSync(compositor, "utf8")
             .replace(/\s+/g, " ");
-        check(compositorSource.includes("clamp(0.5 + f / df, 0.0, 1.0)"),
-            "the vendored compositor mask changed its footprint; "
+        check(compositorSource.includes(
+            "1.0 - clamp(0.5 + dist / coverageWidth, 0.0, 1.0)"),
+            "the compositor glass mask changed its footprint; "
             + "squircle.frag must follow it");
     } catch {
-        console.log("note: vendored kwin-effects-glass not found, "
+        console.log("note: compositor glass tree not found, "
             + "skipping the compositor footprint cross-check");
     }
 }

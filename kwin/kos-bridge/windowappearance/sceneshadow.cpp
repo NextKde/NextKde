@@ -18,7 +18,10 @@ std::shared_ptr<ShadowAtlas> makeAtlas(const CornerRadii &radii,
     const qreal contactSigma = settings.contactBlur * scale;
     const qreal ambientSigma = (active ? settings.activeBlur
                                        : settings.inactiveBlur) * scale;
+    // Symmetric margin sized for the cast side; the other side keeps the
+    // unused slack so the 9-slice geometry stays square.
     const int padding = int(std::ceil(3.0 * std::max(contactSigma, ambientSigma)
+                                      + std::abs(settings.offsetY) * scale
                                       + frameWidth * scale + 1.0));
     const int corner = int(std::ceil(std::max({radii.topLeft, radii.topRight,
         radii.bottomRight, radii.bottomLeft}) * scale));
@@ -33,21 +36,26 @@ std::shared_ptr<ShadowAtlas> makeAtlas(const CornerRadii &radii,
     atlas->innerRect = QRect(padding + corner, padding + corner, 2, 2);
     const qreal halfExtent = coreSize / 2.0 + frameWidth * scale;
     const qreal center = imageSize / 2.0;
+    // Signed distance to the frame contour (positive outside).
+    const auto distanceAt = [&](qreal px, qreal py) {
+        const qreal r = (py < 0
+            ? (px < 0 ? radii.topLeft : radii.topRight)
+            : (px < 0 ? radii.bottomLeft : radii.bottomRight)) * scale
+            + frameWidth * scale;
+        const qreal qx = std::abs(px) - (halfExtent - r);
+        const qreal qy = std::abs(py) - (halfExtent - r);
+        return std::hypot(std::max(0.0, qx), std::max(0.0, qy))
+            + std::min(0.0, std::max(qx, qy)) - r;
+    };
     for (int y = 0; y < imageSize; ++y) {
         auto *row = reinterpret_cast<QRgb *>(atlas->image.scanLine(y));
         for (int x = 0; x < imageSize; ++x) {
             const qreal px = x + 0.5 - center;
             const qreal py = y + 0.5 - center;
-            const qreal r = (py < 0
-                ? (px < 0 ? radii.topLeft : radii.topRight)
-                : (px < 0 ? radii.bottomLeft : radii.bottomRight)) * scale
-                + frameWidth * scale;
-            const qreal qx = std::abs(px) - (halfExtent - r);
-            const qreal qy = std::abs(py) - (halfExtent - r);
-            const qreal distance = std::hypot(std::max(0.0, qx),
-                                             std::max(0.0, qy))
-                + std::min(0.0, std::max(qx, qy)) - r;
-            const qreal d = std::max(0.0, distance);
+            const qreal distance = distanceAt(px, py);
+            const qreal shadowDistance = distanceAt(px,
+                py - settings.offsetY * scale);
+            const qreal d = std::max(0.0, shadowDistance);
             const qreal contact = settings.contactOpacity
                 * std::exp(-0.5 * d * d / (contactSigma * contactSigma));
             const qreal ambient = settings.ambientOpacity
@@ -95,13 +103,14 @@ std::shared_ptr<const ShadowAtlas> ShadowAtlasCache::get(const CornerRadii &radi
     // the current output's device scale. Both use the same contour and falloff.
     scale = forDecoration ? 1.0 : std::max(0.01, scale);
     const qreal ambientBlur = active ? settings.activeBlur : settings.inactiveBlur;
-    const QString key = QStringLiteral("%1,%2,%3,%4/%5/%6/%7/%8/%9/%10/%11")
+    const QString key = QStringLiteral("%1,%2,%3,%4/%5/%6/%7/%8/%9/%10/%11/%12")
         .arg(radii.topLeft, 0, 'f', 4).arg(radii.topRight, 0, 'f', 4)
         .arg(radii.bottomRight, 0, 'f', 4).arg(radii.bottomLeft, 0, 'f', 4)
         .arg(frameWidth, 0, 'f', 4).arg(scale, 0, 'f', 4)
         .arg(settings.contactBlur, 0, 'f', 4).arg(ambientBlur, 0, 'f', 4)
         .arg(settings.contactOpacity, 0, 'f', 4)
-        .arg(settings.ambientOpacity, 0, 'f', 4).arg(forDecoration);
+        .arg(settings.ambientOpacity, 0, 'f', 4)
+        .arg(settings.offsetY, 0, 'f', 4).arg(forDecoration);
     if (const auto *cached = m_cache.object(key)) {
         return *cached;
     }

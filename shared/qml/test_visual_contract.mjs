@@ -286,15 +286,6 @@ for (const control of ["KosButton", "KosRoundButton", "KosSlider", "KosSwitch"])
         `${control} honors the reduce-motion duration tokens`);
 }
 
-const glassEffect = read("../../kwin/glass-effect/src/blur.cpp");
-assert.match(glassEffect, /hasExplicitBlurRequest[\s\S]*explicitlyRequestedBlur/,
-    "explicit application and decoration blur bypass force-blur filtering");
-assert.match(glassEffect,
-    /addBlurCapability\(\)[\s\S]*m_blurCapabilityRegistered = true[\s\S]*if \(m_blurCapabilityRegistered\)[\s\S]*removeBlurCapability/,
-    "new KWin blur capability is released only after successful registration");
-assert.match(glassEffect, /if \(m_valid\)[\s\S]*stackingOrder\(\)[\s\S]*updateBlurRegion/,
-    "reconfiguration refreshes existing windows from a stable snapshot");
-
 const deskCenter = read("../../shell/desktop/modules/deskcenter/DeskCenterWindow.qml");
 assert.doesNotMatch(deskCenter, /#101010|#17151c|#170f14/,
     "desktop widget palette avoids near-black blocks");

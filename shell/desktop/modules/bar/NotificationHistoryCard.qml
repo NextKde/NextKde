@@ -25,6 +25,9 @@ Item {
     property bool sizeReady: false
     property bool interactive: true
     property bool compositorGlass: AppearanceTokens.surface.usesKwinBlur
+    // Forwarded by the embedding pane; the Control Center opts this card's
+    // glass into the pointer effects, the standalone history window does not.
+    property int pointerEffects: 0
     property Item captureAnchor: null
     property rect clipSceneRect: Qt.rect(0, 0, -1, -1)
     property real backdropScale: 1
@@ -76,6 +79,7 @@ Item {
         id: glass
         anchors.fill: parent
         radius: 24
+        pointerEffects: card.pointerEffects
         // Text is a sibling, and never paints into the rounded corners. Native
         // glass needs no offscreen QML layer or mask for this empty surface.
         maskContent: !useKwinEffect || fallbackEnabled
