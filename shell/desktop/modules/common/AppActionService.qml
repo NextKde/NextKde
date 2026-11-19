@@ -18,6 +18,10 @@ QtObject {
     signal unpinRequested(string appId)
     signal hideRequested(string appId)
     signal editRequested(var application)
+    // The platform owns the desktop directory and the .desktop resolution.
+    // created is false when the shortcut already exists and was left alone.
+    signal desktopShortcutFinished(string appId, bool ok, bool created,
+                                   string path, string errorCode)
 
     // execDetached exemption (R12): the desktop-entry Exec line runs through
     // DesktopEntry.execute(), not through a shell or system-control command.
@@ -151,6 +155,33 @@ QtObject {
         // KOS-owned deep links currently use explicit argv rather than URLs.
         // Keep that narrow path until each app publishes a URL scheme.
         return _executeCommandDirect(Array.from(baseCommand).concat(extra), desktopId)
+    }
+
+    // Creates a shortcut to the installed desktop entry in the XDG desktop
+    // directory. The daemon resolves the entry by id and owns path validation;
+    // callers never supply a source or destination path.
+    function sendToDesktop(appId) {
+        const id = String(appId ?? "").trim()
+        if (!id) {
+            console.warn("[AppAction] cannot create a desktop shortcut without an app id")
+            return false
+        }
+        PlatformClient.request("file.create-desktop-shortcut", {
+            desktopId: id
+        }, function(response) {
+            const result = response?.result || ({})
+            const ok = !!response?.ok
+            if (ok) {
+                // The data service watches this directory, but its watcher is
+                // only installed when the directory existed at startup. A
+                // refresh makes the new icon appear even in that case.
+                DataClient.request("desktop.refresh", {}, function() {})
+            }
+            service.desktopShortcutFinished(id, ok, !!result.created,
+                                            String(result.path || ""),
+                                            String(response?.error?.code || ""))
+        })
+        return true
     }
 
     function pin(appId) {
