@@ -1057,6 +1057,7 @@ Item {
                     // as icons, and the clamp below keeps the slot inside the
                     // bar. Removal is only from the separator's own menu.
                     xAxis.enabled: true
+                    yAxis.enabled: false
                     onActiveChanged: {
                         if (active) {
                             // A deliberate drag is an alternate entry point
