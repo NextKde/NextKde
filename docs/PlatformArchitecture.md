@@ -71,7 +71,7 @@ the resolved contour; without Bridge metadata it stays square. See [WindowAppear
 The shared definition is [`kos-surface-shape-v1.xml`](../shell/native/surface-shape/kos-surface-shape-v1.xml),
 currently **v8** for manager and shape. Capability negotiation preserves old request numbering.
 The client `Kos.SurfaceShape` QML native module lives in `shell/native/surface-shape/`; the server
-is `kwin/glass-effect/src/surfaceshapemanager.{h,cpp}`, owned by the effect.
+is `kwin/glass/src/surfaceshapemanager.{h,cpp}`, owned by the effect.
 
 Versions 1–7 keep established immediate updates. v8 adds manager-committed batches latched with
 `wl_surface.commit`, explicit material profiles, continuous blur sigma and tint independent of

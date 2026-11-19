@@ -53,6 +53,10 @@ Item {
 
     // Marker for the single-block panel's positioning pass.
     readonly property bool isControlCenterCard: true
+    // Pointer mask for this card's glass (protocol v9). The control center
+    // panel turns it on for its own cards in placeCard(); every other host
+    // (the desk widgets) leaves the glass static.
+    property int pointerEffects: 0
     // Host shows/hides a card (submenus and the session sheet toggle this).
     property bool cardShown: true
     // Which navigation page this card belongs to. The panel multiplies the
@@ -161,6 +165,7 @@ Item {
         // a transition keeps the default 1 and renders exactly as before.
         scrimOpacity: root.glassOpacity
         materialOpacity: root.glassOpacity
+        pointerEffects: root.pointerEffects
 
         // Concrete card content (declared by the card instance), above the glass.
         Item {

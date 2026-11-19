@@ -4,6 +4,7 @@
  * SPDX-License-Identifier: GPL-2.0-or-later
  */
 #include "continuousclip.h"
+#include "contour.h"
 #ifdef KOS_KWIN_PAINT_RESULT_API
 #include <opengl/eglcontext.h>
 #endif
@@ -82,6 +83,7 @@ uniform vec4 kosFrameColor;
 uniform float kosEdgeOpacity;
 uniform float kosShadowOpacity;
 uniform vec4 kosShadow; // contact sigma, ambient sigma, their opacities
+uniform float kosShadowOffset; // downward shift of the cast shadow, device px
 
 float kosDistance(vec2 p)
 {
@@ -119,12 +121,40 @@ vec4 kosComposite(vec4 source)
     float frameAlpha = kosFrameColor.a * kosEdgeOpacity * max(0.0, outer - inside);
     vec4 frame = vec4(kosFrameColor.rgb * frameAlpha, frameAlpha);
 
-    float d = max(0.0, distance - kosFrameWidth);
+    // The shadow contour is the frame translated down. `outer` stays on the
+    // frame so the part of the shift that falls inside the window is clipped.
+    float shadowDistance = kosDistance(kosPosition - vec2(0.0, kosShadowOffset));
+    float d = max(0.0, shadowDistance - kosFrameWidth);
     float contact = kosShadow.z * exp(-0.5 * d * d / (kosShadow.x * kosShadow.x));
     float ambient = kosShadow.w * exp(-0.5 * d * d / (kosShadow.y * kosShadow.y));
     float shadow = (1.0 - (1.0 - contact) * (1.0 - ambient))
         * kosShadowOpacity * (1.0 - outer);
     return content + frame + vec4(0.0, 0.0, 0.0, shadow);
+}
+)";
+
+// Baked path. The 9-slice atlas already contains the shape, outline, frame
+// and shadow coverage; only the (animated) colours and opacities are
+// uniforms. Every fragment is two texture fetches and a few multiply-adds.
+constexpr auto MaskFragment = R"(
+in vec2 kosMaskCoord;
+uniform sampler2D kosMaskSampler;
+uniform vec4 kosEdgeColor;
+uniform vec4 kosFrameColor;
+uniform float kosEdgeOpacity;
+uniform float kosShadowOpacity;
+
+vec4 kosMaskComposite(vec4 source)
+{
+    vec4 mask = texture(kosMaskSampler, kosMaskCoord);
+    float edge = kosEdgeColor.a * kosEdgeOpacity * mask.g;
+    vec4 result = source * mask.r - source * edge
+        + vec4(kosEdgeColor.rgb, 1.0) * edge;
+    float frame = kosFrameColor.a * kosEdgeOpacity * mask.b;
+    result.rgb += kosFrameColor.rgb * frame;
+    result.a += frame;
+    result.a += kosShadowOpacity * mask.a;
+    return result;
 }
 )";
 }
@@ -137,9 +167,11 @@ ContinuousClip::ContinuousClip()
 ContinuousClip::~ContinuousClip()
 {
     clear();
-    if (m_shader) {
+    if (m_shader || m_maskShader || !m_masks.isEmpty()) {
         KWin::effects->makeOpenGLContextCurrent();
+        m_masks.clear();
         m_shader.reset();
+        m_maskShader.reset();
     }
 }
 
@@ -198,6 +230,10 @@ bool ContinuousClip::available()
         qWarning() << "KOS continuous corners: unsupported KWin shader layout; using native arcs";
         return false;
     }
+    // The mask variant must start from the untouched sources: the analytic
+    // edits below re-declare uniforms that the mask fragment would duplicate.
+    const QByteArray baseVertex = vertex;
+    const QByteArray baseFragment = fragment;
     vertex.replace(vertexMain, "out vec2 kosPosition;\nuniform vec4 kosSourceRect;\nvoid main()\n{\n    kosPosition = kosSourceRect.xy + vec2(texcoord.x, 1.0 - texcoord.y) * kosSourceRect.zw;");
     fragment.replace(fragmentMain, QByteArray(ContourFragment) + fragmentMain);
     fragment.replace(sampling, "result = kosComposite(texture(sampler, texcoord0));");
@@ -221,6 +257,30 @@ bool ContinuousClip::available()
     m_uniforms.edgeOpacity = m_shader->uniformLocation("kosEdgeOpacity");
     m_uniforms.shadowOpacity = m_shader->uniformLocation("kosShadowOpacity");
     m_uniforms.shadow = m_shader->uniformLocation("kosShadow");
+    m_uniforms.shadowOffset = m_shader->uniformLocation("kosShadowOffset");
+
+    // Same KWin pipeline, but the contour comes from the baked 9-slice mask.
+    // If this variant fails to build, the analytic shader above stays in use.
+    QByteArray maskVertex = baseVertex;
+    QByteArray maskFragment = baseFragment;
+    maskVertex.replace(vertexMain, "out vec2 kosMaskCoord;\nuniform mat4 kosMaskMatrix;\nvoid main()\n{\n    kosMaskCoord = (kosMaskMatrix * vec4(position.xy, 0.0, 1.0)).xy;");
+    maskFragment.replace(fragmentMain, QByteArray(MaskFragment) + fragmentMain);
+    maskFragment.replace(sampling, "result = kosMaskComposite(texture(sampler, texcoord0));");
+    m_maskShader = KWin::ShaderManager::instance()->generateCustomShader(
+        KWin::ShaderTrait::MapTexture | KWin::ShaderTrait::Modulate
+        | KWin::ShaderTrait::AdjustSaturation | KWin::ShaderTrait::TransformColorspace,
+        maskVertex, maskFragment);
+    if (m_maskShader && m_maskShader->link()) {
+        m_maskUniforms.maskMatrix = m_maskShader->uniformLocation("kosMaskMatrix");
+        m_maskUniforms.edgeColor = m_maskShader->uniformLocation("kosEdgeColor");
+        m_maskUniforms.frameColor = m_maskShader->uniformLocation("kosFrameColor");
+        m_maskUniforms.edgeOpacity = m_maskShader->uniformLocation("kosEdgeOpacity");
+        m_maskUniforms.shadowOpacity = m_maskShader->uniformLocation("kosShadowOpacity");
+        m_maskUniforms.sampler = m_maskShader->uniformLocation("kosMaskSampler");
+    } else {
+        qWarning() << "KOS continuous corners: mask shader failed; using per-fragment contour";
+        m_maskShader.reset();
+    }
     return true;
 }
 
@@ -273,7 +333,7 @@ bool ContinuousClip::configure(KWin::EffectWindow *window,
     m_rejected.remove(window);
     if (!reservation.damageConnection) {
         reservation.damageConnection = connect(window, &KWin::EffectWindow::windowDamaged,
-            this, [this, window] { invalidate(window); });
+            this, [this, window] { invalidateDamage(window); });
         reservation.effect = std::make_shared<KWin::ItemEffect>(window->windowItem());
     }
     return true;
@@ -301,19 +361,86 @@ void ContinuousClip::release(KWin::EffectWindow *window)
 void ContinuousClip::invalidate(KWin::EffectWindow *window)
 {
     auto it = m_reservations.find(window);
-    if (it != m_reservations.end()) it->dirty = true;
+    if (it == m_reservations.end()) return;
+    it->fullDirty = true;
+    it->damaged = false;
+    it->captured = {};
+    ++it->epoch;
+}
+
+void ContinuousClip::invalidateDamage(KWin::EffectWindow *window)
+{
+    auto it = m_reservations.find(window);
+    if (it == m_reservations.end() || it->fullDirty) return;
+    // Content changed, but we do not get the damage region. Forget what has
+    // been captured; each subsequent draw re-captures the area it paints, and
+    // anything the compositor skips (occluded/off screen) is caught up when
+    // it is painted again.
+    it->damaged = true;
+    it->captured = {};
+    ++it->epoch;
 }
 
 void ContinuousClip::invalidateAll()
 {
-    for (auto &cache : m_reservations) cache.dirty = true;
+    for (auto &cache : m_reservations) {
+        cache.fullDirty = true;
+        cache.damaged = false;
+        cache.captured = {};
+        ++cache.epoch;
+    }
 }
 
-void ContinuousClip::invalidateRegion(const QRectF &region)
+std::shared_ptr<ContinuousClip::MaskAsset> ContinuousClip::maskFor(
+    const ContinuousStyle &style, qreal sourceScale, qreal padding)
 {
-    for (auto it = m_reservations.begin(); it != m_reservations.end(); ++it) {
-        if (QRectF(it.key()->frameGeometry()).intersects(region)) it->dirty = true;
+    MaskKey key;
+    key.radius = style.radius * sourceScale;
+    key.exponent = curveExponent(style.smoothness);
+    key.stroke = style.stroke * sourceScale;
+    key.frameWidth = style.frameWidth * sourceScale;
+    key.contactSigma = style.shadow.contactBlur * sourceScale;
+    key.ambientSigma = (style.active ? style.shadow.activeBlur
+                                     : style.shadow.inactiveBlur) * sourceScale;
+    key.contactOpacity = style.shadow.contactOpacity;
+    key.ambientOpacity = style.shadow.ambientOpacity;
+    key.extent = cornerExtent(style.radius, style.smoothness) * sourceScale;
+    key.padding = padding;
+    key.offsetY = style.shadow.offsetY * sourceScale;
+    const auto cached = m_masks.constFind(key);
+    if (cached != m_masks.cend()) {
+        return *cached;
     }
+    // Focus changes swap the active/inactive shadow sigmas; keep a couple of
+    // variants per style and drop the whole cache on configuration churn.
+    if (m_masks.size() >= 8) {
+        m_masks.clear();
+    }
+    CornerMaskStyle bake;
+    bake.radius = key.radius;
+    bake.exponent = key.exponent;
+    bake.stroke = key.stroke;
+    bake.frameWidth = key.frameWidth;
+    bake.contactSigma = key.contactSigma;
+    bake.ambientSigma = key.ambientSigma;
+    bake.contactOpacity = key.contactOpacity;
+    bake.ambientOpacity = key.ambientOpacity;
+    bake.extent = key.extent;
+    bake.padding = key.padding;
+    bake.offsetY = key.offsetY;
+    auto asset = std::make_shared<MaskAsset>();
+    asset->atlas = bakeCornerMask(bake);
+    auto texture = KWin::GLTexture::upload(asset->atlas.image);
+    if (!texture) {
+        return nullptr;
+    }
+    texture->setFilter(GL_LINEAR);
+    texture->setWrapMode(GL_CLAMP_TO_EDGE);
+    asset->texture = std::shared_ptr<KWin::GLTexture>(std::move(texture));
+    asset->textureMatrix = asset->texture->matrix(KWin::NormalizedCoordinates);
+    asset->atlas.image = QImage();
+    m_masks.insert(key, asset);
+    return asset;
 }
 
 bool ContinuousClip::paint(const KWin::RenderTarget &target,
@@ -362,7 +489,9 @@ bool ContinuousClip::paint(const KWin::RenderTarget &target,
     const QPointF relativeOrigin = sourceGeometry.topLeft() - window->frameGeometry().topLeft();
     if (cache.sourceScale != sourceScale || cache.sourceOrigin != relativeOrigin
         || cache.frameSize != window->frameGeometry().size()) {
-        cache.dirty = true;
+        cache.fullDirty = true;
+        cache.damaged = false;
+        cache.captured = {};
         cache.sourceScale = sourceScale;
         cache.sourceOrigin = relativeOrigin;
         cache.frameSize = window->frameGeometry().size();
@@ -385,31 +514,88 @@ bool ContinuousClip::paint(const KWin::RenderTarget &target,
         if (!cache.fbo->valid()) {
             return reject();
         }
-        cache.dirty = true;
+        cache.fullDirty = true;
+        cache.damaged = false;
+        cache.captured = {};
     }
-    if (cache.dirty) {
-        // Clear before the callback: invalidations raised while sampling the
-        // title bar remain pending for the next frame.
-        cache.dirty = false;
+    if (cache.fullDirty || cache.damaged) {
         KWin::RenderTarget sourceTarget(cache.fbo.get());
         KWin::RenderViewport sourceViewport(sourceGeometry, sourceScale, sourceTarget, QPoint());
-#ifdef KOS_KWIN_PAINT_RESULT_API
-        auto *sourceContext = KWin::EglContext::currentContext();
-#endif
-        KWin::GLFramebuffer::pushFramebuffer(cache.fbo.get());
-        glClearColor(0, 0, 0, 0);
-        glClear(GL_COLOR_BUFFER_BIT);
-        const bool painted = sourcePainter(sourceTarget, sourceViewport);
-#ifdef KOS_KWIN_PAINT_RESULT_API
-        if (KWin::EglContext::currentContext() != sourceContext) {
-            cache.dirty = true;
-            return false;
+        const bool morphing = static_cast<bool>(morph);
+        const KWin::Region textureRegion(KWin::Rect(QPoint(0, 0), textureSize));
+        // Transformed draws (drag, morph, slide) express their region in
+        // target space, which cannot be mapped back to source pixels. Morph
+        // captures also have to bake the controls, so refresh them whole.
+        const bool wholeUpdate = cache.fullDirty || (cache.damaged
+            && (morphing || (mask & PAINT_WINDOW_TRANSFORMED)));
+        KWin::Region update = textureRegion;
+        if (!wholeUpdate) {
+            const KWin::Region logical = viewport.mapFromDeviceCoordinatesAligned(deviceClip);
+            update = sourceViewport.mapToDeviceCoordinatesAligned(logical) & textureRegion;
+            // Anything captured since the damage was raised is already
+            // current; repainting it again would blend translucent content
+            // onto itself.
+            update -= cache.captured;
         }
+        // An empty update still has to composite: the texture is current for
+        // this draw region, so only the capture is skipped.
+        if (!update.isEmpty()) {
+#ifdef KOS_KWIN_PAINT_RESULT_API
+            auto *sourceContext = KWin::EglContext::currentContext();
 #endif
-        KWin::GLFramebuffer::popFramebuffer();
-        if (!painted) {
-            cache.dirty = true;
-            return false;
+            KWin::GLFramebuffer::pushFramebuffer(cache.fbo.get());
+            glClearColor(0, 0, 0, 0);
+            if (wholeUpdate) {
+                glClear(GL_COLOR_BUFFER_BIT);
+            } else {
+                // Clear only the area that is about to be repainted. The rest
+                // of the texture keeps its previous pixels.
+                // glScissor takes bottom-left origin, like GLVertexBuffer::draw.
+                const QSize clearSize = sourceTarget.transformedSize();
+                const GLboolean scissorWasEnabled = glIsEnabled(GL_SCISSOR_TEST);
+                GLint scissorBox[4];
+                glGetIntegerv(GL_SCISSOR_BOX, scissorBox);
+                glEnable(GL_SCISSOR_TEST);
+                for (const KWin::Rect &rect : update.rects()) {
+                    glScissor(rect.x(), clearSize.height() - (rect.y() + rect.height()),
+                        rect.width(), rect.height());
+                    glClear(GL_COLOR_BUFFER_BIT);
+                }
+                glScissor(scissorBox[0], scissorBox[1], scissorBox[2], scissorBox[3]);
+                if (!scissorWasEnabled) {
+                    glDisable(GL_SCISSOR_TEST);
+                }
+            }
+            // Invalidations raised while sampling the title bar stay pending
+            // for the next frame, so the callback still sees the captured
+            // state.
+            const quint64 epochBefore = cache.epoch;
+            cache.fullDirty = false;
+            const bool painted = sourcePainter(sourceTarget, sourceViewport,
+                wholeUpdate ? KWin::Region::infinite() : update);
+#ifdef KOS_KWIN_PAINT_RESULT_API
+            if (KWin::EglContext::currentContext() != sourceContext) {
+                cache.fullDirty = true;
+                cache.damaged = false;
+                cache.captured = {};
+                KWin::GLFramebuffer::popFramebuffer();
+                return false;
+            }
+#endif
+            KWin::GLFramebuffer::popFramebuffer();
+            if (!painted) {
+                cache.fullDirty = true;
+                cache.damaged = false;
+                cache.captured = {};
+                return false;
+            }
+            if (cache.epoch == epochBefore) {
+                cache.captured |= update;
+                if (wholeUpdate || (textureRegion - cache.captured).isEmpty()) {
+                    cache.damaged = false;
+                    cache.captured = {};
+                }
+            }
         }
     }
 
@@ -417,6 +603,196 @@ bool ContinuousClip::paint(const KWin::RenderTarget &target,
     const auto expanded = KWin::snapToPixels(window->expandedGeometry(), scale);
     const auto frame = KWin::snapToPixels(window->frameGeometry(), scale);
     const QRectF bounds(expanded.topLeft() - frame.topLeft(), expanded.size());
+
+    // Baked-mask path: paint the window as nine quads that sample the shared
+    // style atlas. Interior fragments become a source fetch; the perimeter and
+    // shadow cost one more fetch instead of pow/exp per pixel.
+    if (m_maskShader && !morph) {
+        const qreal sourceScale = window->screen()->scale();
+        const qreal frameW = style.size.width() * scale;
+        const qreal frameH = style.size.height() * scale;
+        const qreal leftPad = -bounds.left() * scale;
+        const qreal topPad = -bounds.top() * scale;
+        const qreal rightPad = (bounds.left() + bounds.width()) * scale - frameW;
+        const qreal bottomPad = (bounds.top() + bounds.height()) * scale - frameH;
+        const qreal extentDev = cornerExtent(style.radius, style.smoothness) * scale;
+        const qreal bandDev = std::max(extentDev,
+            (style.stroke + style.frameWidth) * scale + 2.0);
+        const qreal padding = std::ceil(std::max({leftPad, topPad, rightPad,
+            bottomPad, 1.0}));
+        const bool padsAgree = std::abs(leftPad - rightPad) <= 2.0
+            && std::abs(topPad - bottomPad) <= 2.0
+            && std::abs(leftPad - topPad) <= 2.0;
+        if (qFuzzyCompare(scale + 1.0, sourceScale + 1.0) && padsAgree
+            && frameW > 2.0 * bandDev + 2.0 && frameH > 2.0 * bandDev + 2.0) {
+            if (auto asset = maskFor(style, sourceScale, padding)) {
+                const auto &atlas = asset->atlas;
+                const qreal atlasW = atlas.width;
+                const qreal atlasH = atlas.height;
+                const qreal x0 = -padding, x1 = bandDev;
+                const qreal x2 = frameW - bandDev, x3 = frameW + padding;
+                const qreal y0 = -padding, y1 = bandDev;
+                const qreal y2 = frameH - bandDev, y3 = frameH + padding;
+                const qreal sourceX = bounds.left() * scale;
+                const qreal sourceY = bounds.top() * scale;
+                const qreal sourceW = bounds.width() * scale;
+                const qreal sourceH = bounds.height() * scale;
+                KWin::WindowQuadList quads;
+                const auto sourceUv = [&](qreal x, qreal y) {
+                    return QPointF((x - sourceX) / sourceW, (y - sourceY) / sourceH);
+                };
+                const auto addQuad = [&](qreal ax, qreal ay, qreal bx, qreal by) {
+                    KWin::WindowQuad q;
+                    q[0] = KWin::WindowVertex(QPointF(ax / scale, ay / scale),
+                        sourceUv(ax, ay));
+                    q[1] = KWin::WindowVertex(QPointF(bx / scale, ay / scale),
+                        sourceUv(bx, ay));
+                    q[2] = KWin::WindowVertex(QPointF(bx / scale, by / scale),
+                        sourceUv(bx, by));
+                    q[3] = KWin::WindowVertex(QPointF(ax / scale, by / scale),
+                        sourceUv(ax, by));
+                    quads.append(q);
+                };
+                addQuad(x0, y0, x1, y1); // top-left corner
+                addQuad(x2, y0, x3, y1); // top-right
+                addQuad(x0, y2, x1, y3); // bottom-left
+                addQuad(x2, y2, x3, y3); // bottom-right
+                addQuad(x1, y0, x2, y1); // top edge
+                addQuad(x1, y2, x2, y3); // bottom edge
+                addQuad(x0, y1, x1, y2); // left edge
+                addQuad(x2, y1, x3, y2); // right edge
+                addQuad(x1, y1, x2, y2); // interior
+
+                // Per-quad mapping from frame-relative device position to
+                // atlas coordinates. Block texel i holds the value for inward
+                // distance i + 0.5 - padding, i.e. texel coordinate
+                // i + 0.5 = padding + distance (plus the block origin), so the
+                // frame edge lands halfway between two texels and linear
+                // sampling yields the antialiased transition. The straight-edge
+                // profile is stored along the atlas row, so horizontal edges
+                // drive the u coordinate from the fragment's y (and vice versa
+                // for vertical edges).
+                // Top and bottom corners bake different shadow shifts, so they
+                // read their own block; the left/right pair of each still
+                // mirrors horizontally. The edges pick the profile with the
+                // matching shadow distance.
+                const qreal topX = atlas.topBlockX, topY = atlas.topBlockY;
+                const qreal bottomX = atlas.bottomBlockX;
+                const qreal bottomY = atlas.bottomBlockY;
+                // u = sux*x + suy*y + tu, v = svx*x + svy*y + tv.
+                const auto affine = [&](qreal sux, qreal svx, qreal suy, qreal svy,
+                                        qreal tu, qreal tv) {
+                    QMatrix4x4 m;
+                    m(0, 0) = float(sux);
+                    m(0, 1) = float(suy);
+                    m(0, 3) = float(tu);
+                    m(1, 0) = float(svx);
+                    m(1, 1) = float(svy);
+                    m(1, 3) = float(tv);
+                    return asset->textureMatrix * m;
+                };
+                const qreal padTexels = padding;
+                const auto rowV = [&](int row) { return (row + 0.5) / atlasH; };
+                const qreal sideV = rowV(atlas.sideProfileY);
+                const auto topTx = (topX + padTexels) / atlasW;
+                const auto topTy = (topY + padTexels) / atlasH;
+                const auto bottomTx = (bottomX + padTexels) / atlasW;
+                const auto bottomUpV = (bottomY + padTexels + frameH) / atlasH;
+                QMatrix4x4 masks[9];
+                masks[0] = affine(1 / atlasW, 0, 0, 1 / atlasH,
+                    topTx, topTy);
+                masks[1] = affine(-1 / atlasW, 0, 0, 1 / atlasH,
+                    (topX + padTexels + frameW) / atlasW, topTy);
+                masks[2] = affine(1 / atlasW, 0, 0, -1 / atlasH,
+                    bottomTx, bottomUpV);
+                masks[3] = affine(-1 / atlasW, 0, 0, -1 / atlasH,
+                    (bottomX + padTexels + frameW) / atlasW, bottomUpV);
+                masks[4] = affine(0, 0, 1 / atlasW, 0,
+                    (atlas.topProfileX + padTexels) / atlasW,
+                    rowV(atlas.topProfileY));
+                masks[5] = affine(0, 0, -1 / atlasW, 0,
+                    (atlas.bottomProfileX + padTexels + frameH) / atlasW,
+                    rowV(atlas.bottomProfileY));
+                masks[6] = affine(1 / atlasW, 0, 0, 0,
+                    (atlas.sideProfileX + padTexels) / atlasW, sideV);
+                masks[7] = affine(-1 / atlasW, 0, 0, 0,
+                    (atlas.sideProfileX + padTexels + frameW) / atlasW, sideV);
+                masks[8] = affine(0, 0, 0, 0,
+                    (atlas.centerX + 0.5) / atlasW, (atlas.centerY + 0.5) / atlasH);
+
+                KWin::WindowPaintData paintedData = data;
+                KWin::ShaderBinder binder(m_maskShader.get());
+                m_maskShader->setUniform(m_maskUniforms.edgeColor,
+                    style.outline.colorFor(style.dark));
+                m_maskShader->setUniform(m_maskUniforms.frameColor,
+                    style.fill.colorFor(style.dark));
+                m_maskShader->setUniform(m_maskUniforms.edgeOpacity, style.edgeOpacity);
+                m_maskShader->setUniform(m_maskUniforms.shadowOpacity, style.shadowOpacity);
+                m_maskShader->setUniform(m_maskUniforms.sampler, 1);
+                auto *vbo = KWin::GLVertexBuffer::streamingBuffer();
+                vbo->reset();
+                vbo->setAttribLayout(std::span(KWin::GLVertexBuffer::GLVertex2DLayout),
+                    sizeof(KWin::GLVertex2D));
+                KWin::RenderGeometry geometry;
+                geometry.setVertexSnappingMode(
+                    KWin::RenderGeometry::VertexSnappingMode::None);
+                for (const auto &q : quads) {
+                    geometry.appendWindowQuad(q, scale);
+                }
+                geometry.postProcessTextureCoordinates(
+                    cache.texture->matrix(KWin::NormalizedCoordinates));
+                const auto mapped = vbo->map<KWin::GLVertex2D>(geometry.size());
+                if (!mapped) {
+                    return false;
+                }
+                geometry.copy(*mapped);
+                vbo->unmap();
+                vbo->bindArrays();
+                QMatrix4x4 mvp = viewport.projectionMatrix();
+                mvp.translate(std::round(window->x() * scale),
+                    std::round(window->y() * scale));
+                m_maskShader->setUniform(
+                    KWin::GLShader::Mat4Uniform::ModelViewProjectionMatrix,
+                    mvp * paintedData.toMatrix(scale));
+                const qreal rgb = paintedData.brightness() * paintedData.opacity();
+                m_maskShader->setUniform(KWin::GLShader::Vec4Uniform::ModulationConstant,
+                    QVector4D(rgb, rgb, rgb, paintedData.opacity()));
+                m_maskShader->setUniform(KWin::GLShader::FloatUniform::Saturation,
+                    paintedData.saturation());
+                const auto xyz = target.colorDescription()->containerColorimetry().toXYZ();
+                m_maskShader->setUniform(KWin::GLShader::Vec3Uniform::PrimaryBrightness,
+                    QVector3D(xyz(1, 0), xyz(1, 1), xyz(1, 2)));
+                m_maskShader->setUniform(KWin::GLShader::IntUniform::TextureWidth,
+                    cache.texture->width());
+                m_maskShader->setUniform(KWin::GLShader::IntUniform::TextureHeight,
+                    cache.texture->height());
+                m_maskShader->setColorspaceUniforms(KWin::ColorDescription::sRGB,
+                    target.colorDescription(), KWin::RenderingIntent::Perceptual);
+                const auto clip = viewport.transform().map(deviceClip,
+                    target.transformedSize());
+                glEnable(GL_SCISSOR_TEST);
+                glEnable(GL_BLEND);
+                glBlendFunc(GL_ONE, GL_ONE_MINUS_SRC_ALPHA);
+                glActiveTexture(GL_TEXTURE1);
+                asset->texture->bind();
+                glActiveTexture(GL_TEXTURE0);
+                cache.texture->bind();
+                for (int i = 0; i < 9; ++i) {
+                    m_maskShader->setUniform(m_maskUniforms.maskMatrix, masks[i]);
+                    vbo->draw(clip, GL_TRIANGLES, i * 6, 6, true);
+                }
+                cache.texture->unbind();
+                glActiveTexture(GL_TEXTURE1);
+                asset->texture->unbind();
+                glActiveTexture(GL_TEXTURE0);
+                glDisable(GL_BLEND);
+                glDisable(GL_SCISSOR_TEST);
+                vbo->unbindArrays();
+                return true;
+            }
+        }
+    }
+
     KWin::WindowQuad quad;
     quad[0] = KWin::WindowVertex(bounds.topLeft(), QPointF(0, 0));
     quad[1] = KWin::WindowVertex(bounds.topRight(), QPointF(1, 0));
@@ -444,6 +820,8 @@ bool ContinuousClip::paint(const KWin::RenderTarget &target,
         const qreal ambient = style.active ? style.shadow.activeBlur : style.shadow.inactiveBlur;
         m_shader->setUniform(m_uniforms.shadow, QVector4D(style.shadow.contactBlur * scale,
             ambient * scale, style.shadow.contactOpacity, style.shadow.ambientOpacity));
+        m_shader->setUniform(m_uniforms.shadowOffset,
+            qreal(style.shadow.offsetY) * scale);
     }
     // UVs survive the mesh deformation. Compute the continuous contour in
     // source coordinates, then deform its coverage together with the buttons.

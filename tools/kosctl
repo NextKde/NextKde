@@ -809,13 +809,11 @@ filter_vendored_warnings() {
 build_kwin_glass() {
     local build_type=${KOS_BUILD_TYPE:-Release}
     prepare_cmake_build_dir "$glass_build_dir" \
-        "$project_dir/kwin/glass-effect"
-    configure_if_needed "$project_dir/kwin/glass-effect" \
+        "$project_dir/kwin/glass"
+    configure_if_needed "$project_dir/kwin/glass" \
         "$glass_build_dir" \
         -DCMAKE_BUILD_TYPE="$build_type" \
-        -DCMAKE_INSTALL_PREFIX="$kwin_system_prefix" \
-        -DGLASS_WAYLAND=ON \
-        -DGLASS_X11=OFF
+        -DCMAKE_INSTALL_PREFIX="$kwin_system_prefix"
     if (( kwin_plugin_rebuild_required )); then
         cmake --build "$glass_build_dir" --target clean
     fi

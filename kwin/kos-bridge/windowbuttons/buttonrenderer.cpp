@@ -215,9 +215,8 @@ void drawTilePictogram(QPainter &painter, const QRectF &cell, TilePreset preset,
 }
 }
 
-ButtonRenderer *ButtonRenderer::s_instance = nullptr;
-ButtonRenderer::ButtonRenderer() { s_instance = this; }
-ButtonRenderer::~ButtonRenderer() { if (s_instance == this) s_instance = nullptr; }
+ButtonRenderer::ButtonRenderer() = default;
+ButtonRenderer::~ButtonRenderer() = default;
 
 void ButtonRenderer::paint(const KWin::RenderTarget &renderTarget,
                             const KWin::RenderViewport &viewport,
@@ -904,7 +903,6 @@ void ButtonRenderer::repaintRect(const QRectF &globalRect)
     if (!KWin::effects || globalRect.isEmpty()) {
         return;
     }
-    if (s_instance) Q_EMIT s_instance->sourceRepaint(globalRect);
     KWin::effects->addRepaint(KWin::RectF(globalRect.x(), globalRect.y(),
                                           globalRect.width(),
                                           globalRect.height()));
