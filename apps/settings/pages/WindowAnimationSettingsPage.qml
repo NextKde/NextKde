@@ -12,6 +12,7 @@ ColumnLayout {
     id: windowPage
     required property var colors
     property bool materialForm: false
+    property bool buttonRulesExpanded: false
     objectName: "windowAppearancePage"
     spacing: 12
     property var backend: null
@@ -322,6 +323,126 @@ ColumnLayout {
                 iconName: "plus"
                 enabled: windowPage.backend !== null && manualExclusionInput.text.trim().length > 0
                 onClicked: windowPage.addManualExclusion()
+            }
+        }
+        Demo.SettingsItem {
+            readonly property var rulesList: windowPage.snapshot.windowButtonRules ?? []
+            title: I18n.tr("Remembered window button rules")
+            separator: windowPage.buttonRulesExpanded && rulesList.length > 0
+            verticalPadding: 4
+            description: rulesList.length === 0
+                ? I18n.tr("Right-click a window’s traffic lights to customize position, size, mask mode, or scope.")
+                : I18n.tr("Saved rules: ") + rulesList.length
+
+            Demo.LiquidActionButton {
+                objectName: "toggleWindowButtonRules"
+                visible: (windowPage.snapshot.windowButtonRules ?? []).length > 0
+                text: windowPage.buttonRulesExpanded ? I18n.tr("Collapse ▴") : I18n.tr("Manage ▾")
+                materialForm: true
+                implicitHeight: 24
+                cornerRadius: 6
+                onClicked: windowPage.buttonRulesExpanded = !windowPage.buttonRulesExpanded
+            }
+        }
+        Repeater {
+            model: windowPage.buttonRulesExpanded ? (windowPage.snapshot.windowButtonRules ?? []) : []
+            delegate: Demo.SettingsItem {
+                id: ruleRow
+                required property var modelData
+                required property int index
+                objectName: "windowButtonRuleRow_" + index
+                allowStacking: false
+                minimumLabelWidth: 0
+                controlSpacing: 0
+                separator: index + 1 < (windowPage.snapshot.windowButtonRules ?? []).length
+
+                RowLayout {
+                    implicitWidth: ruleRow.availableWidth
+                    Layout.fillWidth: true
+                    spacing: 8
+
+                    Controls.ApplicationIcon {
+                        objectName: "windowButtonRuleIcon_" + ruleRow.index
+                        source: windowPage.appIcon(ruleRow.modelData.appClass || "")
+                        fallbackColor: windowPage.colors.secondaryText
+                    }
+
+                    ColumnLayout {
+                        Layout.fillWidth: true
+                        Layout.minimumWidth: 0
+                        spacing: 1
+
+                        Text {
+                            Layout.fillWidth: true
+                            Layout.minimumWidth: 0
+                            text: {
+                                const cls = ruleRow.modelData.appClass || "";
+                                if (ruleRow.modelData.title) return cls + " · " + ruleRow.modelData.title;
+                                if (ruleRow.modelData.role) return cls + " · " + ruleRow.modelData.role;
+                                return cls;
+                            }
+                            textFormat: Text.PlainText
+                            font.pixelSize: 12
+                            color: windowPage.colors.primaryText
+                            elide: Text.ElideRight
+                        }
+
+                        Text {
+                            Layout.fillWidth: true
+                            Layout.minimumWidth: 0
+                            text: {
+                                const scopeLabel = ruleRow.modelData.scope === "window"
+                                    ? I18n.tr("This window")
+                                    : I18n.tr("Same app");
+                                const type = ruleRow.modelData.type || "";
+                                return (type && type !== "normal") ? (scopeLabel + " · " + type) : scopeLabel;
+                            }
+                            textFormat: Text.PlainText
+                            font.pixelSize: 11
+                            color: windowPage.colors.secondaryText
+                            elide: Text.ElideRight
+                        }
+                    }
+
+                    Controls.SettingsSelect {
+                        objectName: "windowButtonRuleMode_" + ruleRow.index
+                        colors: windowPage.colors
+                        materialForm: windowPage.materialForm
+                        implicitWidth: 112
+                        implicitHeight: 24
+                        Layout.preferredWidth: 112
+                        model: [
+                            {id: "cover", label: I18n.tr("Cover mask")},
+                            {id: "transparent", label: I18n.tr("Transparent")},
+                            {id: "hidden", label: I18n.tr("Hidden")}
+                        ]
+                        textRole: "label"
+                        enabled: windowPage.backend !== null
+                        currentIndex: Math.max(0, ["cover", "transparent", "hidden"].indexOf(ruleRow.modelData.overlayMode || "cover"))
+                        onActivated: function (idx) {
+                            windowPage.backend.setWindowButtonRuleMode(ruleRow.modelData.id, model[idx].id);
+                        }
+                    }
+
+                    Demo.LiquidActionButton {
+                        objectName: "windowButtonRuleBroaden_" + ruleRow.index
+                        visible: ruleRow.modelData.canBroadenToApp === true
+                        text: I18n.tr("Apply to app")
+                        materialForm: true
+                        implicitHeight: 24
+                        cornerRadius: 6
+                        enabled: windowPage.backend !== null
+                        onClicked: windowPage.backend.setWindowButtonRuleScopeToApp(ruleRow.modelData.id)
+                    }
+
+                    Controls.WindowButtonAction {
+                        objectName: "removeWindowButtonRule_" + ruleRow.index
+                        text: I18n.tr("Remove")
+                        iconName: "close"
+                        enabled: windowPage.backend !== null
+                        onClicked: windowPage.backend.removeWindowButtonRule(ruleRow.modelData.id)
+                    }
+                }
             }
         }
     }

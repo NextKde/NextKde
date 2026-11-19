@@ -25,6 +25,7 @@ int main(int argc, char **argv) {
     QTemporaryDir temporary;
     CHECK(temporary.isValid());
     qputenv("XDG_CONFIG_HOME", temporary.path().toUtf8());
+    qputenv("XDG_DATA_HOME", (temporary.path() + "/data").toUtf8());
     qputenv("GSETTINGS_BACKEND", "keyfile");
     qputenv("DBUS_SESSION_BUS_ADDRESS", "unix:path=/nonexistent-kos-test-bus");
     QCoreApplication app(argc, argv);
@@ -246,5 +247,58 @@ int main(int argc, char **argv) {
     putButtons("malformed");
     CHECK(!settings.setIndependentButtonBackground(true));
     CHECK(getButtons() == "malformed");
+
+    const QString rulesFilename = temporary.path() + "/data/kos/window-buttons-rules.json";
+    auto putRules = [&](const QByteArray &bytes) {
+        QDir().mkpath(temporary.path() + "/data/kos");
+        QFile f(rulesFilename);
+        CHECK(f.open(QIODevice::WriteOnly));
+        CHECK(f.write(bytes) == bytes.size());
+    };
+    auto getRules = [&]() { QFile f(rulesFilename); CHECK(f.open(QIODevice::ReadOnly)); return f.readAll(); };
+    putRules(R"({"version":1,"rules":[
+        {"match":{"class":"wechat wechat","title":"朋友圈","type":"normal"},"overlayMode":"transparent","offset":[24,18]},
+        {"match":{"class":"wechat wechat","type":"normal"},"offset":[12,12]},
+        {"match":{"class":"obsidian","type":"normal"},"overlayMode":"hidden"}
+    ]})");
+    auto rulesList = settings.state()["windowButtonRules"].toList();
+    CHECK(rulesList.size() == 3);
+    const auto firstRule = rulesList[0].toMap();
+    const auto thirdRule = rulesList[2].toMap();
+    CHECK(firstRule["appClass"].toString() == "wechat");
+    CHECK(firstRule["scope"].toString() == "window");
+    CHECK(firstRule["canBroadenToApp"].toBool());
+    CHECK(firstRule["overlayMode"].toString() == "transparent");
+    CHECK(thirdRule["scope"].toString() == "app");
+    CHECK(!thirdRule["canBroadenToApp"].toBool());
+    CHECK(thirdRule["overlayMode"].toString() == "hidden");
+
+    const QString firstId = firstRule["id"].toString();
+    const QString thirdId = thirdRule["id"].toString();
+    CHECK(!settings.setWindowButtonRuleMode(firstId, "bogus"));
+    CHECK(!settings.setWindowButtonRuleMode(firstId, "auto"));
+    CHECK(settings.setWindowButtonRuleMode(firstId, "cover"));
+    CHECK(settings.state()["windowButtonRules"].toList()[0].toMap()["overlayMode"].toString() == "cover");
+    CHECK(settings.setWindowButtonRuleMode(firstId, "hidden"));
+    CHECK(settings.state()["windowButtonRules"].toList()[0].toMap()["overlayMode"].toString() == "hidden");
+    CHECK(settings.setWindowButtonRuleMode(firstId, "cover"));
+    CHECK(settings.state()["windowButtonRules"].toList()[0].toMap()["overlayMode"].toString() == "cover");
+
+    // Broadening merges over an existing app-wide rule for the same class/type without duplicating it.
+    CHECK(settings.setWindowButtonRuleScopeToApp(firstId));
+    rulesList = settings.state()["windowButtonRules"].toList();
+    CHECK(rulesList.size() == 2);
+    CHECK(rulesList[0].toMap()["scope"].toString() == "app");
+    CHECK(!rulesList[0].toMap()["canBroadenToApp"].toBool());
+    const QString broadenedId = rulesList[0].toMap()["id"].toString();
+
+    CHECK(settings.removeWindowButtonRule(thirdId));
+    rulesList = settings.state()["windowButtonRules"].toList();
+    CHECK(rulesList.size() == 1);
+    CHECK(rulesList[0].toMap()["id"].toString() == broadenedId);
+
+    const auto beforeRuleFailure = getRules();
+    { QLockFile lock(rulesFilename + ".lock"); CHECK(lock.tryLock(0)); CHECK(!settings.removeWindowButtonRule(broadenedId)); }
+    CHECK(getRules() == beforeRuleFailure);
     qInfo("Window settings configuration checks passed");
 }

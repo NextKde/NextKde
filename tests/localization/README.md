@@ -18,7 +18,7 @@ capture commands for the removed monorepo binaries or the retired Todo app.
 |---|---|---|
 | Shell and Settings (`I18n.tr`) | `shared/qml/i18n/ZhCatalog.mjs` | `shared/qml/i18n/PtBrCatalog.mjs` |
 | Independent apps | Catalogs owned by [their repositories](../../apps/README.md) | Catalogs owned by their repositories |
-| KWin glass effect | `kwin/glass-effect/po/zh_CN/` | `kwin/glass-effect/po/pt_BR/` |
+| KWin glass effect | `kwin/glass/po/zh_CN/` | `kwin/glass/po/pt_BR/` |
 
 The Chinese catalogs must cover every source string. The Portuguese catalogs may
 lag behind: a missing entry falls back to English, but every entry present must

@@ -22,6 +22,7 @@
 #include <cmath>
 #include <cstdio>
 
+#include "windowbuttons/adjustbar.h"
 #include "windowbuttons/buttonconfig.h"
 #include "windowbuttons/panelgeometry.h"
 #include "windowbuttons/tilemenu.h"
@@ -1102,26 +1103,35 @@ void testStore()
     const WindowQuery chat3 = query(QStringLiteral("antigravity antigravity"),
                                     QStringLiteral("Chat 3 - Antigravity"), 0);
     // Simulate a legacy caption-locked rule first; re-saving as a single window
-    // promotes it to class+type so switching chats never drops the cover.
+    // promotes it to class+type so switching chats never drops the cover. The
+    // session expresses the promotion through replace(previous, target), with
+    // appMatcher() standing in for the sibling-free single-window case.
     CHECK(waylandStore.store(adjustmentMatcher(chat1), mainCover));
-    CHECK(!waylandStore.hasClassFallback(chat1));
     CHECK(!waylandStore.found(chat2, &readBack));
-
-    CHECK(waylandStore.storeAdjustment(chat1, mainCover, false));
-    CHECK(waylandStore.hasClassFallback(chat1));
+    CHECK(waylandStore.replace(adjustmentMatcher(chat1), appMatcher(chat1),
+                               mainCover));
     CHECK(waylandStore.count() == 1);
     CHECK(waylandStore.found(chat2, &readBack) && sameGeometry(readBack, mainCover));
-    CHECK(waylandStore.storeAdjustment(chat2, refinedCover, false));
+    // A later adjustment on a sibling chat re-saves the same class+type rule,
+    // so every chat keeps the latest cover and no caption rule accumulates.
+    CHECK(waylandStore.replace(appMatcher(chat2), appMatcher(chat2),
+                               refinedCover));
+    CHECK(waylandStore.count() == 1);
     CHECK(waylandStore.found(chat1, &readBack) && sameGeometry(readBack, refinedCover));
     CHECK(waylandStore.found(chat3, &readBack) && sameGeometry(readBack, refinedCover));
 
-    // Secondary window adjusted while the main window is also open.
+    // Secondary window adjusted while the main window is also open. The main
+    // window was saved as class+type while alone; narrowing to the viewer's
+    // caption refines the class rule instead of replacing it, so the main
+    // window keeps its cover and the caption rule wins for the viewer alone.
     const WindowQuery wechatMain = query(QStringLiteral("wechat com.tencent.wechat"),
                                          QStringLiteral("微信"), 0);
     const WindowQuery wechatViewer = query(QStringLiteral("wechat com.tencent.wechat"),
                                            QStringLiteral("图片和视频"), 0);
-    CHECK(waylandStore.storeAdjustment(wechatMain, mainCover, false));
-    CHECK(waylandStore.storeAdjustment(wechatViewer, viewerCover, true));
+    CHECK(waylandStore.replace(WindowMatcher{}, appMatcher(wechatMain), mainCover));
+    CHECK(waylandStore.replace(appMatcher(wechatMain), adjustmentMatcher(wechatViewer),
+                               viewerCover));
+    CHECK(waylandStore.count() == 2);
     CHECK(waylandStore.found(wechatMain, &readBack) && sameGeometry(readBack, mainCover));
     CHECK(waylandStore.found(wechatViewer, &readBack) && sameGeometry(readBack, viewerCover));
 }
@@ -1194,6 +1204,102 @@ void testIndependentBackground()
     CHECK(resolved.coverage == saved.coverage); // Reactivating restores the cover.
 }
 
+void testOverlayModesAndScopes()
+{
+    removeRulesFile();
+    writeUserConfig(R"({"apps":{"hiddenapp":{"showButtons":false}}})");
+
+    const WindowQuery chat = query(QStringLiteral("wechat"), QStringLiteral("Chat"), 0);
+    const WindowQuery moments = query(QStringLiteral("wechat"), QStringLiteral("Moments"), 0);
+
+    const WindowMatcher appScope = appMatcher(chat);
+    CHECK(appScope.className == QStringLiteral("wechat"));
+    CHECK(appScope.titleRegex.isEmpty());
+    CHECK(appScope.role.isEmpty());
+    CHECK(appScope.matches(chat));
+    CHECK(appScope.matches(moments));
+
+    const WindowMatcher winScope = adjustmentMatcher(moments);
+    CHECK(winScope.matches(moments));
+    CHECK(!winScope.matches(chat));
+
+    ButtonConfig config;
+    config.load();
+
+    // Cover overlay mode keeps hand-written showButtons: false inactive override.
+    CHECK(config.storeGeometry(classMatcher(QStringLiteral("hiddenapp")), PanelGeometry{}, OverlayMode::Cover));
+    AppConfig hiddenAppCfg = config.getAppConfig(query(QStringLiteral("hiddenapp")));
+    CHECK(!hiddenAppCfg.showButtons);
+    CHECK(hiddenAppCfg.overlayMode == OverlayMode::Cover);
+
+    // Explicit per-window Cover, Transparent and Hidden rules round-trip and apply.
+    PanelGeometry g;
+    g.offset = AppOffset{22, 18};
+    CHECK(config.replaceRule(winScope, winScope, g, OverlayMode::Cover));
+    config.load();
+    GeometryRule found;
+    CHECK(config.findStoredRule(moments, &found));
+    CHECK(found.overlayMode == OverlayMode::Cover);
+    CHECK(config.getAppConfig(moments).overlayMode == OverlayMode::Cover);
+    CHECK(config.getAppConfig(moments).showButtons);
+
+    CHECK(config.replaceRule(winScope, winScope, g, OverlayMode::Transparent));
+    config.load();
+    CHECK(config.findStoredRule(moments, &found));
+    CHECK(found.overlayMode == OverlayMode::Transparent);
+    AppConfig momentsCfg = config.getAppConfig(moments);
+    CHECK(momentsCfg.showButtons);
+    CHECK(momentsCfg.overlayMode == OverlayMode::Transparent);
+    CHECK(near(momentsCfg.geometry.offset.x, 22));
+
+    // Replacing window-scoped rule with app-scoped Hidden rule removes old matcher.
+    CHECK(config.replaceRule(winScope, appScope, g, OverlayMode::Hidden));
+    config.load();
+    CHECK(config.findStoredRule(chat, &found));
+    CHECK(found.matcher.canonicalKey() == appScope.canonicalKey());
+    CHECK(found.overlayMode == OverlayMode::Hidden);
+    CHECK(!config.getAppConfig(chat).showButtons);
+    CHECK(config.getAppConfig(chat).overlayMode == OverlayMode::Hidden);
+    CHECK(!config.getAppConfig(moments).showButtons);
+
+    // Removing the rule restores default visibility and Cover mode.
+    CHECK(config.removeRule(appScope));
+    config.load();
+    CHECK(!config.findStoredRule(chat, &found));
+    CHECK(config.getAppConfig(chat).showButtons);
+    CHECK(config.getAppConfig(chat).overlayMode == OverlayMode::Cover);
+}
+
+void testAdjustBar()
+{
+    const QRectF window(0, 0, 900, 600);
+    const QRectF panel(12, 10, 68, 28);
+    const AdjustBarLayout single = adjustBarLayout(panel, window, true, false);
+    CHECK(!single.isEmpty());
+    CHECK(!single.twoRows);
+    CHECK(window.contains(single.rect));
+    CHECK(!single.rect.intersects(panel));
+    for (const auto &btn : single.buttons) {
+        if (btn.enabled) {
+            CHECK(adjustBarActionAt(single, btn.rect.center()) == btn.action);
+        }
+    }
+    CHECK(single.buttons.size() == 7);
+    CHECK(single.buttons[0].action == AdjustAction::ModeCover);
+    CHECK(adjustBarActionAt(single, single.buttons[0].rect.center()) == AdjustAction::ModeCover);
+    CHECK(adjustBarActionAt(single, QPointF(0, 0)) == std::nullopt);
+
+    // Narrow window wraps to two rows and remains inside the window frame.
+    const QRectF narrowWindow(0, 0, 260, 200);
+    const QRectF narrowPanel(8, 8, 68, 28);
+    const AdjustBarLayout wrapped = adjustBarLayout(narrowPanel, narrowWindow, true, true);
+    CHECK(!wrapped.isEmpty());
+    CHECK(wrapped.twoRows);
+    CHECK(narrowWindow.contains(wrapped.rect));
+    CHECK(adjustBarActionAt(wrapped, QPointF(wrapped.rect.left() + 2, wrapped.rect.top() + 2))
+          != AdjustAction::Reset);
+}
+
 } // namespace
 
 int main(int argc, char **argv)
@@ -1238,6 +1344,8 @@ int main(int argc, char **argv)
     testFormaControls();
     testStore();
     testIndependentBackground();
+    testOverlayModesAndScopes();
+    testAdjustBar();
 
     std::printf("%d checks, %d failures\n", g_checks, g_failures);
     return g_failures == 0 ? 0 : 1;

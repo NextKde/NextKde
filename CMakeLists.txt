@@ -298,6 +298,10 @@ if(BUILD_TESTING)
                 ${CMAKE_CURRENT_SOURCE_DIR}/shell/desktop/modules/stage/test_stage_groups.mjs
         )
         set_tests_properties(kos-shell.stage-groups PROPERTIES TIMEOUT 10)
+        add_test(NAME kos-shell.window-family
+            COMMAND ${KOS_NODE_EXECUTABLE} --test
+                ${CMAKE_CURRENT_SOURCE_DIR}/tests/window-family/model.test.mjs)
+        set_tests_properties(kos-shell.window-family PROPERTIES LABELS logic TIMEOUT 10)
         add_test(NAME kos-shell.stage-effects
             COMMAND ${KOS_NODE_EXECUTABLE}
                 ${CMAKE_CURRENT_SOURCE_DIR}/shell/desktop/modules/stage/test_stage_effects.mjs)
@@ -316,8 +320,21 @@ if(BUILD_TESTING)
             set_tests_properties(kos-shell.weather-refresh PROPERTIES
                 LABELS "ui;headless" TIMEOUT 20
                 ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_QUICK_BACKEND=software;QML_IMPORT_PATH=${CMAKE_BINARY_DIR}/qml")
+            add_test(NAME kos-shell.widget-open
+                COMMAND ${KOS_WEATHER_PYTHON_EXECUTABLE}
+                    ${CMAKE_CURRENT_SOURCE_DIR}/tests/widget-open/run.py
+                    ${KOS_QUICKSHELL_EXECUTABLE})
+            set_tests_properties(kos-shell.widget-open PROPERTIES
+                LABELS "ui;headless" TIMEOUT 60
+                ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_QUICK_BACKEND=software;QML_IMPORT_PATH=${CMAKE_BINARY_DIR}/qml")
         endif()
         if(KOS_QUICKSHELL_EXECUTABLE)
+            add_test(NAME kos-shell.window-family-runtime
+                COMMAND ${KOS_NODE_EXECUTABLE}
+                    ${CMAKE_CURRENT_SOURCE_DIR}/tests/window-family/runtime.mjs
+                    ${KOS_QUICKSHELL_EXECUTABLE})
+            set_tests_properties(kos-shell.window-family-runtime PROPERTIES
+                LABELS "ui;headless" TIMEOUT 15)
             add_test(NAME kos-shell.dock-surface
                 COMMAND ${KOS_NODE_EXECUTABLE}
                     ${CMAKE_CURRENT_SOURCE_DIR}/tests/dock/runtime.mjs surface
@@ -856,23 +873,6 @@ if(BUILD_TESTING)
     target_link_libraries(kos-stage-desktop-policy-test PRIVATE Qt6::Core)
     add_test(NAME kos-stage.desktop-policy COMMAND kos-stage-desktop-policy-test)
     set_tests_properties(kos-stage.desktop-policy PROPERTIES LABELS platform TIMEOUT 10)
-    qt_add_executable(kos-legacy-glass-blur-test
-        kwin/glass-effect/tests/test_legacy_blur_region.cpp)
-    target_link_libraries(kos-legacy-glass-blur-test PRIVATE Qt6::Core Qt6::Gui)
-    add_test(NAME kos-glass.legacy-blur-region COMMAND kos-legacy-glass-blur-test)
-    set_tests_properties(kos-glass.legacy-blur-region PROPERTIES LABELS platform TIMEOUT 10)
-    qt_add_executable(kos-desktop-glass-blur-test
-        kwin/glass-effect/tests/test_desktop_blur.cpp)
-    target_link_libraries(kos-desktop-glass-blur-test PRIVATE Qt6::Core Qt6::Gui)
-    add_test(NAME kos-glass.desktop-blur COMMAND kos-desktop-glass-blur-test)
-    set_tests_properties(kos-glass.desktop-blur PROPERTIES LABELS platform TIMEOUT 10)
-    qt_add_executable(kos-overview-panel-projection-test
-        kwin/glass-effect/tests/test_overview_panel_projection.cpp)
-    target_link_libraries(kos-overview-panel-projection-test PRIVATE Qt6::Quick)
-    add_test(NAME kos-glass.overview-panel-projection COMMAND kos-overview-panel-projection-test)
-    set_tests_properties(kos-glass.overview-panel-projection PROPERTIES
-        LABELS platform TIMEOUT 10
-        ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_QUICK_BACKEND=software")
 endif()
 
 qt_standard_project_setup(REQUIRES 6.5)

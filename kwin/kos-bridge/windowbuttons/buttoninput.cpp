@@ -96,37 +96,36 @@ ButtonInput::ButtonInput(ButtonRenderer *renderer, ButtonConfig *config)
     , m_renderer(renderer)
     , m_config(config)
     , m_session(std::make_unique<AdjustSession>(
-          renderer, [config](KWin::EffectWindow *sessionWindow,
-                             const WindowQuery &query,
-                             const PanelGeometry &geometry,
-                             bool changed) {
-              if (!config) {
+          renderer,
+          [config](const WindowMatcher &previous,
+                   const WindowMatcher &target,
+                   const PanelGeometry &geometry,
+                   OverlayMode mode) {
+              return config && config->replaceRule(previous, target, geometry, mode);
+          },
+          [config](const WindowMatcher &matcher) {
+              return config && config->removeRule(matcher);
+          },
+          // Runs once, at commit time only: a roleless window being saved
+          // alongside another managed window of the same class and type under
+          // a different caption scopes the rule to that caption instead of
+          // promoting it to class+type.
+          [config](const WindowQuery &query) -> bool {
+              if (!config || !KWin::effects || query.role.isEmpty()) {
                   return false;
               }
-              bool hasDistinctOpenSibling = false;
-              if (query.role.isEmpty() && KWin::effects) {
-                  const auto windows = KWin::effects->stackingOrder();
-                  for (KWin::EffectWindow *other : windows) {
-                      if (!other || other == sessionWindow || other->isDeleted()
-                          || !other->isManaged()) {
-                          continue;
-                      }
-                      if (other->windowClass() == query.windowClass
-                          && other->windowTypeInt() == query.type
-                          && other->caption() != query.caption) {
-                          hasDistinctOpenSibling = true;
-                          break;
-                      }
+              const auto windows = KWin::effects->stackingOrder();
+              for (KWin::EffectWindow *other : windows) {
+                  if (!other || other->isDeleted() || !other->isManaged()) {
+                      continue;
+                  }
+                  if (other->windowClass() == query.windowClass
+                      && other->windowTypeInt() == query.type
+                      && other->caption() != query.caption) {
+                      return true;
                   }
               }
-              if (!changed && (!query.role.isEmpty() || hasDistinctOpenSibling
-                               || config->hasClassFallback(query))) {
-                  qInfo() << "KOS: the panel for" << query.windowClass
-                          << "was not changed; nothing written";
-                  return true;
-              }
-              return config->storeAdjustment(query, geometry,
-                                             hasDistinctOpenSibling);
+              return false;
           }))
 {
 }
@@ -176,6 +175,14 @@ bool ButtonInput::pointerMotion(KWin::PointerMotionEvent *event)
     // freezes for as long as the pointer is there.
     if (event->buttons != Qt::NoButton && m_consumedButtons == Qt::NoButton) {
         return false;
+    }
+
+    if (m_session->active()) {
+        if (m_renderer->adjustBarContains(event->position)) {
+            m_renderer->setAdjustBarHovered(event->position);
+            return true;
+        }
+        m_renderer->setAdjustBarHovered(QPointF(-1e9, -1e9));
     }
 
     KWin::EffectWindow *window = nullptr;
@@ -341,6 +348,38 @@ bool ButtonInput::sessionPress(KWin::PointerButtonEvent *event,
     }
 
     if (event->button == Qt::LeftButton) {
+        if (m_renderer->adjustBarContains(event->position)) {
+            m_consumedButtons |= event->button;
+            if (const auto barAction = m_renderer->adjustBarActionAt(event->position)) {
+                switch (*barAction) {
+                case AdjustAction::ModeCover:
+                    m_session->setOverlayMode(OverlayMode::Cover);
+                    break;
+                case AdjustAction::ModeTransparent:
+                    m_session->setOverlayMode(OverlayMode::Transparent);
+                    break;
+                case AdjustAction::ModeHidden:
+                    m_session->setOverlayMode(OverlayMode::Hidden);
+                    finishSession();
+                    break;
+                case AdjustAction::ScopeWindow:
+                    m_session->setMatchScope(MatchScope::Window);
+                    break;
+                case AdjustAction::ScopeApp:
+                    m_session->setMatchScope(MatchScope::App);
+                    break;
+                case AdjustAction::Reset:
+                    m_session->reset();
+                    break;
+                case AdjustAction::Done:
+                    finishSession();
+                    break;
+                case AdjustAction::None:
+                    break;
+                }
+            }
+            return true;
+        }
         if (insidePanel && window == m_session->window()) {
             // Pressed on the panel: the edge under the pointer is dragged, or --
             // anywhere else on it -- the panel as a whole follows the pointer.
@@ -491,6 +530,36 @@ bool ButtonInput::keyboardKey(KWin::KeyboardKeyEvent *event)
         m_session->nudge(delta);
         return true;
     }
+    case Qt::Key_M:
+    case Qt::Key_C:
+        m_consumedKeys.insert(event->key);
+        m_session->setOverlayMode(OverlayMode::Cover);
+        return true;
+    case Qt::Key_T:
+        m_consumedKeys.insert(event->key);
+        m_session->setOverlayMode(m_session->overlayMode() == OverlayMode::Transparent
+                                      ? OverlayMode::Cover
+                                      : OverlayMode::Transparent);
+        return true;
+    case Qt::Key_H:
+        m_consumedKeys.insert(event->key);
+        m_session->setOverlayMode(OverlayMode::Hidden);
+        finishSession();
+        return true;
+    case Qt::Key_S:
+        if (m_session->canToggleScope()) {
+            m_consumedKeys.insert(event->key);
+            m_session->setMatchScope(m_session->matchScope() == MatchScope::App
+                                          ? MatchScope::Window
+                                          : MatchScope::App);
+            return true;
+        }
+        break;
+    case Qt::Key_Backspace:
+    case Qt::Key_Delete:
+        m_consumedKeys.insert(event->key);
+        m_session->reset();
+        return true;
     default:
         break;
     }
@@ -513,7 +582,12 @@ void ButtonInput::startSession(KWin::EffectWindow *window)
     }
     const WindowQuery query = windowQueryFor(window);
     const AppConfig config = m_config->getAppConfig(query);
-    if (!m_session->begin(window, query, config.geometry)) {
+    GeometryRule existingRule;
+    const std::optional<GeometryRule> foundRule =
+        m_config->findStoredRule(query, &existingRule)
+            ? std::optional<GeometryRule>(existingRule)
+            : std::nullopt;
+    if (!m_session->begin(window, query, config.geometry, foundRule)) {
         qWarning() << "KOS: not adjusting the panel on this window: it has no"
                    << "window class to write a rule against, or no area to put a"
                    << "panel in";

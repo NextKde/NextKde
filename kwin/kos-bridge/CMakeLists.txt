@@ -34,6 +34,7 @@ add_library(kos_bridge MODULE
     windowbuttons/cooperativecontrols.cpp
     bridge.cpp
     main.cpp
+    windowbuttons/adjustbar.cpp
     windowbuttons/adjustsession.cpp
     windowbuttons/buttonglyph.cpp
     windowbuttons/buttonrenderer.cpp
@@ -50,6 +51,7 @@ add_library(kos_bridge MODULE
     windowappearance/appearanceconfig.cpp
     windowappearance/sceneshadow.cpp
     windowappearance/continuousclip.cpp
+    windowappearance/cornermask.cpp
     windowappearance/windowappearance.cpp
 )
 
@@ -134,6 +136,7 @@ if(KOS_BRIDGE_BUILD_TESTS)
         tests/rules_test.cpp
         windowbuttons/panelgeometry.cpp
         windowappearance/contour.cpp
+        windowbuttons/adjustbar.cpp
         windowbuttons/tilemenu.cpp
         windowbuttons/windowrules.cpp
         windowbuttons/buttonconfig.cpp

@@ -16,6 +16,10 @@ Item {
     property Item captureAnchor: null
     property Item outerViewport: null
     property bool compositorGlass: AppearanceTokens.surface.usesKwinBlur
+    // Protocol v9 pointer mask for every glass this pane owns, including the
+    // notification cards. The embedded Control Center passes its own value;
+    // the standalone history window leaves them static.
+    property int pointerEffects: 0
     // Standalone history can show an empty state; embedded controls hide it.
     property bool showEmptyState: true
     property real backdropScale: 1
@@ -209,6 +213,7 @@ Item {
                 anchors.fill: parent
                 visible: button.glassButton && button.backdropVisible
                 radius: 16
+                pointerEffects: pane.pointerEffects
                 useKwinEffect: pane.compositorGlass
                 captureAnchor: pane.captureAnchor
                 blurAnchor: buttonPlate
@@ -323,6 +328,7 @@ Item {
                 width: parent.width
                 active: cell.revealed || cell.exiting
                 sourceComponent: NotificationHistoryCard {
+                    pointerEffects: pane.pointerEffects
                     width: cardLoader.width
                     historyKey: cell.painted.key
                     appName: cell.painted.appName; appIcon: cell.painted.appIcon; desktopEntry: cell.painted.desktopEntry
@@ -394,6 +400,7 @@ Item {
             NumberAnimation { duration: 360; easing.type: Easing.InOutSine }
         }
         radius: 24
+        pointerEffects: pane.pointerEffects
         blurAnchor: emptyOutline
         backdropRadius: Math.min(radius, emptyOutline.width / 2, emptyOutline.height / 2)
         useKwinEffect: pane.compositorGlass

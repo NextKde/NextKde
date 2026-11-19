@@ -9,14 +9,18 @@
 namespace KOS
 {
 
-AdjustSession::AdjustSession(ButtonRenderer *renderer, Commit commit)
+AdjustSession::AdjustSession(ButtonRenderer *renderer, Commit commit, Remove remove,
+                             SiblingProbe siblingProbe)
     : m_renderer(renderer)
     , m_commit(std::move(commit))
+    , m_remove(std::move(remove))
+    , m_siblingProbe(std::move(siblingProbe))
 {
 }
 
 bool AdjustSession::begin(KWin::EffectWindow *window, const WindowQuery &query,
-                          const PanelGeometry &base)
+                          const PanelGeometry &base,
+                          std::optional<GeometryRule> existingRule)
 {
     cancel();
 
@@ -42,6 +46,26 @@ bool AdjustSession::begin(KWin::EffectWindow *window, const WindowQuery &query,
     m_dragging = false;
     m_resizeEdge.reset();
 
+    if (existingRule) {
+        m_hasExistingRule = true;
+        m_existingMatcher = existingRule->matcher;
+        m_baseOverlayMode = existingRule->overlayMode;
+        m_overlayMode = existingRule->overlayMode;
+        m_baseScope = (existingRule->matcher.title.isEmpty()
+                       && existingRule->matcher.titleRegex.isEmpty()
+                       && existingRule->matcher.role.isEmpty())
+            ? MatchScope::App : MatchScope::Window;
+        m_scope = m_baseScope;
+    } else {
+        m_hasExistingRule = false;
+        m_existingMatcher = WindowMatcher{};
+        m_baseOverlayMode = OverlayMode::Cover;
+        m_overlayMode = OverlayMode::Cover;
+        m_baseScope = canToggleScope() ? MatchScope::Window : MatchScope::App;
+        m_scope = m_baseScope;
+    }
+
+    syncOptions();
     m_renderer->setAdjusting(window, true);
     // The draft starts as the geometry already on screen, so a session that is
     // entered and left again changes nothing and writes nothing.
@@ -128,23 +152,107 @@ void AdjustSession::nudge(const QPointF &delta)
     apply(nudged(m_geometry, m_window->frameGeometry().size(), delta));
 }
 
+bool AdjustSession::canToggleScope() const
+{
+    return !m_query.role.isEmpty() || !m_query.caption.isEmpty();
+}
+
+void AdjustSession::setOverlayMode(OverlayMode mode)
+{
+    if (!m_window || m_overlayMode == mode) {
+        return;
+    }
+    m_overlayMode = mode;
+    syncOptions();
+}
+
+void AdjustSession::setMatchScope(MatchScope scope)
+{
+    if (!m_window || !canToggleScope() || m_scope == scope) {
+        return;
+    }
+    m_scope = scope;
+    syncOptions();
+}
+
+WindowMatcher AdjustSession::targetMatcher() const
+{
+    if (m_scope == MatchScope::App) {
+        if (m_hasExistingRule && m_baseScope == MatchScope::App && !m_existingMatcher.isEmpty()) {
+            return m_existingMatcher;
+        }
+        return appMatcher(m_query);
+    }
+    if (m_hasExistingRule && m_baseScope == MatchScope::Window
+        && !m_existingMatcher.titleRegex.isEmpty()) {
+        return m_existingMatcher;
+    }
+    // A roleless window with no distinct open sibling of the same class and
+    // type commits as class+type so changing document or tab captions keep
+    // the cover. A user who wants the caption honoured despite that can
+    // hand-write a titleRegex rule, which the branch above preserves.
+    if (m_query.role.isEmpty() && !m_siblingProbe(m_query)) {
+        return appMatcher(m_query);
+    }
+    return adjustmentMatcher(m_query);
+}
+
+void AdjustSession::syncOptions()
+{
+    if (m_window && m_renderer) {
+        m_renderer->setAdjustOptions(m_window, m_overlayMode, m_scope,
+                                     canToggleScope(), !m_query.role.isEmpty(),
+                                     m_hasExistingRule);
+    }
+}
+
 bool AdjustSession::commit()
 {
     if (!m_window) {
         return false;
     }
 
-    KWin::EffectWindow *window = m_window;
-    const WindowQuery query = m_query;
     const PanelGeometry geometry = m_geometry;
-    const bool changed = !sameGeometry(m_base, geometry);
+    const OverlayMode overlayMode = m_overlayMode;
+    const WindowMatcher matcher = targetMatcher();
+    const WindowMatcher previous = m_hasExistingRule ? m_existingMatcher : WindowMatcher{};
+    const bool scopeChanged = m_hasExistingRule
+        && matcher.canonicalKey() != m_existingMatcher.canonicalKey();
+    const bool changed = !sameGeometry(m_base, geometry)
+        || overlayMode != m_baseOverlayMode || scopeChanged;
 
     // Ended before the write, so that a write that fails leaves the panel
     // visibly back where the configuration puts it instead of showing an
     // adjustment that is not on disk.
     endSession();
 
-    return m_commit(window, query, geometry, changed);
+    if (!changed) {
+        // Nothing was moved. A rule storing the geometry that was already in
+        // effect would be a second place the same answer is written down, and
+        // it would take the panel out of the user's configuration for nothing.
+        // A changed scope or overlay mode counts as a change even when the
+        // geometry is identical, so a legacy caption-locked rule still gets
+        // promoted to class+type by re-saving it here.
+        qInfo() << "KOS: the panel for" << m_query.windowClass
+                << "was not changed; nothing written";
+        return true;
+    }
+
+    return m_commit ? m_commit(previous, matcher, geometry, overlayMode) : false;
+}
+
+bool AdjustSession::reset()
+{
+    if (!m_window) {
+        return false;
+    }
+    const WindowMatcher toRemove = m_hasExistingRule ? m_existingMatcher : WindowMatcher{};
+    const bool hadRule = m_hasExistingRule;
+    endSession();
+    if (!hadRule || !m_remove) {
+        return true;
+    }
+    return m_remove(toRemove);
 }
 
 void AdjustSession::cancel()
@@ -166,6 +274,8 @@ void AdjustSession::forgetWindow(KWin::EffectWindow *window)
     m_window = nullptr;
     m_dragging = false;
     m_resizeEdge.reset();
+    m_hasExistingRule = false;
+    m_existingMatcher = WindowMatcher{};
 }
 
 void AdjustSession::apply(const PanelGeometry &geometry)
@@ -184,6 +294,8 @@ void AdjustSession::endSession()
     m_window = nullptr;
     m_dragging = false;
     m_resizeEdge.reset();
+    m_hasExistingRule = false;
+    m_existingMatcher = WindowMatcher{};
 }
 
 } // namespace KOS
