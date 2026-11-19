@@ -225,6 +225,7 @@ PopupWindow {
     NotificationHistoryPane {
         id: notificationHistory
         showEmptyState: false
+        pointerEffects: AppearanceConfigService.pointerEffectsFor("controlCenter")
         parent: panelCanvas
         x: 20
         y: panel.notificationsAboveControls ? 0 : panel.controlAreaHeight
@@ -409,6 +410,10 @@ PopupWindow {
                 }
                 c.captureAnchor = popupCapture
                 c.clipViewport = controlViewport
+                // The pointer mask belongs to the control center, not to every
+                // ControlCenterCard host: the desk widgets reuse this card and
+                // must keep their glass static.
+                c.pointerEffects = AppearanceConfigService.pointerEffectsFor("controlCenter")
                 c.parent = panelCanvas
                 panel.placeCard(c)
             }

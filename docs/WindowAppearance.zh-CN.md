@@ -3,7 +3,7 @@
 [English](WindowAppearance.md)
 
 面向 AI 贡献者。源码在 `kwin/kos-bridge/windowappearance/`、`kwin/kos-decoration/`、
-`kwin/glass-effect/`、`shell/native/surface-shape/`。按[开发指南](Development.zh-CN.md)只在 VM 构建安装，
+`kwin/glass/`、`shell/native/surface-shape/`。按[开发指南](Development.zh-CN.md)只在 VM 构建安装，
 原生插件改动后注销登录或重启。本文替代历史方案和审计过程记录。
 
 ## 窗口所有权与回退
@@ -102,7 +102,9 @@ CI 检查按钮锚点、大小/间距手势锁定、全局配置优先级、覆�
 ## Surface-shape 协议
 
 `kos-surface-shape-v1.xml` 定义版本协商，保留接口/操作码顺序。
-v1–7 维持原即时行为；v8 通过 manager commit 在下一次 `wl_surface.commit` 锁存 pending 状态，绘制只读 committed。
+v1–7 维持原即时行为；v8 通过 manager commit 在下一次 `wl_surface.commit` 锁存 pending 状态。
+v9 在末尾追加逐 shape 指针效果掩码（`set_pointer_effects`：hover 光、透镜视差、点击光），同样随 commit 锁存；
+从未发送的客户端保持三类效果全开，低于 v9 的客户端不得发送该请求。绘制只读 committed。
 检查原子批次及旧客户端。v8 显式几何即使空/隐藏也拥有表面，不回退整窗模糊；未声明普通窗口保留旧模糊路径。
 
 圆角矩形携带几何、视觉圆角、scrim、连续模糊 sigma、材质透明度、展开/捕获参数。
