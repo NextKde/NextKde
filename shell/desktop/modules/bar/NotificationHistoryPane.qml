@@ -270,12 +270,14 @@ Item {
         // Expanded decks scroll through every notification; a small cache kept
         // recreating card delegates during the scroll (each one is a full glass
         // card) and that was the whole scroll stutter: 112 px gave 5-200 fps
-        // chaos, covering the deck gives a steady ~240 fps. Cheap: the deck is
-        // capped at ~24 rows (maximumHeight 560).
-        // Sizing the buffer from the view's own count created a binding loop
-        // (count -> cacheBuffer -> count); the model is the stable source.
-        cacheBuffer: pane.expanded
-            ? Math.min(4800, Math.max(2400, displayedRows.count * 140)) : 600
+        // chaos, covering the deck gives a steady ~240 fps.
+        // The buffer scales with the viewport, not with the model: the deck is
+        // height-capped (~24 rows), so 4x the viewport covers it on a real
+        // panel while a small pane -- a headless software-rendered run --
+        // instantiates a bounded number of cards. Instantiating the whole deck
+        // in one synchronous refill there stalled the first frames long enough
+        // to eat a just-started kinetic flick entirely.
+        cacheBuffer: pane.expanded ? Math.min(2400, 4 * height) : 600
         activeFocusOnTab: pane.visibleListRect.height > 0
         Accessible.name: I18n.tr("Notification list")
         boundsBehavior: Flickable.StopAtBounds
