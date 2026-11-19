@@ -46,6 +46,9 @@ class SurfaceShape : public QObject
     // blur level 1..15 (the global kwinrc BlurStrength scale).
     Q_PROPERTY(bool blurEnabled READ blurEnabled WRITE setBlurEnabled NOTIFY blurEnabledChanged)
     Q_PROPERTY(int blurLevel READ blurLevel WRITE setBlurLevel NOTIFY blurLevelChanged)
+    // Per-shape pointer interaction mask (protocol v9): bit 0 hover light,
+    // bit 1 lens parallax, bit 2 click ripple. All bits are on by default.
+    Q_PROPERTY(int pointerEffects READ pointerEffects WRITE setPointerEffects NOTIFY pointerEffectsChanged)
 
 public:
     enum Effect { Liquid, Frosted }; Q_ENUM(Effect)
@@ -101,6 +104,8 @@ public:
     void setBlurEnabled(bool enabled);
     int blurLevel() const { return m_blurLevel; }
     void setBlurLevel(int level);
+    int pointerEffects() const { return m_pointerEffects; }
+    void setPointerEffects(int flags);
 
 Q_SIGNALS:
     void finishChanged();
@@ -112,6 +117,7 @@ Q_SIGNALS:
     void captureGeometryChanged();
     void materialOpacityChanged();
     void revealChanged();
+    void pointerEffectsChanged();
     void revealFinished(bool opened);
     void scrimEnabledChanged();
     void scrimTintChanged();
@@ -160,6 +166,7 @@ private:
     qreal m_scrimDecay = 1.0;
     bool m_blurEnabled = false;
     int m_blurLevel = 1;
+    int m_pointerEffects = 0x7;
     bool m_syncPending = false;
     // The published geometry is a scene rectangle, so it also moves when an
     // ancestor does -- a change the target's own x/y signals cannot see.

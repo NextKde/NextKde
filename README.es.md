@@ -181,7 +181,7 @@ Generado automáticamente a partir de las contribuciones de GitHub con [contrib.
 ## Licencia
 
 Consulta [LICENSE](LICENSE) para la licencia del proyecto. El efecto Glass
-incluido tiene su propia [licencia](kwin/glass-effect/LICENSE).
+incluido tiene su propia [licencia](kwin/glass/LICENSE).
 
 ## Aplicaciones y servicios
 
