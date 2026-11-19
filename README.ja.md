@@ -180,7 +180,6 @@ GitHub のコントリビューションから [contrib.rocks](https://contrib.r
 ## ライセンス
 
 プロジェクトのライセンスは [LICENSE](LICENSE) を参照してください。
-同梱の Glass エフェクトには独自の[ライセンス](kwin/glass/LICENSE)があります。
 
 ## アプリケーションとサービス
 

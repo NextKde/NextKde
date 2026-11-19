@@ -83,4 +83,4 @@ Shell 负责呈现，C++ `kos-platform` 负责桌面接入，Go `kos-data-servic
 
 ## 许可
 
-见 [LICENSE](LICENSE)，Glass 特效另有[许可](kwin/glass/LICENSE)。
+见 [LICENSE](LICENSE)。
