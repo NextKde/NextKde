@@ -38,7 +38,6 @@ endif()
 
 add_subdirectory(src)
 
-# Translations carried over from the vendored effect live beside the new tree.
 if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/po" AND COMMAND ki18n_install)
     ki18n_install(po)
 endif()
