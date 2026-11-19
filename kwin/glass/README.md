@@ -14,8 +14,7 @@ Implemented on top of that: readability scrim, per-shape blur levels, reveal
 animation, per-shape pointer effects (hover light, edge-only lens parallax,
 click ripple, muxed by the v9 `set_pointer_effects` mask), and the
 `kwin_glass_config` settings module. Not implemented: per-shape noise,
-Mica/wallpaper backdrop sources, global color-matrix grading. Accepted debts
-and measurements stay in the [pitfalls ledger](docs/rewrite/pitfalls.zh-CN.md).
+Mica/wallpaper backdrop sources, global color-matrix grading.
 
 ## Build
 
@@ -29,16 +28,10 @@ prefix. KWin plugin changes require a logout/login; never hot-replace the `.so`.
 The optional settings module needs KF6 KCMUtils and KWin's Effects D-Bus
 interface; without them only the effect is built.
 
-## Documents
-
-- [Rewrite requirements](docs/rewrite/requirements.zh-CN.md)
-- [Protocol rules](docs/rewrite/protocol.zh-CN.md)
-- [Development and verification](docs/rewrite/development.zh-CN.md)
-- [Pitfalls and performance debt](docs/rewrite/pitfalls.zh-CN.md)
-
 ## Provenance
 
 The rewrite follows KWin's public effect API and the behavior contract described
 in [Window appearance](../../docs/WindowAppearance.md). The previous
-`kwin/glass-effect` tree was deleted after parity; its license and translations
-live beside this tree, and the repository-level Nix packaging builds this one.
+`kwin/glass-effect` tree was deleted after parity; its translations live beside
+this tree under the repository license, and the repository-level Nix packaging
+builds this one.

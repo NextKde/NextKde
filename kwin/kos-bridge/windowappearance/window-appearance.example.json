@@ -23,14 +23,14 @@
       "dynamic": true,
       "strength": 0.5,
       "minimumStrength": 0.08,
-      "depthDecay": 0.7,
+      "depthDecay": 0.64,
       "transitionMs": 180,
-      "contactBlur": 2,
-      "activeBlur": 28,
-      "inactiveBlur": 20,
-      "contactOpacity": 0.12,
-      "ambientOpacity": 0.26,
-      "offsetY": 12
+      "contactBlur": 1.5,
+      "activeBlur": 22,
+      "inactiveBlur": 16,
+      "contactOpacity": 0.1,
+      "ambientOpacity": 0.24,
+      "offsetY": 8
     },
     "states": { "fullscreen": "off", "maximized": "inherit", "tiled": "inherit" }
   },
