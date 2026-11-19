@@ -298,6 +298,10 @@ private:
 
     struct HitRects {
         bool cooperative = false;
+        // A transparent overlay draws no plate, so gaps between the lights
+        // stay the application's drag area -- except while that window is
+        // being adjusted, when the whole draft panel has to remain grabbable.
+        OverlayMode overlayMode = OverlayMode::Cover;
         QPointF windowOrigin;
         // The drawn panel, and the pointer area it claims: the panel expanded
         // by the intercept margin, never beyond the window's own edge.

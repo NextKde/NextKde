@@ -489,6 +489,7 @@ void ButtonRenderer::paint(const KWin::RenderTarget &renderTarget,
     const QPointF panelOrigin = windowTopLeft + drawnLocal.topLeft();
     HitRects hit;
     hit.cooperative = config.cooperativeControls;
+    hit.overlayMode = overlayMode;
     hit.windowOrigin = windowTopLeft;
     hit.panelRect = QRectF(panelOrigin, drawnPanelSize);
     // The margin is part of the panel as far as the pointer is concerned --
@@ -1679,6 +1680,15 @@ ButtonRenderer::Action ButtonRenderer::hitTest(const QPointF &logicalPos,
             bool onButton = false;
             for (const auto &dot : hit.dots) onButton = onButton || dot.contains(logicalPos);
             if (!onButton) continue; // Transparent gaps remain the application's drag area.
+        } else if (hit.overlayMode == OverlayMode::Transparent
+                   && !m_adjusting.contains(w)) {
+            // Same principle for a transparent overlay without a plate: gaps
+            // between the lights stay the application's drag area. While the
+            // window is being adjusted the whole draft panel must stay
+            // grabbable, so the adjust session keeps the full interception.
+            bool onButton = false;
+            for (const auto &dot : hit.dots) onButton = onButton || dot.contains(logicalPos);
+            if (!onButton) continue;
         }
 
         if (window) {
