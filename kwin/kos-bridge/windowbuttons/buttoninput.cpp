@@ -105,6 +105,27 @@ ButtonInput::ButtonInput(ButtonRenderer *renderer, ButtonConfig *config)
           },
           [config](const WindowMatcher &matcher) {
               return config && config->removeRule(matcher);
+          },
+          // Runs once, at commit time only: a roleless window being saved
+          // alongside another managed window of the same class and type under
+          // a different caption scopes the rule to that caption instead of
+          // promoting it to class+type.
+          [config](const WindowQuery &query) -> bool {
+              if (!config || !KWin::effects || query.role.isEmpty()) {
+                  return false;
+              }
+              const auto windows = KWin::effects->stackingOrder();
+              for (KWin::EffectWindow *other : windows) {
+                  if (!other || other->isDeleted() || !other->isManaged()) {
+                      continue;
+                  }
+                  if (other->windowClass() == query.windowClass
+                      && other->windowTypeInt() == query.type
+                      && other->caption() != query.caption) {
+                      return true;
+                  }
+              }
+              return false;
           }))
 {
 }
@@ -596,9 +617,11 @@ void ButtonInput::performAction(KWin::EffectWindow *window, ButtonRenderer::Acti
 {
     switch (action) {
     case ButtonRenderer::Action::Close:
+        m_renderer->setHovered(nullptr, ButtonRenderer::Action::None);
         window->closeWindow();
         break;
     case ButtonRenderer::Action::Minimize:
+        m_renderer->setHovered(nullptr, ButtonRenderer::Action::None);
         window->minimize();
         break;
     case ButtonRenderer::Action::Maximize:

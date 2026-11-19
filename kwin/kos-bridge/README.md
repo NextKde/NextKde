@@ -44,9 +44,11 @@ controls use their respective native paths instead.
   panel in that same paint. The first cover need not wait for CPU readback.
   Unusable pixels hide both layers unless a previously validated fallback exists;
   input stays with the client until CPU confirmation, avoiding invisible hit areas.
-- Skips screen-space panels and sampling while the window is transformed,
+- Skips title-bar sampling and hit publication while the window is transformed,
   faded, dimmed or desaturated: those pixels are not its unmodified title bar.
-  Neutral offscreen source captures still include the controls during animations.
+  Neutral offscreen source captures (including KWin `OffscreenEffect` animations
+  such as Magic Lamp on square-maximized or arc windows) include the controls,
+  and 2D screen-space animations reuse any already confirmed tint.
   Only touches standalone normal windows. Dialogs, transient windows and
   fixed-size splash/loading surfaces keep their own chrome; applications that
   want compositor-drawn controls declare them through the cooperative
@@ -92,9 +94,11 @@ legacy overlay windows (excluding native KOS decorations):
   as small as two channel levels can qualify. At least 3/4 of the columns must
   support the direction of the change. The strongest local row step places
   the edge, and two consistent observations confirm it before trimming.
-  Icons, isolated lines and gradual gradients do not trim it. The controls retain their
-  configured positions. Boundary detection requires a completely visible
-  probe; unavailable evidence leaves the configured cover extent in place.
+  Icons, isolated lines, tabs/widgets inside the button band and gradual gradients
+  do not trim it; boundary detection never trims above the core button row or from
+  an opposite-end fallback strip. The controls retain their configured positions.
+  Boundary detection requires a completely visible probe; unavailable evidence
+  leaves the configured cover extent in place.
 - **Non-blocking readback.** Transfer into a per-window pixel-pack buffer and
   inspect its fence on a later paint. Only signalled buffers are mapped; paint
   hooks never wait on a GPU fence. Preserve the read framebuffer, source read-buffer selection, pixel-pack
@@ -150,8 +154,9 @@ legacy overlay windows (excluding native KOS decorations):
   canceled or timed-out transfers orphan storage to avoid GPU waits. The RGBA
   payload is capped at 120 KiB per buffer (360 KiB for three CPU buffers and
   120 KiB for one PBO in the general transform path, excluding driver overhead).
-  Minimized windows stop scheduled sampling and release sample caches after
-  a 500 ms animation grace period; closing windows releases them immediately.
+  Minimized windows stop scheduled sampling and release sample caches once
+  animation visibility references end (with a 500 ms fallback); closing windows
+  release them on deletion.
   Periodic repaint requests cover the bounded probe instead of the whole
   window-width band after the first observation.
 - **No texture upload on RGB changes.** A cached white rounded background mask
@@ -378,12 +383,13 @@ without a jump. The wheel leaves `offset` alone, so the panel grows away from th
 edge it is pinned to rather than away from its own middle.
 
 Saving matches the **window class and type**, plus the window role when one
-is available. Without a role (including Wayland), the exact caption is used as
-a fallback, so a QQ image viewer need not inherit the main window's cover size.
-A caption-based adjustment must be saved again if the caption changes; use a
-hand-written `titleRegex` for changing document titles when appropriate. Old
-class-only rules remain compatible as fallbacks; adjust and save the secondary
-window once to override them. A window with no class cannot be adjusted.
+is available. Without a role (including Wayland), adjusting a window when no
+distinct sibling of the same class and type is open saves against class and
+type so changing document or tab titles keep the cover; when a distinct sibling
+is also open (for example a QQ or WeChat image viewer alongside the main
+window), the exact caption scopes the override to that secondary window without
+disturbing the main one. Use a hand-written `titleRegex` for changing secondary
+captions when appropriate. A window with no class cannot be adjusted.
 
 Every session ends in a line in the journal, because the file is the only readout
 an adjustment has:

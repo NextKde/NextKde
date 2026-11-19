@@ -417,9 +417,20 @@ bool WindowRuleStore::replace(const WindowMatcher &previous,
 
     const QString key = matcher.canonicalKey();
     const QString prevKey = previous.isEmpty() ? QString() : previous.canonicalKey();
+    // Narrowing an app-scoped rule to one caption refines it rather than
+    // replacing it: sibling windows keep the class rule while the caption rule
+    // -- more specific, sorted first -- wins for this window alone. That is
+    // what keeps an image viewer's own cover from taking the main window's
+    // rule away. Every other direction replaces, so promoting a caption rule
+    // to class+type still leaves nothing stale behind.
+    const bool refineOnly = !prevKey.isEmpty() && previous.title.isEmpty()
+        && previous.titleRegex.isEmpty() && previous.role.isEmpty()
+        && (!matcher.title.isEmpty() || !matcher.titleRegex.isEmpty()
+            || !matcher.role.isEmpty());
     for (int i = m_rules.size() - 1; i >= 0; --i) {
         const QString entryKey = m_rules.at(i).matcher.canonicalKey();
-        if (entryKey == key || (!prevKey.isEmpty() && entryKey == prevKey)) {
+        if (entryKey == key
+            || (!refineOnly && !prevKey.isEmpty() && entryKey == prevKey)) {
             m_rules.removeAt(i);
         }
     }

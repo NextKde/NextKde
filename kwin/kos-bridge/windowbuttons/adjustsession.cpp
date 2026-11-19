@@ -9,10 +9,12 @@
 namespace KOS
 {
 
-AdjustSession::AdjustSession(ButtonRenderer *renderer, Commit commit, Remove remove)
+AdjustSession::AdjustSession(ButtonRenderer *renderer, Commit commit, Remove remove,
+                             SiblingProbe siblingProbe)
     : m_renderer(renderer)
     , m_commit(std::move(commit))
     , m_remove(std::move(remove))
+    , m_siblingProbe(std::move(siblingProbe))
 {
 }
 
@@ -185,6 +187,13 @@ WindowMatcher AdjustSession::targetMatcher() const
         && !m_existingMatcher.titleRegex.isEmpty()) {
         return m_existingMatcher;
     }
+    // A roleless window with no distinct open sibling of the same class and
+    // type commits as class+type so changing document or tab captions keep
+    // the cover. A user who wants the caption honoured despite that can
+    // hand-write a titleRegex rule, which the branch above preserves.
+    if (m_query.role.isEmpty() && !m_siblingProbe(m_query)) {
+        return appMatcher(m_query);
+    }
     return adjustmentMatcher(m_query);
 }
 
@@ -203,7 +212,6 @@ bool AdjustSession::commit()
         return false;
     }
 
-    const QString windowClass = m_query.windowClass;
     const PanelGeometry geometry = m_geometry;
     const OverlayMode overlayMode = m_overlayMode;
     const WindowMatcher matcher = targetMatcher();
@@ -222,7 +230,10 @@ bool AdjustSession::commit()
         // Nothing was moved. A rule storing the geometry that was already in
         // effect would be a second place the same answer is written down, and
         // it would take the panel out of the user's configuration for nothing.
-        qInfo() << "KOS: the panel for" << windowClass
+        // A changed scope or overlay mode counts as a change even when the
+        // geometry is identical, so a legacy caption-locked rule still gets
+        // promoted to class+type by re-saving it here.
+        qInfo() << "KOS: the panel for" << m_query.windowClass
                 << "was not changed; nothing written";
         return true;
     }
