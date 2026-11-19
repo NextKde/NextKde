@@ -1131,7 +1131,10 @@ void testStore()
     CHECK(waylandStore.replace(WindowMatcher{}, appMatcher(wechatMain), mainCover));
     CHECK(waylandStore.replace(appMatcher(wechatMain), adjustmentMatcher(wechatViewer),
                                viewerCover));
-    CHECK(waylandStore.count() == 2);
+    // Three rules: the antigravity class rule, the wechat class rule, and the
+    // viewer caption that refined it. The refine kept the class rule -- that
+    // is the sibling-cover semantics under test.
+    CHECK(waylandStore.count() == 3);
     CHECK(waylandStore.found(wechatMain, &readBack) && sameGeometry(readBack, mainCover));
     CHECK(waylandStore.found(wechatViewer, &readBack) && sameGeometry(readBack, viewerCover));
 }
