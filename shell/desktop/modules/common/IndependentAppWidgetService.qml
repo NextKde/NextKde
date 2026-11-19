@@ -58,7 +58,9 @@ QtObject {
         launchErrors = next
     }
     function reload(key) {
-        if (pending[key] || !PlatformClient.connected) return
+        // A poll invalidated by an open must not start a replacement while
+        // that open is inspecting/launching the same app in the platform.
+        if (pending[key] || opening[key] || !PlatformClient.connected) return
         const epoch = generation
         const revision = readRevisions[key] || 0
         const next = Object.assign({}, pending)
@@ -103,15 +105,48 @@ QtObject {
             return
         }
         const item = record(key)
-        if (item.state === "not-installed" || item.state === "ambiguous" || item.state === "unavailable") {
-            manage(key)
+        if (!item.installed || !item.sourceToken || item.state === "unavailable"
+                || item.state === "not-installed" || item.state === "ambiguous") {
+            // Negative/unknown results may be several minutes old. Recheck
+            // before sending an installed app's widget to the install page.
+            const epoch = generation
+            const busy = Object.assign({}, opening)
+            busy[key] = true
+            opening = busy
+            invalidateRead(key)
+            PlatformClient.request("application.widget-snapshot", { app: key }, function(response) {
+                if (epoch !== service.generation) return
+                service.invalidateRead(key)
+                const done = Object.assign({}, service.opening)
+                delete done[key]
+                service.opening = done
+                if (!response?.ok) {
+                    service.setError(key, service.launchMessage(response,
+                        "Application data is unavailable; check the installation and platform service"))
+                    return
+                }
+                const fresh = response.result || {}
+                service.assign(key, fresh)
+                if (fresh.state === "not-installed" || fresh.state === "ambiguous") {
+                    service.manage(key)
+                    return
+                }
+                if (!fresh.installed || !fresh.sourceToken || fresh.state === "unavailable") {
+                    service.setError(key, "Application data is unavailable; check the installation and platform service")
+                    return
+                }
+                const parameters = Object.assign({}, options || {})
+                if (item.sourceToken !== fresh.sourceToken) {
+                    delete parameters.item
+                    delete parameters.location
+                }
+                service.openInstalled(key, parameters, fresh)
+            })
             return
         }
-        if (!item.installed || !item.sourceToken) {
-            setError(key, "Application state is not ready; try again")
-            reload(key)
-            return
-        }
+        openInstalled(key, options, item)
+    }
+    function openInstalled(key, options, item) {
         // Item/location ids only make sense with the currently displayed source.
         const parameters = Object.assign({}, options || {})
         if (item.state !== "ready" && item.state !== "stale") {

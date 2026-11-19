@@ -186,6 +186,7 @@ Item {
             scrimLevel: "custom"
             scrimCap: 0.90
             scrimDecay: 1.0
+            pointerEffects: AppearanceConfigService.pointerEffectsFor("dock")
         }
     }
 }

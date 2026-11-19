@@ -17,9 +17,6 @@
     "kos-platform.window-placement",
     "kos-platform.jsonl-client",
     "kos-platform.contracts",
-    "kos-glass.legacy-blur-region",
-    "kos-glass.desktop-blur",
-    "kos-glass.overview-panel-projection",
     "kos-platform.status-panel-data",
     "kos-platform.status-panel-operations",
     "kos-app.dependency-migration"
@@ -97,6 +94,7 @@
     "kos-shell.system-font",
     "kos-shell.inputmethod-motion",
     "kos-shell.weather-refresh",
+    "kos-shell.widget-open",
     "kos-shell.stage-visibility-qml",
     "kos-shell.window-family-runtime",
     "kos-shell.dock-native-target",
