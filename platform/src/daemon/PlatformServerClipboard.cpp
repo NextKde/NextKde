@@ -413,8 +413,10 @@ bool PlatformServer::handleClipboard(QLocalSocket *socket, const QJsonObject &re
     if (op == QStringLiteral("clipboard.set")) {
         const QString mode = request.value(QStringLiteral("payload")).toObject()
                                  .value(QStringLiteral("mode")).toString();
-        const QStringList paths = cleanPaths(request.value(QStringLiteral("payload"))
-                                                  .toObject().value(QStringLiteral("paths")));
+        // Keep the directory entries (including shortcut symlinks) intact so
+        // a paste copies or moves the link, not the installed target.
+        const QStringList paths = cleanEntryPaths(request.value(QStringLiteral("payload"))
+                                                       .toObject().value(QStringLiteral("paths")));
         if ((mode != QStringLiteral("copy") && mode != QStringLiteral("cut"))
             || paths.isEmpty()) {
             respond(socket, request, false, {}, QStringLiteral("invalid-clipboard-request"),

@@ -168,6 +168,49 @@ QStringList cleanPaths(const QJsonValue &value)
     return paths;
 }
 
+QString cleanEntryPath(const QString &path)
+{
+    if (path.isEmpty() || path.contains(QChar('\0')))
+        return {};
+    const QFileInfo raw(path);
+    if (!raw.isAbsolute())
+        return {};
+
+    const QString cleaned = QDir::cleanPath(raw.absoluteFilePath());
+    const QFileInfo info(cleaned);
+    const QString fileName = info.fileName();
+    if (fileName.isEmpty() || fileName == QStringLiteral(".")
+        || fileName == QStringLiteral(".."))
+        return {};
+    const QFileInfo parentInfo(info.path());
+    if (!parentInfo.exists() || !parentInfo.isDir())
+        return {};
+    const QString canonicalParent = parentInfo.canonicalFilePath();
+    if (canonicalParent.isEmpty())
+        return {};
+
+    const QString result = QDir(canonicalParent).filePath(fileName);
+    // lstat semantics: a dangling symlink is still a valid directory entry.
+    const QFileInfo entry(result);
+    if (!entry.exists() && !entry.isSymLink())
+        return {};
+    return result;
+}
+
+QStringList cleanEntryPaths(const QJsonValue &value)
+{
+    QStringList paths;
+    QSet<QString> seen;
+    for (const QJsonValue &item : value.toArray()) {
+        const QString path = cleanEntryPath(item.toString());
+        if (!path.isEmpty() && !seen.contains(path)) {
+            seen.insert(path);
+            paths.append(path);
+        }
+    }
+    return paths;
+}
+
 QJsonArray jsonPaths(const QStringList &paths)
 {
     QJsonArray values;

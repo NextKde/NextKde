@@ -286,7 +286,10 @@ bool PlatformServer::handleFileOperation(QLocalSocket *socket, const QJsonObject
         return true;
     }
     if (op == QStringLiteral("file.trash")) {
-        const QStringList paths = cleanPaths(payload.value(QStringLiteral("paths")));
+        // Trash the directory entry itself. Desktop shortcuts are usually
+        // symlinks to installed entries; following them would trash the
+        // installed entry (or fail on a root-owned one) and leave the shortcut.
+        const QStringList paths = cleanEntryPaths(payload.value(QStringLiteral("paths")));
         if (paths.isEmpty()) {
             respond(socket, request, false, {}, QStringLiteral("invalid-path"), QStringLiteral("文件路径无效"), false);
             return true;
@@ -338,9 +341,12 @@ bool PlatformServer::handleFileOperation(QLocalSocket *socket, const QJsonObject
         return true;
     }
     if (op == QStringLiteral("file.rename")) {
-        const QString source = cleanPath(payload.value(QStringLiteral("source")).toString());
+        // The source is a directory entry: renaming a shortcut symlink must
+        // rename the link, not its installed target.
+        const QString source = cleanEntryPath(payload.value(QStringLiteral("source")).toString());
         const QString target = cleanPath(payload.value(QStringLiteral("target")).toString());
-        if (source.isEmpty() || target.isEmpty() || QFileInfo::exists(target)) {
+        if (source.isEmpty() || target.isEmpty() || QFileInfo::exists(target)
+            || QFileInfo(target).isSymLink()) {
             respond(socket, request, false, {}, QStringLiteral("target-exists"), QStringLiteral("目标文件已存在或路径无效"), false);
             return true;
         }
@@ -372,7 +378,9 @@ bool PlatformServer::handleFileOperation(QLocalSocket *socket, const QJsonObject
         const QString destination = cleanPath(payload.value(QStringLiteral("destination")).toString());
         const QString mode = payload.value(QStringLiteral("mode")).toString();
         const bool move = mode == QStringLiteral("move");
-        const QStringList paths = cleanPaths(payload.value(QStringLiteral("paths")));
+        // Transfer the directory entries themselves. Resolving a shortcut
+        // symlink would move/copy the installed entry instead of the shortcut.
+        const QStringList paths = cleanEntryPaths(payload.value(QStringLiteral("paths")));
         if (destination.isEmpty() || paths.isEmpty()
             || (mode != QStringLiteral("copy") && !move)) {
             respond(socket, request, false, {}, QStringLiteral("invalid-transfer"),
