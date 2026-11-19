@@ -312,6 +312,7 @@ PanelWindow {
             // offset in this surface.
             blurAnchor: dockWrapper
             materialOpacity: StartupReveal.dockProgress
+            pointerEffects: AppearanceConfigService.pointerEffectsFor("dock")
         }
 
         DockContainer {

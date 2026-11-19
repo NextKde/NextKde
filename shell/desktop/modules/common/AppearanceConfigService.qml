@@ -188,7 +188,38 @@ QtObject {
     // so a hand-edited config file cannot make a surface disappear entirely.
     property var hiddenDeskCenterWidgets: []
     property var hiddenStatusCells: []
+    // Which shell surfaces keep the glass pointer effects (hover light, lens
+    // parallax and the click ripple). The ids are fixed by the shell; a
+    // surface that is not listed stays completely static. The default is the
+    // set tuned to carry the light -- the Dock, context menus and the Control
+    // Center -- so every other panel is silent without any further wiring.
+    readonly property var pointerEffectSurfaceIds: ["contextMenu", "controlCenter", "dock"]
+    property var pointerEffectsSurfaces: ["contextMenu", "controlCenter", "dock"]
     property bool ready: false
+
+    function isValidPointerEffectSurface(id) {
+        return service.pointerEffectSurfaceIds.indexOf(String(id)) >= 0
+    }
+
+    // Protocol v9 mask: bit 0 hover light, bit 1 lens parallax, bit 2 click
+    // ripple. 0 keeps the shape static.
+    function pointerEffectsFor(id) {
+        return service.pointerEffectsSurfaces.indexOf(String(id)) >= 0 ? 0x7 : 0
+    }
+
+    function setPointerEffectsEnabled(id, enabled) {
+        const surfaceId = String(id)
+        if (!service.isValidPointerEffectSurface(surfaceId))
+            return false
+        const has = service.pointerEffectsSurfaces.indexOf(surfaceId) >= 0
+        if (has === Boolean(enabled))
+            return true
+        service.pointerEffectsSurfaces = enabled
+            ? service.pointerEffectsSurfaces.concat([surfaceId]).sort()
+            : service.pointerEffectsSurfaces.filter(value => value !== surfaceId)
+        saveTimer.restart()
+        return true
+    }
 
     function isValidShellStyle(value) {
         return value === "windows12" || value === "macos"
@@ -666,7 +697,7 @@ QtObject {
         if (!service._widgetStyleResolved)
             return // Migration will restart the save timer once icons are loaded.
         const payload = JSON.stringify({
-            version: 33,
+            version: 34,
             globalBlurStrength: service.globalBlurStrength,
             globalLiquidStrength: service.globalLiquidStrength,
             materialPresetBlurStrength: service.materialPresetBlurStrength,
@@ -720,6 +751,7 @@ QtObject {
             // spurious diff, and so the file stays readable by hand.
             hiddenDeskCenterWidgets: service.hiddenDeskCenterWidgets.slice().sort(),
             hiddenStatusCells: service.hiddenStatusCells.slice().sort(),
+            pointerEffectsSurfaces: service.pointerEffectsSurfaces.slice().sort(),
         }, null, 2)
         JsonConfigStore.writePath(service.configPath, payload)
     }
@@ -811,6 +843,10 @@ QtObject {
                     // installations already had.
                     const hiddenWidgets = object.hiddenDeskCenterWidgets
                     const hiddenCells = object.hiddenStatusCells
+                    // v34 adds the per-surface pointer-effect allow list. A
+                    // file written before it keeps the tuned default set; an
+                    // explicit empty array really means "no surface".
+                    const pointerSurfaces = object.pointerEffectsSurfaces
                     const glassStyle = String(object.glassStyle ?? "liquid")
                     const followsAppearance = object.glassFollowsAppearanceMode
                     const followsAppearanceLegacy = object.glassFollowsColorMode
@@ -855,6 +891,12 @@ QtObject {
                         hiddenWidgets, VisibilityPolicy.deskCenterWidgetIds)
                     service.hiddenStatusCells = VisibilityPolicy.normalizeHiddenIds(
                         hiddenCells, VisibilityPolicy.statusCellIds)
+                    if (Array.isArray(pointerSurfaces)) {
+                        service.pointerEffectsSurfaces = pointerSurfaces
+                            .filter(value => service.isValidPointerEffectSurface(value))
+                            .filter((value, index, list) => list.indexOf(value) === index)
+                            .sort()
+                    }
                     if (hasGlassFollows)
                         service.glassFollowsAppearanceMode =
                             typeof followsAppearance === "boolean"
@@ -979,7 +1021,7 @@ QtObject {
                     service.globalLiquidStrength = service.activePresetLiquidStrength
                     service.liquidStrength = service.activePresetLiquidStrength
 
-                    if (Number(object.version) !== 33
+                    if (Number(object.version) !== 34
                             || !service.isValidWidgetStyle(widgetStyle)
                             || !service.isValidShellStyle(style)
                             || !service.isValidThemeMode(themeMode)

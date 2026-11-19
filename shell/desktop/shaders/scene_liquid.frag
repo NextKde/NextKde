@@ -45,7 +45,7 @@ vec3 blur9(vec2 uv, vec2 step)
 }
 
 // KWin's adaptiveScrim, ported from
-// kwin/glass-effect/src/generated/onscreen_rounded_core.frag. Keep the curves
+// kwin/glass/src/shaders/onscreen.glsl. Keep the curves
 // identical: the QML fallback and the compositor must agree on how strongly a
 // backdrop is compressed. `scrimTint > 0.5` selects the white tint.
 vec3 adaptiveScrim(vec3 color, float lum, bool whiteScrim)

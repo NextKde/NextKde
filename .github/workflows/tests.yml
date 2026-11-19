@@ -548,8 +548,8 @@ jobs:
 
       - name: Build the Glass effect against the same SDK
         run: |
-          cmake -S kwin/glass-effect -B .build/glass -G Ninja \
-            -DCMAKE_BUILD_TYPE=Release -DGLASS_WAYLAND=ON -DGLASS_X11=OFF
+          cmake -S kwin/glass -B .build/glass -G Ninja \
+            -DCMAKE_BUILD_TYPE=Release
           cmake --build .build/glass --parallel "$(nproc)"
 
       - name: Run offline bridge regressions

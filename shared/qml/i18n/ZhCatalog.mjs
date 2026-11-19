@@ -895,6 +895,7 @@ export const catalog = {
     "Icon name or local path": "图标名称或本地路径",
     "Reset to default": "恢复默认",
     "Hide app": "隐藏应用",
+    "Hidden apps": "隐藏的应用",
     "Save": "保存",
 
     // quicksearch · 快速搜索

@@ -67,6 +67,17 @@ Scope {
         }
         // 几何快照：窗口/堆叠区高度 + 各卡当前 y/scale/z（排障用）
         function debugGeom(): string { return stageWindow.debugGeom() }
+        // Ownership diagnostics omit titles/document paths. The raw app ID is
+        // retained beside the family key so fallback decisions are reviewable.
+        function familyState(): string {
+            return JSON.stringify({ activeId: WindowService.stageActiveWindowId,
+                windows: (WindowService.records || []).map(r => ({
+                    id: r.windowId, handleId: r.handleId, pid: r.pid,
+                    appId: r.identity.rawAppId, familyKey: r.familyKey,
+                    ownerId: r.ownerWindowId, reason: r.familyReason,
+                    pending: r.familyPending, minimized: !!r.toplevel?.minimized
+                })) })
+        }
         // 无头验证钩子：强制抽屉检测（"on"/"off"/"auto"=恢复真实判定）
         function debugFullscreen(mode: string): string {
             return stageWindow.debugFullscreen(mode)

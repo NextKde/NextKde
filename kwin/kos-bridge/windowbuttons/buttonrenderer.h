@@ -177,11 +177,7 @@ public:
     QJsonObject controlDiagnostics(KWin::EffectWindow *) const;
     int samplingWindowCount() const { return m_cache.size(); }
 
-Q_SIGNALS:
-    void sourceRepaint(const QRectF &region);
-
 private:
-    static ButtonRenderer *s_instance;
     // The light drawn in each of the three positions, left to right. `Type` is
     // what a light *is* -- its colour, its glyph, the action it performs -- and
     // where it sits is a separate decision, so the order lives in this one

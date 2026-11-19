@@ -780,6 +780,7 @@ export const catalog = {
     "Icon name or local path": "Nome do ícone ou caminho local",
     "Reset to default": "Restaurar padrão",
     "Hide app": "Ocultar app",
+    "Hidden apps": "Apps ocultos",
     "Save": "Salvar",
     "Apps": "Apps",
     "Clipboard": "Área de transferência",

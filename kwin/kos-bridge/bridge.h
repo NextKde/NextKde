@@ -70,6 +70,8 @@ private:
     KWin::Region visibleRegionFor(KWin::EffectWindow *window,
                                   const KWin::RenderViewport &viewport,
                                   const KWin::Region &deviceRegion) const;
+    bool fullyOccluded(KWin::EffectWindow *window,
+                       const KWin::RenderViewport &viewport) const;
 
     std::unique_ptr<ButtonRenderer> m_renderer;
     std::unique_ptr<ButtonConfig> m_config;

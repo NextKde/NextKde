@@ -87,18 +87,22 @@ struct ShadowSettings
 {
     bool enabled = true;
     bool dynamic = true;
-    qreal strength = 0.37;
+    qreal strength = 0.50;
     qreal minimumStrength = 0.08;
-    qreal depthDecay = 0.7;
+    qreal depthDecay = 0.64;
     int transitionMs = 180;
 
     // Narrow contact layer and a broad ambient layer. Blur is the gaussian
     // sigma in logical pixels; no spread that would create a hard black rim.
-    qreal contactBlur = 1.0;
-    qreal activeBlur = 14.0;
-    qreal inactiveBlur = 8.0;
-    qreal contactOpacity = 0.22;
-    qreal ambientOpacity = 0.28;
+    qreal contactBlur = 1.5;
+    qreal activeBlur = 22.0;
+    qreal inactiveBlur = 16.0;
+    qreal contactOpacity = 0.10;
+    qreal ambientOpacity = 0.24;
+    // Cast the shadow downward so the light reads as coming from above: the
+    // halo above and beside the window thins out, the one below grows. Positive
+    // values move the shadow down. Logical pixels.
+    qreal offsetY = 8.0;
 
     // The alpha of each stacking tier: active window first, then the layers
     // of background windows fading by `depthDecay` down to `minimumStrength`.
