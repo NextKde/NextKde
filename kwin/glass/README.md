@@ -40,5 +40,6 @@ interface; without them only the effect is built.
 
 The rewrite follows KWin's public effect API and the behavior contract described
 in [Window appearance](../../docs/WindowAppearance.md). The previous
-`kwin/glass-effect` tree was deleted after parity; its license and translations
-live beside this tree, and the repository-level Nix packaging builds this one.
+`kwin/glass-effect` tree was deleted after parity; its translations live beside
+this tree under the repository license, and the repository-level Nix packaging
+builds this one.
