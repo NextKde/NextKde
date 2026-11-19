@@ -87,6 +87,7 @@ public:
     // something else happens to repaint it.
     void repaintPanels(KWin::EffectWindow *a, KWin::EffectWindow *b);
     void contentChanged(KWin::EffectWindow *window);
+    void captionChanged(KWin::EffectWindow *window, const AppConfig &config);
 
     // ---- the tiling menu --------------------------------------------------
     //
@@ -177,6 +178,16 @@ public:
     QJsonObject controlDiagnostics(KWin::EffectWindow *) const;
     int samplingWindowCount() const { return m_cache.size(); }
 
+    // Whether this window carries any panel state that a caption change could
+    // move: a sampled tint or published hit rects. A caption can change at
+    // frame rate (a terminal's title), and the handler that reacts to it only
+    // has to resolve the window's configuration when there is panel state to
+    // repaint; otherwise the next paint resolves it anyway.
+    bool tracksWindow(KWin::EffectWindow *window) const
+    {
+        return m_cache.contains(window) || m_hits.contains(window);
+    }
+
 private:
     // The light drawn in each of the three positions, left to right. `Type` is
     // what a light *is* -- its colour, its glyph, the action it performs -- and
@@ -253,7 +264,8 @@ private:
     void blit(const KWin::RenderViewport &viewport, const KWin::Region &clip,
               const QRectF &logicalRect, KWin::GLTexture *texture,
               const QColor &modulation = Qt::white,
-              bool sameFrameTint = false, bool tintBackground = true);
+              bool sameFrameTint = false, bool tintBackground = true,
+              qreal opacity = 1.0, qreal brightness = 1.0);
 
     // The light that opens the tiling menu: the one that performs Action::Maximize.
     // Found through typeAt() so that reordering the panel moves the menu's

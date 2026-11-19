@@ -35,13 +35,21 @@ class ButtonRenderer;
 class AdjustSession
 {
 public:
-    // Writes a committed geometry and overlay mode. False when the file could not be written.
+    // Writes a committed geometry and overlay mode. False when the file could
+    // not be written.
     using Commit = std::function<bool(const WindowMatcher &previous,
                                       const WindowMatcher &target,
                                       const PanelGeometry &, OverlayMode)>;
     using Remove = std::function<bool(const WindowMatcher &)>;
+    // True when another managed window of the same class and type is open
+    // under a different caption. A roleless window with no such sibling
+    // commits as class+type so changing document or tab captions keep the
+    // cover; with a sibling (a QQ/WeChat image viewer beside the main window)
+    // the caption scopes the override to that secondary window.
+    using SiblingProbe = std::function<bool(const WindowQuery &)>;
 
-    AdjustSession(ButtonRenderer *renderer, Commit commit, Remove remove = {});
+    AdjustSession(ButtonRenderer *renderer, Commit commit, Remove remove = {},
+                  SiblingProbe siblingProbe = {});
 
     bool active() const { return m_window != nullptr; }
     KWin::EffectWindow *window() const { return m_window; }
@@ -104,6 +112,7 @@ private:
     ButtonRenderer *m_renderer;
     Commit m_commit;
     Remove m_remove;
+    SiblingProbe m_siblingProbe;
 
     KWin::EffectWindow *m_window = nullptr;
     WindowQuery m_query;

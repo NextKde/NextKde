@@ -9,6 +9,7 @@
 #include <opengl/glframebuffer.h>
 
 #include <algorithm>
+#include <cmath>
 
 namespace KOS
 {
@@ -157,7 +158,12 @@ bool TitlebarSampler::enqueue(const KWin::RenderTarget &renderTarget,
         const quint64 required = std::max(quint64(TintHistogram::MinSamples),
             (quint64(m_rect.width()) * m_rect.height() * 3 + 3) / 4);
         if (quint64(count) >= required) {
-            return m_readback.enqueue(renderTarget, m_rect);
+            if (!m_readback.enqueue(renderTarget, m_rect)) {
+                return false;
+            }
+            m_usedFallback = m_fallback;
+            m_panelBottom = panel.bottom();
+            return true;
         }
         m_fallback = !m_fallback;
     }
@@ -181,11 +187,22 @@ bool TitlebarSampler::take(bool *dark, QColor *color)
     const quint64 tintArea = quint64(m_tintRect.width()) * m_tintRect.height();
     const bool usable = histogram.tint(dark, color, (tintArea * 3 + 3) / 4);
     m_backgroundBottom = -1;
-    if (usable && QRegion(m_rect).subtracted(m_visible).isEmpty()) {
+    // Never trim the right/left button cover from an opposite-end fallback strip,
+    // and never treat internal tabs/search pills inside the button band itself as
+    // the bottom edge of the titlebar.
+    if (usable && !m_usedFallback && QRegion(m_rect).subtracted(m_visible).isEmpty()) {
+        const int minBoundaryRow = std::max(
+            m_tintRect.bottom() - m_rect.y() + 1,
+            int(std::ceil((m_panelBottom - m_probeTop) * m_deviceScale)));
         const int bottom = tintBackgroundBottom(reinterpret_cast<const uchar *>(m_pixels.constData()),
-            m_rect.width(), m_rect.height(), *color, m_tintRect.bottom() - m_rect.y() + 1,
+            m_rect.width(), m_rect.height(), *color, minBoundaryRow,
             qRound(3 * m_deviceScale));
-        if (bottom < m_rect.height()) m_backgroundBottom = bottom / m_deviceScale + m_probeTop;
+        if (bottom < m_rect.height()) {
+            const qreal logicalBottom = bottom / m_deviceScale + m_probeTop;
+            if (logicalBottom >= m_panelBottom) {
+                m_backgroundBottom = logicalBottom;
+            }
+        }
     }
     // A transparent/unpainted local strip can fall back on the next attempt,
     // without a second transfer (or a synchronous wait) in this frame.
