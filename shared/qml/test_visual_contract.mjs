@@ -367,12 +367,13 @@ assert.match(dockAnimationSource,
     "Dock previews debounce pointer passes before requesting a full-screen capture");
 // The four-pixel separation from the Bar lives in BarStatusArea's placement
 // math now that the panel is one persistent layer-shell surface: standalone the
-// panel starts four pixels below the Bar, dock-hosted it stays flush with the
-// Dock. Clamping the anchor centre keeps it inside the screen instead of
-// letting the surface resize.
+// panel starts four pixels below the Bar, dock-hosted it keeps eight pixels of
+// breathing room above the Dock artwork (the old popup's -8 margins). Clamping
+// the anchor centre keeps it inside the screen instead of letting the surface
+// resize.
 const barStatusAreaSource = read("../../shell/desktop/modules/bar/BarStatusArea.qml");
 const persistentPanelSource = read("../../shell/desktop/modules/common/PersistentPanelWindow.qml");
-assert.match(barStatusAreaSource, /const gap = root\.dockHosted \? 0 : 4/,
+assert.match(barStatusAreaSource, /const gap = root\.dockHosted \? 8 : 4/,
     "standalone Control Center starts four pixels below the Bar");
 assert.match(controlCenterPanelSource, /PersistentPanelWindow \{/,
     "the Control Center is one persistent layer-shell surface");
