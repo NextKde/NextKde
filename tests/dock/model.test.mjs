@@ -7,6 +7,7 @@ import { toArray } from "../../shell/desktop/modules/dock/PayloadArray.mjs";
 import { indexAt, parse } from "../../shell/desktop/modules/common/TimedLyrics.mjs";
 import { nextWindowToActivate, pendingWindowIdFor } from "../../shell/desktop/modules/dock/WindowCycle.mjs";
 import { test } from "node:test";
+import * as WindowFamily from "../../shell/desktop/modules/dock/WindowFamily.mjs";
 
 test("process identity", async () => {
     // The normaliser is shared with the rest of the shell, so the test runs the real
@@ -275,13 +276,14 @@ test("window placement updates", async () => {
         revision: 0, placementRevision: 0, _recordsById: {}, _lastActivatedAt: {},
         // Process probes are QML runtime objects; placement tests provide the
         // caches but never spawn a real probe while rebuilding synthetic records.
-        _processHintsByPid: {}, _processProbeByPid: {}, _ensureProcessHints() {},
+        _processHintsByPid: {}, _processProbeByPid: {}, _processFamilyByPid: {},
+        _processScopesByPid: {}, _ensureProcessHints() {},
         // Thumbnail state the service keeps keyed by KWin handle. `_rebuild` sweeps
         // it, so the mock has to carry the same shape or the sweep reads undefined.
         thumbnailRevision: 0, _thumbnailUrlsByHandle: {},
         _thumbnailPendingByHandle: {}};
     const context = vm.createContext({ svc, windowModel, WindowRecordIndex,
-        PayloadArray,
+        PayloadArray, WindowFamily,
         _collectToplevels: () => [],
         AppIdentityService: { resolve: id => ({ desktopId: id, rawAppId: id, iconSource: id }) },
     });
@@ -324,6 +326,18 @@ test("window placement updates", async () => {
     const unchanged = svc.placementRevision;
     svc._rebuild();
     assert.equal(svc.placementRevision, unchanged);
+    // Focus can move between filtered dialogs without changing any tracked
+    // record. Stage must still follow their owner; Dock keeps real focus empty.
+    svc._kwinActiveOwnerId = "one";
+    svc._rebuild();
+    assert.equal(svc.stageActiveWindowId, svc.records[0].windowId);
+    assert.equal(svc.activeWindowId, "");
+    svc._kwinActiveOwnerId = "two";
+    svc._rebuild();
+    assert.equal(svc.stageActiveWindowId, svc.records[1].windowId);
+    svc._kwinActiveOwnerId = "";
+    svc._rebuild();
+    assert.equal(svc.stageActiveWindowId, "");
     // Each presentation field must still wake both presentation and collision.
     // `iconPath` is deliberately absent: presentation now derives the icon from the
     // shared themed source (`_presentationEqual` compares `iconSource`), and KWin's
@@ -332,7 +346,8 @@ test("window placement updates", async () => {
     // not at all and must not wake either lane.
     for (const patch of [{ title: "renamed" }, { activated: true }, { minimized: true },
         { fullscreen: true }, { urgent: true }, { desktops: ["desktop-2"] },
-        { onAllDesktops: true }, { appId: "new-app" }, { pid: 123 }]) {
+        { onAllDesktops: true }, { appId: "new-app" },
+        { resourceClass: "org.example.NativeWindow" }, { pid: 123 }]) {
         const revision = svc.revision, placement = svc.placementRevision;
         svc._kwinWindows[0] = { ...svc._kwinWindows[0], ...patch };
         svc._rebuild();
@@ -354,6 +369,7 @@ test("window placement updates", async () => {
     svc._rebuild();
     assert.equal(rows.length, 0);
     assert.equal(svc.activeWindowId, "");
+    assert.equal(svc.stageActiveWindowId, "");
     // Provider-owned foreign objects are read-only; placement updates cannot
     // assign to them. Their normalized record still receives the new placement.
     const foreign = { provider: "foreign", toplevel: Object.freeze({ visible: true }) };

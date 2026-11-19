@@ -5,6 +5,7 @@ import Quickshell.Wayland._ToplevelManagement
 import qs.desktop.modules.platform
 import qs.desktop.modules.common
 import "ProcessIdentity.mjs" as ProcessIdentity
+import "WindowFamily.mjs" as WindowFamily
 import "WindowRecordIndex.mjs" as WindowRecordIndex
 import "PayloadArray.mjs" as PayloadArray
 
@@ -26,6 +27,10 @@ QtObject {
     // Pure geometry updates retain the presentation array and its objects.
     property int placementRevision: 0
     property string activeWindowId: ""
+    // Stage follows the tracked owner when a filtered transient has focus.
+    // Dock and other consumers retain the actual, unmodified active window.
+    property string stageActiveWindowId: ""
+    property string _kwinActiveOwnerId: ""
     // KWin's real active window (unfiltered scan in the bridge snapshot):
     // non-empty while ANY window holds focus, including transient dialogs
     // that never enter `records`. Empty = genuinely nothing active (desktop).
@@ -76,6 +81,8 @@ QtObject {
     // nothing, because some toolkits report an id that no installed entry
     // carries. See ProcessIdentity.mjs.
     property var _processHintsByPid: ({})
+    property var _processFamilyByPid: ({})
+    property var _processScopesByPid: ({})
     property var _processProbeByPid: ({})
     property var _thumbnailUrlsByHandle: ({})
     property var _thumbnailPendingByHandle: ({})
@@ -251,6 +258,14 @@ QtObject {
             && left.identity.desktopId === right.identity.desktopId
             && left.identity.rawAppId === right.identity.rawAppId
             && left.resourceClass === right.resourceClass
+            && left.identity.hasDesktopEntry === right.identity.hasDesktopEntry
+            && left.identity.desktopEntryNoDisplay === right.identity.desktopEntryNoDisplay
+            && left.familyKey === right.familyKey
+            && left.ownerWindowId === right.ownerWindowId
+            && left.ownerHandleId === right.ownerHandleId
+            && left.familyReason === right.familyReason
+            && left.familyPending === right.familyPending
+            && left.parentHandleId === right.parentHandleId
             && left.iconSource === right.iconSource
             && left.pid === right.pid
             && !!left.isUrgent === !!right.isUrgent
@@ -305,6 +320,7 @@ QtObject {
         const nextRecords = [];
         const nextById = ({});
         const oldRecords = WindowRecordIndex.indexWindowRecords(svc.records);
+        svc._prepareProcessScopes(tops, useKwin);
 
         for (let i = 0; i < tops.length; i++) {
             const source = tops[i];
@@ -360,6 +376,7 @@ QtObject {
                 toplevel: toplevel,
                 provider: provider,
                 handleId: handleId,
+                parentHandleId: useKwin ? String(source.parentId || "") : "",
                 identity: identity,
                 resourceClass: useKwin ? String(source.resourceClass || "") : String(toplevel.appId || ""),
                 pid: Number(toplevel.pid || 0),
@@ -381,6 +398,12 @@ QtObject {
             nextRecords.push(record);
             nextById[record.windowId] = record;
         }
+        WindowFamily.resolveFamilies(nextRecords, svc._processFamilyByPid);
+        const active = nextRecords.find(record => record.toplevel.activated);
+        const stageOwner = useKwin && svc._kwinActiveOwnerId
+            ? nextRecords.find(record => record.handleId === svc._kwinActiveOwnerId)
+            : null;
+        const stageActiveId = active?.windowId || stageOwner?.windowId || "";
 
         let changed = svc.records.length !== nextRecords.length;
         let presentationChanged = changed;
@@ -402,13 +425,16 @@ QtObject {
         svc._hasRebuiltOnce = true;
         if (!useKwin)
             svc._foreignRebuiltOnce = true;
-        if (!changed)
+        if (!changed) {
+            svc.stageActiveWindowId = stageActiveId;
             return;
+        }
 
         if (!presentationChanged) {
             for (let i = 0; i < nextRecords.length; i++)
                 svc._updatePlacement(svc.records[i], nextRecords[i]);
             svc.placementRevision++;
+            svc.stageActiveWindowId = stageActiveId;
             return;
         }
 
@@ -457,8 +483,8 @@ QtObject {
 
         svc.records = nextRecords;
         svc._recordsById = nextById;
-        const active = nextRecords.find(record => record.toplevel.activated);
         svc.activeWindowId = active?.windowId ?? "";
+        svc.stageActiveWindowId = stageActiveId;
         // MRU 时间戳（v87 审查）：dock 多窗应用点击应激活"最近用过的窗"
         // 而不是 records 序首窗——历史行为与注释语义不符。copy-on-write
         //（var 属性原地变异不发通知，v82 P0 同款坑）
@@ -479,7 +505,6 @@ QtObject {
         // collision eligibility, so presentation updates notify both lanes.
         svc.placementRevision++;
         svc._pruneThumbnails(nextRecords);
-        svc._pruneProcessHints(nextRecords);
     }
 
     // windowId → 最近一次成为活动窗的时间戳（0 = 未知，排最后）
@@ -547,86 +572,91 @@ QtObject {
     // pipeline is asynchronous, so a window keeps its first (possibly generic)
     // icon for a few milliseconds and repaints once the hints land.
     property Component _processProbeFactory: Component {
-        Process { stdout: StdioCollector {} }
+        Process {
+            id: probeProcess
+            stdout: StdioCollector {}
+            // Failure settles to an empty ancestry. A stalled /proc lookup
+            // must never disable automatic scheduling indefinitely.
+            property Timer deadline: Timer {
+                interval: 1000
+                running: probeProcess.running
+                onTriggered: probeProcess.signal(9)
+            }
+        }
+    }
+
+    // Cache lifetime follows live window handles as well as PID. A recycled
+    // PID arriving in the same snapshot as an old window's removal must get a
+    // fresh probe, and a late reply from the previous generation is discarded.
+    function _prepareProcessScopes(tops, useKwin) {
+        const live = {};
+        for (const source of tops) {
+            const pid = Number(source.pid || 0);
+            if (!(pid > 0)) continue;
+            if (!live[pid]) live[pid] = [];
+            live[pid].push(useKwin ? String(source.id) : source);
+        }
+        const scopes = {};
+        const hints = {};
+        const families = {};
+        const probes = {};
+        const expired = [];
+        for (const pid in live) {
+            const old = svc._processScopesByPid[pid];
+            const same = old && live[pid].some(w => old.windows.indexOf(w) >= 0);
+            scopes[pid] = { windows: live[pid], token: same ? old.token : ({}) };
+            if (!same) continue;
+            if (svc._processHintsByPid[pid] !== undefined)
+                hints[pid] = svc._processHintsByPid[pid];
+            if (svc._processFamilyByPid[pid] !== undefined)
+                families[pid] = svc._processFamilyByPid[pid];
+            if (svc._processProbeByPid[pid]) probes[pid] = svc._processProbeByPid[pid];
+        }
+        for (const pid in svc._processProbeByPid) {
+            if (!probes[pid]) expired.push(svc._processProbeByPid[pid]);
+        }
+        svc._processScopesByPid = scopes;
+        svc._processHintsByPid = hints;
+        svc._processFamilyByPid = families;
+        svc._processProbeByPid = probes;
+        for (const probe of expired) {
+            if (probe.running) probe.signal(9);
+            probe.destroy();
+        }
     }
 
     function _ensureProcessHints(pid) {
-        if (!(pid > 0))
+        if (!(pid > 0) || svc._processFamilyByPid[pid] !== undefined
+                || svc._processProbeByPid[pid])
             return;
-        if (svc._processHintsByPid[pid] !== undefined)
-            return;
-        if (svc._processProbeByPid[pid])
-            return;
+        const token = svc._processScopesByPid[pid]?.token;
         const probe = svc._processProbeFactory.createObject(svc, {
-            command: ProcessIdentity.probeCommand(pid)
+            command: WindowFamily.probeCommand(pid, ProcessIdentity.probeCommand(pid))
         });
         const pending = Object.assign({}, svc._processProbeByPid);
         pending[pid] = probe;
         svc._processProbeByPid = pending;
         probe.exited.connect(function() {
-            const hints = ProcessIdentity.parseProbeOutput(probe.stdout?.text ?? "");
+            if (svc._processScopesByPid[pid]?.token !== token
+                    || svc._processProbeByPid[pid] !== probe)
+                return;
+            const output = probe.stdout?.text ?? "";
+            const hints = ProcessIdentity.parseProbeOutput(output);
+            const families = WindowFamily.parseProcessProbe(output, pid);
             const inFlight = Object.assign({}, svc._processProbeByPid);
             delete inFlight[pid];
             svc._processProbeByPid = inFlight;
-            // pid 仍在当前 records 里才入缓存（v87 审查）：probe 在途期间
-            // 窗口关闭（或被剪枝销毁后 exited 仍触发）时，把已死 pid 的
-            // hints 塞回缓存＝pid 复用后污染无关新窗的身份。rebuild 循环
-            // 是同步的，exited 异步到达时 records 已含新窗快照
-            let stillLive = false;
-            const recs = svc.records || [];
-            for (let i = 0; i < recs.length; i++) {
-                if (recs[i].pid === pid) {
-                    stillLive = true;
-                    break;
-                }
-            }
-            // An empty result is cached too: a window that cannot be identified
-            // must not be probed again on every rebuild.
-            if (stillLive) {
-                const resolved = Object.assign({}, svc._processHintsByPid);
-                resolved[pid] = hints;
-                svc._processHintsByPid = resolved;
-            }
+            const resolved = Object.assign({}, svc._processHintsByPid);
+            resolved[pid] = hints;
+            svc._processHintsByPid = resolved;
+            const ancestry = Object.assign({}, svc._processFamilyByPid);
+            ancestry[pid] = families;
+            svc._processFamilyByPid = ancestry;
             probe.destroy();
-            if (hints.length && stillLive)
-                svc._scheduleUpdate();
+            // Even a failed probe must release familyPending and rerun Stage.
+            svc._scheduleUpdate();
         });
         probe.running = true;
-    }
-
-    // Per-PID hints die with the PID: the kernel recycles PIDs, and a survivor
-    // would seed a later window with an unrelated application's identity.
-    function _pruneProcessHints(nextRecords) {
-        const live = {};
-        for (let i = 0; i < nextRecords.length; i++) {
-            const pid = nextRecords[i].pid;
-            if (pid > 0)
-                live[pid] = true;
-        }
-        let stale = false;
-        const kept = {};
-        for (const pid in svc._processHintsByPid) {
-            if (live[pid])
-                kept[pid] = svc._processHintsByPid[pid];
-            else
-                stale = true;
-        }
-        if (stale)
-            svc._processHintsByPid = kept;
-        // A probe whose PID disappeared before it reported would otherwise be
-        // kept — and that PID would never be probed again.
-        let inFlight = null;
-        for (const pid in svc._processProbeByPid) {
-            if (live[pid])
-                continue;
-            if (!inFlight)
-                inFlight = Object.assign({}, svc._processProbeByPid);
-            if (inFlight[pid])
-                inFlight[pid].destroy();
-            delete inFlight[pid];
-        }
-        if (inFlight)
-            svc._processProbeByPid = inFlight;
     }
 
     // ── Virtual desktops (KWin D-Bus, via the bridge) ──
@@ -890,7 +920,7 @@ QtObject {
     // 作用于 activate，minimize 本就直发——真正的串行化瓶颈在桥），
     // N 窗收编管线会被拖到 N*50ms——比显示桌面开关的防抖还长（打断窗口
     // 的根源，实测踩过）。多窗批量一律走这里，单窗路径用 minimizeWindow。
-    function minimizeGroup(windowIds, value) {
+    function minimizeGroup(windowIds, value, automatic) {
         const ids = [];
         for (let i = 0; i < windowIds.length; i++) {
             const record = windowById(windowIds[i]);
@@ -905,6 +935,7 @@ QtObject {
         if (ids.length === 0)
             return;
         _sendKwinCommand({ action: "minimize-group", ids: ids,
+            expectedActiveId: automatic === true ? svc.kwinActiveId : undefined,
             value: value === undefined ? true : value });
     }
 
@@ -995,7 +1026,8 @@ QtObject {
                         // 都不变——漏键会把桌面聚焦状态冻结在旧值。
                         const snapshotJson = JSON.stringify(windows)
                             + "#" + (event.activeId ?? "")
-                            + "#" + (event.activeDesktop ? 1 : 0);
+                            + "#" + (event.activeDesktop ? 1 : 0)
+                            + "#" + (event.activeOwnerId ?? "");
                         if (snapshotJson === svc._lastSnapshotJson)
                             return;
                         svc._lastSnapshotJson = snapshotJson;
@@ -1004,6 +1036,7 @@ QtObject {
                         // authoritative list also delayed focus changes.
                         svc.kwinActiveId = String(event.activeId ?? "");
                         svc.kwinActiveDesktop = !!event.activeDesktop;
+                        svc._kwinActiveOwnerId = String(event.activeOwnerId ?? "");
                         svc._kwinWindows = windows;
                         if (!svc._kwinReceivedInitialSnapshot) {
                             svc._kwinReceivedInitialSnapshot = true;
