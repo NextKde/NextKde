@@ -2,6 +2,7 @@ import QtQuick
 import Quickshell.Services.UPower
 import qs.desktop.modules.common
 import qs.desktop.modules.inputmethod
+import qs.desktop.modules.platform
 import "../common/VisibilityPolicy.mjs" as VisibilityPolicy
 
 // Reusable system-status cluster. Popup panels stay anchored to the same
@@ -146,17 +147,32 @@ Item {
         const gx = origin.x + local.x
         const gy = origin.y + local.y
         const edge = root.dockHosted ? root.dockEdge : "top"
-        // Standalone the panel starts four pixels below the Bar; dock-hosted it
-        // stays flush with the Dock. Same contract the PopupWindow's negative
-        // bottom margin used to express before the surface became persistent.
-        const gap = root.dockHosted ? 0 : 4
-        if (edge === "top")
-            return { edge: edge, offset: gy + ih + gap - sy, center: gx + iw / 2 }
-        if (edge === "bottom")
-            return { edge: edge, offset: sy + sh - gy + gap, center: gx + iw / 2 }
-        if (edge === "left")
-            return { edge: edge, offset: gx + iw + gap - sx, center: gy + ih / 2 }
-        return { edge: edge, offset: sx + sw - gx + gap, center: gy + ih / 2 }
+        // The offset measures from the dock artwork itself, not from the
+        // anchor cell: the cell sits well inside the glass (measured a third
+        // of the pill down), so a cell-based offset sinks the panel into the
+        // dock. The resting rect the dock publishes is the artwork, in screen
+        // coordinates. It is null before the dock publishes or on a screen
+        // without one; the cell is the fallback then.
+        const dockRect = root.dockHosted ? WorkspaceLayoutService.dockRect : null
+        // Both placements breathe: standalone four pixels below the Bar,
+        // dock-hosted eight pixels above the Dock artwork, the same room the
+        // old popup's negative margins gave the notification panel (-8 on
+        // every dock edge).
+        const gap = root.dockHosted ? 8 : 4
+        if (edge === "top") {
+            const near = dockRect ? dockRect.y + dockRect.height : gy + ih
+            return { edge: edge, offset: near + gap - sy, center: gx + iw / 2 }
+        }
+        if (edge === "bottom") {
+            const near = dockRect ? dockRect.y : gy
+            return { edge: edge, offset: sy + sh - near + gap, center: gx + iw / 2 }
+        }
+        if (edge === "left") {
+            const near = dockRect ? dockRect.x + dockRect.width : gx + iw
+            return { edge: edge, offset: near + gap - sx, center: gy + ih / 2 }
+        }
+        const near = dockRect ? dockRect.x : gx
+        return { edge: edge, offset: sx + sw - near + gap, center: gy + ih / 2 }
     }
     function _applyPlacement(panel, placement) {
         if (!panel || !placement)

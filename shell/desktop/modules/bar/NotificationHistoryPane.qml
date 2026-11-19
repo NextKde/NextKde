@@ -284,7 +284,13 @@ Item {
         flickDeceleration: 1800
         maximumFlickVelocity: 2200
         model: displayedRows
-        ScrollBar.vertical: ScrollBar { policy: ScrollBar.AsNeeded; width: 3 }
+        // The preview deck sizes itself to its three rows, so there is nothing
+        // to scroll; a bar that cannot be used is only a stray mark. The
+        // expanded deck genuinely overflows and keeps its bar.
+        ScrollBar.vertical: ScrollBar {
+            policy: pane.expanded ? ScrollBar.AsNeeded : ScrollBar.AlwaysOff
+            width: 3
+        }
         displaced: Transition { NumberAnimation { property: "y"; duration: AppearanceTokens.motion.slow.duration; easing.type: AppearanceTokens.motion.enterCurve } }
         add: Transition {
             // The popup supplies its entrance fade. Only later arrivals need one.
