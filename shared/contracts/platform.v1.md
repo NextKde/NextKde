@@ -190,6 +190,17 @@ On `kwin.subscribe`, the daemon replays both its latest `window.snapshot` and
 latest `desktops` event when available. Consumers may explicitly request a
 fresh desktop event with `kwin.command {action: "desktops"}` during startup.
 
+Window snapshots optionally include `windows[].parentId`, the nearest tracked
+ancestor reached through KWin's transient relationship, and `activeOwnerId`,
+the tracked owner of the focused window. IDs use the same normalized internal
+handle format as `windows[].id`; missing relationships are empty strings.
+Filtered dialogs can participate in the relationship without becoming taskbar
+entries. Old producers/consumers may omit or ignore these optional fields.
+
+Automatic `minimize-group` commands may include `expectedActiveId`. The bridge
+discards the batch if compositor focus has changed before execution. Explicit
+desktop collection and user minimize/restore commands omit this guard.
+
 The optional `desktops.transitionActive` boolean marks desktop navigation while
 KWin's `slide`, `cubeslide`, or `fadedesktop` effect is active. The daemon sets
 it before publishing a changed `current` desktop and republishes the latest
