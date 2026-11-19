@@ -218,6 +218,7 @@ export const icons = Object.freeze({
     "launcher.clearSearch": "xmark",
     "launcher.closeEditor": "xmark",
     "launcher.folder.removeApp": "minus",
+    "launcher.hiddenApps": "eye",
     "launcher.search": "search",
 
     // media
