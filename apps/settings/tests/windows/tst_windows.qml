@@ -15,7 +15,7 @@ Item {
     }
     QtObject {
         id: backend
-        property var state: ({enabled:true, radius:20, shadow:true, hideAnimation:"scale", closeAnimation:"scale", buttonGlyphMode:"always", buttonExclusions:[], independentButtonBackground:false})
+        property var state: ({enabled:true, radius:20, shadow:true, hideAnimation:"scale", closeAnimation:"scale", buttonGlyphMode:"always", buttonExclusions:[], independentButtonBackground:false, windowButtonRules:[]})
         property bool animationBusy: false
         property string error: ""
         property var calls: []
@@ -40,6 +40,23 @@ Item {
             change("buttonExclusions", exclusions)
             return true
         }
+        function setWindowButtonRuleMode(ruleId, mode) {
+            const rules = (state.windowButtonRules || []).map(rule =>
+                rule.id === ruleId ? Object.assign({}, rule, {overlayMode: mode}) : rule)
+            change("windowButtonRules", rules)
+            return true
+        }
+        function setWindowButtonRuleScopeToApp(ruleId) {
+            const rules = (state.windowButtonRules || []).map(rule =>
+                rule.id === ruleId ? Object.assign({}, rule, {title: "", role: "", scope: "app", canBroadenToApp: false}) : rule)
+            change("windowButtonRules", rules)
+            return true
+        }
+        function removeWindowButtonRule(ruleId) {
+            const rules = (state.windowButtonRules || []).filter(rule => rule.id !== ruleId)
+            change("windowButtonRules", rules)
+            return true
+        }
     }
     TestCase {
         name: "WindowSettingsInteractions"
@@ -47,7 +64,7 @@ Item {
         property var app: null
         function init() {
             backend.calls = []
-            backend.state = {enabled:true, radius:20, shadow:true, hideAnimation:"scale", closeAnimation:"scale", buttonGlyphMode:"always", buttonExclusions:[], independentButtonBackground:false}
+            backend.state = {enabled:true, radius:20, shadow:true, hideAnimation:"scale", closeAnimation:"scale", buttonGlyphMode:"always", buttonExclusions:[], independentButtonBackground:false, windowButtonRules:[]}
             bridgeBackend.apps = [{name:"Firefox", appId:"firefox", windowClasses:["firefox"]}, {name:"Obsidian", appId:"md.obsidian.Obsidian", windowClasses:["obsidian"]}]
             bridgeBackend.runningAppsRequests = 0
             const component = Qt.createComponent("../../main.qml")
@@ -222,6 +239,37 @@ Item {
                 clickControl(picker, picker.width * (i + 0.5) / 2, picker.height / 2)
                 compare(backend.state.buttonGlyphMode, modes[i])
             }
+        }
+        function test_remembered_window_button_rules() {
+            backend.state = Object.assign({}, backend.state, {
+                windowButtonRules: [
+                    {id:"r1", appClass:"wechat", title:"朋友圈", role:"", type:"normal", scope:"window", canBroadenToApp:true, overlayMode:"transparent"},
+                    {id:"r2", appClass:"obsidian", title:"", role:"", type:"normal", scope:"app", canBroadenToApp:false, overlayMode:"auto"}
+                ]
+            })
+            const toggle = control("toggleWindowButtonRules")
+            verify(toggle.visible)
+            clickControl(toggle, toggle.width / 2, toggle.height / 2)
+
+            const modeBox = control("windowButtonRuleMode_0")
+            compare(modeBox.currentIndex, 1)
+            modeBox.activated(0)
+            compare(backend.state.windowButtonRules[0].overlayMode, "cover")
+            const updatedModeBox = control("windowButtonRuleMode_0")
+            compare(updatedModeBox.currentIndex, 0)
+            updatedModeBox.activated(2)
+            compare(backend.state.windowButtonRules[0].overlayMode, "hidden")
+
+            const broaden = control("windowButtonRuleBroaden_0")
+            verify(broaden.visible)
+            clickControl(broaden, broaden.width / 2, broaden.height / 2)
+            compare(backend.state.windowButtonRules[0].scope, "app")
+            compare(backend.state.windowButtonRules[0].canBroadenToApp, false)
+
+            const remove = control("removeWindowButtonRule_0")
+            clickControl(remove, remove.width / 2, remove.height / 2)
+            compare(backend.state.windowButtonRules.length, 1)
+            compare(backend.state.windowButtonRules[0].id, "r2")
         }
     }
 }

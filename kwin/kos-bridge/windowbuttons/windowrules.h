@@ -62,6 +62,19 @@ struct WindowMatcher {
 // Keep adjustments local to a window kind; titles are the fallback when the
 // application exposes no role (notably Wayland).
 WindowMatcher adjustmentMatcher(const WindowQuery &query);
+// App-wide matcher for windows of the same class and type (survives changing
+// document or tab titles).
+WindowMatcher appMatcher(const WindowQuery &query);
+
+// Per-window presentation override stored alongside geometry.
+enum class OverlayMode {
+    Cover,        // Draw opaque cover plate (default)
+    Transparent,  // Draw traffic lights without an opaque cover plate
+    Hidden,       // Disable KOS overlay for this window (keep native controls)
+};
+
+QString overlayModeToString(OverlayMode);
+OverlayMode overlayModeFromString(const QString &);
 
 // More matcher fields first. The sort is stable, so rules with the same number
 // of fields keep the order they were written in -- which for the machine-written
@@ -71,6 +84,7 @@ bool moreSpecific(const WindowMatcher &, const WindowMatcher &);
 struct GeometryRule {
     WindowMatcher matcher;
     PanelGeometry geometry;
+    OverlayMode overlayMode = OverlayMode::Cover;
 };
 
 // The machine-written rules file.
@@ -86,9 +100,14 @@ public:
     void load();
     // First matching rule wins, in the order they were loaded in.
     bool found(const WindowQuery &, PanelGeometry *out) const;
+    bool foundRule(const WindowQuery &, GeometryRule *out) const;
     // Replaces the rule with the same matcher, or adds it. False when the file
     // could not be written.
-    bool store(const WindowMatcher &, const PanelGeometry &);
+    bool store(const WindowMatcher &, const PanelGeometry &,
+               OverlayMode overlayMode = OverlayMode::Cover);
+    bool replace(const WindowMatcher &previous, const WindowMatcher &matcher,
+                 const PanelGeometry &, OverlayMode overlayMode = OverlayMode::Cover);
+    bool remove(const WindowMatcher &);
 
     QString path() const { return m_path; }
     int count() const { return m_rules.size(); }

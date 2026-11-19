@@ -2,6 +2,7 @@
 #include <QObject>
 #include <QJsonValue>
 #include <QVariantMap>
+#include <functional>
 
 class WindowSettings : public QObject
 {
@@ -24,12 +25,16 @@ public:
     Q_INVOKABLE bool setButtonGlyphMode(const QString &mode);
     Q_INVOKABLE bool setButtonExclusion(const QString &appClass, bool excluded);
     Q_INVOKABLE bool setIndependentButtonBackground(bool enabled);
+    Q_INVOKABLE bool setWindowButtonRuleMode(const QString &ruleId, const QString &mode);
+    Q_INVOKABLE bool setWindowButtonRuleScopeToApp(const QString &ruleId);
+    Q_INVOKABLE bool removeWindowButtonRule(const QString &ruleId);
     bool installDefaults();
     bool restoreAnimationDefaults();
 signals:
     void changed();
 private:
     bool patchAppearance(const QString &section, const QString &key, const QJsonValue &value);
+    bool patchButtonRules(const std::function<bool(QJsonArray &rules, bool &shouldWrite)> &mutator);
     QString m_error;
     bool m_animationBusy = false;
 };
