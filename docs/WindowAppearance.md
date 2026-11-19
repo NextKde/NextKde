@@ -3,7 +3,7 @@
 [简体中文](WindowAppearance.zh-CN.md)
 
 For AI contributors. Current code lives in `kwin/kos-bridge/windowappearance/`,
-`kwin/kos-decoration/`, `kwin/glass-effect/` and `shell/native/surface-shape/`.
+`kwin/kos-decoration/`, `kwin/glass/` and `shell/native/surface-shape/`.
 Use [Development](Development.md) for VM-only builds and installation; native plugin changes
 require logout/login or reboot. This page replaces historical implementation proposals and audits.
 
@@ -147,9 +147,12 @@ focus, theme changes, resizing, covered windows and real GL drivers.
 
 `kos-surface-shape-v1.xml` defines versioned capability negotiation. Preserve interface/opcode order.
 Versions 1–7 apply their established immediate behavior; v8 latches pending shape state via manager
-commit at the next `wl_surface.commit`. Rendering reads committed state only. Test atomic batches
-and old clients. Explicit v8 geometry owns the surface even when empty/hidden; do not fall back to
-whole-window blur for an intentionally empty declaration. Ordinary undeclared windows keep legacy blur.
+commit at the next `wl_surface.commit`. v9 appends a per-shape pointer-effect mask
+(`set_pointer_effects`: hover light, lens parallax, click ripple) that latches the same way; clients
+that never send it keep every effect enabled, and clients below v9 must not send it. Renderers read
+committed state only. Test atomic batches and old clients. Explicit v8 geometry owns the surface even
+when empty/hidden; do not fall back to whole-window blur for an intentionally empty declaration.
+Ordinary undeclared windows keep legacy blur.
 
 Rounded-rectangle shapes carry geometry, visual rounding, scrim, continuous blur sigma, material
 opacity and reveal/capture parameters. Tint opacity is independent of background blur; material opacity fades the complete finish.
