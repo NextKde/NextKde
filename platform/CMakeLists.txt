@@ -287,5 +287,16 @@ if(BUILD_TESTING)
             LABELS platform
             TIMEOUT 60
         )
+        # Desktop shortcuts are daemon-owned links to installed entries: the
+        # client names an id and never supplies a source or destination.
+        add_test(NAME kos-platform.desktop-shortcut
+            COMMAND ${KOS_PYTHON_EXECUTABLE}
+                ${CMAKE_CURRENT_SOURCE_DIR}/tests/test_desktop_shortcut.py
+                $<TARGET_FILE:kos-platform>
+        )
+        set_tests_properties(kos-platform.desktop-shortcut PROPERTIES
+            LABELS platform
+            TIMEOUT 60
+        )
     endif()
 endif()

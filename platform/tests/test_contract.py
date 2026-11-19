@@ -219,6 +219,29 @@ def test_lockscreen_feed_uses_daemon_owned_fixed_destination() -> None:
     assert 'QStringLiteral("theme-unavailable")' in publisher
 
 
+def test_desktop_shortcut_accepts_only_an_installed_desktop_id() -> None:
+    """The Shell names an installed app; the daemon owns both paths."""
+    contract = (ROOT / "shared/contracts/platform.v1.md").read_text()
+    assert "file.create-desktop-shortcut" in contract
+
+    source = (DAEMON / "PlatformServerFiles.cpp").read_text()
+    handler = source[source.index(
+        'if (op == QStringLiteral("file.create-desktop-shortcut"))'):]
+    handler = handler[:handler.index('if (op == QStringLiteral("file.transfer"))')]
+    assert 'payload.value(QStringLiteral("desktopId"))' in handler
+    # Destination and source are daemon-owned; no caller path may reach them.
+    for key in ("source", "destination", "path", "desktopFile"):
+        assert f'payload.value(QStringLiteral("{key}"))' not in handler
+    assert "QStandardPaths::DesktopLocation" in handler
+    assert "QFile::link" in handler
+    assert 'QStringLiteral("created"), false' in handler
+
+    qml = (ROOT / "shell/desktop/modules/common/AppActionService.qml").read_text()
+    assert 'PlatformClient.request("file.create-desktop-shortcut"' in qml
+    launcher = (ROOT / "shell/desktop/modules/applauncher/AppLauncherWindow.qml").read_text()
+    assert '"send-to-desktop"' in launcher
+
+
 def test_file_operations_do_not_resolve_shortcut_symlinks() -> None:
     """A desktop shortcut must be renamed/moved/trashed as a link."""
     source = (DAEMON / "PlatformServerFiles.cpp").read_text()
@@ -260,5 +283,6 @@ if __name__ == "__main__":
     test_thumbnail_memory_is_bounded_and_recent_frames_are_reused()
     test_brightness_targets_one_kde_display()
     test_lockscreen_feed_uses_daemon_owned_fixed_destination()
+    test_desktop_shortcut_accepts_only_an_installed_desktop_id()
     test_file_operations_do_not_resolve_shortcut_symlinks()
     print("platform contracts: ok")
