@@ -5,7 +5,7 @@ import qs.desktop.modules.common
 import "../../../shared/qml/i18n"
 
 // Groups tracked notifications by desktopEntry (fallback appName) into a
-// ListModel that the popup and history views consume. Quickshell's
+// ListModel that the banner popup binds to. Quickshell's
 // trackedNotifications is a read-only UntypedObjectModel (no .get(), no sort,
 // no filter), so -- like WindowService for the Dock -- we bridge it with an
 // Instantiator that collects the live notification objects, debounce
@@ -17,6 +17,12 @@ import "../../../shared/qml/i18n"
 // notification access. So the live Notification objects live in a sidecar JS
 // map `_groupsByKey` keyed by groupKey, and the ListModel only carries
 // presentation primitives plus the groupKey to look the sidecar up.
+//
+// The banner slot is strictly serial (P3): groupsModel holds at most ONE
+// row -- the group currently flying. Every other live group waits in
+// first-seen order and is promoted when the slot frees, so cards can never
+// stack, shove each other, or freeze mid-animation. Critical groups preempt
+// a non-critical active card (the preempted group retires into history).
 //
 // Each ListModel row exposes:
 //   groupKey        string  desktopEntry || appName || "unknown"
@@ -50,6 +56,13 @@ QtObject {
     // collapsed: bool }. Holds the live Notification objects the ListModel
     // cannot store. Rebuilt on every _rebuild.
     property var _groupsByKey: ({})
+
+    // FIFO stamps for groups waiting for the banner slot: groupKey -> the
+    // arrival index of the group's newest notification (see _buildGroups,
+    // append-order = arrival order). The slot drains the smallest stamp
+    // first. Entries are pruned when the group leaves the live set and
+    // dropped on promotion.
+    property var _queuedAt: ({})
 
     // Revision counter bumped on every sidecar rebuild. QML bindings that read
     // the sidecar (e.g. card.notification = latestForKey(key)) cannot track a
@@ -209,6 +222,14 @@ QtObject {
             g.hasActions = latest.actions && latest.actions.length > 0
             g.hasInlineReply = !!latest.hasInlineReply
             g.createdAt = Date.now()
+            // Arrival-ordered queue stamp (smaller = arrived earlier). The
+            // index in the append-ordered source array IS the arrival order,
+            // so a burst that coalesces into one rebuild batch still drains
+            // FIFO; a per-pass Date.now() would tie every group in the batch
+            // and fall back to scan order (newest first). Indexes compress
+            // uniformly when earlier objects retire, preserving the relative
+            // order of the survivors.
+            g.queueStamp = notifications.lastIndexOf(latest)
         }
         // Sort groups newest-first. Since trackedNotifications is append-order,
         // the group whose latest notification arrived last is the freshest.
@@ -223,66 +244,131 @@ QtObject {
         return groups
     }
 
-    // Diff the next groups into groupsModel (primitive roles only) and refresh
-    // the sidecar _groupsByKey with the live notification arrays.
+    // Apply the next groups to the single banner slot. groupsModel holds at
+    // most ONE row -- the group currently flying as a banner; every other
+    // live group waits (FIFO by first-seen stamp) and is promoted when the
+    // slot frees. This is what makes banners strictly serial: cards can no
+    // longer stack, shove each other, or freeze mid-animation.
     function _applyGroups(nextGroups) {
         const model = svc.groupsModel
-        // Refresh the sidecar from the new groups.
+        const rowKeys = ["groupKey", "appName", "appIcon", "count", "collapsed",
+                         "latestSummary", "latestBody", "latestUrgency",
+                         "latestImage", "hasActions", "hasInlineReply", "createdAt"]
+
+        // 1. Refresh the sidecar from the new groups -- all of them, the
+        // waiting ones too, so a promoted card resolves its live objects
+        // without waiting for another rebuild.
         const nextByKey = {}
-        const nextKeySet = new Set()
+        const nextKeys = new Set()
         for (let i = 0; i < nextGroups.length; i++) {
             const g = nextGroups[i]
             nextByKey[g.groupKey] = {
                 notifications: g.notifications,
                 collapsed: g.collapsed
             }
-            nextKeySet.add(g.groupKey)
+            nextKeys.add(g.groupKey)
         }
         svc._groupsByKey = nextByKey
         // Bump the revision so bindings that read the sidecar (card.notification,
         // expand-list Repeater models) re-evaluate against the new state.
         svc.sidecarRevision = svc.sidecarRevision + 1
 
-        // 1. Remove groups from model that are no longer in nextGroups (from tail to head).
-        // This ensures ListView.onRemove is called on the exact deleted delegates.
-        for (let i = model.count - 1; i >= 0; i--) {
-            const rowKey = model.get(i).groupKey
-            if (!nextKeySet.has(rowKey))
-                model.remove(i)
+        // 2. Queue stamps: a group's wait position is fixed at first sight,
+        // by its newest notification's arrival index (see _buildGroups);
+        // the slot drains the smallest stamp first.
+        for (let i = 0; i < nextGroups.length; i++) {
+            const g = nextGroups[i]
+            if (svc._queuedAt[g.groupKey] === undefined)
+                svc._queuedAt[g.groupKey] = g.queueStamp
+        }
+        for (const key of Object.keys(svc._queuedAt)) {
+            if (!nextKeys.has(key))
+                delete svc._queuedAt[key]
         }
 
-        // 2. Insert new groups or update existing groups without overwriting different keys.
-        const keys = ["groupKey", "appName", "appIcon", "count", "collapsed",
-                      "latestSummary", "latestBody", "latestUrgency",
-                      "latestImage", "hasActions", "hasInlineReply", "createdAt"]
-
-        for (let targetIdx = 0; targetIdx < nextGroups.length; targetIdx++) {
-            const targetGroup = nextGroups[targetIdx]
-            let currentIdx = -1
-            for (let j = targetIdx; j < model.count; j++) {
-                if (model.get(j).groupKey === targetGroup.groupKey) {
-                    currentIdx = j
+        // 3. The active group is whatever row holds the slot right now.
+        let activeKey = model.count > 0 ? model.get(0).groupKey : ""
+        let activeGroup = null
+        if (activeKey) {
+            for (let i = 0; i < nextGroups.length; i++) {
+                if (nextGroups[i].groupKey === activeKey) {
+                    activeGroup = nextGroups[i]
                     break
                 }
             }
+            if (!activeGroup) {
+                // The active group's objects all left (dismissed or replaced
+                // away) without a synchronous row removal -- free the slot.
+                model.remove(0)
+                activeKey = ""
+            }
+        }
 
-            if (currentIdx === -1) {
-                // Keep live QObjects exclusively in the sidecar. Passing
-                // targetGroup also inserts its notifications array as a nested
-                // ListModel role, retaining a second collection of wrappers.
-                const row = {}
-                for (const prop of keys)
-                    row[prop] = targetGroup[prop]
-                model.insert(targetIdx, row)
-            } else {
-                if (currentIdx !== targetIdx)
-                    model.move(currentIdx, targetIdx, 1)
-                const row = model.get(targetIdx)
-                for (let k = 0; k < keys.length; k++) {
-                    const prop = keys[k]
-                    if (row[prop] !== targetGroup[prop])
-                        model.setProperty(targetIdx, prop, targetGroup[prop])
+        // 4. Critical preemption: a newer critical group takes the slot NOW
+        // when a non-critical card is flying. The preempted group retires
+        // into history (its actions stay invokable there); the queue does
+        // not replay content the user has been pushed past. Step 6 hands
+        // the freed slot straight to the preempting critical (criticals
+        // jump the queue), so the waiters behind it are never promoted into
+        // a slot a critical outranks -- which would cascade-retire them one
+        // rebuild at a time.
+        let skipKey = ""
+        if (activeGroup && activeGroup.latestUrgency !== NotificationUrgency.Critical) {
+            const activeIdx = nextGroups.indexOf(activeGroup)
+            for (let i = 0; i < activeIdx; i++) {
+                if (nextGroups[i].latestUrgency === NotificationUrgency.Critical) {
+                    skipKey = activeKey
+                    svc.expireGroupByKey(activeKey)
+                    activeGroup = null
+                    activeKey = ""
+                    break
                 }
+            }
+        }
+
+        // 5. Refresh the active row in place. A newer notification that
+        // joined the ACTIVE group updates the flying card (same-group
+        // stacking) -- that is not a new slot, so nothing is queued.
+        if (activeGroup) {
+            const row = model.get(0)
+            for (let k = 0; k < rowKeys.length; k++) {
+                const prop = rowKeys[k]
+                if (row[prop] !== activeGroup[prop])
+                    model.setProperty(0, prop, activeGroup[prop])
+            }
+        }
+
+        // 6. Promote into the empty slot. A waiting critical jumps the queue
+        // outright -- the newest one, since nextGroups is newest-first --
+        // whether the slot freed by expiry or by preemption; otherwise the
+        // oldest waiter (FIFO) plays. Promoting a non-critical while a
+        // critical waits would arm the preemption against it on the very
+        // next rebuild and cascade-retire the queue.
+        if (model.count === 0 && nextGroups.length > 0) {
+            let head = null
+            let headStamp = 0
+            for (let i = 0; i < nextGroups.length; i++) {
+                const g = nextGroups[i]
+                if (g.groupKey === skipKey)
+                    continue
+                const stamp = svc._queuedAt[g.groupKey]
+                if (stamp === undefined)
+                    continue
+                if (g.latestUrgency === NotificationUrgency.Critical) {
+                    head = g
+                    break
+                }
+                if (!head || stamp < headStamp) {
+                    head = g
+                    headStamp = stamp
+                }
+            }
+            if (head) {
+                delete svc._queuedAt[head.groupKey]
+                const row = {}
+                for (const prop of rowKeys)
+                    row[prop] = head[prop]
+                model.insert(0, row)
             }
         }
     }
@@ -391,6 +477,24 @@ QtObject {
         }
         delete svc._groupsByKey[key]
         svc.sidecarRevision++
+        // The slot just freed: schedule a rebuild so the oldest waiter is
+        // promoted. The retire markers only take effect on the next collect,
+        // and the objects stay alive (no destruction signal will trigger
+        // it), so without this the queue would stall until the next arrival.
+        svc._scheduleUpdate()
+    }
+
+    // Retire every non-retired tracked notification -- DND turning on, the
+    // master banner switch turning off, or a history surface coming on
+    // screen: all of them quiet the flying card and the entire wait queue by
+    // hiding, not closing, so the objects stay alive with their actions
+    // invokable from history (same rule as banner expiry).
+    function retireAllBanners() {
+        for (const notification of svc._collectNotifications()) {
+            if (!NotificationHistoryService.isRetired(notification.id))
+                NotificationHistoryService.retire(notification.id)
+        }
+        svc._rebuild()
     }
 
     // Dismiss every notification in a group (by index).

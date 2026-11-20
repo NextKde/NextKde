@@ -39,6 +39,11 @@ PersistentPanelWindow {
     function hide() { requestedOpen = false }
     function setDockPopupVisible(shouldOpen) { requestedOpen = shouldOpen }
     function dismissDockPopupImmediately() { requestedOpen = false; ncMotion.reset() }
+    // Open-list suppression (P3): while this surface is on screen, new
+    // notifications land straight in the list instead of flying a banner
+    // over it. See NotificationHistoryService.listOpen.
+    Component.onCompleted: NotificationHistoryService.historyPanelOpen
+        = Qt.binding(function() { return panel.effectiveOpen })
     // Deferred open: let a few frames render before the reveal starts.
     property int _openPreroll: 0
     FrameAnimation {

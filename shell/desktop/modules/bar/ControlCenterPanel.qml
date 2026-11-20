@@ -441,6 +441,12 @@ PersistentPanelWindow {
                 panel.placeCard(c)
             }
         }
+        // Open-list suppression (P3): while the control center is on screen
+        // (a deferred open already counts -- it is about to be), new
+        // notifications land straight in the list instead of flying a banner
+        // over the panel. See NotificationHistoryService.listOpen.
+        NotificationHistoryService.controlCenterHistoryOpen
+            = Qt.binding(function() { return panel.isOpen })
     }
     function placeCard(c) {
         c.backdropScale = Qt.binding(function() { return panelCanvas.scale * c.scale })
