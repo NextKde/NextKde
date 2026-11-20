@@ -642,7 +642,11 @@ if(BUILD_TESTING)
         add_test(NAME kos-shell.inputmethod-motion
             COMMAND ${KOS_NODE_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/inputmethod/run.mjs
                 ${KOS_INTERACTION_QMLTEST})
-        set_tests_properties(kos-shell.inputmethod-motion PROPERTIES LABELS "ui;headless" TIMEOUT 20)
+        add_test(NAME kos-shell.screen-lifecycle
+            COMMAND ${KOS_NODE_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/screen-lifecycle/run.mjs
+                ${KOS_INTERACTION_QMLTEST})
+        set_tests_properties(kos-shell.inputmethod-motion kos-shell.screen-lifecycle
+            PROPERTIES LABELS "ui;headless" TIMEOUT 20)
     endif()
     if(KOS_NODE_EXECUTABLE)
         add_test(NAME kos-shell.inputmethod-placement
