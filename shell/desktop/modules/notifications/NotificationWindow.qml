@@ -232,7 +232,14 @@ PanelWindow {
             // so it never steals clicks from the buttons inside the card.
             property bool hovered: false
             HoverHandler {
-                onHoveredChanged: card.hovered = hovered
+                onHoveredChanged: {
+                    card.hovered = hovered
+                    // The expanded action list is a hover-driven interaction:
+                    // leaving the card collapses it, so the countdown resumes
+                    // instead of waiting for a click nobody promised.
+                    if (!hovered)
+                        actionRow.expanded = false
+                }
             }
 
             // Auto-expire duration for this card, in ms. Critical notifications
@@ -360,7 +367,6 @@ PanelWindow {
                 windowService: WindowService
                 launcher: DockModelService
                 lookupEntry: function(hint) { return AppPresentationService.entryFor(hint) }
-                onBusyChanged: card._lastTickAt = 0
                 onFinished: function(source, success) {
                     if (source !== card.notification || card.removing)
                         return
@@ -434,7 +440,8 @@ PanelWindow {
                 id: expireTicker
                 interval: 50
                 repeat: true
-                running: card.notification !== null && card.expireMs > 0 && !card.hovered && !opener.busy
+                running: card.notification !== null && card.expireMs > 0
+                    && !card.hovered && !opener.busy && !actionRow.expanded
                 onTriggered: {
                     const now = Date.now()
                     if (card._lastTickAt > 0)
@@ -443,13 +450,11 @@ PanelWindow {
                     if (card._remainingMs <= 0)
                         card.close(true)
                 }
-            }
-
-            // Re-seed the baseline whenever the ticker (re)starts, so the time
-            // spent hovered or paused is excluded from the countdown.
-            onHoveredChanged: {
-                if (!card.hovered)
-                    card._lastTickAt = 0
+                // Any stop invalidates the elapsed baseline: a paused gap
+                // (hover, opener, an expanded action list) must never be
+                // retro-counted when the ticker resumes. onTriggered re-seeds
+                // each tick, so this one line covers every stop reason.
+                onRunningChanged: if (!running) card._lastTickAt = 0
             }
 
             // ---- header ----
@@ -621,63 +626,229 @@ PanelWindow {
                     }
                 }
 
-                // Action buttons (collapsed: latest notification).
-                Row {
+                // Action buttons (collapsed: latest notification). One row: as
+                // many buttons as fit beside a "More" chip; the rest expand
+                // as full-width rows inside this card -- the iOS long-press
+                // pattern, never a floating surface and never a wrapped
+                // double-decker row.
+                Item {
+                    id: actionRow
+                    objectName: "notification-actions"
                     width: parent.width
-                    spacing: 8
+                    // Taller while expanded: the overflow rows stack below
+                    // the chip row, and the card's height Behavior grows the
+                    // glass with them. 28 chip row + 6 gap + n rows of 32
+                    // with 6 between = 28 + 38n.
+                    height: 28 + (expanded && split.overflow.length > 0
+                        ? 38 * split.overflow.length : 0)
                     visible: !card.expanded
                         && card.notification && card.notification.actions
                         && card.notification.actions.length > 0
-                    Repeater {
-                        model: (card.notification && card.notification.actions)
-                            ? card.notification.actions
-                            : []
+                    // The expansion freezes only this card (see the ticker
+                    // gate); neighbours keep living their countdowns.
+                    property bool expanded: false
+                    onSplitChanged: expanded = false
+                    onVisibleChanged: if (!visible) expanded = false
+
+                    // Which buttons fit is decided on measured label widths,
+                    // so it does not depend on which delegates happen to be
+                    // instantiated. TextMetrics shares the chip font.
+                    property var split: {
+                        const list = card.notification && card.notification.actions
+                            ? card.notification.actions : []
+                        const spacing = 8
+                        const available = content.width
+                        const chipWidth = label => {
+                            labelMetrics.text = label
+                            return Math.min(labelMetrics.advanceWidth + 24, available)
+                        }
+                        const labelOf = a => {
+                            const raw = a.text || a.identifier || ""
+                            // Some apps send lowercase or alternate-case
+                            // action labels; tr() maps the common ones and
+                            // falls back to the raw label otherwise.
+                            return I18n.tr(raw) || raw
+                        }
+                        const widths = list.map(a => chipWidth(labelOf(a)))
+                        // Measure the wider of the two chip labels so the
+                        // chip does not resize when "More" flips to "Collapse".
+                        const more = Math.max(chipWidth(I18n.tr("More")),
+                            chipWidth(I18n.tr("Collapse")))
+                        const natural = widths.reduce((sum, w) => sum + w, 0)
+                            + spacing * Math.max(0, widths.length - 1)
+                        if (natural <= available)
+                            return { shown: list, overflow: [], more: 0 }
+                        let used = more, k = 0
+                        for (; k < list.length; ++k) {
+                            if (used + widths[k] > available)
+                                break
+                            used += widths[k] + spacing
+                        }
+                        k = Math.max(1, k)
+                        return { shown: list.slice(0, k), overflow: list.slice(k), more: more }
+                    }
+
+                    TextMetrics {
+                        id: labelMetrics
+                        font.pixelSize: 12
+                    }
+
+                    Row {
+                        spacing: 8
+                        anchors { left: parent.left; top: parent.top }
+                        Repeater {
+                            model: actionRow.split.shown
+                            Rectangle {
+                                id: actionBtn
+                                height: 28
+                                // A single label longer than the card elides
+                                // instead of widening its button past the edge.
+                                width: Math.min(actionLabel.implicitWidth + 24, content.width)
+                                radius: 14
+                                color: AppearanceTokens.surface.selectionHighlightStyle === "glass"
+                                    ? (ThemeService.isDark ? Qt.rgba(1, 1, 1, 0.08) : Qt.rgba(0, 0, 0, 0.04))
+                                    : (actionMouse.containsMouse
+                                        ? (ThemeService.isDark ? Qt.rgba(1, 1, 1, 0.20) : Qt.rgba(0, 0, 0, 0.10))
+                                        : (ThemeService.isDark ? Qt.rgba(1, 1, 1, 0.10) : Qt.rgba(0, 0, 0, 0.05)))
+
+                                SelectionHighlight {
+                                    objectName: "notification-action-highlight"
+                                    anchors.fill: parent
+                                    cornerRadius: actionBtn.radius
+                                    enabled: AppearanceTokens.surface.selectionHighlightStyle === "glass"
+                                    hovered: actionMouse.containsMouse
+                                    pressed: actionMouse.pressed
+                                    dark: ThemeService.isDark
+                                    fillStrength: 0.85
+                                }
+                                GlassText {
+                                    id: actionLabel
+                                    anchors.centerIn: parent
+                                    width: Math.min(implicitWidth, actionBtn.width - 24)
+                                    text: {
+                                        const raw = modelData.text || modelData.identifier || ""
+                                        return I18n.tr(raw) || raw
+                                    }
+                                    color: card.foregroundColor
+                                    font.pixelSize: 12
+                                    elide: Text.ElideRight
+                                }
+                                MouseArea {
+                                    id: actionMouse
+                                    anchors.fill: parent
+                                    hoverEnabled: true
+                                    cursorShape: Qt.PointingHandCursor
+                                    onClicked: {
+                                        actionRow.expanded = false
+                                        opener.cancel()
+                                        const resident = card.notification?.resident ?? false
+                                        modelData.invoke()
+                                        if (!resident)
+                                            card.close(false)
+                                    }
+                                }
+                            }
+                        }
                         Rectangle {
-                            id: actionBtn
+                            id: moreBtn
+                            visible: actionRow.split.overflow.length > 0
                             height: 28
-                            width: actionLabel.implicitWidth + 24
+                            width: actionRow.split.more
                             radius: 14
                             color: AppearanceTokens.surface.selectionHighlightStyle === "glass"
                                 ? (ThemeService.isDark ? Qt.rgba(1, 1, 1, 0.08) : Qt.rgba(0, 0, 0, 0.04))
-                                : (actionMouse.containsMouse
+                                : (moreMouse.containsMouse
                                     ? (ThemeService.isDark ? Qt.rgba(1, 1, 1, 0.20) : Qt.rgba(0, 0, 0, 0.10))
                                     : (ThemeService.isDark ? Qt.rgba(1, 1, 1, 0.10) : Qt.rgba(0, 0, 0, 0.05)))
 
                             SelectionHighlight {
-                                objectName: "notification-action-highlight"
                                 anchors.fill: parent
-                                cornerRadius: actionBtn.radius
+                                cornerRadius: moreBtn.radius
                                 enabled: AppearanceTokens.surface.selectionHighlightStyle === "glass"
-                                hovered: actionMouse.containsMouse
-                                pressed: actionMouse.pressed
+                                hovered: moreMouse.containsMouse
+                                pressed: moreMouse.pressed
                                 dark: ThemeService.isDark
                                 fillStrength: 0.85
                             }
                             GlassText {
-                                id: actionLabel
                                 anchors.centerIn: parent
-                                text: {
-                                    const raw = modelData.text || modelData.identifier || ""
-                                    // Some apps send lowercase or alternate-case
-                                    // action labels; tr() maps the common ones and
-                                    // falls back to the raw label otherwise.
-                                    return I18n.tr(raw) || raw
-                                }
+                                width: Math.min(implicitWidth, moreBtn.width - 24)
+                                text: actionRow.expanded
+                                    ? I18n.tr("Collapse")
+                                    : I18n.tr("More")
                                 color: card.foregroundColor
                                 font.pixelSize: 12
                                 elide: Text.ElideRight
                             }
                             MouseArea {
-                                id: actionMouse
+                                id: moreMouse
                                 anchors.fill: parent
                                 hoverEnabled: true
                                 cursorShape: Qt.PointingHandCursor
-                                onClicked: {
-                                    opener.cancel()
-                                    const resident = card.notification?.resident ?? false
-                                    modelData.invoke()
-                                    if (!resident)
-                                        card.close(false)
+                                onClicked: actionRow.expanded = !actionRow.expanded
+                            }
+                        }
+                    }
+
+                    // The overflow actions, stacked full-width under the
+                    // chip row while expanded: children of the action row
+                    // item, never of the chip Row positioner, where anchors
+                    // are illegal and the width would never resolve. Each
+                    // row speaks the shell's row-button language (see
+                    // MenuItemRow): a glass selection plate, the chips'
+                    // resting fill, centered action text.
+                    Column {
+                        visible: actionRow.expanded
+                        anchors {
+                            left: parent.left; right: parent.right
+                            top: parent.top; topMargin: 34
+                        }
+                        spacing: 6
+                        Repeater {
+                            model: actionRow.split.overflow
+                            Rectangle {
+                                width: parent.width
+                                height: 32
+                                radius: AppearanceTokens.shape.medium
+                                color: AppearanceTokens.surface.selectionHighlightStyle === "glass"
+                                    ? (ThemeService.isDark ? Qt.rgba(1, 1, 1, 0.08) : Qt.rgba(0, 0, 0, 0.04))
+                                    : (overflowMouse.containsMouse
+                                        ? (ThemeService.isDark ? Qt.rgba(1, 1, 1, 0.22) : Qt.rgba(0, 0, 0, 0.10))
+                                        : "transparent")
+
+                                SelectionHighlight {
+                                    anchors.fill: parent
+                                    cornerRadius: parent.radius
+                                    enabled: AppearanceTokens.surface.selectionHighlightStyle === "glass"
+                                    hovered: overflowMouse.containsMouse
+                                    pressed: overflowMouse.pressed
+                                    dark: ThemeService.isDark
+                                    fillStrength: 0.85
+                                }
+                                GlassText {
+                                    anchors.centerIn: parent
+                                    width: parent.width - 20
+                                    text: {
+                                        const raw = modelData.text || modelData.identifier || ""
+                                        return I18n.tr(raw) || raw
+                                    }
+                                    color: card.foregroundColor
+                                    font.pixelSize: 12
+                                    elide: Text.ElideRight
+                                }
+                                MouseArea {
+                                    id: overflowMouse
+                                    anchors.fill: parent
+                                    hoverEnabled: true
+                                    cursorShape: Qt.PointingHandCursor
+                                    onClicked: {
+                                        actionRow.expanded = false
+                                        opener.cancel()
+                                        const resident = card.notification?.resident ?? false
+                                        modelData.invoke()
+                                        if (!resident)
+                                            card.close(false)
+                                    }
                                 }
                             }
                         }
@@ -729,15 +900,27 @@ PanelWindow {
                 id: closeButton
                 name: "notification.dismiss"
                 color: card.foregroundColor
-                opacity: 0.55
+                opacity: closeArea.pressed ? 1 : closeArea.containsMouse ? 0.9 : 0.55
                 size: 14
                 width: 22; height: 22
                 anchors { right: parent.right; rightMargin: 12; top: parent.top; topMargin: 9 }
                 MouseArea {
+                    id: closeArea
+                    objectName: "notification-close-area"
                     anchors.fill: parent
                     anchors.margins: -6
+                    hoverEnabled: true
                     cursorShape: Qt.PointingHandCursor
-                    onClicked: card.close(false)
+                    // Released, not clicked: a card that is still sliding in, or
+                    // moving up after the one above it closed, carries the button
+                    // away from a stationary pointer between press and release,
+                    // and clicked would silently drop that dismissal. A release
+                    // anywhere on the card still counts; dragging off cancels.
+                    onReleased: mouse => {
+                        const point = mapToItem(card, mouse.x, mouse.y)
+                        if (card.contains(point))
+                            card.close(false)
+                    }
                 }
             }
         }

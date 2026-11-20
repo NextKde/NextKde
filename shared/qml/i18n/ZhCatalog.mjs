@@ -1625,6 +1625,7 @@ export const catalog = {
     "hours ago": "小时前",
     "days ago": "天前",
     "%1 more notifications": "还有 %1 条通知",
+    "More": "更多",
     "Collapse": "收起",
     "Clear notifications": "清除",
     "Failed to save notification settings": "通知设置保存失败",
