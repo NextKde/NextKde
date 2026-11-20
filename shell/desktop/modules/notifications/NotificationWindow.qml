@@ -793,10 +793,10 @@ PanelWindow {
                     // The overflow actions, stacked full-width under the
                     // chip row while expanded: children of the action row
                     // item, never of the chip Row positioner, where anchors
-                    // are illegal and the width would never resolve. Each
-                    // row speaks the shell's row-button language (see
-                    // MenuItemRow): a glass selection plate, the chips'
-                    // resting fill, centered action text.
+                    // are illegal and the width would never resolve. Rows
+                    // are the shared NotificationActionRow (the same visual
+                    // the history cards use); this card answers activated
+                    // with its own invoke-then-close flow.
                     Column {
                         visible: actionRow.expanded
                         anchors {
@@ -806,49 +806,19 @@ PanelWindow {
                         spacing: 6
                         Repeater {
                             model: actionRow.split.overflow
-                            Rectangle {
-                                width: parent.width
-                                height: 32
-                                radius: AppearanceTokens.shape.medium
-                                color: AppearanceTokens.surface.selectionHighlightStyle === "glass"
-                                    ? (ThemeService.isDark ? Qt.rgba(1, 1, 1, 0.08) : Qt.rgba(0, 0, 0, 0.04))
-                                    : (overflowMouse.containsMouse
-                                        ? (ThemeService.isDark ? Qt.rgba(1, 1, 1, 0.22) : Qt.rgba(0, 0, 0, 0.10))
-                                        : "transparent")
-
-                                SelectionHighlight {
-                                    anchors.fill: parent
-                                    cornerRadius: parent.radius
-                                    enabled: AppearanceTokens.surface.selectionHighlightStyle === "glass"
-                                    hovered: overflowMouse.containsMouse
-                                    pressed: overflowMouse.pressed
-                                    dark: ThemeService.isDark
-                                    fillStrength: 0.85
+                            NotificationActionRow {
+                                label: {
+                                    const raw = modelData.text || modelData.identifier || ""
+                                    return I18n.tr(raw) || raw
                                 }
-                                GlassText {
-                                    anchors.centerIn: parent
-                                    width: parent.width - 20
-                                    text: {
-                                        const raw = modelData.text || modelData.identifier || ""
-                                        return I18n.tr(raw) || raw
-                                    }
-                                    color: card.foregroundColor
-                                    font.pixelSize: 12
-                                    elide: Text.ElideRight
-                                }
-                                MouseArea {
-                                    id: overflowMouse
-                                    anchors.fill: parent
-                                    hoverEnabled: true
-                                    cursorShape: Qt.PointingHandCursor
-                                    onClicked: {
-                                        actionRow.expanded = false
-                                        opener.cancel()
-                                        const resident = card.notification?.resident ?? false
-                                        modelData.invoke()
-                                        if (!resident)
-                                            card.close(false)
-                                    }
+                                textColor: card.foregroundColor
+                                onActivated: {
+                                    actionRow.expanded = false
+                                    opener.cancel()
+                                    const resident = card.notification?.resident ?? false
+                                    modelData.invoke()
+                                    if (!resident)
+                                        card.close(false)
                                 }
                             }
                         }

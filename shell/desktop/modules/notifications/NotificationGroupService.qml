@@ -2,6 +2,7 @@ import QtQuick
 import Quickshell.Services.Notifications
 import qs.desktop.modules.bar
 import qs.desktop.modules.common
+import "../../../shared/qml/i18n"
 
 // Groups tracked notifications by desktopEntry (fallback appName) into a
 // ListModel that the popup and history views consume. Quickshell's
@@ -359,14 +360,21 @@ QtObject {
         svc.sidecarRevision++
     }
 
-    // Expire every notification in a group (by key). Used by the auto-expire
-    // timer so a stacked group disappears all at once instead of one-by-one.
+    // Retire every notification in a group (by key). Used by the auto-expire
+    // timer so a stacked group leaves the banner list all at once. Expiry is
+    // no longer a close: the banner goes away, but each live object stays
+    // with the server -- untracked, the same mechanism DND uses in
+    // NotificationCenter -- so its actions keep working from the history
+    // list (macOS/Plasma semantics). A real close remains the user's:
+    // dismissGroupByKey, or deleting/clearing from the history view.
     // Re-collects LIVE objects (see dismissGroupByKey for why).
     function expireGroupByKey(key) {
         const arr = svc._liveNotificationsForKey(key)
-            .filter(n => n && typeof n.expire === "function")
-        for (let j = arr.length - 1; j >= 0; j--)
-            arr[j].expire()
+            .filter(n => n)
+        for (let j = arr.length - 1; j >= 0; j--) {
+            NotificationHistoryService.registerLive(arr[j])
+            arr[j].tracked = false
+        }
 
         // Synchronous cleanup fallback: remove the group from groupsModel immediately.
         for (let idx = groupsModel.count - 1; idx >= 0; idx--) {
@@ -401,12 +409,6 @@ QtObject {
         notification.dismiss()
     }
 
-    function expireNotification(notification) {
-        if (!svc._isAlive(notification))
-            return
-        notification.expire()
-    }
-
     // ---- history -----------------------------------------------------------
 
     // Snapshot on arrival, before tracking or DND presentation is decided.
@@ -414,10 +416,24 @@ QtObject {
         _pushHistory(notification)
     }
 
-    // Copy primitive fields into session history before the live object disappears.
+    // Copy primitive fields into session history. The live object outlives
+    // the banner now (retirement keeps it with the server), but the row
+    // still carries only serialized primitives -- ListModel object roles
+    // corrupt -- so actions travel as JSON and invoke through the live
+    // registry (NotificationHistoryService.liveById) by notifId.
     function _pushHistory(notification) {
         if (!notification)
             return
+        const actions = []
+        const raw = notification.actions || []
+        for (let i = 0; i < raw.length; ++i) {
+            const a = raw[i]
+            const text = a.text || a.identifier || ""
+            actions.push({
+                identifier: a.identifier || "",
+                label: I18n.tr(text) || text
+            })
+        }
         const snapshot = {
             notifId: notification.id,
             appName: notification.appName || "",
@@ -426,6 +442,7 @@ QtObject {
             summary: notification.summary || "",
             body: notification.body || "",
             urgency: notification.urgency,
+            actionsJson: JSON.stringify(actions),
             timestamp: Date.now()
         }
         NotificationHistoryService.push(snapshot)

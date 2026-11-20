@@ -16,8 +16,69 @@ QtObject {
     readonly property int count: history.count
     signal historyUpdated()
 
+    // ---- live-object registry ----------------------------------------------
+    //
+    // Banners retire into this registry instead of closing
+    // (GroupService.expireGroupByKey untracks the object, which keeps it
+    // alive with the server), so a history row can still invoke its actions
+    // long after the banner is gone -- macOS/Plasma semantics. Arrival
+    // registers every live object (NotificationCenter.recordNotification);
+    // user dismissals unregister, and dead refs (replaces_id destroys the
+    // old object within ~2ms) are pruned lazily by liveNotification's
+    // liveness probe.
+    property var liveById: ({})
+
+    function registerLive(notification) {
+        if (!notification || notification.id === undefined)
+            return
+        liveById[notification.id] = notification
+    }
+
+    function unregisterLive(notifId) {
+        delete liveById[notifId]
+    }
+
+    // Cheap liveness probe: a destroyed object's dismiss is no longer a
+    // function and appName reads undefined (same pattern as
+    // NotificationGroupService._isAlive).
+    function _liveAlive(n) {
+        return n && typeof n.dismiss === "function" && n.appName !== undefined
+    }
+
+    function liveNotification(notifId) {
+        const n = liveById[notifId]
+        if (!_liveAlive(n)) {
+            delete liveById[notifId]
+            return null
+        }
+        return n
+    }
+
+    // Invoke a stored action on the live object. Returns false when the
+    // object is gone (the app replaced or closed it) or the action no
+    // longer exists; callers fall back to relaunching the app.
+    function invokeAction(notifId, actionIdentifier) {
+        const n = liveNotification(notifId)
+        if (!n)
+            return false
+        const actions = n.actions || []
+        for (let i = 0; i < actions.length; ++i) {
+            if (String(actions[i].identifier || "") === String(actionIdentifier)) {
+                actions[i].invoke()
+                return true
+            }
+        }
+        return false
+    }
+
     function push(snapshot) {
         snapshot.sourceKey = NotificationIdentity.sourceKey(snapshot)
+        // Action rows are serialized JSON on every snapshot _pushHistory
+        // builds; older/foreign pushers (test fixtures, previews) may not
+        // carry the field, so default it rather than bind delegates to a
+        // missing role.
+        if (typeof snapshot.actionsJson !== "string" || snapshot.actionsJson.length === 0)
+            snapshot.actionsJson = "[]"
         let existing = -1
         for (let i = 0; i < history.count; ++i) {
             if (history.get(i).notifId === snapshot.notifId) {
@@ -33,8 +94,17 @@ QtObject {
             snapshot.historyKey = ++nextKey
             history.insert(0, snapshot)
         }
-        while (history.count > maximumCount)
+        while (history.count > maximumCount) {
+            // A real close for evicted objects: retirement must never leak
+            // more live objects than the history window shows.
+            const evicted = history.get(history.count - 1)
+            const live = liveNotification(evicted.notifId)
+            if (live) {
+                unregisterLive(evicted.notifId)
+                live.dismiss()
+            }
             history.remove(history.count - 1)
+        }
         rebuildRows()
     }
     function keysForSource(key) {
@@ -57,8 +127,20 @@ QtObject {
     function remove(key) { removeKeys([key]) }
     function removeKeys(keys) {
         const selected = new Set(keys)
-        for (let i = history.count - 1; i >= 0; --i)
-            if (selected.has(history.get(i).historyKey)) history.remove(i)
+        for (let i = history.count - 1; i >= 0; --i) {
+            if (!selected.has(history.get(i).historyKey))
+                continue
+            // Deleting from the visible history is the user asking the
+            // notification to go away entirely: close the live object,
+            // not just the snapshot row.
+            const row = history.get(i)
+            const live = liveNotification(row.notifId)
+            if (live) {
+                unregisterLive(row.notifId)
+                live.dismiss()
+            }
+            history.remove(i)
+        }
         rebuildRows()
     }
     function clear() { removeKeys(allKeys()) }
@@ -79,7 +161,8 @@ QtObject {
                 bySource.set(key, group)
                 desired.push(group)
             }
-            bySource.get(key).items.push({historyKey: row.historyKey, summary: row.summary,
+            bySource.get(key).items.push({historyKey: row.historyKey, notifId: row.notifId,
+                actionsJson: String(row.actionsJson || "[]"), summary: row.summary,
                 body: row.body, timestamp: row.timestamp})
         }
         // Serialized primitives avoid nested QQmlListModel roles. Each visual
