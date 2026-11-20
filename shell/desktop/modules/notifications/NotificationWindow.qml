@@ -672,8 +672,8 @@ PanelWindow {
                         const widths = list.map(a => chipWidth(labelOf(a)))
                         // Measure the wider of the two chip labels so the
                         // chip does not resize when "More" flips to "Collapse".
-                        const more = Math.max(chipWidth(I18n.tr("More") || "更多"),
-                            chipWidth(I18n.tr("Collapse") || "收起"))
+                        const more = Math.max(chipWidth(I18n.tr("More")),
+                            chipWidth(I18n.tr("Collapse")))
                         const natural = widths.reduce((sum, w) => sum + w, 0)
                             + spacing * Math.max(0, widths.length - 1)
                         if (natural <= available)
@@ -774,8 +774,8 @@ PanelWindow {
                                 anchors.centerIn: parent
                                 width: Math.min(implicitWidth, moreBtn.width - 24)
                                 text: actionRow.expanded
-                                    ? (I18n.tr("Collapse") || "收起")
-                                    : (I18n.tr("More") || "更多")
+                                    ? I18n.tr("Collapse")
+                                    : I18n.tr("More")
                                 color: card.foregroundColor
                                 font.pixelSize: 12
                                 elide: Text.ElideRight

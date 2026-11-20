@@ -1419,6 +1419,7 @@ export const catalog = {
     "hours ago": "h atrás",
     "days ago": "dias atrás",
     "%1 more notifications": "Mais %1 notificações",
+    "More": "Mais",
     "Collapse": "Recolher",
     "Clear notifications": "Limpar notificações",
     "Failed to save notification settings": "Falha ao salvar as configurações de notificação",
