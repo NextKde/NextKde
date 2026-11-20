@@ -653,11 +653,26 @@ PanelWindow {
                     // Which buttons fit is decided on measured label widths,
                     // so it does not depend on which delegates happen to be
                     // instantiated. TextMetrics shares the chip font.
-                    property var split: {
+                    // Recomputed imperatively, never from a binding: setting
+                    // labelMetrics.text while a binding reads its
+                    // advanceWidth is a self-triggering dependency -- the
+                    // binding loop Qt warned about on every banner lifecycle.
+                    property var split: ({ shown: [], overflow: [], more: 0 })
+                    function recomputeSplit() {
                         const list = card.notification && card.notification.actions
                             ? card.notification.actions : []
-                        const spacing = 8
                         const available = content.width
+                        const next = actionRow._partition(list, available)
+                        // Assign only on a real change: a fresh object per
+                        // call would reset `expanded` via onSplitChanged on
+                        // every recompute.
+                        if (JSON.stringify(next) !== JSON.stringify(split))
+                            split = next
+                    }
+                    function _partition(list, available) {
+                        if (list.length === 0)
+                            return { shown: [], overflow: [], more: 0 }
+                        const spacing = 8
                         const chipWidth = label => {
                             labelMetrics.text = label
                             return Math.min(labelMetrics.advanceWidth + 24, available)
@@ -687,6 +702,14 @@ PanelWindow {
                         k = Math.max(1, k)
                         return { shown: list.slice(0, k), overflow: list.slice(k), more: more }
                     }
+                    // width follows content (parent.width), so a width change
+                    // is the available-space change.
+                    onWidthChanged: recomputeSplit()
+                    Connections {
+                        target: card
+                        function onNotificationChanged() { actionRow.recomputeSplit() }
+                    }
+                    Component.onCompleted: recomputeSplit()
 
                     TextMetrics {
                         id: labelMetrics
