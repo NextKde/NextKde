@@ -653,11 +653,26 @@ PanelWindow {
                     // Which buttons fit is decided on measured label widths,
                     // so it does not depend on which delegates happen to be
                     // instantiated. TextMetrics shares the chip font.
-                    property var split: {
+                    // Recomputed imperatively, never from a binding: setting
+                    // labelMetrics.text while a binding reads its
+                    // advanceWidth is a self-triggering dependency -- the
+                    // binding loop Qt warned about on every banner lifecycle.
+                    property var split: ({ shown: [], overflow: [], more: 0 })
+                    function recomputeSplit() {
                         const list = card.notification && card.notification.actions
                             ? card.notification.actions : []
-                        const spacing = 8
                         const available = content.width
+                        const next = actionRow._partition(list, available)
+                        // Assign only on a real change: a fresh object per
+                        // call would reset `expanded` via onSplitChanged on
+                        // every recompute.
+                        if (JSON.stringify(next) !== JSON.stringify(split))
+                            split = next
+                    }
+                    function _partition(list, available) {
+                        if (list.length === 0)
+                            return { shown: [], overflow: [], more: 0 }
+                        const spacing = 8
                         const chipWidth = label => {
                             labelMetrics.text = label
                             return Math.min(labelMetrics.advanceWidth + 24, available)
@@ -687,6 +702,14 @@ PanelWindow {
                         k = Math.max(1, k)
                         return { shown: list.slice(0, k), overflow: list.slice(k), more: more }
                     }
+                    // width follows content (parent.width), so a width change
+                    // is the available-space change.
+                    onWidthChanged: recomputeSplit()
+                    Connections {
+                        target: card
+                        function onNotificationChanged() { actionRow.recomputeSplit() }
+                    }
+                    Component.onCompleted: recomputeSplit()
 
                     TextMetrics {
                         id: labelMetrics
@@ -793,10 +816,10 @@ PanelWindow {
                     // The overflow actions, stacked full-width under the
                     // chip row while expanded: children of the action row
                     // item, never of the chip Row positioner, where anchors
-                    // are illegal and the width would never resolve. Each
-                    // row speaks the shell's row-button language (see
-                    // MenuItemRow): a glass selection plate, the chips'
-                    // resting fill, centered action text.
+                    // are illegal and the width would never resolve. Rows
+                    // are the shared NotificationActionRow (the same visual
+                    // the history cards use); this card answers activated
+                    // with its own invoke-then-close flow.
                     Column {
                         visible: actionRow.expanded
                         anchors {
@@ -806,49 +829,19 @@ PanelWindow {
                         spacing: 6
                         Repeater {
                             model: actionRow.split.overflow
-                            Rectangle {
-                                width: parent.width
-                                height: 32
-                                radius: AppearanceTokens.shape.medium
-                                color: AppearanceTokens.surface.selectionHighlightStyle === "glass"
-                                    ? (ThemeService.isDark ? Qt.rgba(1, 1, 1, 0.08) : Qt.rgba(0, 0, 0, 0.04))
-                                    : (overflowMouse.containsMouse
-                                        ? (ThemeService.isDark ? Qt.rgba(1, 1, 1, 0.22) : Qt.rgba(0, 0, 0, 0.10))
-                                        : "transparent")
-
-                                SelectionHighlight {
-                                    anchors.fill: parent
-                                    cornerRadius: parent.radius
-                                    enabled: AppearanceTokens.surface.selectionHighlightStyle === "glass"
-                                    hovered: overflowMouse.containsMouse
-                                    pressed: overflowMouse.pressed
-                                    dark: ThemeService.isDark
-                                    fillStrength: 0.85
+                            NotificationActionRow {
+                                label: {
+                                    const raw = modelData.text || modelData.identifier || ""
+                                    return I18n.tr(raw) || raw
                                 }
-                                GlassText {
-                                    anchors.centerIn: parent
-                                    width: parent.width - 20
-                                    text: {
-                                        const raw = modelData.text || modelData.identifier || ""
-                                        return I18n.tr(raw) || raw
-                                    }
-                                    color: card.foregroundColor
-                                    font.pixelSize: 12
-                                    elide: Text.ElideRight
-                                }
-                                MouseArea {
-                                    id: overflowMouse
-                                    anchors.fill: parent
-                                    hoverEnabled: true
-                                    cursorShape: Qt.PointingHandCursor
-                                    onClicked: {
-                                        actionRow.expanded = false
-                                        opener.cancel()
-                                        const resident = card.notification?.resident ?? false
-                                        modelData.invoke()
-                                        if (!resident)
-                                            card.close(false)
-                                    }
+                                textColor: card.foregroundColor
+                                onActivated: {
+                                    actionRow.expanded = false
+                                    opener.cancel()
+                                    const resident = card.notification?.resident ?? false
+                                    modelData.invoke()
+                                    if (!resident)
+                                        card.close(false)
                                 }
                             }
                         }

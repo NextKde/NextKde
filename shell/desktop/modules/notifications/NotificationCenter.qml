@@ -22,6 +22,11 @@ Scope {
             return
         }
         notification.tracked = !ControlCenterService.doNotDisturbEnabled && NotificationPolicyService.bannersEnabled
+        // Every live object registers by server id at arrival (including
+        // DND-untracked ones), so history rows can invoke its actions for
+        // as long as the object lives. Banners retire into the same
+        // registry instead of closing when they expire.
+        NotificationHistoryService.registerLive(notification)
         // Metadata/replacement updates still refresh history, but do not chime.
         if (firstArrival && soundService) soundService.play(notification)
         AppNotificationService.recordNotification({
@@ -68,11 +73,13 @@ Scope {
         function onBannersEnabledChanged() {
             if (!NotificationPolicyService.bannersEnabled)
                 for (const notification of notifGroupService._collectNotifications())
-                    notification.tracked = false
+                    if (!NotificationHistoryService.isRetired(notification.id))
+                        notification.tracked = false
         }
         function onBlockedKeysChanged() {
             for (const notification of notifGroupService._collectNotifications())
-                if (NotificationPolicyService.isBlocked(notification))
+                if (NotificationPolicyService.isBlocked(notification)
+                    && !NotificationHistoryService.isRetired(notification.id))
                     notification.tracked = false
         }
     }
@@ -81,7 +88,8 @@ Scope {
         function onDoNotDisturbEnabledChanged() {
             if (ControlCenterService.doNotDisturbEnabled)
                 for (const notification of notifGroupService._collectNotifications())
-                    notification.tracked = false
+                    if (!NotificationHistoryService.isRetired(notification.id))
+                        notification.tracked = false
         }
     }
 
