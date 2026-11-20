@@ -303,7 +303,11 @@ def main():
         if not os.path.lexists(trashed):
             fail("trash-link: the link was not moved to the trash")
 
-        # 4. An existing regular file is never replaced.
+        # 4. An existing regular file is never replaced. Steps 3b and 3c moved
+        # the link away, so ask for the shortcut again before replacing it.
+        response = shortcut(sock_path, "restore", ENTRY_ID)
+        if not response.get("ok"):
+            fail("restore: expected success, got " + str(response))
         os.unlink(dest_path)
         write(dest_path, b"user content\n")
         response = shortcut(sock_path, "regular-file", ENTRY_ID)
