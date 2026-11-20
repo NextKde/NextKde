@@ -288,7 +288,12 @@ QtObject {
     }
 
     function _rebuild() {
+        // Retired objects stay in trackedNotifications (alive with the
+        // server) but must never come back to the banner: filter them out
+        // before grouping, so a sidecar refresh after retirement cannot
+        // resurrect the card.
         const notifications = svc._collectNotifications()
+            .filter(n => !NotificationHistoryService.isRetired(n.id))
         const nextGroups = svc._buildGroups(notifications)
         svc._applyGroups(nextGroups)
     }
@@ -363,17 +368,20 @@ QtObject {
     // Retire every notification in a group (by key). Used by the auto-expire
     // timer so a stacked group leaves the banner list all at once. Expiry is
     // no longer a close: the banner goes away, but each live object stays
-    // with the server -- untracked, the same mechanism DND uses in
-    // NotificationCenter -- so its actions keep working from the history
-    // list (macOS/Plasma semantics). A real close remains the user's:
-    // dismissGroupByKey, or deleting/clearing from the history view.
+    // with the server -- marked retired, filtered out of every banner
+    // collect -- so its actions keep working from the history list
+    // (macOS/Plasma semantics). The object must stay tracked: Quickshell
+    // closes a notification the moment it is untracked (verified on the VM:
+    // reason-2 close fires at the retire instant, even with a 60s app
+    // timeout). A real close remains the user's: dismissGroupByKey, or
+    // deleting/clearing from the history view.
     // Re-collects LIVE objects (see dismissGroupByKey for why).
     function expireGroupByKey(key) {
         const arr = svc._liveNotificationsForKey(key)
             .filter(n => n)
         for (let j = arr.length - 1; j >= 0; j--) {
             NotificationHistoryService.registerLive(arr[j])
-            arr[j].tracked = false
+            NotificationHistoryService.retire(arr[j].id)
         }
 
         // Synchronous cleanup fallback: remove the group from groupsModel immediately.

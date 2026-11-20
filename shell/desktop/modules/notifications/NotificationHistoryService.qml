@@ -18,15 +18,21 @@ QtObject {
 
     // ---- live-object registry ----------------------------------------------
     //
-    // Banners retire into this registry instead of closing
-    // (GroupService.expireGroupByKey untracks the object, which keeps it
-    // alive with the server), so a history row can still invoke its actions
-    // long after the banner is gone -- macOS/Plasma semantics. Arrival
+    // Banners retire instead of closing: expireGroupByKey marks the object
+    // retired (see retiredIds) and registers it here, so a history row can
+    // still invoke its actions long after the banner is gone -- macOS/Plasma
+    // semantics. The object stays tracked with the server; untracking would
+    // close it (Quickshell releases untracked notifications). Arrival
     // registers every live object (NotificationCenter.recordNotification);
     // user dismissals unregister, and dead refs (replaces_id destroys the
     // old object within ~2ms) are pruned lazily by liveNotification's
     // liveness probe.
     property var liveById: ({})
+    // Retired server ids: tracked with the server (actions stay invokable)
+    // but hidden from the banner list. GroupService filters its collects by
+    // this set; deleting/clearing history removes the marker together with
+    // the real dismiss.
+    property var retiredIds: ({})
 
     function registerLive(notification) {
         if (!notification || notification.id === undefined)
@@ -34,8 +40,17 @@ QtObject {
         liveById[notification.id] = notification
     }
 
+    function retire(notifId) {
+        retiredIds[notifId] = true
+    }
+
+    function isRetired(notifId) {
+        return retiredIds[notifId] === true
+    }
+
     function unregisterLive(notifId) {
         delete liveById[notifId]
+        delete retiredIds[notifId]
     }
 
     // Cheap liveness probe: a destroyed object's dismiss is no longer a

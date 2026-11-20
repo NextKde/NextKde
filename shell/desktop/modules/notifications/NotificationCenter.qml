@@ -73,11 +73,13 @@ Scope {
         function onBannersEnabledChanged() {
             if (!NotificationPolicyService.bannersEnabled)
                 for (const notification of notifGroupService._collectNotifications())
-                    notification.tracked = false
+                    if (!NotificationHistoryService.isRetired(notification.id))
+                        notification.tracked = false
         }
         function onBlockedKeysChanged() {
             for (const notification of notifGroupService._collectNotifications())
-                if (NotificationPolicyService.isBlocked(notification))
+                if (NotificationPolicyService.isBlocked(notification)
+                    && !NotificationHistoryService.isRetired(notification.id))
                     notification.tracked = false
         }
     }
@@ -86,7 +88,8 @@ Scope {
         function onDoNotDisturbEnabledChanged() {
             if (ControlCenterService.doNotDisturbEnabled)
                 for (const notification of notifGroupService._collectNotifications())
-                    notification.tracked = false
+                    if (!NotificationHistoryService.isRetired(notification.id))
+                        notification.tracked = false
         }
     }
 
