@@ -34,6 +34,18 @@ QtObject {
     // the real dismiss.
     property var retiredIds: ({})
 
+    // ---- open-list suppression -----------------------------------------------
+    //
+    // While a surface showing the history list is on screen (the dock's
+    // notification panel or the control center), new notifications skip the
+    // banner slot entirely and land straight in the list -- no "the list is
+    // growing AND a banner is flying" double presentation. The hosts push
+    // their own flag; the arrival path and the banner cleanup read the
+    // combined listOpen.
+    property bool historyPanelOpen: false
+    property bool controlCenterHistoryOpen: false
+    readonly property bool listOpen: historyPanelOpen || controlCenterHistoryOpen
+
     function registerLive(notification) {
         if (!notification || notification.id === undefined)
             return
