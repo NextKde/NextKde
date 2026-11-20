@@ -159,20 +159,29 @@ Item {
         // old popup's negative margins gave the notification panel (-8 on
         // every dock edge).
         const gap = root.dockHosted ? 8 : 4
+        // A null item (hidden or unresolvable cell) must still open the panel
+        // somewhere sane: center it on the dock artwork, or the screen when
+        // there is no dock rect, instead of collapsing the center onto the
+        // output origin. Cell anchor and placement are separable since the
+        // panel takes its edge offset from the dock artwork either way.
+        const centerH = item ? gx + iw / 2
+            : (dockRect ? dockRect.x + dockRect.width / 2 : sx + sw / 2)
+        const centerV = item ? gy + ih / 2
+            : (dockRect ? dockRect.y + dockRect.height / 2 : sy + sh / 2)
         if (edge === "top") {
             const near = dockRect ? dockRect.y + dockRect.height : gy + ih
-            return { edge: edge, offset: near + gap - sy, center: gx + iw / 2 }
+            return { edge: edge, offset: near + gap - sy, center: centerH }
         }
         if (edge === "bottom") {
             const near = dockRect ? dockRect.y : gy
-            return { edge: edge, offset: sy + sh - near + gap, center: gx + iw / 2 }
+            return { edge: edge, offset: sy + sh - near + gap, center: centerH }
         }
         if (edge === "left") {
             const near = dockRect ? dockRect.x + dockRect.width : gx + iw
-            return { edge: edge, offset: near + gap - sx, center: gy + ih / 2 }
+            return { edge: edge, offset: near + gap - sx, center: centerV }
         }
         const near = dockRect ? dockRect.x : gx
-        return { edge: edge, offset: sx + sw - near + gap, center: gy + ih / 2 }
+        return { edge: edge, offset: sx + sw - near + gap, center: centerV }
     }
     function _applyPlacement(panel, placement) {
         if (!panel || !placement)
@@ -190,8 +199,17 @@ Item {
         closeDetailPanels()
         notificationPanel.close()
         if (controlCenter) {
-            if (!controlCenter.isOpen)
-                controlCenter.toggle(controlCenterAnchor())
+            if (!controlCenter.isOpen) {
+                // Same placement discipline as toggleControlCenter: this path
+                // used to toggle with no placement applied at all, so a panel
+                // opened from the desktop context menu kept its default or
+                // leftover position instead of the dock artwork's. The anchor
+                // may be null (hidden cell); _panelPlacement then centers on
+                // the artwork.
+                const anchor = controlCenterAnchor()
+                _applyPlacement(controlCenter, _panelPlacement(anchor))
+                controlCenter.toggle(anchor)
+            }
             controlCenter.runSessionAction(action)
         } else {
             pendingSessionAction = action
@@ -486,9 +504,11 @@ Item {
             bluetoothPanel.close()
             if (!root.controlCenterOpen)
                 networkPanel.close()
-            const anchor = root.controlCenterAnchor()
-            if (anchor)
-                root.toggleControlCenter(anchor)
+            // A hidden or unresolvable cell must not swallow the request
+            // (this path toggled only when the lookup succeeded, so the
+            // global shortcut silently did nothing). toggleControlCenter
+            // places from the dock artwork when the anchor is null.
+            root.toggleControlCenter(root.controlCenterAnchor())
         }
     }
 }
