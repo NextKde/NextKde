@@ -15,7 +15,6 @@ ControlCenterCard {
         cornerRadius: stageModeCard.cardRadius
         selected: stageModeCard.stageMode.enabled
     }
-    visible: cardShown && coordinator.cardAnchor !== null
     Rectangle {
         id: stageDisc
         width: 34; height: 34; radius: 17
