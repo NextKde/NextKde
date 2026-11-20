@@ -76,6 +76,17 @@ Item {
         else delete next[key]
         detailStates = next
     }
+    // History rows hold no live state of their own: an action click invokes
+    // through the live registry, and when the object is gone -- the app
+    // replaced or closed it -- the action degrades to opening the app, the
+    // same fallback macOS shows for dead notifications.
+    function invokeHistoryAction(painted, identifier) {
+        if (NotificationHistoryService.invokeAction(painted.notifId, identifier))
+            return
+        const entry = AppPresentationService.entryFor(painted.desktopEntry)
+        if (entry && entry.id)
+            DockModelService.launchApp(String(entry.id), function() {}, function() { return true })
+    }
     property bool modelReady: false
     ListModel { id: displayedRows }
     function reconcileRows() {
@@ -96,7 +107,8 @@ Item {
         for (let i = 0; i < count; ++i) {
             const row = source.get(i)
             desired.push({historyKey:row.historyKey, appName:row.appName, appIcon:row.appIcon,
-                desktopEntry:row.desktopEntry, summary:row.summary, body:row.body, timestamp:row.timestamp})
+                desktopEntry:row.desktopEntry, summary:row.summary, body:row.body, timestamp:row.timestamp,
+                notifId:row.notifId, actionsJson:row.actionsJson})
         }
         const keys = new Set(desired.map(row => row.historyKey))
         for (let i = displayedRows.count - 1; i >= 0; --i)
@@ -307,6 +319,8 @@ Item {
             required property string summary
             required property string body
             required property real timestamp
+            required property int notifId
+            required property string actionsJson
             readonly property bool notificationCell: true
             readonly property bool revealed: true
             readonly property var cardItem: cardLoader.item
@@ -314,13 +328,13 @@ Item {
             property bool registeredExit: false
             property real frozenHeight: 0
             property var painted: ({key:historyKey, appName:appName, appIcon:appIcon, desktopEntry:desktopEntry,
-                summary:summary, body:body, timestamp:timestamp})
+                summary:summary, body:body, timestamp:timestamp, notifId:notifId, actionsJson:actionsJson})
             width: historyList.width
             height: exiting ? frozenHeight : (cardItem ? cardItem.height : 112) + 8
             enabled: !exiting && revealed
             ListView.onRemove: {
                 painted = {key:historyKey, appName:appName, appIcon:appIcon, desktopEntry:desktopEntry,
-                    summary:summary, body:body, timestamp:timestamp}
+                    summary:summary, body:body, timestamp:timestamp, notifId:notifId, actionsJson:actionsJson}
                 frozenHeight = height
                 exiting = true
                 if (pane.historyGroupVisible(cell) && frozenHeight > 0) {
@@ -349,8 +363,10 @@ Item {
                     historyKey: cell.painted.key
                     appName: cell.painted.appName; appIcon: cell.painted.appIcon; desktopEntry: cell.painted.desktopEntry
                     summary: cell.painted.summary; body: cell.painted.body; timestamp: cell.painted.timestamp
+                    notifId: cell.painted.notifId; actionsJson: cell.painted.actionsJson
                     detailsExpanded: pane.detailStates[cell.painted.key] === true
                     onDetailsRequested: value => pane.setDetails(cell.painted.key, value)
+                    onActionActivated: identifier => pane.invokeHistoryAction(cell.painted, identifier)
                     clockNow: pane.clockNow
                     showPreview: NotificationPolicyService.showPreview
                     interactive: !cell.exiting && (cell.index < 3 || pane.expanded)
