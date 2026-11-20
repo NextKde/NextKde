@@ -39,6 +39,13 @@ PanelWindow {
     // allowed to linger past this. Change this single number to retune.
     readonly property int maxAutoExpireMs: 6000
 
+    // Critical alerts get a doubled slot before retiring into history like
+    // everything else (they used to stay until dismissed; the dock badge and
+    // the history list own persistence now, so nothing is lost when the
+    // banner goes). Criticals also ignore DND and queue-jump to the slot --
+    // see NotificationGroupService._applyGroups.
+    readonly property int criticalExpireMs: 12000
+
     color: "transparent"
     exclusionMode: ExclusionMode.Ignore
     WlrLayershell.layer: WlrLayer.Overlay
@@ -242,12 +249,13 @@ PanelWindow {
                 }
             }
 
-            // Auto-expire duration for this card, in ms. Critical notifications
-            // stay until dismissed (matches Plasma: urgency=critical never
-            // auto-expires); everything else is capped by root.maxAutoExpireMs.
+            // Auto-expire duration for this card, in ms. Critical
+            // notifications get a doubled slot and then retire into history
+            // (the dock badge carries the persistence from there); normal
+            // cards are capped by root.maxAutoExpireMs.
             readonly property int expireMs: {
                 if (card.isCritical)
-                    return 0
+                    return root.criticalExpireMs
                 const n = card.notification
                 const requested = (n && n.expireTimeout > 0) ? n.expireTimeout : 7000
                 return Math.min(root.maxAutoExpireMs, Math.max(1000, requested))
@@ -383,11 +391,12 @@ PanelWindow {
 
             // ---- countdown bar ----
             // Drawn as the bottom sliver of the card, above the glass panel so
-            // it stays visible. Hidden for critical/persistent notifications
-            // (no countdown to show) and once the group is dying.
+            // it stays visible. Shown whenever the card has a countdown --
+            // criticals included (their doubled drain) -- and hidden once the
+            // group is dying.
             Rectangle {
                 id: countdownTrack
-                visible: card.expireMs > 0 && !card.isCritical
+                visible: card.expireMs > 0
                 anchors {
                     left: parent.left; right: parent.right; bottom: parent.bottom
                     leftMargin: card.radius * 0.5
