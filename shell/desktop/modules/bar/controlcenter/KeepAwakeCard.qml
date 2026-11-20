@@ -15,7 +15,6 @@ ControlCenterCard {
         cornerRadius: keepAwakeCard.cardRadius
         selected: keepAwakeCard.service.keepAwakeEnabled
     }
-    visible: cardShown && coordinator.cardAnchor !== null
     Rectangle {
         id: keepAwakeDisc
         width: 34; height: 34; radius: 17

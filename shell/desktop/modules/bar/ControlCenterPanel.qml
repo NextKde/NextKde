@@ -370,27 +370,33 @@ PersistentPanelWindow {
     // only the declared card outlines, so the gaps remain transparent. Include
     // every visible declaration in the region union; capture and shape bounds
     // must describe the same envelope throughout scrolling and navigation.
+    // Gate on `backdropVisible` ALONE: that is exactly the condition under
+    // which a card's glass publishes its SurfaceShape ("可见即发布"). Adding
+    // `card.visible &&` here desynchronised the two sides the one time a card
+    // hid itself through a channel the glass did not follow (the retired
+    // cardAnchor gate) — a published shape against an empty slot shifts every
+    // glass rect after it, which reads on screen as whole cards going missing.
     Region { id: emptyRegion }
     Region {
         id: cardsBlurRegion
         regions: [
-            wifiCard.visible && wifiCard.backdropVisible ? wifiCard.blurRegion : emptyRegion,
-            bluetoothCard.visible && bluetoothCard.backdropVisible ? bluetoothCard.blurRegion : emptyRegion,
-            mediaCard.visible && mediaCard.backdropVisible ? mediaCard.blurRegion : emptyRegion,
-            slotCard1.visible && slotCard1.backdropVisible ? slotCard1.blurRegion : emptyRegion,
-            slotCard2.visible && slotCard2.backdropVisible ? slotCard2.blurRegion : emptyRegion,
-            slotCard3.visible && slotCard3.backdropVisible ? slotCard3.blurRegion : emptyRegion,
-            slotCard4.visible && slotCard4.backdropVisible ? slotCard4.blurRegion : emptyRegion,
-            slotCard5.visible && slotCard5.backdropVisible ? slotCard5.blurRegion : emptyRegion,
-            slotCard6.visible && slotCard6.backdropVisible ? slotCard6.blurRegion : emptyRegion,
-            slotCard7.visible && slotCard7.backdropVisible ? slotCard7.blurRegion : emptyRegion,
+            wifiCard.backdropVisible ? wifiCard.blurRegion : emptyRegion,
+            bluetoothCard.backdropVisible ? bluetoothCard.blurRegion : emptyRegion,
+            mediaCard.backdropVisible ? mediaCard.blurRegion : emptyRegion,
+            slotCard1.backdropVisible ? slotCard1.blurRegion : emptyRegion,
+            slotCard2.backdropVisible ? slotCard2.blurRegion : emptyRegion,
+            slotCard3.backdropVisible ? slotCard3.blurRegion : emptyRegion,
+            slotCard4.backdropVisible ? slotCard4.blurRegion : emptyRegion,
+            slotCard5.backdropVisible ? slotCard5.blurRegion : emptyRegion,
+            slotCard6.backdropVisible ? slotCard6.blurRegion : emptyRegion,
+            slotCard7.backdropVisible ? slotCard7.blurRegion : emptyRegion,
             // stageModeCard 同样发布 SurfaceShape（可见即发布）——漏列
             // 一张 = 声明的 shape 集比 region 多一个条目，全卡玻璃按它
             // 偏移（见本清单头注释；审计 🔴，glass 主题下实测错位源）
-            stageModeCard.visible && stageModeCard.backdropVisible ? stageModeCard.blurRegion : emptyRegion,
-            keepAwakeCard.visible && keepAwakeCard.backdropVisible ? keepAwakeCard.blurRegion : emptyRegion,
-            sessionCard.visible && sessionCard.backdropVisible ? sessionCard.blurRegion : emptyRegion,
-            submenuCard.visible && submenuCard.backdropVisible ? submenuCard.blurRegion : emptyRegion,
+            stageModeCard.backdropVisible ? stageModeCard.blurRegion : emptyRegion,
+            keepAwakeCard.backdropVisible ? keepAwakeCard.blurRegion : emptyRegion,
+            sessionCard.backdropVisible ? sessionCard.blurRegion : emptyRegion,
+            submenuCard.backdropVisible ? submenuCard.blurRegion : emptyRegion,
             notificationHistory.visible ? notificationHistory.blurRegion : emptyRegion
         ]
     }
