@@ -187,6 +187,18 @@ class ApiTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "No latest official release"):
                 release.latest_release("https://github.com/SuceV587/NextKde.git")
 
+    def test_rate_limit_is_explained(self):
+        error = urllib.error.HTTPError("https://api.github.com", 403, "Forbidden", {}, None)
+        with patch.object(release.urllib.request, "urlopen", side_effect=error):
+            with self.assertRaisesRegex(ValueError, "rate limit"):
+                release.latest_release("https://github.com/SuceV587/NextKde.git")
+
+    def test_unreachable_api_is_explained(self):
+        error = urllib.error.URLError("Name or service not known")
+        with patch.object(release.urllib.request, "urlopen", side_effect=error):
+            with self.assertRaisesRegex(ValueError, "Cannot reach api.github.com"):
+                release.latest_release("https://github.com/SuceV587/NextKde.git")
+
     def test_prerelease_rejected_even_if_api_returns_it(self):
         payload = io.BytesIO(json.dumps({"tag_name": "v0.1.0-rc.1", "prerelease": True}).encode())
         with patch.object(release.urllib.request, "urlopen", return_value=payload):

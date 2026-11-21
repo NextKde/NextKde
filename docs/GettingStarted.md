@@ -182,7 +182,8 @@ Shallow source selection avoids historical process assets; an existing full clon
 For a source checkout installed with `kosctl install`, Settings → About also offers
 Check for updates with two channels: **Stable** follows the latest official GitHub Release
 tag, and **Canary** follows `origin/main`. The choice is saved per install
-(`~/.config/kos/update-channel`). It refuses dirty trees or in-progress Git operations,
+(`~/.config/kos/update-channel`); a release install starts on Stable and a development
+install on Canary. It refuses dirty trees or in-progress Git operations,
 builds incrementally, and asks for administrator authorization before changing KWin
 plugins. The build and user files stay user-owned; only the existing system-plugin copy
 uses sudo. The first install after this feature must run `./tools/kosctl install` once from

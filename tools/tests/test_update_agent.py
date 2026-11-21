@@ -12,6 +12,7 @@ import stat
 import subprocess
 import sys
 import tempfile
+import time
 import unittest
 
 AGENT = Path(__file__).parents[1] / "update/kos-update-agent.py"
@@ -173,6 +174,27 @@ class UpdateAgentTests(unittest.TestCase):
         self.assertEqual(status["state"], "up-to-date")
         self.assertEqual(status["behind"], 0)
         self.assertEqual(status["stage"], "done")
+
+    def test_agent_log_rotates_instead_of_growing(self):
+        directory = self.state_home / "kos/update"
+        directory.mkdir(parents=True)
+        log = directory / "agent.log"
+        log.write_bytes(b"x" * (5 * 1024 * 1024))
+        result = self.agent("--check")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertTrue((directory / "agent.log.1").exists(), "the old log should be kept")
+        self.assertLess(log.stat().st_size, 64 * 1024)
+        self.assertIn("--- check channel=main ---", log.read_text())
+
+    def test_unreachable_remote_blocks_before_the_long_timeout(self):
+        self.git(self.root, "remote", "set-url", "origin", "http://127.0.0.1:1/NextKde.git")
+        started = time.monotonic()
+        result = self.agent("--check")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertLess(time.monotonic() - started, 60, "the probe should fail fast")
+        status = self.read_status()
+        self.assertEqual(status["state"], "blocked")
+        self.assertIn("No network access", status["error"])
 
     def test_local_changes_block_update(self):
         self.advance(1)

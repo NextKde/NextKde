@@ -66,7 +66,14 @@ def latest_release(repository):
     except urllib.error.HTTPError as error:
         if error.code == 404:
             raise ValueError("No latest official release is available. To choose development explicitly, use: ./tools/kosctl update main") from error
+        if error.code in (403, 429):
+            raise ValueError(
+                "GitHub rate limit reached while looking up the latest release; "
+                "try again later, or select an explicit vX.Y.Z tag"
+            ) from error
         raise
+    except urllib.error.URLError as error:
+        raise ValueError(f"Cannot reach api.github.com: {error.reason}") from error
     tag = release.get("tag_name", "")
     if release.get("draft") or release.get("prerelease") or not re.fullmatch(r"v[0-9]+\.[0-9]+\.[0-9]+", tag):
         raise ValueError("Latest release is not a stable vX.Y.Z release; refusing to fall back to main")

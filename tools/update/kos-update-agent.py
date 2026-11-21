@@ -18,6 +18,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import time
 import traceback
 from datetime import datetime, timezone
 
@@ -25,6 +26,9 @@ SCHEMA_VERSION = 1
 CHECK_TIMEOUT = 120
 MERGE_TIMEOUT = 120
 INSTALL_TIMEOUT = 3600
+NETWORK_TIMEOUT = 20
+LOG_LIMIT_BYTES = 4 * 1024 * 1024
+RETRY_DELAY = 3
 TERMINAL_STATES = ("up-to-date", "available", "blocked", "updated", "failed")
 GIT_MARKERS = (
     "MERGE_HEAD",
@@ -50,6 +54,39 @@ def state_dir():
         return Path(override)
     base = os.environ.get("XDG_STATE_HOME") or str(Path.home() / ".local/state")
     return Path(base) / "kos/update"
+
+
+TRANSIENT_NETWORK = (
+    "could not resolve host",
+    "temporary failure in name resolution",
+    "failed to connect",
+    "connection timed out",
+    "connection reset",
+    "operation timed out",
+    "network is unreachable",
+    "no route to host",
+    "ssl",
+    "tls",
+    "early eof",
+    "unexpected eof",
+)
+
+
+def looks_like_network_error(message):
+    text = str(message or "").lower()
+    return any(marker in text for marker in TRANSIENT_NETWORK)
+
+
+def remote_name(root):
+    """The remote the release tool prefers: origin, then upstream, then any."""
+    result = git(root, "remote")
+    if result.returncode != 0:
+        return ""
+    names = [name.strip() for name in result.stdout.split() if name.strip()]
+    for preferred in ("origin", "upstream"):
+        if preferred in names:
+            return preferred
+    return names[0] if names else ""
 
 
 def release_record():
@@ -169,6 +206,15 @@ class Agent:
     def log(self, message):
         append_text(self.log_path, f"[{now()}] {message}\n")
 
+    def start_log(self, action):
+        """One run, one log; an oversized file is rotated, never truncated."""
+        try:
+            if self.log_path.exists() and self.log_path.stat().st_size > LOG_LIMIT_BYTES:
+                os.replace(self.log_path, self.log_path.with_name("agent.log.1"))
+        except OSError:
+            pass
+        append_text(self.log_path, f"[{now()}] --- {action} channel={self.channel} ---\n")
+
     def write(self):
         payload = json.dumps(self.status, indent=2) + "\n"
         fd, temporary = tempfile.mkstemp(prefix=".status-", dir=self.directory)
@@ -205,6 +251,26 @@ class Agent:
     def block(self, message):
         self.finish("blocked", error=message)
         return "blocked"
+
+    def check_release(self, root):
+        """Run the release check, retrying once when the failure is transient."""
+        attempts = 0
+        while True:
+            attempts += 1
+            result = subprocess.run(
+                [sys.executable, str(RELEASE_TOOL), "--root", str(root), "check", self.channel],
+                text=True,
+                capture_output=True,
+                timeout=CHECK_TIMEOUT,
+                env={**os.environ, "GIT_TERMINAL_PROMPT": "0"},
+            )
+            if result.returncode == 0 or attempts >= 2:
+                return result
+            detail = result.stderr or result.stdout
+            if not looks_like_network_error(detail):
+                return result
+            self.log(f"transient check failure, retrying in {RETRY_DELAY}s: {tail(detail, 200)}")
+            time.sleep(RETRY_DELAY)
 
     def check(self):
         self.status["startedAt"] = now()
@@ -251,14 +317,21 @@ class Agent:
                 return self.block("Finish the in-progress Git operation first.")
         self.status["branch"] = current_branch(root)
         self.set_state("checking", "fetch")
+        # Reachability first: an offline machine should say so in seconds instead
+        # of sitting in a git fetch until the full check timeout expires.
+        remote = remote_name(root)
+        if remote:
+            probe = git(root, "ls-remote", "--exit-code", remote, "HEAD",
+                        timeout=NETWORK_TIMEOUT)
+            if probe.returncode != 0:
+                detail = tail(probe.stderr or probe.stdout)
+                if looks_like_network_error(detail):
+                    self.log(f"network probe to {remote} failed: {detail}")
+                    return self.block(
+                        f"No network access to {remote}. Check the connection and try again."
+                    )
         try:
-            result = subprocess.run(
-                [sys.executable, str(RELEASE_TOOL), "--root", str(root), "check", self.channel],
-                text=True,
-                capture_output=True,
-                timeout=CHECK_TIMEOUT,
-                env={**os.environ, "GIT_TERMINAL_PROMPT": "0"},
-            )
+            result = self.check_release(root)
         except (OSError, subprocess.SubprocessError) as error:
             self.finish("failed", stage="fetch", error=f"Cannot check for updates: {error}")
             return "failed"
@@ -336,6 +409,17 @@ class Agent:
                 return copied
         return ""
 
+    def source_switched_hint(self):
+        """The checkout already moved; the installed copy did not."""
+        version = read_version(self.root) if self.root else ""
+        revision = read_revision(self.root)[:7] if self.root else ""
+        where = version or revision
+        if not where:
+            return "The source checkout is unchanged."
+        return (f"The source checkout is now {where}, but the installed copy still runs the "
+                "previous build. Rerun the update, or run ./tools/kosctl install from the "
+                "checkout. See the log for details.")
+
     def install(self):
         self.log("--- kosctl install ---")
         code = None
@@ -361,12 +445,14 @@ class Agent:
             return 2
         if code is None:
             self.set_state(
-                "failed", "install", error=f"kosctl install timed out after {INSTALL_TIMEOUT}s."
+                "failed", "install",
+                error=(f"kosctl install timed out after {INSTALL_TIMEOUT}s. {self.source_switched_hint()}"),
             )
             return 2
         if code != 0:
             self.set_state(
-                "failed", "install", error=f"kosctl install failed (exit {code}); see the log."
+                "failed", "install",
+                error=f"kosctl install failed (exit {code}). {self.source_switched_hint()}",
             )
             return 2
         return 0
@@ -455,6 +541,7 @@ def main(argv=None):
         agent.log("another update agent is already running; not starting")
         os.close(lock)
         return 3
+    agent.start_log("run" if args.run else "check")
     try:
         if args.run:
             return agent.run()

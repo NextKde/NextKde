@@ -109,7 +109,7 @@ private:
     QString m_configError, m_problem;
     // "stable" or "main". A saved choice outranks the release record's tag, which
     // moves with every install.
-    QString m_channel = QStringLiteral("main");
+    QString m_channel = QStringLiteral("stable");
     bool m_channelSaved = false;
     bool m_active = false, m_sawBusy = false;
     // The agent cannot know a restart happened; keep the acknowledgement here so
