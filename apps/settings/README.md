@@ -11,7 +11,8 @@ cmake --build .build/apps/settings
 
 The host exposes only explicit Settings IPC methods to QML. It does not import
 desktop UI. The current pages cover display, theme, bar, Dock, launcher,
-shortcuts, notifications, and read-only integration status through narrow Shell IPC targets.
+shortcuts, notifications, integration status and opt-in [Forma preferences](../../docs/FormaIntegration.md)
+through narrow Shell IPC targets. The application installer still never changes MIME defaults.
 
 Notifications uses the `notification-settings` endpoint of the active Shell.
 It controls Do Not Disturb, banners, session history, content previews, Dock
