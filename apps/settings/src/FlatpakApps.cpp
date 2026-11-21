@@ -1269,7 +1269,12 @@ void FlatpakApps::refresh()
         Inventory result;
         QDir().mkpath(AppCatalog::stateDirectory());
         QLockFile context(AppCatalog::stateDirectory() + "/context.lock");
-        if (!ownsContext && !context.tryLock(0)) { result.error = "Application source configuration is busy"; return result; }
+        // Calendar and Weather inspections launch separate inventory workers.
+        // Give another short inventory time to release the shared context lock
+        // instead of making simultaneous read-only polls fail each other.
+        // This wait stays on the worker thread and below the query deadline;
+        // long-running source changes still leave installation state unknown.
+        if (!ownsContext && !context.tryLock(1000)) { result.error = "Application source configuration is busy"; return result; }
         QStringList ids;
         for (const auto& app : IndependentAppRegistry::apps()) {
             ids.append(app.appId);
