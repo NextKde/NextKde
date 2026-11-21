@@ -19,7 +19,7 @@ import time
 from PIL import Image
 
 REPO = Path(__file__).resolve().parents[2]
-WIDGETS = ["clock", "weather", "calendar", "todo", "system", "activity", "music"]
+WIDGETS = ["clock", "weather", "calendar", "todo", "system", "activity", "music", "groups"]
 state = {
     "appearance/config.json": json.dumps({"version": 28, "shellStyle": "macos", "useSystemFont": False}),
     "appearance/icon-appearance.json": json.dumps({"version": 1, "mode": "grayscale"}),
@@ -106,7 +106,7 @@ def run(base_env=None):
                 assert not re.search(r"WIDGET_EXPERIENCE_FAIL|ReferenceError|TypeError|Cannot assign|Unable to assign|is not a type", output), output
                 check_bell_pixels(root / "captures")
                 saved = json.loads(state["appearance/config.json"])
-                assert saved["version"] == 34 and saved["widgetStyle"] == "color", saved
+                assert saved["version"] == 35 and saved["widgetStyle"] == "color", saved
                 assert "useSystemFont" not in saved and isinstance(saved["desktopFontFamily"], str) and saved["desktopFontFamily"], saved
                 assert set(saved["hiddenDeskCenterWidgets"]) == set(WIDGETS) - {"clock"}, saved
                 assert json.loads(state["appearance/icon-appearance.json"])["mode"] == "grayscale"

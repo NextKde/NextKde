@@ -94,12 +94,19 @@ ShellRoot {
                         "current screen keeps its temporary placement")
                     check(DeskCenterConfigService.displayPositionsForOutput("projection-test", "8:8").music.row === 6,
                         "restored screen recovers original placement")
-                    for (const id of DeskCenterConfigService.defaultOrder)
+                    // The anchored groups widget has its own top-right layout;
+                    // this fixture exercises the ordinary left-flow cards.
+                    AppearanceConfigService.setDeskCenterWidgetVisible("groups", false)
+                    for (const id of DeskCenterConfigService.defaultOrder) {
+                        if (id === "groups") continue
                         AppearanceConfigService.setDeskCenterWidgetVisible(id, true)
+                    }
                     // Start with room around the clock so accepted corner resizes
                     // need not move any neighbouring widget.
-                    for (const id of DeskCenterConfigService.defaultOrder)
+                    for (const id of DeskCenterConfigService.defaultOrder) {
+                        if (id === "groups") continue
                         DeskCenterConfigService.setSpan(id, 1, 1)
+                    }
                     DeskCenterConfigService.savePosition(desktop.desktopOutput, [], "clock",
                         desktop.maximumWidgetColumns - 2, desktop.usableRows - 2, desktop.widgetGeometry)
                     desktop.enterWidgetEditMode(false)
@@ -181,8 +188,10 @@ ShellRoot {
                 if (stage === 5) {
                     if (renderIndex < renderSpans.length) {
                         const span = renderSpans[renderIndex++]
-                        for (const id of DeskCenterConfigService.defaultOrder)
+                        for (const id of DeskCenterConfigService.defaultOrder) {
+                            if (id === "groups") continue
                             DeskCenterConfigService.setSpan(id, span[0], span[1])
+                        }
                         stage = 4
                         return
                     }

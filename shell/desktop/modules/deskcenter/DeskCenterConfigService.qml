@@ -18,11 +18,13 @@ QtObject {
         todo: "medium",
         system: "medium",
         activity: "medium",
-        music: "medium"
+        music: "medium",
+        groups: "medium"
     })
     readonly property var sizeOrder: WidgetLayout.sizeOrder
     readonly property var defaultOrder: [
-        "clock", "weather", "calendar", "todo", "system", "activity", "music"
+        "clock", "weather", "calendar", "todo", "system", "activity", "music",
+        "groups"
     ]
 
     property Settings _settings: Settings {
@@ -123,11 +125,14 @@ QtObject {
     function sizeFor(widgetId) {
         const sizes = parsedSizes()
         const value = String(sizes[widgetId] ?? defaultSizes[widgetId] ?? "medium")
-        return WidgetLayout.normalizedSize(value)
+        // A hand-edited span must still respect each widget's size ceiling;
+        // only the grouped view accepts 2x3/3x3.
+        return WidgetLayout.isValidSize(widgetId, value)
+            ? WidgetLayout.normalizedSize(value) : "medium"
     }
 
     function setSize(widgetId, size) {
-        if (sizeOrder.indexOf(size) < 0)
+        if (!WidgetLayout.isValidSize(widgetId, size))
             return false
         const sizes = parsedSizes()
         if (sizes[widgetId] === size)

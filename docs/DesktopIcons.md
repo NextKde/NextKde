@@ -7,6 +7,78 @@ Spacing is independent of icon size, display scaling and files. Labels keep at m
 using actual font height. The preference is `DesktopFiles/iconSpacing` in
 `deskcenter-desktop-files.ini`; old configurations default to loose.
 
+## Copying and dropping files
+
+Ctrl+V or **Paste** on the desktop accepts a local file list copied in another
+application. The platform service first asks Qt's clipboard; when the background
+daemon cannot see a foreign Wayland selection, it falls back to
+`wl-paste --type text/uri-list`. That fallback reports a copy; a cut in another
+application is therefore pasted as a copy rather than moved. Copied image data
+(from a browser or a screenshot) has no file path, so it is saved as
+`Clipboard image <timestamp>.png` in the desktop directory and placed on the
+current output.
+
+Dragging accepts local file URLs over the desktop file area (the right side,
+after reserved widget columns) and performs `file.transfer` with the proposed
+copy or move action. Remote URLs and bitmap-only drags are rejected; hidden
+dot-files are not shown. The desktop directory comes from `xdg-user-dir DESKTOP`
+and must be writable. File copies are recursive; the platform bounds concurrent
+copy jobs (32 total, 8 per client).
+
+## Grouped view
+
+The grouped view is a built-in desktop widget (`groups`), managed like the clock and
+weather. It starts hidden so upgrades keep the normal desktop. Show it from
+**Widgets** in desktop edit mode, or right-click the desktop background and choose
+**Grouped View**; hiding it restores the normal file icons.
+
+The widget is anchored to the top-right of the desktop grid and defaults to a 2×3
+span (about 370 × 560 logical pixels), while the other widgets stay in the left flow.
+It uses the same surface backend as the other widgets: the compositor glass in a glass
+form, or the tonal plate in Material. It opts out of the colour-artwork widget style
+so it keeps that material, and its frost joins the same window-wide blur union as the
+other cards. Move and resize it in desktop edit mode; the widget layout stores its
+position and span per output. The last tab the user explicitly chose is shared and
+stored in `DesktopFiles/groupSelectedCategory`; a screen without that type falls back
+locally to its first non-empty type. The widget does not participate in shortcut
+alignment, box selection, drag reordering or **Reset icon order**.
+
+The preset types and their order are fixed:
+
+| Tab | Members |
+| :-- | :-- |
+| App shortcuts | `.desktop` launchers |
+| Pictures | image files |
+| Folders | real folders |
+| Files | every other kind, including PDF, text, code and unknown/future kinds |
+
+All four tabs stay in place for muscle memory. Each shows its member count; an empty
+type is dimmed and cannot be selected, and the view falls back to the first non-empty
+type. The right side shows the selected type's members in a scrolling grid; clicking
+an item opens it.
+
+The search button in the widget header opens a bubble with a single input. It filters
+only the type currently selected on the left by item name. Escape or a click outside
+the bubble only closes it; the filter stays active so the grid does not change under
+the pointer. Clear the input to restore the full type. The search button stays
+highlighted while a filter is active.
+
+The grouped view is a projection of the same desktop snapshot. It never moves,
+renames or deletes files, and it never rewrites saved slots. While the widget is shown
+on an output, that output hides its normal file icons; dragging a file into a real
+folder therefore requires hiding the widget first, and the Folders tab is an index,
+not a replacement for the folder's drop target. The widget is authored on the active
+output only, like the other desktop widgets; other outputs keep their file icons.
+
+`DesktopGroups.mjs` owns the kind-to-group mapping and tab glyphs;
+`DesktopGroupsContent.qml` is the widget content; `DesktopGroupMemberIcon.qml`
+resolves each member's artwork; `WidgetLayout.mjs` owns the top-right anchored
+placement and the 2×3/3×3 span limits. `kos-deskcenter.group-by-type` covers the pure
+mapping and QML wiring, `kos-deskcenter.widget-layout` covers anchored placement and
+span limits, and `kos-deskcenter.group-by-type-runtime` loads the real content with
+isolated fixture entries. None of them replaces visual VM acceptance of the glass,
+widget edit mode, tab reflow and multiple outputs.
+
 ## Desktop surface ownership
 
 `DeskCenterWindow.qml` hosts widgets, icons and their context menu on each output.

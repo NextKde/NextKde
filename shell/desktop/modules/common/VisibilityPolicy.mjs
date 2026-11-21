@@ -11,7 +11,13 @@
 // the shell actually builds.
 export const deskCenterWidgetIds = [
     "clock", "weather", "calendar", "todo", "system", "activity", "music",
+    "groups",
 ];
+
+// New surfaces that must start hidden so enabling them never changes an
+// existing desktop on upgrade. `groups` replaces the desktop file icons with
+// the aggregated view, so it is opt-in.
+export const defaultHiddenDeskCenterWidgets = ["groups"];
 
 // The shell-owned StatusArea cells, in their declared trailing order.
 export const statusCellIds = [

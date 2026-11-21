@@ -53,6 +53,9 @@ ShellRoot {
                 ScreenLifecycle.activeScreen = desktop.screen
                 AppearanceConfigService.updateWidgetStyle("color")
                 for (const id of DeskCenterConfigService.defaultOrder) {
+                    // The grouped widget is opt-in and its 2x3 content is not a
+                    // translation fixture; its library label is still captured.
+                    if (id === "groups") continue
                     AppearanceConfigService.setDeskCenterWidgetVisible(id, true)
                     if (Quickshell.env("LANGUAGE_WIDGET_SIZE"))
                         DeskCenterConfigService.setSize(id, Quickshell.env("LANGUAGE_WIDGET_SIZE"))

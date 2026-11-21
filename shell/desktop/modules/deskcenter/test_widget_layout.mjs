@@ -1,5 +1,7 @@
 import assert from "node:assert/strict";
-import { canPlace, fitWidgets, magnetizedSize, savedPositionsAfterMove, widgetColumnLimit, packWidgets, sizeOrder, snappedPosition, snappedSpan, spanFor } from "./WidgetLayout.mjs";
+import { canPlace, fitWidgets, isValidSize, magnetizedSize, maxSpanFor,
+    placeAnchoredWidget, savedPositionsAfterMove, widgetColumnLimit, packWidgets,
+    sizeOrder, snappedPosition, snappedSpan, spanFor } from "./WidgetLayout.mjs";
 
 const ids = ["clock", "weather", "calendar", "todo", "system", "activity", "music"];
 
@@ -85,6 +87,39 @@ assert.deepEqual(snappedSpan(370, 370, 180, 10), [2, 2]);
 assert.deepEqual(snappedSpan(-900, 9000, 180, 10), [1, 2]);
 assert.deepEqual(snappedSpan(273, 180, 180, 10), [1, 1], "below half-cell threshold");
 assert.deepEqual(snappedSpan(276, 180, 180, 10), [2, 1], "above half-cell threshold");
+
+// The grouped view is the anchored exception: a 2x3 default, a 3-row resize
+// ceiling, and explicit spans stored in sizesJson.
+assert.deepEqual(spanFor("groups", "medium"), [2, 3]);
+assert.deepEqual(spanFor("groups", "large"), [3, 3]);
+assert.deepEqual(spanFor("groups", "2x3"), [2, 3]);
+assert.equal(isValidSize("groups", "2x3"), true);
+assert.equal(isValidSize("groups", "3x3"), true);
+assert.equal(isValidSize("groups", "4x3"), false);
+assert.equal(isValidSize("clock", "2x3"), false, "ordinary widgets stay at 2 rows");
+assert.deepEqual(maxSpanFor("groups"), [3, 3]);
+assert.deepEqual(maxSpanFor("clock"), [2, 2]);
+assert.deepEqual(snappedSpan(370, 560, 180, 10, 3, 3), [2, 3]);
+assert.deepEqual(snappedSpan(370, 560, 180, 10), [2, 2],
+    "the default clamp still applies to ordinary widgets");
+
+const anchored = placeAnchoredWidget(
+    { id: "groups", columns: 2, rows: 3 }, [], 10, 6);
+assert.deepEqual(anchored,
+    { id: "groups", column: 8, row: 0, columns: 2, rows: 3 },
+    "no saved position lands at the top-right");
+const kept = placeAnchoredWidget(
+    { id: "groups", columns: 2, rows: 3, column: 3, row: 1 }, [], 10, 6);
+assert.deepEqual([kept.column, kept.row], [3, 1],
+    "a valid saved position is kept");
+const shifted = placeAnchoredWidget(
+    { id: "groups", columns: 2, rows: 3 },
+    [{ id: "blocker", column: 8, row: 0, columns: 2, rows: 3 }], 10, 6);
+assert.deepEqual([shifted.column, shifted.row], [6, 0],
+    "an occupied top-right scans left first");
+assert.equal(placeAnchoredWidget(
+    { id: "groups", columns: 2, rows: 7 }, [], 10, 6), null,
+    "an anchored span taller than the output has no placement");
 
 // The resize drag is magnetic: the corner is held at a cell size and only
 // follows freely once the pointer pulls it half a cell away.

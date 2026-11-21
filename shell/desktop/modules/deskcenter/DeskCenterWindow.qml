@@ -115,7 +115,6 @@ PanelWindow {
     // widget uses integer spans, giving desktop cards the intentional, large
     // iPadOS scale rather than a collection of small floating macOS tiles.
     readonly property int columns: 10
-    readonly property int widgetColumns: widgetLayout.columns
     readonly property real sideMargin: 20
     // Keep card sizing tied to the original grid metrics. The larger visual
     // insets should consume the flexible desktop-file field on the right,
@@ -184,7 +183,7 @@ PanelWindow {
         clock: I18n.tr("Clock"), weather: I18n.tr("Weather"),
         calendar: I18n.tr("Calendar"), todo: I18n.tr("To-Do"),
         system: I18n.tr("System"), activity: I18n.tr("Activity"),
-        music: I18n.tr("Music")
+        music: I18n.tr("Music"), groups: I18n.tr("Grouped View")
     })
     // Referencing the singleton starts the shared activity recorder once the
     // desktop surface is available.
@@ -320,7 +319,16 @@ PanelWindow {
             priority: priority, startColor: startColor, endColor: endColor,
             surface: false }
     }
-    readonly property var widgetDefinitions: {
+    readonly property bool groupsWidgetVisible:
+        !AppearanceConfigService.isDeskCenterWidgetHidden("groups")
+    // Widgets are authored on the active output only; the grouped view follows
+    // that rule, and only its own output hides the normal file icons.
+    readonly property bool groupsWidgetShown:
+        groupsWidgetVisible
+        && !!groupsPlacement
+        && root.screen?.name === ScreenLifecycle.activeScreen?.name
+
+    readonly property var flowWidgetDefinitions: {
         // Make the binding depend on persisted configuration changes.
         const revision = DeskCenterConfigService.revision
         // Reading the visibility list here is what makes the switch in the
@@ -341,11 +349,29 @@ PanelWindow {
             byId[widget.id] = widget
         const ordered = []
         for (const id of DeskCenterConfigService.orderedIds()) {
+            // The grouped view is anchored to the top-right below; it must not
+            // join the left flow or shift the file area.
+            if (id === "groups")
+                continue
             if (byId[id] && hidden.indexOf(id) < 0)
                 ordered.push(byId[id])
         }
         return ordered
     }
+    readonly property var groupsWidgetDefinition: {
+        const revision = DeskCenterConfigService.revision
+        if (!groupsWidgetVisible)
+            return null
+        const widget = configuredWidget("groups", 110, "#51415d", "#332a3d")
+        // Compact only this output's projection on a short screen; the saved
+        // medium (2x3) span remains untouched.
+        return Object.assign({}, widget, {
+            rows: Math.max(1, Math.min(widget.rows, usableRows))
+        })
+    }
+    readonly property var widgetDefinitions: groupsWidgetDefinition
+        ? flowWidgetDefinitions.concat([groupsWidgetDefinition])
+        : flowWidgetDefinitions
     readonly property var weatherTheme: WeatherTheme.theme(WeatherService.weatherCode, WeatherService.isDay)
 
     function packWidgets(definitions, columnCount, rowCount) {
@@ -364,15 +390,30 @@ PanelWindow {
             / (reservedFileMetrics.cellHeight + reservedFileMetrics.gap)))
     readonly property string widgetGeometry: maximumWidgetColumns + ":" + usableRows
 
-    readonly property var widgetLayout: WidgetLayout.fitWidgets(
-        widgetDefinitions, 4, maximumWidgetColumns, usableRows)
-    readonly property var placements: widgetLayout.placements
+    readonly property var flowWidgetLayout: WidgetLayout.fitWidgets(
+        flowWidgetDefinitions, 4, maximumWidgetColumns, usableRows)
+    readonly property var flowPlacements: flowWidgetLayout.placements
+    readonly property var groupsPlacement: groupsWidgetDefinition
+        ? WidgetLayout.placeAnchoredWidget(groupsWidgetDefinition,
+            flowPlacements, columns, usableRows)
+        : null
+    readonly property var placements: groupsPlacement
+        ? flowPlacements.concat([groupsPlacement])
+        : flowPlacements
+    // The file area starts after the left flow only; the anchored grouped view
+    // does not consume a file column.
+    readonly property int widgetColumns: flowWidgetLayout.columns
+
     function resizeWidget(widgetId, columns, rows) {
         const placement = placementFor(widgetId)
-        if (![1, 2].includes(columns) || ![1, 2].includes(rows)
-                || !placement || !WidgetLayout.canPlace(placements, widgetId,
+        const limit = WidgetLayout.maxSpanFor(widgetId)
+        const maxColumns = widgetId === "groups"
+            ? root.columns : maximumWidgetColumns
+        if (columns < 1 || rows < 1 || columns > limit[0]
+                || rows > limit[1] || !placement
+                || !WidgetLayout.canPlace(placements, widgetId,
                 placement.column, placement.row, columns, rows,
-                maximumWidgetColumns, usableRows)) return false
+                maxColumns, usableRows)) return false
         DeskCenterConfigService.savePosition(desktopOutput, placements,
             widgetId, placement.column, placement.row, widgetGeometry)
         DeskCenterConfigService.setSpan(widgetId, columns, rows)
@@ -505,7 +546,12 @@ PanelWindow {
         visible: root.editMode || opacity > 0
         enabled: root.editMode
         Behavior on opacity { NumberAnimation { duration: AppearanceTokens.motion.fastDuration; easing.type: AppearanceTokens.motion.enterCurve } }
-        anchors { top: parent.top; right: parent.right; topMargin: root.topInset; rightMargin: 24 }
+        // The grouped widget owns the top-right corner, so widget editing
+        // chrome moves to the top-left while it is shown.
+        x: root.groupsWidgetShown ? 24 : parent.width - width - 24
+        y: root.topInset
+        width: implicitWidth
+        height: implicitHeight
         spacing: 8
 
         Repeater {
@@ -557,10 +603,13 @@ PanelWindow {
         visible: (root.editMode && root.widgetLibraryOpen) || opacity > 0
         enabled: root.editMode && root.widgetLibraryOpen
         scale: 0.96 + 0.04 * opacity
-        transformOrigin: Item.TopRight
+        transformOrigin: root.groupsWidgetShown ? Item.TopLeft : Item.TopRight
         Behavior on opacity { NumberAnimation { duration: AppearanceTokens.motion.normalDuration; easing.type: AppearanceTokens.motion.enterCurve } }
-        anchors { top: widgetEditToolbar.bottom; right: widgetEditToolbar.right; topMargin: 10 }
-        width: 430
+        x: root.groupsWidgetShown
+            ? widgetEditToolbar.x
+            : widgetEditToolbar.x + widgetEditToolbar.width - width
+        y: widgetEditToolbar.y + widgetEditToolbar.height + 10
+        width: 480
         height: 116
         radius: AppearanceTokens.isMaterial ? 24 : 18
         color: AppearanceTokens.surface.pick(
@@ -737,13 +786,17 @@ PanelWindow {
             // jump. This flag is assigned by that handler itself, so it is
             // already exact when the writes happen.
             property bool pointerHeld: false
+            // The anchored grouped view may move across the whole grid; every
+            // other card stays inside the left widget field.
+            readonly property int maxDropColumns: modelData.id === "groups"
+                ? root.columns : root.maximumWidgetColumns
             readonly property var dropPosition: WidgetLayout.snappedPosition(
                 x - root.leftInset, y - root.topInset,
                 displayColumns, displayRows, root.cellSize, root.gap,
-                root.maximumWidgetColumns, root.usableRows)
+                maxDropColumns, root.usableRows)
             readonly property bool dropAllowed: WidgetLayout.canPlace(root.placements,
                 modelData.id, dropPosition.column, dropPosition.row,
-                displayColumns, displayRows, root.maximumWidgetColumns, root.usableRows)
+                displayColumns, displayRows, maxDropColumns, root.usableRows)
             visible: placement !== null
             // Desktop widgets are part of the login arrival, not a static
             // layer that appears before the wallpaper, bar and dock.
@@ -756,6 +809,9 @@ PanelWindow {
             // and frost clipped to the petal outline.
             flowerShapedSurface: modelData.id === "clock"
             materialSurfaceColor: root.materialWidgetSurface(modelData.id)
+            // The grouped view keeps the compositor material even when the
+            // colour-artwork widget style is active.
+            allowColorArtwork: modelData.id !== "groups"
             title: modelData.title
             startColor: modelData.id === "weather" ? root.weatherTheme.primary : modelData.startColor
             endColor: modelData.id === "weather" ? root.weatherTheme.secondary : modelData.endColor
@@ -979,10 +1035,12 @@ PanelWindow {
                 anchors { right: parent.right; bottom: parent.bottom; margins: 5 }
                 cellSize: root.cellSize
                 gap: root.gap
+                maximumColumns: card.modelData.id === "groups" ? 3 : 2
+                maximumRows: card.modelData.id === "groups" ? 3 : 2
                 animate: !AppTheme.reduceMotion
                 previewAllowed: card.placement !== null && WidgetLayout.canPlace(
                     root.placements, card.modelData.id, card.placement.column, card.placement.row,
-                    previewColumns, previewRows, root.maximumWidgetColumns, root.usableRows)
+                    previewColumns, previewRows, card.maxDropColumns, root.usableRows)
                 onCommitted: function(columns, rows) {
                     root.resizeWidget(card.modelData.id, columns, rows)
                 }
@@ -1024,13 +1082,33 @@ PanelWindow {
                 enabled: !root.editMode
                 // The clock resolves monochrome ink in its face. Keep its text
                 // out of the extra saturation texture so it renders at the
-                // window's resolution. Other glass artwork is desaturated.
+                // window's resolution. Other glass artwork is desaturated; the
+                // grouped view carries full-colour app icons, so it stays out.
                 layer.enabled: AppearanceConfigService.widgetStyle === "glass"
                     && card.modelData.id !== "clock"
+                    && card.modelData.id !== "groups"
 	                layer.effect: MultiEffect {
 	                    saturation: -1.0
 	                    colorization: 0.0
                 }
+
+            Loader {
+                anchors.fill: parent
+                active: card.visible && card.modelData.id === "groups"
+                sourceComponent: Component {
+                    DesktopGroupsContent {
+                        entries: desktopFileGrid.orderedEntries
+                        initialCategory: root.desktopFiles.layout.groupSelectedCategory
+                        editing: root.editMode
+                        onCategorySelected: function(category) {
+                            root.desktopFiles.setGroupSelectedCategory(category)
+                        }
+                        onOpenEntryRequested: function(entry) {
+                            root.desktopFiles.openEntry(entry)
+                        }
+                    }
+                }
+            }
 
             Loader {
                 anchors.fill: parent
@@ -3553,6 +3631,13 @@ PanelWindow {
                 items.push(_ctxAct(I18n.tr("New File"), "newFile"))
                 items.push(_ctxAct(I18n.tr("New Folder"), "newFolder"))
                 items.push(_ctxAct(I18n.tr("Paste"), "paste"))
+                items.push({ separator: true })
+                // One click, remembered state: the grouped view is a
+                // projection of the same entries, never a change to the
+                // underlying files or their saved slots.
+                items.push(_ctxCheck(I18n.tr("Grouped View"), "toggleGroupsWidget",
+                    null, root.groupsWidgetVisible))
+                items.push({ separator: true })
                 const arrange = [
                     _ctxAct(I18n.tr("By Name"), "arrangeByName"),
                     _ctxAct(I18n.tr("By Type"), "arrangeByType"),
@@ -3623,6 +3708,12 @@ PanelWindow {
                 break
             case "setIconSize": setIconSize(v); break
             case "setIconSpacing": setIconSpacing(v); break
+            case "toggleGroupsWidget": {
+                AppearanceConfigService.setDeskCenterWidgetVisible("groups",
+                    !root.groupsWidgetVisible)
+                desktopFileGrid.clearDesktopSelection()
+                break
+            }
             case "refresh": triggerContextAction("refresh"); break
             // Session entries live in a submenu; without these the menu closes
             // and the command is dropped.
@@ -3708,7 +3799,10 @@ PanelWindow {
             id: externalDesktopDrop
             anchors.fill: parent
             z: 20
-            enabled: false
+            // The free-slot surface owns external drops while it is visible.
+            // The grouped widget hides it, so this fallback keeps
+            // "copy to desktop" working over the widget.
+            enabled: root.groupsWidgetShown
             onEntered: function(drag) {
                 // Ignore a desktop icon's own outgoing URI drag.
                 drag.accepted = drag.hasUrls && !drag.source
@@ -3810,7 +3904,9 @@ PanelWindow {
 
         FreeSlotDesktopDemo {
             id: freeSlotDesktop
-            visible: !root.isDashboardMode
+            // The grouped widget hides the icon field but never touches its
+            // slots or order, so hiding the widget restores it exactly.
+            visible: !root.groupsWidgetShown
             x: -desktopFileGrid.x
             y: -desktopFileGrid.y
             width: root.width
