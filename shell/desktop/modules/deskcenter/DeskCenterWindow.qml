@@ -2812,12 +2812,6 @@ PanelWindow {
         height: root.height - y - root.bottomInset
         clip: false
         readonly property int iconSize: desktopLayout.iconSize
-        // Keep the label optically paired with the three user-selectable
-        // icon sizes instead of leaving it at a fixed desktop-small size.
-        readonly property int fileNameFontSize: iconSize === 72 ? 14
-            : iconSize === 56 ? 11 : 9
-        readonly property int fileNameFontWeight: iconSize === 72 ? Font.Bold
-            : iconSize === 56 ? Font.DemiBold : Font.Medium
         // Reserve real gutters around every icon.  The gaps are not merely
         // visual: they belong to the desktop background so users can start a
         // rubber-band selection between neighbouring files.
@@ -3029,7 +3023,7 @@ PanelWindow {
 
         function gridPositionForIndex(index) {
             return {
-                x: (columnCount - 1 - Math.floor(index / rowCount)) * itemWidth,
+                x: columnForIndex(index) * itemWidth,
                 y: (index % rowCount) * itemHeight
             }
         }
@@ -3094,7 +3088,7 @@ PanelWindow {
             const previousPositions = ({})
             for (let index = 0; index < next.length; ++index) {
                 previousPositions[next[index].path] = ({
-                    x: (columnCount - 1 - Math.floor(index / rowCount)) * itemWidth,
+                    x: columnForIndex(index) * itemWidth,
                     y: (index % rowCount) * itemHeight
                 })
             }
@@ -3107,7 +3101,7 @@ PanelWindow {
                 return candidate.path === path
             })
             previousPositions[path] = ({
-                x: (columnCount - 1 - Math.floor(sourceNewIndex / rowCount)) * itemWidth,
+                x: columnForIndex(sourceNewIndex) * itemWidth,
                 y: (sourceNewIndex % rowCount) * itemHeight
             })
             if (!wasPreviewed) {
@@ -3174,7 +3168,7 @@ PanelWindow {
         }
 
         function setIconSize(size) {
-            if (size !== 40 && size !== 56 && size !== 72)
+            if (size !== 32 && size !== 40 && size !== 56 && size !== 72)
                 return
             desktopLayout.iconSize = size
             desktopLayout.sync()
@@ -3185,6 +3179,22 @@ PanelWindow {
                 return
             desktopLayout.iconSpacing = spacing
             desktopLayout.sync()
+        }
+
+        function setShortcutAlignment(alignment) {
+            if (alignment !== "left" && alignment !== "right")
+                return
+            desktopLayout.shortcutAlignment = alignment
+            desktopLayout.sync()
+        }
+
+        function columnForIndex(index) {
+            return DesktopGridMetrics.columnForSlot(index, rowCount,
+                columnCount, desktopLayout.shortcutAlignment)
+        }
+        function indexForCell(column, row) {
+            return DesktopGridMetrics.slotForCell(column, row, rowCount,
+                columnCount, desktopLayout.shortcutAlignment)
         }
 
         function displayName(entry) {
@@ -3327,7 +3337,7 @@ PanelWindow {
             const next = additive ? selectionBase.slice() : []
             for (let index = 0; index < orderedEntries.length; ++index) {
                 const entry = orderedEntries[index]
-                const column = columnCount - 1 - Math.floor(index / rowCount)
+                const column = columnForIndex(index)
                 const row = index % rowCount
                 if (column < 0)
                     continue
@@ -3557,13 +3567,20 @@ PanelWindow {
                     _ctxAct(I18n.tr("By Name"), "arrangeByName"),
                     _ctxAct(I18n.tr("By Type"), "arrangeByType"),
                     _ctxAct(I18n.tr("By Modified (newest)"), "arrangeModifiedNew"),
-                    _ctxAct(I18n.tr("By Modified (oldest)"), "arrangeModifiedOld")
+                    _ctxAct(I18n.tr("By Modified (oldest)"), "arrangeModifiedOld"),
+                    { separator: true },
+                    _ctxCheck(I18n.tr("Align Left"), "setShortcutAlignment", "left",
+                        desktopLayout.shortcutAlignment === "left"),
+                    _ctxCheck(I18n.tr("Align Right"), "setShortcutAlignment", "right",
+                        desktopLayout.shortcutAlignment === "right")
                 ]
                 items.push(_ctxSub(I18n.tr("Arrange"), arrange, "arrange"))
                 items.push(_ctxAct(I18n.tr("Reset icon order"), "resetLayout"))
                 items.push(_ctxCheck(I18n.tr("Show file extensions"), "toggleExtensions", null,
                     desktopLayout.showExtensions))
-                const sizeKids = [[40, I18n.tr("Small")], [56, I18n.tr("Medium")], [72, I18n.tr("Large")]]
+                const sizeKids = [[32, I18n.tr("Extra Small")],
+                    [40, I18n.tr("Small")], [56, I18n.tr("Medium")],
+                    [72, I18n.tr("Large")]]
                     .map(([px, l]) => _ctxCheck(l, "setIconSize", px,
                         iconSize === px))
                 items.push(_ctxSub(I18n.tr("Icon Size"), sizeKids, "iconSize"))
@@ -3623,6 +3640,7 @@ PanelWindow {
                 break
             case "setIconSize": setIconSize(v); break
             case "setIconSpacing": setIconSpacing(v); break
+            case "setShortcutAlignment": setShortcutAlignment(v); break
             case "refresh": triggerContextAction("refresh"); break
             // Session entries live in a submenu; without these the menu closes
             // and the command is dropped.
@@ -3639,7 +3657,7 @@ PanelWindow {
         function indexAt(pointX, pointY) {
             const column = Math.max(0, Math.min(columnCount - 1, Math.floor(pointX / itemWidth)))
             const row = Math.max(0, Math.min(rowCount - 1, Math.floor(pointY / itemHeight)))
-            const index = (columnCount - 1 - column) * rowCount + row
+            const index = indexForCell(column, row)
             return Math.max(0, Math.min(orderedEntries.length - 1, index))
         }
 
@@ -3822,6 +3840,7 @@ PanelWindow {
             baseCellWidth: desktopFileGrid.preferredItemWidth
             baseCellHeight: desktopFileGrid.itemHeight
             density: desktopFileGrid.desktopLayout.iconSpacing
+            alignment: desktopFileGrid.desktopLayout.shortcutAlignment
             iconVisualSize: desktopFileGrid.iconSize + 12
             showExtensions: desktopFileGrid.desktopLayout.showExtensions
             folderCustomizations: desktopFileGrid._folderCustomCache
@@ -3882,8 +3901,7 @@ PanelWindow {
         Rectangle {
             id: reorderInsertionMarker
             readonly property int markerColumn: desktopFileGrid.reorderInsertionIndex < 0 ? 0
-                : desktopFileGrid.columnCount - 1
-                    - Math.floor(desktopFileGrid.reorderInsertionIndex / desktopFileGrid.rowCount)
+                : desktopFileGrid.columnForIndex(desktopFileGrid.reorderInsertionIndex)
             readonly property int markerRow: desktopFileGrid.reorderInsertionIndex < 0 ? 0
                 : desktopFileGrid.reorderInsertionIndex % desktopFileGrid.rowCount
             x: markerColumn * desktopFileGrid.itemWidth + 7
