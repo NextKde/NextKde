@@ -916,6 +916,9 @@ export const catalog = {
 
     // applauncher · 启动台
     "Open app": "打开应用",
+    "Send to Desktop": "发送到桌面",
+    "Shortcut already exists on Desktop": "桌面已存在该快捷方式",
+    "Could not create the desktop shortcut": "无法创建桌面快捷方式",
     "Edit app": "编辑应用",
     "Pin to Dock": "固定到 Dock",
     "Unpin from Dock": "从 Dock 取消固定",

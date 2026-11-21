@@ -50,9 +50,9 @@ Current operation groups are:
   content-addressed and removed together with the entry that owns it, so
   deleting never leaves state behind)
 - `file.open`, `file.copy`, `file.launch`, `file.rename`, `file.create-folder`,
-  `file.create-file`, `file.transfer`, `file.trash`, `file.trash-state`,
-  `file.empty-trash`, `file.open-trash`, `file.open-with`, `file.set-default`,
-  `file.open-kde`
+  `file.create-file`, `file.create-desktop-shortcut`, `file.transfer`,
+  `file.trash`, `file.trash-state`, `file.empty-trash`, `file.open-trash`,
+  `file.open-with`, `file.set-default`, `file.open-kde`
 - `kwin.subscribe`, `kwin.command`, `kwin.layout.update`
 - `kwin.animation.update-targets`, `kwin.animation.prepare-launch`
 - `wallpaper.plasma.proxy` (replace every screen's Plasma wallpaper with a KOS
@@ -271,6 +271,25 @@ configuration and runtime state; rollback failure is reported explicitly.
 launcher as `application.launch`. A desktop-file path is resolved and parsed by
 `KService`; optional file arguments are passed as URLs. Launch failure is
 reported through the common response envelope.
+
+`file.create-desktop-shortcut` takes `{desktopId}` and creates a symbolic link
+named after the installed entry in `QStandardPaths::DesktopLocation`. The
+daemon resolves the id through KDE `KService`, falling back to the XDG
+applications directories, and accepts application entries only. It never
+accepts a caller-supplied source, destination, or file content. The entry must
+be an installed `.desktop` file whose name does not start with a dot. An
+existing file or link at the destination is left untouched and reported with
+`created:false`, making repeated requests idempotent. Errors are
+`invalid-desktop-id`, `application-not-found`, `invalid-desktop-entry`,
+`desktop-directory-unavailable`, and `shortcut-create-failed`. The shell must
+not write desktop files directly; the data service's watcher or an explicit
+`desktop.refresh` makes the new icon visible.
+
+`file.rename`, `file.transfer`, `file.trash` and `clipboard.set` operate on the
+named directory entry itself. Their source paths canonicalise the parent
+directory but do not resolve the final component, so renaming, copying, moving
+or trashing a shortcut symlink leaves the installed `.desktop` file it points at
+untouched. A symlink is not followed to its target by these operations.
 
 ### Status panel operations
 
