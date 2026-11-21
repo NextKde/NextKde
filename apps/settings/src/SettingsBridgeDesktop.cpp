@@ -121,6 +121,14 @@ void SettingsBridge::updateDockVisibilityMode(const QString& mode)
     callDock({ QStringLiteral("updateVisibilityMode"), mode });
 }
 
+void SettingsBridge::updateDockAutoHideApp(const QString& appId, bool enabled)
+{
+    callShell(QStringLiteral("dock-settings"),
+        { QStringLiteral("updateAutoHideApp"), appId,
+            enabled ? QStringLiteral("true") : QStringLiteral("false") },
+        QStringLiteral("Dock app auto-hide request failed"), RequestKind::DockAutoHideApp);
+}
+
 void SettingsBridge::updateDockWindowGrouping(const QString& mode)
 {
     callDock({ QStringLiteral("updateWindowGrouping"), mode });
@@ -233,8 +241,10 @@ QVariantMap SettingsBridge::snapshotFromReply(const QString& payload)
         return { };
     }
 
-    setLastError({ });
+    setLastError(object.value(QStringLiteral("error")).toString());
     return {
+        { QStringLiteral("autoHideApps"), object.value(QStringLiteral("autoHideApps")).toArray().toVariantList() },
+        { QStringLiteral("runningApps"), object.value(QStringLiteral("runningApps")).toArray().toVariantList() },
         { QStringLiteral("baseHeight"), object.value(QStringLiteral("baseHeight")).toDouble() },
         { QStringLiteral("position"), object.value(QStringLiteral("position")).toString() },
         // contentStyle/dockStyle are read straight back by the dock page's

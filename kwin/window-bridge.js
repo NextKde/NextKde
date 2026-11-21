@@ -226,12 +226,17 @@ function safeAreaForLayout(layout) {
     let top = output.y + Math.min(output.height, reserved);
     let right = output.x + output.width;
     let bottom = output.y + output.height;
-    if (layout.dockPosition === "left")
-        left = Math.max(left, dock.x + dock.width + gap);
-    else if (layout.dockPosition === "right")
-        right = Math.min(right, dock.x - gap);
-    else
-        bottom = Math.min(bottom, dock.y - gap);
+    // Keep the full-reveal geometry for other consumers, but hidden modes
+    // must not leave an invisible strip in one-time window placement either.
+    // Omission preserves the v1 contract for older Shell clients.
+    if (layout.dockReserved !== false) {
+        if (layout.dockPosition === "left")
+            left = Math.max(left, dock.x + dock.width + gap);
+        else if (layout.dockPosition === "right")
+            right = Math.min(right, dock.x - gap);
+        else
+            bottom = Math.min(bottom, dock.y - gap);
+    }
 
     return {
         x: left,
@@ -310,7 +315,8 @@ function updateLayout(command) {
         barReservedHeight: Math.max(0, Number(command.barReservedHeight) || 0),
         dockPosition: String(command.dockPosition || "bottom"),
         dockRect: normalizedRect(command.dockRect),
-        workspaceGap: Math.max(0, Number(command.workspaceGap) || 0)
+        workspaceGap: Math.max(0, Number(command.workspaceGap) || 0),
+        dockReserved: command.dockReserved !== false
     };
     return true;
 }

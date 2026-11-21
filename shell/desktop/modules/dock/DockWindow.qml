@@ -126,6 +126,7 @@ PanelWindow {
     DockAutoHideController {
         id: hide
         mode: ConfigService.visibilityMode
+        autoHideApps: ConfigService.autoHideApps
         configReady: ConfigService.ready
         windowDataReady: WindowService.providerReady
         position: root.position
@@ -146,7 +147,10 @@ PanelWindow {
     // the height plus the inset that keeps the glass off the physical edge.
     // Floating mode also reserves its proportional inner breathing space;
     // taskbar mode remains a flush edge fill.
-    exclusiveZone: ConfigService.visibilityMode === "always"
+    readonly property bool reservesWorkspace: hide.phase !== "Bootstrapping"
+        && hide.effectiveMode === "always"
+    onReservesWorkspaceChanged: layoutPublishTimer.restart()
+    exclusiveZone: root.reservesWorkspace
         ? (root.vertical
             ? dockContainer.width + root.edgeMargin + root.workspaceMargin
             : dockContainer.height + root.edgeMargin + root.workspaceMargin)
@@ -226,7 +230,7 @@ PanelWindow {
         WorkspaceLayoutService.updateDock(root.screen, root.position, {
             x: root.workspaceDockRect.x, y: root.workspaceDockRect.y,
             width: root.workspaceDockRect.width, height: root.workspaceDockRect.height
-        }, root.workspaceMargin)
+        }, root.reservesWorkspace ? root.workspaceMargin : 0, root.reservesWorkspace)
     }
 
     Timer {
