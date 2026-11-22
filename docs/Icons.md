@@ -57,7 +57,8 @@ BundledIcon {
 ```
 
 桌面和 Dock 菜单通过 `reserveIconSpace: true` 保留统一的图标列，
-空白项目的文字仍与其他项目对齐。勾选标记和子菜单箭头分别由
+空白项目的文字仍与其他项目对齐。桌面菜单可按需留空；Dock 菜单的
+操作项都应配置可解析字形，避免出现看似缺失的图标。勾选标记和子菜单箭头分别由
 `menu.trailing.checked`、`menu.trailing.submenu` 控制。
 
 功能映射不控制点击范围或排版。`size` 决定字形大小，调用方的
