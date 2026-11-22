@@ -101,6 +101,8 @@ Current operation groups are:
   escapes are rejected); payloads are capped at 1 MiB. `state.write` commits
   rename. `state.read` returns `{data, exists}` and reports `exists:false`
   with an empty `data` for a missing file)
+- `system.timezone` (read-only system zone lookup; returns `{timeZone}` as the
+  system IANA ID, or an empty string when the platform cannot resolve one)
 - Widget inspection (`application.widget-snapshot`, `application.widget-open`)
   has one worker slot per fixed app, shared between reads and launch preflight.
   Same-key reads coalesce under the bounded reply queue. At 15 seconds the daemon

@@ -537,6 +537,11 @@ QtObject {
             ? tokens.colors.surfaceContainer : "transparent"
         readonly property color elevatedSurfaceColor: tokens.isMaterial
             ? tokens.colors.surfaceContainerHigh : "transparent"
+        readonly property QtObject digitalClock: QtObject {
+            readonly property color artworkStart: tokens.resolvedAppearanceIsDark ? "#536783" : "#fafafa"
+            readonly property color artworkEnd: tokens.resolvedAppearanceIsDark ? "#35465f" : "#ffffff"
+            readonly property color ink: tokens.resolvedAppearanceIsDark ? "#ffffff" : "#242126"
+        }
     }
 
     readonly property QtObject glass: QtObject {

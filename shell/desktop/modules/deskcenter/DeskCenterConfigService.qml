@@ -29,6 +29,7 @@ QtObject {
         location: "file://" + Quickshell.stateDir + "/deskcenter-widgets.ini"
         category: "Widgets"
         property int schemaVersion: 2
+        property string clockStyle: "analog"
         property string sizesJson: "{}"
         property string orderJson: "[]"
         property string positionsJson: "{}"
@@ -41,6 +42,16 @@ QtObject {
         desktopLyricsEnabled = _settings.desktopLyricsEnabled
         desktopLyricsX = Math.max(0, Math.min(1, _settings.desktopLyricsX))
         desktopLyricsY = Math.max(0, Math.min(1, _settings.desktopLyricsY))
+    }
+
+    readonly property string clockStyle: _settings.clockStyle === "digital" ? "digital" : "analog"
+
+    function setClockStyle(style) {
+        if (style !== "analog" && style !== "digital") return false
+        if (clockStyle === style) return false
+        _settings.clockStyle = style
+        _settings.sync()
+        return true
     }
 
     function parsedSizes() {

@@ -684,6 +684,8 @@ export const catalog = {
     // dock · 组件与弹层
     "Music": "音乐",
     "Clock": "时钟",
+    "Analog": "指针",
+    "Digital": "数字",
     "Resource Usage": "资源占用",
     "Sun": "周日",
     "Mon": "周一",

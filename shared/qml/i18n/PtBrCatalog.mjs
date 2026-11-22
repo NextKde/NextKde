@@ -586,6 +586,8 @@ export const catalog = {
     "Close all windows": "Fechar todas as janelas",
     "Music": "Música",
     "Clock": "Relógio",
+    "Analog": "Analógico",
+    "Digital": "Digital",
     "Resource Usage": "Uso de recursos",
     "Sun": "Dom",
     "Mon": "Seg",
