@@ -144,6 +144,18 @@ ShellRoot {
                         && view.labelFontWeight === Font.Medium,
                         "small icons scale the member grid")
                     view.iconSize = 56
+
+                    // Single selection mirrors the normal desktop's filled
+                    // highlight and clears when the visible type changes.
+                    view.selectOnly("/groups/photo.png")
+                    check(view.isSelected("/groups/photo.png"),
+                        "single click selects a member")
+                    check(!view.isSelected("/groups/wall.jpg"),
+                        "only one member is selected")
+                    check(view.selectCategory("shortcuts"),
+                        "switch type for the selection check")
+                    check(!view.isSelected("/groups/photo.png"),
+                        "changing type clears the selection")
                     stage++
                     return
                 }

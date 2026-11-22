@@ -58,9 +58,10 @@ The preset types and their order are fixed:
 All four tabs stay in place for muscle memory. Each shows its member count; an empty
 type is dimmed and cannot be selected, and the view falls back to the first non-empty
 type. The right side shows the selected type's members in a scrolling grid;
-double-clicking an item opens it, matching the normal icon field. Member artwork
-follows the desktop icon size setting (Small/Medium/Large), and the grid cell
-size and label font grow with it.
+single-clicking an item selects it with the same filled highlight as the normal
+icon field, and double-clicking opens it. Member artwork follows the desktop icon
+size setting (Small/Medium/Large), and the grid cell size and label font grow
+with it.
 
 The search button in the widget header opens a bubble with a single input. It filters
 only the type currently selected on the left by item name. Escape or a click outside

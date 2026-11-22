@@ -36,6 +36,9 @@ Item {
     // owns its own inline rename editor and commits through the same callback.
     property string renamingPath: ""
     property var renameCallback: null
+    // Single selection gives the click the same feedback as the normal icon
+    // field and makes the double-click target obvious.
+    property string selectedPath: ""
 
     readonly property var groups: DesktopGroups.buildGroups(entries)
     readonly property int totalCount: groups.reduce(function(sum, group) {
@@ -78,6 +81,14 @@ Item {
             return name
         const extensionIndex = name.lastIndexOf(".")
         return extensionIndex > 0 ? name.slice(0, extensionIndex) : name
+    }
+
+    function isSelected(path) {
+        return path !== "" && path === root.selectedPath
+    }
+
+    function selectOnly(path) {
+        root.selectedPath = path ?? ""
     }
 
     function beginRename(path) {
@@ -175,6 +186,10 @@ Item {
         // entry must not leave a stale editor behind.
         if (root.renamingPath && !nextPaths[root.renamingPath])
             root.renamingPath = ""
+        // The same applies to the selection: switching tabs must not leave a
+        // highlight on an item that is no longer visible.
+        if (root.selectedPath && !nextPaths[root.selectedPath])
+            root.selectedPath = ""
         for (let index = contentModel.count - 1; index >= 0; --index) {
             if (!nextPaths[contentModel.get(index).path])
                 contentModel.remove(index)
@@ -509,8 +524,34 @@ Item {
                 width: grid.cellWidth
                 height: grid.cellHeight
                 readonly property var custom: root.customFor(tile.entry)
+                readonly property bool selected: root.isSelected(tile.path)
                 Accessible.role: Accessible.Button
                 Accessible.name: root.displayName(tile.entry)
+
+                // Same filled selection as the normal icon field, so a click
+                // visibly pins the item before the double-click opens it.
+                Rectangle {
+                    anchors.fill: parent
+                    anchors.margins: 2
+                    radius: 12
+                    color: tile.selected
+                        ? Qt.rgba(0.18, 0.42, 0.78, 0.42)
+                        : Qt.rgba(1, 1, 1, 0.08)
+                    border.width: tile.selected ? 1 : 0
+                    border.color: Qt.rgba(0.45, 0.70, 1, 0.75)
+                    opacity: tile.selected || tileHover.hovered ? 1 : 0
+                    Behavior on opacity {
+                        NumberAnimation {
+                            duration: AppearanceTokens.motion.fast.duration
+                            easing.type: AppearanceTokens.motion.enterCurve
+                        }
+                    }
+                    Behavior on color {
+                        ColorAnimation {
+                            duration: AppearanceTokens.motion.fast.duration
+                        }
+                    }
+                }
 
                 DesktopGroupMemberIcon {
                     id: glyph
@@ -629,6 +670,7 @@ Item {
                 }
 
                 HoverHandler {
+                    id: tileHover
                     cursorShape: Qt.PointingHandCursor
                 }
 
@@ -640,6 +682,7 @@ Item {
                     enabled: root.renamingPath !== tile.path
                     gesturePolicy: TapHandler.ReleaseWithinBounds
                     onTapped: function(point, button) {
+                        root.selectOnly(tile.path)
                         if (button !== Qt.RightButton)
                             return
                         const scenePoint = tile.mapToItem(null,
@@ -648,8 +691,13 @@ Item {
                             scenePoint.x, scenePoint.y)
                     }
                     onDoubleTapped: function(point, button) {
-                        if (button === Qt.LeftButton)
-                            root.openEntryRequested(tile.entry)
+                        if (button !== Qt.LeftButton)
+                            return
+                        // A synthesized double tap may not emit the first
+                        // single tap; select here too so the opened item is
+                        // always the highlighted one.
+                        root.selectOnly(tile.path)
+                        root.openEntryRequested(tile.entry)
                     }
                 }
             }

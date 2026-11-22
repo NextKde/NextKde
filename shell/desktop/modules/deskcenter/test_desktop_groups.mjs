@@ -198,6 +198,14 @@ assert.match(view, /Math\.floor\(width \/ root\.columnWidth\)/);
 assert.match(view, /cellHeight: root\.cellHeight/);
 assert.match(view, /size: root\.iconSize/);
 assert.match(view, /pixelSize: root\.labelFontSize/);
+// Single selection gives the same visible feedback as the normal icon field.
+assert.match(view, /property string selectedPath: ""/);
+assert.match(view, /function isSelected\(path\)/);
+assert.match(view, /function selectOnly\(path\)/);
+assert.match(view, /root\.selectOnly\(tile\.path\)/);
+assert.match(view, /root\.isSelected\(tile\.path\)/);
+assert.match(view, /id: tileHover/);
+assert.match(view, /tileHover\.hovered/);
 assert.match(deskcenter,
     /iconSize: desktopFileGrid\.desktopLayout\.iconSize/);
 assert.match(deskcenter, /property var groupsContentItem/);
