@@ -57,8 +57,10 @@ The preset types and their order are fixed:
 
 All four tabs stay in place for muscle memory. Each shows its member count; an empty
 type is dimmed and cannot be selected, and the view falls back to the first non-empty
-type. The right side shows the selected type's members in a scrolling grid; clicking
-an item opens it.
+type. The right side shows the selected type's members in a scrolling grid;
+double-clicking an item opens it, matching the normal icon field. Member artwork
+follows the desktop icon size setting (Small/Medium/Large), and the grid cell
+size and label font grow with it.
 
 The search button in the widget header opens a bubble with a single input. It filters
 only the type currently selected on the left by item name. Escape or a click outside
@@ -66,11 +68,15 @@ the bubble only closes it; the filter stays active so the grid does not change u
 the pointer. Clear the input to restore the full type. The search button stays
 highlighted while a filter is active.
 
-The grouped view is a projection of the same desktop snapshot. It never moves,
-renames or deletes files, and it never rewrites saved slots. While the widget is shown
-on an output, that output hides its normal file icons; dragging a file into a real
-folder therefore requires hiding the widget first, and the Folders tab is an index,
-not a replacement for the folder's drop target. The widget is authored on the active
+The grouped view is a projection of the same desktop snapshot and never rewrites
+saved slots. Right-clicking a member opens the same file menu as the normal icon
+field, so it can rename, copy/cut, open with, or move the file to the trash through
+the same platform operations. Rename uses an inline editor inside the card because
+the normal icon field is hidden. Member labels honour **Show file extensions**, and
+customized folders keep their colour and emblem. While the widget is shown on an
+output, that output hides its normal file icons; dragging a file into a real folder
+therefore requires hiding the widget first, and the Folders tab is an index, not a
+replacement for the folder's drop target. The widget is authored on the active
 output only, like the other desktop widgets; other outputs keep their file icons.
 
 `DesktopGroups.mjs` owns the kind-to-group mapping and tab glyphs;

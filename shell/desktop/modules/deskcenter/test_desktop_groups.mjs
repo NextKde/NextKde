@@ -66,6 +66,7 @@ const deskcenter = qml('DeskCenterWindow.qml');
 const service = qml('DesktopFilesService.qml');
 const view = qml('DesktopGroupsContent.qml');
 const deskwidget = qml('DeskWidgetCard.qml');
+const memberIcon = qml('DesktopGroupMemberIcon.qml');
 const config = qml('DeskCenterConfigService.qml');
 const layout = qml('WidgetLayout.mjs');
 const qmldir = qml('qmldir');
@@ -101,6 +102,34 @@ assert.match(deskcenter, /maxDropColumns/);
 assert.match(deskcenter, /allowColorArtwork: modelData\.id !== "groups"/);
 assert.match(deskcenter, /card\.modelData\.id === "groups"/);
 assert.match(deskcenter, /DesktopGroupsContent \{/);
+// Editing chrome stays centered on the free bottom edge. Anchoring it to a
+// top corner made it move as soon as the top-right grouped card appeared.
+const toolbarStart = deskcenter.indexOf('id: widgetEditToolbar');
+const toolbarEnd = deskcenter.indexOf('Rectangle {\n        id: widgetLibrary',
+    toolbarStart);
+assert.ok(toolbarStart >= 0 && toolbarEnd > toolbarStart,
+    'edit toolbar moved; update this test');
+const toolbar = deskcenter.slice(toolbarStart, toolbarEnd);
+assert.ok(!toolbar.includes('groupsWidgetShown'),
+    'the edit toolbar must not depend on the grouped card');
+assert.match(toolbar, /x: \(parent\.width - width\) \/ 2/);
+assert.match(toolbar, /y: parent\.height - root\.bottomInset - height/);
+
+const libraryStart = deskcenter.indexOf('id: widgetLibrary');
+const libraryEnd = deskcenter.indexOf('Rectangle {\n        id: widgetDropPreview',
+    libraryStart);
+assert.ok(libraryStart >= 0 && libraryEnd > libraryStart,
+    'widget library moved; update this test');
+const library = deskcenter.slice(libraryStart, libraryEnd);
+assert.ok(!library.includes('groupsWidgetShown'),
+    'the widget library must not depend on the grouped card');
+assert.match(library, /transformOrigin: Item\.Bottom/);
+assert.match(library, /x: \(parent\.width - width\) \/ 2/);
+assert.match(library, /y: widgetEditToolbar\.y - height - 10/);
+assert.match(library, /width: libraryRow\.implicitWidth \+ 32/,
+    'the library keeps 16 px of padding on each side');
+assert.match(library, /id: libraryRow/);
+
 assert.ok(!deskcenter.includes('DesktopGroupsView'),
     'the standalone view is replaced by the widget content');
 assert.ok(!deskcenter.includes('desktopGroupsView.blurRegion'),
@@ -143,6 +172,47 @@ assert.match(view, /root\.entryMatches\(entry\)/);
 assert.match(view, /I18n\.tr\("Search this type"\)/);
 assert.match(view, /I18n\.tr\("No results"\)/);
 assert.match(view, /TextInput \{/);
+
+// ── P0 file operations and display parity ──
+// Members reuse the desktop's shared file menu through a signal; the card
+// owns an inline editor because the normal icon field is hidden.
+assert.match(view, /property bool showExtensions: true/);
+assert.match(view, /property var folderCustomizations/);
+assert.match(view, /signal contextMenuRequested\(var entry, real x, real y\)/);
+assert.match(view, /function displayName\(entry\)/);
+assert.match(view, /function beginRename\(path\)/);
+assert.match(view, /function commitRename\(entry, name\)/);
+assert.match(view, /property var renameCallback: null/);
+assert.match(view, /onDoubleTapped/);
+assert.match(view, /contextMenuRequested\(tile\.entry/);
+assert.match(view, /onActiveFocusChanged/);
+assert.match(view, /Keys\.onReturnPressed/);
+assert.match(view, /folderCustom: tile\.custom/);
+assert.match(view, /tile\.custom\.color/);
+// Member artwork and the grid metrics follow the desktop icon size setting.
+assert.match(view, /property int iconSize: 56/);
+assert.match(view, /readonly property int cellHeight/);
+assert.match(view, /readonly property int columnWidth/);
+assert.match(view, /readonly property int labelFontSize/);
+assert.match(view, /Math\.floor\(width \/ root\.columnWidth\)/);
+assert.match(view, /cellHeight: root\.cellHeight/);
+assert.match(view, /size: root\.iconSize/);
+assert.match(view, /pixelSize: root\.labelFontSize/);
+assert.match(deskcenter,
+    /iconSize: desktopFileGrid\.desktopLayout\.iconSize/);
+assert.match(deskcenter, /property var groupsContentItem/);
+assert.match(deskcenter, /function beginGroupsRename\(entry\)/);
+assert.match(deskcenter, /root\.beginGroupsRename\(entry\)/);
+assert.match(deskcenter, /onContextMenuRequested: function\(entry, x, y\)/);
+assert.match(deskcenter, /desktopFileGrid\.showMenu\(entry,/);
+assert.match(deskcenter,
+    /showExtensions: desktopFileGrid\.desktopLayout\.showExtensions/);
+assert.match(deskcenter,
+    /folderCustomizations: desktopFileGrid\._folderCustomCache/);
+assert.match(deskcenter, /renameCallback: function\(entry, name\)/);
+assert.match(memberIcon, /property var folderCustom: null/);
+assert.match(memberIcon, /folderCustomized/);
+assert.match(memberIcon, /DesktopFolderIcon \{/);
 assert.ok(view.includes('id: searchField'), 'search field must exist');
 assert.ok(!view.includes('LiquidTextField'),
     'the search bubble uses the widget palette, not a second liquid control');

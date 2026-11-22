@@ -156,6 +156,21 @@ PanelWindow {
     property bool editMode: false
     property bool widgetLibraryOpen: false
     property var activeDragCard: null
+    // The loaded grouped content, if the card is on screen. Its own editor is
+    // the only visible rename surface while the normal icon field is hidden.
+    property var groupsContentItem: null
+
+    function beginGroupsRename(entry) {
+        const path = entry?.path ?? ""
+        if (!path || !groupsContentItem)
+            return
+        // The context menu owns focus while closing; defer the editor's grab
+        // by one turn, like beginInlineRename does for the normal icon field.
+        Qt.callLater(function() {
+            if (root.groupsContentItem)
+                root.groupsContentItem.beginRename(path)
+        })
+    }
 
     function enterWidgetEditMode(openLibrary) {
         desktopFileGrid.clearDesktopSelection()
@@ -550,10 +565,11 @@ PanelWindow {
         visible: root.editMode || opacity > 0
         enabled: root.editMode
         Behavior on opacity { NumberAnimation { duration: AppearanceTokens.motion.fastDuration; easing.type: AppearanceTokens.motion.enterCurve } }
-        // The grouped widget owns the top-right corner, so widget editing
-        // chrome moves to the top-left while it is shown.
-        x: root.groupsWidgetShown ? 24 : parent.width - width - 24
-        y: root.topInset
+        // Editing chrome lives on the free bottom edge. The top corners belong
+        // to the widget layout (left flow, top-right grouped card), so a
+        // corner-anchored toolbar moved whenever a card was shown or resized.
+        x: (parent.width - width) / 2
+        y: parent.height - root.bottomInset - height
         width: implicitWidth
         height: implicitHeight
         spacing: 8
@@ -607,13 +623,15 @@ PanelWindow {
         visible: (root.editMode && root.widgetLibraryOpen) || opacity > 0
         enabled: root.editMode && root.widgetLibraryOpen
         scale: 0.96 + 0.04 * opacity
-        transformOrigin: root.groupsWidgetShown ? Item.TopLeft : Item.TopRight
+        // Centered like the toolbar, opening upward from it so the bottom
+        // dock area stays clear.
+        transformOrigin: Item.Bottom
         Behavior on opacity { NumberAnimation { duration: AppearanceTokens.motion.normalDuration; easing.type: AppearanceTokens.motion.enterCurve } }
-        x: root.groupsWidgetShown
-            ? widgetEditToolbar.x
-            : widgetEditToolbar.x + widgetEditToolbar.width - width
-        y: widgetEditToolbar.y + widgetEditToolbar.height + 10
-        width: 480
+        x: (parent.width - width) / 2
+        y: widgetEditToolbar.y - height - 10
+        // Keep the tiles clear of the rounded edges as the library grows or
+        // shrinks, instead of a fixed width that only fits today's eight.
+        width: libraryRow.implicitWidth + 32
         height: 116
         radius: AppearanceTokens.isMaterial ? 24 : 18
         color: AppearanceTokens.surface.pick(
@@ -628,6 +646,7 @@ PanelWindow {
                 ThemeService.foregroundColor.b, 0.16))
 
         Row {
+            id: libraryRow
             anchors.centerIn: parent
             spacing: 6
             Repeater {
@@ -1114,18 +1133,43 @@ PanelWindow {
                 }
 
             Loader {
+                id: groupsContentLoader
                 anchors.fill: parent
                 active: card.visible && card.modelData.id === "groups"
+                onLoaded: root.groupsContentItem = item
+                onActiveChanged: {
+                    if (!active)
+                        root.groupsContentItem = null
+                }
                 sourceComponent: Component {
                     DesktopGroupsContent {
+                        objectName: "desktop-groups-content"
                         entries: desktopFileGrid.orderedEntries
                         initialCategory: root.desktopFiles.layout.groupSelectedCategory
                         editing: root.editMode
+                        // Keep the member labels and folder artwork in sync
+                        // with the desktop's own display settings.
+                        showExtensions: desktopFileGrid.desktopLayout.showExtensions
+                        folderCustomizations: desktopFileGrid._folderCustomCache
+                        iconSize: desktopFileGrid.desktopLayout.iconSize
+                        renameCallback: function(entry, name) {
+                            return desktopFileGrid.commitRename(entry, name)
+                        }
                         onCategorySelected: function(category) {
                             root.desktopFiles.setGroupSelectedCategory(category)
                         }
                         onOpenEntryRequested: function(entry) {
                             root.desktopFiles.openEntry(entry)
+                        }
+                        onContextMenuRequested: function(entry, x, y) {
+                            // The shared menu reads the desktop selection, so
+                            // make the right-clicked member the only selection
+                            // before building its items.
+                            desktopFileGrid.setSelectedPaths(
+                                entry?.path ? [entry.path] : [])
+                            desktopFileGrid.showMenu(entry,
+                                Qt.point(x - desktopFileGrid.x,
+                                    y - desktopFileGrid.y))
                         }
                     }
                 }
@@ -3518,8 +3562,12 @@ PanelWindow {
                 createNewFile()
             else if (kind === "openEntry")
                 root.desktopFiles.openEntry(entry)
-            else if (kind === "rename")
-                beginInlineRename(entry)
+            else if (kind === "rename") {
+                if (root.groupsWidgetShown)
+                    root.beginGroupsRename(entry)
+                else
+                    beginInlineRename(entry)
+            }
             else if (kind === "openWithMore")
                 openWithDialog.show(entry)
             else if (kind === "trash") {

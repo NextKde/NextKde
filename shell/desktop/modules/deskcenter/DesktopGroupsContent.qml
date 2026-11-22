@@ -14,10 +14,28 @@ Item {
     property var entries: []
     property string initialCategory: "shortcuts"
     property bool editing: false
+    // Display parity with the normal desktop icon field.
+    property bool showExtensions: true
+    property var folderCustomizations: ({})
+    // Member artwork follows the desktop's Small/Medium/Large icon size.
+    // The grid metrics scale with it so a 72 px icon keeps its two-line label
+    // without overflowing, while a 40 px icon fits more columns.
+    property int iconSize: 56
+    readonly property int iconTopMargin: Math.max(4, Math.round(iconSize * 0.1))
+    readonly property int cellHeight: Math.max(64, iconSize + 46)
+    readonly property int columnWidth: Math.max(48, iconSize + 36)
+    readonly property int labelFontSize: iconSize >= 72 ? 14
+        : iconSize >= 56 ? 11 : 9
+    readonly property int labelFontWeight: iconSize >= 72 ? Font.Bold
+        : iconSize >= 56 ? Font.DemiBold : Font.Medium
 
     property string selectedCategory: ""
     property bool searchOpen: false
     property string searchQuery: ""
+    // The normal icon field is hidden while this card is shown, so the card
+    // owns its own inline rename editor and commits through the same callback.
+    property string renamingPath: ""
+    property var renameCallback: null
 
     readonly property var groups: DesktopGroups.buildGroups(entries)
     readonly property int totalCount: groups.reduce(function(sum, group) {
@@ -31,6 +49,9 @@ Item {
 
     signal openEntryRequested(var entry)
     signal categorySelected(string category)
+    // Position is in window/scene coordinates, so the host can anchor the
+    // shared desktop context menu beside the member.
+    signal contextMenuRequested(var entry, real x, real y)
 
     function groupFor(category) {
         for (let index = 0; index < groups.length; ++index) {
@@ -43,6 +64,43 @@ Item {
     function countFor(category) {
         const group = groupFor(category)
         return group ? group.entries.length : 0
+    }
+
+    function customFor(entry) {
+        const path = entry?.path
+        return path && root.folderCustomizations
+            ? root.folderCustomizations[path] ?? null : null
+    }
+
+    function displayName(entry) {
+        const name = entry?.title || entry?.name || ""
+        if (root.showExtensions || entry?.kind === "folder")
+            return name
+        const extensionIndex = name.lastIndexOf(".")
+        return extensionIndex > 0 ? name.slice(0, extensionIndex) : name
+    }
+
+    function beginRename(path) {
+        if (path)
+            root.renamingPath = path
+    }
+
+    function renameSelectionEnd(entry) {
+        const name = entry?.name ?? ""
+        if (entry?.kind === "folder")
+            return name.length
+        const extensionIndex = name.lastIndexOf(".")
+        return extensionIndex > 0 ? extensionIndex : name.length
+    }
+
+    function commitRename(entry, name) {
+        const trimmed = (name ?? "").trim()
+        if (!root.renameCallback || trimmed.length === 0)
+            return false
+        if (!root.renameCallback(entry, trimmed))
+            return false
+        root.renamingPath = ""
+        return true
     }
 
     function ensureSelection() {
@@ -73,7 +131,11 @@ Item {
         if (query.length === 0)
             return true
         const text = String(entry?.title || entry?.name || "").toLowerCase()
-        return text.indexOf(query) >= 0
+        if (text.indexOf(query) >= 0)
+            return true
+        // Extension hiding changes the visible name; searching either form
+        // must keep finding the same file.
+        return root.displayName(entry).toLowerCase().indexOf(query) >= 0
     }
 
     function openSearch() {
@@ -109,6 +171,10 @@ Item {
         const nextPaths = ({})
         for (let index = 0; index < next.length; ++index)
             nextPaths[next[index].path] = true
+        // A rename that succeeded has a new path; a filtered-out or removed
+        // entry must not leave a stale editor behind.
+        if (root.renamingPath && !nextPaths[root.renamingPath])
+            root.renamingPath = ""
         for (let index = contentModel.count - 1; index >= 0; --index) {
             if (!nextPaths[contentModel.get(index).path])
                 contentModel.remove(index)
@@ -426,9 +492,9 @@ Item {
             anchors.fill: parent
             clip: true
             readonly property int columns: Math.max(1,
-                Math.floor(width / 96))
+                Math.floor(width / root.columnWidth))
             cellWidth: width / columns
-            cellHeight: 96
+            cellHeight: root.cellHeight
             model: contentModel
             boundsBehavior: Flickable.StopAtBounds
             ScrollBar.vertical: ScrollBar {
@@ -442,20 +508,22 @@ Item {
                 required property var entry
                 width: grid.cellWidth
                 height: grid.cellHeight
+                readonly property var custom: root.customFor(tile.entry)
                 Accessible.role: Accessible.Button
-                Accessible.name: tile.entry?.title || tile.entry?.name || ""
+                Accessible.name: root.displayName(tile.entry)
 
                 DesktopGroupMemberIcon {
                     id: glyph
                     anchors {
                         top: parent.top
                         horizontalCenter: parent.horizontalCenter
-                        topMargin: 6
+                        topMargin: root.iconTopMargin
                     }
-                    width: 56
-                    height: 56
+                    width: root.iconSize
+                    height: root.iconSize
                     entry: tile.entry
-                    size: 56
+                    folderCustom: tile.custom
+                    size: root.iconSize
                 }
 
                 Text {
@@ -465,22 +533,124 @@ Item {
                         right: parent.right
                         topMargin: 2
                     }
-                    text: tile.entry?.title || tile.entry?.name || ""
-                    color: AppearanceTokens.surface.widgetForeground
+                    visible: root.renamingPath !== tile.path
+                    // Same emblem-before-label treatment as the normal icon
+                    // field, so the shared customization menu is not dead
+                    // outside folders.
+                    text: (tile.custom && tile.custom.emoji
+                        ? tile.custom.emoji + " " : "")
+                        + root.displayName(tile.entry)
+                    color: tile.custom && tile.custom.color
+                        ? tile.custom.color
+                        : AppearanceTokens.surface.widgetForeground
                     horizontalAlignment: Text.AlignHCenter
                     elide: Text.ElideRight
                     maximumLineCount: 2
                     wrapMode: Text.Wrap
                     font {
                         family: AppearanceTokens.typography.textFamily
-                        pixelSize: 11
+                        pixelSize: root.labelFontSize
+                        weight: root.labelFontWeight
                     }
                 }
 
-                MouseArea {
-                    anchors.fill: parent
+                // Inline rename: the normal icon field is hidden behind this
+                // card, so the editor lives here and commits through the same
+                // desktop rename callback (validation, folder-custom migration).
+                Rectangle {
+                    id: renameFrame
+                    anchors {
+                        top: glyph.bottom
+                        left: parent.left
+                        right: parent.right
+                        topMargin: 2
+                    }
+                    height: root.labelFontSize + 12
+                    radius: 5
+                    visible: root.renamingPath === tile.path
+                    color: AppearanceTokens.surface.pick(
+                        AppearanceTokens.colors.layer3,
+                        Qt.rgba(0.14, 0.15, 0.20, 0.90))
+                    border.width: 1
+                    border.color: AppearanceTokens.surface.pick(
+                        AppearanceTokens.colors.primary,
+                        Qt.rgba(1, 1, 1, 0.42))
+
+                    function commit() {
+                        if (root.renamingPath !== tile.path)
+                            return
+                        root.commitRename(tile.entry, renameInput.text)
+                    }
+
+                    onVisibleChanged: {
+                        if (!visible)
+                            return
+                        renameInput.text = tile.entry?.name ?? ""
+                        renameInput.forceActiveFocus()
+                        renameInput.select(0,
+                            root.renameSelectionEnd(tile.entry))
+                    }
+
+                    TextInput {
+                        id: renameInput
+                        anchors {
+                            fill: parent
+                            leftMargin: 5
+                            rightMargin: 5
+                        }
+                        color: AppearanceTokens.surface.widgetForeground
+                        selectionColor: AppearanceTokens.surface.pick(
+                            AppearanceTokens.colors.primaryContainer,
+                            Qt.rgba(1, 1, 1, 0.22))
+                        selectedTextColor: AppearanceTokens.surface.pick(
+                            AppearanceTokens.colors.primaryContainerForeground,
+                            "white")
+                        verticalAlignment: TextInput.AlignVCenter
+                        horizontalAlignment: TextInput.AlignHCenter
+                        selectByMouse: true
+                        font {
+                            family: AppearanceTokens.typography.textFamily
+                            pixelSize: root.labelFontSize
+                            weight: root.labelFontWeight
+                        }
+                        onActiveFocusChanged: {
+                            if (!activeFocus && renameFrame.visible)
+                                renameFrame.commit()
+                        }
+                        Keys.onReturnPressed: function(event) {
+                            renameFrame.commit()
+                            event.accepted = true
+                        }
+                        Keys.onEscapePressed: function(event) {
+                            root.renamingPath = ""
+                            event.accepted = true
+                        }
+                    }
+                }
+
+                HoverHandler {
                     cursorShape: Qt.PointingHandCursor
-                    onClicked: root.openEntryRequested(tile.entry)
+                }
+
+                // Double-click opens, like the normal desktop. Right-click
+                // opens the shared file menu; the inner handler takes the
+                // button before the card's right-click-to-edit gesture.
+                TapHandler {
+                    acceptedButtons: Qt.LeftButton | Qt.RightButton
+                    enabled: root.renamingPath !== tile.path
+                    gesturePolicy: TapHandler.ReleaseWithinBounds
+                    onTapped: function(point, button) {
+                        if (button !== Qt.RightButton)
+                            return
+                        const scenePoint = tile.mapToItem(null,
+                            point.position.x, point.position.y)
+                        root.contextMenuRequested(tile.entry,
+                            scenePoint.x, scenePoint.y)
+                    }
+                    onDoubleTapped: function(point, button) {
+                        if (button === Qt.LeftButton)
+                            root.openEntryRequested(tile.entry)
+                    }
                 }
             }
         }

@@ -11,6 +11,8 @@ Item {
 
     required property var entry
     property real size: 40
+    // Same path-keyed appearance record the normal icon field reads.
+    property var folderCustom: null
 
     implicitWidth: size
     implicitHeight: size
@@ -18,6 +20,8 @@ Item {
     readonly property string kind: entry?.kind ?? "file"
     readonly property bool isLauncher: kind === "launcher"
     readonly property bool isImage: kind === "image"
+    readonly property bool folderCustomized: kind === "folder"
+        && folderCustom && (!!folderCustom.color || !!folderCustom.emoji)
 
     readonly property string launcherSource: {
         if (!isLauncher || !entry)
@@ -48,7 +52,8 @@ Item {
     readonly property bool imageShown: isImage
         && thumbnail.status === Image.Ready
     readonly property bool themeShown: !isLauncher && !isImage
-        && themeSource !== "" && themeIcon.status === Image.Ready
+        && !folderCustomized && themeSource !== ""
+        && themeIcon.status === Image.Ready
     // A still-loading image gets no fallback glyph (it would flash a file
     // icon); only a real decode failure falls back.
     readonly property bool fallbackShown: {
@@ -56,6 +61,8 @@ Item {
             return !launcherShown
         if (isImage)
             return thumbnail.status === Image.Error
+        if (folderCustomized)
+            return false
         return !themeShown
     }
 
@@ -93,6 +100,16 @@ Item {
         source: root.themeSource
         // Theme icon: synchronous, see AppIcon.qml.
         asynchronous: false
+    }
+
+    // A customized folder keeps its user colour and emblem, exactly like the
+    // normal desktop artwork, instead of falling back to the theme folder.
+    DesktopFolderIcon {
+        anchors.fill: parent
+        visible: root.folderCustomized
+        color: root.folderCustom && root.folderCustom.color
+            ? root.folderCustom.color : "#70b6ff"
+        emoji: root.folderCustom ? root.folderCustom.emoji || "" : ""
     }
 
     BundledIcon {

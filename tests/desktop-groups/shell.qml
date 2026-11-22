@@ -87,6 +87,63 @@ ShellRoot {
                     view.searchQuery = ""
                     check(view.contentCount === 2,
                         "manually clearing the query restores content")
+
+                    // Display parity with the normal icon field.
+                    view.showExtensions = false
+                    check(view.displayName({ name: "notes.txt", kind: "text" })
+                        === "notes", "extension hiding reaches member labels")
+                    check(view.displayName({ name: "Projects", kind: "folder" })
+                        === "Projects", "folders keep their name")
+                    view.showExtensions = true
+                    check(view.displayName({ name: "notes.txt", kind: "text" })
+                        === "notes.txt", "extensions show when enabled")
+                    view.folderCustomizations = {
+                        "/groups/Projects": { color: "#FF6B6B", emoji: "⭐" }
+                    }
+                    check(view.customFor({ path: "/groups/Projects" }).emoji === "⭐",
+                        "folder customization reaches the icon")
+                    view.folderCustomizations = ({})
+
+                    // Inline rename commits through the shared desktop callback
+                    // and only closes the editor on success.
+                    let renamed = null
+                    view.renameCallback = function(entry, name) {
+                        renamed = { entry: entry, name: name }
+                        return name === "notes-2.txt"
+                    }
+                    view.beginRename("/groups/notes.txt")
+                    check(view.renamingPath === "/groups/notes.txt",
+                        "rename starts on the requested member")
+                    check(view.commitRename({ path: "/groups/notes.txt" }, "bad/name")
+                        === false, "failed rename keeps the editor")
+                    check(view.renamingPath === "/groups/notes.txt",
+                        "failed rename keeps editing")
+                    check(view.commitRename({ path: "/groups/notes.txt" },
+                        "notes-2.txt") === true,
+                        "rename commits through the shared callback")
+                    check(renamed && renamed.name === "notes-2.txt",
+                        "callback got the new name")
+                    check(view.renamingPath === "",
+                        "successful rename closes the editor")
+                    view.renameCallback = null
+
+                    // Member artwork and grid metrics follow the desktop's
+                    // Small/Medium/Large icon size setting.
+                    check(view.iconSize === 56, "default member icon size")
+                    check(view.cellHeight === 102, "default member cell height")
+                    check(view.columnWidth === 92, "default member column width")
+                    check(view.labelFontSize === 11, "default label size")
+                    view.iconSize = 72
+                    check(view.cellHeight === 118 && view.columnWidth === 108
+                        && view.labelFontSize === 14
+                        && view.labelFontWeight === Font.Bold,
+                        "large icons scale the member grid")
+                    view.iconSize = 40
+                    check(view.cellHeight === 86 && view.columnWidth === 76
+                        && view.labelFontSize === 9
+                        && view.labelFontWeight === Font.Medium,
+                        "small icons scale the member grid")
+                    view.iconSize = 56
                     stage++
                     return
                 }
