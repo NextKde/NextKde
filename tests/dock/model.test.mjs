@@ -5,6 +5,7 @@ import { matchEntryByHints, parseProbeOutput, probeCommand } from "../../shell/d
 import { indexWindowRecords } from "../../shell/desktop/modules/dock/WindowRecordIndex.mjs";
 import { toArray } from "../../shell/desktop/modules/dock/PayloadArray.mjs";
 import { indexAt, parse } from "../../shell/desktop/modules/common/TimedLyrics.mjs";
+import { icons as shellIcons } from "../../shell/desktop/modules/common/ShellIconMap.mjs";
 import { nextWindowToActivate, pendingWindowIdFor } from "../../shell/desktop/modules/dock/WindowCycle.mjs";
 import { computeLayout, separatorSlotWidth } from "../../shell/desktop/modules/dock/AdaptiveMath.mjs";
 import { layout } from "../../shell/desktop/modules/dock/DockMagnification.mjs";
@@ -781,4 +782,32 @@ test("dock separators", () => {
     assert.equal(sep.half, 4);
     assert.notEqual(sep.dx, 0);
     assert.ok(frame.byItem.get("a").scale > 1);
+});
+
+test("dock context menu icons", () => {
+    // Dock menus reserve a leading icon column on every row, so an empty or
+    // dangling role leaves a visible blank beside the label. Resolve the
+    // catalog the same way IconRegistry does: one alias hop, then a real glyph.
+    const iconMapSource = readFileSync(
+        new URL("../../shared/Icons/IconMap.js", import.meta.url), "utf8")
+        .replace(/^\.pragma library\s*$/m, "");
+    const iconContext = vm.createContext({});
+    vm.runInContext(iconMapSource, iconContext);
+
+    const roles = new Set();
+    for (const name of ["DockIcon.qml", "DockContainer.qml"]) {
+        const source = readFileSync(
+            new URL(`../../shell/desktop/modules/dock/${name}`, import.meta.url), "utf8");
+        for (const match of source.matchAll(/"dock\.menu\.[A-Za-z0-9_.]+"/g))
+            roles.add(match[0].slice(1, -1));
+    }
+
+    assert.ok(roles.size > 0, "dock menu roles must stay discoverable in the QML sources");
+    for (const role of roles) {
+        assert.ok(Object.hasOwn(shellIcons, role), `${role} must be registered in ShellIconMap`);
+        const value = shellIcons[role];
+        assert.notEqual(value, "", `${role} must render an icon in Dock menus`);
+        const glyph = iconContext.aliases[value] || value;
+        assert.ok(iconContext.glyphs[glyph], `${role} -> ${value} must resolve to a font glyph`);
+    }
 });
