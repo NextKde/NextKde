@@ -80,6 +80,7 @@
     "kos-dock.policy",
     "kos-dock.motion",
     "kos-dock.native-target",
+    "kos-icons.roles",
     "kos-shell.application-traffic",
     "kos-shell.battery-data",
     "kos-shell.traffic-history",
