@@ -278,7 +278,10 @@ PersistentPanelWindow {
     Connections {
         target: WindowService
         function onGlobalPointerPressed(x, y, button, timestamp) {
-            if (!popupMotion.interactive)
+            // Do not dismiss while the centered SessionConfirmationDialog is open:
+            // clicks inside that modal sit outside the control center's bounds and
+            // would otherwise close both panels on mouse press before onClicked runs.
+            if (!popupMotion.interactive || panel.pendingConfirmAction !== "")
                 return
             if (x < panel.globalX || x > panel.globalX + panel.width
                     || y < panel.globalY || y > panel.globalY + panel.height) {
@@ -656,6 +659,7 @@ PersistentPanelWindow {
         id: dismissalCatcher
         screen: panel.targetScreen
         visible: ScreenLifecycle.outputAvailable && panel.targetScreen !== null
+            && panel.pendingConfirmAction === ""
             && (panel.isOpen || panel.sessionModalVisible || panel.activeSubmenu !== "")
         color: "transparent"
         exclusionMode: ExclusionMode.Ignore

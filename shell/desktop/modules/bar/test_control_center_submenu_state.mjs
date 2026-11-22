@@ -85,8 +85,10 @@ assert.match(panel, /id:\s*dismissalCatcher/,
     "the outside-press catcher stays declared")
 assert.match(panel, /onPressed:\s*panel\.close\(\)/,
     "the outside-press catcher dismisses the panel")
-assert.match(panel, /visible:[\s\S]{0,200}panel\.isOpen/,
-    "the catcher covers a deferred open as well as a mapped panel")
+assert.match(panel, /visible:[\s\S]{0,200}panel\.pendingConfirmAction\s*===\s*""[\s\S]{0,200}panel\.isOpen/,
+    "the catcher stays hidden while a session confirmation dialog is active")
+assert.match(panel, /onGlobalPointerPressed\([^)]*\)\s*\{[\s\S]{0,400}panel\.pendingConfirmAction\s*!==\s*""/,
+    "outside-press dismissal ignores presses while the centered session confirmation dialog owns input")
 
 // A popup measures its anchor once, when its window is created, so an open
 // request that arrives while the auto-hiding Bar is still put away must wait
