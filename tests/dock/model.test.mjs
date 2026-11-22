@@ -782,3 +782,15 @@ test("dock separators", () => {
     assert.notEqual(sep.dx, 0);
     assert.ok(frame.byItem.get("a").scale > 1);
 });
+
+test("dock menus do not reserve an empty icon column", () => {
+    // Only a few Dock menu actions carry an icon by design. Reserving the
+    // column for every row left a blank gutter in front of each label, which
+    // reads as a failed icon rather than as a deliberate omission.
+    for (const name of ["DockIcon.qml", "DockContainer.qml"]) {
+        const source = readFileSync(
+            new URL(`../../shell/desktop/modules/dock/${name}`, import.meta.url), "utf8");
+        assert.ok(!/reserveIconSpace\s*:\s*true/.test(source),
+            `${name} must not reserve an icon column in Dock menus`);
+    }
+});
