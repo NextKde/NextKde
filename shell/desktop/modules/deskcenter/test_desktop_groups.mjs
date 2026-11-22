@@ -94,6 +94,8 @@ assert.match(deskcenter, /flowWidgetDefinitions/);
 assert.match(deskcenter, /flowWidgetLayout/);
 assert.match(deskcenter, /groupsPlacement/);
 assert.match(deskcenter, /WidgetLayout\.placeAnchoredWidget/);
+assert.match(deskcenter, /WidgetLayout\.insetRightEdge\(/,
+    'the anchored card keeps the visible right margin');
 assert.match(deskcenter, /WidgetLayout\.maxSpanFor/);
 assert.match(deskcenter, /maxDropColumns/);
 assert.match(deskcenter, /allowColorArtwork: modelData\.id !== "groups"/);
@@ -111,6 +113,16 @@ assert.match(config, /"groups"/);
 assert.match(layout, /groups: \{ small: \[2, 2\], medium: \[2, 3\], large: \[3, 3\] \}/);
 assert.match(layout, /export function placeAnchoredWidget/);
 assert.match(layout, /export function maxSpanFor/);
+assert.match(layout, /export function minSpanFor/);
+assert.match(layout, /\["2x2", "2x3", "3x2", "3x3"\]/,
+    'the grouped view offers only its four readable spans');
+assert.match(deskcenter, /WidgetLayout\.minSpanFor/);
+assert.match(deskcenter, /readonly property var sizeLimit: WidgetLayout\.maxSpanFor/);
+assert.match(deskcenter, /readonly property var sizeFloor: WidgetLayout\.minSpanFor/);
+assert.match(deskcenter, /maximumColumns: card\.sizeLimit\[0\]/);
+assert.match(deskcenter, /maximumRows: card\.sizeLimit\[1\]/);
+assert.match(deskcenter, /minimumColumns: card\.sizeFloor\[0\]/);
+assert.match(deskcenter, /minimumRows: card\.sizeFloor\[1\]/);
 
 assert.match(view, /DesktopGroups\.buildGroups\(entries\)/);
 assert.match(view, /^Item \{/m);

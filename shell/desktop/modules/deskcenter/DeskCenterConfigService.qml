@@ -125,8 +125,9 @@ QtObject {
     function sizeFor(widgetId) {
         const sizes = parsedSizes()
         const value = String(sizes[widgetId] ?? defaultSizes[widgetId] ?? "medium")
-        // A hand-edited span must still respect each widget's size ceiling;
-        // only the grouped view accepts 2x3/3x3.
+        // A hand-edited span must still respect each widget's size ceiling:
+        // the grouped view accepts 2x3/3x2/3x3 and never goes below 2x2, and
+        // weather's three-column layouts are valid explicit spans.
         return WidgetLayout.isValidSize(widgetId, value)
             ? WidgetLayout.normalizedSize(value) : "medium"
     }

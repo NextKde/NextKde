@@ -34,6 +34,9 @@ weather. It starts hidden so upgrades keep the normal desktop. Show it from
 
 The widget is anchored to the top-right of the desktop grid and defaults to a 2×3
 span (about 370 × 560 logical pixels), while the other widgets stay in the left flow.
+Its supported spans are 2×2, 2×3, 3×2 and 3×3; 2×2 is the floor because the header
+and four type tabs need about 222 px and a one-cell column cannot fit a member tile.
+A screen too short to place the 2×2 floor keeps the normal file icons instead.
 It uses the same surface backend as the other widgets: the compositor glass in a glass
 form, or the tonal plate in Material. It opts out of the colour-artwork widget style
 so it keeps that material, and its frost joins the same window-wide blur union as the
@@ -73,7 +76,7 @@ output only, like the other desktop widgets; other outputs keep their file icons
 `DesktopGroups.mjs` owns the kind-to-group mapping and tab glyphs;
 `DesktopGroupsContent.qml` is the widget content; `DesktopGroupMemberIcon.qml`
 resolves each member's artwork; `WidgetLayout.mjs` owns the top-right anchored
-placement and the 2×3/3×3 span limits. `kos-deskcenter.group-by-type` covers the pure
+placement and the 2×2 floor with the 2×3/3×2/3×3 span limits. `kos-deskcenter.group-by-type` covers the pure
 mapping and QML wiring, `kos-deskcenter.widget-layout` covers anchored placement and
 span limits, and `kos-deskcenter.group-by-type-runtime` loads the real content with
 isolated fixture entries. None of them replaces visual VM acceptance of the glass,
@@ -116,7 +119,10 @@ glass before and after leaving Overview. Source/SDK checks do not establish visu
 ## Widget placement and resizing
 
 In desktop edit mode, drag a widget to a free grid rectangle or use its bottom-right
-handle to resize it to 1×1, 1×2, 2×2 or 2×1. The drop preview distinguishes occupied
+handle to resize it. Ordinary cards stay within 1×1–2×2; the weather card can also
+open to 3×1 and 3×2; the grouped view uses its four readable spans from 2×2 to 3×3.
+The handle's ceiling and floor come from each widget's declared limits, so grabbing a
+card never snaps it to a smaller span than it already has. The drop preview distinguishes occupied
 cells from available cells. Moving a widget fixes the other visible cards in place.
 Widget spans and per-output positions are stored alongside the existing size/order
 preferences by `DeskCenterConfigService`; existing small/medium/large values remain valid.

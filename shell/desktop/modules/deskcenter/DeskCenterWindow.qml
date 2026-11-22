@@ -364,10 +364,13 @@ PanelWindow {
             return null
         const widget = configuredWidget("groups", 110, "#51415d", "#332a3d")
         // Compact only this output's projection on a short screen; the saved
-        // medium (2x3) span remains untouched.
-        return Object.assign({}, widget, {
-            rows: Math.max(1, Math.min(widget.rows, usableRows))
-        })
+        // medium (2x3) span remains untouched. Below two rows the grouped
+        // content cannot draw its tabs and member grid, so a screen that
+        // short keeps the normal icon view instead of a broken card.
+        const rows = Math.min(widget.rows, usableRows)
+        if (rows < 2)
+            return null
+        return Object.assign({}, widget, { rows: rows })
     }
     readonly property var widgetDefinitions: groupsWidgetDefinition
         ? flowWidgetDefinitions.concat([groupsWidgetDefinition])
@@ -407,9 +410,10 @@ PanelWindow {
     function resizeWidget(widgetId, columns, rows) {
         const placement = placementFor(widgetId)
         const limit = WidgetLayout.maxSpanFor(widgetId)
+        const minimum = WidgetLayout.minSpanFor(widgetId)
         const maxColumns = widgetId === "groups"
             ? root.columns : maximumWidgetColumns
-        if (columns < 1 || rows < 1 || columns > limit[0]
+        if (columns < minimum[0] || rows < minimum[1] || columns > limit[0]
                 || rows > limit[1] || !placement
                 || !WidgetLayout.canPlace(placements, widgetId,
                 placement.column, placement.row, columns, rows,
@@ -688,7 +692,9 @@ PanelWindow {
         // last target geometry and colour for the entire fade-out.
         property rect lastGeometry: Qt.rect(0, 0, 0, 0)
         readonly property rect previewGeometry: dragged !== null
-            ? Qt.rect(root.leftInset + dragged.dropPosition.column * (root.cellSize + root.gap),
+            ? Qt.rect(WidgetLayout.insetRightEdge(
+                    root.leftInset + dragged.dropPosition.column * (root.cellSize + root.gap),
+                    root.spanSize(dragged.displayColumns), root.width, root.rightInset),
                 root.topInset + dragged.dropPosition.row * (root.cellSize + root.gap),
                 root.spanSize(dragged.displayColumns), root.spanSize(dragged.displayRows))
             : lastGeometry
@@ -786,6 +792,12 @@ PanelWindow {
             // jump. This flag is assigned by that handler itself, so it is
             // already exact when the writes happen.
             property bool pointerHeld: false
+            // Per-card resize limits. The grouped view and the weather card
+            // are the two widgets whose declared spans exceed the ordinary
+            // two-cell ceiling, so the handle reads both the ceiling and the
+            // floor from WidgetLayout instead of hard-coding "groups ? 3 : 2".
+            readonly property var sizeLimit: WidgetLayout.maxSpanFor(modelData.id)
+            readonly property var sizeFloor: WidgetLayout.minSpanFor(modelData.id)
             // The anchored grouped view may move across the whole grid; every
             // other card stays inside the left widget field.
             readonly property int maxDropColumns: modelData.id === "groups"
@@ -824,8 +836,15 @@ PanelWindow {
             // Behaviors on these bindings: Qt's SpringAnimation integrates at a
             // fixed 16 ms step, so on a 240 Hz output a released card moved in
             // ~60 Hz quanta while the compositor kept presenting every frame.
-            readonly property real targetX: root.leftInset
-                + (placement?.column ?? 0) * (root.cellSize + root.gap) + dragOffsetX
+            // The grid is laid out from the left inset but still sized with the
+            // original 8 px layout margins, so its rightmost column overflows
+            // the right inset. Cap the committed cell here: the top-right
+            // anchored grouped view then keeps the same visible margin as every
+            // other card. The committed span (not the resize preview) decides
+            // the cap so a resize drag never drags the card's left edge along.
+            readonly property real targetX: WidgetLayout.insetRightEdge(
+                root.leftInset + (placement?.column ?? 0) * (root.cellSize + root.gap),
+                root.spanSize(displayColumns), root.width, root.rightInset) + dragOffsetX
             readonly property real targetY: root.topInset
                 + (placement?.row ?? 0) * (root.cellSize + root.gap) + dragOffsetY
             // The card and every widget inside it lay themselves out for the
@@ -1035,8 +1054,10 @@ PanelWindow {
                 anchors { right: parent.right; bottom: parent.bottom; margins: 5 }
                 cellSize: root.cellSize
                 gap: root.gap
-                maximumColumns: card.modelData.id === "groups" ? 3 : 2
-                maximumRows: card.modelData.id === "groups" ? 3 : 2
+                maximumColumns: card.sizeLimit[0]
+                maximumRows: card.sizeLimit[1]
+                minimumColumns: card.sizeFloor[0]
+                minimumRows: card.sizeFloor[1]
                 animate: !AppTheme.reduceMotion
                 previewAllowed: card.placement !== null && WidgetLayout.canPlace(
                     root.placements, card.modelData.id, card.placement.column, card.placement.row,

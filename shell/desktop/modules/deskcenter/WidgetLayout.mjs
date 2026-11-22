@@ -14,11 +14,28 @@ const variants = {
 
 // The grouped view is the one widget whose default placement is the top-right
 // of the desktop grid instead of the left flow. It may grow one row/column
-// beyond the ordinary widget ceiling.
+// beyond the ordinary widget ceiling, but it cannot shrink below two cells on
+// either axis: its header plus the four type tabs need about 222 px, and a
+// one-column content area cannot fit a member cell. The stored sizes are the
+// four layouts that remain readable.
 export function allowedSizeOrder(widgetId) {
-    return String(widgetId) === "groups"
-        ? ["1x1", "1x2", "2x2", "2x1", "2x3", "3x3"]
-        : sizeOrder;
+    switch (String(widgetId)) {
+    case "groups":
+        return ["2x2", "2x3", "3x2", "3x3"];
+    case "weather":
+        // Weather's declared medium/large spans are three columns wide, so
+        // every span the resize handle can reach must also be storable.
+        return ["1x1", "1x2", "2x1", "2x2", "3x1", "3x2"];
+    default:
+        return sizeOrder;
+    }
+}
+
+// Minimum span per axis. Ordinary widgets may shrink to a single cell; the
+// grouped view keeps the two-row/two-column floor that its tabs and member
+// grid need.
+export function minSpanFor(widgetId) {
+    return String(widgetId) === "groups" ? [2, 2] : [1, 1];
 }
 
 export function isValidSize(widgetId, size) {
@@ -28,7 +45,17 @@ export function isValidSize(widgetId, size) {
 }
 
 export function maxSpanFor(widgetId) {
-    return String(widgetId) === "groups" ? [3, 3] : [2, 2];
+    switch (String(widgetId)) {
+    case "groups":
+        return [3, 3];
+    // Weather's medium and large layouts are three columns wide. The resize
+    // handle must use the same ceiling, otherwise merely grabbing a 3-column
+    // card snaps it down to two and the user cannot drag it back.
+    case "weather":
+        return [3, 2];
+    default:
+        return [2, 2];
+    }
 }
 
 export function normalizedSize(size) {
@@ -140,12 +167,28 @@ export function placeAnchoredWidget(widget, placements, columnCount, rowCount) {
     return null;
 }
 
+// Cards are placed from the left visual inset, but the 10-column grid itself
+// is still sized with the original 8 px layout margins (see
+// layoutBaseSideMargin in DeskCenterWindow.qml). Shifting that grid inward
+// therefore pushes its rightmost column past `width - rightInset`; the top-
+// right anchored grouped view would sit flush under the screen edge instead of
+// keeping the same margin as every other card. Cap a card's left edge so its
+// right edge never crosses the visible margin; every other card is already
+// inside it, so this only moves the anchored one.
+export function insetRightEdge(x, width, screenWidth, rightInset) {
+    return Math.min(x, Math.max(0, screenWidth - rightInset - width));
+}
+
 export function snappedSpan(width, height, cellSize, gap,
-        maximumColumns = 2, maximumRows = 2) {
+        maximumColumns = 2, maximumRows = 2,
+        minimumColumns = 1, minimumRows = 1) {
     const step = Math.max(1, cellSize + gap);
-    const snap = (length, maximum) => Math.max(1,
-        Math.min(maximum, Math.round((length + gap) / step)));
-    return [snap(width, maximumColumns), snap(height, maximumRows)];
+    // A caller may pass a minimum above the maximum on a screen that cannot
+    // fit it; the maximum wins so the card never claims an impossible span.
+    const snap = (length, maximum, minimum) => Math.max(minimum,
+        Math.min(Math.max(minimum, maximum), Math.round((length + gap) / step)));
+    return [snap(width, maximumColumns, minimumColumns),
+        snap(height, maximumRows, minimumRows)];
 }
 
 // A resize drag moves continuously, but a widget only lands on whole cells.
@@ -155,12 +198,14 @@ export function snappedSpan(width, height, cellSize, gap,
 // halfway line it is free). The mapping is continuous, so the corner tracks a
 // steady hand while the magnet does the resisting, and the release spring does
 // the snapping to the cell the corner is closest to.
-export function magnetizedSize(size, cellSize, gap, maximumSpan = 2) {
+export function magnetizedSize(size, cellSize, gap, maximumSpan = 2, minimumSpan = 1) {
     const step = Math.max(1, cellSize + gap);
-    const minimum = cellSize;
+    const lowerSpan = Math.min(minimumSpan, maximumSpan);
+    const minimum = lowerSpan * cellSize + (lowerSpan - 1) * gap;
     const maximum = maximumSpan * cellSize + (maximumSpan - 1) * gap;
     const clamped = Math.max(minimum, Math.min(maximum, size));
-    const span = Math.max(1, Math.min(maximumSpan, Math.round((clamped + gap) / step)));
+    const span = Math.max(lowerSpan,
+        Math.min(maximumSpan, Math.round((clamped + gap) / step)));
     const snapped = span * cellSize + (span - 1) * gap;
     // 0 at the cell size (fully held), 1 on the halfway line (fully free).
     const free = Math.min(1, Math.abs(clamped - snapped) / (step / 2));

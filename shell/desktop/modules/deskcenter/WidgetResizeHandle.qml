@@ -22,6 +22,10 @@ Item {
     // one anchored card allowed to grow to three rows/columns.
     property int maximumColumns: 2
     property int maximumRows: 2
+    // The grouped view cannot shrink below 2x2: below that its header, four
+    // type tabs and member grid stop fitting. Ordinary widgets keep one cell.
+    property int minimumColumns: 1
+    property int minimumRows: 1
     // The corner position the drag actually shows: the pointer, bent by the
     // magnetic mapping so the card is held near whole-cell sizes.
     property real previewWidth: 0
@@ -73,7 +77,8 @@ Item {
             handle.startWidth = handle.cardWidth
             handle.startHeight = handle.cardHeight
             const span = WidgetLayout.snappedSpan(handle.startWidth, handle.startHeight,
-                handle.cellSize, handle.gap, handle.maximumColumns, handle.maximumRows)
+                handle.cellSize, handle.gap, handle.maximumColumns, handle.maximumRows,
+                handle.minimumColumns, handle.minimumRows)
             handle.previewColumns = span[0]
             handle.previewRows = span[1]
             handle.previewWidth = handle.startWidth
@@ -88,13 +93,16 @@ Item {
             const width = handle.startWidth + point.x - handle.startPoint.x
             const height = handle.startHeight + point.y - handle.startPoint.y
             const span = WidgetLayout.snappedSpan(width, height, handle.cellSize,
-                handle.gap, handle.maximumColumns, handle.maximumRows)
+                handle.gap, handle.maximumColumns, handle.maximumRows,
+                handle.minimumColumns, handle.minimumRows)
             handle.previewColumns = span[0]
             handle.previewRows = span[1]
             handle.previewWidth = WidgetLayout.magnetizedSize(width,
-                handle.cellSize, handle.gap, handle.maximumColumns)
+                handle.cellSize, handle.gap, handle.maximumColumns,
+                handle.minimumColumns)
             handle.previewHeight = WidgetLayout.magnetizedSize(height,
-                handle.cellSize, handle.gap, handle.maximumRows)
+                handle.cellSize, handle.gap, handle.maximumRows,
+                handle.minimumRows)
         }
         onReleased: {
             if (handle.previewAllowed)
