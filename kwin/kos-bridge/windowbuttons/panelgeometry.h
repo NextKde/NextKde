@@ -161,11 +161,14 @@ inline constexpr int PanelFlushLeft = 2;
 inline constexpr int PanelFlushRight = 4;
 int panelFlushMask(const PanelGeometry &);
 
-// Native scene contour. Continuous corners are applied to the complete source
-// after buttons are painted, so that path supplies zero native radii here.
+// Visual window contour used to clip edge-attached panels and adjust rings.
+// Continuous corners zero native borderRadius() and expose their visual radii
+// and curve exponent on the window, so both circular and continuous contours
+// pass through here.
 struct PanelWindowContour {
     QSizeF size;
     WindowAppearance::CornerRadii radii;
+    qreal smoothness = 0.0;
 };
 
 // Floating panels remain pills. Edge-attached panels cover the control box
