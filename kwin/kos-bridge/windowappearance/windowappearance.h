@@ -36,6 +36,8 @@ public:
     void prepare(KWin::EffectWindow *window, bool continuousAvailable = false);
     std::optional<WindowAppearance::ContinuousStyle> continuousStyle(KWin::EffectWindow *window) const;
     void forget(KWin::EffectWindow *window);
+    // Drop only KOS additions on a live window; keep the client's own appearance.
+    void restoreWindow(KWin::EffectWindow *window);
     void focusChanged(KWin::EffectWindow *gained);
     void restoreAll();
 

@@ -8,6 +8,8 @@
 #include "glassshape.h"
 #include "surfaceshapemanager.h"
 
+#include "../../common/windoweffectpolicy.h"
+
 #include <core/rect.h>
 #include <core/region.h>
 #include <core/rendertarget.h>
@@ -735,6 +737,18 @@ void GlassEffect::updateItem(EffectWindow *w)
     if (!m_shapes || !w || !w->surface()) {
         return;
     }
+    // This is an ownership exclusion, not a blur blacklist: even explicitly
+    // requested material must not land on a Mime frame. The application ID can
+    // arrive after mapping, so retire whatever the window built before the
+    // client identified itself instead of only skipping the next build.
+    if (KOS::keepsClientAppearance(w->windowClass())) {
+        if (auto it = m_render.find(w); it != m_render.end()) {
+            effects->makeOpenGLContextCurrent();
+            delete it.value();
+            m_render.erase(it);
+        }
+        return;
+    }
     const QVector<GlassShape> shapes = m_shapes->shapesFor(w->surface());
 
     QRectF bounds;
@@ -1095,7 +1109,9 @@ void GlassEffect::prePaintWindow(RenderView *view, EffectWindow *w, WindowPrePai
     effects->prePaintWindow(view, w, data, presentTime);
 
     Region blurArea;
-    if (m_shapes && w->surface()) {
+    // An excluded window paints no material, so it must not expand damage or
+    // schedule repaints for a glass region that will never be drawn.
+    if (m_shapes && w->surface() && !KOS::keepsClientAppearance(w->windowClass())) {
         const QVector<GlassShape> shapes = m_shapes->shapesFor(w->surface());
         if (!shapes.isEmpty()) {
             const QRectF logical = shapeUnion(w, shapes, false);
@@ -1145,6 +1161,11 @@ void GlassEffect::render(const RenderTarget &renderTarget, const RenderViewport 
 {
     const qreal windowOpacity = paint.opacity();
     if (!m_valid || !m_shapes || !w->surface() || windowOpacity <= 0.0) {
+        return;
+    }
+    // A late application ID must stop the material immediately, even before
+    // updateItem() gets a chance to retire the cached backdrop.
+    if (KOS::keepsClientAppearance(w->windowClass())) {
         return;
     }
     // Nothing under this window is damaged, so the glass already in the target
@@ -1729,6 +1750,17 @@ void GlassEffect::drawWindow(const RenderTarget &renderTarget, const RenderViewp
                              WindowPaintData &data)
 #endif
 {
+    // Mime owns its complete frame, including transparent margins and any
+    // client-drawn reveal: no material and no surface transform is applied.
+    if (w && KOS::keepsClientAppearance(w->windowClass())) {
+#ifdef KOS_KWIN_PAINT_RESULT_API
+        return effects->drawWindow(renderTarget, viewport, w, mask, deviceRegion, data);
+#else
+        effects->drawWindow(renderTarget, viewport, w, mask, deviceRegion, data);
+        return;
+#endif
+    }
+
     // KWin's transformed-window contract: a window painted through a scale or
     // translation, or while a fullscreen effect runs, only keeps its backdrop
     // if that effect asks for it via WindowForceBlurRole (Slide, Present

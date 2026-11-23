@@ -5,6 +5,8 @@
 #include <QString>
 #include <QVector>
 
+#include <optional>
+
 #include "panelgeometry.h"
 
 namespace KOS
@@ -65,6 +67,18 @@ WindowMatcher adjustmentMatcher(const WindowQuery &query);
 // App-wide matcher for windows of the same class and type (survives changing
 // document or tab titles).
 WindowMatcher appMatcher(const WindowQuery &query);
+
+enum class MatchScope {
+    Window,
+    App,
+};
+
+MatchScope matcherScope(const WindowMatcher &matcher);
+MatchScope initialAdjustScope(const WindowQuery &query,
+                              const std::optional<WindowMatcher> &existingMatcher,
+                              bool hasDistinctSibling);
+WindowMatcher resolvedAdjustMatcher(const WindowQuery &query, MatchScope scope,
+                                    const std::optional<WindowMatcher> &existingMatcher);
 
 // Per-window presentation override stored alongside geometry.
 enum class OverlayMode {
