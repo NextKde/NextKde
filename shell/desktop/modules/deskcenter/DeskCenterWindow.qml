@@ -3903,7 +3903,6 @@ PanelWindow {
 
         ContextMenu {
             id: desktopContextMenu
-            reserveIconSpace: true
             capsuleReveal: true
             // The anchor is only a 4px cursor marker; use the Wi-Fi pill size.
             capsuleSourceWidth: 137
