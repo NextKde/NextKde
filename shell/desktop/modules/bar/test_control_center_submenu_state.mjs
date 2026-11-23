@@ -43,8 +43,12 @@ assert.match(submenuCard, /cardShown:\s*panel\.submenuShownPage\s*!==\s*""/,
 assert.match(submenuCard, /pageTag:\s*panel\.submenuShownPage/,
     "the submenu card belongs to the page it is currently rendering")
 const persistentPanel = readFileSync(join(here, "../common/PersistentPanelWindow.qml"), "utf8")
-assert.match(persistentPanel, /visible:\s*true/,
-    "the panel surface stays mapped for the shell's lifetime, including the exit animation")
+assert.match(persistentPanel, /screen:\s*window\.targetScreen/,
+    "the persistent panel follows ScreenLifecycle.activeScreen across output hotplug")
+assert.match(persistentPanel, /visible:\s*ScreenLifecycle\.outputAvailable\s*&&\s*window\.targetScreen\s*!==\s*null/,
+    "the panel surface stays mapped while outputs exist and hides before placeholder-screen churn")
+assert.match(persistentPanel, /onVisibleChanged:[\s\S]{0,120}window\.motion\.reset\(\)/,
+    "hiding on output loss clears pending motion state so the next toggle opens cleanly")
 assert.match(persistentPanel, /contentItem\.visible:[\s\S]{0,160}requestedOpen/,
     "only the content hides while the mapped surface stays alive")
 assert.match(panel, /PersistentPanelWindow\s*\{/,
