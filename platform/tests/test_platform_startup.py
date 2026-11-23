@@ -130,6 +130,7 @@ def main():
             ("state.read", {}, "invalid-state-path"),
             ("clipboard.set", {}, "invalid-clipboard-request"),
             ("display.unknown-operation", {}, "unknown-operation"),
+            ("system.timezone", {}, None),
             ("platform.ping", {}, None),
         ]
         with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as routed:
@@ -150,6 +151,9 @@ def main():
                         error = response.get("error", {})
                         if error.get("code") != code or error.get("retryable") is not False:
                             fail("domain error changed for " + operation + ": " + str(response), output)
+                    if operation == "system.timezone" and not isinstance(
+                            response.get("result", {}).get("timeZone"), str):
+                        fail("system.timezone omitted its zone ID: " + str(response), output)
 
         # Malformed replies must obey the same write cap as events and normal
         # replies. Keep each input batch small and never drain this peer's

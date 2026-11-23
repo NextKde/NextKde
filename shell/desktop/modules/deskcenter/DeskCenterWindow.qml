@@ -154,6 +154,7 @@ PanelWindow {
     property bool timerRunning: false
     property bool timerHasStarted: false
     property bool timerView: false
+    property string systemTimeZone: ""
     property bool editMode: false
     property bool widgetLibraryOpen: false
     property var activeDragCard: null
@@ -208,6 +209,15 @@ PanelWindow {
             root.depthPointerX = 0
             root.depthPointerY = 0
         }
+    }
+    Component.onCompleted: PlatformClient.request("system.timezone", {}, function(response) {
+        if (response?.ok)
+            root.systemTimeZone = String(response.result?.timeZone || "")
+    })
+
+    function toggleClockStyle() {
+        DeskCenterConfigService.setClockStyle(
+            DeskCenterConfigService.clockStyle === "analog" ? "digital" : "analog")
     }
 
     function formattedTimer() {
@@ -328,7 +338,11 @@ PanelWindow {
         // re-evaluates this property, and `placements` packs whatever is left.
         const hidden = AppearanceConfigService.hiddenDeskCenterWidgets
         const definitions = [
-            configuredWidget("clock", 100, "#536783", "#35465f"),
+            configuredWidget("clock", 100,
+                DeskCenterConfigService.clockStyle === "digital"
+                    ? AppearanceTokens.widget.digitalClock.artworkStart : "#536783",
+                DeskCenterConfigService.clockStyle === "digital"
+                    ? AppearanceTokens.widget.digitalClock.artworkEnd : "#35465f"),
             configuredWidget("weather", 90, "#536b94", "#394b70"),
             configuredWidget("calendar", 80, "#fff8fa", "#f3e8ed"),
             configuredWidget("todo", 75, "#f2faf7", "#e2f1eb"),
@@ -750,11 +764,10 @@ PanelWindow {
             opacity: StartupReveal.widgetProgress
             enabled: StartupReveal.widgetProgress > 0
             z: widgetDrag.active || resizeHandle.resizing ? 120 : (root.editMode ? 20 : 1)
-            // The clock is the one card whose glass outline is a shape rather
-            // than a rectangle: it draws MaterialFlower, so its surface has to
-            // be the flower itself — no card fill, no rectangular KWin material,
-            // and frost clipped to the petal outline.
+            // The analog clock uses MaterialFlower's petal outline; the digital
+            // clock uses the regular rounded widget surface.
             flowerShapedSurface: modelData.id === "clock"
+                && DeskCenterConfigService.clockStyle === "analog"
             materialSurfaceColor: root.materialWidgetSurface(modelData.id)
             title: modelData.title
             startColor: modelData.id === "weather" ? root.weatherTheme.primary : modelData.startColor
@@ -972,6 +985,37 @@ PanelWindow {
                 }
             }
 
+            Rectangle {
+                objectName: card.modelData.id === "clock" ? "widget-clock-style" : ""
+                z: 80
+                visible: root.editMode && card.modelData.id === "clock"
+                activeFocusOnTab: visible
+                Accessible.role: Accessible.Button
+                Accessible.name: clockStyleLabel.text
+                Accessible.description: I18n.tr("Clock")
+                Accessible.onPressAction: root.toggleClockStyle()
+                anchors { left: parent.left; top: parent.top; leftMargin: 8; topMargin: 40 }
+                width: clockStyleLabel.implicitWidth + 16
+                height: 26
+                radius: 9
+                color: AppearanceTokens.surface.pick(AppearanceTokens.colors.surfaceContainerHigh, Qt.rgba(0, 0, 0, 0.56))
+                border.width: activeFocus ? 2 : 0
+                border.color: AppearanceTokens.surface.pick(AppearanceTokens.colors.primary, "white")
+                Keys.onSpacePressed: root.toggleClockStyle()
+                Keys.onReturnPressed: root.toggleClockStyle()
+                Keys.onEnterPressed: root.toggleClockStyle()
+                Text {
+                    id: clockStyleLabel
+                    objectName: "widget-clock-style-label"
+                    anchors.centerIn: parent
+                    text: DeskCenterConfigService.clockStyle === "analog"
+                        ? I18n.tr("Digital") : I18n.tr("Analog")
+                    color: AppearanceTokens.surface.pick(AppearanceTokens.colors.surfaceForeground, "white")
+                    font { family: AppearanceTokens.typography.textFamily; pixelSize: 10; weight: Font.DemiBold }
+                }
+                TapHandler { onTapped: root.toggleClockStyle() }
+            }
+
             WidgetResizeHandle {
                 id: resizeHandle
                 z: 80
@@ -1046,6 +1090,7 @@ PanelWindow {
                 // including while a newly loaded card grows from zero height.
                 property real pageProgress: root.timerView ? 1 : 0
                 Behavior on pageProgress {
+                    enabled: !AppearanceConfigService.reduceMotion
                     NumberAnimation { duration: AppearanceTokens.motion.slow.duration; easing.type: AppearanceTokens.motion.enterCurve }
                 }
 
@@ -1055,16 +1100,13 @@ PanelWindow {
                     height: parent.height
                     y: -height * clockPages.pageProgress
 
-                // The flower itself is not drawn here: this card is a regular
-                // Material card whose outline happens to be the flower, so its
-                // paint comes from the card surface like every other card's.
-                // Painting a second flower here is what made the clock read as a
-                // different surface -- its own colour, its own opacity, its own
-                // outline. The clock only adds its face below.
+                // Neither face paints its card surface: DeskWidgetCard owns the
+                // analog flower outline and the digital rounded outline.
 
                 DeskClockFace {
                     id: analogClock
                     objectName: "desktop-clock-face"
+                    visible: DeskCenterConfigService.clockStyle === "analog"
                     anchors.fill: parent
                     anchors.margins: 14
                     date: clock.date
@@ -1078,6 +1120,25 @@ PanelWindow {
                     minuteColor: AppearanceTokens.isMaterial ? AppearanceTokens.colors.tertiary : markColor
                     secondColor: AppearanceTokens.content.accent(AppearanceTokens.colors.secondary, "#ee7659")
                     hubColor: AppearanceTokens.content.accent(AppearanceTokens.colors.primary, "#ee7659")
+                }
+
+                Loader {
+                    anchors.fill: parent
+                    anchors.margins: 14
+                    active: DeskCenterConfigService.clockStyle === "digital"
+                    sourceComponent: Component {
+                        DeskDigitalClockFace {
+                            anchors.fill: parent
+                            date: clock.date
+                            systemTimeZone: root.systemTimeZone
+                            monochrome: AppearanceConfigService.widgetStyle === "glass"
+                            cornerRadius: Math.max(0, AppearanceTokens.widget.radius - 14)
+                            cityColor: AppearanceTokens.content.ink(AppearanceTokens.widget.digitalClock.ink)
+                            timeColor: AppearanceTokens.content.ink(AppearanceTokens.widget.digitalClock.ink)
+                            offsetColor: AppearanceTokens.content.ink(AppearanceTokens.widget.digitalClock.ink)
+                            ringColor: AppearanceTokens.content.ink(AppearanceTokens.widget.digitalClock.ink)
+                        }
+                    }
                 }
 
 	                Rectangle {

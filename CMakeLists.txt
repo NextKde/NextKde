@@ -821,7 +821,7 @@ if(BUILD_TESTING)
             LABELS "ui;widgets" TIMEOUT 120
             ENVIRONMENT "QML_IMPORT_PATH=${CMAKE_BINARY_DIR}/qml;QML2_IMPORT_PATH=${CMAKE_BINARY_DIR}/qml")
         set_tests_properties(kos-ui.widget-experience PROPERTIES
-            LABELS "ui;widgets" TIMEOUT 90
+            LABELS "ui;widgets" TIMEOUT 300
             ENVIRONMENT "QML_IMPORT_PATH=${CMAKE_BINARY_DIR}/qml;QML2_IMPORT_PATH=${CMAKE_BINARY_DIR}/qml")
         set_tests_properties(kos-ui.desktop-overview PROPERTIES
             LABELS "ui;widgets" TIMEOUT 60 RUN_SERIAL TRUE

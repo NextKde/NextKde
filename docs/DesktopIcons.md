@@ -92,6 +92,10 @@ widget content alive when another widget is moved.
 The clock animates a shared page-selection fraction for its face and countdown,
 then derives each page's position from the current height. Height changes alone
 must keep the hidden countdown below the face rather than replaying a slide.
+In edit mode, the clock's Analog/Digital control switches its face without replacing
+the countdown. `DeskCenterConfigService` persists the choice as `analog` or `digital`;
+missing or invalid values use analog. Both faces use the shared clock and appearance
+tokens, with digital retaining the regular rounded card and analog using the flower outline.
 `kos-deskcenter.widget-layout` covers geometry and migration-compatible sizes;
 `kos-ui.widget-resize` exercises pointer input, glass-anchor geometry after the lift
 animation finishes, retained card/clock instances across layout saves and reorder,
