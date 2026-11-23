@@ -46,7 +46,7 @@ Item {
 
     MultiEffect {
         anchors.fill: parent
-        sourceItem: face
+        source: face
         maskEnabled: true
         maskSource: cutout
         maskThresholdMin: 0.5

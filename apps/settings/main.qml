@@ -281,7 +281,8 @@ ApplicationWindow {
         { subtitle: I18n.tr("Notifications") },
         { subtitle: I18n.tr("Power") },
         { subtitle: I18n.tr("Fonts") },
-        { subtitle: I18n.tr("About") }
+        { subtitle: I18n.tr("About") },
+        { subtitle: I18n.tr("Lock screen") }
     ]
 
     // Shown only while a development session drives this window. Every value on
@@ -634,6 +635,15 @@ ApplicationWindow {
 
                                 SidebarEntry {
                                     Layout.fillWidth: true
+                                    pageIndex: 16
+                                    label: I18n.tr("Lock screen")
+                                    navIcon: "lock"
+                                    navSymbol: "▣"
+                                    navTint: "#5856d6"
+                                }
+
+                                SidebarEntry {
+                                    Layout.fillWidth: true
                                     pageIndex: 2
                                     label: I18n.tr("Top bar")
                                     navIcon: "menu-bar"
@@ -814,6 +824,18 @@ ApplicationWindow {
                     // items -- so without it a page the user has left keeps its
                     // whole height as a blank slab between the title and the
                     // page actually being shown.
+                    Loader {
+                        objectName: "lockScreenPageLoader"
+                        Layout.fillWidth: true
+                        active: window.displayedPage === 16
+                        visible: active
+                        sourceComponent: Pages.LockScreenSettingsPage {
+                            colors: window.notificationTheme
+                            materialForm: window.materialForm
+                            backend: typeof lockScreenSettings !== "undefined" ? lockScreenSettings : null
+                        }
+                    }
+
                     Loader {
                         Layout.fillWidth: true
                         active: window.displayedPage === 13
