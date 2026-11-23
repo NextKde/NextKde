@@ -168,20 +168,26 @@ Item {
             : (dockRect ? dockRect.x + dockRect.width / 2 : sx + sw / 2)
         const centerV = item ? gy + ih / 2
             : (dockRect ? dockRect.y + dockRect.height / 2 : sy + sh / 2)
+        // PersistentPanelWindow consumes panelCenter as an offset from the
+        // screen's own origin and clamps it to the screen width/height, while
+        // every value here is in virtual-desktop coordinates. Subtracting the
+        // screen origin keeps a panel on a secondary output anchored to its
+        // cell instead of pinned to that screen's far edge (the clamp used to
+        // eat the whole offset and park the panel at the right/bottom edge).
         if (edge === "top") {
             const near = dockRect ? dockRect.y + dockRect.height : gy + ih
-            return { edge: edge, offset: near + gap - sy, center: centerH }
+            return { edge: edge, offset: near + gap - sy, center: centerH - sx }
         }
         if (edge === "bottom") {
             const near = dockRect ? dockRect.y : gy
-            return { edge: edge, offset: sy + sh - near + gap, center: centerH }
+            return { edge: edge, offset: sy + sh - near + gap, center: centerH - sx }
         }
         if (edge === "left") {
             const near = dockRect ? dockRect.x + dockRect.width : gx + iw
-            return { edge: edge, offset: near + gap - sx, center: centerV }
+            return { edge: edge, offset: near + gap - sx, center: centerV - sy }
         }
         const near = dockRect ? dockRect.x : gx
-        return { edge: edge, offset: sx + sw - near + gap, center: centerV }
+        return { edge: edge, offset: sx + sw - near + gap, center: centerV - sy }
     }
     function _applyPlacement(panel, placement) {
         if (!panel || !placement)
