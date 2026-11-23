@@ -347,6 +347,13 @@ if(BUILD_TESTING)
             set_tests_properties(kos-shell.widget-open PROPERTIES
                 LABELS "ui;headless" TIMEOUT 60
                 ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_QUICK_BACKEND=software;QML_IMPORT_PATH=${CMAKE_BINARY_DIR}/qml")
+            add_test(NAME kos-shell.pim-refresh
+                COMMAND ${KOS_WEATHER_PYTHON_EXECUTABLE}
+                    ${CMAKE_CURRENT_SOURCE_DIR}/tests/pim-refresh/run.py
+                    ${KOS_QUICKSHELL_EXECUTABLE})
+            set_tests_properties(kos-shell.pim-refresh PROPERTIES
+                LABELS "ui;headless" TIMEOUT 20
+                ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_QUICK_BACKEND=software;QML_IMPORT_PATH=${CMAKE_BINARY_DIR}/qml")
         endif()
         if(KOS_QUICKSHELL_EXECUTABLE)
             add_test(NAME kos-shell.window-family-runtime

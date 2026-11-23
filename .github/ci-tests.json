@@ -97,6 +97,7 @@
     "kos-shell.inputmethod-motion",
     "kos-shell.weather-refresh",
     "kos-shell.widget-open",
+    "kos-shell.pim-refresh",
     "kos-shell.stage-visibility-qml",
     "kos-shell.window-family-runtime",
     "kos-shell.dock-native-target",
