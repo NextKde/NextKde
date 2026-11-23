@@ -18,14 +18,21 @@ private slots:
         QVERIFY(context.tryLock(0));
         FlatpakApps backend;
         backend.m_refreshTimer.stop();
+        // changed() is emitted by the same handler that publishes the
+        // inventory, so waiting on it cannot race with the state read the way
+        // querying() does (the future turns idle before that handler runs).
+        QSignalSpy changed(&backend, &FlatpakApps::changed);
         // Model a second inventory holding the same process-shared lock.
         // The event loop must stay responsive while refresh waits off-thread.
         QTimer::singleShot(150, &backend, [&context] { context.unlock(); });
         backend.refresh();
-        QTRY_VERIFY_WITH_TIMEOUT(!backend.querying(), 3000);
-        const auto state = backend.state("org.nextks.calendar");
-        QVERIFY2(state.value("known").toBool(), qPrintable(state.value("error").toString()));
+        QTRY_COMPARE_WITH_TIMEOUT(changed.size(), 1, 3000);
         QVERIFY(!context.isLocked());
+        // The short wait has to reach the inventory phase. Whether Flatpak is
+        // set up on this machine is not part of this regression.
+        QVERIFY2(backend.state("org.nextks.calendar").value("error").toString()
+                != "Application source configuration is busy",
+            "a short lock wait must let the inventory run");
     }
     void inventoryLockWaitIsBoundedAndKeepsUnknownState()
     {
@@ -34,8 +41,9 @@ private slots:
         QVERIFY(context.tryLock(0));
         FlatpakApps backend;
         backend.m_refreshTimer.stop();
+        QSignalSpy changed(&backend, &FlatpakApps::changed);
         backend.refresh();
-        QTRY_VERIFY_WITH_TIMEOUT(!backend.querying(), 3000);
+        QTRY_COMPARE_WITH_TIMEOUT(changed.size(), 1, 3000);
         const auto state = backend.state("org.nextks.calendar");
         QVERIFY(!state.value("known").toBool());
         QCOMPARE(state.value("error").toString(), "Application source configuration is busy");
